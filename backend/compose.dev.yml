@@ -1,0 +1,38 @@
+name: zenflow-dev
+services:
+  postgres:
+    container_name: zenflow-db
+    image: postgres:alpine
+    ports:
+      - "5432:5432"
+    volumes:
+      - /data/postgres:/data/postgres
+    env_file:
+      - docker.dev.env
+    networks:
+      - db
+
+  redis:
+    container_name: zenflow-cache
+    image: redis:alpine
+    ports:
+      - 6379:6379
+    networks:
+      - cache
+
+  mail:
+    container_name: zenflow-mail
+    image: jijiechen/papercut:latest
+    ports:
+      - 25:25
+      - 37408:37408
+    networks:
+      - mail
+
+networks:
+  db:
+    driver: bridge
+  cache:
+    driver: bridge
+  mail:
+    driver: bridge

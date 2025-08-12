@@ -1,0 +1,17 @@
+name: zenflow-test
+services:
+  postgres:
+    container_name: zenflow-test-db
+    image: postgres:alpine
+    ports:
+      - "5433:5432"
+    volumes:
+      - /data/postgres:/data/postgres
+    env_file:
+      - docker.test.env
+    networks:
+      - db
+
+networks:
+  db:
+    driver: bridge

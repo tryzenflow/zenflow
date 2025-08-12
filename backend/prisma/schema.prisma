@@ -1,0 +1,105 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(30)
+  email     String   @unique @db.VarChar(30)
+  createdAt DateTime @default(now())
+
+  // Preferences
+  timezone                    String  @db.VarChar(50) // e.g. "America/New_York", "Asia/Tokyo", "Europe/Paris"
+  maxDeepWorkHours            Int     @default(4) @db.SmallInt
+  batchSimilarTasks           Boolean @default(true)
+  minBreakMinutesBetweenTasks Int     @default(15) @db.SmallInt
+
+  // Relations
+  tasks             Task[]
+  categories        Category[]
+  energyLevels      EnergyLevel[]
+  workingHoursBlock WorkingHoursBlock[]
+}
+
+model Task {
+  id       Int     @id @default(autoincrement())
+  title    String  @db.VarChar(100)
+  note     String? @db.Text
+  priority Int     @default(1) @db.SmallInt
+
+  date                DateTime  @db.Date
+  deadline            DateTime?
+  remindBeforeMinutes Int?      @db.SmallInt
+  durationInMinutes   Int       @db.SmallInt
+  isInWorkingHours    Boolean   @default(true)
+  isFixed             Boolean   @default(false)
+
+  startTime DateTime? @db.Time()
+  endTime   DateTime? @db.Time()
+
+  repeatUntil     DateTime? @db.Date
+  repeatEveryDays Int?      @db.SmallInt
+
+  mentalEnergyLevel   Int @default(1) @db.SmallInt
+  physicalEnergyLevel Int @default(3) @db.SmallInt
+
+  // Relations
+  userId        Int
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categories    Category[]
+  prerequisites Dependency[] @relation(name: "PrerequisiteTask")
+  dependencies  Dependency[] @relation(name: "CurrentTask")
+}
+
+model Category {
+  id     Int    @id @default(autoincrement())
+  name   String
+  userId Int
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks Task[]
+}
+
+model Dependency {
+  currentTaskId      Int
+  prerequisiteTaskId Int
+
+  currentTask      Task @relation(name: "CurrentTask", references: [id], fields: [currentTaskId], onDelete: Cascade)
+  prerequisiteTask Task @relation(name: "PrerequisiteTask", references: [id], fields: [prerequisiteTaskId], onDelete: Cascade)
+
+  @@id([currentTaskId, prerequisiteTaskId])
+}
+
+model EnergyLevel {
+  id        Int      @id @default(autoincrement())
+  weekday   Int      @db.SmallInt // 0=Sunday, 6=Saturday
+  startTime DateTime @db.Time()
+  endTime   DateTime @db.Time()
+  mental    Int      @default(1) @db.SmallInt
+  physical  Int      @default(3) @db.SmallInt
+  userId    Int
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model WorkingHoursBlock {
+  id        Int      @id @default(autoincrement())
+  weekday   Int      @db.SmallInt // 0=Sunday, 6=Saturday
+  startTime DateTime @db.Time()
+  endTime   DateTime @db.Time()
+  userId    Int
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

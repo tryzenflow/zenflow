@@ -1,0 +1,70 @@
+import type { Cache } from "cache-manager";
+import { CACHE_MANAGER } from "@nestjs/cache-manager";
+import {
+  BadRequestException,
+  HttpException,
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from "@nestjs/common";
+import { generateOTP } from "./utils";
+import { UsersService } from "../users/users.service";
+import { MailService } from "../mail/mail.service";
+import { CreateUserDto } from "../users/dto";
+import { User } from "../../generated/prisma";
+
+@Injectable()
+export class AuthService {
+  constructor(
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private usersService: UsersService,
+    private mailService: MailService
+  ) {}
+
+  async requestOTPCode(email: string) {
+    try {
+      const otpCode = generateOTP();
+      await this.cacheManager.set(`otp:${email}`, otpCode);
+      await this.mailService.sendLoginEmail(email, otpCode);
+    } catch (error) {
+      throw new InternalServerErrorException();
+    }
+  }
+
+  async createUserIfNotExist({ email, timezone }: CreateUserDto) {
+    try {
+      const existingUser = await this.usersService.findByEmail(email);
+      let user = existingUser;
+      if (!existingUser) {
+        user = await this.usersService.create({
+          email,
+          timezone,
+        });
+      }
+      return { isNewUser: !existingUser, user };
+    } catch (error) {
+      throw new InternalServerErrorException();
+    }
+  }
+
+  async verifyOTPCode(email: string, providedOtp: string) {
+    try {
+      const otpCode = await this.cacheManager.get<string | null>(
+        `otp:${email}`
+      );
+      if (!otpCode)
+        throw new NotFoundException(
+          "OTP Code is not found or may have been expired"
+        );
+
+      if (otpCode !== providedOtp) {
+        throw new BadRequestException("Incorrect OTP provided");
+      }
+      await this.cacheManager.del(`otp:${email}`);
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new InternalServerErrorException();
+    }
+  }
+}
