@@ -1,13 +1,38 @@
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
+import session from "express-session";
 import { ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { createClient } from "redis";
+import { RedisStore } from "connect-redis";
+import passport from "passport";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
   app.enableCors({ origin: configService.get("CORS_ORIGIN") });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
+
+  const redisClient = createClient({
+    url: configService.get("CACHE_URL"),
+  });
+  await redisClient.connect();
+
+  const redisStore = new RedisStore({
+    client: redisClient,
+  });
+
+  app.use(
+    session({
+      secret: configService.get("SESSION_SECRET")!,
+      store: redisStore,
+      // see explanations for `resave` and `saveUninitialized` at https://stackoverflow.com/a/40396102/16164473
+      resave: false,
+      saveUninitialized: false,
+    })
+  );
+  app.use(passport.initialize());
+  app.use(passport.session());
   await app.listen(process.env.PORT ?? 5000);
 }
 bootstrap();

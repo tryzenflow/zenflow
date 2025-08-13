@@ -11,6 +11,7 @@ import { Keyv } from "keyv";
 import { CacheableMemory } from "cacheable";
 import { MailService } from "./mail/mail.service";
 import { MailModule } from "./mail/mail.module";
+import { UsersModule } from "./users/users.module";
 
 @Module({
   imports: [
@@ -18,6 +19,10 @@ import { MailModule } from "./mail/mail.module";
       envFilePath: ".env.dev",
       validationSchema: Joi.object({
         DATABASE_URL: Joi.string().required(),
+        SESSION_SECRET: Joi.string().required(),
+        CORS_ORIGIN: Joi.string().required(),
+        CACHE_URL: Joi.string().required(),
+        MAIL_TRANSPORT: Joi.string().required(),
       }),
     }),
     CacheModule.registerAsync({
@@ -35,6 +40,7 @@ import { MailModule } from "./mail/mail.module";
         };
       },
     }),
+    UsersModule,
     PrismaModule,
     AuthModule,
     MailModule,

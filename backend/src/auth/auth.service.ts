@@ -11,8 +11,7 @@ import {
 import { generateOTP } from "./utils";
 import { UsersService } from "../users/users.service";
 import { MailService } from "../mail/mail.service";
-import { CreateUserDto } from "../users/dto";
-import { User } from "../../generated/prisma";
+import { UpdateUserDto } from "../users/dto";
 
 @Injectable()
 export class AuthService {
@@ -32,20 +31,22 @@ export class AuthService {
     }
   }
 
-  async createUserIfNotExist({ email, timezone }: CreateUserDto) {
+  async updateBasicInfo(userId: number, { name, timezone }: UpdateUserDto) {
     try {
-      const existingUser = await this.usersService.findByEmail(email);
-      let user = existingUser;
-      if (!existingUser) {
-        user = await this.usersService.create({
-          email,
-          timezone,
-        });
-      }
-      return { isNewUser: !existingUser, user };
+      const user = await this.usersService.update(userId, {
+        name,
+        timezone,
+      });
+      return user;
     } catch (error) {
       throw new InternalServerErrorException();
     }
+  }
+
+  private async createUserIfNotExists(email: string) {
+    let user = await this.usersService.findByEmail(email);
+    if (!user) user = await this.usersService.create({ email });
+    return user;
   }
 
   async verifyOTPCode(email: string, providedOtp: string) {
@@ -62,6 +63,8 @@ export class AuthService {
         throw new BadRequestException("Incorrect OTP provided");
       }
       await this.cacheManager.del(`otp:${email}`);
+      const user = await this.createUserIfNotExists(email);
+      return user;
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException();

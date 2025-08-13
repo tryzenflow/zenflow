@@ -1,10 +1,7 @@
-import { IsEmail, IsString, Length } from "class-validator";
+import { IsEmail, Length } from "class-validator";
 
 export class CreateUserDto {
-  @Length(1, 50)
-  @IsString()
-  timezone: string;
-
   @IsEmail()
+  @Length(1, 30)
   email: string;
 }

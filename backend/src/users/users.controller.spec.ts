@@ -33,12 +33,16 @@ describe("AuthController (integration with AuthService)", () => {
 
   describe("update name", () => {
     it("should call the service with the correct arguments", async () => {
-      jest.spyOn(service, "updateName");
+      jest.spyOn(service, "update");
       jest.spyOn(prisma.user, "update").mockResolvedValue(user);
 
-      await controller.updateName({ name: user.name }, user.id);
-      expect(service.updateName).toHaveBeenCalledWith(user.id, {
+      await controller.updateBasicInfo(
+        { name: user.name, timezone: "UTC" },
+        user
+      );
+      expect(service.update).toHaveBeenCalledWith(user.id, {
         name: user.name,
+        timezone: "UTC",
       });
     });
   });

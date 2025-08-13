@@ -4,7 +4,6 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
-import { faker } from "@faker-js/faker";
 import { Prisma } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { PrismaService } from "../prisma/prisma.service";
@@ -17,7 +16,7 @@ export class UsersService {
   async create(createUserDto: CreateUserDto) {
     try {
       const newUser = await this.prisma.user.create({
-        data: { ...createUserDto, name: faker.internet.displayName() },
+        data: { ...createUserDto, timezone: "Europe/Paris", name: "New User" },
       });
       return newUser;
     } catch (error) {
@@ -30,11 +29,11 @@ export class UsersService {
     }
   }
 
-  async updateName(id: number, { name }: UpdateUserDto) {
+  async update(id: number, updateUserDto: UpdateUserDto) {
     try {
       const updated = await this.prisma.user.update({
         where: { id },
-        data: { name },
+        data: updateUserDto,
       });
       return updated;
     } catch (error) {
@@ -47,10 +46,14 @@ export class UsersService {
   }
 
   async findByEmail(email: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { email },
-    });
-    return user;
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { email },
+      });
+      return user;
+    } catch (error) {
+      throw new InternalServerErrorException();
+    }
   }
 
   async remove(id: number) {
@@ -67,14 +70,11 @@ export class UsersService {
 
   async findById(id: number) {
     try {
-      const user = await this.prisma.user.findUniqueOrThrow({
+      const user = await this.prisma.user.findUnique({
         where: { id },
       });
       return user;
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError)
-        if (error.code === PostgresErrorCode.RecordNotFound)
-          throw new NotFoundException("Cannot find user with the given id");
       throw new InternalServerErrorException();
     }
   }
