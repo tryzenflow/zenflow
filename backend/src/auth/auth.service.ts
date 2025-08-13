@@ -45,8 +45,9 @@ export class AuthService {
 
   private async createUserIfNotExists(email: string) {
     let user = await this.usersService.findByEmail(email);
+    const isNewUser = !user;
     if (!user) user = await this.usersService.create({ email });
-    return user;
+    return { isNewUser, user };
   }
 
   async verifyOTPCode(email: string, providedOtp: string) {
@@ -63,8 +64,8 @@ export class AuthService {
         throw new BadRequestException("Incorrect OTP provided");
       }
       await this.cacheManager.del(`otp:${email}`);
-      const user = await this.createUserIfNotExists(email);
-      return user;
+      const result = await this.createUserIfNotExists(email);
+      return result;
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException();

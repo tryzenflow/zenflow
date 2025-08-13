@@ -104,7 +104,7 @@ describe("AuthController (integration with AuthService)", () => {
       jest.spyOn(req, "logOut");
       controller.logout(req as any);
       expect(req.logOut).toHaveBeenCalled();
-      expect(req.session.cookie.maxAge).toBe(0);
+      expect(req.session.cookie.maxAge).toBe(0) as any;
     });
   });
 });
