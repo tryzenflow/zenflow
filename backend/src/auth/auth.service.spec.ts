@@ -128,7 +128,7 @@ describe("AuthService", () => {
       jest.spyOn(prisma.user, "findUnique").mockResolvedValue(mockedUser);
 
       const result = await service.verifyOTPCode("test@example.com", "654321");
-      expect(result).toEqual({ isNewUser: false, user: mockedUser });
+      expect(result).toEqual(mockedUser);
       expect(usersService.findByEmail).toHaveBeenCalledWith("test@example.com");
       expect(usersService.create).not.toHaveBeenCalled();
       expect(cacheManager.del).toHaveBeenCalledWith("otp:test@example.com");
@@ -141,7 +141,7 @@ describe("AuthService", () => {
       jest.spyOn(usersService, "create").mockResolvedValue(mockedUser);
 
       const result = await service.verifyOTPCode("test@example.com", "654321");
-      expect(result).toEqual({ isNewUser: true, user: mockedUser });
+      expect(result).toEqual(mockedUser);
       expect(usersService.create).toHaveBeenCalledWith({
         email: "test@example.com",
       });

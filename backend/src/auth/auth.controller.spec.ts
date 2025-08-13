@@ -12,10 +12,8 @@ import { PrismaService } from "../prisma/prisma.service";
 
 describe("AuthController (integration with AuthService)", () => {
   let controller: AuthController;
-  let service: AuthService;
   let mailService: MailService;
   let cacheManager: Cache;
-  let prisma: PrismaService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -56,8 +54,6 @@ describe("AuthController (integration with AuthService)", () => {
     controller = module.get<AuthController>(AuthController);
     mailService = module.get(MailService);
     cacheManager = module.get(CACHE_MANAGER);
-    prisma = module.get(PrismaService);
-    service = module.get(AuthService);
   });
 
   describe("POST /auth/otp/request", () => {
