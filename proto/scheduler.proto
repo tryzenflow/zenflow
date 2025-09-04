@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package scheduler;
+import "google/protobuf/timestamp.proto";
+
+
+// ----- CORE MESSAGES -----
+
+message Interval {
+  int32 start = 1; // minutes since midnight
+  int32 end   = 2; // minutes since midnight
+}
+
+message Task {
+  string id            = 1;
+  string title         = 2;
+  int32 duration       = 3;
+  int32 priority       = 4;
+
+  int32 fixed_start    = 5;  // optional
+  int32 earliest_start = 6;  // optional
+  int32 latest_end     = 7;  // optional
+  google.protobuf.Timestamp deadline = 8;
+
+  bool mandatory       = 9;
+  bool splittable      = 10;
+  int32 max_splits     = 11;
+
+  int32 energy_level   = 12; // 1–3
+
+  string user_id       = 13;
+  string category_id   = 14;
+
+  repeated string prerequisites = 15;
+}
+
+message Schedule {
+  string id    = 1;
+  string task_id = 2;
+  string split_id = 3;   // could just be the split number or UUID
+  string start = 4;      // ISO datetime
+  string end   = 5;      // ISO datetime
+}
+
+message EnergyBlock {
+  int32 energy_level = 1;
+  Interval interval  = 2;
+}
+
+message Constraints {
+  repeated Interval available_hours = 1;
+  int32 min_gap_between_tasks       = 2;
+  repeated EnergyBlock energy_blocks = 3;
+  bool batch_similar_tasks          = 4;
+  int32 max_daily_load              = 5;
+}
+
+// ----- REQUEST & RESPONSE -----
+
+message ScheduleRequest {
+  repeated Task tasks     = 1;
+  Constraints constraints = 2;
+}
+
+message TaskSchedule {
+  Task task                = 1;
+  repeated Schedule slots  = 2; // all scheduled instances for this task
+}
+
+message ScheduleResponse {
+  repeated TaskSchedule schedule = 1;
+}
+
+// ----- SERVICE -----
+
+service SchedulerService {
+  rpc schedule (ScheduleRequest) returns (ScheduleResponse);
+}

@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
   output   = "../generated/prisma"
@@ -15,91 +9,91 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
+  id        String   @id @default(uuid())
   name      String   @db.VarChar(30)
   email     String   @unique @db.VarChar(30)
   createdAt DateTime @default(now())
-
-  // Preferences
-  timezone                    String  @db.VarChar(50) // e.g. "America/New_York", "Asia/Tokyo", "Europe/Paris"
-  maxDeepWorkHours            Int     @default(4) @db.SmallInt
-  batchSimilarTasks           Boolean @default(true)
-  minBreakMinutesBetweenTasks Int     @default(15) @db.SmallInt
+  timezone  String   @db.VarChar(50)
 
   // Relations
-  tasks             Task[]
-  categories        Category[]
-  energyLevels      EnergyLevel[]
-  workingHoursBlock WorkingHoursBlock[]
+  tasks      Task[]
+  categories Category[]
 }
 
 model Task {
-  id       Int     @id @default(autoincrement())
-  title    String  @db.VarChar(100)
-  note     String? @db.Text
-  priority Int     @default(1) @db.SmallInt
+  id            String    @id @default(uuid())
+  title         String
+  duration      Int
+  priority      Int       @default(3) // 1–3 (lower = more important)
+  fixedStart    Int? // minutes since midnight, absolute start
+  earliestStart Int? // earliest allowed start
+  latestEnd     Int? // latest allowed end
+  deadline      DateTime?
+  mandatory     Boolean   @default(true)
+  splittable    Boolean   @default(false)
+  maxSplits     Int       @default(1)
+  energyLevel   Int       @default(1) // 1–3
+  userId        String
+  categoryId    String
 
-  date                DateTime  @db.Date
-  deadline            DateTime?
-  remindBeforeMinutes Int?      @db.SmallInt
-  durationInMinutes   Int       @db.SmallInt
-  isInWorkingHours    Boolean   @default(true)
-  isFixed             Boolean   @default(false)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category  Category   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  schedules Schedule[]
 
-  startTime DateTime? @db.Time()
-  endTime   DateTime? @db.Time()
+  // relations
+  prerequisites Task[] @relation("TaskPrerequisites")
+  dependentOn   Task[] @relation("TaskPrerequisites")
+}
 
-  repeatUntil     DateTime? @db.Date
-  repeatEveryDays Int?      @db.SmallInt
+model Schedule {
+  date  DateTime @db.Date
+  start DateTime @db.Time()
+  end   DateTime @db.Time()
+  split Int      @db.SmallInt
 
-  mentalEnergyLevel   Int @default(1) @db.SmallInt
-  physicalEnergyLevel Int @default(3) @db.SmallInt
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
-  // Relations
-  userId        Int
-  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  categories    Category[]
-  prerequisites Dependency[] @relation(name: "PrerequisiteTask")
-  dependencies  Dependency[] @relation(name: "CurrentTask")
+  @@id([split, taskId])
+}
+
+model Constraints {
+  id                 String  @id @default(uuid())
+  minGapBetweenTasks Int     @default(0)
+  maxDailyLoad       Int     @default(1440)
+  batchSimilarTasks  Boolean @default(true)
+
+  availableHours AvailableHour[]
+  energyBlocks   EnergyBlock[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AvailableHour {
+  id    String @id @default(uuid())
+  start Int // minutes since midnight
+  end   Int
+
+  constraints   Constraints @relation(fields: [constraintsId], references: [id])
+  constraintsId String
+}
+
+model EnergyBlock {
+  id          String @id @default(uuid())
+  energyLevel Int // 1–3
+  start       Int
+  end         Int
+
+  constraints   Constraints @relation(fields: [constraintsId], references: [id])
+  constraintsId String
 }
 
 model Category {
-  id     Int    @id @default(autoincrement())
+  id     String @id @default(uuid())
   name   String
-  userId Int
+  userId String
 
   user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   tasks Task[]
-}
-
-model Dependency {
-  currentTaskId      Int
-  prerequisiteTaskId Int
-
-  currentTask      Task @relation(name: "CurrentTask", references: [id], fields: [currentTaskId], onDelete: Cascade)
-  prerequisiteTask Task @relation(name: "PrerequisiteTask", references: [id], fields: [prerequisiteTaskId], onDelete: Cascade)
-
-  @@id([currentTaskId, prerequisiteTaskId])
-}
-
-model EnergyLevel {
-  id        Int      @id @default(autoincrement())
-  weekday   Int      @db.SmallInt // 0=Sunday, 6=Saturday
-  startTime DateTime @db.Time()
-  endTime   DateTime @db.Time()
-  mental    Int      @default(1) @db.SmallInt
-  physical  Int      @default(3) @db.SmallInt
-  userId    Int
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model WorkingHoursBlock {
-  id        Int      @id @default(autoincrement())
-  weekday   Int      @db.SmallInt // 0=Sunday, 6=Saturday
-  startTime DateTime @db.Time()
-  endTime   DateTime @db.Time()
-  userId    Int
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
