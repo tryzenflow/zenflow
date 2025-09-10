@@ -4,6 +4,7 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
+import { fromZonedTime } from "date-fns-tz";
 import { UpdateScheduleDto } from "./dto/update-schedule.dto";
 import { ScheduleResponse } from "../scheduler/scheduler.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -52,9 +53,10 @@ export class SchedulesService {
     return updated;
   }
 
-  async findSchedules({ start, end }: FindSchedulesDto) {
-    const startDate = start ? new Date(start) : undefined;
-    const endDate = end ? new Date(end) : undefined;
+  async findSchedules({ start, end }: FindSchedulesDto, timezone: string) {
+    const startDate = fromZonedTime(`${start}T00:00:00`, timezone);
+    const endDate = fromZonedTime(`${end}T00:00:00`, timezone);
+
     const rangeSchedules = await this.prisma.schedule.findMany({
       where: {
         start: { gte: startDate, lt: endDate },

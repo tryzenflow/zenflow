@@ -1,9 +1,16 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from "@nestjs/common";
 import { CreateConstraintsDto } from "./dto/create-constraints.dto";
 import { UpdateConstraintsDto } from "./dto/update-constraints.dto";
 import { PrismaService } from "../prisma/prisma.service";
 import { validateConstraintsOverlaps } from "./validators/no-overlap";
 import { validateNoIntersectIds } from "./validators/no-intersect-ids";
+import { Prisma } from "../../generated/prisma";
+import { PostgresErrorCode } from "../prisma/error-codes";
 
 @Injectable()
 export class ConstraintsService {
@@ -20,29 +27,42 @@ export class ConstraintsService {
     userId: string
   ) {
     validateConstraintsOverlaps(availableHours, energyBlocks);
-    const constraints = await this.prisma.constraints.create({
-      data: {
-        id: userId,
-        availableHours: {
-          createMany: {
-            data: availableHours.map(({ start, end }) => ({ start, end })),
+    try {
+      const constraints = await this.prisma.constraints.create({
+        data: {
+          id: userId,
+          availableHours: {
+            createMany: {
+              data: availableHours.map(({ start, end }) => ({ start, end })),
+            },
           },
-        },
-        batchSimilarTasks,
-        minGapBetweenTasks,
-        energyBlocks: {
-          createMany: {
-            data: energyBlocks.map(({ start, end, energyLevel }) => ({
-              start,
-              end,
-              energyLevel,
-            })),
+          batchSimilarTasks,
+          minGapBetweenTasks,
+          energyBlocks: {
+            createMany: {
+              data: energyBlocks.map(({ start, end, energyLevel }) => ({
+                start,
+                end,
+                energyLevel,
+              })),
+            },
           },
+          maxDailyLoad,
         },
-        maxDailyLoad,
-      },
-    });
-    return constraints;
+        select: {
+          energyBlocks: { orderBy: { start: "asc" } },
+          availableHours: { orderBy: { start: "asc" } },
+        },
+      });
+      return constraints;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError)
+        if (error.code === PostgresErrorCode.UniqueConstraintViolation)
+          throw new BadRequestException(
+            "Constraint for the user already exists"
+          );
+      throw new InternalServerErrorException();
+    }
   }
 
   async get(id: string) {
@@ -68,9 +88,19 @@ export class ConstraintsService {
       updateAvailableHoursDto,
     }: UpdateConstraintsDto
   ) {
+    const existingConstraints = await this.get(id);
+    if (!existingConstraints) throw new NotFoundException();
     validateConstraintsOverlaps(
-      [...(availableHours ?? []), ...(updateAvailableHoursDto ?? [])],
-      [...(energyBlocks ?? []), ...(updateEnergyBlocksDto ?? [])]
+      [
+        ...(availableHours ?? []),
+        ...existingConstraints.availableHours,
+        ...(updateAvailableHoursDto ?? []),
+      ],
+      [
+        ...(energyBlocks ?? []),
+        ...existingConstraints.energyBlocks,
+        ...(updateEnergyBlocksDto ?? []),
+      ]
     );
 
     const updateAvailableHoursIds = updateAvailableHoursDto?.map(
@@ -81,7 +111,7 @@ export class ConstraintsService {
     validateNoIntersectIds(updateAvailableHoursIds, deleteAvailableHoursIds);
     validateNoIntersectIds(updateEnergyBlockIds, deleteEnergyBlocksIds);
 
-    await this.prisma.constraints.update({
+    const updated = await this.prisma.constraints.update({
       where: { id },
       data: {
         batchSimilarTasks,
@@ -123,6 +153,6 @@ export class ConstraintsService {
           : undefined,
       },
     });
-    return this.get(id);
+    return updated;
   }
 }

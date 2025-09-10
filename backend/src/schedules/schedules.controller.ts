@@ -9,12 +9,17 @@ import {
   ParseIntPipe,
   Put,
   Query,
+  UseGuards,
 } from "@nestjs/common";
 import { FindSchedulesDto } from "./dto/find-schedules.dto";
 import { UpdateScheduleDto } from "./dto/update-schedule.dto";
 import { SchedulesService } from "./schedules.service";
+import { CookieAuthGuard } from "../auth/guards";
+import { CurrentUser } from "../users/decorators/current-user.decorator";
+import { type User } from "../../generated/prisma";
 
 @Controller("schedules")
+@UseGuards(CookieAuthGuard)
 export class SchedulesController {
   constructor(private readonly schedulesService: SchedulesService) {}
 
@@ -34,7 +39,10 @@ export class SchedulesController {
   }
 
   @Get()
-  findSchedules(@Query() findSchedulesDto: FindSchedulesDto) {
-    return this.schedulesService.findSchedules(findSchedulesDto);
+  findSchedules(
+    @Query() findSchedulesDto: FindSchedulesDto,
+    @CurrentUser() user: User
+  ) {
+    return this.schedulesService.findSchedules(findSchedulesDto, user.timezone);
   }
 }
