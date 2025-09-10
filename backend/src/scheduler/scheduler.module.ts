@@ -20,7 +20,7 @@ import { ConstraintsModule } from "../constraints/constraints.module";
           options: {
             package: "scheduler",
             url: configService.get<string>("GRPC_SCHEDULER_URL"),
-            protoPath: path.join(process.cwd(), "..", "proto/scheduler.proto"),
+            protoPath: path.join(process.cwd(), "proto", "scheduler.proto"),
           },
         });
       },
