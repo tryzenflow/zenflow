@@ -3,7 +3,6 @@ syntax = "proto3";
 package scheduler;
 import "google/protobuf/timestamp.proto";
 
-
 // ----- CORE MESSAGES -----
 
 message Interval {
@@ -17,9 +16,9 @@ message Task {
   int32 duration       = 3;
   int32 priority       = 4;
 
-  int32 fixed_start    = 5;  // optional
-  int32 earliest_start = 6;  // optional
-  int32 latest_end     = 7;  // optional
+  optional int32 fixed_start    = 5;
+  optional int32 earliest_start = 6;
+  optional int32 latest_end     = 7;
   google.protobuf.Timestamp deadline = 8;
 
   bool mandatory       = 9;
@@ -28,18 +27,16 @@ message Task {
 
   int32 energy_level   = 12; // 1–3
 
-  string user_id       = 13;
-  string category_id   = 14;
+  string category_id   = 13;
 
-  repeated string prerequisites = 15;
+  repeated string prerequisites = 14;
 }
 
-message Schedule {
-  string id    = 1;
+message TaskSchedule {
   string task_id = 2;
-  string split_id = 3;   // could just be the split number or UUID
-  string start = 4;      // ISO datetime
-  string end   = 5;      // ISO datetime
+  int32 split = 3;
+  int32 start = 4;
+  int32 end   = 5;
 }
 
 message EnergyBlock {
@@ -58,21 +55,16 @@ message Constraints {
 // ----- REQUEST & RESPONSE -----
 
 message ScheduleRequest {
-  repeated Task tasks     = 1;
+  repeated Task tasks     = 1;      // ISO datetime;
   Constraints constraints = 2;
 }
 
-message TaskSchedule {
-  Task task                = 1;
-  repeated Schedule slots  = 2; // all scheduled instances for this task
-}
-
 message ScheduleResponse {
-  repeated TaskSchedule schedule = 1;
+  repeated TaskSchedule schedules = 1;
 }
 
 // ----- SERVICE -----
 
 service SchedulerService {
-  rpc schedule (ScheduleRequest) returns (ScheduleResponse);
+  rpc Schedule (ScheduleRequest) returns (ScheduleResponse);
 }

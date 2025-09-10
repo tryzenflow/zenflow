@@ -16,29 +16,35 @@ model User {
   timezone  String   @db.VarChar(50)
 
   // Relations
-  tasks      Task[]
-  categories Category[]
+  tasks       Task[]
+  categories  Category[]
+  constraints Constraints?
 }
 
 model Task {
-  id            String    @id @default(uuid())
-  title         String
-  duration      Int
-  priority      Int       @default(3) // 1–3 (lower = more important)
-  fixedStart    Int? // minutes since midnight, absolute start
-  earliestStart Int? // earliest allowed start
-  latestEnd     Int? // latest allowed end
+  id       String @id @default(uuid())
+  title    String
+  duration Int
+  priority Int    @default(3) // 1–3 (lower = more important)
+
+  fixedStart    Int?      @db.SmallInt // absolute point in time (UTC)
+  earliestStart Int?      @db.SmallInt
+  latestEnd     Int?      @db.SmallInt
   deadline      DateTime?
-  mandatory     Boolean   @default(true)
-  splittable    Boolean   @default(false)
-  maxSplits     Int       @default(1)
-  energyLevel   Int       @default(1) // 1–3
-  userId        String
-  categoryId    String
+
+  mandatory   Boolean @default(true)
+  splittable  Boolean @default(false)
+  maxSplits   Int     @default(1)
+  energyLevel Int     @default(1) // 1–3
+
+  userId     String
+  categoryId String?
 
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category  Category   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  category  Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   schedules Schedule[]
+
+  createdAt DateTime @default(now())
 
   // relations
   prerequisites Task[] @relation("TaskPrerequisites")
@@ -46,22 +52,22 @@ model Task {
 }
 
 model Schedule {
-  date  DateTime @db.Date
-  start DateTime @db.Time()
-  end   DateTime @db.Time()
+  start DateTime
+  end   DateTime
   split Int      @db.SmallInt
 
   taskId String
   task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
-  @@id([split, taskId])
+  @@id([taskId, split])
 }
 
 model Constraints {
-  id                 String  @id @default(uuid())
   minGapBetweenTasks Int     @default(0)
   maxDailyLoad       Int     @default(1440)
   batchSimilarTasks  Boolean @default(true)
+  id                 String  @id
+  user               User    @relation(fields: [id], references: [id], onDelete: Cascade)
 
   availableHours AvailableHour[]
   energyBlocks   EnergyBlock[]
@@ -72,8 +78,8 @@ model Constraints {
 
 model AvailableHour {
   id    String @id @default(uuid())
-  start Int // minutes since midnight
-  end   Int
+  start Int    @db.SmallInt // minutes since midnight
+  end   Int    @db.SmallInt
 
   constraints   Constraints @relation(fields: [constraintsId], references: [id])
   constraintsId String
@@ -81,9 +87,9 @@ model AvailableHour {
 
 model EnergyBlock {
   id          String @id @default(uuid())
-  energyLevel Int // 1–3
-  start       Int
-  end         Int
+  energyLevel Int    @db.SmallInt // 1–3
+  start       Int    @db.SmallInt
+  end         Int    @db.SmallInt
 
   constraints   Constraints @relation(fields: [constraintsId], references: [id])
   constraintsId String

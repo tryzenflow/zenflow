@@ -1,7 +1,7 @@
 import { Body, Controller, Put, UseGuards } from "@nestjs/common";
-import { UpdateUserDto } from "./dto";
+import { UpdateUserDto } from "./dto/update-user.dto";
 import { UsersService } from "./users.service";
-import { CurrentUser } from "./decorators";
+import { CurrentUser } from "./decorators/current-user.decorator";
 import type { User } from "../../generated/prisma";
 import { CookieAuthGuard } from "../auth/guards";
 

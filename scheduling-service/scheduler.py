@@ -120,29 +120,36 @@ def add_min_gap_constraints(model: cp_model.CpModel, task_vars: list[TaskVar], m
                 start_i).OnlyEnforceIf([i_before_j.Not(), both_present])
 
 
-def schedule_tasks(tasks: list[Task], constraints: Constraints, min_time=0, max_time=24 * 60):
+def init_deadline_weight(tasks: list[Task]):
+  sorted_tasks = sorted(
+    [t for t in tasks if t.deadline is not None], key=lambda t: t.deadline)
+  deadline_weight_factor = {}
+  for i, task in enumerate(sorted_tasks):
+    deadline_weight_factor[task.id] = (
+      len(sorted_tasks) - i) * 10  # scale factor
+  return deadline_weight_factor
+
+
+def schedule_tasks(tasks: list[Task], constraints: Constraints, min_time=0, max_time=24 * 60) -> list[tuple[Task, int, Interval]]:
   model = cp_model.CpModel()
   task_vars: list[TaskVar] = []
   intervals = []
 
-  # ----- build task variables -----
+  # ----- build task variables on global timeline -----
+  # (single variable set per task; availability enforced below)
   for task in tasks:
     start_min = min_time
     end_max = max_time
 
-    for block in constraints.available_hours:
-      start_min = block.start
-      end_max = block.end
+    # apply task-local hard windows (fixed_start / earliest_start / latest_end)
+    if task.fixed_start is not None:
+      start_min = task.fixed_start
+      end_max = task.fixed_start + task.duration
+    if task.earliest_start is not None:
+      start_min = max(start_min, task.earliest_start)
+    if task.latest_end is not None:
+      end_max = min(end_max, task.latest_end)
 
-      if task.fixed_start is not None:
-        start_min = task.fixed_start
-        end_max = task.fixed_start + task.duration
-      if task.earliest_start is not None:
-        start_min = max(start_min, task.earliest_start)
-      if task.latest_end is not None:
-        end_max = min(end_max, task.latest_end)
-
-    # build task for this interval candidate
     if task.splittable:
       tvs, ints = build_splittable_task(model, task, start_min, end_max)
     else:
@@ -153,15 +160,34 @@ def schedule_tasks(tasks: list[Task], constraints: Constraints, min_time=0, max_
 
   model.AddNoOverlap(intervals)
 
-  # ----- add min gap constraints -----
+  # ----- enforce that each task (if present) must fit inside at least one available_hours block -----
+  # For each top-level TaskVar (or each split), create boolean 'fits_block_k' and constrain it.
+  # If a task has fixed_start, it already must fit due to start_min/end_max above.
+  for tv in task_vars:
+    task, split, start_var, end_var, presence = tv.tuple
+    # if there are no available_hours, skip (should be validated before)
+    if not constraints.available_hours:
+      continue
+
+    block_flags = []
+    for i, block in enumerate(constraints.available_hours):
+      fits = model.NewBoolVar(f"fits_{task.id}_{split}_block_{i}")
+      # fits -> start >= block.start AND end <= block.end
+      model.Add(start_var >= block.start).OnlyEnforceIf(fits)
+      model.Add(end_var <= block.end).OnlyEnforceIf(fits)
+      block_flags.append(fits)
+
+    # If task is scheduled (presence=1), it must fit at least one block
+    # presence => OR(block_flags)
+    model.AddBoolOr(block_flags).OnlyEnforceIf(presence)
+    # If not present, no requirement (optional)
+    # (If task is mandatory you already set presence==1 in builders)
+
+  # rest of model...
+  deadline_weight_factor = init_deadline_weight(tasks)
   add_min_gap_constraints(model, task_vars, constraints.min_gap_between_tasks)
-
   add_prerequisite_constraints(model, task_vars)
-
-  # ----- soft constraints -----
-  optimize_function(model, task_vars, constraints)
-
-  # ----- solve -----
+  optimize_function(model, task_vars, constraints, deadline_weight_factor)
   solver = cp_model.CpSolver()
   solver.parameters.max_time_in_seconds = 10
   status = solver.Solve(model)
@@ -172,6 +198,5 @@ def schedule_tasks(tasks: list[Task], constraints: Constraints, min_time=0, max_
       if solver.Value(task_var.presence):
         s = solver.Value(task_var.start)
         e = solver.Value(task_var.end)
-        schedule.append((task_var.task, Interval(s, e)))
-
+        schedule.append((task_var.task, task_var.split, Interval(s, e)))
   return schedule

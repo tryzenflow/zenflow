@@ -11,7 +11,6 @@ import {
 import { generateOTP } from "./utils";
 import { UsersService } from "../users/users.service";
 import { MailService } from "../mail/mail.service";
-import { UpdateUserDto } from "../users/dto";
 
 @Injectable()
 export class AuthService {
@@ -26,18 +25,6 @@ export class AuthService {
       const otpCode = generateOTP();
       await this.cacheManager.set(`otp:${email}`, otpCode);
       await this.mailService.sendLoginEmail(email, otpCode);
-    } catch (error) {
-      throw new InternalServerErrorException();
-    }
-  }
-
-  async updateBasicInfo(userId: number, { name, timezone }: UpdateUserDto) {
-    try {
-      const user = await this.usersService.update(userId, {
-        name,
-        timezone,
-      });
-      return user;
     } catch (error) {
       throw new InternalServerErrorException();
     }

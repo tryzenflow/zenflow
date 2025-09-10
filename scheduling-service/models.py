@@ -1,4 +1,5 @@
 from typing import Optional
+from datetime import datetime
 
 
 class Interval:
@@ -17,7 +18,7 @@ class Task:
       fixed_start: Optional[int] = None,
       earliest_start: Optional[int] = None,
       latest_end: Optional[int] = None,
-      deadline: Optional[int] = None,
+      deadline: Optional[datetime] = None,
       splittable: bool = False,
       mandatory: bool = True,
       max_splits: int = 1,
@@ -47,6 +48,9 @@ class Task:
     self.prerequisites = prerequisites
     self.energy_level = energy_level
     self.category = category
+
+  def __str__(self) -> str:
+    return f'{self.id} - {self.title} ({self.duration} min) - Fixed start: {self.fixed_start}, earliest_start: {self.earliest_start}, latest_end: {self.latest_end}, deadline: {self.deadline}, priority: {self.priority}'
 
 
 class EnergyBlock:

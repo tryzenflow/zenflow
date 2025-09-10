@@ -3,8 +3,8 @@ from task_var import TaskVar
 from models import Constraints
 
 
-def optimize_function(model: cp_model.CpModel, task_vars: list[TaskVar], constraints: Constraints, min_time=0):
-  """Soft constraints i.e., violations will be penalized instead of making scheduling impossible"""
+def optimize_function(model: cp_model.CpModel, task_vars: list[TaskVar], constraints: Constraints, deadline_weight_factor: dict[str, int], min_time=0):
+  max_energy_level = 3
   max_time = 24 * 60
   loss_terms = []
   effective_durations = []
@@ -18,19 +18,28 @@ def optimize_function(model: cp_model.CpModel, task_vars: list[TaskVar], constra
     task, split, start_time, end_time, presence = task_var.tuple
 
     if task.deadline is not None:
-      # lateness = max(0, end_time - deadline)
-      lateness = model.NewIntVar(
-        min_time, max_time, f"lateness_{task.id}_{split}")
-      model.Add(lateness >= end_time - task.deadline)
-      model.Add(lateness >= 0)
+      # convert deadline datetime → priority weight
+      # earlier deadlines produce higher penalty weight
+      # we normalize: lower datetime → higher priority
+      # e.g., earliest_deadline = min(task.deadline for all tasks)
+      # this mapping can be done outside CP-SAT, resulting in 'deadline_weight_factor'
 
-      penalty = model.NewIntVar(min_time, max_time * deadline_weight,
-                                f"deadline_penalty_{task.id}_{split}")
-      model.Add(penalty == lateness * deadline_weight).OnlyEnforceIf(presence)
+      penalty = model.NewIntVar(
+          0, max_time * deadline_weight,
+          f"deadline_penalty_{task.id}_{split}"
+      )
+      # apply the penalty only if task is present
+      # for soft prioritization, we just assign precomputed weight
+      model.Add(penalty == deadline_weight_factor[task.id]).OnlyEnforceIf(
+        presence)
       model.Add(penalty == 0).OnlyEnforceIf(presence.Not())
       loss_terms.append(penalty)
-
+    # ENERGY overlap / penalty
     for i, block in enumerate(constraints.energy_blocks):
+      # create constants for block bounds
+      block_start_const = model.NewConstant(block.interval.start)
+      block_end_const = model.NewConstant(block.interval.end)
+
       overlap = model.NewIntVar(
         0, task.duration, f"energy_overlap_{task.id}_{split}_{i}")
       latest_start = model.NewIntVar(
@@ -38,8 +47,11 @@ def optimize_function(model: cp_model.CpModel, task_vars: list[TaskVar], constra
       earliest_end = model.NewIntVar(
         min_time, max_time, f"energy_earliest_end_{task.id}_{split}_{i}")
 
-      model.AddMaxEquality(latest_start, [start_time, block.interval.start])
-      model.AddMinEquality(earliest_end, [end_time, block.interval.end])
+      # max(latest_start, start_time, block_start_const) == latest_start
+      model.AddMaxEquality(latest_start, [start_time, block_start_const])
+      # min(earliest_end, end_time, block_end_const) == earliest_end
+      model.AddMinEquality(earliest_end, [end_time, block_end_const])
+
       diff = model.NewIntVar(-max_time, max_time, f"energy_diff_{task.id}_{i}")
       model.Add(diff == earliest_end - latest_start)
       model.AddMaxEquality(overlap, [diff, model.NewConstant(0)])
@@ -52,13 +64,13 @@ def optimize_function(model: cp_model.CpModel, task_vars: list[TaskVar], constra
         model.Add(penalty == 0).OnlyEnforceIf(presence.Not())
         loss_terms.append(penalty)
       else:
-        bonus = model.NewIntVar(-energy_weight * task.duration, 0,
-                                f"energy_bonus_{task.id}_{i}")
+        bonus = model.NewIntVar(-energy_weight * task.duration,
+                                0, f"energy_bonus_{task.id}_{i}")
         model.Add(bonus == -energy_weight * overlap).OnlyEnforceIf(presence)
         model.Add(bonus == 0).OnlyEnforceIf(presence.Not())
         loss_terms.append(bonus)
 
-    # ---------- OPTIONAL TASK BONUS ----------
+    # OPTIONAL task bonus
     if not task.mandatory:
       bonus = model.NewIntVar(-optional_task_weight, 0,
                               f"bonus_presence_{task.id}")
@@ -66,44 +78,55 @@ def optimize_function(model: cp_model.CpModel, task_vars: list[TaskVar], constra
       model.Add(bonus == 0).OnlyEnforceIf(presence.Not())
       loss_terms.append(bonus)
 
-    # ---------- MAX DAILY LOAD ----------
-    effective_duration = model.NewIntVar(
-        0, task.duration, f"eff_dur_{task.id}_{split}")
-    model.Add(effective_duration == task.duration).OnlyEnforceIf(presence)
-    model.Add(effective_duration == 0).OnlyEnforceIf(presence.Not())
+    # EFFECTIVE DURATION (for overload)
+    if task.energy_level == max_energy_level:
+      eff = model.NewIntVar(0, task.duration, f"eff_dur_{task.id}_{split}")
+      model.Add(eff == task.duration).OnlyEnforceIf(presence)
+      model.Add(eff == 0).OnlyEnforceIf(presence.Not())
+      effective_durations.append(eff)
 
-    effective_durations.append(effective_duration)
+  # DAILY OVERLOAD (soft)
+  total_eff = sum(
+    effective_durations) if effective_durations else model.NewConstant(0)
+  overload = model.NewIntVar(0, 24 * 60, "daily_overload")
+  # overload >= total_eff - max_daily_load
+  model.Add(overload >= total_eff -
+            model.NewConstant(constraints.max_daily_load))
+  loss_terms.append(model.NewIntVar(
+    0, 24 * 60 * overload_weight, "overload_scaled"))  # placeholder
 
-  overload = model.NewIntVar(min_time, 24 * 60, "daily_overload")
-  model.Add(overload >= sum(effective_durations) - constraints.max_daily_load)
-  loss_terms.append(overload * overload_weight)
+  # To properly multiply the overload by weight, we need an IntVar:
+  overload_penalty = model.NewIntVar(
+    0, 24 * 60 * overload_weight, "overload_penalty")
+  model.Add(overload_penalty == overload * overload_weight)
+  loss_terms.append(overload_penalty)
 
-  # ---------- BATCHING (CONTEXT SWITCH) ----------
+  # Batching / context switch
   if constraints.batch_similar_tasks:
     n = len(task_vars)
     for i in range(n):
       task_i, split_i, start_i, end_i, pres_i = task_vars[i].tuple
       for j in range(i + 1, n):
         task_j, split_j, start_j, end_j, pres_j = task_vars[j].tuple
-
         both_present = model.NewBoolVar(
           f"{task_i.id}_{split_i}_and_{task_j.id}_{split_j}_present")
         model.AddBoolAnd([pres_i, pres_j]).OnlyEnforceIf(both_present)
+        model.AddBoolOr([pres_i.Not(), pres_j.Not()]
+                        ).OnlyEnforceIf(both_present.Not())
 
-        # i_before_j ordering
         i_before_j = model.NewBoolVar(
           f"{task_i.id}_{split_i}_before_{task_j.id}_{split_j}")
         model.Add(start_j >= end_i).OnlyEnforceIf([i_before_j, both_present])
         model.Add(start_i >= end_j).OnlyEnforceIf(
           [i_before_j.Not(), both_present])
 
-        # immediate successor var
         immediate = model.NewBoolVar(
           f"{task_i.id}_{split_i}_immediately_before_{task_j.id}_{split_j}")
-        model.Add(immediate == 1).OnlyEnforceIf([i_before_j, both_present])
+        # immediate implies i_before_j and end_i == start_j; since equality is tricky, keep a relaxed version:
+        model.Add(immediate == 1).OnlyEnforceIf(
+          [i_before_j, both_present])  # conservative
         model.Add(immediate == 0).OnlyEnforceIf(i_before_j.Not())
 
-        # context switch penalty/reward
         if task_i.category != task_j.category:
           penalty = model.NewIntVar(
             0, switch_penalty_weight, f"switch_penalty_{i}_{j}")
@@ -117,5 +140,5 @@ def optimize_function(model: cp_model.CpModel, task_vars: list[TaskVar], constra
           model.Add(reward == 0).OnlyEnforceIf(immediate.Not())
           loss_terms.append(reward)
 
-  # ---------- OBJECTIVE ----------
+  # OBJECTIVE
   model.Minimize(sum(loss_terms))

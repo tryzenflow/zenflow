@@ -36,8 +36,8 @@ class SchedulerServiceStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.schedule = channel.unary_unary(
-                '/scheduler.SchedulerService/schedule',
+        self.Schedule = channel.unary_unary(
+                '/scheduler.SchedulerService/Schedule',
                 request_serializer=scheduler__pb2.ScheduleRequest.SerializeToString,
                 response_deserializer=scheduler__pb2.ScheduleResponse.FromString,
                 _registered_method=True)
@@ -48,7 +48,7 @@ class SchedulerServiceServicer(object):
 
     """
 
-    def schedule(self, request, context):
+    def Schedule(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -57,8 +57,8 @@ class SchedulerServiceServicer(object):
 
 def add_SchedulerServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'schedule': grpc.unary_unary_rpc_method_handler(
-                    servicer.schedule,
+            'Schedule': grpc.unary_unary_rpc_method_handler(
+                    servicer.Schedule,
                     request_deserializer=scheduler__pb2.ScheduleRequest.FromString,
                     response_serializer=scheduler__pb2.ScheduleResponse.SerializeToString,
             ),
@@ -76,7 +76,7 @@ class SchedulerService(object):
     """
 
     @staticmethod
-    def schedule(request,
+    def Schedule(request,
             target,
             options=(),
             channel_credentials=None,
@@ -89,7 +89,7 @@ class SchedulerService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/scheduler.SchedulerService/schedule',
+            '/scheduler.SchedulerService/Schedule',
             scheduler__pb2.ScheduleRequest.SerializeToString,
             scheduler__pb2.ScheduleResponse.FromString,
             options,
