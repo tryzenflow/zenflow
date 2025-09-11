@@ -1,4 +1,3 @@
-import math
 from ortools.sat.python import cp_model
 from models import Task, Constraints, Interval
 from optimizer import optimize_function
@@ -135,13 +134,10 @@ def schedule_tasks(tasks: list[Task], constraints: Constraints, min_time=0, max_
   task_vars: list[TaskVar] = []
   intervals = []
 
-  # ----- build task variables on global timeline -----
-  # (single variable set per task; availability enforced below)
   for task in tasks:
     start_min = min_time
     end_max = max_time
 
-    # apply task-local hard windows (fixed_start / earliest_start / latest_end)
     if task.fixed_start is not None:
       start_min = task.fixed_start
       end_max = task.fixed_start + task.duration
@@ -160,28 +156,19 @@ def schedule_tasks(tasks: list[Task], constraints: Constraints, min_time=0, max_
 
   model.AddNoOverlap(intervals)
 
-  # ----- enforce that each task (if present) must fit inside at least one available_hours block -----
-  # For each top-level TaskVar (or each split), create boolean 'fits_block_k' and constrain it.
-  # If a task has fixed_start, it already must fit due to start_min/end_max above.
   for tv in task_vars:
     task, split, start_var, end_var, presence = tv.tuple
-    # if there are no available_hours, skip (should be validated before)
     if not constraints.available_hours:
       continue
 
     block_flags = []
     for i, block in enumerate(constraints.available_hours):
       fits = model.NewBoolVar(f"fits_{task.id}_{split}_block_{i}")
-      # fits -> start >= block.start AND end <= block.end
       model.Add(start_var >= block.start).OnlyEnforceIf(fits)
       model.Add(end_var <= block.end).OnlyEnforceIf(fits)
       block_flags.append(fits)
 
-    # If task is scheduled (presence=1), it must fit at least one block
-    # presence => OR(block_flags)
     model.AddBoolOr(block_flags).OnlyEnforceIf(presence)
-    # If not present, no requirement (optional)
-    # (If task is mandatory you already set presence==1 in builders)
 
   # rest of model...
   deadline_weight_factor = init_deadline_weight(tasks)

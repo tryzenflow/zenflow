@@ -22,7 +22,8 @@ import { CategoriesModule } from "./categories/categories.module";
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: process.env.NODE_ENV === "production" ? ".env" : ".env.dev",
+      envFilePath:
+        process.env.NODE_ENV === "production" ? ".env.prod" : ".env.dev",
       validationSchema: Joi.object({
         DATABASE_URL: Joi.string().required(),
         SESSION_SECRET: Joi.string().required(),

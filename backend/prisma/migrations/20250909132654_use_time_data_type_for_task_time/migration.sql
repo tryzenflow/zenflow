@@ -1,4 +1,0 @@
--- AlterTable
-ALTER TABLE "public"."Task" ALTER COLUMN "fixedStart" SET DATA TYPE TIME,
-ALTER COLUMN "earliestStart" SET DATA TYPE TIME,
-ALTER COLUMN "latestEnd" SET DATA TYPE TIME;

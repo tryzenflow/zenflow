@@ -14,7 +14,7 @@ export const validateTaskFields = (dto: CreateTaskDto | UpdateTaskDto) => {
       "Task duration must not be less than latestEnd - earliestStart"
     );
 
-  if (dto.fixedStart !== undefined && dto.mandatory)
+  if (dto.fixedStart !== undefined && !dto.mandatory)
     errors.push("Fixed start cannot be optional");
 
   if (

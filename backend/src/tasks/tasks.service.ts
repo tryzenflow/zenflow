@@ -19,11 +19,11 @@ export class TasksService {
     { prerequisites = [], ...createTaskDto }: CreateTaskDto,
     userId: string
   ) {
+    const errors = validateTaskFields({ prerequisites, ...createTaskDto });
+    if (errors.length > 0) {
+      throw new BadRequestException(errors);
+    }
     try {
-      const errors = validateTaskFields({ prerequisites, ...createTaskDto });
-      if (errors.length > 0) {
-        throw new BadRequestException(errors);
-      }
       const newTask = await this.prisma.task.create({
         data: {
           ...createTaskDto,
@@ -33,6 +33,8 @@ export class TasksService {
       });
       return newTask;
     } catch (error) {
+      console.log({ error });
+
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === PostgresErrorCode.RecordNotFound)
           throw new NotFoundException();
@@ -41,6 +43,7 @@ export class TasksService {
             "Cannot create task because its associated category, prerequisites may not exist"
           );
       }
+
       throw new InternalServerErrorException();
     }
   }

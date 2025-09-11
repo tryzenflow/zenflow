@@ -15,9 +15,9 @@ CREATE TABLE "public"."Task" (
     "title" TEXT NOT NULL,
     "duration" INTEGER NOT NULL,
     "priority" INTEGER NOT NULL DEFAULT 3,
-    "fixedStart" TIMESTAMP(3),
-    "earliestStart" TIMESTAMP(3),
-    "latestEnd" TIMESTAMP(3),
+    "fixedStart" SMALLINT,
+    "earliestStart" SMALLINT,
+    "latestEnd" SMALLINT,
     "deadline" TIMESTAMP(3),
     "mandatory" BOOLEAN NOT NULL DEFAULT true,
     "splittable" BOOLEAN NOT NULL DEFAULT false,
@@ -25,18 +25,20 @@ CREATE TABLE "public"."Task" (
     "energyLevel" INTEGER NOT NULL DEFAULT 1,
     "userId" TEXT NOT NULL,
     "categoryId" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Task_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "public"."Schedule" (
+    "date" DATE NOT NULL,
     "start" TIMESTAMP(3) NOT NULL,
     "end" TIMESTAMP(3) NOT NULL,
     "split" SMALLINT NOT NULL,
     "taskId" TEXT NOT NULL,
 
-    CONSTRAINT "Schedule_pkey" PRIMARY KEY ("taskId","split")
+    CONSTRAINT "Schedule_pkey" PRIMARY KEY ("taskId","split","date")
 );
 
 -- CreateTable
@@ -99,7 +101,7 @@ CREATE INDEX "_TaskPrerequisites_B_index" ON "public"."_TaskPrerequisites"("B");
 ALTER TABLE "public"."Task" ADD CONSTRAINT "Task_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."Task" ADD CONSTRAINT "Task_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "public"."Category"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "public"."Task" ADD CONSTRAINT "Task_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "public"."Category"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."Schedule" ADD CONSTRAINT "Schedule_taskId_fkey" FOREIGN KEY ("taskId") REFERENCES "public"."Task"("id") ON DELETE CASCADE ON UPDATE CASCADE;

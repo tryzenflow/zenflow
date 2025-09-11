@@ -19,6 +19,24 @@ cd backend/
 sh build_images.sh
 ```
 
+### Add environment variables
+Create a `.env.prod` file in the `backend/` directory and add:
+```env
+DATABASE_URL="postgres://admin:admin@zenflow-db-prod:5432/zenflow-prod?sslmode=disable&schema=public"
+CACHE_URL="redis://zenflow-cache-prod:6379"
+CORS_ORIGIN="http://localhost:3000"
+MAIL_TRANSPORT="smtp://zenflow-mail-prod:25"
+SESSION_SECRET='s3cr3t'
+GRPC_SCHEDULER_URL='zenflow-scheduler-prod:50051'
+```
+
+Create a `docker.env` file in the `backend/` directory and add:
+```env
+POSTGRES_USER=admin
+POSTGRES_PASSWORD=admin
+POSTGRES_DB=zenflow-prod
+```
+
 ### Run Docker compose
 ```bash
 docker compose up -d
@@ -85,7 +103,7 @@ If the OTP code is incorrect, the response is a 400 Bad Request with the payload
 }
 ```
 
-#### `GET /auth/me`: get current logged in user
+#### `GET /auth/me` (auth required): get current logged in user
 
 Response (200 OK):
 ```json
@@ -98,8 +116,10 @@ Response (200 OK):
 }
 ```
 
+If no user is logged in, an 403 Forbidden is returned.
 
-#### `POST /auth/logout`: log out
+
+#### `POST /auth/logout` (auth required): log out
 
 Response (204 No Content)
 
@@ -141,7 +161,7 @@ Response (201 Created):
 }
 ```
 
-#### `PATCH /tasks/:id` (auth requried): update a task by its `id`
+#### `PATCH /tasks/:id` (auth required): update a task by its `id`
 
 Request body:
 
@@ -213,7 +233,7 @@ Response: 204 No Content
 ]
 ```
 
-#### `POST /populate` (auth required): Populate some default categories. Call once upon user creation.
+#### `POST /categories/populate` (auth required): Populate some default categories. Call once upon user creation.
 
 Request body: N/A
 
@@ -264,7 +284,7 @@ Response:
 
 ### Schedules
 
-#### `GET /schedules?start=<start>&end=<end>`: get the user's schedules between a particular time range
+#### `GET /schedules?start=<start>&end=<end>` (auth required): get the user's schedules from `start` to `end` (exclusive)
 
 `<start>` and `<end>` are required and they have to be date strings in the format of `yyyy-mm-dd`.
 
@@ -294,7 +314,7 @@ Response:
 ```
 
 
-#### `PUT /schedules/:id/split/:split`: update a particular split of a task's schedule
+#### `PUT /schedules/:year/:month/:day/tasks/:id/split/:split` (auth required): update a particular split of a task's schedule on a particular date
 
 Request body:
 ```json
@@ -314,7 +334,7 @@ Response (200 OK):
 }
 ```
 
-#### `DELETE /schedules/:id/split/:split`: delete a particular split of a task's schedule
+#### `DELETE /schedules/:year/:month/:day/tasks/:id/split/:split`: delete a particular split of a task's schedule on a particular date
 
 Response: N/A (204 No Content)
 
@@ -411,7 +431,7 @@ Response (201 Created):
 >    "statusCode": 400
 > }
 
-#### `GET /constraints`: get user constraints
+#### `GET /constraints` (auth required): get user constraints
 
 ```json
 {
@@ -449,4 +469,4 @@ Response (201 Created):
 }
 ```
 
-#### `PATCH /constraints`: update user's constraints
+#### `PATCH /constraints` (auth required): update user's constraints

@@ -6,30 +6,44 @@ import {
 } from "@nestjs/common";
 import { fromZonedTime } from "date-fns-tz";
 import { UpdateScheduleDto } from "./dto/update-schedule.dto";
-import { ScheduleResponse } from "../scheduler/scheduler.service";
+import { ScheduleResponse } from "../scheduler/interfaces";
 import { PrismaService } from "../prisma/prisma.service";
 import { Prisma } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { minutesToUtc } from "../scheduler/utils";
 import { FindSchedulesDto } from "./dto/find-schedules.dto";
+import { extractDate } from "./utils";
 
 @Injectable()
 export class SchedulesService {
   constructor(private prisma: PrismaService) {}
 
   async create(date: Date, { schedules }: ScheduleResponse, timezone: string) {
-    const saved = await this.prisma.schedule.createManyAndReturn({
-      data: schedules.map((s) => ({
-        taskId: s.taskId,
-        split: s?.split ?? 0,
-        start: minutesToUtc(date, s?.start ?? 0, timezone),
-        end: minutesToUtc(date, s?.end ?? 0, timezone),
-      })),
-    });
-    return saved;
+    try {
+      const saved = await this.prisma.schedule.createManyAndReturn({
+        data: schedules.map((s) => ({
+          date,
+          taskId: s.taskId,
+          split: s?.split ?? 0,
+          start: minutesToUtc(date, s?.start ?? 0, timezone),
+          end: minutesToUtc(date, s?.end ?? 0, timezone),
+        })),
+      });
+      return saved;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === PostgresErrorCode.UniqueConstraintViolation) {
+          throw new BadRequestException(
+            `Duplicate tasks on date ${extractDate(date)}`
+          );
+        }
+        throw new InternalServerErrorException();
+      }
+    }
   }
 
   async update(
+    date: Date,
     taskId: string,
     split: number,
     { start, end }: UpdateScheduleDto
@@ -39,16 +53,13 @@ export class SchedulesService {
         "Task start time must be less than its end time"
       );
     const existingSchedule = await this.prisma.schedule.findUnique({
-      where: { taskId_split: { taskId, split } },
+      where: { taskId_split_date: { taskId, split, date } },
     });
     if (!existingSchedule) throw new NotFoundException();
 
     const updated = await this.prisma.schedule.update({
-      where: { taskId_split: { split, taskId } },
-      data: {
-        start,
-        end,
-      },
+      where: { taskId_split_date: { split, taskId, date } },
+      data: { start, end },
     });
     return updated;
   }
@@ -62,6 +73,7 @@ export class SchedulesService {
         start: { gte: startDate, lt: endDate },
         end: { gte: startDate, lt: endDate },
       },
+      omit: { date: true },
       include: {
         task: { select: { title: true } },
       },
@@ -70,10 +82,10 @@ export class SchedulesService {
     return rangeSchedules;
   }
 
-  async remove(taskId: string, split: number) {
+  async remove(date: Date, taskId: string, split: number) {
     try {
       await this.prisma.schedule.delete({
-        where: { taskId_split: { split, taskId } },
+        where: { taskId_split_date: { split, taskId, date } },
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {

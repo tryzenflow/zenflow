@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -30,10 +31,19 @@ export class CategoriesService {
   }
 
   async create(createCategoryDto: CreateCategoryDto, userId: string) {
-    const newCategory = await this.prisma.category.create({
-      data: { ...createCategoryDto, userId },
-    });
-    return newCategory;
+    try {
+      const newCategory = await this.prisma.category.create({
+        data: { ...createCategoryDto, userId },
+      });
+      return newCategory;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError)
+        if (error.code === PostgresErrorCode.UniqueConstraintViolation)
+          throw new BadRequestException(
+            `Category "${createCategoryDto.name}" already exists`
+          );
+      throw new InternalServerErrorException();
+    }
   }
 
   async findAll(userId: string) {
@@ -56,6 +66,10 @@ export class CategoriesService {
       return updated;
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === PostgresErrorCode.UniqueConstraintViolation)
+          throw new BadRequestException(
+            `Category "${updateCategoryDto.name}" already exists`
+          );
         if (error.code === PostgresErrorCode.RecordNotFound)
           throw new NotFoundException();
       }

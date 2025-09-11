@@ -1,5 +1,5 @@
 // pre-schedule-validation.pipe.ts
-import { ScheduleRequest } from "../scheduler.service";
+import { ScheduleRequest } from "../interfaces";
 
 export function validatePreSchedule(body: ScheduleRequest): string[] {
   const errors: any[] = [];

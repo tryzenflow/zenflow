@@ -9,11 +9,8 @@ import {
 } from "@nestjs/common";
 import { SCHEDULER_PACKAGE, SCHEDULER_SERVICE } from "./constants";
 import { type ClientGrpc } from "@nestjs/microservices";
-import {
-  ScheduleResponse,
-  type ScheduleRequest,
-  type SchedulerService,
-} from "./scheduler.service";
+import { SchedulerService } from "./scheduler.service";
+import { ScheduleRequest, ScheduleResponse } from "./interfaces";
 import { ConstraintsService } from "../constraints/constraints.service";
 import { TasksService } from "../tasks/tasks.service";
 import { CookieAuthGuard } from "../auth/guards";

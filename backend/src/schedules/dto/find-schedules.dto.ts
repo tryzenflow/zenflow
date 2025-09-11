@@ -1,9 +1,11 @@
-import { Matches } from "class-validator";
+import { IsDateString, MaxLength } from "class-validator";
 
 export class FindSchedulesDto {
-  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @MaxLength(10)
+  @IsDateString()
   start: string;
 
-  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @MaxLength(10)
+  @IsDateString()
   end: string;
 }

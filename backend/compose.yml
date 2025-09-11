@@ -25,7 +25,7 @@ services:
       mail:
         condition: service_started
     env_file:
-      - .env
+      - .env.prod
 
   postgres:
     container_name: zenflow-db-prod
