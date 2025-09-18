@@ -95,30 +95,6 @@ def add_prerequisite_constraints(model: cp_model.CpModel, task_vars: list[TaskVa
         model.Add(prereq_tv.end <= tv.start).OnlyEnforceIf(both_present)
 
 
-def add_min_gap_constraints(model: cp_model.CpModel, task_vars: list[TaskVar], min_gap: int):
-  """Enforce min gap between tasks except when both are fixed."""
-  for i in range(len(task_vars)):
-    for j in range(i + 1, len(task_vars)):
-      task_i, split_i, start_i, end_i, pres_i = task_vars[i].tuple
-      task_j, split_j, start_j, end_j, pres_j = task_vars[j].tuple
-
-      if task_i.fixed_start is not None and task_j.fixed_start is not None:
-        continue
-
-      i_before_j = model.NewBoolVar(
-        f'{task_i.id}_{split_i}_before_{task_j.id}_{split_j}')
-      both_present = model.NewBoolVar(f'both_present_{i}_{j}')
-
-      model.AddBoolAnd([pres_i, pres_j]).OnlyEnforceIf(both_present)
-      model.AddBoolOr([pres_i.Not(), pres_j.Not()]
-                      ).OnlyEnforceIf(both_present.Not())
-
-      model.Add(end_i + min_gap <=
-                start_j).OnlyEnforceIf([i_before_j, both_present])
-      model.Add(end_j + min_gap <=
-                start_i).OnlyEnforceIf([i_before_j.Not(), both_present])
-
-
 def init_deadline_weight(tasks: list[Task]):
   sorted_tasks = sorted(
     [t for t in tasks if t.deadline is not None], key=lambda t: t.deadline)
@@ -138,15 +114,12 @@ def schedule_tasks(tasks: list[Task], constraints: Constraints, min_time=0, max_
     start_min = min_time
     end_max = max_time
 
-    if task.fixed_start is not None:
-      start_min = task.fixed_start
-      end_max = task.fixed_start + task.duration
     if task.earliest_start is not None:
       start_min = max(start_min, task.earliest_start)
     if task.latest_end is not None:
       end_max = min(end_max, task.latest_end)
 
-    if task.splittable:
+    if task.max_splits > 1:
       tvs, ints = build_splittable_task(model, task, start_min, end_max)
     else:
       tvs, ints = build_non_splittable_task(model, task, start_min, end_max)
@@ -156,23 +129,8 @@ def schedule_tasks(tasks: list[Task], constraints: Constraints, min_time=0, max_
 
   model.AddNoOverlap(intervals)
 
-  for tv in task_vars:
-    task, split, start_var, end_var, presence = tv.tuple
-    if not constraints.available_hours:
-      continue
-
-    block_flags = []
-    for i, block in enumerate(constraints.available_hours):
-      fits = model.NewBoolVar(f"fits_{task.id}_{split}_block_{i}")
-      model.Add(start_var >= block.start).OnlyEnforceIf(fits)
-      model.Add(end_var <= block.end).OnlyEnforceIf(fits)
-      block_flags.append(fits)
-
-    model.AddBoolOr(block_flags).OnlyEnforceIf(presence)
-
   # rest of model...
   deadline_weight_factor = init_deadline_weight(tasks)
-  add_min_gap_constraints(model, task_vars, constraints.min_gap_between_tasks)
   add_prerequisite_constraints(model, task_vars)
   optimize_function(model, task_vars, constraints, deadline_weight_factor)
   solver = cp_model.CpSolver()

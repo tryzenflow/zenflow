@@ -4,7 +4,7 @@ import scheduler_pb2
 import scheduler_pb2_grpc
 
 from google.protobuf.timestamp_pb2 import Timestamp
-from models import Task, Interval, EnergyBlock, Constraints
+from models import Task, Interval, FocusBlock, Constraints
 from scheduler import schedule_tasks
 
 
@@ -18,32 +18,30 @@ def parse_task(task_proto: scheduler_pb2.Task) -> Task:
       title=task_proto.title,
       duration=task_proto.duration,
       priority=task_proto.priority or 3,
-      fixed_start=task_proto.fixed_start if task_proto.fixed_start else None,
       earliest_start=task_proto.earliest_start if task_proto.earliest_start else None,
       latest_end=task_proto.latest_end if task_proto.latest_end else None,
       deadline=deadline.ToDatetime() if deadline else None,
       mandatory=task_proto.mandatory,
-      splittable=task_proto.splittable,
       max_splits=task_proto.max_splits or 1,
       category=task_proto.category_id if task_proto.category_id else None,
       prerequisites=list(task_proto.prerequisites),
-      energy_level=task_proto.energy_level or 1,
+      focus=task_proto.focus or 1,
   )
 
 
 def parse_constraints(c_proto: scheduler_pb2.Constraints) -> Constraints:
   available_hours = [Interval(a.start, a.end) for a in c_proto.available_hours]
-  energy_blocks = [
-      EnergyBlock(
-          energy_level=eb.energy_level,
-          interval=Interval(eb.interval.start, eb.interval.end),
+  focus_blocks = [
+      FocusBlock(
+          level=fb.level,
+          interval=Interval(fb.interval.start, fb.interval.end),
       )
-      for eb in c_proto.energy_blocks
+      for fb in c_proto.focus_blocks
   ]
   return Constraints(
       available_hours=available_hours,
       min_gap_between_tasks=c_proto.min_gap_between_tasks,
-      energy_blocks=energy_blocks,
+      focus_blocks=focus_blocks,
       batch_similar_tasks=c_proto.batch_similar_tasks,
       max_daily_load=c_proto.max_daily_load,
   )

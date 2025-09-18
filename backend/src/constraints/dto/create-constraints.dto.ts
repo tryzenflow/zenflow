@@ -1,5 +1,5 @@
 import { IsInt, Min, IsBoolean, IsArray, Max } from "class-validator";
-import { CreateEnergyBlockDto } from "./create-energy-block.dto";
+import { CreateFocusBlockDto } from "./create-energy-block.dto";
 import { CreateAvailableHoursDto } from "./create-available-hours.dto";
 import { DAILY_HORIZON } from "../../common/constants";
 
@@ -21,5 +21,5 @@ export class CreateConstraintsDto {
   batchSimilarTasks: boolean;
 
   @IsArray()
-  energyBlocks: CreateEnergyBlockDto[];
+  focusBlocks: CreateFocusBlockDto[];
 }

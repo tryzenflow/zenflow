@@ -21,12 +21,12 @@ export class ConstraintsService {
       availableHours,
       batchSimilarTasks,
       minGapBetweenTasks,
-      energyBlocks,
+      focusBlocks,
       maxDailyLoad,
     }: CreateConstraintsDto,
     userId: string
   ) {
-    validateConstraintsOverlaps(availableHours, energyBlocks);
+    validateConstraintsOverlaps(availableHours, focusBlocks);
     try {
       const constraints = await this.prisma.constraints.create({
         data: {
@@ -38,19 +38,19 @@ export class ConstraintsService {
           },
           batchSimilarTasks,
           minGapBetweenTasks,
-          energyBlocks: {
+          focusBlocks: {
             createMany: {
-              data: energyBlocks.map(({ start, end, energyLevel }) => ({
+              data: focusBlocks.map(({ start, end, level }) => ({
                 start,
                 end,
-                energyLevel,
+                level,
               })),
             },
           },
           maxDailyLoad,
         },
         select: {
-          energyBlocks: { orderBy: { start: "asc" } },
+          focusBlocks: { orderBy: { start: "asc" } },
           availableHours: { orderBy: { start: "asc" } },
         },
       });
@@ -68,7 +68,7 @@ export class ConstraintsService {
   async get(id: string) {
     const constraint = await this.prisma.constraints.findUnique({
       where: { id: id },
-      include: { availableHours: true, energyBlocks: true },
+      include: { availableHours: true, focusBlocks: true },
     });
     if (!constraint) throw new NotFoundException();
     return constraint;
@@ -79,12 +79,12 @@ export class ConstraintsService {
     {
       availableHours,
       deleteAvailableHoursIds,
-      deleteEnergyBlocksIds,
-      energyBlocks,
+      deleteFocusBlocksIds,
+      focusBlocks,
       batchSimilarTasks,
       maxDailyLoad,
       minGapBetweenTasks,
-      updateEnergyBlocksDto,
+      updateFocusBlocksDto,
       updateAvailableHoursDto,
     }: UpdateConstraintsDto
   ) {
@@ -97,19 +97,19 @@ export class ConstraintsService {
         ...(updateAvailableHoursDto ?? []),
       ],
       [
-        ...(energyBlocks ?? []),
-        ...existingConstraints.energyBlocks,
-        ...(updateEnergyBlocksDto ?? []),
+        ...(focusBlocks ?? []),
+        ...existingConstraints.focusBlocks,
+        ...(updateFocusBlocksDto ?? []),
       ]
     );
 
     const updateAvailableHoursIds = updateAvailableHoursDto?.map(
       (dto) => dto.id
     );
-    const updateEnergyBlockIds = updateEnergyBlocksDto?.map((dto) => dto.id);
+    const updateFocusBlockIds = updateFocusBlocksDto?.map((dto) => dto.id);
 
     validateNoIntersectIds(updateAvailableHoursIds, deleteAvailableHoursIds);
-    validateNoIntersectIds(updateEnergyBlockIds, deleteEnergyBlocksIds);
+    validateNoIntersectIds(updateFocusBlockIds, deleteFocusBlocksIds);
 
     const updated = await this.prisma.constraints.update({
       where: { id },
@@ -131,22 +131,22 @@ export class ConstraintsService {
               }))
             : undefined,
         },
-        energyBlocks: energyBlocks
+        focusBlocks: focusBlocks
           ? {
-              updateMany: updateEnergyBlocksDto
-                ? updateEnergyBlocksDto.map(({ id, ...rest }) => ({
+              updateMany: updateFocusBlocksDto
+                ? updateFocusBlocksDto.map(({ id, ...rest }) => ({
                     where: { id },
                     data: { ...rest },
                   }))
                 : undefined,
-              deleteMany: deleteEnergyBlocksIds
-                ? deleteEnergyBlocksIds.map((id) => ({ id }))
+              deleteMany: deleteFocusBlocksIds
+                ? deleteFocusBlocksIds.map((id) => ({ id }))
                 : undefined,
               createMany: {
-                data: energyBlocks.map(({ start, end, energyLevel }) => ({
+                data: focusBlocks.map(({ start, end, level }) => ({
                   start,
                   end,
-                  energyLevel,
+                  level,
                 })),
               },
             }

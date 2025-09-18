@@ -1,3 +1,6 @@
+-- CreateEnum
+CREATE TYPE "public"."RepeatType" AS ENUM ('Daily', 'Weekly', 'Monthly', 'Yearly');
+
 -- CreateTable
 CREATE TABLE "public"."User" (
     "id" TEXT NOT NULL,
@@ -15,14 +18,12 @@ CREATE TABLE "public"."Task" (
     "title" TEXT NOT NULL,
     "duration" INTEGER NOT NULL,
     "priority" INTEGER NOT NULL DEFAULT 3,
-    "fixedStart" SMALLINT,
     "earliestStart" SMALLINT,
     "latestEnd" SMALLINT,
     "deadline" TIMESTAMP(3),
     "mandatory" BOOLEAN NOT NULL DEFAULT true,
-    "splittable" BOOLEAN NOT NULL DEFAULT false,
     "maxSplits" INTEGER NOT NULL DEFAULT 1,
-    "energyLevel" INTEGER NOT NULL DEFAULT 1,
+    "focus" INTEGER NOT NULL DEFAULT 1,
     "userId" TEXT NOT NULL,
     "categoryId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -64,14 +65,14 @@ CREATE TABLE "public"."AvailableHour" (
 );
 
 -- CreateTable
-CREATE TABLE "public"."EnergyBlock" (
+CREATE TABLE "public"."FocusBlock" (
     "id" TEXT NOT NULL,
-    "energyLevel" SMALLINT NOT NULL,
+    "level" SMALLINT NOT NULL,
     "start" SMALLINT NOT NULL,
     "end" SMALLINT NOT NULL,
     "constraintsId" TEXT NOT NULL,
 
-    CONSTRAINT "EnergyBlock_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "FocusBlock_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -84,6 +85,36 @@ CREATE TABLE "public"."Category" (
 );
 
 -- CreateTable
+CREATE TABLE "public"."File" (
+    "id" TEXT NOT NULL,
+    "filename" TEXT NOT NULL,
+    "path" TEXT NOT NULL,
+    "mimetype" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+
+    CONSTRAINT "File_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."RepeatRule" (
+    "id" TEXT NOT NULL,
+    "taskId" TEXT NOT NULL,
+    "type" "public"."RepeatType" NOT NULL,
+    "frequency" INTEGER NOT NULL,
+    "weekday" INTEGER[],
+    "month" INTEGER,
+    "day" INTEGER,
+    "weekdayOrdinal" INTEGER,
+    "skipWeekends" BOOLEAN,
+    "firstWorkday" BOOLEAN,
+    "lastWorkday" BOOLEAN,
+    "until" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "RepeatRule_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "public"."_TaskPrerequisites" (
     "A" TEXT NOT NULL,
     "B" TEXT NOT NULL,
@@ -93,6 +124,9 @@ CREATE TABLE "public"."_TaskPrerequisites" (
 
 -- CreateIndex
 CREATE UNIQUE INDEX "User_email_key" ON "public"."User"("email");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Category_userId_name_key" ON "public"."Category"("userId", "name");
 
 -- CreateIndex
 CREATE INDEX "_TaskPrerequisites_B_index" ON "public"."_TaskPrerequisites"("B");
@@ -113,10 +147,16 @@ ALTER TABLE "public"."Constraints" ADD CONSTRAINT "Constraints_id_fkey" FOREIGN 
 ALTER TABLE "public"."AvailableHour" ADD CONSTRAINT "AvailableHour_constraintsId_fkey" FOREIGN KEY ("constraintsId") REFERENCES "public"."Constraints"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."EnergyBlock" ADD CONSTRAINT "EnergyBlock_constraintsId_fkey" FOREIGN KEY ("constraintsId") REFERENCES "public"."Constraints"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "public"."FocusBlock" ADD CONSTRAINT "FocusBlock_constraintsId_fkey" FOREIGN KEY ("constraintsId") REFERENCES "public"."Constraints"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."Category" ADD CONSTRAINT "Category_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."File" ADD CONSTRAINT "File_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."RepeatRule" ADD CONSTRAINT "RepeatRule_taskId_fkey" FOREIGN KEY ("taskId") REFERENCES "public"."Task"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."_TaskPrerequisites" ADD CONSTRAINT "_TaskPrerequisites_A_fkey" FOREIGN KEY ("A") REFERENCES "public"."Task"("id") ON DELETE CASCADE ON UPDATE CASCADE;

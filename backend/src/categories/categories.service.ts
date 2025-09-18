@@ -9,25 +9,22 @@ import { UpdateCategoryDto } from "./dto/update-category.dto";
 import { PrismaService } from "../prisma/prisma.service";
 import { Prisma } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
+import { PopulateCategoriesDto } from "./dto/populate-categories.dto";
 
 @Injectable()
 export class CategoriesService {
   constructor(private prisma: PrismaService) {}
 
-  async initDefault(userId: string) {
-    const defaultCategories = [
-      "💼 Work / Study",
-      "💪 Health & Fitness",
-      "🍽️ Meals",
-      "👨‍👩‍👧 Personal / Family",
-      "🧹 Chores / Errands",
-      "🎮 Leisure",
-      "😴 Rest",
-    ];
-    await this.prisma.category.createMany({
-      data: defaultCategories.map((c) => ({ name: c, userId })),
+  async populateCategories(
+    userId: string,
+    { categories }: PopulateCategoriesDto
+  ) {
+    const newCategories = await this.prisma.category.createManyAndReturn({
+      data: categories.map(({ name }) => ({ name, userId })),
+      select: { id: true, name: true },
       skipDuplicates: true,
     });
+    return newCategories;
   }
 
   async create(createCategoryDto: CreateCategoryDto, userId: string) {

@@ -14,6 +14,7 @@ import { UpdateCategoryDto } from "./dto/update-category.dto";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
 import { type User } from "../../generated/prisma";
+import { PopulateCategoriesDto } from "./dto/populate-categories.dto";
 
 @Controller("categories")
 @UseGuards(CookieAuthGuard)
@@ -21,8 +22,8 @@ export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 
   @Post("populate")
-  populate(@CurrentUser() user: User) {
-    return this.categoriesService.initDefault(user.id);
+  populate(@CurrentUser() user: User, @Body() dto: PopulateCategoriesDto) {
+    return this.categoriesService.populateCategories(user.id, dto);
   }
 
   @Post()

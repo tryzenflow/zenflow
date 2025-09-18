@@ -14,26 +14,5 @@ export const validateTaskFields = (dto: CreateTaskDto | UpdateTaskDto) => {
       "Task duration must not be less than latestEnd - earliestStart"
     );
 
-  if (dto.fixedStart !== undefined && !dto.mandatory)
-    errors.push("Fixed start cannot be optional");
-
-  if (
-    dto.fixedStart !== undefined &&
-    (dto.earliestStart !== undefined || dto.latestEnd !== undefined)
-  )
-    errors.push("Fixed-start task cannot have earliest start and latest end");
-
-  if (
-    dto.fixedStart !== undefined &&
-    (dto.splittable || (dto.maxSplits !== undefined && dto?.maxSplits > 1))
-  ) {
-    errors.push("Fixed-start task cannot be splittable or have maxSplits > 1.");
-  }
-
-  // Non-splittable task cannot have maxSplits > 1
-  if (!dto.splittable && dto.maxSplits !== undefined && dto.maxSplits > 1) {
-    errors.push("Non-splittable task cannot have maxSplits > 1.");
-  }
-
   return errors;
 };

@@ -18,18 +18,31 @@ import { extractDate } from "./utils";
 export class SchedulesService {
   constructor(private prisma: PrismaService) {}
 
-  async create(date: Date, { schedules }: ScheduleResponse, timezone: string) {
+  async schedule(
+    date: Date,
+    { schedules }: ScheduleResponse,
+    timezone: string
+  ) {
     try {
-      const saved = await this.prisma.schedule.createManyAndReturn({
-        data: schedules.map((s) => ({
-          date,
-          taskId: s.taskId,
-          split: s?.split ?? 0,
-          start: minutesToUtc(date, s?.start ?? 0, timezone),
-          end: minutesToUtc(date, s?.end ?? 0, timezone),
-        })),
+      return this.prisma.$transaction(async (tx) => {
+        await tx.schedule.deleteMany({ where: { date } });
+
+        const saved = await tx.schedule.createManyAndReturn({
+          data: schedules.map((s) => ({
+            date,
+            taskId: s.taskId,
+            split: s?.split ?? 0,
+            start: minutesToUtc(date, s?.start ?? 0, timezone),
+            end: minutesToUtc(date, s?.end ?? 0, timezone),
+          })),
+          omit: { date: true, taskId: true },
+          include: {
+            task: { select: { id: true, title: true } },
+          },
+        });
+        saved.sort((a, b) => a.start.getTime() - b.start.getTime());
+        return saved;
       });
-      return saved;
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === PostgresErrorCode.UniqueConstraintViolation) {
@@ -73,9 +86,9 @@ export class SchedulesService {
         start: { gte: startDate, lt: endDate },
         end: { gte: startDate, lt: endDate },
       },
-      omit: { date: true },
+      omit: { taskId: true, date: true },
       include: {
-        task: { select: { title: true } },
+        task: { select: { id: true, title: true } },
       },
       orderBy: { start: "asc" },
     });

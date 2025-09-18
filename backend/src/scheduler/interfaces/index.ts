@@ -4,8 +4,8 @@ export interface ScheduleRequest {
   constraints: {
     availableHours: Interval[];
     batchSimilarTasks: boolean;
-    energyBlocks: {
-      energyLevel: number;
+    focusBlocks: {
+      level: number;
       interval: Interval;
     }[];
     maxDailyLoad: number;
@@ -17,14 +17,12 @@ export interface ScheduleRequest {
     title: string;
     duration: number;
     priority: number;
-    fixedStart?: number;
     earliestStart?: number;
     latestEnd?: number;
     deadline?: Date;
     mandatory: boolean;
-    splittable: boolean;
     maxSplits: number;
-    energyLevel: number;
+    focus: number;
     categoryId?: string;
     prerequisites: string[];
   }[];

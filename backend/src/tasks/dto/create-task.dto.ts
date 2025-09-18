@@ -14,6 +14,8 @@ import { DAILY_HORIZON } from "../../common/constants";
 export class CreateTaskDto {
   @IsString() title: string;
 
+  @IsString() @IsOptional() note?: string;
+
   @IsInt()
   @Min(5)
   @IsDivisibleBy(5)
@@ -24,12 +26,6 @@ export class CreateTaskDto {
   @Max(3)
   @IsOptional()
   priority?: number = 3;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(DAILY_HORIZON)
-  fixedStart?: number;
 
   @IsOptional()
   @IsInt()
@@ -51,10 +47,6 @@ export class CreateTaskDto {
   @IsOptional()
   mandatory?: boolean;
 
-  @IsBoolean()
-  @IsOptional()
-  splittable?: boolean;
-
   @IsInt()
   @Min(1)
   @IsOptional()
@@ -64,7 +56,7 @@ export class CreateTaskDto {
   @Min(1)
   @Max(3)
   @IsOptional()
-  energyLevel?: number = 1;
+  focus?: number = 1;
 
   @IsOptional()
   @IsString()

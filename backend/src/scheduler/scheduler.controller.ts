@@ -21,6 +21,8 @@ import { SchedulesService } from "../schedules/schedules.service";
 import { utcToMinutes } from "./utils";
 import { validatePreSchedule } from "./validators/pre-schedule";
 import { firstValueFrom } from "rxjs";
+import { addDays, endOfDay, startOfDay } from "date-fns";
+import { extractDate } from "../schedules/utils";
 
 @Controller()
 @UseGuards(CookieAuthGuard)
@@ -54,12 +56,10 @@ export class SchedulerController implements OnModuleInit {
       constraints: {
         availableHours: constraints.availableHours,
         batchSimilarTasks: constraints.batchSimilarTasks,
-        energyBlocks: constraints.energyBlocks.map(
-          ({ energyLevel, ...interval }) => ({
-            energyLevel: energyLevel,
-            interval,
-          })
-        ),
+        focusBlocks: constraints.focusBlocks.map(({ level, ...interval }) => ({
+          level,
+          interval,
+        })),
         maxDailyLoad: constraints.maxDailyLoad,
         minGapBetweenTasks: constraints.minGapBetweenTasks,
       },
@@ -67,15 +67,13 @@ export class SchedulerController implements OnModuleInit {
         id: task.id,
         categoryId: task.categoryId ?? undefined,
         duration: task.duration,
-        energyLevel: task.energyLevel,
+        focus: task.focus,
         mandatory: task.mandatory,
-        fixedStart: task.fixedStart ?? undefined,
         earliestStart: task.earliestStart ?? undefined,
         latestEnd: task.latestEnd ?? undefined,
         maxSplits: task.maxSplits,
         prerequisites: task.prerequisites.map((p) => p.id),
         priority: task.priority,
-        splittable: task.splittable,
         title: task.title,
         deadline: task.deadline ?? undefined,
       })),
@@ -87,11 +85,22 @@ export class SchedulerController implements OnModuleInit {
       this.schedulerService.Schedule(request)
     );
 
-    const saved = await this.schedulesService.create(
+    if (response.schedules.length === 0)
+      return {
+        feasible: false,
+        schedule: await this.schedulesService.findSchedules(
+          {
+            start: scheduleDate,
+            end: extractDate(addDays(new Date(scheduleDate), 1)),
+          },
+          user.timezone
+        ),
+      };
+    const schedule = await this.schedulesService.schedule(
       new Date(scheduleDate),
       response,
       user.timezone
     );
-    return saved;
+    return { feasible: true, schedule };
   }
 }

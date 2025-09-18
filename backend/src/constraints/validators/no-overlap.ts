@@ -18,7 +18,7 @@ export const checkNoOverlap = (
 
 export function validateConstraintsOverlaps(
   availableHours: CreateConstraintsDto["availableHours"],
-  energyBlocks: CreateConstraintsDto["energyBlocks"]
+  focusBlocks: CreateConstraintsDto["focusBlocks"]
 ) {
   const overlappingAvailableHours = checkNoOverlap(availableHours);
   if (overlappingAvailableHours.length === 2) {
@@ -35,18 +35,18 @@ export function validateConstraintsOverlaps(
     });
   }
 
-  const overlappingEnergyBlocks = checkNoOverlap(energyBlocks);
-  if (overlappingEnergyBlocks.length === 2) {
-    const start = `${minuteToTime(overlappingEnergyBlocks[0].start)}-${minuteToTime(
-      overlappingEnergyBlocks[0].end
+  const overlappingFocusBlocks = checkNoOverlap(focusBlocks);
+  if (overlappingFocusBlocks.length === 2) {
+    const start = `${minuteToTime(overlappingFocusBlocks[0].start)}-${minuteToTime(
+      overlappingFocusBlocks[0].end
     )}`;
-    const end = `${minuteToTime(overlappingEnergyBlocks[1].start)}-${minuteToTime(
-      overlappingEnergyBlocks[1].end
+    const end = `${minuteToTime(overlappingFocusBlocks[1].start)}-${minuteToTime(
+      overlappingFocusBlocks[1].end
     )}`;
     throw new BadRequestException({
       success: false,
       message: `Energy blocks have overlapping time ranges: ${start} and ${end}`,
-      field: "energyBlocks",
+      field: "focusBlocks",
     });
   }
 }

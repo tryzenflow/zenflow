@@ -4,33 +4,27 @@ import { ScheduleRequest } from "../interfaces";
 export function validatePreSchedule(body: ScheduleRequest): string[] {
   const errors: any[] = [];
   const tasks = body.tasks;
-  const constraints = body.constraints;
 
   // --- 1. Fixed task overlaps
-  const fixed = tasks.filter((t) => t.fixedStart !== undefined);
+  const fixed = tasks.filter(
+    (t) =>
+      t.earliestStart &&
+      t.latestEnd &&
+      t.latestEnd - t.earliestStart === t.duration
+  );
   for (let i = 0; i < fixed.length; i++) {
     const t1 = fixed[i];
-    const end1 = t1.fixedStart! + t1.duration;
+    const end1 = t1.earliestStart! + t1.duration;
     for (let j = i + 1; j < fixed.length; j++) {
       const t2 = fixed[j];
-      const end2 = t2.fixedStart! + t2.duration;
-      if (!(end1 <= t2.fixedStart! || end2 <= t1.fixedStart!)) {
+      const end2 = t2.earliestStart! + t2.duration;
+      if (!(end1 <= t2.earliestStart! || end2 <= t1.earliestStart!)) {
         errors.push(`Task "${t1.title}" overlaps with task "${t2.title}".`);
       }
     }
   }
 
-  for (let i = 0; i < tasks.length; i++) {
-    const t = tasks[i];
-    if (!t.splittable && t.maxSplits > 1) {
-      errors.push(`Non-splittable task cannot have max splits > 1.`);
-    }
-    if (t.fixedStart !== undefined && (t.splittable || t.maxSplits > 1)) {
-      errors.push(`Fixed-start task cannot be splittable.`);
-    }
-  }
-
-  // --- 5. Prerequisite cycles
+  // --- 2. Prerequisite cycles
   const graph = new Map<string, string[]>();
   for (const t of tasks) {
     graph.set(t.id, t.prerequisites ?? []);

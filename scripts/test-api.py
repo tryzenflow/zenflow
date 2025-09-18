@@ -4,21 +4,20 @@ BASE_URL = "http://localhost:5000/tasks"
 
 # Example session cookie (replace with your actual session token)
 SESSION_COOKIE = {
-    "connect.sid": "s:a7bBc6nZN2UtnGWFyNWQgvld1UFaF3sk.P1sASqX2h5sL3hVF7BXGN%2BbT%2BbagyUneEt9PJuiwhjE"
+    "connect.sid": "s:sEJM_GM0KL1SwzYDxBcOPS3TJqFxc4yv.R49wv8frjWkupTZK13xDwkbtyCwOHx7ecd%2Bo179TPsA"
 }
 
 # Map category labels in tasks → IDs from your backend
 CATEGORY_MAP = {
-    "work": "9aa3a6f2-ab1a-4f28-a97f-01472a7b996e",
-    "study": "9aa3a6f2-ab1a-4f28-a97f-01472a7b996e",
-    "health": "6dee747a-bde8-4bfe-86ad-bcf28764ce84",
-    "eat": "dfb6d435-bcf9-46aa-981b-3ee6130af820",
-    "leisure": "9af9d773-b7bd-4d6e-b4f5-ea122786c36b",
-    "rest": "c28b1bef-0df6-4204-8de6-03e6b0250fdf",
-    "personal": "f8cb590c-f25c-4e70-9528-eabb65512235",
-    "chores": "6f9da2ab-c384-4b15-aae2-0708212833f1",
+    "work": "4b296854-4613-4f9f-ae47-fa9904920480",
+    "study": "4b296854-4613-4f9f-ae47-fa9904920480",
+    "health": "2661e6a3-6b20-48dc-889d-585479ba2b79",
+    "eat": "075019ad-ad9b-4a04-806f-3422ac528193",
+    "leisure": "0d1a8431-1606-43f1-9dfc-d49442f479db",
+    "rest": "589d8495-697c-439f-9b4e-c06710ca61f3",
+    "personal": "343826f0-c18a-49b8-8766-3136d3b9aa97",
+    "chores": "d65cb738-5d72-4979-b5a1-d56ea7f5ba9f",
 }
-
 
 # Tasks, grouped so prerequisites are created before dependents
 tasks = [
@@ -29,7 +28,7 @@ tasks = [
         "category": "leisure",
         "earliestStart": 19 * 60,
         "latestEnd": 22 * 60,
-        "energyLevel": 3,
+        "focus": 3,
         "mandatory": False,
     },
     {
@@ -38,9 +37,8 @@ tasks = [
         "priority": 1,
         "earliestStart": 8 * 60,
         "latestEnd": 17 * 60,
-        "splittable": True,
         "maxSplits": 2,
-        "energyLevel": 3,
+        "focus": 3,
         "category": "work",
     },
     {
@@ -50,16 +48,15 @@ tasks = [
         "mandatory": False,
         "earliestStart": 19 * 60,
         "latestEnd": 22 * 60,
-        "energyLevel": 2,
+        "focus": 2,
         "category": "leisure",
     },
     {
         "title": "Team Meeting",
         "duration": 60,
         "priority": 1,
-        "fixedStart": 9 * 60 + 30,
         "mandatory": True,
-        "energyLevel": 2,
+        "focus": 2,
         "category": "work",
     },
     {
@@ -68,7 +65,7 @@ tasks = [
         "priority": 2,
         "earliestStart": 11 * 60,
         "latestEnd": 13 * 60,
-        "energyLevel": 1,
+        "focus": 1,
         "category": "eat",
     },
 
@@ -79,7 +76,7 @@ tasks = [
         "priority": 1,
         "earliestStart": 6 * 60,
         "latestEnd": 8 * 60,
-        "energyLevel": 1,
+        "focus": 1,
         "category": "health",
     },
     {
@@ -88,7 +85,7 @@ tasks = [
         "priority": 1,
         "earliestStart": 6 * 60,
         "latestEnd": 8 * 60,
-        "energyLevel": 1,
+        "focus": 1,
         "category": "eat",
         "prerequisites": ["Morning Exercise"],
     },
@@ -100,7 +97,7 @@ tasks = [
         "priority": 3,
         "earliestStart": 17 * 60,
         "latestEnd": 19 * 60,
-        "energyLevel": 1,
+        "focus": 1,
         "category": "health",
     },
     {
@@ -109,7 +106,7 @@ tasks = [
         "priority": 2,
         "earliestStart": 17 * 60,
         "latestEnd": 19 * 60,
-        "energyLevel": 1,
+        "focus": 1,
         "category": "eat",
         "prerequisites": ["Evening Exercise"],
     },
@@ -120,7 +117,7 @@ tasks = [
         "priority": 3,
         "earliestStart": 13 * 60,
         "latestEnd": 15 * 60,
-        "energyLevel": 1,
+        "focus": 1,
         "category": "health",
     },
     {
@@ -130,7 +127,7 @@ tasks = [
         "mandatory": False,
         "earliestStart": 12 * 60,
         "latestEnd": 14 * 60,
-        "energyLevel": 1,
+        "focus": 1,
         "category": "rest",
     },
     {
@@ -138,7 +135,7 @@ tasks = [
         "duration": 60,
         "priority": 2,
         "mandatory": False,
-        "energyLevel": 2,
+        "focus": 2,
         "category": "study",
     },
 ]
