@@ -55,34 +55,8 @@ Zenflow is a smart planner app that helps users schedule their tasks efficiently
 ## Tech stack
 
 - Frontend: React.js with PWA
-- Backend: Node, NestJS, Prisma (ORM), Python (to use OR-Tools by Google)
+- Backend: NestJS, Prisma (ORM), Python (to use OR-Tools by Google)
 - Database: PostgreSQL, Redis
-- Testing: Jest, RTL
 - Containerization: Docker
 - Deployment: Digital Ocean, NGINX, Netlify
 - Domain name: Cloudflare
-
-## Database Design
-
-### Schema
-
-![image.png](assets/image.png)
-
-### Elaboration
-
-- `isInWorkingHours` indicates whether the task should be scheduled within working hours blocks.
-- `isFixed` indicates whether the task’s time slot is reserved
-- `maxDeepWorkHours` limits the number of hours of deep work to avoid stress and burnout.
-- `batchSimilarTasks` groups tasks with similar categories together to minimize context switching.
-- `minutesBetweenTasks` defines the minimum minutes to take a break between two tasks.
-
-### Constraints
-
-- `physical` and `mental` level can range between 1 and 3, corresponding to low, medium and high.
-- `duration`, `startTime` and `endTime` cannot exceed 24 hours, and must be a multiple of 5 minutes.
-- `priority` can range between 1 and 3, corresponding to high, medium and low.
-- No cycles should be detected in the `dependency`.
-- No overlap in working hour blocks and energy levels for a single `user_id`.
-- The deadline of a task should not be older than today.
-- `minBreakBetweenTasksMinutes` should not exceed 60.
-- `maxDeepWorkHours` should not exceed 8.

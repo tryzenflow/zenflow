@@ -9,11 +9,10 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { AuthService } from "./auth.service";
-import { CreateUserDto } from "../users/dto";
 import { RequestOTPDto } from "./dto";
 import { hideEmail } from "./utils/hide-email";
 import { CookieAuthGuard, LocalAuthGuard } from "./guards";
-import { CurrentUser } from "../users/decorators";
+import { CurrentUser } from "../users/decorators/current-user.decorator";
 import type { User } from "../../generated/prisma";
 import type { Request } from "express";
 
@@ -45,7 +44,7 @@ export class AuthController {
 
   @UseGuards(CookieAuthGuard)
   @Post("logout")
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(HttpStatus.NO_CONTENT)
   logout(@Req() req: Request) {
     req.logOut(() => {});
     req.session.cookie.maxAge = 0;

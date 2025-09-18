@@ -3,6 +3,7 @@ import { AppModule } from "./app.module";
 import session from "express-session";
 import { ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { createClient } from "redis";
 import { RedisStore } from "connect-redis";
 import passport from "passport";
@@ -21,6 +22,14 @@ async function bootstrap() {
   const redisStore = new RedisStore({
     client: redisClient,
   });
+
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle("Zenflow API")
+    .setDescription("Documentation for Zenflow API")
+    .setVersion("1.0")
+    .build();
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup("api", app, document); // available at <API_URL>/api
 
   app.use(
     session({

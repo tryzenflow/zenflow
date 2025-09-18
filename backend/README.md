@@ -1,84 +1,47 @@
-# Linklytics API
+# Zenflow API
 
 ## Overview
-Linklytics API is built with NestJS, a Node.js framework for building scalable backend systems.
+Zenflow API is built with NestJS, a Node.js framework for building scalable backend systems.
 
-## Setup
+## Setup (for the frontend to consume only)
 ### Prerequisites
-* [Node.js 22.x and higher](https://nodejs.org)
-* [Docker](https://www.docker.com/products/docker-desktop/)
-* Yarn (`npm i -g yarn@latest`)
+[Docker](https://www.docker.com/products/docker-desktop/)
 
 ### Clone the repository
 ```bash
-git clone https://github.com/ttalpha/linklytics.git
+git clone https://github.com/ttalpha/zenflow.git
 cd backend/
 ```
 
-### Install all the dependencies
+### Build docker images
 ```bash
-yarn
+cd backend/
+sh build_images.sh
 ```
 
-### Environment variables
-Create two files: `.env.dev` (for development) and `.env.test` (for testing)
-
-`.env.dev`:
-
-```bash
-DATABASE_URL="postgres://admin:admin@localhost:5432/linklytics?sslmode=disable&schema=public"
+### Add environment variables
+Create a `.env.prod` file in the `backend/` directory and add:
+```env
+DATABASE_URL="postgres://admin:admin@zenflow-db-prod:5432/zenflow-prod?sslmode=disable&schema=public"
+CACHE_URL="redis://zenflow-cache-prod:6379"
+CORS_ORIGIN="http://localhost:3000"
+MAIL_TRANSPORT="smtp://zenflow-mail-prod:25"
+SESSION_SECRET='s3cr3t'
+GRPC_SCHEDULER_URL='zenflow-scheduler-prod:50051'
 ```
 
-`.env.test`:
-
-```bash
-DATABASE_URL="postgres://admin:admin@localhost:5433/linklytics-test?sslmode=disable&schema=public"
-```
-
-### Run Docker Compose
-For development, create a `docker.dev.env` file and add:
-```bash
+Create a `docker.env` file in the `backend/` directory and add:
+```env
 POSTGRES_USER=admin
 POSTGRES_PASSWORD=admin
-POSTGRES_DB=linklytics
-PGADMIN_DEFAULT_EMAIL=admin@admin.com
-PGADMIN_DEFAULT_PASSWORD=admin
+POSTGRES_DB=zenflow-prod
 ```
 
-For testing, create a `docker.test.env` file and add:
+### Run Docker compose
 ```bash
-POSTGRES_USER=admin
-POSTGRES_PASSWORD=admin
-POSTGRES_DB=linklytics-test
-PGADMIN_DEFAULT_EMAIL=admin@admin.com
-PGADMIN_DEFAULT_PASSWORD=admin
+docker compose up -d
 ```
 
-Run Docker Compose file (in detached mode):
-```bash
-docker compose -f compose.dev.yml up -d
-```
+The API is available at [http://localhost:5000](http://localhost:5000)
 
-### Start the backend application
-Run NestJS application by:
-
-```bash
-yarn start:dev
-```
-The app is up and running at [http://localhost:5000](http://localhost:5000)
-
-## Testing
-### Unit tests
-
-Run:
-```bash
-yarn test
-# or run in watch mode
-yarn test -w
-```
-
-### E2E tests
-Run:
-```bash
-yarn test:e2e
-```
+For the documentation of the API, go to [http://localhost:5000/api](http://localhost:5000/api)

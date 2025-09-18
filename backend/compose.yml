@@ -1,0 +1,66 @@
+name: zenflow-prod
+services:
+  scheduler:
+    container_name: zenflow-scheduler-prod
+    image: zenflow-scheduler:latest
+    ports:
+      - "50051:50051"
+    networks:
+      - api
+
+  api:
+    container_name: zenflow-api-prod
+    image: zenflow-api:latest
+    ports:
+      - "5000:5000"
+    networks:
+      - api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      scheduler:
+        condition: service_started
+      redis:
+        condition: service_started
+      mail:
+        condition: service_started
+    env_file:
+      - .env.prod
+
+  postgres:
+    container_name: zenflow-db-prod
+    image: postgres:alpine
+    ports:
+      - "5432:5432"
+    volumes:
+      - /data/postgres:/data/postgres
+    env_file:
+      - docker.env
+    networks:
+      - api
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    container_name: zenflow-cache-prod
+    image: redis:alpine
+    ports:
+      - 6379:6379
+    networks:
+      - api
+
+  mail:
+    container_name: zenflow-mail-prod
+    image: jijiechen/papercut:latest
+    ports:
+      - 25:25
+      - 37408:37408
+    networks:
+      - api
+
+networks:
+  api:
+    driver: bridge
