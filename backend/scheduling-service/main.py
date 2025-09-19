@@ -4,28 +4,37 @@ import scheduler_pb2
 import scheduler_pb2_grpc
 
 from google.protobuf.timestamp_pb2 import Timestamp
-from models import Task, Interval, FocusBlock, Constraints
+from models import Task, Interval, FocusBlock, Constraints, Schedule
 from scheduler import schedule_tasks
 
 
 # ---- Proto → Domain Models ----
 
-def parse_task(task_proto: scheduler_pb2.Task) -> Task:
-  deadline: Timestamp | None = task_proto.deadline
+def parse_task(proto: scheduler_pb2.Task) -> Task:
+  deadline = None
+  if proto.HasField("deadline"):
+    dt = proto.deadline.ToDatetime()
+    # ignore "epoch" timestamps
+    if dt.year > 1970:
+      deadline = dt
 
   return Task(
-      id=task_proto.id,
-      title=task_proto.title,
-      duration=task_proto.duration,
-      priority=task_proto.priority or 3,
-      earliest_start=task_proto.earliest_start if task_proto.earliest_start else None,
-      latest_end=task_proto.latest_end if task_proto.latest_end else None,
-      deadline=deadline.ToDatetime() if deadline else None,
-      mandatory=task_proto.mandatory,
-      max_splits=task_proto.max_splits or 1,
-      category=task_proto.category_id if task_proto.category_id else None,
-      prerequisites=list(task_proto.prerequisites),
-      focus=task_proto.focus or 1,
+    id=proto.id,
+    title=proto.title,
+    duration=proto.duration,
+    priority=proto.priority or 3,
+    earliest_start=proto.earliest_start if proto.earliest_start else None,
+    latest_end=proto.latest_end if proto.latest_end else None,
+    deadline=deadline.ToDatetime() if deadline else None,
+    mandatory=proto.mandatory or False,
+    max_splits=proto.max_splits or 1,
+    category=proto.category_id if proto.category_id else None,
+    prerequisites=list(proto.prerequisites),
+    focus=proto.focus or 1,
+    schedules=[
+      Schedule(split=s.split or 0, start=s.start, end=s.end)
+      for s in proto.schedules
+    ]
   )
 
 
@@ -55,6 +64,7 @@ class SchedulerService(scheduler_pb2_grpc.SchedulerServiceServicer):
     schedule_result = schedule_tasks(tasks, constraints)
     # Build response
     response = scheduler_pb2.ScheduleResponse()
+
     for task, split, interval in schedule_result:
       scheduled_task = scheduler_pb2.TaskSchedule()
       scheduled_task.task_id = task.id
@@ -63,7 +73,6 @@ class SchedulerService(scheduler_pb2_grpc.SchedulerServiceServicer):
       scheduled_task.split = split
 
       response.schedules.append(scheduled_task)
-
     return response
 
 

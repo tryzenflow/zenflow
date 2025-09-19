@@ -18,7 +18,7 @@ model User {
   // Relations
   tasks       Task[]
   categories  Category[]
-  constraints Constraints?
+  constraints Constraint[]
   files       File[]
 }
 
@@ -54,10 +54,10 @@ model Task {
 }
 
 model Schedule {
-  date  DateTime @db.Date
-  start DateTime
-  end   DateTime
-  split Int      @db.SmallInt
+  date  DateTime  @db.Date
+  start DateTime?
+  end   DateTime?
+  split Int       @db.SmallInt
 
   taskId String
   task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
@@ -65,18 +65,20 @@ model Schedule {
   @@id([taskId, split, date])
 }
 
-model Constraints {
+model Constraint {
+  id                 String  @id @default(uuid())
   minGapBetweenTasks Int     @default(0)
   maxDailyLoad       Int     @default(1440)
   batchSimilarTasks  Boolean @default(true)
-  id                 String  @id
-  user               User    @relation(fields: [id], references: [id], onDelete: Cascade)
+  weekday            Int     @default(0) @db.SmallInt // 0=Sun, 1=Mon, ..., 6=Sat
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   availableHours AvailableHour[]
   focusBlocks    FocusBlock[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  @@unique([userId, weekday])
 }
 
 model AvailableHour {
@@ -84,8 +86,8 @@ model AvailableHour {
   start Int    @db.SmallInt // minutes since midnight
   end   Int    @db.SmallInt
 
-  constraints   Constraints @relation(fields: [constraintsId], references: [id])
-  constraintsId String
+  constraint   Constraint @relation(fields: [constraintId], references: [id])
+  constraintId String
 }
 
 model FocusBlock {
@@ -94,8 +96,8 @@ model FocusBlock {
   start Int    @db.SmallInt
   end   Int    @db.SmallInt
 
-  constraints   Constraints @relation(fields: [constraintsId], references: [id])
-  constraintsId String
+  constraint   Constraint @relation(fields: [constraintId], references: [id])
+  constraintId String     @map("constraintsId")
 }
 
 model Category {

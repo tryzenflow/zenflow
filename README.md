@@ -12,18 +12,18 @@ Zenflow is a smart planner app that helps users schedule their tasks efficiently
 
 ### Problem it solves
 
-- ***Burnout and stress***: caused by overloading schedules without considering energy levels or realistic task limits.
-- ***Poor time management***: users struggle to prioritize, often spending more time planning than doing.
-- ***Low productivity***: high-focus tasks get scheduled during low-energy periods, leading to inefficiency and frustration.
-- ***Context switching fatigue***: jumping between tasks or tools without a clear plan drains focus and mental energy.
-- ***Planning fatigue***: **t**he daily overhead of figuring out what to do next wastes time and mental energy.
-- ***Disruptions***: ******Sudden events or schedule changes make traditional plans useless, forcing users to re-plan their entire day.
+- **Burnout and stress**: caused by overloading schedules without considering energy levels or realistic task limits.
+- **Poor time management**: users struggle to prioritize, often spending more time planning than doing.
+- **Low productivity**: high-focus tasks get scheduled during low-energy periods, leading to inefficiency and frustration.
+- **Context switching fatigue**: jumping between tasks or tools without a clear plan drains focus and mental energy.
+- **Planning fatigue**: the daily overhead of figuring out what to do next wastes time and mental energy.
+- **Disruptions**: Sudden events or schedule changes make traditional plans useless, forcing users to re-plan their entire day.
 
 ### Solutions
 
 - **Eliminate planning fatigue and improve time management**
 
-    Just list your tasks and provide a few basic details (like duration, priority, and deadline). Zenflow automatically creates an optimized schedule, so you don’t have to waste time figuring out what to do and when.
+    Just list your tasks and provide a few basic details (like duration, allowed time range, priority, and deadline). Zenflow automatically creates an optimized schedule, so you don’t have to waste time figuring out what to do and when.
 
 - **Boost productivity by aligning tasks with your energy levels**
 
@@ -45,18 +45,39 @@ Zenflow is a smart planner app that helps users schedule their tasks efficiently
 ## Features
 
 - Login with email + OTP verification
-- Create, view, update (change info, mark as complete) and delete tasks
+- Create, view, update and delete tasks
 - Schedule tasks optimally
+- Edit, delete the interval of scheduled tasks
+- Real-time re-scheduling on tasks/schedules' change
 - Display events in daily, weekly, monthly and yearly views
-- Add task recurrence and reminders
-- Dashboard showing focus time, task completed
-- Change the user’s global scheduling preferences
+- Add task recurrence
+- Dashboard showing the extent to which the schedules obey/defy the soft constraints (weekly)
+- Change the user’s global scheduling preferences in the settings page
 
 ## Tech stack
 
-- Frontend: React.js with PWA
+- Frontend: React.js with PWA for a more native experience
 - Backend: NestJS, Prisma (ORM), Python (to use OR-Tools by Google)
 - Database: PostgreSQL, Redis
 - Containerization: Docker
 - Deployment: Digital Ocean, NGINX, Netlify
 - Domain name: Cloudflare
+
+
+## Database Design
+
+![Database Design](./assets/image.png)
+
+### Elaboration
+
+- `earliestStart` and `latestEnd` allow flexible scheduling within the range. If `latestEnd - earliestStart = duration`, the task is fixed.
+- `maxDailyLoad` drops optional tasks that demand high mental energy if the total duration exceeds it.
+- `batchSimilarTasks` groups tasks with similar categories together to minimize context switching.
+- `minGapBetweenTasks` defines the minimum minutes to take a break between two tasks (if time allows).
+- `weekday` is a value between 0 and 6, with respect to Monday to Sunday.
+- `weekdayOrdinal` tells whether the task is repeated on the first/second/third weekday of the month/year. It can be -1 (last weekday), or from 0-5 corresponding to the first/second/third, etc.
+- `firstWorkday` and `lastWorkday` are booleans indicating whether repeat rules should be applied to the first or last workday of a month.
+- `timezone` is a string of the user’s timezone e.g., Europe/Paris, Asia/Ho Chi Minh, America/New York, which is used to shift from UTC to the local timezone.
+- `availableHours` are the hours the users are available to perform tasks.
+- `focus` is the **mental** energy level required to perform a task (in the `Task` table), corresponding to the user’s `level` at a particular point in the `FocusBlock` table. The value can range from 1 to 3.
+- The `RepeatRule` table will have a column `weekdays`, which is an array of weekdays to repeat (repeat by week only) instead of a separate table `RepeatWeekday` like above.

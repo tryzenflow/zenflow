@@ -1,5 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
-import { CreateConstraintsDto } from "../dto/create-constraints.dto";
+import { CreateConstraintsDto } from "../dto/create-constraint.dto";
 import { Interval } from "../interfaces/interval.interface";
 import { TIME_REGEX } from "../../common/constants";
 import { minuteToTime } from "../utils";

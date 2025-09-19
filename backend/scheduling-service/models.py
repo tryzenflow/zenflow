@@ -8,20 +8,28 @@ class Interval:
     self.end = end
 
 
+class Schedule:
+  def __init__(self, start: int, end: int, split: int = 0) -> None:
+    self.split = split
+    self.start = start
+    self.end = end
+
+
 class Task:
   def __init__(
       self,
       title: str,
       duration: int,
       priority: int = 3,  # 1-3 (lower = more important)
-      id: Optional[str] = None,
-      earliest_start: Optional[int] = None,
-      latest_end: Optional[int] = None,
-      deadline: Optional[datetime] = None,
+      id: str | None = None,
+      earliest_start: int | None = None,
+      latest_end: int | None = None,
+      deadline: datetime | None = None,
       mandatory: bool = True,
       max_splits: int = 1,
-      category: Optional[str] = None,
+      category: str | None = None,
       prerequisites: list[str] = [],
+      schedules: list[Schedule] = [],
       focus: int = 1  # 1-3 (higher = more mentally demanding)
   ) -> None:
     from uuid import uuid4
@@ -37,10 +45,13 @@ class Task:
     # a list of task IDs to be completed before this task
     self.prerequisites = prerequisites
     self.focus = focus
+    self.schedules = schedules
     self.category = category
 
+    self.schedules.sort(key=lambda x: x.split)
+
   def __str__(self) -> str:
-    return f'{self.id} - {self.title} ({self.duration} min) - earliest_start: {self.earliest_start}, latest_end: {self.latest_end}, deadline: {self.deadline}, priority: {self.priority}'
+    return f'{self.id} - {self.title} ({self.duration} min) - earliest_start: {self.earliest_start}, latest_end: {self.latest_end}'
 
 
 class FocusBlock:

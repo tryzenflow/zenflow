@@ -1,10 +1,12 @@
-import { PartialType } from "@nestjs/mapped-types";
-import { CreateConstraintsDto } from "./create-constraints.dto";
+import { OmitType, PartialType } from "@nestjs/mapped-types";
+import { CreateConstraintsDto as CreateConstraintDto } from "./create-constraint.dto";
 import { IsArray, IsOptional, IsString } from "class-validator";
-import { UpdateFocusBlockDto } from "./update-energy-block.dto";
+import { UpdateFocusBlockDto } from "./update-focus-block.dto";
 import { UpdateAvailableHoursDto } from "./update-available-hours.dto";
 
-export class UpdateConstraintsDto extends PartialType(CreateConstraintsDto) {
+export class UpdateConstraintDto extends PartialType(
+  OmitType(CreateConstraintDto, ["weekday"])
+) {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })

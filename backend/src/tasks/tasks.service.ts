@@ -10,6 +10,8 @@ import { CreateTaskDto } from "./dto/create-task.dto";
 import { Prisma } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { validateTaskFields } from "./validators/task-fields";
+import { ScheduleTasksDto } from "../scheduler/dto/schedule-tasks.dto";
+import { minutesToUtc } from "../scheduler/utils";
 
 @Injectable()
 export class TasksService {
@@ -48,10 +50,10 @@ export class TasksService {
     }
   }
 
-  find(userId: string, taskIds?: string[]) {
+  find(userId: string) {
     return this.prisma.task.findMany({
-      where: { userId, id: { in: taskIds } },
-      include: { prerequisites: true },
+      where: { userId },
+      include: { prerequisites: true, category: true },
     });
   }
 
@@ -67,18 +69,25 @@ export class TasksService {
     return task;
   }
 
-  async findUnscheduled(userId: string) {
-    const unscheduledTasks = await this.prisma.task.findMany({
+  async findToSchedule(
+    { scheduleDate, taskIds }: ScheduleTasksDto,
+    userId: string
+  ) {
+    const tasks = await this.prisma.task.findMany({
       where: {
         userId,
-        schedules: { none: {} },
+        id: { in: taskIds },
       },
       include: {
-        category: true,
-        prerequisites: true,
+        schedules: {
+          where: { date: new Date(scheduleDate) },
+        },
+        category: { select: { id: true } },
+        prerequisites: { select: { id: true } },
       },
     });
-    return unscheduledTasks;
+
+    return tasks;
   }
 
   async update(

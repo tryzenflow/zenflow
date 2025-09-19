@@ -16,6 +16,7 @@ CREATE TABLE "public"."User" (
 CREATE TABLE "public"."Task" (
     "id" TEXT NOT NULL,
     "title" TEXT NOT NULL,
+    "note" TEXT,
     "duration" INTEGER NOT NULL,
     "priority" INTEGER NOT NULL DEFAULT 3,
     "earliestStart" SMALLINT,
@@ -34,8 +35,8 @@ CREATE TABLE "public"."Task" (
 -- CreateTable
 CREATE TABLE "public"."Schedule" (
     "date" DATE NOT NULL,
-    "start" TIMESTAMP(3) NOT NULL,
-    "end" TIMESTAMP(3) NOT NULL,
+    "start" TIMESTAMP(3),
+    "end" TIMESTAMP(3),
     "split" SMALLINT NOT NULL,
     "taskId" TEXT NOT NULL,
 
@@ -43,15 +44,15 @@ CREATE TABLE "public"."Schedule" (
 );
 
 -- CreateTable
-CREATE TABLE "public"."Constraints" (
+CREATE TABLE "public"."Constraint" (
+    "id" TEXT NOT NULL,
     "minGapBetweenTasks" INTEGER NOT NULL DEFAULT 0,
     "maxDailyLoad" INTEGER NOT NULL DEFAULT 1440,
     "batchSimilarTasks" BOOLEAN NOT NULL DEFAULT true,
-    "id" TEXT NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "weekday" SMALLINT NOT NULL DEFAULT 0,
+    "userId" TEXT NOT NULL,
 
-    CONSTRAINT "Constraints_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "Constraint_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -59,7 +60,7 @@ CREATE TABLE "public"."AvailableHour" (
     "id" TEXT NOT NULL,
     "start" SMALLINT NOT NULL,
     "end" SMALLINT NOT NULL,
-    "constraintsId" TEXT NOT NULL,
+    "constraintId" TEXT NOT NULL,
 
     CONSTRAINT "AvailableHour_pkey" PRIMARY KEY ("id")
 );
@@ -141,13 +142,13 @@ ALTER TABLE "public"."Task" ADD CONSTRAINT "Task_categoryId_fkey" FOREIGN KEY ("
 ALTER TABLE "public"."Schedule" ADD CONSTRAINT "Schedule_taskId_fkey" FOREIGN KEY ("taskId") REFERENCES "public"."Task"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."Constraints" ADD CONSTRAINT "Constraints_id_fkey" FOREIGN KEY ("id") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "public"."Constraint" ADD CONSTRAINT "Constraint_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."AvailableHour" ADD CONSTRAINT "AvailableHour_constraintsId_fkey" FOREIGN KEY ("constraintsId") REFERENCES "public"."Constraints"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "public"."AvailableHour" ADD CONSTRAINT "AvailableHour_constraintId_fkey" FOREIGN KEY ("constraintId") REFERENCES "public"."Constraint"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."FocusBlock" ADD CONSTRAINT "FocusBlock_constraintsId_fkey" FOREIGN KEY ("constraintsId") REFERENCES "public"."Constraints"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "public"."FocusBlock" ADD CONSTRAINT "FocusBlock_constraintsId_fkey" FOREIGN KEY ("constraintsId") REFERENCES "public"."Constraint"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."Category" ADD CONSTRAINT "Category_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
