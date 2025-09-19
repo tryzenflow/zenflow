@@ -17,6 +17,7 @@ import { TasksModule } from "./tasks/tasks.module";
 import { SchedulesModule } from "./schedules/schedules.module";
 import { ConstraintsModule } from "./constraints/constraints.module";
 import { CategoriesModule } from "./categories/categories.module";
+import { FilesModule } from "./files/files.module";
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { CategoriesModule } from "./categories/categories.module";
     SchedulesModule,
     ConstraintsModule,
     CategoriesModule,
+    FilesModule,
   ],
   providers: [AppService, MailService],
   controllers: [AppController],
