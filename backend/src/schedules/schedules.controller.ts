@@ -33,10 +33,17 @@ export class SchedulesController {
     @Param("year", ParseIntPipe) year: number,
     @Param("month", ParseIntPipe) month: number,
     @Param("day", ParseIntPipe) day: number,
-    @Body() updateScheduleDto: UpdateScheduleDto
+    @Body() updateScheduleDto: UpdateScheduleDto,
+    @CurrentUser() user: User
   ) {
     const date = new Date(getDateOnlyString(year, month, day));
-    return this.schedulesService.update(date, id, split, updateScheduleDto);
+    return this.schedulesService.update(
+      date,
+      id,
+      split,
+      updateScheduleDto,
+      user.id
+    );
   }
 
   @Delete(":year/:month/:day/tasks/:id/split/:split")
@@ -46,10 +53,11 @@ export class SchedulesController {
     @Param("month", ParseIntPipe) month: number,
     @Param("day", ParseIntPipe) day: number,
     @Param("id") id: string,
-    @Param("split", ParseIntPipe) split: number
+    @Param("split", ParseIntPipe) split: number,
+    @CurrentUser() user: User
   ) {
     const date = new Date(getDateOnlyString(year, month, day));
-    return this.schedulesService.remove(date, id, split);
+    return this.schedulesService.remove(date, id, split, user.id);
   }
 
   @Get()
@@ -57,6 +65,10 @@ export class SchedulesController {
     @Query() findSchedulesDto: FindSchedulesDto,
     @CurrentUser() user: User
   ) {
-    return this.schedulesService.findSchedules(findSchedulesDto, user.timezone);
+    return this.schedulesService.findSchedules(
+      findSchedulesDto,
+      user.id,
+      user.timezone
+    );
   }
 }

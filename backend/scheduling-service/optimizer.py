@@ -3,47 +3,67 @@ from task_var import TaskVar
 from models import Constraints
 
 
-def optimize_function(model: cp_model.CpModel,
-                      task_vars: list[TaskVar],
-                      constraints: Constraints,
-                      deadline_weight_factor: dict[str, int],
-                      min_time=0):
-  max_focus = 3
-  max_time = 24 * 60
-
+def optimize_function(
+  model: cp_model.CpModel,
+  task_vars: list[TaskVar],
+  constraints: Constraints,
+  deadline_weight_factor: dict[str, int],
+  min_time=0,
+  max_time=24 * 60,
+  daily_load=0,
+  max_focus_level=3,
+  deadline_weight=50,
+  optional_task_weight=20,
+  energy_weight=5,
+  switch_penalty_weight=10,
+  overload_weight=5,
+  deviation_weight=5,
+  min_gap_penalty_weight=10,
+  available_hours_penalty_weight=10,
+):
   loss_terms = []
   effective_durations = []
-  # existing weights (you can pass via constraints if you prefer)
-  deadline_weight = 20
-  optional_task_weight = 10
-  energy_weight = 5
-  switch_penalty_weight = 10
-  overload_weight = 5
 
-  # new/adjustable soft-constraint weights (try adding to Constraints)
-  min_gap_penalty_weight = getattr(constraints, "min_gap_penalty_weight", 10)
-  available_hours_penalty_weight = getattr(
-    constraints, "available_hours_penalty_weight", 10)
-
-  # Make a helper to produce a duration-intvar for a task_var (0 if absent)
   duration_vars = {}
   for task_var in task_vars:
-    task, split, start_time, end_time, presence = task_var.tuple
+    task, split, start, end, presence = task_var.tuple
     dur = model.NewIntVar(0, max_time, f"dur_{task.id}_{split}")
     # when present: duration = end - start; else 0
-    model.Add(dur == end_time - start_time).OnlyEnforceIf(presence)
+    model.Add(dur == end - start).OnlyEnforceIf(presence)
     model.Add(dur == 0).OnlyEnforceIf(presence.Not())
     duration_vars[task_var] = dur
-
-  for task_var in task_vars:
-    task, split, start_time, end_time, presence = task_var.tuple
 
     if task.deadline is not None:
       penalty = model.NewIntVar(0, max_time * deadline_weight,
                                 f"deadline_penalty_{task.id}_{split}")
-      model.Add(penalty == deadline_weight_factor[task.id]).OnlyEnforceIf(
-        presence)
-      model.Add(penalty == 0).OnlyEnforceIf(presence.Not())
+      model.Add(penalty == deadline_weight_factor.get(task.id, 0))
+      model.Add(penalty == 0)
+      loss_terms.append(penalty)
+
+    if len(task.schedules) > 0 and split < len(task.schedules):
+      ref_sched = task.schedules[split]
+      ref_start = ref_sched.start
+      ref_end = ref_sched.end
+
+      # Start deviation
+      dev_start = model.NewIntVar(0, max_time, f"dev_start_{task.id}_{split}")
+      diff_start = model.NewIntVar(-max_time, max_time,
+                                   f"diff_start_{task.id}_{split}")
+      model.Add(diff_start == start - ref_start)
+      model.AddAbsEquality(dev_start, diff_start)
+
+      # End deviation
+      dev_end = model.NewIntVar(0, max_time, f"dev_end_{task.id}_{split}")
+      diff_end = model.NewIntVar(-max_time, max_time,
+                                 f"diff_end_{task.id}_{split}")
+      model.Add(diff_end == end - ref_end)
+      model.AddAbsEquality(dev_end, diff_end)
+
+      # Always penalize deviation, regardless of presence
+      penalty = model.NewIntVar(
+        0, 2 * max_time * deviation_weight, f"stability_pen_{task.id}_{split}")
+      model.Add(penalty == deviation_weight * (dev_start + dev_end))
+
       loss_terms.append(penalty)
 
     # ENERGY overlap / penalty (kept from your code)
@@ -58,8 +78,8 @@ def optimize_function(model: cp_model.CpModel,
       earliest_end = model.NewIntVar(min_time, max_time,
                                      f"energy_earliest_end_{task.id}_{split}_{i}")
 
-      model.AddMaxEquality(latest_start, [start_time, block_start_const])
-      model.AddMinEquality(earliest_end, [end_time, block_end_const])
+      model.AddMaxEquality(latest_start, [start, block_start_const])
+      model.AddMinEquality(earliest_end, [end, block_end_const])
 
       diff = model.NewIntVar(-max_time, max_time, f"energy_diff_{task.id}_{i}")
       model.Add(diff == earliest_end - latest_start)
@@ -88,7 +108,7 @@ def optimize_function(model: cp_model.CpModel,
       loss_terms.append(bonus)
 
     # EFFECTIVE DURATION (for overload)
-    if task.focus == max_focus:
+    if task.focus == max_focus_level:
       eff = model.NewIntVar(0, task.duration, f"eff_dur_{task.id}_{split}")
       model.Add(eff == task.duration).OnlyEnforceIf(presence)
       model.Add(eff == 0).OnlyEnforceIf(presence.Not())
@@ -109,8 +129,8 @@ def optimize_function(model: cp_model.CpModel,
         overlap = model.NewIntVar(0, task.duration,
                                   f"avail_overlap_{task.id}_{split}_{i}")
 
-        model.AddMaxEquality(latest_start, [start_time, bstart])
-        model.AddMinEquality(earliest_end, [end_time, bend])
+        model.AddMaxEquality(latest_start, [start, bstart])
+        model.AddMinEquality(earliest_end, [end, bend])
 
         diff = model.NewIntVar(-max_time, max_time,
                                f"avail_diff_{task.id}_{split}_{i}")
@@ -148,12 +168,12 @@ def optimize_function(model: cp_model.CpModel,
   # DAILY OVERLOAD (soft) - unchanged
   total_eff = sum(
     effective_durations) if effective_durations else model.NewConstant(0)
-  overload = model.NewIntVar(0, 24 * 60, "daily_overload")
+  overload = model.NewIntVar(min_time, max_time, "daily_overload")
   model.Add(overload >= total_eff -
-            model.NewConstant(constraints.max_daily_load))
+            model.NewConstant(constraints.max_daily_load - daily_load))
 
   overload_penalty = model.NewIntVar(
-    0, 24 * 60 * overload_weight, "overload_penalty")
+    min_time, max_time * overload_weight, "overload_penalty")
   model.Add(overload_penalty == overload * overload_weight)
   loss_terms.append(overload_penalty)
 
@@ -261,5 +281,4 @@ def optimize_function(model: cp_model.CpModel,
         loss_terms.append(pen_neg)
 
   # OBJECTIVE
-  model.Minimize(sum(loss_terms))
   model.Minimize(sum(loss_terms))

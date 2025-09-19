@@ -4,20 +4,21 @@ BASE_URL = "http://localhost:5000/tasks"
 
 # Example session cookie (replace with your actual session token)
 SESSION_COOKIE = {
-    "connect.sid": "s:sEJM_GM0KL1SwzYDxBcOPS3TJqFxc4yv.R49wv8frjWkupTZK13xDwkbtyCwOHx7ecd%2Bo179TPsA"
+    "connect.sid": "s:Vr60AayUMK-k5z8n75djcuJX7TDflfIs.kamA7PKaX%2FZhRnMH23mLlvBrVYmKNE9vOYluWHZcJA8"
 }
 
 # Map category labels in tasks → IDs from your backend
 CATEGORY_MAP = {
-    "work": "4b296854-4613-4f9f-ae47-fa9904920480",
-    "study": "4b296854-4613-4f9f-ae47-fa9904920480",
-    "health": "2661e6a3-6b20-48dc-889d-585479ba2b79",
-    "eat": "075019ad-ad9b-4a04-806f-3422ac528193",
-    "leisure": "0d1a8431-1606-43f1-9dfc-d49442f479db",
-    "rest": "589d8495-697c-439f-9b4e-c06710ca61f3",
-    "personal": "343826f0-c18a-49b8-8766-3136d3b9aa97",
-    "chores": "d65cb738-5d72-4979-b5a1-d56ea7f5ba9f",
+    "work": "a5bd9f02-b81e-42e2-8f22-3e2f38e588f9",
+    "study": "a5bd9f02-b81e-42e2-8f22-3e2f38e588f9",
+    "health": "a1c5582b-5025-4870-a32a-9462444fc73e",
+    "eat": "08db6919-008c-4e57-b27c-5a01727892fa",
+    "leisure": "961c7561-0891-43cb-ad57-d6b587d95d98",
+    "rest": "3a727ed9-aeaa-4e6b-bd0c-0d0d323c27cf",
+    "personal": "b2d42b98-991b-470c-8a6a-030a4121bf70",
+    "chores": "347740e8-47af-4df5-ae05-247104431c7b",
 }
+
 
 # Tasks, grouped so prerequisites are created before dependents
 tasks = [

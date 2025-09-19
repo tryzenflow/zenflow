@@ -4,8 +4,8 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
-import { CreateConstraintsDto } from "./dto/create-constraints.dto";
-import { UpdateConstraintsDto } from "./dto/update-constraints.dto";
+import { CreateConstraintsDto } from "./dto/create-constraint.dto";
+import { UpdateConstraintDto } from "./dto/update-constraint.dto";
 import { PrismaService } from "../prisma/prisma.service";
 import { validateConstraintsOverlaps } from "./validators/no-overlap";
 import { validateNoIntersectIds } from "./validators/no-intersect-ids";
@@ -23,14 +23,16 @@ export class ConstraintsService {
       minGapBetweenTasks,
       focusBlocks,
       maxDailyLoad,
+      weekday,
     }: CreateConstraintsDto,
     userId: string
   ) {
     validateConstraintsOverlaps(availableHours, focusBlocks);
     try {
-      const constraints = await this.prisma.constraints.create({
+      const constraint = await this.prisma.constraint.create({
         data: {
-          id: userId,
+          userId,
+          weekday,
           availableHours: {
             createMany: {
               data: availableHours.map(({ start, end }) => ({ start, end })),
@@ -49,12 +51,12 @@ export class ConstraintsService {
           },
           maxDailyLoad,
         },
-        select: {
+        include: {
           focusBlocks: { orderBy: { start: "asc" } },
           availableHours: { orderBy: { start: "asc" } },
         },
       });
-      return constraints;
+      return constraint;
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError)
         if (error.code === PostgresErrorCode.UniqueConstraintViolation)
@@ -65,10 +67,25 @@ export class ConstraintsService {
     }
   }
 
-  async get(id: string) {
-    const constraint = await this.prisma.constraints.findUnique({
-      where: { id: id },
-      include: { availableHours: true, focusBlocks: true },
+  async getByWeekday(userId: string, weekday: number) {
+    const constraint = await this.prisma.constraint.findUnique({
+      where: { userId_weekday: { userId, weekday } },
+      include: {
+        availableHours: true,
+        focusBlocks: true,
+      },
+    });
+    if (!constraint) throw new NotFoundException();
+    return constraint;
+  }
+
+  async getById(id: string, userId: string) {
+    const constraint = await this.prisma.constraint.findUnique({
+      where: { id, userId },
+      include: {
+        availableHours: true,
+        focusBlocks: true,
+      },
     });
     if (!constraint) throw new NotFoundException();
     return constraint;
@@ -76,6 +93,7 @@ export class ConstraintsService {
 
   async update(
     id: string,
+    userId: string,
     {
       availableHours,
       deleteAvailableHoursIds,
@@ -86,9 +104,9 @@ export class ConstraintsService {
       minGapBetweenTasks,
       updateFocusBlocksDto,
       updateAvailableHoursDto,
-    }: UpdateConstraintsDto
+    }: UpdateConstraintDto
   ) {
-    const existingConstraints = await this.get(id);
+    const existingConstraints = await this.getById(id, userId);
     if (!existingConstraints) throw new NotFoundException();
     validateConstraintsOverlaps(
       [
@@ -111,7 +129,7 @@ export class ConstraintsService {
     validateNoIntersectIds(updateAvailableHoursIds, deleteAvailableHoursIds);
     validateNoIntersectIds(updateFocusBlockIds, deleteFocusBlocksIds);
 
-    const updated = await this.prisma.constraints.update({
+    const updated = await this.prisma.constraint.update({
       where: { id },
       data: {
         batchSimilarTasks,

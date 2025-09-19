@@ -1,3 +1,4 @@
+from datetime import datetime
 from ortools.sat.python import cp_model
 from models import Task, Constraints, Interval
 from optimizer import optimize_function
@@ -102,10 +103,12 @@ def init_deadline_weight(tasks: list[Task]):
   for i, task in enumerate(sorted_tasks):
     deadline_weight_factor[task.id] = (
       len(sorted_tasks) - i) * 10  # scale factor
+  for t in sorted_tasks:
+    print(t.id, t.title, t.deadline, deadline_weight_factor[t.id])
   return deadline_weight_factor
 
 
-def schedule_tasks(tasks: list[Task], constraints: Constraints, min_time=0, max_time=24 * 60) -> list[tuple[Task, int, Interval]]:
+def schedule_tasks(tasks: list[Task], constraints: Constraints, min_time=0, max_time=24 * 60, daily_load=0, max_focus_level=3) -> list[tuple[Task, int, Interval]]:
   model = cp_model.CpModel()
   task_vars: list[TaskVar] = []
   intervals = []
@@ -132,7 +135,8 @@ def schedule_tasks(tasks: list[Task], constraints: Constraints, min_time=0, max_
   # rest of model...
   deadline_weight_factor = init_deadline_weight(tasks)
   add_prerequisite_constraints(model, task_vars)
-  optimize_function(model, task_vars, constraints, deadline_weight_factor)
+  optimize_function(model, task_vars, constraints, deadline_weight_factor,
+                    max_time=max_time, daily_load=daily_load, max_focus_level=max_focus_level)
   solver = cp_model.CpSolver()
   solver.parameters.max_time_in_seconds = 10
   status = solver.Solve(model)

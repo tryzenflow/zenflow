@@ -9,8 +9,8 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ConstraintsService } from "./constraints.service";
-import { CreateConstraintsDto } from "./dto/create-constraints.dto";
-import { UpdateConstraintsDto } from "./dto/update-constraints.dto";
+import { CreateConstraintsDto } from "./dto/create-constraint.dto";
+import { UpdateConstraintDto } from "./dto/update-constraint.dto";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
 import { type User } from "../../generated/prisma";
@@ -28,16 +28,17 @@ export class ConstraintsController {
     return this.constraintsService.create(createConstraintDto, user.id);
   }
 
-  @Get()
-  get(@CurrentUser() user: User) {
-    return this.constraintsService.get(user.id);
+  @Get(":id")
+  get(@Param("id") id: string, @CurrentUser() user: User) {
+    return this.constraintsService.getById(id, user.id);
   }
 
-  @Patch()
+  @Patch(":id")
   update(
-    @Body() updateConstraintsDto: UpdateConstraintsDto,
+    @Param("id") id: string,
+    @Body() updateConstraintsDto: UpdateConstraintDto,
     @CurrentUser() user: User
   ) {
-    return this.constraintsService.update(user.id, updateConstraintsDto);
+    return this.constraintsService.update(id, user.id, updateConstraintsDto);
   }
 }

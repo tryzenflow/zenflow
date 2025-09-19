@@ -73,6 +73,9 @@ export class UsersService {
     try {
       const user = await this.prisma.user.findUnique({
         where: { id },
+        include: {
+          _count: { select: { categories: true, constraints: true } },
+        },
       });
       return user;
     } catch (error) {

@@ -7,22 +7,22 @@ import {
   Post,
   UseGuards,
 } from "@nestjs/common";
-import { SCHEDULER_PACKAGE, SCHEDULER_SERVICE } from "./constants";
 import { type ClientGrpc } from "@nestjs/microservices";
-import { SchedulerService } from "./scheduler.service";
-import { ScheduleRequest, ScheduleResponse } from "./interfaces";
-import { ConstraintsService } from "../constraints/constraints.service";
-import { TasksService } from "../tasks/tasks.service";
-import { CookieAuthGuard } from "../auth/guards";
-import { CurrentUser } from "../users/decorators/current-user.decorator";
-import { type User } from "../../generated/prisma";
-import { ScheduleTasksDto } from "./dto/schedule-tasks.dto";
-import { SchedulesService } from "../schedules/schedules.service";
-import { utcToMinutes } from "./utils";
-import { validatePreSchedule } from "./validators/pre-schedule";
+import { addDays } from "date-fns";
 import { firstValueFrom } from "rxjs";
-import { addDays, endOfDay, startOfDay } from "date-fns";
+import { type User } from "../../generated/prisma";
+import { CookieAuthGuard } from "../auth/guards";
+import { ConstraintsService } from "../constraints/constraints.service";
+import { SchedulesService } from "../schedules/schedules.service";
 import { extractDate } from "../schedules/utils";
+import { TasksService } from "../tasks/tasks.service";
+import { CurrentUser } from "../users/decorators/current-user.decorator";
+import { SCHEDULER_PACKAGE, SCHEDULER_SERVICE } from "./constants";
+import { ScheduleTasksDto } from "./dto/schedule-tasks.dto";
+import { ScheduleRequest, ScheduleResponse } from "./interfaces";
+import { SchedulerService } from "./scheduler.service";
+import { validatePreSchedule } from "./validators/pre-schedule";
+import { utcToMinutes } from "./utils";
 
 @Controller()
 @UseGuards(CookieAuthGuard)
@@ -46,11 +46,22 @@ export class SchedulerController implements OnModuleInit {
     @CurrentUser() user: User,
     @Body() { scheduleDate, taskIds }: ScheduleTasksDto
   ) {
-    const constraints = await this.constraintsService.get(user.id);
-    const nextDate = new Date(scheduleDate);
-    nextDate.setDate(nextDate.getDate() + 1);
+    const weekday = new Date(scheduleDate).getDay();
+    const constraints = await this.constraintsService.getByWeekday(
+      user.id,
+      weekday
+    );
 
-    const tasks = await this.tasksService.find(user.id, taskIds);
+    const tasks = await this.tasksService.findToSchedule(
+      { scheduleDate, taskIds },
+      user.id
+    );
+
+    if (tasks.length === 0 || !constraints)
+      throw new BadRequestException({
+        success: false,
+        message: "No tasks to schedule or no constraints for the given day",
+      });
 
     const request: ScheduleRequest = {
       constraints: {
@@ -76,6 +87,13 @@ export class SchedulerController implements OnModuleInit {
         priority: task.priority,
         title: task.title,
         deadline: task.deadline ?? undefined,
+        schedules: task.schedules
+          .filter((s) => s.start && s.end)
+          .map((s) => ({
+            split: s.split,
+            start: utcToMinutes(new Date(s.start!), user.timezone),
+            end: utcToMinutes(new Date(s.end!), user.timezone),
+          })),
       })),
     };
     const errors = validatePreSchedule(request);
@@ -85,22 +103,32 @@ export class SchedulerController implements OnModuleInit {
       this.schedulerService.Schedule(request)
     );
 
-    if (response.schedules.length === 0)
+    if (!response.schedules || response?.schedules?.length === 0)
       return {
+        success: true,
         feasible: false,
         schedule: await this.schedulesService.findSchedules(
           {
             start: scheduleDate,
             end: extractDate(addDays(new Date(scheduleDate), 1)),
           },
+          user.id,
           user.timezone
         ),
       };
+
+    const unscheduledTasks = taskIds.filter(
+      (id) => !response.schedules!.some((s) => s.taskId === id)
+    );
     const schedule = await this.schedulesService.schedule(
       new Date(scheduleDate),
-      response,
-      user.timezone
+      [
+        ...response.schedules,
+        ...unscheduledTasks.map((id) => ({ split: 0, taskId: id })),
+      ],
+      user.timezone,
+      user.id
     );
-    return { feasible: true, schedule };
+    return { success: true, feasible: true, schedule };
   }
 }

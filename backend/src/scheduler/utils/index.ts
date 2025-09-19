@@ -1,4 +1,5 @@
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
+import { DAILY_HORIZON } from "../../common/constants";
 
 export function utcToMinutes(
   date: Date, // stored UTC date
@@ -13,7 +14,7 @@ export function minutesToUtc(
   minutes: number,
   timezone: string
 ): Date {
-  const clamped = Math.min(Math.max(0, minutes), 1439);
+  const clamped = Math.min(Math.max(0, minutes), DAILY_HORIZON - 1);
   const hours = Math.floor(clamped / 60);
   const mins = clamped % 60;
 
