@@ -40,7 +40,7 @@ export class FilesController {
     @UploadedFiles() files: Express.Multer.File[],
     @CurrentUser() user: User
   ) {
-    return this.filesService.upload(
+    const newFiles = await this.filesService.upload(
       files.map((f) => ({
         filename: f.filename,
         mimetype: f.path,
@@ -48,12 +48,17 @@ export class FilesController {
       })),
       user.id
     );
+    return {
+      success: true,
+      message: "Uploaded files successfully",
+      data: newFiles,
+    };
   }
 
-  @HttpCode(HttpStatus.NO_CONTENT)
   @Delete("remove")
   async remove(@Query() { ids }: RemoveFilesDto, @CurrentUser() user: User) {
-    return this.filesService.remove(ids, user.id);
+    await this.filesService.remove(ids, user.id);
+    return { success: true, message: "Removed files successfully" };
   }
 
   @Get(":id")

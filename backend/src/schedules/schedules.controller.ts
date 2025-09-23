@@ -18,8 +18,7 @@ import { SchedulesService } from "./schedules.service";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
 import { type User } from "../../generated/prisma";
-import { isDateString } from "class-validator";
-import { getDateOnlyString } from "./utils";
+import { getDateOnlyString } from "../common/utils";
 
 @Controller("schedules")
 @UseGuards(CookieAuthGuard)
@@ -27,7 +26,7 @@ export class SchedulesController {
   constructor(private readonly schedulesService: SchedulesService) {}
 
   @Put(":year/:month/:day/tasks/:id/split/:split")
-  update(
+  async update(
     @Param("id") id: string,
     @Param("split", ParseIntPipe) split: number,
     @Param("year", ParseIntPipe) year: number,
@@ -37,18 +36,22 @@ export class SchedulesController {
     @CurrentUser() user: User
   ) {
     const date = new Date(getDateOnlyString(year, month, day));
-    return this.schedulesService.update(
+    const updated = await this.schedulesService.update(
       date,
       id,
       split,
       updateScheduleDto,
       user.id
     );
+    return {
+      success: true,
+      message: "Update the scheduled task successfully",
+      data: updated,
+    };
   }
 
   @Delete(":year/:month/:day/tasks/:id/split/:split")
-  @HttpCode(HttpStatus.NO_CONTENT)
-  remove(
+  async remove(
     @Param("year", ParseIntPipe) year: number,
     @Param("month", ParseIntPipe) month: number,
     @Param("day", ParseIntPipe) day: number,
@@ -57,18 +60,24 @@ export class SchedulesController {
     @CurrentUser() user: User
   ) {
     const date = new Date(getDateOnlyString(year, month, day));
-    return this.schedulesService.remove(date, id, split, user.id);
+    await this.schedulesService.remove(date, id, split, user.id);
+    return { success: true, message: "Delete the scheduled task successfully" };
   }
 
   @Get()
-  findSchedules(
+  async findSchedules(
     @Query() findSchedulesDto: FindSchedulesDto,
     @CurrentUser() user: User
   ) {
-    return this.schedulesService.findSchedules(
+    const schedules = await this.schedulesService.findSchedules(
       findSchedulesDto,
       user.id,
       user.timezone
     );
+    return {
+      success: true,
+      message: `Found ${schedules.length} scheduled tasks between ${findSchedulesDto.start} and ${findSchedulesDto.end}`,
+      data: schedules,
+    };
   }
 }

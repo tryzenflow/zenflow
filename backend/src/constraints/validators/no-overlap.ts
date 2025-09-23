@@ -1,8 +1,7 @@
 import { BadRequestException } from "@nestjs/common";
 import { CreateConstraintsDto } from "../dto/create-constraint.dto";
 import { Interval } from "../interfaces/interval.interface";
-import { TIME_REGEX } from "../../common/constants";
-import { minuteToTime } from "../utils";
+import { minuteToTime } from "../../common/utils";
 
 export const checkNoOverlap = (
   intervals: Interval[]
@@ -17,24 +16,8 @@ export const checkNoOverlap = (
 };
 
 export function validateConstraintsOverlaps(
-  availableHours: CreateConstraintsDto["availableHours"],
   focusBlocks: CreateConstraintsDto["focusBlocks"]
 ) {
-  const overlappingAvailableHours = checkNoOverlap(availableHours);
-  if (overlappingAvailableHours.length === 2) {
-    const start = `${minuteToTime(overlappingAvailableHours[0].start)}-${minuteToTime(
-      overlappingAvailableHours[0].end
-    )}`;
-    const end = `${minuteToTime(overlappingAvailableHours[1].start)}-${minuteToTime(
-      overlappingAvailableHours[1].end
-    )}`;
-    throw new BadRequestException({
-      success: false,
-      message: `Available hours have overlapping time ranges: ${start} and ${end}`,
-      field: "availableHours",
-    });
-  }
-
   const overlappingFocusBlocks = checkNoOverlap(focusBlocks);
   if (overlappingFocusBlocks.length === 2) {
     const start = `${minuteToTime(overlappingFocusBlocks[0].start)}-${minuteToTime(
@@ -45,7 +28,7 @@ export function validateConstraintsOverlaps(
     )}`;
     throw new BadRequestException({
       success: false,
-      message: `Energy blocks have overlapping time ranges: ${start} and ${end}`,
+      message: `Focus blocks have overlapping time ranges: ${start} and ${end}`,
       field: "focusBlocks",
     });
   }

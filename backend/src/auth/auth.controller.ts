@@ -25,6 +25,7 @@ export class AuthController {
   async requestOTP(@Body() { email }: RequestOTPDto) {
     await this.authService.requestOTPCode(email);
     return {
+      success: true,
       message: `OTP code sent to email ${hideEmail(email)} successfully`,
     };
   }
@@ -33,20 +34,31 @@ export class AuthController {
   @Post("otp/verify")
   @HttpCode(HttpStatus.OK)
   async verifyOTP(@CurrentUser() user: User) {
-    return user;
+    return {
+      success: true,
+      message: "OTP verified successfully. You are now logged in",
+      data: user,
+    };
   }
 
   @UseGuards(CookieAuthGuard)
   @Get("me")
   async me(@CurrentUser() user: User) {
-    return user;
+    return {
+      success: true,
+      message: `Welcome back, ${user.name}`,
+      data: user,
+    };
   }
 
   @UseGuards(CookieAuthGuard)
   @Post("logout")
-  @HttpCode(HttpStatus.NO_CONTENT)
   logout(@Req() req: Request) {
     req.logOut(() => {});
     req.session.cookie.maxAge = 0;
+    return {
+      success: true,
+      message: `Log out successfully`,
+    };
   }
 }

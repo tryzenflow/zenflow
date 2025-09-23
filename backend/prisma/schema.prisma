@@ -75,19 +75,9 @@ model Constraint {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  availableHours AvailableHour[]
-  focusBlocks    FocusBlock[]
+  focusBlocks FocusBlock[]
 
   @@unique([userId, weekday])
-}
-
-model AvailableHour {
-  id    String @id @default(uuid())
-  start Int    @db.SmallInt // minutes since midnight
-  end   Int    @db.SmallInt
-
-  constraint   Constraint @relation(fields: [constraintId], references: [id])
-  constraintId String
 }
 
 model FocusBlock {
