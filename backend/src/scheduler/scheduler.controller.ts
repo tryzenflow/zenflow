@@ -14,15 +14,15 @@ import { type User } from "../../generated/prisma";
 import { CookieAuthGuard } from "../auth/guards";
 import { ConstraintsService } from "../constraints/constraints.service";
 import { SchedulesService } from "../schedules/schedules.service";
-import { extractDate } from "../schedules/utils";
 import { TasksService } from "../tasks/tasks.service";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
 import { SCHEDULER_PACKAGE, SCHEDULER_SERVICE } from "./constants";
 import { ScheduleTasksDto } from "./dto/schedule-tasks.dto";
-import { ScheduleRequest, ScheduleResponse } from "./interfaces";
+import { ScheduleRequest, ScheduleResponse, TaskSchedule } from "./interfaces";
 import { SchedulerService } from "./scheduler.service";
 import { validatePreSchedule } from "./validators/pre-schedule";
-import { utcToMinutes } from "./utils";
+import { utcToMinutes, extractDate } from "../common/utils";
+import { getAvailableHours } from "../constraints/utils";
 
 @Controller()
 @UseGuards(CookieAuthGuard)
@@ -44,7 +44,7 @@ export class SchedulerController implements OnModuleInit {
   @Post("schedule")
   async schedule(
     @CurrentUser() user: User,
-    @Body() { scheduleDate, taskIds }: ScheduleTasksDto
+    @Body() { scheduleDate }: ScheduleTasksDto
   ) {
     const weekday = new Date(scheduleDate).getDay();
     const constraints = await this.constraintsService.getByWeekday(
@@ -53,19 +53,21 @@ export class SchedulerController implements OnModuleInit {
     );
 
     const tasks = await this.tasksService.findToSchedule(
-      { scheduleDate, taskIds },
+      { scheduleDate },
       user.id
     );
 
     if (tasks.length === 0 || !constraints)
       throw new BadRequestException({
         success: false,
+        feasible: false,
         message: "No tasks to schedule or no constraints for the given day",
+        data: [],
       });
 
     const request: ScheduleRequest = {
       constraints: {
-        availableHours: constraints.availableHours,
+        availableHours: getAvailableHours(constraints.focusBlocks),
         batchSimilarTasks: constraints.batchSimilarTasks,
         focusBlocks: constraints.focusBlocks.map(({ level, ...interval }) => ({
           level,
@@ -107,7 +109,8 @@ export class SchedulerController implements OnModuleInit {
       return {
         success: true,
         feasible: false,
-        schedule: await this.schedulesService.findSchedules(
+        message: `Cannot find a feasible schedule on ${scheduleDate}`,
+        data: await this.schedulesService.findSchedules(
           {
             start: scheduleDate,
             end: extractDate(addDays(new Date(scheduleDate), 1)),
@@ -117,18 +120,36 @@ export class SchedulerController implements OnModuleInit {
         ),
       };
 
-    const unscheduledTasks = taskIds.filter(
-      (id) => !response.schedules!.some((s) => s.taskId === id)
-    );
+    const scheduled = response.schedules!;
+
+    const unscheduled: TaskSchedule[] = tasks
+      .filter(
+        (task) =>
+          !scheduled.some((s) => s.taskId === task.id) ||
+          task.duration >
+            scheduled.reduce((acc, s) => {
+              if (s.start && s.end && s.taskId === task.id) {
+                acc += s.end - s.start;
+              }
+              return acc;
+            }, 0)
+      )
+      .map((task) => ({
+        taskId: task.id,
+        split: scheduled.filter((s) => s.taskId === task.id).length,
+      }));
+
     const schedule = await this.schedulesService.schedule(
       new Date(scheduleDate),
-      [
-        ...response.schedules,
-        ...unscheduledTasks.map((id) => ({ split: 0, taskId: id })),
-      ],
+      [...response.schedules, ...unscheduled],
       user.timezone,
       user.id
     );
-    return { success: true, feasible: true, schedule };
+    return {
+      success: true,
+      feasible: true,
+      message: `Schedule tasks on ${scheduleDate} successfully`,
+      data: schedule,
+    };
   }
 }

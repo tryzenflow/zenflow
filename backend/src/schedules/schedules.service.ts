@@ -9,10 +9,9 @@ import { UpdateScheduleDto } from "./dto/update-schedule.dto";
 import { PrismaService } from "../prisma/prisma.service";
 import { Prisma } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
-import { minutesToUtc } from "../scheduler/utils";
 import { FindSchedulesDto } from "./dto/find-schedules.dto";
-import { extractDate } from "./utils";
 import { TaskSchedule } from "../scheduler/interfaces";
+import { extractDate, minutesToUtc, minuteToTime } from "../common/utils";
 
 @Injectable()
 export class SchedulesService {
@@ -53,11 +52,15 @@ export class SchedulesService {
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === PostgresErrorCode.UniqueConstraintViolation) {
-          throw new BadRequestException(
-            `Duplicate tasks on date ${extractDate(date)}`
-          );
+          throw new BadRequestException({
+            success: false,
+            message: `Duplicate tasks on date ${extractDate(date)}`,
+          });
         }
-        throw new InternalServerErrorException();
+        throw new InternalServerErrorException({
+          success: false,
+          message: "Server error when scheduling tasks",
+        });
       }
     }
   }
@@ -116,9 +119,15 @@ export class SchedulesService {
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === PostgresErrorCode.RecordNotFound)
-          throw new NotFoundException();
+          throw new NotFoundException({
+            success: false,
+            message: `Cannot delete scheduled task split ${split} on ${extractDate(date)}`,
+          });
       }
-      throw new InternalServerErrorException();
+      throw new InternalServerErrorException({
+        success: false,
+        message: "Something went wrong when trying to remove the schedule",
+      });
     }
   }
 }

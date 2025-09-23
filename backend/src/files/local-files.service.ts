@@ -11,7 +11,7 @@ export class LocalFilesService implements FilesService {
   async upload(uploadFilesDto: UploadFileDto[], userId: string) {
     const files = await this.prisma.file.createManyAndReturn({
       data: uploadFilesDto.map((dto) => ({ ...dto, userId })),
-      omit: { path: true, filename: true, userId: true },
+      select: { id: true, mimetype: true },
     });
     return files;
   }

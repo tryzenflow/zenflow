@@ -8,8 +8,6 @@ import {
   Delete,
   UseGuards,
   Query,
-  HttpCode,
-  HttpStatus,
 } from "@nestjs/common";
 import { TasksService } from "./tasks.service";
 import { CreateTaskDto } from "./dto/create-task.dto";
@@ -17,6 +15,7 @@ import { UpdateTaskDto } from "./dto/update-task.dto";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
 import { type User } from "../../generated/prisma";
+import { FindSchedulesDto } from "../schedules/dto/find-schedules.dto";
 
 @Controller("tasks")
 @UseGuards(CookieAuthGuard)
@@ -24,32 +23,51 @@ export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
   @Post()
-  create(@Body() createTaskDto: CreateTaskDto, @CurrentUser() user: User) {
-    return this.tasksService.create(createTaskDto, user.id);
+  async create(
+    @Body() createTaskDto: CreateTaskDto,
+    @CurrentUser() user: User
+  ) {
+    const newTask = await this.tasksService.create(createTaskDto, user.id);
+    return {
+      success: true,
+      message: "Create new task successfully",
+      data: newTask,
+    };
   }
 
   @Get()
-  findAll(@CurrentUser() user: User) {
-    return this.tasksService.find(user.id);
+  async findAll(@CurrentUser() user: User, @Query() dto: FindSchedulesDto) {
+    const tasks = await this.tasksService.find(user.id, dto);
+    return {
+      success: true,
+      message: `Found ${tasks.length} tasks between ${dto.start} and ${dto.end}`,
+      data: tasks,
+    };
   }
 
   @Get(":id")
-  findOne(@Param("id") id: string, @CurrentUser() user: User) {
-    return this.tasksService.findById(id, user.id);
+  async findOne(@Param("id") id: string, @CurrentUser() user: User) {
+    const task = await this.tasksService.findById(id, user.id);
+    return { success: true, message: `Found one task`, data: task };
   }
 
   @Patch(":id")
-  update(
+  async update(
     @Param("id") id: string,
     @Body() updateTaskDto: UpdateTaskDto,
     @CurrentUser() user: User
   ) {
-    return this.tasksService.update(id, updateTaskDto, user.id);
+    const updated = await this.tasksService.update(id, updateTaskDto, user.id);
+    return {
+      success: true,
+      data: updated,
+      message: `Sucessfully updated task`,
+    };
   }
 
   @Delete(":id")
-  @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param("id") id: string, @CurrentUser() user: User) {
-    return this.tasksService.remove(id, user.id);
+  async remove(@Param("id") id: string, @CurrentUser() user: User) {
+    await this.tasksService.remove(id, user.id);
+    return { success: true, message: `Successfully delete task` };
   }
 }

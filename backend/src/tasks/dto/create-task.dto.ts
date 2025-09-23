@@ -1,18 +1,25 @@
 import {
   IsArray,
   IsBoolean,
+  IsDateString,
   IsDivisibleBy,
   IsInt,
   IsISO8601,
   IsOptional,
   IsString,
   Max,
+  MaxLength,
   Min,
 } from "class-validator";
 import { DAILY_HORIZON } from "../../common/constants";
 
 export class CreateTaskDto {
   @IsString() title: string;
+
+  @IsDateString()
+  @MaxLength(10)
+  @IsOptional()
+  scheduleDate: string;
 
   @IsString() @IsOptional() note?: string;
 

@@ -1,21 +1,29 @@
-import { DAILY_HORIZON, TIME_REGEX } from "../../common/constants";
+import { FocusBlock } from "../../../generated/prisma";
+import { Interval } from "../interfaces/interval.interface";
 
-export const minuteToTime = (minute: number) => {
-  if (minute < 0 || minute > DAILY_HORIZON)
-    throw new Error(
-      `Minute must be between 0 and ${DAILY_HORIZON}, got ${minute}`
-    );
-  if (minute === DAILY_HORIZON) return "23:59";
-  const hrs = Math.floor(minute / 60);
-  const mins = minute % 60;
-  return `${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`;
-};
+export const getAvailableHours = (
+  focusBlocks: Pick<FocusBlock, "start" | "end">[]
+): Interval[] => {
+  if (focusBlocks.length === 0) return [];
 
-export const timeToMinute = (time: string) => {
-  const match = TIME_REGEX.exec(time);
-  if (!match) {
-    throw new Error(`Invalid time format: ${time}. Expected HH:mm`);
+  const sorted = [...focusBlocks].sort((a, b) => a.start - b.start);
+
+  const intervals: Interval[] = [];
+  let start = sorted[0].start;
+  let end = sorted[0].end;
+
+  for (let i = 1; i < sorted.length; i++) {
+    const block = sorted[i];
+    if (block.start === end) {
+      end = block.end;
+    } else {
+      intervals.push({ start, end });
+      start = block.start;
+      end = block.end;
+    }
   }
-  const [hours, minutes] = time.split(":").map(Number);
-  return hours * 60 + minutes;
+
+  intervals.push({ start, end });
+
+  return intervals;
 };

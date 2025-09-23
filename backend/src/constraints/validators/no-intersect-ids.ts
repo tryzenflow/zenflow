@@ -9,15 +9,17 @@ export const validateNoIntersectIds = (
 
   for (const key in updateIdsSet) {
     if (updateIdsSet.has(key))
-      throw new BadRequestException(
-        `Found duplicate ID ${key} in both update and delete`
-      );
+      throw new BadRequestException({
+        success: false,
+        message: `Found duplicate ID ${key} in both update and delete`,
+      });
   }
 
   for (const key in updateIdsSet) {
     if (deleteIdsSet.has(key))
-      throw new BadRequestException(
-        `Found duplicate ID ${key} in both update and delete`
-      );
+      throw new BadRequestException({
+        success: false,
+        message: `Found duplicate ID ${key} in both update and delete`,
+      });
   }
 };
