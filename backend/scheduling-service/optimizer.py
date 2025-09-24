@@ -40,6 +40,12 @@ def optimize_function(
       model.Add(penalty == 0)
       loss_terms.append(penalty)
 
+    # Task priority loss (applied always, even if not present)
+    priority_penalty = model.NewIntVar(
+      0, 3, f"priority_penalty_{task.id}_{split}")
+    model.Add(priority_penalty == task.priority)
+    loss_terms.append(priority_penalty)
+
     if len(task.schedules) > 0 and split < len(task.schedules):
       ref_sched = task.schedules[split]
       ref_start = ref_sched.start
