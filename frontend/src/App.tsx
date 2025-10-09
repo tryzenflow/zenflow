@@ -1,35 +1,55 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import appLogo from "/favicon.svg";
-import PWABadge from "./PWABadge.tsx";
-import "./App.css";
+import React, { useState } from 'react';
+import './App.css';
+import { LoginScreen } from './components/LoginScreen';
+import { MainLayout } from './components/MainLayout';
+import { DailyView } from './components/DailyView';
+import { TaskView } from './components/TaskView';
+import { AddTaskView } from './components/AddTaskView';
+import { CategoriesModal } from './components/CategoriesModal';
+import { FocusBlocksModal } from './components/FocusBlocksModal';
+import { SchedulingModal } from './components/SchedulingModal';
+import type { NavigationView } from './types/navigation';
 
 function App() {
-  const [count, setCount] = useState(0);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentView, setCurrentView] = useState<NavigationView>('daily');
+
+  const handleLoginSuccess = () => {
+    setIsLoggedIn(true);
+  };
+
+  if (!isLoggedIn) {
+    return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
+  }
+
+  const renderCurrentView = () => {
+    switch (currentView) {
+      case 'daily':
+        return <DailyView onNavigate={setCurrentView} />;
+      case 'tasks':
+        return <TaskView onNavigate={setCurrentView} />;
+      default:
+        return <DailyView onNavigate={setCurrentView} />;
+    }
+  };
 
   return (
     <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={appLogo} className="logo" alt="frontend logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Zenflow</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-      <PWABadge />
+      <MainLayout currentView={currentView} onNavigate={setCurrentView}>
+        {renderCurrentView()}
+      </MainLayout>
+      {currentView === 'add-task' && (
+        <AddTaskView onClose={() => setCurrentView('daily')} />
+      )}
+      {currentView === 'categories' && (
+        <CategoriesModal onClose={() => setCurrentView('daily')} />
+      )}
+      {currentView === 'focus-blocks' && (
+        <FocusBlocksModal onClose={() => setCurrentView('daily')} />
+      )}
+      {currentView === 'scheduling' && (
+        <SchedulingModal onClose={() => setCurrentView('daily')} />
+      )}
     </>
   );
 }
