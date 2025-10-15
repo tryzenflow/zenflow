@@ -77,6 +77,19 @@ export class TasksService {
     });
   }
 
+  findUnscheduled(userId: string, { start, end }: FindSchedulesDto) {
+    return this.prisma.task.findMany({
+      where: {
+        userId,
+        schedules: {
+          none: {
+            date: { gte: new Date(start), lt: new Date(end) },
+          },
+        },
+      },
+    });
+  }
+
   async findById(id: string, userId: string) {
     const task = await this.prisma.task.findUnique({
       where: { id, userId },

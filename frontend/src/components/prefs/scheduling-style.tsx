@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/form";
 import { Button } from "../ui/button";
 import { toast } from "sonner";
+import { formatMinutes } from "../../utils/prefs";
 
 // --- Zod Schema ---
 const constraintSchema = z.object({
@@ -32,18 +33,6 @@ interface SchedulingStyleProps {
   onNext: (data: DaySchedulingStyle) => void;
   onBack: () => void;
 }
-
-// Helper to convert minutes to "H hours M minutes" format
-const formatMinutes = (totalMinutes: number): string => {
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  const parts: string[] = [];
-
-  if (hours > 0) parts.push(`${hours} ${hours === 1 ? "hour" : "hours"}`);
-  if (minutes > 0)
-    parts.push(`${minutes} ${minutes === 1 ? "minute" : "minutes"}`);
-  return parts.length > 0 ? parts.join(" ") : "0 minutes";
-};
 
 export function SchedulingStyle({
   initialSchedulingStyle,

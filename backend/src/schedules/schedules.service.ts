@@ -93,18 +93,16 @@ export class SchedulesService {
     userId: string,
     timezone: string
   ) {
-    const startDate = fromZonedTime(`${start}T00:00:00`, timezone);
-    const endDate = fromZonedTime(`${end}T00:00:00`, timezone);
-
     const rangeSchedules = await this.prisma.schedule.findMany({
       where: {
-        start: { gte: startDate, lt: endDate },
-        end: { gte: startDate, lt: endDate },
+        date: { gte: new Date(start), lt: new Date(end) },
         task: { userId },
       },
       omit: { taskId: true, date: true },
       include: {
-        task: { select: { id: true, title: true } },
+        task: {
+          select: { id: true, title: true, focus: true, duration: true },
+        },
       },
       orderBy: { start: "asc" },
     });

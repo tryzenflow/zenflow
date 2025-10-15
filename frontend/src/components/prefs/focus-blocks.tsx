@@ -107,7 +107,8 @@ export function FocusBlocksPrefs({
                 if (target.dataset?.block) return;
 
                 const rect = containerRef.current.getBoundingClientRect();
-                const x = e.clientX - rect.left;
+                const scrollLeft = containerRef.current.scrollLeft;
+                const x = e.clientX - rect.left + scrollLeft;
 
                 const start = snapToFive(x / PIXELS_PER_MINUTE);
 

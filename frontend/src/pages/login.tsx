@@ -5,10 +5,12 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 export default function LoginPage() {
   const user = useUserStore((state) => state.user);
+  const loading = useUserStore((state) => state.loading);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
   useEffect(() => {
+    if (loading === null || loading) return;
     if (user) navigate(searchParams.get("callback") ?? "/");
   }, [user, searchParams]);
 

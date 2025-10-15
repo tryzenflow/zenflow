@@ -17,7 +17,7 @@ import { FocusBlocksPrefs } from "../components/prefs/focus-blocks";
 import { SchedulingStyle } from "../components/prefs/scheduling-style";
 import { toast } from "sonner";
 import { postData } from "../api";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { CategoriesPref } from "../components/prefs/categories";
 import { useUserStore } from "../hooks/use-user-store";
 
@@ -34,6 +34,8 @@ const defaultFocusBlocks: DayFocusBlocks = {
 
 export function PrefSetupPage() {
   const user = useUserStore((state) => state.user);
+  const setUser = useUserStore((state) => state.setUser);
+  const userFetching = useUserStore((state) => state.loading);
   const navigate = useNavigate();
   const [categories, setCategories] =
     useState<CategoryItem[]>(defaultCategories);
@@ -46,17 +48,21 @@ export function PrefSetupPage() {
   const [schedulingStyle, setSchedulingStyle] = useState<DaySchedulingStyle>(
     defaultSchedulingStyle
   );
-  const [searchParams] = useSearchParams();
 
   const totalSteps = 3;
 
   useEffect(() => {
-    if (!user) return;
-    if (user._count.categories > 0) setCurrentStep(2);
-    if (user._count.constraints > 0) {
-      navigate(searchParams.get("callback") ?? "/");
+    if (userFetching === null || userFetching) return;
+    if (!user) {
+      navigate("/login");
+      return;
     }
-  }, [user]);
+    if (user._count.categories > 0) {
+      if (user._count.constraints > 0) {
+        navigate("/");
+      } else setCurrentStep(2);
+    }
+  }, [user, userFetching]);
 
   const handleNext = () => {
     setSubmissionError(null);
@@ -115,6 +121,17 @@ export function PrefSetupPage() {
         constraintPayload.map((dayData) => postData("/constraints", dayData))
       );
 
+      setUser(
+        user
+          ? {
+              ...user,
+              _count: {
+                categories: categories.length,
+                constraints: Object.keys(dayMap).length,
+              },
+            }
+          : null
+      );
       toast.success("Preferences saved successfully!");
       navigate("/");
     } catch (error: any) {
@@ -154,6 +171,8 @@ export function PrefSetupPage() {
         return null;
     }
   };
+
+  if (!user || userFetching === null || userFetching) return null;
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 md:p-12">

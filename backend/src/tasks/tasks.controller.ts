@@ -45,6 +45,19 @@ export class TasksController {
     };
   }
 
+  @Get("/schedule/none")
+  async findUnscheduled(
+    @CurrentUser() user: User,
+    @Query() dto: FindSchedulesDto
+  ) {
+    const tasks = await this.tasksService.findUnscheduled(user.id, dto);
+    return {
+      success: true,
+      message: `Found ${tasks.length} unscheduled tasks between ${dto.start} and ${dto.end}`,
+      data: tasks,
+    };
+  }
+
   @Get(":id")
   async findOne(@Param("id") id: string, @CurrentUser() user: User) {
     const task = await this.tasksService.findById(id, user.id);

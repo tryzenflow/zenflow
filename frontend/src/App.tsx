@@ -10,9 +10,13 @@ import HomePage from "./pages/home";
 
 function App() {
   const setUser = useUserStore((state) => state.setUser);
+  const setLoading = useUserStore((state) => state.setLoading);
 
   useEffect(() => {
-    getData<{ data: User }>("/auth/me").then(({ data }) => setUser(data));
+    setLoading(true);
+    getData<{ data: User }>("/auth/me")
+      .then(({ data }) => setUser(data))
+      .finally(() => setLoading(false));
   }, []);
 
   return (
