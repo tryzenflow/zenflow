@@ -1,0 +1,11 @@
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: Date;
+  timezone: string;
+  _count: {
+    constraints: number;
+    categories: number;
+  };
+}

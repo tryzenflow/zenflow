@@ -103,8 +103,6 @@ def init_deadline_weight(tasks: list[Task]):
   for i, task in enumerate(sorted_tasks):
     deadline_weight_factor[task.id] = (
       len(sorted_tasks) - i) * 10  # scale factor
-  for t in sorted_tasks:
-    print(t.id, t.title, t.deadline, deadline_weight_factor[t.id])
   return deadline_weight_factor
 
 

@@ -1,0 +1,22 @@
+import { LoginForm } from "@/components/auth/login-form";
+import { useUserStore } from "../hooks/use-user-store";
+import { useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+
+export default function LoginPage() {
+  const user = useUserStore((state) => state.user);
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user) navigate(searchParams.get("callback") ?? "/");
+  }, [user, searchParams]);
+
+  return (
+    <div className="bg-background flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10">
+      <div className="w-full max-w-sm">
+        <LoginForm />
+      </div>
+    </div>
+  );
+}

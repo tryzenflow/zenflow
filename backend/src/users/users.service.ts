@@ -19,7 +19,7 @@ export class UsersService {
       const newUser = await this.prisma.user.create({
         data: { ...createUserDto, timezone: "Europe/Paris", name: "New User" },
       });
-      return newUser;
+      return { ...newUser, _count: { categories: 0, constraints: 0 } };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === PostgresErrorCode.UniqueConstraintViolation)
@@ -50,6 +50,9 @@ export class UsersService {
     try {
       const user = await this.prisma.user.findUnique({
         where: { email },
+        include: {
+          _count: { select: { categories: true, constraints: true } },
+        },
       });
       return user;
     } catch (error) {
