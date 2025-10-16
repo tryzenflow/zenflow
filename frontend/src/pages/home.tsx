@@ -37,6 +37,7 @@ import {
   ScheduleResponse,
 } from "../types/schedule";
 import { Task, TasksResponse } from "../types/tasks";
+import { EditTaskDialog } from "../components/tasks/edit-task-dialog";
 
 const VIEWS = ["Day view", "Week view", "Month view", "Year view"];
 
@@ -60,10 +61,12 @@ export default function HomePage() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [currentView, setCurrentView] = useState("Day view"); // Day view, Week view, Task view, etc.
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [unscheduledTasks, setUnscheduledTasks] = useState<Task[]>([]);
 
   const droppedOutSchedules = schedules.filter((s) => s.start === null);
   const scheduled = schedules.filter((s) => s.start !== null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   const loadUnscheduledTasks = async () => {
     setIsLoading(true);
@@ -187,7 +190,7 @@ export default function HomePage() {
           title: toRemove.task.title,
           duration: toRemove.task.duration,
           focus: toRemove.task.focus,
-        },
+        } as Task,
       ]);
       toast.success("Delete dropped out task successfully");
     } catch (error: any) {
@@ -197,6 +200,11 @@ export default function HomePage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const openEditTaskDialog = (taskId: string) => {
+    setSelectedTaskId(taskId);
+    setEditDialogOpen(true);
   };
 
   const addToSchedule = async (taskId: string) => {
@@ -220,8 +228,6 @@ export default function HomePage() {
     date: string,
     split: number
   ) => {
-    console.log({ taskId, date, split });
-
     try {
       const formatted = format(new Date(date), "y/M/d");
       await deleteData(
@@ -240,7 +246,7 @@ export default function HomePage() {
       );
       toast.success("Delete schedule successfully 🎉");
       if (!toRemove || splitExists) return;
-      setUnscheduledTasks((prev) => [...prev, toRemove.task]);
+      setUnscheduledTasks((prev) => [...prev, toRemove.task as Task]);
     } catch (error: any) {
       toast.error(error.message || "Failed to delete schedule :'(");
     }
@@ -249,137 +255,154 @@ export default function HomePage() {
   if (!user && (userFetching === null || userFetching)) return null;
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-muted/20 text-foreground antialiased">
-      {/* HEADER BAR (Simulating component usage: Button, DropdownMenu) */}
-      <header className="flex items-center w-full justify-between px-4 sm:px-6 lg:px-8 py-4 border-b bg-background shadow-sm">
-        <div className="sticky top-0 bg-background/95 backdrop-blur-sm z-20">
-          <div className="flex-1 font-semibold text-lg">
-            {format(selectedDate, "MMM d, yyyy")}
-            <div className="text-muted-foreground font-normal text-sm">
-              {format(selectedDate, "EEEE")}
+    <>
+      <div className="h-screen w-screen flex flex-col bg-muted/20 text-foreground antialiased">
+        <header className="flex items-center w-full justify-between px-4 sm:px-6 lg:px-8 py-4 border-b bg-background shadow-sm">
+          <div className="sticky top-0 bg-background/95 backdrop-blur-sm z-20">
+            <div className="flex-1 font-semibold text-lg">
+              {format(selectedDate, "MMM d, yyyy")}
+              <div className="text-muted-foreground font-normal text-sm">
+                {format(selectedDate, "EEEE")}
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="flex items-center gap-x-3">
-          <ButtonGroup className="hidden sm:flex" aria-label="Button group">
-            <Button
-              variant="secondary"
-              onClick={() => navigateDate("prev")}
-              size="icon"
-            >
-              <ChevronLeft className="size-4" />
-            </Button>
-            <Button variant="secondary" onClick={goToToday}>
-              Today
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => navigateDate("next")}
-              size="icon"
-            >
-              <ChevronRight className="size-4" />
-            </Button>
-          </ButtonGroup>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="hidden sm:flex">
-                {currentView}
-                <ChevronDown className="size-4 ml-2" />
+          <div className="flex items-center gap-x-3">
+            <ButtonGroup className="hidden sm:flex" aria-label="Button group">
+              <Button
+                variant="secondary"
+                onClick={() => navigateDate("prev")}
+                size="icon"
+              >
+                <ChevronLeft className="size-4" />
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuGroup>
-                <DropdownMenuRadioGroup
-                  value={currentView}
-                  onValueChange={(value) => setCurrentView(value)}
-                >
-                  {VIEWS.map((v) => (
-                    <DropdownMenuRadioItem key={v} value={v}>
-                      {v}
+              <Button variant="secondary" onClick={goToToday}>
+                Today
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => navigateDate("next")}
+                size="icon"
+              >
+                <ChevronRight className="size-4" />
+              </Button>
+            </ButtonGroup>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="hidden sm:flex">
+                  {currentView}
+                  <ChevronDown className="size-4 ml-2" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuGroup>
+                  <DropdownMenuRadioGroup
+                    value={currentView}
+                    onValueChange={(value) => setCurrentView(value)}
+                  >
+                    {VIEWS.map((v) => (
+                      <DropdownMenuRadioItem key={v} value={v}>
+                        {v}
+                      </DropdownMenuRadioItem>
+                    ))}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuRadioItem value="Task view">
+                      Task view
                     </DropdownMenuRadioItem>
-                  ))}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuRadioItem value="Task view">
-                    Task view
-                  </DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button disabled={isLoading} onClick={schedule}>
-            <WandSparklesIcon className="size-4" /> Schedule
-          </Button>
-          <Separator orientation="vertical" className="min-h-9" />
-          <CreateTaskDialog />
-        </div>
-      </header>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button disabled={isLoading} onClick={schedule}>
+              <WandSparklesIcon className="size-4" /> Schedule
+            </Button>
+            <Separator orientation="vertical" className="min-h-9" />
+            <CreateTaskDialog />
+          </div>
+        </header>
 
-      <div className="flex-1 min-h-0 flex overflow-hidden">
-        <CalendarGrid
-          deleteSchedule={deleteSchedule}
-          selectedDate={selectedDate}
-          schedules={scheduled}
-        />
-
-        <ScrollArea className="w-full hidden md:block md:w-96 border-l pb-4 px-4 flex-shrink-0 bg-background/50 dark:bg-slate-900 overflow-y-auto">
-          {/* MINI CALENDAR */}
-          <MiniCalendar
+        <div className="flex-1 min-h-0 flex overflow-hidden">
+          <CalendarGrid
+            openEditTaskDialog={openEditTaskDialog}
+            deleteSchedule={deleteSchedule}
             selectedDate={selectedDate}
-            onDateChange={handleDateChange}
+            schedules={scheduled}
           />
 
-          <div className="mt-6 space-y-6">
-            {/* DROPPED TASKS */}
-            {droppedOutSchedules.length > 0 && (
-              <div className="px-6">
-                <div className="flex items-center gap-x-3">
-                  <h3 className="font-semibold text-sm">Dropout Tasks</h3>
-                  <Badge className="rounded-full" variant="destructive">
-                    {droppedOutSchedules.length}
-                  </Badge>
-                </div>
-                <div>
-                  {droppedOutSchedules.map((s) => (
-                    <DroppedScheduleItem
-                      key={`${s.task.id}-${s.date}-${s.split}`}
-                      duration={s.task.duration}
-                      taskId={s.task.id}
-                      title={s.task.title}
-                      deleteDropoutTask={(id) =>
-                        deleteDropoutTasks(id, s.split)
-                      }
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
+          <ScrollArea className="w-full hidden md:block md:w-96 border-l pb-4 px-4 flex-shrink-0 bg-background/50 dark:bg-slate-900 overflow-y-auto">
+            {/* MINI CALENDAR */}
+            <MiniCalendar
+              selectedDate={selectedDate}
+              onDateChange={handleDateChange}
+            />
 
-            {/* UNSCHEDULED TASKS */}
-            {unscheduledTasks.length > 0 && (
-              <div className="px-6">
-                <div className="flex items-center gap-x-3">
-                  <h3 className="font-semibold text-sm">Unscheduled Tasks</h3>
-                  <Badge className="rounded-full">
-                    {unscheduledTasks.length}
-                  </Badge>
+            <div className="mt-6 space-y-6">
+              {/* DROPPED TASKS */}
+              {droppedOutSchedules.length > 0 && (
+                <div className="px-6">
+                  <div className="flex items-center gap-x-3">
+                    <h3 className="font-semibold text-sm">Dropout Tasks</h3>
+                    <Badge className="rounded-full" variant="destructive">
+                      {droppedOutSchedules.length}
+                    </Badge>
+                  </div>
+                  <div>
+                    {droppedOutSchedules.map((s) => (
+                      <DroppedScheduleItem
+                        key={`${s.task.id}-${s.date}-${s.split}`}
+                        duration={s.task.duration}
+                        taskId={s.task.id}
+                        title={s.task.title}
+                        openEditTaskDialog={openEditTaskDialog}
+                        deleteDropoutTask={(id) =>
+                          deleteDropoutTasks(id, s.split)
+                        }
+                      />
+                    ))}
+                  </div>
                 </div>
-                <div>
-                  {unscheduledTasks.map((task) => (
-                    <UnscheduledTaskItem
-                      addToSchedule={addToSchedule}
-                      taskId={task.id}
-                      key={task.id}
-                      title={task.title}
-                      duration={task.duration}
-                    />
-                  ))}
+              )}
+
+              {/* UNSCHEDULED TASKS */}
+              {unscheduledTasks.length > 0 && (
+                <div className="px-6">
+                  <div className="flex items-center gap-x-3">
+                    <h3 className="font-semibold text-sm">Unscheduled Tasks</h3>
+                    <Badge className="rounded-full">
+                      {unscheduledTasks.length}
+                    </Badge>
+                  </div>
+                  <div>
+                    {unscheduledTasks.map((task) => (
+                      <UnscheduledTaskItem
+                        addToSchedule={addToSchedule}
+                        taskId={task.id}
+                        key={task.id}
+                        title={task.title}
+                        openEditTaskDialog={openEditTaskDialog}
+                        duration={task.duration}
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        </ScrollArea>
+              )}
+            </div>
+          </ScrollArea>
+        </div>
       </div>
-    </div>
+      {selectedTaskId && (
+        <EditTaskDialog
+          updateSchedule={(task) =>
+            setSchedules((prev) =>
+              prev.map((p) => (p.task.id === task.id ? { ...p, task } : p))
+            )
+          }
+          selectedDate={selectedDate}
+          open={editDialogOpen}
+          setOpen={setEditDialogOpen}
+          taskId={selectedTaskId}
+        />
+      )}
+    </>
   );
 }

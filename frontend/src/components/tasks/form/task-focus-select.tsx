@@ -13,7 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { TaskFormValues } from "../../../utils/tasks";
+import { TaskFormValues } from "@/utils/tasks";
+import { Badge } from "@/components/ui/badge";
 
 interface TaskFocusSelectProps {
   formControl: Control<TaskFormValues>;
@@ -29,22 +30,32 @@ export function TaskFocusSelect({
       control={formControl}
       name="focus"
       render={({ field }) => (
-        <FormItem className="flex-1">
+        <FormItem>
           <FormLabel>Focus</FormLabel>
+
           <Select
-            onValueChange={(value) => field.onChange(+value)}
-            defaultValue={field.value.toString()}
             disabled={loading}
+            onValueChange={(value) => field.onChange(+value)}
+            value={field.value.toString()}
           >
             <FormControl>
-              <SelectTrigger>
-                <SelectValue placeholder="Work" />
+              <SelectTrigger className="w-fit">
+                <SelectValue className="line-clamp-1" placeholder="High" />
               </SelectTrigger>
             </FormControl>
             <SelectContent>
-              <SelectItem value="3">Deep Work</SelectItem>
-              <SelectItem value="2">Work</SelectItem>
-              <SelectItem value="1">Personal</SelectItem>
+              <SelectItem value="3">
+                <Badge className="size-4 bg-red-500 mr-2" />
+                High
+              </SelectItem>
+              <SelectItem value="2">
+                <Badge className="size-4 bg-yellow-500 mr-2" />
+                Medium
+              </SelectItem>
+              <SelectItem value="1">
+                <Badge className="size-4 bg-green-500 mr-2" />
+                Low
+              </SelectItem>
             </SelectContent>
           </Select>
           <FormMessage />

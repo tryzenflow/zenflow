@@ -32,9 +32,11 @@ const focusColorMap = {
 export const ScheduleItem = ({
   schedule,
   deleteSchedule,
+  openEditTaskDialog,
 }: {
   schedule: Schedule;
   deleteSchedule: (taskId: string, date: string, split: number) => void;
+  openEditTaskDialog: (taskId: string) => void;
 }) => {
   const { task, start, end, split, date } = schedule;
 
@@ -86,7 +88,7 @@ export const ScheduleItem = ({
       </ContextMenuTrigger>
       <ContextMenuContent>
         <ContextMenuGroup>
-          <ContextMenuItem>
+          <ContextMenuItem onClick={() => openEditTaskDialog(task.id)}>
             <EditIcon className="size-4" />
             Edit task
           </ContextMenuItem>

@@ -42,7 +42,6 @@ export function DatePicker({
       <PopoverContent className="w-auto p-0">
         <Calendar
           disabled={disabled}
-          required
           mode="single"
           selected={date}
           onSelect={onSelect}

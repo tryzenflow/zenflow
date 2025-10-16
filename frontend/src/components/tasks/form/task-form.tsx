@@ -24,6 +24,7 @@ import { TimeInput } from "../time-input";
 import { TaskCategorySelect } from "./task-category-select";
 import { TaskFocusSelect } from "./task-focus-select";
 import { TaskPrioritySelect } from "./task-priority-select";
+import { Switch } from "../../ui/switch";
 
 interface TaskFormProps {
   form: UseFormReturn<TaskFormValues>;
@@ -177,13 +178,28 @@ export function TaskForm({
               name="deadlineTime"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Time</FormLabel>
+                  <FormLabel className="invisible">Time</FormLabel>
                   <Input disabled={loading} type="time" {...field} />
                 </FormItem>
               )}
             />
           </div>
         </div>
+
+        <FormField
+          control={form.control}
+          name="mandatory"
+          render={({ field }) => (
+            <FormItem className="flex gap-x-2">
+              <Switch
+                disabled={loading}
+                checked={field.value}
+                onCheckedChange={field.onChange}
+              />
+              <FormLabel>Mandatory</FormLabel>
+            </FormItem>
+          )}
+        />
 
         <Separator />
 

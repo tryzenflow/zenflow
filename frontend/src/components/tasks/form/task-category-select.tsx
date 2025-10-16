@@ -3,7 +3,6 @@ import {
   FormField,
   FormItem,
   FormLabel,
-  FormControl,
   FormMessage,
 } from "@/components/ui/form";
 import {
@@ -36,14 +35,13 @@ export function TaskCategorySelect({
           <FormLabel>Category</FormLabel>
           <Select
             onValueChange={field.onChange}
-            defaultValue={field.value}
+            value={field.value}
             disabled={loading || categories.length === 0}
           >
-            <FormControl>
-              <SelectTrigger>
-                <SelectValue placeholder="No category selected" />
-              </SelectTrigger>
-            </FormControl>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="No category selected" />
+            </SelectTrigger>
+
             <SelectContent>
               {categories.map((category) => (
                 <SelectItem key={category.id} value={category.id}>

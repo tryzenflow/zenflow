@@ -1,11 +1,8 @@
-// src/components/task-form/TaskPrioritySelect.tsx
-
 import { Control } from "react-hook-form";
 import {
   FormField,
   FormItem,
   FormLabel,
-  FormControl,
   FormMessage,
 } from "@/components/ui/form";
 import {
@@ -36,14 +33,13 @@ export function TaskPrioritySelect({
           <FormLabel>Priority</FormLabel>
           <Select
             onValueChange={(value) => field.onChange(+value)}
-            defaultValue={field.value.toString()}
+            value={field.value.toString()}
             disabled={loading}
           >
-            <FormControl>
-              <SelectTrigger>
-                <SelectValue placeholder="Medium" />
-              </SelectTrigger>
-            </FormControl>
+            <SelectTrigger>
+              <SelectValue placeholder={field.value} />
+            </SelectTrigger>
+
             <SelectContent>
               <SelectItem value="3">
                 <Badge className="size-4 rounded-full bg-red-500 mr-2" />

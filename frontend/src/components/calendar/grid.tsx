@@ -6,10 +6,12 @@ export const CalendarGrid = ({
   selectedDate,
   schedules,
   deleteSchedule,
+  openEditTaskDialog,
 }: {
   selectedDate: Date;
   schedules: Schedule[];
   deleteSchedule: (taskId: string, date: string, split: number) => void;
+  openEditTaskDialog: (taskId: string) => void;
 }) => {
   // Create an array for the hourly timeline (0 AM to 11 PM)
   const hours = Array.from({ length: 24 }, (_, i) => {
@@ -47,6 +49,7 @@ export const CalendarGrid = ({
         {/* Render Scheduled Items */}
         {daySchedules.map((schedule) => (
           <ScheduleItem
+            openEditTaskDialog={openEditTaskDialog}
             deleteSchedule={deleteSchedule}
             key={`${schedule.task.id}-${schedule.date}-${schedule.split}`}
             schedule={schedule}

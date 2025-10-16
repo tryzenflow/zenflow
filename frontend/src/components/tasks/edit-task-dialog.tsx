@@ -1,27 +1,46 @@
-import { useState, useEffect } from "react";
-import { format, addDays } from "date-fns";
-import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { postData, getData } from "../../api";
+import { useTaskForm } from "@/hooks/use-task-form";
+import { addDays, addMinutes, format, startOfDay } from "date-fns";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { getData, patchData } from "../../api";
 import { CategoryItem } from "../../types/prefs";
 import { Task } from "../../types/tasks";
-import { TaskForm } from "./form/task-form";
-import { useTaskForm } from "@/hooks/use-task-form";
 import { TaskFormValues } from "../../utils/tasks";
-import { minutesToTime, timeToMinutes } from "../../utils/prefs";
+import { TaskForm } from "./form/task-form";
+import { militaryTimeToMinutes } from "../../utils/prefs";
 
-export function CreateTaskDialog() {
-  const [open, setOpen] = useState(false);
+interface EditTaskDialogProps {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  taskId: string;
+  selectedDate: Date;
+  updateSchedule: (task: Task) => void;
+}
+
+export function EditTaskDialog({
+  open,
+  setOpen,
+  taskId,
+  selectedDate,
+  updateSchedule,
+}: EditTaskDialogProps) {
   const [loading, setLoading] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [task, setTask] = useState<Task | null>(null);
   const [categories, setCategories] = useState<CategoryItem[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    getData<{ data: Task | null }>(`/tasks/${taskId}`).then(({ data }) =>
+      setTask(data)
+    );
+  }, [taskId, open]);
 
   const { form, scheduleDate } = useTaskForm({
     defaultValues: {
@@ -57,33 +76,61 @@ export function CreateTaskDialog() {
     ).then(({ data }) => setTasks(data));
   }, [scheduleDate, open]);
 
+  useEffect(() => {
+    if (!task) return;
+    console.log({ task });
+
+    form.reset({
+      ...task,
+      categoryId: task.categoryId ?? undefined,
+      prerequisites: task.prerequisites?.map((p) =>
+        typeof p === "string" ? p : p.id
+      ),
+      deadlineDate: task.deadline
+        ? startOfDay(new Date(task.deadline))
+        : undefined,
+      deadlineTime: task.deadline
+        ? format(new Date(task.deadline), "HH:mm")
+        : undefined,
+    });
+  }, [task]);
+
   async function onSubmit(values: TaskFormValues) {
     let deadline = undefined;
     if (values.deadlineDate) {
-      const offsetInMinutes = values.deadlineDate.getTimezoneOffset();
-      let utcMinute = 0;
-      if (values.deadlineTime) {
-        utcMinute = timeToMinutes(values.deadlineTime) + offsetInMinutes;
-      }
-      deadline = `${format(values.deadlineDate, "yyyy-MM-dd")}T${minutesToTime(
-        utcMinute
-      )}:00.000Z`;
+      deadline = addMinutes(
+        new Date(values.deadlineDate),
+        militaryTimeToMinutes(values.deadlineTime ?? "00:00")
+      );
     }
 
-    const payload: any = { ...values };
+    const formattedScheduleDate = format(values.scheduleDate, "yyyy-MM-dd");
+
+    const payload = { ...values, deadline };
     payload.deadline = deadline;
-    payload.scheduleDate = format(values.scheduleDate, "yyyy-MM-dd");
+    if (formattedScheduleDate === format(selectedDate, "yyyy-MM-dd")) {
+      // @ts-ignore
+      delete payload.scheduleDate;
+    } else {
+      // @ts-ignore
+      payload.scheduleDate = formattedScheduleDate;
+    }
     delete payload.deadlineTime;
     delete payload.deadlineDate;
     setLoading(true);
     try {
-      await postData("/tasks", payload);
+      const updated = await patchData<any, { data: Task }>(
+        `/tasks/${taskId}`,
+        payload
+      );
+
+      updateSchedule(updated.data);
       form.reset();
-      toast.success("Task created successfully 🎉");
+      toast.success("Task updated successfully 🎉");
       setOpen(false);
     } catch (error: any) {
       toast.error(
-        error.message || "Something went wrong when creating a new task"
+        error.message || "Something went wrong when updating the task"
       );
     } finally {
       setLoading(false);
@@ -97,19 +144,16 @@ export function CreateTaskDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline">Add task</Button>
-      </DialogTrigger>
       <DialogContent className="sm:max-w-[500px] overflow-x-hidden md:max-w-[600px] overflow-y-auto max-h-[90vh]">
         <DialogHeader className="space-y-0">
-          <DialogTitle>Create new task</DialogTitle>
+          <DialogTitle>Edit Task</DialogTitle>
         </DialogHeader>
 
         <TaskForm
           form={form as any}
           onSubmit={onSubmit}
           loading={loading}
-          tasks={tasks}
+          tasks={tasks.filter((t) => t.id !== taskId)}
           categories={categories}
           onCancel={handleClose}
         />
