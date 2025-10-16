@@ -7,6 +7,7 @@ import { getData, patchData } from "./api";
 import { useUserStore } from "./hooks/use-user-store";
 import { User } from "./types/user";
 import HomePage from "./pages/home";
+import TasksViewPage from "./pages/tasks-view";
 
 function App() {
   const user = useUserStore((state) => state.user);
@@ -34,6 +35,7 @@ function App() {
         <Route index element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/prefs" element={<PrefSetupPage />} />
+        <Route path="/view/tasks" element={<TasksViewPage />} />
       </Routes>
     </BrowserRouter>
   );

@@ -1,11 +1,11 @@
-import { CalendarGrid } from "../components/calendar/grid";
 import ViewLayout from "../components/layout/view-layout";
+import { TaskView } from "../components/tasks/task-view";
 
-export default function HomePage() {
+export default function TasksViewPage() {
   return (
     <ViewLayout
       renderBody={(body) => (
-        <CalendarGrid
+        <TaskView
           deleteSchedule={body.deleteSchedule}
           openEditTaskDialog={body.openEditTaskDialog}
           schedules={body.schedules}

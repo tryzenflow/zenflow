@@ -50,7 +50,7 @@ export function EditTaskDialog({
       priority: 2,
       focus: 2,
       maxSplits: 1,
-      scheduleDate: new Date(),
+      scheduleDate: selectedDate,
       note: "",
       earliestStart: undefined,
       latestEnd: undefined,
@@ -78,7 +78,6 @@ export function EditTaskDialog({
 
   useEffect(() => {
     if (!task) return;
-    console.log({ task });
 
     form.reset({
       ...task,

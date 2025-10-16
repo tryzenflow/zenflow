@@ -12,7 +12,7 @@ export const MiniCalendar = ({
 }) => {
   return (
     <Calendar
-      className="w-full"
+      className="w-full bg-transparent"
       required
       mode="single"
       selected={selectedDate}
@@ -24,18 +24,20 @@ export const MiniCalendar = ({
 export const DroppedScheduleItem = ({
   title,
   duration,
+  split,
   taskId,
   deleteDropoutTask,
   openEditTaskDialog,
 }: {
   title: string;
+  split: number;
   duration: number;
   taskId: string;
-  deleteDropoutTask: (id: string) => void;
+  deleteDropoutTask: (id: string, split: number) => void;
   openEditTaskDialog: (taskId: string) => void;
 }) => {
   return (
-    <div className="flex items-center justify-between py-3 border-b last:border-b-0">
+    <div className="flex items-center bg-transparent justify-between py-3">
       <div>
         <div className="text-sm font-medium">{title}</div>
         <div className="flex items-center text-xs text-muted-foreground mt-0.5">
@@ -54,7 +56,7 @@ export const DroppedScheduleItem = ({
         </Button>
         <Button
           variant="ghost"
-          onClick={() => deleteDropoutTask(taskId)}
+          onClick={() => deleteDropoutTask(taskId, split)}
           size="icon"
           className="h-6 w-6"
         >
@@ -78,7 +80,7 @@ export const UnscheduledTaskItem = ({
   addToSchedule: (taskId: string) => void;
   openEditTaskDialog: (taskId: string) => void;
 }) => (
-  <div className="flex items-center justify-between py-3 border-b last:border-b-0">
+  <div className="flex items-center justify-between py-3">
     <div>
       <div className="text-sm font-medium">{title}</div>
       <div className="flex items-center text-xs text-muted-foreground mt-0.5">

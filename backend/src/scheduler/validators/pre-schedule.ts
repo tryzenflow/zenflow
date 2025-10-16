@@ -13,9 +13,11 @@ export function validatePreSchedule(body: ScheduleRequest): string[] {
   );
   for (let i = 0; i < fixed.length; i++) {
     const t1 = fixed[i];
+    if (!t1.mandatory) continue;
     const end1 = t1.earliestStart! + t1.duration;
     for (let j = i + 1; j < fixed.length; j++) {
       const t2 = fixed[j];
+      if (!t2.mandatory) continue;
       const end2 = t2.earliestStart! + t2.duration;
       if (!(end1 <= t2.earliestStart! || end2 <= t1.earliestStart!)) {
         errors.push(`Task "${t1.title}" overlaps with task "${t2.title}".`);
