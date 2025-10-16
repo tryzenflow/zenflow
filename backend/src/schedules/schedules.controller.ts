@@ -71,8 +71,7 @@ export class SchedulesController {
   ) {
     const schedules = await this.schedulesService.findSchedules(
       findSchedulesDto,
-      user.id,
-      user.timezone
+      user.id
     );
     return {
       success: true,

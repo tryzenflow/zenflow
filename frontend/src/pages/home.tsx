@@ -9,7 +9,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { deleteData, getData, patchData } from "../api";
+import { deleteData, getData, patchData, postData } from "../api";
 import { CalendarGrid } from "../components/calendar/grid";
 import {
   DroppedScheduleItem,
@@ -19,7 +19,6 @@ import {
 import { CreateTaskDialog } from "../components/tasks/create-task-dialog";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-import { Card, CardContent, CardHeader } from "../components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,7 +31,11 @@ import {
 import { ScrollArea } from "../components/ui/scroll-area";
 import { Separator } from "../components/ui/separator";
 import { useUserStore } from "../hooks/use-user-store";
-import { Schedule, SchedulesResponse } from "../types/schedule";
+import {
+  Schedule,
+  GetSchedulesResponse,
+  ScheduleResponse,
+} from "../types/schedule";
 import { Task, TasksResponse } from "../types/tasks";
 
 const VIEWS = ["Day view", "Week view", "Month view", "Year view"];
@@ -60,6 +63,7 @@ export default function HomePage() {
   const [unscheduledTasks, setUnscheduledTasks] = useState<Task[]>([]);
 
   const droppedOutSchedules = schedules.filter((s) => s.start === null);
+  const scheduled = schedules.filter((s) => s.start !== null);
 
   const loadUnscheduledTasks = async () => {
     setIsLoading(true);
@@ -74,7 +78,6 @@ export default function HomePage() {
 
       if (response.success) {
         setUnscheduledTasks(response.data);
-        console.log({ response });
       } else {
         toast.error("Failed to load schedules: " + response.message);
       }
@@ -88,7 +91,7 @@ export default function HomePage() {
     setIsLoading(true);
     try {
       const nextDay = addDays(selectedDate, 1);
-      const response = await getData<SchedulesResponse>(
+      const response = await getData<GetSchedulesResponse>(
         `/schedules?start=${format(selectedDate, "yyyy-MM-dd")}&end=${format(
           nextDay,
           "yyyy-MM-dd"
@@ -135,11 +138,57 @@ export default function HomePage() {
     [selectedDate, addDays, subDays, handleDateChange]
   );
 
+  const schedule = async () => {
+    try {
+      setIsLoading(true);
+      const response = await postData<
+        { scheduleDate: string },
+        ScheduleResponse
+      >("/schedule", { scheduleDate: format(selectedDate, "yyyy-MM-dd") });
+      if (response.feasible) {
+        toast.success("Schedule successfully!");
+      } else {
+        toast.error(
+          "Infeasible schedule. Please shorten or drop some mandatory tasks"
+        );
+      }
+      setSchedules(response.data);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to schedule tasks");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const deleteDropoutTasks = async (id: string, split: number) => {
     try {
       await deleteData(
         `/schedules/${format(selectedDate, "y/M/d")}/tasks/${id}/split/${split}`
       );
+      const toRemove = schedules.find(
+        (s) =>
+          s.task.id === id &&
+          s.date === format(selectedDate, "yyyy-MM-dd") &&
+          s.split === split
+      );
+      setSchedules((prev) =>
+        prev.filter(
+          (s) =>
+            s.task.id !== id ||
+            s.date !== format(selectedDate, "yyyy-MM-dd") ||
+            s.split !== split
+        )
+      );
+      if (!toRemove) return;
+      setUnscheduledTasks((prev) => [
+        ...prev,
+        {
+          id,
+          title: toRemove.task.title,
+          duration: toRemove.task.duration,
+          focus: toRemove.task.focus,
+        },
+      ]);
       toast.success("Delete dropped out task successfully");
     } catch (error: any) {
       toast.error(
@@ -157,12 +206,47 @@ export default function HomePage() {
         scheduleDate: format(selectedDate, "yyyy-MM-dd"),
       });
       toast.success("Task added to the day's schedule");
+      await schedule();
+      setUnscheduledTasks((prev) => prev.filter((t) => t.id !== taskId));
     } catch (error: any) {
       toast.error(error.message || "Failed to add task to the day's schedule");
     } finally {
       setIsLoading(false);
     }
   };
+
+  const deleteSchedule = async (
+    taskId: string,
+    date: string,
+    split: number
+  ) => {
+    console.log({ taskId, date, split });
+
+    try {
+      const formatted = format(new Date(date), "y/M/d");
+      await deleteData(
+        `/schedules/${formatted}/tasks/${taskId}/split/${split}`
+      );
+      const toRemove = schedules.find(
+        (s) => s.split === split && s.task.id === taskId && s.date === date
+      );
+      setSchedules((prev) =>
+        prev.filter(
+          (s) => s.split !== split || s.task.id !== taskId || s.date !== date
+        )
+      );
+      const splitExists = schedules.some(
+        (s) => s.task.id === taskId && s.split !== split
+      );
+      toast.success("Delete schedule successfully 🎉");
+      if (!toRemove || splitExists) return;
+      setUnscheduledTasks((prev) => [...prev, toRemove.task]);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to delete schedule :'(");
+    }
+  };
+
+  if (!user && (userFetching === null || userFetching)) return null;
 
   return (
     <div className="h-screen w-screen flex flex-col bg-muted/20 text-foreground antialiased">
@@ -223,7 +307,7 @@ export default function HomePage() {
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button>
+          <Button disabled={isLoading} onClick={schedule}>
             <WandSparklesIcon className="size-4" /> Schedule
           </Button>
           <Separator orientation="vertical" className="min-h-9" />
@@ -232,7 +316,11 @@ export default function HomePage() {
       </header>
 
       <div className="flex-1 min-h-0 flex overflow-hidden">
-        <CalendarGrid selectedDate={selectedDate} schedules={schedules} />
+        <CalendarGrid
+          deleteSchedule={deleteSchedule}
+          selectedDate={selectedDate}
+          schedules={scheduled}
+        />
 
         <ScrollArea className="w-full hidden md:block md:w-96 border-l pb-4 px-4 flex-shrink-0 bg-background/50 dark:bg-slate-900 overflow-y-auto">
           {/* MINI CALENDAR */}

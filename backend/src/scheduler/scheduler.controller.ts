@@ -115,8 +115,7 @@ export class SchedulerController implements OnModuleInit {
             start: scheduleDate,
             end: extractDate(addDays(new Date(scheduleDate), 1)),
           },
-          user.id,
-          user.timezone
+          user.id
         ),
       };
 

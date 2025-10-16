@@ -33,7 +33,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - /var/run/postgresql:/var/run/postgresql
+      - /var/lib/postgresql:/var/lib/postgresql
     env_file:
       - docker.env
     networks:

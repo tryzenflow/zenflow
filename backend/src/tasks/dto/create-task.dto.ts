@@ -18,7 +18,6 @@ export class CreateTaskDto {
 
   @IsDateString()
   @MaxLength(10)
-  @IsOptional()
   scheduleDate: string;
 
   @IsString() @IsOptional() note?: string;
@@ -31,8 +30,7 @@ export class CreateTaskDto {
   @IsInt()
   @Min(1)
   @Max(3)
-  @IsOptional()
-  priority?: number = 3;
+  priority: number;
 
   @IsOptional()
   @IsInt()
@@ -62,8 +60,7 @@ export class CreateTaskDto {
   @IsInt()
   @Min(1)
   @Max(3)
-  @IsOptional()
-  focus?: number = 1;
+  focus: number;
 
   @IsOptional()
   @IsString()

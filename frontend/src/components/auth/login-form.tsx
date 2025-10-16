@@ -127,7 +127,7 @@ export function LoginForm({
         toast.success("Login successfully", {
           description: "You will be redirected to the home page shortly",
         });
-        setUser({ ...result, _count: { categories: 0, constraints: 0 } });
+        setUser(result.data);
         navigate("/");
       } else {
         const errorMessage = result.message || "Invalid OTP. Please try again.";

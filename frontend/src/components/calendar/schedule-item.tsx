@@ -1,4 +1,12 @@
+import { EditIcon, TrashIcon } from "lucide-react";
 import { Schedule } from "../../types/schedule";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuGroup,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "../ui/context-menu";
 
 const focusColorMap = {
   1: {
@@ -21,52 +29,76 @@ const focusColorMap = {
   },
 };
 
-export const ScheduleItem = ({ schedule }: { schedule: Schedule }) => {
-  const { task, start, end } = schedule;
-  const colors = focusColorMap[task.focusLevel] || focusColorMap[1];
+export const ScheduleItem = ({
+  schedule,
+  deleteSchedule,
+}: {
+  schedule: Schedule;
+  deleteSchedule: (taskId: string, date: string, split: number) => void;
+}) => {
+  const { task, start, end, split, date } = schedule;
 
-  const startDate = new Date(start);
-  const endDate = new Date(end);
+  const colors = focusColorMap[task.focus] || focusColorMap[1];
+
+  const startDate = new Date(start!);
+  const endDate = new Date(end!);
   const startHour = startDate.getHours();
   const startMinute = startDate.getMinutes();
   const endHour = endDate.getHours();
   const endMinute = endDate.getMinutes();
 
-  // Calculate position (top) and duration (height) in a grid where 1 hour = 64px
   const startMinutes = startHour * 60 + startMinute;
   const endMinutes = endHour * 60 + endMinute;
   const durationMinutes = endMinutes - startMinutes;
 
-  // 1 minute = 64px / 60 = 1.0667px
-  const topPosition = (startMinutes / 60) * 64;
-  const height = (durationMinutes / 60) * 64;
+  const topPosition = startMinutes;
+  const height = durationMinutes;
 
   return (
-    <div
-      className={`absolute w-[95%] rounded-md p-2 text-xs border-l-4 shadow-sm transition-all ${colors.bg} ${colors.text} ${colors.border} ${colors.hover}`}
-      style={{
-        top: `${topPosition}px`,
-        height: `${height}px`,
-        minHeight: "2rem", // Minimum height for visibility
-        zIndex: 10,
-        marginLeft: "1rem",
-        overflow: "hidden",
-      }}
-    >
-      <div className="font-semibold">{task.title}</div>
-      {durationMinutes > 60 && (
-        <div className="text-[10px] opacity-80">
-          {startDate.toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}{" "}
-          -{" "}
-          {endDate.toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          className={`absolute left-12 w-[calc(100%-4rem)] rounded-sm p-1 text-xs border-l-3 shadow-sm transition-all ${colors.bg} ${colors.text} ${colors.border} ${colors.hover}`}
+          style={{
+            top: `${topPosition}px`,
+            height: `${height}px`,
+            minHeight: "2rem", // Minimum height for visibility
+            zIndex: 10,
+            marginLeft: "1rem",
+            overflow: "hidden",
+          }}
+        >
+          <div className="font-semibold">{task.title}</div>
+          {durationMinutes >= 30 && (
+            <div className="text-[10px] opacity-80">
+              {startDate.toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}{" "}
+              -{" "}
+              {endDate.toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </div>
+          )}
         </div>
-      )}
-    </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuGroup>
+          <ContextMenuItem>
+            <EditIcon className="size-4" />
+            Edit task
+          </ContextMenuItem>
+          <ContextMenuItem
+            onClick={() => deleteSchedule(task.id, date, split)}
+            variant="destructive"
+          >
+            <TrashIcon className="size-4" />
+            Delete schedule
+          </ContextMenuItem>
+        </ContextMenuGroup>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 };

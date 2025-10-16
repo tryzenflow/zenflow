@@ -5,9 +5,11 @@ import { ScheduleItem } from "./schedule-item";
 export const CalendarGrid = ({
   selectedDate,
   schedules,
+  deleteSchedule,
 }: {
   selectedDate: Date;
   schedules: Schedule[];
+  deleteSchedule: (taskId: string, date: string, split: number) => void;
 }) => {
   // Create an array for the hourly timeline (0 AM to 11 PM)
   const hours = Array.from({ length: 24 }, (_, i) => {
@@ -21,7 +23,7 @@ export const CalendarGrid = ({
   const selectedDayEnd = selectedDayStart + 24 * 60 * 60 * 1000;
 
   const daySchedules = schedules.filter((s) => {
-    const startTimestamp = new Date(s.start).getTime();
+    const startTimestamp = new Date(s.start!).getTime();
     return (
       startTimestamp >= selectedDayStart && startTimestamp < selectedDayEnd
     );
@@ -44,7 +46,11 @@ export const CalendarGrid = ({
 
         {/* Render Scheduled Items */}
         {daySchedules.map((schedule) => (
-          <ScheduleItem key={schedule.taskId} schedule={schedule} />
+          <ScheduleItem
+            deleteSchedule={deleteSchedule}
+            key={`${schedule.task.id}-${schedule.date}-${schedule.split}`}
+            schedule={schedule}
+          />
         ))}
 
         {/* This creates a vertical line down the grid */}

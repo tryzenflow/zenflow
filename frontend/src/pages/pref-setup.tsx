@@ -172,7 +172,7 @@ export function PrefSetupPage() {
     }
   };
 
-  if (!user || userFetching === null || userFetching) return null;
+  if (!user && (userFetching === null || userFetching)) return null;
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 md:p-12">

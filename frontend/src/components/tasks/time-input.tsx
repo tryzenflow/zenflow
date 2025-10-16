@@ -4,7 +4,6 @@ import { Button } from "../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Command, CommandInput, CommandItem, CommandList } from "../ui/command";
 import { cn } from "../../lib/utils";
-import { DAILY_HORIZON } from "../../types/prefs";
 
 const timeBlocks = Array(289)
   .fill(null)
@@ -14,10 +13,14 @@ export function TimeInput({
   value,
   onChange,
   disabled,
+  start,
+  end,
 }: {
   value: number;
   onChange: (value: number) => void;
   disabled?: boolean;
+  start?: number;
+  end?: number;
 }) {
   return (
     <Popover>
@@ -35,21 +38,23 @@ export function TimeInput({
         <Command>
           <CommandInput placeholder="Search time..." className="h-9" />
           <CommandList>
-            {timeBlocks.map((b) => (
-              <CommandItem
-                key={b}
-                value={minutesToTime(b)}
-                onSelect={(value) => onChange(timeToMinutes(value))}
-              >
-                {minutesToTime(b)}
-                <Check
-                  className={cn(
-                    "ml-auto",
-                    value === b ? "opacity-100" : "opacity-0"
-                  )}
-                />
-              </CommandItem>
-            ))}
+            {timeBlocks
+              .filter((b) => (!start || b >= start) && (!end || b <= end))
+              .map((b) => (
+                <CommandItem
+                  key={b}
+                  value={minutesToTime(b)}
+                  onSelect={(value) => onChange(timeToMinutes(value))}
+                >
+                  {minutesToTime(b)}
+                  <Check
+                    className={cn(
+                      "ml-auto",
+                      value === b ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                </CommandItem>
+              ))}
           </CommandList>
         </Command>
       </PopoverContent>

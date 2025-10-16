@@ -37,9 +37,14 @@ export class SchedulesService {
             start: s.start ? minutesToUtc(date, s.start, timezone) : undefined,
             end: s.end ? minutesToUtc(date, s.end, timezone) : undefined,
           })),
-          omit: { date: true, taskId: true },
-          include: {
-            task: { select: { id: true, title: true } },
+          select: {
+            date: true,
+            end: true,
+            split: true,
+            start: true,
+            task: {
+              select: { id: true, title: true, focus: true, duration: true },
+            },
           },
         });
         saved.sort((a, b) => {
@@ -88,17 +93,13 @@ export class SchedulesService {
     return updated;
   }
 
-  async findSchedules(
-    { start, end }: FindSchedulesDto,
-    userId: string,
-    timezone: string
-  ) {
+  async findSchedules({ start, end }: FindSchedulesDto, userId: string) {
     const rangeSchedules = await this.prisma.schedule.findMany({
       where: {
         date: { gte: new Date(start), lt: new Date(end) },
         task: { userId },
       },
-      omit: { taskId: true, date: true },
+      omit: { taskId: true },
       include: {
         task: {
           select: { id: true, title: true, focus: true, duration: true },

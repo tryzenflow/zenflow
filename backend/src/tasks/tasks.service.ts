@@ -31,14 +31,12 @@ export class TasksService {
           ...createTaskDto,
           prerequisites: { connect: prerequisites.map((p) => ({ id: p })) },
           userId,
-          schedules: scheduleDate
-            ? {
-                create: {
-                  date: new Date(scheduleDate),
-                  split: 0,
-                },
-              }
-            : undefined,
+          schedules: {
+            create: {
+              date: new Date(scheduleDate),
+              split: 0,
+            },
+          },
         },
       });
       return newTask;

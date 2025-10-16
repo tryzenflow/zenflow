@@ -11,6 +11,7 @@ export const taskSchema = z
       .int()
       .min(5, { error: "Task duration must be at least 5 minutes" })
       .max(DAILY_HORIZON, { error: "Task duration must be at most 24 hours" }),
+    mandatory: z.boolean(),
     priority: z
       .int()
       .min(1, { error: "Task priority must be at least 1" })
