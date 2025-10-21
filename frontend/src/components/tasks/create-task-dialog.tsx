@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { format, addDays } from "date-fns";
+import { format, addDays, addMinutes } from "date-fns";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -11,13 +11,19 @@ import {
 import { Button } from "@/components/ui/button";
 import { postData, getData } from "../../api";
 import { CategoryItem } from "../../types/prefs";
-import { Task } from "../../types/tasks";
+import { Task, TaskResponse } from "../../types/tasks";
 import { TaskForm } from "./form/task-form";
 import { useTaskForm } from "@/hooks/use-task-form";
 import { TaskFormValues } from "../../utils/tasks";
-import { minutesToTime, timeToMinutes } from "../../utils/prefs";
+import { militaryTimeToMinutes } from "../../utils/prefs";
 
-export function CreateTaskDialog() {
+export function CreateTaskDialog({
+  addTask,
+  selectedDate,
+}: {
+  addTask: (task: Task) => Promise<void>;
+  selectedDate: Date;
+}) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -31,7 +37,7 @@ export function CreateTaskDialog() {
       priority: 2,
       focus: 2,
       maxSplits: 1,
-      scheduleDate: new Date(),
+      scheduleDate: selectedDate,
       note: "",
       earliestStart: undefined,
       latestEnd: undefined,
@@ -41,6 +47,10 @@ export function CreateTaskDialog() {
       prerequisites: undefined,
     },
   });
+
+  useEffect(() => {
+    form.setValue("scheduleDate", selectedDate);
+  }, [selectedDate]);
 
   useEffect(() => {
     if (!open) return;
@@ -60,24 +70,24 @@ export function CreateTaskDialog() {
   async function onSubmit(values: TaskFormValues) {
     let deadline = undefined;
     if (values.deadlineDate) {
-      const offsetInMinutes = values.deadlineDate.getTimezoneOffset();
-      let utcMinute = 0;
-      if (values.deadlineTime) {
-        utcMinute = timeToMinutes(values.deadlineTime) + offsetInMinutes;
-      }
-      deadline = `${format(values.deadlineDate, "yyyy-MM-dd")}T${minutesToTime(
-        utcMinute
-      )}:00.000Z`;
+      deadline = addMinutes(
+        new Date(values.deadlineDate),
+        militaryTimeToMinutes(values.deadlineTime ?? "00:00")
+      );
     }
 
-    const payload: any = { ...values };
+    const formattedScheduleDate = format(values.scheduleDate, "yyyy-MM-dd");
+
+    const payload = { ...values, deadline };
     payload.deadline = deadline;
-    payload.scheduleDate = format(values.scheduleDate, "yyyy-MM-dd");
+    // @ts-ignore
+    payload.scheduleDate = formattedScheduleDate;
     delete payload.deadlineTime;
     delete payload.deadlineDate;
     setLoading(true);
     try {
-      await postData("/tasks", payload);
+      const response = await postData<object, TaskResponse>("/tasks", payload);
+      await addTask(response.data);
       form.reset();
       toast.success("Task created successfully 🎉");
       setOpen(false);

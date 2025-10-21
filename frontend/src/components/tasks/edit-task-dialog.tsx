@@ -81,6 +81,7 @@ export function EditTaskDialog({
 
     form.reset({
       ...task,
+      scheduleDate: selectedDate,
       categoryId: task.categoryId ?? undefined,
       prerequisites: task.prerequisites?.map((p) =>
         typeof p === "string" ? p : p.id
@@ -92,7 +93,7 @@ export function EditTaskDialog({
         ? format(new Date(task.deadline), "HH:mm")
         : undefined,
     });
-  }, [task]);
+  }, [task, selectedDate]);
 
   async function onSubmit(values: TaskFormValues) {
     let deadline = undefined;

@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useUserStore } from "../../hooks/use-user-store";
 import {
+  Dispatch,
   ReactNode,
   SetStateAction,
   useCallback,
@@ -24,13 +25,18 @@ import { Sidebar } from "./sidebar";
 interface BodyProps {
   schedules: Schedule[];
   selectedDate: Date;
+  currentView: string;
+  tasks: Task[];
+  setTasks: Dispatch<SetStateAction<Task[]>>;
   openEditTaskDialog: (taskId: string) => void;
+  setSelectedDate: (date: Date) => void;
+  loading: boolean;
+  setLoading: (loading: boolean) => void;
   deleteSchedule: (
     taskId: string,
     date: string,
     split: number
   ) => Promise<void>;
-  currentView: string;
 }
 
 export default function ViewLayout({
@@ -44,8 +50,9 @@ export default function ViewLayout({
 
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [unscheduledTasks, setUnscheduledTasks] = useState<Task[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [currentView, setCurrentView] = useState("Day view");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -71,7 +78,7 @@ export default function ViewLayout({
   const nextDay = addDays(selectedDate, 1);
 
   const loadUnscheduledTasks = useCallback(async () => {
-    setIsLoading(true);
+    setLoading(true);
     try {
       const response = await getData<{ data: Task[] }>(
         `/tasks/schedule/none?start=${format(
@@ -83,12 +90,12 @@ export default function ViewLayout({
     } catch (error) {
       toast.error("Failed to load unscheduled tasks: " + error);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   }, [selectedDate]);
 
   const loadSchedules = useCallback(async () => {
-    setIsLoading(true);
+    setLoading(true);
     try {
       const response = await getData<GetSchedulesResponse>(
         `/schedules?start=${format(selectedDate, "yyyy-MM-dd")}&end=${format(
@@ -100,7 +107,7 @@ export default function ViewLayout({
     } catch (error) {
       toast.error("Failed to load schedules: " + error);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   }, [selectedDate]);
 
@@ -131,9 +138,10 @@ export default function ViewLayout({
 
   const schedule = useCallback(async () => {
     try {
-      setIsLoading(true);
+      setLoading(true);
+      const formattedScheduleDate = format(selectedDate, "yyyy-MM-dd");
       const response = await postData<object, ScheduleResponse>("/schedule", {
-        scheduleDate: format(selectedDate, "yyyy-MM-dd"),
+        scheduleDate: formattedScheduleDate,
       });
       if (response.feasible) {
         toast.success("Schedule successfully!");
@@ -142,13 +150,37 @@ export default function ViewLayout({
           "Infeasible schedule. Please shorten or drop some mandatory tasks"
         );
       }
-      setSchedules(response.data || scheduled); // Use scheduled as fallback
+
+      const generated = response.data || scheduled;
+      if (currentView === "Task view") {
+        const taskScheduleMap = new Map<string, Schedule[]>();
+        for (const schedule of generated) {
+          if (!taskScheduleMap.has(schedule.task.id))
+            taskScheduleMap.set(schedule.task.id, []);
+          const values = taskScheduleMap.get(schedule.task.id);
+          values?.push(schedule);
+        }
+        setTasks((prev) =>
+          prev.map((t) => ({
+            ...t,
+            schedules: [
+              ...(taskScheduleMap.get(t.id) ?? []),
+              ...(t.schedules ?? []).filter(
+                (s) =>
+                  format(new Date(s.date), "yyyy-MM-dd") !==
+                  formattedScheduleDate
+              ),
+            ],
+          }))
+        );
+      }
+      setSchedules(generated); // Use scheduled as fallback
     } catch (error: any) {
       toast.error(error.message || "Failed to schedule tasks");
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  }, [selectedDate, scheduled]);
+  }, [selectedDate, currentView, scheduled]);
 
   const openEditTaskDialog = useCallback((taskId: string) => {
     setSelectedTaskId(taskId);
@@ -184,7 +216,7 @@ export default function ViewLayout({
           error.message || "Failed to remove tasks from dropout list"
         );
       } finally {
-        setIsLoading(false);
+        setLoading(false);
       }
     },
     [selectedDate, schedules]
@@ -192,7 +224,7 @@ export default function ViewLayout({
 
   const addToSchedule = useCallback(
     async (taskId: string) => {
-      setIsLoading(true);
+      setLoading(true);
       try {
         await patchData(`/tasks/${taskId}`, {
           scheduleDate: format(selectedDate, "yyyy-MM-dd"),
@@ -206,7 +238,7 @@ export default function ViewLayout({
           error.message || "Failed to add task to the day's schedule"
         );
       } finally {
-        setIsLoading(false);
+        setLoading(false);
       }
     },
     [selectedDate, schedule]
@@ -237,6 +269,20 @@ export default function ViewLayout({
         if (toRemove && !splitExists) {
           setUnscheduledTasks((prev) => [...prev, toRemove.task as Task]);
         }
+        if (currentView === "Task view") {
+          setTasks((prev) =>
+            prev.map((t) =>
+              t.id === taskId
+                ? {
+                    ...t,
+                    schedules: t.schedules?.filter(
+                      (s) => s.split !== split || s.date !== date
+                    ),
+                  }
+                : t
+            )
+          );
+        }
       } catch (error: any) {
         toast.error(error.message || "Failed to delete schedule :'(");
       }
@@ -244,33 +290,53 @@ export default function ViewLayout({
     [schedules]
   );
 
+  const deleteUnscheduledTasks = async (id: string) => {
+    setLoading(true);
+    try {
+      await deleteData(`/tasks/${id}`);
+      toast.success("Delete task successfully");
+      setUnscheduledTasks((prev) => prev.filter((t) => t.id !== id));
+      setTasks((prev) => prev.filter((t) => t.id !== id));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!user && (userFetching === null || userFetching)) return null;
 
   // Props passed to the main content render prop
   const bodyProps = {
     schedules: scheduled,
     selectedDate,
+    setSelectedDate,
     openEditTaskDialog,
     deleteSchedule,
     currentView,
+    loading,
+    setLoading,
+    tasks,
+    setTasks,
   };
 
   return (
     <>
       <div className="h-screen w-screen flex flex-col bg-gray-100 text-foreground antialiased dark:bg-gray-950">
         <Navbar
+          addTask={(task) =>
+            currentView === "Task view"
+              ? setTasks((prev) => [...prev, task])
+              : undefined
+          }
           selectedDate={selectedDate}
           currentView={currentView}
           setCurrentView={setCurrentView}
           navigateDate={navigateDate}
           goToToday={goToToday}
           schedule={schedule}
-          isLoading={isLoading}
+          isLoading={loading}
         />
 
         <div className="flex-1 min-h-0 flex overflow-hidden">
-          {/* Main Content Area: Render Prop */}
-          {/* If renderBody is provided, call it with bodyProps, otherwise use the DefaultCalendarGrid */}
           {renderBody ? renderBody(bodyProps) : <CalendarGrid {...bodyProps} />}
 
           {/* Sidebar */}
@@ -278,6 +344,7 @@ export default function ViewLayout({
             selectedDate={selectedDate}
             handleDateChange={handleDateChange}
             droppedOutSchedules={droppedOutSchedules}
+            deleteUnscheduledTasks={deleteUnscheduledTasks}
             unscheduledTasks={unscheduledTasks}
             openEditTaskDialog={openEditTaskDialog}
             deleteDropoutTasks={deleteDropoutTasks}

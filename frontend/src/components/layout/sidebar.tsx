@@ -24,6 +24,7 @@ interface SidebarProps {
   unscheduledTasks: Task[];
   openEditTaskDialog: (taskId: string) => void;
   deleteDropoutTasks: (id: string, split: number) => Promise<void>;
+  deleteUnscheduledTasks: (id: string) => void;
   addToSchedule: (taskId: string) => Promise<void>;
 }
 
@@ -34,6 +35,7 @@ export const Sidebar = ({
   unscheduledTasks,
   openEditTaskDialog,
   deleteDropoutTasks,
+  deleteUnscheduledTasks,
   addToSchedule,
 }: SidebarProps) => {
   const [isDropoutTasksCollapsed, setIsDropoutTasksCollapsed] = useState(true);
@@ -122,6 +124,7 @@ export const Sidebar = ({
               <UnscheduledTaskItem
                 addToSchedule={addToSchedule}
                 taskId={task.id}
+                deleteTask={deleteUnscheduledTasks}
                 key={task.id}
                 title={task.title}
                 openEditTaskDialog={openEditTaskDialog}

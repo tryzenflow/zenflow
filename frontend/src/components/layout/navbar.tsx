@@ -7,7 +7,7 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
-} from "@radix-ui/react-dropdown-menu";
+} from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
 import {
   ChevronLeft,
@@ -19,6 +19,7 @@ import { CreateTaskDialog } from "../tasks/create-task-dialog";
 import { ButtonGroup } from "../ui/button-group";
 import { Button } from "../ui/button";
 import { NavUser } from "./nav-user";
+import { Task } from "../../types/tasks";
 
 interface NavbarProps {
   selectedDate: Date;
@@ -28,6 +29,7 @@ interface NavbarProps {
   goToToday: () => void;
   schedule: () => Promise<void>;
   isLoading: boolean;
+  addTask: (task: Task) => void;
 }
 
 const VIEWS = ["Day view", "Week view", "Month view", "Year view"];
@@ -39,6 +41,7 @@ export const Navbar = ({
   navigateDate,
   goToToday,
   schedule,
+  addTask,
   isLoading,
 }: NavbarProps) => (
   <header className="flex items-center w-full justify-between px-4 sm:px-6 lg:px-8 py-4 border-b bg-white shadow-sm dark:bg-gray-900">
@@ -95,11 +98,18 @@ export const Navbar = ({
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
+
       <Button disabled={isLoading} onClick={schedule}>
         <WandSparklesIcon className="size-4" /> Schedule
       </Button>
       <Separator orientation="vertical" className="min-h-9" />
-      <CreateTaskDialog />
+      <CreateTaskDialog
+        selectedDate={selectedDate}
+        addTask={async (task) => {
+          addTask(task);
+          await schedule();
+        }}
+      />
       <NavUser />
     </div>
   </header>

@@ -1,4 +1,4 @@
-import { ArrowRight, Clock, Edit2, X } from "lucide-react";
+import { ArrowRight, Clock, Edit2, Trash, X } from "lucide-react";
 import { formatMinutes } from "../../utils/prefs";
 import { Button } from "../ui/button";
 import { Calendar } from "../ui/calendar";
@@ -72,12 +72,14 @@ export const UnscheduledTaskItem = ({
   duration,
   addToSchedule,
   openEditTaskDialog,
+  deleteTask,
   taskId,
 }: {
   title: string;
   duration: number;
   taskId: string;
   addToSchedule: (taskId: string) => void;
+  deleteTask: (taskId: string) => void;
   openEditTaskDialog: (taskId: string) => void;
 }) => (
   <div className="flex items-center justify-between py-3">
@@ -95,6 +97,14 @@ export const UnscheduledTaskItem = ({
         className="h-6 w-6"
       >
         <Edit2 className="h-4 w-4" />
+      </Button>
+      <Button
+        variant="ghost"
+        onClick={() => deleteTask(taskId)}
+        size="icon"
+        className="h-6 w-6"
+      >
+        <Trash className="h-4 w-4 text-destructive" />
       </Button>
       <Button
         variant="ghost"

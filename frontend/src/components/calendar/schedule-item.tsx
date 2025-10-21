@@ -7,6 +7,15 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "../ui/context-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
+import { TaskCard } from "../tasks/views/card";
+import { useEffect, useState } from "react";
+import { Task, TaskResponse } from "../../types/tasks";
+import { getData } from "../../api";
 
 const focusColorMap = {
   1: {
@@ -56,36 +65,64 @@ export const ScheduleItem = ({
   const topPosition = startMinutes;
   const height = durationMinutes;
 
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [taskDetail, setTaskDetail] = useState<Task | null>(null);
+
+  useEffect(() => {
+    if (!selectedTaskId) setTaskDetail(null);
+    else
+      getData<TaskResponse>(`/tasks/${selectedTaskId}`).then((res) =>
+        setTaskDetail(res.data)
+      );
+  }, [selectedTaskId]);
+
   return (
     <ContextMenu>
-      <ContextMenuTrigger asChild>
-        <div
-          className={`absolute left-12 w-[calc(100%-4rem)] rounded-sm p-1 text-xs border-l-3 shadow-sm transition-all ${colors.bg} ${colors.text} ${colors.border} ${colors.hover}`}
-          style={{
-            top: `${topPosition}px`,
-            height: `${height}px`,
-            minHeight: "2rem", // Minimum height for visibility
-            zIndex: 10,
-            marginLeft: "1rem",
-            overflow: "hidden",
-          }}
-        >
-          <div className="font-semibold">{task.title}</div>
-          {durationMinutes >= 30 && (
-            <div className="text-[10px] opacity-80">
-              {startDate.toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}{" "}
-              -{" "}
-              {endDate.toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
+      <DropdownMenu
+        open={!!selectedTaskId}
+        onOpenChange={() =>
+          setSelectedTaskId((prev) => (prev ? null : task.id))
+        }
+      >
+        <ContextMenuTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <div
+              className={`absolute left-12 w-[calc(100%-4rem)] rounded-sm p-1 text-xs border-l-3 shadow-sm transition-all ${colors.bg} ${colors.text} ${colors.border} ${colors.hover}`}
+              style={{
+                top: `${topPosition}px`,
+                height: `${height}px`,
+                minHeight: "2rem", // Minimum height for visibility
+                zIndex: 10,
+                marginLeft: "1rem",
+                overflow: "hidden",
+              }}
+            >
+              <div className="font-semibold">{task.title}</div>
+              {durationMinutes >= 30 && (
+                <div className="text-[10px] opacity-80">
+                  {startDate.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}{" "}
+                  -{" "}
+                  {endDate.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </div>
+              )}
             </div>
+          </DropdownMenuTrigger>
+        </ContextMenuTrigger>
+
+        <DropdownMenuContent asChild={!!taskDetail}>
+          {taskDetail ? (
+            <TaskCard task={taskDetail} deleteSchedule={deleteSchedule} />
+          ) : (
+            <div className="text-muted-foreground">No data available</div>
           )}
-        </div>
-      </ContextMenuTrigger>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <ContextMenuContent>
         <ContextMenuGroup>
           <ContextMenuItem onClick={() => openEditTaskDialog(task.id)}>

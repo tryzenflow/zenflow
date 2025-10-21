@@ -1,3 +1,5 @@
+import { Schedule } from "./schedule";
+
 export type Scale = 1 | 2 | 3;
 
 export interface Task {
@@ -14,6 +16,13 @@ export interface Task {
   focus: Scale;
   categoryId?: string;
   prerequisites?: (string | Task)[];
+  schedules?: Schedule[];
+}
+
+export interface TaskResponse {
+  data: Task;
+  message: string;
+  success: boolean;
 }
 
 export interface TasksResponse {
