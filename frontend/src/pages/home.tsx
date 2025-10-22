@@ -1,4 +1,7 @@
-import { CalendarGrid } from "../components/calendar/grid";
+import { DayView } from "../components/calendar/day-view";
+import { MonthView } from "../components/calendar/month-view";
+import { WeekView } from "../components/calendar/week-view";
+import { YearView } from "../components/calendar/year-view";
 import ViewLayout from "../components/layout/view-layout";
 import { TaskView } from "../components/tasks/task-view";
 
@@ -9,13 +12,20 @@ export default function HomePage() {
         switch (body.currentView) {
           case "Day view":
             return (
-              <CalendarGrid
+              <DayView
                 deleteSchedule={body.deleteSchedule}
+                updateScheduleTime={body.updateScheduleTime}
                 openEditTaskDialog={body.openEditTaskDialog}
                 schedules={body.schedules}
                 selectedDate={body.selectedDate}
               />
             );
+          case "Week view":
+            return <WeekView />;
+          case "Month view":
+            return <MonthView />;
+          case "Year view":
+            return <YearView />;
           case "Task view":
             return (
               <TaskView

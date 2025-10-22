@@ -16,9 +16,8 @@ import {
 import { Task } from "../../types/tasks";
 import { format, addDays, subDays } from "date-fns";
 import { toast } from "sonner";
-import { getData, postData, deleteData, patchData } from "../../api";
+import { getData, postData, deleteData, patchData, putData } from "../../api";
 import { EditTaskDialog } from "../tasks/edit-task-dialog";
-import { CalendarGrid } from "../calendar/grid";
 import { Navbar } from "./navbar";
 import { Sidebar } from "./sidebar";
 
@@ -37,6 +36,13 @@ interface BodyProps {
     date: string,
     split: number
   ) => Promise<void>;
+  updateScheduleTime: (
+    taskId: string,
+    date: string,
+    split: number,
+    newStart: string,
+    newEnd: string
+  ) => void;
 }
 
 export default function ViewLayout({
@@ -302,6 +308,38 @@ export default function ViewLayout({
     }
   };
 
+  const updateScheduleTime = async (
+    taskId: string,
+    date: string,
+    split: number,
+    newStart: string,
+    newEnd: string
+  ) => {
+    setLoading(true);
+    try {
+      const formatted = format(new Date(date), "y/M/d");
+      await putData(`/schedules/${formatted}/tasks/${taskId}/split/${split}`, {
+        start: newStart,
+        end: newEnd,
+      });
+      setSchedules((prevSchedules) =>
+        prevSchedules.map((s) => {
+          // Find the specific schedule using its unique keys
+          if (s.task.id === taskId && s.date === date && s.split === split) {
+            return {
+              ...s,
+              start: newStart,
+              end: newEnd,
+            };
+          }
+          return s;
+        })
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!user && (userFetching === null || userFetching)) return null;
 
   // Props passed to the main content render prop
@@ -316,6 +354,7 @@ export default function ViewLayout({
     setLoading,
     tasks,
     setTasks,
+    updateScheduleTime,
   };
 
   return (
@@ -337,7 +376,7 @@ export default function ViewLayout({
         />
 
         <div className="flex-1 min-h-0 flex overflow-hidden">
-          {renderBody ? renderBody(bodyProps) : <CalendarGrid {...bodyProps} />}
+          {renderBody(bodyProps)}
 
           {/* Sidebar */}
           <Sidebar

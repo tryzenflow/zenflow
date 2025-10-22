@@ -85,6 +85,9 @@ export class TasksService {
           },
         },
       },
+      orderBy: {
+        schedules: { _count: "desc" },
+      },
     });
   }
 

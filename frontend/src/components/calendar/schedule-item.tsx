@@ -8,14 +8,17 @@ import {
   ContextMenuTrigger,
 } from "../ui/context-menu";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "../ui/dropdown-menu";
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "../ui/hover-card";
 import { TaskCard } from "../tasks/views/card";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Task, TaskResponse } from "../../types/tasks";
 import { getData } from "../../api";
+import { minutesToTime, militaryTimeToMinutes } from "../../utils/prefs";
+import { snapToFive } from "../../utils/snap";
+import { format } from "date-fns";
 
 const focusColorMap = {
   1: {
@@ -38,14 +41,33 @@ const focusColorMap = {
   },
 };
 
+const BOUNDARY = 5; // Pixel threshold for resize areas (top and bottom)
+const MIN_BLOCK_MINUTES = 5;
+const PIXELS_PER_MINUTE = 1; // 1px = 1 minute (Vertical scale)
+const CALENDAR_TIME_COLUMN_WIDTH_PX = 48; // Time column offset (w-12 or 3rem)
+
 export const ScheduleItem = ({
   schedule,
   deleteSchedule,
   openEditTaskDialog,
+  columnIndex = 0,
+  totalColumns = 1,
+  isOverlapping = false,
+  updateScheduleTime,
 }: {
   schedule: Schedule;
   deleteSchedule: (taskId: string, date: string, split: number) => void;
   openEditTaskDialog: (taskId: string) => void;
+  columnIndex?: number;
+  totalColumns?: number;
+  isOverlapping?: boolean;
+  updateScheduleTime: (
+    taskId: string,
+    date: string,
+    split: number,
+    newStart: string,
+    newEnd: string
+  ) => void;
 }) => {
   const { task, start, end, split, date } = schedule;
 
@@ -53,20 +75,28 @@ export const ScheduleItem = ({
 
   const startDate = new Date(start!);
   const endDate = new Date(end!);
-  const startHour = startDate.getHours();
-  const startMinute = startDate.getMinutes();
-  const endHour = endDate.getHours();
-  const endMinute = endDate.getMinutes();
 
-  const startMinutes = startHour * 60 + startMinute;
-  const endMinutes = endHour * 60 + endMinute;
-  const durationMinutes = endMinutes - startMinutes;
+  // Calculate current minutes from start of day
+  const currentStartMinutes = militaryTimeToMinutes(format(startDate, "HH:mm"));
+  const currentEndMinutes = militaryTimeToMinutes(format(endDate, "HH:mm"));
+  const durationMinutes = currentEndMinutes - currentStartMinutes;
 
-  const topPosition = startMinutes;
-  const height = durationMinutes;
+  const topPosition = currentStartMinutes * PIXELS_PER_MINUTE; // 1px per minute
+  const height = durationMinutes * PIXELS_PER_MINUTE;
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [taskDetail, setTaskDetail] = useState<Task | null>(null);
+  const itemRef = useRef<HTMLDivElement>(null); // Ref for the main event block
+
+  // --- Drag/Resize State (Adapted from FocusBlock) ---
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragType, setDragType] = useState<
+    "move" | "resizeTop" | "resizeBottom" | null
+  >(null);
+  const [dragStartY, setDragStartY] = useState<number | null>(null);
+  const [initialStartMinutes, setInitialStartMinutes] =
+    useState(currentStartMinutes);
+  const [initialEndMinutes, setInitialEndMinutes] = useState(currentEndMinutes);
 
   useEffect(() => {
     if (!selectedTaskId) setTaskDetail(null);
@@ -76,53 +106,198 @@ export const ScheduleItem = ({
       );
   }, [selectedTaskId]);
 
+  // ---- Handle mouse down (Adapted to vertical) ----
+  const onMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    if (!itemRef.current) return;
+
+    const rect = itemRef.current.getBoundingClientRect();
+    const offsetY = e.clientY - rect.top;
+
+    if (offsetY < BOUNDARY) {
+      setDragType("resizeTop");
+    } else if (offsetY > rect.height - BOUNDARY) {
+      setDragType("resizeBottom");
+    } else {
+      setDragType("move");
+    }
+
+    setIsDragging(true);
+    setDragStartY(e.clientY);
+    setInitialStartMinutes(currentStartMinutes);
+    setInitialEndMinutes(currentEndMinutes);
+
+    // Set a class to prevent text selection during drag
+    document.body.classList.add("select-none");
+    e.preventDefault();
+  };
+
+  // ---- Mouse Move (Adapted to vertical and time calculation) ----
+  const onMouseMove = (e: MouseEvent) => {
+    e.stopPropagation();
+    if (!isDragging || dragStartY === null || !dragType) return;
+
+    // Delta in pixels, which is Delta in minutes (PIXELS_PER_MINUTE = 1)
+    const deltaMinutes = e.clientY - dragStartY;
+
+    // --- MOVE LOGIC ---
+    if (dragType === "move") {
+      const newStartMinutes = initialStartMinutes + deltaMinutes;
+      const newEndMinutes = initialEndMinutes + deltaMinutes;
+
+      const snappedStart = snapToFive(newStartMinutes);
+      const snappedEnd = snapToFive(newEndMinutes);
+
+      // Simple check to prevent dragging off the 24-hour clock (0 to 1440 minutes)
+      if (snappedStart >= 0 && snappedEnd <= 1440) {
+        // Optimistic update using onBlockChange pattern (calls updateScheduleTime)
+        updateTimeChange(snappedStart, snappedEnd);
+      }
+
+      // --- RESIZE TOP LOGIC ---
+    } else if (dragType === "resizeTop") {
+      const newStartMinutes = initialStartMinutes + deltaMinutes;
+
+      const snappedStart = snapToFive(
+        Math.min(newStartMinutes, initialEndMinutes - MIN_BLOCK_MINUTES)
+      );
+
+      updateTimeChange(snappedStart, initialEndMinutes);
+
+      // --- RESIZE BOTTOM LOGIC ---
+    } else if (dragType === "resizeBottom") {
+      const newEndMinutes = initialEndMinutes + deltaMinutes;
+
+      const snappedEnd = snapToFive(
+        Math.max(newEndMinutes, initialStartMinutes + MIN_BLOCK_MINUTES)
+      );
+
+      updateTimeChange(initialStartMinutes, snappedEnd);
+    }
+  };
+
+  // Utility to finalize and call the parent update function
+  const updateTimeChange = (newStartMins: number, newEndMins: number) => {
+    // Convert new minutes back to ISO string dates
+    const finalStartDate = new Date(startDate);
+    finalStartDate.setHours(0, newStartMins, 0, 0);
+
+    const finalEndDate = new Date(endDate);
+    finalEndDate.setHours(0, newEndMins, 0, 0);
+
+    updateScheduleTime(
+      task.id,
+      date,
+      split,
+      finalStartDate.toISOString(),
+      finalEndDate.toISOString()
+    );
+  };
+
+  // ---- Handle mouse up ----
+  const onMouseUp = (e: MouseEvent) => {
+    e.stopPropagation();
+    setIsDragging(false);
+    setDragType(null);
+    setDragStartY(null);
+    document.body.classList.remove("select-none");
+  };
+
+  // ---- Cursor change on hover (Vertical adaptation) ----
+  const onMouseMoveOver = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!itemRef.current || isDragging) return;
+    const rect = itemRef.current.getBoundingClientRect();
+    const offsetY = e.clientY - rect.top;
+
+    if (offsetY < BOUNDARY || offsetY > rect.height - BOUNDARY) {
+      itemRef.current.style.cursor = "ns-resize"; // Vertical resize
+    } else {
+      itemRef.current.style.cursor = "grab"; // Drag
+    }
+  };
+
+  // ---- Global listeners during drag (FocusBlock style) ----
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
+    } else {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    }
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [
+    isDragging,
+    dragType,
+    dragStartY,
+    initialStartMinutes,
+    initialEndMinutes,
+    schedule,
+  ]);
+
+  // --- Styling ---
+  const isInteractionActive = isDragging; // Use isDragging for global interaction state
+
+  const dynamicStyles: React.CSSProperties = {
+    top: `${topPosition}px`,
+    height: `${height}px`,
+    minHeight: "2rem",
+
+    left: `${CALENDAR_TIME_COLUMN_WIDTH_PX}px`,
+    width: `calc((100% - ${
+      CALENDAR_TIME_COLUMN_WIDTH_PX + 5
+    }px) / ${totalColumns})`,
+    marginLeft: `calc((100% - ${
+      CALENDAR_TIME_COLUMN_WIDTH_PX + 5
+    }px) / ${totalColumns} * ${columnIndex} + 5px)`,
+
+    zIndex: isInteractionActive ? 30 : isOverlapping ? 20 + columnIndex : 10,
+    overflow: "hidden",
+  };
+
+  const contentPadding = "pt-1 px-2 pb-2"; // Padding to clear resize handles
+
   return (
     <ContextMenu>
-      <DropdownMenu
-        open={!!selectedTaskId}
+      <HoverCard
+        open={!!selectedTaskId && !isInteractionActive} // Prevent dropdown during interaction
         onOpenChange={() =>
           setSelectedTaskId((prev) => (prev ? null : task.id))
         }
       >
         <ContextMenuTrigger asChild>
-          <DropdownMenuTrigger asChild>
+          <HoverCardTrigger asChild>
             <div
-              className={`absolute left-12 w-[calc(100%-4rem)] rounded-sm p-1 text-xs border-l-3 shadow-sm transition-all ${colors.bg} ${colors.text} ${colors.border} ${colors.hover}`}
-              style={{
-                top: `${topPosition}px`,
-                height: `${height}px`,
-                minHeight: "2rem", // Minimum height for visibility
-                zIndex: 10,
-                marginLeft: "1rem",
-                overflow: "hidden",
-              }}
+              ref={itemRef}
+              className={`absolute rounded-sm border-l-2 text-xs shadow-md transition-all ${colors.bg} ${colors.text} ${colors.border} ${colors.hover}`}
+              style={dynamicStyles}
+              onMouseDown={onMouseDown} // 👈 Use combined drag/resize handler
+              onMouseMove={onMouseMoveOver} // 👈 Use combined cursor handler
             >
-              <div className="font-semibold">{task.title}</div>
-              {durationMinutes >= 30 && (
-                <div className="text-[10px] opacity-80">
-                  {startDate.toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}{" "}
-                  -{" "}
-                  {endDate.toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </div>
-              )}
+              {/* CONTENT WRAPPER */}
+              <div className={`relative h-full w-full ${contentPadding}`}>
+                <div className="font-semibold">{task.title}</div>
+                {durationMinutes >= 30 && (
+                  <div className="text-[10px] opacity-80">
+                    {minutesToTime(currentStartMinutes)} -{" "}
+                    {minutesToTime(currentEndMinutes)}
+                  </div>
+                )}
+              </div>
             </div>
-          </DropdownMenuTrigger>
+          </HoverCardTrigger>
         </ContextMenuTrigger>
-
-        <DropdownMenuContent asChild={!!taskDetail}>
+        <HoverCardContent asChild={!!taskDetail}>
           {taskDetail ? (
             <TaskCard task={taskDetail} deleteSchedule={deleteSchedule} />
           ) : (
             <div className="text-muted-foreground">No data available</div>
           )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+        </HoverCardContent>
+      </HoverCard>
       <ContextMenuContent>
         <ContextMenuGroup>
           <ContextMenuItem onClick={() => openEditTaskDialog(task.id)}>
