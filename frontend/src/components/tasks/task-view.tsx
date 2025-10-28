@@ -55,7 +55,11 @@ export function TaskView({
         )}`
       );
       if (response.data) {
-        setTasks((prev: Task[]) => [...prev, ...response.data]);
+        const ids = tasks.map((t) => t.id);
+        setTasks((prev: Task[]) => [
+          ...prev.filter((t) => !ids.includes(t.id)),
+          ...response.data,
+        ]);
       }
     } finally {
       setLoading(false);

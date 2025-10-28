@@ -3,7 +3,6 @@ import grpc
 import scheduler_pb2
 import scheduler_pb2_grpc
 
-from google.protobuf.timestamp_pb2 import Timestamp
 from models import Task, Interval, FocusBlock, Constraints, Schedule
 from scheduler import schedule_tasks
 

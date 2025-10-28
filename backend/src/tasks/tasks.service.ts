@@ -7,36 +7,50 @@ import {
 import { UpdateTaskDto } from "./dto/update-task.dto";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateTaskDto } from "./dto/create-task.dto";
-import { Prisma } from "../../generated/prisma";
+import { Prisma, Task } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { validateTaskFields } from "./validators/task-fields";
 import { ScheduleTasksDto } from "../scheduler/dto/schedule-tasks.dto";
 import { FindSchedulesDto } from "../schedules/dto/find-schedules.dto";
+import { RRule } from "rrule";
+import { endOfDay, startOfDay } from "date-fns";
 
 @Injectable()
 export class TasksService {
   constructor(private prisma: PrismaService) {}
 
   async create(
-    { prerequisites = [], scheduleDate, ...createTaskDto }: CreateTaskDto,
+    {
+      prerequisites = [],
+      rrule,
+      scheduleDate,
+      ...createTaskDto
+    }: CreateTaskDto,
     userId: string
   ) {
     const errors = validateTaskFields({ prerequisites, ...createTaskDto });
     if (errors.length > 0) {
       throw new BadRequestException({ success: false, message: errors });
     }
+    const { startDate, until } = this.extractRRule(rrule);
+
     try {
       const newTask = await this.prisma.task.create({
         data: {
           ...createTaskDto,
+          rrule,
           prerequisites: { connect: prerequisites.map((p) => ({ id: p })) },
           userId,
-          schedules: {
-            create: {
-              date: new Date(scheduleDate),
-              split: 0,
-            },
-          },
+          startDate,
+          until,
+          schedules: scheduleDate
+            ? {
+                create: {
+                  date: new Date(scheduleDate),
+                  split: 0,
+                },
+              }
+            : undefined,
         },
       });
       return newTask;
@@ -55,40 +69,54 @@ export class TasksService {
     }
   }
 
-  find(userId: string, { start, end }: FindSchedulesDto) {
-    return this.prisma.task.findMany({
+  async find(userId: string, { start, end }: FindSchedulesDto) {
+    const startDate = startOfDay(new Date(start));
+    const endDate = startOfDay(new Date(end));
+    const tasks = await this.prisma.task.findMany({
       where: {
         userId,
-        schedules: {
-          some: {
-            date: { gte: new Date(start), lt: new Date(end) },
-          },
-        },
+        OR: [
+          { rrule: { not: null } },
+          { schedules: { some: { date: { gte: startDate, lt: endDate } } } },
+        ],
       },
       include: {
         prerequisites: true,
         category: true,
         schedules: {
-          where: { date: { gte: new Date(start), lt: new Date(end) } },
+          where: { date: { gte: startDate, lt: endDate } },
         },
       },
     });
+    return this.filterRecurringTasks(tasks, startDate, endDate);
   }
 
-  findUnscheduled(userId: string, { start, end }: FindSchedulesDto) {
-    return this.prisma.task.findMany({
+  async findUnscheduled(userId: string, { start, end }: FindSchedulesDto) {
+    const startDate = startOfDay(new Date(start));
+    const endDate = startOfDay(new Date(end));
+
+    const tasks = await this.prisma.task.findMany({
       where: {
         userId,
-        schedules: {
-          none: {
-            date: { gte: new Date(start), lt: new Date(end) },
+        OR: [
+          { rrule: { not: null } },
+          {
+            schedules: {
+              none: {
+                date: { gte: startDate, lt: endDate },
+              },
+            },
           },
-        },
+        ],
       },
-      orderBy: {
-        schedules: { _count: "desc" },
+      include: {
+        prerequisites: true,
+        category: true,
       },
+      orderBy: [{ createdAt: "desc" }, { schedules: { _count: "desc" } }],
     });
+
+    return this.filterRecurringTasks(tasks, startDate, endDate, true);
   }
 
   async findById(id: string, userId: string) {
@@ -108,21 +136,21 @@ export class TasksService {
   }
 
   async findToSchedule({ scheduleDate }: ScheduleTasksDto, userId: string) {
+    const date = startOfDay(new Date(scheduleDate));
+    const endDate = endOfDay(date);
     const tasks = await this.prisma.task.findMany({
       where: {
         userId,
-        schedules: { some: { date: new Date(scheduleDate) } },
+        OR: [{ rrule: { not: null } }, { schedules: { some: { date } } }],
       },
       include: {
-        schedules: {
-          where: { date: new Date(scheduleDate) },
-        },
+        schedules: { where: { date } },
         category: { select: { id: true } },
         prerequisites: { select: { id: true } },
       },
     });
 
-    return tasks;
+    return this.filterRecurringTasks(tasks, date, endDate) as typeof tasks;
   }
 
   async update(
@@ -130,6 +158,7 @@ export class TasksService {
     {
       prerequisites,
       categoryId,
+      rrule,
       scheduleDate,
       ...updateTaskDto
     }: UpdateTaskDto,
@@ -141,19 +170,22 @@ export class TasksService {
         categoryId,
         ...updateTaskDto,
       });
-      if (errors.length > 0) {
-        throw new BadRequestException(errors);
-      }
+      if (errors.length > 0) throw new BadRequestException(errors);
+      const { startDate, until } = this.extractRRule(rrule);
       const updated = await this.prisma.task.update({
         where: { id, userId },
         data: {
           ...updateTaskDto,
+          startDate,
+          until,
+          rrule,
           category: categoryId ? { connect: { id: categoryId } } : undefined,
-          schedules: scheduleDate
-            ? {
-                create: { date: new Date(scheduleDate), split: 0 },
-              }
-            : undefined,
+          schedules: {
+            deleteMany: {},
+            create: scheduleDate
+              ? { date: new Date(scheduleDate), split: 0 }
+              : undefined,
+          },
           prerequisites: prerequisites
             ? { set: prerequisites?.map((p) => ({ id: p })) }
             : undefined,
@@ -205,5 +237,30 @@ export class TasksService {
         message: "Something went wrong when deleting a task",
       });
     }
+  }
+  private extractRRule(rrule?: string) {
+    let startDate: Date | null | undefined;
+    let until: Date | null | undefined;
+    if (rrule) {
+      const rule = RRule.fromString(rrule);
+      startDate = rule.options.dtstart;
+      until = rule.options.until;
+    }
+    return { startDate, until };
+  }
+
+  private filterRecurringTasks(
+    tasks: Task[],
+    startDate: Date,
+    endDate: Date,
+    complement: boolean = false
+  ) {
+    return tasks.filter((t) => {
+      if (!t.rrule) return true;
+      const rule = RRule.fromString(t.rrule);
+
+      const matches = rule.between(startDate, endDate, true);
+      return complement ? matches.length === 0 : matches.length > 0;
+    });
   }
 }

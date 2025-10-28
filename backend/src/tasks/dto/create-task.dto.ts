@@ -12,13 +12,19 @@ import {
   Min,
 } from "class-validator";
 import { DAILY_HORIZON } from "../../common/constants";
+import { IsRRule } from "../validators/is-rrule.validator";
 
 export class CreateTaskDto {
   @IsString() title: string;
 
   @IsDateString()
   @MaxLength(10)
-  scheduleDate: string;
+  @IsOptional()
+  scheduleDate?: string;
+
+  @IsOptional()
+  @IsRRule({ message: "Invalid RRULE: must follow RFC 5545 format" })
+  rrule?: string;
 
   @IsString() @IsOptional() note?: string;
 

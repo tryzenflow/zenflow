@@ -6,6 +6,7 @@ import {
   SetStateAction,
   useCallback,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 import {
@@ -77,7 +78,27 @@ export default function ViewLayout({
   }, [user, userFetching, navigate]);
 
   // Derived state
-  const droppedOutSchedules = schedules.filter((s) => s.start === null);
+  const droppedOutSchedules: Schedule[] = useMemo(() => {
+    const unscheduledTaskIds = new Set(unscheduledTasks.map((t) => t.id));
+    return [
+      ...tasks
+        .filter(
+          (t) =>
+            t.rrule &&
+            t.schedules &&
+            t.schedules.length === 0 &&
+            !unscheduledTaskIds.has(t.id)
+        )
+        .flatMap((t) => ({
+          start: null,
+          end: null,
+          date: selectedDate.toISOString(),
+          split: 0,
+          task: t,
+        })),
+      ...schedules.filter((s) => s.start === null),
+    ];
+  }, [tasks, unscheduledTasks]);
   const scheduled = schedules.filter((s) => s.start !== null);
 
   // --- Data & Logic Handlers ---

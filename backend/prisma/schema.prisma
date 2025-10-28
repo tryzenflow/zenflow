@@ -37,6 +37,10 @@ model Task {
   maxSplits Int     @default(1)
   focus     Int     @default(1) // 1–3
 
+  rrule     String?
+  startDate DateTime?
+  until     DateTime?
+
   userId     String
   categoryId String?
 
@@ -45,8 +49,6 @@ model Task {
   schedules Schedule[]
 
   createdAt DateTime @default(now())
-
-  repeatRules RepeatRule[]
 
   // relations
   prerequisites Task[] @relation("TaskPrerequisites")
@@ -101,13 +103,6 @@ model Category {
   @@unique([userId, name])
 }
 
-enum RepeatType {
-  Daily
-  Weekly
-  Monthly
-  Yearly
-}
-
 model File {
   id       String @id @default(uuid())
   filename String
@@ -116,23 +111,4 @@ model File {
   userId   String
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model RepeatRule {
-  id     String @id @default(uuid())
-  task   Task   @relation(fields: [taskId], references: [id])
-  taskId String
-
-  type           RepeatType // 'daily' | 'weekly' | 'monthly' | 'yearly'
-  frequency      Int // every N units
-  weekday        Int[] // e.g., [1,3,5] for Mon/Wed/Fri
-  month          Int?
-  day            Int?
-  weekdayOrdinal Int? // e.g., 1=first, -1=last
-  skipWeekends   Boolean?
-  firstWorkday   Boolean? // for monthly repeat
-  lastWorkday    Boolean?
-  until          DateTime?
-
-  createdAt DateTime @default(now())
 }
