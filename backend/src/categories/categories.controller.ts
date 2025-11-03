@@ -23,7 +23,7 @@ export class CategoriesController {
 
   @Post("populate")
   populate(@CurrentUser() user: User, @Body() dto: PopulateCategoriesDto) {
-    return this.categoriesService.populateCategories(user.id, dto);
+    return this.categoriesService.populate(user.id, dto);
   }
 
   @Post()

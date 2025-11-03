@@ -37,10 +37,7 @@ model Task {
   maxSplits Int     @default(1)
   focus     Int     @default(1) // 1–3
 
-  rrule     String?
-  startDate DateTime?
-  until     DateTime?
-
+  rrule      String?
   userId     String
   categoryId String?
 
@@ -96,6 +93,7 @@ model Category {
   id     String @id @default(uuid())
   name   String
   userId String
+  order  Float  @default(0)
 
   user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   tasks Task[]

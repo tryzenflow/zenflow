@@ -32,8 +32,6 @@ export class TasksService {
     if (errors.length > 0) {
       throw new BadRequestException({ success: false, message: errors });
     }
-    const { startDate, until } = this.extractRRule(rrule);
-
     try {
       const newTask = await this.prisma.task.create({
         data: {
@@ -41,8 +39,6 @@ export class TasksService {
           rrule,
           prerequisites: { connect: prerequisites.map((p) => ({ id: p })) },
           userId,
-          startDate,
-          until,
           schedules: scheduleDate
             ? {
                 create: {
@@ -171,13 +167,10 @@ export class TasksService {
         ...updateTaskDto,
       });
       if (errors.length > 0) throw new BadRequestException(errors);
-      const { startDate, until } = this.extractRRule(rrule);
       const updated = await this.prisma.task.update({
         where: { id, userId },
         data: {
           ...updateTaskDto,
-          startDate,
-          until,
           rrule,
           category: categoryId ? { connect: { id: categoryId } } : undefined,
           schedules: {
@@ -237,16 +230,6 @@ export class TasksService {
         message: "Something went wrong when deleting a task",
       });
     }
-  }
-  private extractRRule(rrule?: string) {
-    let startDate: Date | null | undefined;
-    let until: Date | null | undefined;
-    if (rrule) {
-      const rule = RRule.fromString(rrule);
-      startDate = rule.options.dtstart;
-      until = rule.options.until;
-    }
-    return { startDate, until };
   }
 
   private filterRecurringTasks(
