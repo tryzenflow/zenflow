@@ -1,11 +1,8 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
   Get,
-  HttpCode,
-  HttpStatus,
   Param,
   ParseIntPipe,
   Put,
@@ -35,13 +32,14 @@ export class SchedulesController {
     @Body() updateScheduleDto: UpdateScheduleDto,
     @CurrentUser() user: User
   ) {
-    const date = new Date(getDateOnlyString(year, month, day));
+    const date = getDateOnlyString(year, month, day);
     const updated = await this.schedulesService.update(
       date,
       id,
       split,
       updateScheduleDto,
-      user.id
+      user.id,
+      user.timezone
     );
     return {
       success: true,
@@ -59,7 +57,7 @@ export class SchedulesController {
     @Param("split", ParseIntPipe) split: number,
     @CurrentUser() user: User
   ) {
-    const date = new Date(getDateOnlyString(year, month, day));
+    const date = getDateOnlyString(year, month, day);
     await this.schedulesService.remove(date, id, split, user.id);
     return { success: true, message: "Delete the scheduled task successfully" };
   }
@@ -71,7 +69,8 @@ export class SchedulesController {
   ) {
     const schedules = await this.schedulesService.findSchedules(
       findSchedulesDto,
-      user.id
+      user.id,
+      user.timezone
     );
     return {
       success: true,

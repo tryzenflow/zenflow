@@ -37,7 +37,7 @@ export class TasksController {
 
   @Get()
   async findAll(@CurrentUser() user: User, @Query() dto: FindSchedulesDto) {
-    const tasks = await this.tasksService.find(user.id, dto);
+    const tasks = await this.tasksService.find(user.id, dto, user.timezone);
     return {
       success: true,
       message: `Found ${tasks.length} tasks between ${dto.start} and ${dto.end}`,
@@ -50,7 +50,11 @@ export class TasksController {
     @CurrentUser() user: User,
     @Query() dto: FindSchedulesDto
   ) {
-    const tasks = await this.tasksService.findUnscheduled(user.id, dto);
+    const tasks = await this.tasksService.findUnscheduled(
+      user.id,
+      dto,
+      user.timezone
+    );
     return {
       success: true,
       message: `Found ${tasks.length} unscheduled tasks between ${dto.start} and ${dto.end}`,

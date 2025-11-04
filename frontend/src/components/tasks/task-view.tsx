@@ -1,12 +1,5 @@
 import { addDays, eachDayOfInterval, format, subDays } from "date-fns";
-import {
-  Dispatch,
-  SetStateAction,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { deleteData, getData } from "../../api";
 import { Task, TasksResponse } from "../../types/tasks";
 import { Separator } from "../ui/separator";
@@ -20,8 +13,8 @@ export function TaskView({
   setSelectedDate,
   loading,
   setLoading,
-  tasks,
-  setTasks,
+  // REMOVED: tasks, setTasks props
+  taskViewRefetchTrigger, // NEW PROP
 }: {
   selectedDate: Date;
   deleteSchedule: (
@@ -31,12 +24,30 @@ export function TaskView({
   ) => Promise<void>;
   openEditTaskDialog: (taskId: string) => void;
   setSelectedDate: (date: Date) => void;
-  tasks: Task[];
-  setTasks: Dispatch<SetStateAction<Task[]>>;
   loading: boolean;
   setLoading: (loading: boolean) => void;
+  // NEW: Refetch trigger from ViewLayout
+  taskViewRefetchTrigger: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // NEW: Local state for tasks
+  const [tasks, setTasks] = useState<Task[]>([]);
+
+  // Cache key to force remount/re-initialization when ViewLayout triggers a refetch
+  const [taskCacheKey, setTaskCacheKey] = useState(taskViewRefetchTrigger);
+
+  // When the trigger changes, reset all TaskView state variables
+  useEffect(() => {
+    if (taskViewRefetchTrigger !== taskCacheKey) {
+      setTasks([]); // Crucial: Clear tasks to prevent appending to old data
+      setRangeStart(subDays(selectedDate, 7));
+      setRangeEnd(addDays(selectedDate, 7));
+      prevRangeRef.current = null; // Clear previous range ref
+      setTaskCacheKey(taskViewRefetchTrigger); // Update key to acknowledge reset
+    }
+  }, [taskViewRefetchTrigger, taskCacheKey, selectedDate]);
+
   const [rangeStart, setRangeStart] = useState(() => subDays(selectedDate, 7));
   const [rangeEnd, setRangeEnd] = useState(() => addDays(selectedDate, 7));
 
@@ -45,6 +56,7 @@ export function TaskView({
     [rangeStart, rangeEnd]
   );
 
+  // ...existing code...
   const fetchTasks = async (start: Date, end: Date) => {
     setLoading(true);
     try {
@@ -55,18 +67,57 @@ export function TaskView({
         )}`
       );
       if (response.data) {
-        const ids = tasks.map((t) => t.id);
-        setTasks((prev: Task[]) => [
-          ...prev.filter((t) => !ids.includes(t.id)),
-          ...response.data,
-        ]);
+        // Robust deduplication: dedupe schedules by id (if present) or by date+split
+        const dedupeSchedules = (schedules: any[] = []) => {
+          const map = new Map<string, any>();
+          for (const s of schedules) {
+            const dateKey =
+              s?.date != null ? new Date(s.date).toISOString() : "nodate";
+            const key = s?.id ?? `${dateKey}|${s?.split ?? 0}`;
+            if (!map.has(key)) map.set(key, s);
+          }
+          return Array.from(map.values());
+        };
+
+        setTasks((prev) => {
+          const existingTasksMap = new Map(prev.map((t) => [t.id, t]));
+
+          for (const newTask of response.data) {
+            const existing = existingTasksMap.get(newTask.id);
+            if (!existing) {
+              // ensure schedules are unique on first insert
+              existingTasksMap.set(newTask.id, {
+                ...newTask,
+                schedules: dedupeSchedules(newTask.schedules),
+              });
+            } else {
+              // combine schedules and dedupe by schedule key
+              const combined = [
+                ...(existing.schedules || []),
+                ...(newTask.schedules || []),
+              ];
+              existingTasksMap.set(newTask.id, {
+                ...existing,
+                // prefer latest task fields from newTask, but keep deduped schedules
+                ...newTask,
+                schedules: dedupeSchedules(combined),
+              });
+            }
+          }
+
+          return Array.from(existingTasksMap.values());
+        });
       }
+    } catch (error) {
+      toast.error("Failed to load tasks: " + error);
     } finally {
       setLoading(false);
     }
   };
+  // ...existing code...
 
   const taskGroup = useMemo(() => {
+    // This grouping logic is still complex, but it works on the deduped tasks array
     const dateMap = new Map<string, Map<string, Task>>();
     for (const task of tasks) {
       const schedules = task.schedules || [];
@@ -75,39 +126,31 @@ export function TaskView({
         const scheduleDate = format(new Date(schedule.date), "yyyy-MM-dd");
         if (!dateMap.has(scheduleDate)) {
           dateMap.set(scheduleDate, new Map());
-          const taskMap = dateMap.get(scheduleDate)!;
-          taskMap.set(task.id, { ...task, schedules: [schedule] });
+        }
+
+        const tasksBucket = dateMap.get(scheduleDate)!;
+        const taskData = tasksBucket.get(task.id);
+
+        if (!taskData) {
+          tasksBucket.set(task.id, { ...task, schedules: [schedule] });
         } else {
-          const tasksBucket = dateMap.get(scheduleDate)!;
-          const taskData = tasksBucket.get(task.id);
-          if (!taskData) {
-            tasksBucket.set(task.id, { ...task, schedules: [schedule] });
-          } else {
-            tasksBucket.set(task.id, {
-              ...task,
-              schedules: [...(taskData.schedules ?? []), schedule],
-            });
-          }
+          tasksBucket.set(task.id, {
+            ...task,
+            schedules: [...(taskData.schedules ?? []), schedule],
+          });
         }
       }
     }
     return dateMap;
   }, [tasks]);
 
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const containerRect = container.getBoundingClientRect();
-    container.scrollTo({
-      behavior: "smooth",
-      top: (containerRect.y + containerRect.height) / 2,
-    });
-  }, []);
-
   const prevRangeRef = useRef<{ start: Date; end: Date } | null>(null);
 
   useEffect(() => {
-    // Detect previous range
+    // Depend on taskCacheKey so that when ViewLayout triggers a refetch,
+    // this effect runs with a fresh state (tasks = []).
+    if (taskCacheKey !== taskViewRefetchTrigger) return;
+
     const prev = prevRangeRef.current;
 
     // On first mount — fetch the initial range
@@ -128,9 +171,10 @@ export function TaskView({
 
     // Update reference
     prevRangeRef.current = { start: rangeStart, end: rangeEnd };
-  }, [rangeStart, rangeEnd]);
+  }, [rangeStart, rangeEnd, taskCacheKey]); // Added taskCacheKey dependency
 
   useEffect(() => {
+    // ... (Scroll handling logic remains the same)
     const container = containerRef.current;
     if (!container || loading) return;
     const handleScroll = () => {
@@ -142,6 +186,8 @@ export function TaskView({
       // Expand upward
       if (atTop) {
         setRangeStart((prev) => subDays(prev, 7));
+        // NOTE: Keeping the scroll offset fix, which is still prone to jumpiness,
+        // but required for now until a virtualization solution is adopted.
         container.scrollTop = scrollTop + 100;
       }
 
@@ -158,6 +204,7 @@ export function TaskView({
 
       sections.forEach((section) => {
         const rect = section.getBoundingClientRect();
+        // Check section top relative to container top
         const distance = Math.abs(rect.top - containerRect.top + 80);
         if (distance < minDistance) {
           minDistance = distance;
@@ -183,7 +230,11 @@ export function TaskView({
     try {
       await deleteData(`/tasks/${taskId}`);
       toast.success("Delete task successfully");
+      // Local state update is sufficient here
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
+
+      // OPTIONAL: Since the task is deleted, the schedule state in ViewLayout
+      // might need a cleanup if it holds a reference to this task.
     } finally {
       setLoading(false);
     }

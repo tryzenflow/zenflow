@@ -29,8 +29,7 @@ export default function HomePage() {
           case "Task view":
             return (
               <TaskView
-                tasks={body.tasks}
-                setTasks={body.setTasks}
+                taskViewRefetchTrigger={body.taskViewRefetchTrigger}
                 deleteSchedule={body.deleteSchedule}
                 openEditTaskDialog={body.openEditTaskDialog}
                 loading={body.loading}

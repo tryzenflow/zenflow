@@ -65,8 +65,8 @@ export const ScheduleItem = ({
     taskId: string,
     date: string,
     split: number,
-    newStart: string,
-    newEnd: string
+    newStart: number,
+    newEnd: number
   ) => void;
 }) => {
   const { task, start, end, split, date } = schedule;
@@ -178,20 +178,7 @@ export const ScheduleItem = ({
 
   // Utility to finalize and call the parent update function
   const updateTimeChange = (newStartMins: number, newEndMins: number) => {
-    // Convert new minutes back to ISO string dates
-    const finalStartDate = new Date(startDate);
-    finalStartDate.setHours(0, newStartMins, 0, 0);
-
-    const finalEndDate = new Date(endDate);
-    finalEndDate.setHours(0, newEndMins, 0, 0);
-
-    updateScheduleTime(
-      task.id,
-      date,
-      split,
-      finalStartDate.toISOString(),
-      finalEndDate.toISOString()
-    );
+    updateScheduleTime(task.id, date, split, newStartMins, newEndMins);
   };
 
   // ---- Handle mouse up ----

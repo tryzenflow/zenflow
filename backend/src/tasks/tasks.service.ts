@@ -7,13 +7,14 @@ import {
 import { UpdateTaskDto } from "./dto/update-task.dto";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateTaskDto } from "./dto/create-task.dto";
-import { Prisma, Task } from "../../generated/prisma";
+import { Prisma, Schedule, Task } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { validateTaskFields } from "./validators/task-fields";
 import { ScheduleTasksDto } from "../scheduler/dto/schedule-tasks.dto";
 import { FindSchedulesDto } from "../schedules/dto/find-schedules.dto";
 import { RRule } from "rrule";
 import { endOfDay, startOfDay } from "date-fns";
+import { fromZonedTime } from "date-fns-tz";
 
 @Injectable()
 export class TasksService {
@@ -32,6 +33,7 @@ export class TasksService {
     if (errors.length > 0) {
       throw new BadRequestException({ success: false, message: errors });
     }
+
     try {
       const newTask = await this.prisma.task.create({
         data: {
@@ -65,45 +67,50 @@ export class TasksService {
     }
   }
 
-  async find(userId: string, { start, end }: FindSchedulesDto) {
-    const startDate = startOfDay(new Date(start));
-    const endDate = startOfDay(new Date(end));
+  async find(
+    userId: string,
+    { start, end }: FindSchedulesDto,
+    timezone: string
+  ) {
+    const startInTz = new Date(`${start}T00:00:00`);
+    const endInTz = new Date(`${end}T00:00:00`);
+    const startDate = fromZonedTime(startOfDay(startInTz), timezone);
+    const endDate = fromZonedTime(endOfDay(endInTz), timezone);
     const tasks = await this.prisma.task.findMany({
       where: {
         userId,
         OR: [
           { rrule: { not: null } },
-          { schedules: { some: { date: { gte: startDate, lt: endDate } } } },
+          { schedules: { some: { date: { gte: startDate, lte: endDate } } } },
         ],
       },
       include: {
         prerequisites: true,
         category: true,
         schedules: {
-          where: { date: { gte: startDate, lt: endDate } },
+          where: { date: { gte: startDate, lte: endDate } },
         },
       },
     });
     return this.filterRecurringTasks(tasks, startDate, endDate);
   }
 
-  async findUnscheduled(userId: string, { start, end }: FindSchedulesDto) {
-    const startDate = startOfDay(new Date(start));
-    const endDate = startOfDay(new Date(end));
+  async findUnscheduled(
+    userId: string,
+    { start, end }: FindSchedulesDto,
+    timezone: string
+  ) {
+    const startInTz = new Date(`${start}T00:00:00`);
+    const endInTz = new Date(`${end}T00:00:00`);
+    const startDate = fromZonedTime(startOfDay(startInTz), timezone);
+    const endDate = fromZonedTime(endOfDay(endInTz), timezone);
 
     const tasks = await this.prisma.task.findMany({
       where: {
         userId,
-        OR: [
-          { rrule: { not: null } },
-          {
-            schedules: {
-              none: {
-                date: { gte: startDate, lt: endDate },
-              },
-            },
-          },
-        ],
+        schedules: {
+          none: { date: { gt: startDate, lte: endDate } },
+        },
       },
       include: {
         prerequisites: true,
@@ -132,8 +139,7 @@ export class TasksService {
   }
 
   async findToSchedule({ scheduleDate }: ScheduleTasksDto, userId: string) {
-    const date = startOfDay(new Date(scheduleDate));
-    const endDate = endOfDay(date);
+    const date = new Date(scheduleDate);
     const tasks = await this.prisma.task.findMany({
       where: {
         userId,
@@ -146,7 +152,11 @@ export class TasksService {
       },
     });
 
-    return this.filterRecurringTasks(tasks, date, endDate) as typeof tasks;
+    return this.filterRecurringTasks(
+      tasks,
+      date,
+      endOfDay(date)
+    ) as typeof tasks;
   }
 
   async update(
@@ -166,7 +176,9 @@ export class TasksService {
         categoryId,
         ...updateTaskDto,
       });
+
       if (errors.length > 0) throw new BadRequestException(errors);
+
       const updated = await this.prisma.task.update({
         where: { id, userId },
         data: {
@@ -174,7 +186,6 @@ export class TasksService {
           rrule,
           category: categoryId ? { connect: { id: categoryId } } : undefined,
           schedules: {
-            deleteMany: {},
             create: scheduleDate
               ? { date: new Date(scheduleDate), split: 0 }
               : undefined,
@@ -183,6 +194,7 @@ export class TasksService {
             ? { set: prerequisites?.map((p) => ({ id: p })) }
             : undefined,
         },
+        include: { schedules: true },
       });
       return updated;
     } catch (error) {
@@ -233,13 +245,16 @@ export class TasksService {
   }
 
   private filterRecurringTasks(
-    tasks: Task[],
+    tasks: (Task & { schedules?: Schedule[] })[],
     startDate: Date,
     endDate: Date,
     complement: boolean = false
   ) {
     return tasks.filter((t) => {
-      if (!t.rrule) return true;
+      const hasEmptySlot =
+        t.schedules && t.schedules.some((t) => !t.start || !t.end);
+
+      if (!t.rrule || hasEmptySlot) return true;
       const rule = RRule.fromString(t.rrule);
 
       const matches = rule.between(startDate, endDate, true);

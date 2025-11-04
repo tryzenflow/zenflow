@@ -81,6 +81,7 @@ export function EditTaskDialog({
 
     form.reset({
       ...task,
+      note: task.note ?? "",
       scheduleDate: selectedDate,
       categoryId: task.categoryId ?? undefined,
       prerequisites: task.prerequisites?.map((p) =>

@@ -56,6 +56,12 @@ export class SchedulerController implements OnModuleInit {
       { scheduleDate },
       user.id
     );
+    console.log({
+      tasks: tasks.map((t) => ({
+        name: t.title,
+        schedules: t.schedules.map((s) => `${s.start}-${s.end}`).join(", "),
+      })),
+    });
 
     if (tasks.length === 0 || !constraints)
       throw new BadRequestException({
@@ -115,7 +121,8 @@ export class SchedulerController implements OnModuleInit {
             start: scheduleDate,
             end: extractDate(addDays(new Date(scheduleDate), 1)),
           },
-          user.id
+          user.id,
+          user.timezone
         ),
       };
 
@@ -139,7 +146,7 @@ export class SchedulerController implements OnModuleInit {
       }));
 
     const schedule = await this.schedulesService.schedule(
-      new Date(scheduleDate),
+      scheduleDate,
       [...response.schedules, ...unscheduled],
       user.timezone,
       user.id

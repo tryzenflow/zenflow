@@ -26,8 +26,7 @@ interface BodyProps {
   schedules: Schedule[];
   selectedDate: Date;
   currentView: string;
-  tasks: Task[];
-  setTasks: Dispatch<SetStateAction<Task[]>>;
+  // REMOVED: tasks, setTasks
   openEditTaskDialog: (taskId: string) => void;
   setSelectedDate: (date: Date) => void;
   loading: boolean;
@@ -41,9 +40,12 @@ interface BodyProps {
     taskId: string,
     date: string,
     split: number,
-    newStart: string,
-    newEnd: string
+    newStart: number,
+    newEnd: number
   ) => void;
+  // NEW: Refetch trigger for TaskView after scheduling
+  taskViewRefetchTrigger: number;
+  setTaskViewRefetchTrigger: Dispatch<SetStateAction<number>>;
 }
 
 export default function ViewLayout({
@@ -57,12 +59,14 @@ export default function ViewLayout({
 
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
+  // REMOVED: tasks state
   const [unscheduledTasks, setUnscheduledTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(false);
-  const [currentView, setCurrentView] = useState("Day view");
+  const [currentView, setCurrentView] = useState("Task view");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  // NEW: State to force TaskView to refetch/re-render its data
+  const [taskViewRefetchTrigger, setTaskViewRefetchTrigger] = useState(0);
 
   // Auth/Redirect logic (placeholders)
   useEffect(() => {
@@ -79,40 +83,25 @@ export default function ViewLayout({
 
   // Derived state
   const droppedOutSchedules: Schedule[] = useMemo(() => {
-    const unscheduledTaskIds = new Set(unscheduledTasks.map((t) => t.id));
-    return [
-      ...tasks
-        .filter(
-          (t) =>
-            t.rrule &&
-            t.schedules &&
-            t.schedules.length === 0 &&
-            !unscheduledTaskIds.has(t.id)
-        )
-        .flatMap((t) => ({
-          start: null,
-          end: null,
-          date: selectedDate.toISOString(),
-          split: 0,
-          task: t,
-        })),
-      ...schedules.filter((s) => s.start === null),
-    ];
-  }, [tasks, unscheduledTasks]);
-  const scheduled = schedules.filter((s) => s.start !== null);
+    return schedules.filter(
+      (s) =>
+        s.start === null &&
+        format(new Date(s.date), "yyyy-MM-dd") ===
+          format(selectedDate, "yyyy-MM-dd")
+    );
+  }, [schedules, selectedDate]); // Dependency simplified
 
-  // --- Data & Logic Handlers ---
-  const nextDay = addDays(selectedDate, 1);
+  const scheduled = schedules.filter((s) => s.start !== null);
 
   const loadUnscheduledTasks = useCallback(async () => {
     setLoading(true);
+    const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
+
     try {
       const response = await getData<{ data: Task[] }>(
-        `/tasks/schedule/none?start=${format(
-          selectedDate,
-          "yyyy-MM-dd"
-        )}&end=${format(nextDay, "yyyy-MM-dd")}`
+        `/tasks/schedule/none?start=${selectedDateStr}&end=${selectedDateStr}`
       );
+
       setUnscheduledTasks(response.data);
     } catch (error) {
       toast.error("Failed to load unscheduled tasks: " + error);
@@ -121,28 +110,34 @@ export default function ViewLayout({
     }
   }, [selectedDate]);
 
-  const loadSchedules = useCallback(async () => {
+  const fetchDayData = useCallback(async (date: Date) => {
     setLoading(true);
+    const selectedDateStr = format(date, "yyyy-MM-dd");
+    console.log({ selectedDateStr });
+
     try {
-      const response = await getData<GetSchedulesResponse>(
-        `/schedules?start=${format(selectedDate, "yyyy-MM-dd")}&end=${format(
-          nextDay,
-          "yyyy-MM-dd"
-        )}`
-      );
-      setSchedules(response.data);
-    } catch (error) {
-      toast.error("Failed to load schedules: " + error);
+      const [unsResp, schedResp] = await Promise.all([
+        getData<{ data: Task[] }>(
+          `/tasks/schedule/none?start=${selectedDateStr}&end=${selectedDateStr}`
+        ),
+        getData<GetSchedulesResponse>(
+          `/schedules?start=${selectedDateStr}&end=${selectedDateStr}`
+        ),
+      ]);
+
+      setUnscheduledTasks(unsResp.data);
+      setSchedules(schedResp.data);
+    } catch (error: any) {
+      toast.error("Failed to load data: " + (error?.message || error));
     } finally {
       setLoading(false);
     }
-  }, [selectedDate]);
+  }, []);
 
+  // run when selectedDate changes
   useEffect(() => {
-    if (!selectedDate) return;
-    loadUnscheduledTasks();
-    loadSchedules();
-  }, [selectedDate, loadUnscheduledTasks, loadSchedules]);
+    fetchDayData(selectedDate);
+  }, [selectedDate, fetchDayData]);
 
   const handleDateChange = useCallback((date: SetStateAction<Date>) => {
     setSelectedDate(date);
@@ -179,35 +174,17 @@ export default function ViewLayout({
       }
 
       const generated = response.data || scheduled;
-      if (currentView === "Task view") {
-        const taskScheduleMap = new Map<string, Schedule[]>();
-        for (const schedule of generated) {
-          if (!taskScheduleMap.has(schedule.task.id))
-            taskScheduleMap.set(schedule.task.id, []);
-          const values = taskScheduleMap.get(schedule.task.id);
-          values?.push(schedule);
-        }
-        setTasks((prev) =>
-          prev.map((t) => ({
-            ...t,
-            schedules: [
-              ...(taskScheduleMap.get(t.id) ?? []),
-              ...(t.schedules ?? []).filter(
-                (s) =>
-                  format(new Date(s.date), "yyyy-MM-dd") !==
-                  formattedScheduleDate
-              ),
-            ],
-          }))
-        );
-      }
-      setSchedules(generated); // Use scheduled as fallback
+      setSchedules(generated);
+
+      setTaskViewRefetchTrigger((prev) => prev + 1);
+
+      loadUnscheduledTasks();
     } catch (error: any) {
       toast.error(error.message || "Failed to schedule tasks");
     } finally {
       setLoading(false);
     }
-  }, [selectedDate, currentView, scheduled]);
+  }, [selectedDate, scheduled, loadUnscheduledTasks]); // Dependencies updated
 
   const openEditTaskDialog = useCallback((taskId: string) => {
     setSelectedTaskId(taskId);
@@ -238,6 +215,7 @@ export default function ViewLayout({
           setUnscheduledTasks((prev) => [...prev, toRemove.task as Task]);
         }
         toast.success("Delete dropped out task successfully");
+        setTaskViewRefetchTrigger((prev) => prev + 1); // Trigger TaskView
       } catch (error: any) {
         toast.error(
           error.message || "Failed to remove tasks from dropout list"
@@ -259,6 +237,7 @@ export default function ViewLayout({
         toast.success("Task added to the day's schedule");
         // Re-run schedule to place the task
         await schedule();
+        // The schedule function will handle the TaskView trigger
         setUnscheduledTasks((prev) => prev.filter((t) => t.id !== taskId));
       } catch (error: any) {
         toast.error(
@@ -294,22 +273,13 @@ export default function ViewLayout({
         toast.success("Delete schedule successfully 🎉");
 
         if (toRemove && !splitExists) {
+          // If all schedules for this task are gone, re-add to unscheduled list
+          // This should only happen if the date is the selectedDate, but we run with it.
           setUnscheduledTasks((prev) => [...prev, toRemove.task as Task]);
         }
-        if (currentView === "Task view") {
-          setTasks((prev) =>
-            prev.map((t) =>
-              t.id === taskId
-                ? {
-                    ...t,
-                    schedules: t.schedules?.filter(
-                      (s) => s.split !== split || s.date !== date
-                    ),
-                  }
-                : t
-            )
-          );
-        }
+
+        // Trigger TaskView refetch
+        setTaskViewRefetchTrigger((prev) => prev + 1);
       } catch (error: any) {
         toast.error(error.message || "Failed to delete schedule :'(");
       }
@@ -323,7 +293,8 @@ export default function ViewLayout({
       await deleteData(`/tasks/${id}`);
       toast.success("Delete task successfully");
       setUnscheduledTasks((prev) => prev.filter((t) => t.id !== id));
-      setTasks((prev) => prev.filter((t) => t.id !== id));
+      // Trigger TaskView refetch
+      setTaskViewRefetchTrigger((prev) => prev + 1);
     } finally {
       setLoading(false);
     }
@@ -333,8 +304,8 @@ export default function ViewLayout({
     taskId: string,
     date: string,
     split: number,
-    newStart: string,
-    newEnd: string
+    newStart: number,
+    newEnd: number
   ) => {
     setLoading(true);
     try {
@@ -345,17 +316,23 @@ export default function ViewLayout({
       });
       setSchedules((prevSchedules) =>
         prevSchedules.map((s) => {
+          const startDate = new Date(date);
+          const endDate = new Date(date);
+          startDate.setHours(0, newStart, 0, 0);
+          endDate.setHours(0, newEnd, 0, 0);
           // Find the specific schedule using its unique keys
           if (s.task.id === taskId && s.date === date && s.split === split) {
             return {
               ...s,
-              start: newStart,
-              end: newEnd,
+              start: startDate.toISOString(),
+              end: endDate.toISOString(),
             };
           }
           return s;
         })
       );
+      // Trigger TaskView refetch
+      setTaskViewRefetchTrigger((prev) => prev + 1);
     } finally {
       setLoading(false);
     }
@@ -364,7 +341,7 @@ export default function ViewLayout({
   if (!user && (userFetching === null || userFetching)) return null;
 
   // Props passed to the main content render prop
-  const bodyProps = {
+  const bodyProps: BodyProps = {
     schedules: scheduled,
     selectedDate,
     setSelectedDate,
@@ -373,20 +350,19 @@ export default function ViewLayout({
     currentView,
     loading,
     setLoading,
-    tasks,
-    setTasks,
+    // REMOVED: tasks, setTasks
     updateScheduleTime,
+    taskViewRefetchTrigger, // NEW
+    setTaskViewRefetchTrigger, // NEW
   };
 
   return (
     <>
       <div className="h-screen w-screen flex flex-col bg-gray-100 text-foreground antialiased dark:bg-gray-950">
         <Navbar
-          addTask={(task) =>
-            currentView === "Task view"
-              ? setTasks((prev) => [...prev, task])
-              : undefined
-          }
+          // addTask logic removed as tasks state is gone. If this feature is needed,
+          // a refetch/re-render trigger must be added here for TaskView.
+          addTask={() => setTaskViewRefetchTrigger((prev) => prev + 1)}
           selectedDate={selectedDate}
           currentView={currentView}
           setCurrentView={setCurrentView}
@@ -420,11 +396,12 @@ export default function ViewLayout({
           open={editDialogOpen}
           setOpen={setEditDialogOpen}
           taskId={selectedTaskId}
-          // The updateSchedule prop is still required to handle internal state update after dialog edit
+          // The updateSchedule prop now updates schedules and triggers TaskView refetch
           updateSchedule={(task) => {
             setSchedules((prev) =>
               prev.map((p) => (p.task.id === task.id ? { ...p, task } : p))
             );
+            setTaskViewRefetchTrigger((prev) => prev + 1);
           }}
         />
       )}

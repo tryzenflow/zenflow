@@ -19,8 +19,8 @@ export const DayView = ({
     taskId: string,
     date: string,
     split: number,
-    newStart: string,
-    newEnd: string
+    newStart: number,
+    newEnd: number
   ) => void;
 }) => {
   // Create an array for the hourly timeline (0 AM to 11 PM)

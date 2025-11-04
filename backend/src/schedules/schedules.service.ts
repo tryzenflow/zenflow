@@ -4,21 +4,22 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
-import { fromZonedTime } from "date-fns-tz";
-import { UpdateScheduleDto } from "./dto/update-schedule.dto";
-import { PrismaService } from "../prisma/prisma.service";
+import { endOfDay, startOfDay } from "date-fns";
 import { Prisma } from "../../generated/prisma";
+import { minutesToUtc } from "../common/utils";
 import { PostgresErrorCode } from "../prisma/error-codes";
-import { FindSchedulesDto } from "./dto/find-schedules.dto";
+import { PrismaService } from "../prisma/prisma.service";
 import { TaskSchedule } from "../scheduler/interfaces";
-import { extractDate, minutesToUtc, minuteToTime } from "../common/utils";
+import { FindSchedulesDto } from "./dto/find-schedules.dto";
+import { UpdateScheduleDto } from "./dto/update-schedule.dto";
+import { fromZonedTime } from "date-fns-tz";
 
 @Injectable()
 export class SchedulesService {
   constructor(private prisma: PrismaService) {}
 
   async schedule(
-    date: Date,
+    date: string,
     schedules: TaskSchedule[],
     timezone: string,
     userId: string
@@ -26,12 +27,12 @@ export class SchedulesService {
     try {
       return this.prisma.$transaction(async (tx) => {
         await tx.schedule.deleteMany({
-          where: { date, task: { userId } },
+          where: { date: new Date(date), task: { userId } },
         });
 
         const saved = await tx.schedule.createManyAndReturn({
           data: schedules.map((s) => ({
-            date,
+            date: new Date(date),
             taskId: s.taskId,
             split: s?.split ?? 0,
             start: s.start ? minutesToUtc(date, s.start, timezone) : undefined,
@@ -59,7 +60,7 @@ export class SchedulesService {
         if (error.code === PostgresErrorCode.UniqueConstraintViolation) {
           throw new BadRequestException({
             success: false,
-            message: `Duplicate tasks on date ${extractDate(date)}`,
+            message: `Duplicate tasks on date ${date}`,
           });
         }
         throw new InternalServerErrorException({
@@ -71,32 +72,50 @@ export class SchedulesService {
   }
 
   async update(
-    date: Date,
+    date: string,
     taskId: string,
     split: number,
     { start, end }: UpdateScheduleDto,
-    userId: string
+    userId: string,
+    timezone: string
   ) {
     if (start >= end)
-      throw new BadRequestException(
-        "Task start time must be less than its end time"
-      );
+      throw new BadRequestException({
+        success: false,
+        message: "Task start time must be less than its end time",
+      });
     const existingSchedule = await this.prisma.schedule.findUnique({
-      where: { taskId_split_date: { taskId, split, date }, task: { userId } },
+      where: {
+        taskId_split_date: { taskId, split, date: new Date(date) },
+        task: { userId },
+      },
     });
     if (!existingSchedule) throw new NotFoundException();
 
+    // Convert start/end minutes → UTC Date
+    const utcStart = minutesToUtc(date, start, timezone);
+    const utcEnd = minutesToUtc(date, end, timezone);
     const updated = await this.prisma.schedule.update({
-      where: { taskId_split_date: { split, taskId, date }, task: { userId } },
-      data: { start, end },
+      where: {
+        taskId_split_date: { split, taskId, date: new Date(date) },
+        task: { userId },
+      },
+      data: { start: utcStart, end: utcEnd },
     });
     return updated;
   }
 
-  async findSchedules({ start, end }: FindSchedulesDto, userId: string) {
+  async findSchedules(
+    { start, end }: FindSchedulesDto,
+    userId: string,
+    timezone: string
+  ) {
+    const startDate = fromZonedTime(startOfDay(new Date(start)), timezone);
+    const endDate = fromZonedTime(endOfDay(new Date(end)), timezone);
+
     const rangeSchedules = await this.prisma.schedule.findMany({
       where: {
-        date: { gte: new Date(start), lt: new Date(end) },
+        date: { gte: startDate, lte: endDate },
         task: { userId },
       },
       omit: { taskId: true },
@@ -110,17 +129,20 @@ export class SchedulesService {
     return rangeSchedules;
   }
 
-  async remove(date: Date, taskId: string, split: number, userId: string) {
+  async remove(date: string, taskId: string, split: number, userId: string) {
     try {
       await this.prisma.schedule.delete({
-        where: { taskId_split_date: { split, taskId, date }, task: { userId } },
+        where: {
+          taskId_split_date: { split, taskId, date: new Date(date) },
+          task: { userId },
+        },
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === PostgresErrorCode.RecordNotFound)
           throw new NotFoundException({
             success: false,
-            message: `Cannot delete scheduled task split ${split} on ${extractDate(date)}`,
+            message: `Cannot delete scheduled task split ${split} on ${date}`,
           });
       }
       throw new InternalServerErrorException({
