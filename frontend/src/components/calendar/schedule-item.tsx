@@ -238,7 +238,7 @@ export const ScheduleItem = ({
       // Week view: position within specific day column
       const dayColumnWidth = `calc((100% - ${CALENDAR_TIME_COLUMN_WIDTH_PX}px) / 7)`;
       const dayColumnOffset = `calc(${CALENDAR_TIME_COLUMN_WIDTH_PX}px + ${dayColumnWidth} * ${dayIndex})`;
-      
+
       return {
         left: dayColumnOffset,
         width: `calc(${dayColumnWidth} / ${totalColumns})`,
@@ -267,8 +267,6 @@ export const ScheduleItem = ({
     overflow: "hidden",
   };
 
-  const contentPadding = "pt-1 px-2 pb-2"; // Padding to clear resize handles
-
   return (
     <ContextMenu>
       <HoverCard
@@ -289,19 +287,16 @@ export const ScheduleItem = ({
               onMouseMove={onMouseMoveOver} // 👈 Use combined cursor handler
             >
               {/* CONTENT WRAPPER */}
-              <div className={`relative h-full w-full ${contentPadding}`}>
-                <div className={`font-semibold ${isWeekView ? "truncate" : ""}`}>
+              <div className={`relative h-full w-full px-2 pt-1`}>
+                <div
+                  className={`font-semibold ${isWeekView ? "truncate" : ""}`}
+                >
                   {task.title}
                 </div>
-                {durationMinutes >= 30 && !isWeekView && (
+                {durationMinutes >= 30 && (
                   <div className="text-[10px] opacity-80">
                     {minutesToTime(currentStartMinutes)} -{" "}
                     {minutesToTime(currentEndMinutes)}
-                  </div>
-                )}
-                {durationMinutes >= 60 && isWeekView && (
-                  <div className="text-[8px] opacity-80 truncate">
-                    {minutesToTime(currentStartMinutes)}
                   </div>
                 )}
               </div>

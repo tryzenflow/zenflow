@@ -2,24 +2,27 @@ import { format, startOfDay, startOfWeek, addDays } from "date-fns";
 import { Schedule } from "../../types/schedule";
 import { ScheduleItem } from "./schedule-item";
 import { calculateLayout } from "../../utils/calc-layout";
+import { cn } from "../../lib/utils";
 
 export const WeekView = ({
   selectedDate,
   schedules,
   deleteSchedule,
+  setSelectedDate,
   openEditTaskDialog,
   updateScheduleTime,
 }: {
   selectedDate: Date;
   schedules: Schedule[];
   deleteSchedule: (taskId: string, date: string, split: number) => void;
+  setSelectedDate: (date: Date) => void;
   openEditTaskDialog: (taskId: string) => void;
   updateScheduleTime: (
     taskId: string,
     date: string,
     split: number,
-    newStart: string,
-    newEnd: string
+    newStart: number,
+    newEnd: number
   ) => void;
 }) => {
   // Create an array for the hourly timeline (0 AM to 11 PM)
@@ -30,17 +33,19 @@ export const WeekView = ({
   });
 
   // Get the start of the week (Monday)
-  const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
-  
+  const weekStart = startOfWeek(selectedDate, { weekStartsOn: 0 });
+
   // Create array of 7 days for the week
   const daysOfWeek = Array.from({ length: 7 }, (_, i) => {
     const day = addDays(weekStart, i);
-    const isToday = startOfDay(day).getTime() === startOfDay(new Date()).getTime();
-    const isSelected = startOfDay(day).getTime() === startOfDay(selectedDate).getTime();
-    
+    const isToday =
+      startOfDay(day).getTime() === startOfDay(new Date()).getTime();
+    const isSelected =
+      startOfDay(day).getTime() === startOfDay(selectedDate).getTime();
+
     return {
       date: day,
-  dayName: format(day, "EEE"),
+      dayName: format(day, "EEE"),
       dayNumber: format(day, "d"),
       isToday,
       isSelected,
@@ -63,7 +68,7 @@ export const WeekView = ({
   const schedulesByDay = daysOfWeek.map((dayInfo) => {
     const dayStart = startOfDay(dayInfo.date).getTime();
     const dayEnd = dayStart + 24 * 60 * 60 * 1000;
-    
+
     const daySchedules = weekSchedules.filter((s) => {
       const startTimestamp = new Date(s.start!).getTime();
       return startTimestamp >= dayStart && startTimestamp < dayEnd;
@@ -76,31 +81,31 @@ export const WeekView = ({
   });
 
   return (
-    <div className="flex-1 min-w-0 h-full relative overflow-y-auto bg-background rounded-l-xl">
+    <div className="flex-1 min-w-0 h-full relative overflow-y-auto bg-background">
       {/* Week header with days */}
-      <div className="sticky top-0 z-10 bg-background border-b border-border">
+      <div className="sticky top-0 z-20 bg-background/50 backdrop-blur border-b border-border">
         <div className="flex">
           {/* Time column header */}
           <div className="w-12 flex-shrink-0 border-r border-border py-2"></div>
-          
+
           {/* Day headers */}
           {daysOfWeek.map((dayInfo, index) => (
             <div
               key={index}
-              className="flex-1 min-w-0 py-2 px-2 text-center border-r border-border last:border-r-0"
+              className="flex-1 min-w-0 py-2 px-2 text-center cursor-pointer border-r border-border last:border-r-0"
+              onClick={() => setSelectedDate(dayInfo.date)}
             >
               <div className="flex flex-col items-center justify-center gap-1">
                 <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">
                   {dayInfo.dayName}
                 </div>
                 <div
-                  className={`text-sm font-semibold transition-all ${
-                    dayInfo.isToday
-                      ? "bg-primary text-primary-foreground rounded-full w-7 h-7 flex items-center justify-center shadow-sm"
-                      : dayInfo.isSelected
-                      ? "text-primary"
-                      : "text-foreground"
-                  }`}
+                  className={cn(
+                    "text-sm w-7 h-7 text-foreground rounded-full flex items-center justify-center font-semibold transition-all",
+                    dayInfo.isSelected
+                      ? "bg-primary text-primary-foreground"
+                      : dayInfo.isToday && "bg-muted"
+                  )}
                 >
                   {dayInfo.dayNumber}
                 </div>
@@ -115,13 +120,16 @@ export const WeekView = ({
         {hours.map((time, index) => (
           <div key={index} className="flex h-[60px] group">
             {/* Time label column */}
-            <div className="w-12 flex-shrink-0 text-[10px] text-muted-foreground -mt-2 pr-2 text-right border-r border-border">
+            <div className="w-12 flex-shrink-0 text-[10px] text-muted-foreground -mt-2 pr-2 text-right border-border">
               {time}
             </div>
-            
+
             {/* Day columns */}
             {daysOfWeek.map((_, dayIndex) => (
-              <div key={dayIndex} className="flex-1 min-w-0 relative border-r border-border last:border-r-0">
+              <div
+                key={dayIndex}
+                className="flex-1 min-w-0 relative border-r border-border last:border-r-0"
+              >
                 {/* Half-hour grid lines */}
                 <div className="h-1/2 w-full absolute border-t border-border/70"></div>
                 <div className="h-1/2"></div>

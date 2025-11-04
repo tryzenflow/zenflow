@@ -23,6 +23,7 @@ export default function HomePage() {
           case "Week view":
             return (
               <WeekView
+                setSelectedDate={body.setSelectedDate}
                 deleteSchedule={body.deleteSchedule}
                 updateScheduleTime={body.updateScheduleTime}
                 openEditTaskDialog={body.openEditTaskDialog}

@@ -15,7 +15,7 @@ import {
   ScheduleResponse,
 } from "../../types/schedule";
 import { Task } from "../../types/tasks";
-import { format, addDays, subDays } from "date-fns";
+import { format, addDays, subDays, startOfWeek } from "date-fns";
 import { toast } from "sonner";
 import { getData, postData, deleteData, patchData, putData } from "../../api";
 import { EditTaskDialog } from "../tasks/edit-task-dialog";
@@ -110,34 +110,55 @@ export default function ViewLayout({
     }
   }, [selectedDate]);
 
-  const fetchDayData = useCallback(async (date: Date) => {
+  const loadSchedules = useCallback(async () => {
     setLoading(true);
-    const selectedDateStr = format(date, "yyyy-MM-dd");
-    console.log({ selectedDateStr });
+    let startDateStr = format(selectedDate, "yyyy-MM-dd");
+    let endDateStr = startDateStr; // For single day fetch
+    if (currentView === "Week view") {
+      const endDate = addDays(selectedDate, 6);
+      startDateStr = format(startOfWeek(selectedDate), "yyyy-MM-dd");
+      endDateStr = format(endDate, "yyyy-MM-dd");
+    } else if (currentView === "Month view") {
+      const startOfMonth = new Date(
+        selectedDate.getFullYear(),
+        selectedDate.getMonth(),
+        1
+      );
+      const endOfMonth = new Date(
+        selectedDate.getFullYear(),
+        selectedDate.getMonth() + 1,
+        0
+      );
+      startDateStr = format(startOfMonth, "yyyy-MM-dd");
+      endDateStr = format(endOfMonth, "yyyy-MM-dd");
+    } else if (currentView === "Year view") {
+      const startOfYear = new Date(selectedDate.getFullYear(), 0, 1);
+      const endOfYear = new Date(selectedDate.getFullYear(), 11, 31);
+      startDateStr = format(startOfYear, "yyyy-MM-dd");
+      endDateStr = format(endOfYear, "yyyy-MM-dd");
+    }
 
     try {
-      const [unsResp, schedResp] = await Promise.all([
-        getData<{ data: Task[] }>(
-          `/tasks/schedule/none?start=${selectedDateStr}&end=${selectedDateStr}`
-        ),
-        getData<GetSchedulesResponse>(
-          `/schedules?start=${selectedDateStr}&end=${selectedDateStr}`
-        ),
-      ]);
+      const schedResp = await getData<GetSchedulesResponse>(
+        `/schedules?start=${startDateStr}&end=${endDateStr}`
+      );
 
-      setUnscheduledTasks(unsResp.data);
       setSchedules(schedResp.data);
     } catch (error: any) {
       toast.error("Failed to load data: " + (error?.message || error));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentView, selectedDate]);
 
   // run when selectedDate changes
   useEffect(() => {
-    fetchDayData(selectedDate);
-  }, [selectedDate, fetchDayData]);
+    loadSchedules();
+  }, [loadSchedules]);
+
+  useEffect(() => {
+    loadUnscheduledTasks();
+  }, [loadUnscheduledTasks]);
 
   const handleDateChange = useCallback((date: SetStateAction<Date>) => {
     setSelectedDate(date);
