@@ -54,6 +54,8 @@ export const ScheduleItem = ({
   totalColumns = 1,
   isOverlapping = false,
   updateScheduleTime,
+  dayIndex = 0,
+  isWeekView = false,
 }: {
   schedule: Schedule;
   deleteSchedule: (taskId: string, date: string, split: number) => void;
@@ -68,6 +70,8 @@ export const ScheduleItem = ({
     newStart: number,
     newEnd: number
   ) => void;
+  dayIndex?: number;
+  isWeekView?: boolean;
 }) => {
   const { task, start, end, split, date } = schedule;
 
@@ -228,19 +232,37 @@ export const ScheduleItem = ({
   // --- Styling ---
   const isInteractionActive = isDragging; // Use isDragging for global interaction state
 
+  // Calculate positioning based on view type
+  const getPositionStyles = () => {
+    if (isWeekView) {
+      // Week view: position within specific day column
+      const dayColumnWidth = `calc((100% - ${CALENDAR_TIME_COLUMN_WIDTH_PX}px) / 7)`;
+      const dayColumnOffset = `calc(${CALENDAR_TIME_COLUMN_WIDTH_PX}px + ${dayColumnWidth} * ${dayIndex})`;
+      
+      return {
+        left: dayColumnOffset,
+        width: `calc(${dayColumnWidth} / ${totalColumns})`,
+        marginLeft: `calc(${dayColumnWidth} / ${totalColumns} * ${columnIndex})`,
+      };
+    } else {
+      // Day view: original positioning
+      return {
+        left: `${CALENDAR_TIME_COLUMN_WIDTH_PX}px`,
+        width: `calc((100% - ${
+          CALENDAR_TIME_COLUMN_WIDTH_PX + 5
+        }px) / ${totalColumns})`,
+        marginLeft: `calc((100% - ${
+          CALENDAR_TIME_COLUMN_WIDTH_PX + 5
+        }px) / ${totalColumns} * ${columnIndex} + 5px)`,
+      };
+    }
+  };
+
   const dynamicStyles: React.CSSProperties = {
     top: `${topPosition}px`,
     height: `${height}px`,
     minHeight: "2rem",
-
-    left: `${CALENDAR_TIME_COLUMN_WIDTH_PX}px`,
-    width: `calc((100% - ${
-      CALENDAR_TIME_COLUMN_WIDTH_PX + 5
-    }px) / ${totalColumns})`,
-    marginLeft: `calc((100% - ${
-      CALENDAR_TIME_COLUMN_WIDTH_PX + 5
-    }px) / ${totalColumns} * ${columnIndex} + 5px)`,
-
+    ...getPositionStyles(),
     zIndex: isInteractionActive ? 30 : isOverlapping ? 20 + columnIndex : 10,
     overflow: "hidden",
   };
@@ -259,18 +281,27 @@ export const ScheduleItem = ({
           <HoverCardTrigger asChild>
             <div
               ref={itemRef}
-              className={`absolute rounded-sm border-l-2 text-xs shadow-md transition-all ${colors.bg} ${colors.text} ${colors.border} ${colors.hover}`}
+              className={`absolute rounded-sm border-l-2 shadow-md transition-all ${
+                isWeekView ? "text-[10px]" : "text-xs"
+              } ${colors.bg} ${colors.text} ${colors.border} ${colors.hover}`}
               style={dynamicStyles}
               onMouseDown={onMouseDown} // 👈 Use combined drag/resize handler
               onMouseMove={onMouseMoveOver} // 👈 Use combined cursor handler
             >
               {/* CONTENT WRAPPER */}
               <div className={`relative h-full w-full ${contentPadding}`}>
-                <div className="font-semibold">{task.title}</div>
-                {durationMinutes >= 30 && (
+                <div className={`font-semibold ${isWeekView ? "truncate" : ""}`}>
+                  {task.title}
+                </div>
+                {durationMinutes >= 30 && !isWeekView && (
                   <div className="text-[10px] opacity-80">
                     {minutesToTime(currentStartMinutes)} -{" "}
                     {minutesToTime(currentEndMinutes)}
+                  </div>
+                )}
+                {durationMinutes >= 60 && isWeekView && (
+                  <div className="text-[8px] opacity-80 truncate">
+                    {minutesToTime(currentStartMinutes)}
                   </div>
                 )}
               </div>

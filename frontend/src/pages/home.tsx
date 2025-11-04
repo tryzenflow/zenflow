@@ -21,7 +21,15 @@ export default function HomePage() {
               />
             );
           case "Week view":
-            return <WeekView />;
+            return (
+              <WeekView
+                deleteSchedule={body.deleteSchedule}
+                updateScheduleTime={body.updateScheduleTime}
+                openEditTaskDialog={body.openEditTaskDialog}
+                schedules={body.schedules}
+                selectedDate={body.selectedDate}
+              />
+            );
           case "Month view":
             return <MonthView />;
           case "Year view":
