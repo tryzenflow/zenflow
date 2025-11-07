@@ -195,7 +195,13 @@ export default function ViewLayout({
       }
 
       const generated = response.data || scheduled;
-      setSchedules(generated);
+      setSchedules((prev) => [
+        ...prev.filter(
+          (s) =>
+            format(new Date(s.date), "yyyy-MM-dd") !== formattedScheduleDate
+        ),
+        ...generated,
+      ]);
 
       setTaskViewRefetchTrigger((prev) => prev + 1);
 
