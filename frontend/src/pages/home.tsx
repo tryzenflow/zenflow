@@ -31,9 +31,21 @@ export default function HomePage() {
               />
             );
           case "Month view":
-            return <MonthView />;
+            return (
+              <MonthView
+                selectedDate={body.selectedDate}
+                schedules={body.schedules}
+                setSelectedDate={body.setSelectedDate}
+              />
+            );
           case "Year view":
-            return <YearView />;
+            return (
+              <YearView
+                selectedDate={body.selectedDate}
+                schedules={body.schedules}
+                setSelectedDate={body.setSelectedDate}
+              />
+            );
           case "Task view":
             return (
               <TaskView
