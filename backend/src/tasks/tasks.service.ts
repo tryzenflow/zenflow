@@ -138,7 +138,7 @@ export class TasksService {
     return task;
   }
 
-  async findToSchedule({ scheduleDate }: ScheduleTasksDto, userId: string) {
+  async findToSchedule(scheduleDate: string, userId: string) {
     const date = new Date(scheduleDate);
     const tasks = await this.prisma.task.findMany({
       where: {

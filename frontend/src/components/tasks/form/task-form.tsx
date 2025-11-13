@@ -259,12 +259,14 @@ export function TaskForm({
                 disabled={loading}
                 tasks={tasks}
                 selected={field.value ?? []}
-                onChange={(value) =>
-                  field.onChange([
-                    ...(form.getValues("prerequisites") ?? []),
-                    value,
-                  ])
-                }
+                onChange={(value) => {
+                  const preqIdsSet = new Set(
+                    form.getValues("prerequisites") ?? []
+                  );
+                  if (preqIdsSet.has(value)) preqIdsSet.delete(value);
+                  else preqIdsSet.add(value);
+                  field.onChange(Array.from(preqIdsSet));
+                }}
               />
             </FormItem>
           )}

@@ -53,7 +53,7 @@ export function TaskCard({
   return (
     <Card className="py-0 min-w-72 gap-3">
       <div
-        style={{ background: getGradientIndex(task.title) }}
+        style={{ background: getGradientIndex(task.id) }}
         className="rounded-t-xl relative aspect-video"
       >
         <div className="flex gap-x-3 absolute z-10 top-4 right-4">

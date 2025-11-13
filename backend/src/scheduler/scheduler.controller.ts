@@ -18,11 +18,22 @@ import { TasksService } from "../tasks/tasks.service";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
 import { SCHEDULER_PACKAGE, SCHEDULER_SERVICE } from "./constants";
 import { ScheduleTasksDto } from "./dto/schedule-tasks.dto";
-import { ScheduleRequest, ScheduleResponse, TaskSchedule } from "./interfaces";
+import {
+  ScheduleRequest,
+  ScheduleResponse,
+  Task,
+  TaskSchedule,
+} from "./interfaces";
 import { SchedulerService } from "./scheduler.service";
 import { validatePreSchedule } from "./validators/pre-schedule";
 import { utcToMinutes, extractDate } from "../common/utils";
 import { getAvailableHours } from "../constraints/utils";
+import {
+  getTaskDuration,
+  getTaskEarliestStart,
+  getTaskLatestEnd,
+  getTaskMaxSplits,
+} from "./utils";
 
 @Controller()
 @UseGuards(CookieAuthGuard)
@@ -44,7 +55,7 @@ export class SchedulerController implements OnModuleInit {
   @Post("schedule")
   async schedule(
     @CurrentUser() user: User,
-    @Body() { scheduleDate }: ScheduleTasksDto
+    @Body() { scheduleDate, scheduleBased: schedulesBased }: ScheduleTasksDto
   ) {
     const weekday = new Date(scheduleDate).getDay();
     const constraints = await this.constraintsService.getByWeekday(
@@ -52,16 +63,7 @@ export class SchedulerController implements OnModuleInit {
       weekday
     );
 
-    const tasks = await this.tasksService.findToSchedule(
-      { scheduleDate },
-      user.id
-    );
-    console.log({
-      tasks: tasks.map((t) => ({
-        name: t.title,
-        schedules: t.schedules.map((s) => `${s.start}-${s.end}`).join(", "),
-      })),
-    });
+    const tasks = await this.tasksService.findToSchedule(scheduleDate, user.id);
 
     if (tasks.length === 0 || !constraints)
       throw new BadRequestException({
@@ -71,7 +73,37 @@ export class SchedulerController implements OnModuleInit {
         data: [],
       });
 
+    const scheduleBasedTasks: Task[] = tasks.map((task) => ({
+      id: task.id,
+      categoryId: task.categoryId ?? undefined,
+      duration: task.duration,
+      focus: task.focus,
+      mandatory: task.mandatory,
+      earliestStart: task.earliestStart ?? undefined,
+      latestEnd: task.latestEnd ?? undefined,
+      maxSplits: task.maxSplits,
+      prerequisites: task.prerequisites.map((p) => p.id),
+      priority: task.priority,
+      title: task.title,
+      deadline: task.deadline ?? undefined,
+      schedules: task.schedules.map((s) => ({
+        split: s.split,
+        start: s.start
+          ? utcToMinutes(new Date(s.start), user.timezone)
+          : undefined,
+        end: s.end ? utcToMinutes(new Date(s.end), user.timezone) : undefined,
+      })),
+    }));
+
+    scheduleBasedTasks.forEach((t) => {
+      t.duration = getTaskDuration(t, schedulesBased);
+      t.earliestStart = getTaskEarliestStart(t, schedulesBased);
+      t.latestEnd = getTaskLatestEnd(t, schedulesBased);
+      t.maxSplits = getTaskMaxSplits(t, schedulesBased);
+    });
+
     const request: ScheduleRequest = {
+      scheduleBased: true,
       constraints: {
         availableHours: getAvailableHours(constraints.focusBlocks),
         batchSimilarTasks: constraints.batchSimilarTasks,
@@ -82,27 +114,7 @@ export class SchedulerController implements OnModuleInit {
         maxDailyLoad: constraints.maxDailyLoad,
         minGapBetweenTasks: constraints.minGapBetweenTasks,
       },
-      tasks: tasks.map((task) => ({
-        id: task.id,
-        categoryId: task.categoryId ?? undefined,
-        duration: task.duration,
-        focus: task.focus,
-        mandatory: task.mandatory,
-        earliestStart: task.earliestStart ?? undefined,
-        latestEnd: task.latestEnd ?? undefined,
-        maxSplits: task.maxSplits,
-        prerequisites: task.prerequisites.map((p) => p.id),
-        priority: task.priority,
-        title: task.title,
-        deadline: task.deadline ?? undefined,
-        schedules: task.schedules
-          .filter((s) => s.start && s.end)
-          .map((s) => ({
-            split: s.split,
-            start: utcToMinutes(new Date(s.start!), user.timezone),
-            end: utcToMinutes(new Date(s.end!), user.timezone),
-          })),
-      })),
+      tasks: scheduleBasedTasks,
     };
     const errors = validatePreSchedule(request);
     if (errors.length > 0) throw new BadRequestException(errors);
@@ -128,13 +140,17 @@ export class SchedulerController implements OnModuleInit {
 
     const scheduled = response.schedules!;
 
-    const unscheduled: TaskSchedule[] = tasks
+    const unscheduled: TaskSchedule[] = scheduleBasedTasks
       .filter(
         (task) =>
           !scheduled.some((s) => s.taskId === task.id) ||
           task.duration >
             scheduled.reduce((acc, s) => {
-              if (s.start && s.end && s.taskId === task.id) {
+              if (
+                s.start !== undefined &&
+                s.end !== undefined &&
+                s.taskId === task.id
+              ) {
                 acc += s.end - s.start;
               }
               return acc;

@@ -41,7 +41,7 @@ export function TaskPrioritySelect({
             </SelectTrigger>
 
             <SelectContent>
-              <SelectItem value="3">
+              <SelectItem value="1">
                 <Badge className="size-4 rounded-full bg-red-500 mr-2" />
                 High
               </SelectItem>
@@ -49,7 +49,7 @@ export function TaskPrioritySelect({
                 <Badge className="size-4 rounded-full bg-yellow-500 mr-2" />
                 Medium
               </SelectItem>
-              <SelectItem value="1">
+              <SelectItem value="3">
                 <Badge className="size-4 rounded-full bg-blue-500 mr-2" />
                 Low
               </SelectItem>

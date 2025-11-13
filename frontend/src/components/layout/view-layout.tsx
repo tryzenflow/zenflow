@@ -83,6 +83,7 @@ export default function ViewLayout({
 
   // Derived state
   const droppedOutSchedules: Schedule[] = useMemo(() => {
+    // (has a null schedule) & (on selected date)
     return schedules.filter(
       (s) =>
         s.start === null &&
@@ -194,7 +195,8 @@ export default function ViewLayout({
         );
       }
 
-      const generated = response.data || scheduled;
+      const generated = response.data;
+
       setSchedules((prev) => [
         ...prev.filter(
           (s) =>

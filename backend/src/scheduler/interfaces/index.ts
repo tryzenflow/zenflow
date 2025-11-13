@@ -17,6 +17,7 @@ export interface Task {
 }
 
 export interface ScheduleRequest {
+  scheduleBased: boolean;
   constraints: {
     availableHours: Interval[];
     batchSimilarTasks: boolean;

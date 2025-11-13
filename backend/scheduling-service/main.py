@@ -60,7 +60,10 @@ class SchedulerService(scheduler_pb2_grpc.SchedulerServiceServicer):
     # Convert proto → domain models
     tasks = [parse_task(t) for t in request.tasks]
     constraints = parse_constraints(request.constraints)
-    schedule_result = schedule_tasks(tasks, constraints)
+    schedule_result = schedule_tasks(
+      tasks,
+      constraints,
+    )
     # Build response
     response = scheduler_pb2.ScheduleResponse()
 

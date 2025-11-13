@@ -1,4 +1,3 @@
-from datetime import datetime
 from ortools.sat.python import cp_model
 from models import Task, Constraints, Interval
 from optimizer import optimize_function
@@ -7,12 +6,17 @@ from task_var import TaskVar
 
 def enforce_multiple_of_5(model: cp_model.CpModel, var: cp_model.IntVar, name: str):
   """Force an IntVar to be a multiple of 5."""
-  rem = model.NewIntVar(0, 4, f'rem_{name}')
+  rem = model.NewIntVar(0, 4, f"rem_{name}")
   model.AddModuloEquality(rem, var, 5)
   model.Add(rem == 0)
 
 
-def build_splittable_task(model: cp_model.CpModel, task: Task, start_min: int, end_max: int):
+def build_splittable_task(
+    model: cp_model.CpModel,
+    task: Task,
+    start_min: int,
+    end_max: int,
+):
   """Create variables and intervals for a splittable task."""
   avg = max(1, task.duration // task.max_splits)
   slack = int(avg * 0.4)
@@ -53,19 +57,20 @@ def build_splittable_task(model: cp_model.CpModel, task: Task, start_min: int, e
   return task_vars, intervals
 
 
-def build_non_splittable_task(model: cp_model.CpModel, task: Task, start_min: int, end_max: int):
+def build_non_splittable_task(
+    model: cp_model.CpModel, task: Task, start_min: int, end_max: int
+):
   """Create variables and intervals for a non-splittable task."""
   start_time = model.NewIntVar(
-    start_min, end_max - task.duration, f'start_{task.id}')
+    start_min, end_max - task.duration, f"start_{task.id}")
   end_time = model.NewIntVar(
-    start_min + task.duration, end_max, f'end_{task.id}')
-  presence = model.NewBoolVar(f'presence_{task.id}')
+    start_min + task.duration, end_max, f"end_{task.id}")
+  presence = model.NewBoolVar(f"presence_{task.id}")
 
   enforce_multiple_of_5(model, start_time, f"start_{task.id}")
-  # task.duration assumed to already be multiple of 5
 
   interval = model.NewOptionalIntervalVar(
-      start_time, task.duration, end_time, presence, f'interval_{task.id}'
+      start_time, task.duration, end_time, presence, f"interval_{task.id}"
   )
   model.Add(end_time == start_time + task.duration).OnlyEnforceIf(presence)
 
@@ -88,25 +93,36 @@ def add_prerequisite_constraints(model: cp_model.CpModel, task_vars: list[TaskVa
       for prereq_tv in task_dict[prereq_id]:
         # only if both are present
         both_present = model.NewBoolVar(
-          f'both_present_{prereq_id}_{tv.task.id}_{prereq_tv.split}_{tv.split}')
-        model.AddBoolAnd([prereq_tv.presence, tv.presence]
-                         ).OnlyEnforceIf(both_present)
-        model.AddBoolOr([prereq_tv.presence.Not(), tv.presence.Not()]).OnlyEnforceIf(
-          both_present.Not())
+            f"both_present_{prereq_id}_{tv.task.id}_{prereq_tv.split}_{tv.split}"
+        )
+        model.AddBoolAnd([prereq_tv.presence, tv.presence]).OnlyEnforceIf(
+            both_present
+        )
+        model.AddBoolOr(
+            [prereq_tv.presence.Not(), tv.presence.Not()]
+        ).OnlyEnforceIf(both_present.Not())
         model.Add(prereq_tv.end <= tv.start).OnlyEnforceIf(both_present)
 
 
-def init_deadline_weight(tasks: list[Task]):
+def init_deadline_weight(tasks: list[Task], base_deadline_weight=100):
   sorted_tasks = sorted(
-    [t for t in tasks if t.deadline is not None], key=lambda t: t.deadline)
+      [t for t in tasks if t.deadline is not None], key=lambda t: t.deadline
+  )
   deadline_weight_factor = {}
   for i, task in enumerate(sorted_tasks):
     deadline_weight_factor[task.id] = (
-      len(sorted_tasks) - i) * 10  # scale factor
+      len(sorted_tasks) - i) * base_deadline_weight
   return deadline_weight_factor
 
 
-def schedule_tasks(tasks: list[Task], constraints: Constraints, min_time=0, max_time=24 * 60, daily_load=0, max_focus_level=3) -> list[tuple[Task, int, Interval]]:
+def schedule_tasks(
+    tasks: list[Task],
+    constraints: Constraints,
+    min_time=0,
+    max_time=24 * 60,
+    daily_load=0,
+    max_focus_level=3,
+) -> list[tuple[Task, int, Interval]]:
   model = cp_model.CpModel()
   task_vars: list[TaskVar] = []
   intervals = []
@@ -133,8 +149,15 @@ def schedule_tasks(tasks: list[Task], constraints: Constraints, min_time=0, max_
   # rest of model...
   deadline_weight_factor = init_deadline_weight(tasks)
   add_prerequisite_constraints(model, task_vars)
-  optimize_function(model, task_vars, constraints, deadline_weight_factor,
-                    max_time=max_time, daily_load=daily_load, max_focus_level=max_focus_level)
+  optimize_function(
+      model,
+      task_vars,
+      constraints,
+      deadline_weight_factor,
+      max_time=max_time,
+      daily_load=daily_load,
+      max_focus_level=max_focus_level,
+  )
   solver = cp_model.CpSolver()
   solver.parameters.max_time_in_seconds = 10
   status = solver.Solve(model)

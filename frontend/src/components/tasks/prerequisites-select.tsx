@@ -10,6 +10,7 @@ import {
 } from "../ui/command";
 import { cn } from "../../lib/utils";
 import { Task } from "../../types/tasks";
+import { useMemo, useState } from "react";
 
 export function PrerequisitesSelect({
   selected,
@@ -25,6 +26,15 @@ export function PrerequisitesSelect({
   disabled?: boolean;
 }) {
   const taskMap = new Map(tasks.map((t) => [t.id, t.title]));
+  const [q, setQ] = useState("");
+  const searchedTasks = useMemo(() => {
+    return tasks.filter(
+      (t) =>
+        t.title.toLowerCase().includes(q.toLowerCase()) ||
+        t.note?.toLowerCase().includes(q.toLowerCase())
+    );
+  }, [q]);
+
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -42,11 +52,16 @@ export function PrerequisitesSelect({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="p-0">
-        <Command>
-          <CommandInput placeholder="Search duration..." className="h-9" />
+        <Command shouldFilter={false}>
+          <CommandInput
+            value={q}
+            onValueChange={setQ}
+            placeholder="Search prerequisites..."
+            className="h-9"
+          />
           <CommandEmpty>No tasks found</CommandEmpty>
           <CommandList>
-            {tasks.map((task) => (
+            {searchedTasks.map((task) => (
               <CommandItem value={task.id} onSelect={onChange} key={task.id}>
                 {task.title}
                 <Check

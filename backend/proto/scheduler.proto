@@ -59,7 +59,6 @@ message ScheduleRequest {
   int32 min_time = 3;
   int32 max_time = 4;
   int32 daily_load = 5;
-  bool schedule_based = 6;
 }
 
 message ScheduleResponse {
