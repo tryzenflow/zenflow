@@ -36,12 +36,15 @@ export default function HomePage() {
               <MonthView
                 selectedDate={body.selectedDate}
                 schedules={body.schedules}
+                deleteSchedule={body.deleteSchedule}
                 setSelectedDate={body.setSelectedDate}
+                setCurrentView={body.setCurrentView}
               />
             );
           case "Year view":
             return (
               <YearView
+                setCurrentView={body.setCurrentView}
                 selectedDate={body.selectedDate}
                 schedules={body.schedules}
                 setSelectedDate={body.setSelectedDate}

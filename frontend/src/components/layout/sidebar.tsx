@@ -43,7 +43,7 @@ export const Sidebar = ({
     useState(true);
   useState(false);
   return (
-    <ScrollArea className="w-full hidden md:block md:w-96 border-l px-4 flex-shrink-0 bg-muted overflow-y-auto">
+    <ScrollArea className="w-full hidden lg:block lg:w-80 border-l flex-shrink-0 bg-muted overflow-y-auto">
       <div className="bg-muted z-10 pt-4 pb-2">
         {/* MINI CALENDAR */}
         <MiniCalendar

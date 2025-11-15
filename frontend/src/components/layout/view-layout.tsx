@@ -15,7 +15,15 @@ import {
   ScheduleResponse,
 } from "../../types/schedule";
 import { Task } from "../../types/tasks";
-import { format, addDays, subDays, startOfWeek } from "date-fns";
+import {
+  format,
+  addDays,
+  subDays,
+  startOfWeek,
+  startOfMonth,
+  endOfWeek,
+  endOfMonth,
+} from "date-fns";
 import { toast } from "sonner";
 import { getData, postData, deleteData, patchData, putData } from "../../api";
 import { EditTaskDialog } from "../tasks/edit-task-dialog";
@@ -36,6 +44,7 @@ interface BodyProps {
     date: string,
     split: number
   ) => Promise<void>;
+  setCurrentView: (view: string) => void;
   updateScheduleTime: (
     taskId: string,
     date: string,
@@ -43,7 +52,6 @@ interface BodyProps {
     newStart: number,
     newEnd: number
   ) => void;
-  // NEW: Refetch trigger for TaskView after scheduling
   taskViewRefetchTrigger: number;
   setTaskViewRefetchTrigger: Dispatch<SetStateAction<number>>;
 }
@@ -120,18 +128,11 @@ export default function ViewLayout({
       startDateStr = format(startOfWeek(selectedDate), "yyyy-MM-dd");
       endDateStr = format(endDate, "yyyy-MM-dd");
     } else if (currentView === "Month view") {
-      const startOfMonth = new Date(
-        selectedDate.getFullYear(),
-        selectedDate.getMonth(),
-        1
+      startDateStr = format(
+        startOfWeek(startOfMonth(selectedDate)),
+        "yyyy-MM-dd"
       );
-      const endOfMonth = new Date(
-        selectedDate.getFullYear(),
-        selectedDate.getMonth() + 1,
-        0
-      );
-      startDateStr = format(startOfMonth, "yyyy-MM-dd");
-      endDateStr = format(endOfMonth, "yyyy-MM-dd");
+      endDateStr = format(endOfWeek(endOfMonth(selectedDate)), "yyyy-MM-dd");
     } else if (currentView === "Year view") {
       const startOfYear = new Date(selectedDate.getFullYear(), 0, 1);
       const endOfYear = new Date(selectedDate.getFullYear(), 11, 31);
@@ -379,8 +380,8 @@ export default function ViewLayout({
     currentView,
     loading,
     setLoading,
-    // REMOVED: tasks, setTasks
     updateScheduleTime,
+    setCurrentView,
     taskViewRefetchTrigger, // NEW
     setTaskViewRefetchTrigger, // NEW
   };
