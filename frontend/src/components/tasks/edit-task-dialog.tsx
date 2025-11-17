@@ -5,7 +5,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useTaskForm } from "@/hooks/use-task-form";
-import { addDays, addMinutes, format, startOfDay } from "date-fns";
+import { addMinutes, format, startOfDay } from "date-fns";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getData, patchData } from "../../api";
@@ -63,16 +63,18 @@ export function EditTaskDialog({
 
   useEffect(() => {
     if (!open) return;
-    getData<CategoryItem[]>("/categories").then((data) => {
-      setCategories(data);
+    getData<{ data: CategoryItem[] }>("/categories").then((data) => {
+      setCategories(data.data);
     });
   }, [open]);
 
   useEffect(() => {
-    if (!scheduleDate || !open) return;
-    const nextDay = format(addDays(scheduleDate, 1), "yyyy-MM-dd");
+    console.log("Fetch prerequisite tasks");
+
+    if (!scheduleDate || !open) setTasks([]);
+    const formattedScheduleDate = format(scheduleDate, "yyyy-MM-dd");
     getData<{ data: Task[] }>(
-      `/tasks?start=${format(scheduleDate, "yyyy-MM-dd")}&end=${nextDay}`
+      `/tasks?start=${formattedScheduleDate}&end=${formattedScheduleDate}`
     ).then(({ data }) => setTasks(data));
   }, [scheduleDate, open]);
 

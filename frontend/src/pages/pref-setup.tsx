@@ -11,6 +11,7 @@ import {
   dayMap,
   CategoryItem,
   defaultCategories,
+  UpdateCategoryPayload,
 } from "@/types/prefs"; // Assume types are in './types' or defined above
 
 import { FocusBlocksPrefs } from "../components/prefs/focus-blocks";
@@ -143,13 +144,42 @@ export function PrefSetupPage() {
     }
   };
 
+  const handleAddCategory = (newCategoryName: string) => {
+    if (newCategoryName.trim()) {
+      const newCategory: CategoryItem = {
+        id: Date.now().toString(),
+        name: newCategoryName.trim(),
+        isEditable: false,
+      };
+      setCategories((prev) => [...prev, newCategory]);
+    }
+  };
+
+  const handleEditCategoryToggle = (
+    id: string,
+    updatePayload: UpdateCategoryPayload,
+    editing: boolean
+  ) => {
+    setCategories((prev) =>
+      prev.map((c) =>
+        c.id === id ? { ...c, ...updatePayload, isEditable: editing } : c
+      )
+    );
+  };
+  const handleDeleteCategory = (id: string) => {
+    setCategories((prev) => prev.filter((c) => c.id !== id));
+  };
+
   const renderStep = () => {
     switch (currentStep) {
       case 1:
         return (
           <CategoriesPref
+            handleAdd={handleAddCategory}
+            handleEdit={handleEditCategoryToggle}
             categories={categories}
             setCategories={setCategories}
+            handleDelete={handleDeleteCategory}
           />
         );
       case 2:
@@ -162,9 +192,8 @@ export function PrefSetupPage() {
       case 3:
         return (
           <SchedulingStyle
-            initialSchedulingStyle={schedulingStyle}
-            onNext={handleFinalSubmit}
-            onBack={handleBack}
+            styleData={schedulingStyle}
+            setStyleData={setSchedulingStyle}
           />
         );
       default:

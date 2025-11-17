@@ -79,10 +79,7 @@ export class TasksService {
     const tasks = await this.prisma.task.findMany({
       where: {
         userId,
-        OR: [
-          { rrule: { not: null } },
-          { schedules: { some: { date: { gte: startDate, lte: endDate } } } },
-        ],
+        schedules: { some: { date: { gt: startDate, lte: endDate } } },
       },
       include: {
         prerequisites: true,
@@ -92,7 +89,7 @@ export class TasksService {
         },
       },
     });
-    return this.filterRecurringTasks(tasks, startDate, endDate);
+    return tasks;
   }
 
   async findUnscheduled(
@@ -119,7 +116,7 @@ export class TasksService {
       orderBy: [{ createdAt: "desc" }, { schedules: { _count: "desc" } }],
     });
 
-    return this.filterRecurringTasks(tasks, startDate, endDate, true);
+    return tasks;
   }
 
   async findById(id: string, userId: string) {
@@ -141,10 +138,7 @@ export class TasksService {
   async findToSchedule(scheduleDate: string, userId: string) {
     const date = new Date(scheduleDate);
     const tasks = await this.prisma.task.findMany({
-      where: {
-        userId,
-        OR: [{ rrule: { not: null } }, { schedules: { some: { date } } }],
-      },
+      where: { userId, schedules: { some: { date } } },
       include: {
         schedules: { where: { date } },
         category: { select: { id: true } },
@@ -152,11 +146,7 @@ export class TasksService {
       },
     });
 
-    return this.filterRecurringTasks(
-      tasks,
-      date,
-      endOfDay(date)
-    ) as typeof tasks;
+    return tasks;
   }
 
   async update(

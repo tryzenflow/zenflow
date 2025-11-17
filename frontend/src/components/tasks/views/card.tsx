@@ -31,9 +31,9 @@ interface TaskCardProps {
 }
 
 const priorityMap = {
-  1: { className: "bg-blue-500", text: "Low" },
+  3: { className: "bg-blue-500", text: "Low" },
   2: { className: "bg-yellow-500", text: "Medium" },
-  3: { className: "bg-red-500", text: "High" },
+  1: { className: "bg-red-500", text: "High" },
 };
 
 const focusMap = {

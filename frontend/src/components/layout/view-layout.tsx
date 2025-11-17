@@ -211,6 +211,7 @@ export default function ViewLayout({
       loadUnscheduledTasks();
     } catch (error: any) {
       toast.error(error.message || "Failed to schedule tasks");
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -264,20 +265,32 @@ export default function ViewLayout({
         await patchData(`/tasks/${taskId}`, {
           scheduleDate: format(selectedDate, "yyyy-MM-dd"),
         });
-        toast.success("Task added to the day's schedule");
-        // Re-run schedule to place the task
-        await schedule();
-        // The schedule function will handle the TaskView trigger
         setUnscheduledTasks((prev) => prev.filter((t) => t.id !== taskId));
+        toast.success("Task added to the day's schedule");
+        try {
+          await schedule();
+        } catch (error: any) {
+          const task = unscheduledTasks.find((t) => t.id === taskId);
+          if (!task) return;
+
+          setSchedules((prev) => [
+            ...prev,
+            {
+              date: format(selectedDate, "yyyy-MM-dd"),
+              start: null,
+              end: null,
+              split: 0,
+              task,
+            },
+          ]);
+        }
       } catch (error: any) {
-        toast.error(
-          error.message || "Failed to add task to the day's schedule"
-        );
+        toast.error(error.message || "Failed to add task to schedule");
       } finally {
         setLoading(false);
       }
     },
-    [selectedDate, schedule]
+    [selectedDate, schedule, unscheduledTasks]
   );
 
   const deleteSchedule = useCallback(

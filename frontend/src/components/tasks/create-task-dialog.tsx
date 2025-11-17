@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { format, addDays, addMinutes } from "date-fns";
+import { format, addMinutes } from "date-fns";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -54,17 +54,25 @@ export function CreateTaskDialog({
 
   useEffect(() => {
     if (!open) return;
-    getData<CategoryItem[]>("/categories").then((data) => {
-      setCategories(data);
+    getData<{ data: CategoryItem[] }>("/categories").then((data) => {
+      setCategories(data.data);
     });
   }, [open]);
 
   useEffect(() => {
-    if (!scheduleDate || !open) return;
-    const nextDay = format(addDays(scheduleDate, 1), "yyyy-MM-dd");
+    if (!scheduleDate || !open) {
+      setTasks([]);
+      return;
+    }
+    console.log("Fetch prerequisites tasks");
+    const formattedScheduleDate = format(scheduleDate, "yyyy-MM-dd");
+
     getData<{ data: Task[] }>(
-      `/tasks?start=${format(scheduleDate, "yyyy-MM-dd")}&end=${nextDay}`
-    ).then(({ data }) => setTasks(data));
+      `/tasks?start=${formattedScheduleDate}&end=${formattedScheduleDate}`
+    ).then(({ data }) => {
+      setTasks(data);
+      console.log(`Fetch tasks on ${formattedScheduleDate}`, data);
+    });
   }, [scheduleDate, open]);
 
   async function onSubmit(values: TaskFormValues) {

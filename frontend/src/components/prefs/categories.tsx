@@ -2,44 +2,32 @@ import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { X, Plus, GripVertical } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { CategoryItem } from "../../types/prefs";
+import { CategoryItem, UpdateCategoryPayload } from "../../types/prefs";
 
 interface CategoriesPrefProps {
   categories: CategoryItem[];
   setCategories: React.Dispatch<React.SetStateAction<CategoryItem[]>>;
+  handleAdd: (name: string) => void;
+  handleEdit: (
+    id: string,
+    updatePayload: UpdateCategoryPayload,
+    editing: boolean
+  ) => void;
+  handleDelete: (id: string) => void;
 }
 
 export function CategoriesPref({
   categories,
   setCategories,
+  handleAdd,
+  handleEdit,
+  handleDelete,
 }: CategoriesPrefProps) {
   const [newCategoryName, setNewCategoryName] = useState("");
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
 
   // State to track the ID of the item currently being dragged *over*
   const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
-
-  const handleDelete = (id: string) => {
-    setCategories((prev) => prev.filter((c) => c.id !== id));
-  };
-
-  const handleAdd = () => {
-    if (newCategoryName.trim()) {
-      const newCategory: CategoryItem = {
-        id: Date.now().toString(),
-        name: newCategoryName.trim(),
-        isEditable: false,
-      };
-      setCategories((prev) => [...prev, newCategory]);
-      setNewCategoryName("");
-    }
-  };
-
-  const handleEditToggle = (id: string, editing: boolean) => {
-    setCategories((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, isEditable: editing } : c))
-    );
-  };
 
   const handleNameChange = (id: string, newName: string) => {
     setCategories((prev) =>
@@ -96,6 +84,15 @@ export function CategoriesPref({
     newCategories.splice(targetIndex, 0, movedItem);
 
     setCategories(newCategories);
+    handleEdit(
+      draggedItemId,
+      {
+        beforeId: newCategories[targetIndex - 1]?.id,
+        afterId: newCategories[targetIndex + 1]?.id,
+        name: movedItem.name,
+      },
+      false
+    );
   };
 
   return (
@@ -140,11 +137,13 @@ export function CategoriesPref({
                   onChange={(e) =>
                     handleNameChange(category.id, e.target.value)
                   }
-                  onBlur={() => handleEditToggle(category.id, false)}
+                  onBlur={() =>
+                    handleEdit(category.id, { name: category.name }, false)
+                  }
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      handleEditToggle(category.id, false);
+                      handleEdit(category.id, { name: category.name }, false);
                     }
                   }}
                   autoFocus
@@ -155,7 +154,7 @@ export function CategoriesPref({
                   className="flex-grow cursor-pointer truncate"
                   onDoubleClick={(e) => {
                     e.stopPropagation();
-                    handleEditToggle(category.id, true);
+                    handleEdit(category.id, { name: category.name }, true);
                   }}
                 >
                   {category.name}
@@ -183,7 +182,10 @@ export function CategoriesPref({
             type="button"
             variant="ghost"
             size="icon"
-            onClick={handleAdd}
+            onClick={() => {
+              handleAdd(newCategoryName);
+              setNewCategoryName("");
+            }}
             disabled={!newCategoryName.trim()}
           >
             <Plus className="h-5 w-5" />
@@ -195,7 +197,8 @@ export function CategoriesPref({
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
-                handleAdd();
+                handleAdd(newCategoryName);
+                setNewCategoryName("");
               }
             }}
           />

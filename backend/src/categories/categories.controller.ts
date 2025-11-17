@@ -22,34 +22,64 @@ export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 
   @Post("populate")
-  populate(@CurrentUser() user: User, @Body() dto: PopulateCategoriesDto) {
-    return this.categoriesService.populate(user.id, dto);
+  async populate(
+    @CurrentUser() user: User,
+    @Body() dto: PopulateCategoriesDto
+  ) {
+    const newCategories = await this.categoriesService.populate(user.id, dto);
+    return {
+      success: true,
+      data: newCategories,
+    };
   }
 
   @Post()
-  create(
+  async create(
     @Body() createCategoryDto: CreateCategoryDto,
     @CurrentUser() user: User
   ) {
-    return this.categoriesService.create(createCategoryDto, user.id);
+    const newCategory = await this.categoriesService.create(
+      createCategoryDto,
+      user.id
+    );
+    return {
+      success: true,
+      data: newCategory,
+    };
   }
 
   @Get()
-  findAll(@CurrentUser() user: User) {
-    return this.categoriesService.findAll(user.id);
+  async findAll(@CurrentUser() user: User) {
+    const categories = await this.categoriesService.findAll(user.id);
+    return {
+      success: true,
+      data: categories,
+    };
   }
 
   @Patch(":id")
-  update(
+  async update(
     @Param("id") id: string,
     @Body() updateCategoryDto: UpdateCategoryDto,
     @CurrentUser() user: User
   ) {
-    return this.categoriesService.update(id, updateCategoryDto, user.id);
+    const updated = await this.categoriesService.update(
+      id,
+      updateCategoryDto,
+      user.id
+    );
+    return {
+      success: true,
+      data: updated,
+    };
   }
 
   @Delete(":id")
-  remove(@Param("id") id: string, @CurrentUser() user: User) {
-    return this.categoriesService.remove(id, user.id);
+  async remove(@Param("id") id: string, @CurrentUser() user: User) {
+    await this.categoriesService.remove(id, user.id);
+    return {
+      success: true,
+      message: "Category deleted successfully",
+    };
   }
 }

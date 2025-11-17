@@ -28,12 +28,13 @@ export function PrerequisitesSelect({
   const taskMap = new Map(tasks.map((t) => [t.id, t.title]));
   const [q, setQ] = useState("");
   const searchedTasks = useMemo(() => {
+    if (q.trim() === "") return tasks;
     return tasks.filter(
       (t) =>
         t.title.toLowerCase().includes(q.toLowerCase()) ||
         t.note?.toLowerCase().includes(q.toLowerCase())
     );
-  }, [q]);
+  }, [q, tasks]);
 
   return (
     <Popover>

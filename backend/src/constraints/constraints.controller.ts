@@ -36,30 +36,30 @@ export class ConstraintsController {
     };
   }
 
-  @Get(":id")
-  async get(@Param("id") id: string, @CurrentUser() user: User) {
-    const constraint = await this.constraintsService.getById(id, user.id);
+  @Get()
+  async get(@CurrentUser() user: User) {
+    const constraints = await this.constraintsService.getAll(user.id);
     return {
       success: true,
-      message: `Found one constraint with id ${id}`,
-      data: constraint,
+      message: `Found ${constraints.length} constraints for user`,
+      data: constraints,
     };
   }
 
-  @Patch(":id")
+  @Patch(":weekday")
   async update(
-    @Param("id") id: string,
+    @Param("weekday") weekday: number,
     @Body() updateConstraintsDto: UpdateConstraintDto,
     @CurrentUser() user: User
   ) {
     const updated = await this.constraintsService.update(
-      id,
+      weekday,
       user.id,
       updateConstraintsDto
     );
     return {
       success: true,
-      message: `Update successfully constraint ${id}`,
+      message: `Update successfully constraint on ${weekday}`,
       data: updated,
     };
   }

@@ -27,6 +27,12 @@ export interface DailyConstraints {
   batchSimilarTasks: boolean;
 }
 
+export interface Constraints extends DailyConstraints {
+  id: string;
+  weekday: number; // 0=Sun, 1=Mon, ..., 6=Sat
+  focusBlocks: FocusBlock[];
+}
+
 export type DaySchedulingStyle = {
   [key in
     | "Mon"
@@ -37,6 +43,16 @@ export type DaySchedulingStyle = {
     | "Sat"
     | "Sun"]: DailyConstraints;
 };
+
+export interface UpdateCategoryPayload {
+  beforeId?: string;
+  afterId?: string;
+  name: string;
+}
+
+export interface NewCategoryPayload {
+  name: string;
+}
 
 export interface FinalConstraintSubmission {
   minGapBetweenTasks: number;

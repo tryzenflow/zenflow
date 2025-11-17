@@ -7,6 +7,7 @@ export class MailService {
 
   async sendLoginEmail(to: string, otp: string) {
     await this.mailerService.sendMail({
+      from: "Zenflow <no-reply@zenflow.io>",
       to,
       subject: "Confirm your email account",
       template: "./confirm-email",

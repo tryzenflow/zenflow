@@ -65,74 +65,43 @@ export class ConstraintsService {
       });
     }
   }
-
   async getByWeekday(userId: string, weekday: number) {
     const constraint = await this.prisma.constraint.findUnique({
       where: { userId_weekday: { userId, weekday } },
-      include: { focusBlocks: true },
-    });
-    if (!constraint)
-      throw new NotFoundException({
-        success: false,
-        message: `Cannot find a constraint on ${getWeekday(weekday)}`,
-      });
-    return constraint;
-  }
-
-  async getById(id: string, userId: string) {
-    const constraint = await this.prisma.constraint.findUnique({
-      where: { id, userId },
-      include: { focusBlocks: true },
+      include: { focusBlocks: { orderBy: { start: "asc" } } },
     });
     if (!constraint) throw new NotFoundException();
     return constraint;
   }
 
+  async getAll(userId: string) {
+    const constraints = await this.prisma.constraint.findMany({
+      where: { userId },
+      include: { focusBlocks: true },
+    });
+    return constraints;
+  }
+
   async update(
-    id: string,
+    weekday: number,
     userId: string,
     {
-      deleteFocusBlocksIds,
       focusBlocks,
       batchSimilarTasks,
       maxDailyLoad,
       minGapBetweenTasks,
-      updateFocusBlocksDto,
     }: UpdateConstraintDto
   ) {
-    const existingConstraints = await this.getById(id, userId);
-    if (!existingConstraints)
-      throw new NotFoundException({
-        success: false,
-        message: `Cannot update constraint with id ${id} because it is not found`,
-      });
-    validateConstraintsOverlaps([
-      ...(focusBlocks ?? []),
-      ...existingConstraints.focusBlocks,
-      ...(updateFocusBlocksDto ?? []),
-    ]);
-
-    const updateFocusBlockIds = updateFocusBlocksDto?.map((dto) => dto.id);
-
-    validateNoIntersectIds(updateFocusBlockIds, deleteFocusBlocksIds);
-
+    validateConstraintsOverlaps(focusBlocks || []);
     const updated = await this.prisma.constraint.update({
-      where: { id },
+      where: { userId_weekday: { userId, weekday } },
       data: {
         batchSimilarTasks,
         maxDailyLoad,
         minGapBetweenTasks,
         focusBlocks: focusBlocks
           ? {
-              updateMany: updateFocusBlocksDto
-                ? updateFocusBlocksDto.map(({ id, ...rest }) => ({
-                    where: { id },
-                    data: { ...rest },
-                  }))
-                : undefined,
-              deleteMany: deleteFocusBlocksIds
-                ? deleteFocusBlocksIds.map((id) => ({ id }))
-                : undefined,
+              deleteMany: {},
               createMany: {
                 data: focusBlocks.map(({ start, end, level }) => ({
                   start,

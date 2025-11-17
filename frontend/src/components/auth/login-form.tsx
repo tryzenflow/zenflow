@@ -123,9 +123,7 @@ export function LoginForm({
 
       const result = await response.json();
       if (response.ok && result.success && result.data) {
-        toast.success("Login successfully", {
-          description: "You will be redirected to the home page shortly",
-        });
+        toast.success("Login successfully");
         setUser(result.data);
         navigate("/");
       } else {
