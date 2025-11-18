@@ -63,7 +63,7 @@ export function validatePreSchedule(body: ScheduleRequest): string[] {
       const prerequisiteTask = tasksMap.get(p);
       if (!prerequisiteTask || (!prerequisiteTask.mandatory && t.mandatory))
         errors.push(
-          `Mandatory task "${t.title}" depends on task "${tasksMap.get(p)!.title}", which may be excluded or optional`
+          `Mandatory task "${t.title}" depends on task "${tasksMap.get(p)?.title}", which may be excluded or optional`
         );
     }
   }

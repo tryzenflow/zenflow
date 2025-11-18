@@ -1,4 +1,4 @@
-import { LogOut, Settings } from "lucide-react";
+import { Grid2X2, Home, LogOut, Settings } from "lucide-react";
 import { useState } from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { useNavigate } from "react-router-dom";
+import { redirect, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { postData } from "../../api";
 import { useUserStore } from "../../hooks/use-user-store";
@@ -66,6 +66,14 @@ export function NavUser() {
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => navigate("/")}>
+            <Home className="h-4 w-4" />
+            Home
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => navigate("/analytics")}>
+            <Grid2X2 className="h-4 w-4" />
+            Analytics
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
             <Settings className="h-4 w-4" />
             Settings

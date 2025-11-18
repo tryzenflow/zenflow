@@ -7,6 +7,7 @@ import HomePage from "./pages/home";
 import LoginPage from "./pages/login";
 import { PrefSetupPage } from "./pages/pref-setup";
 import { User } from "./types/user";
+import AnalyticsPage from "./pages/analytics";
 
 function App() {
   const user = useUserStore((state) => state.user);
@@ -34,6 +35,7 @@ function App() {
         <Route index element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/prefs" element={<PrefSetupPage />} />
+        <Route path="/analytics" element={<AnalyticsPage />} />
       </Routes>
     </BrowserRouter>
   );

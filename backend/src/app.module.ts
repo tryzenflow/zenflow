@@ -18,6 +18,7 @@ import { SchedulesModule } from "./schedules/schedules.module";
 import { ConstraintsModule } from "./constraints/constraints.module";
 import { CategoriesModule } from "./categories/categories.module";
 import { FilesModule } from "./files/files.module";
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { FilesModule } from "./files/files.module";
     ConstraintsModule,
     CategoriesModule,
     FilesModule,
+    AnalyticsModule,
   ],
   providers: [AppService, MailService],
   controllers: [AppController],
