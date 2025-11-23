@@ -10,7 +10,6 @@ import { CreateTaskDto } from "./dto/create-task.dto";
 import { Prisma, Schedule, Task } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { validateTaskFields } from "./validators/task-fields";
-import { ScheduleTasksDto } from "../scheduler/dto/schedule-tasks.dto";
 import { FindSchedulesDto } from "../schedules/dto/find-schedules.dto";
 import { RRule } from "rrule";
 import { endOfDay, startOfDay } from "date-fns";
@@ -25,13 +24,25 @@ export class TasksService {
       prerequisites = [],
       rrule,
       scheduleDate,
+      deadlineDate,
+      deadlineTime,
       ...createTaskDto
     }: CreateTaskDto,
-    userId: string
+    userId: string,
+    timezone: string
   ) {
     const errors = validateTaskFields({ prerequisites, ...createTaskDto });
     if (errors.length > 0) {
       throw new BadRequestException({ success: false, message: errors });
+    }
+
+    let deadline: Date | undefined;
+    if (deadlineDate) {
+      const timePart = deadlineTime ?? "23:59:59";
+      const localDeadlineStr = `${deadlineDate}T${timePart}`;
+
+      // Convert from user's timezone to UTC
+      deadline = fromZonedTime(localDeadlineStr, timezone);
     }
 
     try {
@@ -41,6 +52,7 @@ export class TasksService {
           rrule,
           prerequisites: { connect: prerequisites.map((p) => ({ id: p })) },
           userId,
+          deadline,
           schedules: scheduleDate
             ? {
                 create: {
@@ -152,13 +164,16 @@ export class TasksService {
   async update(
     id: string,
     {
+      deadlineTime,
+      deadlineDate,
       prerequisites,
       categoryId,
       rrule,
       scheduleDate,
       ...updateTaskDto
     }: UpdateTaskDto,
-    userId: string
+    userId: string,
+    timezone: string
   ) {
     try {
       const errors = validateTaskFields({
@@ -168,12 +183,21 @@ export class TasksService {
       });
 
       if (errors.length > 0) throw new BadRequestException(errors);
+      let deadline: Date | undefined;
+      if (deadlineDate) {
+        const timePart = deadlineTime ?? "23:59:59";
+        const localDeadlineStr = `${deadlineDate}T${timePart}`;
+
+        // Convert from user's timezone to UTC
+        deadline = fromZonedTime(localDeadlineStr, timezone);
+      }
 
       const updated = await this.prisma.task.update({
         where: { id, userId },
         data: {
           ...updateTaskDto,
           rrule,
+          deadline,
           category: categoryId ? { connect: { id: categoryId } } : undefined,
           schedules: {
             create: scheduleDate

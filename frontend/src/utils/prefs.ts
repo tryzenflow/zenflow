@@ -22,7 +22,9 @@ export const timeToMinutes = (time: string): number => {
     throw new Error("Invalid time provided, got " + time);
   const [t, ampm] = time.split(" ");
   const [h, m] = t.split(":");
-  const militaryHour = ampm === "AM" || h === "12" ? +h : +h + 12;
+  const militaryHour =
+    ampm === "AM" ? (h === "12" ? 0 : +h) : h === "12" ? 12 : +h + 12;
+
   const minutes = militaryHour * 60 + +m;
   if (minutes === DAILY_HORIZON - 1) return minutes + 1;
   return minutes;

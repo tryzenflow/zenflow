@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 interface TaskCardProps {
   task: Task;
@@ -50,12 +50,56 @@ export function TaskCard({
   deleteSchedule,
 }: TaskCardProps) {
   const [open, setOpen] = useState(false);
+  const firstImageOrVideoUrl = useMemo(() => {
+    // find first occurrence of img or video tag and extract src
+    const imgRegex = /<img[^>]+src="([^">]+)"/i;
+    const videoRegex = /<video[^>]+src="([^">]+)"/i;
+    const imgMatch = task.note?.match(imgRegex);
+    if (imgMatch && imgMatch[1]) {
+      return { match: "image", url: imgMatch[1] };
+    }
+    const videoMatch = task.note?.match(videoRegex);
+    if (videoMatch && videoMatch[1]) {
+      return { match: "video", url: videoMatch[1] };
+    }
+  }, [task.note]);
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    videoRef.current?.play().catch(() => {});
+  }, [task.id]);
+
   return (
     <Card className="py-0 min-w-72 gap-3">
       <div
-        style={{ background: getGradientIndex(task.id) }}
+        style={{
+          background: firstImageOrVideoUrl?.match
+            ? "none"
+            : getGradientIndex(task.id),
+        }}
         className="rounded-t-xl relative aspect-video"
       >
+        {task.note &&
+          (firstImageOrVideoUrl?.match === "image" ? (
+            <img
+              src={firstImageOrVideoUrl.url}
+              alt="Task Media"
+              className="w-72 h-40 object-cover rounded-t-xl"
+            />
+          ) : firstImageOrVideoUrl?.match === "video" ? (
+            <video
+              src={firstImageOrVideoUrl.url}
+              autoPlay
+              playsInline
+              preload="auto"
+              ref={videoRef}
+              loop
+              muted
+              className="w-72 h-40 object-cover rounded-t-xl"
+              controls={false}
+            />
+          ) : null)}
         <div className="flex gap-x-3 absolute z-10 top-4 right-4">
           {openEditDialog && (
             <Button
@@ -96,7 +140,7 @@ export function TaskCard({
           </div>
         </div>
         <div className="flex items-center gap-x-2">
-          {task.earliestStart && (
+          {task.earliestStart !== undefined && (
             <div className="flex items-center gap-x-2 text-muted-foreground text-sm">
               <ClockArrowUp className="size-4" />
               <span>{minutesToTime(task.earliestStart)}</span>

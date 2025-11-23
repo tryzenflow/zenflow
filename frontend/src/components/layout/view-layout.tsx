@@ -29,6 +29,7 @@ import { getData, postData, deleteData, patchData, putData } from "../../api";
 import { EditTaskDialog } from "../tasks/edit-task-dialog";
 import { Navbar } from "./navbar";
 import { Sidebar } from "./sidebar";
+import { deleteTask } from "../../utils/tasks";
 
 interface BodyProps {
   schedules: Schedule[];
@@ -91,7 +92,6 @@ export default function ViewLayout({
 
   // Derived state
   const droppedOutSchedules: Schedule[] = useMemo(() => {
-    // (has a null schedule) & (on selected date)
     return schedules.filter(
       (s) =>
         s.start === null &&
@@ -333,7 +333,7 @@ export default function ViewLayout({
   const deleteUnscheduledTasks = async (id: string) => {
     setLoading(true);
     try {
-      await deleteData(`/tasks/${id}`);
+      await deleteTask(id);
       toast.success("Delete task successfully");
       setUnscheduledTasks((prev) => prev.filter((t) => t.id !== id));
       // Trigger TaskView refetch

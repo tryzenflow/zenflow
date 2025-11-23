@@ -7,6 +7,7 @@ import {
   IsISO8601,
   IsOptional,
   IsString,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -51,8 +52,13 @@ export class CreateTaskDto {
   latestEnd?: number;
 
   @IsOptional()
-  @IsISO8601()
-  deadline?: string;
+  @IsDateString()
+  @MaxLength(10)
+  deadlineDate?: string;
+
+  @IsOptional()
+  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/)
+  deadlineTime?: string;
 
   @IsBoolean()
   @IsOptional()

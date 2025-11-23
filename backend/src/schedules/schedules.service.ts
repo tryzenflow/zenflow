@@ -35,8 +35,14 @@ export class SchedulesService {
             date: new Date(date),
             taskId: s.taskId,
             split: s?.split ?? 0,
-            start: s.start ? minutesToUtc(date, s.start, timezone) : undefined,
-            end: s.end ? minutesToUtc(date, s.end, timezone) : undefined,
+            start:
+              s.start !== undefined
+                ? minutesToUtc(date, s.start, timezone)
+                : undefined,
+            end:
+              s.end !== undefined
+                ? minutesToUtc(date, s.end, timezone)
+                : undefined,
           })),
           select: {
             date: true,

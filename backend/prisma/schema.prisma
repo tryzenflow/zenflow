@@ -104,11 +104,13 @@ model Category {
 }
 
 model File {
-  id       String @id @default(uuid())
-  filename String
-  path     String
-  mimetype String
-  userId   String
+  id           String @id @default(uuid())
+  originalName String
+  filename     String
+  path         String
+  mimetype     String
+  size         Int
+  userId       String
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

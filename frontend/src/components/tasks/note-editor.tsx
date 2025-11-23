@@ -1,49 +1,31 @@
-import { Toggle } from "@/components/ui/toggle";
-import {
-  Bold,
-  Italic,
-  List,
-  ListOrdered,
-  Paperclip,
-  Underline,
-} from "lucide-react";
-import { Button } from "../ui/button";
-import { Textarea } from "../ui/textarea";
+import { Editor } from "../common/editor";
+import { useContentEditor } from "@/hooks/use-editor";
+import { useEffect } from "react";
 
 interface NoteEditorProps {
+  initialValue?: string;
   value: string;
   onChange: (value: string) => void;
+  newUploadsRef?: React.RefObject<string[]>;
   disabled?: boolean;
 }
 
-export function NoteEditor({ value, onChange, disabled }: NoteEditorProps) {
-  return (
-    <div className="border rounded-md">
-      <div className="flex items-center gap-1 p-2 border-b">
-        <Toggle size="sm" aria-label="Toggle bold">
-          <Bold className="h-4 w-4" />
-        </Toggle>
-        <Toggle size="sm" aria-label="Toggle italic">
-          <Italic className="h-4 w-4" />
-        </Toggle>
-        <Toggle size="sm" aria-label="Toggle underline">
-          <Underline className="h-4 w-4" />
-        </Toggle>
-        <Toggle size="sm" aria-label="Toggle unordered list">
-          <List className="h-4 w-4" />
-        </Toggle>
-        <Toggle size="sm" aria-label="Toggle ordered list">
-          <ListOrdered className="h-4 w-4" />
-        </Toggle>
-        <Button variant="ghost" size="icon" aria-label="Upload attachments">
-          <Paperclip className="h-4 w-4" />
-        </Button>
-      </div>
-      <Textarea
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
-      />
-    </div>
-  );
+export function NoteEditor({
+  initialValue,
+  value,
+  onChange,
+  disabled,
+  newUploadsRef,
+}: NoteEditorProps) {
+  const editor = useContentEditor({
+    content: value,
+    onChange: (newValue) => onChange(newValue),
+    editable: !disabled,
+  });
+
+  useEffect(() => {
+    editor.commands.setContent(initialValue || "");
+  }, [initialValue, editor]);
+
+  return <Editor editor={editor} newUploadsRef={newUploadsRef} />;
 }

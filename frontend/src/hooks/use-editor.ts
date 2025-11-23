@@ -1,0 +1,47 @@
+import { useEditor } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import { sanitizeContent } from "@/utils/sanitizer";
+import Underline from "@tiptap/extension-underline";
+import Highlight from "@tiptap/extension-highlight";
+import Image from "@tiptap/extension-image";
+import { Video } from "@/components/common/editor/video-block";
+import { CustomLink } from "@/components/common/editor/custom-link";
+
+interface ContentEditor {
+  content?: string;
+  onChange: (newValue: string) => void;
+  editable?: boolean;
+}
+
+export const useContentEditor = ({
+  content,
+  onChange,
+  editable,
+}: ContentEditor) => {
+  const editor = useEditor(
+    {
+      extensions: [
+        StarterKit.configure({ codeBlock: false }),
+        CustomLink,
+        Image,
+        Highlight,
+        Underline,
+        Video,
+      ],
+      editable,
+      content,
+      editorProps: {
+        attributes: {
+          class:
+            "relative break-words text-sm min-h-24 px-3 py-2 max-h-96 focus:outline-none overflow-hidden rounded-lg markdown",
+        },
+      },
+      onUpdate({ editor }) {
+        const newContent = sanitizeContent(editor.getHTML());
+        onChange(newContent);
+      },
+    },
+    [editable]
+  );
+  return editor;
+};

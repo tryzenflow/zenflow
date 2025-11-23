@@ -1,6 +1,4 @@
-import { useState, useEffect } from "react";
-import { format, addMinutes } from "date-fns";
-import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -8,14 +6,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { postData, getData } from "../../api";
-import { CategoryItem } from "../../types/prefs";
-import { Task, TaskResponse } from "../../types/tasks";
-import { TaskForm } from "./form/task-form";
 import { useTaskForm } from "@/hooks/use-task-form";
+import { format } from "date-fns";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { getData, postData } from "../../api";
+import { useFilesTracker } from "../../hooks/use-files-tracker";
+import { useUserStore } from "../../hooks/use-user-store";
+import { CategoryItem, DAILY_HORIZON } from "../../types/prefs";
+import { Task, TaskResponse } from "../../types/tasks";
 import { TaskFormValues } from "../../utils/tasks";
-import { militaryTimeToMinutes } from "../../utils/prefs";
+import { TaskForm } from "./form/task-form";
 
 export function CreateTaskDialog({
   addTask,
@@ -28,8 +29,8 @@ export function CreateTaskDialog({
   const [loading, setLoading] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [categories, setCategories] = useState<CategoryItem[]>([]);
-
-  const { form, scheduleDate } = useTaskForm({
+  const user = useUserStore((state) => state.user);
+  const form = useTaskForm({
     defaultValues: {
       title: "",
       duration: 60,
@@ -39,14 +40,19 @@ export function CreateTaskDialog({
       maxSplits: 1,
       scheduleDate: selectedDate,
       note: "",
-      earliestStart: undefined,
-      latestEnd: undefined,
-      deadlineDate: undefined,
-      deadlineTime: undefined,
-      categoryId: undefined,
-      prerequisites: undefined,
+      earliestStart: 0,
+      latestEnd: DAILY_HORIZON,
+      prerequisites: [],
     },
   });
+  const note = form.watch("note");
+  const { newUploadsRef, updateRemovedFileIds, removedFileIds } =
+    useFilesTracker();
+  const scheduleDate = form.watch("scheduleDate");
+
+  useEffect(() => {
+    updateRemovedFileIds(note || "", "");
+  }, [note]);
 
   useEffect(() => {
     form.setValue("scheduleDate", selectedDate);
@@ -64,37 +70,31 @@ export function CreateTaskDialog({
       setTasks([]);
       return;
     }
-    console.log("Fetch prerequisites tasks");
     const formattedScheduleDate = format(scheduleDate, "yyyy-MM-dd");
 
     getData<{ data: Task[] }>(
       `/tasks?start=${formattedScheduleDate}&end=${formattedScheduleDate}`
     ).then(({ data }) => {
       setTasks(data);
-      console.log(`Fetch tasks on ${formattedScheduleDate}`, data);
     });
   }, [scheduleDate, open]);
 
   async function onSubmit(values: TaskFormValues) {
-    let deadline = undefined;
-    if (values.deadlineDate) {
-      deadline = addMinutes(
-        new Date(values.deadlineDate),
-        militaryTimeToMinutes(values.deadlineTime ?? "00:00")
-      );
-    }
-
-    const formattedScheduleDate = format(values.scheduleDate, "yyyy-MM-dd");
-
-    const payload = { ...values, deadline };
-    payload.deadline = deadline;
-    // @ts-ignore
-    payload.scheduleDate = formattedScheduleDate;
-    delete payload.deadlineTime;
-    delete payload.deadlineDate;
+    if (!user) return;
     setLoading(true);
+
+    const deadlineDate = values.deadlineDate || undefined;
+    const deadlineTime = values.deadlineTime || undefined;
+    const removed = removedFileIds.current;
+
     try {
-      const response = await postData<object, TaskResponse>("/tasks", payload);
+      if (removed.length > 0) await postData("/files/remove", { ids: removed });
+      const response = await postData<object, TaskResponse>("/tasks", {
+        ...values,
+        scheduleDate: format(values.scheduleDate, "yyyy-MM-dd"),
+        deadlineDate,
+        deadlineTime,
+      });
       await addTask(response.data);
       form.reset();
       toast.success("Task created successfully 🎉");
@@ -108,9 +108,19 @@ export function CreateTaskDialog({
     }
   }
 
-  const handleClose = () => {
-    form.reset();
-    setOpen(false);
+  const handleClose = async () => {
+    setLoading(true);
+    try {
+      await postData("/files/remove", { ids: newUploadsRef.current });
+      form.reset();
+      setOpen(false);
+    } catch (error: any) {
+      toast.error(
+        error.message || "Something went wrong when cancelling task creation"
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -126,6 +136,7 @@ export function CreateTaskDialog({
         <TaskForm
           form={form as any}
           onSubmit={onSubmit}
+          newUploadsRef={newUploadsRef}
           loading={loading}
           tasks={tasks}
           categories={categories}
