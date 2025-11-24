@@ -29,11 +29,23 @@ export const sanitizeContent = (content: string) => {
     allowedIframeDomains: ["www.youtube.com"],
     allowedAttributes: {
       code: ["class"],
-      a: ["href"],
+
+      a: [
+        "href",
+        "data-filename",
+        "data-filesize",
+        "data-type",
+        "target",
+        "rel",
+        "class",
+      ],
+
+      // keep classes for styling
+      div: ["class", "style"],
+      span: ["class", "style"],
+
       img: ["src"],
       video: ["src", "controls"],
-      div: ["style"],
-      span: ["style"],
     },
   });
 };

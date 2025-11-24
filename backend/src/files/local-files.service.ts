@@ -32,11 +32,6 @@ export class LocalFilesService implements FilesService {
     const toDeleteFiles = await this.prisma.file.findMany({
       where: { id: { in: keys }, userId },
     });
-    if (toDeleteFiles.length < keys.length)
-      throw new NotFoundException({
-        success: false,
-        message: "Cannot find some files with the given `ids`",
-      });
     await this.prisma.file.deleteMany({ where: { id: { in: keys } } });
     const deleteOperations = toDeleteFiles.map((file) => rm(file.path));
     await Promise.all(deleteOperations).catch(() => {});
