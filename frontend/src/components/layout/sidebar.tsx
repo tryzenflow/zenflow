@@ -39,12 +39,12 @@ export const Sidebar = ({
   addToSchedule,
 }: SidebarProps) => {
   const [isDropoutTasksCollapsed, setIsDropoutTasksCollapsed] = useState(true);
-  const [isUnscheduledTasksCollapsed, setIsUnscheduledTasksCollapsed] =
+  const [isRecommendedTasksCollapsed, setIsRecommendedTasksCollapsed] =
     useState(true);
-  useState(false);
+  const [showMore, setShowMore] = useState(false);
   return (
-    <ScrollArea className="w-full hidden lg:block lg:w-80 border-l flex-shrink-0 bg-muted overflow-y-auto">
-      <div className="bg-muted z-10 pt-4 pb-2">
+    <ScrollArea className="w-full hidden lg:block lg:w-80 border-l flex-shrink-0 bg-white overflow-y-auto">
+      <div className="bg-white z-10 pt-4 pb-2">
         {/* MINI CALENDAR */}
         <MiniCalendar
           selectedDate={selectedDate}
@@ -59,7 +59,7 @@ export const Sidebar = ({
           className="px-6 relative"
         >
           <div className="flex justify-between items-center gap-x-3">
-            <div className="flex sticky top-0 items-center gap-x-3 bg-muted py-2 border-b border-border">
+            <div className="flex sticky top-0 items-center gap-x-3 bg-white py-2 border-b border-border">
               <h3 className="font-semibold text-sm text-foreground">
                 Dropout Tasks
               </h3>
@@ -72,7 +72,7 @@ export const Sidebar = ({
                 <ChevronDown
                   className={cn(
                     "size-4 transition-all",
-                    isDropoutTasksCollapsed && "rotate-180"
+                    isDropoutTasksCollapsed && "rotate-180",
                   )}
                 />
               </Button>
@@ -96,23 +96,22 @@ export const Sidebar = ({
 
       {unscheduledTasks.length > 0 && (
         <Collapsible
-          open={isUnscheduledTasksCollapsed}
-          onOpenChange={setIsUnscheduledTasksCollapsed}
+          open={isRecommendedTasksCollapsed}
+          onOpenChange={setIsRecommendedTasksCollapsed}
           className="px-6 relative"
         >
-          <div className="justify-between flex items-center gap-x-3">
-            <div className="flex sticky top-0 items-center gap-x-3 bg-muted py-2 border-b border-border">
+          <div className="justify-between flex items-center gap-x-3 border-b border-border">
+            <div className="flex sticky top-0 items-center gap-x-3 bg-white py-2">
               <h3 className="font-semibold text-sm text-foreground">
-                Unscheduled Tasks
+                Recommended
               </h3>
-              <Badge>{unscheduledTasks.length}</Badge>
             </div>
             <CollapsibleTrigger asChild>
               <Button size="icon-sm" variant="ghost">
                 <ChevronDown
                   className={cn(
                     "size-4 transition-all",
-                    isUnscheduledTasksCollapsed && "rotate-180"
+                    isRecommendedTasksCollapsed && "rotate-180",
                   )}
                 />
               </Button>
@@ -120,17 +119,29 @@ export const Sidebar = ({
           </div>
 
           <CollapsibleContent>
-            {unscheduledTasks.map((task) => (
-              <UnscheduledTaskItem
-                addToSchedule={addToSchedule}
-                taskId={task.id}
-                deleteTask={deleteUnscheduledTasks}
-                key={task.id}
-                title={task.title}
-                openEditTaskDialog={openEditTaskDialog}
-                duration={task.duration}
-              />
-            ))}
+            {unscheduledTasks
+              .slice(0, !showMore ? 5 : undefined)
+              .map((task) => (
+                <UnscheduledTaskItem
+                  addToSchedule={addToSchedule}
+                  taskId={task.id}
+                  deleteTask={deleteUnscheduledTasks}
+                  key={task.id}
+                  title={task.title}
+                  openEditTaskDialog={openEditTaskDialog}
+                  duration={task.duration}
+                />
+              ))}
+            {unscheduledTasks.length > 5 && (
+              <Button
+                size="sm"
+                className="p-0"
+                variant="link"
+                onClick={() => setShowMore(!showMore)}
+              >
+                Show {showMore ? "less" : "more"}
+              </Button>
+            )}
           </CollapsibleContent>
         </Collapsible>
       )}

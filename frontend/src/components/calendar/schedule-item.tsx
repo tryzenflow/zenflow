@@ -68,7 +68,7 @@ export const ScheduleItem = ({
     date: string,
     split: number,
     newStart: number,
-    newEnd: number
+    newEnd: number,
   ) => void;
   dayIndex?: number;
   isWeekView?: boolean;
@@ -106,7 +106,7 @@ export const ScheduleItem = ({
     if (!selectedTaskId) setTaskDetail(null);
     else
       getData<TaskResponse>(`/tasks/${selectedTaskId}`).then((res) =>
-        setTaskDetail(res.data)
+        setTaskDetail(res.data),
       );
   }, [selectedTaskId]);
 
@@ -163,7 +163,7 @@ export const ScheduleItem = ({
       const newStartMinutes = initialStartMinutes + deltaMinutes;
 
       const snappedStart = snapToFive(
-        Math.min(newStartMinutes, initialEndMinutes - MIN_BLOCK_MINUTES)
+        Math.min(newStartMinutes, initialEndMinutes - MIN_BLOCK_MINUTES),
       );
 
       updateTimeChange(snappedStart, initialEndMinutes);
@@ -173,7 +173,7 @@ export const ScheduleItem = ({
       const newEndMinutes = initialEndMinutes + deltaMinutes;
 
       const snappedEnd = snapToFive(
-        Math.max(newEndMinutes, initialStartMinutes + MIN_BLOCK_MINUTES)
+        Math.max(newEndMinutes, initialStartMinutes + MIN_BLOCK_MINUTES),
       );
 
       updateTimeChange(initialStartMinutes, snappedEnd);
@@ -303,7 +303,7 @@ export const ScheduleItem = ({
             </div>
           </HoverCardTrigger>
         </ContextMenuTrigger>
-        <HoverCardContent asChild={!!taskDetail}>
+        <HoverCardContent className="relative z-20" asChild={!!taskDetail}>
           {taskDetail ? (
             <TaskCard task={taskDetail} deleteSchedule={deleteSchedule} />
           ) : (
