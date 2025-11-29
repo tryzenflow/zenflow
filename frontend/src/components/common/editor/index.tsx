@@ -1,7 +1,7 @@
 import { Editor as TiptapEditor, EditorContent } from "@tiptap/react";
 import { Toolbar } from "./toolbar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useFileUploads } from "../../../hooks/use-file-uploads";
 import { FilePlus } from "lucide-react";
 
@@ -16,22 +16,38 @@ export const Editor = ({ editor, newUploadsRef }: EditorProps) => {
     onChange: (value) => editor.commands.setContent(value),
     newUploadsRef,
   });
+
+  const onPaste = useCallback(
+    ({ event }: { event: ClipboardEvent }) => {
+      const clipboard = event.clipboardData;
+      if (!clipboard) return;
+
+      const files = clipboard.files;
+      if (!files || files.length === 0) return;
+      console.log({ files });
+
+      event.preventDefault();
+
+      // Create a lightweight DragEvent-like object that matches the shape expected by onFileChange
+      const fakeDragEvent = {
+        preventDefault: () => {},
+        dataTransfer: { files },
+      } as unknown as React.DragEvent<Element>;
+
+      // Forward to the existing upload handler
+      onFileChange(fakeDragEvent);
+    },
+    [onFileChange],
+  );
+
   useEffect(() => {
     if (!editor) return;
-    const renderDocs = ({ editor }: { editor: TiptapEditor }) => {
-      const { from, to } = editor.state.selection;
-      editor.state.doc.nodesBetween(from, to, (node) => {
-        if (node.type.name === "customLink") {
-          const href = node.attrs.href;
-          editor.commands.fetchFileMetadata(href);
-        }
-      });
-    };
-    editor.on("transaction", renderDocs);
+
+    editor.on("paste", onPaste);
     return () => {
-      editor.off("transaction", renderDocs);
+      editor.off("paste", onPaste);
     };
-  }, [editor]);
+  }, [editor, onPaste]);
   const [isDragging, setIsDragging] = useState(false);
   const dropRef = useRef<HTMLDivElement>(null);
 
@@ -40,7 +56,7 @@ export const Editor = ({ editor, newUploadsRef }: EditorProps) => {
     e.preventDefault();
     e.stopPropagation();
     const hasFiles = Array.from(e.dataTransfer.items).some(
-      (item) => item.kind === "file"
+      (item) => item.kind === "file",
     );
 
     setIsDragging(hasFiles);
@@ -92,7 +108,7 @@ export const Editor = ({ editor, newUploadsRef }: EditorProps) => {
           <FilePlus className="w-5 h-5 text-white animate-bounce" />
           <p className="font-medium text-white">Drop files here</p>
           <p className="text-sm text-white/80">
-            Supports PDFs, images, documents…
+            Supports PDFs, images, videos…
           </p>
         </div>
       )}

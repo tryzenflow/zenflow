@@ -21,16 +21,28 @@ interface ToolbarProps {
 export const Toolbar = ({ editor, newUploadsRef }: ToolbarProps) => {
   const [, setState] = useState(0);
 
+  const renderDocs = (editor: Editor) => {
+    const { from, to } = editor.state.selection;
+    editor.state.doc.nodesBetween(from, to, (node) => {
+      if (node.type.name === "customLink") {
+        const href = node.attrs.href;
+        editor.commands.fetchFileMetadata(href);
+      }
+    });
+  };
+
   useEffect(() => {
     if (!editor) return;
 
-    editor.on("transaction", () => {
+    editor.on("transaction", ({ editor }) => {
       setState((x) => x + 1);
+      renderDocs(editor);
     });
 
     return () => {
-      editor.off("transaction", () => {
+      editor.off("transaction", ({ editor }) => {
         setState((x) => x + 1);
+        renderDocs(editor);
       });
     };
   }, [editor]);
@@ -80,7 +92,7 @@ export const Toolbar = ({ editor, newUploadsRef }: ToolbarProps) => {
         onPress: () => editor.chain().focus().toggleOrderedList().run(),
       },
     ],
-    [editor]
+    [editor],
   );
 
   return (
