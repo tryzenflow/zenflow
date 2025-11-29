@@ -12,12 +12,5 @@ export function useTaskForm({ defaultValues }: UseTaskFormProps) {
     defaultValues,
   });
 
-  const scheduleDate = form.watch("scheduleDate");
-  const maxSplits = form.watch("maxSplits");
-
-  return {
-    form,
-    scheduleDate,
-    maxSplits,
-  };
+  return form;
 }

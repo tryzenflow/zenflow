@@ -11,7 +11,7 @@ export class LocalFilesService implements FilesService {
   async upload(uploadFilesDto: UploadFileDto[], userId: string) {
     const files = await this.prisma.file.createManyAndReturn({
       data: uploadFilesDto.map((dto) => ({ ...dto, userId })),
-      select: { id: true, mimetype: true },
+      select: { id: true, originalName: true, mimetype: true, size: true },
     });
     return files;
   }
@@ -32,16 +32,21 @@ export class LocalFilesService implements FilesService {
     const toDeleteFiles = await this.prisma.file.findMany({
       where: { id: { in: keys }, userId },
     });
-    if (toDeleteFiles.length < keys.length)
+    await this.prisma.file.deleteMany({ where: { id: { in: keys } } });
+    const deleteOperations = toDeleteFiles.map((file) => rm(file.path));
+    await Promise.all(deleteOperations).catch(() => {});
+  }
+
+  async getMetadata(id: string, userId: string) {
+    const file = await this.prisma.file.findUnique({
+      where: { id, userId },
+      select: { id: true, originalName: true, mimetype: true, size: true },
+    });
+    if (!file)
       throw new NotFoundException({
         success: false,
-        message: "Cannot find some files with the given `ids`",
+        message: "Cannot find file with the given `id`",
       });
-    await this.prisma.file.deleteMany({ where: { id: { in: keys } } });
-    for (const file of toDeleteFiles) {
-      try {
-        await rm(file.path);
-      } catch {}
-    }
+    return file;
   }
 }

@@ -27,7 +27,11 @@ export class TasksController {
     @Body() createTaskDto: CreateTaskDto,
     @CurrentUser() user: User
   ) {
-    const newTask = await this.tasksService.create(createTaskDto, user.id);
+    const newTask = await this.tasksService.create(
+      createTaskDto,
+      user.id,
+      user.timezone
+    );
     return {
       success: true,
       message: "Create new task successfully",
@@ -74,7 +78,12 @@ export class TasksController {
     @Body() updateTaskDto: UpdateTaskDto,
     @CurrentUser() user: User
   ) {
-    const updated = await this.tasksService.update(id, updateTaskDto, user.id);
+    const updated = await this.tasksService.update(
+      id,
+      updateTaskDto,
+      user.id,
+      user.timezone
+    );
     return {
       success: true,
       data: updated,

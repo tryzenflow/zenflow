@@ -1,27 +1,24 @@
 import {
+  Body,
   Controller,
-  Delete,
   Get,
-  HttpCode,
   Param,
   Post,
-  Query,
   Res,
   StreamableFile,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
-  HttpStatus,
 } from "@nestjs/common";
+import { type Response } from "express";
 import { createReadStream } from "fs";
 import { join } from "path";
-import { type Response } from "express";
-import { LocalFilesService } from "./local-files.service";
+import { type User } from "../../generated/prisma";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
-import { type User } from "../../generated/prisma";
-import { LocalFilesInterceptor } from "./interceptors/local-files.interceptor";
 import { RemoveFilesDto } from "./dto";
+import { LocalFilesInterceptor } from "./interceptors/local-files.interceptor";
+import { LocalFilesService } from "./local-files.service";
 
 @Controller("files")
 @UseGuards(CookieAuthGuard)
@@ -42,8 +39,10 @@ export class FilesController {
   ) {
     const newFiles = await this.filesService.upload(
       files.map((f) => ({
+        originalName: f.originalname,
         filename: f.filename,
-        mimetype: f.path,
+        size: f.size,
+        mimetype: f.mimetype,
         path: f.path,
       })),
       user.id
@@ -55,10 +54,16 @@ export class FilesController {
     };
   }
 
-  @Delete("remove")
-  async remove(@Query() { ids }: RemoveFilesDto, @CurrentUser() user: User) {
+  @Post("remove")
+  async remove(@Body() { ids }: RemoveFilesDto, @CurrentUser() user: User) {
     await this.filesService.remove(ids, user.id);
     return { success: true, message: "Removed files successfully" };
+  }
+
+  @Get("metadata/:id")
+  async getMetadata(@Param("id") id: string, @CurrentUser() user: User) {
+    const metadata = await this.filesService.getMetadata(id, user.id);
+    return { success: true, data: metadata };
   }
 
   @Get(":id")
@@ -72,7 +77,7 @@ export class FilesController {
     const stream = createReadStream(join(process.cwd(), file.path));
 
     response.set({
-      "Content-Disposition": `inline; filename="${file.filename}"`,
+      "Content-Disposition": `inline; filename="${file.originalName}"`,
       "Content-Type": file.mimetype,
     });
     return new StreamableFile(stream);

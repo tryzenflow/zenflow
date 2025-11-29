@@ -15,7 +15,7 @@ import { Slider } from "@/components/ui/slider";
 import { CategoryItem, DAILY_HORIZON } from "@/types/prefs";
 import { Task } from "@/types/tasks";
 import { TaskFormValues } from "@/utils/tasks";
-import { addDays } from "date-fns";
+import { addDays, format } from "date-fns";
 import { UseFormReturn } from "react-hook-form";
 import { DurationInput } from "../duration-input";
 import { NoteEditor } from "../note-editor";
@@ -28,10 +28,12 @@ import { Switch } from "../../ui/switch";
 
 interface TaskFormProps {
   form: UseFormReturn<TaskFormValues>;
+  newUploadsRef?: React.RefObject<string[]>;
   onSubmit: (values: TaskFormValues) => void;
   onCancel: () => void;
   loading: boolean;
   tasks: Task[];
+  initialNote?: string;
   categories: CategoryItem[];
 }
 
@@ -39,14 +41,17 @@ export function TaskForm({
   form,
   onSubmit,
   onCancel,
+  newUploadsRef,
   loading,
   tasks,
   categories,
+  initialNote,
 }: TaskFormProps) {
   const maxSplits = form.watch("maxSplits");
   const earliestStart = form.watch("earliestStart");
   const latestEnd = form.watch("latestEnd");
   const duration = form.watch("duration");
+  const scheduleDate = form.watch("scheduleDate");
 
   return (
     <Form {...form}>
@@ -79,7 +84,7 @@ export function TaskForm({
                 <FormLabel>Schedule Date</FormLabel>
                 <FormControl>
                   <DatePicker
-                    disabled={loading || { before: new Date() }}
+                    disabled={loading}
                     className="w-full"
                     date={field.value}
                     onSelect={field.onChange}
@@ -128,7 +133,9 @@ export function TaskForm({
                 <TimeInput
                   disabled={loading}
                   value={field.value || 0}
-                  onChange={field.onChange}
+                  onChange={(value) => {
+                    field.onChange(value);
+                  }}
                   end={latestEnd ? latestEnd - duration : latestEnd}
                 />
                 <FormMessage />
@@ -165,10 +172,14 @@ export function TaskForm({
                 <FormLabel>Deadline Date</FormLabel>
                 <DatePicker
                   placeholder="Select date"
-                  disabled={loading || { before: addDays(new Date(), 1) }}
-                  date={field.value}
-                  onSelect={field.onChange}
+                  disabled={loading || { before: addDays(scheduleDate, 1) }}
+                  date={field.value ? new Date(field.value) : undefined}
+                  onSelect={(value) => {
+                    field.onChange(value ? format(value, "yyyy-MM-dd") : "");
+                    if (value) console.log(format(value, "yyyy-MM-dd"));
+                  }}
                 />
+                <FormMessage />
               </FormItem>
             )}
           />
@@ -212,6 +223,8 @@ export function TaskForm({
               <FormLabel>Notes</FormLabel>
               <FormControl>
                 <NoteEditor
+                  initialValue={initialNote}
+                  newUploadsRef={newUploadsRef}
                   disabled={loading}
                   value={field.value || ""}
                   onChange={field.onChange}
@@ -241,7 +254,9 @@ export function TaskForm({
               </FormControl>
               <FormDescription>
                 Task will be split into at most{" "}
-                <span className="font-medium">{maxSplits} chunks.</span>
+                <span className="font-medium">
+                  {maxSplits} chunk{maxSplits !== 1 ? "s" : ""}.
+                </span>
               </FormDescription>
               <FormMessage />
             </FormItem>

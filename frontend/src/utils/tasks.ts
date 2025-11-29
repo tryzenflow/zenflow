@@ -1,6 +1,9 @@
 // types.ts or schema.ts
 import * as z from "zod";
 import { DAILY_HORIZON } from "../types/prefs";
+import { deleteData, getData, postData } from "../api";
+import { Task } from "../types/tasks";
+import { extractFileIdsFromNoteContent } from "./files";
 
 export const taskSchema = z
   .object({
@@ -33,7 +36,17 @@ export const taskSchema = z
       .min(0, { error: "Task latest end must be from 12AM" })
       .max(DAILY_HORIZON, { error: "Task latest end must be at most 11:59PM" })
       .optional(),
-    deadlineDate: z.date().optional(),
+    deadlineDate: z
+      .string()
+      .refine(
+        (val) => {
+          if (!val) return true;
+          if (isNaN(Date.parse(val))) return false;
+          return true;
+        },
+        { message: "Invalid date format" }
+      )
+      .optional(),
     deadlineTime: z.string().optional(),
     note: z.string().optional(),
     maxSplits: z.number().min(1).max(10).default(1),
@@ -50,3 +63,10 @@ export const taskSchema = z
   );
 
 export type TaskFormValues = z.infer<typeof taskSchema>;
+
+export async function deleteTask(taskId: string) {
+  const data = await getData<{ data: Task }>(`/tasks/${taskId}`);
+  const previousIds = extractFileIdsFromNoteContent(data.data.note || "");
+  await postData("/files/remove", { ids: previousIds });
+  return deleteData(`/tasks/${taskId}`);
+}

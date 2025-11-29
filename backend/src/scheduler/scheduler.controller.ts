@@ -138,7 +138,10 @@ export class SchedulerController implements OnModuleInit {
         ),
       };
 
-    const scheduled = response.schedules!;
+    const scheduled = response.schedules!.map((s) => ({
+      ...s,
+      start: s.end !== undefined ? s.start || 0 : undefined,
+    }));
 
     const unscheduled: TaskSchedule[] = scheduleBasedTasks
       .filter(
@@ -163,7 +166,7 @@ export class SchedulerController implements OnModuleInit {
 
     const schedule = await this.schedulesService.schedule(
       scheduleDate,
-      [...response.schedules, ...unscheduled],
+      [...scheduled, ...unscheduled],
       user.timezone,
       user.id
     );

@@ -1,10 +1,11 @@
 import { addDays, eachDayOfInterval, format, subDays } from "date-fns";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { deleteData, getData } from "../../api";
+import { getData } from "../../api";
 import { Task, TasksResponse } from "../../types/tasks";
 import { Separator } from "../ui/separator";
 import { TaskCard } from "./views/card";
 import { toast } from "sonner";
+import { deleteTask } from "../../utils/tasks";
 
 export function TaskView({
   selectedDate,
@@ -225,10 +226,10 @@ export function TaskView({
     return () => container.removeEventListener("scroll", handleScroll);
   }, [loading, selectedDate, setSelectedDate]);
 
-  const deleteTask = async (taskId: string) => {
+  const deleteTaskUI = async (taskId: string) => {
     setLoading(true);
     try {
-      await deleteData(`/tasks/${taskId}`);
+      await deleteTask(taskId);
       toast.success("Delete task successfully");
       // Local state update is sufficient here
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
@@ -254,7 +255,7 @@ export function TaskView({
           )}
           loading={loading}
           deleteSchedule={deleteSchedule}
-          deleteTask={deleteTask}
+          deleteTask={deleteTaskUI}
           openEditDialog={openEditTaskDialog}
           setSelectedDate={setSelectedDate}
         />

@@ -5,15 +5,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useTaskForm } from "@/hooks/use-task-form";
-import { addMinutes, format, startOfDay } from "date-fns";
+import { format } from "date-fns";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { getData, patchData } from "../../api";
-import { CategoryItem } from "../../types/prefs";
+import { getData, patchData, postData } from "../../api";
+import { CategoryItem, DAILY_HORIZON } from "../../types/prefs";
 import { Task } from "../../types/tasks";
 import { TaskFormValues } from "../../utils/tasks";
 import { TaskForm } from "./form/task-form";
-import { militaryTimeToMinutes } from "../../utils/prefs";
+import { useFilesTracker } from "../../hooks/use-files-tracker";
 
 interface EditTaskDialogProps {
   open: boolean;
@@ -34,6 +34,8 @@ export function EditTaskDialog({
   const [tasks, setTasks] = useState<Task[]>([]);
   const [task, setTask] = useState<Task | null>(null);
   const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const { newUploadsRef, removedFileIds, updateRemovedFileIds } =
+    useFilesTracker();
 
   useEffect(() => {
     if (!open) return;
@@ -42,7 +44,7 @@ export function EditTaskDialog({
     );
   }, [taskId, open]);
 
-  const { form, scheduleDate } = useTaskForm({
+  const form = useTaskForm({
     defaultValues: {
       title: "",
       duration: 60,
@@ -52,14 +54,13 @@ export function EditTaskDialog({
       maxSplits: 1,
       scheduleDate: selectedDate,
       note: "",
-      earliestStart: undefined,
-      latestEnd: undefined,
-      deadlineDate: undefined,
-      deadlineTime: undefined,
-      categoryId: undefined,
-      prerequisites: undefined,
+      earliestStart: 0,
+      latestEnd: DAILY_HORIZON,
+      prerequisites: [],
     },
   });
+  const scheduleDate = form.watch("scheduleDate");
+  const note = form.watch("note");
 
   useEffect(() => {
     if (!open) return;
@@ -69,8 +70,10 @@ export function EditTaskDialog({
   }, [open]);
 
   useEffect(() => {
-    console.log("Fetch prerequisite tasks");
+    updateRemovedFileIds(note || "", task?.note || "");
+  }, [note, task?.note]);
 
+  useEffect(() => {
     if (!scheduleDate || !open) setTasks([]);
     const formattedScheduleDate = format(scheduleDate, "yyyy-MM-dd");
     getData<{ data: Task[] }>(
@@ -80,52 +83,43 @@ export function EditTaskDialog({
 
   useEffect(() => {
     if (!task) return;
-
     form.reset({
       ...task,
       note: task.note ?? "",
       scheduleDate: selectedDate,
       categoryId: task.categoryId ?? undefined,
-      prerequisites: task.prerequisites?.map((p) =>
-        typeof p === "string" ? p : p.id
-      ),
+      prerequisites:
+        task.prerequisites?.map((p) => (typeof p === "string" ? p : p.id)) ??
+        [],
+      earliestStart: task.earliestStart ?? 0,
+      latestEnd: task.latestEnd ?? DAILY_HORIZON,
       deadlineDate: task.deadline
-        ? startOfDay(new Date(task.deadline))
-        : undefined,
+        ? format(new Date(task.deadline), "yyyy-MM-dd")
+        : "",
       deadlineTime: task.deadline
         ? format(new Date(task.deadline), "HH:mm")
-        : undefined,
+        : "",
     });
   }, [task, selectedDate]);
 
   async function onSubmit(values: TaskFormValues) {
-    let deadline = undefined;
-    if (values.deadlineDate) {
-      deadline = addMinutes(
-        new Date(values.deadlineDate),
-        militaryTimeToMinutes(values.deadlineTime ?? "00:00")
-      );
-    }
-
+    // setLoading(true);
     const formattedScheduleDate = format(values.scheduleDate, "yyyy-MM-dd");
-
-    const payload = { ...values, deadline };
-    payload.deadline = deadline;
-    if (formattedScheduleDate === format(selectedDate, "yyyy-MM-dd")) {
-      // @ts-ignore
-      delete payload.scheduleDate;
-    } else {
-      // @ts-ignore
-      payload.scheduleDate = formattedScheduleDate;
-    }
-    delete payload.deadlineTime;
-    delete payload.deadlineDate;
-    setLoading(true);
+    const formattedSelectedDate = format(selectedDate, "yyyy-MM-dd");
+    const deadlineDate = values.deadlineDate || undefined;
+    const deadlineTime = values.deadlineTime || undefined;
     try {
-      const updated = await patchData<any, { data: Task }>(
-        `/tasks/${taskId}`,
-        payload
-      );
+      if (removedFileIds.current.length > 0)
+        await postData("/files/remove", { ids: removedFileIds.current });
+      const updated = await patchData<any, { data: Task }>(`/tasks/${taskId}`, {
+        ...values,
+        deadlineDate,
+        deadlineTime,
+        scheduleDate:
+          formattedScheduleDate === formattedSelectedDate
+            ? undefined
+            : formattedScheduleDate,
+      });
 
       updateSchedule(updated.data);
       form.reset();
@@ -140,9 +134,19 @@ export function EditTaskDialog({
     }
   }
 
-  const handleClose = () => {
-    form.reset();
-    setOpen(false);
+  const handleClose = async () => {
+    setLoading(true);
+    try {
+      await postData("/files/remove", { ids: newUploadsRef.current });
+      form.reset();
+      setOpen(false);
+    } catch (error: any) {
+      toast.error(
+        error.message || "Something went wrong when cancelling task creation"
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -159,6 +163,8 @@ export function EditTaskDialog({
           tasks={tasks.filter((t) => t.id !== taskId)}
           categories={categories}
           onCancel={handleClose}
+          newUploadsRef={newUploadsRef}
+          initialNote={task?.note}
         />
       </DialogContent>
     </Dialog>
