@@ -21,7 +21,7 @@ export function TaskView({
   deleteSchedule: (
     taskId: string,
     date: string,
-    split: number
+    split: number,
   ) => Promise<void>;
   openEditTaskDialog: (taskId: string) => void;
   setSelectedDate: (date: Date) => void;
@@ -54,7 +54,7 @@ export function TaskView({
 
   const range = useMemo(
     () => eachDayOfInterval({ start: rangeStart, end: rangeEnd }),
-    [rangeStart, rangeEnd]
+    [rangeStart, rangeEnd],
   );
 
   // ...existing code...
@@ -64,8 +64,8 @@ export function TaskView({
       const response = await getData<TasksResponse>(
         `/tasks?start=${format(start, "yyyy-MM-dd")}&end=${format(
           end,
-          "yyyy-MM-dd"
-        )}`
+          "yyyy-MM-dd",
+        )}`,
       );
       if (response.data) {
         // Robust deduplication: dedupe schedules by id (if present) or by date+split
@@ -244,14 +244,14 @@ export function TaskView({
   return (
     <div
       ref={containerRef}
-      className="h-full w-full px-4 sm:px-6 lg:px-8 relative overflow-y-auto bg-background"
+      className="h-full w-full pl-4 sm:pl-6 lg:pl-8 relative overflow-y-auto bg-background"
     >
       {range.map((date) => (
         <DateSection
           key={format(date, "yyyy-MM-dd")}
           date={date}
           tasks={Array.from(
-            taskGroup.get(format(date, "yyyy-MM-dd"))?.values() ?? []
+            taskGroup.get(format(date, "yyyy-MM-dd"))?.values() ?? [],
           )}
           loading={loading}
           deleteSchedule={deleteSchedule}
@@ -284,7 +284,10 @@ function DateSection({
   openEditDialog,
 }: DateSectionProps) {
   return (
-    <section className="bg-background py-3" id={format(date, "yyyy-MM-dd")}>
+    <section
+      className="bg-background py-3 max-w-screen mr-3"
+      id={format(date, "yyyy-MM-dd")}
+    >
       <a
         href={`#${format(date, "yyyy-MM-dd")}`}
         className="flex-1 cursor-pointer font-semibold"

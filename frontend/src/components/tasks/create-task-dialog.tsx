@@ -17,6 +17,7 @@ import { CategoryItem, DAILY_HORIZON } from "../../types/prefs";
 import { Task, TaskResponse } from "../../types/tasks";
 import { TaskFormValues } from "../../utils/tasks";
 import { TaskForm } from "./form/task-form";
+import { PlusIcon } from "lucide-react";
 
 export function CreateTaskDialog({
   addTask,
@@ -73,7 +74,7 @@ export function CreateTaskDialog({
     const formattedScheduleDate = format(scheduleDate, "yyyy-MM-dd");
 
     getData<{ data: Task[] }>(
-      `/tasks?start=${formattedScheduleDate}&end=${formattedScheduleDate}`
+      `/tasks?start=${formattedScheduleDate}&end=${formattedScheduleDate}`,
     ).then(({ data }) => {
       setTasks(data);
     });
@@ -101,7 +102,7 @@ export function CreateTaskDialog({
       setOpen(false);
     } catch (error: any) {
       toast.error(
-        error.message || "Something went wrong when creating a new task"
+        error.message || "Something went wrong when creating a new task",
       );
     } finally {
       setLoading(false);
@@ -116,7 +117,7 @@ export function CreateTaskDialog({
       setOpen(false);
     } catch (error: any) {
       toast.error(
-        error.message || "Something went wrong when cancelling task creation"
+        error.message || "Something went wrong when cancelling task creation",
       );
     } finally {
       setLoading(false);
@@ -126,7 +127,10 @@ export function CreateTaskDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline">Add task</Button>
+        <Button size="sm" variant="outline">
+          <PlusIcon className="size-4 sm:hidden" />{" "}
+          <span className="hidden sm:inline">Add</span> Task
+        </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px] overflow-x-hidden md:max-w-[600px] overflow-y-auto max-h-[90vh]">
         <DialogHeader className="space-y-0">
