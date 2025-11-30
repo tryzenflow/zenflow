@@ -8,9 +8,13 @@ import LoginPage from "./pages/login";
 import { PrefSetupPage } from "./pages/pref-setup";
 import { User } from "./types/user";
 import AnalyticsPage from "./pages/analytics";
+import { toast } from "sonner";
+import { Button } from "./components/ui/button";
+import { LoaderCircleIcon } from "lucide-react";
 
 function App() {
   const user = useUserStore((state) => state.user);
+  const loading = useUserStore((state) => state.loading);
   const setUser = useUserStore((state) => state.setUser);
   const setLoading = useUserStore((state) => state.setLoading);
 
@@ -18,14 +22,41 @@ function App() {
     setLoading(true);
     getData<{ data: User }>("/auth/me")
       .then(({ data }) => setUser(data))
+      .catch()
       .finally(() => setLoading(false));
   }, []);
+
+  function updateTimezone(timezone: string) {
+    setLoading(true);
+    try {
+      patchData("/users/update/basic-info", { timezone });
+      setUser(user ? { ...user, timezone } : null);
+    } catch {
+      toast.error("Failed to update timezone");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
     if (!user) return;
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     if (timezone !== user.timezone)
-      patchData("/users/update/basic-info", { timezone });
+      toast.info(`Do you want to change your timezone to ${timezone}?`, {
+        action: (
+          <Button
+            disabled={loading}
+            variant="outline"
+            onClick={() => updateTimezone(timezone)}
+          >
+            {loading ? (
+              <LoaderCircleIcon className="size-4" />
+            ) : (
+              <span>Update</span>
+            )}
+          </Button>
+        ),
+      });
   }, [user]);
 
   return (

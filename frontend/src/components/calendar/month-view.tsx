@@ -9,17 +9,13 @@ import {
   isToday,
 } from "date-fns";
 import { Schedule } from "../../types/schedule";
-import { MouseEvent, useEffect, useState } from "react";
+import { MouseEvent, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { Task, TaskResponse } from "../../types/tasks";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "../ui/hover-card";
 import { TaskCard } from "../tasks/views/card";
 import { getData } from "../../api";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 
 export const MonthView = ({
   selectedDate,
@@ -35,7 +31,7 @@ export const MonthView = ({
   deleteSchedule: (
     taskId: string,
     date: string,
-    split: number
+    split: number,
   ) => Promise<void>;
 }) => {
   const [displayMonth, setDisplayMonth] = useState(selectedDate);
@@ -52,12 +48,13 @@ export const MonthView = ({
   }
   const [taskDetail, setTaskDetail] = useState<Task | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [hoverDate, setHoverDate] = useState<Date | null>(null);
+  const [popoverDate, setPopoverDate] = useState<Date | null>(null);
+  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const formatKey = (d: Date) => format(d, "yyyy-MM-dd");
 
   const focusDayView = (
     e: MouseEvent<HTMLDivElement, globalThis.MouseEvent>,
-    date: Date
+    date: Date,
   ) => {
     e.stopPropagation();
     setCurrentView("Day view");
@@ -72,9 +69,13 @@ export const MonthView = ({
     if (!selectedTaskId) setTaskDetail(null);
     else
       getData<TaskResponse>(`/tasks/${selectedTaskId}`).then((res) =>
-        setTaskDetail(res.data)
+        setTaskDetail(res.data),
       );
   }, [selectedTaskId]);
+
+  const schedulesWithoutSplits = useMemo(() => {
+    return schedules.filter((schedule) => schedule.split === 0);
+  }, [schedules]);
 
   return (
     <div className="flex-1 min-w-0 h-full pt-8 relative overflow-y-auto bg-background rounded-l-xl flex flex-col">
@@ -85,10 +86,10 @@ export const MonthView = ({
             onClick={() => setDisplayMonth(subMonths(displayMonth, 1))}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >
-            <ChevronLeft className="w-5 h-5 text-gray-600" />
+            <ChevronLeft className="w-5 h-5 text-muted-foreground" />
           </button>
 
-          <h3 className="text-3xl font-bold text-gray-900 flex-1 text-center">
+          <h3 className="text-lg lg:text-3xl font-bold text-foreground flex-1 text-center">
             {format(start, "LLLL yyyy")}
           </h3>
 
@@ -121,8 +122,8 @@ export const MonthView = ({
               selectedDate.toDateString() === date.toDateString();
 
             // Find schedules for this date
-            const daySchedules = schedules.filter(
-              (s) => formatKey(new Date(s.date)) === key
+            const daySchedules = schedulesWithoutSplits.filter(
+              (s) => formatKey(new Date(s.date)) === key,
             );
 
             return (
@@ -135,7 +136,6 @@ export const MonthView = ({
                 className="
                   flex flex-col p-3 text-xs text-foreground cursor-pointer
                   border-r border-b border-gray-200 transition-all duration-150
-                  min-h-[100px]
                 "
                 onDoubleClick={(e) => focusDayView(e, date)}
               >
@@ -145,64 +145,85 @@ export const MonthView = ({
                     "font-medium mb-2 w-7 h-7 flex items-center justify-center rounded-full",
                     inMonth ? "text-foreground" : "text-muted-foreground",
                     isSelected && "text-white bg-primary",
-                    isToday(date) && !isSelected && "bg-muted"
+                    isToday(date) && !isSelected && "bg-muted",
                   )}
                 >
                   {format(date, "d")}
                 </div>
 
                 {/* Events */}
-                <div className="flex flex-col gap-1 flex-1 overflow-hidden">
-                  {daySchedules.slice(0, 2).map((schedule) => (
-                    <HoverCard
-                      open={
-                        selectedTaskId === schedule.task.id &&
-                        hoverDate?.toDateString() === date.toDateString()
-                      }
-                      onOpenChange={(open) => {
-                        open
-                          ? setSelectedTaskId(schedule.task.id)
-                          : setSelectedTaskId(null);
-                        open ? setHoverDate(date) : setHoverDate(null);
-                      }}
-                    >
-                      <HoverCardTrigger asChild>
+                <div className="block md:hidden">
+                  {daySchedules.length > 0 && (
+                    <div className="mt-0.5 flex items-center gap-0.5">
+                      {Array.from(
+                        new Set(daySchedules.map((s) => s.task.focus)),
+                      ).map((focus, i) => (
                         <div
-                          key={`${schedule.task.id}-${schedule.date}`}
+                          key={i}
                           className={cn(
-                            "text-xs font-medium",
-                            inMonth
-                              ? "text-foreground"
-                              : "text-muted-foreground"
+                            "w-1.5 h-1.5 rounded-full",
+                            focus === 1 && "bg-green-500",
+                            focus === 2 && "bg-yellow-500",
+                            focus === 3 && "bg-red-500",
                           )}
-                        >
-                          {schedule.task.title}
-                        </div>
-                      </HoverCardTrigger>
-                      <HoverCardContent asChild={!!taskDetail}>
-                        {taskDetail ? (
-                          <TaskCard
-                            task={taskDetail}
-                            deleteSchedule={deleteSchedule}
-                          />
-                        ) : (
-                          <div className="text-muted-foreground">
-                            No data available
-                          </div>
-                        )}
-                      </HoverCardContent>
-                    </HoverCard>
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="hidden md:flex flex-col gap-1 flex-1 overflow-hidden">
+                  {daySchedules.slice(0, 2).map((schedule) => (
+                    <MonthViewEvent
+                      key={`${schedule.date}-${schedule.task.id}-${schedule.split}`}
+                      selectedTaskId={selectedTaskId}
+                      setSelectedTaskId={setSelectedTaskId}
+                      popoverDate={popoverDate}
+                      setPopoverDate={setPopoverDate}
+                      date={date}
+                      schedule={schedule}
+                      inMonth={inMonth}
+                      taskDetail={taskDetail}
+                      deleteSchedule={deleteSchedule}
+                      isPopoverOpen={isPopoverOpen}
+                      isInPopover={false}
+                    />
                   ))}
                   {daySchedules.length > 2 && (
-                    <div
-                      className={cn(
-                        "text-xs",
-                        inMonth ? "text-foreground" : "text-muted-foreground"
-                      )}
-                      onClick={(e) => focusDayView(e, date)}
+                    <Popover
+                      open={isPopoverOpen}
+                      onOpenChange={setIsPopoverOpen}
                     >
-                      +{daySchedules.length - 2} more
-                    </div>
+                      <PopoverTrigger asChild>
+                        <div
+                          className={cn(
+                            "text-xs",
+                            inMonth
+                              ? "text-foreground"
+                              : "text-muted-foreground",
+                          )}
+                        >
+                          {daySchedules.length - 2} more
+                        </div>
+                      </PopoverTrigger>
+                      <PopoverContent>
+                        {daySchedules.map((schedule) => (
+                          <MonthViewEvent
+                            key={`${schedule.date}-${schedule.task.id}-${schedule.split}`}
+                            selectedTaskId={selectedTaskId}
+                            setSelectedTaskId={setSelectedTaskId}
+                            popoverDate={popoverDate}
+                            setPopoverDate={setPopoverDate}
+                            date={date}
+                            schedule={schedule}
+                            inMonth={inMonth}
+                            taskDetail={taskDetail}
+                            deleteSchedule={deleteSchedule}
+                            isPopoverOpen={isPopoverOpen}
+                            isInPopover
+                          />
+                        ))}
+                      </PopoverContent>
+                    </Popover>
                   )}
                 </div>
               </div>
@@ -213,3 +234,83 @@ export const MonthView = ({
     </div>
   );
 };
+
+interface MonthViewEventProps {
+  selectedTaskId: string | null;
+  setSelectedTaskId: (id: string | null) => void;
+  popoverDate: Date | null;
+  setPopoverDate: (date: Date | null) => void;
+  date: Date;
+  schedule: Schedule;
+  inMonth: boolean;
+  taskDetail: Task | null;
+  deleteSchedule: (
+    taskId: string,
+    date: string,
+    split: number,
+  ) => Promise<void>;
+  isInPopover: boolean;
+  isPopoverOpen: boolean;
+}
+
+function MonthViewEvent({
+  selectedTaskId,
+  setSelectedTaskId,
+  popoverDate,
+  setPopoverDate,
+  date,
+  schedule,
+  inMonth,
+  taskDetail,
+  deleteSchedule,
+  isInPopover = false,
+  isPopoverOpen = false,
+}: MonthViewEventProps) {
+  return (
+    <Popover
+      open={
+        (!isPopoverOpen || isInPopover) &&
+        selectedTaskId === schedule.task.id &&
+        popoverDate?.toDateString() === date.toDateString()
+      }
+      onOpenChange={(open) => {
+        if (open) {
+          setSelectedTaskId(schedule.task.id);
+          setPopoverDate(date);
+        } else {
+          setSelectedTaskId(null);
+          setPopoverDate(null);
+        }
+      }}
+    >
+      <PopoverTrigger asChild>
+        <div className="flex items-center gap-x-2">
+          <div
+            className={cn(
+              "w-1.5 h-1.5 rounded-full shrink-0",
+              schedule.task.focus === 1 && "bg-green-500",
+              schedule.task.focus === 2 && "bg-yellow-500",
+              schedule.task.focus === 3 && "bg-red-500",
+            )}
+          />
+          <div
+            key={`${schedule.task.id}-${schedule.date}`}
+            className={cn(
+              "text-xs font-medium line-clamp-1",
+              inMonth ? "text-foreground" : "text-muted-foreground",
+            )}
+          >
+            {schedule.task.title}
+          </div>
+        </div>
+      </PopoverTrigger>
+      <PopoverContent asChild={!!taskDetail}>
+        {taskDetail ? (
+          <TaskCard task={taskDetail} deleteSchedule={deleteSchedule} />
+        ) : (
+          <div className="text-muted-foreground">No data available</div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}

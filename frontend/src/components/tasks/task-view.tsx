@@ -6,6 +6,8 @@ import { Separator } from "../ui/separator";
 import { TaskCard } from "./views/card";
 import { toast } from "sonner";
 import { deleteTask } from "../../utils/tasks";
+import { useUserStore } from "@/hooks/use-user-store";
+import { Schedule } from "@/types/schedule";
 
 export function TaskView({
   selectedDate,
@@ -21,7 +23,7 @@ export function TaskView({
   deleteSchedule: (
     taskId: string,
     date: string,
-    split: number
+    split: number,
   ) => Promise<void>;
   openEditTaskDialog: (taskId: string) => void;
   setSelectedDate: (date: Date) => void;
@@ -31,6 +33,7 @@ export function TaskView({
   taskViewRefetchTrigger: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const user = useUserStore((state) => state.user);
 
   // NEW: Local state for tasks
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -54,7 +57,7 @@ export function TaskView({
 
   const range = useMemo(
     () => eachDayOfInterval({ start: rangeStart, end: rangeEnd }),
-    [rangeStart, rangeEnd]
+    [rangeStart, rangeEnd],
   );
 
   // ...existing code...
@@ -64,13 +67,13 @@ export function TaskView({
       const response = await getData<TasksResponse>(
         `/tasks?start=${format(start, "yyyy-MM-dd")}&end=${format(
           end,
-          "yyyy-MM-dd"
-        )}`
+          "yyyy-MM-dd",
+        )}`,
       );
       if (response.data) {
         // Robust deduplication: dedupe schedules by id (if present) or by date+split
-        const dedupeSchedules = (schedules: any[] = []) => {
-          const map = new Map<string, any>();
+        const dedupeSchedules = (schedules: Schedule[] = []) => {
+          const map = new Map<string, Schedule>();
           for (const s of schedules) {
             const dateKey =
               s?.date != null ? new Date(s.date).toISOString() : "nodate";
@@ -148,6 +151,7 @@ export function TaskView({
   const prevRangeRef = useRef<{ start: Date; end: Date } | null>(null);
 
   useEffect(() => {
+    if (!user) return;
     // Depend on taskCacheKey so that when ViewLayout triggers a refetch,
     // this effect runs with a fresh state (tasks = []).
     if (taskCacheKey !== taskViewRefetchTrigger) return;
@@ -172,7 +176,7 @@ export function TaskView({
 
     // Update reference
     prevRangeRef.current = { start: rangeStart, end: rangeEnd };
-  }, [rangeStart, rangeEnd, taskCacheKey]); // Added taskCacheKey dependency
+  }, [user, taskViewRefetchTrigger, rangeStart, rangeEnd, taskCacheKey]); // Added taskCacheKey dependency
 
   useEffect(() => {
     // ... (Scroll handling logic remains the same)
@@ -244,14 +248,14 @@ export function TaskView({
   return (
     <div
       ref={containerRef}
-      className="h-full w-full px-4 sm:px-6 lg:px-8 relative overflow-y-auto bg-background"
+      className="h-full w-full pl-4 sm:pl-6 lg:pl-8 relative overflow-y-auto bg-background"
     >
       {range.map((date) => (
         <DateSection
           key={format(date, "yyyy-MM-dd")}
           date={date}
           tasks={Array.from(
-            taskGroup.get(format(date, "yyyy-MM-dd"))?.values() ?? []
+            taskGroup.get(format(date, "yyyy-MM-dd"))?.values() ?? [],
           )}
           loading={loading}
           deleteSchedule={deleteSchedule}
@@ -284,7 +288,10 @@ function DateSection({
   openEditDialog,
 }: DateSectionProps) {
   return (
-    <section className="bg-background py-3" id={format(date, "yyyy-MM-dd")}>
+    <section
+      className="bg-background py-3 max-w-screen mr-3"
+      id={format(date, "yyyy-MM-dd")}
+    >
       <a
         href={`#${format(date, "yyyy-MM-dd")}`}
         className="flex-1 cursor-pointer font-semibold"

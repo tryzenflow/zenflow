@@ -1,4 +1,4 @@
-import { format, startOfDay } from "date-fns";
+import { format, isToday, startOfDay } from "date-fns";
 import { Schedule } from "../../types/schedule";
 import { ScheduleItem } from "./schedule-item";
 import { calculateLayout } from "../../utils/calc-layout";
@@ -20,7 +20,7 @@ export const DayView = ({
     date: string,
     split: number,
     newStart: number,
-    newEnd: number
+    newEnd: number,
   ) => void;
 }) => {
   // Create an array for the hourly timeline (0 AM to 11 PM)
@@ -40,6 +40,8 @@ export const DayView = ({
       startTimestamp >= selectedDayStart && startTimestamp < selectedDayEnd
     );
   });
+  const currentHour = new Date().getHours();
+  const currentMinute = new Date().getMinutes();
 
   // 1. Calculate the layout for the day's schedules
   const schedulesWithLayout = calculateLayout(daySchedules);
@@ -49,7 +51,7 @@ export const DayView = ({
       <div className="relative h-[1440px]">
         {hours.map((time, index) => (
           <div key={index} className="flex h-[60px] group">
-            {/* Time label column: w-16 matches the base offset in ScheduleItem */}
+            {/* Time label column: w-12 matches the base offset in ScheduleItem */}
             <div className="w-12 flex-shrink-0 text-[10px] text-muted-foreground -mt-2 pr-2 text-right">
               {time}
             </div>
@@ -60,7 +62,23 @@ export const DayView = ({
             </div>
           </div>
         ))}
-
+        {isToday(selectedDate) && (
+          <>
+            <div
+              className="h-px bg-destructive left-12 absolute z-[15]"
+              style={{
+                width: "calc(100% - 3rem)",
+                top: `calc(${currentHour * 60}px + ${currentMinute * 1}px)`,
+              }}
+            />
+            <div
+              className="w-2 h-2 bg-destructive rounded-full left-11 absolute z-[15]"
+              style={{
+                top: `calc(${currentHour * 60}px + ${currentMinute * 1}px - 0.25rem)`,
+              }}
+            />
+          </>
+        )}
         {/* 2. Render Scheduled Items with Layout Props */}
         {schedulesWithLayout.map((schedule) => (
           <ScheduleItem

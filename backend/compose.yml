@@ -16,7 +16,7 @@ services:
     networks:
       - api
     volumes:
-      - uploads:/app/uploads
+      - ./uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy

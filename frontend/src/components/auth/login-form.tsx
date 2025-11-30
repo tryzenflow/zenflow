@@ -84,7 +84,7 @@ export function LoginForm({
       const result = await response.json();
 
       if (response.ok && result.success) {
-        toast.info("Email sent successfully", { description: result.message });
+        toast.info("Email sent successfully");
         setStage("otp");
         clearErrors();
 

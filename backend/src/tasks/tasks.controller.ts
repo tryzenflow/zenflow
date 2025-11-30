@@ -25,12 +25,12 @@ export class TasksController {
   @Post()
   async create(
     @Body() createTaskDto: CreateTaskDto,
-    @CurrentUser() user: User
+    @CurrentUser() user: User,
   ) {
     const newTask = await this.tasksService.create(
       createTaskDto,
       user.id,
-      user.timezone
+      user.timezone,
     );
     return {
       success: true,
@@ -52,17 +52,16 @@ export class TasksController {
   @Get("/schedule/none")
   async findUnscheduled(
     @CurrentUser() user: User,
-    @Query() dto: FindSchedulesDto
+    @Query() dto: FindSchedulesDto,
   ) {
-    const tasks = await this.tasksService.findUnscheduled(
+    const groups = await this.tasksService.findUnscheduled(
       user.id,
       dto,
-      user.timezone
+      user.timezone,
     );
     return {
       success: true,
-      message: `Found ${tasks.length} unscheduled tasks between ${dto.start} and ${dto.end}`,
-      data: tasks,
+      data: groups,
     };
   }
 
@@ -76,13 +75,13 @@ export class TasksController {
   async update(
     @Param("id") id: string,
     @Body() updateTaskDto: UpdateTaskDto,
-    @CurrentUser() user: User
+    @CurrentUser() user: User,
   ) {
     const updated = await this.tasksService.update(
       id,
       updateTaskDto,
       user.id,
-      user.timezone
+      user.timezone,
     );
     return {
       success: true,

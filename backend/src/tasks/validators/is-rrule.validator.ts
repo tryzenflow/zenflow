@@ -3,7 +3,7 @@ import {
   ValidationOptions,
   ValidationArguments,
 } from "class-validator";
-import { RRule } from "rrule";
+import { rrulestr } from "rrule";
 
 export function IsRRule(validationOptions?: ValidationOptions) {
   return function (object: Object, propertyName: string) {
@@ -16,7 +16,8 @@ export function IsRRule(validationOptions?: ValidationOptions) {
         validate(value: any, _args: ValidationArguments) {
           if (typeof value !== "string") return false;
           try {
-            RRule.fromString(value);
+            // Use rrulestr to parse full iCalendar blocks (DTSTART + RRULE)
+            rrulestr(value);
             const validFreqs = ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"];
             if (!validFreqs.some((f) => value.includes(`FREQ=${f}`)))
               return false;

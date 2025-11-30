@@ -108,7 +108,7 @@ export const Editor = ({ editor, newUploadsRef }: EditorProps) => {
           <FilePlus className="w-5 h-5 text-white animate-bounce" />
           <p className="font-medium text-white">Drop files here</p>
           <p className="text-sm text-white/80">
-            Supports PDFs, images, videos…
+            Supports PDFs, images, audios, videos…
           </p>
         </div>
       )}

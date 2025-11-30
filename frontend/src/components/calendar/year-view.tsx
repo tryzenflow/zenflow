@@ -38,7 +38,7 @@ export const YearView = ({
   const renderMonth = (monthDate: Date) => {
     const start = startOfMonth(monthDate);
     const end = endOfMonth(monthDate);
-    const firstCell = startOfWeek(start, { weekStartsOn: 1 });
+    const firstCell = startOfWeek(start, { weekStartsOn: 0 });
 
     const cells: Date[] = [];
     let cursor = firstCell;
@@ -48,18 +48,21 @@ export const YearView = ({
     }
 
     return (
-      <div key={format(monthDate, "yyyy-MM")} className="flex flex-col">
+      <div
+        key={format(monthDate, "yyyy-MM")}
+        className="flex flex-col justify-self-center"
+      >
         {/* Month header */}
         <h3 className="font-semibold text-foreground mb-2 text-center">
           {format(monthDate, "MMMM")}
         </h3>
 
         {/* Week headers */}
-        <div className="grid grid-cols-7 gap-px mb-px">
-          {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((day) => (
+        <div className="grid grid-cols-7 gap-0 mb-px w-max lg:w-full">
+          {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
             <div
               key={day}
-              className="text-center text-xs font-semibold text-gray-600 py-1"
+              className="text-center text-xs font-semibold text-muted-foreground py-1 w-10 lg:w-full"
             >
               {day[0]}
             </div>
@@ -67,26 +70,26 @@ export const YearView = ({
         </div>
 
         {/* Calendar grid */}
-        <div className="grid grid-cols-7 border-collapse bg-white mt-2 rounded">
+        <div className="grid grid-cols-7 gap-0 border-collapse bg-background mt-2 rounded w-max">
           {cells.map((date, idx) => {
             const inMonth = date.getMonth() === start.getMonth();
             const key = formatKey(date);
             const isSelected =
               selectedDate.toDateString() === date.toDateString();
             const daySchedules = schedules.filter(
-              (s) => formatKey(new Date(s.date)) === key
+              (s) => formatKey(new Date(s.date)) === key,
             );
 
             return (
               <div
                 key={idx}
                 className={cn(
-                  "flex flex-col border border-border items-center p-2",
+                  "flex flex-col border border-border items-center w-10 lg:w-full p-2",
                   inMonth ? "bg-white" : "bg-muted",
                   idx === 0 && "rounded-tl-lg",
                   idx === 6 && "rounded-tr-lg",
                   idx === cells.length - 7 && "rounded-bl-lg",
-                  idx === cells.length - 1 && "rounded-br-lg"
+                  idx === cells.length - 1 && "rounded-br-lg",
                 )}
               >
                 <div
@@ -101,7 +104,7 @@ export const YearView = ({
                     "flex items-center justify-center text-xs font-medium w-7 h-7 rounded-full cursor-pointer transition-all duration-150",
                     inMonth ? "text-foreground" : "text-muted-foreground",
                     isSelected && "bg-primary text-white",
-                    isToday(date) && !isSelected && "bg-muted"
+                    isToday(date) && !isSelected && "bg-muted",
                   )}
                 >
                   {format(date, "d")}
@@ -109,7 +112,7 @@ export const YearView = ({
                 {daySchedules.length > 0 && (
                   <div className="mt-0.5 flex items-center gap-0.5">
                     {Array.from(
-                      new Set(daySchedules.map((s) => s.task.focus))
+                      new Set(daySchedules.map((s) => s.task.focus)),
                     ).map((focus, i) => (
                       <div
                         key={i}
@@ -117,7 +120,7 @@ export const YearView = ({
                           "w-1.5 h-1.5 rounded-full",
                           focus === 1 && "bg-green-500",
                           focus === 2 && "bg-yellow-500",
-                          focus === 3 && "bg-red-500"
+                          focus === 3 && "bg-red-500",
                         )}
                       />
                     ))}
@@ -132,14 +135,14 @@ export const YearView = ({
   };
 
   return (
-    <div className="flex-1 min-w-0 h-full relative overflow-y-auto bg-background sm:px-4 md:px-6 lg:px-8 py-8 rounded-l-xl flex flex-col">
+    <div className="flex-1 min-w-0 h-full relative overflow-y-auto bg-background sm:px-4 md:px-6 lg:px-8 py-4 flex flex-col">
       {/* Header with year navigation */}
-      <div className="flex items-center justify-between py-4">
+      <div className="flex items-center justify-between">
         <button
           onClick={() => setDisplayYear(displayYear - 1)}
           className="p-2 hover:bg-muted rounded-lg transition-colors"
         >
-          <ChevronLeft className="w-5 h-5 text-gray-600" />
+          <ChevronLeft className="w-5 h-5 text-muted-foreground" />
         </button>
 
         <h2 className="text-2xl font-bold text-foreground">{displayYear}</h2>
@@ -148,12 +151,12 @@ export const YearView = ({
           onClick={() => setDisplayYear(displayYear + 1)}
           className="p-2 hover:bg-muted rounded-lg transition-colors"
         >
-          <ChevronRight className="w-5 h-5 text-gray-600" />
+          <ChevronRight className="w-5 h-5 text-muted-foreground" />
         </button>
       </div>
 
       {/* Grid of 12 months (4 rows x 3 columns) */}
-      <div className="grid grid-cols-3 gap-8 flex-1 overflow-y-auto">
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 flex-1 overflow-y-auto">
         {months.map((month) => renderMonth(month))}
       </div>
     </div>

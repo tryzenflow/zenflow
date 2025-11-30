@@ -154,7 +154,7 @@ body {
   .markdown {
     @apply max-w-full leading-5 prose prose-sm dark:prose-invert
       prose-p:my-0 prose-p:whitespace-pre-line prose-p:before:content-none prose-p:after:content-none
-      prose-img:rounded-lg prose-img:max-w-full prose-img:h-auto prose-img:max-h-96 prose-img:object-contain
+      prose-img:rounded-lg prose-img:max-w-full prose-img:h-auto prose-img:max-h-48 prose-img:object-contain
       prose-a:text-primary prose-a:underline prose-a:underline-offset-4 prose-a:font-medium prose-a:cursor-pointer
       prose-blockquote:border-l-border prose-blockquote:pl-4 prose-blockquote:italic
       prose-code:before:content-none prose-code:after:content-none prose-code:text-sm prose-code:bg-muted

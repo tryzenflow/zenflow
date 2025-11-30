@@ -12,6 +12,7 @@ const allowedTags = [
   "code",
   "pre",
   "img",
+  "audio",
   "video",
   "a",
   "p",
@@ -46,6 +47,7 @@ export const sanitizeContent = (content: string) => {
 
       img: ["src"],
       video: ["src", "controls"],
+      audio: ["src", "controls"],
     },
   });
 };

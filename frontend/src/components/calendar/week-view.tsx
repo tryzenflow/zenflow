@@ -22,14 +22,14 @@ export const WeekView = ({
     date: string,
     split: number,
     newStart: number,
-    newEnd: number
+    newEnd: number,
   ) => void;
 }) => {
   // Create an array for the hourly timeline (0 AM to 11 PM)
   const hours = Array.from({ length: 24 }, (_, i) => {
     const date = new Date(selectedDate);
     date.setHours(i, 0, 0, 0);
-    return format(date, "ha").toUpperCase();
+    return format(date, "ha");
   });
 
   // Get the start of the week (Monday)
@@ -79,24 +79,26 @@ export const WeekView = ({
       schedules: calculateLayout(daySchedules),
     };
   });
+  const currentHour = new Date().getHours();
+  const currentMinute = new Date().getMinutes();
 
   return (
     <div className="flex-1 min-w-0 h-full relative overflow-y-auto bg-background">
       {/* Week header with days */}
-      <div className="sticky top-0 z-20 bg-background/50 backdrop-blur border-b border-border">
+      <div className="sticky top-0 z-20 bg-background/50 backdrop-blur">
         <div className="flex">
           {/* Time column header */}
-          <div className="w-12 flex-shrink-0 border-r border-border py-2"></div>
+          <div className="w-12 flex-shrink-0 py-2"></div>
 
           {/* Day headers */}
           {daysOfWeek.map((dayInfo, index) => (
             <div
               key={index}
-              className="flex-1 min-w-0 py-2 px-2 text-center cursor-pointer border-r border-border last:border-r-0"
+              className="flex-1 relative z-15 min-w-0 py-2 text-center cursor-pointer border-l border-b border-border last:border-r-0"
               onClick={() => setSelectedDate(dayInfo.date)}
             >
               <div className="flex flex-col items-center justify-center gap-1">
-                <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">
+                <div className="text-[10px] text-muted-foreground font-medium tracking-wide">
                   {dayInfo.dayName}
                 </div>
                 <div
@@ -104,7 +106,7 @@ export const WeekView = ({
                     "text-sm w-7 h-7 text-foreground rounded-full flex items-center justify-center font-semibold transition-all",
                     dayInfo.isSelected
                       ? "bg-primary text-primary-foreground"
-                      : dayInfo.isToday && "bg-muted"
+                      : dayInfo.isToday && "bg-muted",
                   )}
                 >
                   {dayInfo.dayNumber}
@@ -116,23 +118,39 @@ export const WeekView = ({
       </div>
 
       {/* Week grid */}
-      <div className="relative h-[1440px] mt-2">
-        {hours.map((time, index) => (
+      <div className="relative h-[1440px]">
+        {hours.map((hour, index) => (
           <div key={index} className="flex h-[60px] group">
             {/* Time label column */}
-            <div className="w-12 flex-shrink-0 text-[10px] text-muted-foreground -mt-2 pr-2 text-right border-border">
-              {time}
+            <div className="w-12 flex-shrink-0 z-20 text-[10px] text-muted-foreground -mt-2 pr-2 text-right border-border">
+              {hour}
             </div>
 
             {/* Day columns */}
-            {daysOfWeek.map((_, dayIndex) => (
+            {daysOfWeek.map(({ isToday }, dayIndex) => (
               <div
                 key={dayIndex}
-                className="flex-1 min-w-0 relative border-r border-border last:border-r-0"
+                className="flex-1 min-w-0 relative border-r border-b border-border last:border-r-0"
               >
                 {/* Half-hour grid lines */}
-                <div className="h-1/2 w-full absolute border-t border-border/70"></div>
+                <div className="h-1/2 w-full absolute border-border/70"></div>
                 <div className="h-1/2"></div>
+                {isToday && currentHour >= index && currentHour < index + 1 && (
+                  <>
+                    <div
+                      className="h-px bg-destructive w-full absolute z-[15]"
+                      style={{
+                        top: `${currentMinute * 1}px`,
+                      }}
+                    />
+                    <div
+                      className="w-2 h-2 bg-destructive rounded-full -left-1 absolute z-[15]"
+                      style={{
+                        top: `calc(${currentMinute * 1}px - 0.25rem)`,
+                      }}
+                    />
+                  </>
+                )}
               </div>
             ))}
           </div>
@@ -153,7 +171,7 @@ export const WeekView = ({
               dayIndex={dayIndex}
               isWeekView={true}
             />
-          ))
+          )),
         )}
 
         {/* Vertical grid lines */}

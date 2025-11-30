@@ -67,18 +67,20 @@ export const DroppedScheduleItem = ({
   );
 };
 
-export const UnscheduledTaskItem = ({
+export const TaskItem = ({
   title,
   duration,
   addToSchedule,
   openEditTaskDialog,
   deleteTask,
   taskId,
+  isRecurring,
 }: {
   title: string;
   duration: number;
   taskId: string;
   addToSchedule: (taskId: string) => void;
+  isRecurring: boolean;
   deleteTask: (taskId: string) => void;
   openEditTaskDialog: (taskId: string) => void;
 }) => (
@@ -106,14 +108,16 @@ export const UnscheduledTaskItem = ({
       >
         <Trash className="h-4 w-4 text-destructive" />
       </Button>
-      <Button
-        variant="ghost"
-        onClick={() => addToSchedule(taskId)}
-        size="icon"
-        className="h-6 w-6"
-      >
-        <ArrowRight className="h-4 w-4 text-muted-foreground" />
-      </Button>
+      {!isRecurring && (
+        <Button
+          variant="ghost"
+          onClick={() => addToSchedule(taskId)}
+          size="icon"
+          className="h-6 w-6"
+        >
+          <ArrowRight className="h-4 w-4 text-muted-foreground" />
+        </Button>
+      )}
     </div>
   </div>
 );

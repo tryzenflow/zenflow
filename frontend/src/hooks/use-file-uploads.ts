@@ -48,6 +48,10 @@ export function useFileUploads({
           }${fileUrl}" alt="${
             fileMetadata.originalName
           }" style="max-width: 100%;"/></p>`;
+        } else if (fileMetadata.mimetype.startsWith("audio/")) {
+          valueWithFile += `<p><audio controls src="${
+            import.meta.env.VITE_API_URL
+          }${fileUrl}" style="max-width: 100%;"></audio></p>`;
         } else if (fileMetadata.mimetype.startsWith("video/")) {
           valueWithFile += `<p><video controls src="${
             import.meta.env.VITE_API_URL

@@ -6,6 +6,7 @@ import Highlight from "@tiptap/extension-highlight";
 import Image from "@tiptap/extension-image";
 import { Video } from "@/components/common/editor/video-block";
 import { CustomLink } from "@/components/common/editor/custom-link";
+import { Audio } from "@/components/common/editor/audio-block";
 
 interface ContentEditor {
   content?: string;
@@ -27,13 +28,14 @@ export const useContentEditor = ({
         Highlight,
         Underline,
         Video,
+        Audio,
       ],
       editable,
       content,
       editorProps: {
         attributes: {
           class:
-            "relative break-words text-sm min-h-24 px-3 py-2 max-h-96 focus:outline-none overflow-hidden rounded-lg markdown",
+            "relative break-words text-sm min-h-64 px-3 py-2 focus:outline-none overflow-hidden rounded-lg markdown",
         },
       },
       onUpdate({ editor }) {
@@ -41,7 +43,7 @@ export const useContentEditor = ({
         onChange(newContent);
       },
     },
-    [editable]
+    [editable],
   );
   return editor;
 };
