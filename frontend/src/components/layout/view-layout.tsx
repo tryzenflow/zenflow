@@ -192,9 +192,7 @@ export default function ViewLayout({
       if (response.feasible) {
         toast.success("Schedule successfully!");
       } else {
-        toast.error(
-          "Infeasible schedule. Please shorten or drop some mandatory tasks",
-        );
+        toast.error("Infeasible schedule");
       }
 
       const generated = response.data;
@@ -216,7 +214,7 @@ export default function ViewLayout({
     } finally {
       setLoading(false);
     }
-  }, [selectedDate, scheduled, loadUnscheduledTasks]); // Dependencies updated
+  }, [selectedDate, loadUnscheduledTasks]); // Dependencies updated
 
   const openEditTaskDialog = useCallback((taskId: string) => {
     setSelectedTaskId(taskId);

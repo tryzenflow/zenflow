@@ -7,11 +7,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "../ui/context-menu";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "../ui/hover-card";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { TaskCard } from "../tasks/views/card";
 import { useEffect, useRef, useState } from "react";
 import { Task, TaskResponse } from "../../types/tasks";
@@ -269,14 +265,14 @@ export const ScheduleItem = ({
 
   return (
     <ContextMenu>
-      <HoverCard
+      <Popover
         open={!!selectedTaskId && !isInteractionActive} // Prevent dropdown during interaction
         onOpenChange={() =>
           setSelectedTaskId((prev) => (prev ? null : task.id))
         }
       >
         <ContextMenuTrigger asChild>
-          <HoverCardTrigger asChild>
+          <PopoverTrigger asChild>
             <div
               ref={itemRef}
               className={`absolute rounded-sm border-l-2 shadow-md transition-all ${
@@ -288,11 +284,7 @@ export const ScheduleItem = ({
             >
               {/* CONTENT WRAPPER */}
               <div className={`relative h-full w-full px-2 pt-1`}>
-                <div
-                  className={`font-semibold ${isWeekView ? "truncate" : ""}`}
-                >
-                  {task.title}
-                </div>
+                <div className="font-semibold">{task.title}</div>
                 {durationMinutes >= 30 && (
                   <div className="text-[10px] opacity-80">
                     {minutesToTime(currentStartMinutes)} -{" "}
@@ -301,16 +293,16 @@ export const ScheduleItem = ({
                 )}
               </div>
             </div>
-          </HoverCardTrigger>
+          </PopoverTrigger>
         </ContextMenuTrigger>
-        <HoverCardContent className="relative z-20" asChild={!!taskDetail}>
+        <PopoverContent className="relative z-20" asChild={!!taskDetail}>
           {taskDetail ? (
             <TaskCard task={taskDetail} deleteSchedule={deleteSchedule} />
           ) : (
             <div className="text-muted-foreground">No data available</div>
           )}
-        </HoverCardContent>
-      </HoverCard>
+        </PopoverContent>
+      </Popover>
       <ContextMenuContent>
         <ContextMenuGroup>
           <ContextMenuItem onClick={() => openEditTaskDialog(task.id)}>

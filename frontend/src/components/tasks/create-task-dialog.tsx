@@ -128,15 +128,11 @@ export function CreateTaskDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button size="sm" variant="outline">
-          <PlusIcon className="size-4 sm:hidden" />{" "}
-          <span className="hidden sm:inline">Add</span> Task
+          <PlusIcon className="size-4" />
+          Task
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px] overflow-x-hidden md:max-w-[600px] overflow-y-auto max-h-[90vh]">
-        <DialogHeader className="space-y-0">
-          <DialogTitle>Create new task</DialogTitle>
-        </DialogHeader>
-
+      <DialogContent className="overflow-x-hidden rounded-none max-w-none sm:max-w-none w-screen overflow-y-auto h-screen px-4 sm:px-6 lg:px-8 py-6">
         <TaskForm
           form={form as any}
           onSubmit={onSubmit}

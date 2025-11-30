@@ -86,10 +86,10 @@ export const MonthView = ({
             onClick={() => setDisplayMonth(subMonths(displayMonth, 1))}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >
-            <ChevronLeft className="w-5 h-5 text-gray-600" />
+            <ChevronLeft className="w-5 h-5 text-muted-foreground" />
           </button>
 
-          <h3 className="text-3xl font-bold text-gray-900 flex-1 text-center">
+          <h3 className="text-lg lg:text-3xl font-bold text-foreground flex-1 text-center">
             {format(start, "LLLL yyyy")}
           </h3>
 
@@ -136,7 +136,6 @@ export const MonthView = ({
                 className="
                   flex flex-col p-3 text-xs text-foreground cursor-pointer
                   border-r border-b border-gray-200 transition-all duration-150
-                  min-h-[100px]
                 "
                 onDoubleClick={(e) => focusDayView(e, date)}
               >
@@ -153,7 +152,26 @@ export const MonthView = ({
                 </div>
 
                 {/* Events */}
-                <div className="flex flex-col gap-1 flex-1 overflow-hidden">
+                <div className="block md:hidden">
+                  {daySchedules.length > 0 && (
+                    <div className="mt-0.5 flex items-center gap-0.5">
+                      {Array.from(
+                        new Set(daySchedules.map((s) => s.task.focus)),
+                      ).map((focus, i) => (
+                        <div
+                          key={i}
+                          className={cn(
+                            "w-1.5 h-1.5 rounded-full",
+                            focus === 1 && "bg-green-500",
+                            focus === 2 && "bg-yellow-500",
+                            focus === 3 && "bg-red-500",
+                          )}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="hidden md:flex flex-col gap-1 flex-1 overflow-hidden">
                   {daySchedules.slice(0, 2).map((schedule) => (
                     <MonthViewEvent
                       key={`${schedule.date}-${schedule.task.id}-${schedule.split}`}
@@ -269,7 +287,7 @@ function MonthViewEvent({
         <div className="flex items-center gap-x-2">
           <div
             className={cn(
-              "w-1.5 h-1.5 rounded-full",
+              "w-1.5 h-1.5 rounded-full shrink-0",
               schedule.task.focus === 1 && "bg-green-500",
               schedule.task.focus === 2 && "bg-yellow-500",
               schedule.task.focus === 3 && "bg-red-500",
@@ -278,7 +296,7 @@ function MonthViewEvent({
           <div
             key={`${schedule.task.id}-${schedule.date}`}
             className={cn(
-              "text-xs font-medium",
+              "text-xs font-medium line-clamp-1",
               inMonth ? "text-foreground" : "text-muted-foreground",
             )}
           >

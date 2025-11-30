@@ -31,7 +31,7 @@ export function TaskCategorySelect({
       control={formControl}
       name="categoryId"
       render={({ field }) => (
-        <FormItem className="flex-1">
+        <FormItem className="flex-1 w-full">
           <FormLabel>Category</FormLabel>
           <Select
             onValueChange={field.onChange}

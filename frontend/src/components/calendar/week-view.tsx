@@ -85,20 +85,20 @@ export const WeekView = ({
   return (
     <div className="flex-1 min-w-0 h-full relative overflow-y-auto bg-background">
       {/* Week header with days */}
-      <div className="sticky top-0 z-20 bg-background/50 backdrop-blur border-b border-border">
+      <div className="sticky top-0 z-20 bg-background/50 backdrop-blur">
         <div className="flex">
           {/* Time column header */}
-          <div className="w-12 flex-shrink-0 border-r border-border py-2"></div>
+          <div className="w-12 flex-shrink-0 py-2"></div>
 
           {/* Day headers */}
           {daysOfWeek.map((dayInfo, index) => (
             <div
               key={index}
-              className="flex-1 min-w-0 py-2 px-2 text-center cursor-pointer border-r border-border last:border-r-0"
+              className="flex-1 relative z-15 min-w-0 py-2 text-center cursor-pointer border-l border-b border-border last:border-r-0"
               onClick={() => setSelectedDate(dayInfo.date)}
             >
               <div className="flex flex-col items-center justify-center gap-1">
-                <div className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">
+                <div className="text-[10px] text-muted-foreground font-medium tracking-wide">
                   {dayInfo.dayName}
                 </div>
                 <div
@@ -118,11 +118,11 @@ export const WeekView = ({
       </div>
 
       {/* Week grid */}
-      <div className="relative h-[1440px] mt-2">
+      <div className="relative h-[1440px]">
         {hours.map((hour, index) => (
           <div key={index} className="flex h-[60px] group">
             {/* Time label column */}
-            <div className="w-12 flex-shrink-0 text-[10px] text-muted-foreground -mt-2 pr-2 text-right border-border">
+            <div className="w-12 flex-shrink-0 z-20 text-[10px] text-muted-foreground -mt-2 pr-2 text-right border-border">
               {hour}
             </div>
 
@@ -130,10 +130,10 @@ export const WeekView = ({
             {daysOfWeek.map(({ isToday }, dayIndex) => (
               <div
                 key={dayIndex}
-                className="flex-1 min-w-0 relative border-r border-border last:border-r-0"
+                className="flex-1 min-w-0 relative border-r border-b border-border last:border-r-0"
               >
                 {/* Half-hour grid lines */}
-                <div className="h-1/2 w-full absolute border-t border-border/70"></div>
+                <div className="h-1/2 w-full absolute border-border/70"></div>
                 <div className="h-1/2"></div>
                 {isToday && currentHour >= index && currentHour < index + 1 && (
                   <>

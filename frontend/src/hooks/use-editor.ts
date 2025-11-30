@@ -33,7 +33,7 @@ export const useContentEditor = ({
       editorProps: {
         attributes: {
           class:
-            "relative break-words text-sm min-h-24 px-3 py-2 max-h-96 focus:outline-none overflow-hidden rounded-lg markdown",
+            "relative break-words text-sm min-h-64 px-3 py-2 focus:outline-none overflow-hidden rounded-lg markdown",
         },
       },
       onUpdate({ editor }) {
@@ -41,7 +41,7 @@ export const useContentEditor = ({
         onChange(newContent);
       },
     },
-    [editable]
+    [editable],
   );
   return editor;
 };

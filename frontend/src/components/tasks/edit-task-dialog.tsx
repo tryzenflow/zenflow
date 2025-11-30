@@ -40,7 +40,7 @@ export function EditTaskDialog({
   useEffect(() => {
     if (!open) return;
     getData<{ data: Task | null }>(`/tasks/${taskId}`).then(({ data }) =>
-      setTask(data)
+      setTask(data),
     );
   }, [taskId, open]);
 
@@ -77,7 +77,7 @@ export function EditTaskDialog({
     if (!scheduleDate || !open) setTasks([]);
     const formattedScheduleDate = format(scheduleDate, "yyyy-MM-dd");
     getData<{ data: Task[] }>(
-      `/tasks?start=${formattedScheduleDate}&end=${formattedScheduleDate}`
+      `/tasks?start=${formattedScheduleDate}&end=${formattedScheduleDate}`,
     ).then(({ data }) => setTasks(data));
   }, [scheduleDate, open]);
 
@@ -127,7 +127,7 @@ export function EditTaskDialog({
       setOpen(false);
     } catch (error: any) {
       toast.error(
-        error.message || "Something went wrong when updating the task"
+        error.message || "Something went wrong when updating the task",
       );
     } finally {
       setLoading(false);
@@ -142,7 +142,7 @@ export function EditTaskDialog({
       setOpen(false);
     } catch (error: any) {
       toast.error(
-        error.message || "Something went wrong when cancelling task creation"
+        error.message || "Something went wrong when cancelling task creation",
       );
     } finally {
       setLoading(false);
@@ -151,11 +151,7 @@ export function EditTaskDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="sm:max-w-[500px] overflow-x-hidden md:max-w-[600px] overflow-y-auto max-h-[90vh]">
-        <DialogHeader className="space-y-0">
-          <DialogTitle>Edit Task</DialogTitle>
-        </DialogHeader>
-
+      <DialogContent className="overflow-x-hidden rounded-none max-w-none sm:max-w-none w-screen overflow-y-auto h-screen px-4 sm:px-6 lg:px-8 p-0">
         <TaskForm
           form={form as any}
           onSubmit={onSubmit}
