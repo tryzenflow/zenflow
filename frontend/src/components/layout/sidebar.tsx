@@ -4,7 +4,7 @@ import { Task } from "../../types/tasks";
 import {
   DroppedScheduleItem,
   MiniCalendar,
-  UnscheduledTaskItem,
+  TaskItem,
 } from "../calendar/sidebar";
 import { Badge } from "../ui/badge";
 import {
@@ -12,19 +12,14 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "../ui/collapsible";
-import { ScrollArea } from "../ui/scroll-area";
 import { Button } from "../ui/button";
-import { ChevronDown, MenuIcon } from "lucide-react";
+import { ChevronDown, MenuIcon, RefreshCw } from "lucide-react";
 import { cn } from "../../lib/utils";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarTrigger,
-} from "../ui/sidebar";
+import { Sidebar, SidebarContent, SidebarGroup } from "../ui/sidebar";
 
 interface SidebarProps {
   selectedDate: Date;
+  recurringTasks: Task[];
   handleDateChange: (date: Date) => void;
   droppedOutSchedules: Schedule[];
   unscheduledTasks: Task[];
@@ -36,16 +31,19 @@ interface SidebarProps {
 
 export const AppSidebar = ({
   selectedDate,
+  recurringTasks,
   handleDateChange,
   droppedOutSchedules,
   unscheduledTasks,
   openEditTaskDialog,
   deleteDropoutTasks,
-  deleteUnscheduledTasks,
+  deleteUnscheduledTasks: deleteTask,
   addToSchedule,
 }: SidebarProps) => {
   const [isDropoutTasksCollapsed, setIsDropoutTasksCollapsed] = useState(true);
   const [isRecommendedTasksCollapsed, setIsRecommendedTasksCollapsed] =
+    useState(true);
+  const [isRecurringTasksCollapsed, setIsRecurringTasksCollapsed] =
     useState(true);
   const [showMore, setShowMore] = useState(false);
   return (
@@ -57,6 +55,49 @@ export const AppSidebar = ({
             selectedDate={selectedDate}
             onDateChange={handleDateChange}
           />
+        </SidebarGroup>
+
+        <SidebarGroup>
+          {recurringTasks.length > 0 && (
+            <Collapsible
+              open={isRecurringTasksCollapsed}
+              onOpenChange={setIsRecurringTasksCollapsed}
+              className="px-6 relative"
+            >
+              <div className="flex justify-between items-center gap-x-3 border-b border-border">
+                <div className="flex sticky top-0 items-center gap-x-3 bg-white py-2">
+                  <h3 className="font-semibold text-sm text-foreground">
+                    Recurring Tasks
+                  </h3>
+                  <RefreshCw className="size-4 text-muted-foreground" />
+                </div>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" size="icon-sm">
+                    <ChevronDown
+                      className={cn(
+                        "size-4 transition-all",
+                        isRecurringTasksCollapsed && "rotate-180",
+                      )}
+                    />
+                  </Button>
+                </CollapsibleTrigger>
+              </div>
+              <CollapsibleContent>
+                {recurringTasks.map((task) => (
+                  <TaskItem
+                    key={task.id}
+                    duration={task.duration}
+                    taskId={task.id}
+                    title={task.title}
+                    addToSchedule={addToSchedule}
+                    isRecurring
+                    deleteTask={deleteTask}
+                    openEditTaskDialog={openEditTaskDialog}
+                  />
+                ))}
+              </CollapsibleContent>
+            </Collapsible>
+          )}
         </SidebarGroup>
 
         <SidebarGroup>
@@ -132,11 +173,12 @@ export const AppSidebar = ({
                 {unscheduledTasks
                   .slice(0, !showMore ? 5 : undefined)
                   .map((task) => (
-                    <UnscheduledTaskItem
+                    <TaskItem
                       addToSchedule={addToSchedule}
                       taskId={task.id}
-                      deleteTask={deleteUnscheduledTasks}
+                      deleteTask={deleteTask}
                       key={task.id}
+                      isRecurring={false}
                       title={task.title}
                       openEditTaskDialog={openEditTaskDialog}
                       duration={task.duration}

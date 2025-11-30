@@ -44,7 +44,7 @@ export class SchedulerController implements OnModuleInit {
     @Inject(SCHEDULER_PACKAGE) private client: ClientGrpc,
     private constraintsService: ConstraintsService,
     private tasksService: TasksService,
-    private schedulesService: SchedulesService
+    private schedulesService: SchedulesService,
   ) {}
 
   onModuleInit() {
@@ -55,15 +55,19 @@ export class SchedulerController implements OnModuleInit {
   @Post("schedule")
   async schedule(
     @CurrentUser() user: User,
-    @Body() { scheduleDate, scheduleBased: schedulesBased }: ScheduleTasksDto
+    @Body() { scheduleDate, scheduleBased: schedulesBased }: ScheduleTasksDto,
   ) {
     const weekday = new Date(scheduleDate).getDay();
     const constraints = await this.constraintsService.getByWeekday(
       user.id,
-      weekday
+      weekday,
     );
 
-    const tasks = await this.tasksService.findToSchedule(scheduleDate, user.id);
+    const tasks = await this.tasksService.findToSchedule(
+      scheduleDate,
+      user.id,
+      user.timezone,
+    );
 
     if (tasks.length === 0 || !constraints)
       throw new BadRequestException({
@@ -120,7 +124,7 @@ export class SchedulerController implements OnModuleInit {
     if (errors.length > 0) throw new BadRequestException(errors);
 
     const response = await firstValueFrom<ScheduleResponse>(
-      this.schedulerService.Schedule(request)
+      this.schedulerService.Schedule(request),
     );
 
     if (!response.schedules || response?.schedules?.length === 0)
@@ -134,7 +138,7 @@ export class SchedulerController implements OnModuleInit {
             end: extractDate(addDays(new Date(scheduleDate), 1)),
           },
           user.id,
-          user.timezone
+          user.timezone,
         ),
       };
 
@@ -157,7 +161,7 @@ export class SchedulerController implements OnModuleInit {
                 acc += s.end - s.start;
               }
               return acc;
-            }, 0)
+            }, 0),
       )
       .map((task) => ({
         taskId: task.id,
@@ -168,7 +172,7 @@ export class SchedulerController implements OnModuleInit {
       scheduleDate,
       [...scheduled, ...unscheduled],
       user.timezone,
-      user.id
+      user.id,
     );
     return {
       success: true,

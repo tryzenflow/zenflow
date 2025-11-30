@@ -6,6 +6,8 @@ import { Separator } from "../ui/separator";
 import { TaskCard } from "./views/card";
 import { toast } from "sonner";
 import { deleteTask } from "../../utils/tasks";
+import { useUserStore } from "@/hooks/use-user-store";
+import { Schedule } from "@/types/schedule";
 
 export function TaskView({
   selectedDate,
@@ -31,6 +33,7 @@ export function TaskView({
   taskViewRefetchTrigger: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const user = useUserStore((state) => state.user);
 
   // NEW: Local state for tasks
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -69,8 +72,8 @@ export function TaskView({
       );
       if (response.data) {
         // Robust deduplication: dedupe schedules by id (if present) or by date+split
-        const dedupeSchedules = (schedules: any[] = []) => {
-          const map = new Map<string, any>();
+        const dedupeSchedules = (schedules: Schedule[] = []) => {
+          const map = new Map<string, Schedule>();
           for (const s of schedules) {
             const dateKey =
               s?.date != null ? new Date(s.date).toISOString() : "nodate";
@@ -148,6 +151,7 @@ export function TaskView({
   const prevRangeRef = useRef<{ start: Date; end: Date } | null>(null);
 
   useEffect(() => {
+    if (!user) return;
     // Depend on taskCacheKey so that when ViewLayout triggers a refetch,
     // this effect runs with a fresh state (tasks = []).
     if (taskCacheKey !== taskViewRefetchTrigger) return;
@@ -172,7 +176,7 @@ export function TaskView({
 
     // Update reference
     prevRangeRef.current = { start: rangeStart, end: rangeEnd };
-  }, [rangeStart, rangeEnd, taskCacheKey]); // Added taskCacheKey dependency
+  }, [user, taskViewRefetchTrigger, rangeStart, rangeEnd, taskCacheKey]); // Added taskCacheKey dependency
 
   useEffect(() => {
     // ... (Scroll handling logic remains the same)

@@ -29,7 +29,7 @@ interface NavbarProps {
   setCurrentView: (prev: string) => void;
   navigateDate: (dir: "next" | "prev") => void;
   goToToday: () => void;
-  schedule: () => Promise<void>;
+  schedule: (scheduleDate: Date) => Promise<void>;
   isLoading: boolean;
   addTask: (task: Task) => void;
 }
@@ -94,16 +94,20 @@ export const Navbar = ({
         currentView={currentView}
         setCurrentView={setCurrentView}
       />
-      <Button size="sm" disabled={isLoading} onClick={schedule}>
+      <Button
+        size="sm"
+        disabled={isLoading}
+        onClick={() => schedule(selectedDate)}
+      >
         <WandSparklesIcon className="size-4" />{" "}
         <span className="hidden sm:inline">Plan</span>
       </Button>
       <Separator orientation="vertical" className="min-h-9" />
       <CreateTaskDialog
         selectedDate={selectedDate}
-        addTask={async (task) => {
+        addTask={async (task, scheduleDate) => {
           addTask(task);
-          await schedule();
+          await schedule(scheduleDate);
         }}
       />
       <NavUser />

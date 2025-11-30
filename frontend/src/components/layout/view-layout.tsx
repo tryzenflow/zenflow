@@ -36,7 +36,6 @@ interface BodyProps {
   schedules: Schedule[];
   selectedDate: Date;
   currentView: string;
-  // REMOVED: tasks, setTasks
   openEditTaskDialog: (taskId: string) => void;
   setSelectedDate: (date: Date) => void;
   loading: boolean;
@@ -69,14 +68,13 @@ export default function ViewLayout({
 
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [schedules, setSchedules] = useState<Schedule[]>([]);
-  // REMOVED: tasks state
   const [unscheduledTasks, setUnscheduledTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(false);
   const [currentView, setCurrentView] = useState("Task view");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  // NEW: State to force TaskView to refetch/re-render its data
   const [taskViewRefetchTrigger, setTaskViewRefetchTrigger] = useState(0);
+  const [recurringTasks, setRecurringTasks] = useState<Task[]>([]);
 
   // Auth/Redirect logic (placeholders)
   useEffect(() => {
@@ -108,11 +106,14 @@ export default function ViewLayout({
     const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
 
     try {
-      const response = await getData<{ data: Task[] }>(
+      const response = await getData<{
+        data: { unscheduled: Task[]; recurring: Task[] };
+      }>(
         `/tasks/schedule/none?start=${selectedDateStr}&end=${selectedDateStr}`,
       );
 
-      setUnscheduledTasks(response.data);
+      setUnscheduledTasks(response.data.unscheduled);
+      setRecurringTasks(response.data.recurring);
     } catch (error) {
       toast.error("Failed to load unscheduled tasks: " + error);
     } finally {
@@ -156,12 +157,10 @@ export default function ViewLayout({
 
   // run when selectedDate changes
   useEffect(() => {
+    if (!user) return;
     loadSchedules();
-  }, [loadSchedules]);
-
-  useEffect(() => {
     loadUnscheduledTasks();
-  }, [loadUnscheduledTasks]);
+  }, [loadSchedules, loadUnscheduledTasks, user]);
 
   const handleDateChange = useCallback((date: SetStateAction<Date>) => {
     setSelectedDate(date);
@@ -182,39 +181,42 @@ export default function ViewLayout({
     [selectedDate, handleDateChange],
   );
 
-  const schedule = useCallback(async () => {
-    try {
-      setLoading(true);
-      const formattedScheduleDate = format(selectedDate, "yyyy-MM-dd");
-      const response = await postData<object, ScheduleResponse>("/schedule", {
-        scheduleDate: formattedScheduleDate,
-      });
-      if (response.feasible) {
-        toast.success("Schedule successfully!");
-      } else {
-        toast.error("Infeasible schedule");
+  const schedule = useCallback(
+    async (scheduleDate: Date) => {
+      try {
+        setLoading(true);
+        const formattedScheduleDate = format(scheduleDate, "yyyy-MM-dd");
+        const response = await postData<object, ScheduleResponse>("/schedule", {
+          scheduleDate: formattedScheduleDate,
+        });
+        if (response.feasible) {
+          toast.success("Schedule successfully!");
+        } else {
+          toast.error("Infeasible schedule");
+        }
+
+        const generated = response.data;
+
+        setSchedules((prev) => [
+          ...prev.filter(
+            (s) =>
+              format(new Date(s.date), "yyyy-MM-dd") !== formattedScheduleDate,
+          ),
+          ...generated,
+        ]);
+
+        setTaskViewRefetchTrigger((prev) => prev + 1);
+
+        loadUnscheduledTasks();
+      } catch (error: any) {
+        toast.error(error.message || "Failed to schedule tasks");
+        throw error;
+      } finally {
+        setLoading(false);
       }
-
-      const generated = response.data;
-
-      setSchedules((prev) => [
-        ...prev.filter(
-          (s) =>
-            format(new Date(s.date), "yyyy-MM-dd") !== formattedScheduleDate,
-        ),
-        ...generated,
-      ]);
-
-      setTaskViewRefetchTrigger((prev) => prev + 1);
-
-      loadUnscheduledTasks();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to schedule tasks");
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedDate, loadUnscheduledTasks]); // Dependencies updated
+    },
+    [loadUnscheduledTasks],
+  );
 
   const openEditTaskDialog = useCallback((taskId: string) => {
     setSelectedTaskId(taskId);
@@ -267,7 +269,7 @@ export default function ViewLayout({
         setUnscheduledTasks((prev) => prev.filter((t) => t.id !== taskId));
         toast.success("Task added to the day's schedule");
         try {
-          await schedule();
+          await schedule(selectedDate);
         } catch (error: any) {
           const task = unscheduledTasks.find((t) => t.id === taskId);
           if (!task) return;
@@ -425,6 +427,7 @@ export default function ViewLayout({
           </div>
           {/* Sidebar */}
           <AppSidebar
+            recurringTasks={recurringTasks}
             selectedDate={selectedDate}
             handleDateChange={handleDateChange}
             droppedOutSchedules={droppedOutSchedules}

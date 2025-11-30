@@ -23,7 +23,7 @@ async function bootstrap() {
       transform: true,
       forbidNonWhitelisted: true,
       transformOptions: { enableImplicitConversion: true },
-    })
+    }),
   );
 
   const redisClient = createClient({
@@ -50,7 +50,7 @@ async function bootstrap() {
       // see explanations for `resave` and `saveUninitialized` at https://stackoverflow.com/a/40396102/16164473
       resave: false,
       saveUninitialized: false,
-    })
+    }),
   );
   app.use(passport.initialize());
   app.use(passport.session());

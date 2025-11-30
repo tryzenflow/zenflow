@@ -25,6 +25,7 @@ import { TaskCategorySelect } from "./task-category-select";
 import { TaskFocusSelect } from "./task-focus-select";
 import { TaskPrioritySelect } from "./task-priority-select";
 import { Switch } from "../../ui/switch";
+import { RRuleForm } from "../rrule-form";
 
 interface TaskFormProps {
   form: UseFormReturn<TaskFormValues>;
@@ -52,6 +53,7 @@ export function TaskForm({
   const latestEnd = form.watch("latestEnd");
   const duration = form.watch("duration");
   const scheduleDate = form.watch("scheduleDate");
+  const isRecurring = form.watch("isRecurring");
 
   return (
     <Form {...form}>
@@ -59,27 +61,6 @@ export function TaskForm({
         onSubmit={form.handleSubmit(onSubmit)}
         className="space-y-4 w-full md:max-w-7xl mx-auto"
       >
-        {/* Header: title on the left, actions on the right */}
-        <div className="flex items-center mt-3 justify-between">
-          <h3 className="text-base sm:text-lg font-semibold">
-            Create new task
-          </h3>
-          <div className="flex items-center space-x-2">
-            <Button
-              onClick={onCancel}
-              disabled={loading}
-              type="button"
-              variant="outline"
-              size="sm"
-            >
-              Cancel
-            </Button>
-            <Button size="sm" disabled={loading} type="submit">
-              Save
-            </Button>
-          </div>
-        </div>
-
         {/* Top-level responsive grid:
             - Single column on small screens
             - 3 columns at md, with main content spanning 2 cols and sidebar 1 col
@@ -197,11 +178,45 @@ export function TaskForm({
                 )}
               />
             </div>
+            <FormField
+              control={form.control}
+              name="note"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Notes</FormLabel>
+                  <FormControl>
+                    <NoteEditor
+                      initialValue={initialNote}
+                      newUploadsRef={newUploadsRef}
+                      disabled={loading}
+                      value={field.value || ""}
+                      onChange={field.onChange}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </div>
 
           {/* Sidebar / Advanced config (small column on the right from md) */}
-          <div className="md:col-span-1 space-y-4">
+          <div className="md:col-span-1 flex flex-col gap-y-4">
             {/* Deadline Date and Time */}
+
+            <div className="flex items-center space-x-2 w-fit justify-self-end md:order-1 order-last">
+              <Button
+                onClick={onCancel}
+                disabled={loading}
+                type="button"
+                variant="outline"
+                size="sm"
+              >
+                Cancel
+              </Button>
+              <Button size="sm" disabled={loading} type="submit">
+                Save
+              </Button>
+            </div>
             <div className="grid grid-cols-3 gap-4 items-baseline">
               <FormField
                 control={form.control}
@@ -307,31 +322,22 @@ export function TaskForm({
                 </FormItem>
               )}
             />
-          </div>
-        </div>
-
-        {/* Notes - always at the end of the form but constrained to the left/main column on md+ */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="md:col-span-2">
+            {/* Recurring switch */}
             <FormField
               control={form.control}
-              name="note"
+              name="isRecurring"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Notes</FormLabel>
-                  <FormControl>
-                    <NoteEditor
-                      initialValue={initialNote}
-                      newUploadsRef={newUploadsRef}
-                      disabled={loading}
-                      value={field.value || ""}
-                      onChange={field.onChange}
-                    />
-                  </FormControl>
-                  <FormMessage />
+                <FormItem className="flex gap-2 items-center">
+                  <Switch
+                    disabled={loading}
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                  <FormLabel>Recurring</FormLabel>
                 </FormItem>
               )}
             />
+            {isRecurring && <RRuleForm form={form} />}
           </div>
         </div>
       </form>

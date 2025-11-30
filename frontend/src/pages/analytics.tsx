@@ -13,6 +13,8 @@ import {
   TrendingUp,
   Zap,
 } from "lucide-react"; // Icons for visual flair
+import { useUserStore } from "@/hooks/use-user-store";
+import { useNavigate } from "react-router-dom";
 
 interface DashboardSummary {
   totalScheduledTime: number;
@@ -39,14 +41,27 @@ export default function AnalyticsPage() {
   const [selectedStartDate, setSelectedStartDate] = useState<Date>(new Date());
   const [selectedEndDate, setSelectedEndDate] = useState<Date>(new Date());
   const [dashboardData, setDashboardData] = useState<DashboardSummary | null>(
-    null
+    null,
   );
-
+  const user = useUserStore().user;
+  const userFetching = useUserStore().loading;
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (userFetching === null || userFetching) return;
+    if (!user) {
+      navigate("/login?callback=/");
+      return;
+    }
+    if (user._count.categories === 0 || user._count.constraints === 0) {
+      navigate("/prefs?callback=/");
+      return;
+    }
+  }, [user, userFetching, navigate]);
   useEffect(() => {
     const formattedStartDate = format(selectedStartDate, "yyyy-MM-dd");
     const formattedEndDate = format(selectedEndDate, "yyyy-MM-dd");
     getData<DashboardSummary>(
-      `/analytics/summary?start=${formattedStartDate}&end=${formattedEndDate}`
+      `/analytics/summary?start=${formattedStartDate}&end=${formattedEndDate}`,
     ).then((data) => setDashboardData(data));
   }, [selectedStartDate, selectedEndDate]);
 
@@ -261,8 +276,8 @@ export const Dashboard: React.FC<Props> = ({ data }) => {
                       dailyLoadProgress > 90
                         ? "bg-red-100 text-red-700"
                         : dailyLoadProgress > 70
-                        ? "bg-amber-100 text-amber-700"
-                        : "bg-green-100 text-green-700"
+                          ? "bg-amber-100 text-amber-700"
+                          : "bg-green-100 text-green-700"
                     }`}
                   >
                     {dailyLoadProgress.toFixed(0)}%
@@ -276,10 +291,10 @@ export const Dashboard: React.FC<Props> = ({ data }) => {
                   {dailyLoadProgress >= 100
                     ? "At full capacity - consider rescheduling"
                     : dailyLoadProgress > 90
-                    ? "Near capacity - consider rescheduling"
-                    : dailyLoadProgress > 70
-                    ? "Well-balanced schedule"
-                    : "Space for more tasks"}
+                      ? "Near capacity - consider rescheduling"
+                      : dailyLoadProgress > 70
+                        ? "Well-balanced schedule"
+                        : "Space for more tasks"}
                 </p>
               </div>
             </CardContent>

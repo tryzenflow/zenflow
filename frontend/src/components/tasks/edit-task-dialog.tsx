@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { getData, patchData, postData } from "../../api";
 import { CategoryItem, DAILY_HORIZON } from "../../types/prefs";
 import { Task } from "../../types/tasks";
-import { TaskFormValues } from "../../utils/tasks";
+import { generateRRule, parseRRule, TaskFormValues } from "../../utils/tasks";
 import { TaskForm } from "./form/task-form";
 import { useFilesTracker } from "../../hooks/use-files-tracker";
 
@@ -57,6 +57,21 @@ export function EditTaskDialog({
       earliestStart: 0,
       latestEnd: DAILY_HORIZON,
       prerequisites: [],
+      deadlineDate: "",
+      deadlineTime: "",
+      frequency: "WEEKLY",
+      interval: 1,
+      byweekday: ["MO"],
+      bymonthday: 1,
+      bysetpos: 1,
+      byweekdayMonth: "MO",
+      monthlyMode: "on",
+      yearlyMode: "on",
+      isRecurring: false,
+      month: 1,
+      endMode: "never",
+      count: 1,
+      until: undefined,
     },
   });
   const scheduleDate = form.watch("scheduleDate");
@@ -83,8 +98,11 @@ export function EditTaskDialog({
 
   useEffect(() => {
     if (!task) return;
+    const parsedFields = task.rrule ? parseRRule(task.rrule) : {};
     form.reset({
       ...task,
+      ...parsedFields,
+      isRecurring: !!task.rrule,
       note: task.note ?? "",
       scheduleDate: selectedDate,
       categoryId: task.categoryId ?? undefined,
@@ -111,16 +129,29 @@ export function EditTaskDialog({
     try {
       if (removedFileIds.current.length > 0)
         await postData("/files/remove", { ids: removedFileIds.current });
-      const updated = await patchData<any, { data: Task }>(`/tasks/${taskId}`, {
-        ...values,
-        deadlineDate,
-        deadlineTime,
-        scheduleDate:
-          formattedScheduleDate === formattedSelectedDate
-            ? undefined
-            : formattedScheduleDate,
-      });
-
+      const updated = await patchData<object, { data: Task }>(
+        `/tasks/${taskId}`,
+        {
+          title: values.title,
+          note: values.note,
+          priority: values.priority,
+          earliestStart: values.earliestStart,
+          latestEnd: values.latestEnd,
+          prerequisites: values.prerequisites,
+          categoryId: values.categoryId,
+          focus: values.focus,
+          maxSplits: values.maxSplits,
+          duration: values.duration,
+          mandatory: values.mandatory,
+          scheduleDate:
+            formattedScheduleDate === formattedSelectedDate
+              ? undefined
+              : formattedScheduleDate,
+          deadlineDate,
+          deadlineTime,
+          rrule: values.isRecurring ? generateRRule(values) : undefined,
+        },
+      );
       updateSchedule(updated.data);
       form.reset();
       toast.success("Task updated successfully 🎉");
@@ -153,7 +184,10 @@ export function EditTaskDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="overflow-x-hidden rounded-none max-w-none sm:max-w-none w-screen overflow-y-auto h-screen px-4 sm:px-6 lg:px-8 p-0">
+      <DialogContent className="overflow-x-hidden rounded-none max-w-none sm:max-w-none w-screen overflow-y-auto h-screen px-4 sm:px-6 lg:px-8">
+        <DialogHeader className="max-w-7xl mx-auto w-full">
+          <DialogTitle>Edit task</DialogTitle>
+        </DialogHeader>
         <TaskForm
           form={form as any}
           onSubmit={onSubmit}

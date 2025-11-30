@@ -29,7 +29,7 @@ export class TasksService {
       ...createTaskDto
     }: CreateTaskDto,
     userId: string,
-    timezone: string
+    timezone: string,
   ) {
     const errors = validateTaskFields({ prerequisites, ...createTaskDto });
     if (errors.length > 0) {
@@ -53,14 +53,15 @@ export class TasksService {
           prerequisites: { connect: prerequisites.map((p) => ({ id: p })) },
           userId,
           deadline,
-          schedules: scheduleDate
-            ? {
-                create: {
-                  date: new Date(scheduleDate),
-                  split: 0,
-                },
-              }
-            : undefined,
+          schedules:
+            scheduleDate && !rrule
+              ? {
+                  create: {
+                    date: new Date(scheduleDate),
+                    split: 0,
+                  },
+                }
+              : undefined,
         },
       });
       return newTask;
@@ -68,7 +69,7 @@ export class TasksService {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === PostgresErrorCode.ForeignViolation)
           throw new BadRequestException(
-            "Cannot create task because its associated user, category, prerequisites may not exist"
+            "Cannot create task because its associated user, category, prerequisites may not exist",
           );
       }
 
@@ -82,7 +83,7 @@ export class TasksService {
   async find(
     userId: string,
     { start, end }: FindSchedulesDto,
-    timezone: string
+    timezone: string,
   ) {
     const startInTz = new Date(`${start}T00:00:00`);
     const endInTz = new Date(`${end}T00:00:00`);
@@ -91,7 +92,7 @@ export class TasksService {
     const tasks = await this.prisma.task.findMany({
       where: {
         userId,
-        schedules: { some: { date: { gt: startDate, lte: endDate } } },
+        schedules: { some: { date: { gte: startDate, lte: endDate } } },
       },
       include: {
         prerequisites: true,
@@ -107,7 +108,7 @@ export class TasksService {
   async findUnscheduled(
     userId: string,
     { start, end }: FindSchedulesDto,
-    timezone: string
+    timezone: string,
   ) {
     const startInTz = new Date(`${start}T00:00:00`);
     const endInTz = new Date(`${end}T00:00:00`);
@@ -118,17 +119,31 @@ export class TasksService {
       where: {
         userId,
         schedules: {
-          none: { date: { gt: startDate, lte: endDate } },
+          none: { date: { gte: startDate, lte: endDate } },
         },
       },
       include: {
-        prerequisites: true,
+        prerequisites: { select: { id: true } },
         category: true,
       },
       orderBy: [{ createdAt: "desc" }, { schedules: { _count: "desc" } }],
     });
 
-    return tasks;
+    const tasksWithEmptySchedules = tasks.map((t) => ({ ...t, schedules: [] }));
+
+    return {
+      recurring: this.filterRecurringTasks(
+        tasksWithEmptySchedules.filter((t) => t.rrule),
+        startDate,
+        endDate,
+      ) as typeof tasksWithEmptySchedules,
+      unscheduled: this.filterRecurringTasks(
+        tasksWithEmptySchedules,
+        startDate,
+        endDate,
+        true,
+      ) as typeof tasksWithEmptySchedules,
+    };
   }
 
   async findById(id: string, userId: string) {
@@ -147,18 +162,27 @@ export class TasksService {
     return task;
   }
 
-  async findToSchedule(scheduleDate: string, userId: string) {
-    const date = new Date(scheduleDate);
+  async findToSchedule(scheduleDate: string, userId: string, timezone: string) {
+    const startInTz = new Date(`${scheduleDate}T00:00:00`);
+    const endInTz = new Date(`${scheduleDate}T23:59:59`);
+    const startDate = fromZonedTime(startOfDay(startInTz), timezone);
+    const endDate = fromZonedTime(endOfDay(endInTz), timezone);
     const tasks = await this.prisma.task.findMany({
-      where: { userId, schedules: { some: { date } } },
+      where: {
+        userId,
+        OR: [
+          { rrule: { not: null } },
+          { schedules: { some: { date: { gte: startDate, lte: endDate } } } },
+        ],
+      },
       include: {
-        schedules: { where: { date } },
+        schedules: { where: { date: { gte: startDate, lte: endDate } } },
         category: { select: { id: true } },
         prerequisites: { select: { id: true } },
       },
     });
 
-    return tasks;
+    return this.filterRecurringTasks(tasks, startDate, endDate) as typeof tasks;
   }
 
   async update(
@@ -173,7 +197,7 @@ export class TasksService {
       ...updateTaskDto
     }: UpdateTaskDto,
     userId: string,
-    timezone: string
+    timezone: string,
   ) {
     try {
       const errors = validateTaskFields({
@@ -200,9 +224,10 @@ export class TasksService {
           deadline,
           category: categoryId ? { connect: { id: categoryId } } : undefined,
           schedules: {
-            create: scheduleDate
-              ? { date: new Date(scheduleDate), split: 0 }
-              : undefined,
+            create:
+              scheduleDate && !rrule
+                ? { date: new Date(scheduleDate), split: 0 }
+                : undefined,
           },
           prerequisites: prerequisites
             ? { set: prerequisites?.map((p) => ({ id: p })) }
@@ -259,10 +284,10 @@ export class TasksService {
   }
 
   private filterRecurringTasks(
-    tasks: (Task & { schedules?: Schedule[] })[],
+    tasks: (Task & { schedules: Schedule[] })[],
     startDate: Date,
     endDate: Date,
-    complement: boolean = false
+    complement: boolean = false,
   ) {
     return tasks.filter((t) => {
       const hasEmptySlot =
