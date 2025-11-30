@@ -112,7 +112,9 @@ export function CreateTaskDialog({
   const handleClose = async () => {
     setLoading(true);
     try {
-      await postData("/files/remove", { ids: newUploadsRef.current });
+      if (newUploadsRef.current.length > 0) {
+        await postData("/files/remove", { ids: newUploadsRef.current });
+      }
       form.reset();
       setOpen(false);
     } catch (error: any) {

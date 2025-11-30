@@ -6,6 +6,7 @@ import Highlight from "@tiptap/extension-highlight";
 import Image from "@tiptap/extension-image";
 import { Video } from "@/components/common/editor/video-block";
 import { CustomLink } from "@/components/common/editor/custom-link";
+import { Audio } from "@/components/common/editor/audio-block";
 
 interface ContentEditor {
   content?: string;
@@ -27,6 +28,7 @@ export const useContentEditor = ({
         Highlight,
         Underline,
         Video,
+        Audio,
       ],
       editable,
       content,

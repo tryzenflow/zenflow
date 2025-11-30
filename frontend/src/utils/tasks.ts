@@ -44,7 +44,7 @@ export const taskSchema = z
           if (isNaN(Date.parse(val))) return false;
           return true;
         },
-        { message: "Invalid date format" }
+        { message: "Invalid date format" },
       )
       .optional(),
     deadlineTime: z.string().optional(),
@@ -59,7 +59,7 @@ export const taskSchema = z
     {
       error: "Earliest start + duration > latest end",
       path: ["earliestStart"],
-    }
+    },
   );
 
 export type TaskFormValues = z.infer<typeof taskSchema>;
@@ -67,6 +67,8 @@ export type TaskFormValues = z.infer<typeof taskSchema>;
 export async function deleteTask(taskId: string) {
   const data = await getData<{ data: Task }>(`/tasks/${taskId}`);
   const previousIds = extractFileIdsFromNoteContent(data.data.note || "");
-  await postData("/files/remove", { ids: previousIds });
+  if (previousIds.length > 0) {
+    await postData("/files/remove", { ids: previousIds });
+  }
   return deleteData(`/tasks/${taskId}`);
 }
