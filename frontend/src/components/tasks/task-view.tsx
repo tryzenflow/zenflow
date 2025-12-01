@@ -92,7 +92,7 @@ export function TaskView({
             };
             if (!taskObj || !taskObj.id) continue;
 
-            const schedule: Schedule = {
+            const schedule: Omit<Schedule, "task"> = {
               date: row.date,
               start: row.start ?? null,
               end: row.end ?? null,

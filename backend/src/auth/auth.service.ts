@@ -17,7 +17,7 @@ export class AuthService {
   constructor(
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private usersService: UsersService,
-    private mailService: MailService
+    private mailService: MailService,
   ) {}
 
   async requestOTPCode(email: string) {
@@ -39,11 +39,11 @@ export class AuthService {
   async verifyOTPCode(email: string, providedOtp: string) {
     try {
       const otpCode = await this.cacheManager.get<string | null>(
-        `otp:${email}`
+        `otp:${email}`,
       );
       if (!otpCode)
         throw new NotFoundException(
-          "OTP Code is not found or may have been expired"
+          "OTP Code is not found or may have been expired",
         );
 
       if (otpCode !== providedOtp) {
