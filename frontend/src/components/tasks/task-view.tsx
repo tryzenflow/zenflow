@@ -92,11 +92,17 @@ export function TaskView({
             };
             if (!taskObj || !taskObj.id) continue;
 
-            const schedule: Omit<Schedule, "task"> = {
+            const schedule: Schedule = {
               date: row.date,
               start: row.start ?? null,
               end: row.end ?? null,
               split: row.split ?? 0,
+              task: {
+                id: taskObj.id,
+                title: taskObj.title,
+                focus: taskObj.focus as 1 | 2 | 3,
+                duration: taskObj.duration,
+              },
             };
 
             const existing = map.get(taskObj.id);
