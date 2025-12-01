@@ -13,7 +13,7 @@ import {
   CollapsibleTrigger,
 } from "../ui/collapsible";
 import { Button } from "../ui/button";
-import { ChevronDown, MenuIcon, RefreshCw } from "lucide-react";
+import { ChevronDown, RefreshCw } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { Sidebar, SidebarContent, SidebarGroup } from "../ui/sidebar";
 

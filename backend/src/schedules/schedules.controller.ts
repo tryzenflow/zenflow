@@ -30,7 +30,7 @@ export class SchedulesController {
     @Param("month", ParseIntPipe) month: number,
     @Param("day", ParseIntPipe) day: number,
     @Body() updateScheduleDto: UpdateScheduleDto,
-    @CurrentUser() user: User
+    @CurrentUser() user: User,
   ) {
     const date = getDateOnlyString(year, month, day);
     const updated = await this.schedulesService.update(
@@ -39,7 +39,7 @@ export class SchedulesController {
       split,
       updateScheduleDto,
       user.id,
-      user.timezone
+      user.timezone,
     );
     return {
       success: true,
@@ -55,7 +55,7 @@ export class SchedulesController {
     @Param("day", ParseIntPipe) day: number,
     @Param("id") id: string,
     @Param("split", ParseIntPipe) split: number,
-    @CurrentUser() user: User
+    @CurrentUser() user: User,
   ) {
     const date = getDateOnlyString(year, month, day);
     await this.schedulesService.remove(date, id, split, user.id);
@@ -65,12 +65,11 @@ export class SchedulesController {
   @Get()
   async findSchedules(
     @Query() findSchedulesDto: FindSchedulesDto,
-    @CurrentUser() user: User
+    @CurrentUser() user: User,
   ) {
     const schedules = await this.schedulesService.findSchedules(
       findSchedulesDto,
       user.id,
-      user.timezone
     );
     return {
       success: true,

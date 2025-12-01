@@ -12,7 +12,6 @@ import { PostgresErrorCode } from "../prisma/error-codes";
 import { validateTaskFields } from "./validators/task-fields";
 import { FindSchedulesDto } from "../schedules/dto/find-schedules.dto";
 import { RRule } from "rrule";
-import { endOfDay, startOfDay } from "date-fns";
 import { fromZonedTime } from "date-fns-tz";
 
 @Injectable()
@@ -80,67 +79,143 @@ export class TasksService {
     }
   }
 
-  async find(
-    userId: string,
-    { start, end }: FindSchedulesDto,
-    timezone: string,
-  ) {
-    const startInTz = new Date(`${start}T00:00:00`);
-    const endInTz = new Date(`${end}T00:00:00`);
-    const startDate = fromZonedTime(startOfDay(startInTz), timezone);
-    const endDate = fromZonedTime(endOfDay(endInTz), timezone);
+  async find(userId: string, { start, end }: FindSchedulesDto) {
+    // Get task ids that have schedules in the calendar-range using EXISTS (no duplicates).
+    const idsRows = await this.prisma.$queryRaw<
+      Array<{ id: string }>
+    >`SELECT t.id
+      FROM "Task" t
+      WHERE t."userId" = ${userId}
+        AND EXISTS (
+          SELECT 1 FROM "Schedule" s
+          WHERE s."taskId" = t.id
+            AND s.date BETWEEN ${start}::date AND ${end}::date
+        )
+      ORDER BY t."createdAt" DESC;`;
+
+    const taskIds = idsRows.map((r) => r.id);
+    if (taskIds.length === 0) return [];
+
+    // Fetch full task objects with relations
     const tasks = await this.prisma.task.findMany({
-      where: {
-        userId,
-        schedules: { some: { date: { gte: startDate, lte: endDate } } },
-      },
+      where: { id: { in: taskIds } },
       include: {
         prerequisites: true,
         category: true,
-        schedules: {
-          where: { date: { gte: startDate, lte: endDate } },
-        },
       },
+      orderBy: [{ createdAt: "desc" }],
     });
-    return tasks;
+
+    // Fetch schedules for those tasks in the same calendar-range (date-only comparison)
+    const schedulesRows = await this.prisma.$queryRaw<
+      Array<{
+        taskId: string;
+        date: string;
+        start: Date | null;
+        end: Date | null;
+        split: number;
+      }>
+    >`SELECT s."taskId" AS "taskId", s.date::text AS date, s.start, s."end" AS "end", s.split
+      FROM "Schedule" s
+      WHERE s."taskId" = ANY(${taskIds})
+        AND s.date BETWEEN ${start}::date AND ${end}::date
+      ORDER BY s.date, s.start NULLS FIRST, s.split;`;
+
+    // Group schedules by taskId
+    const schedulesByTask = new Map<
+      string,
+      Array<{
+        date: string;
+        start: Date | null;
+        end: Date | null;
+        split: number;
+      }>
+    >();
+    for (const r of schedulesRows) {
+      const arr = schedulesByTask.get(r.taskId) ?? [];
+      arr.push({
+        date: r.date,
+        start: r.start ?? null,
+        end: r.end ?? null,
+        split: r.split,
+      });
+      schedulesByTask.set(r.taskId, arr);
+    }
+
+    // Attach schedules to tasks and return same shape as original method
+    const result = tasks.map((t) => {
+      const schedules = (schedulesByTask.get(t.id) ?? []).map((s) => ({
+        date: s.date ? new Date(`${s.date}T00:00:00Z`).toISOString() : null,
+        start: s.start ? new Date(s.start).toISOString() : null,
+        end: s.end ? new Date(s.end).toISOString() : null,
+        split: s.split,
+      }));
+
+      return {
+        ...t,
+        schedules,
+      };
+    });
+
+    return result;
   }
 
+  /**
+   * Find tasks that do not have a schedule between start and end (calendar days).
+   * Returns an object with recurring (rrule-based occurrences in range) and
+   * unscheduled lists (subject to filterRecurringTasks).
+   */
   async findUnscheduled(
     userId: string,
     { start, end }: FindSchedulesDto,
     timezone: string,
   ) {
-    const startInTz = new Date(`${start}T00:00:00`);
-    const endInTz = new Date(`${end}T00:00:00`);
-    const startDate = fromZonedTime(startOfDay(startInTz), timezone);
-    const endDate = fromZonedTime(endOfDay(endInTz), timezone);
+    // Use raw to get task ids that do NOT have schedules between the two dates
+    const idsRows = await this.prisma.$queryRaw<
+      Array<{ id: string }>
+    >`SELECT t.id
+       FROM "Task" t
+       WHERE t."userId" = ${userId}
+         AND NOT EXISTS (
+           SELECT 1 FROM "Schedule" s
+           WHERE s."taskId" = t.id
+             AND s.date BETWEEN ${start}::date AND ${end}::date
+         )
+       ORDER BY t."createdAt" DESC;`;
 
+    const taskIds = idsRows.map((r) => r.id);
+    if (taskIds.length === 0) {
+      return { recurring: [], unscheduled: [] };
+    }
+
+    // Fetch tasks with relations using Prisma so we get the same shapes (prereqs/category)
     const tasks = await this.prisma.task.findMany({
-      where: {
-        userId,
-        schedules: {
-          none: { date: { gte: startDate, lte: endDate } },
-        },
-      },
+      where: { id: { in: taskIds } },
       include: {
         prerequisites: { select: { id: true } },
         category: true,
       },
-      orderBy: [{ createdAt: "desc" }, { schedules: { _count: "desc" } }],
+      // keep order by createdAt desc similar to the raw query ordering
+      orderBy: [{ createdAt: "desc" }],
     });
 
+    // For recurrence checks we need instants that cover the user's local day
+    const startInstant = fromZonedTime(`${start}T00:00:00`, timezone);
+    const endInstant = fromZonedTime(`${end}T23:59:59.999`, timezone);
+
+    // We do not load schedules here (they are known to be none in the date range).
     const tasksWithEmptySchedules = tasks.map((t) => ({ ...t, schedules: [] }));
 
     return {
       recurring: this.filterRecurringTasks(
         tasksWithEmptySchedules.filter((t) => t.rrule),
-        startDate,
-        endDate,
+        startInstant,
+        endInstant,
       ) as typeof tasksWithEmptySchedules,
       unscheduled: this.filterRecurringTasks(
         tasksWithEmptySchedules,
-        startDate,
-        endDate,
+        startInstant,
+        endInstant,
         true,
       ) as typeof tasksWithEmptySchedules,
     };
@@ -163,26 +238,45 @@ export class TasksService {
   }
 
   async findToSchedule(scheduleDate: string, userId: string, timezone: string) {
-    const startInTz = new Date(`${scheduleDate}T00:00:00`);
-    const endInTz = new Date(`${scheduleDate}T23:59:59`);
-    const startDate = fromZonedTime(startOfDay(startInTz), timezone);
-    const endDate = fromZonedTime(endOfDay(endInTz), timezone);
+    // Get task ids that either have an rrule or have a schedule on that date
+    const idsRows = await this.prisma.$queryRaw<
+      Array<{ id: string }>
+    >`SELECT DISTINCT t.id
+       FROM "Task" t
+       LEFT JOIN "Schedule" s ON s."taskId" = t.id
+       WHERE t."userId" = ${userId}
+         AND (t.rrule IS NOT NULL OR s.date BETWEEN ${scheduleDate}::date AND ${scheduleDate}::date);`;
+
+    const taskIds = idsRows.map((r) => r.id);
+    if (taskIds.length === 0) return [];
+
+    // Fetch tasks with includes
     const tasks = await this.prisma.task.findMany({
-      where: {
-        userId,
-        OR: [
-          { rrule: { not: null } },
-          { schedules: { some: { date: { gte: startDate, lte: endDate } } } },
-        ],
-      },
+      where: { id: { in: taskIds } },
       include: {
-        schedules: { where: { date: { gte: startDate, lte: endDate } } },
+        schedules: {
+          where: {
+            date: {
+              gte: new Date(`${scheduleDate}T00:00:00Z`),
+              lte: new Date(`${scheduleDate}T23:59:59Z`),
+            },
+          }, // this include is less important; main filtering is done via raw
+        },
         category: { select: { id: true } },
         prerequisites: { select: { id: true } },
       },
     });
 
-    return this.filterRecurringTasks(tasks, startDate, endDate) as typeof tasks;
+    // For rrule checks we need the day instants in UTC
+    const startInstant = fromZonedTime(`${scheduleDate}T00:00:00`, timezone);
+    const endInstant = fromZonedTime(`${scheduleDate}T23:59:59.999`, timezone);
+
+    // Use filterRecurringTasks to remove recurring tasks that don't have an occurrence in that day
+    return this.filterRecurringTasks(
+      tasks,
+      startInstant,
+      endInstant,
+    ) as typeof tasks;
   }
 
   async update(
@@ -290,10 +384,7 @@ export class TasksService {
     complement: boolean = false,
   ) {
     return tasks.filter((t) => {
-      const hasEmptySlot =
-        t.schedules && t.schedules.some((t) => !t.start || !t.end);
-
-      if (!t.rrule || hasEmptySlot) return true;
+      if (!t.rrule) return true;
       const rule = RRule.fromString(t.rrule);
 
       const matches = rule.between(startDate, endDate, true);

@@ -23,6 +23,21 @@ interface EditTaskDialogProps {
   updateSchedule: (task: Task) => void;
 }
 
+const defaultRecurringFields = {
+  frequency: "WEEKLY",
+  interval: 1,
+  byweekday: ["MO"],
+  bymonthday: 1,
+  bysetpos: 1,
+  byweekdayMonth: "MO",
+  monthlyMode: "on",
+  yearlyMode: "on",
+  isRecurring: false,
+  month: 1,
+  endMode: "never",
+  count: 1,
+  until: undefined,
+};
 export function EditTaskDialog({
   open,
   setOpen,
@@ -46,6 +61,7 @@ export function EditTaskDialog({
 
   const form = useTaskForm({
     defaultValues: {
+      ...(defaultRecurringFields as any),
       title: "",
       duration: 60,
       mandatory: true,
@@ -59,19 +75,6 @@ export function EditTaskDialog({
       prerequisites: [],
       deadlineDate: "",
       deadlineTime: "",
-      frequency: "WEEKLY",
-      interval: 1,
-      byweekday: ["MO"],
-      bymonthday: 1,
-      bysetpos: 1,
-      byweekdayMonth: "MO",
-      monthlyMode: "on",
-      yearlyMode: "on",
-      isRecurring: false,
-      month: 1,
-      endMode: "never",
-      count: 1,
-      until: undefined,
     },
   });
   const scheduleDate = form.watch("scheduleDate");
@@ -98,8 +101,10 @@ export function EditTaskDialog({
 
   useEffect(() => {
     if (!task) return;
-    const parsedFields = task.rrule ? parseRRule(task.rrule) : {};
-    form.reset({
+    const parsedFields = task.rrule
+      ? parseRRule(task.rrule)
+      : (defaultRecurringFields as any);
+    const fields = {
       ...task,
       ...parsedFields,
       isRecurring: !!task.rrule,
@@ -117,7 +122,8 @@ export function EditTaskDialog({
       deadlineTime: task.deadline
         ? format(new Date(task.deadline), "HH:mm")
         : "",
-    });
+    };
+    form.reset(fields);
   }, [task, selectedDate]);
 
   async function onSubmit(values: TaskFormValues) {

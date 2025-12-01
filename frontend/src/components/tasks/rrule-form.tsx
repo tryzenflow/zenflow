@@ -1,9 +1,8 @@
-import { useForm, UseFormReturn } from "react-hook-form";
+import { UseFormReturn } from "react-hook-form";
 import { Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Calendar as DatePicker } from "@/components/ui/calendar";
 import {
-  Form,
   FormControl,
   FormField,
   FormItem,
@@ -48,7 +47,7 @@ const MONTHS = [
 ];
 const ORDINALS = ["1st", "2nd", "3rd", "4th", "Last"];
 
-const formatDate = (date) => {
+const formatDate = (date?: Date) => {
   if (!date) return "Pick date";
   return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
 };
@@ -56,7 +55,7 @@ const formatDate = (date) => {
 export function RRuleForm({ form }: RRuleFormProps) {
   const frequency = form.watch("frequency");
 
-  const toggleWeekday = (day) => {
+  const toggleWeekday = (day: string) => {
     const current = form.getValues("byweekday");
     form.setValue(
       "byweekday",
@@ -137,7 +136,7 @@ export function RRuleForm({ form }: RRuleFormProps) {
             <FormItem>
               <FormLabel className="">Days</FormLabel>
               <FormControl>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap sm:flex-nowrap gap-2">
                   {DAYS.map((day, idx) => (
                     <Button
                       key={day}

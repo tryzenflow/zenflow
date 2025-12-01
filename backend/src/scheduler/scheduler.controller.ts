@@ -34,6 +34,7 @@ import {
   getTaskLatestEnd,
   getTaskMaxSplits,
 } from "./utils";
+import { fromZonedTime, toZonedTime } from "date-fns-tz";
 
 @Controller()
 @UseGuards(CookieAuthGuard)
@@ -57,7 +58,16 @@ export class SchedulerController implements OnModuleInit {
     @CurrentUser() user: User,
     @Body() { scheduleDate, scheduleBased: schedulesBased }: ScheduleTasksDto,
   ) {
-    const weekday = new Date(scheduleDate).getDay();
+    // Use timezone-aware helpers so the weekday and next-day are computed in the user's tz
+    // NOTE: add these imports at top of file:
+    // import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
+    const localMidnightUtc = fromZonedTime(
+      `${scheduleDate}T00:00:00`,
+      user.timezone,
+    );
+    const localDay = toZonedTime(localMidnightUtc, user.timezone); // localDay.getDay() is the user's weekday
+    const weekday = localDay.getDay();
+
     const constraints = await this.constraintsService.getByWeekday(
       user.id,
       weekday,
@@ -127,7 +137,11 @@ export class SchedulerController implements OnModuleInit {
       this.schedulerService.Schedule(request),
     );
 
-    if (!response.schedules || response?.schedules?.length === 0)
+    if (!response.schedules || response?.schedules?.length === 0) {
+      // compute end date as the next calendar day in the user's timezone
+      const nextLocalDay = addDays(localDay, 1);
+      const endStr = extractDate(nextLocalDay); // extractDate returns 'YYYY-MM-DD'
+
       return {
         success: true,
         feasible: false,
@@ -135,14 +149,14 @@ export class SchedulerController implements OnModuleInit {
         data: await this.schedulesService.findSchedules(
           {
             start: scheduleDate,
-            end: extractDate(addDays(new Date(scheduleDate), 1)),
+            end: endStr,
           },
           user.id,
-          user.timezone,
         ),
       };
+    }
 
-    const scheduled = response.schedules!.map((s) => ({
+    const scheduled = response.schedules.map((s) => ({
       ...s,
       start: s.end !== undefined ? s.start || 0 : undefined,
     }));

@@ -45,7 +45,7 @@ function App() {
       toast.info(`Do you want to change your timezone to ${timezone}?`, {
         action: (
           <Button
-            disabled={loading}
+            disabled={!!loading}
             variant="outline"
             onClick={() => updateTimezone(timezone)}
           >

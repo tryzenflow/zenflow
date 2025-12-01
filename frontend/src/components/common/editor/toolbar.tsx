@@ -26,6 +26,7 @@ export const Toolbar = ({ editor, newUploadsRef }: ToolbarProps) => {
     editor.state.doc.nodesBetween(from, to, (node) => {
       if (node.type.name === "customLink") {
         const href = node.attrs.href;
+        // @ts-ignore
         editor.commands.fetchFileMetadata(href);
       }
     });

@@ -10,7 +10,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
 import { CategoryItem, DAILY_HORIZON } from "@/types/prefs";
 import { Task } from "@/types/tasks";

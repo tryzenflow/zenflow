@@ -71,13 +71,61 @@ export function TaskView({
         )}`,
       );
       if (response.data) {
+        // If backend returned schedule-level rows (each row has 'task'), convert to tasks
+        let responseTasks: Task[] = [];
+
+        // Detect schedule-row shape: first element has 'task' property
+        if (
+          Array.isArray(response.data) &&
+          response.data.length > 0 &&
+          "task" in (response.data as any)[0]
+        ) {
+          // response.data is schedule rows -> group them into tasks
+          const rows = response.data as any[];
+          const map = new Map<string, Task>();
+          for (const row of rows) {
+            const taskObj = row.task as {
+              id: string;
+              title: string;
+              focus: number;
+              duration: number;
+            };
+            if (!taskObj || !taskObj.id) continue;
+
+            const schedule: Schedule = {
+              date: row.date,
+              start: row.start ?? null,
+              end: row.end ?? null,
+              split: row.split ?? 0,
+            };
+
+            const existing = map.get(taskObj.id);
+            if (!existing) {
+              map.set(taskObj.id, {
+                id: taskObj.id,
+                title: taskObj.title,
+                focus: taskObj.focus,
+                duration: taskObj.duration,
+                // other Task fields that may be used elsewhere can be added as needed
+                schedules: [schedule],
+              } as Task);
+            } else {
+              existing.schedules = [...(existing.schedules ?? []), schedule];
+            }
+          }
+          responseTasks = Array.from(map.values());
+        } else {
+          // Assume backend returned tasks in the task-centered shape
+          responseTasks = response.data as Task[];
+        }
+
         // Robust deduplication: dedupe schedules by id (if present) or by date+split
         const dedupeSchedules = (schedules: Schedule[] = []) => {
           const map = new Map<string, Schedule>();
           for (const s of schedules) {
             const dateKey =
               s?.date != null ? new Date(s.date).toISOString() : "nodate";
-            const key = s?.id ?? `${dateKey}|${s?.split ?? 0}`;
+            const key = `${dateKey}|${s?.split ?? 0}`;
             if (!map.has(key)) map.set(key, s);
           }
           return Array.from(map.values());
@@ -86,7 +134,7 @@ export function TaskView({
         setTasks((prev) => {
           const existingTasksMap = new Map(prev.map((t) => [t.id, t]));
 
-          for (const newTask of response.data) {
+          for (const newTask of responseTasks) {
             const existing = existingTasksMap.get(newTask.id);
             if (!existing) {
               // ensure schedules are unique on first insert
@@ -113,7 +161,7 @@ export function TaskView({
         });
       }
     } catch (error) {
-      toast.error("Failed to load tasks: " + error);
+      toast.error("Failed to load tasks: " + (error as any));
     } finally {
       setLoading(false);
     }
@@ -151,9 +199,6 @@ export function TaskView({
   const prevRangeRef = useRef<{ start: Date; end: Date } | null>(null);
 
   useEffect(() => {
-    if (!user) return;
-    // Depend on taskCacheKey so that when ViewLayout triggers a refetch,
-    // this effect runs with a fresh state (tasks = []).
     if (taskCacheKey !== taskViewRefetchTrigger) return;
 
     const prev = prevRangeRef.current;

@@ -14,7 +14,9 @@ export const CustomLink = Link.extend({
 
       fetchFileMetadata:
         (href: string) =>
+        // @ts-ignore
         async ({ commands }) => {
+          // @ts-ignore
           const base = this.options.fileBaseUrl;
 
           if (!href.startsWith(`${base}/files/`)) return;

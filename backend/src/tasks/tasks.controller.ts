@@ -41,7 +41,7 @@ export class TasksController {
 
   @Get()
   async findAll(@CurrentUser() user: User, @Query() dto: FindSchedulesDto) {
-    const tasks = await this.tasksService.find(user.id, dto, user.timezone);
+    const tasks = await this.tasksService.find(user.id, dto);
     return {
       success: true,
       message: `Found ${tasks.length} tasks between ${dto.start} and ${dto.end}`,

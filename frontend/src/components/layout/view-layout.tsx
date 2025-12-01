@@ -331,12 +331,13 @@ export default function ViewLayout({
     [schedules],
   );
 
-  const deleteUnscheduledTasks = async (id: string) => {
+  const deleteTaskUI = async (id: string) => {
     setLoading(true);
     try {
       await deleteTask(id);
       toast.success("Delete task successfully");
       setUnscheduledTasks((prev) => prev.filter((t) => t.id !== id));
+      setRecurringTasks((prev) => prev.filter((t) => t.id !== id));
       // Trigger TaskView refetch
       setTaskViewRefetchTrigger((prev) => prev + 1);
     } finally {
@@ -403,6 +404,7 @@ export default function ViewLayout({
   return (
     <SidebarProvider
       style={{
+        // @ts-ignore
         "--sidebar-width": "320px",
         "--sidebar-width-mobile": "300px",
       }}
@@ -431,7 +433,7 @@ export default function ViewLayout({
             selectedDate={selectedDate}
             handleDateChange={handleDateChange}
             droppedOutSchedules={droppedOutSchedules}
-            deleteUnscheduledTasks={deleteUnscheduledTasks}
+            deleteUnscheduledTasks={deleteTaskUI}
             unscheduledTasks={unscheduledTasks}
             openEditTaskDialog={openEditTaskDialog}
             deleteDropoutTasks={deleteDropoutTasks}

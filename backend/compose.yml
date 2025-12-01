@@ -85,6 +85,5 @@ networks:
     driver: bridge
 
 volumes:
-  uploads:
   caddy_data:
   caddy_config:

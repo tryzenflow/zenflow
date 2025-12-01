@@ -295,7 +295,7 @@ export const ScheduleItem = ({
             </div>
           </PopoverTrigger>
         </ContextMenuTrigger>
-        <PopoverContent className="relative z-20" asChild={!!taskDetail}>
+        <PopoverContent className="relative z-30" asChild={!!taskDetail}>
           {taskDetail ? (
             <TaskCard task={taskDetail} deleteSchedule={deleteSchedule} />
           ) : (

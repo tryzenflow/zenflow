@@ -53,7 +53,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const setUser = useUserStore((state) => state.setUser);
   const [isLoading, setIsLoading] = useState(false);
   const [styleData, setStyleData] = useState<DaySchedulingStyle>(
-    defaultSchedulingStyle
+    defaultSchedulingStyle,
   );
 
   // Account form
@@ -132,7 +132,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               minGapBetweenTasks: constraint.minGapBetweenTasks,
             };
             return acc;
-          }, {} as DaySchedulingStyle)
+          }, {} as DaySchedulingStyle),
         );
 
         setFocusBlocks(() => {
@@ -167,7 +167,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       setIsLoading(true);
       const { data } = await postData<object, { data: CategoryItem }>(
         "/categories",
-        { name }
+        { name },
       );
       const newCategory: CategoryItem = {
         id: data.id,
@@ -186,7 +186,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const handleEditCategory = async (
     id: string,
     updatePayload: UpdateCategoryPayload,
-    editing: boolean
+    editing: boolean,
   ) => {
     try {
       setIsLoading(true);
@@ -195,7 +195,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       if (categoryIndex === -1) return;
       await patchData(`/categories/${id}`, updatePayload);
       setCategories((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, isEditable: editing } : c))
+        prev.map((c) => (c.id === id ? { ...c, isEditable: editing } : c)),
       );
     } catch (error) {
       console.log(error);
@@ -348,8 +348,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 onClick={async () => {
                   await Promise.all(
                     Object.keys(focusBlocks).map((day) =>
-                      updateFocusBlocks(day as keyof DayFocusBlocks)
-                    )
+                      updateFocusBlocks(day as keyof DayFocusBlocks),
+                    ),
                   );
                   toast.success("Focus blocks updated successfully");
                 }}
@@ -371,8 +371,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 onClick={async () => {
                   await Promise.all(
                     Object.keys(styleData).map((day) =>
-                      updateSchedulingStyle(day as keyof DaySchedulingStyle)
-                    )
+                      updateSchedulingStyle(day as keyof DaySchedulingStyle),
+                    ),
                   );
                   toast.success("Scheduling style updated successfully");
                 }}

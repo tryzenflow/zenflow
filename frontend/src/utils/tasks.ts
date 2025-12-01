@@ -4,8 +4,7 @@ import { DAILY_HORIZON } from "../types/prefs";
 import { deleteData, getData, postData } from "../api";
 import { Task } from "../types/tasks";
 import { extractFileIdsFromNoteContent } from "./files";
-import { rrulestr, RRule } from "rrule";
-import { format } from "date-fns";
+import { rrulestr, RRule, Weekday } from "rrule";
 
 export const taskSchema = z
   .object({
@@ -148,7 +147,7 @@ export const parseRRule = (rruleString: string): Partial<TaskFormValues> => {
       [RRule.WEEKLY]: "WEEKLY",
       [RRule.DAILY]: "DAILY",
     };
-    const frequency = freqMap[options.freq];
+    const frequency = freqMap[options.freq!];
 
     // Extract interval (default to 1 if not specified)
     const interval = options.interval || 1;
@@ -176,20 +175,22 @@ export const parseRRule = (rruleString: string): Partial<TaskFormValues> => {
 
     // Extract bymonthday
     const bymonthday =
-      options.bymonthday && options.bymonthday.length > 0
+      Array.isArray(options.bymonthday) && options.bymonthday.length > 0
         ? options.bymonthday[0]
         : 1;
 
     // Extract bysetpos and determine mode for MONTHLY/YEARLY
     const bysetpos =
-      options.bysetpos && options.bysetpos.length > 0 ? options.bysetpos[0] : 1;
+      Array.isArray(options.bysetpos) && options.bysetpos.length > 0
+        ? options.bysetpos[0]
+        : 1;
 
     // Extract byweekdayMonth for "on_the" mode
     let byweekdayMonth = "MO";
     if (frequency === "MONTHLY" || frequency === "YEARLY") {
-      if (options.byweekday && options.byweekday.length > 0) {
+      if (Array.isArray(options.byweekday) && options.byweekday.length > 0) {
         const wd = options.byweekday[0];
-        const dayNum = typeof wd === "number" ? wd : wd.weekday;
+        const dayNum = typeof wd === "number" ? wd : (wd as Weekday).weekday;
         const weekdayMap: Record<number, string> = {
           0: "MO",
           1: "TU",
@@ -206,19 +207,21 @@ export const parseRRule = (rruleString: string): Partial<TaskFormValues> => {
     // Determine monthlyMode
     const monthlyMode: "on" | "on_the" =
       frequency === "MONTHLY" &&
-      options.bymonthday &&
+      Array.isArray(options.bymonthday) &&
       options.bymonthday.length > 0
         ? "on"
         : "on_the";
 
     // Extract month for YEARLY
     const month =
-      options.bymonth && options.bymonth.length > 0 ? options.bymonth[0] : 1;
+      Array.isArray(options.bymonth) && options.bymonth.length > 0
+        ? options.bymonth[0]
+        : 1;
 
     // Determine yearlyMode
     const yearlyMode: "on" | "on_the" =
       frequency === "YEARLY" &&
-      options.bymonthday &&
+      Array.isArray(options.bymonthday) &&
       options.bymonthday.length > 0
         ? "on"
         : "on_the";

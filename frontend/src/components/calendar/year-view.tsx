@@ -58,11 +58,11 @@ export const YearView = ({
         </h3>
 
         {/* Week headers */}
-        <div className="grid grid-cols-7 gap-0 mb-px w-max lg:w-full">
+        <div className="grid grid-cols-7 gap-0 mb-px lg:w-full">
           {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
             <div
               key={day}
-              className="text-center text-xs font-semibold text-muted-foreground py-1 w-10 lg:w-full"
+              className="text-center text-xs font-semibold text-muted-foreground py-1 w-full"
             >
               {day[0]}
             </div>
@@ -84,7 +84,7 @@ export const YearView = ({
               <div
                 key={idx}
                 className={cn(
-                  "flex flex-col border border-border items-center w-10 lg:w-full p-2",
+                  "flex flex-col border border-border items-center p-2",
                   inMonth ? "bg-white" : "bg-muted",
                   idx === 0 && "rounded-tl-lg",
                   idx === 6 && "rounded-tr-lg",
@@ -135,9 +135,9 @@ export const YearView = ({
   };
 
   return (
-    <div className="flex-1 min-w-0 h-full relative overflow-y-auto bg-background sm:px-4 md:px-6 lg:px-8 py-4 flex flex-col">
+    <div className="flex-1 min-w-0 h-full relative overflow-y-auto bg-background py-4 flex flex-col">
       {/* Header with year navigation */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between px-4 sm:px-6 lg:px-8">
         <button
           onClick={() => setDisplayYear(displayYear - 1)}
           className="p-2 hover:bg-muted rounded-lg transition-colors"
@@ -145,7 +145,9 @@ export const YearView = ({
           <ChevronLeft className="w-5 h-5 text-muted-foreground" />
         </button>
 
-        <h2 className="text-2xl font-bold text-foreground">{displayYear}</h2>
+        <h2 className="text-lg md:text-2xl font-bold text-foreground">
+          {displayYear}
+        </h2>
 
         <button
           onClick={() => setDisplayYear(displayYear + 1)}
@@ -156,7 +158,7 @@ export const YearView = ({
       </div>
 
       {/* Grid of 12 months (4 rows x 3 columns) */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 flex-1 overflow-y-auto">
+      <div className="grid sm:grid-cols-2 2xl:grid-cols-3 gap-8 flex-1 overflow-y-auto">
         {months.map((month) => renderMonth(month))}
       </div>
     </div>
