@@ -1,0 +1,7 @@
+:80 {
+  redir https://{host}{uri} permanent
+}
+
+zenflow-api.alphatrann.com {
+  reverse_proxy api:5000
+}

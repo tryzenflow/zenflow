@@ -1,0 +1,79 @@
+name: zenflow-prod
+services:
+  scheduler:
+    container_name: zenflow-scheduler-prod
+    image: zenflow-scheduler:latest
+    expose:
+      - "50051"
+    networks:
+      - api
+
+  api:
+    container_name: zenflow-api-prod
+    image: zenflow-api:latest
+    expose:
+      - "5000"
+    networks:
+      - api
+    volumes:
+      - ./uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      scheduler:
+        condition: service_started
+      redis:
+        condition: service_started
+    env_file:
+      - .env.prod
+
+  postgres:
+    container_name: zenflow-db-prod
+    image: postgres:alpine
+    expose:
+      - "5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    env_file:
+      - docker.prod.env
+    networks:
+      - api
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    container_name: zenflow-cache-prod
+    image: redis:alpine
+    expose:
+      - "6379"
+    networks:
+      - api
+
+  caddy:
+    image: caddy:latest
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile.prod:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    networks:
+      - api
+
+networks:
+  api:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

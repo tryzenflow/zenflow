@@ -38,7 +38,8 @@ lerna-debug.log*
 !.vscode/extensions.json
 
 # dotenv environment variable files
-.env
+!.env
+.env.prod
 .env.development.local
 .env.test.local
 .env.production.local
@@ -53,6 +54,8 @@ pids
 *.pid
 *.seed
 *.pid.lock
+
+docker.prod.env
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
