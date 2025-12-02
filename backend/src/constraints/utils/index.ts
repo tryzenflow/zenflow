@@ -1,29 +1,43 @@
 import { FocusBlock } from "../../../generated/prisma";
 import { Interval } from "../interfaces/interval.interface";
 
+/**
+ * Return the union of all focus-block intervals.
+ * The returned intervals represent the times "covered by focus blocks"
+ * and therefore are the available hours.
+ *
+ * Overlapping or adjacent blocks are merged.
+ */
 export const getAvailableHours = (
-  focusBlocks: Pick<FocusBlock, "start" | "end">[]
+  focusBlocks: Pick<FocusBlock, "start" | "end">[],
 ): Interval[] => {
-  if (focusBlocks.length === 0) return [];
+  if (!focusBlocks || focusBlocks.length === 0) return [];
 
-  const sorted = [...focusBlocks].sort((a, b) => a.start - b.start);
+  // Filter out invalid blocks and sort by start ascending
+  const cleaned = focusBlocks
+    .filter((b) => b != null && isFinite(b.start) && isFinite(b.end))
+    .map((b) => ({ start: Math.floor(b.start), end: Math.floor(b.end) }))
+    .filter((b) => b.end > b.start)
+    .sort((a, b) => a.start - b.start);
 
-  const intervals: Interval[] = [];
-  let start = sorted[0].start;
-  let end = sorted[0].end;
+  if (cleaned.length === 0) return [];
 
-  for (let i = 1; i < sorted.length; i++) {
-    const block = sorted[i];
-    if (block.start === end) {
-      end = block.end;
+  const merged: Interval[] = [];
+  let currentStart = cleaned[0].start;
+  let currentEnd = cleaned[0].end;
+
+  for (let i = 1; i < cleaned.length; i++) {
+    const block = cleaned[i];
+    // Merge if overlapping or adjacent
+    if (block.start <= currentEnd) {
+      currentEnd = Math.max(currentEnd, block.end);
     } else {
-      intervals.push({ start, end });
-      start = block.start;
-      end = block.end;
+      merged.push({ start: currentStart, end: currentEnd });
+      currentStart = block.start;
+      currentEnd = block.end;
     }
   }
 
-  intervals.push({ start, end });
-
-  return intervals;
+  merged.push({ start: currentStart, end: currentEnd });
+  return merged;
 };
