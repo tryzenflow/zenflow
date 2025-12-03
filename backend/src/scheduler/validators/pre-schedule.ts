@@ -1,7 +1,7 @@
 import { ScheduleRequest } from "../interfaces";
 
 export function validatePreSchedule(body: ScheduleRequest): string[] {
-  const errors: any[] = [];
+  const errors: string[] = [];
   const tasks = body.tasks;
 
   // --- 1. Fixed task overlaps
@@ -9,7 +9,7 @@ export function validatePreSchedule(body: ScheduleRequest): string[] {
     (t) =>
       t.earliestStart &&
       t.latestEnd &&
-      t.latestEnd - t.earliestStart === t.duration
+      t.latestEnd - t.earliestStart === t.duration,
   );
   for (let i = 0; i < fixed.length; i++) {
     const t1 = fixed[i];
@@ -61,9 +61,9 @@ export function validatePreSchedule(body: ScheduleRequest): string[] {
   for (const t of tasks) {
     for (const p of t.prerequisites) {
       const prerequisiteTask = tasksMap.get(p);
-      if (!prerequisiteTask || (!prerequisiteTask.mandatory && t.mandatory))
+      if (prerequisiteTask && !prerequisiteTask.mandatory && t.mandatory)
         errors.push(
-          `Mandatory task "${t.title}" depends on task "${tasksMap.get(p)?.title}", which may be excluded or optional`
+          `Mandatory task "${t.title}" depends on task "${prerequisiteTask.title}", which may be excluded or optional`,
         );
     }
   }

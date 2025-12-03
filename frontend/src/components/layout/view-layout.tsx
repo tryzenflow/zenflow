@@ -29,8 +29,9 @@ import { getData, postData, deleteData, patchData, putData } from "../../api";
 import { EditTaskDialog } from "../tasks/edit-task-dialog";
 import { Navbar } from "./navbar";
 import { AppSidebar } from "./sidebar";
-import { deleteTask } from "../../utils/tasks";
+import { deleteTask, rruleCoversDate } from "../../utils/tasks";
 import { SidebarProvider } from "../ui/sidebar";
+import { cn } from "@/lib/utils";
 
 interface BodyProps {
   schedules: Schedule[];
@@ -69,7 +70,12 @@ export default function ViewLayout({
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [unscheduledTasks, setUnscheduledTasks] = useState<Task[]>([]);
+  // keep this as action-level loading for user-initiated operations
   const [loading, setLoading] = useState(false);
+  // separate loading flags for the two background fetches to avoid flipping the same boolean
+  const [schedulesLoading, setSchedulesLoading] = useState(false);
+  const [unscheduledLoading, setUnscheduledLoading] = useState(false);
+
   const [currentView, setCurrentView] = useState("Task view");
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -102,7 +108,7 @@ export default function ViewLayout({
   const scheduled = schedules.filter((s) => s.start !== null);
 
   const loadUnscheduledTasks = useCallback(async () => {
-    setLoading(true);
+    setUnscheduledLoading(true);
     const selectedDateStr = format(selectedDate, "yyyy-MM-dd");
 
     try {
@@ -117,12 +123,12 @@ export default function ViewLayout({
     } catch (error) {
       toast.error("Failed to load unscheduled tasks: " + error);
     } finally {
-      setLoading(false);
+      setUnscheduledLoading(false);
     }
   }, [selectedDate]);
 
   const loadSchedules = useCallback(async () => {
-    setLoading(true);
+    setSchedulesLoading(true);
     let startDateStr = format(selectedDate, "yyyy-MM-dd");
     let endDateStr = startDateStr; // For single day fetch
     if (currentView === "Week view") {
@@ -151,13 +157,14 @@ export default function ViewLayout({
     } catch (error: any) {
       toast.error("Failed to load data: " + (error?.message || error));
     } finally {
-      setLoading(false);
+      setSchedulesLoading(false);
     }
   }, [currentView, selectedDate]);
 
   // run when selectedDate changes
   useEffect(() => {
     if (!user) return;
+    // run in parallel but they each control their own loading flag
     loadSchedules();
     loadUnscheduledTasks();
   }, [loadSchedules, loadUnscheduledTasks, user]);
@@ -226,6 +233,7 @@ export default function ViewLayout({
   const deleteDropoutTasks = useCallback(
     async (id: string, split: number) => {
       try {
+        setLoading(true);
         await deleteData(
           `/schedules/${format(
             selectedDate,
@@ -297,6 +305,7 @@ export default function ViewLayout({
   const deleteSchedule = useCallback(
     async (taskId: string, date: string, split: number) => {
       try {
+        setLoading(true);
         const formatted = format(new Date(date), "y/M/d");
         await deleteData(
           `/schedules/${formatted}/tasks/${taskId}/split/${split}`,
@@ -319,13 +328,20 @@ export default function ViewLayout({
         if (toRemove && !splitExists) {
           // If all schedules for this task are gone, re-add to unscheduled list
           // This should only happen if the date is the selectedDate, but we run with it.
-          setUnscheduledTasks((prev) => [...prev, toRemove.task as Task]);
+          const recurringTask = recurringTasks.find((t) => t.id === taskId);
+          if (
+            recurringTask &&
+            recurringTask.rrule &&
+            rruleCoversDate(recurringTask.rrule, selectedDate)
+          ) {
+            setRecurringTasks((prev) => [...prev, recurringTask]);
+          } else
+            setUnscheduledTasks((prev) => [...prev, toRemove.task as Task]);
         }
-
-        // Trigger TaskView refetch
-        setTaskViewRefetchTrigger((prev) => prev + 1);
       } catch (error: any) {
         toast.error(error.message || "Failed to delete schedule :'(");
+      } finally {
+        setLoading(false);
       }
     },
     [schedules],
@@ -338,8 +354,6 @@ export default function ViewLayout({
       toast.success("Delete task successfully");
       setUnscheduledTasks((prev) => prev.filter((t) => t.id !== id));
       setRecurringTasks((prev) => prev.filter((t) => t.id !== id));
-      // Trigger TaskView refetch
-      setTaskViewRefetchTrigger((prev) => prev + 1);
     } finally {
       setLoading(false);
     }
@@ -385,6 +399,9 @@ export default function ViewLayout({
 
   if (!user && (userFetching === null || userFetching)) return null;
 
+  // derived overall loading state so UI can react to any kind of loading
+  const isLoading = loading || schedulesLoading || unscheduledLoading;
+
   // Props passed to the main content render prop
   const bodyProps: BodyProps = {
     schedules: scheduled,
@@ -393,7 +410,7 @@ export default function ViewLayout({
     openEditTaskDialog,
     deleteSchedule,
     currentView,
-    loading,
+    loading: isLoading,
     setLoading,
     updateScheduleTime,
     setCurrentView,
@@ -420,11 +437,17 @@ export default function ViewLayout({
           navigateDate={navigateDate}
           goToToday={goToToday}
           schedule={schedule}
-          isLoading={loading}
+          isLoading={isLoading}
         />
 
         <div className="flex-1 min-h-0 flex overflow-hidden">
-          <div className="lg:w-[calc(100%-320px)] w-full">
+          <div
+            className={cn(
+              "lg:w-[calc(100%-320px)] w-full",
+              currentView === "Task view" &&
+                "overflow-x-auto overflow-y-hidden",
+            )}
+          >
             {renderBody(bodyProps)}
           </div>
           {/* Sidebar */}

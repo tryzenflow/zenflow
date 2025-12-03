@@ -49,11 +49,11 @@ export default function AnalyticsPage() {
   useEffect(() => {
     if (userFetching === null || userFetching) return;
     if (!user) {
-      navigate("/login?callback=/");
+      navigate("/login?callback=/analytics");
       return;
     }
     if (user._count.categories === 0 || user._count.constraints === 0) {
-      navigate("/prefs?callback=/");
+      navigate("/prefs?callback=/analytics");
       return;
     }
   }, [user, userFetching, navigate]);

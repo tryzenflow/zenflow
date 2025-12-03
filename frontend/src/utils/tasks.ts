@@ -273,3 +273,70 @@ export const parseRRule = (rruleString: string): Partial<TaskFormValues> => {
     };
   }
 };
+
+export const rruleCoversDate = (
+  rruleString: string,
+  date: Date,
+  opts?: { mode?: "day" | "exact"; timezone?: "local" | "utc" },
+): boolean => {
+  const { mode = "day", timezone = "local" } = opts || {};
+
+  try {
+    const rule = rrulestr(rruleString); // rrulestr can return RRule or RRuleSet
+
+    if (mode === "exact") {
+      // Use .before(date, true) which returns the occurrence equal to date if it exists (inc=true)
+      if (typeof rule.before === "function") {
+        const occ = rule.before(date, true);
+        return !!(occ && occ.getTime() === date.getTime());
+      }
+      return false;
+    }
+
+    // mode === "day"
+    let start: Date;
+    let end: Date;
+    if (timezone === "utc") {
+      // Create UTC start/end of the given date
+      start = new Date(
+        Date.UTC(
+          date.getUTCFullYear(),
+          date.getUTCMonth(),
+          date.getUTCDate(),
+          0,
+          0,
+          0,
+          0,
+        ),
+      );
+      end = new Date(
+        Date.UTC(
+          date.getUTCFullYear(),
+          date.getUTCMonth(),
+          date.getUTCDate(),
+          23,
+          59,
+          59,
+          999,
+        ),
+      );
+    } else {
+      // Local start/end of the given date
+      start = new Date(date);
+      start.setHours(0, 0, 0, 0);
+      end = new Date(date);
+      end.setHours(23, 59, 59, 999);
+    }
+
+    if (typeof rule.between === "function") {
+      const occs = rule.between(start, end, true);
+      return Array.isArray(occs) && occs.length > 0;
+    }
+
+    return false;
+  } catch (err) {
+    // If parsing fails, treat as not covering the date
+    console.error("rruleCoversDate: failed to parse rrule:", err);
+    return false;
+  }
+};

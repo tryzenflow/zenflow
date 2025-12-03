@@ -92,11 +92,31 @@ export function EditTaskDialog({
   }, [note, task?.note]);
 
   useEffect(() => {
-    if (!scheduleDate || !open) setTasks([]);
+    if (!scheduleDate || !open) {
+      setTasks([]);
+      return;
+    }
     const formattedScheduleDate = format(scheduleDate, "yyyy-MM-dd");
-    getData<{ data: Task[] }>(
-      `/tasks?start=${formattedScheduleDate}&end=${formattedScheduleDate}`,
-    ).then(({ data }) => setTasks(data));
+    const allPrerequisites = Promise.all([
+      getData<{ data: Task[] }>(
+        `/tasks?start=${formattedScheduleDate}&end=${formattedScheduleDate}`,
+      ),
+
+      getData<{ data: { recurring: Task[] } }>(
+        `/tasks/none?start=${formattedScheduleDate}&end=${formattedScheduleDate}`,
+      ),
+    ]);
+
+    allPrerequisites.then(
+      ([
+        { data },
+        {
+          data: { recurring },
+        },
+      ]) => {
+        setTasks([...data, ...recurring]);
+      },
+    );
   }, [scheduleDate, open]);
 
   useEffect(() => {

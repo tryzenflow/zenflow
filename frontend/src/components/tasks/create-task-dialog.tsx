@@ -87,12 +87,26 @@ export function CreateTaskDialog({
       return;
     }
     const formattedScheduleDate = format(scheduleDate, "yyyy-MM-dd");
+    const allPrerequisites = Promise.all([
+      getData<{ data: Task[] }>(
+        `/tasks?start=${formattedScheduleDate}&end=${formattedScheduleDate}`,
+      ),
 
-    getData<{ data: Task[] }>(
-      `/tasks?start=${formattedScheduleDate}&end=${formattedScheduleDate}`,
-    ).then(({ data }) => {
-      setTasks(data);
-    });
+      getData<{ data: { recurring: Task[] } }>(
+        `/tasks/schedule/none?start=${formattedScheduleDate}&end=${formattedScheduleDate}`,
+      ),
+    ]);
+
+    allPrerequisites.then(
+      ([
+        { data },
+        {
+          data: { recurring },
+        },
+      ]) => {
+        setTasks([...data, ...recurring]);
+      },
+    );
   }, [scheduleDate, open]);
 
   async function onSubmit(values: TaskFormValues) {

@@ -193,7 +193,13 @@ export class SchedulesService {
         start: Date | null;
         end: Date | null;
         split: number;
-        task: { id: string; title: string; focus: number; duration: number };
+        task: {
+          id: string;
+          title: string;
+          focus: number;
+          duration: number;
+          rrule: string | null;
+        };
       }>
     >`SELECT
         s.date::text AS date,
@@ -204,7 +210,8 @@ export class SchedulesService {
           'id', t.id,
           'title', t.title,
           'focus', t.focus,
-          'duration', t.duration
+          'duration', t.duration,
+          'rrule', t.rrule
         ) AS task
       FROM "Schedule" s
       JOIN "Task" t ON s."taskId" = t.id

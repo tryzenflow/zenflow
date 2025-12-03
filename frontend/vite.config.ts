@@ -14,6 +14,20 @@ export default defineConfig({
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg}"],
       },
+      manifest: {
+        name: "Zenflow",
+        short_name: "Zenflow",
+        description:
+          "Zenflow is a daily planner app that helps you stay organized and focused.",
+        theme_color: "#ffffff",
+        icons: [
+          {
+            src: "flower.svg",
+            sizes: "192x192",
+            type: "image/svg+xml",
+          },
+        ],
+      },
       devOptions: {
         enabled: true,
       },

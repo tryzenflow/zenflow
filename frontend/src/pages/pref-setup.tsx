@@ -21,16 +21,17 @@ import { postData } from "../api";
 import { useNavigate } from "react-router-dom";
 import { CategoriesPref } from "../components/prefs/categories";
 import { useUserStore } from "../hooks/use-user-store";
+import { EARLY_BIRD_BLOCKS } from "@/utils/prefs";
 
 // --- Default Data ---
 const defaultFocusBlocks: DayFocusBlocks = {
-  Mon: [],
-  Tue: [],
-  Wed: [],
-  Thu: [],
-  Fri: [],
-  Sat: [],
-  Sun: [],
+  Mon: EARLY_BIRD_BLOCKS,
+  Tue: EARLY_BIRD_BLOCKS,
+  Wed: EARLY_BIRD_BLOCKS,
+  Thu: EARLY_BIRD_BLOCKS,
+  Fri: EARLY_BIRD_BLOCKS,
+  Sat: EARLY_BIRD_BLOCKS,
+  Sun: EARLY_BIRD_BLOCKS,
 };
 
 export function PrefSetupPage() {
@@ -47,7 +48,7 @@ export function PrefSetupPage() {
   const [focusBlocks, setFocusBlocks] =
     useState<DayFocusBlocks>(defaultFocusBlocks);
   const [schedulingStyle, setSchedulingStyle] = useState<DaySchedulingStyle>(
-    defaultSchedulingStyle
+    defaultSchedulingStyle,
   );
 
   const totalSteps = 3;
@@ -83,7 +84,7 @@ export function PrefSetupPage() {
 
   const mapSchedulingStyleToDto = (
     style: DaySchedulingStyle,
-    blocks: DayFocusBlocks
+    blocks: DayFocusBlocks,
   ): FinalConstraintSubmission[] => {
     const submissionArray: FinalConstraintSubmission[] = [];
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
@@ -119,7 +120,7 @@ export function PrefSetupPage() {
       const constraintPayload = mapSchedulingStyleToDto(data, focusBlocks);
 
       await Promise.all(
-        constraintPayload.map((dayData) => postData("/constraints", dayData))
+        constraintPayload.map((dayData) => postData("/constraints", dayData)),
       );
 
       setUser(
@@ -131,13 +132,13 @@ export function PrefSetupPage() {
                 constraints: Object.keys(dayMap).length,
               },
             }
-          : null
+          : null,
       );
       toast.success("Preferences saved successfully!");
       navigate("/");
     } catch (error: any) {
       setSubmissionError(
-        error.message || "An unknown error occurred during submission."
+        error.message || "An unknown error occurred during submission.",
       );
     } finally {
       setLoading(false);
@@ -158,12 +159,12 @@ export function PrefSetupPage() {
   const handleEditCategoryToggle = (
     id: string,
     updatePayload: UpdateCategoryPayload,
-    editing: boolean
+    editing: boolean,
   ) => {
     setCategories((prev) =>
       prev.map((c) =>
-        c.id === id ? { ...c, ...updatePayload, isEditable: editing } : c
-      )
+        c.id === id ? { ...c, ...updatePayload, isEditable: editing } : c,
+      ),
     );
   };
   const handleDeleteCategory = (id: string) => {

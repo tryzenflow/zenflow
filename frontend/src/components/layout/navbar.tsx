@@ -46,7 +46,10 @@ export const Navbar = ({
   addTask,
   isLoading,
 }: NavbarProps) => (
-  <header className="flex sm:flex-row flex-col gap-3 sm:items-center lg:w-[calc(100%-320px)] justify-between px-4 lg:px-8 py-4 border-b bg-white shadow-sm dark:bg-gray-900">
+  <header
+    id="navbar"
+    className="flex sm:flex-row flex-col gap-3 sm:items-center lg:w-[calc(100%-320px)] justify-between px-4 lg:px-8 py-4 border-b bg-white shadow-sm dark:bg-gray-900"
+  >
     <div className="flex justify-between items-center">
       <div>
         <div className="flex-1 font-semibold text-lg">

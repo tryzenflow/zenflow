@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Moon, Sun } from "lucide-react";
-import { Dispatch, useRef, useState } from "react";
+import { FrameIcon, Moon, Sun } from "lucide-react";
+import { Dispatch, useCallback, useRef, useState } from "react";
 import { DayFocusBlocks, FocusBlock as IFocusBlock } from "../../types/prefs";
 import {
   EARLY_BIRD_BLOCKS,
@@ -11,6 +11,7 @@ import {
 import { FocusBlock } from "./focus-block";
 import { snapToFive } from "../../utils/snap";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 // Helper to convert minutes (0-1440) to a display time string (e.g., 5:00 AM)
 interface FocusBlocksProps {
@@ -31,6 +32,19 @@ export function FocusBlocksPrefs({
   >("Mon");
 
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+
+  const isPresetApplied = useCallback(
+    (preset: IFocusBlock[]) => {
+      if (preset.length !== focusBlocks[selectedDay].length) return false;
+      preset.sort((a, b) => a.start - b.start);
+      focusBlocks[selectedDay].sort((a, b) => a.start - b.start);
+      for (let i = 0; i < preset.length; i++) {
+        if (preset[i].start !== focusBlocks[selectedDay][i].start) return false;
+      }
+      return true;
+    },
+    [focusBlocks, selectedDay],
+  );
 
   const applyPreset = (presetBlocks: IFocusBlock[]) => {
     const newBlocks = presetBlocks.map((b) => ({
@@ -53,6 +67,13 @@ export function FocusBlocksPrefs({
       Fri: prev[selectedDay],
       Sat: prev[selectedDay],
       Sun: prev[selectedDay],
+    }));
+  };
+
+  const clear = () => {
+    setFocusBlocks((prev) => ({
+      ...prev,
+      [selectedDay]: [],
     }));
   };
 
@@ -85,7 +106,11 @@ export function FocusBlocksPrefs({
                 type="button"
                 variant="outline"
                 onClick={() => applyPreset(EARLY_BIRD_BLOCKS)}
-                className="flex items-center gap-2"
+                className={cn(
+                  "flex items-center gap-2",
+                  isPresetApplied(EARLY_BIRD_BLOCKS) &&
+                    "border-yellow-300 bg-yellow-100 hover:bg-yellow-100",
+                )}
               >
                 <Sun className="text-yellow-500 size-4" /> Early bird
               </Button>
@@ -93,9 +118,25 @@ export function FocusBlocksPrefs({
                 type="button"
                 variant="outline"
                 onClick={() => applyPreset(NIGHT_OWL_BLOCKS)}
-                className="flex items-center gap-2"
+                className={cn(
+                  "flex items-center gap-2",
+                  isPresetApplied(NIGHT_OWL_BLOCKS) &&
+                    "border-blue-300 bg-blue-100 hover:bg-blue-100",
+                )}
               >
                 <Moon className="text-blue-500 size-4" /> Night owl
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className={cn(
+                  "flex items-center gap-2 hover:bg-transparent",
+                  !isPresetApplied(EARLY_BIRD_BLOCKS) &&
+                    !isPresetApplied(NIGHT_OWL_BLOCKS) &&
+                    "border-rose-300 bg-rose-100 hover:bg-rose-100",
+                )}
+              >
+                <FrameIcon className="text-rose-500 size-4" /> Custom
               </Button>
             </div>
 
@@ -114,7 +155,7 @@ export function FocusBlocksPrefs({
 
                 // Get all existing blocks sorted
                 const blocks = [...focusBlocks[day]].sort(
-                  (a, b) => a.start - b.start
+                  (a, b) => a.start - b.start,
                 );
 
                 // Find the next block to the right of the click
@@ -141,14 +182,14 @@ export function FocusBlocksPrefs({
                   end: clampedStart + blockLength,
                   level: Math.max(
                     1,
-                    Math.floor((rect.bottom - e.clientY) / 40)
+                    Math.floor((rect.bottom - e.clientY) / 40),
                   ),
                 };
 
                 setFocusBlocks((prev) => ({
                   ...prev,
                   [day]: [...prev[day], newBlock].sort(
-                    (a, b) => a.start - b.start
+                    (a, b) => a.start - b.start,
                   ),
                 }));
               }}
@@ -214,7 +255,7 @@ export function FocusBlocksPrefs({
                           .filter((b) => b.start <= updatedBlock.start)
                           .at(-1);
                         const nextBlock = others.find(
-                          (b) => b.start >= updatedBlock.start
+                          (b) => b.start >= updatedBlock.start,
                         );
 
                         // --- Clamp to avoid overlap ---
@@ -223,7 +264,7 @@ export function FocusBlocksPrefs({
                           updatedBlock.start = prevBlock.end;
                           updatedBlock.end = Math.max(
                             updatedBlock.start + 5,
-                            updatedBlock.end
+                            updatedBlock.end,
                           );
                         }
 
@@ -232,13 +273,13 @@ export function FocusBlocksPrefs({
                           updatedBlock.end = nextBlock.start;
                           updatedBlock.start = Math.min(
                             updatedBlock.start,
-                            updatedBlock.end - 5
+                            updatedBlock.end - 5,
                           );
                         }
 
                         // --- Rebuild the day’s array immutably ---
                         const newBlocks = blocks.map((b, i) =>
-                          i === index ? updatedBlock : b
+                          i === index ? updatedBlock : b,
                         );
 
                         // --- Return new overall state ---
@@ -273,15 +314,19 @@ export function FocusBlocksPrefs({
           </TabsContent>
         ))}
       </Tabs>
-      <Button
-        size="sm"
-        className="mt-4"
-        type="button"
-        onClick={applyToEveryWeekday}
-        variant="secondary"
-      >
-        Apply to every weekday
-      </Button>
+      <div className="flex mt-4 justify-between">
+        <Button
+          size="sm"
+          type="button"
+          onClick={applyToEveryWeekday}
+          variant="outline"
+        >
+          Apply to every weekday
+        </Button>
+        <Button size="sm" type="reset" onClick={clear} variant="secondary">
+          Clear
+        </Button>
+      </div>
     </form>
   );
 }
