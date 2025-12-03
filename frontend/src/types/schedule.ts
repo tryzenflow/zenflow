@@ -3,7 +3,13 @@ export interface Schedule {
   split: number;
   date: string;
   end: string | null;
-  task: { id: string; title: string; focus: 1 | 2 | 3; duration: number };
+  task: {
+    id: string;
+    title: string;
+    focus: 1 | 2 | 3;
+    duration: number;
+    rrule: string | null;
+  };
 }
 
 export interface GetSchedulesResponse {

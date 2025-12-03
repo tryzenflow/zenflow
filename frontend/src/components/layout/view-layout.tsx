@@ -326,18 +326,16 @@ export default function ViewLayout({
         toast.success("Delete schedule successfully 🎉");
 
         if (toRemove && !splitExists) {
-          // If all schedules for this task are gone, re-add to unscheduled list
-          // This should only happen if the date is the selectedDate, but we run with it.
-          const recurringTask = recurringTasks.find((t) => t.id === taskId);
           if (
-            recurringTask &&
-            recurringTask.rrule &&
-            rruleCoversDate(recurringTask.rrule, selectedDate)
+            toRemove.task.rrule &&
+            toRemove.task.rrule &&
+            rruleCoversDate(toRemove.task.rrule, selectedDate)
           ) {
-            setRecurringTasks((prev) => [...prev, recurringTask]);
+            setRecurringTasks((prev) => [...prev, toRemove.task as Task]);
           } else
             setUnscheduledTasks((prev) => [...prev, toRemove.task as Task]);
         }
+        setTaskViewRefetchTrigger((prev) => prev + 1);
       } catch (error: any) {
         toast.error(error.message || "Failed to delete schedule :'(");
       } finally {
@@ -354,6 +352,7 @@ export default function ViewLayout({
       toast.success("Delete task successfully");
       setUnscheduledTasks((prev) => prev.filter((t) => t.id !== id));
       setRecurringTasks((prev) => prev.filter((t) => t.id !== id));
+      setTaskViewRefetchTrigger((prev) => prev + 1);
     } finally {
       setLoading(false);
     }

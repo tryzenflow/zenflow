@@ -49,8 +49,7 @@ export function EditTaskDialog({
   const [tasks, setTasks] = useState<Task[]>([]);
   const [task, setTask] = useState<Task | null>(null);
   const [categories, setCategories] = useState<CategoryItem[]>([]);
-  const { newUploadsRef, removedFileIds, updateRemovedFileIds } =
-    useFilesTracker();
+  const { newUploadsRef } = useFilesTracker();
 
   useEffect(() => {
     if (!open) return;
@@ -78,7 +77,6 @@ export function EditTaskDialog({
     },
   });
   const scheduleDate = form.watch("scheduleDate");
-  const note = form.watch("note");
 
   useEffect(() => {
     if (!open) return;
@@ -86,10 +84,6 @@ export function EditTaskDialog({
       setCategories(data.data);
     });
   }, [open]);
-
-  useEffect(() => {
-    updateRemovedFileIds(note || "", task?.note || "");
-  }, [note, task?.note]);
 
   useEffect(() => {
     if (!scheduleDate || !open) {
@@ -153,8 +147,6 @@ export function EditTaskDialog({
     const deadlineDate = values.deadlineDate || undefined;
     const deadlineTime = values.deadlineTime || undefined;
     try {
-      if (removedFileIds.current.length > 0)
-        await postData("/files/remove", { ids: removedFileIds.current });
       const updated = await patchData<object, { data: Task }>(
         `/tasks/${taskId}`,
         {

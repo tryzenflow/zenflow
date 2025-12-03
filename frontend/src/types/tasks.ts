@@ -6,7 +6,7 @@ export interface Task {
   id: string;
   title: string;
   note?: string;
-  rrule?: string;
+  rrule: string | null;
   duration: number;
   priority: Scale;
   earliestStart?: number;
