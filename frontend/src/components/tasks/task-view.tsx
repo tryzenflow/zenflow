@@ -116,12 +116,7 @@ export function TaskView({
           const rows = response.data as any[];
           const map = new Map<string, Task>();
           for (const row of rows) {
-            const taskObj = row.task as {
-              id: string;
-              title: string;
-              focus: number;
-              duration: number;
-            };
+            const taskObj = row.task as Schedule["task"];
             if (!taskObj || !taskObj.id) continue;
 
             const schedule: Schedule = {
@@ -134,6 +129,7 @@ export function TaskView({
                 title: taskObj.title,
                 focus: taskObj.focus as 1 | 2 | 3,
                 duration: taskObj.duration,
+                rrule: taskObj.rrule,
               },
             };
 
