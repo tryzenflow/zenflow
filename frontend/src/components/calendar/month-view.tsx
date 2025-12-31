@@ -49,7 +49,6 @@ export const MonthView = ({
   const [taskDetail, setTaskDetail] = useState<Task | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [popoverDate, setPopoverDate] = useState<Date | null>(null);
-  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const formatKey = (d: Date) => format(d, "yyyy-MM-dd");
 
   const focusDayView = (
@@ -184,15 +183,11 @@ export const MonthView = ({
                       inMonth={inMonth}
                       taskDetail={taskDetail}
                       deleteSchedule={deleteSchedule}
-                      isPopoverOpen={isPopoverOpen}
                       isInPopover={false}
                     />
                   ))}
                   {daySchedules.length > 2 && (
-                    <Popover
-                      open={isPopoverOpen}
-                      onOpenChange={setIsPopoverOpen}
-                    >
+                    <Popover>
                       <PopoverTrigger asChild>
                         <div
                           className={cn(
@@ -218,7 +213,6 @@ export const MonthView = ({
                             inMonth={inMonth}
                             taskDetail={taskDetail}
                             deleteSchedule={deleteSchedule}
-                            isPopoverOpen={isPopoverOpen}
                             isInPopover
                           />
                         ))}
@@ -250,7 +244,6 @@ interface MonthViewEventProps {
     split: number,
   ) => Promise<void>;
   isInPopover: boolean;
-  isPopoverOpen: boolean;
 }
 
 function MonthViewEvent({
@@ -264,12 +257,11 @@ function MonthViewEvent({
   taskDetail,
   deleteSchedule,
   isInPopover = false,
-  isPopoverOpen = false,
 }: MonthViewEventProps) {
   return (
     <Popover
       open={
-        (!isPopoverOpen || isInPopover) &&
+        isInPopover &&
         selectedTaskId === schedule.task.id &&
         popoverDate?.toDateString() === date.toDateString()
       }

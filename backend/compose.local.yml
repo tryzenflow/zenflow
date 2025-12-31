@@ -27,7 +27,7 @@ services:
       mail:
         condition: service_started
     env_file:
-      - .env.prod
+      - .env.local
 
   postgres:
     container_name: zenflow-db-prod
@@ -72,7 +72,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./Caddyfile.local:/etc/caddy/Caddyfile
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

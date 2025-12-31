@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 from datetime import datetime, timedelta
 from typing import List
 
@@ -597,6 +596,83 @@ def case_energy_alignment():
     print()
 
 
+def case_optional_tasks_encouraged():
+    print("CASE: optional tasks are encouraged (regression diagnostic)")
+
+    focus_blocks = [
+        FocusBlock(3, Interval(9 * 60, 11 * 60)),
+        FocusBlock(1, Interval(13 * 60, 15 * 60)),
+    ]
+    avail = get_available_hours_from_focus_blocks(focus_blocks)
+
+    constraints = Constraints(
+        available_hours=avail,
+        min_gap_between_tasks=10,
+        focus_blocks=focus_blocks,
+        batch_similar_tasks=True,
+        max_daily_load=240,
+    )
+
+    tasks = []
+    tasks.append(
+        Task(
+            "Mandatory deep work",
+            120,
+            priority=1,
+            mandatory=True,
+            category="deep",
+            focus=3,
+        )
+    )
+    tasks.append(
+        Task(
+            "Mandatory meeting",
+            60,
+            priority=2,
+            mandatory=True,
+            category="meetings",
+            focus=1,
+        )
+    )
+
+    for i in range(8):
+        tasks.append(
+            Task(
+                f"Optional admin #{i + 1}",
+                25,
+                priority=3,
+                mandatory=False,
+                category="admin",
+                focus=1,
+            )
+        )
+
+    schedule = schedule_tasks(
+        tasks,
+        constraints,
+        min_time=8 * 60,
+        max_time=18 * 60,
+        daily_load=0,
+        max_focus_level=3,
+    )
+
+    print_schedule(schedule)
+
+    # Diagnostics (same style as other cases)
+    outside = compute_available_outside(schedule, constraints)
+    opt_scheduled = count_optional_scheduled(schedule)
+    total_optional = len([t for t in tasks if not t.mandatory])
+
+    batching = compute_batching_score(schedule)
+    min_gap = compute_min_gap_violations(schedule, constraints.min_gap_between_tasks)
+
+    print(f"  -> Optional tasks scheduled: {opt_scheduled}/{total_optional}")
+    print(f"  -> Minutes outside available hours: {outside}")
+    print(f"  -> Batching score: {batching}")
+    print(f"  -> Min-gap violations: {min_gap}")
+    print()
+
+
 # Run all scenarios including energy alignment
 def run_all():
     case_available_hours_focus_on_in_hours()
@@ -604,6 +680,7 @@ def run_all():
     case_batching_and_min_gap_many_short()
     case_deadlines_prereq_stability()
     case_energy_alignment()
+    case_optional_tasks_encouraged()
 
 
 if __name__ == "__main__":

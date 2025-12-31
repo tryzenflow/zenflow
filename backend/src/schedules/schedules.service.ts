@@ -11,81 +11,123 @@ import { PrismaService } from "../prisma/prisma.service";
 import { TaskSchedule } from "../scheduler/interfaces";
 import { FindSchedulesDto } from "./dto/find-schedules.dto";
 import { UpdateScheduleDto } from "./dto/update-schedule.dto";
-import { fromZonedTime } from "date-fns-tz";
 
 @Injectable()
 export class SchedulesService {
   constructor(private prisma: PrismaService) {}
 
-  /**
-   * Replace schedules for a calendar date for the given user and insert provided schedules.
-   * - `date` is a 'YYYY-MM-DD' string representing a calendar day in the user's timezone.
-   * - The delete and inserts use DB-side DATE comparisons so Postgres stores the calendar date exactly.
-   */
   async schedule(
-    date: string,
+    date: string, // YYYY-MM-DD (local date)
     schedules: TaskSchedule[],
-    timezone: string,
+    timezone: string, // e.g. "Asia/Bangkok"
     userId: string,
   ) {
-    try {
-      const results = await this.prisma.$transaction(async (tx) => {
-        // Delete existing schedules for this user's tasks on that calendar date.
-        await tx.$executeRaw`DELETE FROM "Schedule" s
-           USING "Task" t
-           WHERE s."taskId" = t.id
-             AND t."userId" = ${userId}
-             AND s.date = ${date}::date;`;
+    return this.prisma.$transaction(async (tx) => {
+      /**
+       * 1. DELETE ALL schedules for this user on that local date
+       *    (this is the critical part)
+       */
+      await tx.$executeRaw`
+        DELETE FROM "Schedule" s
+        USING "Task" t
+        WHERE s."taskId" = t.id
+          AND t."userId" = ${userId}
+          AND s."date" = ${date}::date;
+      `;
 
-        // Insert each schedule row using raw INSERT ... RETURNING so date is stored as DATE
-        const insertedRows: Array<{
+      if (schedules.length === 0) {
+        // complete wipe requested
+        return [];
+      }
+
+      /**
+       * 2. Prepare rows (deduplicate input defensively)
+       */
+      const rows = Array.from(
+        new Map(
+          schedules.map((s) => {
+            const split = s.split ?? 0;
+            return [
+              `${s.taskId}:${split}`,
+              {
+                date,
+                taskId: s.taskId,
+                split,
+                start:
+                  s.start !== undefined
+                    ? minutesToUtc(date, s.start, timezone)
+                    : null,
+                end:
+                  s.end !== undefined
+                    ? minutesToUtc(date, s.end, timezone)
+                    : null,
+              },
+            ];
+          }),
+        ).values(),
+      );
+
+      /**
+       * 3. BULK INSERT (no conflict possible now)
+       */
+      const inserted = await tx.$queryRaw<
+        Array<{
           date: string;
           start: Date | null;
           end: Date | null;
           split: number;
           taskId: string;
-        }> = [];
+        }>
+      >`
+        INSERT INTO "Schedule" (date, "taskId", split, start, "end")
+        SELECT
+          r.date::date,
+          r."taskId",
+          r.split,
+          r.start,
+          r."end"
+        FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb)
+          AS r(
+            date text,
+            "taskId" uuid,
+            split int,
+            start timestamptz,
+            "end" timestamptz
+          )
+        RETURNING
+          date::text AS date,
+          start,
+          "end",
+          split,
+          "taskId";
+      `;
 
-        for (const s of schedules) {
-          const split = s?.split ?? 0;
-          const utcStart =
-            s.start !== undefined
-              ? minutesToUtc(date, s.start, timezone)
-              : null;
-          const utcEnd =
-            s.end !== undefined ? minutesToUtc(date, s.end, timezone) : null;
+      /**
+       * 4. Fetch tasks
+       */
+      const taskIds = Array.from(new Set(inserted.map((r) => r.taskId)));
 
-          const rows = await tx.$queryRaw<
-            Array<{
-              date: string;
-              start: Date | null;
-              end: Date | null;
-              split: number;
-              taskId: string;
-            }>
-          >`INSERT INTO "Schedule" (date, "taskId", split, start, "end")
-             VALUES (${date}::date, ${s.taskId}, ${split}, ${utcStart}, ${utcEnd})
-             RETURNING date::text AS date, start, "end", split, "taskId";`;
+      const tasks = await tx.task.findMany({
+        where: {
+          id: { in: taskIds },
+          userId,
+        },
+        select: {
+          id: true,
+          title: true,
+          focus: true,
+          duration: true,
+        },
+      });
 
-          if (rows && rows.length > 0) insertedRows.push(rows[0]);
-        }
+      const taskMap = new Map(tasks.map((t) => [t.id, t]));
 
-        if (insertedRows.length === 0) return [];
-
-        // Fetch tasks for the inserted taskIds to build the same shape your API expects
-        const uniqueTaskIds = Array.from(
-          new Set(insertedRows.map((r) => r.taskId)),
-        );
-
-        const tasks = await tx.task.findMany({
-          where: { id: { in: uniqueTaskIds } },
-          select: { id: true, title: true, focus: true, duration: true },
-        });
-        const taskMap = new Map(tasks.map((t) => [t.id, t]));
-
-        // Map inserted rows to desired output shape
-        const saved = insertedRows.map((r) => ({
-          date: r.date ? new Date(`${r.date}T00:00:00Z`).toISOString() : null,
+      /**
+       * 5. Shape response
+       */
+      return inserted
+        .map((r) => ({
+          date: new Date(`${r.date}T00:00:00Z`).toISOString(),
           start: r.start ? new Date(r.start).toISOString() : null,
           end: r.end ? new Date(r.end).toISOString() : null,
           split: r.split,
@@ -95,35 +137,13 @@ export class SchedulesService {
             focus: 1,
             duration: 0,
           },
-        }));
-
-        saved.sort((a, b) => {
-          const aTime = a?.start ? new Date(a.start).getTime() : 0;
-          const bTime = b?.start ? new Date(b.start).getTime() : 0;
+        }))
+        .sort((a, b) => {
+          const aTime = a.start ? Date.parse(a.start) : 0;
+          const bTime = b.start ? Date.parse(b.start) : 0;
           return aTime - bTime;
         });
-
-        return saved;
-      });
-
-      return results;
-    } catch (error) {
-      console.log(error);
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === PostgresErrorCode.UniqueConstraintViolation) {
-          throw new BadRequestException({
-            success: false,
-            message: `Duplicate tasks on date ${date}`,
-          });
-        }
-        throw new InternalServerErrorException({
-          success: false,
-          message: "Server error when scheduling tasks",
-        });
-      }
-      // rethrow other errors
-      throw error;
-    }
+    });
   }
 
   async update(

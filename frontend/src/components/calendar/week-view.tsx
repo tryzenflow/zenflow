@@ -53,26 +53,16 @@ export const WeekView = ({
     };
   });
 
-  // Filter schedules for the entire week
-  const weekStartTimestamp = startOfDay(weekStart).getTime();
-  const weekEndTimestamp = weekStartTimestamp + 7 * 24 * 60 * 60 * 1000;
-
   const weekSchedules = schedules.filter((s) => {
-    const startTimestamp = new Date(s.start!).getTime();
-    return (
-      startTimestamp >= weekStartTimestamp && startTimestamp < weekEndTimestamp
-    );
+    const d = new Date(s.date);
+    return d >= weekStart && d < addDays(weekStart, 7);
   });
 
   // Group schedules by day and calculate layout for each day
   const schedulesByDay = daysOfWeek.map((dayInfo) => {
-    const dayStart = startOfDay(dayInfo.date).getTime();
-    const dayEnd = dayStart + 24 * 60 * 60 * 1000;
-
-    const daySchedules = weekSchedules.filter((s) => {
-      const startTimestamp = new Date(s.start!).getTime();
-      return startTimestamp >= dayStart && startTimestamp < dayEnd;
-    });
+    const daySchedules = weekSchedules.filter(
+      (s) => format(new Date(s.date), "yyyy-MM-dd") === dayInfo.fullDate,
+    );
 
     return {
       ...dayInfo,

@@ -5,6 +5,14 @@ from ortools.sat.python import cp_model
 from task_var import TaskVar
 
 
+def penalty_scale(task):
+    return 1 if task.mandatory else 0.2  # optional tasks are 5× cheaper
+
+
+def reward_scale(task):
+    return 1 if task.mandatory else 1
+
+
 def optimize_function(
     model: cp_model.CpModel,
     task_vars: List[TaskVar],
@@ -15,24 +23,14 @@ def optimize_function(
     daily_load=0,
     max_focus_level=3,
     # Concrete default weights to try
-    deadline_weight=300,
     optional_task_weight=400,
-    energy_weight=100,
-    switch_penalty_weight=20,
-    overload_weight=100,
-    deviation_weight=80,
-    min_gap_penalty_weight=200,
-    available_hours_penalty_weight=20,
+    energy_weight=250,
+    available_hours_penalty_weight=400,
+    overload_weight=350,
+    deviation_weight=150,
+    min_gap_penalty_weight=150,
+    switch_penalty_weight=150,
 ):
-    """
-    Objective builder with concrete default weights (see defaults above).
-    Many earlier bugs were fixed:
-    - penalties/rewards are conditional on presence (OnlyEnforceIf).
-    - removed contradictory assignments (no var is set to two different constants).
-    - added split to var names to avoid collisions.
-    - fixed reified batching constraints to include both_present in negative branch.
-    """
-
     loss_terms = []
     effective_durations = []
 
@@ -64,10 +62,14 @@ def optimize_function(
         # NOTE: priority scale in Task is 1-3 (lower = more important). We convert to a penalty
         # where larger number = worse. Using (4 - priority) gives higher penalty to lower priority tasks.
         # Apply only when present.
-        priority_penalty = model.NewIntVar(0, 3, f"priority_penalty_{task.id}_{split}")
-        model.Add(priority_penalty == (4 - task.priority)).OnlyEnforceIf(presence)
-        model.Add(priority_penalty == 0).OnlyEnforceIf(presence.Not())
-        loss_terms.append(priority_penalty)
+
+        if task.mandatory:
+            priority_penalty = model.NewIntVar(
+                0, 3, f"priority_penalty_{task.id}_{split}"
+            )
+            model.Add(priority_penalty == (4 - task.priority)).OnlyEnforceIf(presence)
+            model.Add(priority_penalty == 0).OnlyEnforceIf(presence.Not())
+            loss_terms.append(priority_penalty)
 
         # Stability / deviation from reference schedule (if a ref exists for this split)
         if len(task.schedules) > 0 and split < len(task.schedules):
@@ -139,7 +141,8 @@ def optimize_function(
                     task.duration * mismatch * energy_weight,
                     f"energy_penalty_{task.id}_{split}_{i}",
                 )
-                model.Add(penalty == mismatch * overlap * 1).OnlyEnforceIf(presence)
+                scale = int(energy_weight * penalty_scale(task))
+                model.Add(penalty == mismatch * overlap * scale).OnlyEnforceIf(presence)
                 model.Add(penalty == 0).OnlyEnforceIf(presence.Not())
                 loss_terms.append(penalty)
             else:
@@ -154,14 +157,20 @@ def optimize_function(
                 loss_terms.append(bonus)
 
         # OPTIONAL task bonus (reward) -- per-split var name and conditional on presence
+
         if not task.mandatory:
+            dur = duration_vars[task_var]
+
             bonus = model.NewIntVar(
-                -optional_task_weight, 0, f"bonus_presence_{task.id}_{split}"
+                -optional_task_weight * task.duration,
+                0,
+                f"optional_bonus_{task.id}_{split}",
             )
-            # Give more reward for higher priority tasks: multiply by (4 - priority) so high priority -> bigger reward
+
             model.Add(
-                bonus == -optional_task_weight * (4 - task.priority)
+                bonus == -optional_task_weight * dur * (4 - task.priority)
             ).OnlyEnforceIf(presence)
+
             model.Add(bonus == 0).OnlyEnforceIf(presence.Not())
             loss_terms.append(bonus)
 
@@ -224,7 +233,10 @@ def optimize_function(
                 max_time * available_hours_penalty_weight,
                 f"avail_penalty_{task.id}_{split}",
             )
-            model.Add(avail_pen == outside * available_hours_penalty_weight)
+
+            scale = int(available_hours_penalty_weight * penalty_scale(task))
+            model.Add(avail_pen == outside * scale)
+
             loss_terms.append(avail_pen)
 
     # DAILY OVERLOAD (soft)
@@ -276,19 +288,15 @@ def optimize_function(
                     [i_before_j.Not(), both_present]
                 )
                 model.Add(immediate == 0).OnlyEnforceIf(both_present.Not())
-
+                scale = int(switch_penalty_weight * penalty_scale(task_i))
                 if task_i.category != task_j.category:
-                    penalty = model.NewIntVar(
-                        0, switch_penalty_weight, f"switch_penalty_{i}_{j}"
-                    )
-                    model.Add(penalty == switch_penalty_weight).OnlyEnforceIf(immediate)
+                    penalty = model.NewIntVar(0, scale, f"switch_penalty_{i}_{j}")
+                    model.Add(penalty == scale).OnlyEnforceIf(immediate)
                     model.Add(penalty == 0).OnlyEnforceIf(immediate.Not())
                     loss_terms.append(penalty)
                 else:
-                    reward = model.NewIntVar(
-                        -switch_penalty_weight, 0, f"batch_reward_{i}_{j}"
-                    )
-                    model.Add(reward == -switch_penalty_weight).OnlyEnforceIf(immediate)
+                    reward = model.NewIntVar(-scale, 0, f"batch_reward_{i}_{j}")
+                    model.Add(reward == -scale).OnlyEnforceIf(immediate)
                     model.Add(reward == 0).OnlyEnforceIf(immediate.Not())
                     loss_terms.append(reward)
 
@@ -344,14 +352,31 @@ def optimize_function(
                 pen_pos = model.NewIntVar(
                     0, min_gap_val * min_gap_penalty_weight, f"min_gap_pen_pos_{i}_{j}"
                 )
-                model.Add(pen_pos == viol_pos * min_gap_penalty_weight)
                 pen_neg = model.NewIntVar(
                     0, min_gap_val * min_gap_penalty_weight, f"min_gap_pen_neg_{i}_{j}"
                 )
-                model.Add(pen_neg == viol_neg * min_gap_penalty_weight)
+                scale = int(min_gap_penalty_weight * penalty_scale(task_i))
+                model.Add(pen_pos == viol_pos * scale)
+                model.Add(pen_neg == viol_neg * scale)
 
                 loss_terms.append(pen_pos)
                 loss_terms.append(pen_neg)
+
+    optional_presences = [
+        pres
+        for task, _, _, _, pres in (tv.tuple for tv in task_vars)
+        if not task.mandatory
+    ]
+
+    if optional_presences:
+        opt_count = model.NewIntVar(0, len(optional_presences), "optional_task_count")
+        model.Add(opt_count == sum(optional_presences))
+
+        global_optional_bonus = model.NewIntVar(
+            -5000 * len(optional_presences), 0, "global_optional_bonus"
+        )
+        model.Add(global_optional_bonus == -5000 * opt_count)
+        loss_terms.append(global_optional_bonus)
 
     # Final objective
     if not loss_terms:
