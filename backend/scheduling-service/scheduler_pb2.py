@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0fscheduler.proto\x12\tscheduler\x1a\x1fgoogle/protobuf/timestamp.proto\"&\n\x08Interval\x12\r\n\x05start\x18\x01 \x01(\x05\x12\x0b\n\x03\x65nd\x18\x02 \x01(\x05\"\xeb\x02\n\x04Task\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05title\x18\x02 \x01(\t\x12\x10\n\x08\x64uration\x18\x03 \x01(\x05\x12\x10\n\x08priority\x18\x04 \x01(\x05\x12\x1b\n\x0e\x65\x61rliest_start\x18\x05 \x01(\x05H\x00\x88\x01\x01\x12\x17\n\nlatest_end\x18\x06 \x01(\x05H\x01\x88\x01\x01\x12\x31\n\x08\x64\x65\x61\x64line\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.TimestampH\x02\x88\x01\x01\x12\x11\n\tmandatory\x18\x08 \x01(\x08\x12\x12\n\nmax_splits\x18\t \x01(\x05\x12\r\n\x05\x66ocus\x18\n \x01(\x05\x12\x13\n\x0b\x63\x61tegory_id\x18\x0b \x01(\t\x12\x15\n\rprerequisites\x18\x0c \x03(\t\x12*\n\tschedules\x18\r \x03(\x0b\x32\x17.scheduler.TaskScheduleB\x11\n\x0f_earliest_startB\r\n\x0b_latest_endB\x0b\n\t_deadline\"[\n\x0cTaskSchedule\x12\x14\n\x07task_id\x18\x01 \x01(\tH\x00\x88\x01\x01\x12\r\n\x05split\x18\x02 \x01(\x05\x12\r\n\x05start\x18\x03 \x01(\x05\x12\x0b\n\x03\x65nd\x18\x04 \x01(\x05\x42\n\n\x08_task_id\"B\n\nFocusBlock\x12\r\n\x05level\x18\x01 \x01(\x05\x12%\n\x08interval\x18\x02 \x01(\x0b\x32\x13.scheduler.Interval\"\xbc\x01\n\x0b\x43onstraints\x12,\n\x0f\x61vailable_hours\x18\x01 \x03(\x0b\x32\x13.scheduler.Interval\x12\x1d\n\x15min_gap_between_tasks\x18\x02 \x01(\x05\x12+\n\x0c\x66ocus_blocks\x18\x03 \x03(\x0b\x32\x15.scheduler.FocusBlock\x12\x1b\n\x13\x62\x61tch_similar_tasks\x18\x04 \x01(\x08\x12\x16\n\x0emax_daily_load\x18\x05 \x01(\x05\"\x96\x01\n\x0fScheduleRequest\x12\x1e\n\x05tasks\x18\x01 \x03(\x0b\x32\x0f.scheduler.Task\x12+\n\x0b\x63onstraints\x18\x02 \x01(\x0b\x32\x16.scheduler.Constraints\x12\x10\n\x08min_time\x18\x03 \x01(\x05\x12\x10\n\x08max_time\x18\x04 \x01(\x05\x12\x12\n\ndaily_load\x18\x05 \x01(\x05\">\n\x10ScheduleResponse\x12*\n\tschedules\x18\x01 \x03(\x0b\x32\x17.scheduler.TaskSchedule2W\n\x10SchedulerService\x12\x43\n\x08Schedule\x12\x1a.scheduler.ScheduleRequest\x1a\x1b.scheduler.ScheduleResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0fscheduler.proto\x12\tscheduler\x1a\x1fgoogle/protobuf/timestamp.proto\"&\n\x08Interval\x12\r\n\x05start\x18\x01 \x01(\x05\x12\x0b\n\x03\x65nd\x18\x02 \x01(\x05\"\xdd\x01\n\x04Task\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05title\x18\x02 \x01(\t\x12\x10\n\x08\x64uration\x18\x03 \x01(\x05\x12\x10\n\x08priority\x18\x04 \x01(\x05\x12\x31\n\x08\x64\x65\x61\x64line\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.TimestampH\x00\x88\x01\x01\x12\x0e\n\x06\x65nergy\x18\x06 \x01(\x05\x12\x13\n\x0b\x63\x61tegory_id\x18\x07 \x01(\t\x12\x31\n\x0fschedule_blocks\x18\x08 \x03(\x0b\x32\x18.scheduler.ScheduleBlockB\x0b\n\t_deadline\"b\n\rScheduleBlock\x12\x14\n\x07task_id\x18\x01 \x01(\tH\x00\x88\x01\x01\x12\x13\n\x0bsplit_index\x18\x02 \x01(\x05\x12\r\n\x05start\x18\x03 \x01(\x05\x12\x0b\n\x03\x65nd\x18\x04 \x01(\x05\x42\n\n\x08_task_id\"D\n\x0b\x45nergyBlock\x12\x0e\n\x06\x65nergy\x18\x01 \x01(\x05\x12%\n\x08interval\x18\x02 \x01(\x0b\x32\x13.scheduler.Interval\"\x8c\x01\n\x0eUserPreference\x12,\n\x0f\x61vailable_hours\x18\x01 \x03(\x0b\x32\x13.scheduler.Interval\x12\x1d\n\x15min_gap_between_tasks\x18\x02 \x01(\x05\x12-\n\renergy_blocks\x18\x03 \x03(\x0b\x32\x16.scheduler.EnergyBlock\"e\n\x0fScheduleRequest\x12\x1e\n\x05tasks\x18\x01 \x03(\x0b\x32\x0f.scheduler.Task\x12\x32\n\x0fuser_preference\x18\x02 \x01(\x0b\x32\x19.scheduler.UserPreference\"?\n\x10ScheduleResponse\x12+\n\tschedules\x18\x01 \x03(\x0b\x32\x18.scheduler.ScheduleBlock2W\n\x10SchedulerService\x12\x43\n\x08Schedule\x12\x1a.scheduler.ScheduleRequest\x1a\x1b.scheduler.ScheduleResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -35,17 +35,17 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_INTERVAL']._serialized_start=63
   _globals['_INTERVAL']._serialized_end=101
   _globals['_TASK']._serialized_start=104
-  _globals['_TASK']._serialized_end=467
-  _globals['_TASKSCHEDULE']._serialized_start=469
-  _globals['_TASKSCHEDULE']._serialized_end=560
-  _globals['_FOCUSBLOCK']._serialized_start=562
-  _globals['_FOCUSBLOCK']._serialized_end=628
-  _globals['_CONSTRAINTS']._serialized_start=631
-  _globals['_CONSTRAINTS']._serialized_end=819
-  _globals['_SCHEDULEREQUEST']._serialized_start=822
-  _globals['_SCHEDULEREQUEST']._serialized_end=972
-  _globals['_SCHEDULERESPONSE']._serialized_start=974
-  _globals['_SCHEDULERESPONSE']._serialized_end=1036
-  _globals['_SCHEDULERSERVICE']._serialized_start=1038
-  _globals['_SCHEDULERSERVICE']._serialized_end=1125
+  _globals['_TASK']._serialized_end=325
+  _globals['_SCHEDULEBLOCK']._serialized_start=327
+  _globals['_SCHEDULEBLOCK']._serialized_end=425
+  _globals['_ENERGYBLOCK']._serialized_start=427
+  _globals['_ENERGYBLOCK']._serialized_end=495
+  _globals['_USERPREFERENCE']._serialized_start=498
+  _globals['_USERPREFERENCE']._serialized_end=638
+  _globals['_SCHEDULEREQUEST']._serialized_start=640
+  _globals['_SCHEDULEREQUEST']._serialized_end=741
+  _globals['_SCHEDULERESPONSE']._serialized_start=743
+  _globals['_SCHEDULERESPONSE']._serialized_end=806
+  _globals['_SCHEDULERSERVICE']._serialized_start=808
+  _globals['_SCHEDULERSERVICE']._serialized_end=895
 # @@protoc_insertion_point(module_scope)

@@ -32,19 +32,19 @@ def parse_task(proto: scheduler_pb2.Task) -> Task:
     )
 
 
-def parse_constraints(c_proto: scheduler_pb2.UserPreference) -> UserPreference:
-    available_hours = [Interval(a.start, a.end) for a in c_proto.available_hours]
+def parse_user_preference(proto: scheduler_pb2.UserPreference) -> UserPreference:
+    available_hours = [Interval(a.start, a.end) for a in proto.available_hours]
     energy_blocks = [
         EnergyBlock(
             energy=eb.energy,
             start=eb.interval.start,
             end=eb.interval.end,
         )
-        for eb in c_proto.energy_blocks
+        for eb in proto.energy_blocks
     ]
     return UserPreference(
         available_hours=available_hours,
-        min_gap_between_tasks=c_proto.min_gap_between_tasks,
+        min_gap_between_tasks=proto.min_gap_between_tasks,
         energy_blocks=energy_blocks,
     )
 
@@ -53,10 +53,10 @@ class SchedulerService(scheduler_pb2_grpc.SchedulerServiceServicer):
     def Schedule(self, request, context):
         # Convert proto → domain models
         tasks = [parse_task(t) for t in request.tasks]
-        constraints = parse_constraints(request.constraints)
+        user_pref = parse_user_preference(request.user_preference)
         schedule_result = schedule_tasks(
             tasks,
-            constraints,
+            user_pref,
         )
         # Build response
         response = scheduler_pb2.SchedulerResponse()

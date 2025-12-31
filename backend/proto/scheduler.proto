@@ -1,72 +1,58 @@
 syntax = "proto3";
 
 package scheduler;
+
 import "google/protobuf/timestamp.proto";
 
 // ----- CORE MESSAGES -----
 
 message Interval {
   int32 start = 1; // minutes since midnight
-  int32 end   = 2; // minutes since midnight
+  int32 end = 2; // minutes since midnight
 }
 
 message Task {
-  string id            = 1;
-  string title         = 2;
-  int32 duration       = 3;
-  int32 priority       = 4;
-
-  optional int32 earliest_start = 5;
-  optional int32 latest_end     = 6;
-  optional google.protobuf.Timestamp deadline = 7;
-
-  bool mandatory       = 8;
-  int32 max_splits     = 9;
-
-  int32 focus   = 10; // 1–3
-
-  string category_id   = 11;
-
-  repeated string prerequisites = 12;
-  repeated TaskSchedule schedules = 13;
+  string id = 1;
+  string title = 2;
+  int32 duration = 3;
+  int32 priority = 4;
+  optional google.protobuf.Timestamp deadline = 5;
+  int32 energy = 6; // 1–3
+  string category_id = 7;
+  repeated ScheduledBlock scheduled_blocks = 8;
 }
 
-message TaskSchedule {
+message ScheduledBlock {
   optional string task_id = 1;
-  int32 split = 2;
+  int32 split_index = 2;
   int32 start = 3;
-  int32 end   = 4;
+  int32 end = 4;
 }
 
-message FocusBlock {
-  int32 level = 1;
-  Interval interval  = 2;
+message EnergyBlock {
+  int32 energy = 1;
+  Interval interval = 2;
 }
 
-message Constraints {
+message UserPreference {
   repeated Interval available_hours = 1;
-  int32 min_gap_between_tasks       = 2;
-  repeated FocusBlock focus_blocks = 3;
-  bool batch_similar_tasks          = 4;
-  int32 max_daily_load              = 5;
+  int32 min_gap_between_tasks = 2;
+  repeated EnergyBlock energy_blocks = 3;
 }
 
 // ----- REQUEST & RESPONSE -----
 
 message ScheduleRequest {
-  repeated Task tasks     = 1;
-  Constraints constraints = 2;
-  int32 min_time = 3;
-  int32 max_time = 4;
-  int32 daily_load = 5;
+  repeated Task tasks = 1;
+  UserPreference user_preference = 2;
 }
 
 message ScheduleResponse {
-  repeated TaskSchedule schedules = 1;
+  repeated ScheduledBlock schedules = 1;
 }
 
 // ----- SERVICE -----
 
 service SchedulerService {
-  rpc Schedule (ScheduleRequest) returns (ScheduleResponse);
+  rpc Schedule(ScheduleRequest) returns (ScheduleResponse);
 }
