@@ -3,7 +3,7 @@ from concurrent import futures
 import grpc
 import scheduler_pb2
 import scheduler_pb2_grpc
-from models import Constraints, FocusBlock, Interval, Schedule, Task
+from models import EnergyBlock, Interval, ScheduledBlock, Task, UserPreference
 from scheduler import schedule_tasks
 
 # ---- Proto → Domain Models ----
@@ -21,37 +21,31 @@ def parse_task(proto: scheduler_pb2.Task) -> Task:
         id=proto.id,
         title=proto.title,
         duration=proto.duration,
-        priority=proto.priority or 3,
-        earliest_start=proto.earliest_start if proto.earliest_start else None,
-        latest_end=proto.latest_end if proto.latest_end else None,
+        priority=proto.priority,
         deadline=deadline.ToDatetime() if deadline else None,
-        mandatory=proto.mandatory or False,
-        max_splits=proto.max_splits or 1,
         category=proto.category_id if proto.category_id else None,
-        prerequisites=list(proto.prerequisites),
-        focus=proto.focus or 1,
-        schedules=[
-            Schedule(split=s.split or 0, start=s.start, end=s.end)
-            for s in proto.schedules
+        energy=proto.energy,
+        scheduled_blocks=[
+            ScheduledBlock(split_index=s.split_index or 0, start=s.start, end=s.end)
+            for s in proto.scheduled_blocks
         ],
     )
 
 
-def parse_constraints(c_proto: scheduler_pb2.Constraints) -> Constraints:
+def parse_constraints(c_proto: scheduler_pb2.UserPreference) -> UserPreference:
     available_hours = [Interval(a.start, a.end) for a in c_proto.available_hours]
-    focus_blocks = [
-        FocusBlock(
-            level=fb.level,
-            interval=Interval(fb.interval.start, fb.interval.end),
+    energy_blocks = [
+        EnergyBlock(
+            energy=eb.energy,
+            start=eb.interval.start,
+            end=eb.interval.end,
         )
-        for fb in c_proto.focus_blocks
+        for eb in c_proto.energy_blocks
     ]
-    return Constraints(
+    return UserPreference(
         available_hours=available_hours,
         min_gap_between_tasks=c_proto.min_gap_between_tasks,
-        focus_blocks=focus_blocks,
-        batch_similar_tasks=c_proto.batch_similar_tasks,
-        max_daily_load=c_proto.max_daily_load,
+        energy_blocks=energy_blocks,
     )
 
 
@@ -65,14 +59,14 @@ class SchedulerService(scheduler_pb2_grpc.SchedulerServiceServicer):
             constraints,
         )
         # Build response
-        response = scheduler_pb2.ScheduleResponse()
+        response = scheduler_pb2.SchedulerResponse()
 
-        for task, split, interval in schedule_result:
-            scheduled_task = scheduler_pb2.TaskSchedule()
+        for task, split_index, interval in schedule_result:
+            scheduled_task = scheduler_pb2.ScheduledBlock()
             scheduled_task.task_id = task.id
             scheduled_task.start = interval.start
             scheduled_task.end = interval.end
-            scheduled_task.split = split
+            scheduled_task.split_index = split_index
 
             response.schedules.append(scheduled_task)
         return response
@@ -84,10 +78,6 @@ class SchedulerService(scheduler_pb2_grpc.SchedulerServiceServicer):
 def serve():
     server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=10),
-        options=[
-            ("grpc.max_receive_message_length", 5 * 1024 * 1024),
-            ("grpc.max_send_message_length", 5 * 1024 * 1024),
-        ],
     )
     scheduler_pb2_grpc.add_SchedulerServiceServicer_to_server(
         SchedulerService(), server
