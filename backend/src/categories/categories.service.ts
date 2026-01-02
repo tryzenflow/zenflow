@@ -10,22 +10,20 @@ import { Prisma } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { PopulateCategoriesDto } from "./dto/populate-categories.dto";
 import { ORDER_GAP } from "../common/constants";
+import { Transaction } from "src/common/types";
 
 @Injectable()
 export class CategoriesService {
   constructor(private prisma: PrismaService) {}
 
-  async populate(userId: string, { categories }: PopulateCategoriesDto) {
-    const existingCategoriesCount = await this.prisma.category.count({
-      where: { userId },
-    });
-    if (existingCategoriesCount > 0) {
-      throw new BadRequestException({
-        success: false,
-        message: "Categories already populated",
-      });
-    }
-    const newCategories = await this.prisma.category.createManyAndReturn({
+  async populate(
+    userId: string,
+    { categories }: PopulateCategoriesDto,
+    tx: Transaction,
+  ) {
+    const newCategories = await (
+      tx ?? this.prisma
+    ).category.createManyAndReturn({
       data: categories.map(({ name }, i) => ({
         name,
         userId,
@@ -72,7 +70,7 @@ export class CategoriesService {
   async update(
     id: string,
     { beforeId, afterId, ...updateCategoryDto }: UpdateCategoryDto,
-    userId: string
+    userId: string,
   ) {
     try {
       let beforeOrder: number = 0;

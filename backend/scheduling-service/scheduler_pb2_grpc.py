@@ -26,9 +26,7 @@ if _version_not_supported:
 
 
 class SchedulerServiceStub(object):
-    """----- SERVICE -----
-
-    """
+    """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
         """Constructor.
@@ -44,9 +42,7 @@ class SchedulerServiceStub(object):
 
 
 class SchedulerServiceServicer(object):
-    """----- SERVICE -----
-
-    """
+    """Missing associated documentation comment in .proto file."""
 
     def Schedule(self, request, context):
         """Missing associated documentation comment in .proto file."""
@@ -71,9 +67,7 @@ def add_SchedulerServiceServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class SchedulerService(object):
-    """----- SERVICE -----
-
-    """
+    """Missing associated documentation comment in .proto file."""
 
     @staticmethod
     def Schedule(request,

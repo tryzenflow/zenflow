@@ -4,39 +4,30 @@ import {
   Delete,
   Get,
   Param,
-  ParseIntPipe,
   Put,
   Query,
   UseGuards,
 } from "@nestjs/common";
-import { FindSchedulesDto } from "./dto/find-schedules.dto";
-import { UpdateScheduleDto } from "./dto/update-schedule.dto";
+import { DateRangeDto } from "../common/dto/date-range.dto";
+import { UpdateScheduledBlockDto } from "./dto/update-schedule.dto";
 import { SchedulesService } from "./schedules.service";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
 import { type User } from "../../generated/prisma";
-import { getDateOnlyString } from "../common/utils";
 
 @Controller("schedules")
 @UseGuards(CookieAuthGuard)
 export class SchedulesController {
   constructor(private readonly schedulesService: SchedulesService) {}
 
-  @Put(":year/:month/:day/tasks/:id/split/:split")
+  @Put(":id")
   async update(
     @Param("id") id: string,
-    @Param("split", ParseIntPipe) split: number,
-    @Param("year", ParseIntPipe) year: number,
-    @Param("month", ParseIntPipe) month: number,
-    @Param("day", ParseIntPipe) day: number,
-    @Body() updateScheduleDto: UpdateScheduleDto,
+    @Body() updateScheduleDto: UpdateScheduledBlockDto,
     @CurrentUser() user: User,
   ) {
-    const date = getDateOnlyString(year, month, day);
     const updated = await this.schedulesService.update(
-      date,
       id,
-      split,
       updateScheduleDto,
       user.id,
       user.timezone,
@@ -48,28 +39,21 @@ export class SchedulesController {
     };
   }
 
-  @Delete(":year/:month/:day/tasks/:id/split/:split")
-  async remove(
-    @Param("year", ParseIntPipe) year: number,
-    @Param("month", ParseIntPipe) month: number,
-    @Param("day", ParseIntPipe) day: number,
-    @Param("id") id: string,
-    @Param("split", ParseIntPipe) split: number,
-    @CurrentUser() user: User,
-  ) {
-    const date = getDateOnlyString(year, month, day);
-    await this.schedulesService.remove(date, id, split, user.id);
+  @Delete(":id")
+  async remove(@Param("id") id: string, @CurrentUser() user: User) {
+    await this.schedulesService.remove(id, user.id);
     return { success: true, message: "Delete the scheduled task successfully" };
   }
 
   @Get()
   async findSchedules(
-    @Query() findSchedulesDto: FindSchedulesDto,
+    @Query() findSchedulesDto: DateRangeDto,
     @CurrentUser() user: User,
   ) {
-    const schedules = await this.schedulesService.findSchedules(
-      findSchedulesDto,
+    const schedules = await this.schedulesService.findScheduledBlocks(
       user.id,
+      findSchedulesDto,
+      user.timezone,
     );
     return {
       success: true,

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Loader2 } from "lucide-react";
 import {
-  DayFocusBlocks,
+  DayEnergyBlocks,
   DaySchedulingStyle,
   defaultSchedulingStyle,
   FinalConstraintSubmission,
@@ -14,7 +14,7 @@ import {
   UpdateCategoryPayload,
 } from "@/types/prefs"; // Assume types are in './types' or defined above
 
-import { FocusBlocksPrefs } from "../components/prefs/focus-blocks";
+import { EnergyBlocksPrefs } from "../components/prefs/focus-blocks";
 import { SchedulingStyle } from "../components/prefs/scheduling-style";
 import { toast } from "sonner";
 import { postData } from "../api";
@@ -24,7 +24,7 @@ import { useUserStore } from "../hooks/use-user-store";
 import { EARLY_BIRD_BLOCKS } from "@/utils/prefs";
 
 // --- Default Data ---
-const defaultFocusBlocks: DayFocusBlocks = {
+const defaultEnergyBlocks: DayEnergyBlocks = {
   Mon: EARLY_BIRD_BLOCKS,
   Tue: EARLY_BIRD_BLOCKS,
   Wed: EARLY_BIRD_BLOCKS,
@@ -45,8 +45,8 @@ export function PrefSetupPage() {
   const [loading, setLoading] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
 
-  const [focusBlocks, setFocusBlocks] =
-    useState<DayFocusBlocks>(defaultFocusBlocks);
+  const [focusBlocks, setEnergyBlocks] =
+    useState<DayEnergyBlocks>(defaultEnergyBlocks);
   const [schedulingStyle, setSchedulingStyle] = useState<DaySchedulingStyle>(
     defaultSchedulingStyle,
   );
@@ -60,7 +60,7 @@ export function PrefSetupPage() {
       return;
     }
     if (user._count.categories > 0) {
-      if (user._count.constraints > 0) {
+      if (user._count.userPreferences > 0) {
         navigate("/");
       } else setCurrentStep(2);
     }
@@ -84,22 +84,22 @@ export function PrefSetupPage() {
 
   const mapSchedulingStyleToDto = (
     style: DaySchedulingStyle,
-    blocks: DayFocusBlocks,
+    blocks: DayEnergyBlocks,
   ): FinalConstraintSubmission[] => {
     const submissionArray: FinalConstraintSubmission[] = [];
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
     days.forEach((day) => {
-      const constraints = style[day];
+      const userPreferences = style[day];
       const dayBlocks = blocks[day];
 
-      const weekdayNumber = dayMap[day];
+      const dayNumber = dayMap[day];
 
       submissionArray.push({
-        minGapBetweenTasks: constraints.minGapBetweenTasks,
-        maxDailyLoad: constraints.maxDailyLoad,
-        weekday: weekdayNumber,
-        batchSimilarTasks: constraints.batchSimilarTasks,
+        minGapBetweenTasks: userPreferences.minGapBetweenTasks,
+        maxDailyLoad: userPreferences.maxDailyLoad,
+        day: dayNumber,
+        batchSimilarTasks: userPreferences.batchSimilarTasks,
         focusBlocks: dayBlocks.map((block) => ({
           level: block.level,
           start: block.start,
@@ -117,10 +117,12 @@ export function PrefSetupPage() {
 
     try {
       await postData("/categories/populate", { categories });
-      const constraintPayload = mapSchedulingStyleToDto(data, focusBlocks);
+      const userPreferencePayload = mapSchedulingStyleToDto(data, focusBlocks);
 
       await Promise.all(
-        constraintPayload.map((dayData) => postData("/constraints", dayData)),
+        userPreferencePayload.map((dayData) =>
+          postData("/userPreferences", dayData),
+        ),
       );
 
       setUser(
@@ -129,7 +131,7 @@ export function PrefSetupPage() {
               ...user,
               _count: {
                 categories: categories.length,
-                constraints: Object.keys(dayMap).length,
+                userPreferences: Object.keys(dayMap).length,
               },
             }
           : null,
@@ -185,9 +187,9 @@ export function PrefSetupPage() {
         );
       case 2:
         return (
-          <FocusBlocksPrefs
+          <EnergyBlocksPrefs
             focusBlocks={focusBlocks}
-            setFocusBlocks={setFocusBlocks}
+            setEnergyBlocks={setEnergyBlocks}
           />
         );
       case 3:

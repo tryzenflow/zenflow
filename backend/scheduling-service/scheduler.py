@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import datetime
 from typing import List
 
@@ -30,58 +31,63 @@ def build_task(
     presences = []
     intervals = []
     task_vars = []
+    if task.fixed_window is None:
+        for k in range(task.max_splits):
+            presence = model.NewBoolVar(f"presence_{task.id}_{k}")
 
-    for k in range(task.max_splits):
-        presence = model.NewBoolVar(f"presence_{task.id}_{k}")
+            start = model.NewIntVar(start_min, end_max, f"start_{task.id}_{k}")
 
-        start = model.NewIntVar(start_min, end_max, f"start_{task.id}_{k}")
+            # Each split can be 0 if unused, or any multiple of TIME_GRANULARITY up to task.duration
+            duration = model.NewIntVar(0, task.duration, f"dur_{task.id}_{k}")
+            end = model.NewIntVar(start_min, end_max, f"end_{task.id}_{k}")
 
-        # Each split can be 0 if unused, or any multiple of TIME_GRANULARITY up to task.duration
-        duration = model.NewIntVar(0, task.duration, f"dur_{task.id}_{k}")
-        end = model.NewIntVar(start_min, end_max, f"end_{task.id}_{k}")
+            # enforce multiples of TIME_GRANULARITY
+            enforce_multiple_of_time_granularity(model, start)
+            enforce_multiple_of_time_granularity(model, duration)
 
-        # enforce multiples of TIME_GRANULARITY
-        enforce_multiple_of_time_granularity(model, start)
-        enforce_multiple_of_time_granularity(model, duration)
+            # Only enforce minimum nonzero split if the split is selected
+            min_split = nearest_multiple_of_time_granularity(
+                task.duration // task.max_splits
+            )
+            model.Add(duration >= min_split).OnlyEnforceIf(presence)
+            model.Add(duration == 0).OnlyEnforceIf(presence.Not())
 
-        # Only enforce minimum nonzero split if the split is selected
-        min_split = nearest_multiple_of_time_granularity(
-            task.duration // task.max_splits
+            model.Add(end == start + duration).OnlyEnforceIf(presence)
+
+            interval = model.NewOptionalIntervalVar(
+                start, duration, end, presence, f"interval_{task.id}_{k}"
+            )
+
+            presences.append(presence)
+            intervals.append(interval)
+            task_vars.append((task, k, start, end, duration, presence))
+
+        # total scheduled ≤ task.duration
+        model.Add(sum(d for *_, d, _ in task_vars) <= task.duration)
+    else:
+        start_lb = task.fixed_window.start
+        end_ub = task.fixed_window.end - task.duration
+        start = model.NewIntVar(start_lb, end_ub, f"start_{task.id}")
+        duration = model.NewIntVar(
+            task.duration, task.duration, f"dur_{task.id}"
+        )  # no splitting for fixed_window
+        end = model.NewIntVar(
+            start_lb + task.duration,
+            task.fixed_window.end if task.fixed_window else end_max,
+            f"end_{task.id}",
         )
-        model.Add(duration >= min_split).OnlyEnforceIf(presence)
-        model.Add(duration == 0).OnlyEnforceIf(presence.Not())
-
-        model.Add(end == start + duration).OnlyEnforceIf(presence)
+        model.Add(end == start + duration)
+        presence = model.NewBoolVar(f"presence_{task.id}")
+        model.Add(presence == 1)
 
         interval = model.NewOptionalIntervalVar(
-            start, duration, end, presence, f"interval_{task.id}_{k}"
+            start, duration, end, presence, f"interval_{task.id}"
         )
-
         presences.append(presence)
         intervals.append(interval)
-        task_vars.append((task, k, start, end, duration, presence))
-
-    # total scheduled ≤ task.duration
-    model.Add(sum(d for *_, d, _ in task_vars) <= task.duration)
+        task_vars.append((task, 0, start, end, duration, presence))
 
     return task_vars, intervals
-
-
-def add_hard_available_hours(
-    model: cp_model.CpModel,
-    start,
-    end,
-    presence,
-    available_hours: List[Interval],
-):
-    inside_any = []
-    for i, block in enumerate(available_hours):
-        inside = model.NewBoolVar(f"inside_avail_{i}")
-        model.Add(start >= block.start).OnlyEnforceIf(inside)
-        model.Add(end <= block.end).OnlyEnforceIf(inside)
-        inside_any.append(inside)
-
-    model.AddBoolOr(inside_any).OnlyEnforceIf(presence)
 
 
 def schedule_tasks(
@@ -110,9 +116,6 @@ def schedule_tasks(
 
     model.AddNoOverlap(all_intervals)
 
-    for task, _, start, end, _, presence in all_task_vars:
-        add_hard_available_hours(model, start, end, presence, pref.available_hours)
-
     optimize_function(model, all_task_vars, pref, max_time=max_time)
 
     solver = cp_model.CpSolver()
@@ -120,13 +123,16 @@ def schedule_tasks(
     status = solver.Solve(model)
 
     schedule = []
+    splits_per_task = defaultdict(int)
     if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        for task, split, start, end, _, presence in all_task_vars:
+        for task, _, start, end, _, presence in all_task_vars:
             if solver.Value(presence):
                 block = Interval(
                     solver.Value(start),
                     solver.Value(end),
                 )
-                schedule.append((task, split, block))
+                split_index = splits_per_task[task]
+                splits_per_task[task] += 1
+                schedule.append((task, split_index, block))
 
     return schedule

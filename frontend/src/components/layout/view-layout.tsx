@@ -89,7 +89,7 @@ export default function ViewLayout({
       navigate("/login?callback=/");
       return;
     }
-    if (user._count.categories === 0 || user._count.constraints === 0) {
+    if (user._count.categories === 0 || user._count.userPreferences === 0) {
       navigate("/prefs?callback=/");
       return;
     }

@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/context-menu";
 import React, { useRef, useState, useEffect } from "react";
 import { cn } from "../../lib/utils";
-import { FocusBlock as IFocusBlock } from "../../types/prefs";
+import { EnergyBlock as IEnergyBlock } from "../../types/prefs";
 import {
   Tooltip,
   TooltipContent,
@@ -22,9 +22,9 @@ import { Trash } from "lucide-react";
 import { minutesToTime } from "../../utils/prefs";
 import { snapToFive } from "../../utils/snap";
 
-interface FocusBlockProps {
-  block: IFocusBlock;
-  onBlockChange: (id: string, updated: Partial<IFocusBlock>) => void;
+interface EnergyBlockProps {
+  block: IEnergyBlock;
+  onBlockChange: (id: string, updated: Partial<IEnergyBlock>) => void;
   deleteBlock: (id: string) => void;
 }
 
@@ -32,11 +32,11 @@ const BOUNDARY = 5;
 const MIN_BLOCK_MINUTES = 5;
 const PIXELS_PER_MINUTE = 1;
 
-export function FocusBlock({
+export function EnergyBlock({
   block,
   onBlockChange,
   deleteBlock,
-}: FocusBlockProps) {
+}: EnergyBlockProps) {
   const colorMap = { 3: "bg-red-500", 2: "bg-yellow-500", 1: "bg-green-500" };
   const blockRef = useRef<HTMLDivElement>(null);
 
@@ -86,13 +86,13 @@ export function FocusBlock({
     } else if (dragType === "resizeLeft") {
       onBlockChange(block.id, {
         start: snapToFive(
-          Math.min(initialStart + delta, initialEnd - MIN_BLOCK_MINUTES)
+          Math.min(initialStart + delta, initialEnd - MIN_BLOCK_MINUTES),
         ),
       });
     } else if (dragType === "resizeRight") {
       onBlockChange(block.id, {
         end: snapToFive(
-          Math.max(initialEnd + delta, initialStart + MIN_BLOCK_MINUTES)
+          Math.max(initialEnd + delta, initialStart + MIN_BLOCK_MINUTES),
         ),
       });
     }
@@ -147,7 +147,7 @@ export function FocusBlock({
                 ref={blockRef}
                 className={cn(
                   "absolute h-full transition-all cursor-pointer rounded-full opacity-70 hover:opacity-100",
-                  colorMap[block.level]
+                  colorMap[block.level],
                 )}
                 style={{
                   left: `${block.start * PIXELS_PER_MINUTE}px`,
@@ -162,7 +162,7 @@ export function FocusBlock({
               value={block.level.toString()}
               onValueChange={(value) =>
                 onBlockChange(block.id, {
-                  level: +value as IFocusBlock["level"],
+                  level: +value as IEnergyBlock["level"],
                 })
               }
               onClick={(e) => e.stopPropagation()}

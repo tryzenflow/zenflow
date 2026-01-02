@@ -55,10 +55,10 @@ export const taskSchema = z
     prerequisites: z.array(z.string()).optional(),
     frequency: z.enum(["YEARLY", "MONTHLY", "WEEKLY", "DAILY"]),
     interval: z.number().min(1),
-    byweekday: z.array(z.string()),
+    byday: z.array(z.string()),
     bymonthday: z.number().min(1).max(31),
     bysetpos: z.number(),
-    byweekdayMonth: z.string(),
+    bydayMonth: z.string(),
     monthlyMode: z.enum(["on", "on_the"]),
     yearlyMode: z.enum(["on", "on_the"]),
     month: z.number().min(1).max(12),
@@ -96,15 +96,15 @@ export const generateRRule = (values: z.infer<typeof taskSchema>) => {
 
   rrule += `;INTERVAL=${values.interval}`;
 
-  if (values.frequency === "WEEKLY" && values.byweekday.length > 0) {
-    rrule += `;BYDAY=${values.byweekday.join(",")}`;
+  if (values.frequency === "WEEKLY" && values.byday.length > 0) {
+    rrule += `;BYDAY=${values.byday.join(",")}`;
   }
 
   if (values.frequency === "MONTHLY") {
     if (values.monthlyMode === "on") {
       rrule += `;BYMONTHDAY=${values.bymonthday}`;
     } else {
-      rrule += `;BYDAY=${values.byweekdayMonth};BYSETPOS=${values.bysetpos}`;
+      rrule += `;BYDAY=${values.bydayMonth};BYSETPOS=${values.bysetpos}`;
     }
   }
 
@@ -113,7 +113,7 @@ export const generateRRule = (values: z.infer<typeof taskSchema>) => {
     if (values.yearlyMode === "on") {
       rrule += `;BYMONTHDAY=${values.bymonthday}`;
     } else {
-      rrule += `;BYDAY=${values.byweekdayMonth};BYSETPOS=${values.bysetpos}`;
+      rrule += `;BYDAY=${values.bydayMonth};BYSETPOS=${values.bysetpos}`;
     }
   }
 
@@ -152,11 +152,11 @@ export const parseRRule = (rruleString: string): Partial<TaskFormValues> => {
     // Extract interval (default to 1 if not specified)
     const interval = options.interval || 1;
 
-    // Extract byweekday for WEEKLY frequency
-    const byweekday: string[] = [];
-    if (options.byweekday && Array.isArray(options.byweekday)) {
-      options.byweekday.forEach((wd: any) => {
-        const weekdayMap: Record<number, string> = {
+    // Extract byday for WEEKLY frequency
+    const byday: string[] = [];
+    if (options.byday && Array.isArray(options.byday)) {
+      options.byday.forEach((wd: any) => {
+        const dayMap: Record<number, string> = {
           0: "MO",
           1: "TU",
           2: "WE",
@@ -166,9 +166,9 @@ export const parseRRule = (rruleString: string): Partial<TaskFormValues> => {
           6: "SU",
         };
         // Handle both Weekday objects and numbers
-        const dayNum = typeof wd === "number" ? wd : wd.weekday;
-        if (weekdayMap[dayNum]) {
-          byweekday.push(weekdayMap[dayNum]);
+        const dayNum = typeof wd === "number" ? wd : wd.day;
+        if (dayMap[dayNum]) {
+          byday.push(dayMap[dayNum]);
         }
       });
     }
@@ -185,13 +185,13 @@ export const parseRRule = (rruleString: string): Partial<TaskFormValues> => {
         ? options.bysetpos[0]
         : 1;
 
-    // Extract byweekdayMonth for "on_the" mode
-    let byweekdayMonth = "MO";
+    // Extract bydayMonth for "on_the" mode
+    let bydayMonth = "MO";
     if (frequency === "MONTHLY" || frequency === "YEARLY") {
-      if (Array.isArray(options.byweekday) && options.byweekday.length > 0) {
-        const wd = options.byweekday[0];
-        const dayNum = typeof wd === "number" ? wd : (wd as Weekday).weekday;
-        const weekdayMap: Record<number, string> = {
+      if (Array.isArray(options.byday) && options.byday.length > 0) {
+        const wd = options.byday[0];
+        const dayNum = typeof wd === "number" ? wd : (wd as Weekday).day;
+        const dayMap: Record<number, string> = {
           0: "MO",
           1: "TU",
           2: "WE",
@@ -200,7 +200,7 @@ export const parseRRule = (rruleString: string): Partial<TaskFormValues> => {
           5: "SA",
           6: "SU",
         };
-        byweekdayMonth = weekdayMap[dayNum] || "MO";
+        bydayMonth = dayMap[dayNum] || "MO";
       }
     }
 
@@ -243,10 +243,10 @@ export const parseRRule = (rruleString: string): Partial<TaskFormValues> => {
       scheduleDate,
       frequency,
       interval,
-      byweekday,
+      byday,
       bymonthday,
       bysetpos,
-      byweekdayMonth,
+      bydayMonth,
       monthlyMode,
       yearlyMode,
       month,
@@ -261,10 +261,10 @@ export const parseRRule = (rruleString: string): Partial<TaskFormValues> => {
       scheduleDate: new Date(),
       frequency: "DAILY",
       interval: 1,
-      byweekday: [],
+      byday: [],
       bymonthday: 1,
       bysetpos: 1,
-      byweekdayMonth: "MO",
+      bydayMonth: "MO",
       monthlyMode: "on",
       yearlyMode: "on",
       month: 1,

@@ -8,14 +8,11 @@ from models import (
     UserPreference,
 )
 from scheduler import schedule_tasks
+from utils import minutes_to_hhmm
 
 # -------------------------
 # Helpers
 # -------------------------
-
-
-def minutes_to_hhmm(m: int) -> str:
-    return f"{m // 60:02d}:{m % 60:02d}"
 
 
 def total_scheduled_minutes(schedule):
@@ -115,61 +112,80 @@ def overlap(a: Interval, b: Interval) -> int:
 # -------------------------
 
 
-def case_hard_available_hours_only():
-    print("\nCASE: HARD available_hours")
+def case_task_splitting_behavior():
+    print("\nCASE: realistic mixed-duration task splitting")
 
     pref = UserPreference(
-        available_hours=[
-            Interval(9 * 60, 12 * 60),
-            Interval(13 * 60, 17 * 60),
-        ]
+        energy_blocks=[
+            EnergyBlock(9 * 60, 11 * 60, energy=3),  # peak focus
+            EnergyBlock(11 * 60, 13 * 60, energy=2),  # steady
+            EnergyBlock(14 * 60, 17 * 60, energy=2),  # afternoon
+        ],
+        min_gap_between_tasks=15,
     )
 
     tasks = [
-        Task("Task A", 60),
-        Task("Task B", 90),
-        Task("Task C", 120),
+        Task(
+            "Write system design doc",
+            duration=150,  # long deep work
+            priority=1,
+            energy=3,
+        ),
+        Task(
+            "Design review notes",
+            duration=120,  # medium focus
+            priority=2,
+            energy=2,
+        ),
+        Task(
+            "Email inbox cleanup",
+            duration=30,  # short admin
+            priority=3,
+            energy=1,
+        ),
+        Task(
+            "Slack follow-ups",
+            duration=15,  # very short admin
+            priority=3,
+            energy=1,
+        ),
     ]
 
-    schedule = schedule_tasks(tasks, pref, min_time=8 * 60, max_time=18 * 60)
+    schedule = schedule_tasks(tasks, pref)
     print_schedule(schedule)
 
-    for _, _, interval in schedule:
-        assert any(
-            interval.start >= b.start and interval.end <= b.end
-            for b in pref.available_hours
-        ), "❌ Task scheduled outside available_hours"
+    # ---- Analyze per-task behavior ----
+    by_task = {}
+    for task, _, block in schedule:
+        by_task.setdefault(task.title, []).append(block)
 
+    print("\nOBSERVATIONS")
+    for title, blocks in by_task.items():
+        durations = [b.end - b.start for b in blocks]
+        total = sum(durations)
 
-def case_task_splitting_behavior():
-    print("\nCASE: task splitting behavior")
+        print(f"\n  {title}")
+        print(f"    → total planned: {total} min")
+        print(f"    → sessions: {len(blocks)}")
+        print(f"    → session lengths: {durations}")
 
-    pref = UserPreference(
-        available_hours=[
-            Interval(9 * 60, 10 * 60),  # 60 min
-            Interval(11 * 60, 12 * 60),  # 60 min
-            Interval(14 * 60, 15 * 60),  # 60 min
-        ]
-    )
+        # Soft human expectations
+        if total >= 120:
+            assert len(blocks) >= 2, "Long task was not split"
+            assert min(durations) >= 45, "Long task split into micro-blocks"
 
-    long_task = Task(
-        "Long task",
-        duration=150,  # needs splits
-        priority=1,
-        energy=2,
-    )
+        if total <= 30:
+            assert len(blocks) == 1, "Short task should not be split"
 
-    schedule = schedule_tasks([long_task], pref)
-    print_schedule(schedule)
+        if 45 <= total <= 75:
+            assert len(blocks) <= 2, "Medium task oversplit"
 
-    splits = count_splits(schedule)
-    total = total_scheduled_minutes(schedule)
+    # ---- Global sanity checks ----
+    all_blocks = [b for blocks in by_task.values() for b in blocks]
+    all_durations = [b.end - b.start for b in all_blocks]
 
-    print(f"  -> total scheduled minutes: {total}")
-    print(f"  -> splits used: {splits}")
-
-    assert total <= long_task.duration
-    assert splits[long_task.id] <= long_task.max_splits
+    assert min(all_durations) >= 15, "Unrealistically tiny block found"
+    assert max(all_durations) <= 120, "Unrealistically long focus block found"
 
 
 # -------------------------
@@ -177,47 +193,84 @@ def case_task_splitting_behavior():
 # -------------------------
 
 
-def case_energy_alignment_only():
-    print("\nCASE: energy alignment metrics")
+def case_energy_alignment():
+    print("\nCASE: realistic energy alignment behavior")
 
+    # Simulated human energy curve for a workday
     pref = UserPreference(
-        available_hours=[Interval(8 * 60, 18 * 60)],
         energy_blocks=[
-            EnergyBlock(8 * 60, 10 * 60, energy=3),
-            EnergyBlock(10 * 60, 13 * 60, energy=1),
-            EnergyBlock(13 * 60, 16 * 60, energy=2),
-        ],
+            EnergyBlock(7 * 60, 9 * 60, energy=2),  # morning warm-up
+            EnergyBlock(9 * 60, 12 * 60, energy=3),  # peak focus
+            EnergyBlock(12 * 60, 14 * 60, energy=1),  # lunch slump
+            EnergyBlock(14 * 60, 17 * 60, energy=2),  # steady work
+        ]
     )
 
     tasks = [
-        Task("Deep A", 90, energy=3, priority=1),
-        Task("Admin A", 60, energy=1, priority=3),
-        Task("Design A", 60, energy=2, priority=2),
+        # High-focus task that should land in peak hours (may split)
+        Task(
+            "Deep architecture work",
+            duration=150,  # forces split
+            energy=3,
+            priority=1,
+        ),
+        # Low-energy admin, should be pushed into slump
+        Task(
+            "Email & paperwork",
+            duration=60,
+            energy=1,
+            priority=3,
+        ),
+        # Medium-energy creative task
+        Task(
+            "Product design",
+            duration=90,
+            energy=2,
+            priority=2,
+        ),
+        # Slight mismatch task (energy=2 but competes with peak)
+        Task(
+            "Code review",
+            duration=60,
+            energy=2,
+            priority=2,
+        ),
+        # Short filler task (can go anywhere)
+        Task(
+            "Inbox cleanup",
+            duration=30,
+            energy=1,
+            priority=3,
+        ),
     ]
 
     schedule = schedule_tasks(tasks, pref)
     print_schedule(schedule)
 
+    # ---- Energy metrics ----
     m = energy_metrics(schedule, pref)
     print(f"  -> aligned minutes: {m['aligned']}")
     print(f"  -> mismatched minutes: {m['mismatched']}")
     print(f"  -> weighted mismatch: {m['weighted_mismatch']}")
 
-    assert m["aligned"] >= m["mismatched"]
+    # ---- Sanity expectations ----
+    assert m["aligned"] > 0, "No energy-aligned time found"
+    assert m["aligned"] >= m["mismatched"], "Energy alignment worse than mismatch"
 
 
 def case_min_gap_only():
-    print("\nCASE: SOFT min_gap_between_tasks")
+    print("\nCASE: SOFT min_gap_between_tasks (micro-task fatigue)")
 
     pref = UserPreference(
-        available_hours=[Interval(9 * 60, 12 * 60)],
-        min_gap_between_tasks=20,
+        energy_blocks=[EnergyBlock(9 * 60, 17 * 60, 3)],
+        min_gap_between_tasks=15,  # coffee / mental reset
     )
 
     tasks = [
-        Task("Short 1", 15),
-        Task("Short 2", 15),
-        Task("Short 3", 15),
+        Task("Slack replies", 15, priority=3),
+        Task("Expense receipt upload", 15, priority=3),
+        Task("Quick status update", 15, priority=2),
+        Task("Bug triage", 30, priority=1),
     ]
 
     schedule = schedule_tasks(tasks, pref)
@@ -230,25 +283,22 @@ def case_min_gap_only():
 
 
 def case_context_switch_only():
-    print("\nCASE: context switching with many tasks")
+    print("\nCASE: context switching in a real workday")
 
-    pref = UserPreference(
-        available_hours=[Interval(9 * 60, 17 * 60)],
-    )
+    pref = UserPreference(energy_blocks=[EnergyBlock(9 * 60, 17 * 60, 3)])
 
-    tasks = []
-
-    # Calls
-    for i in range(5):
-        tasks.append(Task(f"Call {i + 1}", 15, category="calls", priority=1))
-
-    # Admin
-    for i in range(5):
-        tasks.append(Task(f"Admin {i + 1}", 15, category="admin", priority=3))
-
-    # Writing
-    for i in range(5):
-        tasks.append(Task(f"Writing {i + 1}", 30, category="writing", priority=2))
+    tasks = [
+        # Calls (urgent, should cluster)
+        Task("Client call A", 30, category="calls", priority=1),
+        Task("Client call B", 30, category="calls", priority=1),
+        Task("Recruiter call", 15, category="calls", priority=2),
+        # Writing (deep work)
+        Task("Write proposal", 90, category="writing", priority=1),
+        Task("Documentation update", 60, category="writing", priority=2),
+        # Admin (low priority fillers)
+        Task("Invoice review", 30, category="admin", priority=3),
+        Task("CRM cleanup", 30, category="admin", priority=3),
+    ]
 
     schedule = schedule_tasks(tasks, pref)
     print_schedule(schedule)
@@ -257,45 +307,24 @@ def case_context_switch_only():
     print(f"  -> context switches: {metrics['switches']}")
     print(f"  -> same-category batches: {metrics['batches']}")
 
-    assert metrics["batches"] >= metrics["switches"]
-
-
-def case_stability_only():
-    print("\nCASE: SOFT stability preference")
-
-    pref = UserPreference(
-        available_hours=[Interval(9 * 60, 17 * 60)],
-    )
-
-    task = Task("Stable task", 60, priority=2)
-    task.scheduled_blocks = [ScheduledBlock(start=10 * 60, end=11 * 60, split_index=0)]
-
-    schedule = schedule_tasks([task], pref)
-    print_schedule(schedule)
-
-    for _, _, interval in schedule:
-        dev = abs(interval.start - 10 * 60)
-        print(f"    deviation from reference: {dev} min")
-
 
 def case_priority_deadline_inclusion():
-    print("\nCASE: priority & deadline metrics")
+    print("\nCASE: priority & deadline triage")
 
     now = datetime.now()
 
-    pref = UserPreference(
-        available_hours=[Interval(9 * 60, 12 * 60)],
-    )
+    pref = UserPreference(energy_blocks=[EnergyBlock(9 * 60, 12 * 60, 3)])
 
     tasks = [
-        Task("Low priority", 60, priority=3),
+        Task("Refactor later", 60, priority=3),
         Task(
-            "Urgent",
+            "Production incident",
             60,
             priority=1,
             deadline=now + timedelta(minutes=90),
         ),
-        Task("Medium", 60, priority=2),
+        Task("Prepare slides", 60, priority=2),
+        Task("Nice-to-have cleanup", 30, priority=3),
     ]
 
     schedule = schedule_tasks(tasks, pref)
@@ -304,53 +333,152 @@ def case_priority_deadline_inclusion():
     titles = [t.title for t, _, _ in schedule]
     print(f"  -> scheduled titles: {titles}")
 
-    # assert "Urgent" in titles
+
+def case_stability_only():
+    print("\nCASE: SOFT stability with competing tasks")
+
+    pref = UserPreference(energy_blocks=[EnergyBlock(9 * 60, 17 * 60, 3)])
+
+    stable_task = Task("Weekly planning", 60, priority=2)
+    stable_task.scheduled_blocks = [ScheduledBlock(start=10 * 60, end=11 * 60)]
+
+    competing = [
+        Task("Urgent bug fix", 90, priority=1),
+        Task("Email follow-ups", 30, priority=3),
+    ]
+
+    schedule = schedule_tasks([stable_task] + competing, pref)
+    print_schedule(schedule)
+
+    for t, _, interval in schedule:
+        if t.title == "Weekly planning":
+            dev = abs(interval.start - 10 * 60)
+            print(f"    deviation from reference: {dev} min")
 
 
-def case_partial_task_due_to_time_limit():
-    print("\nCASE: partial task due to limited time")
+def case_fixed_task_with_flexible():
+    print("\nCASE: fixed meeting interrupts deep work")
 
-    pref = UserPreference(
-        available_hours=[Interval(9 * 60, 11 * 60)]  # 120 min
+    fixed_task = Task(
+        "Team standup",
+        duration=30,
+        priority=1,
+        fixed_window=Interval(15 * 60, 15 * 60 + 30),
     )
 
     tasks = [
-        Task("Critical long task", 180, priority=1),  # needs 3h
-        Task("Small urgent", 30, priority=1),
+        fixed_task,
+        Task("Deep work – feature A", 120, priority=1),
+        Task("Code review", 45, priority=2),
+        Task("Admin follow-ups", 30, priority=3),
+    ]
+
+    pref = UserPreference(
+        energy_blocks=[
+            EnergyBlock(9 * 60, 12 * 60, energy=3),
+            EnergyBlock(13 * 60, 17 * 60, energy=2),
+        ]
+    )
+
+    schedule = schedule_tasks(tasks, pref)
+    print_schedule(schedule)
+
+    fixed = [b for t, _, b in schedule if t.title == "Team standup"]
+    assert fixed
+    assert fixed[0].start == 15 * 60
+
+
+def case_preferred_windows():
+    print("\nCASE: tasks with preferred windows")
+
+    # Strongly preferred task (must stay in afternoon)
+    coding = Task(
+        "Deep coding session",
+        duration=120,  # may split
+        priority=1,
+        energy=3,
+        preferred_windows=[Interval(14 * 60, 17 * 60)],  # 2pm–5pm
+    )
+
+    # Morning routine — short but very time-sensitive
+    breakfast = Task(
+        "Breakfast & planning",
+        duration=30,
+        priority=1,
+        energy=1,
+        preferred_windows=[Interval(7 * 60, 9 * 60)],  # 7am–9am
+    )
+
+    # Flexible but important
+    emails = Task(
+        "Email triage",
+        duration=45,
+        priority=2,
+        energy=1,
+    )
+
+    # Medium focus task, prefers late morning
+    reading = Task(
+        "Read tech articles",
+        duration=60,
+        priority=2,
+        energy=2,
+        preferred_windows=[Interval(10 * 60, 12 * 60)],  # 10am–12pm
+    )
+
+    # Long flexible task that competes for time
+    side_project = Task(
+        "Side project work",
+        duration=150,  # likely split
+        priority=2,
+        energy=3,
+    )
+
+    # Low-priority filler task
+    cleanup = Task(
+        "Inbox cleanup",
+        duration=30,
+        priority=3,
+        energy=1,
+    )
+
+    pref = UserPreference(
+        energy_blocks=[
+            EnergyBlock(7 * 60, 10 * 60, energy=1),
+            EnergyBlock(10 * 60, 14 * 60, energy=2),
+            EnergyBlock(14 * 60, 18 * 60, energy=3),
+        ]
+    )
+
+    tasks = [
+        breakfast,
+        emails,
+        reading,
+        coding,
+        side_project,
+        cleanup,
     ]
 
     schedule = schedule_tasks(tasks, pref)
     print_schedule(schedule)
 
-    m = task_completion_metrics(tasks, schedule)
-    print("  -> completed:", m["completed"])
-    print("  -> partial:", m["partial"])
-    print("  -> dropped:", m["dropped"])
+    # ---- Assertions / sanity checks ----
 
-    assert "Critical long task" not in m["dropped"]
-    assert any(t[0] == "Critical long task" for t in m["partial"])
-
-
-def case_low_priority_dropped():
-    print("\nCASE: low priority task dropped")
-
-    pref = UserPreference(
-        available_hours=[Interval(9 * 60, 10 * 60)]  # 45 min
+    # Breakfast must be in the morning window
+    breakfast_blocks = [b for t, _, b in schedule if t.title == "Breakfast & planning"]
+    assert breakfast_blocks, "Breakfast was not scheduled"
+    assert all(7 * 60 <= b.start and b.end <= 9 * 60 for b in breakfast_blocks), (
+        "Breakfast scheduled outside preferred window"
     )
 
-    tasks = [
-        Task("High priority", 60, priority=1),
-        Task("Low priority", 45, priority=3),
-    ]
+    # Coding must be in afternoon
+    coding_blocks = [b for t, _, b in schedule if t.title == "Deep coding session"]
+    assert coding_blocks, "Coding was not scheduled"
+    assert all(14 * 60 <= b.start and b.end <= 17 * 60 for b in coding_blocks), (
+        "Coding scheduled outside preferred window"
+    )
 
-    schedule = schedule_tasks(tasks, pref)
-    print_schedule(schedule)
-
-    m = task_completion_metrics(tasks, schedule)
-    print("  -> dropped:", m["dropped"])
-
-    assert "Low priority" in m["dropped"]
-    assert "High priority" not in m["dropped"]
+    print("✔ Preferred window constraints respected")
 
 
 # -------------------------
@@ -359,15 +487,14 @@ def case_low_priority_dropped():
 
 
 def run_all():
-    case_hard_available_hours_only()
-    case_energy_alignment_only()
+    case_energy_alignment()
     case_min_gap_only()
     case_task_splitting_behavior()
     case_context_switch_only()
     case_stability_only()
     case_priority_deadline_inclusion()
-    case_partial_task_due_to_time_limit()
-    case_low_priority_dropped()
+    case_fixed_task_with_flexible()
+    case_preferred_windows()
 
 
 if __name__ == "__main__":

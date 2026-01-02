@@ -2,30 +2,33 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FrameIcon, Moon, Sun } from "lucide-react";
 import { Dispatch, useCallback, useRef, useState } from "react";
-import { DayFocusBlocks, FocusBlock as IFocusBlock } from "../../types/prefs";
+import {
+  DayEnergyBlocks,
+  EnergyBlock as IEnergyBlock,
+} from "../../types/prefs";
 import {
   EARLY_BIRD_BLOCKS,
   NIGHT_OWL_BLOCKS,
   minutesToTime,
 } from "../../utils/prefs";
-import { FocusBlock } from "./focus-block";
+import { EnergyBlock } from "./focus-block";
 import { snapToFive } from "../../utils/snap";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 // Helper to convert minutes (0-1440) to a display time string (e.g., 5:00 AM)
-interface FocusBlocksProps {
-  focusBlocks: DayFocusBlocks;
-  setFocusBlocks: Dispatch<React.SetStateAction<DayFocusBlocks>>;
+interface EnergyBlocksProps {
+  focusBlocks: DayEnergyBlocks;
+  setEnergyBlocks: Dispatch<React.SetStateAction<DayEnergyBlocks>>;
 }
 
 const PIXELS_PER_MINUTE = 1; // adjust if you're scaling
 const DEFAULT_BLOCK_LENGTH = 60; // 60 minutes
 
-export function FocusBlocksPrefs({
+export function EnergyBlocksPrefs({
   focusBlocks,
-  setFocusBlocks,
-}: FocusBlocksProps) {
+  setEnergyBlocks,
+}: EnergyBlocksProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectedDay, setSelectedDay] = useState<
     "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun"
@@ -34,7 +37,7 @@ export function FocusBlocksPrefs({
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
   const isPresetApplied = useCallback(
-    (preset: IFocusBlock[]) => {
+    (preset: IEnergyBlock[]) => {
       if (preset.length !== focusBlocks[selectedDay].length) return false;
       preset.sort((a, b) => a.start - b.start);
       focusBlocks[selectedDay].sort((a, b) => a.start - b.start);
@@ -46,20 +49,20 @@ export function FocusBlocksPrefs({
     [focusBlocks, selectedDay],
   );
 
-  const applyPreset = (presetBlocks: IFocusBlock[]) => {
+  const applyPreset = (presetBlocks: IEnergyBlock[]) => {
     const newBlocks = presetBlocks.map((b) => ({
       ...b,
       id: crypto.randomUUID(),
     }));
-    setFocusBlocks((prev) => ({
+    setEnergyBlocks((prev) => ({
       ...prev,
       [selectedDay]: newBlocks,
     }));
   };
 
   const applyToEveryWeekday = () => {
-    toast.info("Successfully applied to every weekday");
-    setFocusBlocks((prev) => ({
+    toast.info("Successfully applied to every day");
+    setEnergyBlocks((prev) => ({
       Mon: prev[selectedDay],
       Tue: prev[selectedDay],
       Wed: prev[selectedDay],
@@ -71,7 +74,7 @@ export function FocusBlocksPrefs({
   };
 
   const clear = () => {
-    setFocusBlocks((prev) => ({
+    setEnergyBlocks((prev) => ({
       ...prev,
       [selectedDay]: [],
     }));
@@ -186,7 +189,7 @@ export function FocusBlocksPrefs({
                   ),
                 };
 
-                setFocusBlocks((prev) => ({
+                setEnergyBlocks((prev) => ({
                   ...prev,
                   [day]: [...prev[day], newBlock].sort(
                     (a, b) => a.start - b.start,
@@ -216,11 +219,11 @@ export function FocusBlocksPrefs({
 
               <div className="absolute rounded-full inset-x-0 bottom-0 h-10">
                 {focusBlocks[day].map((block) => (
-                  <FocusBlock
+                  <EnergyBlock
                     key={block.id}
                     block={block}
                     deleteBlock={(id) =>
-                      setFocusBlocks((prev) => ({
+                      setEnergyBlocks((prev) => ({
                         ...prev,
                         [day]: prev[day].filter((b) => {
                           return b.id !== id;
@@ -228,7 +231,7 @@ export function FocusBlocksPrefs({
                       }))
                     }
                     onBlockChange={(id, updated) =>
-                      setFocusBlocks((prev) => {
+                      setEnergyBlocks((prev) => {
                         // Clone day's blocks array safely
                         const blocks = [...prev[day]];
                         const index = blocks.findIndex((b) => b.id === id);
@@ -321,7 +324,7 @@ export function FocusBlocksPrefs({
           onClick={applyToEveryWeekday}
           variant="outline"
         >
-          Apply to every weekday
+          Apply to every day
         </Button>
         <Button size="sm" type="reset" onClick={clear} variant="secondary">
           Clear

@@ -52,7 +52,7 @@ export default function AnalyticsPage() {
       navigate("/login?callback=/analytics");
       return;
     }
-    if (user._count.categories === 0 || user._count.constraints === 0) {
+    if (user._count.categories === 0 || user._count.userPreferences === 0) {
       navigate("/prefs?callback=/analytics");
       return;
     }

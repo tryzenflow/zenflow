@@ -88,7 +88,7 @@ export const ScheduleItem = ({
   const [taskDetail, setTaskDetail] = useState<Task | null>(null);
   const itemRef = useRef<HTMLDivElement>(null); // Ref for the main event block
 
-  // --- Drag/Resize State (Adapted from FocusBlock) ---
+  // --- Drag/Resize State (Adapted from EnergyBlock) ---
   const [isDragging, setIsDragging] = useState(false);
   const [dragType, setDragType] = useState<
     "move" | "resizeTop" | "resizeBottom" | null
@@ -203,7 +203,7 @@ export const ScheduleItem = ({
     }
   };
 
-  // ---- Global listeners during drag (FocusBlock style) ----
+  // ---- Global listeners during drag (EnergyBlock style) ----
   useEffect(() => {
     if (isDragging) {
       window.addEventListener("mousemove", onMouseMove);

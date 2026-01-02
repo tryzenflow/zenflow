@@ -1,27 +1,21 @@
 import {
+  ArrayMinSize,
   IsArray,
-  IsBoolean,
-  IsDateString,
   IsDivisibleBy,
   IsInt,
   IsISO8601,
   IsOptional,
   IsString,
-  Matches,
   Max,
-  MaxLength,
   Min,
+  ValidateIf,
 } from "class-validator";
-import { DAILY_HORIZON } from "../../common/constants";
-import { IsRRule } from "../validators/is-rrule.validator";
+import { IsRRule } from "../validators/is-rrule.decorator";
+import { TIME_GRANULARITY } from "src/common/constants";
+import { TaskWindowDto } from "./task-window.dto";
 
 export class CreateTaskDto {
   @IsString() title: string;
-
-  @IsDateString()
-  @MaxLength(10)
-  @IsOptional()
-  scheduleDate?: string;
 
   @IsOptional()
   @IsRRule({ message: "Invalid RRULE: must follow RFC 5545 format" })
@@ -30,8 +24,8 @@ export class CreateTaskDto {
   @IsString() @IsOptional() note?: string;
 
   @IsInt()
-  @Min(5)
-  @IsDivisibleBy(5)
+  @Min(TIME_GRANULARITY)
+  @IsDivisibleBy(TIME_GRANULARITY)
   duration: number;
 
   @IsInt()
@@ -40,45 +34,25 @@ export class CreateTaskDto {
   priority: number;
 
   @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(DAILY_HORIZON)
-  earliestStart?: number;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(DAILY_HORIZON)
-  latestEnd?: number;
-
-  @IsOptional()
-  @IsDateString()
-  @MaxLength(10)
-  deadlineDate?: string;
-
-  @IsOptional()
-  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/)
-  deadlineTime?: string;
-
-  @IsBoolean()
-  @IsOptional()
-  mandatory?: boolean;
-
-  @IsInt()
-  @Min(1)
-  @IsOptional()
-  maxSplits?: number;
+  @ValidateIf((object, value) => value !== null)
+  @IsISO8601()
+  deadline?: string | null;
 
   @IsInt()
   @Min(1)
   @Max(3)
-  focus: number;
+  energy: number;
 
   @IsOptional()
   @IsString()
   categoryId?: string;
 
   @IsOptional()
+  @ValidateIf((object, value) => value !== null)
+  fixedWindow?: TaskWindowDto | null;
+
+  @IsOptional()
   @IsArray()
-  prerequisites?: string[];
+  @ArrayMinSize(1)
+  preferredWindows?: TaskWindowDto[];
 }

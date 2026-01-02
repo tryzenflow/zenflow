@@ -23,7 +23,7 @@ export function SchedulingStyle({
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
   const applyToEveryWeekday = () => {
-    toast.info("Successfully applied to every weekday");
+    toast.info("Successfully applied to every day");
     setStyleData((prev) => ({
       Mon: prev[selectedDay],
       Tue: prev[selectedDay],
@@ -155,7 +155,7 @@ export function SchedulingStyle({
         onClick={applyToEveryWeekday}
         variant="secondary"
       >
-        Apply to every weekday
+        Apply to every day
       </Button>
     </div>
   );

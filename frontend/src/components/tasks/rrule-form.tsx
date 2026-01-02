@@ -56,9 +56,9 @@ export function RRuleForm({ form }: RRuleFormProps) {
   const frequency = form.watch("frequency");
 
   const toggleWeekday = (day: string) => {
-    const current = form.getValues("byweekday");
+    const current = form.getValues("byday");
     form.setValue(
-      "byweekday",
+      "byday",
       current.includes(day)
         ? current.filter((d) => d !== day)
         : [...current, day],
@@ -131,7 +131,7 @@ export function RRuleForm({ form }: RRuleFormProps) {
       {frequency === "WEEKLY" && (
         <FormField
           control={form.control}
-          name="byweekday"
+          name="byday"
           render={({ field }) => (
             <FormItem>
               <FormLabel className="">Days</FormLabel>
@@ -239,7 +239,7 @@ export function RRuleForm({ form }: RRuleFormProps) {
                       />
                       <FormField
                         control={form.control}
-                        name="byweekdayMonth"
+                        name="bydayMonth"
                         render={({ field }) => (
                           <Select
                             onValueChange={field.onChange}
@@ -379,7 +379,7 @@ export function RRuleForm({ form }: RRuleFormProps) {
                         />
                         <FormField
                           control={form.control}
-                          name="byweekdayMonth"
+                          name="bydayMonth"
                           render={({ field }) => (
                             <Select
                               onValueChange={field.onChange}

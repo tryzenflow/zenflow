@@ -5,7 +5,7 @@ export interface User {
   createdAt: Date;
   timezone: string;
   _count: {
-    constraints: number;
+    userPreferences: number;
     categories: number;
   };
 }

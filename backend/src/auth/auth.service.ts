@@ -26,13 +26,16 @@ export class AuthService {
       await this.cacheManager.set(`otp:${email}`, otpCode);
       await this.mailService.sendLoginEmail(email, otpCode);
     } catch (error) {
-      throw new InternalServerErrorException();
+      throw new InternalServerErrorException({
+        success: false,
+        message: "Failed to send OTP code",
+      });
     }
   }
 
-  private async createUserIfNotExists(email: string) {
-    let user = await this.usersService.findByEmail(email);
-    if (!user) user = await this.usersService.create({ email });
+  async createUserIfNotExists(email: string, timezone: string) {
+    const user = await this.usersService.findByEmail(email);
+    if (!user) return await this.usersService.create({ email, timezone });
     return user;
   }
 
@@ -50,8 +53,6 @@ export class AuthService {
         throw new BadRequestException("Incorrect OTP provided");
       }
       await this.cacheManager.del(`otp:${email}`);
-      const user = await this.createUserIfNotExists(email);
-      return user;
     } catch (error) {
       if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException();

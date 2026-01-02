@@ -6,10 +6,10 @@ import { ConfigService } from "@nestjs/config";
 import path from "path";
 import { SchedulesModule } from "../schedules/schedules.module";
 import { TasksModule } from "../tasks/tasks.module";
-import { ConstraintsModule } from "../constraints/constraints.module";
+import { UserPreferencesModule } from "../prefs/prefs.module";
 
 @Module({
-  imports: [SchedulesModule, TasksModule, ConstraintsModule],
+  imports: [SchedulesModule, TasksModule, UserPreferencesModule],
   controllers: [SchedulerController],
   providers: [
     {

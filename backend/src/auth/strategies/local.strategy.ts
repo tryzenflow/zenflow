@@ -10,11 +10,17 @@ export class LocalStrategy extends PassportStrategy(Strategy) {
     super({
       usernameField: "email",
       passwordField: "otp",
+      passReqToCallback: true,
     });
   }
 
-  async validate(email: string, otp: string): Promise<User> {
-    const user = await this.authService.verifyOTPCode(email, otp);
+  async validate(req: Request, email: string, otp: string): Promise<User> {
+    const timezone: string = req.headers?.["x-timezone"] || "UTC";
+
+    // example: create or verify user with timezone
+    await this.authService.verifyOTPCode(email, otp);
+    const user = await this.authService.createUserIfNotExists(email, timezone);
+
     return user;
   }
 }

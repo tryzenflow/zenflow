@@ -25,15 +25,15 @@ import { z } from "zod";
 import { deleteData, getData, patchData, postData } from "@/api";
 import { toast } from "sonner";
 import { CategoriesPref } from "@/components/prefs/categories";
-import { FocusBlocksPrefs } from "@/components/prefs/focus-blocks";
+import { EnergyBlocksPrefs } from "@/components/prefs/focus-blocks";
 import { SchedulingStyle } from "@/components/prefs/scheduling-style";
 import {
   CategoryItem,
-  Constraints,
+  UserPreferences,
   defaultSchedulingStyle,
   UpdateCategoryPayload,
 } from "@/types/prefs";
-import { DayFocusBlocks, DaySchedulingStyle } from "@/types/prefs";
+import { DayEnergyBlocks, DaySchedulingStyle } from "@/types/prefs";
 import { TimezoneSelect } from "../settings/timezone-select";
 
 const accountSchema = z.object({
@@ -68,7 +68,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   // Preferences state
   const [categories, setCategories] = useState<CategoryItem[]>([]);
 
-  const [focusBlocks, setFocusBlocks] = useState<DayFocusBlocks>({
+  const [focusBlocks, setEnergyBlocks] = useState<DayEnergyBlocks>({
     Mon: [],
     Tue: [],
     Wed: [],
@@ -111,12 +111,12 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
   useEffect(() => {
     setIsLoading(true);
-    getData<{ data: Constraints[] }>("/constraints")
+    getData<{ data: UserPreferences[] }>("/userPreferences")
       .then((data) => {
-        const constraints = data.data;
+        const userPreferences = data.data;
         setStyleData(() =>
-          data.data.reduce((acc, constraint) => {
-            const weekdayMap: { [key: number]: keyof DaySchedulingStyle } = {
+          data.data.reduce((acc, userPreference) => {
+            const dayMap: { [key: number]: keyof DaySchedulingStyle } = {
               0: "Sun",
               1: "Mon",
               2: "Tue",
@@ -125,19 +125,19 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               5: "Fri",
               6: "Sat",
             };
-            const dayKey = weekdayMap[constraint.weekday];
+            const dayKey = dayMap[userPreference.day];
             acc[dayKey] = {
-              batchSimilarTasks: constraint.batchSimilarTasks,
-              maxDailyLoad: constraint.maxDailyLoad,
-              minGapBetweenTasks: constraint.minGapBetweenTasks,
+              batchSimilarTasks: userPreference.batchSimilarTasks,
+              maxDailyLoad: userPreference.maxDailyLoad,
+              minGapBetweenTasks: userPreference.minGapBetweenTasks,
             };
             return acc;
           }, {} as DaySchedulingStyle),
         );
 
-        setFocusBlocks(() => {
-          return constraints.reduce((acc, constraint) => {
-            const weekdayMap: { [key: number]: keyof DayFocusBlocks } = {
+        setEnergyBlocks(() => {
+          return userPreferences.reduce((acc, userPreference) => {
+            const dayMap: { [key: number]: keyof DayEnergyBlocks } = {
               0: "Sun",
               1: "Mon",
               2: "Tue",
@@ -146,15 +146,15 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               5: "Fri",
               6: "Sat",
             };
-            const dayKey = weekdayMap[constraint.weekday];
-            acc[dayKey] = constraint.focusBlocks.map((block) => ({
+            const dayKey = dayMap[userPreference.day];
+            acc[dayKey] = userPreference.focusBlocks.map((block) => ({
               id: block.id,
               start: block.start,
               end: block.end,
               level: block.level,
             }));
             return acc;
-          }, {} as DayFocusBlocks);
+          }, {} as DayEnergyBlocks);
         });
       })
       .finally(() => {
@@ -220,19 +220,19 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     }
   };
 
-  const updateFocusBlocks = async (weekday: keyof DayFocusBlocks) => {
+  const updateEnergyBlocks = async (day: keyof DayEnergyBlocks) => {
     try {
       setIsLoading(true);
-      const weekdayIndex = (
+      const dayIndex = (
         ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const
-      ).indexOf(weekday);
-      if (weekdayIndex === -1) return;
-      await patchData(`/constraints/${weekdayIndex}`, {
-        focusBlocks: focusBlocks[weekday],
+      ).indexOf(day);
+      if (dayIndex === -1) return;
+      await patchData(`/userPreferences/${dayIndex}`, {
+        focusBlocks: focusBlocks[day],
       });
-      setFocusBlocks((prev) => ({
+      setEnergyBlocks((prev) => ({
         ...prev,
-        [weekdayIndex]: focusBlocks[weekday],
+        [dayIndex]: focusBlocks[day],
       }));
     } catch (error) {
       console.log(error);
@@ -242,14 +242,14 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     }
   };
 
-  const updateSchedulingStyle = async (weekday: keyof DaySchedulingStyle) => {
+  const updateSchedulingStyle = async (day: keyof DaySchedulingStyle) => {
     try {
       setIsLoading(true);
-      const weekdayIndex = (
+      const dayIndex = (
         ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const
-      ).indexOf(weekday);
-      if (weekdayIndex === -1) return;
-      await patchData(`/constraints/${weekdayIndex}`, styleData[weekday]);
+      ).indexOf(day);
+      if (dayIndex === -1) return;
+      await patchData(`/userPreferences/${dayIndex}`, styleData[day]);
     } catch (error) {
       console.log(error);
       toast.error("Failed to update scheduling style");
@@ -339,16 +339,16 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           </TabsContent>
           <TabsContent value="focus-blocks" className="my-4 pb-4">
             <div className="space-y-4">
-              <FocusBlocksPrefs
+              <EnergyBlocksPrefs
                 focusBlocks={focusBlocks}
-                setFocusBlocks={setFocusBlocks}
+                setEnergyBlocks={setEnergyBlocks}
               />
               <Button
                 disabled={isLoading}
                 onClick={async () => {
                   await Promise.all(
                     Object.keys(focusBlocks).map((day) =>
-                      updateFocusBlocks(day as keyof DayFocusBlocks),
+                      updateEnergyBlocks(day as keyof DayEnergyBlocks),
                     ),
                   );
                   toast.success("Focus blocks updated successfully");

@@ -8,7 +8,7 @@ export interface CategoryItem {
 }
 
 // Data structure for an individual Focus Block (Step 2)
-export interface FocusBlock {
+export interface EnergyBlock {
   id: string; // Local key
   level: 1 | 2 | 3; // 1: Low, 2: Medium, 3: High
   start: number; // Minutes from midnight (e.g., 5:00 AM = 300)
@@ -16,21 +16,21 @@ export interface FocusBlock {
 }
 
 // Data structure for daily Focus Blocks (Step 2 state)
-export type DayFocusBlocks = {
-  [key in "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun"]: FocusBlock[];
+export type DayEnergyBlocks = {
+  [key in "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun"]: EnergyBlock[];
 };
 
 // Data structure for daily Scheduling Style (Step 3 state)
-export interface DailyConstraints {
+export interface DailyUserPreferences {
   minGapBetweenTasks: number; // Minimum Break Time (in minutes)
   maxDailyLoad: number; // Maximum Daily Load (in minutes, 8 hours 30 mins = 510)
   batchSimilarTasks: boolean;
 }
 
-export interface Constraints extends DailyConstraints {
+export interface UserPreferences extends DailyUserPreferences {
   id: string;
-  weekday: number; // 0=Sun, 1=Mon, ..., 6=Sat
-  focusBlocks: FocusBlock[];
+  day: number; // 0=Sun, 1=Mon, ..., 6=Sat
+  focusBlocks: EnergyBlock[];
 }
 
 export type DaySchedulingStyle = {
@@ -41,7 +41,7 @@ export type DaySchedulingStyle = {
     | "Thu"
     | "Fri"
     | "Sat"
-    | "Sun"]: DailyConstraints;
+    | "Sun"]: DailyUserPreferences;
 };
 
 export interface UpdateCategoryPayload {
@@ -57,7 +57,7 @@ export interface NewCategoryPayload {
 export interface FinalConstraintSubmission {
   minGapBetweenTasks: number;
   maxDailyLoad: number;
-  weekday: number; // 0=Sun, 1=Mon, ..., 6=Sat (We'll map Mon-Sun to 1-7, then adjust)
+  day: number; // 0=Sun, 1=Mon, ..., 6=Sat (We'll map Mon-Sun to 1-7, then adjust)
   batchSimilarTasks: boolean;
   focusBlocks: { level: number; start: number; end: number }[];
 }
@@ -74,7 +74,7 @@ export const dayMap: {
   Sat: 6,
 };
 
-export const defaultConstraints: DailyConstraints = {
+export const defaultUserPreferences: DailyUserPreferences = {
   minGapBetweenTasks: 20, // 20 minutes
   maxDailyLoad: 510, // 8 hours 30 minutes
   batchSimilarTasks: true,
@@ -91,11 +91,11 @@ export const defaultCategories: CategoryItem[] = [
 ];
 
 export const defaultSchedulingStyle: DaySchedulingStyle = {
-  Mon: { ...defaultConstraints },
-  Tue: { ...defaultConstraints },
-  Wed: { ...defaultConstraints },
-  Thu: { ...defaultConstraints },
-  Fri: { ...defaultConstraints },
+  Mon: { ...defaultUserPreferences },
+  Tue: { ...defaultUserPreferences },
+  Wed: { ...defaultUserPreferences },
+  Thu: { ...defaultUserPreferences },
+  Fri: { ...defaultUserPreferences },
   Sat: { minGapBetweenTasks: 30, maxDailyLoad: 360, batchSimilarTasks: false }, // 6 hours
   Sun: { minGapBetweenTasks: 30, maxDailyLoad: 360, batchSimilarTasks: false },
 };

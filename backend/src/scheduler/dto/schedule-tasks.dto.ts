@@ -1,7 +1,10 @@
 import {
+  ArrayMinSize,
+  IsArray,
   IsBoolean,
   IsDateString,
   IsOptional,
+  IsUUID,
   MaxLength,
 } from "class-validator";
 
@@ -10,7 +13,12 @@ export class ScheduleTasksDto {
   @MaxLength(10)
   scheduleDate: string;
 
-  @IsBoolean()
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsUUID("4", { each: true })
+  taskIds: string[];
+
   @IsOptional()
-  scheduleBased: boolean = true;
+  @IsBoolean()
+  keepManual: boolean = true;
 }

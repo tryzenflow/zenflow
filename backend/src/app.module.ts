@@ -15,10 +15,9 @@ import { UsersModule } from "./users/users.module";
 import { SchedulerModule } from "./scheduler/scheduler.module";
 import { TasksModule } from "./tasks/tasks.module";
 import { SchedulesModule } from "./schedules/schedules.module";
-import { ConstraintsModule } from "./constraints/constraints.module";
+import { UserPreferencesModule } from "./prefs/prefs.module";
 import { CategoriesModule } from "./categories/categories.module";
 import { FilesModule } from "./files/files.module";
-import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -57,10 +56,9 @@ import { AnalyticsModule } from './analytics/analytics.module';
     SchedulerModule,
     TasksModule,
     SchedulesModule,
-    ConstraintsModule,
+    UserPreferencesModule,
     CategoriesModule,
     FilesModule,
-    AnalyticsModule,
   ],
   providers: [AppService, MailService],
   controllers: [AppController],

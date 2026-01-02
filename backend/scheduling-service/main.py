@@ -10,43 +10,57 @@ from scheduler import schedule_tasks
 
 
 def parse_task(proto: scheduler_pb2.Task) -> Task:
-    deadline = None
-    if proto.HasField("deadline"):
-        dt = proto.deadline.ToDatetime()
-        # ignore "epoch" timestamps
-        if dt.year > 1970:
-            deadline = dt
+    try:
+        deadline = None
+        if proto.deadline.seconds != 0:
+            dt = proto.deadline.ToDatetime()
+            if dt.year > 1970:
+                deadline = dt
 
-    return Task(
-        id=proto.id,
-        title=proto.title,
-        duration=proto.duration,
-        priority=proto.priority,
-        deadline=deadline.ToDatetime() if deadline else None,
-        category=proto.category_id if proto.category_id else None,
-        energy=proto.energy,
-        scheduled_blocks=[
-            ScheduledBlock(split_index=s.split_index or 0, start=s.start, end=s.end)
-            for s in proto.scheduled_blocks
-        ],
-    )
+        fixed_window = None
+        if proto.HasField("fixed_window"):
+            fixed_window = Interval(proto.fixed_window.start, proto.fixed_window.end)
+
+        return Task(
+            id=proto.id,
+            title=proto.title,
+            duration=proto.duration,
+            priority=proto.priority,
+            fixed_window=fixed_window,
+            max_splits=proto.max_splits,
+            preferred_windows=[
+                Interval(w.start, w.end) for w in proto.preferred_windows
+            ],
+            deadline=deadline,
+            category=proto.category_id or None,
+            energy=proto.energy,
+            scheduled_blocks=[
+                ScheduledBlock(split_index=s.split_index or 0, start=s.start, end=s.end)
+                for s in proto.scheduled_blocks
+            ],
+        )
+    except Exception as e:
+        print(f"Failed to parse task: {e}")
+        raise ValueError(f"Failed to parse task: {e}")
 
 
 def parse_user_preference(proto: scheduler_pb2.UserPreference) -> UserPreference:
-    available_hours = [Interval(a.start, a.end) for a in proto.available_hours]
-    energy_blocks = [
-        EnergyBlock(
-            energy=eb.energy,
-            start=eb.interval.start,
-            end=eb.interval.end,
+    try:
+        energy_blocks = [
+            EnergyBlock(
+                energy=eb.energy,
+                start=eb.interval.start,
+                end=eb.interval.end,
+            )
+            for eb in proto.energy_blocks
+        ]
+        return UserPreference(
+            min_gap_between_tasks=proto.min_gap_between_tasks,
+            energy_blocks=energy_blocks,
         )
-        for eb in proto.energy_blocks
-    ]
-    return UserPreference(
-        available_hours=available_hours,
-        min_gap_between_tasks=proto.min_gap_between_tasks,
-        energy_blocks=energy_blocks,
-    )
+    except Exception as e:
+        print(f"Failed to parse user preference: {e}")
+        raise ValueError(f"Failed to parse user preference: {e}")
 
 
 class SchedulerService(scheduler_pb2_grpc.SchedulerServiceServicer):
@@ -54,12 +68,18 @@ class SchedulerService(scheduler_pb2_grpc.SchedulerServiceServicer):
         # Convert proto → domain models
         tasks = [parse_task(t) for t in request.tasks]
         user_pref = parse_user_preference(request.user_preference)
-        schedule_result = schedule_tasks(
-            tasks,
-            user_pref,
-        )
+
+        try:
+            schedule_result = schedule_tasks(
+                tasks,
+                user_pref,
+            )
+        except Exception as e:
+            print(f"Failed to schedule tasks: {e}")
+            raise ValueError(f"Failed to schedule tasks: {e}")
+
         # Build response
-        response = scheduler_pb2.SchedulerResponse()
+        response = scheduler_pb2.ScheduleResponse()
 
         for task, split_index, interval in schedule_result:
             scheduled_task = scheduler_pb2.ScheduledBlock()
@@ -68,7 +88,7 @@ class SchedulerService(scheduler_pb2_grpc.SchedulerServiceServicer):
             scheduled_task.end = interval.end
             scheduled_task.split_index = split_index
 
-            response.schedules.append(scheduled_task)
+            response.scheduled_blocks.append(scheduled_task)
         return response
 
 
