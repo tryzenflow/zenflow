@@ -11,10 +11,16 @@ import { ScheduledBlock } from "../scheduler/interfaces";
 import { UpdateScheduledBlockDto } from "./dto/update-schedule.dto";
 import { fromZonedTime } from "date-fns-tz";
 import { DateRangeDto } from "src/common/dto/date-range.dto";
+import { EnergyLearningService } from "src/energy-learning/energy-learning.service";
+import { UserPreferencesService } from "src/prefs/prefs.service";
 
 @Injectable()
 export class SchedulesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private energyLearningService: EnergyLearningService,
+    private userPreferencesService: UserPreferencesService,
+  ) {}
 
   async findScheduledBlocks(
     userId: string,
@@ -30,7 +36,7 @@ export class SchedulesService {
         end: { gte: startDate, lte: endDate },
       },
       include: {
-        task: { select: { title: true, energy: true, priority: true } },
+        task: { select: { title: true, energy: true } },
       },
     });
     return scheduledBlocks;
@@ -54,13 +60,14 @@ export class SchedulesService {
       });
       const scheduled = await tx.scheduledBlock.createManyAndReturn({
         data: scheduledBlocks.map((block) => ({
+          id: `${block.splitIndex}-${date}-${block.taskId}`,
           taskId: block.taskId,
-          start: minutesToUtc(date, block.start, timezone),
-          end: minutesToUtc(date, block.end, timezone),
+          start: minutesToUtc(date, block.start || 0, timezone),
+          end: minutesToUtc(date, block.end || 0, timezone),
           splitIndex: block.splitIndex || 0,
         })),
         include: {
-          task: { select: { title: true, energy: true, priority: true } },
+          task: { select: { title: true, energy: true } },
         },
       });
       return scheduled.sort((a, b) => a.start.getTime() - b.start.getTime());
@@ -75,12 +82,33 @@ export class SchedulesService {
     timezone: string,
   ) {
     try {
-      await this.prisma.scheduledBlock.update({
-        where: { id: blockId, task: { userId } },
-        data: {
-          start: minutesToUtc(date, start, timezone),
-          end: minutesToUtc(date, end, timezone),
-        },
+      await this.prisma.$transaction(async (tx) => {
+        const updated = await tx.scheduledBlock.update({
+          where: { id: blockId, task: { userId } },
+          data: {
+            start: minutesToUtc(date, start, timezone),
+            end: minutesToUtc(date, end, timezone),
+          },
+          select: { task: { select: { energy: true } } },
+        });
+        const startOfDay = fromZonedTime(`${date}T00:00:00`, timezone);
+        const pref = await this.userPreferencesService.getByDay(
+          userId,
+          startOfDay.getDay(),
+        );
+        const newEnergyBlocks =
+          this.energyLearningService.observeManualPlacement(
+            pref.energyBlocks,
+            start,
+            end,
+            updated.task.energy,
+          );
+        await this.userPreferencesService.update(
+          startOfDay.getDay(),
+          userId,
+          { energyBlocks: newEnergyBlocks },
+          tx,
+        );
       });
     } catch (error) {
       if (error === PostgresErrorCode.RecordNotFound) {

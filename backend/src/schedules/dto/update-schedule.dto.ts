@@ -1,4 +1,4 @@
-import { IsDivisibleBy, IsISO8601, Max, MaxLength, Min } from "class-validator";
+import { IsBoolean, IsDivisibleBy, IsISO8601, Max, MaxLength, Min } from "class-validator";
 import { DAILY_HORIZON, TIME_GRANULARITY } from "../../common/constants";
 import { IsEndTimeAfterStartTime } from "src/tasks/validators/start-end.decorator";
 
@@ -17,4 +17,7 @@ export class UpdateScheduledBlockDto {
   @IsDivisibleBy(TIME_GRANULARITY)
   @IsEndTimeAfterStartTime()
   end: number;
+
+  @IsBoolean()
+  completed: boolean;
 }

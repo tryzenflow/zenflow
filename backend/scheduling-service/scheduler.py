@@ -1,5 +1,4 @@
 from collections import defaultdict
-from datetime import datetime
 from typing import List
 
 from models import (
@@ -34,12 +33,16 @@ def build_task(
     if task.fixed_window is None:
         for k in range(task.max_splits):
             presence = model.NewBoolVar(f"presence_{task.id}_{k}")
+            if k == 0:
+                model.Add(presence == 1)
 
             start = model.NewIntVar(start_min, end_max, f"start_{task.id}_{k}")
 
             # Each split can be 0 if unused, or any multiple of TIME_GRANULARITY up to task.duration
             duration = model.NewIntVar(0, task.duration, f"dur_{task.id}_{k}")
             end = model.NewIntVar(start_min, end_max, f"end_{task.id}_{k}")
+            if task.deadline and task.deadline < end_max:
+                model.Add(end <= task.deadline).OnlyEnforceIf(presence)
 
             # enforce multiples of TIME_GRANULARITY
             enforce_multiple_of_time_granularity(model, start)
@@ -49,6 +52,10 @@ def build_task(
             min_split = nearest_multiple_of_time_granularity(
                 task.duration // task.max_splits
             )
+            if task.scheduled_blocks:
+                min_split = min(
+                    [block.end - block.start for block in task.scheduled_blocks]
+                )
             model.Add(duration >= min_split).OnlyEnforceIf(presence)
             model.Add(duration == 0).OnlyEnforceIf(presence.Not())
 
@@ -62,8 +69,7 @@ def build_task(
             intervals.append(interval)
             task_vars.append((task, k, start, end, duration, presence))
 
-        # total scheduled ≤ task.duration
-        model.Add(sum(d for *_, d, _ in task_vars) <= task.duration)
+        model.Add(sum(d for *_, d, _ in task_vars) == task.duration)
     else:
         start_lb = task.fixed_window.start
         end_ub = task.fixed_window.end - task.duration
@@ -100,14 +106,6 @@ def schedule_tasks(
 
     all_intervals = []
     all_task_vars = []
-
-    # Deadline weighting (earlier deadlines are more important)
-    now = datetime.now()
-    for task in tasks:
-        if task.deadline:
-            task.deadline_weight = max(
-                0, int((task.deadline - now).total_seconds() // 60)
-            )
 
     for task in tasks:
         task_vars, intervals = build_task(model, task, min_time, max_time)

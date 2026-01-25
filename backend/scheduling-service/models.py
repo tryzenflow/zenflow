@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import List, Optional
 from uuid import uuid4
 
@@ -54,31 +53,26 @@ class Task:
         self,
         title: str,
         duration: int,
-        priority: Optional[int] = None,
-        deadline: Optional[datetime] = None,
+        deadline: Optional[int] = None,  # minutes since midnight
         energy: int = 2,
         category: Optional[str] = None,
         id: Optional[str] = None,
         max_splits: Optional[int] = None,
         scheduled_blocks: List[ScheduledBlock] = [],
         fixed_window: Optional["Interval"] = None,  # hard time block
-        preferred_windows: Optional[List["Interval"]] = None,  # soft preferred times
     ) -> None:
         assert duration % TIME_GRANULARITY == 0
 
         self.id = id or str(uuid4())
         self.title = title
         self.duration = duration
-        self.priority = priority or 2  # lower = higher priority
-        self.deadline = deadline
-        self.deadline_weight = int(bool(self.deadline))
-        self.energy = energy or 1  # higher = higher energy
+        self.deadline = deadline or None
+        self.energy = energy or 1
         self.category = category or "default"
 
         self.max_splits = max_splits or self._infer_max_splits()
         self.scheduled_blocks = scheduled_blocks
         self.fixed_window = fixed_window
-        self.preferred_windows = preferred_windows or []
 
     def _infer_max_splits(self) -> int:
         if self.duration <= 60:
@@ -93,7 +87,7 @@ class Task:
         return sum(b.end - b.start for b in self.scheduled_blocks)
 
     def __repr__(self) -> str:
-        return f"Task(id={self.id}, title={self.title}, duration={self.duration}, priority={self.priority}, deadline={self.deadline}, max_splits={self.max_splits}, energy={self.energy}, category={self.category}, max_splits={self.max_splits}, scheduled_blocks={self.scheduled_blocks}, fixed_window={self.fixed_window}, preferred_windows={self.preferred_windows})"
+        return f"Task(id={self.id}, title={self.title}, duration={self.duration}, max_splits={self.max_splits}, energy={self.energy}, category={self.category}, max_splits={self.max_splits}, scheduled_blocks={self.scheduled_blocks}, fixed_window={self.fixed_window})"
 
 
 class UserPreference:

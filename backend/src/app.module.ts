@@ -18,6 +18,8 @@ import { SchedulesModule } from "./schedules/schedules.module";
 import { UserPreferencesModule } from "./prefs/prefs.module";
 import { CategoriesModule } from "./categories/categories.module";
 import { FilesModule } from "./files/files.module";
+import { EnergyLearningModule } from "./energy-learning/energy-learning.module";
+import { ScheduleModule } from "@nestjs/schedule";
 
 @Module({
   imports: [
@@ -34,6 +36,7 @@ import { FilesModule } from "./files/files.module";
         GRPC_SCHEDULER_URL: Joi.string().required(),
       }),
     }),
+    ScheduleModule.forRoot(),
     CacheModule.registerAsync({
       isGlobal: true,
       imports: [ConfigModule],
@@ -49,6 +52,7 @@ import { FilesModule } from "./files/files.module";
         };
       },
     }),
+    EnergyLearningModule,
     UsersModule,
     PrismaModule,
     AuthModule,

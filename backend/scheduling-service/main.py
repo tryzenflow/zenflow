@@ -11,12 +11,6 @@ from scheduler import schedule_tasks
 
 def parse_task(proto: scheduler_pb2.Task) -> Task:
     try:
-        deadline = None
-        if proto.deadline.seconds != 0:
-            dt = proto.deadline.ToDatetime()
-            if dt.year > 1970:
-                deadline = dt
-
         fixed_window = None
         if proto.HasField("fixed_window"):
             fixed_window = Interval(proto.fixed_window.start, proto.fixed_window.end)
@@ -25,13 +19,12 @@ def parse_task(proto: scheduler_pb2.Task) -> Task:
             id=proto.id,
             title=proto.title,
             duration=proto.duration,
-            priority=proto.priority,
             fixed_window=fixed_window,
             max_splits=proto.max_splits,
             preferred_windows=[
                 Interval(w.start, w.end) for w in proto.preferred_windows
             ],
-            deadline=deadline,
+            deadline=proto.deadline,
             category=proto.category_id or None,
             energy=proto.energy,
             scheduled_blocks=[

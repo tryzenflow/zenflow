@@ -2,6 +2,7 @@ from collections import defaultdict
 
 from models import UserPreference
 from ortools.sat.python import cp_model
+from utils import get_urgency
 
 
 def optimize_function(
@@ -9,19 +10,15 @@ def optimize_function(
     task_vars,
     pref: UserPreference,
     max_time=24 * 60,
-    # weights
-    priority_weight=300,
-    deadline_weight=400,
-    pref_overlap_weight=5000,
-    pref_inside_weight=100000,
-    energy_weight=250,
-    stability_weight=200,
-    switch_penalty_weight=180,
-    min_gap_penalty_weight=600,
-    split_weight=400,  # penalty per extra split
-    span_weight=120,
-    small_block_weight=900,  # penalty for tiny fragments
     min_good_block=45,  # minutes
+    energy_weight=20,
+    stability_weight=15,
+    switch_penalty_weight=30,
+    min_gap_penalty_weight=10,
+    split_weight=40,
+    span_weight=2,
+    small_block_weight=50,
+    outside_energy_penalty_weight=25,
 ):
     loss_terms = []
     splits_by_task = defaultdict(list)
@@ -48,61 +45,6 @@ def optimize_function(
         loss_terms.append(small_pen)
 
         # ------------------------
-        # Inclusion reward
-        # ------------------------
-        importance = (
-            priority_weight * (3 - task.priority)
-            + energy_weight * task.energy
-            + deadline_weight * task.deadline_weight
-        )
-        inclusion_bonus = model.NewIntVar(
-            -importance * task.duration, 0, f"inclusion_{task.id}_{split}"
-        )
-        model.Add(inclusion_bonus == -importance * duration).OnlyEnforceIf(presence)
-        model.Add(inclusion_bonus == 0).OnlyEnforceIf(presence.Not())
-        loss_terms.append(inclusion_bonus)
-
-        for i, pref_window in enumerate(task.preferred_windows):
-            # Compute overlap between [start, end] and preferred window
-            latest_start = model.NewIntVar(0, max_time, "")
-            earliest_end = model.NewIntVar(0, max_time, "")
-            overlap = model.NewIntVar(0, task.duration, "")
-
-            model.AddMaxEquality(latest_start, [start, pref_window.start])
-            model.AddMinEquality(earliest_end, [end, pref_window.end])
-
-            diff = model.NewIntVar(-max_time, max_time, "")
-            model.Add(diff == earliest_end - latest_start)
-            model.AddMaxEquality(overlap, [diff, model.NewConstant(0)])
-
-            # Penalize time OUTSIDE preferred window
-            outside = model.NewIntVar(0, task.duration, "")
-            model.Add(outside == duration - overlap)
-
-            outside_penalty = model.NewIntVar(
-                0, task.duration * pref_overlap_weight, ""
-            )
-            model.Add(outside_penalty == outside * pref_overlap_weight).OnlyEnforceIf(
-                presence
-            )
-            model.Add(outside_penalty == 0).OnlyEnforceIf(presence.Not())
-
-            # Strong "must be fully inside" soft constraint
-            is_inside = model.NewBoolVar(f"inside_pref_{task.id}_{i}")
-
-            model.Add(overlap >= duration).OnlyEnforceIf([is_inside, presence])
-            model.Add(overlap < duration).OnlyEnforceIf(is_inside.Not())
-
-            miss_pen = model.NewIntVar(0, pref_inside_weight, "")
-            model.Add(miss_pen == pref_inside_weight).OnlyEnforceIf(
-                [presence, is_inside.Not()]
-            )
-            model.Add(miss_pen == 0).OnlyEnforceIf(presence.Not())
-
-            loss_terms.append(outside_penalty)
-            loss_terms.append(miss_pen)
-
-        # ------------------------
         # Stability (reference schedule)
         # ------------------------
         if split < len(task.scheduled_blocks):
@@ -127,6 +69,12 @@ def optimize_function(
         # ------------------------
         # Energy alignment
         # ------------------------
+
+        aligned_sum = model.NewIntVar(0, task.duration, f"aligned_sum_{task.id}")
+        aligned_terms = []
+        lower_energy_terms = []
+        any_energy_terms = []
+
         for block in pref.energy_blocks:
             latest_start = model.NewIntVar(0, max_time, "")
             earliest_end = model.NewIntVar(0, max_time, "")
@@ -138,12 +86,72 @@ def optimize_function(
             diff = model.NewIntVar(-max_time, max_time, "")
             model.Add(diff == earliest_end - latest_start)
             model.AddMaxEquality(overlap, [diff, model.NewConstant(0)])
-
+            any_energy_terms.append(overlap)
+            # Only consider energy blocks matching task energy
             if task.energy == block.energy:
-                bonus = model.NewIntVar(-task.duration * energy_weight, 0, "")
-                model.Add(bonus == -overlap * energy_weight).OnlyEnforceIf(presence)
-                model.Add(bonus == 0).OnlyEnforceIf(presence.Not())
-                loss_terms.append(bonus)
+                aligned_terms.append(overlap)
+            elif task.energy < block.energy:
+                lower_energy_terms.append(overlap)
+
+        # aligned_sum = sum of all overlaps with matching energy blocks
+        if aligned_terms:
+            model.Add(aligned_sum == sum(aligned_terms))
+        else:
+            model.Add(aligned_sum == 0)
+        urgency = get_urgency(task.deadline) if task.deadline else 1
+        comb_factor = urgency * energy_weight
+        # Energy alignment bonus
+        bonus = model.NewIntVar(
+            -task.duration * comb_factor,
+            0,
+            f"energy_bonus_{task.id}_{split}",
+        )
+        model.Add(bonus == -aligned_sum * comb_factor).OnlyEnforceIf(presence)
+        model.Add(bonus == 0).OnlyEnforceIf(presence.Not())
+        loss_terms.append(bonus)
+
+        lower_bonus = model.NewIntVar(
+            -task.duration * comb_factor // 4,
+            0,
+            f"energy_bonus_{task.id}_{split}",
+        )
+        model.Add(lower_bonus == -aligned_sum * (comb_factor // 4)).OnlyEnforceIf(
+            presence
+        )
+        model.Add(lower_bonus == 0).OnlyEnforceIf(presence.Not())
+        loss_terms.append(lower_bonus)
+
+        matching_overlap = model.NewIntVar(0, task.duration, "")
+        lower_energy_overlap = model.NewIntVar(0, task.duration, "")
+        any_energy_overlap = model.NewIntVar(0, task.duration, "")
+
+        model.Add(
+            matching_overlap == sum(aligned_terms)
+            if aligned_terms
+            else matching_overlap == 0
+        )
+        model.Add(
+            lower_energy_overlap == sum(lower_energy_terms)
+            if lower_energy_terms
+            else lower_energy_overlap == 0
+        )
+        model.Add(any_energy_overlap == sum(any_energy_terms))
+
+        # Penalize task outside energy blocks
+        outside_energy = model.NewIntVar(0, task.duration, f"outside_energy_{task.id}")
+        model.Add(outside_energy == duration - any_energy_overlap)
+        outside_pen = model.NewIntVar(
+            0,
+            task.duration * outside_energy_penalty_weight,
+            f"outside_energy_pen_{task.id}_{split}",
+        )
+
+        model.Add(
+            outside_pen == outside_energy * outside_energy_penalty_weight
+        ).OnlyEnforceIf(presence)
+        model.Add(outside_pen == 0).OnlyEnforceIf(presence.Not())
+
+        loss_terms.append(outside_pen)
 
     # ----------------------------
     # Context switching penalty

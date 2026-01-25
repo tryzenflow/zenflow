@@ -3,11 +3,11 @@ import {
   Get,
   Post,
   Body,
-  Patch,
   Param,
   Delete,
   UseGuards,
   Query,
+  Put,
 } from "@nestjs/common";
 import { TasksService } from "./tasks.service";
 import { CreateTaskDto } from "./dto/create-task.dto";
@@ -74,7 +74,7 @@ export class TasksController {
     return { success: true, message: `Found one task`, data: task };
   }
 
-  @Patch(":id")
+  @Put(":id")
   async update(
     @Param("id") id: string,
     @Body() updateTaskDto: UpdateTaskDto,

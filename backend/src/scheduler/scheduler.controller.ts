@@ -19,8 +19,9 @@ import { SCHEDULER_PACKAGE, SCHEDULER_SERVICE } from "./constants";
 import { ScheduleTasksDto } from "./dto/schedule-tasks.dto";
 import { ScheduleRequest, ScheduleResponse, Task } from "./interfaces";
 import { SchedulerService } from "./scheduler.service";
-import { utcToMinutes } from "src/common/utils";
+import { clamp, utcToMinutes } from "src/common/utils";
 import { inferMaxSplits } from "src/tasks/utils/infer-max-splits";
+import { differenceInMinutes } from "date-fns";
 
 @Controller()
 @UseGuards(CookieAuthGuard)
@@ -31,7 +32,7 @@ export class SchedulerController implements OnModuleInit {
     @Inject(SCHEDULER_PACKAGE) private client: ClientGrpc,
     private userPreferencesService: UserPreferencesService,
     private tasksService: TasksService,
-    private schedulesService: SchedulesService,
+    private schedulesService: SchedulesService
   ) {}
 
   onModuleInit() {
@@ -42,17 +43,17 @@ export class SchedulerController implements OnModuleInit {
   @Post("schedule")
   async schedule(
     @CurrentUser() user: User,
-    @Body() { scheduleDate, taskIds, keepManual }: ScheduleTasksDto,
+    @Body() { scheduleDate, taskIds, keepManual }: ScheduleTasksDto
   ) {
-    const localMidnight = fromZonedTime(
+    const utcMidnight = fromZonedTime(
       `${scheduleDate}T00:00:00`,
-      user.timezone,
+      user.timezone
     );
-    const day = localMidnight.getDay();
+    const day = utcMidnight.getDay();
 
     const userPreference = await this.userPreferencesService.getByDay(
       user.id,
-      day,
+      day
     );
 
     const tasks = await this.tasksService.findToSchedule(
@@ -60,7 +61,7 @@ export class SchedulerController implements OnModuleInit {
       user.id,
       scheduleDate,
       user.timezone,
-      keepManual,
+      keepManual
     );
 
     const toScheduleTasks: Task[] = tasks.map((task) => {
@@ -72,22 +73,24 @@ export class SchedulerController implements OnModuleInit {
                 acc +
                 utcToMinutes(block.end, user.timezone) -
                 utcToMinutes(block.start, user.timezone),
-              0,
+              0
             );
       const maxSplits = keepManual
         ? task.scheduledBlocks.length
         : inferMaxSplits(task.duration);
+
+      const minutesDiff = task.deadline
+        ? differenceInMinutes(task.deadline, utcMidnight)
+        : undefined;
       return {
         id: task.id,
         categoryId: task.categoryId ?? undefined,
         duration: actualDuration,
-        energy: task.energy,
-        priority: task.priority,
+        energy: clamp(task.energy, 1, 3),
         title: task.title,
         maxSplits,
-        deadline: task.deadline ?? undefined,
+        deadline: !minutesDiff || minutesDiff <= 0 ? undefined : minutesDiff,
         fixedWindow: task.fixedWindow ?? undefined,
-        preferredWindows: task.preferredWindows ?? undefined,
         scheduledBlocks: keepManual
           ? task?.scheduledBlocks.map((s) => ({
               taskId: task.id,
@@ -111,7 +114,7 @@ export class SchedulerController implements OnModuleInit {
     };
 
     const response = await firstValueFrom<ScheduleResponse>(
-      this.schedulerService.Schedule(request),
+      this.schedulerService.Schedule(request)
     );
 
     if (!response.scheduledBlocks) {
@@ -127,7 +130,7 @@ export class SchedulerController implements OnModuleInit {
       scheduleDate,
       response.scheduledBlocks,
       user.timezone,
-      user.id,
+      user.id
     );
     return {
       success: true,

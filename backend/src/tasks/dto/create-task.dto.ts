@@ -1,6 +1,4 @@
 import {
-  ArrayMinSize,
-  IsArray,
   IsDivisibleBy,
   IsInt,
   IsISO8601,
@@ -13,6 +11,7 @@ import {
 import { IsRRule } from "../validators/is-rrule.decorator";
 import { TIME_GRANULARITY } from "src/common/constants";
 import { TaskWindowDto } from "./task-window.dto";
+import { ValidFixedWindow } from "../validators/fixed-window.decorator";
 
 export class CreateTaskDto {
   @IsString() title: string;
@@ -27,11 +26,6 @@ export class CreateTaskDto {
   @Min(TIME_GRANULARITY)
   @IsDivisibleBy(TIME_GRANULARITY)
   duration: number;
-
-  @IsInt()
-  @Min(1)
-  @Max(3)
-  priority: number;
 
   @IsOptional()
   @ValidateIf((object, value) => value !== null)
@@ -49,10 +43,6 @@ export class CreateTaskDto {
 
   @IsOptional()
   @ValidateIf((object, value) => value !== null)
+  @ValidFixedWindow()
   fixedWindow?: TaskWindowDto | null;
-
-  @IsOptional()
-  @IsArray()
-  @ArrayMinSize(1)
-  preferredWindows?: TaskWindowDto[];
 }

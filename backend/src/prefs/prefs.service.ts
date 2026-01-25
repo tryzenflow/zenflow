@@ -10,6 +10,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { Prisma } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { Transaction } from "src/common/types";
+import { Cron, CronExpression } from "@nestjs/schedule";
 
 @Injectable()
 export class UserPreferencesService {
@@ -55,12 +56,18 @@ export class UserPreferencesService {
     }
   }
 
-  async getByDay(userId: string, day: number) {
+  async getByDay(userId: string, dayOfWeek: number) {
     const userPreference = await this.prisma.userPreference.findUnique({
-      where: { userId_day: { userId, day } },
+      where: { userId_day: { userId, day: dayOfWeek } },
       include: {
         energyBlocks: {
-          select: { start: true, end: true, energy: true, id: true },
+          select: {
+            start: true,
+            end: true,
+            confidence: true,
+            energy: true,
+            id: true,
+          },
           orderBy: { start: "asc" },
         },
       },
@@ -69,26 +76,14 @@ export class UserPreferencesService {
     return userPreference;
   }
 
-  async getAll(userId: string) {
-    const userPreferences = await this.prisma.userPreference.findMany({
-      where: { userId },
-      include: {
-        energyBlocks: {
-          select: { start: true, end: true, energy: true, id: true },
-          orderBy: { start: "asc" },
-        },
-      },
-    });
-    return userPreferences;
-  }
-
   async update(
-    day: number,
+    dayOfWeek: number,
     userId: string,
     { minGapBetweenTasks, energyBlocks }: UpdateUserPreferenceDto,
+    tx?: Transaction,
   ) {
-    const updated = await this.prisma.userPreference.update({
-      where: { userId_day: { userId, day } },
+    const updated = await (tx ?? this.prisma).userPreference.update({
+      where: { userId_day: { userId, day: dayOfWeek } },
       data: {
         minGapBetweenTasks,
         energyBlocks: energyBlocks
@@ -112,5 +107,20 @@ export class UserPreferencesService {
       },
     });
     return updated;
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_10AM)
+  async decayEnergy() {
+    await this.prisma.energyBlock.updateMany({
+      data: {
+        energy: {
+          // pull gently toward neutral
+          multiply: 0.98,
+        },
+        confidence: {
+          multiply: 0.95,
+        },
+      },
+    });
   }
 }

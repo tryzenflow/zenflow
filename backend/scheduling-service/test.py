@@ -1,5 +1,3 @@
-from datetime import datetime, timedelta
-
 from models import (
     EnergyBlock,
     Interval,
@@ -99,7 +97,7 @@ def print_schedule(schedule):
             f"  - {task.title:25} "
             f"{minutes_to_hhmm(interval.start)}–{minutes_to_hhmm(interval.end)} "
             f"dur={interval.end - interval.start:3d} "
-            f"pr={task.priority} energy={task.energy} cat={task.category}"
+            f"deadline={task.deadline} energy={task.energy} cat={task.category}"
         )
 
 
@@ -113,7 +111,7 @@ def overlap(a: Interval, b: Interval) -> int:
 
 
 def case_task_splitting_behavior():
-    print("\nCASE: realistic mixed-duration task splitting")
+    print("\nCASE: task splitting")
 
     pref = UserPreference(
         energy_blocks=[
@@ -128,25 +126,21 @@ def case_task_splitting_behavior():
         Task(
             "Write system design doc",
             duration=150,  # long deep work
-            priority=1,
             energy=3,
         ),
         Task(
             "Design review notes",
             duration=120,  # medium focus
-            priority=2,
             energy=2,
         ),
         Task(
             "Email inbox cleanup",
             duration=30,  # short admin
-            priority=3,
             energy=1,
         ),
         Task(
             "Slack follow-ups",
             duration=15,  # very short admin
-            priority=3,
             energy=1,
         ),
     ]
@@ -194,7 +188,7 @@ def case_task_splitting_behavior():
 
 
 def case_energy_alignment():
-    print("\nCASE: realistic energy alignment behavior")
+    print("\nCASE: energy alignment behavior")
 
     # Simulated human energy curve for a workday
     pref = UserPreference(
@@ -212,35 +206,30 @@ def case_energy_alignment():
             "Deep architecture work",
             duration=150,  # forces split
             energy=3,
-            priority=1,
         ),
         # Low-energy admin, should be pushed into slump
         Task(
             "Email & paperwork",
             duration=60,
             energy=1,
-            priority=3,
         ),
         # Medium-energy creative task
         Task(
             "Product design",
             duration=90,
             energy=2,
-            priority=2,
         ),
         # Slight mismatch task (energy=2 but competes with peak)
         Task(
             "Code review",
             duration=60,
             energy=2,
-            priority=2,
         ),
         # Short filler task (can go anywhere)
         Task(
             "Inbox cleanup",
             duration=30,
             energy=1,
-            priority=3,
         ),
     ]
 
@@ -267,10 +256,22 @@ def case_min_gap_only():
     )
 
     tasks = [
-        Task("Slack replies", 15, priority=3),
-        Task("Expense receipt upload", 15, priority=3),
-        Task("Quick status update", 15, priority=2),
-        Task("Bug triage", 30, priority=1),
+        Task(
+            "Slack replies",
+            15,
+        ),
+        Task(
+            "Expense receipt upload",
+            15,
+        ),
+        Task(
+            "Quick status update",
+            15,
+        ),
+        Task(
+            "Bug triage",
+            30,
+        ),
     ]
 
     schedule = schedule_tasks(tasks, pref)
@@ -289,15 +290,43 @@ def case_context_switch_only():
 
     tasks = [
         # Calls (urgent, should cluster)
-        Task("Client call A", 30, category="calls", priority=1),
-        Task("Client call B", 30, category="calls", priority=1),
-        Task("Recruiter call", 15, category="calls", priority=2),
+        Task(
+            "Client call A",
+            30,
+            category="calls",
+        ),
+        Task(
+            "Client call B",
+            30,
+            category="calls",
+        ),
+        Task(
+            "Recruiter call",
+            15,
+            category="calls",
+        ),
         # Writing (deep work)
-        Task("Write proposal", 90, category="writing", priority=1),
-        Task("Documentation update", 60, category="writing", priority=2),
-        # Admin (low priority fillers)
-        Task("Invoice review", 30, category="admin", priority=3),
-        Task("CRM cleanup", 30, category="admin", priority=3),
+        Task(
+            "Write proposal",
+            90,
+            category="writing",
+        ),
+        Task(
+            "Documentation update",
+            60,
+            category="writing",
+        ),
+        # Admin (low urgency fillers)
+        Task(
+            "Invoice review",
+            30,
+            category="admin",
+        ),
+        Task(
+            "CRM cleanup",
+            30,
+            category="admin",
+        ),
     ]
 
     schedule = schedule_tasks(tasks, pref)
@@ -308,43 +337,26 @@ def case_context_switch_only():
     print(f"  -> same-category batches: {metrics['batches']}")
 
 
-def case_priority_deadline_inclusion():
-    print("\nCASE: priority & deadline triage")
-
-    now = datetime.now()
-
-    pref = UserPreference(energy_blocks=[EnergyBlock(9 * 60, 12 * 60, 3)])
-
-    tasks = [
-        Task("Refactor later", 60, priority=3),
-        Task(
-            "Production incident",
-            60,
-            priority=1,
-            deadline=now + timedelta(minutes=90),
-        ),
-        Task("Prepare slides", 60, priority=2),
-        Task("Nice-to-have cleanup", 30, priority=3),
-    ]
-
-    schedule = schedule_tasks(tasks, pref)
-    print_schedule(schedule)
-
-    titles = [t.title for t, _, _ in schedule]
-    print(f"  -> scheduled titles: {titles}")
-
-
 def case_stability_only():
     print("\nCASE: SOFT stability with competing tasks")
 
     pref = UserPreference(energy_blocks=[EnergyBlock(9 * 60, 17 * 60, 3)])
 
-    stable_task = Task("Weekly planning", 60, priority=2)
+    stable_task = Task(
+        "Weekly planning",
+        60,
+    )
     stable_task.scheduled_blocks = [ScheduledBlock(start=10 * 60, end=11 * 60)]
 
     competing = [
-        Task("Urgent bug fix", 90, priority=1),
-        Task("Email follow-ups", 30, priority=3),
+        Task(
+            "Urgent bug fix",
+            90,
+        ),
+        Task(
+            "Email follow-ups",
+            30,
+        ),
     ]
 
     schedule = schedule_tasks([stable_task] + competing, pref)
@@ -362,15 +374,23 @@ def case_fixed_task_with_flexible():
     fixed_task = Task(
         "Team standup",
         duration=30,
-        priority=1,
         fixed_window=Interval(15 * 60, 15 * 60 + 30),
     )
 
     tasks = [
         fixed_task,
-        Task("Deep work – feature A", 120, priority=1),
-        Task("Code review", 45, priority=2),
-        Task("Admin follow-ups", 30, priority=3),
+        Task(
+            "Deep work – feature A",
+            120,
+        ),
+        Task(
+            "Code review",
+            45,
+        ),
+        Task(
+            "Admin follow-ups",
+            30,
+        ),
     ]
 
     pref = UserPreference(
@@ -388,97 +408,162 @@ def case_fixed_task_with_flexible():
     assert fixed[0].start == 15 * 60
 
 
-def case_preferred_windows():
-    print("\nCASE: tasks with preferred windows")
-
-    # Strongly preferred task (must stay in afternoon)
-    coding = Task(
-        "Deep coding session",
-        duration=120,  # may split
-        priority=1,
-        energy=3,
-        preferred_windows=[Interval(14 * 60, 17 * 60)],  # 2pm–5pm
-    )
-
-    # Morning routine — short but very time-sensitive
-    breakfast = Task(
-        "Breakfast & planning",
-        duration=30,
-        priority=1,
-        energy=1,
-        preferred_windows=[Interval(7 * 60, 9 * 60)],  # 7am–9am
-    )
-
-    # Flexible but important
-    emails = Task(
-        "Email triage",
-        duration=45,
-        priority=2,
-        energy=1,
-    )
-
-    # Medium focus task, prefers late morning
-    reading = Task(
-        "Read tech articles",
-        duration=60,
-        priority=2,
-        energy=2,
-        preferred_windows=[Interval(10 * 60, 12 * 60)],  # 10am–12pm
-    )
-
-    # Long flexible task that competes for time
-    side_project = Task(
-        "Side project work",
-        duration=150,  # likely split
-        priority=2,
-        energy=3,
-    )
-
-    # Low-priority filler task
-    cleanup = Task(
-        "Inbox cleanup",
-        duration=30,
-        priority=3,
-        energy=1,
-    )
+def case_energy_deadline():
+    print("\nCASE: deadline (today vs future) + energy alignment")
 
     pref = UserPreference(
         energy_blocks=[
-            EnergyBlock(7 * 60, 10 * 60, energy=1),
-            EnergyBlock(10 * 60, 14 * 60, energy=2),
-            EnergyBlock(14 * 60, 18 * 60, energy=3),
+            EnergyBlock(start=9 * 60, end=10 * 60, energy=3),  # morning high energy
+            EnergyBlock(
+                start=14 * 60, end=15 * 60, energy=2
+            ),  # afternoon medium energy
         ]
     )
 
     tasks = [
-        breakfast,
-        emails,
-        reading,
-        coding,
-        side_project,
-        cleanup,
+        # -------- TODAY (hard deadlines) --------
+        Task(
+            "Today – Very urgent, high energy",
+            duration=60,
+            deadline=9 * 60 + 30,  # 09:30
+            energy=3,
+        ),
+        Task(
+            "Today – Less urgent, high energy",
+            duration=60,
+            deadline=11 * 60,  # 11:00
+            energy=3,
+        ),
+        Task(
+            "Today – Medium energy",
+            duration=60,
+            deadline=15 * 60,  # 15:00
+            energy=2,
+        ),
+        # -------- FUTURE (soft ASAP) --------
+        Task(
+            "Future – High energy",
+            duration=60,
+            deadline=2 * 1440 + 600,  # 2 days later
+            energy=3,
+        ),
+        Task(
+            "Future – Medium energy",
+            duration=60,
+            deadline=3 * 1440 + 900,  # 3 days later
+            energy=2,
+        ),
+        # -------- NO ENERGY MATCH --------
+        Task(
+            "No matching energy",
+            duration=60,
+            energy=1,
+        ),
     ]
 
     schedule = schedule_tasks(tasks, pref)
     print_schedule(schedule)
 
-    # ---- Assertions / sanity checks ----
+    # ----------------------------
+    # Analysis
+    # ----------------------------
+    print("\nDeadline + energy alignment analysis:")
+    for t, _, block in schedule:
+        overlaps = [
+            max(0, min(block.end, b.end) - max(block.start, b.start))
+            for b in pref.energy_blocks
+            if b.energy == t.energy
+        ]
+        aligned_minutes = sum(overlaps)
 
-    # Breakfast must be in the morning window
-    breakfast_blocks = [b for t, _, b in schedule if t.title == "Breakfast & planning"]
-    assert breakfast_blocks, "Breakfast was not scheduled"
-    assert all(7 * 60 <= b.start and b.end <= 9 * 60 for b in breakfast_blocks), (
-        "Breakfast scheduled outside preferred window"
+        deadline_type = (
+            "TODAY"
+            if t.deadline is not None and t.deadline < 1440
+            else "FUTURE"
+            if t.deadline is not None
+            else "NONE"
+        )
+
+        print(
+            f"{t.title:35} | "
+            f"{block.start:4}-{block.end:4} | "
+            f"aligned: {aligned_minutes:3} mins | "
+            f"deadline: {t.deadline} ({deadline_type}) | "
+            f"energy: {t.energy}"
+        )
+
+    print("\nExpected behavior:")
+    print("- Today tasks finish before their deadlines")
+    print("- Earlier deadlines scheduled earlier")
+    print("- Urgent high-energy tasks align with 9–10 block")
+    print("- Future tasks prefer energy alignment over exact timing")
+    print("- Tasks with no matching energy are placed flexibly")
+
+
+def case_energy_multi_level_fallback():
+    print("\nCASE: multi-level energy fallback (high → medium → low → outside)")
+
+    pref = UserPreference(
+        energy_blocks=[
+            # High energy (limited)
+            EnergyBlock(start=9 * 60, end=10 * 60, energy=3),  # 60
+            EnergyBlock(start=15 * 60, end=15 * 60 + 30, energy=3),  # 30
+            # Medium energy
+            EnergyBlock(start=10 * 60, end=12 * 60, energy=2),  # 120
+            EnergyBlock(start=14 * 60, end=15 * 60, energy=2),  # 60
+            # Low energy (large)
+            EnergyBlock(start=12 * 60, end=14 * 60, energy=1),  # 120
+            EnergyBlock(start=16 * 60, end=18 * 60, energy=1),  # 120
+        ]
     )
 
-    # Coding must be in afternoon
-    coding_blocks = [b for t, _, b in schedule if t.title == "Deep coding session"]
-    assert coding_blocks, "Coding was not scheduled"
-    assert all(14 * 60 <= b.start and b.end <= 17 * 60 for b in coding_blocks), (
-        "Coding scheduled outside preferred window"
-    )
+    tasks = [
+        # 6 identical high-energy tasks → 360 minutes total
+        Task("Deep Work A", duration=60, energy=3),
+        Task("Deep Work B", duration=60, energy=3),
+        Task("Deep Work C", duration=60, energy=3),
+        Task("Deep Work D", duration=60, energy=2),
+        Task("Deep Work E", duration=60, energy=2),
+        Task("Deep Work F", duration=60, energy=1),
+    ]
 
-    print("✔ Preferred window constraints respected")
+    schedule = schedule_tasks(tasks, pref)
+    print_schedule(schedule)
+
+    # ----------------------------
+    # Energy distribution analysis
+    # ----------------------------
+    print("\nEnergy distribution analysis:")
+
+    for t, _, block in schedule:
+        match = med = low = outside = 0
+
+        for b in pref.energy_blocks:
+            overlap = max(
+                0,
+                min(block.end, b.end) - max(block.start, b.start),
+            )
+
+            if b.energy == t.energy:
+                match += overlap
+            elif b.energy == 2:
+                med += overlap
+            elif b.energy == 1:
+                low += overlap
+
+        outside = t.duration - (match + med + low)
+
+        print(
+            f"{t.title:15} | "
+            f"{block.start:4}-{block.end:4} | "
+            f"H:{match:3}  M:{med:3}  L:{low:3}  O:{outside:3}"
+        )
+
+    print("\nExpected behavior:")
+    print("- High energy blocks fill first (≈90 mins total)")
+    print("- Medium energy absorbs overflow next")
+    print("- Low energy absorbs remaining tasks")
+    print("- Outside usage should be minimal or zero")
 
 
 # -------------------------
@@ -492,9 +577,9 @@ def run_all():
     case_task_splitting_behavior()
     case_context_switch_only()
     case_stability_only()
-    case_priority_deadline_inclusion()
     case_fixed_task_with_flexible()
-    case_preferred_windows()
+    case_energy_deadline()
+    case_energy_multi_level_fallback()
 
 
 if __name__ == "__main__":

@@ -3,8 +3,9 @@ CREATE TABLE "public"."User" (
     "id" TEXT NOT NULL,
     "name" VARCHAR(30) NOT NULL,
     "email" VARCHAR(30) NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "timezone" VARCHAR(50) NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
 );
@@ -15,13 +16,13 @@ CREATE TABLE "public"."Task" (
     "title" TEXT NOT NULL,
     "note" TEXT,
     "duration" INTEGER NOT NULL,
-    "priority" INTEGER NOT NULL DEFAULT 3,
     "deadline" TIMESTAMP(3),
     "energy" INTEGER NOT NULL DEFAULT 1,
     "rrule" TEXT,
     "userId" TEXT NOT NULL,
     "categoryId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "Task_pkey" PRIMARY KEY ("id")
 );
@@ -31,8 +32,7 @@ CREATE TABLE "public"."TaskWindow" (
     "id" TEXT NOT NULL,
     "start" SMALLINT NOT NULL,
     "end" SMALLINT NOT NULL,
-    "taskId" TEXT,
-    "preferredTaskId" TEXT,
+    "fixedTaskId" TEXT,
 
     CONSTRAINT "TaskWindow_pkey" PRIMARY KEY ("id")
 );
@@ -43,6 +43,8 @@ CREATE TABLE "public"."ScheduledBlock" (
     "start" TIMESTAMP(3) NOT NULL,
     "end" TIMESTAMP(3) NOT NULL,
     "splitIndex" SMALLINT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
     "taskId" TEXT NOT NULL,
 
     CONSTRAINT "ScheduledBlock_pkey" PRIMARY KEY ("id")
@@ -54,6 +56,8 @@ CREATE TABLE "public"."UserPreference" (
     "minGapBetweenTasks" INTEGER NOT NULL DEFAULT 0,
     "day" SMALLINT NOT NULL DEFAULT 0,
     "userId" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "UserPreference_pkey" PRIMARY KEY ("id")
 );
@@ -61,7 +65,8 @@ CREATE TABLE "public"."UserPreference" (
 -- CreateTable
 CREATE TABLE "public"."EnergyBlock" (
     "id" TEXT NOT NULL,
-    "energy" SMALLINT NOT NULL,
+    "energy" DOUBLE PRECISION NOT NULL,
+    "confidence" DOUBLE PRECISION NOT NULL DEFAULT 0.2,
     "start" SMALLINT NOT NULL,
     "end" SMALLINT NOT NULL,
     "userPreferenceId" TEXT NOT NULL,
@@ -75,6 +80,8 @@ CREATE TABLE "public"."Category" (
     "name" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "order" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "Category_pkey" PRIMARY KEY ("id")
 );
@@ -88,6 +95,7 @@ CREATE TABLE "public"."File" (
     "mimetype" TEXT NOT NULL,
     "size" INTEGER NOT NULL,
     "userId" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "File_pkey" PRIMARY KEY ("id")
 );
@@ -99,13 +107,13 @@ CREATE UNIQUE INDEX "User_email_key" ON "public"."User"("email");
 CREATE INDEX "Task_userId_idx" ON "public"."Task"("userId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "TaskWindow_taskId_key" ON "public"."TaskWindow"("taskId");
+CREATE UNIQUE INDEX "TaskWindow_fixedTaskId_key" ON "public"."TaskWindow"("fixedTaskId");
 
 -- CreateIndex
 CREATE INDEX "ScheduledBlock_start_end_idx" ON "public"."ScheduledBlock"("start", "end");
 
 -- CreateIndex
-CREATE INDEX "UserPreference_userId_idx" ON "public"."UserPreference"("userId");
+CREATE INDEX "UserPreference_userId_day_idx" ON "public"."UserPreference"("userId", "day");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "UserPreference_userId_day_key" ON "public"."UserPreference"("userId", "day");
@@ -126,10 +134,7 @@ ALTER TABLE "public"."Task" ADD CONSTRAINT "Task_userId_fkey" FOREIGN KEY ("user
 ALTER TABLE "public"."Task" ADD CONSTRAINT "Task_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "public"."Category"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."TaskWindow" ADD CONSTRAINT "TaskWindow_taskId_fkey" FOREIGN KEY ("taskId") REFERENCES "public"."Task"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "public"."TaskWindow" ADD CONSTRAINT "TaskWindow_preferredTaskId_fkey" FOREIGN KEY ("preferredTaskId") REFERENCES "public"."Task"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "public"."TaskWindow" ADD CONSTRAINT "TaskWindow_fixedTaskId_fkey" FOREIGN KEY ("fixedTaskId") REFERENCES "public"."Task"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."ScheduledBlock" ADD CONSTRAINT "ScheduledBlock_taskId_fkey" FOREIGN KEY ("taskId") REFERENCES "public"."Task"("id") ON DELETE CASCADE ON UPDATE CASCADE;

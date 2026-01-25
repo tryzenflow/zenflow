@@ -4,12 +4,10 @@ export interface Task {
   id: string;
   title: string;
   duration: number;
-  priority: number;
-  deadline?: Date;
+  deadline?: number;
   energy: number;
   maxSplits: number;
   categoryId?: string;
-  preferredWindows?: Interval[];
   scheduledBlocks?: ScheduledBlock[];
   fixedWindow?: Interval;
 }

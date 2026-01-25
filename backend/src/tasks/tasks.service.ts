@@ -18,8 +18,8 @@ export class TasksService {
   constructor(private prisma: PrismaService) {}
 
   async create(
-    { rrule, fixedWindow, preferredWindows, ...createTaskDto }: CreateTaskDto,
-    userId: string,
+    { rrule, fixedWindow, ...createTaskDto }: CreateTaskDto,
+    userId: string
   ) {
     try {
       const newTask = await this.prisma.task.create({
@@ -31,23 +31,10 @@ export class TasksService {
                 create: { start: fixedWindow.start, end: fixedWindow.end },
               }
             : undefined,
-          preferredWindows: {
-            createMany: {
-              data:
-                preferredWindows?.map((w) => ({
-                  start: w.start,
-                  end: w.end,
-                })) || [],
-            },
-          },
           userId,
         },
         include: {
           fixedWindow: { select: { start: true, end: true } },
-          preferredWindows: {
-            select: { start: true, end: true },
-            orderBy: { start: "asc" },
-          },
         },
       });
       return newTask;
@@ -56,7 +43,7 @@ export class TasksService {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === PostgresErrorCode.ForeignViolation)
           throw new BadRequestException(
-            "Cannot create task because its associated user, category may not exist",
+            "Cannot create task because its associated user, category may not exist"
           );
       }
 
@@ -72,7 +59,7 @@ export class TasksService {
     userId: string,
     date: string,
     timezone: string,
-    includeScheduledBlocks = false,
+    includeScheduledBlocks = false
   ) {
     const startDate = fromZonedTime(new Date(`${date}T00:00:00`), timezone);
     const endDate = fromZonedTime(new Date(`${date}T23:59:59`), timezone);
@@ -83,7 +70,6 @@ export class TasksService {
       },
       include: {
         fixedWindow: true,
-        preferredWindows: true,
         scheduledBlocks: includeScheduledBlocks
           ? {
               where: {
@@ -106,7 +92,7 @@ export class TasksService {
       startDate,
       endDate,
       false,
-      timezone,
+      timezone
     ) as typeof tasks;
   }
 
@@ -119,13 +105,8 @@ export class TasksService {
         deadline: true,
         createdAt: true,
         duration: true,
-        priority: true,
         energy: true,
         fixedWindow: true,
-        preferredWindows: {
-          select: { start: true, end: true },
-          orderBy: { start: "asc" },
-        },
         category: true,
         rrule: true,
         user: { select: { id: true, name: true } },
@@ -138,7 +119,7 @@ export class TasksService {
   async findUnscheduled(
     userId: string,
     { start, end }: DateRangeDto,
-    timezone: string,
+    timezone: string
   ) {
     const startDate = fromZonedTime(new Date(`${start}T00:00:00`), timezone);
     const endDate = fromZonedTime(new Date(`${end}T23:59:59`), timezone);
@@ -170,13 +151,8 @@ export class TasksService {
         deadline: true,
         createdAt: true,
         duration: true,
-        priority: true,
         energy: true,
         fixedWindow: true,
-        preferredWindows: {
-          select: { start: true, end: true },
-          orderBy: { start: "asc" },
-        },
         category: true,
         rrule: true,
         user: { select: { id: true, name: true } },
@@ -190,7 +166,7 @@ export class TasksService {
     id: string,
     userId: string,
     { start, end }: DateRangeDto,
-    timezone: string,
+    timezone: string
   ) {
     const task = await this.prisma.task.findUnique({
       where: { id, userId },
@@ -215,14 +191,8 @@ export class TasksService {
 
   async update(
     id: string,
-    {
-      categoryId,
-      fixedWindow,
-      preferredWindows,
-      rrule,
-      ...updateTaskDto
-    }: UpdateTaskDto,
-    userId: string,
+    { categoryId, fixedWindow, rrule, ...updateTaskDto }: UpdateTaskDto,
+    userId: string
   ) {
     try {
       const updated = await this.prisma.task.update({
@@ -236,18 +206,6 @@ export class TasksService {
               ? { start: fixedWindow.start, end: fixedWindow.end }
               : undefined,
           },
-          preferredWindows: preferredWindows
-            ? {
-                deleteMany: {},
-                createMany: {
-                  data:
-                    preferredWindows.map((window) => ({
-                      start: window.start,
-                      end: window.end,
-                    })) || [],
-                },
-              }
-            : undefined,
           category: categoryId
             ? { connect: { id: categoryId, userId } }
             : undefined,
@@ -258,7 +216,6 @@ export class TasksService {
             orderBy: { start: "asc" },
           },
           fixedWindow: { select: { start: true, end: true } },
-          preferredWindows: { select: { start: true, end: true } },
         },
       });
       return updated;
