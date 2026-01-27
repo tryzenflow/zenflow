@@ -9,8 +9,7 @@ import { format } from "date-fns";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getData, patchData, postData } from "../../api";
-import { CategoryItem, DAILY_HORIZON } from "../../types/prefs";
-import { Task } from "../../types/tasks";
+import { Category, Task } from "../../types/tasks";
 import { generateRRule, parseRRule, TaskFormValues } from "../../utils/tasks";
 import { TaskForm } from "./form/task-form";
 import { useFilesTracker } from "../../hooks/use-files-tracker";
@@ -48,7 +47,7 @@ export function EditTaskDialog({
   const [loading, setLoading] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [task, setTask] = useState<Task | null>(null);
-  const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const { newUploadsRef } = useFilesTracker();
 
   useEffect(() => {
@@ -63,55 +62,19 @@ export function EditTaskDialog({
       ...(defaultRecurringFields as any),
       title: "",
       duration: 60,
-      mandatory: true,
-      priority: 2,
-      focus: 2,
-      maxSplits: 1,
-      scheduleDate: selectedDate,
+      energy: 2,
       note: "",
-      earliestStart: 0,
-      latestEnd: DAILY_HORIZON,
-      prerequisites: [],
       deadlineDate: "",
       deadlineTime: "",
     },
   });
-  const scheduleDate = form.watch("scheduleDate");
 
   useEffect(() => {
     if (!open) return;
-    getData<{ data: CategoryItem[] }>("/categories").then((data) => {
+    getData<{ data: Category[] }>("/categories").then((data) => {
       setCategories(data.data);
     });
   }, [open]);
-
-  useEffect(() => {
-    if (!scheduleDate || !open) {
-      setTasks([]);
-      return;
-    }
-    const formattedScheduleDate = format(scheduleDate, "yyyy-MM-dd");
-    const allPrerequisites = Promise.all([
-      getData<{ data: Task[] }>(
-        `/tasks?start=${formattedScheduleDate}&end=${formattedScheduleDate}`,
-      ),
-
-      getData<{ data: { recurring: Task[] } }>(
-        `/tasks/none?start=${formattedScheduleDate}&end=${formattedScheduleDate}`,
-      ),
-    ]);
-
-    allPrerequisites.then(
-      ([
-        { data },
-        {
-          data: { recurring },
-        },
-      ]) => {
-        setTasks([...data, ...recurring]);
-      },
-    );
-  }, [scheduleDate, open]);
 
   useEffect(() => {
     if (!task) return;
@@ -123,13 +86,7 @@ export function EditTaskDialog({
       ...parsedFields,
       isRecurring: !!task.rrule,
       note: task.note ?? "",
-      scheduleDate: selectedDate,
       categoryId: task.categoryId ?? undefined,
-      prerequisites:
-        task.prerequisites?.map((p) => (typeof p === "string" ? p : p.id)) ??
-        [],
-      earliestStart: task.earliestStart ?? 0,
-      latestEnd: task.latestEnd ?? DAILY_HORIZON,
       deadlineDate: task.deadline
         ? format(new Date(task.deadline), "yyyy-MM-dd")
         : "",
@@ -138,12 +95,10 @@ export function EditTaskDialog({
         : "",
     };
     form.reset(fields);
-  }, [task, selectedDate]);
+  }, [task, form, selectedDate]);
 
   async function onSubmit(values: TaskFormValues) {
-    // setLoading(true);
-    const formattedScheduleDate = format(values.scheduleDate, "yyyy-MM-dd");
-    const formattedSelectedDate = format(selectedDate, "yyyy-MM-dd");
+    setLoading(true);
     const deadlineDate = values.deadlineDate || undefined;
     const deadlineTime = values.deadlineTime || undefined;
     try {
@@ -152,19 +107,9 @@ export function EditTaskDialog({
         {
           title: values.title,
           note: values.note,
-          priority: values.priority,
-          earliestStart: values.earliestStart,
-          latestEnd: values.latestEnd,
-          prerequisites: values.prerequisites,
           categoryId: values.categoryId,
-          focus: values.focus,
-          maxSplits: values.maxSplits,
+          focus: values.energy,
           duration: values.duration,
-          mandatory: values.mandatory,
-          scheduleDate:
-            formattedScheduleDate === formattedSelectedDate
-              ? undefined
-              : formattedScheduleDate,
           deadlineDate,
           deadlineTime,
           rrule: values.isRecurring ? generateRRule(values) : undefined,
@@ -202,8 +147,8 @@ export function EditTaskDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="overflow-x-hidden rounded-none max-w-none sm:max-w-none w-screen overflow-y-auto h-screen px-4 sm:px-6 lg:px-8">
-        <DialogHeader className="max-w-7xl mx-auto w-full">
+      <DialogContent>
+        <DialogHeader>
           <DialogTitle>Edit task</DialogTitle>
         </DialogHeader>
         <TaskForm

@@ -1,5 +1,4 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { FlowerIcon } from "lucide-react";
 import React, { useState } from "react";
 import { SubmitHandler, useForm } from "react-hook-form";
 import { z } from "zod";
@@ -116,7 +115,10 @@ export function LoginForm({
 
       const response = await fetch(`${API_BASE_URL}/auth/otp/verify`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-timezone": Intl.DateTimeFormat().resolvedOptions().timeZone,
+        },
         body: JSON.stringify({ email: emailForApi, otp: data.otp }),
         credentials: "include",
       });
@@ -158,7 +160,7 @@ export function LoginForm({
               className="flex flex-col items-center gap-2 font-medium"
             >
               <div className="flex size-8 items-center justify-center rounded-md">
-                <FlowerIcon className="size-6" />
+                <img src="/logo.svg" width="64px" height="64px" />
               </div>
               <span className="sr-only">Zenflow</span>
             </a>

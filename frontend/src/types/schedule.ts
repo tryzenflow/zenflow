@@ -1,12 +1,14 @@
-export interface Schedule {
-  start: string | null;
-  split: number;
-  date: string;
-  end: string | null;
+import { Scale } from "./tasks";
+
+export interface ScheduledBlock {
+  id: string;
+  start: string; // date string
+  splitIndex: number;
+  end: string; // date string
   task: {
     id: string;
     title: string;
-    focus: 1 | 2 | 3;
+    energy: Scale;
     duration: number;
     rrule: string | null;
   };
@@ -15,12 +17,14 @@ export interface Schedule {
 export interface GetSchedulesResponse {
   success: boolean;
   message: string;
-  data: Schedule[];
+  data: ScheduledBlock[];
 }
 
 export interface ScheduleResponse {
   success: boolean;
   message: string;
   feasible: boolean;
-  data: Schedule[];
+  data: ScheduledBlock[];
 }
+
+export type ViewMode = "day" | "week" | "month";

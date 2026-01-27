@@ -4,8 +4,4 @@ export interface User {
   email: string;
   createdAt: Date;
   timezone: string;
-  _count: {
-    userPreferences: number;
-    categories: number;
-  };
 }

@@ -12,13 +12,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CategoryItem } from "@/types/prefs";
 import { TaskFormValues } from "@/utils/tasks";
+import { Category } from "@/types/tasks";
 
 interface TaskCategorySelectProps {
   formControl: Control<TaskFormValues>;
   loading: boolean;
-  categories: CategoryItem[];
+  categories: Category[];
 }
 
 export function TaskCategorySelect({

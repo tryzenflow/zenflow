@@ -1,4 +1,4 @@
-import { Schedule } from "./schedule";
+import { ScheduledBlock } from "./schedule";
 
 export type Scale = 1 | 2 | 3;
 
@@ -8,16 +8,15 @@ export interface Task {
   note?: string;
   rrule: string | null;
   duration: number;
-  priority: Scale;
-  earliestStart?: number;
-  latestEnd?: number;
   deadline?: string;
-  mandatory: boolean;
-  maxSplits: number;
-  focus: Scale;
+  energy: Scale;
   categoryId?: string;
-  prerequisites?: (string | Task)[];
-  schedules?: Schedule[];
+  schedules?: ScheduledBlock[];
+}
+
+export interface Category {
+  id: string;
+  name: string;
 }
 
 export interface TaskResponse {

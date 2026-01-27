@@ -6,75 +6,44 @@ import { Task } from "../types/tasks";
 import { extractFileIdsFromNoteContent } from "./files";
 import { rrulestr, RRule, Weekday } from "rrule";
 
-export const taskSchema = z
-  .object({
-    title: z.string().min(1, { error: "Task name is required" }),
-
-    scheduleDate: z.date({ error: "A date is required." }),
-    duration: z
-      .int()
-      .min(5, { error: "Task duration must be at least 5 minutes" })
-      .max(DAILY_HORIZON, { error: "Task duration must be at most 24 hours" }),
-    mandatory: z.boolean(),
-    priority: z
-      .int()
-      .min(1, { error: "Task priority must be at least 1" })
-      .max(3, { error: "Task priority must be at most 3" }),
-    focus: z
-      .int()
-      .min(1, { error: "Task focus must be at least 1" })
-      .max(3, { error: "Task focus must be at most 3" }),
-    categoryId: z.string().optional(),
-    earliestStart: z
-      .int()
-      .min(0, { error: "Task earliest start must be from 12AM" })
-      .max(DAILY_HORIZON, {
-        error: "Task earliest start must be at most 11:59PM",
-      })
-      .optional(),
-    latestEnd: z
-      .int()
-      .min(0, { error: "Task latest end must be from 12AM" })
-      .max(DAILY_HORIZON, { error: "Task latest end must be at most 11:59PM" })
-      .optional(),
-    deadlineDate: z
-      .string()
-      .refine(
-        (val) => {
-          if (!val) return true;
-          if (isNaN(Date.parse(val))) return false;
-          return true;
-        },
-        { message: "Invalid date format" },
-      )
-      .optional(),
-    isRecurring: z.boolean().default(false),
-    deadlineTime: z.string().optional(),
-    note: z.string().optional(),
-    maxSplits: z.number().min(1).max(10).default(1),
-    prerequisites: z.array(z.string()).optional(),
-    frequency: z.enum(["YEARLY", "MONTHLY", "WEEKLY", "DAILY"]),
-    interval: z.number().min(1),
-    byday: z.array(z.string()),
-    bymonthday: z.number().min(1).max(31),
-    bysetpos: z.number(),
-    bydayMonth: z.string(),
-    monthlyMode: z.enum(["on", "on_the"]),
-    yearlyMode: z.enum(["on", "on_the"]),
-    month: z.number().min(1).max(12),
-    endMode: z.enum(["never", "after", "on"]),
-    count: z.number().min(1),
-    until: z.date().optional(),
-  })
-  .refine(
-    (arg) =>
-      (arg?.latestEnd || DAILY_HORIZON) >=
-      (arg?.earliestStart || 0) + arg.duration,
-    {
-      error: "Earliest start + duration > latest end",
-      path: ["earliestStart"],
-    },
-  );
+export const taskSchema = z.object({
+  title: z.string().min(1, { error: "Task name is required" }),
+  duration: z
+    .int()
+    .min(5, { error: "Task duration must be at least 5 minutes" })
+    .max(DAILY_HORIZON, { error: "Task duration must be at most 24 hours" }),
+  energy: z
+    .int()
+    .min(1, { error: "Task focus must be at least 1" })
+    .max(3, { error: "Task focus must be at most 3" }),
+  categoryId: z.string().optional(),
+  deadlineDate: z
+    .string()
+    .refine(
+      (val) => {
+        if (!val) return true;
+        if (isNaN(Date.parse(val))) return false;
+        return true;
+      },
+      { message: "Invalid date format" },
+    )
+    .optional(),
+  isRecurring: z.boolean().default(false),
+  deadlineTime: z.string().optional(),
+  note: z.string().optional(),
+  frequency: z.enum(["YEARLY", "MONTHLY", "WEEKLY", "DAILY"]),
+  interval: z.number().min(1),
+  byday: z.array(z.string()),
+  bymonthday: z.number().min(1).max(31),
+  bysetpos: z.number(),
+  bydayMonth: z.string(),
+  monthlyMode: z.enum(["on", "on_the"]),
+  yearlyMode: z.enum(["on", "on_the"]),
+  month: z.number().min(1).max(12),
+  endMode: z.enum(["never", "after", "on"]),
+  count: z.number().min(1),
+  until: z.date().optional(),
+});
 
 export type TaskFormValues = z.infer<typeof taskSchema>;
 
@@ -89,10 +58,7 @@ export async function deleteTask(taskId: string) {
 
 export const generateRRule = (values: z.infer<typeof taskSchema>) => {
   // Format DTSTART as RFC 5545: YYYYMMDDTHHMMSSZ (no milliseconds, no punctuation)
-  const dtstart =
-    values.scheduleDate.toISOString().split(".")[0].replace(/[-:]/g, "") + "Z";
-  let rrule = `DTSTART:${dtstart}\n`;
-  rrule += `RRULE:FREQ=${values.frequency}`;
+  let rrule = `RRULE:FREQ=${values.frequency}`;
 
   rrule += `;INTERVAL=${values.interval}`;
 
@@ -135,11 +101,6 @@ export const parseRRule = (rruleString: string): Partial<TaskFormValues> => {
     const rule = rrulestr(rruleString);
     const options = rule.origOptions;
 
-    // Extract DTSTART
-    const scheduleDate = options.dtstart
-      ? new Date(options.dtstart)
-      : new Date();
-
     // Map frequency
     const freqMap: Record<number, "YEARLY" | "MONTHLY" | "WEEKLY" | "DAILY"> = {
       [RRule.YEARLY]: "YEARLY",
@@ -154,8 +115,8 @@ export const parseRRule = (rruleString: string): Partial<TaskFormValues> => {
 
     // Extract byday for WEEKLY frequency
     const byday: string[] = [];
-    if (options.byday && Array.isArray(options.byday)) {
-      options.byday.forEach((wd: any) => {
+    if (options.byweekday && Array.isArray(options.byweekday)) {
+      options.byweekday.forEach((wd: any) => {
         const dayMap: Record<number, string> = {
           0: "MO",
           1: "TU",
@@ -188,9 +149,9 @@ export const parseRRule = (rruleString: string): Partial<TaskFormValues> => {
     // Extract bydayMonth for "on_the" mode
     let bydayMonth = "MO";
     if (frequency === "MONTHLY" || frequency === "YEARLY") {
-      if (Array.isArray(options.byday) && options.byday.length > 0) {
-        const wd = options.byday[0];
-        const dayNum = typeof wd === "number" ? wd : (wd as Weekday).day;
+      if (Array.isArray(options.byweekday) && options.byweekday.length > 0) {
+        const wd = options.byweekday[0];
+        const dayNum = typeof wd === "number" ? wd : (wd as Weekday).weekday;
         const dayMap: Record<number, string> = {
           0: "MO",
           1: "TU",
@@ -240,7 +201,6 @@ export const parseRRule = (rruleString: string): Partial<TaskFormValues> => {
     }
 
     return {
-      scheduleDate,
       frequency,
       interval,
       byday,
@@ -258,7 +218,6 @@ export const parseRRule = (rruleString: string): Partial<TaskFormValues> => {
     console.error("Error parsing RRULE:", error);
     // Return defaults on parse error
     return {
-      scheduleDate: new Date(),
       frequency: "DAILY",
       interval: 1,
       byday: [],

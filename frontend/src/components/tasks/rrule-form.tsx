@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { generateRRule, TaskFormValues } from "@/utils/tasks";
+import { TaskFormValues } from "@/utils/tasks";
 
 interface RRuleFormProps {
   form: UseFormReturn<TaskFormValues>;
@@ -485,13 +485,6 @@ export function RRuleForm({ form }: RRuleFormProps) {
           </FormItem>
         )}
       />
-      <Button
-        type="button"
-        onClick={() => alert(generateRRule(form.getValues()))}
-        className="w-full"
-      >
-        Generate Rule
-      </Button>
     </div>
   );
 }

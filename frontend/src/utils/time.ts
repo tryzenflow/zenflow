@@ -1,4 +1,4 @@
-import { DAILY_HORIZON, EnergyBlock } from "../types/prefs";
+import { DAILY_HORIZON } from "./constants";
 
 export const minutesToTime = (minutes: number): string => {
   if (minutes === DAILY_HORIZON) return "11:59 PM";
@@ -66,19 +66,3 @@ export const durationToMinutes = (duration: string): number => {
   }
   return +hour * 60 + +minute;
 };
-
-export const EARLY_BIRD_BLOCKS: EnergyBlock[] = [
-  { id: "eb1", level: 3, start: 300, end: 540 },
-  { id: "eb2", level: 2, start: 540, end: 780 },
-  { id: "eb3", level: 1, start: 780, end: 960 },
-  { id: "eb3", level: 2, start: 960, end: 1200 },
-];
-
-export const NIGHT_OWL_BLOCKS: EnergyBlock[] = [
-  { id: "no1", level: 1, start: 480, end: 660 },
-  { id: "no2", level: 2, start: 660, end: 900 },
-  { id: "no3", level: 3, start: 900, end: 1200 },
-  { id: "no3", level: 2, start: 1200, end: 1380 },
-  { id: "no4", level: 3, start: 1380, end: 1440 },
-  { id: "no4", level: 3, start: 0, end: 120 },
-];

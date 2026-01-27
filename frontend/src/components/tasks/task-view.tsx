@@ -7,7 +7,7 @@ import { TaskCard } from "./views/card";
 import { toast } from "sonner";
 import { deleteTask } from "../../utils/tasks";
 import { useUserStore } from "@/hooks/use-user-store";
-import { Schedule } from "@/types/schedule";
+import { ScheduledBlock } from "@/types/schedule";
 
 export function TaskView({
   selectedDate,
@@ -116,14 +116,14 @@ export function TaskView({
           const rows = response.data as any[];
           const map = new Map<string, Task>();
           for (const row of rows) {
-            const taskObj = row.task as Schedule["task"];
+            const taskObj = row.task as ScheduledBlock["task"];
             if (!taskObj || !taskObj.id) continue;
 
-            const schedule: Schedule = {
+            const schedule: ScheduledBlock = {
               date: row.date,
               start: row.start ?? null,
               end: row.end ?? null,
-              split: row.split ?? 0,
+              splitIndex: row.split ?? 0,
               task: {
                 id: taskObj.id,
                 title: taskObj.title,
@@ -138,7 +138,7 @@ export function TaskView({
               map.set(taskObj.id, {
                 id: taskObj.id,
                 title: taskObj.title,
-                focus: taskObj.focus,
+                energy: taskObj.focus,
                 duration: taskObj.duration,
                 schedules: [schedule],
               } as Task);
@@ -151,12 +151,12 @@ export function TaskView({
           responseTasks = response.data as Task[];
         }
 
-        const dedupeSchedules = (schedules: Schedule[] = []) => {
-          const map = new Map<string, Schedule>();
+        const dedupeSchedules = (schedules: ScheduledBlock[] = []) => {
+          const map = new Map<string, ScheduledBlock>();
           for (const s of schedules) {
             const dateKey =
               s?.date != null ? new Date(s.date).toISOString() : "nodate";
-            const key = `${dateKey}|${s?.split ?? 0}`;
+            const key = `${dateKey}|${s?.splitIndex ?? 0}`;
             if (!map.has(key)) map.set(key, s);
           }
           return Array.from(map.values());

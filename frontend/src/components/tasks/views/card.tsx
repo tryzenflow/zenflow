@@ -11,7 +11,7 @@ import {
   Trash,
   X,
 } from "lucide-react";
-import { formatMinutes, minutesToTime } from "@/utils/prefs";
+import { formatMinutes, minutesToTime } from "@/utils/time";
 import { cn } from "@/lib/utils";
 import {
   Collapsible,
@@ -159,7 +159,7 @@ export function TaskCard({
             <div
               className={cn(
                 priorityMap[task.priority].className,
-                "rounded-sm size-4"
+                "rounded-sm size-4",
               )}
             />
             <span>{priorityMap[task.priority].text} Priority</span>
@@ -167,11 +167,11 @@ export function TaskCard({
           <div className="flex items-center gap-x-1 font-medium text-sm">
             <div
               className={cn(
-                focusMap[task.focus].className,
-                "rounded-full size-4"
+                focusMap[task.energy].className,
+                "rounded-full size-4",
               )}
             />
-            <span>{focusMap[task.focus].text} Focus</span>
+            <span>{focusMap[task.energy].text} Focus</span>
           </div>
         </div>
         {(task.schedules ?? []).length > 0 && (
@@ -186,7 +186,7 @@ export function TaskCard({
                 <ChevronDown
                   className={cn(
                     "size-4 transition-transform",
-                    open && "rotate-180"
+                    open && "rotate-180",
                   )}
                 />
               </Button>
@@ -194,14 +194,17 @@ export function TaskCard({
             <CollapsibleContent className="grid gap-y-2 mt-3">
               {task.schedules?.map((s) => (
                 <div
-                  key={`${format(s.date, "yyyy-MM-dd")}-${s.split}}`}
+                  key={`${format(s.date, "yyyy-MM-dd")}-${s.splitIndex}}`}
                   className="flex justify-between items-center"
                 >
                   <span className="text-foreground text-sm font-medium">
-                    {format(s.start!, "hh:mm a")} - {format(s.end!, "hh:mm a")}{" "}
+                    {format(s.start!, "hh:mm a")} -{" "}
+                    {format(s.end!, "hh:mm a")}{" "}
                   </span>
                   <X
-                    onClick={() => deleteSchedule(task.id, s.date, s.split)}
+                    onClick={() =>
+                      deleteSchedule(task.id, s.date, s.splitIndex)
+                    }
                     className="size-4"
                   />
                 </div>
