@@ -6,7 +6,7 @@ export function useViewShortcuts(setView: (v: ViewMode) => void) {
     function onKeyDown(e: KeyboardEvent) {
       if (
         e.target instanceof HTMLElement &&
-        ["INPUT", "TEXTAREA"].includes(e.tagName)
+        ["INPUT", "TEXTAREA"].includes(e.target.tagName)
       ) {
         return;
       }

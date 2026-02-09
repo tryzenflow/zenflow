@@ -1,6 +1,11 @@
-import { ScheduledBlock } from "./schedule";
+import { Event } from "./schedule";
 
 export type Scale = 1 | 2 | 3;
+
+export interface FixedWindow {
+  start: number;
+  end: number;
+}
 
 export interface Task {
   id: string;
@@ -11,8 +16,22 @@ export interface Task {
   deadline?: string;
   energy: Scale;
   categoryId?: string;
-  schedules?: ScheduledBlock[];
+  schedules?: Event[];
 }
+
+export interface CreateTaskDto {
+  title: string;
+  note?: string;
+  rrule?: string;
+  scheduleDate: string;
+  duration: number;
+  deadline?: string;
+  energy: Scale;
+  categoryId?: string;
+  fixedWindow?: FixedWindow;
+}
+
+export interface UpdateTaskDto extends Omit<CreateTaskDto, "scheduleDate"> {}
 
 export interface Category {
   id: string;

@@ -1,6 +1,6 @@
 // types.ts or schema.ts
 import * as z from "zod";
-import { DAILY_HORIZON } from "../types/prefs";
+import { DAILY_HORIZON, TIME_GRANULARITY } from "./constants";
 import { deleteData, getData, postData } from "../api";
 import { Task } from "../types/tasks";
 import { extractFileIdsFromNoteContent } from "./files";
@@ -10,12 +10,14 @@ export const taskSchema = z.object({
   title: z.string().min(1, { error: "Task name is required" }),
   duration: z
     .int()
-    .min(5, { error: "Task duration must be at least 5 minutes" })
+    .min(TIME_GRANULARITY, {
+      error: `Task duration must be at least ${TIME_GRANULARITY} minutes`,
+    })
     .max(DAILY_HORIZON, { error: "Task duration must be at most 24 hours" }),
   energy: z
     .int()
-    .min(1, { error: "Task focus must be at least 1" })
-    .max(3, { error: "Task focus must be at most 3" }),
+    .min(1, { error: "Task energy must be at least 1" })
+    .max(3, { error: "Task energy must be at most 3" }),
   categoryId: z.string().optional(),
   deadlineDate: z
     .string()
@@ -28,6 +30,17 @@ export const taskSchema = z.object({
       { message: "Invalid date format" },
     )
     .optional(),
+  isFixed: z.boolean().default(false),
+  fixedStart: z
+    .number()
+    .min(0)
+    .max(DAILY_HORIZON - TIME_GRANULARITY)
+    .default(0),
+  fixedEnd: z
+    .number()
+    .min(TIME_GRANULARITY)
+    .max(DAILY_HORIZON)
+    .default(DAILY_HORIZON),
   isRecurring: z.boolean().default(false),
   deadlineTime: z.string().optional(),
   note: z.string().optional(),
@@ -56,8 +69,7 @@ export async function deleteTask(taskId: string) {
   return deleteData(`/tasks/${taskId}`);
 }
 
-export const generateRRule = (values: z.infer<typeof taskSchema>) => {
-  // Format DTSTART as RFC 5545: YYYYMMDDTHHMMSSZ (no milliseconds, no punctuation)
+export const generateRRule = (values: TaskFormValues) => {
   let rrule = `RRULE:FREQ=${values.frequency}`;
 
   rrule += `;INTERVAL=${values.interval}`;

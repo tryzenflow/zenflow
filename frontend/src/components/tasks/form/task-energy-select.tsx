@@ -30,7 +30,7 @@ export function TaskEnergySelect({
       control={formControl}
       name="energy"
       render={({ field }) => (
-        <FormItem>
+        <FormItem className="w-full">
           <FormLabel>Energy</FormLabel>
 
           <Select

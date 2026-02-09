@@ -25,8 +25,8 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { hideEmail } from "../../utils/hide-email";
 import { useUserStore } from "../../hooks/use-user-store";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL;
+import { requestOtp, verifyOtp } from "@/api/auth";
+import { isAxiosError } from "axios";
 
 const emailSchema = z.object({
   email: z.email({ message: "Invalid email address." }),
@@ -74,26 +74,20 @@ export function LoginForm({
     clearErrors("email");
 
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/otp/request`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: data.email }),
-      });
+      await requestOtp(data.email);
 
-      const result = await response.json();
+      toast.info("Email sent successfully");
+      setStage("otp");
+      clearErrors();
 
-      if (response.ok && result.success) {
-        toast.info("Email sent successfully");
-        setStage("otp");
-        clearErrors();
-
-        trigger("otp");
-      } else {
+      trigger("otp");
+    } catch (error) {
+      if (isAxiosError(error) && error.status === 400) {
         const errorMessage =
-          result.message || "Failed to send OTP. Please try again.";
+          error.response?.data.message ||
+          "Failed to send OTP. Please try again.";
         setError("email", { type: "manual", message: errorMessage });
       }
-    } catch (error) {
       setError("email", {
         type: "manual",
         message: "Network error. Could not connect to the server.",
@@ -113,26 +107,18 @@ export function LoginForm({
     try {
       const emailForApi = getValues("email");
 
-      const response = await fetch(`${API_BASE_URL}/auth/otp/verify`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-timezone": Intl.DateTimeFormat().resolvedOptions().timeZone,
-        },
-        body: JSON.stringify({ email: emailForApi, otp: data.otp }),
-        credentials: "include",
-      });
+      const result = await verifyOtp(emailForApi, data.otp);
 
-      const result = await response.json();
-      if (response.ok && result.success && result.data) {
-        toast.success("Login successfully");
-        setUser(result.data);
-        navigate("/");
-      } else {
-        const errorMessage = result.message || "Invalid OTP. Please try again.";
+      toast.success("Login successfully");
+      setUser(result.data);
+      navigate("/");
+    } catch (error) {
+      if (isAxiosError(error) && error.status === 400) {
+        const errorMessage =
+          error.response?.data.message ||
+          "Failed to verify OTP. Please try again.";
         setError("otp", { type: "manual", message: errorMessage });
       }
-    } catch (error) {
       setError("otp", {
         type: "manual",
         message: "Network error. Could not connect to the server.",
@@ -142,11 +128,11 @@ export function LoginForm({
     }
   };
 
-  const onSubmit: SubmitHandler<FormValues> = (data) => {
+  const onSubmit: SubmitHandler<FormValues> = async (data) => {
     if (stage === "email") {
-      handleEmailRequest(data as EmailFormValues);
+      await handleEmailRequest(data as EmailFormValues);
     } else {
-      handleOtpVerify(data as OtpFormValues);
+      await handleOtpVerify(data as OtpFormValues);
     }
   };
 

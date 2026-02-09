@@ -6,7 +6,7 @@ import {
   startOfWeek,
 } from "date-fns";
 import { WeekGrid } from "./week-grid";
-import { ScheduledBlock } from "@/types/schedule";
+import { Event } from "@/types/schedule";
 import { DndContext, DragEndEvent } from "@dnd-kit/core";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 
@@ -15,8 +15,8 @@ export function WeekView({
   setEvents,
   date,
 }: {
-  events: ScheduledBlock[];
-  setEvents: React.Dispatch<React.SetStateAction<ScheduledBlock[]>>;
+  events: Event[];
+  setEvents: React.Dispatch<React.SetStateAction<Event[]>>;
   date: Date;
 }) {
   const weekDates = eachDayOfInterval({

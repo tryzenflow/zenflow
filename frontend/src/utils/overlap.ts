@@ -1,6 +1,6 @@
-import { ScheduledBlock } from "@/types/schedule";
+import { Event } from "@/types/schedule";
 
-export function getOverlapSpacing(events: ScheduledBlock[]) {
+export function getOverlapSpacing(events: Event[]) {
   const spacings = new Map<string, number>();
   events.sort(
     (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),

@@ -1,17 +1,13 @@
 import { useUserStore } from "@/hooks/use-user-store";
 import { cn } from "@/lib/utils";
-import { ScheduledBlock } from "@/types/schedule";
+import { Event } from "@/types/schedule";
 import { DAILY_HORIZON } from "@/utils/constants";
 import { getEnergyStyle } from "@/utils/energy";
 import { CSS } from "@dnd-kit/utilities";
 import { useDraggable } from "@dnd-kit/core";
 import { fromZonedTime } from "date-fns-tz";
 
-function getBlockStyle(
-  block: ScheduledBlock,
-  spacing: number,
-  timezone: string,
-) {
+function getBlockStyle(block: Event, spacing: number, timezone: string) {
   const start = fromZonedTime(block.start, timezone);
   const end = fromZonedTime(block.end, timezone);
 
@@ -29,7 +25,7 @@ export function ScheduledBlockItem({
   block,
   spacing,
 }: {
-  block: ScheduledBlock;
+  block: Event;
   spacing: number;
 }) {
   const user = useUserStore((state) => state.user);
@@ -54,7 +50,7 @@ export function ScheduledBlockItem({
     >
       <div
         className={cn(
-          "flex h-full flex-col overflow-hidden rounded px-2 py-1 text-xs",
+          "flex h-full flex-col overflow-hidden transition-colors rounded px-2 py-1 text-xs",
           backgroundColor,
           textColor,
         )}

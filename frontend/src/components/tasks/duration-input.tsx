@@ -32,7 +32,7 @@ export function DurationInput({
           {formatMinutes(value)} <ChevronsUpDown className="opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="p-0">
+      <PopoverContent className="p-0 w-48">
         <Command>
           <CommandInput placeholder="Search duration..." className="h-9" />
           <CommandList>

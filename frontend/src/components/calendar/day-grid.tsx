@@ -1,8 +1,8 @@
-import { ScheduledBlock } from "@/types/schedule";
+import { Event } from "@/types/schedule";
 import { DAILY_HORIZON, TIME_GRANULARITY } from "@/utils/constants";
 import { useMemo } from "react";
 import { ScheduledBlockItem } from "./scheduled-block-item";
-import { format } from "date-fns";
+import { format, isToday } from "date-fns";
 import { Cell } from "./day-cell";
 import { getOverlapSpacing } from "@/utils/overlap";
 
@@ -18,7 +18,7 @@ function formatHour(hour: number) {
   return format(d, "h a");
 }
 
-export function DayGrid({ events }: { events: ScheduledBlock[] }) {
+export function DayGrid({ events, date }: { events: Event[]; date: Date }) {
   const nowTop = useMemo(() => {
     const mins = minutesSinceStartOfDay(new Date());
     return `${(mins / DAILY_HORIZON) * 100}%`;
@@ -41,27 +41,28 @@ export function DayGrid({ events }: { events: ScheduledBlock[] }) {
         ))}
       </div>
 
-      {/* grid */}
       <div className="relative">
-        {/* now indicator */}
-        <div
-          className="pointer-events-none absolute inset-x-0 z-20"
-          style={{ top: nowTop }}
-        >
-          <div className="relative flex items-center">
-            <div className="bg-primary absolute -left-1 h-2 w-2 rounded-full" />
-            <div className="bg-primary h-[2px] w-full" />
+        {isToday(date) && (
+          <div
+            className="pointer-events-none absolute inset-x-0 z-20"
+            style={{ top: nowTop }}
+          >
+            <div className="relative flex items-center">
+              <div className="bg-primary absolute -left-1 h-2 w-2 rounded-full" />
+              <div className="bg-primary h-[2px] w-full" />
+            </div>
           </div>
-        </div>
+        )}
 
         {/* time cells */}
         {HOURS.map((hour) => (
           <div
             key={hour}
-            className="relative h-[var(--week-cells-height)] border-b"
+            className="relative h-[var(--week-cells-height)] border-border z-10 border-b"
           >
             {Array.from({ length: 4 }).map((_, q) => (
               <Cell
+                key={`${hour}:${q * TIME_GRANULARITY}`}
                 id={`${hour}:${q * TIME_GRANULARITY}`}
                 quarter={q}
                 hour={hour}

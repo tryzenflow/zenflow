@@ -1,71 +1,104 @@
-import { useState } from "react";
-import { ScheduledBlock, ViewMode } from "@/types/schedule";
+import { useEffect, useState } from "react";
+import { Event, ViewMode } from "@/types/schedule";
 import { CalendarHeader } from "./header";
 import { useViewShortcuts } from "@/hooks/use-view-shortcuts";
 import { DayView } from "./day-view";
 import { WeekView } from "./week-view";
-import { endOfDay, endOfWeek, startOfDay, startOfWeek } from "date-fns";
+import {
+  endOfDay,
+  endOfMonth,
+  endOfWeek,
+  format,
+  isToday,
+  startOfDay,
+  startOfMonth,
+  startOfWeek,
+} from "date-fns";
+import { MonthView } from "./month-view";
+import { schedule } from "@/api/scheduler";
+import { isAxiosError } from "axios";
+import { toast } from "sonner";
+import { queryEvents } from "@/api/events";
+import { snapToNearestLaterQuarterHour } from "@/utils/time";
 
 export function CalendarLayout() {
   const [date, setDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>("day");
   useViewShortcuts(setViewMode);
-  const [events, setEvents] = useState<ScheduledBlock[]>([
-    {
-      id: "1",
-      splitIndex: 0,
-      task: {
-        title: "Team Meeting",
-        energy: 2,
-        id: "1",
-        duration: 60,
-        rrule: null,
-      },
-      start: new Date(
-        date.getFullYear(),
-        date.getMonth(),
-        date.getDate(),
-        10,
-        0,
-      ).toISOString(),
-      end: new Date(
-        date.getFullYear(),
-        date.getMonth(),
-        date.getDate(),
-        11,
-        0,
-      ).toISOString(),
-    },
-    {
-      id: "2",
-      splitIndex: 0,
-      task: {
-        title: "Client Project",
-        energy: 3,
-        id: "2",
-        duration: 240,
-        rrule: null,
-      },
-      start: new Date(
-        date.getFullYear(),
-        date.getMonth(),
-        date.getDate(),
-        10,
-        30,
-      ).toISOString(),
-      end: new Date(
-        date.getFullYear(),
-        date.getMonth(),
-        date.getDate(),
-        14,
-        30,
-      ).toISOString(),
-    },
-  ]);
+  const [events, setEvents] = useState<Event[]>([]);
+
+  function getDateRange() {
+    switch (viewMode) {
+      case "day":
+        return {
+          start: startOfDay(date),
+          end: endOfDay(date),
+        };
+      case "week":
+        return {
+          start: startOfWeek(date),
+          end: endOfWeek(date),
+        };
+      case "month":
+        return {
+          start: startOfWeek(startOfMonth(date)),
+          end: endOfWeek(endOfMonth(date)),
+        };
+    }
+  }
+
+  async function getEvents() {
+    const dateRange = getDateRange();
+    try {
+      const data = await queryEvents({
+        start: format(dateRange.start, "yyyy-MM-dd"),
+        end: format(dateRange.end, "yyyy-MM-dd"),
+      });
+      console.log({ data });
+      setEvents(data.data);
+    } catch (error) {
+      if (isAxiosError(error)) {
+        toast.error(
+          error.response?.data.message ||
+            "An error occurred when fetching events",
+        );
+      }
+    }
+  }
+
+  async function scheduleEvents() {
+    try {
+      const data = await schedule({
+        keepManual: true,
+        minTime: isToday(date)
+          ? snapToNearestLaterQuarterHour(
+              date.getHours() * 60 + date.getMinutes(),
+            )
+          : 0,
+        scheduleDate: format(date, "yyyy-MM-dd"),
+      });
+      if (data.feasible) {
+        await getEvents();
+      } else {
+        toast.error("No feasible schedule found");
+      }
+    } catch (error) {
+      if (isAxiosError(error)) {
+        toast.error(
+          error.response?.data.message ||
+            "An error occurred when scheduling events",
+        );
+      }
+    }
+  }
+
+  useEffect(() => {
+    getEvents();
+  }, [date, viewMode]);
 
   return (
     <div
-      className="flex min-h-[calc(100vh-var(--header-height)-3rem)] flex-col rounded-lg border"
+      className="flex min-h-screen flex-col rounded-lg border"
       style={
         {
           "--week-cells-height": "64px",
@@ -77,28 +110,17 @@ export function CalendarLayout() {
         date={date}
         setDate={setDate}
         setCurrentView={setViewMode}
+        schedule={scheduleEvents}
       />
 
       {viewMode === "day" && (
-        <DayView
-          events={events.filter(
-            (event) =>
-              event.start >= startOfDay(date).toISOString() &&
-              event.end <= endOfDay(date).toISOString(),
-          )}
-          setEvents={setEvents}
-        />
+        <DayView events={events} date={date} setEvents={setEvents} />
       )}
       {viewMode === "week" && (
-        <WeekView
-          events={events.filter(
-            (event) =>
-              event.start >= startOfWeek(date).toISOString() &&
-              event.end <= endOfWeek(date).toISOString(),
-          )}
-          setEvents={setEvents}
-          date={date}
-        />
+        <WeekView events={events} setEvents={setEvents} date={date} />
+      )}
+      {viewMode === "month" && (
+        <MonthView events={events} setEvents={setEvents} date={date} />
       )}
     </div>
   );

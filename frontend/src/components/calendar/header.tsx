@@ -7,18 +7,19 @@ import {
   addWeeks,
   endOfWeek,
   format,
-  startOfDay,
   startOfMonth,
   startOfWeek,
 } from "date-fns";
 import { Dispatch, SetStateAction } from "react";
 import { ViewMode } from "@/types/schedule";
+import { CreateTaskDialog } from "../tasks/create-task-dialog";
 
 interface CalendarHeaderProps {
   date: Date;
   setDate: Dispatch<SetStateAction<Date>>;
   currentView: ViewMode;
   setCurrentView: Dispatch<SetStateAction<ViewMode>>;
+  schedule: () => Promise<void>;
 }
 
 export function CalendarHeader({
@@ -26,6 +27,7 @@ export function CalendarHeader({
   setDate,
   currentView,
   setCurrentView,
+  schedule,
 }: CalendarHeaderProps) {
   const shift = (direction: "left" | "right") => {
     switch (currentView) {
@@ -75,10 +77,13 @@ export function CalendarHeader({
       <div className="flex items-center gap-2">
         <ViewModeSelect value={currentView} onChange={setCurrentView} />
 
-        <Button size="sm">
-          <Plus className="size-4" />
-          <span className="sr-only sm:not-sr-only">New event</span>
-        </Button>
+        <CreateTaskDialog
+          scheduleDate={date}
+          onScheduleDateChange={(newDate) =>
+            newDate ? setDate(newDate) : undefined
+          }
+          schedule={schedule}
+        />
       </div>
     </div>
   );

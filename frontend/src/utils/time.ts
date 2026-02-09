@@ -1,4 +1,4 @@
-import { DAILY_HORIZON } from "./constants";
+import { DAILY_HORIZON, TIME_GRANULARITY } from "./constants";
 
 export const minutesToTime = (minutes: number): string => {
   if (minutes === DAILY_HORIZON) return "11:59 PM";
@@ -42,8 +42,8 @@ export const militaryTimeToMinutes = (time: string): number => {
 export const formatMinutes = (totalMinutes: number): string => {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
-  const hourWord = hours !== 1 ? " hours" : " hour";
-  const minuteWord = minutes !== 1 ? " minutes" : " minute";
+  const hourWord = " h";
+  const minuteWord = " min";
   const parts: string[] = [];
 
   if (hours > 0) parts.push(`${hours}${hourWord}`);
@@ -61,8 +61,13 @@ export const durationToMinutes = (duration: string): number => {
     minute = +m;
   } else {
     const timeUnit = parts[1];
-    if (timeUnit.startsWith("hour")) hour = +parts[0];
+    if (timeUnit.startsWith("h")) hour = +parts[0];
     else minute = +parts[0];
   }
   return +hour * 60 + +minute;
+};
+
+export const snapToNearestLaterQuarterHour = (minutes: number): number => {
+  const remainder = minutes % TIME_GRANULARITY;
+  return minutes + TIME_GRANULARITY - remainder;
 };

@@ -12,7 +12,7 @@ export function Cell({ quarter, hour, id }: DayCellProps) {
     id,
   });
   const style = {
-    opacity: isOver ? 1 : 0.5,
+    opacity: !isOver ? 1 : 0.5,
   };
 
   return (

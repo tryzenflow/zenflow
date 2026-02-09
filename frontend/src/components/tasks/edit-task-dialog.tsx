@@ -1,6 +1,7 @@
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -10,7 +11,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getData, patchData, postData } from "../../api";
 import { Category, Task } from "../../types/tasks";
-import { generateRRule, parseRRule, TaskFormValues } from "../../utils/tasks";
+import { generateRRule, parseRRule } from "../../utils/tasks";
 import { TaskForm } from "./form/task-form";
 import { useFilesTracker } from "../../hooks/use-files-tracker";
 
@@ -45,7 +46,6 @@ export function EditTaskDialog({
   updateSchedule,
 }: EditTaskDialogProps) {
   const [loading, setLoading] = useState(false);
-  const [tasks, setTasks] = useState<Task[]>([]);
   const [task, setTask] = useState<Task | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const { newUploadsRef } = useFilesTracker();
@@ -97,7 +97,7 @@ export function EditTaskDialog({
     form.reset(fields);
   }, [task, form, selectedDate]);
 
-  async function onSubmit(values: TaskFormValues) {
+  async function onSubmit(values: EditTaskFormValues) {
     setLoading(true);
     const deadlineDate = values.deadlineDate || undefined;
     const deadlineTime = values.deadlineTime || undefined;
@@ -109,7 +109,6 @@ export function EditTaskDialog({
           note: values.note,
           categoryId: values.categoryId,
           focus: values.energy,
-          duration: values.duration,
           deadlineDate,
           deadlineTime,
           rrule: values.isRecurring ? generateRRule(values) : undefined,
@@ -150,12 +149,14 @@ export function EditTaskDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Edit task</DialogTitle>
+          <DialogDescription>
+            Some changes will only be applied when you start fresh.
+          </DialogDescription>
         </DialogHeader>
         <TaskForm
           form={form as any}
           onSubmit={onSubmit}
           loading={loading}
-          tasks={tasks.filter((t) => t.id !== taskId)}
           categories={categories}
           onCancel={handleClose}
           newUploadsRef={newUploadsRef}

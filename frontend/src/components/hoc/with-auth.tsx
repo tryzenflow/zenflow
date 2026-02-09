@@ -1,6 +1,5 @@
-import { getData } from "@/api";
+import { me } from "@/api/auth";
 import { useUserStore } from "@/hooks/use-user-store";
-import { User } from "@/types/user";
 import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -12,10 +11,10 @@ export function WithAuth({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user && !loading) {
       setLoading(true);
-      getData<{ data: User }>("/auth/me")
+      me()
         .then((data) => {
           setLoading(false);
-          setUser(data.data);
+          setUser(data);
         })
         .catch(() => {
           navigate(`/login?callback=${location.pathname}`);

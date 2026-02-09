@@ -1,15 +1,16 @@
-import { ScheduledBlock } from "@/types/schedule";
+import { Event } from "@/types/schedule";
 import { DndContext, DragEndEvent } from "@dnd-kit/core";
 import { DayGrid } from "./day-grid";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { startOfDay } from "date-fns";
 
 interface DayViewProps {
-  events: ScheduledBlock[];
-  setEvents: React.Dispatch<React.SetStateAction<ScheduledBlock[]>>;
+  events: Event[];
+  setEvents: React.Dispatch<React.SetStateAction<Event[]>>;
+  date: Date;
 }
 
-export function DayView({ events, setEvents }: DayViewProps) {
+export function DayView({ events, setEvents, date }: DayViewProps) {
   function onDragEnd({ over, active }: DragEndEvent) {
     if (!over) return;
     const activeId = active.id.toString();
@@ -36,7 +37,7 @@ export function DayView({ events, setEvents }: DayViewProps) {
 
   return (
     <DndContext modifiers={[restrictToVerticalAxis]} onDragEnd={onDragEnd}>
-      <DayGrid events={events} />
+      <DayGrid events={events} date={date} />
     </DndContext>
   );
 }

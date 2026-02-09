@@ -1,7 +1,7 @@
 import { format, isToday } from "date-fns";
 import { Cell } from "./day-cell";
 import { TIME_GRANULARITY } from "@/utils/constants";
-import { ScheduledBlock } from "@/types/schedule";
+import { Event } from "@/types/schedule";
 import { ScheduledBlockItem } from "./scheduled-block-item";
 import { getOverlapSpacing } from "@/utils/overlap";
 
@@ -17,7 +17,7 @@ export const WeekGrid = ({
   events,
   weekDates,
 }: {
-  events: ScheduledBlock[];
+  events: Event[];
   weekDates: Date[];
 }) => {
   const spacings = getOverlapSpacing(events);

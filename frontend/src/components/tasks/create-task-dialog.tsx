@@ -12,20 +12,26 @@ import { toast } from "sonner";
 import { getData, postData } from "../../api";
 import { useFilesTracker } from "../../hooks/use-files-tracker";
 import { useUserStore } from "../../hooks/use-user-store";
-import { Category, Task, TaskResponse } from "../../types/tasks";
+import { Category, Scale, Task } from "../../types/tasks";
 import { generateRRule, TaskFormValues } from "../../utils/tasks";
 import { TaskForm } from "./form/task-form";
-import { PlusIcon } from "lucide-react";
+import { Plus } from "lucide-react";
+import { createTask } from "@/api/tasks";
+import { format, isToday } from "date-fns";
+import { fromZonedTime } from "date-fns-tz";
+import { snapToNearestLaterQuarterHour } from "@/utils/time";
 
 export function CreateTaskDialog({
-  addTask,
+  schedule,
+  scheduleDate,
+  onScheduleDateChange,
 }: {
-  addTask: (task: Task) => Promise<void>;
-  selectedDate: Date;
+  schedule: () => Promise<void>;
+  scheduleDate: Date;
+  onScheduleDateChange: (date?: Date) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [tasks, setTasks] = useState<Task[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const user = useUserStore((state) => state.user);
   const form = useTaskForm({
@@ -44,6 +50,17 @@ export function CreateTaskDialog({
       bydayMonth: "MO",
       monthlyMode: "on",
       yearlyMode: "on",
+      isFixed: false,
+      fixedStart: isToday(scheduleDate)
+        ? snapToNearestLaterQuarterHour(
+            scheduleDate.getHours() * 60 + scheduleDate.getMinutes(),
+          )
+        : 7 * 60,
+      fixedEnd: isToday(scheduleDate)
+        ? snapToNearestLaterQuarterHour(
+            scheduleDate.getHours() * 60 + scheduleDate.getMinutes(),
+          ) + 60
+        : 8 * 60,
       isRecurring: false,
       month: 1,
       endMode: "never",
@@ -73,20 +90,29 @@ export function CreateTaskDialog({
     const deadlineDate = values.deadlineDate || undefined;
     const deadlineTime = values.deadlineTime || undefined;
     const removed = removedFileIds.current;
+    const deadline = deadlineDate
+      ? fromZonedTime(
+          `${deadlineDate}T${deadlineTime ?? "23:59"}:00`,
+          user.timezone,
+        ).toISOString()
+      : undefined;
 
     try {
       if (removed.length > 0) await postData("/files/remove", { ids: removed });
-      const response = await postData<object, TaskResponse>("/tasks", {
+      await createTask({
         title: values.title,
         note: values.note,
         categoryId: values.categoryId,
-        focus: values.energy,
+        energy: values.energy as Scale,
+        scheduleDate: format(scheduleDate, "yyyy-MM-dd"),
         duration: values.duration,
-        deadlineDate,
-        deadlineTime,
+        deadline,
+        fixedWindow: values.isFixed
+          ? { start: values.fixedStart, end: values.fixedEnd }
+          : undefined,
         rrule: values.isRecurring ? generateRRule(values) : undefined,
       });
-      await addTask(response.data);
+      await schedule();
       form.reset();
       toast.success("Task created successfully 🎉");
       setOpen(false);
@@ -119,9 +145,9 @@ export function CreateTaskDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline">
-          <PlusIcon className="size-4" />
-          Task
+        <Button size="sm">
+          <Plus className="size-4" />
+          <span className="sr-only sm:not-sr-only">New task</span>
         </Button>
       </DialogTrigger>
       <DialogContent>
@@ -133,9 +159,10 @@ export function CreateTaskDialog({
           onSubmit={onSubmit}
           newUploadsRef={newUploadsRef}
           loading={loading}
-          tasks={tasks}
           categories={categories}
           onCancel={handleClose}
+          scheduleDate={scheduleDate}
+          onScheduleDateChange={onScheduleDateChange}
         />
       </DialogContent>
     </Dialog>
