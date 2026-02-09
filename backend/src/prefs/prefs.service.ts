@@ -10,7 +10,6 @@ import { PrismaService } from "../prisma/prisma.service";
 import { Prisma } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { Transaction } from "src/common/types";
-import { Cron, CronExpression } from "@nestjs/schedule";
 
 @Injectable()
 export class UserPreferencesService {
@@ -27,13 +26,13 @@ export class UserPreferencesService {
           data: {
             userId,
             day: dto.day,
-            minGapBetweenTasks: dto.minGapBetweenTasks,
-            energyBlocks: {
+            breakMinutes: dto.breakMinutes,
+            energyZones: {
               createMany: {
-                data: dto.energyBlocks.map(({ start, end, energy }) => ({
+                data: dto.energyZones.map(({ start, end, level }) => ({
                   start,
                   end,
-                  energy,
+                  level,
                 })),
               },
             },
@@ -60,12 +59,11 @@ export class UserPreferencesService {
     const userPreference = await this.prisma.userPreference.findUnique({
       where: { userId_day: { userId, day: dayOfWeek } },
       include: {
-        energyBlocks: {
+        energyZones: {
           select: {
             start: true,
             end: true,
-            confidence: true,
-            energy: true,
+            level: true,
             id: true,
           },
           orderBy: { start: "asc" },
@@ -79,48 +77,33 @@ export class UserPreferencesService {
   async update(
     dayOfWeek: number,
     userId: string,
-    { minGapBetweenTasks, energyBlocks }: UpdateUserPreferenceDto,
+    { breakMinutes, energyZones }: UpdateUserPreferenceDto,
     tx?: Transaction,
   ) {
     const updated = await (tx ?? this.prisma).userPreference.update({
       where: { userId_day: { userId, day: dayOfWeek } },
       data: {
-        minGapBetweenTasks,
-        energyBlocks: energyBlocks
+        breakMinutes,
+        energyZones: energyZones
           ? {
               deleteMany: {},
               createMany: {
-                data: energyBlocks.map(({ start, end, energy }) => ({
+                data: energyZones.map(({ start, end, level }) => ({
                   start,
                   end,
-                  energy,
+                  level,
                 })),
               },
             }
           : undefined,
       },
       include: {
-        energyBlocks: {
-          select: { start: true, end: true, energy: true, id: true },
+        energyZones: {
+          select: { start: true, end: true, level: true, id: true },
           orderBy: { start: "asc" },
         },
       },
     });
     return updated;
-  }
-
-  @Cron(CronExpression.EVERY_DAY_AT_10AM)
-  async decayEnergy() {
-    await this.prisma.energyBlock.updateMany({
-      data: {
-        energy: {
-          // pull gently toward neutral
-          multiply: 0.98,
-        },
-        confidence: {
-          multiply: 0.95,
-        },
-      },
-    });
   }
 }

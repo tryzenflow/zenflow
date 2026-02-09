@@ -1,10 +1,12 @@
 import {
+  IsDateString,
   IsDivisibleBy,
   IsInt,
   IsISO8601,
   IsOptional,
   IsString,
   Max,
+  MaxLength,
   Min,
   ValidateIf,
 } from "class-validator";
@@ -15,6 +17,10 @@ import { ValidFixedWindow } from "../validators/fixed-window.decorator";
 
 export class CreateTaskDto {
   @IsString() title: string;
+
+  @IsDateString()
+  @MaxLength(10)
+  scheduleDate: string;
 
   @IsOptional()
   @IsRRule({ message: "Invalid RRULE: must follow RFC 5545 format" })

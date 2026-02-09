@@ -12,18 +12,22 @@ import { PostgresErrorCode } from "../prisma/error-codes";
 import { DateRangeDto } from "../common/dto/date-range.dto";
 import { fromZonedTime } from "date-fns-tz";
 import { filterRecurringTasks } from "./utils/filter-recurring-tasks";
+import { addMinutes } from "date-fns";
 
 @Injectable()
 export class TasksService {
   constructor(private prisma: PrismaService) {}
 
   async create(
-    { rrule, fixedWindow, ...createTaskDto }: CreateTaskDto,
-    userId: string
+    { rrule, fixedWindow, scheduleDate, ...createTaskDto }: CreateTaskDto,
+    userId: string,
+    timezone: string,
   ) {
     try {
+      const taskId = crypto.randomUUID();
       const newTask = await this.prisma.task.create({
         data: {
+          id: taskId,
           ...createTaskDto,
           rrule,
           fixedWindow: fixedWindow
@@ -32,6 +36,15 @@ export class TasksService {
               }
             : undefined,
           userId,
+          events: {
+            create: scheduleDate
+              ? {
+                  id: `${scheduleDate}/0/${taskId}`,
+                  splitIndex: 0,
+                  start: fromZonedTime(`${scheduleDate}T23:59:59`, timezone),
+                }
+              : undefined,
+          },
         },
         include: {
           fixedWindow: { select: { start: true, end: true } },
@@ -43,7 +56,7 @@ export class TasksService {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === PostgresErrorCode.ForeignViolation)
           throw new BadRequestException(
-            "Cannot create task because its associated user, category may not exist"
+            "Cannot create task because its associated user, category may not exist",
           );
       }
 
@@ -55,29 +68,44 @@ export class TasksService {
   }
 
   async findToSchedule(
-    taskIds: string[],
     userId: string,
-    date: string,
     timezone: string,
-    includeScheduledBlocks = false
+    scheduleDate: string,
+    keepManual: boolean,
+    minTime: number,
   ) {
-    const startDate = fromZonedTime(new Date(`${date}T00:00:00`), timezone);
-    const endDate = fromZonedTime(new Date(`${date}T23:59:59`), timezone);
+    const startDate = fromZonedTime(
+      addMinutes(new Date(`${scheduleDate}T00:00:00`), minTime),
+      timezone,
+    );
+    const endDate = fromZonedTime(
+      new Date(`${scheduleDate}T23:59:59`),
+      timezone,
+    );
+    console.log(startDate, endDate);
     const tasks = await this.prisma.task.findMany({
       where: {
         userId,
-        OR: [{ id: { in: taskIds } }, { rrule: { not: null } }],
-      },
-      include: {
-        fixedWindow: true,
-        scheduledBlocks: includeScheduledBlocks
-          ? {
-              where: {
+        OR: [
+          {
+            events: {
+              some: {
                 start: {
                   gte: startDate,
                   lte: endDate,
                 },
-                end: {
+              },
+            },
+          },
+          { rrule: { not: null } },
+        ],
+      },
+      include: {
+        fixedWindow: true,
+        events: keepManual
+          ? {
+              where: {
+                start: {
                   gte: startDate,
                   lte: endDate,
                 },
@@ -92,98 +120,38 @@ export class TasksService {
       startDate,
       endDate,
       false,
-      timezone
+      timezone,
     ) as typeof tasks;
   }
 
-  async find(userId: string) {
+  async findRecurringTasks(
+    userId: string,
+    timezone: string,
+    dateRangeDto: DateRangeDto,
+  ) {
+    const startDate = fromZonedTime(`${dateRangeDto.start}T00:00:00`, timezone);
+    const endDate = fromZonedTime(`${dateRangeDto.end}T23:59:59`, timezone);
+
     const tasks = await this.prisma.task.findMany({
-      where: { userId },
-      select: {
-        id: true,
-        title: true,
-        deadline: true,
-        createdAt: true,
-        duration: true,
-        energy: true,
-        fixedWindow: true,
-        category: true,
-        rrule: true,
-        user: { select: { id: true, name: true } },
+      where: { userId, rrule: { not: null } },
+      include: {
+        fixedWindow: { select: { start: true, end: true } },
+        category: { select: { id: true, name: true } },
       },
     });
 
-    return tasks;
+    return filterRecurringTasks(
+      tasks,
+      startDate,
+      endDate,
+      false,
+      timezone,
+    ) as typeof tasks;
   }
 
-  async findUnscheduled(
-    userId: string,
-    { start, end }: DateRangeDto,
-    timezone: string
-  ) {
-    const startDate = fromZonedTime(new Date(`${start}T00:00:00`), timezone);
-    const endDate = fromZonedTime(new Date(`${end}T23:59:59`), timezone);
-
-    const tasks = await this.prisma.task.findMany({
-      where: {
-        userId,
-        OR: [
-          { rrule: { not: null } },
-          {
-            scheduledBlocks: {
-              none: {
-                start: {
-                  gte: startDate,
-                  lte: endDate,
-                },
-                end: {
-                  gte: startDate,
-                  lte: endDate,
-                },
-              },
-            },
-          },
-        ],
-      },
-      select: {
-        id: true,
-        title: true,
-        deadline: true,
-        createdAt: true,
-        duration: true,
-        energy: true,
-        fixedWindow: true,
-        category: true,
-        rrule: true,
-        user: { select: { id: true, name: true } },
-      },
-    });
-
-    return filterRecurringTasks(tasks, startDate, endDate, true, timezone);
-  }
-
-  async findById(
-    id: string,
-    userId: string,
-    { start, end }: DateRangeDto,
-    timezone: string
-  ) {
+  async findById(id: string, userId: string) {
     const task = await this.prisma.task.findUnique({
       where: { id, userId },
-      include: {
-        scheduledBlocks: {
-          where: {
-            start: {
-              gte: fromZonedTime(new Date(`${start}T00:00:00`), timezone),
-              lte: fromZonedTime(new Date(`${end}T23:59:59`), timezone),
-            },
-            end: {
-              gte: fromZonedTime(new Date(`${start}T00:00:00`), timezone),
-              lte: fromZonedTime(new Date(`${end}T23:59:59`), timezone),
-            },
-          },
-        },
-      },
     });
 
     return task;
@@ -191,53 +159,64 @@ export class TasksService {
 
   async update(
     id: string,
-    { categoryId, fixedWindow, rrule, ...updateTaskDto }: UpdateTaskDto,
-    userId: string
+    { categoryId, fixedWindow, ...updateTaskDto }: UpdateTaskDto,
+    userId: string,
+    timezone: string,
   ) {
-    try {
-      const updated = await this.prisma.task.update({
-        where: { id, userId },
-        data: {
-          ...updateTaskDto,
-          rrule,
-          fixedWindow: {
-            delete: fixedWindow === null ? {} : undefined,
-            create: fixedWindow
-              ? { start: fixedWindow.start, end: fixedWindow.end }
+    await this.prisma.$transaction(async (tx) => {
+      try {
+        const updated = await tx.task.update({
+          where: { id, userId },
+          data: {
+            ...updateTaskDto,
+            fixedWindow: {
+              delete: fixedWindow === null ? {} : undefined,
+              create: fixedWindow
+                ? { start: fixedWindow.start, end: fixedWindow.end }
+                : undefined,
+            },
+            category: categoryId
+              ? { connect: { id: categoryId, userId } }
               : undefined,
           },
-          category: categoryId
-            ? { connect: { id: categoryId, userId } }
-            : undefined,
-        },
-        include: {
-          scheduledBlocks: {
-            select: { id: true, start: true, end: true },
-            orderBy: { start: "asc" },
+          include: {
+            events: {
+              select: { id: true, start: true, end: true },
+              orderBy: { start: "asc" },
+            },
+            fixedWindow: { select: { start: true, end: true } },
           },
-          fixedWindow: { select: { start: true, end: true } },
-        },
-      });
-      return updated;
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === PostgresErrorCode.RecordNotFound)
-          throw new NotFoundException({
-            success: false,
-            message: `Cannot find task with id ${id}`,
+        });
+        if (updateTaskDto.rrule) {
+          await tx.event.deleteMany({
+            where: {
+              taskId: id,
+              isDirty: false,
+              start: { gte: fromZonedTime(new Date(), timezone) },
+            },
           });
-        if (error.code === PostgresErrorCode.ForeignViolation)
-          throw new BadRequestException({
-            success: false,
-            message:
-              "Cannot update task because its associated category or prerequisites may not exist",
-          });
+        }
+        return updated;
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError) {
+          if (error.code === PostgresErrorCode.RecordNotFound)
+            throw new NotFoundException({
+              success: false,
+              message: `Cannot find task with id ${id}`,
+            });
+          if (error.code === PostgresErrorCode.ForeignViolation)
+            throw new BadRequestException({
+              success: false,
+              message:
+                "Cannot update task because its associated category or prerequisites may not exist",
+            });
+        }
+        throw new InternalServerErrorException({
+          success: false,
+          message: "Something went wrong when updating a task",
+        });
       }
-      throw new InternalServerErrorException({
-        success: false,
-        message: "Something went wrong when updating a task",
-      });
-    }
+    });
   }
 
   async remove(id: string, userId: string) {

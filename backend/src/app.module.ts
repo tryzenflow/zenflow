@@ -18,7 +18,6 @@ import { SchedulesModule } from "./schedules/schedules.module";
 import { UserPreferencesModule } from "./prefs/prefs.module";
 import { CategoriesModule } from "./categories/categories.module";
 import { FilesModule } from "./files/files.module";
-import { EnergyLearningModule } from "./energy-learning/energy-learning.module";
 import { ScheduleModule } from "@nestjs/schedule";
 
 @Module({
@@ -41,7 +40,7 @@ import { ScheduleModule } from "@nestjs/schedule";
       isGlobal: true,
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: async (configService: ConfigService) => {
+      useFactory: (configService: ConfigService) => {
         return {
           stores: [
             new Keyv({
@@ -52,7 +51,6 @@ import { ScheduleModule } from "@nestjs/schedule";
         };
       },
     }),
-    EnergyLearningModule,
     UsersModule,
     PrismaModule,
     AuthModule,

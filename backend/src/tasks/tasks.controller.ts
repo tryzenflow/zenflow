@@ -4,10 +4,9 @@ import {
   Post,
   Body,
   Param,
-  Delete,
   UseGuards,
   Query,
-  Put,
+  Patch,
 } from "@nestjs/common";
 import { TasksService } from "./tasks.service";
 import { CreateTaskDto } from "./dto/create-task.dto";
@@ -27,7 +26,11 @@ export class TasksController {
     @Body() createTaskDto: CreateTaskDto,
     @CurrentUser() user: User,
   ) {
-    const newTask = await this.tasksService.create(createTaskDto, user.id);
+    const newTask = await this.tasksService.create(
+      createTaskDto,
+      user.id,
+      user.timezone,
+    );
     return {
       success: true,
       message: "Create new task successfully",
@@ -35,62 +38,45 @@ export class TasksController {
     };
   }
 
-  @Get()
-  async findAll(@CurrentUser() user: User) {
-    const tasks = await this.tasksService.find(user.id);
-    return {
-      success: true,
-      message: `Found ${tasks.length} tasks`,
-      data: tasks,
-    };
-  }
-
-  @Get("/schedule/none")
-  async findUnscheduled(@CurrentUser() user: User, @Query() dto: DateRangeDto) {
-    const tasks = await this.tasksService.findUnscheduled(
-      user.id,
-      dto,
-      user.timezone,
-    );
-    return {
-      success: true,
-      message: `Found ${tasks.length} unscheduled tasks between ${dto.start} and ${dto.end}`,
-      data: tasks,
-    };
-  }
-
-  @Get(":id")
-  async findOne(
-    @Param("id") id: string,
-    @Query() query: DateRangeDto,
+  @Get("recurring")
+  async findRecurringTasks(
     @CurrentUser() user: User,
+    @Query() dateRangeDto: DateRangeDto,
   ) {
-    const task = await this.tasksService.findById(
-      id,
+    const tasks = await this.tasksService.findRecurringTasks(
       user.id,
-      query,
       user.timezone,
+      dateRangeDto,
     );
+    return {
+      success: true,
+      message: `Found ${tasks.length} recurring tasks`,
+      data: tasks,
+    };
+  }
+
+  @Get(":id/details")
+  async findOne(@Param("id") id: string, @CurrentUser() user: User) {
+    const task = await this.tasksService.findById(id, user.id);
     return { success: true, message: `Found one task`, data: task };
   }
 
-  @Put(":id")
+  @Patch(":id")
   async update(
     @Param("id") id: string,
     @Body() updateTaskDto: UpdateTaskDto,
     @CurrentUser() user: User,
   ) {
-    const updated = await this.tasksService.update(id, updateTaskDto, user.id);
+    const updated = await this.tasksService.update(
+      id,
+      updateTaskDto,
+      user.id,
+      user.timezone,
+    );
     return {
       success: true,
       data: updated,
       message: `Sucessfully updated task`,
     };
-  }
-
-  @Delete(":id")
-  async remove(@Param("id") id: string, @CurrentUser() user: User) {
-    await this.tasksService.remove(id, user.id);
-    return { success: true, message: `Successfully delete task` };
   }
 }

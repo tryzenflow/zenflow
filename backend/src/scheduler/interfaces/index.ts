@@ -8,28 +8,30 @@ export interface Task {
   energy: number;
   maxSplits: number;
   categoryId?: string;
-  scheduledBlocks?: ScheduledBlock[];
+  events?: Event[];
   fixedWindow?: Interval;
 }
 
-export interface ScheduledBlock {
+export interface Event {
+  id: string;
   taskId: string;
   splitIndex: number;
   start: number;
-  end: number;
+  end: number | null;
 }
 
 export interface ScheduleRequest {
+  minTime: number;
   userPreference: {
-    energyBlocks: {
-      energy: number;
+    energyZones: {
+      level: number;
       interval: Interval;
     }[];
-    minGapBetweenTasks: number;
+    breakMinutes: number;
   };
   tasks: Task[];
 }
 
 export interface ScheduleResponse {
-  scheduledBlocks: ScheduledBlock[];
+  events: Event[];
 }

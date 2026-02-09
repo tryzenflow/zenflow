@@ -1,24 +1,27 @@
 import {
-  ArrayMinSize,
-  IsArray,
   IsBoolean,
   IsDateString,
+  IsInt,
   IsOptional,
-  IsUUID,
+  Max,
   MaxLength,
+  Min,
 } from "class-validator";
+import { DAILY_HORIZON } from "src/common/constants";
 
 export class ScheduleTasksDto {
+  @IsOptional()
   @IsDateString()
   @MaxLength(10)
   scheduleDate: string;
 
-  @IsArray()
-  @ArrayMinSize(1)
-  @IsUUID("4", { each: true })
-  taskIds: string[];
-
   @IsOptional()
   @IsBoolean()
   keepManual: boolean = true;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(DAILY_HORIZON)
+  minTime: number = 0;
 }

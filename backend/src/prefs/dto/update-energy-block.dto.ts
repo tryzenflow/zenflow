@@ -1,7 +1,7 @@
 import { IsNotEmpty } from "class-validator";
-import { EnergyBlockDto } from "./energy-block.dto";
+import { EnergyZoneDto } from "./energy-block.dto";
 
-export class UpdateEnergyBlockDto extends EnergyBlockDto {
+export class UpdateEnergyZoneDto extends EnergyZoneDto {
   @IsNotEmpty()
   id: string;
 }

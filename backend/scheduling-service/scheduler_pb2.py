@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0fscheduler.proto\x12\tscheduler\"&\n\x08Interval\x12\r\n\x05start\x18\x01 \x01(\x05\x12\x0b\n\x03\x65nd\x18\x02 \x01(\x05\"\x8e\x02\n\x04Task\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05title\x18\x02 \x01(\t\x12\x10\n\x08\x64uration\x18\x03 \x01(\x05\x12\x12\n\nmax_splits\x18\x05 \x01(\x05\x12\x10\n\x08\x64\x65\x61\x64line\x18\x06 \x01(\x05\x12\x0e\n\x06\x65nergy\x18\x07 \x01(\x05\x12\x13\n\x0b\x63\x61tegory_id\x18\x08 \x01(\t\x12.\n\x11preferred_windows\x18\t \x03(\x0b\x32\x13.scheduler.Interval\x12\x33\n\x10scheduled_blocks\x18\n \x03(\x0b\x32\x19.scheduler.ScheduledBlock\x12)\n\x0c\x66ixed_window\x18\x0b \x01(\x0b\x32\x13.scheduler.Interval\"R\n\x0eScheduledBlock\x12\x0f\n\x07task_id\x18\x01 \x01(\t\x12\x13\n\x0bsplit_index\x18\x02 \x01(\x05\x12\r\n\x05start\x18\x03 \x01(\x05\x12\x0b\n\x03\x65nd\x18\x04 \x01(\x05\"D\n\x0b\x45nergyBlock\x12\x0e\n\x06\x65nergy\x18\x01 \x01(\x05\x12%\n\x08interval\x18\x02 \x01(\x0b\x32\x13.scheduler.Interval\"^\n\x0eUserPreference\x12\x1d\n\x15min_gap_between_tasks\x18\x02 \x01(\x05\x12-\n\renergy_blocks\x18\x03 \x03(\x0b\x32\x16.scheduler.EnergyBlock\"e\n\x0fScheduleRequest\x12\x1e\n\x05tasks\x18\x01 \x03(\x0b\x32\x0f.scheduler.Task\x12\x32\n\x0fuser_preference\x18\x02 \x01(\x0b\x32\x19.scheduler.UserPreference\"G\n\x10ScheduleResponse\x12\x33\n\x10scheduled_blocks\x18\x01 \x03(\x0b\x32\x19.scheduler.ScheduledBlock2W\n\x10SchedulerService\x12\x43\n\x08Schedule\x12\x1a.scheduler.ScheduleRequest\x1a\x1b.scheduler.ScheduleResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0fscheduler.proto\x12\tscheduler\"&\n\x08Interval\x12\r\n\x05start\x18\x01 \x01(\x05\x12\x0b\n\x03\x65nd\x18\x02 \x01(\x05\"\xcb\x01\n\x04Task\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05title\x18\x02 \x01(\t\x12\x10\n\x08\x64uration\x18\x03 \x01(\x05\x12\x12\n\nmax_splits\x18\x05 \x01(\x05\x12\x10\n\x08\x64\x65\x61\x64line\x18\x06 \x01(\x05\x12\x0e\n\x06\x65nergy\x18\x07 \x01(\x05\x12\x13\n\x0b\x63\x61tegory_id\x18\x08 \x01(\t\x12 \n\x06\x65vents\x18\n \x03(\x0b\x32\x10.scheduler.Event\x12)\n\x0c\x66ixed_window\x18\x0b \x01(\x0b\x32\x13.scheduler.Interval\"I\n\x05\x45vent\x12\x0f\n\x07task_id\x18\x01 \x01(\t\x12\x13\n\x0bsplit_index\x18\x02 \x01(\x05\x12\r\n\x05start\x18\x03 \x01(\x05\x12\x0b\n\x03\x65nd\x18\x04 \x01(\x05\"B\n\nEnergyZone\x12\r\n\x05level\x18\x01 \x01(\x05\x12%\n\x08interval\x18\x02 \x01(\x0b\x32\x13.scheduler.Interval\"T\n\x0eUserPreference\x12\x15\n\rbreak_minutes\x18\x02 \x01(\x05\x12+\n\x0c\x65nergy_zones\x18\x03 \x03(\x0b\x32\x15.scheduler.EnergyZone\"w\n\x0fScheduleRequest\x12\x1e\n\x05tasks\x18\x01 \x03(\x0b\x32\x0f.scheduler.Task\x12\x10\n\x08min_time\x18\x02 \x01(\x05\x12\x32\n\x0fuser_preference\x18\x03 \x01(\x0b\x32\x19.scheduler.UserPreference\"4\n\x10ScheduleResponse\x12 \n\x06\x65vents\x18\x01 \x03(\x0b\x32\x10.scheduler.Event2W\n\x10SchedulerService\x12\x43\n\x08Schedule\x12\x1a.scheduler.ScheduleRequest\x1a\x1b.scheduler.ScheduleResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,17 +34,17 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_INTERVAL']._serialized_start=30
   _globals['_INTERVAL']._serialized_end=68
   _globals['_TASK']._serialized_start=71
-  _globals['_TASK']._serialized_end=341
-  _globals['_SCHEDULEDBLOCK']._serialized_start=343
-  _globals['_SCHEDULEDBLOCK']._serialized_end=425
-  _globals['_ENERGYBLOCK']._serialized_start=427
-  _globals['_ENERGYBLOCK']._serialized_end=495
-  _globals['_USERPREFERENCE']._serialized_start=497
-  _globals['_USERPREFERENCE']._serialized_end=591
-  _globals['_SCHEDULEREQUEST']._serialized_start=593
-  _globals['_SCHEDULEREQUEST']._serialized_end=694
-  _globals['_SCHEDULERESPONSE']._serialized_start=696
-  _globals['_SCHEDULERESPONSE']._serialized_end=767
-  _globals['_SCHEDULERSERVICE']._serialized_start=769
-  _globals['_SCHEDULERSERVICE']._serialized_end=856
+  _globals['_TASK']._serialized_end=274
+  _globals['_EVENT']._serialized_start=276
+  _globals['_EVENT']._serialized_end=349
+  _globals['_ENERGYZONE']._serialized_start=351
+  _globals['_ENERGYZONE']._serialized_end=417
+  _globals['_USERPREFERENCE']._serialized_start=419
+  _globals['_USERPREFERENCE']._serialized_end=503
+  _globals['_SCHEDULEREQUEST']._serialized_start=505
+  _globals['_SCHEDULEREQUEST']._serialized_end=624
+  _globals['_SCHEDULERESPONSE']._serialized_start=626
+  _globals['_SCHEDULERESPONSE']._serialized_end=678
+  _globals['_SCHEDULERSERVICE']._serialized_start=680
+  _globals['_SCHEDULERSERVICE']._serialized_end=767
 # @@protoc_insertion_point(module_scope)

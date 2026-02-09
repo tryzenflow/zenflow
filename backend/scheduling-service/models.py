@@ -6,22 +6,22 @@ from utils import minutes_to_hhmm
 TIME_GRANULARITY = 15
 
 
-class EnergyBlock:
-    def __init__(self, start: int, end: int, energy: int) -> None:
+class EnergyZone:
+    def __init__(self, start: int, end: int, level: int) -> None:
         assert start < end
         self.start = start
         self.end = end
-        self.energy = energy  # 1 (low) → 3 (high)
+        self.level = level  # 0 (unavailable) → 3 (high)
 
     def __repr__(self) -> str:
         formatted_start = minutes_to_hhmm(self.start)
         formatted_end = minutes_to_hhmm(self.end)
-        return f"EnergyBlock(start={formatted_start}, end={formatted_end}, energy={self.energy})"
+        return f"EnergyBlock(start={formatted_start}, end={formatted_end}, level={self.level})"
 
 
 class Interval:
     def __init__(self, start: int, end: int) -> None:
-        assert start < end
+        assert start < end, f"Start time must be before end time, got {start} >= {end}"
         self.start = start
         self.end = end
 
@@ -31,7 +31,7 @@ class Interval:
         return f"Interval(start={formatted_start}, end={formatted_end})"
 
 
-class ScheduledBlock:
+class Event:
     def __init__(
         self,
         start: int,
@@ -58,7 +58,7 @@ class Task:
         category: Optional[str] = None,
         id: Optional[str] = None,
         max_splits: Optional[int] = None,
-        scheduled_blocks: List[ScheduledBlock] = [],
+        events: List[Event] = [],
         fixed_window: Optional["Interval"] = None,  # hard time block
     ) -> None:
         assert duration % TIME_GRANULARITY == 0
@@ -71,7 +71,7 @@ class Task:
         self.category = category or "default"
 
         self.max_splits = max_splits or self._infer_max_splits()
-        self.scheduled_blocks = scheduled_blocks
+        self.scheduled_blocks = events
         self.fixed_window = fixed_window
 
     def _infer_max_splits(self) -> int:
@@ -93,11 +93,11 @@ class Task:
 class UserPreference:
     def __init__(
         self,
-        min_gap_between_tasks: int = 0,  # soft
-        energy_blocks: Optional[List[EnergyBlock]] = None,
+        break_minutes: int = 0,  # soft
+        energy_zones: Optional[List[EnergyZone]] = None,
     ) -> None:
-        self.min_gap_between_tasks = min_gap_between_tasks
-        self.energy_blocks = energy_blocks or []
+        self.break_minutes = break_minutes
+        self.energy_zones = energy_zones or []
 
     def __repr__(self) -> str:
-        return f"UserPreference(min_gap_between_tasks={self.min_gap_between_tasks}, energy_blocks={self.energy_blocks})"
+        return f"UserPreference(break_minutes={self.break_minutes}, energy_zones={self.energy_zones})"

@@ -14,7 +14,7 @@ model User {
   id        String   @id @default(uuid())
   name      String   @db.VarChar(30)
   email     String   @unique @db.VarChar(30)
-  timezone  String   @db.VarChar(50)
+  timezone  String   @default("UTC") @db.VarChar(50)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -37,9 +37,9 @@ model Task {
   userId     String
   categoryId String?
 
-  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category        Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  scheduledBlocks ScheduledBlock[]
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  events   Event[]
 
   fixedWindow TaskWindow?
 
@@ -58,13 +58,15 @@ model TaskWindow {
   fixedTask   Task?   @relation(fields: [fixedTaskId], references: [id], onDelete: Cascade)
 }
 
-model ScheduledBlock {
-  id         String   @id
+model Event {
+  id         String    @id
   start      DateTime
-  end        DateTime
-  splitIndex Int      @db.SmallInt
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  end        DateTime?
+  splitIndex Int       @db.SmallInt
+  completed  Boolean   @default(false)
+  isDirty    Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   taskId String
   task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
@@ -73,9 +75,9 @@ model ScheduledBlock {
 }
 
 model UserPreference {
-  id                 String @id @default(uuid())
-  minGapBetweenTasks Int    @default(0)
-  day                Int    @default(0) @db.SmallInt // 0=Sun, 1=Mon, ..., 6=Sat
+  id           String @id @default(uuid())
+  breakMinutes Int    @default(0)
+  day          Int    @default(0) @db.SmallInt // 0=Sun, 1=Mon, ..., 6=Sat
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -83,18 +85,17 @@ model UserPreference {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  energyBlocks EnergyBlock[]
+  energyZones EnergyZone[]
 
   @@unique([userId, day])
   @@index([userId, day])
 }
 
-model EnergyBlock {
-  id         String @id @default(uuid())
-  energy     Float // 1–3
-  confidence Float  @default(0.2) // 0-1
-  start      Int    @db.SmallInt
-  end        Int    @db.SmallInt
+model EnergyZone {
+  id    String @id @default(uuid())
+  level Int    @db.SmallInt
+  start Int    @db.SmallInt
+  end   Int    @db.SmallInt
 
   userPref         UserPreference @relation(fields: [userPreferenceId], references: [id])
   userPreferenceId String

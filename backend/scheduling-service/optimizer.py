@@ -75,7 +75,7 @@ def optimize_function(
         lower_energy_terms = []
         any_energy_terms = []
 
-        for block in pref.energy_blocks:
+        for block in pref.energy_zones:
             latest_start = model.NewIntVar(0, max_time, "")
             earliest_end = model.NewIntVar(0, max_time, "")
             overlap = model.NewIntVar(0, task.duration, "")
@@ -88,9 +88,9 @@ def optimize_function(
             model.AddMaxEquality(overlap, [diff, model.NewConstant(0)])
             any_energy_terms.append(overlap)
             # Only consider energy blocks matching task energy
-            if task.energy == block.energy:
+            if task.energy == block.level:
                 aligned_terms.append(overlap)
-            elif task.energy < block.energy:
+            elif task.energy < block.level:
                 lower_energy_terms.append(overlap)
 
         # aligned_sum = sum of all overlaps with matching energy blocks
@@ -191,8 +191,8 @@ def optimize_function(
             # Adjacent (soft)
             # ------------------------
             adjacent = model.NewBoolVar(f"adj_{i}_{j}")
-            model.Add(gap <= pref.min_gap_between_tasks).OnlyEnforceIf(adjacent)
-            model.Add(gap > pref.min_gap_between_tasks).OnlyEnforceIf(adjacent.Not())
+            model.Add(gap <= pref.break_minutes).OnlyEnforceIf(adjacent)
+            model.Add(gap > pref.break_minutes).OnlyEnforceIf(adjacent.Not())
             model.Add(adjacent == 0).OnlyEnforceIf(both.Not())
 
             # ------------------------
@@ -212,12 +212,12 @@ def optimize_function(
             # ------------------------
             # Soft min-gap violation
             # ------------------------
-            viol = model.NewIntVar(0, pref.min_gap_between_tasks, "")
-            model.Add(viol >= pref.min_gap_between_tasks - gap)
+            viol = model.NewIntVar(0, pref.break_minutes, "")
+            model.Add(viol >= pref.break_minutes - gap)
             model.Add(viol >= 0)
 
             gap_pen = model.NewIntVar(
-                0, pref.min_gap_between_tasks * min_gap_penalty_weight, ""
+                0, pref.break_minutes * min_gap_penalty_weight, ""
             )
             model.Add(gap_pen == viol * min_gap_penalty_weight)
             loss_terms.append(gap_pen)

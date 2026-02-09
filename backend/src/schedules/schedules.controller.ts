@@ -4,12 +4,13 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Put,
   Query,
   UseGuards,
 } from "@nestjs/common";
 import { DateRangeDto } from "../common/dto/date-range.dto";
-import { UpdateScheduledBlockDto } from "./dto/update-schedule.dto";
+import { UpdateEventDto } from "./dto/update-schedule.dto";
 import { SchedulesService } from "./schedules.service";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
@@ -20,10 +21,10 @@ import { type User } from "../../generated/prisma";
 export class SchedulesController {
   constructor(private readonly schedulesService: SchedulesService) {}
 
-  @Put(":id")
+  @Patch(":id")
   async update(
     @Param("id") id: string,
-    @Body() updateScheduleDto: UpdateScheduledBlockDto,
+    @Body() updateScheduleDto: UpdateEventDto,
     @CurrentUser() user: User,
   ) {
     const updated = await this.schedulesService.update(

@@ -1,7 +1,7 @@
 from models import (
-    EnergyBlock,
+    EnergyZone,
+    Event,
     Interval,
-    ScheduledBlock,
     Task,
     UserPreference,
 )
@@ -45,15 +45,15 @@ def energy_metrics(schedule, pref):
     weighted_mismatch = 0
 
     for task, _, interval in schedule:
-        for block in pref.energy_blocks:
+        for block in pref.energy_zones:
             ov = overlap(interval, Interval(block.start, block.end))
             if ov <= 0:
                 continue
-            if block.energy == task.energy:
+            if block.level == task.energy:
                 aligned += ov
             else:
                 mismatched += ov
-                weighted_mismatch += ov * abs(block.energy - task.energy)
+                weighted_mismatch += ov * abs(block.level - task.energy)
 
     return {
         "aligned": aligned,
@@ -114,12 +114,12 @@ def case_task_splitting_behavior():
     print("\nCASE: task splitting")
 
     pref = UserPreference(
-        energy_blocks=[
-            EnergyBlock(9 * 60, 11 * 60, energy=3),  # peak focus
-            EnergyBlock(11 * 60, 13 * 60, energy=2),  # steady
-            EnergyBlock(14 * 60, 17 * 60, energy=2),  # afternoon
+        energy_zones=[
+            EnergyZone(9 * 60, 11 * 60, level=3),  # peak focus
+            EnergyZone(11 * 60, 13 * 60, level=2),  # steady
+            EnergyZone(14 * 60, 17 * 60, level=2),  # afternoon
         ],
-        min_gap_between_tasks=15,
+        break_minutes=15,
     )
 
     tasks = [
@@ -192,11 +192,11 @@ def case_energy_alignment():
 
     # Simulated human energy curve for a workday
     pref = UserPreference(
-        energy_blocks=[
-            EnergyBlock(7 * 60, 9 * 60, energy=2),  # morning warm-up
-            EnergyBlock(9 * 60, 12 * 60, energy=3),  # peak focus
-            EnergyBlock(12 * 60, 14 * 60, energy=1),  # lunch slump
-            EnergyBlock(14 * 60, 17 * 60, energy=2),  # steady work
+        energy_zones=[
+            EnergyZone(7 * 60, 9 * 60, level=2),  # morning warm-up
+            EnergyZone(9 * 60, 12 * 60, level=3),  # peak focus
+            EnergyZone(12 * 60, 14 * 60, level=1),  # lunch slump
+            EnergyZone(14 * 60, 17 * 60, level=2),  # steady work
         ]
     )
 
@@ -251,8 +251,8 @@ def case_min_gap_only():
     print("\nCASE: SOFT min_gap_between_tasks (micro-task fatigue)")
 
     pref = UserPreference(
-        energy_blocks=[EnergyBlock(9 * 60, 17 * 60, 3)],
-        min_gap_between_tasks=15,  # coffee / mental reset
+        energy_zones=[EnergyZone(9 * 60, 17 * 60, 3)],
+        break_minutes=15,  # coffee / mental reset
     )
 
     tasks = [
@@ -286,7 +286,7 @@ def case_min_gap_only():
 def case_context_switch_only():
     print("\nCASE: context switching in a real workday")
 
-    pref = UserPreference(energy_blocks=[EnergyBlock(9 * 60, 17 * 60, 3)])
+    pref = UserPreference(energy_zones=[EnergyZone(9 * 60, 17 * 60, 3)])
 
     tasks = [
         # Calls (urgent, should cluster)
@@ -340,13 +340,13 @@ def case_context_switch_only():
 def case_stability_only():
     print("\nCASE: SOFT stability with competing tasks")
 
-    pref = UserPreference(energy_blocks=[EnergyBlock(9 * 60, 17 * 60, 3)])
+    pref = UserPreference(energy_zones=[EnergyZone(9 * 60, 17 * 60, 3)])
 
     stable_task = Task(
         "Weekly planning",
         60,
     )
-    stable_task.scheduled_blocks = [ScheduledBlock(start=10 * 60, end=11 * 60)]
+    stable_task.scheduled_blocks = [Event(start=10 * 60, end=11 * 60)]
 
     competing = [
         Task(
@@ -394,9 +394,9 @@ def case_fixed_task_with_flexible():
     ]
 
     pref = UserPreference(
-        energy_blocks=[
-            EnergyBlock(9 * 60, 12 * 60, energy=3),
-            EnergyBlock(13 * 60, 17 * 60, energy=2),
+        energy_zones=[
+            EnergyZone(9 * 60, 12 * 60, level=3),
+            EnergyZone(13 * 60, 17 * 60, level=2),
         ]
     )
 
@@ -412,11 +412,9 @@ def case_energy_deadline():
     print("\nCASE: deadline (today vs future) + energy alignment")
 
     pref = UserPreference(
-        energy_blocks=[
-            EnergyBlock(start=9 * 60, end=10 * 60, energy=3),  # morning high energy
-            EnergyBlock(
-                start=14 * 60, end=15 * 60, energy=2
-            ),  # afternoon medium energy
+        energy_zones=[
+            EnergyZone(start=9 * 60, end=10 * 60, level=3),  # morning high energy
+            EnergyZone(start=14 * 60, end=15 * 60, level=2),  # afternoon medium energy
         ]
     )
 
@@ -471,8 +469,8 @@ def case_energy_deadline():
     for t, _, block in schedule:
         overlaps = [
             max(0, min(block.end, b.end) - max(block.start, b.start))
-            for b in pref.energy_blocks
-            if b.energy == t.energy
+            for b in pref.energy_zones
+            if b.level == t.energy
         ]
         aligned_minutes = sum(overlaps)
 
@@ -504,16 +502,15 @@ def case_energy_multi_level_fallback():
     print("\nCASE: multi-level energy fallback (high → medium → low → outside)")
 
     pref = UserPreference(
-        energy_blocks=[
+        energy_zones=[
             # High energy (limited)
-            EnergyBlock(start=9 * 60, end=10 * 60, energy=3),  # 60
-            EnergyBlock(start=15 * 60, end=15 * 60 + 30, energy=3),  # 30
+            EnergyZone(start=9 * 60, end=10 * 60 + 30, level=3),
             # Medium energy
-            EnergyBlock(start=10 * 60, end=12 * 60, energy=2),  # 120
-            EnergyBlock(start=14 * 60, end=15 * 60, energy=2),  # 60
+            EnergyZone(start=11 * 60, end=12 * 60 + 30, level=2),
+            EnergyZone(start=14 * 60, end=16 * 60, level=2),
             # Low energy (large)
-            EnergyBlock(start=12 * 60, end=14 * 60, energy=1),  # 120
-            EnergyBlock(start=16 * 60, end=18 * 60, energy=1),  # 120
+            EnergyZone(start=18 * 60, end=20 * 60, level=1),
+            EnergyZone(start=21 * 60, end=22 * 60, level=1),
         ]
     )
 
@@ -522,9 +519,9 @@ def case_energy_multi_level_fallback():
         Task("Deep Work A", duration=60, energy=3),
         Task("Deep Work B", duration=60, energy=3),
         Task("Deep Work C", duration=60, energy=3),
-        Task("Deep Work D", duration=60, energy=2),
-        Task("Deep Work E", duration=60, energy=2),
-        Task("Deep Work F", duration=60, energy=1),
+        Task("Medium Work D", duration=60, energy=2),
+        Task("Medium Work E", duration=60, energy=2),
+        Task("Light Work F", duration=60, energy=1),
     ]
 
     schedule = schedule_tasks(tasks, pref)
@@ -538,17 +535,17 @@ def case_energy_multi_level_fallback():
     for t, _, block in schedule:
         match = med = low = outside = 0
 
-        for b in pref.energy_blocks:
+        for b in pref.energy_zones:
             overlap = max(
                 0,
                 min(block.end, b.end) - max(block.start, b.start),
             )
 
-            if b.energy == t.energy:
+            if b.level == t.energy:
                 match += overlap
-            elif b.energy == 2:
+            elif b.level == 2:
                 med += overlap
-            elif b.energy == 1:
+            elif b.level == 1:
                 low += overlap
 
         outside = t.duration - (match + med + low)

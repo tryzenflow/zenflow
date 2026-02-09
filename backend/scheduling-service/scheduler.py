@@ -39,7 +39,9 @@ def build_task(
             start = model.NewIntVar(start_min, end_max, f"start_{task.id}_{k}")
 
             # Each split can be 0 if unused, or any multiple of TIME_GRANULARITY up to task.duration
-            duration = model.NewIntVar(0, task.duration, f"dur_{task.id}_{k}")
+            duration = model.NewIntVar(
+                TIME_GRANULARITY, task.duration, f"dur_{task.id}_{k}"
+            )
             end = model.NewIntVar(start_min, end_max, f"end_{task.id}_{k}")
             if task.deadline and task.deadline < end_max:
                 model.Add(end <= task.deadline).OnlyEnforceIf(presence)
@@ -132,5 +134,4 @@ def schedule_tasks(
                 split_index = splits_per_task[task]
                 splits_per_task[task] += 1
                 schedule.append((task, split_index, block))
-
     return schedule

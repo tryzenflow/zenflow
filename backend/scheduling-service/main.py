@@ -3,7 +3,7 @@ from concurrent import futures
 import grpc
 import scheduler_pb2
 import scheduler_pb2_grpc
-from models import EnergyBlock, Interval, ScheduledBlock, Task, UserPreference
+from models import EnergyZone, Event, Interval, Task, UserPreference
 from scheduler import schedule_tasks
 
 # ---- Proto → Domain Models ----
@@ -21,15 +21,12 @@ def parse_task(proto: scheduler_pb2.Task) -> Task:
             duration=proto.duration,
             fixed_window=fixed_window,
             max_splits=proto.max_splits,
-            preferred_windows=[
-                Interval(w.start, w.end) for w in proto.preferred_windows
-            ],
             deadline=proto.deadline,
             category=proto.category_id or None,
             energy=proto.energy,
-            scheduled_blocks=[
-                ScheduledBlock(split_index=s.split_index or 0, start=s.start, end=s.end)
-                for s in proto.scheduled_blocks
+            events=[
+                Event(split_index=s.split_index or 0, start=s.start, end=s.end)
+                for s in proto.events
             ],
         )
     except Exception as e:
@@ -39,17 +36,17 @@ def parse_task(proto: scheduler_pb2.Task) -> Task:
 
 def parse_user_preference(proto: scheduler_pb2.UserPreference) -> UserPreference:
     try:
-        energy_blocks = [
-            EnergyBlock(
-                energy=eb.energy,
+        energy_zones = [
+            EnergyZone(
+                level=eb.level,
                 start=eb.interval.start,
                 end=eb.interval.end,
             )
-            for eb in proto.energy_blocks
+            for eb in proto.energy_zones
         ]
         return UserPreference(
-            min_gap_between_tasks=proto.min_gap_between_tasks,
-            energy_blocks=energy_blocks,
+            break_minutes=proto.break_minutes,
+            energy_zones=energy_zones,
         )
     except Exception as e:
         print(f"Failed to parse user preference: {e}")
@@ -61,13 +58,20 @@ class SchedulerService(scheduler_pb2_grpc.SchedulerServiceServicer):
         # Convert proto → domain models
         tasks = [parse_task(t) for t in request.tasks]
         user_pref = parse_user_preference(request.user_preference)
+        min_time = request.min_time or 0
+        print("tasks:", tasks)
+        print("user_pref:", user_pref)
+        print("min_time:", min_time)
 
         try:
             schedule_result = schedule_tasks(
                 tasks,
                 user_pref,
+                min_time=min_time,
             )
         except Exception as e:
+            print(e.__class__.__name__)
+            print(str(e))
             print(f"Failed to schedule tasks: {e}")
             raise ValueError(f"Failed to schedule tasks: {e}")
 
@@ -75,13 +79,14 @@ class SchedulerService(scheduler_pb2_grpc.SchedulerServiceServicer):
         response = scheduler_pb2.ScheduleResponse()
 
         for task, split_index, interval in schedule_result:
-            scheduled_task = scheduler_pb2.ScheduledBlock()
+            scheduled_task = scheduler_pb2.Event()
             scheduled_task.task_id = task.id
             scheduled_task.start = interval.start
             scheduled_task.end = interval.end
             scheduled_task.split_index = split_index
 
-            response.scheduled_blocks.append(scheduled_task)
+            response.events.append(scheduled_task)
+            print(scheduled_task)
         return response
 
 

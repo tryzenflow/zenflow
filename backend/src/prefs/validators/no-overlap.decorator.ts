@@ -24,11 +24,10 @@ export const checkNoOverlap = (
 @ValidatorConstraint({ name: "NoOverlap", async: false })
 export class NoOverlapConstraint implements ValidatorConstraintInterface {
   validate(
-    energyBlocks: CreateUserPreferenceDto["energyBlocks"],
+    energyZones: CreateUserPreferenceDto["energyZones"],
     args: ValidationArguments,
   ) {
-    const object = args.object as CreateUserPreferenceDto;
-    const intervals = object.energyBlocks.map((block) => ({
+    const intervals = energyZones.map((block) => ({
       start: block.start,
       end: block.end,
     }));

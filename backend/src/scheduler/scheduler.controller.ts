@@ -19,7 +19,7 @@ import { SCHEDULER_PACKAGE, SCHEDULER_SERVICE } from "./constants";
 import { ScheduleTasksDto } from "./dto/schedule-tasks.dto";
 import { ScheduleRequest, ScheduleResponse, Task } from "./interfaces";
 import { SchedulerService } from "./scheduler.service";
-import { clamp, utcToMinutes } from "src/common/utils";
+import { utcToMinutes } from "src/common/utils";
 import { inferMaxSplits } from "src/tasks/utils/infer-max-splits";
 import { differenceInMinutes } from "date-fns";
 
@@ -32,7 +32,7 @@ export class SchedulerController implements OnModuleInit {
     @Inject(SCHEDULER_PACKAGE) private client: ClientGrpc,
     private userPreferencesService: UserPreferencesService,
     private tasksService: TasksService,
-    private schedulesService: SchedulesService
+    private schedulesService: SchedulesService,
   ) {}
 
   onModuleInit() {
@@ -43,40 +43,47 @@ export class SchedulerController implements OnModuleInit {
   @Post("schedule")
   async schedule(
     @CurrentUser() user: User,
-    @Body() { scheduleDate, taskIds, keepManual }: ScheduleTasksDto
+    @Body() { scheduleDate, keepManual, minTime }: ScheduleTasksDto,
   ) {
     const utcMidnight = fromZonedTime(
       `${scheduleDate}T00:00:00`,
-      user.timezone
+      user.timezone,
     );
     const day = utcMidnight.getDay();
 
     const userPreference = await this.userPreferencesService.getByDay(
       user.id,
-      day
+      day,
     );
 
     const tasks = await this.tasksService.findToSchedule(
-      taskIds,
       user.id,
-      scheduleDate,
       user.timezone,
-      keepManual
+      scheduleDate,
+      keepManual,
+      minTime,
     );
+    console.log("tasks:", tasks);
 
     const toScheduleTasks: Task[] = tasks.map((task) => {
+      const eventsAfterMinTime = task.events.filter(
+        (e) =>
+          e.end !== null && minTime <= utcToMinutes(e.start, user.timezone),
+      );
       const actualDuration =
-        !keepManual || task.scheduledBlocks.length === 0
+        !keepManual || eventsAfterMinTime.length === 0
           ? task.duration
-          : task.scheduledBlocks.reduce(
+          : eventsAfterMinTime.reduce(
               (acc, block) =>
                 acc +
-                utcToMinutes(block.end, user.timezone) -
-                utcToMinutes(block.start, user.timezone),
-              0
+                (block.end
+                  ? utcToMinutes(block.end, user.timezone) -
+                    utcToMinutes(block.start, user.timezone)
+                  : 0),
+              0,
             );
       const maxSplits = keepManual
-        ? task.scheduledBlocks.length
+        ? task.events.length
         : inferMaxSplits(task.duration);
 
       const minutesDiff = task.deadline
@@ -86,38 +93,40 @@ export class SchedulerController implements OnModuleInit {
         id: task.id,
         categoryId: task.categoryId ?? undefined,
         duration: actualDuration,
-        energy: clamp(task.energy, 1, 3),
+        energy: task.energy,
         title: task.title,
         maxSplits,
         deadline: !minutesDiff || minutesDiff <= 0 ? undefined : minutesDiff,
         fixedWindow: task.fixedWindow ?? undefined,
-        scheduledBlocks: keepManual
-          ? task?.scheduledBlocks.map((s) => ({
+        events: keepManual
+          ? eventsAfterMinTime.map((e) => ({
+              id: e.id,
               taskId: task.id,
-              splitIndex: s.splitIndex,
-              start: utcToMinutes(s.start, user.timezone),
-              end: utcToMinutes(s.end, user.timezone),
+              splitIndex: e.splitIndex,
+              start: utcToMinutes(e.start, user.timezone),
+              end: e.end ? utcToMinutes(e.end, user.timezone) : null,
             }))
           : [],
       };
     });
 
     const request: ScheduleRequest = {
+      minTime,
       userPreference: {
-        energyBlocks: userPreference.energyBlocks.map((eb) => ({
-          energy: eb.energy,
+        energyZones: userPreference.energyZones.map((eb) => ({
+          level: eb.level,
           interval: { start: eb.start, end: eb.end },
         })),
-        minGapBetweenTasks: userPreference.minGapBetweenTasks,
+        breakMinutes: userPreference.breakMinutes,
       },
       tasks: toScheduleTasks,
     };
 
     const response = await firstValueFrom<ScheduleResponse>(
-      this.schedulerService.Schedule(request)
+      this.schedulerService.Schedule(request),
     );
 
-    if (!response.scheduledBlocks) {
+    if (!response.events) {
       return {
         success: true,
         feasible: false,
@@ -126,17 +135,15 @@ export class SchedulerController implements OnModuleInit {
       };
     }
 
-    const schedule = await this.schedulesService.schedule(
+    await this.schedulesService.schedule(
       scheduleDate,
-      response.scheduledBlocks,
+      response.events,
       user.timezone,
-      user.id
     );
     return {
       success: true,
       feasible: true,
       message: `Schedule tasks on ${scheduleDate} successfully`,
-      data: schedule,
     };
   }
 }

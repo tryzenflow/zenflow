@@ -7,20 +7,14 @@ import { Prisma } from "../../generated/prisma";
 import { minutesToUtc } from "../common/utils";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { PrismaService } from "../prisma/prisma.service";
-import { ScheduledBlock } from "../scheduler/interfaces";
-import { UpdateScheduledBlockDto } from "./dto/update-schedule.dto";
+import { Event } from "../scheduler/interfaces";
+import { UpdateEventDto } from "./dto/update-schedule.dto";
 import { fromZonedTime } from "date-fns-tz";
 import { DateRangeDto } from "src/common/dto/date-range.dto";
-import { EnergyLearningService } from "src/energy-learning/energy-learning.service";
-import { UserPreferencesService } from "src/prefs/prefs.service";
 
 @Injectable()
 export class SchedulesService {
-  constructor(
-    private prisma: PrismaService,
-    private energyLearningService: EnergyLearningService,
-    private userPreferencesService: UserPreferencesService,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
   async findScheduledBlocks(
     userId: string,
@@ -29,7 +23,7 @@ export class SchedulesService {
   ) {
     const startDate = fromZonedTime(new Date(`${start}T00:00:00`), timezone);
     const endDate = fromZonedTime(new Date(`${end}T23:59:59`), timezone);
-    const scheduledBlocks = await this.prisma.scheduledBlock.findMany({
+    const events = await this.prisma.event.findMany({
       where: {
         task: { userId },
         start: { gte: startDate, lte: endDate },
@@ -39,77 +33,59 @@ export class SchedulesService {
         task: { select: { title: true, energy: true } },
       },
     });
-    return scheduledBlocks;
+    return events;
   }
 
   async schedule(
     date: string, // YYYY-MM-DD (local date)
-    scheduledBlocks: ScheduledBlock[],
+    events: Event[],
     timezone: string, // e.g. "Asia/Bangkok"
-    userId: string,
   ) {
-    const startDate = fromZonedTime(`${date}T00:00:00`, timezone);
-    const endDate = fromZonedTime(`${date}T23:59:59`, timezone);
-    const scheduled = await this.prisma.$transaction(async (tx) => {
-      await tx.scheduledBlock.deleteMany({
-        where: {
-          start: { gte: startDate, lte: endDate },
-          end: { gte: startDate, lte: endDate },
-          task: { userId },
-        },
-      });
-      const scheduled = await tx.scheduledBlock.createManyAndReturn({
-        data: scheduledBlocks.map((block) => ({
-          id: `${block.splitIndex}-${date}-${block.taskId}`,
-          taskId: block.taskId,
-          start: minutesToUtc(date, block.start || 0, timezone),
-          end: minutesToUtc(date, block.end || 0, timezone),
-          splitIndex: block.splitIndex || 0,
-        })),
-        include: {
-          task: { select: { title: true, energy: true } },
-        },
-      });
-      return scheduled.sort((a, b) => a.start.getTime() - b.start.getTime());
+    await this.prisma.$transaction(async (tx) => {
+      for (const event of events) {
+        await tx.event.upsert({
+          where: {
+            id: `${date}/${event.splitIndex ?? 0}/${event.taskId}`,
+          },
+          update: {
+            start: minutesToUtc(date, event.start || 0, timezone),
+            end: minutesToUtc(date, event.end || 0, timezone),
+            splitIndex: event.splitIndex || 0,
+          },
+          create: {
+            id: `${date}/${event.splitIndex ?? 0}/${event.taskId}`,
+            taskId: event.taskId,
+            start: minutesToUtc(date, event.start || 0, timezone),
+            end: minutesToUtc(date, event.end || 0, timezone),
+            splitIndex: event.splitIndex || 0,
+          },
+        });
+      }
     });
-    return scheduled;
   }
 
   async update(
     blockId: string,
-    { start, end, date }: UpdateScheduledBlockDto,
+    { interval, completed, date }: UpdateEventDto,
     userId: string,
     timezone: string,
   ) {
     try {
-      await this.prisma.$transaction(async (tx) => {
-        const updated = await tx.scheduledBlock.update({
-          where: { id: blockId, task: { userId } },
-          data: {
-            start: minutesToUtc(date, start, timezone),
-            end: minutesToUtc(date, end, timezone),
-          },
-          select: { task: { select: { energy: true } } },
-        });
-        const startOfDay = fromZonedTime(`${date}T00:00:00`, timezone);
-        const pref = await this.userPreferencesService.getByDay(
-          userId,
-          startOfDay.getDay(),
-        );
-        const newEnergyBlocks =
-          this.energyLearningService.observeManualPlacement(
-            pref.energyBlocks,
-            start,
-            end,
-            updated.task.energy,
-          );
-        await this.userPreferencesService.update(
-          startOfDay.getDay(),
-          userId,
-          { energyBlocks: newEnergyBlocks },
-          tx,
-        );
+      const updated = await this.prisma.event.update({
+        where: { id: blockId, task: { userId } },
+        data: {
+          start: interval
+            ? minutesToUtc(date, interval.start, timezone)
+            : undefined,
+          end: interval
+            ? minutesToUtc(date, interval.end, timezone)
+            : undefined,
+          completed,
+          isDirty: true,
+        },
+        select: { task: { select: { energy: true } } },
       });
+      return updated;
     } catch (error) {
       if (error === PostgresErrorCode.RecordNotFound) {
         throw new NotFoundException({
@@ -122,8 +98,17 @@ export class SchedulesService {
 
   async remove(blockId: string, userId: string) {
     try {
-      await this.prisma.scheduledBlock.delete({
-        where: { id: blockId, task: { userId } },
+      await this.prisma.$transaction(async (tx) => {
+        const { taskId } = await tx.event.delete({
+          where: { id: blockId, task: { userId } },
+        });
+        const task = await tx.task.findUnique({
+          where: { id: taskId },
+          select: { _count: { select: { events: true } } },
+        });
+        if (task?._count.events === 0) {
+          await tx.task.delete({ where: { id: taskId } });
+        }
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
