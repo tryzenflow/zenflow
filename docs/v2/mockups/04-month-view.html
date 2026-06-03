@@ -1,0 +1,885 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Zenflow — Month View</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800;900&family=Geist+Mono:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = { darkMode: "class" };
+    </script>
+    <style>
+      :root {
+        --primary: oklch(0.496 0.265 301.924);
+        --primary-foreground: oklch(0.977 0.014 308.299);
+        --background: oklch(0.99 0.002 106.5);
+        --foreground: oklch(0.153 0.006 107.1);
+        --card: oklch(1 0 0);
+        --muted: oklch(0.966 0.005 106.5);
+        --muted-foreground: oklch(0.58 0.031 107.3);
+        --border: oklch(0.93 0.007 106.5);
+        --ring: oklch(0.737 0.021 106.9);
+        --sidebar: oklch(0.988 0.003 106.5);
+        --sidebar-border: oklch(0.93 0.007 106.5);
+      }
+      .dark {
+        --primary: oklch(0.62 0.22 303.724);
+        --background: oklch(0.153 0.006 107.1);
+        --foreground: oklch(0.988 0.003 106.5);
+        --card: oklch(0.228 0.013 107.4);
+        --muted: oklch(0.286 0.016 107.4);
+        --muted-foreground: oklch(0.737 0.021 106.9);
+        --border: oklch(0.32 0.01 107);
+        --sidebar: oklch(0.228 0.013 107.4);
+        --sidebar-border: oklch(0.32 0.01 107);
+      }
+      body {
+        font-family: "Geist", system-ui, sans-serif;
+        background-color: var(--background);
+        color: var(--foreground);
+      }
+      .font-mono {
+        font-family: "Geist Mono", ui-monospace, monospace;
+      }
+      .bg-primary {
+        background-color: var(--primary);
+      }
+      .text-primary {
+        color: var(--primary);
+      }
+      .border-l-primary {
+        border-left-color: var(--primary) !important;
+      }
+      .bg-primary-10 {
+        background-color: color-mix(in oklch, var(--primary) 10%, transparent);
+      }
+      .text-primary-fg {
+        color: var(--primary-foreground);
+      }
+      .bg-card {
+        background-color: var(--card);
+      }
+      .bg-muted {
+        background-color: var(--muted);
+      }
+      .text-muted-fg {
+        color: var(--muted-foreground);
+      }
+      .bg-muted-fg {
+        background-color: var(--muted-foreground);
+      }
+      .border-border {
+        border-color: var(--border);
+      }
+      .bg-sidebar {
+        background-color: var(--sidebar);
+      }
+      .border-sidebar {
+        border-color: var(--sidebar-border);
+      }
+
+      /* Day cell backgrounds */
+      .day-work {
+        background-color: var(--card);
+      }
+      .day-nonwork {
+        background-color: var(--muted);
+      }
+      .day-today {
+        background-color: color-mix(in oklch, var(--muted) 30%, var(--card));
+      }
+
+      /* Fade task content in non-work / out-of-month cells */
+      .day-nonwork > div {
+        opacity: 0.45;
+      }
+
+      /* Task micro-capsules */
+      .cap-primary {
+        border-left-color: var(--primary) !important;
+        background-color: color-mix(in oklch, var(--primary) 8%, var(--card));
+        color: var(--foreground);
+      }
+
+      /* Glassmorphism */
+      .glass-header {
+        background-color: color-mix(in oklch, var(--card) 70%, transparent);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+      }
+      .glass-day-headers {
+        background-color: color-mix(in oklch, var(--card) 78%, transparent);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+      }
+
+      *:focus-visible {
+        outline: 1px solid var(--ring);
+        outline-offset: 0;
+      }
+    </style>
+  </head>
+  <body class="h-screen overflow-hidden antialiased flex">
+    <!-- ── Sidebar ── -->
+    <aside
+      class="w-64 shrink-0 h-full bg-sidebar border-r border-sidebar flex flex-col z-5"
+    >
+      <div
+        class="h-14 px-5 flex items-center justify-between border-b border-sidebar shrink-0"
+      >
+        <div class="flex items-center space-x-2.5">
+          <div class="w-6 h-6 shrink-0">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 100 100"
+              fill="none"
+              class="w-full h-full"
+              style="color: var(--foreground)"
+            >
+              <path
+                d="M20 20H80V80H20V20Z"
+                stroke="currentColor"
+                stroke-width="4"
+                stroke-linecap="round"
+                style="opacity: 0.12"
+              />
+              <path
+                d="M20 35H50C55.5 35 60 39.5 60 45V80"
+                stroke="currentColor"
+                stroke-width="5"
+                stroke-linecap="round"
+                style="opacity: 0.4"
+              />
+              <path
+                d="M40 20V55C40 60.5 44.5 65 50 65H80"
+                stroke="currentColor"
+                stroke-width="5"
+                stroke-linecap="round"
+                style="opacity: 0.8"
+              />
+              <rect
+                x="52"
+                y="32"
+                width="16"
+                height="16"
+                rx="4"
+                fill="var(--primary)"
+              />
+            </svg>
+          </div>
+          <span class="text-sm font-bold tracking-tight">Zenflow</span>
+        </div>
+        <button
+          onclick="document.documentElement.classList.toggle('dark')"
+          class="p-1.5 rounded text-muted-fg hover:text-foreground transition-colors"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg>
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto p-4 space-y-5">
+        <!-- Month load -->
+        <div class="space-y-2">
+          <label
+            class="text-[10px] font-bold uppercase tracking-wider text-muted-fg"
+            >June Load</label
+          >
+          <div class="p-3 bg-card border border-border rounded-lg space-y-2">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-muted-fg font-medium">Scheduled</span>
+              <span class="font-mono font-bold">42h / 160h</span>
+            </div>
+            <div class="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                class="h-full bg-muted-fg rounded-full"
+                style="width: 26.25%"
+              ></div>
+            </div>
+            <p class="text-[10px] text-muted-fg">
+              118h remaining · 20 working days
+            </p>
+          </div>
+        </div>
+        <!-- Summary by week -->
+        <div class="space-y-2">
+          <label
+            class="text-[10px] font-bold uppercase tracking-wider text-muted-fg"
+            >By Week</label
+          >
+          <div class="space-y-1">
+            <div class="flex items-center justify-between text-xs px-1">
+              <span class="text-muted-fg">Week 1 (Jun 2–6)</span>
+              <span class="font-mono font-semibold">18.5h</span>
+            </div>
+            <div class="flex items-center justify-between text-xs px-1">
+              <span class="text-muted-fg">Week 2 (Jun 9–13)</span>
+              <span class="font-mono font-semibold">12h</span>
+            </div>
+            <div class="flex items-center justify-between text-xs px-1">
+              <span class="text-muted-fg">Week 3 (Jun 16–20)</span>
+              <span class="font-mono font-semibold">8h</span>
+            </div>
+            <div class="flex items-center justify-between text-xs px-1">
+              <span class="text-muted-fg">Week 4 (Jun 23–27)</span>
+              <span class="font-mono font-semibold">3.5h</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── Main ── -->
+    <div class="flex-1 h-full overflow-y-auto relative">
+      <!-- Header — sticky glassmorphism -->
+      <header
+        class="sticky top-0 z-20 h-14 border-b border-border flex items-center justify-between px-5 glass-header"
+      >
+        <div class="flex items-center space-x-3">
+          <div
+            class="inline-flex h-8 items-center bg-muted rounded-lg p-1 border border-border shadow-inner text-muted-fg text-xs font-semibold"
+          >
+            <button
+              class="px-3 py-1 rounded-md hover:bg-card/60 transition-colors"
+            >
+              Day
+            </button>
+            <button
+              class="px-3 py-1 rounded-md hover:bg-card/60 transition-colors"
+            >
+              Week
+            </button>
+            <button
+              class="px-3 py-1 rounded-md bg-card shadow-sm border border-border"
+              style="color: var(--foreground)"
+            >
+              Month
+            </button>
+          </div>
+          <div class="flex items-center space-x-1">
+            <button
+              class="p-1.5 rounded hover:bg-muted transition-colors text-muted-fg"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </button>
+            <span class="text-sm font-semibold">June 2026</span>
+            <button
+              class="p-1.5 rounded hover:bg-muted transition-colors text-muted-fg"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <button
+          class="h-8 px-4 bg-primary text-primary-fg text-xs font-semibold rounded-md hover:opacity-90 transition-opacity flex items-center space-x-1.5"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          <span>Add Task</span>
+        </button>
+      </header>
+
+      <!-- Month Grid -->
+      <main>
+        <div class="h-full flex flex-col min-h-[600px]">
+          <!-- Weekday headers (Mon–Sun) — sticky below main header -->
+          <div
+            class="grid grid-cols-7 border-b border-border sticky top-14 z-5 glass-day-headers"
+          >
+            <div
+              class="py-2 text-center text-[11px] font-bold uppercase tracking-wider text-foreground"
+            >
+              Mon
+            </div>
+            <div
+              class="py-2 text-center text-[11px] font-bold uppercase tracking-wider text-foreground"
+            >
+              Tue
+            </div>
+            <div
+              class="py-2 text-center text-[11px] font-bold uppercase tracking-wider text-foreground"
+            >
+              Wed
+            </div>
+            <div
+              class="py-2 text-center text-[11px] font-bold uppercase tracking-wider text-foreground"
+            >
+              Thu
+            </div>
+            <div
+              class="py-2 text-center text-[11px] font-bold uppercase tracking-wider text-foreground"
+            >
+              Fri
+            </div>
+            <div
+              class="py-2 text-center text-[11px] font-bold uppercase tracking-wider text-muted-fg"
+            >
+              Sat
+            </div>
+            <div
+              class="py-2 text-center text-[11px] font-bold uppercase tracking-wider text-muted-fg"
+            >
+              Sun
+            </div>
+          </div>
+
+          <!-- Calendar grid — June 2026 starts on Mon Jun 1 -->
+          <div
+            class="flex-1 grid grid-cols-7 grid-rows-6 auto-rows-fr divide-x divide-y divide-border border-b border-border"
+          >
+            <!-- Row 1: Jun 1–7 -->
+
+            <!-- Jun 1 — Sunday (non-work day, but has exception task) -->
+            <!-- Note: June starts on Sunday. In Mon-first grid, Jun 1 is in the "Sun" column = col 7, row 1 -->
+            <!-- Empty cols 1–6 for previous month (May 25–31) -->
+            <div
+              class="day-nonwork p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-bold text-muted-fg/50 mb-1"
+                >26</span
+              >
+            </div>
+            <div
+              class="day-nonwork p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-bold text-muted-fg/50 mb-1"
+                >27</span
+              >
+            </div>
+            <div
+              class="day-nonwork p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-bold text-muted-fg/50 mb-1"
+                >28</span
+              >
+            </div>
+            <div
+              class="day-nonwork p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-bold text-muted-fg/50 mb-1"
+                >29</span
+              >
+            </div>
+            <div
+              class="day-nonwork p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-bold text-muted-fg/50 mb-1"
+                >30</span
+              >
+            </div>
+            <!-- Sat May 31 -->
+            <div
+              class="day-nonwork p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-bold text-muted-fg/50 mb-1"
+                >31</span
+              >
+            </div>
+            <!-- Sun Jun 1 — non-work day with exception -->
+            <div
+              class="day-nonwork p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium text-muted-fg mb-1">1</span>
+              <div class="space-y-0.5 flex-1 overflow-hidden">
+                <div
+                  class="px-1.5 py-0.5 rounded border-l-2 border-l-primary cap-primary text-[10px] font-medium truncate"
+                >
+                  09:15 · DB Indexes
+                </div>
+                <div
+                  class="px-1.5 py-0.5 bg-rose-50 dark:bg-rose-950/30 border-l-2 border-l-rose-500 text-[10px] font-bold text-rose-800 dark:text-rose-300 rounded truncate"
+                >
+                  Deploy Auth V2
+                </div>
+                <div
+                  class="px-1.5 py-0.5 bg-amber-50/60 dark:bg-amber-950/30 border-l-2 border-l-amber-500 text-[10px] font-bold text-amber-950 dark:text-amber-300 rounded truncate"
+                >
+                  01:00 · Marketing
+                </div>
+                <div
+                  class="px-1.5 py-0.5 bg-muted dark:bg-muted/40 border-l-2 border-l-emerald-500 text-[10px] text-muted-fg line-through rounded truncate opacity-50"
+                >
+                  Log Rotations
+                </div>
+                <div
+                  class="px-1.5 py-0.5 cap-primary border-l-2 border-l-primary rounded text-[10px] font-medium truncate"
+                >
+                  <span class="text-[9px] text-amber-600">exc</span> · 19:00 ·
+                  Client
+                </div>
+              </div>
+            </div>
+
+            <!-- Row 2: Jun 2–8 -->
+            <!-- Mon Jun 2 — TODAY, work day -->
+            <div
+              class="day-today p-1.5 min-h-[110px] border-border flex flex-col border-t-2"
+              style="border-top-color: var(--foreground)"
+            >
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] font-medium">2</span>
+                <span
+                  class="text-[8px] font-bold uppercase bg-foreground text-background px-1 py-0.5 rounded"
+                  >Today</span
+                >
+              </div>
+              <div class="space-y-0.5 flex-1 overflow-hidden">
+                <div
+                  class="px-1.5 py-0.5 cap-primary border-l-2 border-l-primary rounded text-[10px] font-medium truncate"
+                >
+                  09:15 · DB Indexes
+                </div>
+                <div
+                  class="px-1.5 py-0.5 bg-rose-50 dark:bg-rose-950/30 border-l-2 border-l-rose-500 text-[10px] font-bold text-rose-800 dark:text-rose-300 rounded truncate"
+                >
+                  Deploy Auth V2
+                </div>
+                <div
+                  class="px-1.5 py-0.5 bg-amber-50/60 dark:bg-amber-950/30 border-l-2 border-l-amber-500 text-[10px] font-bold text-amber-950 dark:text-amber-300 rounded truncate"
+                >
+                  13:00 · Marketing
+                </div>
+                <div
+                  class="px-1.5 py-0.5 bg-muted border-l-2 border-l-emerald-500 text-[10px] text-muted-fg line-through rounded truncate opacity-50"
+                >
+                  Log Rotations
+                </div>
+              </div>
+            </div>
+            <!-- Tue Jun 3 -->
+            <div
+              class="day-work p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium mb-1">3</span>
+              <div class="space-y-0.5 flex-1 overflow-hidden">
+                <div
+                  class="px-1.5 py-0.5 cap-primary border-l-2 border-l-primary rounded text-[10px] font-medium truncate"
+                >
+                  09:15 · Index Refactor
+                </div>
+                <div
+                  class="px-1.5 py-0.5 cap-primary border-l-2 border-l-primary rounded text-[10px] font-medium truncate"
+                >
+                  14:00 · API Docs
+                </div>
+              </div>
+            </div>
+            <!-- Wed Jun 4 -->
+            <div
+              class="day-work p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium mb-1">4</span>
+              <div class="space-y-0.5 flex-1 overflow-hidden">
+                <div
+                  class="px-1.5 py-0.5 bg-muted border border-dashed border-border text-[10px] text-muted-fg rounded truncate flex items-center space-x-1"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="8"
+                    height="8"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                  >
+                    <rect x="3" y="11" width="18" height="11" rx="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                  <span>09:00 · Standup</span>
+                </div>
+                <div
+                  class="px-1.5 py-0.5 cap-primary border-l-2 border-l-primary rounded text-[10px] font-medium truncate"
+                >
+                  10:00 · Sprint Planning
+                </div>
+              </div>
+            </div>
+            <!-- Thu Jun 5 -->
+            <div
+              class="day-work p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium mb-1">5</span>
+              <div class="space-y-0.5 flex-1 overflow-hidden">
+                <div
+                  class="px-1.5 py-0.5 cap-primary border-l-2 border-l-primary rounded text-[10px] font-medium truncate"
+                >
+                  09:30 · Code Review
+                </div>
+              </div>
+            </div>
+            <!-- Fri Jun 6 -->
+            <div
+              class="day-work p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium mb-1">6</span>
+              <div class="space-y-0.5 flex-1 overflow-hidden">
+                <div
+                  class="px-1.5 py-0.5 cap-primary border-l-2 border-l-primary rounded text-[10px] font-medium truncate"
+                >
+                  10:00 · Sprint Retro
+                </div>
+              </div>
+            </div>
+            <!-- Sat Jun 7 — non-work, exception -->
+            <div
+              class="day-nonwork p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium text-muted-fg mb-1">7</span>
+              <div class="space-y-0.5 flex-1 overflow-hidden">
+                <div
+                  class="px-1.5 py-0.5 cap-primary border-l-2 border-l-primary rounded text-[10px] font-medium truncate"
+                >
+                  <span class="text-[9px] text-amber-600">exc</span> · 14:00 ·
+                  Client
+                </div>
+              </div>
+            </div>
+            <!-- Sun Jun 8 — non-work -->
+            <div
+              class="day-nonwork p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium text-muted-fg mb-1">8</span>
+            </div>
+
+            <!-- Row 3: Jun 9–15 -->
+            <div
+              class="day-work p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium mb-1">9</span>
+              <div class="space-y-0.5">
+                <div
+                  class="px-1.5 py-0.5 cap-primary border-l-2 border-l-primary rounded text-[10px] font-medium truncate"
+                >
+                  10:00 · Backend Review
+                </div>
+                <div
+                  class="px-1.5 py-0.5 cap-primary border-l-2 border-l-primary rounded text-[10px] font-medium truncate"
+                >
+                  14:30 · Documentation
+                </div>
+              </div>
+            </div>
+            <div
+              class="day-work p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium mb-1">10</span>
+              <div class="space-y-0.5">
+                <div
+                  class="px-1.5 py-0.5 cap-primary border-l-2 border-l-primary rounded text-[10px] font-medium truncate"
+                >
+                  09:00 · QA Testing
+                </div>
+              </div>
+            </div>
+            <div
+              class="day-work p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium mb-1">11</span>
+              <div class="space-y-0.5">
+                <div
+                  class="px-1.5 py-0.5 bg-muted border border-dashed border-border text-[10px] text-muted-fg rounded truncate flex items-center space-x-1"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="8"
+                    height="8"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                  >
+                    <rect x="3" y="11" width="18" height="11" rx="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                  <span>09:00 · Standup</span>
+                </div>
+                <div
+                  class="px-1.5 py-0.5 cap-primary border-l-2 border-l-primary rounded text-[10px] font-medium truncate"
+                >
+                  11:00 · Architecture
+                </div>
+              </div>
+            </div>
+            <div
+              class="day-work p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium mb-1">12</span>
+            </div>
+            <div
+              class="day-work p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium mb-1">13</span>
+              <div class="space-y-0.5">
+                <div
+                  class="px-1.5 py-0.5 cap-primary border-l-2 border-l-primary rounded text-[10px] font-medium truncate"
+                >
+                  15:00 · Weekly sync
+                </div>
+              </div>
+            </div>
+            <div
+              class="day-nonwork p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium text-muted-fg mb-1">14</span>
+            </div>
+            <div
+              class="day-nonwork p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium text-muted-fg mb-1">15</span>
+            </div>
+
+            <!-- Row 4: Jun 16–22 -->
+            <div
+              class="day-work p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium mb-1">16</span>
+              <div class="space-y-0.5">
+                <div
+                  class="px-1.5 py-0.5 cap-primary border-l-2 border-l-primary rounded text-[10px] font-medium truncate"
+                >
+                  10:00 · Refactor
+                </div>
+              </div>
+            </div>
+            <div
+              class="day-work p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium mb-1">17</span>
+            </div>
+            <div
+              class="day-work p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium mb-1">18</span>
+              <div class="space-y-0.5">
+                <div
+                  class="px-1.5 py-0.5 bg-muted border border-dashed border-border text-[10px] text-muted-fg rounded truncate flex items-center space-x-1"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="8"
+                    height="8"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                  >
+                    <rect x="3" y="11" width="18" height="11" rx="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                  <span>09:00 · Standup</span>
+                </div>
+              </div>
+            </div>
+            <div
+              class="day-work p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium mb-1">19</span>
+            </div>
+            <div
+              class="day-work p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium mb-1">20</span>
+            </div>
+            <div
+              class="day-nonwork p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium text-muted-fg mb-1">21</span>
+            </div>
+            <div
+              class="day-nonwork p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium text-muted-fg mb-1">22</span>
+            </div>
+
+            <!-- Row 5: Jun 23–30 -->
+            <div
+              class="day-work p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium mb-1">23</span>
+            </div>
+            <div
+              class="day-work p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium mb-1">24</span>
+              <div class="space-y-0.5">
+                <div
+                  class="px-1.5 py-0.5 cap-primary border-l-2 border-l-primary rounded text-[10px] font-medium truncate"
+                >
+                  09:00 · Q3 Planning
+                </div>
+              </div>
+            </div>
+            <div
+              class="day-work p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium mb-1">25</span>
+              <div class="space-y-0.5">
+                <div
+                  class="px-1.5 py-0.5 bg-muted border border-dashed border-border text-[10px] text-muted-fg rounded truncate flex items-center space-x-1"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="8"
+                    height="8"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                  >
+                    <rect x="3" y="11" width="18" height="11" rx="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                  <span>09:00 · Standup</span>
+                </div>
+              </div>
+            </div>
+            <div
+              class="day-work p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium mb-1">26</span>
+            </div>
+            <div
+              class="day-work p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium mb-1">27</span>
+            </div>
+            <div
+              class="day-nonwork p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium text-muted-fg mb-1">28</span>
+              <!-- Weekend exception -->
+              <div class="space-y-0.5">
+                <div
+                  class="px-1.5 py-0.5 cap-primary border-l-2 border-l-primary rounded text-[10px] font-medium truncate"
+                >
+                  <span class="text-[9px] text-amber-600">exc</span> · 09:00 ·
+                  Conf.
+                </div>
+              </div>
+            </div>
+            <div
+              class="day-nonwork p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium text-muted-fg mb-1">29</span>
+            </div>
+
+            <!-- Row 6: Jun 30 + Jul 1–6 -->
+            <!-- Mon Jun 30 -->
+            <div
+              class="day-work p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-medium mb-1">30</span>
+            </div>
+            <!-- Tue Jul 1 — next month -->
+            <div
+              class="day-nonwork p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-bold text-muted-fg/50 mb-1">1</span>
+            </div>
+            <!-- Wed Jul 2 — next month -->
+            <div
+              class="day-nonwork p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-bold text-muted-fg/50 mb-1">2</span>
+            </div>
+            <!-- Thu Jul 3 — next month -->
+            <div
+              class="day-nonwork p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-bold text-muted-fg/50 mb-1">3</span>
+            </div>
+            <!-- Fri Jul 4 — next month -->
+            <div
+              class="day-nonwork p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-bold text-muted-fg/50 mb-1">4</span>
+            </div>
+            <!-- Sat Jul 5 — next month, non-work -->
+            <div
+              class="day-nonwork p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-bold text-muted-fg/50 mb-1">5</span>
+            </div>
+            <!-- Sun Jul 6 — next month, non-work -->
+            <div
+              class="day-nonwork p-1.5 min-h-[110px] border-border flex flex-col"
+            >
+              <span class="text-[10px] font-bold text-muted-fg/50 mb-1">6</span>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <style>
+      .text-primary-fg {
+        color: var(--primary-foreground);
+      }
+      .text-foreground {
+        color: var(--foreground);
+      }
+      .bg-foreground {
+        background-color: var(--foreground);
+      }
+      .text-background {
+        color: var(--background);
+      }
+    </style>
+  </body>
+</html>
