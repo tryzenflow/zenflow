@@ -62,10 +62,16 @@ export class TasksService {
     const tz = user.timezone;
 
     // A fixed task is anchored immediately at its chosen day + time-of-day.
+    // A flexible task uses the same day (the calendar view it was created from)
+    // as the earliest placement bound, so the engine schedules it on/after that
+    // day rather than at the first open slot from now.
     let fixedStart: Date | null = null;
+    let earliest: Date | undefined;
     if (fixed) {
       const day = startDate ?? localDateStr(new Date(), tz);
       fixedStart = minutesToUtc(day, startTime ?? 0, tz);
+    } else if (startDate) {
+      earliest = minutesToUtc(startDate, 0, tz);
     }
 
     try {
@@ -87,7 +93,7 @@ export class TasksService {
         });
 
         if (!created.fixed) {
-          await this.scheduler.placeNewTask(user, created, tx);
+          await this.scheduler.placeNewTask(user, created, tx, earliest);
         }
 
         const finalTask = await tx.task.findUniqueOrThrow({

@@ -133,6 +133,28 @@ describe("placeOne", () => {
     const p = placeOne(prefs, task({ id: "n" }), others, MON_MIDNIGHT);
     expect(iso(p.scheduledStartTime)).toBe("2026-06-08T10:00:00.000Z");
   });
+
+  it("honours the earliest anchor (the day the task was created from)", () => {
+    const p = placeOne(
+      prefs,
+      task({ id: "n" }),
+      [],
+      MON_MIDNIGHT,
+      new Date("2026-06-10T00:00:00Z"), // created while viewing Wed the 10th
+    );
+    expect(iso(p.scheduledStartTime)).toBe("2026-06-10T09:00:00.000Z");
+  });
+
+  it("never schedules before now even if the anchor is in the past", () => {
+    const p = placeOne(
+      prefs,
+      task({ id: "n" }),
+      [],
+      new Date("2026-06-10T11:00:00Z"), // now: Wed the 10th, late morning
+      new Date("2026-06-08T00:00:00Z"), // anchor: Mon the 8th (past)
+    );
+    expect(iso(p.scheduledStartTime)).toBe("2026-06-10T11:00:00.000Z");
+  });
 });
 
 describe("cascadeReschedule", () => {

@@ -2,7 +2,6 @@ import {
   eachDayOfInterval,
   endOfWeek,
   format,
-  isToday,
   startOfWeek,
 } from "date-fns";
 import { WeekGrid } from "./week-grid";
@@ -13,6 +12,12 @@ import { cn } from "@/lib/utils";
 import { useUserStore } from "@/hooks/use-user-store";
 import { DEFAULT_WORK_PREFS, getDayZones } from "@/utils/zones";
 import { WEEK_STARTS_ON } from "@/utils/constants";
+import {
+  isZonedToday,
+  tzAbbrev,
+  zonedDate,
+  zonedWallClockToUtc,
+} from "@/utils/tz";
 
 /** Shared column template: a fixed time gutter + 7 equal day columns. */
 const GRID_COLS = "grid-cols-[3rem_repeat(7,minmax(0,1fr))] sm:grid-cols-[4rem_repeat(7,minmax(0,1fr))]";
@@ -29,6 +34,8 @@ export function WeekView({
   onReschedule: (taskId: string, startISO: string) => void;
 }) {
   const prefs = useUserStore((s) => s.user) ?? DEFAULT_WORK_PREFS;
+  const tz = useUserStore((s) => s.user?.timezone) || "UTC";
+  // `date` is already in user-tz space, so the week columns are too.
   const weekDates = eachDayOfInterval({
     start: startOfWeek(date, { weekStartsOn: WEEK_STARTS_ON }),
     end: endOfWeek(date, { weekStartsOn: WEEK_STARTS_ON }),
@@ -43,8 +50,10 @@ export function WeekView({
 
     const duration =
       new Date(block.end).getTime() - new Date(block.start).getTime();
-    const newStart = new Date(weekDates[dayIndex] ?? new Date(block.start));
-    newStart.setHours(hours, minutes, 0, 0);
+    // Target day (user-tz) + dropped wall-clock time → real UTC instant.
+    const wall = new Date(weekDates[dayIndex] ?? zonedDate(block.start, tz));
+    wall.setHours(hours, minutes, 0, 0);
+    const newStart = zonedWallClockToUtc(wall, tz);
     const newEnd = new Date(newStart.getTime() + duration);
 
     setEvents((evs) =>
@@ -72,10 +81,10 @@ export function WeekView({
         )}
       >
         <div className="text-muted-foreground border-border flex items-center justify-center border-r py-2 text-center font-mono text-[10px] font-bold">
-          {format(new Date(), "z")}
+          {tzAbbrev(tz)}
         </div>
         {weekDates.map((d) => {
-          const today = isToday(d);
+          const today = isZonedToday(d, tz);
           const { isWorkDay } = getDayZones(d, prefs);
           return (
             <div

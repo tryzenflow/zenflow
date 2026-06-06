@@ -2,10 +2,12 @@ import { Event } from "@/types/schedule";
 import { DAILY_HORIZON, TIME_GRANULARITY } from "@/utils/constants";
 import { useMemo } from "react";
 import { ScheduledBlockItem } from "./scheduled-block-item";
-import { format, isToday } from "date-fns";
+import { format } from "date-fns";
 import { Cell } from "./day-cell";
 import { DayColumnBackground } from "./day-column-background";
 import { getOverlapSpacing } from "@/utils/overlap";
+import { useUserStore } from "@/hooks/use-user-store";
+import { isZonedToday, zonedNow } from "@/utils/tz";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
@@ -20,10 +22,11 @@ function formatHour(hour: number) {
 }
 
 export function DayGrid({ events, date }: { events: Event[]; date: Date }) {
+  const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const nowTop = useMemo(() => {
-    const mins = minutesSinceStartOfDay(new Date());
+    const mins = minutesSinceStartOfDay(zonedNow(tz));
     return `${(mins / DAILY_HORIZON) * 100}%`;
-  }, []);
+  }, [tz]);
 
   const spacings = getOverlapSpacing(events);
 
@@ -46,7 +49,7 @@ export function DayGrid({ events, date }: { events: Event[]; date: Date }) {
       <div className="bg-card relative">
         <DayColumnBackground date={date} />
 
-        {isToday(date) && (
+        {isZonedToday(date, tz) && (
           <div
             className="pointer-events-none absolute inset-x-0 z-20"
             style={{ top: nowTop }}

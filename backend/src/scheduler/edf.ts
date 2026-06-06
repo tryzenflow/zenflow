@@ -139,12 +139,15 @@ export function scheduleAll(
 /**
  * Incremental placement of a single new task around already-placed tasks
  * (preserves existing/ manually-moved placements). Used on POST /tasks.
+ * `earliest` lower-bounds the search (e.g. the day the user was viewing), so a
+ * flexible task lands on/after that day rather than the first slot from `now`.
  */
 export function placeOne(
   prefs: SchedulerPrefs,
   task: EdfTask,
   others: EdfTask[],
   now: Date,
+  earliest?: Date,
 ): Placement {
   if (task.fixed) {
     return {
@@ -156,7 +159,14 @@ export function placeOne(
   const occupied = others
     .map(intervalOf)
     .filter((i): i is Interval => i !== null);
-  const slot = findSlot(prefs, task.durationMinutes, task.deadline, occupied, now);
+  const slot = findSlot(
+    prefs,
+    task.durationMinutes,
+    task.deadline,
+    occupied,
+    now,
+    earliest,
+  );
   return slot
     ? { id: task.id, scheduledStartTime: slot, conflict: false }
     : { id: task.id, scheduledStartTime: null, conflict: true };

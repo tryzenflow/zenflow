@@ -2,12 +2,13 @@ import { cn } from "@/lib/utils";
 import { Event } from "@/types/schedule";
 import { TASK_CARD_CLASSES } from "@/lib/task-card";
 import { Popover, PopoverTrigger, PopoverContent } from "../ui/popover";
-import { format, isSameDay, isSameMonth, isToday } from "date-fns";
+import { format, isSameDay, isSameMonth } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useUserStore } from "@/hooks/use-user-store";
 import { DEFAULT_WORK_PREFS, getDayZones } from "@/utils/zones";
+import { isZonedToday, zonedDate } from "@/utils/tz";
 
 export function MonthCell({
   date,
@@ -22,9 +23,10 @@ export function MonthCell({
     id: format(date, "yyyy-MM-dd"),
   });
   const prefs = useUserStore((s) => s.user) ?? DEFAULT_WORK_PREFS;
+  const tz = useUserStore((s) => s.user?.timezone) || "UTC";
 
   const outside = !isSameMonth(date, currentDate);
-  const today = isToday(date);
+  const today = isZonedToday(date, tz);
   const { isWorkDay } = getDayZones(date, prefs);
   const nonWork = outside || !isWorkDay;
 
@@ -69,7 +71,7 @@ export function MonthCell({
         )}
       >
         {events.slice(0, 3).map((ev) => (
-          <MonthEventItem key={ev.id} ev={ev} />
+          <MonthEventItem key={ev.id} ev={ev} tz={tz} />
         ))}
 
         {events.length > 3 && (
@@ -87,9 +89,9 @@ export function MonthCell({
               <h5 className="mb-2 text-sm font-medium">{format(date, "EEE d")}</h5>
               <div className="space-y-0.5">
                 {events
-                  .filter((ev) => isSameDay(new Date(ev.start), date))
+                  .filter((ev) => isSameDay(zonedDate(ev.start, tz), date))
                   .map((ev) => (
-                    <MonthEventItem key={ev.id} ev={ev} />
+                    <MonthEventItem key={ev.id} ev={ev} tz={tz} />
                   ))}
               </div>
             </PopoverContent>
@@ -100,7 +102,7 @@ export function MonthCell({
   );
 }
 
-function MonthEventItem({ ev }: { ev: Event }) {
+function MonthEventItem({ ev, tz }: { ev: Event; tz: string }) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: ev.id,
   });
@@ -131,7 +133,7 @@ function MonthEventItem({ ev }: { ev: Event }) {
     >
       <span className="truncate">
         <span className="text-muted-foreground font-mono font-normal">
-          {format(new Date(ev.start), "HH:mm")}
+          {format(zonedDate(ev.start, tz), "HH:mm")}
         </span>{" "}
         {ev.title}
       </span>

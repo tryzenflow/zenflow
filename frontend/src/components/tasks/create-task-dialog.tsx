@@ -10,9 +10,10 @@ import { generateRRule, parseTags, TaskFormValues } from "../../utils/tasks";
 import { TaskForm } from "./form/task-form";
 import { Plus } from "lucide-react";
 import { createTask } from "@/api/tasks";
-import { format, isToday } from "date-fns";
+import { format } from "date-fns";
 import { fromZonedTime } from "date-fns-tz";
 import { snapToNearestLaterQuarterHour } from "@/utils/time";
+import { isZonedToday } from "@/utils/tz";
 import type { ViewMode } from "@zenflow/shared";
 
 const VIEW_SUBTITLE: Record<ViewMode, string> = {
@@ -34,6 +35,7 @@ export function CreateTaskDialog({
   const [loading, setLoading] = useState(false);
   const user = useUserStore((state) => state.user);
   const workDays = user?.workDays ?? [1, 2, 3, 4, 5];
+  const tz = user?.timezone || "UTC";
   const form = useTaskForm({
     defaultValues: {
       title: "",
@@ -53,12 +55,12 @@ export function CreateTaskDialog({
       monthlyMode: "on",
       yearlyMode: "on",
       isFixed: false,
-      fixedStart: isToday(date)
+      fixedStart: isZonedToday(date, tz)
         ? snapToNearestLaterQuarterHour(
             date.getHours() * 60 + date.getMinutes(),
           )
         : 9 * 60,
-      fixedEnd: isToday(date)
+      fixedEnd: isZonedToday(date, tz)
         ? snapToNearestLaterQuarterHour(
             date.getHours() * 60 + date.getMinutes(),
           ) + 60
@@ -100,7 +102,9 @@ export function CreateTaskDialog({
         deadline,
         fixed: values.isFixed,
         startTime: values.isFixed ? values.fixedStart : 0,
-        startDate: values.isFixed ? format(date, "yyyy-MM-dd") : undefined,
+        // Always the viewed day: a fixed anchor when fixed, otherwise the
+        // earliest day the flexible engine may place the task on.
+        startDate: format(date, "yyyy-MM-dd"),
         rrule:
           values.isRecurring && view !== "day"
             ? generateRRule(values, { view, date, workDays })

@@ -49,7 +49,11 @@ export class CreateTaskDto implements CreateTaskInput {
   @Max(DAILY_HORIZON)
   startTime?: number;
 
-  /** 'YYYY-MM-DD' anchor day for a fixed task (defaults to today in the user's tz). */
+  /**
+   * 'YYYY-MM-DD' day the task was created from, in the user's tz. For a fixed
+   * task it's the exact anchor day; for a flexible task it's the earliest day
+   * the engine may place it on. Defaults to today.
+   */
   @IsOptional()
   @IsDateString()
   startDate?: string;

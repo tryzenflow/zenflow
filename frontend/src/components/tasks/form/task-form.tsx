@@ -10,7 +10,9 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { TaskFormValues, parseTags } from "@/utils/tasks";
-import { format, isToday } from "date-fns";
+import { format } from "date-fns";
+import { isZonedToday } from "@/utils/tz";
+import { useUserStore } from "@/hooks/use-user-store";
 import type { ViewMode } from "@zenflow/shared";
 import { UseFormReturn } from "react-hook-form";
 import { useState, type ReactNode } from "react";
@@ -68,6 +70,7 @@ export function TaskForm({
   bodyExtra,
   footerExtra,
 }: TaskFormProps) {
+  const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const isFixed = form.watch("isFixed");
   const fixedStart = form.watch("fixedStart");
   const fixedEnd = form.watch("fixedEnd");
@@ -189,7 +192,7 @@ export function TaskForm({
           {isFixed && (
             <FixedForm
               minTime={
-                date && isToday(date)
+                date && isZonedToday(date, tz)
                   ? snapToNearestLaterQuarterHour(
                       date.getHours() * 60 + date.getMinutes(),
                     )

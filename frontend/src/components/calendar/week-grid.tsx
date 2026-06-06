@@ -1,10 +1,12 @@
-import { format, isSameDay, isToday } from "date-fns";
+import { format, isSameDay } from "date-fns";
 import { Cell } from "./day-cell";
 import { DayColumnBackground } from "./day-column-background";
 import { TIME_GRANULARITY } from "@/utils/constants";
 import { Event } from "@/types/schedule";
 import { ScheduledBlockItem } from "./scheduled-block-item";
 import { getOverlapSpacing } from "@/utils/overlap";
+import { useUserStore } from "@/hooks/use-user-store";
+import { isZonedToday, zonedDate, zonedNow } from "@/utils/tz";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
@@ -21,6 +23,7 @@ export const WeekGrid = ({
   events: Event[];
   weekDates: Date[];
 }) => {
+  const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const spacings = getOverlapSpacing(events);
   return (
     <>
@@ -48,11 +51,11 @@ export const WeekGrid = ({
         >
           <DayColumnBackground date={date} />
 
-          {isToday(date) && (
+          {isZonedToday(date, tz) && (
             <div
               className="pointer-events-none absolute right-0 left-0 z-20"
               style={{
-                top: `${64 * new Date().getHours() + new Date().getMinutes()}px`,
+                top: `${64 * zonedNow(tz).getHours() + zonedNow(tz).getMinutes()}px`,
               }}
             >
               <div className="relative flex items-center">
@@ -81,7 +84,7 @@ export const WeekGrid = ({
 
           {/* events for this day */}
           {events
-            .filter((e) => isSameDay(new Date(e.start), date))
+            .filter((e) => isSameDay(zonedDate(e.start, tz), date))
             .map((e) => (
               <ScheduledBlockItem
                 block={e}

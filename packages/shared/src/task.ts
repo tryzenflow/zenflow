@@ -68,7 +68,11 @@ export interface CreateTaskInput {
   tags?: string[];
   fixed?: boolean;
   startTime?: number;
-  /** 'YYYY-MM-DD' anchor day for a fixed task (defaults to today in the user's tz). */
+  /**
+   * 'YYYY-MM-DD' day the task was created from, in the user's tz. Fixed: the
+   * exact anchor day. Flexible: the earliest day the engine may place it on.
+   * Defaults to today.
+   */
   startDate?: string;
   rrule?: string;
 }

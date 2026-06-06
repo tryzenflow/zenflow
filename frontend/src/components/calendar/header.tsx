@@ -13,6 +13,8 @@ import {
 import { Dispatch, SetStateAction } from "react";
 import { ViewMode } from "@/types/schedule";
 import { CreateTaskDialog } from "../tasks/create-task-dialog";
+import { useUserStore } from "@/hooks/use-user-store";
+import { zonedNow } from "@/utils/tz";
 
 interface CalendarHeaderProps {
   date: Date;
@@ -34,6 +36,7 @@ export function CalendarHeader({
   onChanged,
   onOpenNav,
 }: CalendarHeaderProps) {
+  const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const shift = (direction: "left" | "right") => {
     switch (currentView) {
       case "day":
@@ -74,7 +77,7 @@ export function CalendarHeader({
           <Menu className="size-4" />
         </Button>
 
-        <Button variant="outline" onClick={() => setDate(new Date())}>
+        <Button variant="outline" onClick={() => setDate(zonedNow(tz))}>
           Today
         </Button>
 

@@ -4,6 +4,8 @@ import { Event } from "@/types/schedule";
 import { DndContext, DragEndEvent } from "@dnd-kit/core";
 import { WEEK_STARTS_ON } from "@/utils/constants";
 import { cn } from "@/lib/utils";
+import { useUserStore } from "@/hooks/use-user-store";
+import { zonedDate, zonedWallClockToUtc } from "@/utils/tz";
 
 export function MonthView({
   events,
@@ -16,6 +18,7 @@ export function MonthView({
   setEvents: React.Dispatch<React.SetStateAction<Event[]>>;
   onReschedule: (taskId: string, startISO: string) => void;
 }) {
+  const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const weekdays = eachDayOfInterval({
     start: startOfWeek(new Date(), { weekStartsOn: WEEK_STARTS_ON }),
     end: endOfWeek(new Date(), { weekStartsOn: WEEK_STARTS_ON }),
@@ -26,10 +29,12 @@ export function MonthView({
     const activeId = active.id.toString();
     const block = events.find((e) => e.id === activeId);
     if (!block) return;
-    const overDate = new Date(over.id.toString());
-
-    const newStart = new Date(block.start);
-    newStart.setFullYear(overDate.getFullYear(), overDate.getMonth(), overDate.getDate());
+    // Droppable id is a 'YYYY-MM-DD' user-tz day. Keep the block's wall-clock
+    // time-of-day, move it to that day in zoned space, then back to UTC.
+    const [y, m, d] = over.id.toString().split("-").map(Number);
+    const wall = zonedDate(block.start, tz);
+    wall.setFullYear(y, m - 1, d);
+    const newStart = zonedWallClockToUtc(wall, tz);
     const duration =
       new Date(block.end).getTime() - new Date(block.start).getTime();
     const newEnd = new Date(newStart.getTime() + duration);
@@ -43,6 +48,7 @@ export function MonthView({
     );
     onReschedule(block.taskId, newStart.toISOString());
   }
+
 
   return (
     <div data-slot="month-view" className="flex min-h-full flex-col">

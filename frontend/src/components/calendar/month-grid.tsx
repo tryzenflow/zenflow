@@ -9,8 +9,11 @@ import {
 } from "date-fns";
 import { MonthCell } from "./month-cell";
 import { WEEK_STARTS_ON } from "@/utils/constants";
+import { useUserStore } from "@/hooks/use-user-store";
+import { zonedDate } from "@/utils/tz";
 
 export function MonthGrid({ events, date }: { events: Event[]; date: Date }) {
+  const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const monthDays = eachDayOfInterval({
     start: startOfWeek(startOfMonth(date), { weekStartsOn: WEEK_STARTS_ON }),
     end: endOfWeek(endOfMonth(date), { weekStartsOn: WEEK_STARTS_ON }),
@@ -23,7 +26,7 @@ export function MonthGrid({ events, date }: { events: Event[]; date: Date }) {
           key={d.toISOString()}
           currentDate={date}
           date={d}
-          events={events.filter((e) => isSameDay(d, new Date(e.start)))}
+          events={events.filter((e) => isSameDay(d, zonedDate(e.start, tz)))}
         />
       ))}
     </div>

@@ -14,9 +14,16 @@ import type { Task, TasksMeta } from "@zenflow/shared";
 import { isAxiosError } from "axios";
 import { toast } from "sonner";
 import { isSameDay } from "date-fns";
+import { useUserStore } from "@/hooks/use-user-store";
+import { zonedDate, zonedNow } from "@/utils/tz";
 
 export function CalendarLayout() {
-  const [date, setDate] = useState(new Date());
+  const tz = useUserStore((s) => s.user?.timezone) || "UTC";
+  // The cursor day is held in user-tz space (its local fields are the user's
+  // wall clock), so every downstream day comparison stays in that tz.
+  const [date, setDate] = useState<Date>(() =>
+    zonedNow(useUserStore.getState().user?.timezone || "UTC"),
+  );
   const [viewMode, setViewMode] = useState<ViewMode>("day");
   useViewShortcuts(setViewMode);
 
@@ -76,11 +83,11 @@ export function CalendarLayout() {
   const agenda = useMemo(
     () =>
       [...blocks]
-        .filter((b) => isSameDay(new Date(b.start), date))
+        .filter((b) => isSameDay(zonedDate(b.start, tz), date))
         .sort(
           (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
         ),
-    [blocks, date],
+    [blocks, date, tz],
   );
 
   return (

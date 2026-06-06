@@ -49,11 +49,14 @@ export class SchedulerService {
   /**
    * Place a single freshly-created task around already-scheduled tasks
    * (preserves existing placements). Mutates the row; run inside a transaction.
+   * `earliest` anchors a flexible task to a chosen day (the calendar view the
+   * user created it from) instead of the first open slot from `now`.
    */
   async placeNewTask(
     user: User,
     task: Task,
     tx: PrismaTx,
+    earliest?: Date,
     now = new Date(),
   ): Promise<{ scheduledStartTime: Date | null; conflict: boolean }> {
     const others = (await this.pendingTasks(user.id, tx)).filter(
@@ -64,6 +67,7 @@ export class SchedulerService {
       this.toEdf(task),
       others.map((t) => this.toEdf(t)),
       now,
+      earliest,
     );
     await tx.task.update({
       where: { id: task.id },
