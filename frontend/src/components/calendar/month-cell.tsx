@@ -121,7 +121,7 @@ function MonthEventItem({ ev, tz }: { ev: Event; tz: string }) {
       style={style}
       onClick={() =>
         window.dispatchEvent(
-          new CustomEvent("zenflow:open-task", { detail: ev.taskId }),
+          new CustomEvent("zenflow:open-task", { detail: ev.id }),
         )
       }
       className={cn(
