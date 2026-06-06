@@ -17,11 +17,16 @@ export function WithAuth({ children }: { children: React.ReactNode }) {
       setLoading(true);
       me()
         .then((data) => {
-          setLoading(false);
           setUser(data);
         })
         .catch(() => {
           navigate(`/login?callback=${location.pathname}`);
+        })
+        .finally(() => {
+          // Always clear the flag — otherwise a failed pre-login `me()` leaves
+          // `loading` stuck `true`, and after login `WithAuth` renders null
+          // (blank page) because of the `if (loading) return null` guard.
+          setLoading(false);
         });
     }
   }, [user, loading, location.pathname]);
