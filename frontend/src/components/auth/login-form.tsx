@@ -190,7 +190,7 @@ export function LoginForm({
                         form.setValue("otp", "");
                         clearErrors();
                       }}
-                      className="text-sm ml-3 underline-offset-2 font-medium underline"
+                      className="block text-sm underline-offset-4 font-medium underline"
                     >
                       Change Email
                     </a>

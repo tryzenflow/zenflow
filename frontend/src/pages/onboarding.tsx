@@ -10,7 +10,7 @@ import {
   Info,
 } from "lucide-react";
 import { WithAuth } from "@/components/hoc/with-auth";
-import { Logo } from "@/components/logo";
+import { Logo, Wordmark } from "@/components/logo";
 import { cn } from "@/lib/utils";
 import { useUserStore } from "@/hooks/use-user-store";
 import { completeOnboarding } from "@/api/users";
@@ -28,14 +28,37 @@ const DAYS = [
 ];
 
 const ARCHETYPES = [
-  { id: "night-owl-dev", name: "Developer", sig: "#backend #ops", blurb: "Peaks mid-afternoon, avoids early mornings" },
-  { id: "creative-lead", name: "Creative Lead", sig: "#marketing #copy", blurb: "Mornings, hard-avoids Friday afternoons" },
-  { id: "finance-ops", name: "Finance / Ops", sig: "#finance #admin", blurb: "Structured 09–12 blocks, cutoff at 17:00" },
-  { id: "generalist-pm", name: "Generalist PM", sig: "#planning #meetings", blurb: "Distributed across the day, high recurrence" },
+  {
+    id: "night-owl-dev",
+    name: "Developer",
+    sig: "#backend #ops",
+    blurb: "Peaks mid-afternoon, avoids early mornings",
+  },
+  {
+    id: "creative-lead",
+    name: "Creative Lead",
+    sig: "#marketing #copy",
+    blurb: "Mornings, hard-avoids Friday afternoons",
+  },
+  {
+    id: "finance-ops",
+    name: "Finance / Ops",
+    sig: "#finance #admin",
+    blurb: "Structured 09–12 blocks, cutoff at 17:00",
+  },
+  {
+    id: "generalist-pm",
+    name: "Generalist PM",
+    sig: "#planning #meetings",
+    blurb: "Distributed across the day, high recurrence",
+  },
 ];
 
 /** Half-hour options between 05:00 and 22:00. */
-const TIME_OPTIONS = Array.from({ length: (22 - 5) * 2 + 1 }, (_, i) => 5 * 60 + i * 30);
+const TIME_OPTIONS = Array.from(
+  { length: (22 - 5) * 2 + 1 },
+  (_, i) => 5 * 60 + i * 30,
+);
 
 function minutesToLabel(m: number) {
   const h = Math.floor(m / 60);
@@ -49,8 +72,7 @@ function StepRail({ current }: { current: number }) {
   return (
     <div className="hidden w-72 shrink-0 flex-col border-r border-border bg-card px-8 py-10 md:flex">
       <div className="mb-12 flex items-center gap-2.5">
-        <Logo className="h-9 w-9 shrink-0" />
-        <span className="text-sm font-bold tracking-tight">Zenflow</span>
+        <Wordmark />
       </div>
       <div className="space-y-1">
         {STEPS.map((label, i) => {
@@ -85,7 +107,9 @@ function StepRail({ current }: { current: number }) {
               <span
                 className={cn(
                   "text-xs font-medium",
-                  active ? "font-semibold text-primary" : "text-muted-foreground",
+                  active
+                    ? "font-semibold text-primary"
+                    : "text-muted-foreground",
                 )}
               >
                 {label}
@@ -195,7 +219,7 @@ function OnboardingWizard() {
     <div className="flex min-h-screen">
       <StepRail current={step} />
       <div className="flex flex-1 items-center justify-center bg-gradient-to-b from-muted/60 to-background p-4 sm:p-8">
-        <div className="w-full max-w-md rounded-2xl border border-border bg-card/80 p-6 backdrop-blur-xl sm:p-8">
+        <div className="w-full max-w-lg rounded-2xl border border-border bg-card/80 p-6 backdrop-blur-xl sm:p-8">
           <div className="mb-8">
             <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
               Step {step + 1} of {STEPS.length}
@@ -351,7 +375,10 @@ function OnboardingWizard() {
 
             {step === 4 && (
               <div className="space-y-2 rounded-md border border-border bg-muted p-4 text-sm">
-                <Row label="Hours" value={`${minutesToLabel(workStart)} – ${minutesToLabel(workEnd)}`} />
+                <Row
+                  label="Hours"
+                  value={`${minutesToLabel(workStart)} – ${minutesToLabel(workEnd)}`}
+                />
                 <Row
                   label="Days"
                   value={DAYS.filter((d) => workDays.includes(d.iso))
