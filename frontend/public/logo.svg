@@ -3,7 +3,7 @@
 <path d="M220.5 51.5C220.5 51.5 172.668 65.7587 147.635 89.6235C122.602 113.488 136.249 158.201 104.912 183.517C80.2542 203.436 32.9999 199.5 32.9999 199.5" stroke="#FFF085" stroke-width="24" stroke-linecap="round"/>
 <defs>
 <linearGradient id="paint0_linear_2005_11" x1="48.5" y1="31.5" x2="222.5" y2="220.5" gradientUnits="userSpaceOnUse">
-<stop stop-color="#FF6900"/>
+<stop stop-color="#ff8e3e"/>
 <stop offset="0.323567" stop-color="#F0B100"/>
 <stop offset="1" stop-color="#D8F999"/>
 </linearGradient>

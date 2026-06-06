@@ -53,9 +53,9 @@ const AGENDA_ROW: Record<TaskCardState, string> = {
   fluid: "border-border bg-card hover:bg-sidebar-accent",
   fixed: "border-border bg-card hover:bg-sidebar-accent",
   overdue:
-    "border-rose-200/60 bg-rose-50/60 dark:border-rose-900/30 dark:bg-rose-950/20",
+    "border-rose-400/60 bg-rose-50/60 dark:border-rose-900/30 dark:bg-rose-950/20",
   conflict:
-    "border-amber-200/50 bg-amber-50/60 dark:border-amber-900/20 dark:bg-amber-950/10",
+    "border-amber-400/50 bg-amber-50/60 dark:border-amber-900/20 dark:bg-amber-950/10",
   completed: "border-border bg-card opacity-60",
 };
 
@@ -121,7 +121,7 @@ function AgendaItem({ block, tz }: { block: Event; tz: string }) {
 /** Desktop rail — hidden below `lg`, where the content moves into a drawer. */
 export function CalendarSidebar(props: SidebarProps) {
   return (
-    <aside className="hidden w-64 shrink-0 border-r border-sidebar-border bg-sidebar lg:block">
+    <aside className="hidden w-72 shrink-0 border-r border-sidebar-border bg-sidebar lg:block">
       <SidebarBody {...props} />
     </aside>
   );
@@ -132,7 +132,8 @@ export function SidebarBody({ meta, agenda, view }: SidebarProps) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const allocated = meta?.totalAllocatedMinutes ?? 0;
   const total = meta?.totalWorkMinutes ?? 0;
-  const pct = total > 0 ? Math.min(100, Math.round((allocated / total) * 100)) : 0;
+  const pct =
+    total > 0 ? Math.min(100, Math.round((allocated / total) * 100)) : 0;
   // Day view is a single day — keep it flat; week/month group under day headers.
   const grouped = view !== "day";
   const groups = grouped ? groupByDay(agenda, tz) : [];
@@ -148,7 +149,7 @@ export function SidebarBody({ meta, agenda, view }: SidebarProps) {
         <Label>Day Load</Label>
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
           <div
-            className="h-full rounded-full bg-primary transition-all"
+            className="h-full rounded-full bg-gradient-to-r from-brand-orange via-brand-yellow to-brand-lime transition-all"
             style={{ width: `${pct}%` }}
           />
         </div>
@@ -186,17 +187,22 @@ export function SidebarBody({ meta, agenda, view }: SidebarProps) {
         </Label>
         <ul className="space-y-1 text-[11px] leading-snug text-muted-foreground">
           <li>
-            <span className="font-semibold text-foreground">Drag</span> a task to
-            reschedule it.
+            <span className="font-semibold text-foreground">Drag</span> a task
+            to reschedule it.
+          </li>
+          <li>
+            <span className="font-semibold text-foreground">Hold and drag</span>{" "}
+            one edge of a task to resize it.
           </li>
           <li>
             <span className="font-semibold text-foreground">Double-click</span>{" "}
             (or long-press on touch) to edit.
           </li>
           <li>
-            <span className="font-semibold text-foreground">Flexible</span> tasks
-            are auto-placed by the engine; <span className="font-semibold text-foreground">fixed</span>{" "}
-            ones stay where you put them.
+            <span className="font-semibold text-foreground">Flexible</span>{" "}
+            tasks are auto-placed by the engine;{" "}
+            <span className="font-semibold text-foreground">fixed</span> ones
+            stay where you put them.
           </li>
           <li>
             Overlapping tasks are flagged as{" "}

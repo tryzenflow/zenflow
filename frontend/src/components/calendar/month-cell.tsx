@@ -39,7 +39,7 @@ export function MonthCell({
         "flex min-h-[110px] flex-col p-1.5 transition-colors",
         today ? "day-today" : nonWork ? "bg-muted" : "bg-card",
         today && "border-t-foreground border-t-2",
-        isOver && "ring-primary/40 ring-1 ring-inset",
+        isOver && "ring-brand-yellow/70 ring-1 ring-inset",
       )}
     >
       {/* Date row */}
