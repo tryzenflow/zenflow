@@ -27,6 +27,7 @@ import { hideEmail } from "../../utils/hide-email";
 import { useUserStore } from "../../hooks/use-user-store";
 import { requestOtp, verifyOtp } from "@/api/auth";
 import { isAxiosError } from "axios";
+import { Logo } from "@/components/logo";
 
 const emailSchema = z.object({
   email: z.email({ message: "Invalid email address." }),
@@ -111,7 +112,7 @@ export function LoginForm({
 
       toast.success("Login successfully");
       setUser(result.data);
-      navigate("/");
+      navigate(result.data?.onboardingComplete ? "/" : "/onboarding");
     } catch (error) {
       if (isAxiosError(error) && error.status === 400) {
         const errorMessage =
@@ -141,15 +142,10 @@ export function LoginForm({
       <Form {...form}>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <div className="flex flex-col items-center gap-2 text-center">
-            <a
-              href="#"
-              className="flex flex-col items-center gap-2 font-medium"
-            >
-              <div className="flex size-8 items-center justify-center rounded-md">
-                <img src="/logo.svg" width="64px" height="64px" />
-              </div>
+            <div className="flex flex-col items-center gap-2 font-medium">
+              <Logo className="size-16" />
               <span className="sr-only">Zenflow</span>
-            </a>
+            </div>
             <h1 className="text-xl font-bold">Login to Zenflow</h1>
           </div>
 

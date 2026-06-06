@@ -3,6 +3,10 @@ import { useUserStore } from "@/hooks/use-user-store";
 import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
+/**
+ * Gate authenticated routes. Redirects to /login when unauthenticated, and to
+ * /onboarding until the user has completed onboarding.
+ */
 export function WithAuth({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -21,6 +25,16 @@ export function WithAuth({ children }: { children: React.ReactNode }) {
         });
     }
   }, [user, loading, location.pathname]);
+
+  useEffect(() => {
+    if (
+      user &&
+      !user.onboardingComplete &&
+      location.pathname !== "/onboarding"
+    ) {
+      navigate("/onboarding");
+    }
+  }, [user, location.pathname]);
 
   if (loading) return null;
 

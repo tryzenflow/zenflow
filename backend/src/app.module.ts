@@ -12,11 +12,7 @@ import { CacheableMemory } from "cacheable";
 import { MailService } from "./mail/mail.service";
 import { MailModule } from "./mail/mail.module";
 import { UsersModule } from "./users/users.module";
-import { SchedulerModule } from "./scheduler/scheduler.module";
 import { TasksModule } from "./tasks/tasks.module";
-import { SchedulesModule } from "./schedules/schedules.module";
-import { UserPreferencesModule } from "./prefs/prefs.module";
-import { CategoriesModule } from "./categories/categories.module";
 import { FilesModule } from "./files/files.module";
 import { ScheduleModule } from "@nestjs/schedule";
 
@@ -32,7 +28,6 @@ import { ScheduleModule } from "@nestjs/schedule";
         CORS_ORIGIN: Joi.string().required(),
         CACHE_URL: Joi.string().uri().required(),
         MAIL_TRANSPORT: Joi.string().uri().required(),
-        GRPC_SCHEDULER_URL: Joi.string().required(),
       }),
     }),
     ScheduleModule.forRoot(),
@@ -55,11 +50,7 @@ import { ScheduleModule } from "@nestjs/schedule";
     PrismaModule,
     AuthModule,
     MailModule,
-    SchedulerModule,
     TasksModule,
-    SchedulesModule,
-    UserPreferencesModule,
-    CategoriesModule,
     FilesModule,
   ],
   providers: [AppService, MailService],

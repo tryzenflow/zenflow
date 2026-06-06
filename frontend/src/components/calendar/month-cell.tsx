@@ -1,11 +1,13 @@
 import { cn } from "@/lib/utils";
 import { Event } from "@/types/schedule";
-import { getEnergyStyle } from "@/utils/energy";
+import { TASK_CARD_CLASSES } from "@/lib/task-card";
 import { Popover, PopoverTrigger, PopoverContent } from "../ui/popover";
 import { format, isSameDay, isSameMonth, isToday } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
+import { useUserStore } from "@/hooks/use-user-store";
+import { DEFAULT_WORK_PREFS, getDayZones } from "@/utils/zones";
 
 export function MonthCell({
   date,
@@ -19,52 +21,80 @@ export function MonthCell({
   const { isOver, setNodeRef } = useDroppable({
     id: format(date, "yyyy-MM-dd"),
   });
+  const prefs = useUserStore((s) => s.user) ?? DEFAULT_WORK_PREFS;
+
+  const outside = !isSameMonth(date, currentDate);
+  const today = isToday(date);
+  const { isWorkDay } = getDayZones(date, prefs);
+  const nonWork = outside || !isWorkDay;
 
   return (
     <div
-      data-outside-cell={!isSameMonth(date, currentDate) ? "true" : undefined}
-      data-today={isToday(date) ? "true" : undefined}
       ref={setNodeRef}
-      className="group border-border/70 data-outside-cell:bg-muted/25 data-outside-cell:text-muted-foreground/70 border-r border-b last:border-r-0"
+      data-outside-cell={outside ? "true" : undefined}
+      data-today={today ? "true" : undefined}
+      className={cn(
+        "flex min-h-[110px] flex-col p-1.5 transition-colors",
+        today ? "day-today" : nonWork ? "bg-muted" : "bg-card",
+        today && "border-t-foreground border-t-2",
+        isOver && "ring-primary/40 ring-1 ring-inset",
+      )}
     >
-      <div
-        data-grabbing={isOver ? "true" : undefined}
-        className="data-dragging:bg-accent flex h-full flex-col px-0.5 py-1 sm:px-1"
-      >
-        <div className="group-data-today:bg-primary group-data-today:text-primary-foreground mt-1 inline-flex size-6 items-center justify-center rounded-full text-sm">
+      {/* Date row */}
+      <div className="mb-1 flex items-center justify-between">
+        <span
+          className={cn(
+            "text-[10px] font-bold",
+            outside
+              ? "text-muted-foreground/50"
+              : nonWork
+                ? "text-muted-foreground"
+                : "text-foreground",
+          )}
+        >
           {date.getDate()}
-        </div>
-        <div className="min-h-[calc((var(--event-height)+var(--event-gap))*2)] sm:min-h-[calc((var(--event-height)+var(--event-gap))*3)] lg:min-h-[calc((var(--event-height)+var(--event-gap))*4)]">
-          {events.slice(0, 2).map((ev) => (
-            <MonthEventItem key={ev.id} ev={ev} />
-          ))}
+        </span>
+        {today && (
+          <span className="bg-foreground text-background rounded px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide">
+            Today
+          </span>
+        )}
+      </div>
 
-          {events.length > 2 && (
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  className="text-xs w-full justify-start h-4 font-light"
-                  variant="ghost"
-                  size="sm"
-                >
-                  <span>
-                    + {events.length - 2} <span>more</span>
-                  </span>
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[250px]">
-                <h5 className="font-medium mb-2 text-sm">
-                  {format(date, "EEE d")}
-                </h5>
+      {/* Tasks — faded on off-days, mirroring the mockup. */}
+      <div
+        className={cn(
+          "flex-1 space-y-0.5 overflow-hidden",
+          nonWork && !today && "opacity-45",
+        )}
+      >
+        {events.slice(0, 3).map((ev) => (
+          <MonthEventItem key={ev.id} ev={ev} />
+        ))}
+
+        {events.length > 3 && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                className="text-muted-foreground h-4 w-full justify-start px-1.5 text-[10px] font-medium"
+                variant="ghost"
+                size="sm"
+              >
+                + {events.length - 3} more
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[250px]">
+              <h5 className="mb-2 text-sm font-medium">{format(date, "EEE d")}</h5>
+              <div className="space-y-0.5">
                 {events
                   .filter((ev) => isSameDay(new Date(ev.start), date))
                   .map((ev) => (
                     <MonthEventItem key={ev.id} ev={ev} />
                   ))}
-              </PopoverContent>
-            </Popover>
-          )}
-        </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+        )}
       </div>
     </div>
   );
@@ -85,20 +115,26 @@ function MonthEventItem({ ev }: { ev: Event }) {
       {...listeners}
       ref={setNodeRef}
       size="sm"
+      variant="ghost"
       style={style}
-      data-grabbing={transform ? "true" : undefined}
+      onClick={() =>
+        window.dispatchEvent(
+          new CustomEvent("zenflow:open-task", { detail: ev.taskId }),
+        )
+      }
       className={cn(
-        "data-dragging:cursor-grabbing relative z-30 data-dragging:shadow-lg data-past-event:line-through sm:px-2 justify-between mt-1 w-full h-4 rounded items-center text-[10px] sm:text-xs gap-x-4",
-        getEnergyStyle(ev.task.energy).backgroundColor,
-        getEnergyStyle(ev.task.energy).textColor,
+        "relative z-30 mt-0 h-auto w-full justify-start gap-x-1 rounded border border-l-2 px-1.5 py-0.5 text-[10px] font-medium",
+        transform && "cursor-grabbing shadow-lg",
+        ev.state === "completed" && "line-through",
+        TASK_CARD_CLASSES[ev.state],
       )}
     >
-      <div className="line-clamp-1">
-        <span className="font-light">
-          {format(new Date(ev.start), "hh:mm")}{" "}
-        </span>
-        {ev.task.title}
-      </div>
+      <span className="truncate">
+        <span className="text-muted-foreground font-mono font-normal">
+          {format(new Date(ev.start), "HH:mm")}
+        </span>{" "}
+        {ev.title}
+      </span>
     </Button>
   );
 }

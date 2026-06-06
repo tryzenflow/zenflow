@@ -2,76 +2,108 @@ import {
   eachDayOfInterval,
   endOfWeek,
   format,
-  startOfDay,
+  isToday,
   startOfWeek,
 } from "date-fns";
 import { WeekGrid } from "./week-grid";
 import { Event } from "@/types/schedule";
 import { DndContext, DragEndEvent } from "@dnd-kit/core";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import { cn } from "@/lib/utils";
+import { useUserStore } from "@/hooks/use-user-store";
+import { DEFAULT_WORK_PREFS, getDayZones } from "@/utils/zones";
+import { WEEK_STARTS_ON } from "@/utils/constants";
+
+/** Shared column template: a fixed time gutter + 7 equal day columns. */
+const GRID_COLS = "grid-cols-[3rem_repeat(7,minmax(0,1fr))] sm:grid-cols-[4rem_repeat(7,minmax(0,1fr))]";
 
 export function WeekView({
   events,
   setEvents,
   date,
+  onReschedule,
 }: {
   events: Event[];
   setEvents: React.Dispatch<React.SetStateAction<Event[]>>;
   date: Date;
+  onReschedule: (taskId: string, startISO: string) => void;
 }) {
+  const prefs = useUserStore((s) => s.user) ?? DEFAULT_WORK_PREFS;
   const weekDates = eachDayOfInterval({
-    start: startOfWeek(date),
-    end: endOfWeek(date),
+    start: startOfWeek(date, { weekStartsOn: WEEK_STARTS_ON }),
+    end: endOfWeek(date, { weekStartsOn: WEEK_STARTS_ON }),
   });
+
   function onDragEnd({ over, active }: DragEndEvent) {
     if (!over) return;
     const activeId = active.id.toString();
-    const [hours, minutes] = over.id.toString().split(":").map(Number);
+    const block = events.find((e) => e.id === activeId);
+    if (!block) return;
+    const [hours, minutes, dayIndex] = over.id.toString().split(":").map(Number);
 
-    setEvents((events) =>
-      events.map((ev) => {
-        if (ev.id !== activeId) return ev;
-        const startDate = new Date(ev.start);
-        const endDate = new Date(ev.end);
-        const duration = endDate.getTime() - startDate.getTime();
-        const newStart = startOfDay(new Date(startDate.getTime()));
-        newStart.setHours(hours);
-        newStart.setMinutes(minutes);
-        const newEnd = new Date(newStart.getTime() + duration);
-        return {
-          ...ev,
-          start: newStart.toISOString(),
-          end: newEnd.toISOString(),
-        };
-      }),
+    const duration =
+      new Date(block.end).getTime() - new Date(block.start).getTime();
+    const newStart = new Date(weekDates[dayIndex] ?? new Date(block.start));
+    newStart.setHours(hours, minutes, 0, 0);
+    const newEnd = new Date(newStart.getTime() + duration);
+
+    setEvents((evs) =>
+      evs.map((ev) =>
+        ev.id === activeId
+          ? { ...ev, start: newStart.toISOString(), end: newEnd.toISOString() }
+          : ev,
+      ),
     );
+    onReschedule(block.taskId, newStart.toISOString());
   }
 
   return (
     <div data-slot="week-view" className="flex h-full flex-col">
-      <div className="bg-background/80 border-border/70 sticky top-0 z-30 grid grid-cols-8 border-b backdrop-blur-md">
-        <div className="text-muted-foreground/70 py-2 text-center text-sm">
-          <span className="max-[479px]:sr-only">{format(new Date(), "z")}</span>
+      {/* Day headers — sticky, frosted, aligned to the grid below. */}
+      <div
+        className={cn(
+          "bg-card/80 border-border sticky top-0 z-30 grid border-b backdrop-blur-md",
+          GRID_COLS,
+        )}
+      >
+        <div className="text-muted-foreground border-border flex items-center justify-center border-r py-2 text-center font-mono text-[10px] font-bold">
+          {format(new Date(), "z")}
         </div>
-        {weekDates.map((date) => (
-          <div
-            key={date.toISOString()}
-            data-today={
-              format(date, "yyyy-MM-dd") === format(new Date(), "yyyy-MM-dd")
-                ? "true"
-                : undefined
-            }
-            className="data-today:text-foreground text-muted-foreground/70 py-2 text-center text-sm data-today:font-medium"
-          >
-            <span className="sm:hidden" aria-hidden="true">
-              {format(date, "eeeee d")}
-            </span>
-            <span className="max-sm:hidden">{format(date, "eee d")}</span>
-          </div>
-        ))}
+        {weekDates.map((d) => {
+          const today = isToday(d);
+          const { isWorkDay } = getDayZones(d, prefs);
+          return (
+            <div
+              key={d.toISOString()}
+              className={cn(
+                "flex flex-col items-center justify-center py-2",
+                today && "bg-muted",
+                !today && !isWorkDay && "zone-weekend",
+              )}
+            >
+              <span
+                className={cn(
+                  "text-[10px] font-bold uppercase tracking-wide",
+                  today ? "text-foreground" : "text-muted-foreground",
+                )}
+              >
+                {format(d, "eee")}
+              </span>
+              <span
+                className={cn(
+                  "mt-0.5 text-base font-bold leading-none",
+                  !today && !isWorkDay && "text-muted-foreground",
+                )}
+              >
+                {format(d, "d")}
+              </span>
+            </div>
+          );
+        })}
       </div>
+
       <DndContext modifiers={[restrictToVerticalAxis]} onDragEnd={onDragEnd}>
-        <div className="grid flex-2 grid-cols-8 overflow-hidden">
+        <div className={cn("grid", GRID_COLS)}>
           <WeekGrid weekDates={weekDates} events={events} />
         </div>
       </DndContext>

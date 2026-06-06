@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { ScheduledBlockItem } from "./scheduled-block-item";
 import { format, isToday } from "date-fns";
 import { Cell } from "./day-cell";
+import { DayColumnBackground } from "./day-column-background";
 import { getOverlapSpacing } from "@/utils/overlap";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -27,13 +28,13 @@ export function DayGrid({ events, date }: { events: Event[]; date: Date }) {
   const spacings = getOverlapSpacing(events);
 
   return (
-    <div className="border-border/70 grid flex-1 grid-cols-[3rem_1fr] overflow-hidden border-t sm:grid-cols-[4rem_1fr]">
-      {/* hours */}
-      <div>
+    <div className="border-border grid flex-1 grid-cols-[3rem_1fr] overflow-hidden border-t sm:grid-cols-[4rem_1fr]">
+      {/* time ruler */}
+      <div className="bg-sidebar border-border border-r">
         {HOURS.map((hour) => (
           <div key={hour} className="relative h-[var(--week-cells-height)]">
             {hour !== 0 && (
-              <span className="absolute -top-3 left-0 w-16  sm:pe-4 pe-2 text-right text-xs text-muted-foreground">
+              <span className="text-muted-foreground absolute -top-2 right-0 w-full pe-2 text-right font-mono text-[10px] font-bold sm:pe-4">
                 {formatHour(hour)}
               </span>
             )}
@@ -41,24 +42,27 @@ export function DayGrid({ events, date }: { events: Event[]; date: Date }) {
         ))}
       </div>
 
-      <div className="relative">
+      {/* day column */}
+      <div className="bg-card relative">
+        <DayColumnBackground date={date} />
+
         {isToday(date) && (
           <div
             className="pointer-events-none absolute inset-x-0 z-20"
             style={{ top: nowTop }}
           >
             <div className="relative flex items-center">
-              <div className="bg-primary absolute -left-1 h-2 w-2 rounded-full" />
-              <div className="bg-primary h-[2px] w-full" />
+              <div className="absolute -left-1 h-2 w-2 rounded-full bg-rose-500 shadow-sm" />
+              <div className="h-[2px] w-full bg-gradient-to-r from-rose-500 via-rose-400/50 to-transparent" />
             </div>
           </div>
         )}
 
-        {/* time cells */}
+        {/* droppable time cells */}
         {HOURS.map((hour) => (
           <div
             key={hour}
-            className="relative h-[var(--week-cells-height)] border-border z-10 border-b"
+            className="relative h-[var(--week-cells-height)]"
           >
             {Array.from({ length: 4 }).map((_, q) => (
               <Cell

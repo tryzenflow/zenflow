@@ -14,11 +14,7 @@ export const taskSchema = z.object({
       error: `Task duration must be at least ${TIME_GRANULARITY} minutes`,
     })
     .max(DAILY_HORIZON, { error: "Task duration must be at most 24 hours" }),
-  energy: z
-    .int()
-    .min(1, { error: "Task energy must be at least 1" })
-    .max(3, { error: "Task energy must be at most 3" }),
-  categoryId: z.string().optional(),
+  tags: z.string().optional(),
   deadlineDate: z
     .string()
     .refine(
@@ -59,10 +55,20 @@ export const taskSchema = z.object({
 });
 
 export type TaskFormValues = z.infer<typeof taskSchema>;
+export type EditTaskFormValues = TaskFormValues;
+
+/** Parse the comma-separated tags input into a clean string array. */
+export function parseTags(input?: string): string[] {
+  if (!input) return [];
+  return input
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
 
 export async function deleteTask(taskId: string) {
-  const data = await getData<{ data: Task }>(`/tasks/${taskId}`);
-  const previousIds = extractFileIdsFromNoteContent(data.data.note || "");
+  const { data } = await getData<{ data: { task: Task } }>(`/tasks/${taskId}`);
+  const previousIds = extractFileIdsFromNoteContent(data.task.note || "");
   if (previousIds.length > 0) {
     await postData("/files/remove", { ids: previousIds });
   }

@@ -1,126 +1,133 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Event, ViewMode } from "@/types/schedule";
 import { CalendarHeader } from "./header";
 import { useViewShortcuts } from "@/hooks/use-view-shortcuts";
 import { DayView } from "./day-view";
 import { WeekView } from "./week-view";
-import {
-  endOfDay,
-  endOfMonth,
-  endOfWeek,
-  format,
-  isToday,
-  startOfDay,
-  startOfMonth,
-  startOfWeek,
-} from "date-fns";
 import { MonthView } from "./month-view";
-import { schedule } from "@/api/scheduler";
+import { CalendarSidebar } from "./sidebar";
+import { EditTaskDialog } from "../tasks/edit-task-dialog";
+import { listTasks, rescheduleTask } from "@/api/tasks";
+import { tasksToBlocks } from "@/utils/blocks";
+import type { Task, TasksMeta } from "@zenflow/shared";
 import { isAxiosError } from "axios";
 import { toast } from "sonner";
-import { queryEvents } from "@/api/events";
-import { snapToNearestLaterQuarterHour } from "@/utils/time";
+import { isSameDay } from "date-fns";
 
 export function CalendarLayout() {
   const [date, setDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>("day");
   useViewShortcuts(setViewMode);
-  const [events, setEvents] = useState<Event[]>([]);
 
-  function getDateRange() {
-    switch (viewMode) {
-      case "day":
-        return {
-          start: startOfDay(date),
-          end: endOfDay(date),
-        };
-      case "week":
-        return {
-          start: startOfWeek(date),
-          end: endOfWeek(date),
-        };
-      case "month":
-        return {
-          start: startOfWeek(startOfMonth(date)),
-          end: endOfWeek(endOfMonth(date)),
-        };
-    }
-  }
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [blocks, setBlocks] = useState<Event[]>([]);
+  const [meta, setMeta] = useState<TasksMeta | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
 
-  async function getEvents() {
-    const dateRange = getDateRange();
+  async function refetch() {
     try {
-      const data = await queryEvents({
-        start: format(dateRange.start, "yyyy-MM-dd"),
-        end: format(dateRange.end, "yyyy-MM-dd"),
-      });
-      console.log({ data });
-      setEvents(data.data);
+      const data = await listTasks(viewMode, date);
+      setTasks(data.tasks);
+      setBlocks(tasksToBlocks(data.tasks));
+      setMeta(data.meta);
     } catch (error) {
-      if (isAxiosError(error)) {
-        toast.error(
-          error.response?.data.message ||
-            "An error occurred when fetching events",
-        );
-      }
-    }
-  }
-
-  async function scheduleEvents() {
-    try {
-      const data = await schedule({
-        keepManual: true,
-        minTime: isToday(date)
-          ? snapToNearestLaterQuarterHour(
-              date.getHours() * 60 + date.getMinutes(),
-            )
-          : 0,
-        scheduleDate: format(date, "yyyy-MM-dd"),
-      });
-      if (data.feasible) {
-        await getEvents();
-      } else {
-        toast.error("No feasible schedule found");
-      }
-    } catch (error) {
-      if (isAxiosError(error)) {
-        toast.error(
-          error.response?.data.message ||
-            "An error occurred when scheduling events",
-        );
-      }
+      if (isAxiosError(error))
+        toast.error(error.response?.data?.message || "Failed to load tasks");
     }
   }
 
   useEffect(() => {
-    getEvents();
+    refetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, viewMode]);
 
-  return (
-    <div
-      className="flex min-h-screen flex-col rounded-lg border"
-      style={
-        {
-          "--week-cells-height": "64px",
-        } as React.CSSProperties
-      }
-    >
-      <CalendarHeader
-        currentView={viewMode}
-        date={date}
-        setDate={setDate}
-        setCurrentView={setViewMode}
-        schedule={scheduleEvents}
-      />
+  // Open the detail panel when a block/sidebar item requests it.
+  useEffect(() => {
+    const handler = (e: Event | CustomEvent) =>
+      setEditId((e as CustomEvent).detail as string);
+    window.addEventListener("zenflow:open-task", handler as EventListener);
+    return () =>
+      window.removeEventListener("zenflow:open-task", handler as EventListener);
+  }, []);
 
-      {viewMode === "day" && (
-        <DayView events={events} date={date} setEvents={setEvents} />
-      )}
-      {viewMode === "week" && (
-        <WeekView events={events} setEvents={setEvents} date={date} />
-      )}
-      {viewMode === "month" && (
-        <MonthView events={events} setEvents={setEvents} date={date} />
+  async function onReschedule(taskId: string, startISO: string) {
+    try {
+      await rescheduleTask(taskId, startISO);
+    } catch (error) {
+      if (isAxiosError(error))
+        toast.error(error.response?.data?.message || "Failed to reschedule");
+    } finally {
+      await refetch(); // reconcile with the server (applies cascade / reverts)
+    }
+  }
+
+  const conflicts = useMemo(
+    () =>
+      tasks
+        .filter((t) => t.conflict)
+        .map((t) => ({ id: t.id, title: t.title })),
+    [tasks],
+  );
+
+  const agenda = useMemo(
+    () =>
+      [...blocks]
+        .filter((b) => isSameDay(new Date(b.start), date))
+        .sort(
+          (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
+        ),
+    [blocks, date],
+  );
+
+  return (
+    <div className="flex h-screen">
+      <CalendarSidebar meta={meta} agenda={agenda} conflicts={conflicts} />
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <CalendarHeader
+          date={date}
+          setDate={setDate}
+          currentView={viewMode}
+          setCurrentView={setViewMode}
+          conflictCount={meta?.conflictCount ?? 0}
+          onChanged={refetch}
+        />
+        <div
+          className="flex-1 overflow-auto"
+          style={{ "--week-cells-height": "64px" } as React.CSSProperties}
+        >
+          {viewMode === "day" && (
+            <DayView
+              events={blocks}
+              date={date}
+              setEvents={setBlocks}
+              onReschedule={onReschedule}
+            />
+          )}
+          {viewMode === "week" && (
+            <WeekView
+              events={blocks}
+              date={date}
+              setEvents={setBlocks}
+              onReschedule={onReschedule}
+            />
+          )}
+          {viewMode === "month" && (
+            <MonthView
+              events={blocks}
+              date={date}
+              setEvents={setBlocks}
+              onReschedule={onReschedule}
+            />
+          )}
+        </div>
+      </div>
+      {editId && (
+        <EditTaskDialog
+          open={!!editId}
+          setOpen={(o) => !o && setEditId(null)}
+          taskId={editId}
+          onSaved={refetch}
+        />
       )}
     </div>
   );

@@ -1,24 +1,28 @@
 import { useUserStore } from "@/hooks/use-user-store";
 import { cn } from "@/lib/utils";
+import { TASK_CARD_CLASSES } from "@/lib/task-card";
 import { Event } from "@/types/schedule";
 import { DAILY_HORIZON } from "@/utils/constants";
-import { getEnergyStyle } from "@/utils/energy";
 import { CSS } from "@dnd-kit/utilities";
 import { useDraggable } from "@dnd-kit/core";
-import { fromZonedTime } from "date-fns-tz";
+import { toZonedTime } from "date-fns-tz";
+import { Lock } from "lucide-react";
 
-function getBlockStyle(block: Event, spacing: number, timezone: string) {
-  const start = fromZonedTime(block.start, timezone);
-  const end = fromZonedTime(block.end, timezone);
+function minutesOfDay(iso: string, tz: string) {
+  const d = toZonedTime(new Date(iso), tz);
+  return d.getHours() * 60 + d.getMinutes();
+}
 
-  const startFromMidnight = start.getHours() * 60 + start.getMinutes();
-  const endFromMidnight = end.getHours() * 60 + end.getMinutes();
+function fmt(iso: string, tz: string) {
+  return toZonedTime(new Date(iso), tz).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
-  return {
-    top: `${(startFromMidnight / DAILY_HORIZON) * 100}%`,
-    left: `${spacing * 16}px`,
-    height: `${((endFromMidnight - startFromMidnight) / DAILY_HORIZON) * 100}%`,
-  };
+/** Notify the layout to open the task detail panel for this block's task. */
+function openTask(taskId: string) {
+  window.dispatchEvent(new CustomEvent("zenflow:open-task", { detail: taskId }));
 }
 
 export function ScheduledBlockItem({
@@ -28,45 +32,61 @@ export function ScheduledBlockItem({
   block: Event;
   spacing: number;
 }) {
-  const user = useUserStore((state) => state.user);
-  const { backgroundColor, textColor } = getEnergyStyle(block.task.energy);
+  const tz = useUserStore((s) => s.user?.timezone) || "UTC";
+  const startMin = minutesOfDay(block.start, tz);
+  const endMin = minutesOfDay(block.end, tz);
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: block.id,
   });
-  const style = {
-    // Outputs `translate3d(x, y, 0)`
-    transform: CSS.Translate.toString(transform),
-  };
+
   return (
     <div
-      className="absolute inset-x-0 px-0.5 z-10"
+      className="absolute inset-x-0 z-10 px-0.5"
       ref={setNodeRef}
       {...listeners}
       {...attributes}
+      onClick={() => openTask(block.taskId)}
       style={{
-        ...getBlockStyle(block, spacing, user?.timezone || "UTC"),
-        ...style,
+        top: `${(startMin / DAILY_HORIZON) * 100}%`,
+        left: `${spacing * 16}px`,
+        height: `${((endMin - startMin) / DAILY_HORIZON) * 100}%`,
+        transform: CSS.Translate.toString(transform),
       }}
     >
       <div
         className={cn(
-          "flex h-full flex-col overflow-hidden transition-colors rounded px-2 py-1 text-xs",
-          backgroundColor,
-          textColor,
+          "flex h-full cursor-grab flex-col overflow-hidden rounded border border-l-4 px-2 py-1 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing",
+          TASK_CARD_CLASSES[block.state],
         )}
       >
-        <div className="truncate font-medium">{block.task.title}</div>
-        <div className="truncate text-[10px] opacity-70">
-          {new Date(block.start).toLocaleTimeString([], {
-            hour: "numeric",
-            minute: "2-digit",
-          })}
-          {" – "}
-          {new Date(block.end).toLocaleTimeString([], {
-            hour: "numeric",
-            minute: "2-digit",
-          })}
+        <div className="flex items-center gap-1">
+          {block.fixed && (
+            <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />
+          )}
+          <span
+            className={cn(
+              "truncate text-xs font-semibold",
+              block.state === "completed" && "line-through",
+            )}
+          >
+            {block.title}
+          </span>
         </div>
+        <span className="font-mono text-[10px]">
+          {fmt(block.start, tz)} – {fmt(block.end, tz)}
+        </span>
+        {block.tags.length > 0 && (
+          <div className="mt-0.5 flex flex-wrap gap-1 overflow-hidden">
+            {block.tags.slice(0, 3).map((t) => (
+              <span
+                key={t}
+                className="rounded border border-border bg-muted px-1.5 py-0.5 text-[9px] font-medium"
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

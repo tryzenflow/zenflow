@@ -1,0 +1,99 @@
+import { minutesToUtc } from "../common/utils";
+import { TIME_GRANULARITY } from "../common/constants";
+
+/**
+ * Slot / work-window math for the EDF engine. All calendar reasoning is done in
+ * the user's IANA timezone, then converted to absolute UTC instants for
+ * comparison. A "slot" is a {@link TIME_GRANULARITY}-minute (15) block.
+ */
+
+export const MS_PER_MINUTE = 60_000;
+export const SLOT_MS = TIME_GRANULARITY * MS_PER_MINUTE;
+
+/** A half-open occupied interval, in epoch milliseconds. */
+export interface Interval {
+  start: number;
+  end: number;
+}
+
+/** 'YYYY-MM-DD' for the given instant in the user's timezone. */
+export function localDateStr(date: Date, timezone: string): string {
+  // en-CA yields ISO-style YYYY-MM-DD; honours the IANA zone.
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+/** Advance a 'YYYY-MM-DD' string by `n` days (DST-safe, pure UTC math). */
+export function addDaysStr(dateStr: string, n: number): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + n);
+  return dt.toISOString().slice(0, 10);
+}
+
+/** ISO weekday for a 'YYYY-MM-DD' string: 1=Mon … 7=Sun. */
+export function isoWeekday(dateStr: string): number {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay(); // 0=Sun … 6=Sat
+  return dow === 0 ? 7 : dow;
+}
+
+/** Round an instant up to the next 15-minute slot boundary. */
+export function ceilToSlot(ms: number): number {
+  return Math.ceil(ms / SLOT_MS) * SLOT_MS;
+}
+
+/** True when [aStart,aEnd) overlaps any interval in `occupied`. */
+export function overlapsAny(
+  occupied: Interval[],
+  aStart: number,
+  aEnd: number,
+): boolean {
+  for (const o of occupied) {
+    if (aStart < o.end && aEnd > o.start) return true;
+  }
+  return false;
+}
+
+export interface WorkWindow {
+  /** epoch ms of workStart on this date */
+  start: number;
+  /** epoch ms of workEnd on this date */
+  end: number;
+}
+
+/** Absolute UTC bounds of a user's working window on a given local date. */
+export function workWindowFor(
+  dateStr: string,
+  workStart: number,
+  workEnd: number,
+  timezone: string,
+): WorkWindow {
+  return {
+    start: minutesToUtc(dateStr, workStart, timezone).getTime(),
+    end: minutesToUtc(dateStr, workEnd, timezone).getTime(),
+  };
+}
+
+/**
+ * Index into the flat 336-int penalty matrix for an instant.
+ * `(isoWeekday-1) * 48 + halfHourOfDay`.
+ */
+export function penaltyIndex(date: Date, timezone: string): number {
+  const dateStr = localDateStr(date, timezone);
+  const day = isoWeekday(dateStr) - 1; // 0=Mon … 6=Sun
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: timezone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0") % 24;
+  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+  const halfHour = hour * 2 + (minute >= 30 ? 1 : 0);
+  return day * 48 + halfHour;
+}

@@ -2,37 +2,36 @@ import { Event } from "@/types/schedule";
 import { DndContext, DragEndEvent } from "@dnd-kit/core";
 import { DayGrid } from "./day-grid";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
-import { startOfDay } from "date-fns";
 
 interface DayViewProps {
   events: Event[];
   setEvents: React.Dispatch<React.SetStateAction<Event[]>>;
   date: Date;
+  onReschedule: (taskId: string, startISO: string) => void;
 }
 
-export function DayView({ events, setEvents, date }: DayViewProps) {
+export function DayView({ events, setEvents, date, onReschedule }: DayViewProps) {
   function onDragEnd({ over, active }: DragEndEvent) {
     if (!over) return;
     const activeId = active.id.toString();
+    const block = events.find((e) => e.id === activeId);
+    if (!block) return;
     const [hours, minutes] = over.id.toString().split(":").map(Number);
 
-    setEvents((events) =>
-      events.map((ev) => {
-        if (ev.id !== activeId) return ev;
-        const startDate = new Date(ev.start);
-        const endDate = new Date(ev.end);
-        const duration = endDate.getTime() - startDate.getTime();
-        const newStart = startOfDay(new Date(startDate.getTime()));
-        newStart.setHours(hours);
-        newStart.setMinutes(minutes);
-        const newEnd = new Date(newStart.getTime() + duration);
-        return {
-          ...ev,
-          start: newStart.toISOString(),
-          end: newEnd.toISOString(),
-        };
-      }),
+    const duration =
+      new Date(block.end).getTime() - new Date(block.start).getTime();
+    const newStart = new Date(block.start);
+    newStart.setHours(hours, minutes, 0, 0);
+    const newEnd = new Date(newStart.getTime() + duration);
+
+    setEvents((evs) =>
+      evs.map((ev) =>
+        ev.id === activeId
+          ? { ...ev, start: newStart.toISOString(), end: newEnd.toISOString() }
+          : ev,
+      ),
     );
+    onReschedule(block.taskId, newStart.toISOString());
   }
 
   return (

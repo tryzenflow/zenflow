@@ -3,7 +3,7 @@ import { IsEmail, IsString, Length, Matches } from "class-validator";
 export class VerifyOTPDto {
   @IsEmail()
   @IsString()
-  @Length(1, 30)
+  @Length(1, 255)
   email: string;
 
   @IsString()

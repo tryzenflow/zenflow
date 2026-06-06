@@ -1,4 +1,5 @@
 import { TIME_GRANULARITY } from "@/utils/constants";
+import { cn } from "@/lib/utils";
 import { useDroppable } from "@dnd-kit/core";
 
 interface DayCellProps {
@@ -11,17 +12,16 @@ export function Cell({ quarter, hour, id }: DayCellProps) {
   const { isOver, setNodeRef } = useDroppable({
     id,
   });
-  const style = {
-    opacity: !isOver ? 1 : 0.5,
-  };
 
   return (
     <div
       key={quarter}
       ref={setNodeRef}
-      className="absolute bg-white w-full"
+      className={cn(
+        "absolute w-full transition-colors",
+        isOver && "bg-primary/10",
+      )}
       style={{
-        ...style,
         top: `calc(var(--week-cells-height) / 4 * ${quarter})`,
         height: "calc(var(--week-cells-height) / 4)",
       }}

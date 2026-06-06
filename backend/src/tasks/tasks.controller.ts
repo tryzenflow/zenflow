@@ -1,20 +1,22 @@
 import {
-  Controller,
-  Get,
-  Post,
   Body,
+  Controller,
+  Delete,
+  Get,
   Param,
-  UseGuards,
-  Query,
   Patch,
+  Post,
+  Query,
+  UseGuards,
 } from "@nestjs/common";
 import { TasksService } from "./tasks.service";
 import { CreateTaskDto } from "./dto/create-task.dto";
 import { UpdateTaskDto } from "./dto/update-task.dto";
+import { ListTasksDto } from "./dto/list-tasks.dto";
+import { RescheduleTaskDto } from "./dto/reschedule-task.dto";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
 import { type User } from "../../generated/prisma";
-import { DateRangeDto } from "../common/dto/date-range.dto";
 
 @Controller("tasks")
 @UseGuards(CookieAuthGuard)
@@ -22,61 +24,60 @@ export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
   @Post()
-  async create(
-    @Body() createTaskDto: CreateTaskDto,
-    @CurrentUser() user: User,
-  ) {
-    const newTask = await this.tasksService.create(
-      createTaskDto,
-      user.id,
-      user.timezone,
-    );
+  async create(@Body() dto: CreateTaskDto, @CurrentUser() user: User) {
+    const data = await this.tasksService.create(dto, user);
+    return { success: true, message: "Task created", data };
+  }
+
+  @Get()
+  async list(@Query() dto: ListTasksDto, @CurrentUser() user: User) {
+    const data = await this.tasksService.list(dto, user);
     return {
       success: true,
-      message: "Create new task successfully",
-      data: newTask,
+      message: `Found ${data.tasks.length} tasks`,
+      data,
     };
   }
 
-  @Get("recurring")
-  async findRecurringTasks(
-    @CurrentUser() user: User,
-    @Query() dateRangeDto: DateRangeDto,
-  ) {
-    const tasks = await this.tasksService.findRecurringTasks(
-      user.id,
-      user.timezone,
-      dateRangeDto,
-    );
-    return {
-      success: true,
-      message: `Found ${tasks.length} recurring tasks`,
-      data: tasks,
-    };
-  }
-
-  @Get(":id/details")
+  @Get(":id")
   async findOne(@Param("id") id: string, @CurrentUser() user: User) {
-    const task = await this.tasksService.findById(id, user.id);
-    return { success: true, message: `Found one task`, data: task };
+    const data = await this.tasksService.findById(id, user);
+    return { success: true, message: "Found task", data };
+  }
+
+  @Patch(":id/reschedule")
+  async reschedule(
+    @Param("id") id: string,
+    @Body() dto: RescheduleTaskDto,
+    @CurrentUser() user: User,
+  ) {
+    const data = await this.tasksService.reschedule(
+      id,
+      dto.requestedStartTime,
+      user,
+    );
+    return { success: true, message: "Task rescheduled", data };
+  }
+
+  @Patch(":id/complete")
+  async complete(@Param("id") id: string, @CurrentUser() user: User) {
+    const data = await this.tasksService.complete(id, user);
+    return { success: true, message: "Task completed", data };
   }
 
   @Patch(":id")
   async update(
     @Param("id") id: string,
-    @Body() updateTaskDto: UpdateTaskDto,
+    @Body() dto: UpdateTaskDto,
     @CurrentUser() user: User,
   ) {
-    const updated = await this.tasksService.update(
-      id,
-      updateTaskDto,
-      user.id,
-      user.timezone,
-    );
-    return {
-      success: true,
-      data: updated,
-      message: `Sucessfully updated task`,
-    };
+    const data = await this.tasksService.update(id, dto, user);
+    return { success: true, message: "Task updated", data };
+  }
+
+  @Delete(":id")
+  async remove(@Param("id") id: string, @CurrentUser() user: User) {
+    await this.tasksService.remove(id, user);
+    return { success: true, message: "Task deleted" };
   }
 }

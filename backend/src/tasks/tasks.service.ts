@@ -4,62 +4,132 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
-import { UpdateTaskDto } from "./dto/update-task.dto";
-import { PrismaService } from "../prisma/prisma.service";
-import { CreateTaskDto } from "./dto/create-task.dto";
-import { Prisma } from "../../generated/prisma";
-import { PostgresErrorCode } from "../prisma/error-codes";
-import { DateRangeDto } from "../common/dto/date-range.dto";
 import { fromZonedTime } from "date-fns-tz";
-import { filterRecurringTasks } from "./utils/filter-recurring-tasks";
-import { addMinutes } from "date-fns";
+import { PrismaService } from "../prisma/prisma.service";
+import { SchedulerService } from "../scheduler/scheduler.service";
+import { Prisma, type Task, type User } from "../../generated/prisma";
+import { PostgresErrorCode } from "../prisma/error-codes";
+import { minutesToUtc } from "../common/utils";
+import { localDateStr } from "../scheduler/slot";
+import { viewDayRange, sumWorkMinutes } from "../scheduler/horizon";
+import { expandRecurring } from "./utils/expand-recurring";
+import { CreateTaskDto } from "./dto/create-task.dto";
+import { UpdateTaskDto } from "./dto/update-task.dto";
+import { ListTasksDto } from "./dto/list-tasks.dto";
+import type {
+  CreateTaskResponse,
+  Task as SharedTask,
+  TaskDetailResponse,
+  TasksListResponse,
+} from "@zenflow/shared";
 
 @Injectable()
 export class TasksService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly scheduler: SchedulerService,
+  ) {}
+
+  /** Map a Prisma row to the shared API shape (dates → ISO strings). */
+  private toDto(task: Task, overrides?: Partial<SharedTask>): SharedTask {
+    return {
+      id: task.id,
+      title: task.title,
+      note: task.note,
+      durationMinutes: task.durationMinutes,
+      deadline: task.deadline ? task.deadline.toISOString() : null,
+      tags: task.tags,
+      fixed: task.fixed,
+      startTime: task.startTime,
+      status: task.status,
+      conflict: task.conflict,
+      rrule: task.rrule,
+      scheduledStartTime: task.scheduledStartTime
+        ? task.scheduledStartTime.toISOString()
+        : null,
+      createdAt: task.createdAt.toISOString(),
+      updatedAt: task.updatedAt.toISOString(),
+      seriesId: null,
+      ...overrides,
+    };
+  }
 
   async create(
-    { rrule, fixedWindow, scheduleDate, ...createTaskDto }: CreateTaskDto,
-    userId: string,
-    timezone: string,
-  ) {
+    dto: CreateTaskDto,
+    user: User,
+  ): Promise<CreateTaskResponse> {
+    const { startDate, fixed, startTime, ...rest } = dto;
+    const tz = user.timezone;
+
+    // A fixed task is anchored immediately at its chosen day + time-of-day.
+    let fixedStart: Date | null = null;
+    if (fixed) {
+      const day = startDate ?? localDateStr(new Date(), tz);
+      fixedStart = minutesToUtc(day, startTime ?? 0, tz);
+    }
+
     try {
-      const taskId = crypto.randomUUID();
-      const newTask = await this.prisma.task.create({
-        data: {
-          id: taskId,
-          ...createTaskDto,
-          rrule,
-          fixedWindow: fixedWindow
-            ? {
-                create: { start: fixedWindow.start, end: fixedWindow.end },
-              }
-            : undefined,
-          userId,
-          events: {
-            create: scheduleDate
-              ? {
-                  id: `${scheduleDate}/0/${taskId}`,
-                  splitIndex: 0,
-                  start: fromZonedTime(`${scheduleDate}T23:59:59`, timezone),
-                }
-              : undefined,
+      return await this.prisma.$transaction(async (tx) => {
+        const created = await tx.task.create({
+          data: {
+            title: rest.title,
+            note: rest.note ?? null,
+            durationMinutes: rest.durationMinutes,
+            deadline: rest.deadline ? new Date(rest.deadline) : null,
+            tags: rest.tags ?? [],
+            fixed: fixed ?? false,
+            startTime: startTime ?? 0,
+            rrule: rest.rrule ?? "",
+            userId: user.id,
+            scheduledStartTime: fixedStart,
+            conflict: false,
           },
-        },
-        include: {
-          fixedWindow: { select: { start: true, end: true } },
-        },
+        });
+
+        if (!created.fixed) {
+          await this.scheduler.placeNewTask(user, created, tx);
+        }
+
+        const finalTask = await tx.task.findUniqueOrThrow({
+          where: { id: created.id },
+        });
+
+        await tx.taskEvent.create({
+          data: {
+            taskId: finalTask.id,
+            userId: user.id,
+            eventType: "CREATE",
+            oldSnapshot: Prisma.JsonNull,
+            newSnapshot: {
+              scheduledStartTime: finalTask.scheduledStartTime
+                ? finalTask.scheduledStartTime.toISOString()
+                : null,
+              durationMinutes: finalTask.durationMinutes,
+            },
+            rewardScore: 1.0,
+          },
+        });
+
+        return {
+          task: this.toDto(finalTask),
+          schedulingMeta: {
+            adjustedDuration: finalTask.durationMinutes,
+            placedAt: finalTask.scheduledStartTime
+              ? finalTask.scheduledStartTime.toISOString()
+              : null,
+            engine: "edf" as const,
+            biasApplied: 1.0,
+          },
+        };
       });
-      return newTask;
     } catch (error) {
-      console.error(error);
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === PostgresErrorCode.ForeignViolation)
-          throw new BadRequestException(
-            "Cannot create task because its associated user, category may not exist",
-          );
+          throw new BadRequestException({
+            success: false,
+            message: "Cannot create task: associated user does not exist",
+          });
       }
-
       throw new InternalServerErrorException({
         success: false,
         message: "Something went wrong when creating a task",
@@ -67,171 +137,185 @@ export class TasksService {
     }
   }
 
-  async findToSchedule(
-    userId: string,
-    timezone: string,
-    scheduleDate: string,
-    keepManual: boolean,
-    minTime: number,
-  ) {
-    const startDate = fromZonedTime(
-      addMinutes(new Date(`${scheduleDate}T00:00:00`), minTime),
-      timezone,
-    );
-    const endDate = fromZonedTime(
-      new Date(`${scheduleDate}T23:59:59`),
-      timezone,
-    );
-    console.log(startDate, endDate);
-    const tasks = await this.prisma.task.findMany({
-      where: {
-        userId,
-        OR: [
-          {
-            events: {
-              some: {
-                start: {
-                  gte: startDate,
-                  lte: endDate,
-                },
-              },
-            },
-          },
-          { rrule: { not: null } },
-        ],
-      },
-      include: {
-        fixedWindow: true,
-        events: keepManual
-          ? {
-              where: {
-                start: {
-                  gte: startDate,
-                  lte: endDate,
-                },
-              },
-            }
-          : undefined,
-      },
-    });
+  async list(dto: ListTasksDto, user: User): Promise<TasksListResponse> {
+    const tz = user.timezone;
+    const { startStr, endStr } = viewDayRange(dto.view, dto.date);
+    const windowStart = fromZonedTime(`${startStr}T00:00:00`, tz);
+    const windowEnd = fromZonedTime(`${endStr}T23:59:59.999`, tz);
 
-    return filterRecurringTasks(
-      tasks,
-      startDate,
-      endDate,
-      false,
-      timezone,
-    ) as typeof tasks;
+    const where: Prisma.TaskWhereInput = { userId: user.id };
+    if (dto.status && dto.status !== "all") where.status = dto.status;
+
+    const tasks = await this.prisma.task.findMany({ where });
+
+    const out: SharedTask[] = [];
+    for (const t of tasks) {
+      if (t.rrule) {
+        for (const start of expandRecurring(t, windowStart, windowEnd, tz)) {
+          out.push(
+            this.toDto(t, {
+              id: `${t.id}__${start.toISOString()}`,
+              seriesId: t.id,
+              scheduledStartTime: start.toISOString(),
+            }),
+          );
+        }
+      } else {
+        const inWindow =
+          t.scheduledStartTime !== null &&
+          t.scheduledStartTime >= windowStart &&
+          t.scheduledStartTime <= windowEnd;
+        if (inWindow || t.conflict) out.push(this.toDto(t));
+      }
+    }
+
+    const totalAllocatedMinutes = out.reduce(
+      (sum, t) =>
+        sum + (t.scheduledStartTime && !t.conflict ? t.durationMinutes : 0),
+      0,
+    );
+
+    return {
+      tasks: out,
+      meta: {
+        totalAllocatedMinutes,
+        totalWorkMinutes: sumWorkMinutes(
+          startStr,
+          endStr,
+          user.workStart,
+          user.workEnd,
+          user.workDays,
+        ),
+        conflictCount: out.filter((t) => t.conflict).length,
+      },
+    };
   }
 
-  async findRecurringTasks(
-    userId: string,
-    timezone: string,
-    dateRangeDto: DateRangeDto,
-  ) {
-    const startDate = fromZonedTime(`${dateRangeDto.start}T00:00:00`, timezone);
-    const endDate = fromZonedTime(`${dateRangeDto.end}T23:59:59`, timezone);
-
-    const tasks = await this.prisma.task.findMany({
-      where: { userId, rrule: { not: null } },
-      include: {
-        fixedWindow: { select: { start: true, end: true } },
-        category: { select: { id: true, name: true } },
-      },
-    });
-
-    return filterRecurringTasks(
-      tasks,
-      startDate,
-      endDate,
-      false,
-      timezone,
-    ) as typeof tasks;
-  }
-
-  async findById(id: string, userId: string) {
+  async findById(id: string, user: User): Promise<TaskDetailResponse> {
     const task = await this.prisma.task.findUnique({
-      where: { id, userId },
+      where: { id, userId: user.id },
+    });
+    if (!task) throw new NotFoundException(`Cannot find task with id ${id}`);
+
+    const events = await this.prisma.taskEvent.findMany({
+      where: { taskId: id, userId: user.id },
+      orderBy: { occurredAt: "desc" },
+      take: 20,
     });
 
-    return task;
+    return {
+      task: this.toDto(task),
+      events: events.map((e) => ({
+        id: e.id.toString(),
+        taskId: e.taskId,
+        eventType: e.eventType,
+        oldSnapshot:
+          e.oldSnapshot as unknown as TaskDetailResponse["events"][number]["oldSnapshot"],
+        newSnapshot:
+          e.newSnapshot as unknown as TaskDetailResponse["events"][number]["newSnapshot"],
+        rewardScore: e.rewardScore,
+        occurredAt: e.occurredAt.toISOString(),
+      })),
+    };
   }
 
   async update(
     id: string,
-    { categoryId, fixedWindow, ...updateTaskDto }: UpdateTaskDto,
-    userId: string,
-    timezone: string,
-  ) {
-    await this.prisma.$transaction(async (tx) => {
-      try {
-        const updated = await tx.task.update({
-          where: { id, userId },
-          data: {
-            ...updateTaskDto,
-            fixedWindow: {
-              delete: fixedWindow === null ? {} : undefined,
-              create: fixedWindow
-                ? { start: fixedWindow.start, end: fixedWindow.end }
-                : undefined,
-            },
-            category: categoryId
-              ? { connect: { id: categoryId, userId } }
-              : undefined,
-          },
-          include: {
-            events: {
-              select: { id: true, start: true, end: true },
-              orderBy: { start: "asc" },
-            },
-            fixedWindow: { select: { start: true, end: true } },
-          },
-        });
-        if (updateTaskDto.rrule) {
-          await tx.event.deleteMany({
-            where: {
-              taskId: id,
-              isDirty: false,
-              start: { gte: fromZonedTime(new Date(), timezone) },
-            },
-          });
-        }
-        return updated;
-      } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError) {
-          if (error.code === PostgresErrorCode.RecordNotFound)
-            throw new NotFoundException({
-              success: false,
-              message: `Cannot find task with id ${id}`,
-            });
-          if (error.code === PostgresErrorCode.ForeignViolation)
-            throw new BadRequestException({
-              success: false,
-              message:
-                "Cannot update task because its associated category or prerequisites may not exist",
-            });
-        }
-        throw new InternalServerErrorException({
-          success: false,
-          message: "Something went wrong when updating a task",
-        });
-      }
-    });
+    dto: UpdateTaskDto,
+    user: User,
+  ): Promise<SharedTask> {
+    try {
+      const updated = await this.prisma.task.update({
+        where: { id, userId: user.id },
+        data: {
+          title: dto.title,
+          note: dto.note,
+          deadline:
+            dto.deadline === undefined
+              ? undefined
+              : dto.deadline === null
+                ? null
+                : new Date(dto.deadline),
+          tags: dto.tags,
+        },
+      });
+      return this.toDto(updated);
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === PostgresErrorCode.RecordNotFound
+      )
+        throw new NotFoundException(`Cannot find task with id ${id}`);
+      throw new InternalServerErrorException({
+        success: false,
+        message: "Something went wrong when updating a task",
+      });
+    }
   }
 
-  async remove(id: string, userId: string) {
+  async reschedule(id: string, requestedStartTime: string, user: User) {
+    const { task, displaced } = await this.scheduler.reschedule(
+      user,
+      id,
+      new Date(requestedStartTime),
+    );
+    return {
+      task: this.toDto(task),
+      displaced: displaced.map((d) => ({
+        taskId: d.taskId,
+        newScheduledStartTime: d.newScheduledStartTime
+          ? d.newScheduledStartTime.toISOString()
+          : null,
+      })),
+    };
+  }
+
+  async complete(id: string, user: User): Promise<SharedTask> {
     try {
-      await this.prisma.task.delete({
-        where: { id, userId },
+      return await this.prisma.$transaction(async (tx) => {
+        const updated = await tx.task.update({
+          where: { id, userId: user.id },
+          data: { status: "DONE" },
+        });
+        await tx.taskEvent.create({
+          data: {
+            taskId: updated.id,
+            userId: user.id,
+            eventType: "COMPLETE",
+            oldSnapshot: Prisma.JsonNull,
+            newSnapshot: {
+              scheduledStartTime: updated.scheduledStartTime
+                ? updated.scheduledStartTime.toISOString()
+                : null,
+              durationMinutes: updated.durationMinutes,
+            },
+            rewardScore: 1.0,
+          },
+        });
+        return this.toDto(updated);
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === PostgresErrorCode.RecordNotFound)
-          throw new NotFoundException({
-            success: false,
-            message: `Cannot find task with id ${id}`,
-          });
-      }
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === PostgresErrorCode.RecordNotFound
+      )
+        throw new NotFoundException(`Cannot find task with id ${id}`);
+      throw new InternalServerErrorException({
+        success: false,
+        message: "Something went wrong when completing a task",
+      });
+    }
+  }
+
+  async remove(id: string, user: User): Promise<void> {
+    try {
+      await this.prisma.task.delete({ where: { id, userId: user.id } });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === PostgresErrorCode.RecordNotFound
+      )
+        throw new NotFoundException(`Cannot find task with id ${id}`);
       throw new InternalServerErrorException({
         success: false,
         message: "Something went wrong when deleting a task",

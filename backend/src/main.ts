@@ -11,6 +11,7 @@ import passport from "passport";
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
+  app.setGlobalPrefix("api/v1");
   app.enableCors({
     origin: configService.get("CORS_ORIGIN"),
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",

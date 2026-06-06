@@ -15,6 +15,8 @@ export function IsRRule(validationOptions?: ValidationOptions) {
       validator: {
         validate(value: any, _args: ValidationArguments) {
           if (typeof value !== "string") return false;
+          // Empty string = non-recurring (matches the shared Task default).
+          if (value === "") return true;
           try {
             // Use rrulestr to parse full iCalendar blocks (DTSTART + RRULE)
             rrulestr(value);

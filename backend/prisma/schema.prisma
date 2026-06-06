@@ -11,110 +11,88 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  name      String   @db.VarChar(30)
-  email     String   @unique @db.VarChar(30)
-  timezone  String   @default("UTC") @db.VarChar(50)
+  id       String @id @default(uuid())
+  name     String @db.VarChar(60)
+  email    String @unique @db.VarChar(255)
+  timezone String @default("UTC") @db.VarChar(50)
+
+  // Working window (see docs/objects.md). Minutes from midnight + ISO weekdays.
+  workStart Int   @default(540) // 09:00
+  workEnd   Int   @default(1020) // 17:00
+  workDays  Int[] @default([1, 2, 3, 4, 5]) // 1=Mon … 7=Sun
+
+  // Flat 336-int penalty matrix (7 days × 48 half-hour slots). Written on MOVE
+  // in Phase 1 (telemetry); not yet read by the scheduler. Seeded lazily.
+  penaltyMatrix Int[] @default([])
+
+  roleArchetypeId    String? // Phase-4 cold-start cluster id
+  onboardingComplete Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relations
   tasks      Task[]
-  categories Category[]
-  prefs      UserPreference[]
   files      File[]
+  taskEvents TaskEvent[]
+}
+
+enum TaskStatus {
+  PENDING
+  DONE
 }
 
 model Task {
-  id       String    @id @default(uuid())
-  title    String
-  note     String?
-  duration Int
-  deadline DateTime?
-  energy   Int       @default(1) // 1–3
-  rrule    String?
+  id              String     @id @default(uuid())
+  title           String
+  note            String? // rich-text (TipTap) — carried over from v1
+  durationMinutes Int // positive multiple of 15
+  deadline        DateTime?
+  tags            String[]   @default([]) // free-form labels (text[])
+  fixed           Boolean    @default(false)
+  startTime       Int        @default(0) // minutes from midnight; used when fixed
+  status          TaskStatus @default(PENDING)
+  conflict        Boolean    @default(false) // unplaced (no slot before deadline)
+  rrule           String     @default("") // RFC 5545; "" when non-recurring
 
-  userId     String
-  categoryId String?
-
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  events   Event[]
-
-  fixedWindow TaskWindow?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-}
-
-model TaskWindow {
-  id    String @id @default(uuid())
-  start Int    @db.SmallInt
-  end   Int    @db.SmallInt
-
-  fixedTaskId String? @unique // FK for fixed window
-  fixedTask   Task?   @relation(fields: [fixedTaskId], references: [id], onDelete: Cascade)
-}
-
-model Event {
-  id         String    @id
-  start      DateTime
-  end        DateTime?
-  splitIndex Int       @db.SmallInt
-  completed  Boolean   @default(false)
-  isDirty    Boolean   @default(false)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-
-  taskId String
-  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
-
-  @@index([start, end])
-}
-
-model UserPreference {
-  id           String @id @default(uuid())
-  breakMinutes Int    @default(0)
-  day          Int    @default(0) @db.SmallInt // 0=Sun, 1=Mon, ..., 6=Sat
+  scheduledStartTime DateTime? // assigned by the EDF engine
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  energyZones EnergyZone[]
-
-  @@unique([userId, day])
-  @@index([userId, day])
-}
-
-model EnergyZone {
-  id    String @id @default(uuid())
-  level Int    @db.SmallInt
-  start Int    @db.SmallInt
-  end   Int    @db.SmallInt
-
-  userPref         UserPreference @relation(fields: [userPreferenceId], references: [id])
-  userPreferenceId String
-}
-
-model Category {
-  id     String @id @default(uuid())
-  name   String
-  userId String
-  order  Float  @default(0)
-
-  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tasks Task[]
+  events TaskEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([userId, name])
-  @@index([userId])
+  @@index([userId, deadline])
+  @@index([userId, status])
+  @@index([userId, scheduledStartTime])
+}
+
+enum TaskEventType {
+  CREATE
+  MOVE
+  RESIZE
+  COMPLETE
+}
+
+model TaskEvent {
+  id          BigInt        @id @default(autoincrement())
+  eventType   TaskEventType
+  oldSnapshot Json? // { scheduledStartTime, durationMinutes }; null on CREATE
+  newSnapshot Json
+  rewardScore Float         @default(1.0) // Phase-3 signal
+  occurredAt  DateTime      @default(now())
+
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  userId String // denormalized for partition/range queries
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, occurredAt(sort: Desc)])
+  @@index([taskId])
 }
 
 model File {

@@ -33,7 +33,13 @@ export class AuthController {
   @UseGuards(LocalAuthGuard)
   @Post("otp/verify")
   @HttpCode(HttpStatus.OK)
-  async verifyOTP(@CurrentUser() user: User) {
+  async verifyOTP(@CurrentUser() user: User, @Req() req: Request) {
+    // Ensure the session is fully persisted to Redis before responding, so the
+    // client's immediate post-login requests (me / tasks) aren't rejected by a
+    // not-yet-saved session (first-login 403 race).
+    await new Promise<void>((resolve, reject) =>
+      req.session.save((err) => (err ? reject(err) : resolve())),
+    );
     return {
       success: true,
       message: "OTP verified successfully. You are now logged in",

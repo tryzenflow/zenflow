@@ -1,7 +1,1 @@
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  createdAt: Date;
-  timezone: string;
-}
+export type { User, UserPreferences } from "@zenflow/shared";

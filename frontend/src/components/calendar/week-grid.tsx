@@ -1,5 +1,6 @@
-import { format, isToday } from "date-fns";
+import { format, isSameDay, isToday } from "date-fns";
 import { Cell } from "./day-cell";
+import { DayColumnBackground } from "./day-column-background";
 import { TIME_GRANULARITY } from "@/utils/constants";
 import { Event } from "@/types/schedule";
 import { ScheduledBlockItem } from "./scheduled-block-item";
@@ -23,28 +24,30 @@ export const WeekGrid = ({
   const spacings = getOverlapSpacing(events);
   return (
     <>
-      <div className="border-border/70 grid auto-cols-fr border-r">
+      {/* Time ruler */}
+      <div className="bg-sidebar border-border border-r">
         {HOURS.map((hour) => (
-          <div className="border-border/70 relative min-h-[var(--week-cells-height)] border-b last:border-b-0">
+          <div
+            key={hour}
+            className="relative h-[var(--week-cells-height)]"
+          >
             {hour > 0 && (
-              <span className="bg-background text-muted-foreground/70 absolute -top-3 left-0 flex h-6 w-16 max-w-full items-center justify-end pe-2 text-[10px] sm:pe-4 sm:text-xs">
+              <span className="text-muted-foreground absolute -top-2 right-0 w-full pe-2 text-right font-mono text-[10px] font-bold sm:pe-4">
                 {formatHour(hour)}
               </span>
             )}
           </div>
         ))}
       </div>
+
+      {/* Day columns */}
       {weekDates.map((date, d) => (
-        <div className="border-border/70 relative grid auto-cols-fr border-r last:border-r-0">
-          {events
-            .filter((e) => new Date(e.start).getDay() === d)
-            .map((e) => (
-              <ScheduledBlockItem
-                block={e}
-                key={e.id}
-                spacing={spacings.get(e.id) || 0}
-              />
-            ))}
+        <div
+          key={date.toISOString()}
+          className="bg-card border-border relative border-r last:border-r-0"
+        >
+          <DayColumnBackground date={date} />
+
           {isToday(date) && (
             <div
               className="pointer-events-none absolute right-0 left-0 z-20"
@@ -53,18 +56,21 @@ export const WeekGrid = ({
               }}
             >
               <div className="relative flex items-center">
-                <div className="bg-primary absolute -left-1 h-2 w-2 rounded-full" />
-                <div className="bg-primary h-[2px] w-full" />
+                <div className="absolute -left-1 h-2 w-2 rounded-full bg-rose-500 shadow-sm" />
+                <div className="h-[2px] w-full bg-gradient-to-r from-rose-500 via-rose-400/50 to-transparent" />
               </div>
             </div>
           )}
+
+          {/* droppable time cells */}
           {HOURS.map((hour) => (
             <div
               key={hour}
-              className="relative h-[var(--week-cells-height)] border-b"
+              className="relative h-[var(--week-cells-height)]"
             >
               {Array.from({ length: 4 }).map((_, q) => (
                 <Cell
+                  key={`${hour}:${q}:${d}`}
                   id={`${hour}:${q * TIME_GRANULARITY}:${d}`}
                   quarter={q}
                   hour={hour}
@@ -72,6 +78,17 @@ export const WeekGrid = ({
               ))}
             </div>
           ))}
+
+          {/* events for this day */}
+          {events
+            .filter((e) => isSameDay(new Date(e.start), date))
+            .map((e) => (
+              <ScheduledBlockItem
+                block={e}
+                key={e.id}
+                spacing={spacings.get(e.id) || 0}
+              />
+            ))}
         </div>
       ))}
     </>

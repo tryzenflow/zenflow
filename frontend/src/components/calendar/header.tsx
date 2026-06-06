@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "../ui/button";
 import { ViewModeSelect } from "./view-mode-select";
 import {
@@ -19,7 +19,8 @@ interface CalendarHeaderProps {
   setDate: Dispatch<SetStateAction<Date>>;
   currentView: ViewMode;
   setCurrentView: Dispatch<SetStateAction<ViewMode>>;
-  schedule: () => Promise<void>;
+  conflictCount: number;
+  onChanged: () => void;
 }
 
 export function CalendarHeader({
@@ -27,7 +28,8 @@ export function CalendarHeader({
   setDate,
   currentView,
   setCurrentView,
-  schedule,
+  conflictCount,
+  onChanged,
 }: CalendarHeaderProps) {
   const shift = (direction: "left" | "right") => {
     switch (currentView) {
@@ -57,33 +59,31 @@ export function CalendarHeader({
   };
 
   return (
-    <div className="flex items-center justify-between p-2 sm:p-4">
+    <div className="flex h-14 items-center justify-between border-b border-border bg-card px-4">
       <div className="flex items-center gap-2 sm:gap-4">
         <Button variant="outline" onClick={() => setDate(new Date())}>
           Today
         </Button>
 
         <Button variant="ghost" size="icon-sm" onClick={() => shift("left")}>
-          <ChevronLeft className="size-4 text-muted-foreground" />
+          <ChevronLeft className="size-4" />
         </Button>
 
         <Button variant="ghost" size="icon-sm" onClick={() => shift("right")}>
-          <ChevronRight className="size-4 text-muted-foreground" />
+          <ChevronRight className="size-4" />
         </Button>
 
         <h2 className="text-sm font-semibold sm:text-lg">{formatByView()}</h2>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
+        <span className="text-xs text-muted-foreground">
+          {conflictCount > 0
+            ? `${conflictCount} conflict${conflictCount > 1 ? "s" : ""}`
+            : "All tasks scheduled"}
+        </span>
         <ViewModeSelect value={currentView} onChange={setCurrentView} />
-
-        <CreateTaskDialog
-          scheduleDate={date}
-          onScheduleDateChange={(newDate) =>
-            newDate ? setDate(newDate) : undefined
-          }
-          schedule={schedule}
-        />
+        <CreateTaskDialog date={date} onCreated={onChanged} />
       </div>
     </div>
   );
