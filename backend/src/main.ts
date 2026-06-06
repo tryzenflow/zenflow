@@ -11,10 +11,11 @@ import passport from "passport";
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
+  app.setGlobalPrefix("api/v1");
   app.enableCors({
     origin: configService.get("CORS_ORIGIN"),
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
-    allowedHeaders: "Content-Type, Accept, Authorization", // Include necessary headers
+    allowedHeaders: "Content-Type, Accept, Authorization, x-timezone", // Include necessary headers
     credentials: true,
   });
   app.useGlobalPipes(

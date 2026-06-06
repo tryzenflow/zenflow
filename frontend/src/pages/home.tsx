@@ -1,71 +1,10 @@
-import { DayView } from "../components/calendar/day-view";
-import { MonthView } from "../components/calendar/month-view";
-import { WeekView } from "../components/calendar/week-view";
-import { YearView } from "../components/calendar/year-view";
-import ViewLayout from "../components/layout/view-layout";
-import { TaskView } from "../components/tasks/task-view";
+import { CalendarLayout } from "@/components/calendar/layout";
+import { WithAuth } from "@/components/hoc/with-auth";
 
 export default function HomePage() {
   return (
-    <ViewLayout
-      renderBody={(body) => {
-        switch (body.currentView) {
-          case "Day view":
-            return (
-              <DayView
-                deleteSchedule={body.deleteSchedule}
-                updateScheduleTime={body.updateScheduleTime}
-                openEditTaskDialog={body.openEditTaskDialog}
-                schedules={body.schedules}
-                selectedDate={body.selectedDate}
-              />
-            );
-          case "Week view":
-            return (
-              <WeekView
-                setSelectedDate={body.setSelectedDate}
-                deleteSchedule={body.deleteSchedule}
-                updateScheduleTime={body.updateScheduleTime}
-                openEditTaskDialog={body.openEditTaskDialog}
-                schedules={body.schedules}
-                selectedDate={body.selectedDate}
-              />
-            );
-          case "Month view":
-            return (
-              <MonthView
-                selectedDate={body.selectedDate}
-                schedules={body.schedules}
-                deleteSchedule={body.deleteSchedule}
-                setSelectedDate={body.setSelectedDate}
-                setCurrentView={body.setCurrentView}
-              />
-            );
-          case "Year view":
-            return (
-              <YearView
-                setCurrentView={body.setCurrentView}
-                selectedDate={body.selectedDate}
-                schedules={body.schedules}
-                setSelectedDate={body.setSelectedDate}
-              />
-            );
-          case "Task view":
-            return (
-              <TaskView
-                taskViewRefetchTrigger={body.taskViewRefetchTrigger}
-                deleteSchedule={body.deleteSchedule}
-                openEditTaskDialog={body.openEditTaskDialog}
-                loading={body.loading}
-                setLoading={body.setLoading}
-                selectedDate={body.selectedDate}
-                setSelectedDate={body.setSelectedDate}
-              />
-            );
-          default:
-            return null;
-        }
-      }}
-    />
+    <WithAuth>
+      <CalendarLayout />
+    </WithAuth>
   );
 }

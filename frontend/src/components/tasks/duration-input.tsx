@@ -1,13 +1,14 @@
 import { Check, ChevronsUpDown } from "lucide-react";
-import { durationToMinutes, formatMinutes } from "../../utils/prefs";
+import { durationToMinutes, formatMinutes } from "../../utils/time";
 import { Button } from "../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Command, CommandInput, CommandItem, CommandList } from "../ui/command";
 import { cn } from "../../lib/utils";
+import { DAILY_HORIZON, TIME_GRANULARITY } from "@/utils/constants";
 
-const durationBlocks = Array(288)
+const durationBlocks = Array(Math.floor(DAILY_HORIZON / TIME_GRANULARITY))
   .fill(null)
-  .map((_, i) => (i + 1) * 5);
+  .map((_, i) => (i + 1) * TIME_GRANULARITY);
 
 export function DurationInput({
   value,
@@ -31,7 +32,7 @@ export function DurationInput({
           {formatMinutes(value)} <ChevronsUpDown className="opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="p-0">
+      <PopoverContent className="p-0 w-48">
         <Command>
           <CommandInput placeholder="Search duration..." className="h-9" />
           <CommandList>
@@ -45,7 +46,7 @@ export function DurationInput({
                 <Check
                   className={cn(
                     "ml-auto",
-                    value === b ? "opacity-100" : "opacity-0"
+                    value === b ? "opacity-100" : "opacity-0",
                   )}
                 />
               </CommandItem>

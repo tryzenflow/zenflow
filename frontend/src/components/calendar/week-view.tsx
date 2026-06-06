@@ -1,172 +1,135 @@
-import { format, startOfDay, startOfWeek, addDays } from "date-fns";
-import { Schedule } from "../../types/schedule";
-import { ScheduleItem } from "./schedule-item";
-import { calculateLayout } from "../../utils/calc-layout";
-import { cn } from "../../lib/utils";
+import {
+  eachDayOfInterval,
+  endOfWeek,
+  format,
+  startOfWeek,
+} from "date-fns";
+import { WeekGrid } from "./week-grid";
+import { Event } from "@/types/schedule";
+import { DndContext, DragEndEvent } from "@dnd-kit/core";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import { cn } from "@/lib/utils";
+import { useUserStore } from "@/hooks/use-user-store";
+import { useDragSensors } from "@/hooks/use-drag-sensors";
+import { DEFAULT_WORK_PREFS, getDayZones } from "@/utils/zones";
+import { WEEK_STARTS_ON } from "@/utils/constants";
+import {
+  isZonedToday,
+  tzAbbrev,
+  zonedDate,
+  zonedWallClockToUtc,
+} from "@/utils/tz";
 
-export const WeekView = ({
-  selectedDate,
-  schedules,
-  deleteSchedule,
-  setSelectedDate,
-  openEditTaskDialog,
-  updateScheduleTime,
+/** Shared column template: a fixed time gutter + 7 equal day columns. */
+const GRID_COLS = "grid-cols-[3rem_repeat(7,minmax(0,1fr))] sm:grid-cols-[4rem_repeat(7,minmax(0,1fr))]";
+
+export function WeekView({
+  events,
+  setEvents,
+  date,
+  onReschedule,
 }: {
-  selectedDate: Date;
-  schedules: Schedule[];
-  deleteSchedule: (taskId: string, date: string, split: number) => void;
-  setSelectedDate: (date: Date) => void;
-  openEditTaskDialog: (taskId: string) => void;
-  updateScheduleTime: (
-    taskId: string,
-    date: string,
-    split: number,
-    newStart: number,
-    newEnd: number,
-  ) => void;
-}) => {
-  // Create an array for the hourly timeline (0 AM to 11 PM)
-  const hours = Array.from({ length: 24 }, (_, i) => {
-    const date = new Date(selectedDate);
-    date.setHours(i, 0, 0, 0);
-    return format(date, "ha");
+  events: Event[];
+  setEvents: React.Dispatch<React.SetStateAction<Event[]>>;
+  date: Date;
+  onReschedule: (taskId: string, startISO: string) => void;
+}) {
+  const prefs = useUserStore((s) => s.user) ?? DEFAULT_WORK_PREFS;
+  const tz = useUserStore((s) => s.user?.timezone) || "UTC";
+  const sensors = useDragSensors();
+  // `date` is already in user-tz space, so the week columns are too.
+  const weekDates = eachDayOfInterval({
+    start: startOfWeek(date, { weekStartsOn: WEEK_STARTS_ON }),
+    end: endOfWeek(date, { weekStartsOn: WEEK_STARTS_ON }),
   });
 
-  // Get the start of the week (Monday)
-  const weekStart = startOfWeek(selectedDate, { weekStartsOn: 0 });
+  function onDragEnd({ over, active }: DragEndEvent) {
+    if (!over) return;
+    const activeId = active.id.toString();
+    const block = events.find((e) => e.id === activeId);
+    if (!block) return;
+    const [hours, minutes, dayIndex] = over.id.toString().split(":").map(Number);
 
-  // Create array of 7 days for the week
-  const daysOfWeek = Array.from({ length: 7 }, (_, i) => {
-    const day = addDays(weekStart, i);
-    const isToday =
-      startOfDay(day).getTime() === startOfDay(new Date()).getTime();
-    const isSelected =
-      startOfDay(day).getTime() === startOfDay(selectedDate).getTime();
+    const duration =
+      new Date(block.end).getTime() - new Date(block.start).getTime();
+    // Target day (user-tz) + dropped wall-clock time → real UTC instant.
+    const wall = new Date(weekDates[dayIndex] ?? zonedDate(block.start, tz));
+    wall.setHours(hours, minutes, 0, 0);
+    const newStart = zonedWallClockToUtc(wall, tz);
+    const newEnd = new Date(newStart.getTime() + duration);
 
-    return {
-      date: day,
-      dayName: format(day, "EEE"),
-      dayNumber: format(day, "d"),
-      isToday,
-      isSelected,
-      fullDate: format(day, "yyyy-MM-dd"),
-    };
-  });
+    // No-op drop (released on the same slot it started) — don't record a move.
+    if (newStart.toISOString() === block.start) return;
 
-  const weekSchedules = schedules.filter((s) => {
-    const d = new Date(s.date);
-    return d >= weekStart && d < addDays(weekStart, 7);
-  });
-
-  // Group schedules by day and calculate layout for each day
-  const schedulesByDay = daysOfWeek.map((dayInfo) => {
-    const daySchedules = weekSchedules.filter(
-      (s) => format(new Date(s.date), "yyyy-MM-dd") === dayInfo.fullDate,
+    setEvents((evs) =>
+      evs.map((ev) =>
+        ev.id === activeId
+          ? { ...ev, start: newStart.toISOString(), end: newEnd.toISOString() }
+          : ev,
+      ),
     );
-
-    return {
-      ...dayInfo,
-      schedules: calculateLayout(daySchedules),
-    };
-  });
-  const currentHour = new Date().getHours();
-  const currentMinute = new Date().getMinutes();
+    onReschedule(block.taskId, newStart.toISOString());
+  }
 
   return (
-    <div className="flex-1 min-w-0 h-full relative overflow-y-auto bg-background">
-      {/* Week header with days */}
-      <div className="sticky top-0 z-20 bg-background/50 backdrop-blur">
-        <div className="flex">
-          {/* Time column header */}
-          <div className="w-12 flex-shrink-0 py-2"></div>
-
-          {/* Day headers */}
-          {daysOfWeek.map((dayInfo, index) => (
-            <div
-              key={index}
-              className="flex-1 relative z-15 min-w-0 py-2 text-center cursor-pointer border-l border-b border-border last:border-r-0"
-              onClick={() => setSelectedDate(dayInfo.date)}
-            >
-              <div className="flex flex-col items-center justify-center gap-1">
-                <div className="text-[10px] text-muted-foreground font-medium tracking-wide">
-                  {dayInfo.dayName}
-                </div>
-                <div
-                  className={cn(
-                    "text-sm w-7 h-7 text-foreground rounded-full flex items-center justify-center font-semibold transition-all",
-                    dayInfo.isSelected
-                      ? "bg-primary text-primary-foreground"
-                      : dayInfo.isToday && "bg-muted",
-                  )}
-                >
-                  {dayInfo.dayNumber}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Week grid */}
-      <div className="relative h-[1440px]">
-        {hours.map((hour, index) => (
-          <div key={index} className="flex h-[60px] group">
-            {/* Time label column */}
-            <div className="w-12 flex-shrink-0 z-20 text-[10px] text-muted-foreground -mt-2 pr-2 text-right border-border">
-              {hour}
-            </div>
-
-            {/* Day columns */}
-            {daysOfWeek.map(({ isToday }, dayIndex) => (
-              <div
-                key={dayIndex}
-                className="flex-1 min-w-0 relative border-r border-b border-border last:border-r-0"
-              >
-                {/* Half-hour grid lines */}
-                <div className="h-1/2 w-full absolute border-border/70"></div>
-                <div className="h-1/2"></div>
-                {isToday && currentHour >= index && currentHour < index + 1 && (
-                  <>
-                    <div
-                      className="h-px bg-destructive w-full absolute z-[15]"
-                      style={{
-                        top: `${currentMinute * 1}px`,
-                      }}
-                    />
-                    <div
-                      className="w-2 h-2 bg-destructive rounded-full -left-1 absolute z-[15]"
-                      style={{
-                        top: `calc(${currentMinute * 1}px - 0.25rem)`,
-                      }}
-                    />
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
-        ))}
-
-        {/* Render scheduled items for each day */}
-        {schedulesByDay.map((dayData, dayIndex) =>
-          dayData.schedules.map((schedule) => (
-            <ScheduleItem
-              key={`${schedule.task.id}-${schedule.date}-${schedule.split}-${dayIndex}`}
-              openEditTaskDialog={openEditTaskDialog}
-              deleteSchedule={deleteSchedule}
-              schedule={schedule}
-              updateScheduleTime={updateScheduleTime}
-              isOverlapping={schedule.isOverlapping}
-              columnIndex={schedule.columnIndex}
-              totalColumns={schedule.totalColumns}
-              dayIndex={dayIndex}
-              isWeekView={true}
-            />
-          )),
+    // Below `lg`, keep a min width so the 7 columns stay legible and the
+    // content area scrolls horizontally instead of crushing each day.
+    <div
+      data-slot="week-view"
+      className="flex h-full min-w-[48rem] flex-col lg:min-w-0"
+    >
+      {/* Day headers — sticky, frosted, aligned to the grid below. */}
+      <div
+        className={cn(
+          "bg-card/80 border-border sticky top-0 z-30 grid border-b backdrop-blur-md",
+          GRID_COLS,
         )}
-
-        {/* Vertical grid lines */}
-        <div className="absolute inset-y-0 left-12 w-px bg-border z-0"></div>
+      >
+        <div className="text-muted-foreground border-border flex items-center justify-center border-r py-2 text-center font-mono text-[10px] font-bold">
+          {tzAbbrev(tz)}
+        </div>
+        {weekDates.map((d) => {
+          const today = isZonedToday(d, tz);
+          const { isWorkDay } = getDayZones(d, prefs);
+          return (
+            <div
+              key={d.toISOString()}
+              className={cn(
+                "flex flex-col items-center justify-center py-2",
+                today && "bg-muted",
+                !today && !isWorkDay && "zone-weekend",
+              )}
+            >
+              <span
+                className={cn(
+                  "text-[10px] font-bold uppercase tracking-wide",
+                  today ? "text-foreground" : "text-muted-foreground",
+                )}
+              >
+                {format(d, "eee")}
+              </span>
+              <span
+                className={cn(
+                  "mt-0.5 text-base font-bold leading-none",
+                  !today && !isWorkDay && "text-muted-foreground",
+                )}
+              >
+                {format(d, "d")}
+              </span>
+            </div>
+          );
+        })}
       </div>
+
+      <DndContext
+        sensors={sensors}
+        modifiers={[restrictToVerticalAxis]}
+        onDragEnd={onDragEnd}
+      >
+        <div className={cn("grid", GRID_COLS)}>
+          <WeekGrid weekDates={weekDates} events={events} />
+        </div>
+      </DndContext>
     </div>
   );
-};
+}

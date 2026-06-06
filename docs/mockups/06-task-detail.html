@@ -1,0 +1,629 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Zenflow — Task Detail Panel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800;900&family=Geist+Mono:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = { darkMode: "class" };
+    </script>
+    <style>
+      :root {
+        --primary: oklch(0.496 0.265 301.924);
+        --primary-foreground: oklch(0.977 0.014 308.299);
+        --background: oklch(0.99 0.002 106.5);
+        --foreground: oklch(0.153 0.006 107.1);
+        --card: oklch(1 0 0);
+        --muted: oklch(0.966 0.005 106.5);
+        --muted-foreground: oklch(0.58 0.031 107.3);
+        --border: oklch(0.93 0.007 106.5);
+        --ring: oklch(0.737 0.021 106.9);
+        --sidebar: oklch(0.988 0.003 106.5);
+        --sidebar-border: oklch(0.93 0.007 106.5);
+        --destructive: oklch(0.577 0.245 27.325);
+      }
+      .dark {
+        --primary: oklch(0.62 0.22 303.724);
+        --background: oklch(0.153 0.006 107.1);
+        --foreground: oklch(0.988 0.003 106.5);
+        --card: oklch(0.228 0.013 107.4);
+        --muted: oklch(0.286 0.016 107.4);
+        --muted-foreground: oklch(0.737 0.021 106.9);
+        --border: oklch(0.32 0.01 107);
+        --sidebar: oklch(0.228 0.013 107.4);
+        --sidebar-border: oklch(0.32 0.01 107);
+        --destructive: oklch(0.704 0.191 22.216);
+      }
+      body {
+        font-family: "Geist", system-ui, sans-serif;
+        background-color: var(--background);
+        color: var(--foreground);
+      }
+      .font-mono {
+        font-family: "Geist Mono", ui-monospace, monospace;
+      }
+      .bg-primary {
+        background-color: var(--primary);
+      }
+      .text-primary {
+        color: var(--primary);
+      }
+      .border-l-primary {
+        border-left-color: var(--primary) !important;
+      }
+      .bg-primary-10 {
+        background-color: color-mix(in oklch, var(--primary) 10%, transparent);
+      }
+      .text-primary-fg {
+        color: var(--primary-foreground);
+      }
+      .bg-card {
+        background-color: var(--card);
+      }
+      .bg-muted {
+        background-color: var(--muted);
+      }
+      .text-muted-fg {
+        color: var(--muted-foreground);
+      }
+      .border-border {
+        border-color: var(--border);
+      }
+      .border-primary {
+        border-color: var(--primary);
+      }
+      .bg-sidebar {
+        background-color: var(--sidebar);
+      }
+      .border-sidebar {
+        border-color: var(--sidebar-border);
+      }
+      .text-destructive {
+        color: var(--destructive);
+      }
+      .border-destructive {
+        border-color: var(--destructive);
+      }
+      .bg-destructive-10 {
+        background-color: color-mix(
+          in oklch,
+          var(--destructive) 10%,
+          transparent
+        );
+      }
+      input,
+      select {
+        background-color: var(--card);
+        color: var(--foreground);
+        border-color: var(--border);
+      }
+      input:focus,
+      select:focus {
+        outline: 1px solid var(--primary);
+        outline-offset: 0;
+        border-color: var(--primary);
+      }
+      *:focus-visible {
+        outline: 1px solid var(--ring);
+        outline-offset: 0;
+      }
+
+      /* Glassmorphism */
+      .glass-header {
+        background-color: color-mix(in oklch, var(--card) 70%, transparent);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+      }
+      .glass-panel {
+        background-color: color-mix(in oklch, var(--card) 82%, transparent);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+      }
+    </style>
+  </head>
+  <body class="h-screen overflow-hidden antialiased flex">
+    <!-- ── Sidebar ── -->
+    <aside
+      class="w-64 shrink-0 h-full bg-sidebar border-r border-sidebar flex flex-col z-30"
+    >
+      <div
+        class="h-14 px-5 flex items-center justify-between border-b border-sidebar shrink-0"
+      >
+        <div class="flex items-center space-x-2.5">
+          <div class="w-6 h-6 shrink-0">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 100 100"
+              fill="none"
+              class="w-full h-full"
+              style="color: var(--foreground)"
+            >
+              <path
+                d="M20 20H80V80H20V20Z"
+                stroke="currentColor"
+                stroke-width="4"
+                stroke-linecap="round"
+                style="opacity: 0.12"
+              />
+              <path
+                d="M20 35H50C55.5 35 60 39.5 60 45V80"
+                stroke="currentColor"
+                stroke-width="5"
+                stroke-linecap="round"
+                style="opacity: 0.4"
+              />
+              <path
+                d="M40 20V55C40 60.5 44.5 65 50 65H80"
+                stroke="currentColor"
+                stroke-width="5"
+                stroke-linecap="round"
+                style="opacity: 0.8"
+              />
+              <rect
+                x="52"
+                y="32"
+                width="16"
+                height="16"
+                rx="4"
+                fill="var(--primary)"
+              />
+            </svg>
+          </div>
+          <span class="text-sm font-bold tracking-tight">Zenflow</span>
+        </div>
+        <button
+          onclick="document.documentElement.classList.toggle('dark')"
+          class="p-1.5 rounded text-muted-fg hover:text-foreground transition-colors"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg>
+        </button>
+      </div>
+      <div class="flex-1 p-4 opacity-40 pointer-events-none space-y-5">
+        <div class="space-y-2">
+          <label
+            class="text-[10px] font-bold uppercase tracking-wider text-muted-fg"
+            >Day Load</label
+          >
+          <div class="p-3 bg-card border border-border rounded-lg space-y-2">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-muted-fg">Allocated</span>
+              <span class="font-mono font-bold">5.25h / 8h</span>
+            </div>
+            <div class="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                class="h-full bg-muted-fg rounded-full"
+                style="width: 65.6%"
+              ></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── Main ── -->
+    <div class="flex-1 h-full flex flex-col overflow-hidden relative">
+      <!-- Header -->
+      <header
+        class="h-14 border-b border-border flex items-center justify-between px-5 shrink-0 z-5 glass-header"
+      >
+        <div class="flex items-center space-x-3">
+          <div
+            class="inline-flex h-8 items-center bg-muted rounded-lg p-1 border border-border shadow-inner text-muted-fg text-xs font-semibold"
+          >
+            <button
+              class="px-3 py-1 rounded-md bg-card shadow-sm border border-border"
+              style="color: var(--foreground)"
+            >
+              Day
+            </button>
+            <button class="px-3 py-1 rounded-md">Week</button>
+            <button class="px-3 py-1 rounded-md">Month</button>
+          </div>
+          <span class="text-sm font-semibold">Monday, June 2</span>
+        </div>
+        <button
+          class="h-8 px-4 bg-primary text-primary-fg text-xs font-semibold rounded-md hover:opacity-90 transition-opacity flex items-center space-x-1.5"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          <span>Add Task</span>
+        </button>
+      </header>
+
+      <!-- Overlay + panel -->
+      <div class="flex-1 overflow-hidden relative">
+        <div
+          class="absolute inset-0"
+          style="
+            background-color: color-mix(
+              in oklch,
+              var(--foreground) 20%,
+              transparent
+            );
+            backdrop-filter: blur(1px);
+            z-index: 10;
+          "
+        ></div>
+
+        <!-- Blurred calendar behind -->
+        <div class="absolute inset-0 p-6 opacity-40">
+          <div class="flex space-x-4">
+            <div
+              class="w-16 text-right space-y-16 text-[10px] font-mono font-bold text-muted-fg pt-1"
+            >
+              <div>9 AM</div>
+              <div>10 AM</div>
+              <div>11 AM</div>
+            </div>
+            <div class="flex-1 relative">
+              <!-- Task card visible through blur -->
+              <div
+                class="absolute left-0 right-0 p-2 bg-card border-l-4 border-l-primary border border-border rounded-lg"
+                style="top: 3%; height: 10%"
+              >
+                <p class="text-xs font-bold">Index Refactor</p>
+                <p class="text-[10px] text-muted-fg">09:15 – 10:30</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Task Detail Panel — glassmorphism -->
+        <div
+          class="absolute top-0 right-0 bottom-0 w-96 border-l border-border shadow-2xl flex flex-col z-30 overflow-hidden glass-panel"
+        >
+          <!-- Panel header -->
+          <div
+            class="h-14 px-5 border-b border-border flex items-center justify-between shrink-0"
+          >
+            <div class="flex items-center space-x-2.5">
+              <!-- Status indicator -->
+              <div class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></div>
+              <div>
+                <h2 class="text-sm font-bold tracking-tight">Index Refactor</h2>
+                <p class="text-[11px] text-muted-fg">
+                  Created Jun 1 · Scheduled Mon 09:15
+                </p>
+              </div>
+            </div>
+            <button
+              class="p-2 rounded-md hover:bg-muted transition-colors text-muted-fg"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+
+          <!-- Status banner -->
+          <div
+            class="mx-5 mt-4 p-3 bg-muted border border-border rounded-md flex items-center justify-between"
+          >
+            <div class="flex items-center space-x-2.5">
+              <div
+                class="w-8 h-8 rounded-md bg-card border border-border flex items-center justify-center shrink-0"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="text-muted-fg"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+              </div>
+              <div>
+                <p class="text-xs font-bold text-foreground">
+                  Mon Jun 2, 09:15 – 10:30
+                </p>
+                <p class="text-[11px] text-muted-fg">
+                  75 min · EDF engine placed
+                </p>
+              </div>
+            </div>
+            <button
+              class="h-7 px-2.5 rounded text-[10px] font-bold bg-primary text-primary-fg hover:opacity-90 transition-opacity"
+            >
+              Mark Done
+            </button>
+          </div>
+
+          <!-- Scrollable detail form -->
+          <div class="flex-1 overflow-y-auto p-5 space-y-5">
+            <!-- Title (editable) -->
+            <div class="space-y-1.5">
+              <label class="text-xs font-semibold">Task name</label>
+              <input
+                type="text"
+                value="Index Refactor"
+                class="w-full h-9 px-3 text-sm border border-border rounded-md focus:border-primary transition-colors"
+              />
+            </div>
+
+            <!-- Duration -->
+            <div class="space-y-1.5">
+              <label class="text-xs font-semibold">Duration</label>
+              <div class="flex items-center space-x-3">
+                <div class="relative flex-1">
+                  <input
+                    type="text"
+                    value="75m (bias-adjusted from 45m)"
+                    class="w-full h-9 pl-3 pr-16 text-sm border border-border rounded-md font-mono"
+                  />
+                  <span
+                    class="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono text-muted-fg"
+                    >75 min</span
+                  >
+                </div>
+                <!-- Original estimate note -->
+                <div class="text-[11px] text-muted-fg whitespace-nowrap">
+                  Original: 45m
+                </div>
+              </div>
+            </div>
+
+            <!-- Scheduling type -->
+            <div class="space-y-1.5">
+              <label class="text-xs font-semibold">Type</label>
+              <div
+                class="flex rounded-md border border-border overflow-hidden text-xs font-semibold"
+              >
+                <button
+                  class="flex-1 py-2 bg-primary text-primary-fg flex items-center justify-center space-x-1.5"
+                >
+                  <span>Flexible</span>
+                </button>
+                <button
+                  class="flex-1 py-2 bg-muted text-muted-fg flex items-center justify-center space-x-1.5 border-l border-border"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <rect x="3" y="11" width="18" height="11" rx="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                  <span>Fixed</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Deadline -->
+            <div class="space-y-1.5">
+              <label class="text-xs font-semibold">Deadline</label>
+              <div class="relative">
+                <div
+                  class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-fg"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                  </svg>
+                </div>
+                <input
+                  type="date"
+                  value="2026-06-02"
+                  class="w-full h-9 pl-9 pr-3 text-sm border border-border rounded-md font-mono"
+                />
+              </div>
+            </div>
+
+            <!-- Tags + bias -->
+            <div class="space-y-2">
+              <label class="text-xs font-semibold">Tags</label>
+              <div class="flex flex-wrap gap-1.5">
+                <span
+                  class="inline-flex items-center text-[10px] font-semibold bg-muted text-muted-fg px-2 py-0.5 rounded-full border border-border"
+                >
+                  #backend <button class="ml-1">×</button>
+                </span>
+                <span
+                  class="inline-flex items-center text-[10px] font-semibold bg-muted text-muted-fg px-2 py-0.5 rounded-full border border-border"
+                >
+                  #critical <button class="ml-1">×</button>
+                </span>
+              </div>
+              <!-- Bias display -->
+              <div
+                class="p-2.5 bg-muted border border-border rounded-md space-y-1.5"
+              >
+                <label
+                  class="text-[10px] font-bold uppercase tracking-wider text-muted-fg"
+                  >Estimation Bias (active)</label
+                >
+                <div class="space-y-1">
+                  <div class="flex items-center justify-between text-xs">
+                    <span class="text-muted-fg">#backend</span>
+                    <span class="font-mono font-bold text-foreground"
+                      >×1.2</span
+                    >
+                  </div>
+                  <div class="flex items-center justify-between text-xs">
+                    <span class="text-muted-fg">#critical</span>
+                    <span class="font-mono font-bold text-foreground"
+                      >×1.5</span
+                    >
+                  </div>
+                  <div
+                    class="flex items-center justify-between text-xs border-t border-border pt-1 mt-1"
+                  >
+                    <span class="font-medium">Applied (conservative max)</span>
+                    <span class="font-mono font-bold text-foreground"
+                      >×1.5</span
+                    >
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Event history -->
+            <div class="space-y-2">
+              <label class="text-xs font-semibold">History</label>
+              <div class="space-y-1.5">
+                <div class="flex items-start space-x-3">
+                  <div
+                    class="w-1.5 h-1.5 rounded-full bg-muted-fg mt-1.5 shrink-0"
+                  ></div>
+                  <div>
+                    <p class="text-xs font-medium">Created · Jun 1 at 07:30</p>
+                    <p class="text-[11px] text-muted-fg">
+                      Engine placed at 09:15 · bandit prediction · reward 1.0
+                    </p>
+                  </div>
+                </div>
+
+                <div class="flex items-start space-x-3">
+                  <div
+                    class="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0"
+                  ></div>
+                  <div>
+                    <p class="text-xs font-medium">Moved · Jun 1 at 08:00</p>
+                    <p class="text-[11px] text-muted-fg">
+                      09:15 → 13:00 (user override) · reward 0.0 · penalty
+                      matrix updated
+                    </p>
+                  </div>
+                </div>
+
+                <div class="flex items-start space-x-3">
+                  <div
+                    class="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0"
+                  ></div>
+                  <div>
+                    <p class="text-xs font-medium">
+                      Cascade moved · Jun 1 at 08:00
+                    </p>
+                    <p class="text-[11px] text-muted-fg">
+                      13:00 → 09:15 · displaced by fixed "Team Standup" · engine
+                      realigned
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Panel footer -->
+          <div class="p-5 border-t border-border shrink-0">
+            <div class="flex items-center justify-between space-x-3 mb-3">
+              <button
+                class="flex-1 h-9 rounded-md text-xs font-semibold border border-border text-muted-fg hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                class="flex-1 h-9 rounded-md text-xs font-semibold bg-primary text-primary-fg hover:opacity-90 transition-opacity"
+              >
+                Save Changes
+              </button>
+            </div>
+            <!-- Destructive action -->
+            <button
+              class="w-full h-8 rounded-md text-xs font-semibold border border-destructive text-destructive hover:bg-destructive-10 transition-colors flex items-center justify-center space-x-1.5"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                <path d="M10 11v6" />
+                <path d="M14 11v6" />
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+              </svg>
+              <span>Delete Task</span>
+            </button>
+          </div>
+        </div>
+        <!-- end panel -->
+      </div>
+    </div>
+
+    <style>
+      .text-primary-fg {
+        color: var(--primary-foreground);
+      }
+      .text-foreground {
+        color: var(--foreground);
+      }
+      .bg-muted-fg {
+        background-color: var(--muted-foreground);
+      }
+    </style>
+  </body>
+</html>

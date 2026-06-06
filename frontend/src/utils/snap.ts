@@ -1,3 +1,5 @@
-export function snapToFive(minutes: number) {
-  return Math.round(minutes / 5) * 5;
+import { TIME_GRANULARITY } from "./constants";
+
+export function snap(minutes: number) {
+  return Math.round(minutes / TIME_GRANULARITY) * TIME_GRANULARITY;
 }

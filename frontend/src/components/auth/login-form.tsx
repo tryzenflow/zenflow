@@ -1,5 +1,4 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { FlowerIcon } from "lucide-react";
 import React, { useState } from "react";
 import { SubmitHandler, useForm } from "react-hook-form";
 import { z } from "zod";
@@ -26,8 +25,9 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { hideEmail } from "../../utils/hide-email";
 import { useUserStore } from "../../hooks/use-user-store";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL;
+import { requestOtp, verifyOtp } from "@/api/auth";
+import { isAxiosError } from "axios";
+import { Logo } from "@/components/logo";
 
 const emailSchema = z.object({
   email: z.email({ message: "Invalid email address." }),
@@ -75,26 +75,20 @@ export function LoginForm({
     clearErrors("email");
 
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/otp/request`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: data.email }),
-      });
+      await requestOtp(data.email);
 
-      const result = await response.json();
+      toast.info("Email sent successfully");
+      setStage("otp");
+      clearErrors();
 
-      if (response.ok && result.success) {
-        toast.info("Email sent successfully");
-        setStage("otp");
-        clearErrors();
-
-        trigger("otp");
-      } else {
+      trigger("otp");
+    } catch (error) {
+      if (isAxiosError(error) && error.status === 400) {
         const errorMessage =
-          result.message || "Failed to send OTP. Please try again.";
+          error.response?.data.message ||
+          "Failed to send OTP. Please try again.";
         setError("email", { type: "manual", message: errorMessage });
       }
-    } catch (error) {
       setError("email", {
         type: "manual",
         message: "Network error. Could not connect to the server.",
@@ -114,23 +108,18 @@ export function LoginForm({
     try {
       const emailForApi = getValues("email");
 
-      const response = await fetch(`${API_BASE_URL}/auth/otp/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: emailForApi, otp: data.otp }),
-        credentials: "include",
-      });
+      const result = await verifyOtp(emailForApi, data.otp);
 
-      const result = await response.json();
-      if (response.ok && result.success && result.data) {
-        toast.success("Login successfully");
-        setUser(result.data);
-        navigate("/");
-      } else {
-        const errorMessage = result.message || "Invalid OTP. Please try again.";
+      toast.success("Login successfully");
+      setUser(result.data);
+      navigate(result.data?.onboardingComplete ? "/" : "/onboarding");
+    } catch (error) {
+      if (isAxiosError(error) && error.status === 400) {
+        const errorMessage =
+          error.response?.data.message ||
+          "Failed to verify OTP. Please try again.";
         setError("otp", { type: "manual", message: errorMessage });
       }
-    } catch (error) {
       setError("otp", {
         type: "manual",
         message: "Network error. Could not connect to the server.",
@@ -140,11 +129,11 @@ export function LoginForm({
     }
   };
 
-  const onSubmit: SubmitHandler<FormValues> = (data) => {
+  const onSubmit: SubmitHandler<FormValues> = async (data) => {
     if (stage === "email") {
-      handleEmailRequest(data as EmailFormValues);
+      await handleEmailRequest(data as EmailFormValues);
     } else {
-      handleOtpVerify(data as OtpFormValues);
+      await handleOtpVerify(data as OtpFormValues);
     }
   };
 
@@ -153,15 +142,10 @@ export function LoginForm({
       <Form {...form}>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <div className="flex flex-col items-center gap-2 text-center">
-            <a
-              href="#"
-              className="flex flex-col items-center gap-2 font-medium"
-            >
-              <div className="flex size-8 items-center justify-center rounded-md">
-                <FlowerIcon className="size-6" />
-              </div>
+            <div className="flex flex-col items-center gap-2 font-medium">
+              <Logo className="size-16" />
               <span className="sr-only">Zenflow</span>
-            </a>
+            </div>
             <h1 className="text-xl font-bold">Login to Zenflow</h1>
           </div>
 
@@ -206,7 +190,7 @@ export function LoginForm({
                         form.setValue("otp", "");
                         clearErrors();
                       }}
-                      className="text-sm ml-3 underline-offset-2 font-medium underline"
+                      className="block text-sm underline-offset-4 font-medium underline"
                     >
                       Change Email
                     </a>

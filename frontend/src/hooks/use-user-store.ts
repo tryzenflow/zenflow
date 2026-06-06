@@ -3,7 +3,7 @@ import { User } from "../types/user";
 
 type State = {
   user: User | null;
-  loading: boolean | null;
+  loading: boolean;
 };
 
 type Action = {
@@ -13,9 +13,7 @@ type Action = {
 
 export const useUserStore = create<State & Action>((set) => ({
   user: null,
-  loading: null,
-  setUser(user) {
-    set({ user });
-  },
+  loading: false,
+  setUser: (user) => set({ user }),
   setLoading: (loading) => set({ loading }),
 }));

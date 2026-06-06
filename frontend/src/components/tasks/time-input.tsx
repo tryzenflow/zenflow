@@ -1,13 +1,14 @@
 import { Check, ChevronsUpDown } from "lucide-react";
-import { minutesToTime, timeToMinutes } from "../../utils/prefs";
 import { Button } from "../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Command, CommandInput, CommandItem, CommandList } from "../ui/command";
 import { cn } from "../../lib/utils";
+import { minutesToTime, timeToMinutes } from "@/utils/time";
+import { DAILY_HORIZON, TIME_GRANULARITY } from "@/utils/constants";
 
-const timeBlocks = Array(289)
+const timeBlocks = Array(DAILY_HORIZON / TIME_GRANULARITY + 1)
   .fill(null)
-  .map((_, i) => i * 5);
+  .map((_, i) => i * TIME_GRANULARITY);
 
 export function TimeInput({
   value,
@@ -50,7 +51,7 @@ export function TimeInput({
                   <Check
                     className={cn(
                       "ml-auto",
-                      value === b ? "opacity-100" : "opacity-0"
+                      value === b ? "opacity-100" : "opacity-0",
                     )}
                   />
                 </CommandItem>

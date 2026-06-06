@@ -9,7 +9,7 @@ services:
       - api
 
   api:
-    container_name: zenflow-api-prod
+    container_name: zenflow-api-local
     image: zenflow-api:latest
     expose:
       - "5000"
@@ -30,7 +30,7 @@ services:
       - .env.local
 
   postgres:
-    container_name: zenflow-db-prod
+    container_name: zenflow-db-local
     image: postgres:alpine
     expose:
       - "5432"
@@ -55,7 +55,7 @@ services:
       - api
 
   mail:
-    container_name: zenflow-mail-prod
+    container_name: zenflow-mail-local
     image: jijiechen/papercut:latest
     expose:
       - "25"

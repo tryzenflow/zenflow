@@ -12,13 +12,9 @@ import { CacheableMemory } from "cacheable";
 import { MailService } from "./mail/mail.service";
 import { MailModule } from "./mail/mail.module";
 import { UsersModule } from "./users/users.module";
-import { SchedulerModule } from "./scheduler/scheduler.module";
 import { TasksModule } from "./tasks/tasks.module";
-import { SchedulesModule } from "./schedules/schedules.module";
-import { ConstraintsModule } from "./constraints/constraints.module";
-import { CategoriesModule } from "./categories/categories.module";
 import { FilesModule } from "./files/files.module";
-import { AnalyticsModule } from './analytics/analytics.module';
+import { ScheduleModule } from "@nestjs/schedule";
 
 @Module({
   imports: [
@@ -32,14 +28,14 @@ import { AnalyticsModule } from './analytics/analytics.module';
         CORS_ORIGIN: Joi.string().required(),
         CACHE_URL: Joi.string().uri().required(),
         MAIL_TRANSPORT: Joi.string().uri().required(),
-        GRPC_SCHEDULER_URL: Joi.string().required(),
       }),
     }),
+    ScheduleModule.forRoot(),
     CacheModule.registerAsync({
       isGlobal: true,
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: async (configService: ConfigService) => {
+      useFactory: (configService: ConfigService) => {
         return {
           stores: [
             new Keyv({
@@ -54,13 +50,8 @@ import { AnalyticsModule } from './analytics/analytics.module';
     PrismaModule,
     AuthModule,
     MailModule,
-    SchedulerModule,
     TasksModule,
-    SchedulesModule,
-    ConstraintsModule,
-    CategoriesModule,
     FilesModule,
-    AnalyticsModule,
   ],
   providers: [AppService, MailService],
   controllers: [AppController],

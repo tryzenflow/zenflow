@@ -3,82 +3,72 @@ import {
   IsBoolean,
   IsDateString,
   IsDivisibleBy,
+  IsIn,
   IsInt,
   IsISO8601,
   IsOptional,
   IsString,
-  Matches,
   Max,
-  MaxLength,
   Min,
+  ValidateIf,
 } from "class-validator";
-import { DAILY_HORIZON } from "../../common/constants";
-import { IsRRule } from "../validators/is-rrule.validator";
+import { IsRRule } from "../validators/is-rrule.decorator";
+import { DAILY_HORIZON, TIME_GRANULARITY } from "src/common/constants";
+import type { CreateTaskInput, ViewMode } from "@zenflow/shared";
 
-export class CreateTaskDto {
+export class CreateTaskDto implements CreateTaskInput {
   @IsString() title: string;
 
-  @IsDateString()
-  @MaxLength(10)
   @IsOptional()
-  scheduleDate?: string;
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  note?: string | null;
+
+  @IsInt()
+  @Min(TIME_GRANULARITY)
+  @IsDivisibleBy(TIME_GRANULARITY)
+  durationMinutes: number;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsISO8601()
+  deadline?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tags?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  fixed?: boolean;
+
+  /** Minutes from midnight; only used when {@link fixed} is true. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(DAILY_HORIZON)
+  startTime?: number;
+
+  /**
+   * 'YYYY-MM-DD' day the task was created from, in the user's tz. For a fixed
+   * task it's the exact anchor day; for a flexible task it's the earliest day
+   * the engine may place it on. Defaults to today.
+   */
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
 
   @IsOptional()
   @IsRRule({ message: "Invalid RRULE: must follow RFC 5545 format" })
   rrule?: string;
 
-  @IsString() @IsOptional() note?: string;
-
-  @IsInt()
-  @Min(5)
-  @IsDivisibleBy(5)
-  duration: number;
-
-  @IsInt()
-  @Min(1)
-  @Max(3)
-  priority: number;
-
+  /**
+   * Active calendar perspective. Scopes recurrence materialization to its
+   * window (week → that week, month → that month). Defaults to a single
+   * instance ("day").
+   */
   @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(DAILY_HORIZON)
-  earliestStart?: number;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(DAILY_HORIZON)
-  latestEnd?: number;
-
-  @IsOptional()
-  @IsDateString()
-  @MaxLength(10)
-  deadlineDate?: string;
-
-  @IsOptional()
-  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/)
-  deadlineTime?: string;
-
-  @IsBoolean()
-  @IsOptional()
-  mandatory?: boolean;
-
-  @IsInt()
-  @Min(1)
-  @IsOptional()
-  maxSplits?: number;
-
-  @IsInt()
-  @Min(1)
-  @Max(3)
-  focus: number;
-
-  @IsOptional()
-  @IsString()
-  categoryId?: string;
-
-  @IsOptional()
-  @IsArray()
-  prerequisites?: string[];
+  @IsIn(["day", "week", "month"])
+  view?: ViewMode;
 }

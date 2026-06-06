@@ -1,26 +1,23 @@
-export interface Schedule {
-  start: string | null;
-  split: number;
-  date: string;
-  end: string | null;
-  task: {
-    id: string;
-    title: string;
-    focus: 1 | 2 | 3;
-    duration: number;
-    rrule: string | null;
-  };
-}
+import type { TaskCardState, TaskStatus } from "@zenflow/shared";
 
-export interface GetSchedulesResponse {
-  success: boolean;
-  message: string;
-  data: Schedule[];
-}
+export type { ViewMode } from "@zenflow/shared";
 
-export interface ScheduleResponse {
-  success: boolean;
-  message: string;
-  feasible: boolean;
-  data: Schedule[];
+/**
+ * A positioned calendar block — one concrete, scheduled occurrence of a task.
+ * Each occurrence (recurring or not) is its own persisted row, so `id` and
+ * `taskId` both address that real, mutable task. Built via {@link taskToBlock}.
+ */
+export interface Event {
+  id: string;
+  /** The persisted task row this block edits/moves; equals {@link id}. */
+  taskId: string;
+  title: string;
+  start: string; // ISO
+  end: string; // ISO
+  status: TaskStatus;
+  fixed: boolean;
+  conflict: boolean;
+  tags: string[];
+  rrule: string;
+  state: TaskCardState;
 }

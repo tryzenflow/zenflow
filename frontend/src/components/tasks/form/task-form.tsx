@@ -3,28 +3,37 @@ import { DatePicker } from "@/components/ui/datepicker";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Slider } from "@/components/ui/slider";
-import { CategoryItem, DAILY_HORIZON } from "@/types/prefs";
-import { Task } from "@/types/tasks";
-import { TaskFormValues } from "@/utils/tasks";
-import { addDays, format } from "date-fns";
+import { TaskFormValues, parseTags } from "@/utils/tasks";
+import { format } from "date-fns";
+import { isZonedToday } from "@/utils/tz";
+import { useUserStore } from "@/hooks/use-user-store";
+import type { ViewMode } from "@zenflow/shared";
 import { UseFormReturn } from "react-hook-form";
+import { useState, type ReactNode } from "react";
 import { DurationInput } from "../duration-input";
 import { NoteEditor } from "../note-editor";
-import { PrerequisitesSelect } from "../prerequisites-select";
-import { TimeInput } from "../time-input";
-import { TaskCategorySelect } from "./task-category-select";
-import { TaskFocusSelect } from "./task-focus-select";
-import { TaskPrioritySelect } from "./task-priority-select";
-import { Switch } from "../../ui/switch";
 import { RRuleForm } from "../rrule-form";
+import { FixedForm } from "../fixed-form";
+import { snapToNearestLaterQuarterHour } from "@/utils/time";
+import { cn } from "@/lib/utils";
+import { Box, Lock, Repeat, Tag, X } from "lucide-react";
+
+const DURATION_PRESETS = [15, 30, 45, 60, 120];
+
+const presetLabel = (m: number) =>
+  m % 60 === 0 ? `${m / 60}h` : m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
+
+const segBase =
+  "flex-1 py-2 flex items-center justify-center gap-1.5 transition-colors";
+const segActive = "bg-primary text-primary-foreground";
+const segIdle =
+  "bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary";
 
 interface TaskFormProps {
   form: UseFormReturn<TaskFormValues>;
@@ -32,9 +41,19 @@ interface TaskFormProps {
   onSubmit: (values: TaskFormValues) => void;
   onCancel: () => void;
   loading: boolean;
-  tasks: Task[];
+  /** Active calendar perspective. Drives view-scoped recurrence (and is hidden
+   *  in "day" / on the edit panel, where it's undefined). */
+  view?: ViewMode;
+  /** The day the task is being scheduled into (anchors fixed-time minimums). */
+  date?: Date;
+  /** Onboarding workdays (ISO 1–7) — constrains recurrence weekday choices. */
+  workDays?: number[];
   initialNote?: string;
-  categories: CategoryItem[];
+  submitLabel?: string;
+  /** Extra sections rendered inside the scrollable body (e.g. history). */
+  bodyExtra?: ReactNode;
+  /** Extra actions rendered under the Cancel/Save row (e.g. delete). */
+  footerExtra?: ReactNode;
 }
 
 export function TaskForm({
@@ -43,303 +62,355 @@ export function TaskForm({
   onCancel,
   newUploadsRef,
   loading,
-  tasks,
-  categories,
   initialNote,
+  view,
+  date,
+  workDays = [1, 2, 3, 4, 5],
+  submitLabel = "Save",
+  bodyExtra,
+  footerExtra,
 }: TaskFormProps) {
-  const maxSplits = form.watch("maxSplits");
-  const earliestStart = form.watch("earliestStart");
-  const latestEnd = form.watch("latestEnd");
-  const duration = form.watch("duration");
-  const scheduleDate = form.watch("scheduleDate");
-  const isRecurring = form.watch("isRecurring");
+  const tz = useUserStore((s) => s.user?.timezone) || "UTC";
+  const isFixed = form.watch("isFixed");
+  const fixedStart = form.watch("fixedStart");
+  const fixedEnd = form.watch("fixedEnd");
+  const duration = isFixed ? fixedEnd - fixedStart : form.watch("duration");
+  // Recurrence is only meaningful at creation in Week/Month views.
+  const recurrenceView = view === "week" || view === "month" ? view : null;
 
   return (
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
-        className="space-y-4 w-full md:max-w-7xl mx-auto"
+        className="flex min-h-0 flex-1 flex-col"
       >
-        {/* Top-level responsive grid:
-            - Single column on small screens
-            - 3 columns at md, with main content spanning 2 cols and sidebar 1 col
-        */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Main column: important fields (spans 2 cols on md) */}
-          <div className="md:col-span-2 h-fit space-y-4">
-            {/* Task Name and Schedule Date */}
-            <div className="flex flex-col sm:flex-row items-baseline gap-4">
-              <FormField
-                control={form.control}
-                name="title"
-                render={({ field }) => (
-                  <FormItem className="flex-1 w-full">
-                    <FormLabel>Title</FormLabel>
-                    <FormControl>
-                      <Input
-                        disabled={loading}
-                        placeholder="Do something"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+        <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5">
+          {/* Title */}
+          <FormField
+            control={form.control}
+            name="title"
+            render={({ field }) => (
+              <FormItem className="space-y-1.5">
+                <FormLabel className="text-xs font-semibold">Task name</FormLabel>
+                <FormControl>
+                  <Input
+                    disabled={loading}
+                    placeholder="What needs to get done?"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-              <FormField
-                control={form.control}
-                name="scheduleDate"
-                render={({ field }) => (
-                  <FormItem className="w-full sm:w-48">
-                    <FormLabel>Schedule Date</FormLabel>
-                    <FormControl>
-                      <DatePicker
-                        disabled={loading}
-                        className="w-full"
-                        date={field.value}
-                        onSelect={field.onChange}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            {/* Priority, Focus, Category - keep them grouped */}
-            <div className="flex flex-col sm:flex-row gap-4 items-baseline">
-              <div className="flex gap-x-4">
-                <TaskPrioritySelect
-                  formControl={form.control}
-                  loading={loading}
+          {/* Duration — quick-pick + custom */}
+          <FormField
+            control={form.control}
+            name="duration"
+            render={({ field }) => (
+              <FormItem className="space-y-2">
+                <FormLabel className="text-xs font-semibold">Duration</FormLabel>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {DURATION_PRESETS.map((m) => {
+                    const active = duration === m;
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        disabled={loading || isFixed}
+                        onClick={() => field.onChange(m)}
+                        className={cn(
+                          "h-8 rounded-md border text-xs font-semibold transition-colors disabled:opacity-50",
+                          active
+                            ? "border-primary bg-primary/15 font-bold text-primary"
+                            : "border-border bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary",
+                        )}
+                      >
+                        {presetLabel(m)}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="h-px flex-1 bg-border" />
+                  <span className="text-[10px] text-muted-foreground">or custom</span>
+                  <div className="h-px flex-1 bg-border" />
+                </div>
+                <DurationInput
+                  className="w-full"
+                  disabled={loading || isFixed}
+                  value={duration}
+                  onChange={field.onChange}
                 />
-                <TaskFocusSelect formControl={form.control} loading={loading} />
-              </div>
-              <TaskCategorySelect
-                formControl={form.control}
-                loading={loading}
-                categories={categories}
-              />
-            </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-            {/* Duration / Earliest Start / Latest End */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-baseline">
+          {/* Scheduling type */}
+          <FormField
+            control={form.control}
+            name="isFixed"
+            render={({ field }) => (
+              <FormItem className="space-y-2">
+                <FormLabel className="text-xs font-semibold">
+                  Scheduling type
+                </FormLabel>
+                <div className="flex overflow-hidden rounded-md border border-border text-xs font-semibold">
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => field.onChange(false)}
+                    className={cn(segBase, !field.value ? segActive : segIdle)}
+                  >
+                    <Box className="size-3" />
+                    Flexible
+                  </button>
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => field.onChange(true)}
+                    className={cn(
+                      segBase,
+                      "border-l border-border",
+                      field.value ? segActive : segIdle,
+                    )}
+                  >
+                    <Lock className="size-3" />
+                    Fixed
+                  </button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Flexible: the engine chooses the optimal slot. Fixed: you pick the
+                  exact time.
+                </p>
+              </FormItem>
+            )}
+          />
+
+          {isFixed && (
+            <FixedForm
+              minTime={
+                date && isZonedToday(date, tz)
+                  ? snapToNearestLaterQuarterHour(
+                      date.getHours() * 60 + date.getMinutes(),
+                    )
+                  : 0
+              }
+              form={form}
+            />
+          )}
+
+          {/* Deadline */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <FormLabel className="text-xs font-semibold">Deadline</FormLabel>
+              <span className="text-[10px] text-muted-foreground">Optional</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
               <FormField
                 control={form.control}
-                name="duration"
+                name="deadlineDate"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Duration</FormLabel>
-                    <DurationInput
-                      disabled={loading}
-                      value={field.value}
-                      onChange={field.onChange}
-                    />
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="earliestStart"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Earliest Start</FormLabel>
-                    <TimeInput
-                      disabled={loading}
-                      value={field.value || 0}
-                      onChange={(value) => {
-                        field.onChange(value);
-                      }}
-                      end={latestEnd ? latestEnd - duration : latestEnd}
-                    />
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="latestEnd"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Latest End</FormLabel>
-                    <TimeInput
-                      disabled={loading}
-                      value={field.value || DAILY_HORIZON}
-                      onChange={field.onChange}
-                      start={
-                        earliestStart ? earliestStart + duration : earliestStart
+                  <FormItem className="col-span-2 space-y-0">
+                    <DatePicker
+                      placeholder="Select date"
+                      disabled={loading || { before: new Date() }}
+                      date={field.value ? new Date(field.value) : undefined}
+                      onSelect={(value) =>
+                        field.onChange(value ? format(value, "yyyy-MM-dd") : "")
                       }
                     />
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            </div>
-            <FormField
-              control={form.control}
-              name="note"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Notes</FormLabel>
-                  <FormControl>
-                    <NoteEditor
-                      initialValue={initialNote}
-                      newUploadsRef={newUploadsRef}
-                      disabled={loading}
-                      value={field.value || ""}
-                      onChange={field.onChange}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-
-          {/* Sidebar / Advanced config (small column on the right from md) */}
-          <div className="md:col-span-1 flex flex-col gap-y-4">
-            {/* Deadline Date and Time */}
-
-            <div className="flex items-center space-x-2 w-fit justify-self-end md:order-1 order-last">
-              <Button
-                onClick={onCancel}
-                disabled={loading}
-                type="button"
-                variant="outline"
-                size="sm"
-              >
-                Cancel
-              </Button>
-              <Button size="sm" disabled={loading} type="submit">
-                Save
-              </Button>
-            </div>
-            <div className="grid grid-cols-3 gap-4 items-baseline">
               <FormField
                 control={form.control}
-                name="deadlineDate"
+                name="deadlineTime"
                 render={({ field }) => (
-                  <FormItem className="col-span-2">
-                    <FormLabel>Deadline Date</FormLabel>
-                    <DatePicker
-                      placeholder="Select date"
-                      disabled={loading || { before: addDays(scheduleDate, 1) }}
-                      date={field.value ? new Date(field.value) : undefined}
-                      onSelect={(value) => {
-                        field.onChange(
-                          value ? format(value, "yyyy-MM-dd") : "",
-                        );
-                        if (value) console.log(format(value, "yyyy-MM-dd"));
-                      }}
-                    />
-                    <FormMessage />
+                  <FormItem className="space-y-0">
+                    <Input disabled={loading} type="time" {...field} />
                   </FormItem>
                 )}
               />
-              <div className="col-span-1">
-                <FormField
-                  control={form.control}
-                  name="deadlineTime"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="invisible">Time</FormLabel>
-                      <Input disabled={loading} type="time" {...field} />
-                    </FormItem>
-                  )}
-                />
-              </div>
             </div>
+          </div>
 
-            {/* Mandatory switch */}
-            <FormField
-              control={form.control}
-              name="mandatory"
-              render={({ field }) => (
-                <FormItem className="flex gap-2 items-center">
-                  <Switch
+          {/* Tags */}
+          <FormField
+            control={form.control}
+            name="tags"
+            render={({ field }) => (
+              <FormItem className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <FormLabel className="text-xs font-semibold">Tags</FormLabel>
+                  <span className="text-[10px] text-muted-foreground">Optional</span>
+                </div>
+                <TagsField
+                  disabled={loading}
+                  value={field.value ?? ""}
+                  onChange={field.onChange}
+                />
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Description (rich text) */}
+          <FormField
+            control={form.control}
+            name="note"
+            render={({ field }) => (
+              <FormItem className="space-y-1.5">
+                <FormLabel className="text-xs font-semibold">Description</FormLabel>
+                <FormControl>
+                  <NoteEditor
+                    initialValue={initialNote}
+                    newUploadsRef={newUploadsRef}
                     disabled={loading}
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
+                    value={field.value || ""}
+                    onChange={field.onChange}
                   />
-                  <FormLabel>Mandatory</FormLabel>
-                </FormItem>
-              )}
-            />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-            {/* Max Splits slider */}
-            <FormField
-              control={form.control}
-              name="maxSplits"
-              render={({ field }) => (
-                <FormItem className="flex flex-col gap-y-3">
-                  <div className="flex gap-x-2">
-                    <FormLabel className="shrink-0 w-1/3">Max Splits</FormLabel>
-                    <FormControl>
-                      <Slider
-                        min={1}
-                        max={10}
-                        disabled={loading}
-                        step={1}
-                        value={[field.value]}
-                        onValueChange={(val) => field.onChange(val[0])}
-                      />
-                    </FormControl>
-                  </div>
-                  <FormDescription>
-                    Task will be split into at most{" "}
-                    <span className="font-medium">
-                      {maxSplits} chunk{maxSplits !== 1 ? "s" : ""}.
-                    </span>
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Prerequisites */}
-            <FormField
-              control={form.control}
-              name="prerequisites"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Prerequisites</FormLabel>
-                  <PrerequisitesSelect
-                    disabled={loading}
-                    tasks={tasks}
-                    selected={field.value ?? []}
-                    onChange={(value) => {
-                      const preqIdsSet = new Set(
-                        form.getValues("prerequisites") ?? [],
-                      );
-                      if (preqIdsSet.has(value)) preqIdsSet.delete(value);
-                      else preqIdsSet.add(value);
-                      field.onChange(Array.from(preqIdsSet));
-                    }}
-                  />
-                </FormItem>
-              )}
-            />
-            {/* Recurring switch */}
+          {/* Recurrence — view-scoped; hidden in Day view and on the edit panel. */}
+          {recurrenceView && (
             <FormField
               control={form.control}
               name="isRecurring"
               render={({ field }) => (
-                <FormItem className="flex gap-2 items-center">
-                  <Switch
-                    disabled={loading}
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                  />
-                  <FormLabel>Recurring</FormLabel>
+                <FormItem className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <FormLabel className="text-xs font-semibold">
+                      Recurrence
+                    </FormLabel>
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => field.onChange(!field.value)}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                        field.value
+                          ? "border-primary bg-primary/15 text-primary"
+                          : "border-border bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary",
+                      )}
+                    >
+                      <Repeat className="size-3" />
+                      {field.value ? "Repeats" : "Does not repeat"}
+                    </button>
+                  </div>
+                  {field.value && (
+                    <RRuleForm
+                      form={form}
+                      view={recurrenceView}
+                      workDays={workDays}
+                      date={date ?? new Date()}
+                    />
+                  )}
                 </FormItem>
               )}
             />
-            {isRecurring && <RRuleForm form={form} />}
+          )}
+
+          {bodyExtra}
+        </div>
+
+        {/* Footer */}
+        <div className="shrink-0 space-y-3 border-t border-border p-5">
+          <div className="flex items-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={loading}
+              onClick={onCancel}
+              className="h-9 flex-1"
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={loading} className="h-9 flex-1">
+              {submitLabel}
+            </Button>
           </div>
+          {footerExtra}
         </div>
       </form>
     </Form>
+  );
+}
+
+/** Chip-based tag editor backed by a comma-separated string field. */
+function TagsField({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const [draft, setDraft] = useState("");
+  const tags = parseTags(value);
+
+  const commit = (raw: string) => {
+    const next = [...tags];
+    for (const t of parseTags(raw)) {
+      if (!next.includes(t)) next.push(t);
+    }
+    onChange(next.join(", "));
+    setDraft("");
+  };
+
+  const remove = (tag: string) =>
+    onChange(tags.filter((t) => t !== tag).join(", "));
+
+  return (
+    <div className="space-y-2">
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {tags.map((tag) => (
+            <span
+              key={tag}
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground"
+            >
+              #{tag}
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => remove(tag)}
+                className="transition-colors hover:text-foreground"
+                aria-label={`Remove ${tag}`}
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="relative">
+        <Tag className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          disabled={disabled}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === ",") {
+              e.preventDefault();
+              if (draft.trim()) commit(draft);
+            } else if (e.key === "Backspace" && !draft && tags.length) {
+              remove(tags[tags.length - 1]);
+            }
+          }}
+          onBlur={() => draft.trim() && commit(draft)}
+          placeholder="Add tag (e.g. admin, meetings)…"
+          className="pl-9"
+        />
+      </div>
+    </div>
   );
 }

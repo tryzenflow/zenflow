@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zenflow — Onboarding</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800;900&family=Geist+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { darkMode: 'class' }</script>
+  <style>
+    :root {
+      --primary: oklch(0.496 0.265 301.924);
+      --primary-foreground: oklch(0.977 0.014 308.299);
+      --background: oklch(0.99 0.002 106.5);
+      --foreground: oklch(0.153 0.006 107.1);
+      --card: oklch(1 0 0);
+      --muted: oklch(0.966 0.005 106.5);
+      --muted-foreground: oklch(0.58 0.031 107.3);
+      --border: oklch(0.93 0.007 106.5);
+      --input: oklch(0.93 0.007 106.5);
+      --ring: oklch(0.737 0.021 106.9);
+      --radius: 0.375rem;
+    }
+    .dark {
+      --primary: oklch(0.62 0.22 303.724);
+      --background: oklch(0.153 0.006 107.1);
+      --foreground: oklch(0.988 0.003 106.5);
+      --card: oklch(0.228 0.013 107.4);
+      --muted: oklch(0.286 0.016 107.4);
+      --muted-foreground: oklch(0.737 0.021 106.9);
+      --border: oklch(0.32 0.01 107);
+      --input: oklch(0.32 0.01 107);
+    }
+    body { font-family: 'Geist', system-ui, sans-serif; background-color: var(--background); color: var(--foreground); }
+    .bg-primary { background-color: var(--primary); }
+    .text-primary { color: var(--primary); }
+    .border-primary { border-color: var(--primary); }
+    .bg-primary-10 { background-color: color-mix(in oklch, var(--primary) 10%, transparent); }
+    .bg-card { background-color: var(--card); }
+    .bg-muted { background-color: var(--muted); }
+    .text-muted-fg { color: var(--muted-foreground); }
+    .border-border { border-color: var(--border); }
+    .text-primary-fg { color: var(--primary-foreground); }
+    *:focus-visible { outline: 1px solid var(--ring); outline-offset: 0; border-radius: var(--radius); }
+    .onboarding-bg {
+      background: radial-gradient(ellipse 80% 80% at 50% 20%,
+        color-mix(in oklch, var(--muted) 80%, var(--background)),
+        var(--background));
+    }
+    .glass-card {
+      background-color: color-mix(in oklch, var(--card) 82%, transparent);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      padding: 2rem;
+    }
+  </style>
+</head>
+<body class="min-h-screen antialiased">
+
+  <!-- Dark mode toggle -->
+  <button onclick="document.documentElement.classList.toggle('dark')"
+          class="fixed top-4 right-4 z-50 p-2 rounded-md bg-card border border-border text-muted-fg hover:text-foreground transition-colors"
+          title="Toggle dark mode">
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+    </svg>
+  </button>
+
+  <div class="min-h-screen flex">
+
+    <!-- Left panel — steps -->
+    <div class="w-72 shrink-0 bg-card border-r border-border flex flex-col py-10 px-8">
+
+      <!-- Logo -->
+      <div class="flex items-center space-x-2.5 mb-12">
+        <div class="w-7 h-7 shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none" class="w-full h-full text-foreground">
+            <path d="M20 20H80V80H20V20Z" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" style="opacity:.12"/>
+            <line x1="40" y1="20" x2="40" y2="80" stroke="currentColor" stroke-width="2.5" stroke-dasharray="3 4" style="opacity:.2"/>
+            <line x1="60" y1="20" x2="60" y2="80" stroke="currentColor" stroke-width="2.5" stroke-dasharray="3 4" style="opacity:.2"/>
+            <path d="M20 35H50C55.5 35 60 39.5 60 45V80" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" style="opacity:.4"/>
+            <path d="M40 20V55C40 60.5 44.5 65 50 65H80" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" style="opacity:.75"/>
+            <rect x="52" y="32" width="16" height="16" rx="4" fill="var(--primary)"/>
+          </svg>
+        </div>
+        <span class="text-sm font-bold tracking-tight">Zenflow</span>
+      </div>
+
+      <!-- Steps -->
+      <div class="space-y-1">
+        <!-- Step 1 — done -->
+        <div class="flex items-center space-x-3 px-3 py-2.5 rounded-md">
+          <div class="w-5 h-5 rounded-full bg-primary flex items-center justify-center shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 20 4 14"/></svg>
+          </div>
+          <span class="text-xs font-medium text-muted-fg">Welcome</span>
+        </div>
+        <!-- Step 2 — active -->
+        <div class="flex items-center space-x-3 px-3 py-2.5 rounded-md bg-primary-10">
+          <div class="w-5 h-5 rounded-full border-2 border-primary bg-card flex items-center justify-center shrink-0">
+            <div class="w-2 h-2 rounded-full bg-primary"></div>
+          </div>
+          <span class="text-xs font-semibold text-primary">Work Hours</span>
+        </div>
+        <!-- Step 3 -->
+        <div class="flex items-center space-x-3 px-3 py-2.5 rounded-md">
+          <div class="w-5 h-5 rounded-full border-2 border-border flex items-center justify-center shrink-0">
+            <span class="text-[9px] font-bold text-muted-fg">3</span>
+          </div>
+          <span class="text-xs font-medium text-muted-fg">Work Days</span>
+        </div>
+        <!-- Step 4 -->
+        <div class="flex items-center space-x-3 px-3 py-2.5 rounded-md">
+          <div class="w-5 h-5 rounded-full border-2 border-border flex items-center justify-center shrink-0">
+            <span class="text-[9px] font-bold text-muted-fg">4</span>
+          </div>
+          <span class="text-xs font-medium text-muted-fg">Your Role</span>
+        </div>
+        <!-- Step 5 -->
+        <div class="flex items-center space-x-3 px-3 py-2.5 rounded-md">
+          <div class="w-5 h-5 rounded-full border-2 border-border flex items-center justify-center shrink-0">
+            <span class="text-[9px] font-bold text-muted-fg">5</span>
+          </div>
+          <span class="text-xs font-medium text-muted-fg">All Set</span>
+        </div>
+      </div>
+
+      <div class="mt-auto">
+        <p class="text-[11px] text-muted-fg leading-relaxed">Setup takes under 60 seconds. Your schedule adapts to your preferences from day one.</p>
+      </div>
+    </div>
+
+    <!-- Right panel — form -->
+    <div class="flex-1 flex items-center justify-center p-8 onboarding-bg">
+      <div class="w-full max-w-md glass-card">
+
+        <!-- Step header -->
+        <div class="mb-8">
+          <div class="text-[10px] font-bold uppercase tracking-wider text-muted-fg mb-2">Step 2 of 5</div>
+          <h1 class="text-2xl font-bold tracking-tight mb-2">When do you work?</h1>
+          <p class="text-sm text-muted-fg">Zenflow only schedules tasks within your working hours. You can change this anytime in Settings.</p>
+        </div>
+
+        <!-- Form -->
+        <div class="space-y-6">
+
+          <!-- Work Start Time -->
+          <div class="space-y-2">
+            <label class="text-xs font-semibold">Work starts at</label>
+            <div class="relative">
+              <div class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-fg">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </div>
+              <select class="w-full h-10 pl-9 pr-4 text-sm bg-card border border-border rounded-md appearance-none focus:outline-none focus:ring-1 focus:ring-[var(--primary)] font-medium">
+                <option>7:00 AM</option>
+                <option>7:30 AM</option>
+                <option>8:00 AM</option>
+                <option selected>9:00 AM</option>
+                <option>9:30 AM</option>
+                <option>10:00 AM</option>
+              </select>
+              <div class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-fg pointer-events-none">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- Work End Time -->
+          <div class="space-y-2">
+            <label class="text-xs font-semibold">Work ends at</label>
+            <div class="relative">
+              <div class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-fg">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </div>
+              <select class="w-full h-10 pl-9 pr-4 text-sm bg-card border border-border rounded-md appearance-none focus:outline-none focus:ring-1 focus:ring-[var(--primary)] font-medium">
+                <option>4:00 PM</option>
+                <option>4:30 PM</option>
+                <option selected>5:00 PM</option>
+                <option>5:30 PM</option>
+                <option>6:00 PM</option>
+                <option>7:00 PM</option>
+              </select>
+              <div class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-fg pointer-events-none">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- Duration summary -->
+          <div class="flex items-center space-x-3 p-3.5 bg-muted border border-border rounded-md">
+            <div class="w-8 h-8 rounded-md bg-card border border-border flex items-center justify-center shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-muted-fg"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <div>
+              <p class="text-xs font-semibold text-foreground">8 hours of schedulable time</p>
+              <p class="text-[11px] text-muted-fg mt-0.5">09:00 AM – 05:00 PM · Up to 32 task slots per day</p>
+            </div>
+          </div>
+
+          <!-- Timezone note -->
+          <div class="flex items-start space-x-2 text-[11px] text-muted-fg">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="mt-0.5 shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span>Your current timezone is <strong class="font-semibold text-foreground">Asia/Saigon (GMT+7)</strong>. Detected automatically.</span>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex items-center justify-between pt-2">
+            <button class="h-9 px-4 text-xs font-medium text-muted-fg hover:text-foreground border border-border rounded-md transition-colors">
+              Back
+            </button>
+            <button class="h-9 px-5 bg-primary text-primary-fg text-xs font-semibold rounded-md hover:opacity-90 transition-opacity flex items-center space-x-1.5">
+              <span>Continue</span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .text-primary-fg { color: var(--primary-foreground); }
+    .bg-card { background-color: var(--card); }
+    .text-foreground { color: var(--foreground); }
+  </style>
+</body>
+</html>

@@ -1,308 +1,79 @@
-import {
-  addDays,
-  endOfMonth,
-  format,
-  startOfMonth,
-  startOfWeek,
-  addMonths,
-  subMonths,
-  isToday,
-} from "date-fns";
-import { Schedule } from "../../types/schedule";
-import { MouseEvent, useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { cn } from "../../lib/utils";
-import { Task, TaskResponse } from "../../types/tasks";
-import { TaskCard } from "../tasks/views/card";
-import { getData } from "../../api";
-import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { eachDayOfInterval, endOfWeek, format, startOfWeek } from "date-fns";
+import { MonthGrid } from "./month-grid";
+import { Event } from "@/types/schedule";
+import { DndContext, DragEndEvent } from "@dnd-kit/core";
+import { WEEK_STARTS_ON } from "@/utils/constants";
+import { cn } from "@/lib/utils";
+import { useUserStore } from "@/hooks/use-user-store";
+import { useDragSensors } from "@/hooks/use-drag-sensors";
+import { zonedDate, zonedWallClockToUtc } from "@/utils/tz";
 
-export const MonthView = ({
-  selectedDate,
-  schedules,
-  setSelectedDate,
-  setCurrentView,
-  deleteSchedule,
-}: {
-  selectedDate: Date;
-  schedules: Schedule[];
-  setSelectedDate: (date: Date) => void;
-  setCurrentView: (view: string) => void;
-  deleteSchedule: (
-    taskId: string,
-    date: string,
-    split: number,
-  ) => Promise<void>;
-}) => {
-  const [displayMonth, setDisplayMonth] = useState(selectedDate);
-  const start = startOfMonth(displayMonth);
-  const end = endOfMonth(displayMonth);
-
-  // Build a simple array of dates covering full weeks in the month (Mon-start)
-  const firstCell = startOfWeek(start, { weekStartsOn: 1 });
-  const cells: Date[] = [];
-  let cursor = firstCell;
-  while (cursor <= end || cells.length % 7 !== 0) {
-    cells.push(cursor);
-    cursor = addDays(cursor, 1);
-  }
-  const [taskDetail, setTaskDetail] = useState<Task | null>(null);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [popoverDate, setPopoverDate] = useState<Date | null>(null);
-  const formatKey = (d: Date) => format(d, "yyyy-MM-dd");
-
-  const focusDayView = (
-    e: MouseEvent<HTMLDivElement, globalThis.MouseEvent>,
-    date: Date,
-  ) => {
-    e.stopPropagation();
-    setCurrentView("Day view");
-    setSelectedDate(date);
-  };
-
-  useEffect(() => {
-    setDisplayMonth(selectedDate);
-  }, [selectedDate]);
-
-  useEffect(() => {
-    if (!selectedTaskId) setTaskDetail(null);
-    else
-      getData<TaskResponse>(`/tasks/${selectedTaskId}`).then((res) =>
-        setTaskDetail(res.data),
-      );
-  }, [selectedTaskId]);
-
-  const schedulesWithoutSplits = useMemo(() => {
-    return schedules.filter((schedule) => schedule.split === 0);
-  }, [schedules]);
-
-  return (
-    <div className="flex-1 min-w-0 h-full pt-8 relative overflow-y-auto bg-background rounded-l-xl flex flex-col">
-      <div className="flex-1 flex flex-col">
-        {/* Header with month navigation */}
-        <div className="flex items-center px-8 justify-between mb-8">
-          <button
-            onClick={() => setDisplayMonth(subMonths(displayMonth, 1))}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <ChevronLeft className="w-5 h-5 text-muted-foreground" />
-          </button>
-
-          <h3 className="text-lg lg:text-3xl font-bold text-foreground flex-1 text-center">
-            {format(start, "LLLL yyyy")}
-          </h3>
-
-          <button
-            onClick={() => setDisplayMonth(addMonths(displayMonth, 1))}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <ChevronRight className="w-5 h-5 text-gray-600" />
-          </button>
-        </div>
-
-        {/* Week headers */}
-        <div className="grid grid-cols-7 gap-0 mb-0">
-          {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day) => (
-            <div
-              key={day}
-              className="text-center text-sm font-semibold text-gray-600 py-3 border-b-2 border-gray-200"
-            >
-              {day}
-            </div>
-          ))}
-        </div>
-
-        {/* Calendar grid */}
-        <div className="grid grid-cols-7 gap-0 flex-1">
-          {cells.map((date, idx) => {
-            const inMonth = date.getMonth() === start.getMonth();
-            const key = formatKey(date);
-            const isSelected =
-              selectedDate.toDateString() === date.toDateString();
-
-            // Find schedules for this date
-            const daySchedules = schedulesWithoutSplits.filter(
-              (s) => formatKey(new Date(s.date)) === key,
-            );
-
-            return (
-              <div
-                key={idx}
-                onClick={() => setSelectedDate(date)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === "Enter" && setSelectedDate(date)}
-                className="
-                  flex flex-col p-3 text-xs text-foreground cursor-pointer
-                  border-r border-b border-gray-200 transition-all duration-150
-                "
-                onDoubleClick={(e) => focusDayView(e, date)}
-              >
-                {/* Date number */}
-                <div
-                  className={cn(
-                    "font-medium mb-2 w-7 h-7 flex items-center justify-center rounded-full",
-                    inMonth ? "text-foreground" : "text-muted-foreground",
-                    isSelected && "text-white bg-primary",
-                    isToday(date) && !isSelected && "bg-muted",
-                  )}
-                >
-                  {format(date, "d")}
-                </div>
-
-                {/* Events */}
-                <div className="block md:hidden">
-                  {daySchedules.length > 0 && (
-                    <div className="mt-0.5 flex items-center gap-0.5">
-                      {Array.from(
-                        new Set(daySchedules.map((s) => s.task.focus)),
-                      ).map((focus, i) => (
-                        <div
-                          key={i}
-                          className={cn(
-                            "w-1.5 h-1.5 rounded-full",
-                            focus === 1 && "bg-green-500",
-                            focus === 2 && "bg-yellow-500",
-                            focus === 3 && "bg-red-500",
-                          )}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="hidden md:flex flex-col gap-1 flex-1 overflow-hidden">
-                  {daySchedules.slice(0, 2).map((schedule) => (
-                    <MonthViewEvent
-                      key={`${schedule.date}-${schedule.task.id}-${schedule.split}`}
-                      selectedTaskId={selectedTaskId}
-                      setSelectedTaskId={setSelectedTaskId}
-                      popoverDate={popoverDate}
-                      setPopoverDate={setPopoverDate}
-                      date={date}
-                      schedule={schedule}
-                      inMonth={inMonth}
-                      taskDetail={taskDetail}
-                      deleteSchedule={deleteSchedule}
-                      isInPopover={false}
-                    />
-                  ))}
-                  {daySchedules.length > 2 && (
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <div
-                          className={cn(
-                            "text-xs",
-                            inMonth
-                              ? "text-foreground"
-                              : "text-muted-foreground",
-                          )}
-                        >
-                          {daySchedules.length - 2} more
-                        </div>
-                      </PopoverTrigger>
-                      <PopoverContent>
-                        {daySchedules.map((schedule) => (
-                          <MonthViewEvent
-                            key={`${schedule.date}-${schedule.task.id}-${schedule.split}`}
-                            selectedTaskId={selectedTaskId}
-                            setSelectedTaskId={setSelectedTaskId}
-                            popoverDate={popoverDate}
-                            setPopoverDate={setPopoverDate}
-                            date={date}
-                            schedule={schedule}
-                            inMonth={inMonth}
-                            taskDetail={taskDetail}
-                            deleteSchedule={deleteSchedule}
-                            isInPopover
-                          />
-                        ))}
-                      </PopoverContent>
-                    </Popover>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-interface MonthViewEventProps {
-  selectedTaskId: string | null;
-  setSelectedTaskId: (id: string | null) => void;
-  popoverDate: Date | null;
-  setPopoverDate: (date: Date | null) => void;
-  date: Date;
-  schedule: Schedule;
-  inMonth: boolean;
-  taskDetail: Task | null;
-  deleteSchedule: (
-    taskId: string,
-    date: string,
-    split: number,
-  ) => Promise<void>;
-  isInPopover: boolean;
-}
-
-function MonthViewEvent({
-  selectedTaskId,
-  setSelectedTaskId,
-  popoverDate,
-  setPopoverDate,
+export function MonthView({
+  events,
   date,
-  schedule,
-  inMonth,
-  taskDetail,
-  deleteSchedule,
-  isInPopover = false,
-}: MonthViewEventProps) {
+  setEvents,
+  onReschedule,
+}: {
+  events: Event[];
+  date: Date;
+  setEvents: React.Dispatch<React.SetStateAction<Event[]>>;
+  onReschedule: (taskId: string, startISO: string) => void;
+}) {
+  const tz = useUserStore((s) => s.user?.timezone) || "UTC";
+  const sensors = useDragSensors();
+  const weekdays = eachDayOfInterval({
+    start: startOfWeek(new Date(), { weekStartsOn: WEEK_STARTS_ON }),
+    end: endOfWeek(new Date(), { weekStartsOn: WEEK_STARTS_ON }),
+  });
+
+  function onDragEnd({ over, active }: DragEndEvent) {
+    if (!over) return;
+    const activeId = active.id.toString();
+    const block = events.find((e) => e.id === activeId);
+    if (!block) return;
+    // Droppable id is a 'YYYY-MM-DD' user-tz day. Keep the block's wall-clock
+    // time-of-day, move it to that day in zoned space, then back to UTC.
+    const [y, m, d] = over.id.toString().split("-").map(Number);
+    const wall = zonedDate(block.start, tz);
+    wall.setFullYear(y, m - 1, d);
+    const newStart = zonedWallClockToUtc(wall, tz);
+    const duration =
+      new Date(block.end).getTime() - new Date(block.start).getTime();
+    const newEnd = new Date(newStart.getTime() + duration);
+
+    // No-op drop (released on the same day it started) — don't record a move.
+    if (newStart.toISOString() === block.start) return;
+
+    setEvents((evs) =>
+      evs.map((ev) =>
+        ev.id === activeId
+          ? { ...ev, start: newStart.toISOString(), end: newEnd.toISOString() }
+          : ev,
+      ),
+    );
+    onReschedule(block.taskId, newStart.toISOString());
+  }
+
+
   return (
-    <Popover
-      open={
-        isInPopover &&
-        selectedTaskId === schedule.task.id &&
-        popoverDate?.toDateString() === date.toDateString()
-      }
-      onOpenChange={(open) => {
-        if (open) {
-          setSelectedTaskId(schedule.task.id);
-          setPopoverDate(date);
-        } else {
-          setSelectedTaskId(null);
-          setPopoverDate(null);
-        }
-      }}
-    >
-      <PopoverTrigger asChild>
-        <div className="flex items-center gap-x-2">
+    <div data-slot="month-view" className="flex min-h-full flex-col">
+      {/* Weekday headers — sticky, frosted, weekend muted. */}
+      <div className="bg-card/80 border-border sticky top-0 z-10 grid grid-cols-7 border-b backdrop-blur-md">
+        {weekdays.map((day, i) => (
           <div
+            key={day.toISOString()}
             className={cn(
-              "w-1.5 h-1.5 rounded-full shrink-0",
-              schedule.task.focus === 1 && "bg-green-500",
-              schedule.task.focus === 2 && "bg-yellow-500",
-              schedule.task.focus === 3 && "bg-red-500",
-            )}
-          />
-          <div
-            key={`${schedule.task.id}-${schedule.date}`}
-            className={cn(
-              "text-xs font-medium line-clamp-1",
-              inMonth ? "text-foreground" : "text-muted-foreground",
+              "py-2 text-center text-[11px] font-bold uppercase tracking-wider",
+              i >= 5 ? "text-muted-foreground" : "text-foreground",
             )}
           >
-            {schedule.task.title}
+            {format(day, "eee")}
           </div>
-        </div>
-      </PopoverTrigger>
-      <PopoverContent asChild={!!taskDetail}>
-        {taskDetail ? (
-          <TaskCard task={taskDetail} deleteSchedule={deleteSchedule} />
-        ) : (
-          <div className="text-muted-foreground">No data available</div>
-        )}
-      </PopoverContent>
-    </Popover>
+        ))}
+      </div>
+      <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+        <MonthGrid events={events} date={date} />
+      </DndContext>
+    </div>
   );
 }

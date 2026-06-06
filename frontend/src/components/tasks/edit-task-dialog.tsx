@@ -1,35 +1,50 @@
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 import { useTaskForm } from "@/hooks/use-task-form";
 import { format } from "date-fns";
+import { fromZonedTime } from "date-fns-tz";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { getData, patchData, postData } from "../../api";
-import { CategoryItem, DAILY_HORIZON } from "../../types/prefs";
-import { Task } from "../../types/tasks";
-import { generateRRule, parseRRule, TaskFormValues } from "../../utils/tasks";
+import { postData } from "../../api";
+import { useUserStore } from "../../hooks/use-user-store";
+import type { Task } from "../../types/tasks";
+import type { RecurrenceScope, TaskEvent } from "@zenflow/shared";
+import {
+  deleteTask,
+  EditTaskFormValues,
+  parseRRule,
+  parseTags,
+} from "../../utils/tasks";
 import { TaskForm } from "./form/task-form";
 import { useFilesTracker } from "../../hooks/use-files-tracker";
+import { completeTask, getTaskDetails, updateTask } from "@/api/tasks";
+import { Clock, Trash2 } from "lucide-react";
 
 interface EditTaskDialogProps {
   open: boolean;
   setOpen: (open: boolean) => void;
   taskId: string;
-  selectedDate: Date;
-  updateSchedule: (task: Task) => void;
+  onSaved: () => void;
 }
 
 const defaultRecurringFields = {
+  recurrenceMode: "specific",
+  byweeks: [1],
   frequency: "WEEKLY",
   interval: 1,
-  byweekday: ["MO"],
+  byday: ["MO"],
   bymonthday: 1,
   bysetpos: 1,
-  byweekdayMonth: "MO",
+  bydayMonth: "MO",
   monthlyMode: "on",
   yearlyMode: "on",
   isRecurring: false,
@@ -38,24 +53,31 @@ const defaultRecurringFields = {
   count: 1,
   until: undefined,
 };
+
 export function EditTaskDialog({
   open,
   setOpen,
   taskId,
-  selectedDate,
-  updateSchedule,
+  onSaved,
 }: EditTaskDialogProps) {
   const [loading, setLoading] = useState(false);
-  const [tasks, setTasks] = useState<Task[]>([]);
   const [task, setTask] = useState<Task | null>(null);
-  const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const [events, setEvents] = useState<TaskEvent[]>([]);
+  // When set, a recurring task is awaiting the user's choice of how far a
+  // save/delete should propagate across the series.
+  const [scopePrompt, setScopePrompt] = useState<
+    { mode: "save"; values: EditTaskFormValues } | { mode: "delete" } | null
+  >(null);
+  const user = useUserStore((s) => s.user);
   const { newUploadsRef } = useFilesTracker();
+  const isRecurring = !!task?.rrule;
 
   useEffect(() => {
     if (!open) return;
-    getData<{ data: Task | null }>(`/tasks/${taskId}`).then(({ data }) =>
-      setTask(data),
-    );
+    getTaskDetails(taskId).then((res) => {
+      setTask(res.task);
+      setEvents(res.events);
+    });
   }, [taskId, open]);
 
   const form = useTaskForm({
@@ -63,160 +85,318 @@ export function EditTaskDialog({
       ...(defaultRecurringFields as any),
       title: "",
       duration: 60,
-      mandatory: true,
-      priority: 2,
-      focus: 2,
-      maxSplits: 1,
-      scheduleDate: selectedDate,
+      tags: "",
       note: "",
-      earliestStart: 0,
-      latestEnd: DAILY_HORIZON,
-      prerequisites: [],
       deadlineDate: "",
       deadlineTime: "",
+      isFixed: false,
+      fixedStart: 9 * 60,
+      fixedEnd: 10 * 60,
     },
   });
-  const scheduleDate = form.watch("scheduleDate");
-
-  useEffect(() => {
-    if (!open) return;
-    getData<{ data: CategoryItem[] }>("/categories").then((data) => {
-      setCategories(data.data);
-    });
-  }, [open]);
-
-  useEffect(() => {
-    if (!scheduleDate || !open) {
-      setTasks([]);
-      return;
-    }
-    const formattedScheduleDate = format(scheduleDate, "yyyy-MM-dd");
-    const allPrerequisites = Promise.all([
-      getData<{ data: Task[] }>(
-        `/tasks?start=${formattedScheduleDate}&end=${formattedScheduleDate}`,
-      ),
-
-      getData<{ data: { recurring: Task[] } }>(
-        `/tasks/none?start=${formattedScheduleDate}&end=${formattedScheduleDate}`,
-      ),
-    ]);
-
-    allPrerequisites.then(
-      ([
-        { data },
-        {
-          data: { recurring },
-        },
-      ]) => {
-        setTasks([...data, ...recurring]);
-      },
-    );
-  }, [scheduleDate, open]);
 
   useEffect(() => {
     if (!task) return;
-    const parsedFields = task.rrule
+    const parsed = task.rrule
       ? parseRRule(task.rrule)
       : (defaultRecurringFields as any);
-    const fields = {
-      ...task,
-      ...parsedFields,
-      isRecurring: !!task.rrule,
+    form.reset({
+      ...(defaultRecurringFields as any),
+      ...parsed,
+      title: task.title,
+      duration: task.durationMinutes,
+      tags: task.tags.join(", "),
       note: task.note ?? "",
-      scheduleDate: selectedDate,
-      categoryId: task.categoryId ?? undefined,
-      prerequisites:
-        task.prerequisites?.map((p) => (typeof p === "string" ? p : p.id)) ??
-        [],
-      earliestStart: task.earliestStart ?? 0,
-      latestEnd: task.latestEnd ?? DAILY_HORIZON,
+      isFixed: task.fixed,
+      fixedStart: task.startTime,
+      fixedEnd: task.startTime + task.durationMinutes,
+      isRecurring: !!task.rrule,
       deadlineDate: task.deadline
         ? format(new Date(task.deadline), "yyyy-MM-dd")
         : "",
       deadlineTime: task.deadline
         ? format(new Date(task.deadline), "HH:mm")
         : "",
-    };
-    form.reset(fields);
-  }, [task, selectedDate]);
+    });
+  }, [task, form]);
 
-  async function onSubmit(values: TaskFormValues) {
-    // setLoading(true);
-    const formattedScheduleDate = format(values.scheduleDate, "yyyy-MM-dd");
-    const formattedSelectedDate = format(selectedDate, "yyyy-MM-dd");
-    const deadlineDate = values.deadlineDate || undefined;
-    const deadlineTime = values.deadlineTime || undefined;
+  async function onSubmit(values: EditTaskFormValues) {
+    // Recurring edits ask how far to propagate before hitting the API.
+    if (isRecurring) {
+      setScopePrompt({ mode: "save", values });
+      return;
+    }
+    await doUpdate(values);
+  }
+
+  async function doUpdate(values: EditTaskFormValues, scope?: RecurrenceScope) {
+    if (!user) return;
+    setLoading(true);
+    const deadline = values.deadlineDate
+      ? fromZonedTime(
+          `${values.deadlineDate}T${values.deadlineTime || "23:59"}:00`,
+          user.timezone,
+        ).toISOString()
+      : null;
     try {
-      const updated = await patchData<object, { data: Task }>(
-        `/tasks/${taskId}`,
-        {
-          title: values.title,
-          note: values.note,
-          priority: values.priority,
-          earliestStart: values.earliestStart,
-          latestEnd: values.latestEnd,
-          prerequisites: values.prerequisites,
-          categoryId: values.categoryId,
-          focus: values.focus,
-          maxSplits: values.maxSplits,
-          duration: values.duration,
-          mandatory: values.mandatory,
-          scheduleDate:
-            formattedScheduleDate === formattedSelectedDate
-              ? undefined
-              : formattedScheduleDate,
-          deadlineDate,
-          deadlineTime,
-          rrule: values.isRecurring ? generateRRule(values) : undefined,
-        },
-      );
-      updateSchedule(updated.data);
-      form.reset();
-      toast.success("Task updated successfully 🎉");
+      await updateTask(taskId, {
+        title: values.title,
+        note: values.note || null,
+        deadline,
+        tags: parseTags(values.tags),
+        scope,
+      });
+      onSaved();
+      toast.success("Task updated 🎉");
       setOpen(false);
     } catch (error: any) {
-      toast.error(
-        error.message || "Something went wrong when updating the task",
-      );
+      toast.error(error?.response?.data?.message || "Failed to update task");
     } finally {
       setLoading(false);
     }
   }
 
-  const handleClose = async () => {
-    setLoading(true);
+  async function onComplete() {
     try {
-      if (newUploadsRef.current.length > 0) {
-        await postData("/files/remove", { ids: newUploadsRef.current });
-      }
-      form.reset();
+      await completeTask(taskId);
+      onSaved();
+      toast.success("Task completed ✅");
       setOpen(false);
     } catch (error: any) {
-      toast.error(
-        error.message || "Something went wrong when cancelling task creation",
-      );
-    } finally {
-      setLoading(false);
+      toast.error(error?.response?.data?.message || "Failed to complete task");
     }
+  }
+
+  async function onDelete() {
+    if (isRecurring) {
+      setScopePrompt({ mode: "delete" });
+      return;
+    }
+    await doDelete();
+  }
+
+  async function doDelete(scope?: RecurrenceScope) {
+    try {
+      await deleteTask(taskId, scope);
+      onSaved();
+      toast.success(
+        scope === "following" ? "Occurrences deleted" : "Task deleted",
+      );
+      setOpen(false);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Failed to delete task");
+    }
+  }
+
+  /** Run the pending save/delete with the chosen recurrence scope. */
+  async function applyScope(scope: RecurrenceScope) {
+    const prompt = scopePrompt;
+    setScopePrompt(null);
+    if (!prompt) return;
+    if (prompt.mode === "save") await doUpdate(prompt.values, scope);
+    else await doDelete(scope);
+  }
+
+  const handleClose = async () => {
+    if (newUploadsRef.current.length > 0) {
+      await postData("/files/remove", { ids: newUploadsRef.current });
+    }
+    form.reset();
+    setOpen(false);
   };
 
+  const isDone = task?.status === "DONE";
+  const statusColor = isDone
+    ? "bg-emerald-500"
+    : task?.conflict
+      ? "bg-amber-500"
+      : task?.scheduledStartTime
+        ? "bg-primary"
+        : "bg-muted-foreground";
+
+  const scheduledStart = task?.scheduledStartTime
+    ? new Date(task.scheduledStartTime)
+    : null;
+  const scheduledEnd =
+    scheduledStart && task
+      ? new Date(scheduledStart.getTime() + task.durationMinutes * 60_000)
+      : null;
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="overflow-x-hidden rounded-none max-w-none sm:max-w-none w-screen overflow-y-auto h-screen px-4 sm:px-6 lg:px-8">
-        <DialogHeader className="max-w-7xl mx-auto w-full">
-          <DialogTitle>Edit task</DialogTitle>
-        </DialogHeader>
+    <>
+    <Sheet open={open} onOpenChange={setOpen} modal={false}>
+      {/* Non-modal + no overlay + offset below the 56px header so the calendar
+          stays navigable while editing. Outside interactions are swallowed so
+          paging the date range or switching view never closes the panel. */}
+      <SheetContent
+        showOverlay={false}
+        onInteractOutside={(e) => e.preventDefault()}
+        className="inset-y-auto top-14 h-[calc(100vh-3.5rem)] w-full gap-0 p-0 sm:w-[30rem] sm:max-w-[30rem]"
+      >
+        {/* Header */}
+        <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-5">
+          <span className={cn("size-2 shrink-0 rounded-full", statusColor)} />
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-bold tracking-tight">
+              {task?.title || "Task detail"}
+            </h2>
+            {task && (
+              <p className="truncate text-[11px] text-muted-foreground">
+                Created {format(new Date(task.createdAt), "MMM d")}
+                {scheduledStart &&
+                  ` · Scheduled ${format(scheduledStart, "EEE HH:mm")}`}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Status banner */}
+        {task && (
+          <div className="mx-5 mt-4 flex shrink-0 items-center justify-between rounded-md border border-border bg-muted p-3">
+            <div className="flex items-center gap-2.5">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-card">
+                <Clock className="size-3.5 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="text-xs font-bold">
+                  {scheduledStart && scheduledEnd
+                    ? `${format(scheduledStart, "EEE MMM d, HH:mm")} – ${format(scheduledEnd, "HH:mm")}`
+                    : "Not yet scheduled"}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  {task.durationMinutes} min ·{" "}
+                  {isDone
+                    ? "Completed"
+                    : task.fixed
+                      ? "Fixed placement"
+                      : "EDF engine placed"}
+                </p>
+              </div>
+            </div>
+            {!isDone && (
+              <Button
+                size="sm"
+                className="h-7 px-2.5 text-[10px] font-bold"
+                onClick={onComplete}
+              >
+                Mark Done
+              </Button>
+            )}
+          </div>
+        )}
+
         <TaskForm
           form={form as any}
           onSubmit={onSubmit}
           loading={loading}
-          tasks={tasks.filter((t) => t.id !== taskId)}
-          categories={categories}
           onCancel={handleClose}
           newUploadsRef={newUploadsRef}
-          initialNote={task?.note}
+          initialNote={task?.note ?? undefined}
+          submitLabel="Save Changes"
+          bodyExtra={events.length > 0 && <TaskHistory events={events} />}
+          footerExtra={
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onDelete}
+              className="h-8 w-full border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
+              <Trash2 className="size-3.5" /> Delete Task
+            </Button>
+          }
         />
+      </SheetContent>
+    </Sheet>
+
+    {/* Recurring scope chooser — gates save/delete for series occurrences. */}
+    <Dialog
+      open={!!scopePrompt}
+      onOpenChange={(o) => !o && setScopePrompt(null)}
+    >
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>
+            {scopePrompt?.mode === "delete"
+              ? "Delete recurring task"
+              : "Edit recurring task"}
+          </DialogTitle>
+          <DialogDescription>
+            This task repeats. Apply{" "}
+            {scopePrompt?.mode === "delete" ? "the deletion" : "your changes"} to
+            only this occurrence, or this and all following occurrences?
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="flex-col gap-2 sm:flex-col">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={loading}
+            onClick={() => applyScope("one")}
+            className="w-full"
+          >
+            This task
+          </Button>
+          <Button
+            type="button"
+            variant={scopePrompt?.mode === "delete" ? "destructive" : "default"}
+            disabled={loading}
+            onClick={() => applyScope("following")}
+            className="w-full"
+          >
+            This and following tasks
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
+  );
+}
+
+const EVENT_LABEL: Record<TaskEvent["eventType"], string> = {
+  CREATE: "Created",
+  MOVE: "Moved",
+  RESIZE: "Resized",
+  COMPLETE: "Completed",
+};
+
+const EVENT_DOT: Record<TaskEvent["eventType"], string> = {
+  CREATE: "bg-muted-foreground",
+  MOVE: "bg-amber-500",
+  RESIZE: "bg-amber-500",
+  COMPLETE: "bg-emerald-500",
+};
+
+function TaskHistory({ events }: { events: TaskEvent[] }) {
+  return (
+    <div className="space-y-2">
+      <h4 className="text-xs font-semibold">History</h4>
+      <div className="space-y-1.5">
+        {events.map((e) => (
+          <div key={e.id} className="flex items-start gap-3">
+            <span
+              className={cn(
+                "mt-1.5 size-1.5 shrink-0 rounded-full",
+                EVENT_DOT[e.eventType],
+              )}
+            />
+            <div>
+              <p className="text-xs font-medium">
+                {EVENT_LABEL[e.eventType]} ·{" "}
+                {format(new Date(e.occurredAt), "MMM d 'at' HH:mm")}
+              </p>
+              {e.oldSnapshot?.scheduledStartTime &&
+                e.newSnapshot?.scheduledStartTime && (
+                  <p className="text-[11px] text-muted-foreground">
+                    {format(new Date(e.oldSnapshot.scheduledStartTime), "HH:mm")}{" "}
+                    →{" "}
+                    {format(new Date(e.newSnapshot.scheduledStartTime), "HH:mm")}{" "}
+                    · reward {e.rewardScore.toFixed(1)}
+                  </p>
+                )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

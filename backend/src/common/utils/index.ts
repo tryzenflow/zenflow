@@ -6,7 +6,7 @@ import { BadRequestException } from "@nestjs/common";
 export const minuteToTime = (minute: number) => {
   if (minute < 0 || minute > DAILY_HORIZON)
     throw new Error(
-      `Minute must be between 0 and ${DAILY_HORIZON}, got ${minute}`
+      `Minute must be between 0 and ${DAILY_HORIZON}, got ${minute}`,
     );
   if (minute === DAILY_HORIZON) return "23:59";
   const hrs = Math.floor(minute / 60);
@@ -25,7 +25,7 @@ export const timeToMinute = (time: string) => {
 
 export function utcToMinutes(
   date: Date, // stored UTC date
-  timezone: string // e.g. "Europe/Paris"
+  timezone: string, // e.g. "Europe/Paris"
 ): number {
   const local = toZonedTime(date, timezone);
   return local.getHours() * 60 + local.getMinutes();
@@ -34,10 +34,10 @@ export function utcToMinutes(
 export function minutesToUtc(
   dateString: string,
   minutes: number,
-  timezone: string
+  timezone: string,
 ): Date {
   const local = new Date(`${dateString}T00:00:00`);
-  local.setHours(0, minutes, 0, 0);
+  local.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
   return fromZonedTime(local, timezone);
 }
 
@@ -59,8 +59,8 @@ export const getDateOnlyString = (year: number, month: number, day: number) => {
   return dateOnly;
 };
 
-export function getWeekday(dayNumber: number) {
-  const weekdays = [
+export function getDayOfWeek(dayNumber: number) {
+  const days = [
     "Sunday",
     "Monday",
     "Tuesday",
@@ -70,7 +70,7 @@ export function getWeekday(dayNumber: number) {
     "Saturday",
   ];
   if (dayNumber >= 0 && dayNumber <= 6) {
-    return weekdays[dayNumber];
+    return days[dayNumber];
   } else {
     throw new BadRequestException({
       success: false,
@@ -78,3 +78,7 @@ export function getWeekday(dayNumber: number) {
     });
   }
 }
+
+export const clamp = (value: number, min: number, max: number) => {
+  return Math.min(Math.max(value, min), max);
+};

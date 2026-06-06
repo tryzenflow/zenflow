@@ -56,9 +56,9 @@ For the documentation of the API, go to [http://localhost:5000/api](http://local
 - `maxDailyLoad` drops optional tasks that demand high mental energy if the total duration exceeds it.
 - `batchSimilarTasks` groups tasks with similar categories together to minimize context switching.
 - `minGapBetweenTasks` defines the minimum minutes to take a break between two tasks (if time allows).
-- `weekday` is a value between 0 and 6, with respect to Monday to Sunday.
-- `weekdayOrdinal` tells whether the task is repeated on the first/second/third weekday of the month/year. It can be -1 (last weekday), or from 0-5 corresponding to the first/second/third, etc.
+- `day` is a value between 0 and 6, with respect to Monday to Sunday.
+- `dayOrdinal` tells whether the task is repeated on the first/second/third day of the month/year. It can be -1 (last day), or from 0-5 corresponding to the first/second/third, etc.
 - `firstWorkday` and `lastWorkday` are booleans indicating whether repeat rules should be applied to the first or last workday of a month.
 - `timezone` is a string of the user’s timezone e.g., Europe/Paris, Asia/Ho Chi Minh, America/New York, which is used to shift from UTC to the local timezone.
-- `focus` is the **mental** energy level required to perform a task (in the `Task` table), corresponding to the user’s `level` at a particular point in the `FocusBlock` table. The value can range from 1 to 3.
-- The `RepeatRule` table will have a column `weekdays`, which is an array of weekdays to repeat (repeat by week only) instead of a separate table `RepeatWeekday` like above.
+- `focus` is the **mental** energy level required to perform a task (in the `Task` table), corresponding to the user’s `level` at a particular point in the `EnergyBlock` table. The value can range from 1 to 3.
+- The `RepeatRule` table will have a column `days`, which is an array of days to repeat (repeat by week only) instead of a separate table `RepeatWeekday` like above.

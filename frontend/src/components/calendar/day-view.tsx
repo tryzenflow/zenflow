@@ -1,102 +1,57 @@
-import { format, isToday, startOfDay } from "date-fns";
-import { Schedule } from "../../types/schedule";
-import { ScheduleItem } from "./schedule-item";
-import { calculateLayout } from "../../utils/calc-layout";
-// --- CalendarGrid Component ---
+import { Event } from "@/types/schedule";
+import { DndContext, DragEndEvent } from "@dnd-kit/core";
+import { DayGrid } from "./day-grid";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import { useUserStore } from "@/hooks/use-user-store";
+import { useDragSensors } from "@/hooks/use-drag-sensors";
+import { zonedDate, zonedWallClockToUtc } from "@/utils/tz";
 
-export const DayView = ({
-  selectedDate,
-  schedules,
-  deleteSchedule,
-  openEditTaskDialog,
-  updateScheduleTime,
-}: {
-  selectedDate: Date;
-  schedules: Schedule[];
-  deleteSchedule: (taskId: string, date: string, split: number) => void;
-  openEditTaskDialog: (taskId: string) => void;
-  updateScheduleTime: (
-    taskId: string,
-    date: string,
-    split: number,
-    newStart: number,
-    newEnd: number,
-  ) => void;
-}) => {
-  // Create an array for the hourly timeline (0 AM to 11 PM)
-  const hours = Array.from({ length: 24 }, (_, i) => {
-    const date = new Date(selectedDate);
-    date.setHours(i, 0, 0, 0);
-    return format(date, "ha");
-  });
+interface DayViewProps {
+  events: Event[];
+  setEvents: React.Dispatch<React.SetStateAction<Event[]>>;
+  date: Date;
+  onReschedule: (taskId: string, startISO: string) => void;
+}
 
-  // Filter schedules only for the selected date
-  const selectedDayStart = startOfDay(selectedDate).getTime();
-  const selectedDayEnd = selectedDayStart + 24 * 60 * 60 * 1000;
+export function DayView({ events, setEvents, date, onReschedule }: DayViewProps) {
+  const tz = useUserStore((s) => s.user?.timezone) || "UTC";
+  const sensors = useDragSensors();
+  function onDragEnd({ over, active }: DragEndEvent) {
+    if (!over) return;
+    const activeId = active.id.toString();
+    const block = events.find((e) => e.id === activeId);
+    if (!block) return;
+    const [hours, minutes] = over.id.toString().split(":").map(Number);
 
-  const daySchedules = schedules.filter((s) => {
-    const startTimestamp = new Date(s.start!).getTime();
-    return (
-      startTimestamp >= selectedDayStart && startTimestamp < selectedDayEnd
+    const duration =
+      new Date(block.end).getTime() - new Date(block.start).getTime();
+    // Drop target is a user-tz wall-clock time on the block's existing day;
+    // set it in zoned space, then convert back to a real UTC instant.
+    const wall = zonedDate(block.start, tz);
+    wall.setHours(hours, minutes, 0, 0);
+    const newStart = zonedWallClockToUtc(wall, tz);
+    const newEnd = new Date(newStart.getTime() + duration);
+
+    // No-op drop (released on the same slot it started) — don't record a move.
+    if (newStart.toISOString() === block.start) return;
+
+    setEvents((evs) =>
+      evs.map((ev) =>
+        ev.id === activeId
+          ? { ...ev, start: newStart.toISOString(), end: newEnd.toISOString() }
+          : ev,
+      ),
     );
-  });
-  const currentHour = new Date().getHours();
-  const currentMinute = new Date().getMinutes();
-
-  // 1. Calculate the layout for the day's schedules
-  const schedulesWithLayout = calculateLayout(daySchedules);
+    onReschedule(block.taskId, newStart.toISOString());
+  }
 
   return (
-    <div className="flex-1 min-w-0 h-full pt-4 relative overflow-y-auto bg-background rounded-l-xl">
-      <div className="relative h-[1440px]">
-        {hours.map((time, index) => (
-          <div key={index} className="flex h-[60px] group">
-            {/* Time label column: w-12 matches the base offset in ScheduleItem */}
-            <div className="w-12 flex-shrink-0 text-[10px] text-muted-foreground -mt-2 pr-2 text-right">
-              {time}
-            </div>
-            {/* Grid line area */}
-            <div className="flex-1 relative">
-              <div className="h-1/2 w-full absolute border-t border-border/70"></div>
-              <div className="h-1/2"></div>
-            </div>
-          </div>
-        ))}
-        {isToday(selectedDate) && (
-          <>
-            <div
-              className="h-px bg-destructive left-12 absolute z-[15]"
-              style={{
-                width: "calc(100% - 3rem)",
-                top: `calc(${currentHour * 60}px + ${currentMinute * 1}px)`,
-              }}
-            />
-            <div
-              className="w-2 h-2 bg-destructive rounded-full left-11 absolute z-[15]"
-              style={{
-                top: `calc(${currentHour * 60}px + ${currentMinute * 1}px - 0.25rem)`,
-              }}
-            />
-          </>
-        )}
-        {/* 2. Render Scheduled Items with Layout Props */}
-        {schedulesWithLayout.map((schedule) => (
-          <ScheduleItem
-            openEditTaskDialog={openEditTaskDialog}
-            deleteSchedule={deleteSchedule}
-            key={`${schedule.task.id}-${schedule.date}-${schedule.split}`}
-            schedule={schedule}
-            updateScheduleTime={updateScheduleTime}
-            isOverlapping={schedule.isOverlapping}
-            columnIndex={schedule.columnIndex}
-            totalColumns={schedule.totalColumns}
-          />
-        ))}
-
-        {/* This creates a vertical line down the grid (needs to match time column width) */}
-        {/* Adjusted left-12 to left-[3rem] (48px) to match the time column width (w-12) */}
-        <div className="absolute inset-y-0 left-12 w-px bg-border z-0"></div>
-      </div>
-    </div>
+    <DndContext
+      sensors={sensors}
+      modifiers={[restrictToVerticalAxis]}
+      onDragEnd={onDragEnd}
+    >
+      <DayGrid events={events} date={date} />
+    </DndContext>
   );
-};
+}

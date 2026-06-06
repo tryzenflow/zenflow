@@ -1,0 +1,5 @@
+# Phase 3+ dependencies (placeholder — service not yet implemented).
+# fastapi
+# uvicorn[standard]
+# pydantic
+# numpy

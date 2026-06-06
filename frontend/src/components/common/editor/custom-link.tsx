@@ -2,10 +2,11 @@ import Link from "@tiptap/extension-link";
 
 export const CustomLink = Link.extend({
   addOptions() {
+    // Cast shims a version drift in @tiptap/extension-link's option types.
     return {
       ...this.parent?.(),
       fileBaseUrl: import.meta.env.VITE_API_URL,
-    };
+    } as any;
   },
 
   addCommands() {

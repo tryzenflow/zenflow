@@ -1,59 +1,70 @@
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useTaskForm } from "@/hooks/use-task-form";
-import { format } from "date-fns";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { getData, postData } from "../../api";
+import { postData } from "../../api";
 import { useFilesTracker } from "../../hooks/use-files-tracker";
 import { useUserStore } from "../../hooks/use-user-store";
-import { CategoryItem, DAILY_HORIZON } from "../../types/prefs";
-import { Task, TaskResponse } from "../../types/tasks";
-import { generateRRule, TaskFormValues } from "../../utils/tasks";
+import { generateRRule, parseTags, TaskFormValues } from "../../utils/tasks";
 import { TaskForm } from "./form/task-form";
-import { PlusIcon } from "lucide-react";
+import { Plus } from "lucide-react";
+import { createTask } from "@/api/tasks";
+import { format } from "date-fns";
+import { fromZonedTime } from "date-fns-tz";
+import { snapToNearestLaterQuarterHour } from "@/utils/time";
+import { isZonedToday } from "@/utils/tz";
+import type { ViewMode } from "@zenflow/shared";
+
+const VIEW_SUBTITLE: Record<ViewMode, string> = {
+  day: "EEE, MMM d",
+  week: "'week of' MMM d",
+  month: "MMMM yyyy",
+};
 
 export function CreateTaskDialog({
-  addTask,
-  selectedDate,
+  date,
+  view,
+  onCreated,
 }: {
-  addTask: (task: Task, scheduleDate: Date) => Promise<void>;
-  selectedDate: Date;
+  date: Date;
+  view: ViewMode;
+  onCreated: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [categories, setCategories] = useState<CategoryItem[]>([]);
   const user = useUserStore((state) => state.user);
+  const workDays = user?.workDays ?? [1, 2, 3, 4, 5];
+  const tz = user?.timezone || "UTC";
   const form = useTaskForm({
     defaultValues: {
       title: "",
       duration: 60,
-      mandatory: true,
-      priority: 2,
-      focus: 2,
-      maxSplits: 1,
-      scheduleDate: selectedDate,
+      tags: "",
       note: "",
-      earliestStart: 0,
-      latestEnd: DAILY_HORIZON,
-      prerequisites: [],
       deadlineDate: "",
       deadlineTime: "",
+      recurrenceMode: "specific",
+      byweeks: [1],
       frequency: "WEEKLY",
       interval: 1,
-      byweekday: ["MO"],
+      byday: ["MO"],
       bymonthday: 1,
       bysetpos: 1,
-      byweekdayMonth: "MO",
+      bydayMonth: "MO",
       monthlyMode: "on",
       yearlyMode: "on",
+      isFixed: false,
+      fixedStart: isZonedToday(date, tz)
+        ? snapToNearestLaterQuarterHour(
+            date.getHours() * 60 + date.getMinutes(),
+          )
+        : 9 * 60,
+      fixedEnd: isZonedToday(date, tz)
+        ? snapToNearestLaterQuarterHour(
+            date.getHours() * 60 + date.getMinutes(),
+          ) + 60
+        : 10 * 60,
       isRecurring: false,
       month: 1,
       endMode: "never",
@@ -64,85 +75,52 @@ export function CreateTaskDialog({
   const note = form.watch("note");
   const { newUploadsRef, updateRemovedFileIds, removedFileIds } =
     useFilesTracker();
-  const scheduleDate = form.watch("scheduleDate");
 
   useEffect(() => {
     updateRemovedFileIds(note || "", "");
   }, [note]);
 
-  useEffect(() => {
-    form.setValue("scheduleDate", selectedDate);
-  }, [selectedDate]);
-
-  useEffect(() => {
-    if (!open) return;
-    getData<{ data: CategoryItem[] }>("/categories").then((data) => {
-      setCategories(data.data);
-    });
-  }, [open]);
-
-  useEffect(() => {
-    if (!scheduleDate || !open) {
-      setTasks([]);
-      return;
-    }
-    const formattedScheduleDate = format(scheduleDate, "yyyy-MM-dd");
-    const allPrerequisites = Promise.all([
-      getData<{ data: Task[] }>(
-        `/tasks?start=${formattedScheduleDate}&end=${formattedScheduleDate}`,
-      ),
-
-      getData<{ data: { recurring: Task[] } }>(
-        `/tasks/schedule/none?start=${formattedScheduleDate}&end=${formattedScheduleDate}`,
-      ),
-    ]);
-
-    allPrerequisites.then(
-      ([
-        { data },
-        {
-          data: { recurring },
-        },
-      ]) => {
-        setTasks([...data, ...recurring]);
-      },
-    );
-  }, [scheduleDate, open]);
-
   async function onSubmit(values: TaskFormValues) {
     if (!user) return;
     setLoading(true);
 
-    const deadlineDate = values.deadlineDate || undefined;
-    const deadlineTime = values.deadlineTime || undefined;
     const removed = removedFileIds.current;
+    const deadline = values.deadlineDate
+      ? fromZonedTime(
+          `${values.deadlineDate}T${values.deadlineTime || "23:59"}:00`,
+          user.timezone,
+        ).toISOString()
+      : null;
 
     try {
       if (removed.length > 0) await postData("/files/remove", { ids: removed });
-      const response = await postData<object, TaskResponse>("/tasks", {
+      await createTask({
         title: values.title,
-        note: values.note,
-        priority: values.priority,
-        earliestStart: values.earliestStart,
-        latestEnd: values.latestEnd,
-        prerequisites: values.prerequisites,
-        categoryId: values.categoryId,
-        focus: values.focus,
-        maxSplits: values.maxSplits,
-        duration: values.duration,
-        mandatory: values.mandatory,
-        scheduleDate: format(values.scheduleDate, "yyyy-MM-dd"),
-        deadlineDate,
-        deadlineTime,
-        rrule: values.isRecurring ? generateRRule(values) : undefined,
+        note: values.note || null,
+        durationMinutes: values.duration,
+        tags: parseTags(values.tags),
+        deadline,
+        fixed: values.isFixed,
+        startTime: values.isFixed ? values.fixedStart : 0,
+        // Always the viewed day: a fixed anchor when fixed, otherwise the
+        // earliest day the flexible engine may place the task on.
+        startDate: format(date, "yyyy-MM-dd"),
+        // Scopes recurrence materialization to the active week/month window.
+        view,
+        rrule:
+          values.isRecurring && view !== "day"
+            ? generateRRule(values, { view, date, workDays })
+            : "",
       });
-      await addTask(response.data, values.scheduleDate);
+      onCreated();
       form.reset();
       toast.success("Task created successfully 🎉");
       setOpen(false);
     } catch (error: any) {
       toast.error(
-        error.message || "Something went wrong when creating a new task",
+        error?.response?.data?.message ||
+          error.message ||
+          "Something went wrong when creating a new task",
       );
     } finally {
       setLoading(false);
@@ -167,27 +145,42 @@ export function CreateTaskDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" variant="outline">
-          <PlusIcon className="size-4" />
-          Task
+    <Sheet open={open} onOpenChange={setOpen} modal={false}>
+      <SheetTrigger asChild>
+        <Button size="sm">
+          <Plus className="size-4" />
+          <span className="sr-only sm:not-sr-only">New task</span>
         </Button>
-      </DialogTrigger>
-      <DialogContent className="overflow-x-hidden rounded-none max-w-none sm:max-w-none w-screen overflow-y-auto h-screen px-4 sm:px-6 lg:px-8 py-6">
-        <DialogHeader className="max-w-7xl mx-auto w-full">
-          <DialogTitle>Create new task</DialogTitle>
-        </DialogHeader>
+      </SheetTrigger>
+      {/* Non-modal + no overlay + offset below the 56px header so the view can
+          still be switched (which re-scopes recurrence) while creating.
+          Outside interactions are swallowed so navigating the calendar (paging
+          the date range, switching view) never closes the half-filled form. */}
+      <SheetContent
+        showOverlay={false}
+        onInteractOutside={(e) => e.preventDefault()}
+        className="inset-y-auto top-14 h-[calc(100vh-3.5rem)] w-full gap-0 p-0 sm:w-[30rem] sm:max-w-[30rem]"
+      >
+        <div className="flex h-14 shrink-0 items-center border-b border-border px-5">
+          <div>
+            <h2 className="text-sm font-bold tracking-tight">New Task</h2>
+            <p className="text-[11px] text-muted-foreground">
+              Scheduling in {format(date, VIEW_SUBTITLE[view])}
+            </p>
+          </div>
+        </div>
         <TaskForm
           form={form as any}
           onSubmit={onSubmit}
           newUploadsRef={newUploadsRef}
           loading={loading}
-          tasks={tasks}
-          categories={categories}
           onCancel={handleClose}
+          view={view}
+          date={date}
+          workDays={workDays}
+          submitLabel="Create Task"
         />
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

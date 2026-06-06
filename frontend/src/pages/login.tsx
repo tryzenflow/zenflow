@@ -10,9 +10,9 @@ export default function LoginPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (loading === null || loading) return;
+    if (loading) return;
     if (user) navigate(searchParams.get("callback") ?? "/");
-  }, [user, searchParams]);
+  }, [user, loading, searchParams]);
 
   return (
     <div className="bg-background flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10">

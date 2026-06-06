@@ -1,132 +1,169 @@
 // types.ts or schema.ts
 import * as z from "zod";
-import { DAILY_HORIZON } from "../types/prefs";
+import { DAILY_HORIZON, TIME_GRANULARITY } from "./constants";
 import { deleteData, getData, postData } from "../api";
 import { Task } from "../types/tasks";
 import { extractFileIdsFromNoteContent } from "./files";
 import { rrulestr, RRule, Weekday } from "rrule";
+import { endOfMonth, endOfWeek } from "date-fns";
+import type { RecurrenceScope, ViewMode } from "@zenflow/shared";
 
-export const taskSchema = z
-  .object({
-    title: z.string().min(1, { error: "Task name is required" }),
-
-    scheduleDate: z.date({ error: "A date is required." }),
-    duration: z
-      .int()
-      .min(5, { error: "Task duration must be at least 5 minutes" })
-      .max(DAILY_HORIZON, { error: "Task duration must be at most 24 hours" }),
-    mandatory: z.boolean(),
-    priority: z
-      .int()
-      .min(1, { error: "Task priority must be at least 1" })
-      .max(3, { error: "Task priority must be at most 3" }),
-    focus: z
-      .int()
-      .min(1, { error: "Task focus must be at least 1" })
-      .max(3, { error: "Task focus must be at most 3" }),
-    categoryId: z.string().optional(),
-    earliestStart: z
-      .int()
-      .min(0, { error: "Task earliest start must be from 12AM" })
-      .max(DAILY_HORIZON, {
-        error: "Task earliest start must be at most 11:59PM",
-      })
-      .optional(),
-    latestEnd: z
-      .int()
-      .min(0, { error: "Task latest end must be from 12AM" })
-      .max(DAILY_HORIZON, { error: "Task latest end must be at most 11:59PM" })
-      .optional(),
-    deadlineDate: z
-      .string()
-      .refine(
-        (val) => {
-          if (!val) return true;
-          if (isNaN(Date.parse(val))) return false;
-          return true;
-        },
-        { message: "Invalid date format" },
-      )
-      .optional(),
-    isRecurring: z.boolean().default(false),
-    deadlineTime: z.string().optional(),
-    note: z.string().optional(),
-    maxSplits: z.number().min(1).max(10).default(1),
-    prerequisites: z.array(z.string()).optional(),
-    frequency: z.enum(["YEARLY", "MONTHLY", "WEEKLY", "DAILY"]),
-    interval: z.number().min(1),
-    byweekday: z.array(z.string()),
-    bymonthday: z.number().min(1).max(31),
-    bysetpos: z.number(),
-    byweekdayMonth: z.string(),
-    monthlyMode: z.enum(["on", "on_the"]),
-    yearlyMode: z.enum(["on", "on_the"]),
-    month: z.number().min(1).max(12),
-    endMode: z.enum(["never", "after", "on"]),
-    count: z.number().min(1),
-    until: z.date().optional(),
-  })
-  .refine(
-    (arg) =>
-      (arg?.latestEnd || DAILY_HORIZON) >=
-      (arg?.earliestStart || 0) + arg.duration,
-    {
-      error: "Earliest start + duration > latest end",
-      path: ["earliestStart"],
-    },
-  );
+export const taskSchema = z.object({
+  title: z.string().min(1, { error: "Task name is required" }),
+  duration: z
+    .int()
+    .min(TIME_GRANULARITY, {
+      error: `Task duration must be at least ${TIME_GRANULARITY} minutes`,
+    })
+    .max(DAILY_HORIZON, { error: "Task duration must be at most 24 hours" }),
+  tags: z.string().optional(),
+  deadlineDate: z
+    .string()
+    .refine(
+      (val) => {
+        if (!val) return true;
+        if (isNaN(Date.parse(val))) return false;
+        return true;
+      },
+      { message: "Invalid date format" },
+    )
+    .optional(),
+  isFixed: z.boolean().default(false),
+  fixedStart: z
+    .number()
+    .min(0)
+    .max(DAILY_HORIZON - TIME_GRANULARITY)
+    .default(0),
+  fixedEnd: z
+    .number()
+    .min(TIME_GRANULARITY)
+    .max(DAILY_HORIZON)
+    .default(DAILY_HORIZON),
+  isRecurring: z.boolean().default(false),
+  deadlineTime: z.string().optional(),
+  note: z.string().optional(),
+  /**
+   * View-scoped recurrence shape:
+   *  - "interval" → "Every X days" (FREQ=DAILY;INTERVAL=X)
+   *  - "specific" → Week: "Specific days" (BYDAY) · Month: "Specific weeks" (byweeks)
+   */
+  recurrenceMode: z.enum(["interval", "specific"]).default("specific"),
+  /** Month "Specific weeks": ordinal week-of-month positions (1..5). */
+  byweeks: z.array(z.number()).default([1]),
+  frequency: z.enum(["YEARLY", "MONTHLY", "WEEKLY", "DAILY"]),
+  interval: z.number().min(1),
+  byday: z.array(z.string()),
+  bymonthday: z.number().min(1).max(31),
+  bysetpos: z.number(),
+  bydayMonth: z.string(),
+  monthlyMode: z.enum(["on", "on_the"]),
+  yearlyMode: z.enum(["on", "on_the"]),
+  month: z.number().min(1).max(12),
+  endMode: z.enum(["never", "after", "on"]),
+  count: z.number().min(1),
+  until: z.date().optional(),
+});
 
 export type TaskFormValues = z.infer<typeof taskSchema>;
+export type EditTaskFormValues = TaskFormValues;
 
-export async function deleteTask(taskId: string) {
-  const data = await getData<{ data: Task }>(`/tasks/${taskId}`);
-  const previousIds = extractFileIdsFromNoteContent(data.data.note || "");
+/** Parse the comma-separated tags input into a clean string array. */
+export function parseTags(input?: string): string[] {
+  if (!input) return [];
+  return input
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
+export async function deleteTask(taskId: string, scope?: RecurrenceScope) {
+  const { data } = await getData<{ data: { task: Task } }>(`/tasks/${taskId}`);
+  const previousIds = extractFileIdsFromNoteContent(data.task.note || "");
   if (previousIds.length > 0) {
     await postData("/files/remove", { ids: previousIds });
   }
-  return deleteData(`/tasks/${taskId}`);
+  const qs = scope ? `?scope=${scope}` : "";
+  return deleteData(`/tasks/${taskId}${qs}`);
 }
 
-export const generateRRule = (values: z.infer<typeof taskSchema>) => {
-  // Format DTSTART as RFC 5545: YYYYMMDDTHHMMSSZ (no milliseconds, no punctuation)
-  const dtstart =
-    values.scheduleDate.toISOString().split(".")[0].replace(/[-:]/g, "") + "Z";
-  let rrule = `DTSTART:${dtstart}\n`;
-  rrule += `RRULE:FREQ=${values.frequency}`;
+/** ISO weekday (1=Mon … 7=Sun) → RFC 5545 BYDAY code. */
+export const ISO_TO_BYDAY: Record<number, string> = {
+  1: "MO",
+  2: "TU",
+  3: "WE",
+  4: "TH",
+  5: "FR",
+  6: "SA",
+  7: "SU",
+};
 
-  rrule += `;INTERVAL=${values.interval}`;
+/** Format a Date as an RFC 5545 UNTIL value: YYYYMMDDTHHMMSSZ. */
+const toUntil = (d: Date) =>
+  d.toISOString().split(".")[0].replace(/[-:]/g, "") + "Z";
 
-  if (values.frequency === "WEEKLY" && values.byweekday.length > 0) {
-    rrule += `;BYDAY=${values.byweekday.join(",")}`;
-  }
+export interface RRuleContext {
+  /** Active calendar perspective; recurrence is scoped to its window. */
+  view: ViewMode;
+  /** A date inside the active window (anchors the week/month bounds). */
+  date: Date;
+  /** The user's onboarding workdays, ISO 1–7. */
+  workDays: number[];
+}
 
-  if (values.frequency === "MONTHLY") {
-    if (values.monthlyMode === "on") {
-      rrule += `;BYMONTHDAY=${values.bymonthday}`;
-    } else {
-      rrule += `;BYDAY=${values.byweekdayMonth};BYSETPOS=${values.bysetpos}`;
+/**
+ * Build a single-line, FREQ-based RRULE scoped to the active view's window.
+ * The backend materializes one task row per occurrence (working days only) and
+ * only understands a lone `RRULE:` line, so every branch emits one `FREQ=…`
+ * rule bounded by `UNTIL`.
+ *
+ *  - Week · interval  → every X working days through the end of the week
+ *  - Week · specific  → chosen weekdays (workdays) this week
+ *  - Month · interval → every X working days through the end of the month
+ *  - Month · specific → the chosen week ordinals, encoded as the BYDAY prefix
+ *    of a MONTHLY rule (e.g. weeks 1,3 → `BYDAY=1MO,3MO`). The backend reads
+ *    those ordinals and expands each to every working day of that week.
+ */
+export const generateRRule = (
+  values: TaskFormValues,
+  ctx: RRuleContext,
+): string => {
+  const { view, date, workDays } = ctx;
+  // "Day" never recurs; treat as non-recurring.
+  if (view === "day") return "";
+
+  const firstWorkday = [...workDays].sort((a, b) => a - b)[0] ?? 1;
+  const interval = Math.max(1, values.interval);
+
+  // The window never extends past the deadline: an occurrence due-by date caps
+  // the recurrence's UNTIL (the backend also enforces this defensively).
+  const deadlineEnd = values.deadlineDate
+    ? new Date(`${values.deadlineDate}T23:59:59`)
+    : null;
+  const untilFor = (windowEnd: Date) =>
+    toUntil(deadlineEnd && deadlineEnd < windowEnd ? deadlineEnd : windowEnd);
+
+  if (view === "week") {
+    const until = untilFor(endOfWeek(date, { weekStartsOn: 1 }));
+    if (values.recurrenceMode === "interval") {
+      return `RRULE:FREQ=DAILY;INTERVAL=${interval};UNTIL=${until}`;
     }
+    // Constrain to workdays; fall back to the first workday if none remain.
+    const workdayCodes = workDays.map((d) => ISO_TO_BYDAY[d]);
+    const days = values.byday.filter((d) => workdayCodes.includes(d));
+    const byday = days.length ? days : [ISO_TO_BYDAY[firstWorkday]];
+    return `RRULE:FREQ=WEEKLY;BYDAY=${byday.join(",")};UNTIL=${until}`;
   }
 
-  if (values.frequency === "YEARLY") {
-    rrule += `;BYMONTH=${values.month}`;
-    if (values.yearlyMode === "on") {
-      rrule += `;BYMONTHDAY=${values.bymonthday}`;
-    } else {
-      rrule += `;BYDAY=${values.byweekdayMonth};BYSETPOS=${values.bysetpos}`;
-    }
+  // view === "month"
+  const until = untilFor(endOfMonth(date));
+  if (values.recurrenceMode === "interval") {
+    return `RRULE:FREQ=DAILY;INTERVAL=${interval};UNTIL=${until}`;
   }
-
-  if (values.endMode === "after") {
-    rrule += `;COUNT=${values.count}`;
-  } else if (values.endMode === "on" && values.until) {
-    // Format UNTIL as YYYYMMDDTHHMMSSZ (no milliseconds, no punctuation)
-    const untilStr =
-      values.until.toISOString().split(".")[0].replace(/[-:]/g, "") + "Z";
-    rrule += `;UNTIL=${untilStr}`;
-  }
-
-  return rrule;
+  // "Specific weeks" → Nth <first workday> of the month (e.g. 1MO,3MO).
+  const wd = ISO_TO_BYDAY[firstWorkday];
+  const weeks = values.byweeks.length ? values.byweeks : [1];
+  const byday = weeks.map((n) => `${n}${wd}`).join(",");
+  return `RRULE:FREQ=MONTHLY;BYDAY=${byday};UNTIL=${until}`;
 };
 
 export const parseRRule = (rruleString: string): Partial<TaskFormValues> => {
@@ -134,11 +171,6 @@ export const parseRRule = (rruleString: string): Partial<TaskFormValues> => {
     // Parse the RRULE string
     const rule = rrulestr(rruleString);
     const options = rule.origOptions;
-
-    // Extract DTSTART
-    const scheduleDate = options.dtstart
-      ? new Date(options.dtstart)
-      : new Date();
 
     // Map frequency
     const freqMap: Record<number, "YEARLY" | "MONTHLY" | "WEEKLY" | "DAILY"> = {
@@ -152,11 +184,11 @@ export const parseRRule = (rruleString: string): Partial<TaskFormValues> => {
     // Extract interval (default to 1 if not specified)
     const interval = options.interval || 1;
 
-    // Extract byweekday for WEEKLY frequency
-    const byweekday: string[] = [];
+    // Extract byday for WEEKLY frequency
+    const byday: string[] = [];
     if (options.byweekday && Array.isArray(options.byweekday)) {
       options.byweekday.forEach((wd: any) => {
-        const weekdayMap: Record<number, string> = {
+        const dayMap: Record<number, string> = {
           0: "MO",
           1: "TU",
           2: "WE",
@@ -166,9 +198,9 @@ export const parseRRule = (rruleString: string): Partial<TaskFormValues> => {
           6: "SU",
         };
         // Handle both Weekday objects and numbers
-        const dayNum = typeof wd === "number" ? wd : wd.weekday;
-        if (weekdayMap[dayNum]) {
-          byweekday.push(weekdayMap[dayNum]);
+        const dayNum = typeof wd === "number" ? wd : wd.day;
+        if (dayMap[dayNum]) {
+          byday.push(dayMap[dayNum]);
         }
       });
     }
@@ -185,13 +217,13 @@ export const parseRRule = (rruleString: string): Partial<TaskFormValues> => {
         ? options.bysetpos[0]
         : 1;
 
-    // Extract byweekdayMonth for "on_the" mode
-    let byweekdayMonth = "MO";
+    // Extract bydayMonth for "on_the" mode
+    let bydayMonth = "MO";
     if (frequency === "MONTHLY" || frequency === "YEARLY") {
       if (Array.isArray(options.byweekday) && options.byweekday.length > 0) {
         const wd = options.byweekday[0];
         const dayNum = typeof wd === "number" ? wd : (wd as Weekday).weekday;
-        const weekdayMap: Record<number, string> = {
+        const dayMap: Record<number, string> = {
           0: "MO",
           1: "TU",
           2: "WE",
@@ -200,7 +232,7 @@ export const parseRRule = (rruleString: string): Partial<TaskFormValues> => {
           5: "SA",
           6: "SU",
         };
-        byweekdayMonth = weekdayMap[dayNum] || "MO";
+        bydayMonth = dayMap[dayNum] || "MO";
       }
     }
 
@@ -240,13 +272,12 @@ export const parseRRule = (rruleString: string): Partial<TaskFormValues> => {
     }
 
     return {
-      scheduleDate,
       frequency,
       interval,
-      byweekday,
+      byday,
       bymonthday,
       bysetpos,
-      byweekdayMonth,
+      bydayMonth,
       monthlyMode,
       yearlyMode,
       month,
@@ -258,13 +289,12 @@ export const parseRRule = (rruleString: string): Partial<TaskFormValues> => {
     console.error("Error parsing RRULE:", error);
     // Return defaults on parse error
     return {
-      scheduleDate: new Date(),
       frequency: "DAILY",
       interval: 1,
-      byweekday: [],
+      byday: [],
       bymonthday: 1,
       bysetpos: 1,
-      byweekdayMonth: "MO",
+      bydayMonth: "MO",
       monthlyMode: "on",
       yearlyMode: "on",
       month: 1,
