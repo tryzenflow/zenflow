@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Menu } from "lucide-react";
 import { Button } from "../ui/button";
 import { ViewModeSelect } from "./view-mode-select";
 import {
@@ -21,6 +21,8 @@ interface CalendarHeaderProps {
   setCurrentView: Dispatch<SetStateAction<ViewMode>>;
   conflictCount: number;
   onChanged: () => void;
+  /** Open the mobile nav drawer (hamburger is shown only below `lg`). */
+  onOpenNav?: () => void;
 }
 
 export function CalendarHeader({
@@ -30,6 +32,7 @@ export function CalendarHeader({
   setCurrentView,
   conflictCount,
   onChanged,
+  onOpenNav,
 }: CalendarHeaderProps) {
   const shift = (direction: "left" | "right") => {
     switch (currentView) {
@@ -59,31 +62,53 @@ export function CalendarHeader({
   };
 
   return (
-    <div className="flex h-14 items-center justify-between border-b border-border bg-card px-4">
-      <div className="flex items-center gap-2 sm:gap-4">
+    <div className="flex h-14 items-center justify-between gap-2 border-b border-border bg-card px-2 sm:px-4">
+      <div className="flex min-w-0 items-center gap-1 sm:gap-4">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="lg:hidden"
+          onClick={onOpenNav}
+          aria-label="Open navigation"
+        >
+          <Menu className="size-4" />
+        </Button>
+
         <Button variant="outline" onClick={() => setDate(new Date())}>
           Today
         </Button>
 
-        <Button variant="ghost" size="icon-sm" onClick={() => shift("left")}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="shrink-0"
+          onClick={() => shift("left")}
+        >
           <ChevronLeft className="size-4" />
         </Button>
 
-        <Button variant="ghost" size="icon-sm" onClick={() => shift("right")}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="shrink-0"
+          onClick={() => shift("right")}
+        >
           <ChevronRight className="size-4" />
         </Button>
 
-        <h2 className="text-sm font-semibold sm:text-lg">{formatByView()}</h2>
+        <h2 className="truncate text-sm font-semibold sm:text-lg">
+          {formatByView()}
+        </h2>
       </div>
 
-      <div className="flex items-center gap-3">
-        <span className="text-xs text-muted-foreground">
+      <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
+        <span className="hidden text-xs text-muted-foreground md:inline">
           {conflictCount > 0
             ? `${conflictCount} conflict${conflictCount > 1 ? "s" : ""}`
             : "All tasks scheduled"}
         </span>
         <ViewModeSelect value={currentView} onChange={setCurrentView} />
-        <CreateTaskDialog date={date} onCreated={onChanged} />
+        <CreateTaskDialog date={date} view={currentView} onCreated={onChanged} />
       </div>
     </div>
   );

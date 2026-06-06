@@ -29,6 +29,8 @@ interface EditTaskDialogProps {
 }
 
 const defaultRecurringFields = {
+  recurrenceMode: "specific",
+  byweeks: [1],
   frequency: "WEEKLY",
   interval: 1,
   byday: ["MO"],
@@ -179,7 +181,7 @@ export function EditTaskDialog({
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetContent className="w-96 gap-0 p-0 sm:max-w-md">
+      <SheetContent className="w-full gap-0 p-0 sm:w-96 sm:max-w-md">
         {/* Header */}
         <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-5">
           <span className={cn("size-2 shrink-0 rounded-full", statusColor)} />

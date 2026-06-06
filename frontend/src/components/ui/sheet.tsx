@@ -48,13 +48,17 @@ function SheetContent({
   className,
   children,
   side = "right",
+  showOverlay = true,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
+  /** Render the dimming backdrop. Set false for a non-modal side panel that
+   *  must leave the rest of the page (e.g. the calendar header) interactive. */
+  showOverlay?: boolean
 }) {
   return (
     <SheetPortal>
-      <SheetOverlay />
+      {showOverlay && <SheetOverlay />}
       <SheetPrimitive.Content
         data-slot="sheet-content"
         className={cn(

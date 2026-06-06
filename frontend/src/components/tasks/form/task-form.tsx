@@ -11,6 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { TaskFormValues, parseTags } from "@/utils/tasks";
 import { format, isToday } from "date-fns";
+import type { ViewMode } from "@zenflow/shared";
 import { UseFormReturn } from "react-hook-form";
 import { useState, type ReactNode } from "react";
 import { DurationInput } from "../duration-input";
@@ -38,8 +39,13 @@ interface TaskFormProps {
   onSubmit: (values: TaskFormValues) => void;
   onCancel: () => void;
   loading: boolean;
-  scheduleDate?: Date;
-  onScheduleDateChange?: (date?: Date) => void;
+  /** Active calendar perspective. Drives view-scoped recurrence (and is hidden
+   *  in "day" / on the edit panel, where it's undefined). */
+  view?: ViewMode;
+  /** The day the task is being scheduled into (anchors fixed-time minimums). */
+  date?: Date;
+  /** Onboarding workdays (ISO 1–7) — constrains recurrence weekday choices. */
+  workDays?: number[];
   initialNote?: string;
   submitLabel?: string;
   /** Extra sections rendered inside the scrollable body (e.g. history). */
@@ -55,8 +61,9 @@ export function TaskForm({
   newUploadsRef,
   loading,
   initialNote,
-  scheduleDate,
-  onScheduleDateChange,
+  view,
+  date,
+  workDays = [1, 2, 3, 4, 5],
   submitLabel = "Save",
   bodyExtra,
   footerExtra,
@@ -65,6 +72,8 @@ export function TaskForm({
   const fixedStart = form.watch("fixedStart");
   const fixedEnd = form.watch("fixedEnd");
   const duration = isFixed ? fixedEnd - fixedStart : form.watch("duration");
+  // Recurrence is only meaningful at creation in Week/Month views.
+  const recurrenceView = view === "week" || view === "month" ? view : null;
 
   return (
     <Form {...form}>
@@ -91,19 +100,6 @@ export function TaskForm({
               </FormItem>
             )}
           />
-
-          {/* Schedule date (create flow only) */}
-          {scheduleDate && (
-            <div className="space-y-1.5">
-              <FormLabel className="text-xs font-semibold">Schedule for</FormLabel>
-              <DatePicker
-                disabled={loading || { before: new Date() }}
-                className="w-full"
-                date={scheduleDate}
-                onSelect={onScheduleDateChange ?? (() => {})}
-              />
-            </div>
-          )}
 
           {/* Duration — quick-pick + custom */}
           <FormField
@@ -193,9 +189,9 @@ export function TaskForm({
           {isFixed && (
             <FixedForm
               minTime={
-                scheduleDate && isToday(scheduleDate)
+                date && isToday(date)
                   ? snapToNearestLaterQuarterHour(
-                      scheduleDate.getHours() * 60 + scheduleDate.getMinutes(),
+                      date.getHours() * 60 + date.getMinutes(),
                     )
                   : 0
               }
@@ -280,33 +276,44 @@ export function TaskForm({
             )}
           />
 
-          {/* Recurrence */}
-          <FormField
-            control={form.control}
-            name="isRecurring"
-            render={({ field }) => (
-              <FormItem className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <FormLabel className="text-xs font-semibold">Recurrence</FormLabel>
-                  <button
-                    type="button"
-                    disabled={loading}
-                    onClick={() => field.onChange(!field.value)}
-                    className={cn(
-                      "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-semibold transition-colors",
-                      field.value
-                        ? "border-primary bg-primary/15 text-primary"
-                        : "border-border bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary",
-                    )}
-                  >
-                    <Repeat className="size-3" />
-                    {field.value ? "Repeats" : "Does not repeat"}
-                  </button>
-                </div>
-                {field.value && <RRuleForm form={form} />}
-              </FormItem>
-            )}
-          />
+          {/* Recurrence — view-scoped; hidden in Day view and on the edit panel. */}
+          {recurrenceView && (
+            <FormField
+              control={form.control}
+              name="isRecurring"
+              render={({ field }) => (
+                <FormItem className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <FormLabel className="text-xs font-semibold">
+                      Recurrence
+                    </FormLabel>
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => field.onChange(!field.value)}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                        field.value
+                          ? "border-primary bg-primary/15 text-primary"
+                          : "border-border bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary",
+                      )}
+                    >
+                      <Repeat className="size-3" />
+                      {field.value ? "Repeats" : "Does not repeat"}
+                    </button>
+                  </div>
+                  {field.value && (
+                    <RRuleForm
+                      form={form}
+                      view={recurrenceView}
+                      workDays={workDays}
+                      date={date ?? new Date()}
+                    />
+                  )}
+                </FormItem>
+              )}
+            />
+          )}
 
           {bodyExtra}
         </div>

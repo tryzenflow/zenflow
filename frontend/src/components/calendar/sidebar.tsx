@@ -13,22 +13,30 @@ function Label({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function CalendarSidebar({
-  meta,
-  agenda,
-  conflicts,
-}: {
+interface SidebarProps {
   meta: TasksMeta | null;
   agenda: Event[];
   conflicts: { id: string; title: string }[];
-}) {
+}
+
+/** Desktop rail — hidden below `lg`, where the content moves into a drawer. */
+export function CalendarSidebar(props: SidebarProps) {
+  return (
+    <aside className="hidden w-64 shrink-0 border-r border-sidebar-border bg-sidebar lg:block">
+      <SidebarBody {...props} />
+    </aside>
+  );
+}
+
+/** The sidebar's inner content — reused by the desktop rail and mobile drawer. */
+export function SidebarBody({ meta, agenda, conflicts }: SidebarProps) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const allocated = meta?.totalAllocatedMinutes ?? 0;
   const total = meta?.totalWorkMinutes ?? 0;
   const pct = total > 0 ? Math.min(100, Math.round((allocated / total) * 100)) : 0;
 
   return (
-    <aside className="flex w-64 shrink-0 flex-col gap-6 border-r border-sidebar-border bg-sidebar p-4">
+    <div className="flex h-full flex-col gap-6 p-4">
       <div className="flex items-center gap-2">
         <Logo className="h-9 w-9 shrink-0" />
         <span className="text-xl font-semibold tracking-tight">Zenflow</span>
@@ -99,6 +107,6 @@ export function CalendarSidebar({
           </div>
         </div>
       )}
-    </aside>
+    </div>
   );
 }

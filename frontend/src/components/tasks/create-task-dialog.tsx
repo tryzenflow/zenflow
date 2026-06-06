@@ -13,18 +13,27 @@ import { createTask } from "@/api/tasks";
 import { format, isToday } from "date-fns";
 import { fromZonedTime } from "date-fns-tz";
 import { snapToNearestLaterQuarterHour } from "@/utils/time";
+import type { ViewMode } from "@zenflow/shared";
+
+const VIEW_SUBTITLE: Record<ViewMode, string> = {
+  day: "EEE, MMM d",
+  week: "'week of' MMM d",
+  month: "MMMM yyyy",
+};
 
 export function CreateTaskDialog({
   date,
+  view,
   onCreated,
 }: {
   date: Date;
+  view: ViewMode;
   onCreated: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [scheduleDate, setScheduleDate] = useState<Date>(date);
   const user = useUserStore((state) => state.user);
+  const workDays = user?.workDays ?? [1, 2, 3, 4, 5];
   const form = useTaskForm({
     defaultValues: {
       title: "",
@@ -33,6 +42,8 @@ export function CreateTaskDialog({
       note: "",
       deadlineDate: "",
       deadlineTime: "",
+      recurrenceMode: "specific",
+      byweeks: [1],
       frequency: "WEEKLY",
       interval: 1,
       byday: ["MO"],
@@ -64,10 +75,6 @@ export function CreateTaskDialog({
     useFilesTracker();
 
   useEffect(() => {
-    setScheduleDate(date);
-  }, [date]);
-
-  useEffect(() => {
     updateRemovedFileIds(note || "", "");
   }, [note]);
 
@@ -93,10 +100,11 @@ export function CreateTaskDialog({
         deadline,
         fixed: values.isFixed,
         startTime: values.isFixed ? values.fixedStart : 0,
-        startDate: values.isFixed
-          ? format(scheduleDate, "yyyy-MM-dd")
-          : undefined,
-        rrule: values.isRecurring ? generateRRule(values) : "",
+        startDate: values.isFixed ? format(date, "yyyy-MM-dd") : undefined,
+        rrule:
+          values.isRecurring && view !== "day"
+            ? generateRRule(values, { view, date, workDays })
+            : "",
       });
       onCreated();
       form.reset();
@@ -131,19 +139,24 @@ export function CreateTaskDialog({
   };
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <Sheet open={open} onOpenChange={setOpen} modal={false}>
       <SheetTrigger asChild>
         <Button size="sm">
           <Plus className="size-4" />
           <span className="sr-only sm:not-sr-only">New task</span>
         </Button>
       </SheetTrigger>
-      <SheetContent className="w-96 gap-0 p-0 sm:max-w-md">
+      {/* Non-modal + no overlay + offset below the 56px header so the view can
+          still be switched (which re-scopes recurrence) while creating. */}
+      <SheetContent
+        showOverlay={false}
+        className="inset-y-auto top-14 h-[calc(100vh-3.5rem)] w-full gap-0 p-0 sm:w-96 sm:max-w-md"
+      >
         <div className="flex h-14 shrink-0 items-center border-b border-border px-5">
           <div>
             <h2 className="text-sm font-bold tracking-tight">New Task</h2>
             <p className="text-[11px] text-muted-foreground">
-              Scheduling for {format(scheduleDate, "EEE, MMM d")}
+              Scheduling in {format(date, VIEW_SUBTITLE[view])}
             </p>
           </div>
         </div>
@@ -153,8 +166,9 @@ export function CreateTaskDialog({
           newUploadsRef={newUploadsRef}
           loading={loading}
           onCancel={handleClose}
-          scheduleDate={scheduleDate}
-          onScheduleDateChange={(d) => d && setScheduleDate(d)}
+          view={view}
+          date={date}
+          workDays={workDays}
           submitLabel="Create Task"
         />
       </SheetContent>

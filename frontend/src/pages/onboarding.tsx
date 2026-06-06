@@ -47,7 +47,7 @@ function minutesToLabel(m: number) {
 
 function StepRail({ current }: { current: number }) {
   return (
-    <div className="flex w-72 shrink-0 flex-col border-r border-border bg-card px-8 py-10">
+    <div className="hidden w-72 shrink-0 flex-col border-r border-border bg-card px-8 py-10 md:flex">
       <div className="mb-12 flex items-center gap-2.5">
         <Logo className="h-9 w-9 shrink-0" />
         <span className="text-sm font-bold tracking-tight">Zenflow</span>
@@ -194,8 +194,8 @@ function OnboardingWizard() {
   return (
     <div className="flex min-h-screen">
       <StepRail current={step} />
-      <div className="flex flex-1 items-center justify-center bg-gradient-to-b from-muted/60 to-background p-8">
-        <div className="w-full max-w-md rounded-2xl border border-border bg-card/80 p-8 backdrop-blur-xl">
+      <div className="flex flex-1 items-center justify-center bg-gradient-to-b from-muted/60 to-background p-4 sm:p-8">
+        <div className="w-full max-w-md rounded-2xl border border-border bg-card/80 p-6 backdrop-blur-xl sm:p-8">
           <div className="mb-8">
             <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
               Step {step + 1} of {STEPS.length}

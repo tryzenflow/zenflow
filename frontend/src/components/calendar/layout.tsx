@@ -5,7 +5,8 @@ import { useViewShortcuts } from "@/hooks/use-view-shortcuts";
 import { DayView } from "./day-view";
 import { WeekView } from "./week-view";
 import { MonthView } from "./month-view";
-import { CalendarSidebar } from "./sidebar";
+import { CalendarSidebar, SidebarBody } from "./sidebar";
+import { Sheet, SheetContent, SheetTitle } from "../ui/sheet";
 import { EditTaskDialog } from "../tasks/edit-task-dialog";
 import { listTasks, rescheduleTask } from "@/api/tasks";
 import { tasksToBlocks } from "@/utils/blocks";
@@ -23,6 +24,7 @@ export function CalendarLayout() {
   const [blocks, setBlocks] = useState<Event[]>([]);
   const [meta, setMeta] = useState<TasksMeta | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
+  const [navOpen, setNavOpen] = useState(false);
 
   async function refetch() {
     try {
@@ -43,8 +45,10 @@ export function CalendarLayout() {
 
   // Open the detail panel when a block/sidebar item requests it.
   useEffect(() => {
-    const handler = (e: Event | CustomEvent) =>
+    const handler = (e: Event | CustomEvent) => {
       setEditId((e as CustomEvent).detail as string);
+      setNavOpen(false); // close the mobile drawer if the tap came from it
+    };
     window.addEventListener("zenflow:open-task", handler as EventListener);
     return () =>
       window.removeEventListener("zenflow:open-task", handler as EventListener);
@@ -82,7 +86,19 @@ export function CalendarLayout() {
   return (
     <div className="flex h-screen">
       <CalendarSidebar meta={meta} agenda={agenda} conflicts={conflicts} />
-      <div className="flex flex-1 flex-col overflow-hidden">
+
+      {/* Mobile/tablet nav drawer — same content as the desktop rail. */}
+      <Sheet open={navOpen} onOpenChange={setNavOpen}>
+        <SheetContent
+          side="left"
+          className="w-72 bg-sidebar p-0 lg:hidden"
+        >
+          <SheetTitle className="sr-only">Navigation</SheetTitle>
+          <SidebarBody meta={meta} agenda={agenda} conflicts={conflicts} />
+        </SheetContent>
+      </Sheet>
+
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <CalendarHeader
           date={date}
           setDate={setDate}
@@ -90,6 +106,7 @@ export function CalendarLayout() {
           setCurrentView={setViewMode}
           conflictCount={meta?.conflictCount ?? 0}
           onChanged={refetch}
+          onOpenNav={() => setNavOpen(true)}
         />
         <div
           className="flex-1 overflow-auto"

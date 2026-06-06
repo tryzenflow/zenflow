@@ -15,7 +15,7 @@ export function ViewModeSelect({
 }) {
   return (
     <Select value={value} onValueChange={(v) => onChange(v as ViewMode)}>
-      <SelectTrigger className="w-[140px]">
+      <SelectTrigger className="w-24 sm:w-[140px]">
         <span className="capitalize">{value}</span>
       </SelectTrigger>
       <SelectContent>
