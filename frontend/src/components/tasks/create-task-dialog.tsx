@@ -105,6 +105,8 @@ export function CreateTaskDialog({
         // Always the viewed day: a fixed anchor when fixed, otherwise the
         // earliest day the flexible engine may place the task on.
         startDate: format(date, "yyyy-MM-dd"),
+        // Scopes recurrence materialization to the active week/month window.
+        view,
         rrule:
           values.isRecurring && view !== "day"
             ? generateRRule(values, { view, date, workDays })

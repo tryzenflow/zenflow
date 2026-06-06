@@ -13,12 +13,10 @@ import { tasksToBlocks } from "@/utils/blocks";
 import type { Task, TasksMeta } from "@zenflow/shared";
 import { isAxiosError } from "axios";
 import { toast } from "sonner";
-import { isSameDay } from "date-fns";
 import { useUserStore } from "@/hooks/use-user-store";
-import { zonedDate, zonedNow } from "@/utils/tz";
+import { zonedNow } from "@/utils/tz";
 
 export function CalendarLayout() {
-  const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   // The cursor day is held in user-tz space (its local fields are the user's
   // wall clock), so every downstream day comparison stays in that tz.
   const [date, setDate] = useState<Date>(() =>
@@ -72,19 +70,20 @@ export function CalendarLayout() {
     }
   }
 
+  // The agenda mirrors the active view's window (the backend already scopes
+  // `blocks` to day/week/month), sorted chronologically; the sidebar groups by
+  // day when the window spans more than one.
   const agenda = useMemo(
     () =>
-      [...blocks]
-        .filter((b) => isSameDay(zonedDate(b.start, tz), date))
-        .sort(
-          (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
-        ),
-    [blocks, date, tz],
+      [...blocks].sort(
+        (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
+      ),
+    [blocks],
   );
 
   return (
     <div className="flex h-screen">
-      <CalendarSidebar meta={meta} agenda={agenda} />
+      <CalendarSidebar meta={meta} agenda={agenda} view={viewMode} />
 
       {/* Mobile/tablet nav drawer — same content as the desktop rail. */}
       <Sheet open={navOpen} onOpenChange={setNavOpen}>
@@ -93,7 +92,7 @@ export function CalendarLayout() {
           className="w-72 bg-sidebar p-0 lg:hidden"
         >
           <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <SidebarBody meta={meta} agenda={agenda} />
+          <SidebarBody meta={meta} agenda={agenda} view={viewMode} />
         </SheetContent>
       </Sheet>
 

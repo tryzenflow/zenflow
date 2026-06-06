@@ -1,9 +1,9 @@
 import { useUserStore } from "@/hooks/use-user-store";
 import { cn } from "@/lib/utils";
 import type { Event } from "@/types/schedule";
-import type { TaskCardState, TasksMeta } from "@zenflow/shared";
+import type { TaskCardState, TasksMeta, ViewMode } from "@zenflow/shared";
 import { toZonedTime } from "date-fns-tz";
-import { Lightbulb } from "lucide-react";
+import { Lightbulb, Repeat } from "lucide-react";
 import { Logo } from "@/components/logo";
 
 function Label({ children }: { children: React.ReactNode }) {
@@ -17,6 +17,35 @@ function Label({ children }: { children: React.ReactNode }) {
 interface SidebarProps {
   meta: TasksMeta | null;
   agenda: Event[];
+  /** Active view — drives whether the agenda is grouped by day. */
+  view: ViewMode;
+}
+
+/** Group chronologically-sorted blocks into contiguous per-day buckets. */
+function groupByDay(
+  agenda: Event[],
+  tz: string,
+): { key: string; label: string; items: Event[] }[] {
+  const groups: { key: string; label: string; items: Event[] }[] = [];
+  for (const b of agenda) {
+    const d = toZonedTime(new Date(b.start), tz);
+    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) {
+      last.items.push(b);
+    } else {
+      groups.push({
+        key,
+        label: d.toLocaleDateString([], {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+        }),
+        items: [b],
+      });
+    }
+  }
+  return groups;
 }
 
 /** Row treatment per state — mirrors the calendar card colours (mockup 02). */
@@ -74,6 +103,9 @@ function AgendaItem({ block, tz }: { block: Event; tz: string }) {
           {tag}
         </span>
       )}
+      {block.rrule && (
+        <Repeat className="h-3 w-3 shrink-0 text-primary" title="Recurring" />
+      )}
       <span
         className={cn(
           "shrink-0 font-mono text-[10px]",
@@ -96,11 +128,14 @@ export function CalendarSidebar(props: SidebarProps) {
 }
 
 /** The sidebar's inner content — reused by the desktop rail and mobile drawer. */
-export function SidebarBody({ meta, agenda }: SidebarProps) {
+export function SidebarBody({ meta, agenda, view }: SidebarProps) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const allocated = meta?.totalAllocatedMinutes ?? 0;
   const total = meta?.totalWorkMinutes ?? 0;
   const pct = total > 0 ? Math.min(100, Math.round((allocated / total) * 100)) : 0;
+  // Day view is a single day — keep it flat; week/month group under day headers.
+  const grouped = view !== "day";
+  const groups = grouped ? groupByDay(agenda, tz) : [];
 
   return (
     <div className="flex h-full flex-col gap-6 p-4">
@@ -128,9 +163,18 @@ export function SidebarBody({ meta, agenda }: SidebarProps) {
           {agenda.length === 0 && (
             <p className="text-xs text-muted-foreground">Nothing scheduled.</p>
           )}
-          {agenda.map((b) => (
-            <AgendaItem key={b.id} block={b} tz={tz} />
-          ))}
+          {grouped
+            ? groups.map((g) => (
+                <div key={g.key} className="space-y-1.5">
+                  <p className="px-0.5 pt-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    {g.label}
+                  </p>
+                  {g.items.map((b) => (
+                    <AgendaItem key={b.id} block={b} tz={tz} />
+                  ))}
+                </div>
+              ))
+            : agenda.map((b) => <AgendaItem key={b.id} block={b} tz={tz} />)}
         </div>
       </div>
 

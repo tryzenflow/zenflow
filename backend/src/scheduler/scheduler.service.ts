@@ -50,34 +50,47 @@ export class SchedulerService {
   /**
    * Place a single freshly-created task around already-scheduled tasks
    * (preserves existing placements). Mutates the row; run inside a transaction.
-   * `earliest` anchors a flexible task to a chosen day (the calendar view the
-   * user created it from) instead of the first open slot from `now`.
+   *
+   *  - `earliest` anchors a flexible task to a chosen day (the view it was
+   *    created from) instead of the first open slot from `now`.
+   *  - `placementDeadline` caps the search without touching the stored
+   *    `deadline` — used to confine a recurring occurrence to its own day.
+   *  - `dayAnchor` keeps a recurring occurrence on its day even when no slot
+   *    fits (placed there as a standing conflict rather than floating unplaced).
    */
   async placeNewTask(
     user: User,
     task: Task,
     tx: PrismaTx,
-    earliest?: Date,
+    opts: {
+      earliest?: Date;
+      placementDeadline?: Date;
+      dayAnchor?: Date;
+    } = {},
     now = new Date(),
   ): Promise<{ scheduledStartTime: Date | null; conflict: boolean }> {
     const others = (await this.pendingTasks(user.id, tx)).filter(
       (t) => t.id !== task.id,
     );
+    const edf = this.toEdf(task);
+    if (opts.placementDeadline) edf.deadline = opts.placementDeadline;
     const placement = placeOne(
       this.prefsOf(user),
-      this.toEdf(task),
+      edf,
       others.map((t) => this.toEdf(t)),
       now,
-      earliest,
+      opts.earliest,
     );
+    let { scheduledStartTime, conflict } = placement;
+    if (scheduledStartTime === null && opts.dayAnchor) {
+      scheduledStartTime = opts.dayAnchor;
+      conflict = true;
+    }
     await tx.task.update({
       where: { id: task.id },
-      data: {
-        scheduledStartTime: placement.scheduledStartTime,
-        conflict: placement.conflict,
-      },
+      data: { scheduledStartTime, conflict },
     });
-    return placement;
+    return { scheduledStartTime, conflict };
   }
 
   /** Full deterministic re-EDF of every PENDING task (e.g. after pref change). */

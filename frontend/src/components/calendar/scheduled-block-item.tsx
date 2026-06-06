@@ -7,7 +7,7 @@ import type { BlockLayout } from "@/utils/overlap";
 import { CSS } from "@dnd-kit/utilities";
 import { useDraggable } from "@dnd-kit/core";
 import { toZonedTime } from "date-fns-tz";
-import { Lock } from "lucide-react";
+import { Lock, Repeat } from "lucide-react";
 import { useRef } from "react";
 
 function minutesOfDay(iso: string, tz: string) {
@@ -115,6 +115,9 @@ export function ScheduledBlockItem({
               {block.fixed && (
                 <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />
               )}
+              {block.rrule && (
+                <Repeat className="h-3 w-3 shrink-0 text-primary" />
+              )}
               <span
                 className={cn(
                   "truncate text-[10px] font-semibold leading-none",
@@ -133,6 +136,9 @@ export function ScheduledBlockItem({
             <div className="flex items-center gap-1">
               {block.fixed && (
                 <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />
+              )}
+              {block.rrule && (
+                <Repeat className="h-3 w-3 shrink-0 text-primary" />
               )}
               <span
                 className={cn(

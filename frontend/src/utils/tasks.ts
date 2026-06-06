@@ -6,7 +6,7 @@ import { Task } from "../types/tasks";
 import { extractFileIdsFromNoteContent } from "./files";
 import { rrulestr, RRule, Weekday } from "rrule";
 import { endOfMonth, endOfWeek } from "date-fns";
-import type { ViewMode } from "@zenflow/shared";
+import type { RecurrenceScope, ViewMode } from "@zenflow/shared";
 
 export const taskSchema = z.object({
   title: z.string().min(1, { error: "Task name is required" }),
@@ -76,13 +76,14 @@ export function parseTags(input?: string): string[] {
     .filter(Boolean);
 }
 
-export async function deleteTask(taskId: string) {
+export async function deleteTask(taskId: string, scope?: RecurrenceScope) {
   const { data } = await getData<{ data: { task: Task } }>(`/tasks/${taskId}`);
   const previousIds = extractFileIdsFromNoteContent(data.task.note || "");
   if (previousIds.length > 0) {
     await postData("/files/remove", { ids: previousIds });
   }
-  return deleteData(`/tasks/${taskId}`);
+  const qs = scope ? `?scope=${scope}` : "";
+  return deleteData(`/tasks/${taskId}${qs}`);
 }
 
 /** ISO weekday (1=Mon … 7=Sun) → RFC 5545 BYDAY code. */
@@ -111,8 +112,9 @@ export interface RRuleContext {
 
 /**
  * Build a single-line, FREQ-based RRULE scoped to the active view's window.
- * The backend ({@link expand-recurring}) only understands a lone `RRULE:` line,
- * so every branch emits one `FREQ=…` rule bounded by `UNTIL`.
+ * The backend materializes one task row per occurrence and only understands a
+ * lone `RRULE:` line, so every branch emits one `FREQ=…` rule bounded by
+ * `UNTIL`.
  *
  *  - Week · interval  → every X days through the end of the week
  *  - Week · specific  → chosen weekdays (workdays) this week

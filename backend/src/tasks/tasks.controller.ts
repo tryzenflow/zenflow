@@ -17,6 +17,7 @@ import { RescheduleTaskDto } from "./dto/reschedule-task.dto";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
 import { type User } from "../../generated/prisma";
+import type { RecurrenceScope } from "@zenflow/shared";
 
 @Controller("tasks")
 @UseGuards(CookieAuthGuard)
@@ -76,8 +77,12 @@ export class TasksController {
   }
 
   @Delete(":id")
-  async remove(@Param("id") id: string, @CurrentUser() user: User) {
-    await this.tasksService.remove(id, user);
+  async remove(
+    @Param("id") id: string,
+    @Query("scope") scope: RecurrenceScope | undefined,
+    @CurrentUser() user: User,
+  ) {
+    await this.tasksService.remove(id, user, scope);
     return { success: true, message: "Task deleted" };
   }
 }

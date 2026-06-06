@@ -3,6 +3,7 @@ import {
   IsBoolean,
   IsDateString,
   IsDivisibleBy,
+  IsIn,
   IsInt,
   IsISO8601,
   IsOptional,
@@ -13,7 +14,7 @@ import {
 } from "class-validator";
 import { IsRRule } from "../validators/is-rrule.decorator";
 import { DAILY_HORIZON, TIME_GRANULARITY } from "src/common/constants";
-import type { CreateTaskInput } from "@zenflow/shared";
+import type { CreateTaskInput, ViewMode } from "@zenflow/shared";
 
 export class CreateTaskDto implements CreateTaskInput {
   @IsString() title: string;
@@ -61,4 +62,13 @@ export class CreateTaskDto implements CreateTaskInput {
   @IsOptional()
   @IsRRule({ message: "Invalid RRULE: must follow RFC 5545 format" })
   rrule?: string;
+
+  /**
+   * Active calendar perspective. Scopes recurrence materialization to its
+   * window (week → that week, month → that month). Defaults to a single
+   * instance ("day").
+   */
+  @IsOptional()
+  @IsIn(["day", "week", "month"])
+  view?: ViewMode;
 }
