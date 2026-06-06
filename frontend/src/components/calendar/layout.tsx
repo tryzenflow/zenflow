@@ -72,14 +72,6 @@ export function CalendarLayout() {
     }
   }
 
-  const conflicts = useMemo(
-    () =>
-      tasks
-        .filter((t) => t.conflict)
-        .map((t) => ({ id: t.id, title: t.title })),
-    [tasks],
-  );
-
   const agenda = useMemo(
     () =>
       [...blocks]
@@ -92,7 +84,7 @@ export function CalendarLayout() {
 
   return (
     <div className="flex h-screen">
-      <CalendarSidebar meta={meta} agenda={agenda} conflicts={conflicts} />
+      <CalendarSidebar meta={meta} agenda={agenda} />
 
       {/* Mobile/tablet nav drawer — same content as the desktop rail. */}
       <Sheet open={navOpen} onOpenChange={setNavOpen}>
@@ -101,7 +93,7 @@ export function CalendarLayout() {
           className="w-72 bg-sidebar p-0 lg:hidden"
         >
           <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <SidebarBody meta={meta} agenda={agenda} conflicts={conflicts} />
+          <SidebarBody meta={meta} agenda={agenda} />
         </SheetContent>
       </Sheet>
 

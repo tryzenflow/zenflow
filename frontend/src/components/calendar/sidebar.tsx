@@ -1,8 +1,9 @@
 import { useUserStore } from "@/hooks/use-user-store";
+import { cn } from "@/lib/utils";
 import type { Event } from "@/types/schedule";
-import type { TasksMeta } from "@zenflow/shared";
+import type { TaskCardState, TasksMeta } from "@zenflow/shared";
 import { toZonedTime } from "date-fns-tz";
-import { TriangleAlert } from "lucide-react";
+import { Lightbulb } from "lucide-react";
 import { Logo } from "@/components/logo";
 
 function Label({ children }: { children: React.ReactNode }) {
@@ -16,7 +17,73 @@ function Label({ children }: { children: React.ReactNode }) {
 interface SidebarProps {
   meta: TasksMeta | null;
   agenda: Event[];
-  conflicts: { id: string; title: string }[];
+}
+
+/** Row treatment per state — mirrors the calendar card colours (mockup 02). */
+const AGENDA_ROW: Record<TaskCardState, string> = {
+  fluid: "border-border bg-card hover:bg-sidebar-accent",
+  fixed: "border-border bg-card hover:bg-sidebar-accent",
+  overdue:
+    "border-rose-200/60 bg-rose-50/60 dark:border-rose-900/30 dark:bg-rose-950/20",
+  conflict:
+    "border-amber-200/50 bg-amber-50/60 dark:border-amber-900/20 dark:bg-amber-950/10",
+  completed: "border-border bg-card opacity-60",
+};
+
+const AGENDA_TIME: Record<TaskCardState, string> = {
+  fluid: "text-muted-foreground",
+  fixed: "text-muted-foreground",
+  overdue: "text-rose-600 dark:text-rose-400",
+  conflict: "text-amber-600 dark:text-amber-400",
+  completed: "text-muted-foreground",
+};
+
+const AGENDA_TAG: Partial<Record<TaskCardState, string>> = {
+  overdue: "Overdue",
+  conflict: "Conflict",
+};
+
+function AgendaItem({ block, tz }: { block: Event; tz: string }) {
+  const time = toZonedTime(new Date(block.start), tz).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const tag = AGENDA_TAG[block.state];
+  return (
+    <button
+      onClick={() =>
+        window.dispatchEvent(
+          new CustomEvent("zenflow:open-task", { detail: block.taskId }),
+        )
+      }
+      className={cn(
+        "flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left text-xs transition-colors",
+        AGENDA_ROW[block.state],
+      )}
+    >
+      <span
+        className={cn(
+          "min-w-0 flex-1 truncate font-medium",
+          block.state === "completed" && "text-muted-foreground line-through",
+        )}
+      >
+        {block.title}
+      </span>
+      {tag && (
+        <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-800 dark:bg-amber-950 dark:text-amber-400">
+          {tag}
+        </span>
+      )}
+      <span
+        className={cn(
+          "shrink-0 font-mono text-[10px]",
+          AGENDA_TIME[block.state],
+        )}
+      >
+        {block.state === "completed" ? "Done" : time}
+      </span>
+    </button>
+  );
 }
 
 /** Desktop rail — hidden below `lg`, where the content moves into a drawer. */
@@ -29,7 +96,7 @@ export function CalendarSidebar(props: SidebarProps) {
 }
 
 /** The sidebar's inner content — reused by the desktop rail and mobile drawer. */
-export function SidebarBody({ meta, agenda, conflicts }: SidebarProps) {
+export function SidebarBody({ meta, agenda }: SidebarProps) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const allocated = meta?.totalAllocatedMinutes ?? 0;
   const total = meta?.totalWorkMinutes ?? 0;
@@ -57,56 +124,42 @@ export function SidebarBody({ meta, agenda, conflicts }: SidebarProps) {
 
       <div className="flex min-h-0 flex-1 flex-col gap-2">
         <Label>Agenda</Label>
-        <div className="flex-1 space-y-1 overflow-y-auto">
+        <div className="flex-1 space-y-1.5 overflow-y-auto">
           {agenda.length === 0 && (
             <p className="text-xs text-muted-foreground">Nothing scheduled.</p>
           )}
           {agenda.map((b) => (
-            <button
-              key={b.id}
-              onClick={() =>
-                window.dispatchEvent(
-                  new CustomEvent("zenflow:open-task", { detail: b.taskId }),
-                )
-              }
-              className="flex w-full items-center gap-2 rounded px-2 py-1 text-left hover:bg-sidebar-accent"
-            >
-              <span className="font-mono text-[10px] text-muted-foreground">
-                {toZonedTime(new Date(b.start), tz).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </span>
-              <span className="truncate text-xs">{b.title}</span>
-            </button>
+            <AgendaItem key={b.id} block={b} tz={tz} />
           ))}
         </div>
       </div>
 
-      {conflicts.length > 0 && (
-        <div className="space-y-2">
-          <Label>
-            <span className="inline-flex items-center gap-1 text-amber-600">
-              <TriangleAlert className="h-3 w-3" /> Conflicts ({conflicts.length})
-            </span>
-          </Label>
-          <div className="space-y-1">
-            {conflicts.map((c) => (
-              <button
-                key={c.id}
-                onClick={() =>
-                  window.dispatchEvent(
-                    new CustomEvent("zenflow:open-task", { detail: c.id }),
-                  )
-                }
-                className="block w-full truncate rounded border-l-2 border-l-amber-500 bg-amber-50/40 px-2 py-1 text-left text-xs text-amber-950 dark:bg-amber-950/10 dark:text-amber-100"
-              >
-                {c.title}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      <div className="space-y-2">
+        <Label>
+          <span className="inline-flex items-center gap-1">
+            <Lightbulb className="h-3 w-3" /> Tips
+          </span>
+        </Label>
+        <ul className="space-y-1 text-[11px] leading-snug text-muted-foreground">
+          <li>
+            <span className="font-semibold text-foreground">Drag</span> a task to
+            reschedule it.
+          </li>
+          <li>
+            <span className="font-semibold text-foreground">Double-click</span>{" "}
+            (or long-press on touch) to edit.
+          </li>
+          <li>
+            <span className="font-semibold text-foreground">Flexible</span> tasks
+            are auto-placed by the engine; <span className="font-semibold text-foreground">fixed</span>{" "}
+            ones stay where you put them.
+          </li>
+          <li>
+            Overlapping tasks are flagged as{" "}
+            <span className="font-semibold text-amber-600">conflicts</span>.
+          </li>
+        </ul>
+      </div>
     </div>
   );
 }

@@ -180,8 +180,15 @@ export function EditTaskDialog({
       : null;
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetContent className="w-full gap-0 p-0 sm:w-96 sm:max-w-md">
+    <Sheet open={open} onOpenChange={setOpen} modal={false}>
+      {/* Non-modal + no overlay + offset below the 56px header so the calendar
+          stays navigable while editing. Outside interactions are swallowed so
+          paging the date range or switching view never closes the panel. */}
+      <SheetContent
+        showOverlay={false}
+        onInteractOutside={(e) => e.preventDefault()}
+        className="inset-y-auto top-14 h-[calc(100vh-3.5rem)] w-full gap-0 p-0 sm:w-[30rem] sm:max-w-[30rem]"
+      >
         {/* Header */}
         <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-5">
           <span className={cn("size-2 shrink-0 rounded-full", statusColor)} />
@@ -245,6 +252,7 @@ export function EditTaskDialog({
           bodyExtra={events.length > 0 && <TaskHistory events={events} />}
           footerExtra={
             <Button
+              type="button"
               variant="outline"
               onClick={onDelete}
               className="h-8 w-full border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive"

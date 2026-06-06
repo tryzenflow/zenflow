@@ -3,6 +3,7 @@ import { DndContext, DragEndEvent } from "@dnd-kit/core";
 import { DayGrid } from "./day-grid";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { useUserStore } from "@/hooks/use-user-store";
+import { useDragSensors } from "@/hooks/use-drag-sensors";
 import { zonedDate, zonedWallClockToUtc } from "@/utils/tz";
 
 interface DayViewProps {
@@ -14,6 +15,7 @@ interface DayViewProps {
 
 export function DayView({ events, setEvents, date, onReschedule }: DayViewProps) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
+  const sensors = useDragSensors();
   function onDragEnd({ over, active }: DragEndEvent) {
     if (!over) return;
     const activeId = active.id.toString();
@@ -30,6 +32,9 @@ export function DayView({ events, setEvents, date, onReschedule }: DayViewProps)
     const newStart = zonedWallClockToUtc(wall, tz);
     const newEnd = new Date(newStart.getTime() + duration);
 
+    // No-op drop (released on the same slot it started) — don't record a move.
+    if (newStart.toISOString() === block.start) return;
+
     setEvents((evs) =>
       evs.map((ev) =>
         ev.id === activeId
@@ -41,7 +46,11 @@ export function DayView({ events, setEvents, date, onReschedule }: DayViewProps)
   }
 
   return (
-    <DndContext modifiers={[restrictToVerticalAxis]} onDragEnd={onDragEnd}>
+    <DndContext
+      sensors={sensors}
+      modifiers={[restrictToVerticalAxis]}
+      onDragEnd={onDragEnd}
+    >
       <DayGrid events={events} date={date} />
     </DndContext>
   );

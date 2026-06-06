@@ -4,7 +4,7 @@ import { DayColumnBackground } from "./day-column-background";
 import { TIME_GRANULARITY } from "@/utils/constants";
 import { Event } from "@/types/schedule";
 import { ScheduledBlockItem } from "./scheduled-block-item";
-import { getOverlapSpacing } from "@/utils/overlap";
+import { getOverlapLayout } from "@/utils/overlap";
 import { useUserStore } from "@/hooks/use-user-store";
 import { isZonedToday, zonedDate, zonedNow } from "@/utils/tz";
 
@@ -24,7 +24,6 @@ export const WeekGrid = ({
   weekDates: Date[];
 }) => {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
-  const spacings = getOverlapSpacing(events);
   return (
     <>
       {/* Time ruler */}
@@ -44,7 +43,12 @@ export const WeekGrid = ({
       </div>
 
       {/* Day columns */}
-      {weekDates.map((date, d) => (
+      {weekDates.map((date, d) => {
+        const dayEvents = events.filter((e) =>
+          isSameDay(zonedDate(e.start, tz), date),
+        );
+        const layout = getOverlapLayout(dayEvents);
+        return (
         <div
           key={date.toISOString()}
           className="bg-card border-border relative border-r last:border-r-0"
@@ -83,17 +87,18 @@ export const WeekGrid = ({
           ))}
 
           {/* events for this day */}
-          {events
-            .filter((e) => isSameDay(zonedDate(e.start, tz), date))
-            .map((e) => (
-              <ScheduledBlockItem
-                block={e}
-                key={e.id}
-                spacing={spacings.get(e.id) || 0}
-              />
-            ))}
+          {dayEvents.map((e) => (
+            <ScheduledBlockItem
+              block={e}
+              key={e.id}
+              layout={
+                layout.get(e.id) ?? { column: 0, columns: 1, conflict: false }
+              }
+            />
+          ))}
         </div>
-      ))}
+        );
+      })}
     </>
   );
 };

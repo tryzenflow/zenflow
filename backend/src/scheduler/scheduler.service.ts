@@ -5,11 +5,12 @@ import { PENALTY_MATRIX_LENGTH } from "@zenflow/shared";
 import {
   cascadeReschedule,
   type EdfTask,
+  intervalOf,
   placeOne,
   scheduleAll,
   type SchedulerPrefs,
 } from "./edf";
-import { penaltyIndex } from "./slot";
+import { type Interval, SLOT_MS, penaltyIndex } from "./slot";
 
 type PrismaTx = Prisma.TransactionClient;
 
@@ -164,6 +165,97 @@ export class SchedulerService {
       }
 
       // Telemetry: increment penalty matrix for the target's vacated slot.
+      if (target.scheduledStartTime) {
+        await this.bumpPenalty(user, target.scheduledStartTime, tx);
+      }
+
+      return { task: updatedTarget, displaced };
+    });
+  }
+
+  /**
+   * Manual drag-drop placement. Pins `taskId` at the snapped `requestedStart`
+   * exactly where the user dropped it — no cascade, nothing else moves. Any
+   * resulting time overlap is allowed and surfaced as a conflict; conflicts are
+   * recomputed pairwise across all pending tasks so they self-heal when a task
+   * is dragged back off another. The EDF engine only runs on create/pref edits.
+   */
+  async pin(
+    user: User,
+    taskId: string,
+    requestedStart: Date,
+  ): Promise<{ task: Task; displaced: DisplacedTask[] }> {
+    return this.prisma.$transaction(async (tx) => {
+      const tasks = await this.pendingTasks(user.id, tx);
+      const target = tasks.find((t) => t.id === taskId);
+      if (!target) throw new NotFoundException(`Cannot find task ${taskId}`);
+
+      // Snap to the 15-minute grid the calendar drops onto.
+      const snapped = new Date(
+        Math.round(requestedStart.getTime() / SLOT_MS) * SLOT_MS,
+      );
+
+      // Project the move, then recompute every task's conflict from real
+      // time-overlap (a placed task clashes if it overlaps another placed task).
+      const projected = tasks.map((t) =>
+        t.id === taskId ? { ...t, scheduledStartTime: snapped } : t,
+      );
+      const overlaps = (a: Interval, b: Interval) =>
+        a.start < b.end && b.start < a.end;
+      const conflictOf = new Map<string, boolean>();
+      for (const t of projected) {
+        const iv = intervalOf(t);
+        if (!iv) {
+          conflictOf.set(t.id, t.conflict); // unplaced — keep engine's verdict
+          continue;
+        }
+        conflictOf.set(
+          t.id,
+          projected.some((o) => {
+            if (o.id === t.id) return false;
+            const oiv = intervalOf(o);
+            return oiv ? overlaps(iv, oiv) : false;
+          }),
+        );
+      }
+
+      const before = new Map(tasks.map((t) => [t.id, t]));
+      const displaced: DisplacedTask[] = [];
+      let updatedTarget = target;
+
+      for (const t of tasks) {
+        const nextStart = t.id === taskId ? snapped : t.scheduledStartTime;
+        const nextConflict = conflictOf.get(t.id) ?? t.conflict;
+        const startUnchanged =
+          (t.scheduledStartTime?.getTime() ?? null) ===
+          (nextStart?.getTime() ?? null);
+        if (startUnchanged && t.conflict === nextConflict) continue;
+
+        const updated = await tx.task.update({
+          where: { id: t.id },
+          data: { scheduledStartTime: nextStart, conflict: nextConflict },
+        });
+        if (t.id === taskId) {
+          updatedTarget = updated;
+          await tx.taskEvent.create({
+            data: {
+              taskId: t.id,
+              userId: user.id,
+              eventType: "MOVE",
+              oldSnapshot: this.snapshot(before.get(t.id)!),
+              newSnapshot: this.snapshot(updated),
+              rewardScore: 0.0, // user override
+            },
+          });
+        } else {
+          displaced.push({
+            taskId: t.id,
+            newScheduledStartTime: updated.scheduledStartTime,
+          });
+        }
+      }
+
+      // Telemetry: the user overrode the engine's choice for this slot.
       if (target.scheduledStartTime) {
         await this.bumpPenalty(user, target.scheduledStartTime, tx);
       }

@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight, Menu } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
 import { ViewModeSelect } from "./view-mode-select";
 import {
@@ -105,11 +106,21 @@ export function CalendarHeader({
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
-        <span className="hidden text-xs text-muted-foreground md:inline">
-          {conflictCount > 0
-            ? `${conflictCount} conflict${conflictCount > 1 ? "s" : ""}`
-            : "All tasks scheduled"}
-        </span>
+        <div className="hidden items-center gap-2 rounded-full border border-border bg-muted px-3 py-1 text-[11px] font-semibold text-muted-foreground md:flex">
+          <span
+            className={cn(
+              "size-1.5 rounded-full",
+              conflictCount > 0
+                ? "bg-amber-500"
+                : "animate-pulse bg-emerald-500",
+            )}
+          />
+          <span>
+            {conflictCount > 0
+              ? `${conflictCount} conflict${conflictCount > 1 ? "s" : ""}`
+              : "All tasks scheduled"}
+          </span>
+        </div>
         <ViewModeSelect value={currentView} onChange={setCurrentView} />
         <CreateTaskDialog date={date} view={currentView} onCreated={onChanged} />
       </div>

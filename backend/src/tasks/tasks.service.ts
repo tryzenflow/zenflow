@@ -171,7 +171,11 @@ export class TasksService {
           t.scheduledStartTime !== null &&
           t.scheduledStartTime >= windowStart &&
           t.scheduledStartTime <= windowEnd;
-        if (inWindow || t.conflict) out.push(this.toDto(t));
+        // A placed task (even a conflicting overlap) belongs to its own day
+        // only. Truly unplaced tasks (no slot found) have no day, so surface
+        // them everywhere as standing conflicts the user still needs to fix.
+        const unplaced = t.scheduledStartTime === null;
+        if (inWindow || (t.conflict && unplaced)) out.push(this.toDto(t));
       }
     }
 
@@ -260,7 +264,10 @@ export class TasksService {
   }
 
   async reschedule(id: string, requestedStartTime: string, user: User) {
-    const { task, displaced } = await this.scheduler.reschedule(
+    // Drag-drop is a manual pin: place exactly where dropped, allow overlaps as
+    // conflicts, and never cascade other tasks. The EDF engine only runs on
+    // task create and preference edits — not on every drag.
+    const { task, displaced } = await this.scheduler.pin(
       user,
       id,
       new Date(requestedStartTime),

@@ -18,10 +18,24 @@ export function deriveState(t: StateInput, now = new Date()): TaskCardState {
   return "fluid";
 }
 
+/**
+ * Fold a manually-created overlap into a card's state. Two tasks scheduled on
+ * top of each other are a conflict the engine didn't make, so they render with
+ * the conflict treatment — unless the card is already done (a finished task can
+ * sit under a live one without it being a real clash).
+ */
+export function withOverlap(
+  state: TaskCardState,
+  overlapping: boolean,
+): TaskCardState {
+  if (!overlapping || state === "completed") return state;
+  return "conflict";
+}
+
 /** Semantic status classes — left-accent border + background per state. */
 export const TASK_CARD_CLASSES: Record<TaskCardState, string> = {
   fluid: "glass-task border-l-primary",
-  fixed: "bg-muted border-dashed border-l-muted-foreground/50",
+  fixed: "bg-muted/50 border-dashed border-l-muted-foreground/50",
   overdue:
     "bg-rose-50/40 dark:bg-rose-950/10 border-l-rose-500 text-rose-950 dark:text-rose-100",
   conflict:

@@ -5,6 +5,7 @@ import { DndContext, DragEndEvent } from "@dnd-kit/core";
 import { WEEK_STARTS_ON } from "@/utils/constants";
 import { cn } from "@/lib/utils";
 import { useUserStore } from "@/hooks/use-user-store";
+import { useDragSensors } from "@/hooks/use-drag-sensors";
 import { zonedDate, zonedWallClockToUtc } from "@/utils/tz";
 
 export function MonthView({
@@ -19,6 +20,7 @@ export function MonthView({
   onReschedule: (taskId: string, startISO: string) => void;
 }) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
+  const sensors = useDragSensors();
   const weekdays = eachDayOfInterval({
     start: startOfWeek(new Date(), { weekStartsOn: WEEK_STARTS_ON }),
     end: endOfWeek(new Date(), { weekStartsOn: WEEK_STARTS_ON }),
@@ -38,6 +40,9 @@ export function MonthView({
     const duration =
       new Date(block.end).getTime() - new Date(block.start).getTime();
     const newEnd = new Date(newStart.getTime() + duration);
+
+    // No-op drop (released on the same day it started) — don't record a move.
+    if (newStart.toISOString() === block.start) return;
 
     setEvents((evs) =>
       evs.map((ev) =>
@@ -66,7 +71,7 @@ export function MonthView({
           </div>
         ))}
       </div>
-      <DndContext onDragEnd={onDragEnd}>
+      <DndContext sensors={sensors} onDragEnd={onDragEnd}>
         <MonthGrid events={events} date={date} />
       </DndContext>
     </div>

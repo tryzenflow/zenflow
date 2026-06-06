@@ -10,6 +10,7 @@ import { DndContext, DragEndEvent } from "@dnd-kit/core";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { cn } from "@/lib/utils";
 import { useUserStore } from "@/hooks/use-user-store";
+import { useDragSensors } from "@/hooks/use-drag-sensors";
 import { DEFAULT_WORK_PREFS, getDayZones } from "@/utils/zones";
 import { WEEK_STARTS_ON } from "@/utils/constants";
 import {
@@ -35,6 +36,7 @@ export function WeekView({
 }) {
   const prefs = useUserStore((s) => s.user) ?? DEFAULT_WORK_PREFS;
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
+  const sensors = useDragSensors();
   // `date` is already in user-tz space, so the week columns are too.
   const weekDates = eachDayOfInterval({
     start: startOfWeek(date, { weekStartsOn: WEEK_STARTS_ON }),
@@ -55,6 +57,9 @@ export function WeekView({
     wall.setHours(hours, minutes, 0, 0);
     const newStart = zonedWallClockToUtc(wall, tz);
     const newEnd = new Date(newStart.getTime() + duration);
+
+    // No-op drop (released on the same slot it started) — don't record a move.
+    if (newStart.toISOString() === block.start) return;
 
     setEvents((evs) =>
       evs.map((ev) =>
@@ -116,7 +121,11 @@ export function WeekView({
         })}
       </div>
 
-      <DndContext modifiers={[restrictToVerticalAxis]} onDragEnd={onDragEnd}>
+      <DndContext
+        sensors={sensors}
+        modifiers={[restrictToVerticalAxis]}
+        onDragEnd={onDragEnd}
+      >
         <div className={cn("grid", GRID_COLS)}>
           <WeekGrid weekDates={weekDates} events={events} />
         </div>

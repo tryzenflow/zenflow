@@ -1,12 +1,14 @@
 import { useUserStore } from "@/hooks/use-user-store";
 import { cn } from "@/lib/utils";
-import { TASK_CARD_CLASSES } from "@/lib/task-card";
+import { TASK_CARD_CLASSES, withOverlap } from "@/lib/task-card";
 import { Event } from "@/types/schedule";
 import { DAILY_HORIZON } from "@/utils/constants";
+import type { BlockLayout } from "@/utils/overlap";
 import { CSS } from "@dnd-kit/utilities";
 import { useDraggable } from "@dnd-kit/core";
 import { toZonedTime } from "date-fns-tz";
 import { Lock } from "lucide-react";
+import { useRef } from "react";
 
 function minutesOfDay(iso: string, tz: string) {
   const d = toZonedTime(new Date(iso), tz);
@@ -22,15 +24,21 @@ function fmt(iso: string, tz: string) {
 
 /** Notify the layout to open the task detail panel for this block's task. */
 function openTask(taskId: string) {
-  window.dispatchEvent(new CustomEvent("zenflow:open-task", { detail: taskId }));
+  window.dispatchEvent(
+    new CustomEvent("zenflow:open-task", { detail: taskId }),
+  );
 }
+
+// Touch long-press: how long to hold, and how far a finger may drift first.
+const LONG_PRESS_MS = 450;
+const LONG_PRESS_MOVE_TOLERANCE = 8;
 
 export function ScheduledBlockItem({
   block,
-  spacing,
+  layout,
 }: {
   block: Event;
-  spacing: number;
+  layout: BlockLayout;
 }) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const startMin = minutesOfDay(block.start, tz);
@@ -39,24 +47,62 @@ export function ScheduledBlockItem({
     id: block.id,
   });
 
+  // Long-press to open on touch, without stealing the drag gesture.
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pressOrigin = useRef<{ x: number; y: number } | null>(null);
+
+  const cancelLongPress = () => {
+    if (longPressTimer.current !== null) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+    pressOrigin.current = null;
+  };
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    listeners?.onPointerDown?.(e); // keep dnd-kit's drag tracking intact
+    if (e.pointerType !== "touch") return;
+    pressOrigin.current = { x: e.clientX, y: e.clientY };
+    longPressTimer.current = setTimeout(() => {
+      openTask(block.taskId);
+      cancelLongPress();
+    }, LONG_PRESS_MS);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!pressOrigin.current) return;
+    const dx = e.clientX - pressOrigin.current.x;
+    const dy = e.clientY - pressOrigin.current.y;
+    if (Math.hypot(dx, dy) > LONG_PRESS_MOVE_TOLERANCE) cancelLongPress();
+  };
+
+  const state = withOverlap(block.state, layout.conflict);
+  const width = 100 / layout.columns;
+
   return (
     <div
-      className="absolute inset-x-0 z-10 px-0.5"
+      className="absolute z-10 px-0.5"
       ref={setNodeRef}
-      {...listeners}
       {...attributes}
-      onClick={() => openTask(block.taskId)}
+      {...listeners}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={cancelLongPress}
+      onPointerCancel={cancelLongPress}
+      onDoubleClick={() => openTask(block.taskId)}
+      title="Drag to reschedule · double-click to edit"
       style={{
         top: `${(startMin / DAILY_HORIZON) * 100}%`,
-        left: `${spacing * 16}px`,
+        left: `${layout.column * width}%`,
+        width: `${width}%`,
         height: `${((endMin - startMin) / DAILY_HORIZON) * 100}%`,
         transform: CSS.Translate.toString(transform),
       }}
     >
       <div
         className={cn(
-          "flex h-full cursor-grab flex-col overflow-hidden rounded border border-l-4 px-2 py-1 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing",
-          TASK_CARD_CLASSES[block.state],
+          "flex h-full cursor-grab flex-col overflow-hidden rounded border border-l-4 px-2 py-1 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing backdrop-blur-lg",
+          TASK_CARD_CLASSES[state],
         )}
       >
         <div className="flex items-center gap-1">
@@ -66,7 +112,7 @@ export function ScheduledBlockItem({
           <span
             className={cn(
               "truncate text-xs font-semibold",
-              block.state === "completed" && "line-through",
+              state === "completed" && "line-through",
             )}
           >
             {block.title}

@@ -151,10 +151,13 @@ export function CreateTaskDialog({
         </Button>
       </SheetTrigger>
       {/* Non-modal + no overlay + offset below the 56px header so the view can
-          still be switched (which re-scopes recurrence) while creating. */}
+          still be switched (which re-scopes recurrence) while creating.
+          Outside interactions are swallowed so navigating the calendar (paging
+          the date range, switching view) never closes the half-filled form. */}
       <SheetContent
         showOverlay={false}
-        className="inset-y-auto top-14 h-[calc(100vh-3.5rem)] w-full gap-0 p-0 sm:w-96 sm:max-w-md"
+        onInteractOutside={(e) => e.preventDefault()}
+        className="inset-y-auto top-14 h-[calc(100vh-3.5rem)] w-full gap-0 p-0 sm:w-[30rem] sm:max-w-[30rem]"
       >
         <div className="flex h-14 shrink-0 items-center border-b border-border px-5">
           <div>
