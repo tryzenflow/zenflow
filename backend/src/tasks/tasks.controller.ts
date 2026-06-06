@@ -14,6 +14,7 @@ import { CreateTaskDto } from "./dto/create-task.dto";
 import { UpdateTaskDto } from "./dto/update-task.dto";
 import { ListTasksDto } from "./dto/list-tasks.dto";
 import { RescheduleTaskDto } from "./dto/reschedule-task.dto";
+import { ResizeTaskDto } from "./dto/resize-task.dto";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
 import { type User } from "../../generated/prisma";
@@ -58,6 +59,21 @@ export class TasksController {
       user,
     );
     return { success: true, message: "Task rescheduled", data };
+  }
+
+  @Patch(":id/resize")
+  async resize(
+    @Param("id") id: string,
+    @Body() dto: ResizeTaskDto,
+    @CurrentUser() user: User,
+  ) {
+    const data = await this.tasksService.resize(
+      id,
+      dto.requestedStartTime,
+      dto.durationMinutes,
+      user,
+    );
+    return { success: true, message: "Task resized", data };
   }
 
   @Patch(":id/complete")

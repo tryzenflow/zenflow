@@ -112,14 +112,16 @@ export interface RRuleContext {
 
 /**
  * Build a single-line, FREQ-based RRULE scoped to the active view's window.
- * The backend materializes one task row per occurrence and only understands a
- * lone `RRULE:` line, so every branch emits one `FREQ=…` rule bounded by
- * `UNTIL`.
+ * The backend materializes one task row per occurrence (working days only) and
+ * only understands a lone `RRULE:` line, so every branch emits one `FREQ=…`
+ * rule bounded by `UNTIL`.
  *
- *  - Week · interval  → every X days through the end of the week
+ *  - Week · interval  → every X working days through the end of the week
  *  - Week · specific  → chosen weekdays (workdays) this week
- *  - Month · interval → every X days through the end of the month
- *  - Month · specific → chosen weeks mapped to the Nth workday of the month
+ *  - Month · interval → every X working days through the end of the month
+ *  - Month · specific → the chosen week ordinals, encoded as the BYDAY prefix
+ *    of a MONTHLY rule (e.g. weeks 1,3 → `BYDAY=1MO,3MO`). The backend reads
+ *    those ordinals and expands each to every working day of that week.
  */
 export const generateRRule = (
   values: TaskFormValues,
@@ -132,8 +134,16 @@ export const generateRRule = (
   const firstWorkday = [...workDays].sort((a, b) => a - b)[0] ?? 1;
   const interval = Math.max(1, values.interval);
 
+  // The window never extends past the deadline: an occurrence due-by date caps
+  // the recurrence's UNTIL (the backend also enforces this defensively).
+  const deadlineEnd = values.deadlineDate
+    ? new Date(`${values.deadlineDate}T23:59:59`)
+    : null;
+  const untilFor = (windowEnd: Date) =>
+    toUntil(deadlineEnd && deadlineEnd < windowEnd ? deadlineEnd : windowEnd);
+
   if (view === "week") {
-    const until = toUntil(endOfWeek(date, { weekStartsOn: 1 }));
+    const until = untilFor(endOfWeek(date, { weekStartsOn: 1 }));
     if (values.recurrenceMode === "interval") {
       return `RRULE:FREQ=DAILY;INTERVAL=${interval};UNTIL=${until}`;
     }
@@ -145,7 +155,7 @@ export const generateRRule = (
   }
 
   // view === "month"
-  const until = toUntil(endOfMonth(date));
+  const until = untilFor(endOfMonth(date));
   if (values.recurrenceMode === "interval") {
     return `RRULE:FREQ=DAILY;INTERVAL=${interval};UNTIL=${until}`;
   }

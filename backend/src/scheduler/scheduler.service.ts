@@ -11,6 +11,7 @@ import {
   type SchedulerPrefs,
 } from "./edf";
 import { type Interval, SLOT_MS, penaltyIndex } from "./slot";
+import { TIME_GRANULARITY } from "../common/constants";
 
 type PrismaTx = Prisma.TransactionClient;
 
@@ -83,8 +84,21 @@ export class SchedulerService {
     );
     let { scheduledStartTime, conflict } = placement;
     if (scheduledStartTime === null && opts.dayAnchor) {
+      // No slot fit the day (it's full, in the past, or the task overflows the
+      // work window). Anchor the occurrence on its day anyway, but only flag a
+      // conflict when it actually overlaps another task there or can't fit the
+      // day — a lone task on an otherwise empty day is not a conflict.
       scheduledStartTime = opts.dayAnchor;
-      conflict = true;
+      const anchorStart = opts.dayAnchor.getTime();
+      const anchorEnd = anchorStart + task.durationMinutes * 60_000;
+      const overflowsDay =
+        user.workStart + task.durationMinutes > user.workEnd;
+      conflict =
+        overflowsDay ||
+        others.some((o) => {
+          const iv = intervalOf(o);
+          return iv !== null && anchorStart < iv.end && iv.start < anchorEnd;
+        });
     }
     await tx.task.update({
       where: { id: task.id },
@@ -271,6 +285,107 @@ export class SchedulerService {
       // Telemetry: the user overrode the engine's choice for this slot.
       if (target.scheduledStartTime) {
         await this.bumpPenalty(user, target.scheduledStartTime, tx);
+      }
+
+      return { task: updatedTarget, displaced };
+    });
+  }
+
+  /**
+   * Manual edge-resize. Pins `taskId` at the snapped start with the new
+   * duration exactly as the user dragged it — no cascade, nothing else moves.
+   * Conflicts are recomputed pairwise from real time-overlap across all pending
+   * tasks (the new size may create or clear an overlap), mirroring {@link pin}.
+   * Records a RESIZE audit event for the target.
+   */
+  async resize(
+    user: User,
+    taskId: string,
+    requestedStart: Date,
+    durationMinutes: number,
+  ): Promise<{ task: Task; displaced: DisplacedTask[] }> {
+    return this.prisma.$transaction(async (tx) => {
+      const tasks = await this.pendingTasks(user.id, tx);
+      const target = tasks.find((t) => t.id === taskId);
+      if (!target) throw new NotFoundException(`Cannot find task ${taskId}`);
+
+      // Snap start and duration to the 15-minute grid the calendar drops onto.
+      const snappedStart = new Date(
+        Math.round(requestedStart.getTime() / SLOT_MS) * SLOT_MS,
+      );
+      const snappedDuration = Math.max(
+        TIME_GRANULARITY,
+        Math.round(durationMinutes / TIME_GRANULARITY) * TIME_GRANULARITY,
+      );
+
+      // Project the resize, then recompute every task's conflict from real
+      // time-overlap (a placed task clashes if it overlaps another placed task).
+      const projected = tasks.map((t) =>
+        t.id === taskId
+          ? {
+              ...t,
+              scheduledStartTime: snappedStart,
+              durationMinutes: snappedDuration,
+            }
+          : t,
+      );
+      const overlaps = (a: Interval, b: Interval) =>
+        a.start < b.end && b.start < a.end;
+      const conflictOf = new Map<string, boolean>();
+      for (const t of projected) {
+        const iv = intervalOf(t);
+        if (!iv) {
+          conflictOf.set(t.id, t.conflict); // unplaced — keep engine's verdict
+          continue;
+        }
+        conflictOf.set(
+          t.id,
+          projected.some((o) => {
+            if (o.id === t.id) return false;
+            const oiv = intervalOf(o);
+            return oiv ? overlaps(iv, oiv) : false;
+          }),
+        );
+      }
+
+      const before = new Map(tasks.map((t) => [t.id, t]));
+      const displaced: DisplacedTask[] = [];
+      let updatedTarget = target;
+
+      for (const t of tasks) {
+        const nextConflict = conflictOf.get(t.id) ?? t.conflict;
+        if (t.id === taskId) {
+          const updated = await tx.task.update({
+            where: { id: t.id },
+            data: {
+              scheduledStartTime: snappedStart,
+              durationMinutes: snappedDuration,
+              conflict: nextConflict,
+            },
+          });
+          updatedTarget = updated;
+          await tx.taskEvent.create({
+            data: {
+              taskId: t.id,
+              userId: user.id,
+              eventType: "RESIZE",
+              oldSnapshot: this.snapshot(before.get(t.id)!),
+              newSnapshot: this.snapshot(updated),
+              rewardScore: 0.0, // user override
+            },
+          });
+        } else {
+          // Only conflict can change for the others — the resize never moves them.
+          if (t.conflict === nextConflict) continue;
+          const updated = await tx.task.update({
+            where: { id: t.id },
+            data: { conflict: nextConflict },
+          });
+          displaced.push({
+            taskId: t.id,
+            newScheduledStartTime: updated.scheduledStartTime,
+          });
+        }
       }
 
       return { task: updatedTarget, displaced };

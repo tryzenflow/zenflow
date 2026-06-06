@@ -11,7 +11,7 @@ import { SchedulerService } from "../scheduler/scheduler.service";
 import { Prisma, type Task, type User } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { minutesToUtc } from "../common/utils";
-import { localDateStr } from "../scheduler/slot";
+import { addDaysStr, localDateStr } from "../scheduler/slot";
 import { viewDayRange, sumWorkMinutes } from "../scheduler/horizon";
 import { occurrenceDays } from "./utils/recurrence";
 import { CreateTaskDto } from "./dto/create-task.dto";
@@ -71,7 +71,31 @@ export class TasksService {
     // every row sharing the same rrule + seriesId but owning a distinct id. The
     // EDF engine then places each instance, confined to its own day.
     const tod = isFixed ? startTime ?? 0 : user.workStart;
-    const days = occurrenceDays(rrule, view ?? "day", anchorDateStr, tz, tod);
+    // Recurrence never materializes past the deadline (the rrule's window may
+    // run later than the task is due).
+    const deadlineDateStr = rest.deadline
+      ? localDateStr(new Date(rest.deadline), tz)
+      : undefined;
+    // Recurrence starts from "now", not the window start: when today falls
+    // inside the active week/month, occurrences begin today — or tomorrow if
+    // today's working hours are already over (bound by the work day's end).
+    const now = new Date();
+    const nowDateStr = localDateStr(now, tz);
+    const todayWorkEnd = minutesToUtc(nowDateStr, user.workEnd, tz);
+    const floorDateStr =
+      now.getTime() >= todayWorkEnd.getTime()
+        ? addDaysStr(nowDateStr, 1)
+        : nowDateStr;
+    const days = occurrenceDays(
+      rrule,
+      view ?? "day",
+      anchorDateStr,
+      tz,
+      tod,
+      user.workDays,
+      deadlineDateStr,
+      floorDateStr,
+    );
     const seriesId = rrule ? randomUUID() : null;
 
     try {
@@ -334,6 +358,31 @@ export class TasksService {
       user,
       id,
       new Date(requestedStartTime),
+    );
+    return {
+      task: this.toDto(task),
+      displaced: displaced.map((d) => ({
+        taskId: d.taskId,
+        newScheduledStartTime: d.newScheduledStartTime
+          ? d.newScheduledStartTime.toISOString()
+          : null,
+      })),
+    };
+  }
+
+  async resize(
+    id: string,
+    requestedStartTime: string,
+    durationMinutes: number,
+    user: User,
+  ) {
+    // Edge-resize is a manual pin that also changes duration: place exactly
+    // where dropped, allow overlaps as conflicts, never cascade other tasks.
+    const { task, displaced } = await this.scheduler.resize(
+      user,
+      id,
+      new Date(requestedStartTime),
+      durationMinutes,
     );
     return {
       task: this.toDto(task),

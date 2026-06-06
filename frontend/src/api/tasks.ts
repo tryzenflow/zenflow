@@ -52,6 +52,18 @@ export async function rescheduleTask(
   return data.data;
 }
 
+export async function resizeTask(
+  id: string,
+  requestedStartTime: string,
+  durationMinutes: number,
+): Promise<RescheduleResponse> {
+  const { data } = await api.patch(`/tasks/${id}/resize`, {
+    requestedStartTime,
+    durationMinutes,
+  });
+  return data.data;
+}
+
 export async function completeTask(id: string): Promise<Task> {
   const { data } = await api.patch(`/tasks/${id}/complete`);
   return data.data;

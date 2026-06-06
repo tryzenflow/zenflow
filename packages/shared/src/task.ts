@@ -106,3 +106,13 @@ export interface RescheduleInput {
   /** ISO-8601 start the user dropped the task at (snapped to the 15-min grid). */
   requestedStartTime: string;
 }
+
+export interface ResizeInput {
+  /**
+   * ISO-8601 start (snapped to the 15-min grid). Unchanged from the original
+   * for a bottom-edge resize; moved earlier for a top-edge resize.
+   */
+  requestedStartTime: string;
+  /** New duration in minutes (positive multiple of 15). */
+  durationMinutes: number;
+}

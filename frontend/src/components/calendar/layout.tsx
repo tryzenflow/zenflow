@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Event, ViewMode } from "@/types/schedule";
 import { CalendarHeader } from "./header";
 import { useViewShortcuts } from "@/hooks/use-view-shortcuts";
@@ -8,7 +8,7 @@ import { MonthView } from "./month-view";
 import { CalendarSidebar, SidebarBody } from "./sidebar";
 import { Sheet, SheetContent, SheetTitle } from "../ui/sheet";
 import { EditTaskDialog } from "../tasks/edit-task-dialog";
-import { listTasks, rescheduleTask } from "@/api/tasks";
+import { listTasks, rescheduleTask, resizeTask } from "@/api/tasks";
 import { tasksToBlocks } from "@/utils/blocks";
 import type { Task, TasksMeta } from "@zenflow/shared";
 import { isAxiosError } from "axios";
@@ -69,6 +69,54 @@ export function CalendarLayout() {
       await refetch(); // reconcile with the server (applies cascade / reverts)
     }
   }
+
+  async function onResize(
+    taskId: string,
+    startISO: string,
+    durationMinutes: number,
+  ) {
+    // Optimistic: reflect the new size immediately so the block doesn't snap
+    // back to its old height for the round-trip. refetch() reconciles after.
+    setBlocks((bs) =>
+      bs.map((b) =>
+        b.taskId === taskId
+          ? {
+              ...b,
+              start: startISO,
+              end: new Date(
+                new Date(startISO).getTime() + durationMinutes * 60_000,
+              ).toISOString(),
+            }
+          : b,
+      ),
+    );
+    try {
+      await resizeTask(taskId, startISO, durationMinutes);
+    } catch (error) {
+      if (isAxiosError(error))
+        toast.error(error.response?.data?.message || "Failed to resize");
+    } finally {
+      await refetch();
+    }
+  }
+
+  // Blocks dispatch resize requests via a window event (see ScheduledBlockItem),
+  // mirroring zenflow:open-task. A ref keeps the listener bound to the latest
+  // closure without re-subscribing on every render.
+  const onResizeRef = useRef(onResize);
+  onResizeRef.current = onResize;
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { taskId, startISO, durationMinutes } = (e as CustomEvent).detail;
+      onResizeRef.current(taskId, startISO, durationMinutes);
+    };
+    window.addEventListener("zenflow:resize-task", handler as EventListener);
+    return () =>
+      window.removeEventListener(
+        "zenflow:resize-task",
+        handler as EventListener,
+      );
+  }, []);
 
   // The agenda mirrors the active view's window (the backend already scopes
   // `blocks` to day/week/month), sorted chronologically; the sidebar groups by
