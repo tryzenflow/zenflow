@@ -1,4 +1,5 @@
 import {
+  displayDayRange,
   monthRange,
   sumWorkMinutes,
   viewDayRange,
@@ -40,6 +41,38 @@ describe("viewDayRange", () => {
     expect(viewDayRange("month", "2026-06-10")).toEqual({
       startStr: "2026-06-01",
       endStr: "2026-06-30",
+    });
+  });
+});
+
+describe("displayDayRange", () => {
+  it("day → identical to viewDayRange (no padding)", () => {
+    expect(displayDayRange("day", "2026-06-10")).toEqual(
+      viewDayRange("day", "2026-06-10"),
+    );
+  });
+
+  it("week → identical to viewDayRange (no padding)", () => {
+    expect(displayDayRange("week", "2026-06-10")).toEqual(
+      viewDayRange("week", "2026-06-10"),
+    );
+  });
+
+  it("month starting Thursday pads the grid into the previous month", () => {
+    // Oct 2026: Oct 1 is a Thursday, Oct 31 is a Saturday.
+    // Grid = Mon 2026-09-28 .. Sun 2026-11-01.
+    expect(displayDayRange("month", "2026-10-15")).toEqual({
+      startStr: "2026-09-28",
+      endStr: "2026-11-01",
+    });
+  });
+
+  it("month starting Monday has no leading pad", () => {
+    // Jun 2026: Jun 1 is a Monday, Jun 30 is a Tuesday.
+    // Grid = Mon 2026-06-01 .. Sun 2026-07-05.
+    expect(displayDayRange("month", "2026-06-15")).toEqual({
+      startStr: "2026-06-01",
+      endStr: "2026-07-05",
     });
   });
 });

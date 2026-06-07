@@ -42,6 +42,27 @@ export function viewDayRange(
   }
 }
 
+/**
+ * Inclusive local-date range to FETCH/DISPLAY for a view, which can be wider
+ * than the focal {@link viewDayRange}. For `month`, the focal month is padded
+ * out to whole Monday-started weeks so the response covers every cell the
+ * frontend month grid renders (`startOfWeek(startOfMonth)`..`endOfWeek(
+ * endOfMonth)`, Monday week start) — otherwise the leading/trailing
+ * adjacent-month days would be blank. `week`/`day` need no padding and are
+ * identical to {@link viewDayRange}.
+ */
+export function displayDayRange(
+  view: ViewMode,
+  refDateStr: string,
+): { startStr: string; endStr: string } {
+  if (view !== "month") return viewDayRange(view, refDateStr);
+  const { startStr: monthStart, endStr: monthEnd } = monthRange(refDateStr);
+  return {
+    startStr: weekStartStr(monthStart),
+    endStr: addDaysStr(weekStartStr(monthEnd), 6),
+  };
+}
+
 /** Walk backwards from `dateStr` (inclusive) to the nearest work day. */
 export function lastWorkdayOnOrBefore(
   dateStr: string,

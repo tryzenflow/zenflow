@@ -12,7 +12,11 @@ import { Prisma, type Task, type User } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { minutesToUtc } from "../common/utils";
 import { addDaysStr, localDateStr } from "../scheduler/slot";
-import { viewDayRange, sumWorkMinutes } from "../scheduler/horizon";
+import {
+  displayDayRange,
+  viewDayRange,
+  sumWorkMinutes,
+} from "../scheduler/horizon";
 import { occurrenceDays } from "./utils/recurrence";
 import { CreateTaskDto } from "./dto/create-task.dto";
 import { UpdateTaskDto } from "./dto/update-task.dto";
@@ -199,9 +203,17 @@ export class TasksService {
 
   async list(dto: ListTasksDto, user: User): Promise<TasksListResponse> {
     const tz = user.timezone;
+    // Focal window: the actual view extent (month = 1st..last). Drives meta.
     const { startStr, endStr } = viewDayRange(dto.view, dto.date);
-    const windowStart = fromZonedTime(`${startStr}T00:00:00`, tz);
-    const windowEnd = fromZonedTime(`${endStr}T23:59:59.999`, tz);
+    const focalStart = fromZonedTime(`${startStr}T00:00:00`, tz);
+    const focalEnd = fromZonedTime(`${endStr}T23:59:59.999`, tz);
+    // Display window: what the frontend grid renders. For month this pads out
+    // to whole Monday-started weeks so adjacent-month edge cells aren't blank;
+    // for week/day it equals the focal window.
+    const { startStr: displayStartStr, endStr: displayEndStr } =
+      displayDayRange(dto.view, dto.date);
+    const displayStart = fromZonedTime(`${displayStartStr}T00:00:00`, tz);
+    const displayEnd = fromZonedTime(`${displayEndStr}T23:59:59.999`, tz);
 
     const where: Prisma.TaskWhereInput = { userId: user.id };
     if (dto.status && dto.status !== "all") where.status = dto.status;
@@ -211,23 +223,25 @@ export class TasksService {
     // Recurring series are materialized at creation, so every occurrence is a
     // concrete row placed on its own day — there's no virtual expansion here.
     const out: SharedTask[] = [];
+    // Meta stays scoped to the FOCAL month: padded edge-day tasks are rendered
+    // but must not inflate capacity/conflict figures.
+    let totalAllocatedMinutes = 0;
+    let conflictCount = 0;
     for (const t of tasks) {
-      const inWindow =
-        t.scheduledStartTime !== null &&
-        t.scheduledStartTime >= windowStart &&
-        t.scheduledStartTime <= windowEnd;
+      const placedAt = t.scheduledStartTime;
       // A placed task (even a conflicting overlap) belongs to its own day only.
       // Truly unplaced tasks (no slot found) have no day, so surface them
       // everywhere as standing conflicts the user still needs to fix.
-      const unplaced = t.scheduledStartTime === null;
-      if (inWindow || (t.conflict && unplaced)) out.push(this.toDto(t));
-    }
+      const unplaced = placedAt === null;
+      const inDisplay =
+        placedAt !== null && placedAt >= displayStart && placedAt <= displayEnd;
+      if (inDisplay || (t.conflict && unplaced)) out.push(this.toDto(t));
 
-    const totalAllocatedMinutes = out.reduce(
-      (sum, t) =>
-        sum + (t.scheduledStartTime && !t.conflict ? t.durationMinutes : 0),
-      0,
-    );
+      const inFocal =
+        placedAt !== null && placedAt >= focalStart && placedAt <= focalEnd;
+      if (inFocal && !t.conflict) totalAllocatedMinutes += t.durationMinutes;
+      if (t.conflict && (inFocal || unplaced)) conflictCount += 1;
+    }
 
     return {
       tasks: out,
@@ -240,7 +254,7 @@ export class TasksService {
           user.workEnd,
           user.workDays,
         ),
-        conflictCount: out.filter((t) => t.conflict).length,
+        conflictCount,
       },
     };
   }
