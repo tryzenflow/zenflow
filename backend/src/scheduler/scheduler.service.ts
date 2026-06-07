@@ -58,6 +58,9 @@ export class SchedulerService {
    *    `deadline` — used to confine a recurring occurrence to its own day.
    *  - `dayAnchor` keeps a recurring occurrence on its day even when no slot
    *    fits (placed there as a standing conflict rather than floating unplaced).
+   *  - `ignoreWorkDays` lets a recurring occurrence place within its pinned
+   *    day's work hours even when that day is a non-working day (the user chose
+   *    that weekday on purpose).
    */
   async placeNewTask(
     user: User,
@@ -67,6 +70,7 @@ export class SchedulerService {
       earliest?: Date;
       placementDeadline?: Date;
       dayAnchor?: Date;
+      ignoreWorkDays?: boolean;
     } = {},
     now = new Date(),
   ): Promise<{ scheduledStartTime: Date | null; conflict: boolean }> {
@@ -81,6 +85,7 @@ export class SchedulerService {
       others.map((t) => this.toEdf(t)),
       now,
       opts.earliest,
+      { ignoreWorkDays: opts.ignoreWorkDays },
     );
     let { scheduledStartTime, conflict } = placement;
     if (scheduledStartTime === null && opts.dayAnchor) {

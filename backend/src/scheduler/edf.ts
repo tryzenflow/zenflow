@@ -37,6 +37,11 @@ export function compareEdf(a: EdfTask, b: EdfTask): number {
 /**
  * Earliest contiguous work-hours slot of `durationMinutes` that starts at/after
  * `earliest` (and `now`) and ends before `deadline`. Returns null on conflict.
+ *
+ * With `opts.ignoreWorkDays` the non-working-day skip is suppressed, so a slot
+ * can be placed within the work hours of a non-working day. This is only used
+ * for recurring occurrences, which are pinned to a single day via
+ * `earliest`+`deadline`, so it can only ever consider that one chosen day.
  */
 export function findSlot(
   prefs: SchedulerPrefs,
@@ -45,6 +50,7 @@ export function findSlot(
   occupied: Interval[],
   now: Date,
   earliest?: Date,
+  opts: { ignoreWorkDays?: boolean } = {},
 ): Date | null {
   const tz = prefs.timezone;
   const durMs = durationMs(durationMinutes);
@@ -56,7 +62,8 @@ export function findSlot(
   for (let d = 0; d <= MAX_SCAN_DAYS; d++) {
     const dateStr = addDaysStr(fromStr, d);
     if (deadlineDateStr && dateStr > deadlineDateStr) break;
-    if (!prefs.workDays.includes(isoWeekday(dateStr))) continue;
+    if (!opts.ignoreWorkDays && !prefs.workDays.includes(isoWeekday(dateStr)))
+      continue;
 
     const win = workWindowFor(dateStr, prefs.workStart, prefs.workEnd, tz);
     let cand = ceilToSlot(Math.max(win.start, lowerMs));
@@ -119,6 +126,7 @@ export function placeOne(
   others: EdfTask[],
   now: Date,
   earliest?: Date,
+  opts: { ignoreWorkDays?: boolean } = {},
 ): Placement {
   if (task.fixed) {
     return {
@@ -137,6 +145,7 @@ export function placeOne(
     occupied,
     now,
     earliest,
+    opts,
   );
   return slot
     ? { id: task.id, scheduledStartTime: slot, conflict: false }

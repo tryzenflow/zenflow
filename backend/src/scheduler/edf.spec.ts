@@ -77,6 +77,35 @@ describe("findSlot", () => {
     );
     expect(iso(slot)).toBe("2026-06-15T09:00:00.000Z");
   });
+
+  it("skips a non-working day by default (ignoreWorkDays omitted)", () => {
+    // 2026-06-13 is a Saturday; earliest pins the search to it, but the default
+    // workday-only behaviour rolls forward to Monday 06-15.
+    const slot = findSlot(
+      prefs,
+      60,
+      null,
+      [],
+      MON_MIDNIGHT,
+      new Date("2026-06-13T00:00:00Z"), // Saturday
+    );
+    expect(iso(slot)).toBe("2026-06-15T09:00:00.000Z");
+  });
+
+  it("places within a non-working day's work window when ignoreWorkDays is set", () => {
+    // Saturday 06-13: with ignoreWorkDays it places at that day's work start,
+    // pinned there by the earliest anchor + same-day deadline.
+    const slot = findSlot(
+      prefs,
+      60,
+      new Date("2026-06-13T17:00:00Z"), // day work-end as placement deadline
+      [],
+      MON_MIDNIGHT,
+      new Date("2026-06-13T00:00:00Z"),
+      { ignoreWorkDays: true },
+    );
+    expect(iso(slot)).toBe("2026-06-13T09:00:00.000Z");
+  });
 });
 
 describe("scheduleAll", () => {

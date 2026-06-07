@@ -139,6 +139,9 @@ export class TasksService {
               dayAnchor: recurring
                 ? minutesToUtc(dateStr, user.workStart, tz)
                 : undefined,
+              // A recurring occurrence is pinned to its chosen day, which may be
+              // a non-working day; place it within that day's work hours anyway.
+              ignoreWorkDays: recurring,
             });
           }
 

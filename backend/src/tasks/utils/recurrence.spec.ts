@@ -11,7 +11,7 @@ describe("occurrenceDays", () => {
   const anchor = "2026-06-03";
   const { startStr } = viewDayRange("week", anchor); // Mon 2026-06-01
 
-  it("materializes one occurrence per working day for a daily rule across the week", () => {
+  it("materializes one occurrence per day for a daily rule across the week", () => {
     const days = occurrenceDays(
       "RRULE:FREQ=DAILY;INTERVAL=1",
       "week",
@@ -20,13 +20,13 @@ describe("occurrenceDays", () => {
       WORK_START,
       WORKDAYS,
     );
-    // The weekend is skipped — only the five working days remain.
-    expect(days).toHaveLength(5);
+    // Every day of the week — the weekend is no longer skipped.
+    expect(days).toHaveLength(7);
     expect(days[0]).toBe(startStr); // anchored to the week's first day
-    expect(days.every((d) => WORKDAYS.includes(isoWeekday(d)))).toBe(true);
+    expect(days[days.length - 1]).toBe("2026-06-07"); // Sunday
   });
 
-  it("steps 'every X days' over working days only", () => {
+  it("steps 'every X days' across the window, incl. non-working days", () => {
     const days = occurrenceDays(
       "RRULE:FREQ=DAILY;INTERVAL=2",
       "week",
@@ -35,8 +35,8 @@ describe("occurrenceDays", () => {
       WORK_START,
       WORKDAYS,
     );
-    // Mon, Wed, Fri, (Sun→dropped) → three working days.
-    expect(days.map((d) => isoWeekday(d))).toEqual([1, 3, 5]);
+    // Mon, Wed, Fri, Sun — the Sunday is no longer dropped.
+    expect(days.map((d) => isoWeekday(d))).toEqual([1, 3, 5, 7]);
   });
 
   it("expands a weekly BYDAY rule to just the chosen weekdays", () => {
@@ -51,6 +51,22 @@ describe("occurrenceDays", () => {
     expect(days).toHaveLength(3);
     // Mon(1) Wed(3) Fri(5)
     expect(days.map((d) => isoWeekday(d))).toEqual([1, 3, 5]);
+  });
+
+  it("keeps a chosen non-working day in a weekly BYDAY rule", () => {
+    // BYDAY=MO,SA with Mon–Fri workdays: Saturday was chosen on purpose, so
+    // both the Monday and the Saturday of the week must materialize.
+    const days = occurrenceDays(
+      "RRULE:FREQ=WEEKLY;BYDAY=MO,SA",
+      "week",
+      anchor,
+      TZ,
+      WORK_START,
+      WORKDAYS,
+    );
+    // Mon 2026-06-01, Sat 2026-06-06 — the Saturday is NOT dropped.
+    expect(days).toEqual(["2026-06-01", "2026-06-06"]);
+    expect(days.map((d) => isoWeekday(d))).toEqual([1, 6]);
   });
 
   it("collapses a non-recurring task to its single anchor day", () => {
@@ -72,7 +88,7 @@ describe("occurrenceDays", () => {
     ).toEqual([anchor]);
   });
 
-  it("stays inside the active month and skips non-working days for a daily rule", () => {
+  it("stays inside the active month for a daily rule (every day, incl. weekends)", () => {
     const monthAnchor = "2026-06-15";
     const days = occurrenceDays(
       "RRULE:FREQ=DAILY;INTERVAL=1",
@@ -82,10 +98,10 @@ describe("occurrenceDays", () => {
       WORK_START,
       WORKDAYS,
     );
-    expect(days).toHaveLength(22); // June 2026 has 22 working days
+    // Every calendar day of June 2026 — non-working days are no longer dropped.
+    expect(days).toHaveLength(30);
     expect(days[0]).toBe("2026-06-01");
     expect(days[days.length - 1]).toBe("2026-06-30");
-    expect(days.every((d) => WORKDAYS.includes(isoWeekday(d)))).toBe(true);
   });
 
   it("starts recurrence from the floor day (now), not the window start", () => {
@@ -100,7 +116,13 @@ describe("occurrenceDays", () => {
       undefined,
       "2026-06-03", // floor = Wed
     );
-    expect(days).toEqual(["2026-06-03", "2026-06-04", "2026-06-05"]);
+    expect(days).toEqual([
+      "2026-06-03",
+      "2026-06-04",
+      "2026-06-05",
+      "2026-06-06",
+      "2026-06-07",
+    ]);
   });
 
   it("floors month recurrence at now and skips the already-passed weeks", () => {
@@ -197,8 +219,9 @@ describe("occurrenceDays", () => {
     ]);
   });
 
-  it("drops non-workday weekdays from a month weekly BYDAY rule", () => {
-    // BYDAY=MO,SA — Saturday isn't a workday, so only the five Mondays remain.
+  it("keeps non-workday weekdays in a month weekly BYDAY rule", () => {
+    // BYDAY=MO,SA — Saturday was chosen on purpose, so every Monday AND every
+    // Saturday of June 2026 materializes (Saturdays are no longer dropped).
     const days = occurrenceDays(
       "RRULE:FREQ=WEEKLY;BYDAY=MO,SA",
       "month",
@@ -208,30 +231,82 @@ describe("occurrenceDays", () => {
       WORKDAYS,
     );
     expect(days).toEqual([
-      "2026-06-01",
-      "2026-06-08",
-      "2026-06-15",
-      "2026-06-22",
-      "2026-06-29",
+      "2026-06-01", // Mon
+      "2026-06-06", // Sat
+      "2026-06-08", // Mon
+      "2026-06-13", // Sat
+      "2026-06-15", // Mon
+      "2026-06-20", // Sat
+      "2026-06-22", // Mon
+      "2026-06-27", // Sat
+      "2026-06-29", // Mon
     ]);
   });
 
-  it("bounds month 'specific weeks' by the deadline too", () => {
+  it("expands month 'weeks × weekdays' to the chosen weekday(s) of each chosen week", () => {
+    // June 2026: June 1 is a Monday, so calendar-row 1 Monday = 06-01,
+    // Wed = 06-03; row 3 Monday = 06-15, Wed = 06-17.
     const days = occurrenceDays(
-      "RRULE:FREQ=MONTHLY;BYDAY=1MO,3MO",
+      "RRULE:FREQ=MONTHLY;BYDAY=1MO,1WE,3MO,3WE",
       "month",
       "2026-06-15",
       TZ,
       WORK_START,
       WORKDAYS,
-      "2026-06-03", // due before week 3 — only week 1 days up to the 3rd survive
     );
-    expect(days).toEqual(["2026-06-01", "2026-06-02", "2026-06-03"]);
+    expect(days).toEqual([
+      "2026-06-01", // row 1 Mon
+      "2026-06-03", // row 1 Wed
+      "2026-06-15", // row 3 Mon
+      "2026-06-17", // row 3 Wed
+    ]);
   });
 
-  it("floors month 'specific weeks' at now and drops the already-passed week", () => {
+  it("keeps a chosen non-working weekday in a month 'weeks × weekdays' rule", () => {
+    // 1SA selects Saturday of calendar-row 1 (06-06) — a non-working day that
+    // is kept because the user chose that weekday on purpose.
     const days = occurrenceDays(
-      "RRULE:FREQ=MONTHLY;BYDAY=1MO,3MO",
+      "RRULE:FREQ=MONTHLY;BYDAY=1MO,1SA",
+      "month",
+      "2026-06-15",
+      TZ,
+      WORK_START,
+      WORKDAYS,
+    );
+    expect(days).toEqual(["2026-06-01", "2026-06-06"]);
+    expect(days.map((d) => isoWeekday(d))).toEqual([1, 6]);
+  });
+
+  it("drops month 'weeks × weekdays' days that fall outside the month", () => {
+    // Calendar-row 5 of June 2026 = week of Mon 06-29; its Wed (07-01) is in
+    // July and must be dropped, while Mon 06-29 survives.
+    const days = occurrenceDays(
+      "RRULE:FREQ=MONTHLY;BYDAY=5MO,5WE",
+      "month",
+      "2026-06-15",
+      TZ,
+      WORK_START,
+      WORKDAYS,
+    );
+    expect(days).toEqual(["2026-06-29"]);
+  });
+
+  it("bounds month 'weeks × weekdays' by the deadline too", () => {
+    const days = occurrenceDays(
+      "RRULE:FREQ=MONTHLY;BYDAY=1MO,1WE,3MO,3WE",
+      "month",
+      "2026-06-15",
+      TZ,
+      WORK_START,
+      WORKDAYS,
+      "2026-06-03", // due in week 1 — only the week-1 days up to the 3rd survive
+    );
+    expect(days).toEqual(["2026-06-01", "2026-06-03"]);
+  });
+
+  it("floors month 'weeks × weekdays' at now and drops the already-passed week", () => {
+    const days = occurrenceDays(
+      "RRULE:FREQ=MONTHLY;BYDAY=1MO,1WE,3MO,3WE",
       "month",
       "2026-06-15",
       TZ,
@@ -240,39 +315,6 @@ describe("occurrenceDays", () => {
       undefined,
       "2026-06-15", // created mid-month — week 1 has already passed
     );
-    // Only week 3's working days (Mon 06-15 …) remain.
-    expect(days).toEqual([
-      "2026-06-15",
-      "2026-06-16",
-      "2026-06-17",
-      "2026-06-18",
-      "2026-06-19",
-    ]);
-  });
-
-  it("expands month 'specific weeks' to every working day of each chosen week", () => {
-    // BYDAY=1MO,3MO encodes weeks 1 and 3 of June 2026.
-    const days = occurrenceDays(
-      "RRULE:FREQ=MONTHLY;BYDAY=1MO,3MO",
-      "month",
-      "2026-06-15",
-      TZ,
-      WORK_START,
-      WORKDAYS,
-    );
-    expect(days).toEqual([
-      // Week 1 (Mon 06-01 …) — working days within June.
-      "2026-06-01",
-      "2026-06-02",
-      "2026-06-03",
-      "2026-06-04",
-      "2026-06-05",
-      // Week 3 (Mon 06-15 …).
-      "2026-06-15",
-      "2026-06-16",
-      "2026-06-17",
-      "2026-06-18",
-      "2026-06-19",
-    ]);
+    expect(days).toEqual(["2026-06-15", "2026-06-17"]);
   });
 });
