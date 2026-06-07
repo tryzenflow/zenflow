@@ -215,4 +215,64 @@ describe("occurrenceDays", () => {
       "2026-06-29",
     ]);
   });
+
+  it("bounds month 'specific weeks' by the deadline too", () => {
+    const days = occurrenceDays(
+      "RRULE:FREQ=MONTHLY;BYDAY=1MO,3MO",
+      "month",
+      "2026-06-15",
+      TZ,
+      WORK_START,
+      WORKDAYS,
+      "2026-06-03", // due before week 3 — only week 1 days up to the 3rd survive
+    );
+    expect(days).toEqual(["2026-06-01", "2026-06-02", "2026-06-03"]);
+  });
+
+  it("floors month 'specific weeks' at now and drops the already-passed week", () => {
+    const days = occurrenceDays(
+      "RRULE:FREQ=MONTHLY;BYDAY=1MO,3MO",
+      "month",
+      "2026-06-15",
+      TZ,
+      WORK_START,
+      WORKDAYS,
+      undefined,
+      "2026-06-15", // created mid-month — week 1 has already passed
+    );
+    // Only week 3's working days (Mon 06-15 …) remain.
+    expect(days).toEqual([
+      "2026-06-15",
+      "2026-06-16",
+      "2026-06-17",
+      "2026-06-18",
+      "2026-06-19",
+    ]);
+  });
+
+  it("expands month 'specific weeks' to every working day of each chosen week", () => {
+    // BYDAY=1MO,3MO encodes weeks 1 and 3 of June 2026.
+    const days = occurrenceDays(
+      "RRULE:FREQ=MONTHLY;BYDAY=1MO,3MO",
+      "month",
+      "2026-06-15",
+      TZ,
+      WORK_START,
+      WORKDAYS,
+    );
+    expect(days).toEqual([
+      // Week 1 (Mon 06-01 …) — working days within June.
+      "2026-06-01",
+      "2026-06-02",
+      "2026-06-03",
+      "2026-06-04",
+      "2026-06-05",
+      // Week 3 (Mon 06-15 …).
+      "2026-06-15",
+      "2026-06-16",
+      "2026-06-17",
+      "2026-06-18",
+      "2026-06-19",
+    ]);
+  });
 });
