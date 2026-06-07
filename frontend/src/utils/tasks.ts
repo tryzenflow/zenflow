@@ -45,11 +45,10 @@ export const taskSchema = z.object({
   /**
    * View-scoped recurrence shape:
    *  - "interval" → "Every X days" (FREQ=DAILY;INTERVAL=X)
-   *  - "specific" → Week: "Specific days" (BYDAY) · Month: "Specific weeks" (byweeks)
+   *  - "specific" → Week & Month: "Specific days" (BYDAY weekday chips). Month
+   *    plans the selected weekdays across the whole month window.
    */
   recurrenceMode: z.enum(["interval", "specific"]).default("specific"),
-  /** Month "Specific weeks": ordinal week-of-month positions (1..5). */
-  byweeks: z.array(z.number()).default([1]),
   frequency: z.enum(["YEARLY", "MONTHLY", "WEEKLY", "DAILY"]),
   interval: z.number().min(1),
   byday: z.array(z.string()),
@@ -119,9 +118,10 @@ export interface RRuleContext {
  *  - Week · interval  → every X working days through the end of the week
  *  - Week · specific  → chosen weekdays (workdays) this week
  *  - Month · interval → every X working days through the end of the month
- *  - Month · specific → the chosen week ordinals, encoded as the BYDAY prefix
- *    of a MONTHLY rule (e.g. weeks 1,3 → `BYDAY=1MO,3MO`). The backend reads
- *    those ordinals and expands each to every working day of that week.
+ *  - Month · specific → the chosen weekdays (workdays) repeated across the whole
+ *    month, encoded as a WEEKLY BYDAY rule bounded to the end of the month
+ *    (e.g. Mon+Wed → `FREQ=WEEKLY;BYDAY=MO,WE`). The backend expands it to every
+ *    matching working day within the month window.
  */
 export const generateRRule = (
   values: TaskFormValues,
@@ -142,16 +142,20 @@ export const generateRRule = (
   const untilFor = (windowEnd: Date) =>
     toUntil(deadlineEnd && deadlineEnd < windowEnd ? deadlineEnd : windowEnd);
 
+  // Selected weekdays constrained to workdays, falling back to the first
+  // workday when none remain. Shared by the week and month "specific" branches.
+  const specificByday = (): string => {
+    const workdayCodes = workDays.map((d) => ISO_TO_BYDAY[d]);
+    const days = values.byday.filter((d) => workdayCodes.includes(d));
+    return (days.length ? days : [ISO_TO_BYDAY[firstWorkday]]).join(",");
+  };
+
   if (view === "week") {
     const until = untilFor(endOfWeek(date, { weekStartsOn: 1 }));
     if (values.recurrenceMode === "interval") {
       return `RRULE:FREQ=DAILY;INTERVAL=${interval};UNTIL=${until}`;
     }
-    // Constrain to workdays; fall back to the first workday if none remain.
-    const workdayCodes = workDays.map((d) => ISO_TO_BYDAY[d]);
-    const days = values.byday.filter((d) => workdayCodes.includes(d));
-    const byday = days.length ? days : [ISO_TO_BYDAY[firstWorkday]];
-    return `RRULE:FREQ=WEEKLY;BYDAY=${byday.join(",")};UNTIL=${until}`;
+    return `RRULE:FREQ=WEEKLY;BYDAY=${specificByday()};UNTIL=${until}`;
   }
 
   // view === "month"
@@ -159,11 +163,8 @@ export const generateRRule = (
   if (values.recurrenceMode === "interval") {
     return `RRULE:FREQ=DAILY;INTERVAL=${interval};UNTIL=${until}`;
   }
-  // "Specific weeks" → Nth <first workday> of the month (e.g. 1MO,3MO).
-  const wd = ISO_TO_BYDAY[firstWorkday];
-  const weeks = values.byweeks.length ? values.byweeks : [1];
-  const byday = weeks.map((n) => `${n}${wd}`).join(",");
-  return `RRULE:FREQ=MONTHLY;BYDAY=${byday};UNTIL=${until}`;
+  // "Specific days" → chosen weekdays repeated across the whole month window.
+  return `RRULE:FREQ=WEEKLY;BYDAY=${specificByday()};UNTIL=${until}`;
 };
 
 export const parseRRule = (rruleString: string): Partial<TaskFormValues> => {
