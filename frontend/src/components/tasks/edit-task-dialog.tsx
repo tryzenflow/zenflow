@@ -38,6 +38,7 @@ interface EditTaskDialogProps {
 
 const defaultRecurringFields = {
   recurrenceMode: "specific",
+  byweeks: [1],
   frequency: "WEEKLY",
   interval: 1,
   byday: ["MO"],

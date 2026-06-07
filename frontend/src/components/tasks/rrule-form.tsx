@@ -1,6 +1,14 @@
 import { useMemo } from "react";
 import { UseFormReturn } from "react-hook-form";
 import {
+  addWeeks,
+  endOfMonth,
+  endOfWeek,
+  format,
+  startOfMonth,
+  startOfWeek,
+} from "date-fns";
+import {
   FormControl,
   FormField,
   FormItem,
@@ -18,8 +26,8 @@ interface RRuleFormProps {
   view: Exclude<ViewMode, "day">;
   /** Onboarding workdays (ISO 1–7) — constrains the selectable weekdays. */
   workDays: number[];
-  /** A date inside the active window. Kept for API stability. */
-  date?: Date;
+  /** A date inside the active month (for the week-of-month ranges). */
+  date: Date;
 }
 
 const DAY_LABELS: Record<string, string> = {
@@ -43,7 +51,7 @@ const chipActive = "border-primary bg-primary/15 text-primary";
 const chipIdle =
   "border-border bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary";
 
-export function RRuleForm({ form, view, workDays }: RRuleFormProps) {
+export function RRuleForm({ form, view, workDays, date }: RRuleFormProps) {
   const mode = form.watch("recurrenceMode");
 
   // Selectable weekdays, ordered Mon→Sun, limited to the user's workdays.
@@ -56,6 +64,21 @@ export function RRuleForm({ form, view, workDays }: RRuleFormProps) {
     [workDays],
   );
 
+  // Week-of-month ranges for the active month (Mon-started weeks overlapping it).
+  const weeks = useMemo(() => {
+    const monthEnd = endOfMonth(date);
+    const out: { n: number; label: string }[] = [];
+    let cursor = startOfWeek(startOfMonth(date), { weekStartsOn: 1 });
+    let n = 1;
+    while (cursor <= monthEnd) {
+      const weekEnd = endOfWeek(cursor, { weekStartsOn: 1 });
+      out.push({ n, label: `${format(cursor, "d/M")}–${format(weekEnd, "d/M")}` });
+      cursor = addWeeks(cursor, 1);
+      n++;
+    }
+    return out;
+  }, [date]);
+
   const toggleWeekday = (code: string) => {
     const current = form.getValues("byday");
     form.setValue(
@@ -67,11 +90,21 @@ export function RRuleForm({ form, view, workDays }: RRuleFormProps) {
     );
   };
 
-  const specificLabel = "Specific days";
+  const toggleWeek = (n: number) => {
+    const current = form.getValues("byweeks");
+    form.setValue(
+      "byweeks",
+      current.includes(n) ? current.filter((w) => w !== n) : [...current, n],
+      { shouldDirty: true },
+    );
+  };
+
+  const intervalLabel = view === "week" ? "Every X days" : "Days of week";
+  const specificLabel = view === "week" ? "Specific days" : "Specific weeks";
   const boundHint =
     view === "week"
       ? "Repeats this week only — each occurrence is a single-instance task."
-      : "Repeats on the selected weekdays within this month only.";
+      : "Repeats within this month only — bounded to its working days.";
 
   return (
     <div className="space-y-3">
@@ -90,7 +123,7 @@ export function RRuleForm({ form, view, workDays }: RRuleFormProps) {
                   field.value === "interval" ? segActive : segIdle,
                 )}
               >
-                Every X days
+                {intervalLabel}
               </button>
               <button
                 type="button"
@@ -108,7 +141,7 @@ export function RRuleForm({ form, view, workDays }: RRuleFormProps) {
         )}
       />
 
-      {mode === "interval" && (
+      {mode === "interval" && view === "week" && (
         <FormField
           control={form.control}
           name="interval"
@@ -133,7 +166,8 @@ export function RRuleForm({ form, view, workDays }: RRuleFormProps) {
         />
       )}
 
-      {mode === "specific" && (
+      {((view === "week" && mode === "specific") ||
+        (view === "month" && mode === "interval")) && (
         <FormField
           control={form.control}
           name="byday"
@@ -155,6 +189,41 @@ export function RRuleForm({ form, view, workDays }: RRuleFormProps) {
                       )}
                     >
                       {DAY_LABELS[code]}
+                    </button>
+                  );
+                })}
+              </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      )}
+
+      {view === "month" && mode === "specific" && (
+        <FormField
+          control={form.control}
+          name="byweeks"
+          render={({ field }) => (
+            <FormItem className="space-y-1.5">
+              <FormLabel className="text-xs font-semibold">On weeks</FormLabel>
+              <div className="grid grid-cols-2 gap-1.5">
+                {weeks.map((w) => {
+                  const active = field.value.includes(w.n);
+                  return (
+                    <button
+                      key={w.n}
+                      type="button"
+                      onClick={() => toggleWeek(w.n)}
+                      className={cn(
+                        chipBase,
+                        "flex items-center justify-between gap-1.5",
+                        active ? chipActive : chipIdle,
+                      )}
+                    >
+                      <span>Week {w.n}</span>
+                      <span className="text-[10px] font-medium opacity-70">
+                        {w.label}
+                      </span>
                     </button>
                   );
                 })}
