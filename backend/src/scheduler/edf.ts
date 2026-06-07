@@ -1,5 +1,8 @@
 import { MAX_CASCADE_STEPS, MAX_SCAN_DAYS, MIN } from "./constants";
 import { EdfTask, SchedulerPrefs, Placement, OccBlock } from "./interfaces";
+
+// Re-export the scheduler's public types so consumers can import them from "./edf".
+export type { EdfTask, SchedulerPrefs };
 import {
   Interval,
   SLOT_MS,
