@@ -16,6 +16,7 @@ import { ViewMode } from "@/types/schedule";
 import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
 import { useUserStore } from "@/hooks/use-user-store";
 import { zonedNow } from "@/utils/tz";
+import { WEEK_STARTS_ON } from "@/utils/constants";
 
 interface CalendarHeaderProps {
   date: Date;
@@ -44,7 +45,12 @@ export function CalendarHeader({
         setDate((d) => addDays(d, direction === "left" ? -1 : 1));
         break;
       case "week":
-        setDate((d) => addWeeks(startOfWeek(d), direction === "left" ? -1 : 1));
+        setDate((d) =>
+          addWeeks(
+            startOfWeek(d, { weekStartsOn: WEEK_STARTS_ON }),
+            direction === "left" ? -1 : 1,
+          ),
+        );
         break;
       case "month":
         setDate((d) =>
@@ -59,7 +65,10 @@ export function CalendarHeader({
       case "day":
         return format(date, "EEE MMMM d, yyyy");
       case "week":
-        return format(endOfWeek(date), "MMMM yyyy");
+        return format(
+          endOfWeek(date, { weekStartsOn: WEEK_STARTS_ON }),
+          "MMMM yyyy",
+        );
       case "month":
         return format(startOfMonth(date), "MMMM yyyy");
     }
