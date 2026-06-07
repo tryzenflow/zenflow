@@ -8,7 +8,12 @@ import { MonthView } from "./month-view";
 import { CalendarSidebar, SidebarBody } from "./sidebar";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { EditTaskDialog } from "@/components/tasks/edit-task-dialog";
-import { listTasks, rescheduleTask, resizeTask } from "@/api/tasks";
+import {
+  completeTask,
+  listTasks,
+  rescheduleTask,
+  resizeTask,
+} from "@/api/tasks";
 import { tasksToBlocks } from "@/utils/blocks";
 import type { TasksMeta } from "@zenflow/shared";
 import { isAxiosError } from "axios";
@@ -116,6 +121,40 @@ export function CalendarLayout() {
       );
   }, []);
 
+  async function onComplete(taskId: string) {
+    // Optimistic: flip the block to DONE so it reflects immediately; refetch()
+    // reconciles after the round-trip.
+    setBlocks((bs) =>
+      bs.map((b) => (b.taskId === taskId ? { ...b, status: "DONE" } : b)),
+    );
+    try {
+      await completeTask(taskId);
+      toast.success("Task completed");
+    } catch (error) {
+      if (isAxiosError(error))
+        toast.error(error.response?.data?.message || "Failed to complete task");
+    } finally {
+      await refetch();
+    }
+  }
+
+  // Double-click/tap on a block dispatches zenflow:complete-task; bound via a
+  // ref exactly like the resize listener above.
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+  useEffect(() => {
+    const handler = (e: Event | CustomEvent) => {
+      const { taskId } = (e as CustomEvent).detail;
+      onCompleteRef.current(taskId);
+    };
+    window.addEventListener("zenflow:complete-task", handler as EventListener);
+    return () =>
+      window.removeEventListener(
+        "zenflow:complete-task",
+        handler as EventListener,
+      );
+  }, []);
+
   // The agenda mirrors the active view's window (the backend already scopes
   // `blocks` to day/week/month), sorted chronologically; the sidebar groups by
   // day when the window spans more than one.
@@ -133,10 +172,7 @@ export function CalendarLayout() {
 
       {/* Mobile/tablet nav drawer — same content as the desktop rail. */}
       <Sheet open={navOpen} onOpenChange={setNavOpen}>
-        <SheetContent
-          side="left"
-          className="w-72 bg-sidebar p-0 lg:hidden"
-        >
+        <SheetContent side="left" className="w-72 bg-sidebar p-0 lg:hidden">
           <SheetTitle className="sr-only">Navigation</SheetTitle>
           <SidebarBody meta={meta} agenda={agenda} view={viewMode} />
         </SheetContent>

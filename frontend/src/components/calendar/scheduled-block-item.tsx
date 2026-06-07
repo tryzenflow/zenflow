@@ -76,9 +76,18 @@ function requestResize(
   );
 }
 
-// Touch long-press: how long to hold, and how far a finger may drift first.
-const LONG_PRESS_MS = 450;
-const LONG_PRESS_MOVE_TOLERANCE = 8;
+/** Notify the layout to mark this block's task complete (double-click/tap). */
+function requestComplete(taskId: string) {
+  window.dispatchEvent(
+    new CustomEvent("zenflow:complete-task", { detail: { taskId } }),
+  );
+}
+
+// Touch: how far a finger may drift before a press counts as a drag, not a tap.
+const TAP_MOVE_TOLERANCE = 8;
+// Delay before a single click opens the popover, so a double-click (which
+// completes the task) can cancel it first instead of flashing the popover open.
+const SINGLE_CLICK_DELAY_MS = 220;
 
 export function ScheduledBlockItem({
   block,
@@ -185,49 +194,61 @@ export function ScheduledBlockItem({
   // Tags need vertical room; on a short block they'd crowd out the title/time.
   const showTags = dispDuration > TAGS_MIN_DURATION && block.tags.length > 0;
 
-  // Click (no drag) opens a detail popover; double-click opens the full editor.
+  // Click (no drag) opens a detail popover; double-click completes the task.
   const [popoverOpen, setPopoverOpen] = useState(false);
 
-  // Long-press to open on touch, without stealing the drag gesture.
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Pointer-drift tracking so a drag/resize gesture isn't mistaken for a tap.
   const pressOrigin = useRef<{ x: number; y: number } | null>(null);
   // Set once the pointer drags past tolerance (or a resize begins) so the
   // trailing click is recognised as a gesture, not a tap, and skips the popover.
   const moved = useRef(false);
+  // A pending single-click popover toggle; cleared if a double-click follows.
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const cancelLongPress = () => {
-    if (longPressTimer.current !== null) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
+  const clearPendingClick = () => {
+    if (clickTimer.current !== null) {
+      clearTimeout(clickTimer.current);
+      clickTimer.current = null;
     }
-    pressOrigin.current = null;
   };
 
   const handlePointerDown = (e: React.PointerEvent) => {
     listeners?.onPointerDown?.(e); // keep dnd-kit's drag tracking intact
     moved.current = false;
     pressOrigin.current = { x: e.clientX, y: e.clientY };
-    if (e.pointerType !== "touch") return;
-    longPressTimer.current = setTimeout(() => {
-      openTask(block.id);
-      cancelLongPress();
-    }, LONG_PRESS_MS);
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!pressOrigin.current) return;
     const dx = e.clientX - pressOrigin.current.x;
     const dy = e.clientY - pressOrigin.current.y;
-    if (Math.hypot(dx, dy) > LONG_PRESS_MOVE_TOLERANCE) {
+    if (Math.hypot(dx, dy) > TAP_MOVE_TOLERANCE) {
       moved.current = true;
-      cancelLongPress();
     }
+  };
+
+  const endPress = () => {
+    pressOrigin.current = null;
   };
 
   const handleClick = () => {
     // A real drag or resize ends in a click too — only a still tap opens here.
     if (moved.current || resizing.current) return;
-    setPopoverOpen((o) => !o);
+    // Defer the toggle so a following double-click can cancel it (otherwise the
+    // popover would flash open before completing the task).
+    clearPendingClick();
+    clickTimer.current = setTimeout(() => {
+      clickTimer.current = null;
+      setPopoverOpen((o) => !o);
+    }, SINGLE_CLICK_DELAY_MS);
+  };
+
+  const handleDoubleClick = () => {
+    // Cancel the pending single-click and keep the popover closed.
+    clearPendingClick();
+    setPopoverOpen(false);
+    if (isCompleted) return; // don't re-complete a DONE block
+    requestComplete(block.taskId);
   };
 
   const state = withOverlap(block.state, layout.conflict);
@@ -243,14 +264,14 @@ export function ScheduledBlockItem({
           {...listeners}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
-          onPointerUp={cancelLongPress}
-          onPointerCancel={cancelLongPress}
+          onPointerUp={endPress}
+          onPointerCancel={endPress}
           onClick={handleClick}
-          onDoubleClick={() => openTask(block.id)}
+          onDoubleClick={handleDoubleClick}
           title={
             isCompleted
-              ? "Completed · click for details · double-click to edit"
-              : "Drag to reschedule · click for details · double-click to edit"
+              ? "Completed · click for details"
+              : "Drag to reschedule · click for details · double-click to complete"
           }
           style={{
             top: `${(dispStart / DAILY_HORIZON) * 100}%`,

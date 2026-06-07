@@ -159,7 +159,7 @@ export function EditTaskDialog({
     try {
       await completeTask(taskId);
       onSaved();
-      toast.success("Task completed ✅");
+      toast.success("Task completed");
       setOpen(false);
     } catch (error: any) {
       toast.error(error?.response?.data?.message || "Failed to complete task");
@@ -223,130 +223,132 @@ export function EditTaskDialog({
 
   return (
     <>
-    <Sheet open={open} onOpenChange={setOpen} modal={false}>
-      {/* Non-modal + no overlay + offset below the 56px header so the calendar
+      <Sheet open={open} onOpenChange={setOpen} modal={false}>
+        {/* Non-modal + no overlay + offset below the 56px header so the calendar
           stays navigable while editing. Outside interactions are swallowed so
           paging the date range or switching view never closes the panel. */}
-      <SheetContent
-        showOverlay={false}
-        onInteractOutside={(e) => e.preventDefault()}
-        className="inset-y-auto top-14 h-[calc(100vh-3.5rem)] w-full gap-0 p-0 sm:w-[30rem] sm:max-w-[30rem]"
-      >
-        {/* Header */}
-        <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-5">
-          <span className={cn("size-2 shrink-0 rounded-full", statusColor)} />
-          <div className="min-w-0">
-            <h2 className="truncate text-sm font-bold tracking-tight">
-              {task?.title || "Task detail"}
-            </h2>
-            {task && (
-              <p className="truncate text-[11px] text-muted-foreground">
-                Created {format(new Date(task.createdAt), "MMM d")}
-                {scheduledStart &&
-                  ` · Scheduled ${format(scheduledStart, "EEE HH:mm")}`}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Status banner */}
-        {task && (
-          <div className="mx-5 mt-4 flex shrink-0 items-center justify-between rounded-md border border-border bg-muted p-3">
-            <div className="flex items-center gap-2.5">
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-card">
-                <Clock className="size-3.5 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="text-xs font-bold">
-                  {scheduledStart && scheduledEnd
-                    ? `${format(scheduledStart, "EEE MMM d, HH:mm")} – ${format(scheduledEnd, "HH:mm")}`
-                    : "Not yet scheduled"}
+        <SheetContent
+          showOverlay={false}
+          onInteractOutside={(e) => e.preventDefault()}
+          className="inset-y-auto top-14 h-[calc(100vh-3.5rem)] w-full gap-0 p-0 sm:w-[30rem] sm:max-w-[30rem]"
+        >
+          {/* Header */}
+          <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-5">
+            <span className={cn("size-2 shrink-0 rounded-full", statusColor)} />
+            <div className="min-w-0">
+              <h2 className="truncate text-sm font-bold tracking-tight">
+                {task?.title || "Task detail"}
+              </h2>
+              {task && (
+                <p className="truncate text-[11px] text-muted-foreground">
+                  Created {format(new Date(task.createdAt), "MMM d")}
+                  {scheduledStart &&
+                    ` · Scheduled ${format(scheduledStart, "EEE HH:mm")}`}
                 </p>
-                <p className="text-[11px] text-muted-foreground">
-                  {task.durationMinutes} min ·{" "}
-                  {isDone
-                    ? "Completed"
-                    : task.fixed
-                      ? "Fixed placement"
-                      : "EDF engine placed"}
-                </p>
-              </div>
+              )}
             </div>
-            {!isDone && (
-              <Button
-                size="sm"
-                className="h-7 px-2.5 text-[10px] font-bold"
-                onClick={onComplete}
-              >
-                Mark Done
-              </Button>
-            )}
           </div>
-        )}
 
-        <TaskForm
-          form={form as any}
-          onSubmit={onSubmit}
-          loading={loading}
-          onCancel={handleClose}
-          newUploadsRef={newUploadsRef}
-          initialNote={task?.note ?? undefined}
-          submitLabel="Save Changes"
-          bodyExtra={events.length > 0 && <TaskHistory events={events} />}
-          footerExtra={
+          {/* Status banner */}
+          {task && (
+            <div className="mx-5 mt-4 flex shrink-0 items-center justify-between rounded-md border border-border bg-muted p-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-card">
+                  <Clock className="size-3.5 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold">
+                    {scheduledStart && scheduledEnd
+                      ? `${format(scheduledStart, "EEE MMM d, HH:mm")} – ${format(scheduledEnd, "HH:mm")}`
+                      : "Not yet scheduled"}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {task.durationMinutes} min ·{" "}
+                    {isDone
+                      ? "Completed"
+                      : task.fixed
+                        ? "Fixed placement"
+                        : "EDF engine placed"}
+                  </p>
+                </div>
+              </div>
+              {!isDone && (
+                <Button
+                  size="sm"
+                  className="h-7 px-2.5 text-[10px] font-bold"
+                  onClick={onComplete}
+                >
+                  Mark Done
+                </Button>
+              )}
+            </div>
+          )}
+
+          <TaskForm
+            form={form as any}
+            onSubmit={onSubmit}
+            loading={loading}
+            onCancel={handleClose}
+            newUploadsRef={newUploadsRef}
+            initialNote={task?.note ?? undefined}
+            submitLabel="Save Changes"
+            bodyExtra={events.length > 0 && <TaskHistory events={events} />}
+            footerExtra={
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onDelete}
+                className="h-8 w-full border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive"
+              >
+                <Trash2 className="size-3.5" /> Delete Task
+              </Button>
+            }
+          />
+        </SheetContent>
+      </Sheet>
+
+      {/* Recurring scope chooser — gates save/delete for series occurrences. */}
+      <Dialog
+        open={!!scopePrompt}
+        onOpenChange={(o) => !o && setScopePrompt(null)}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              {scopePrompt?.mode === "delete"
+                ? "Delete recurring task"
+                : "Edit recurring task"}
+            </DialogTitle>
+            <DialogDescription>
+              This task repeats. Apply{" "}
+              {scopePrompt?.mode === "delete" ? "the deletion" : "your changes"}{" "}
+              to only this occurrence, or this and all following occurrences?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
             <Button
               type="button"
               variant="outline"
-              onClick={onDelete}
-              className="h-8 w-full border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive"
+              disabled={loading}
+              onClick={() => applyScope("one")}
+              className="w-full"
             >
-              <Trash2 className="size-3.5" /> Delete Task
+              This task
             </Button>
-          }
-        />
-      </SheetContent>
-    </Sheet>
-
-    {/* Recurring scope chooser — gates save/delete for series occurrences. */}
-    <Dialog
-      open={!!scopePrompt}
-      onOpenChange={(o) => !o && setScopePrompt(null)}
-    >
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>
-            {scopePrompt?.mode === "delete"
-              ? "Delete recurring task"
-              : "Edit recurring task"}
-          </DialogTitle>
-          <DialogDescription>
-            This task repeats. Apply{" "}
-            {scopePrompt?.mode === "delete" ? "the deletion" : "your changes"} to
-            only this occurrence, or this and all following occurrences?
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter className="flex-col gap-2 sm:flex-col">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={loading}
-            onClick={() => applyScope("one")}
-            className="w-full"
-          >
-            This task
-          </Button>
-          <Button
-            type="button"
-            variant={scopePrompt?.mode === "delete" ? "destructive" : "default"}
-            disabled={loading}
-            onClick={() => applyScope("following")}
-            className="w-full"
-          >
-            This and following tasks
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+            <Button
+              type="button"
+              variant={
+                scopePrompt?.mode === "delete" ? "destructive" : "default"
+              }
+              disabled={loading}
+              onClick={() => applyScope("following")}
+              className="w-full"
+            >
+              This and following tasks
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -386,9 +388,15 @@ function TaskHistory({ events }: { events: TaskEvent[] }) {
               {e.oldSnapshot?.scheduledStartTime &&
                 e.newSnapshot?.scheduledStartTime && (
                   <p className="text-[11px] text-muted-foreground">
-                    {format(new Date(e.oldSnapshot.scheduledStartTime), "HH:mm")}{" "}
+                    {format(
+                      new Date(e.oldSnapshot.scheduledStartTime),
+                      "HH:mm",
+                    )}{" "}
                     →{" "}
-                    {format(new Date(e.newSnapshot.scheduledStartTime), "HH:mm")}{" "}
+                    {format(
+                      new Date(e.newSnapshot.scheduledStartTime),
+                      "HH:mm",
+                    )}{" "}
                     · reward {e.rewardScore.toFixed(1)}
                   </p>
                 )}
