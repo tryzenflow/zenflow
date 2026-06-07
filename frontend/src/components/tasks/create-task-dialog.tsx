@@ -44,7 +44,6 @@ export function CreateTaskDialog({
       note: "",
       deadlineDate: "",
       deadlineTime: "",
-      recurrenceMode: "specific",
       byweeks: [1],
       frequency: "WEEKLY",
       interval: 1,
