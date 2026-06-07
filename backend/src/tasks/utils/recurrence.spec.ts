@@ -133,23 +133,11 @@ describe("occurrenceDays", () => {
     expect(days).toEqual(["2026-06-01", "2026-06-02", "2026-06-03"]);
   });
 
-  it("bounds month 'specific weeks' by the deadline too", () => {
+  it("expands a month weekly BYDAY rule to every chosen weekday of the month", () => {
+    // June 2026 Mondays: 06-01, 06-08, 06-15, 06-22, 06-29.
+    //          Wednesdays: 06-03, 06-10, 06-17, 06-24.
     const days = occurrenceDays(
-      "RRULE:FREQ=MONTHLY;BYDAY=1MO,3MO",
-      "month",
-      "2026-06-15",
-      TZ,
-      WORK_START,
-      WORKDAYS,
-      "2026-06-03", // due before week 3 — only week 1 days up to the 3rd survive
-    );
-    expect(days).toEqual(["2026-06-01", "2026-06-02", "2026-06-03"]);
-  });
-
-  it("expands month 'specific weeks' to every working day of each chosen week", () => {
-    // BYDAY=1MO,3MO encodes weeks 1 and 3 of June 2026.
-    const days = occurrenceDays(
-      "RRULE:FREQ=MONTHLY;BYDAY=1MO,3MO",
+      "RRULE:FREQ=WEEKLY;BYDAY=MO,WE",
       "month",
       "2026-06-15",
       TZ,
@@ -157,18 +145,74 @@ describe("occurrenceDays", () => {
       WORKDAYS,
     );
     expect(days).toEqual([
-      // Week 1 (Mon 06-01 …) — working days within June.
       "2026-06-01",
-      "2026-06-02",
       "2026-06-03",
-      "2026-06-04",
-      "2026-06-05",
-      // Week 3 (Mon 06-15 …).
+      "2026-06-08",
+      "2026-06-10",
       "2026-06-15",
-      "2026-06-16",
       "2026-06-17",
-      "2026-06-18",
-      "2026-06-19",
+      "2026-06-22",
+      "2026-06-24",
+      "2026-06-29",
+    ]);
+    expect(days[0]).toBe("2026-06-01");
+    expect(days.every((d) => WORKDAYS.includes(isoWeekday(d)))).toBe(true);
+  });
+
+  it("bounds a month weekly BYDAY rule by the deadline", () => {
+    const days = occurrenceDays(
+      "RRULE:FREQ=WEEKLY;BYDAY=MO,WE",
+      "month",
+      "2026-06-15",
+      TZ,
+      WORK_START,
+      WORKDAYS,
+      "2026-06-10", // only Mon/Wed on or before the 10th survive
+    );
+    expect(days).toEqual([
+      "2026-06-01",
+      "2026-06-03",
+      "2026-06-08",
+      "2026-06-10",
+    ]);
+  });
+
+  it("floors a month weekly BYDAY rule at now and drops earlier weekdays", () => {
+    const days = occurrenceDays(
+      "RRULE:FREQ=WEEKLY;BYDAY=MO,WE",
+      "month",
+      "2026-06-15",
+      TZ,
+      WORK_START,
+      WORKDAYS,
+      undefined,
+      "2026-06-15", // created mid-month — nothing before the 15th
+    );
+    expect(days).toEqual([
+      "2026-06-15",
+      "2026-06-17",
+      "2026-06-22",
+      "2026-06-24",
+      "2026-06-29",
+    ]);
+  });
+
+  it("drops non-workday weekdays from a month weekly BYDAY rule", () => {
+    // BYDAY=MO,SA — Saturday isn't a workday, so only the five Mondays remain.
+    const days = occurrenceDays(
+      "RRULE:FREQ=WEEKLY;BYDAY=MO,SA",
+      "month",
+      "2026-06-15",
+      TZ,
+      WORK_START,
+      WORKDAYS,
+    );
+    expect(days).toEqual([
+      "2026-06-01",
+      "2026-06-08",
+      "2026-06-15",
+      "2026-06-22",
+      "2026-06-29",
     ]);
   });
 });
