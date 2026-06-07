@@ -54,9 +54,9 @@ describe("occurrenceDays", () => {
   });
 
   it("collapses a non-recurring task to its single anchor day", () => {
-    expect(occurrenceDays("", "week", anchor, TZ, WORK_START, WORKDAYS)).toEqual(
-      [anchor],
-    );
+    expect(
+      occurrenceDays("", "week", anchor, TZ, WORK_START, WORKDAYS),
+    ).toEqual([anchor]);
   });
 
   it("never recurs in day view", () => {

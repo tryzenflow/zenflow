@@ -35,7 +35,13 @@ describe("findSlot", () => {
   });
 
   it("clamps to now and snaps up to the next 15-min slot", () => {
-    const slot = findSlot(prefs, 60, null, [], new Date("2026-06-08T09:40:00Z"));
+    const slot = findSlot(
+      prefs,
+      60,
+      null,
+      [],
+      new Date("2026-06-08T09:40:00Z"),
+    );
     expect(iso(slot)).toBe("2026-06-08T09:45:00.000Z");
   });
 
@@ -62,7 +68,13 @@ describe("findSlot", () => {
   });
 
   it("rolls over the weekend to the next work day", () => {
-    const slot = findSlot(prefs, 60, null, [], new Date("2026-06-12T16:30:00Z"));
+    const slot = findSlot(
+      prefs,
+      60,
+      null,
+      [],
+      new Date("2026-06-12T16:30:00Z"),
+    );
     expect(iso(slot)).toBe("2026-06-15T09:00:00.000Z");
   });
 });
@@ -107,7 +119,13 @@ describe("scheduleAll", () => {
   it("flags unplaceable tasks as conflicts", () => {
     const out = scheduleAll(
       prefs,
-      [task({ id: "x", durationMinutes: 120, deadline: new Date("2026-06-08T10:00:00Z") })],
+      [
+        task({
+          id: "x",
+          durationMinutes: 120,
+          deadline: new Date("2026-06-08T10:00:00Z"),
+        }),
+      ],
       MON_MIDNIGHT,
     );
     expect(out[0].conflict).toBe(true);
@@ -155,7 +173,6 @@ describe("placeOne", () => {
     );
     expect(iso(p.scheduledStartTime)).toBe("2026-06-10T11:00:00.000Z");
   });
-
 });
 
 describe("cascadeReschedule", () => {

@@ -91,8 +91,7 @@ export class SchedulerService {
       scheduledStartTime = opts.dayAnchor;
       const anchorStart = opts.dayAnchor.getTime();
       const anchorEnd = anchorStart + task.durationMinutes * 60_000;
-      const overflowsDay =
-        user.workStart + task.durationMinutes > user.workEnd;
+      const overflowsDay = user.workStart + task.durationMinutes > user.workEnd;
       conflict =
         overflowsDay ||
         others.some((o) => {

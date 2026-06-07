@@ -6,11 +6,11 @@ import { DayView } from "./day-view";
 import { WeekView } from "./week-view";
 import { MonthView } from "./month-view";
 import { CalendarSidebar, SidebarBody } from "./sidebar";
-import { Sheet, SheetContent, SheetTitle } from "../ui/sheet";
-import { EditTaskDialog } from "../tasks/edit-task-dialog";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { EditTaskDialog } from "@/components/tasks/edit-task-dialog";
 import { listTasks, rescheduleTask, resizeTask } from "@/api/tasks";
 import { tasksToBlocks } from "@/utils/blocks";
-import type { Task, TasksMeta } from "@zenflow/shared";
+import type { TasksMeta } from "@zenflow/shared";
 import { isAxiosError } from "axios";
 import { toast } from "sonner";
 import { useUserStore } from "@/hooks/use-user-store";
@@ -25,7 +25,6 @@ export function CalendarLayout() {
   const [viewMode, setViewMode] = useState<ViewMode>("day");
   useViewShortcuts(setViewMode);
 
-  const [tasks, setTasks] = useState<Task[]>([]);
   const [blocks, setBlocks] = useState<Event[]>([]);
   const [meta, setMeta] = useState<TasksMeta | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
@@ -34,7 +33,6 @@ export function CalendarLayout() {
   async function refetch() {
     try {
       const data = await listTasks(viewMode, date);
-      setTasks(data.tasks);
       setBlocks(tasksToBlocks(data.tasks));
       setMeta(data.meta);
     } catch (error) {
@@ -106,7 +104,7 @@ export function CalendarLayout() {
   const onResizeRef = useRef(onResize);
   onResizeRef.current = onResize;
   useEffect(() => {
-    const handler = (e: Event) => {
+    const handler = (e: Event | CustomEvent) => {
       const { taskId, startISO, durationMinutes } = (e as CustomEvent).detail;
       onResizeRef.current(taskId, startISO, durationMinutes);
     };

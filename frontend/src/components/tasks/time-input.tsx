@@ -1,8 +1,8 @@
 import { Check, ChevronsUpDown } from "lucide-react";
-import { Button } from "../ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-import { Command, CommandInput, CommandItem, CommandList } from "../ui/command";
-import { cn } from "../../lib/utils";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 import { minutesToTime, timeToMinutes } from "@/utils/time";
 import { DAILY_HORIZON, TIME_GRANULARITY } from "@/utils/constants";
 

@@ -8,9 +8,7 @@ import {
 import { DateRangeDto } from "../dto/date-range.dto";
 
 @ValidatorConstraint({ name: "IsEndDateAfterStartDate", async: false })
-export class IsEndDateAfterStartDateConstraint
-  implements ValidatorConstraintInterface
-{
+export class IsEndDateAfterStartDateConstraint implements ValidatorConstraintInterface {
   validate(end: string, args: ValidationArguments) {
     const object = args.object as DateRangeDto;
     const start = object.start;

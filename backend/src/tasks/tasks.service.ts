@@ -56,10 +56,7 @@ export class TasksService {
     };
   }
 
-  async create(
-    dto: CreateTaskDto,
-    user: User,
-  ): Promise<CreateTaskResponse> {
+  async create(dto: CreateTaskDto, user: User): Promise<CreateTaskResponse> {
     const { startDate, fixed, startTime, view, rrule: rawRrule, ...rest } = dto;
     const tz = user.timezone;
     const isFixed = fixed ?? false;
@@ -70,7 +67,7 @@ export class TasksService {
     // within the active view's window (e.g. FREQ=DAILY across a week → 7 rows),
     // every row sharing the same rrule + seriesId but owning a distinct id. The
     // EDF engine then places each instance, confined to its own day.
-    const tod = isFixed ? startTime ?? 0 : user.workStart;
+    const tod = isFixed ? (startTime ?? 0) : user.workStart;
     // Recurrence never materializes past the deadline (the rrule's window may
     // run later than the task is due).
     const deadlineDateStr = rest.deadline
@@ -294,7 +291,8 @@ export class TasksService {
       const target = await this.prisma.task.findFirst({
         where: { id, userId: user.id },
       });
-      if (!target) throw new NotFoundException(`Cannot find task with id ${id}`);
+      if (!target)
+        throw new NotFoundException(`Cannot find task with id ${id}`);
 
       // "This and following": apply the metadata to this occurrence and every
       // later sibling in the series; otherwise just this row.
@@ -338,10 +336,7 @@ export class TasksService {
   }
 
   /** Match this occurrence and every later one in the same series. */
-  private followingWhere(
-    userId: string,
-    target: Task,
-  ): Prisma.TaskWhereInput {
+  private followingWhere(userId: string, target: Task): Prisma.TaskWhereInput {
     return {
       userId,
       seriesId: target.seriesId,
@@ -432,16 +427,13 @@ export class TasksService {
     }
   }
 
-  async remove(
-    id: string,
-    user: User,
-    scope?: RecurrenceScope,
-  ): Promise<void> {
+  async remove(id: string, user: User, scope?: RecurrenceScope): Promise<void> {
     try {
       const target = await this.prisma.task.findFirst({
         where: { id, userId: user.id },
       });
-      if (!target) throw new NotFoundException(`Cannot find task with id ${id}`);
+      if (!target)
+        throw new NotFoundException(`Cannot find task with id ${id}`);
 
       // "This and following" removes this occurrence and every later sibling.
       if (this.appliesToFollowing(scope, target)) {

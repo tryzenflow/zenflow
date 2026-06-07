@@ -11,7 +11,7 @@ interface UploadFilesResponse {
 export interface FilesService {
   upload(
     uploadFilesDto: UploadFileDto[],
-    userId: string
+    userId: string,
   ): Promise<UploadFilesResponse[]>;
   findOne(id: string, userId: string): Promise<File | null>;
   remove(keys: string[], userId: string): Promise<void>;

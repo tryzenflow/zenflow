@@ -1,4 +1,4 @@
-import { Editor } from "../common/editor";
+import { Editor } from "@/components/common/editor";
 import { useContentEditor } from "@/hooks/use-editor";
 import { useEffect } from "react";
 

@@ -104,7 +104,9 @@ function AgendaItem({ block, tz }: { block: Event; tz: string }) {
         </span>
       )}
       {block.rrule && (
-        <Repeat className="h-3 w-3 shrink-0 text-primary" title="Recurring" />
+        <span title="Recurring" className="flex shrink-0">
+          <Repeat className="h-3 w-3 text-primary" />
+        </span>
       )}
       <span
         className={cn(

@@ -19,7 +19,7 @@ describe("hideEmail", () => {
 
   test("handles username with special characters", () => {
     expect(hideEmail("user.name+tag@example.com")).toBe(
-      "u***********g@example.com"
+      "u***********g@example.com",
     );
   });
 

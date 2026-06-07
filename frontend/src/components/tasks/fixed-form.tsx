@@ -1,6 +1,6 @@
 import { TaskFormValues } from "@/utils/tasks";
 import { UseFormReturn } from "react-hook-form";
-import { FormField, FormItem, FormLabel, FormMessage } from "../ui/form";
+import { FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { TimeInput } from "./time-input";
 import { DAILY_HORIZON, TIME_GRANULARITY } from "@/utils/constants";
 

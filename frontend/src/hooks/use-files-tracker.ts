@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { extractFileIdsFromNoteContent } from "../utils/files";
+import { extractFileIdsFromNoteContent } from "@/utils/files";
 
 export function useFilesTracker() {
   const newUploadsRef = useRef<string[]>([]);

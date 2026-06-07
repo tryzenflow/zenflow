@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PaperclipIcon } from "lucide-react";
-import { useFileUploads } from "../../../hooks/use-file-uploads";
+import { useFileUploads } from "@/hooks/use-file-uploads";
 
 interface FileUploadProps {
   value: string;
