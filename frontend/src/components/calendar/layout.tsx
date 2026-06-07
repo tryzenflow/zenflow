@@ -19,7 +19,8 @@ import type { TasksMeta } from "@zenflow/shared";
 import { isAxiosError } from "axios";
 import { toast } from "sonner";
 import { useUserStore } from "@/hooks/use-user-store";
-import { zonedNow } from "@/utils/tz";
+import { zonedDate, zonedNow } from "@/utils/tz";
+import { isSameMonth } from "date-fns";
 
 export function CalendarLayout() {
   // The cursor day is held in user-tz space (its local fields are the user's
@@ -29,6 +30,7 @@ export function CalendarLayout() {
   );
   const [viewMode, setViewMode] = useState<ViewMode>("day");
   useViewShortcuts(setViewMode);
+  const tz = useUserStore((s) => s.user?.timezone) || "UTC";
 
   const [blocks, setBlocks] = useState<Event[]>([]);
   const [meta, setMeta] = useState<TasksMeta | null>(null);
@@ -155,16 +157,21 @@ export function CalendarLayout() {
       );
   }, []);
 
-  // The agenda mirrors the active view's window (the backend already scopes
-  // `blocks` to day/week/month), sorted chronologically; the sidebar groups by
-  // day when the window spans more than one.
-  const agenda = useMemo(
-    () =>
-      [...blocks].sort(
-        (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
-      ),
-    [blocks],
-  );
+  // The agenda mirrors the active view's window, sorted chronologically; the
+  // sidebar groups by day when the window spans more than one. For day/week the
+  // backend display range equals the focal window, so `blocks` is already
+  // scoped. In month view the backend also returns the prev/next-month tasks the
+  // grid renders at its dimmed edge cells, so we filter the agenda back to the
+  // focal month (same tz-based month membership as month-cell.tsx).
+  const agenda = useMemo(() => {
+    const scoped =
+      viewMode === "month"
+        ? blocks.filter((b) => isSameMonth(zonedDate(b.start, tz), date))
+        : blocks;
+    return [...scoped].sort(
+      (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
+    );
+  }, [blocks, viewMode, date, tz]);
 
   return (
     <div className="flex h-screen">
