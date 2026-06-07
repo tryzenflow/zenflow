@@ -10,7 +10,7 @@ import {
   Info,
 } from "lucide-react";
 import { WithAuth } from "@/components/hoc/with-auth";
-import { Logo, Wordmark } from "@/components/logo";
+import { Wordmark } from "@/components/logo";
 import { cn } from "@/lib/utils";
 import { useUserStore } from "@/hooks/use-user-store";
 import { completeOnboarding } from "@/api/users";

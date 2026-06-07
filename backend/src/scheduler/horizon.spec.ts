@@ -47,8 +47,8 @@ describe("viewDayRange", () => {
 describe("sumWorkMinutes", () => {
   it("counts only work days in the range", () => {
     // Mon–Sun, 8h workday (480 min), Mon–Fri → 5 × 480 = 2400.
-    expect(sumWorkMinutes("2026-06-08", "2026-06-14", 540, 1020, [1, 2, 3, 4, 5])).toBe(
-      2400,
-    );
+    expect(
+      sumWorkMinutes("2026-06-08", "2026-06-14", 540, 1020, [1, 2, 3, 4, 5]),
+    ).toBe(2400);
   });
 });

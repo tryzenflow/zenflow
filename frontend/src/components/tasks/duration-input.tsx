@@ -1,9 +1,9 @@
 import { Check, ChevronsUpDown } from "lucide-react";
-import { durationToMinutes, formatMinutes } from "../../utils/time";
-import { Button } from "../ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-import { Command, CommandInput, CommandItem, CommandList } from "../ui/command";
-import { cn } from "../../lib/utils";
+import { durationToMinutes, formatMinutes } from "@/utils/time";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 import { DAILY_HORIZON, TIME_GRANULARITY } from "@/utils/constants";
 
 const durationBlocks = Array(Math.floor(DAILY_HORIZON / TIME_GRANULARITY))

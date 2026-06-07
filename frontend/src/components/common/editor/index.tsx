@@ -2,7 +2,7 @@ import { Editor as TiptapEditor, EditorContent } from "@tiptap/react";
 import { Toolbar } from "./toolbar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useFileUploads } from "../../../hooks/use-file-uploads";
+import { useFileUploads } from "@/hooks/use-file-uploads";
 import { FilePlus } from "lucide-react";
 
 interface EditorProps {

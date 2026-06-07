@@ -14,7 +14,10 @@ export function weekStartStr(dateStr: string): string {
 }
 
 /** First and last calendar day of the month containing `dateStr`. */
-export function monthRange(dateStr: string): { startStr: string; endStr: string } {
+export function monthRange(dateStr: string): {
+  startStr: string;
+  endStr: string;
+} {
   const [y, m] = dateStr.split("-").map(Number);
   const startStr = `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-01`;
   const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate(); // day 0 of next month

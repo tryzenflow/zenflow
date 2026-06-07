@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "../ui/button";
+import { Button } from "@/components/ui/button";
 import { ViewModeSelect } from "./view-mode-select";
 import {
   addDays,
@@ -13,7 +13,7 @@ import {
 } from "date-fns";
 import { Dispatch, SetStateAction } from "react";
 import { ViewMode } from "@/types/schedule";
-import { CreateTaskDialog } from "../tasks/create-task-dialog";
+import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
 import { useUserStore } from "@/hooks/use-user-store";
 import { zonedNow } from "@/utils/tz";
 

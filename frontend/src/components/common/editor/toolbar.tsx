@@ -9,7 +9,7 @@ import {
   UnderlineIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Toggle } from "../../ui/toggle";
+import { Toggle } from "@/components/ui/toggle";
 import { LinkInsert } from "./link-insert";
 import { FileUpload } from "./file-upload";
 

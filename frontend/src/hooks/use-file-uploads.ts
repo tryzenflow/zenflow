@@ -1,6 +1,6 @@
 import { useCallback } from "react";
-import { getData } from "../api";
-import { FileMetadata } from "../types/files";
+import { getData } from "@/api";
+import { FileMetadata } from "@/types/files";
 
 export function useFileUploads({
   value,

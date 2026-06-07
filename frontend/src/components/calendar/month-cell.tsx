@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { Event } from "@/types/schedule";
 import { TASK_CARD_CLASSES } from "@/lib/task-card";
-import { Popover, PopoverTrigger, PopoverContent } from "../ui/popover";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { format, isSameDay, isSameMonth } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useDraggable, useDroppable } from "@dnd-kit/core";

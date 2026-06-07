@@ -31,11 +31,11 @@ export class FilesController {
       fieldName: "files",
       limits: { fileSize: Math.pow(1024, 2) * 100 },
       maxFilesCount: 5,
-    })
+    }),
   )
   async upload(
     @UploadedFiles() files: Express.Multer.File[],
-    @CurrentUser() user: User
+    @CurrentUser() user: User,
   ) {
     const newFiles = await this.filesService.upload(
       files.map((f) => ({
@@ -45,7 +45,7 @@ export class FilesController {
         mimetype: f.mimetype,
         path: f.path,
       })),
-      user.id
+      user.id,
     );
     return {
       success: true,
@@ -70,7 +70,7 @@ export class FilesController {
   async stream(
     @Param("id") id: string,
     @CurrentUser() user: User,
-    @Res({ passthrough: true }) response: Response
+    @Res({ passthrough: true }) response: Response,
   ) {
     const file = await this.filesService.findOne(id, user.id);
 

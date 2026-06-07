@@ -14,18 +14,18 @@ import { format } from "date-fns";
 import { fromZonedTime } from "date-fns-tz";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { postData } from "../../api";
-import { useUserStore } from "../../hooks/use-user-store";
-import type { Task } from "../../types/tasks";
+import { postData } from "@/api";
+import { useUserStore } from "@/hooks/use-user-store";
+import type { Task } from "@/types/tasks";
 import type { RecurrenceScope, TaskEvent } from "@zenflow/shared";
 import {
   deleteTask,
   EditTaskFormValues,
   parseRRule,
   parseTags,
-} from "../../utils/tasks";
+} from "@/utils/tasks";
 import { TaskForm } from "./form/task-form";
-import { useFilesTracker } from "../../hooks/use-files-tracker";
+import { useFilesTracker } from "@/hooks/use-files-tracker";
 import { completeTask, getTaskDetails, updateTask } from "@/api/tasks";
 import { Clock, Trash2 } from "lucide-react";
 

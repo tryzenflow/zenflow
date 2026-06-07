@@ -108,9 +108,12 @@ export function occurrenceDays(
   // Month "specific weeks" → every working day of each chosen week.
   const weekOrdinals = monthWeekOrdinals(rrule, view);
   if (weekOrdinals) {
-    const days = expandMonthWeeks(weekOrdinals, startStr, endStr, isWorkday).filter(
-      inRange,
-    );
+    const days = expandMonthWeeks(
+      weekOrdinals,
+      startStr,
+      endStr,
+      isWorkday,
+    ).filter(inRange);
     return days.length ? days : [anchorDateStr];
   }
 

@@ -1,5 +1,5 @@
 import { LoginForm } from "@/components/auth/login-form";
-import { useUserStore } from "../hooks/use-user-store";
+import { useUserStore } from "@/hooks/use-user-store";
 import { useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
