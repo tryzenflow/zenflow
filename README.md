@@ -122,5 +122,9 @@ See [CLAUDE.md](CLAUDE.md) for conventions and the critical invariants.
   alias (autofixed). Run `pnpm --filter <app> lint` and `pnpm -r typecheck` before pushing.
 - **Commits:** follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
   — `type(scope): summary` (e.g. `feat(calendar): …`, `fix(frontend): …`, `docs: …`).
+- **Pull requests:** branch off `master` (`type/short-description`), give the PR a Conventional
+  Commit title, and fill in every section of the
+  [PR template](.github/PULL_REQUEST_TEMPLATE.md) — what & why, linked issue, area(s) touched,
+  and how to test. Make sure lint, typecheck, and the relevant tests are green first.
 
-Full setup, style, commit, branching, and testing guidelines: **[CONTRIBUTING.md](CONTRIBUTING.md)**.
+Full setup, style, commit, branching, and PR guidelines: **[CONTRIBUTING.md](CONTRIBUTING.md)**.
