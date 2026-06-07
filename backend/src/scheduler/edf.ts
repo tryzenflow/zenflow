@@ -1,3 +1,5 @@
+import { MAX_CASCADE_STEPS, MAX_SCAN_DAYS, MIN } from "./constants";
+import { EdfTask, SchedulerPrefs, Placement, OccBlock } from "./interfaces";
 import {
   Interval,
   SLOT_MS,
@@ -8,43 +10,6 @@ import {
   overlapsAny,
   workWindowFor,
 } from "./slot";
-
-/**
- * Pure, deterministic Earliest-Deadline-First scheduling core (Phase 1).
- * No I/O, no randomness — same inputs always produce the same schedule, which
- * makes this directly unit-testable. The NestJS SchedulerService wraps these
- * with persistence, audit events, and penalty-matrix telemetry.
- */
-
-export interface SchedulerPrefs {
-  workStart: number; // minutes from midnight
-  workEnd: number;
-  workDays: number[]; // ISO 1=Mon … 7=Sun
-  timezone: string; // IANA
-}
-
-export interface EdfTask {
-  id: string;
-  durationMinutes: number;
-  deadline: Date | null;
-  fixed: boolean;
-  scheduledStartTime: Date | null;
-  createdAt: Date;
-}
-
-export interface Placement {
-  id: string;
-  scheduledStartTime: Date | null;
-  conflict: boolean;
-}
-
-/** How far ahead the engine will scan for an open slot for deadline-less tasks. */
-export const MAX_SCAN_DAYS = 90;
-/** Safety bound on cascade depth (≫ slots in any realistic horizon). */
-export const MAX_CASCADE_STEPS = 500;
-
-const MIN = 60_000;
-
 export function durationMs(durationMinutes: number): number {
   return durationMinutes * MIN;
 }
@@ -127,7 +92,10 @@ export function scheduleAll(
   for (const t of flexible) {
     const slot = findSlot(prefs, t.durationMinutes, t.deadline, occupied, now);
     if (slot) {
-      occupied.push({ start: slot.getTime(), end: slot.getTime() + durationMs(t.durationMinutes) });
+      occupied.push({
+        start: slot.getTime(),
+        end: slot.getTime() + durationMs(t.durationMinutes),
+      });
       out.push({ id: t.id, scheduledStartTime: slot, conflict: false });
     } else {
       out.push({ id: t.id, scheduledStartTime: null, conflict: true });
@@ -172,13 +140,6 @@ export function placeOne(
     : { id: task.id, scheduledStartTime: null, conflict: true };
 }
 
-interface OccBlock {
-  id: string;
-  start: number;
-  end: number;
-  fixed: boolean;
-}
-
 /**
  * Cascading realignment for a manual move. Places `targetId` at the snapped
  * `requestedStart`; if that lands on a fixed anchor the incoming task is routed
@@ -204,10 +165,13 @@ export function cascadeReschedule(
   for (const t of byId.values()) {
     if (t.id === targetId) continue;
     const iv = intervalOf(t);
-    if (iv) occ.push({ id: t.id, start: iv.start, end: iv.end, fixed: t.fixed });
+    if (iv)
+      occ.push({ id: t.id, start: iv.start, end: iv.end, fixed: t.fixed });
   }
   const asIntervals = (exclude?: string): Interval[] =>
-    occ.filter((o) => o.id !== exclude).map((o) => ({ start: o.start, end: o.end }));
+    occ
+      .filter((o) => o.id !== exclude)
+      .map((o) => ({ start: o.start, end: o.end }));
 
   // Resolve the target's landing slot.
   let targetStart: number | null = reqMs;
@@ -227,7 +191,8 @@ export function cascadeReschedule(
     targetStart = slot ? slot.getTime() : null;
   }
 
-  target.scheduledStartTime = targetStart === null ? null : new Date(targetStart);
+  target.scheduledStartTime =
+    targetStart === null ? null : new Date(targetStart);
   changed.set(target.id, target.scheduledStartTime);
 
   const queue: string[] = [];
@@ -241,7 +206,12 @@ export function cascadeReschedule(
         queue.push(o.id);
       }
     }
-    occ.push({ id: target.id, start: targetStart, end: tEnd, fixed: target.fixed });
+    occ.push({
+      id: target.id,
+      start: targetStart,
+      end: tEnd,
+      fixed: target.fixed,
+    });
   }
 
   let steps = 0;
