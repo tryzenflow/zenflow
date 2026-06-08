@@ -1,6 +1,9 @@
 import { TasksService } from "./tasks.service";
-import type { Task, User } from "../../generated/prisma";
+import type { Tag, Task, User } from "../../generated/prisma";
 import type { ListTasksDto } from "./dto/list-tasks.dto";
+
+/** list() reads tasks with their related tags included. */
+type TaskWithTags = Task & { tags: Tag[] };
 
 /**
  * Focused coverage for the GET /tasks `list()` display-vs-focal split:
@@ -29,19 +32,20 @@ const user: User = {
   updatedAt: new Date("2026-01-01T00:00:00.000Z"),
 };
 
-function task(overrides: Partial<Task> & { id: string }): Task {
+function task(overrides: Partial<TaskWithTags> & { id: string }): TaskWithTags {
   return {
     title: "Task",
     note: null,
     durationMinutes: 60,
     deadline: null,
+    // The Prisma row now carries related Tag rows; toDto maps these to names.
     tags: [],
     fixed: false,
+    manuallyMoved: false,
+    schedulingAnchor: null,
     startTime: 0,
     status: "PENDING",
     conflict: false,
-    rrule: "",
-    seriesId: null,
     scheduledStartTime: null,
     userId: user.id,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -50,13 +54,132 @@ function task(overrides: Partial<Task> & { id: string }): Task {
   };
 }
 
-function makeService(rows: Task[]): TasksService {
+function tag(name: string): Tag {
+  return {
+    id: `tag-${name}`,
+    name,
+    userId: user.id,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+  };
+}
+
+function makeService(rows: TaskWithTags[]): TasksService {
   const prisma = {
     task: { findMany: jest.fn().mockResolvedValue(rows) },
   };
   // Scheduler is unused by list().
   return new TasksService(prisma as never, {} as never);
 }
+
+/**
+ * Build a TasksService over an in-memory task table for create(). Captures
+ * every `task.create` call so the test can assert exactly how many rows a
+ * single POST materializes (must be one — recurrence is gone).
+ */
+function makeCreateService(): {
+  service: TasksService;
+  creates: { id: string; data: Record<string, unknown> }[];
+} {
+  const creates: { id: string; data: Record<string, unknown> }[] = [];
+  const byId = new Map<string, TaskWithTags>();
+
+  const tx = {
+    tag: {
+      createMany: jest.fn().mockResolvedValue({}),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    task: {
+      create: jest.fn((args: { data: Record<string, unknown> }) => {
+        const id = `task-${creates.length}`;
+        creates.push({ id, data: args.data });
+        const row = task({
+          id,
+          title: (args.data.title as string) ?? "Task",
+          fixed: (args.data.fixed as boolean) ?? false,
+          schedulingAnchor: (args.data.schedulingAnchor as Date | null) ?? null,
+          scheduledStartTime:
+            (args.data.scheduledStartTime as Date | null) ?? null,
+        });
+        byId.set(id, row);
+        return Promise.resolve(row);
+      }),
+      findUniqueOrThrow: jest.fn((args: { where: { id: string } }) =>
+        Promise.resolve(byId.get(args.where.id)!),
+      ),
+    },
+    taskEvent: { create: jest.fn().mockResolvedValue({}) },
+  };
+
+  const prisma = {
+    $transaction: (fn: (t: typeof tx) => unknown) => fn(tx),
+  };
+  // The scheduler is stubbed: placement is exercised in scheduler specs.
+  const scheduler = {
+    cascadeReschedule: jest.fn().mockResolvedValue(undefined),
+  };
+
+  return {
+    service: new TasksService(prisma as never, scheduler as never),
+    creates,
+  };
+}
+
+describe("TasksService.create — single row (no recurrence)", () => {
+  it("materializes exactly one Task row per POST for a flexible task", async () => {
+    const { service, creates } = makeCreateService();
+    await service.create(
+      {
+        title: "Standup",
+        durationMinutes: 30,
+        startDate: "2026-06-10",
+      },
+      user,
+    );
+    expect(creates).toHaveLength(1);
+  });
+
+  it("materializes exactly one Task row per POST for a fixed task", async () => {
+    const { service, creates } = makeCreateService();
+    await service.create(
+      {
+        title: "Meeting",
+        durationMinutes: 60,
+        fixed: true,
+        startTime: 600,
+        startDate: "2026-06-10",
+      },
+      user,
+    );
+    expect(creates).toHaveLength(1);
+  });
+
+  it("persists the create-day as schedulingAnchor (start-of-day UTC) for a flexible task", async () => {
+    const { service, creates } = makeCreateService();
+    await service.create(
+      { title: "Standup", durationMinutes: 30, startDate: "2026-06-10" },
+      user,
+    );
+    const anchor = creates[0].data.schedulingAnchor as Date;
+    expect(anchor).toBeInstanceOf(Date);
+    // UTC user: 2026-06-10 local midnight maps straight to the UTC instant.
+    expect(anchor.toISOString()).toBe("2026-06-10T00:00:00.000Z");
+  });
+
+  it("does NOT set a schedulingAnchor for a fixed task", async () => {
+    const { service, creates } = makeCreateService();
+    await service.create(
+      {
+        title: "Meeting",
+        durationMinutes: 60,
+        fixed: true,
+        startTime: 600,
+        startDate: "2026-06-10",
+      },
+      user,
+    );
+    expect(creates[0].data.schedulingAnchor).toBeNull();
+  });
+});
 
 describe("TasksService.list — display vs focal window", () => {
   describe("month view", () => {
@@ -141,6 +264,18 @@ describe("TasksService.list — display vs focal window", () => {
       ]);
       // Prev-month edge rendered but excluded from meta.
       expect(res.meta.totalAllocatedMinutes).toBe(60);
+    });
+
+    it("maps related Tag rows to a sorted name array on the DTO", async () => {
+      const tagged = task({
+        id: "tagged",
+        scheduledStartTime: new Date("2026-06-15T10:00:00.000Z"),
+        tags: [tag("work"), tag("admin")],
+      });
+      const service = makeService([tagged]);
+      const res = await service.list(dto, user);
+      const out = res.tasks.find((t) => t.id === "tagged");
+      expect(out?.tags).toEqual(["admin", "work"]);
     });
 
     it("still surfaces unplaced conflicts everywhere", async () => {

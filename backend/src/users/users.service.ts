@@ -8,6 +8,7 @@ import { Prisma, type User } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { PrismaService } from "../prisma/prisma.service";
 import { SchedulerService } from "../scheduler/scheduler.service";
+import { workWindowMinutes } from "../scheduler/slot";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { UpdatePreferencesDto } from "./dto/update-preferences.dto";
@@ -56,9 +57,11 @@ export class UsersService {
   }
 
   private assertValidWindow(workStart: number, workEnd: number) {
-    if (workStart >= workEnd)
-      throw new BadRequestException("workStart must be before workEnd");
-    if (workEnd - workStart < MIN_WORKDAY_MINUTES)
+    // A window wraps past midnight iff workEnd <= workStart; an equal start/end
+    // is a zero-length / ambiguous-24h window and is always rejected.
+    if (workStart === workEnd)
+      throw new BadRequestException("Working window cannot be empty");
+    if (workWindowMinutes(workStart, workEnd) < MIN_WORKDAY_MINUTES)
       throw new BadRequestException("Working window must be at least 1 hour");
   }
 
@@ -72,6 +75,11 @@ export class UsersService {
         workEnd: dto.workEnd,
         workDays: dto.workDays,
         timezone: dto.timezone,
+        // Only touch the archetype when the caller explicitly sent the key,
+        // so an update that omits it does not wipe an existing value.
+        ...("roleArchetypeId" in dto
+          ? { roleArchetypeId: dto.roleArchetypeId ?? null }
+          : {}),
       },
     });
     await this.scheduler.rescheduleAll(updated);

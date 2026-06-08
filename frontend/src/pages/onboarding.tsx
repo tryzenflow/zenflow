@@ -1,72 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import {
-  Check,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  Info,
-} from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Clock, Info } from "lucide-react";
 import { WithAuth } from "@/components/hoc/with-auth";
 import { Wordmark } from "@/components/logo";
 import { cn } from "@/lib/utils";
 import { useUserStore } from "@/hooks/use-user-store";
 import { completeOnboarding } from "@/api/users";
+import {
+  ARCHETYPES,
+  DAYS,
+  isValidWindow,
+  minutesToLabel,
+  TimeSelect,
+  windowWraps,
+  workWindowMinutes,
+} from "@/components/settings/preferences-fields";
 
 const STEPS = ["Welcome", "Work Hours", "Work Days", "Your Role", "All Set"];
-
-const DAYS = [
-  { iso: 1, label: "Mon" },
-  { iso: 2, label: "Tue" },
-  { iso: 3, label: "Wed" },
-  { iso: 4, label: "Thu" },
-  { iso: 5, label: "Fri" },
-  { iso: 6, label: "Sat" },
-  { iso: 7, label: "Sun" },
-];
-
-const ARCHETYPES = [
-  {
-    id: "night-owl-dev",
-    name: "Developer",
-    sig: "#backend #ops",
-    blurb: "Peaks mid-afternoon, avoids early mornings",
-  },
-  {
-    id: "creative-lead",
-    name: "Creative Lead",
-    sig: "#marketing #copy",
-    blurb: "Mornings, hard-avoids Friday afternoons",
-  },
-  {
-    id: "finance-ops",
-    name: "Finance / Ops",
-    sig: "#finance #admin",
-    blurb: "Structured 09–12 blocks, cutoff at 17:00",
-  },
-  {
-    id: "generalist-pm",
-    name: "Generalist PM",
-    sig: "#planning #meetings",
-    blurb: "Distributed across the day, high recurrence",
-  },
-];
-
-/** Half-hour options between 05:00 and 22:00. */
-const TIME_OPTIONS = Array.from(
-  { length: (22 - 5) * 2 + 1 },
-  (_, i) => 5 * 60 + i * 30,
-);
-
-function minutesToLabel(m: number) {
-  const h = Math.floor(m / 60);
-  const min = m % 60;
-  const ampm = h < 12 ? "AM" : "PM";
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}:${String(min).padStart(2, "0")} ${ampm}`;
-}
 
 function StepRail({ current }: { current: number }) {
   return (
@@ -126,37 +77,6 @@ function StepRail({ current }: { current: number }) {
   );
 }
 
-function TimeSelect({
-  value,
-  onChange,
-  label,
-}: {
-  value: number;
-  onChange: (v: number) => void;
-  label: string;
-}) {
-  return (
-    <div className="space-y-2">
-      <label className="text-xs font-semibold">{label}</label>
-      <div className="relative">
-        <Clock className="pointer-events-none absolute left-3 top-1/2 h-[15px] w-[15px] -translate-y-1/2 text-muted-foreground" />
-        <select
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="h-10 w-full appearance-none rounded-md border border-border bg-card pl-9 pr-9 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-ring"
-        >
-          {TIME_OPTIONS.map((m) => (
-            <option key={m} value={m}>
-              {minutesToLabel(m)}
-            </option>
-          ))}
-        </select>
-        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-      </div>
-    </div>
-  );
-}
-
 function OnboardingWizard() {
   const navigate = useNavigate();
   const { user, setUser } = useUserStore();
@@ -177,8 +97,9 @@ function OnboardingWizard() {
     if (user?.onboardingComplete) navigate("/");
   }, [user, navigate]);
 
-  const hours = Math.max(0, (workEnd - workStart) / 60);
-  const validHours = workEnd > workStart && workEnd - workStart >= 60;
+  const hours = workWindowMinutes(workStart, workEnd) / 60;
+  const validHours = isValidWindow(workStart, workEnd);
+  const wraps = windowWraps(workStart, workEnd);
 
   function toggleDay(iso: number) {
     setWorkDays((d) =>
@@ -299,10 +220,15 @@ function OnboardingWizard() {
                     <p className="text-xs font-semibold">
                       {validHours
                         ? `${hours} hours of schedulable time`
-                        : "End time must be after start time"}
+                        : "Window must be at least an hour long"}
                     </p>
                     <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
                       {minutesToLabel(workStart)} – {minutesToLabel(workEnd)}
+                      {wraps && (
+                        <span className="ml-1 font-sans text-primary">
+                          (next day)
+                        </span>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -377,7 +303,9 @@ function OnboardingWizard() {
               <div className="space-y-2 rounded-md border border-border bg-muted p-4 text-sm">
                 <Row
                   label="Hours"
-                  value={`${minutesToLabel(workStart)} – ${minutesToLabel(workEnd)}`}
+                  value={`${minutesToLabel(workStart)} – ${minutesToLabel(workEnd)}${
+                    wraps ? " (next day)" : ""
+                  }`}
                 />
                 <Row
                   label="Days"

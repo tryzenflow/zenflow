@@ -3,8 +3,10 @@ import { cn } from "@/lib/utils";
 import type { Event } from "@/types/schedule";
 import type { TaskCardState, TasksMeta, ViewMode } from "@zenflow/shared";
 import { toZonedTime } from "date-fns-tz";
-import { Lightbulb, Repeat } from "lucide-react";
+import { Lightbulb, LogOut, Settings } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Logo } from "@/components/logo";
+import { logout } from "@/api/auth";
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
@@ -103,11 +105,6 @@ function AgendaItem({ block, tz }: { block: Event; tz: string }) {
           {tag}
         </span>
       )}
-      {block.rrule && (
-        <span title="Recurring" className="flex shrink-0">
-          <Repeat className="h-3 w-3 text-primary" />
-        </span>
-      )}
       <span
         className={cn(
           "shrink-0 font-mono text-[10px]",
@@ -126,6 +123,65 @@ export function CalendarSidebar(props: SidebarProps) {
     <aside className="hidden w-72 shrink-0 border-r border-sidebar-border bg-sidebar lg:block">
       <SidebarBody {...props} />
     </aside>
+  );
+}
+
+/** Footer with the signed-in user, a Settings button, and Log out. */
+function SidebarFooter() {
+  const navigate = useNavigate();
+  const user = useUserStore((s) => s.user);
+
+  async function handleLogout() {
+    try {
+      await logout();
+    } catch {
+      // Sign the user out locally even if the request fails.
+    } finally {
+      useUserStore.getState().setUser(null);
+      navigate("/login");
+    }
+  }
+
+  // Settings lives in a dialog mounted once in layout.tsx; request it via a
+  // window event (mirrors the zenflow:open-task pattern) so the rail and the
+  // mobile drawer share a single dialog instance.
+  function openSettings() {
+    window.dispatchEvent(new CustomEvent("zenflow:open-settings"));
+  }
+
+  const identity = user?.name || user?.email || "Account";
+  const initial = (user?.name || user?.email || "?").charAt(0).toUpperCase();
+
+  return (
+    <div className="space-y-2 border-t border-sidebar-border pt-3">
+      <button
+        type="button"
+        onClick={openSettings}
+        className="flex w-full items-center gap-2.5 rounded-md px-2 py-2 text-left transition-colors hover:bg-sidebar-accent"
+      >
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+          {initial}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-xs font-semibold">
+            {identity}
+          </span>
+          {user?.name && user?.email && (
+            <span className="block truncate text-[10px] text-muted-foreground">
+              {user.email}
+            </span>
+          )}
+        </span>
+        <Settings className="h-4 w-4 shrink-0 text-muted-foreground" />
+      </button>
+      <button
+        type="button"
+        onClick={handleLogout}
+        className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+      >
+        <LogOut className="h-3.5 w-3.5" /> Log out
+      </button>
+    </div>
   );
 }
 
@@ -212,6 +268,8 @@ export function SidebarBody({ meta, agenda, view }: SidebarProps) {
           </li>
         </ul>
       </div>
+
+      <SidebarFooter />
     </div>
   );
 }

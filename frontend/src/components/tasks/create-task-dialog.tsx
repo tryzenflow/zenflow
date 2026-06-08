@@ -6,13 +6,14 @@ import { toast } from "sonner";
 import { postData } from "@/api";
 import { useFilesTracker } from "@/hooks/use-files-tracker";
 import { useUserStore } from "@/hooks/use-user-store";
-import { generateRRule, parseTags, TaskFormValues } from "@/utils/tasks";
+import { TaskFormValues } from "@/utils/tasks";
 import { TaskForm } from "./form/task-form";
 import { Plus } from "lucide-react";
 import { createTask } from "@/api/tasks";
 import { format } from "date-fns";
 import { fromZonedTime } from "date-fns-tz";
 import { snapToNearestLaterQuarterHour } from "@/utils/time";
+import { DAILY_HORIZON, TIME_GRANULARITY } from "@/utils/constants";
 import { isZonedToday } from "@/utils/tz";
 import type { ViewMode } from "@zenflow/shared";
 
@@ -34,41 +35,28 @@ export function CreateTaskDialog({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const user = useUserStore((state) => state.user);
-  const workDays = user?.workDays ?? [1, 2, 3, 4, 5];
   const tz = user?.timezone || "UTC";
+  // Default fixed window starts at the next quarter-hour (today) or 9 AM, lasting
+  // an hour — but clamped to the day's horizon. Without the clamp, a same-day
+  // create after ~23:00 snaps the end past DAILY_HORIZON, and since the fixed-time
+  // fields are hidden in the default (flexible) mode their validation error is
+  // invisible — silently blocking the Create button.
+  const rawStart = isZonedToday(date, tz)
+    ? snapToNearestLaterQuarterHour(date.getHours() * 60 + date.getMinutes())
+    : 9 * 60;
+  const fixedStart = Math.min(rawStart, DAILY_HORIZON - TIME_GRANULARITY);
+  const fixedEnd = Math.min(fixedStart + 60, DAILY_HORIZON);
   const form = useTaskForm({
     defaultValues: {
       title: "",
       duration: 60,
-      tags: "",
+      tags: [],
       note: "",
       deadlineDate: "",
       deadlineTime: "",
-      byweeks: [1],
-      frequency: "WEEKLY",
-      interval: 1,
-      byday: ["MO"],
-      bymonthday: 1,
-      bysetpos: 1,
-      bydayMonth: "MO",
-      monthlyMode: "on",
-      yearlyMode: "on",
       isFixed: false,
-      fixedStart: isZonedToday(date, tz)
-        ? snapToNearestLaterQuarterHour(
-            date.getHours() * 60 + date.getMinutes(),
-          )
-        : 9 * 60,
-      fixedEnd: isZonedToday(date, tz)
-        ? snapToNearestLaterQuarterHour(
-            date.getHours() * 60 + date.getMinutes(),
-          ) + 60
-        : 10 * 60,
-      isRecurring: false,
-      month: 1,
-      endMode: "never",
-      count: 1,
-      until: undefined,
+      fixedStart,
+      fixedEnd,
     },
   });
   const note = form.watch("note");
@@ -97,19 +85,13 @@ export function CreateTaskDialog({
         title: values.title,
         note: values.note || null,
         durationMinutes: values.duration,
-        tags: parseTags(values.tags),
+        tags: values.tags,
         deadline,
         fixed: values.isFixed,
         startTime: values.isFixed ? values.fixedStart : 0,
         // Always the viewed day: a fixed anchor when fixed, otherwise the
         // earliest day the flexible engine may place the task on.
         startDate: format(date, "yyyy-MM-dd"),
-        // Scopes recurrence materialization to the active week/month window.
-        view,
-        rrule:
-          values.isRecurring && view !== "day"
-            ? generateRRule(values, { view, date, workDays })
-            : "",
       });
       onCreated();
       form.reset();
@@ -174,9 +156,7 @@ export function CreateTaskDialog({
           newUploadsRef={newUploadsRef}
           loading={loading}
           onCancel={handleClose}
-          view={view}
           date={date}
-          workDays={workDays}
           submitLabel="Create Task"
         />
       </SheetContent>

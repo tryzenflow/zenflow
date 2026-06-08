@@ -1,13 +1,5 @@
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useTaskForm } from "@/hooks/use-task-form";
 import { format } from "date-fns";
@@ -17,13 +9,8 @@ import { toast } from "sonner";
 import { postData } from "@/api";
 import { useUserStore } from "@/hooks/use-user-store";
 import type { Task } from "@/types/tasks";
-import type { RecurrenceScope, TaskEvent } from "@zenflow/shared";
-import {
-  deleteTask,
-  EditTaskFormValues,
-  parseRRule,
-  parseTags,
-} from "@/utils/tasks";
+import type { TaskEvent } from "@zenflow/shared";
+import { deleteTask, EditTaskFormValues } from "@/utils/tasks";
 import { TaskForm } from "./form/task-form";
 import { useFilesTracker } from "@/hooks/use-files-tracker";
 import { completeTask, getTaskDetails, updateTask } from "@/api/tasks";
@@ -36,23 +23,6 @@ interface EditTaskDialogProps {
   onSaved: () => void;
 }
 
-const defaultRecurringFields = {
-  byweeks: [1],
-  frequency: "WEEKLY",
-  interval: 1,
-  byday: ["MO"],
-  bymonthday: 1,
-  bysetpos: 1,
-  bydayMonth: "MO",
-  monthlyMode: "on",
-  yearlyMode: "on",
-  isRecurring: false,
-  month: 1,
-  endMode: "never",
-  count: 1,
-  until: undefined,
-};
-
 export function EditTaskDialog({
   open,
   setOpen,
@@ -62,14 +32,8 @@ export function EditTaskDialog({
   const [loading, setLoading] = useState(false);
   const [task, setTask] = useState<Task | null>(null);
   const [events, setEvents] = useState<TaskEvent[]>([]);
-  // When set, a recurring task is awaiting the user's choice of how far a
-  // save/delete should propagate across the series.
-  const [scopePrompt, setScopePrompt] = useState<
-    { mode: "save"; values: EditTaskFormValues } | { mode: "delete" } | null
-  >(null);
   const user = useUserStore((s) => s.user);
   const { newUploadsRef } = useFilesTracker();
-  const isRecurring = !!task?.rrule;
 
   useEffect(() => {
     if (!open) return;
@@ -81,10 +45,9 @@ export function EditTaskDialog({
 
   const form = useTaskForm({
     defaultValues: {
-      ...(defaultRecurringFields as any),
       title: "",
       duration: 60,
-      tags: "",
+      tags: [],
       note: "",
       deadlineDate: "",
       deadlineTime: "",
@@ -96,20 +59,14 @@ export function EditTaskDialog({
 
   useEffect(() => {
     if (!task) return;
-    const parsed = task.rrule
-      ? parseRRule(task.rrule)
-      : (defaultRecurringFields as any);
     form.reset({
-      ...(defaultRecurringFields as any),
-      ...parsed,
       title: task.title,
       duration: task.durationMinutes,
-      tags: task.tags.join(", "),
+      tags: task.tags,
       note: task.note ?? "",
       isFixed: task.fixed,
       fixedStart: task.startTime,
       fixedEnd: task.startTime + task.durationMinutes,
-      isRecurring: !!task.rrule,
       deadlineDate: task.deadline
         ? format(new Date(task.deadline), "yyyy-MM-dd")
         : "",
@@ -120,15 +77,6 @@ export function EditTaskDialog({
   }, [task, form]);
 
   async function onSubmit(values: EditTaskFormValues) {
-    // Recurring edits ask how far to propagate before hitting the API.
-    if (isRecurring) {
-      setScopePrompt({ mode: "save", values });
-      return;
-    }
-    await doUpdate(values);
-  }
-
-  async function doUpdate(values: EditTaskFormValues, scope?: RecurrenceScope) {
     if (!user) return;
     setLoading(true);
     const deadline = values.deadlineDate
@@ -142,8 +90,7 @@ export function EditTaskDialog({
         title: values.title,
         note: values.note || null,
         deadline,
-        tags: parseTags(values.tags),
-        scope,
+        tags: values.tags,
       });
       onSaved();
       toast.success("Task updated 🎉");
@@ -167,33 +114,14 @@ export function EditTaskDialog({
   }
 
   async function onDelete() {
-    if (isRecurring) {
-      setScopePrompt({ mode: "delete" });
-      return;
-    }
-    await doDelete();
-  }
-
-  async function doDelete(scope?: RecurrenceScope) {
     try {
-      await deleteTask(taskId, scope);
+      await deleteTask(taskId);
       onSaved();
-      toast.success(
-        scope === "following" ? "Occurrences deleted" : "Task deleted",
-      );
+      toast.success("Task deleted");
       setOpen(false);
     } catch (error: any) {
       toast.error(error?.response?.data?.message || "Failed to delete task");
     }
-  }
-
-  /** Run the pending save/delete with the chosen recurrence scope. */
-  async function applyScope(scope: RecurrenceScope) {
-    const prompt = scopePrompt;
-    setScopePrompt(null);
-    if (!prompt) return;
-    if (prompt.mode === "save") await doUpdate(prompt.values, scope);
-    else await doDelete(scope);
   }
 
   const handleClose = async () => {
@@ -222,8 +150,7 @@ export function EditTaskDialog({
       : null;
 
   return (
-    <>
-      <Sheet open={open} onOpenChange={setOpen} modal={false}>
+    <Sheet open={open} onOpenChange={setOpen} modal={false}>
         {/* Non-modal + no overlay + offset below the 56px header so the calendar
           stays navigable while editing. Outside interactions are swallowed so
           paging the date range or switching view never closes the panel. */}
@@ -306,50 +233,6 @@ export function EditTaskDialog({
           />
         </SheetContent>
       </Sheet>
-
-      {/* Recurring scope chooser — gates save/delete for series occurrences. */}
-      <Dialog
-        open={!!scopePrompt}
-        onOpenChange={(o) => !o && setScopePrompt(null)}
-      >
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>
-              {scopePrompt?.mode === "delete"
-                ? "Delete recurring task"
-                : "Edit recurring task"}
-            </DialogTitle>
-            <DialogDescription>
-              This task repeats. Apply{" "}
-              {scopePrompt?.mode === "delete" ? "the deletion" : "your changes"}{" "}
-              to only this occurrence, or this and all following occurrences?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex-col gap-2 sm:flex-col">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={loading}
-              onClick={() => applyScope("one")}
-              className="w-full"
-            >
-              This task
-            </Button>
-            <Button
-              type="button"
-              variant={
-                scopePrompt?.mode === "delete" ? "destructive" : "default"
-              }
-              disabled={loading}
-              onClick={() => applyScope("following")}
-              className="w-full"
-            >
-              This and following tasks
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
   );
 }
 

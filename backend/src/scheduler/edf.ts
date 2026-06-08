@@ -1,5 +1,5 @@
-import { MAX_CASCADE_STEPS, MAX_SCAN_DAYS, MIN } from "./constants";
-import { EdfTask, SchedulerPrefs, Placement, OccBlock } from "./interfaces";
+import { MAX_SCAN_DAYS, MIN } from "./constants";
+import { EdfTask, SchedulerPrefs, Placement } from "./interfaces";
 
 // Re-export the scheduler's public types so consumers can import them from "./edf".
 export type { EdfTask, SchedulerPrefs };
@@ -26,6 +26,25 @@ export function intervalOf(t: {
   return { start, end: start + durationMs(t.durationMinutes) };
 }
 
+/**
+ * A task is "past" (frozen) iff it has a `scheduledStartTime` that already
+ * begins before `now`. Past tasks are never moved, re-placed, or re-flagged for
+ * conflict by any scheduling path, and they are excluded from the occupied set
+ * that drives placement/conflict for non-past tasks (a past block can never
+ * legitimately block a future slot — `findSlot` clamps every candidate to
+ * `now`). A task with no `scheduledStartTime` is never past. An in-progress
+ * task that started before `now` IS past and is left alone.
+ */
+export function isPast(
+  t: { scheduledStartTime: Date | null },
+  now: Date,
+): boolean {
+  return (
+    t.scheduledStartTime !== null &&
+    t.scheduledStartTime.getTime() < now.getTime()
+  );
+}
+
 /** EDF ordering: deadline ascending (nulls last), then createdAt ascending. */
 export function compareEdf(a: EdfTask, b: EdfTask): number {
   const ad = a.deadline ? a.deadline.getTime() : Infinity;
@@ -37,11 +56,6 @@ export function compareEdf(a: EdfTask, b: EdfTask): number {
 /**
  * Earliest contiguous work-hours slot of `durationMinutes` that starts at/after
  * `earliest` (and `now`) and ends before `deadline`. Returns null on conflict.
- *
- * With `opts.ignoreWorkDays` the non-working-day skip is suppressed, so a slot
- * can be placed within the work hours of a non-working day. This is only used
- * for recurring occurrences, which are pinned to a single day via
- * `earliest`+`deadline`, so it can only ever consider that one chosen day.
  */
 export function findSlot(
   prefs: SchedulerPrefs,
@@ -50,7 +64,6 @@ export function findSlot(
   occupied: Interval[],
   now: Date,
   earliest?: Date,
-  opts: { ignoreWorkDays?: boolean } = {},
 ): Date | null {
   const tz = prefs.timezone;
   const durMs = durationMs(durationMinutes);
@@ -59,11 +72,15 @@ export function findSlot(
   const deadlineMs = deadline ? deadline.getTime() : null;
   const deadlineDateStr = deadline ? localDateStr(deadline, tz) : null;
 
-  for (let d = 0; d <= MAX_SCAN_DAYS; d++) {
+  // A window that wraps past midnight and started on the *previous* day spills
+  // into `now`'s morning, so when it wraps the scan begins one day earlier. The
+  // `cand` clamp below keeps every candidate ≥ now/earliest, so the prev-day
+  // evening slots that precede `now` are naturally skipped.
+  const wraps = prefs.workEnd <= prefs.workStart;
+  for (let d = wraps ? -1 : 0; d <= MAX_SCAN_DAYS; d++) {
     const dateStr = addDaysStr(fromStr, d);
     if (deadlineDateStr && dateStr > deadlineDateStr) break;
-    if (!opts.ignoreWorkDays && !prefs.workDays.includes(isoWeekday(dateStr)))
-      continue;
+    if (!prefs.workDays.includes(isoWeekday(dateStr))) continue;
 
     const win = workWindowFor(dateStr, prefs.workStart, prefs.workEnd, tz);
     let cand = ceilToSlot(Math.max(win.start, lowerMs));
@@ -77,30 +94,74 @@ export function findSlot(
 }
 
 /**
- * Full deterministic re-schedule of all PENDING tasks. Fixed tasks keep their
- * anchored slot; flexible tasks are EDF-placed around them. Used on preference
- * changes (docs: "PUT preferences triggers full EDF rescheduling").
+ * An anchored task keeps its stored slot through {@link scheduleAll}: a `fixed`
+ * task, or a flexible task the user manually dragged/resized (`manuallyMoved`).
+ * Both are passed through as occupied space; only the remaining flexible,
+ * non-anchored, non-past tasks get EDF-packed.
+ */
+function isAnchored(t: EdfTask): boolean {
+  return (t.fixed || t.manuallyMoved) && t.scheduledStartTime !== null;
+}
+
+/**
+ * Full deterministic re-schedule of all PENDING tasks. Fixed and manually-moved
+ * tasks keep their anchored slot. The remaining flexible tasks are EDF-packed
+ * from `now` around everything already occupied — closer deadlines win earlier
+ * slots, later ones cascade. Used on preference changes and on the create /
+ * deadline-edit cascade.
  */
 export function scheduleAll(
   prefs: SchedulerPrefs,
   tasks: EdfTask[],
   now: Date,
 ): Placement[] {
-  const fixed = tasks.filter((t) => t.fixed && t.scheduledStartTime);
-  const flexible = tasks.filter((t) => !t.fixed).sort(compareEdf);
+  // Past tasks are frozen: never moved, never re-flagged, and excluded from the
+  // occupied set so they can't block or displace future placements.
+  const past = tasks.filter((t) => isPast(t, now));
+  const live = tasks.filter((t) => !isPast(t, now));
 
-  const occupied: Interval[] = fixed
+  // Fixed + manually-moved tasks are anchors; everything else is EDF-packed.
+  const anchored = live.filter(isAnchored);
+  const plain = live.filter((t) => !isAnchored(t)).sort(compareEdf);
+
+  const occupied: Interval[] = anchored
     .map(intervalOf)
     .filter((i): i is Interval => i !== null);
 
-  const out: Placement[] = fixed.map((t) => ({
+  // Frozen past tasks pass through with their stored placement + conflict.
+  const out: Placement[] = past.map((t) => ({
     id: t.id,
     scheduledStartTime: t.scheduledStartTime,
-    conflict: false,
+    conflict: t.conflict,
   }));
 
-  for (const t of flexible) {
-    const slot = findSlot(prefs, t.durationMinutes, t.deadline, occupied, now);
+  // Anchors pass through with their stored slot. A `fixed` task is trusted to be
+  // conflict-free (its slot is user-chosen and authoritative); a manually-moved
+  // flexible task keeps its stored overlap verdict, since dragging it onto
+  // another task is allowed and surfaced as a conflict (see recomputeConflicts).
+  out.push(
+    ...anchored.map((t) => ({
+      id: t.id,
+      scheduledStartTime: t.scheduledStartTime,
+      conflict: t.fixed ? false : t.conflict,
+    })),
+  );
+
+  // Flexible tasks fill the gaps with EDF packing. Each task carries its own
+  // floor: a deadline-bearing task is packed from `now` (urgency dominates — its
+  // create-day anchor is ignored), while a no-deadline task is floored at its
+  // stored `schedulingAnchor` so it lands on/after the day it was created from.
+  // `findSlot` already clamps the floor up to `now`, so a past anchor is inert.
+  for (const t of plain) {
+    const earliest = t.deadline ? undefined : (t.schedulingAnchor ?? undefined);
+    const slot = findSlot(
+      prefs,
+      t.durationMinutes,
+      t.deadline,
+      occupied,
+      now,
+      earliest,
+    );
     if (slot) {
       occupied.push({
         start: slot.getTime(),
@@ -112,162 +173,4 @@ export function scheduleAll(
     }
   }
   return out;
-}
-
-/**
- * Incremental placement of a single new task around already-placed tasks
- * (preserves existing/ manually-moved placements). Used on POST /tasks.
- * `earliest` lower-bounds the search (e.g. the day the user was viewing), so a
- * flexible task lands on/after that day rather than the first slot from `now`.
- */
-export function placeOne(
-  prefs: SchedulerPrefs,
-  task: EdfTask,
-  others: EdfTask[],
-  now: Date,
-  earliest?: Date,
-  opts: { ignoreWorkDays?: boolean } = {},
-): Placement {
-  if (task.fixed) {
-    return {
-      id: task.id,
-      scheduledStartTime: task.scheduledStartTime,
-      conflict: task.scheduledStartTime === null,
-    };
-  }
-  const occupied = others
-    .map(intervalOf)
-    .filter((i): i is Interval => i !== null);
-  const slot = findSlot(
-    prefs,
-    task.durationMinutes,
-    task.deadline,
-    occupied,
-    now,
-    earliest,
-    opts,
-  );
-  return slot
-    ? { id: task.id, scheduledStartTime: slot, conflict: false }
-    : { id: task.id, scheduledStartTime: null, conflict: true };
-}
-
-/**
- * Cascading realignment for a manual move. Places `targetId` at the snapped
- * `requestedStart`; if that lands on a fixed anchor the incoming task is routed
- * to the next open slot, and any flexible tasks it displaces are re-placed
- * (recursively). Returns the new placement of every task that moved (including
- * the target). Tasks that don't move are omitted.
- */
-export function cascadeReschedule(
-  prefs: SchedulerPrefs,
-  tasks: EdfTask[],
-  targetId: string,
-  requestedStart: Date,
-  now: Date,
-): Placement[] {
-  const byId = new Map(tasks.map((t) => [t.id, { ...t }]));
-  const target = byId.get(targetId);
-  if (!target) return [];
-
-  const reqMs = Math.round(requestedStart.getTime() / SLOT_MS) * SLOT_MS;
-  const changed = new Map<string, Date | null>();
-
-  const occ: OccBlock[] = [];
-  for (const t of byId.values()) {
-    if (t.id === targetId) continue;
-    const iv = intervalOf(t);
-    if (iv)
-      occ.push({ id: t.id, start: iv.start, end: iv.end, fixed: t.fixed });
-  }
-  const asIntervals = (exclude?: string): Interval[] =>
-    occ
-      .filter((o) => o.id !== exclude)
-      .map((o) => ({ start: o.start, end: o.end }));
-
-  // Resolve the target's landing slot.
-  let targetStart: number | null = reqMs;
-  const targetEnd = reqMs + durationMs(target.durationMinutes);
-  const hitsFixed = occ.some(
-    (o) => o.fixed && reqMs < o.end && targetEnd > o.start,
-  );
-  if (hitsFixed) {
-    const slot = findSlot(
-      prefs,
-      target.durationMinutes,
-      target.deadline,
-      asIntervals(),
-      now,
-      new Date(reqMs),
-    );
-    targetStart = slot ? slot.getTime() : null;
-  }
-
-  target.scheduledStartTime =
-    targetStart === null ? null : new Date(targetStart);
-  changed.set(target.id, target.scheduledStartTime);
-
-  const queue: string[] = [];
-  if (targetStart !== null) {
-    const tEnd = targetStart + durationMs(target.durationMinutes);
-    // Evict flexible tasks overlapping the target's new block.
-    for (let i = occ.length - 1; i >= 0; i--) {
-      const o = occ[i];
-      if (!o.fixed && targetStart < o.end && tEnd > o.start) {
-        occ.splice(i, 1);
-        queue.push(o.id);
-      }
-    }
-    occ.push({
-      id: target.id,
-      start: targetStart,
-      end: tEnd,
-      fixed: target.fixed,
-    });
-  }
-
-  let steps = 0;
-  while (queue.length && steps++ < MAX_CASCADE_STEPS) {
-    const id = queue.shift()!;
-    const t = byId.get(id)!;
-    const slot = findSlot(
-      prefs,
-      t.durationMinutes,
-      t.deadline,
-      asIntervals(id),
-      now,
-      t.scheduledStartTime ?? undefined,
-    );
-    if (slot) {
-      const s = slot.getTime();
-      const e = s + durationMs(t.durationMinutes);
-      // Newly placed block may itself displace others.
-      for (let i = occ.length - 1; i >= 0; i--) {
-        const o = occ[i];
-        if (o.id === id) continue;
-        if (!o.fixed && s < o.end && e > o.start) {
-          occ.splice(i, 1);
-          if (!queue.includes(o.id)) queue.push(o.id);
-        }
-      }
-      const existing = occ.find((o) => o.id === id);
-      if (existing) {
-        existing.start = s;
-        existing.end = e;
-      } else {
-        occ.push({ id, start: s, end: e, fixed: t.fixed });
-      }
-      t.scheduledStartTime = slot;
-      changed.set(id, slot);
-    } else {
-      t.scheduledStartTime = null;
-      changed.set(id, null);
-    }
-  }
-
-  return [...changed.entries()].map(([id, scheduledStartTime]) => ({
-    id,
-    scheduledStartTime,
-    conflict: scheduledStartTime === null,
-  }));
 }

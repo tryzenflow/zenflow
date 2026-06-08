@@ -8,6 +8,7 @@ import { MonthView } from "./month-view";
 import { CalendarSidebar, SidebarBody } from "./sidebar";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { EditTaskDialog } from "@/components/tasks/edit-task-dialog";
+import { SettingsDialog } from "@/components/settings/settings-dialog";
 import {
   completeTask,
   listTasks,
@@ -36,6 +37,7 @@ export function CalendarLayout() {
   const [meta, setMeta] = useState<TasksMeta | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [navOpen, setNavOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   async function refetch() {
     try {
@@ -62,6 +64,16 @@ export function CalendarLayout() {
     window.addEventListener("zenflow:open-task", handler as EventListener);
     return () =>
       window.removeEventListener("zenflow:open-task", handler as EventListener);
+  }, []);
+
+  // Open the settings dialog when the sidebar footer requests it.
+  useEffect(() => {
+    const handler = () => {
+      setSettingsOpen(true);
+      setNavOpen(false); // close the mobile drawer if the tap came from it
+    };
+    window.addEventListener("zenflow:open-settings", handler);
+    return () => window.removeEventListener("zenflow:open-settings", handler);
   }, []);
 
   async function onReschedule(taskId: string, startISO: string) {
@@ -233,6 +245,7 @@ export function CalendarLayout() {
           onSaved={refetch}
         />
       )}
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>
   );
 }

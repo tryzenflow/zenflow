@@ -13,6 +13,7 @@ import { MailService } from "./mail/mail.service";
 import { MailModule } from "./mail/mail.module";
 import { UsersModule } from "./users/users.module";
 import { TasksModule } from "./tasks/tasks.module";
+import { TagsModule } from "./tags/tags.module";
 import { FilesModule } from "./files/files.module";
 import { ScheduleModule } from "@nestjs/schedule";
 
@@ -51,6 +52,7 @@ import { ScheduleModule } from "@nestjs/schedule";
     AuthModule,
     MailModule,
     TasksModule,
+    TagsModule,
     FilesModule,
   ],
   providers: [AppService, MailService],

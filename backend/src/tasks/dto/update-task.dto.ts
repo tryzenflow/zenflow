@@ -1,12 +1,11 @@
 import {
   IsArray,
-  IsIn,
   IsISO8601,
   IsOptional,
   IsString,
   ValidateIf,
 } from "class-validator";
-import type { RecurrenceScope, UpdateTaskInput } from "@zenflow/shared";
+import type { UpdateTaskInput } from "@zenflow/shared";
 
 /** Metadata-only update. Does NOT trigger rescheduling (see docs ADR/api-contracts). */
 export class UpdateTaskDto implements UpdateTaskInput {
@@ -28,9 +27,4 @@ export class UpdateTaskDto implements UpdateTaskInput {
   @IsArray()
   @IsString({ each: true })
   tags?: string[];
-
-  /** Recurring propagation; defaults to this occurrence only. */
-  @IsOptional()
-  @IsIn(["one", "following"])
-  scope?: RecurrenceScope;
 }

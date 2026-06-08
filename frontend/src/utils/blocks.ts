@@ -8,9 +8,6 @@ export function taskToBlock(task: Task): Event | null {
   const start = new Date(task.scheduledStartTime);
   const end = new Date(start.getTime() + task.durationMinutes * 60_000);
   return {
-    // Each occurrence is its own row now (materialized series), so both the
-    // block id and the mutation target are the real task id; seriesId is only
-    // a grouping link between siblings, never a mutation target.
     id: task.id,
     taskId: task.id,
     title: task.title,
@@ -20,7 +17,6 @@ export function taskToBlock(task: Task): Event | null {
     fixed: task.fixed,
     conflict: task.conflict,
     tags: task.tags,
-    rrule: task.rrule,
     state: deriveState(task),
   };
 }

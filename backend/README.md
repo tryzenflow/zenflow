@@ -15,7 +15,7 @@ Earliest-Deadline-First (EDF) scheduling engine**. Part of the
 | ORM / DB | Prisma 6 + PostgreSQL |
 | Sessions & cache | Redis (`connect-redis` sessions, `@nestjs/cache-manager` + keyv) |
 | Auth | Passport `local` strategy used for **email OTP** (no passwords) |
-| Scheduling/time | `rrule`, `luxon`, `date-fns` / `date-fns-tz` |
+| Scheduling/time | `luxon`, `date-fns` / `date-fns-tz` |
 | Validation | `class-validator` + `class-transformer` (global `ValidationPipe`) |
 | Mail | `@nestjs-modules/mailer` + nodemailer + Handlebars templates |
 | API docs | `@nestjs/swagger` (served at `/api`) |
@@ -40,8 +40,6 @@ backend/
 │   ├── users/                 # profile, preferences, onboarding
 │   │   └── decorators/        # @CurrentUser()
 │   ├── tasks/                 # task CRUD, reschedule, resize, complete
-│   │   ├── utils/             # recurrence.ts (materialize a series → rows)
-│   │   └── validators/        # @IsRRule()
 │   ├── scheduler/             # the engine (see below)
 │   │   ├── edf.ts             # PURE algorithm — no I/O, fully unit-tested
 │   │   ├── slot.ts            # work-window math, 15-min slots, penalty index
@@ -64,7 +62,7 @@ what makes the engine unit-testable and what Phase 3 will plug into.
 
 ## Database schema
 
-Defined in [`prisma/schema.prisma`](prisma/schema.prisma). Four models.
+Defined in [`prisma/schema.prisma`](prisma/schema.prisma). Five models.
 
 ### `User`
 | Field | Type | Notes |
@@ -81,22 +79,19 @@ Defined in [`prisma/schema.prisma`](prisma/schema.prisma). Four models.
 ### `Task`
 | Field | Type | Notes |
 |-------|------|-------|
-| `id` | uuid | PK — every materialized occurrence is its own row |
+| `id` | uuid | PK |
 | `title`, `note` | string | `note` is rich text (TipTap) |
 | `durationMinutes` | int | **always a positive multiple of 15** |
 | `deadline` | DateTime? | EDF ordering key (nulls last) |
-| `tags` | string[] | free-form `text[]` |
+| `tags` | `Tag[]` | implicit many-to-many with `Tag` (per-user labels) |
 | `fixed` | bool | true → immovable anchor at `startTime` |
 | `startTime` | int | minutes from midnight; only meaningful when `fixed` |
 | `status` | `TaskStatus` | `PENDING` \| `DONE` |
-| `conflict` | bool | true when the engine found no slot before the deadline |
-| `rrule` | string | RFC 5545, `""` when non-recurring |
-| `seriesId` | string? | shared by every occurrence of a recurring series; null otherwise |
+| `conflict` | bool | true when the task has no valid placement (no slot before its deadline) — i.e. `scheduledStartTime` is null |
 | `scheduledStartTime` | DateTime? | placement assigned by the EDF engine |
 | `userId` | uuid | FK → `User`, `onDelete: Cascade` |
 
-Indexes: `[userId, deadline]`, `[userId, status]`, `[userId, scheduledStartTime]`,
-`[userId, seriesId]`.
+Indexes: `[userId, deadline]`, `[userId, status]`, `[userId, scheduledStartTime]`.
 
 ### `TaskEvent` (append-only audit trail — the ML fuel)
 | Field | Type | Notes |
@@ -108,13 +103,27 @@ Indexes: `[userId, deadline]`, `[userId, status]`, `[userId, scheduledStartTime]
 | `occurredAt` | DateTime | indexed desc per user |
 | `taskId` / `userId` | uuid | FKs, cascade delete (`userId` denormalized for range queries) |
 
+### `Tag`
+Per-user label in an implicit many-to-many with `Task`.
+| Field | Type | Notes |
+|-------|------|-------|
+| `id` | uuid | PK |
+| `name` | string | unique per user (`@@unique([userId, name])`) |
+| `userId` | uuid | FK → `User`, `onDelete: Cascade` |
+| `createdAt` | DateTime | |
+
+On task create/update the backend resolves an incoming array of tag **names**:
+unknown names are upserted (per user) and all are connected to the occurrence(s),
+atomically inside the task transaction. The wire format keeps `Task.tags` as a
+`string[]` of names — the `Tag` table is a backend detail.
+
 ### `File`
 `id`, `originalName`, `filename`, `path`, `mimetype`, `size`, `userId` (cascade).
 
-> **Recurrence is materialized, not virtual.** Creating a recurring task expands the
-> series into one real `Task` row per occurrence day, all sharing a `seriesId`. Each row
-> is scheduled independently by EDF and is safe to mutate on its own. Bulk mutations use
-> a `scope` of `"one"` or `"following"`.
+> **Tasks are one-off.** A `POST /tasks` always creates exactly one `Task` row — fixed
+> tasks anchor at `startTime`, flexible tasks are EDF-placed from `startDate` (or `now`).
+> There is no recurrence: no `rrule`, no `seriesId`, no `scope`. True recurrence may be
+> reintroduced later as a deliberate feature on top of this simplified scheduler.
 
 ## API endpoints
 
@@ -142,14 +151,19 @@ Global prefix **`/api/v1`**. All routes except `POST /auth/otp/*` require
 ### Tasks (`/tasks`)
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/tasks` | create (materializes a recurring series; EDF-places flexible tasks) |
+| POST | `/tasks` | create a single task (fixed anchors at `startTime`; flexible is EDF-placed) |
 | GET | `/tasks?view=&date=&status=` | list within the view window (+ unplaced conflicts) |
 | GET | `/tasks/:id` | task detail + last events |
-| PATCH | `/tasks/:id` | metadata only (title/note/deadline/tags) — **does NOT reschedule**; honors `scope` |
-| PATCH | `/tasks/:id/reschedule` | manual drag → `cascadeReschedule`, records MOVE + penalty telemetry |
+| PATCH | `/tasks/:id` | metadata only (title/note/deadline/tags) — **does NOT reschedule** |
+| PATCH | `/tasks/:id/reschedule` | manual drag → `pin`, records MOVE + penalty telemetry |
 | PATCH | `/tasks/:id/resize` | edge-resize, snaps to 15-min grid, recomputes conflicts |
 | PATCH | `/tasks/:id/complete` | mark DONE, records COMPLETE |
-| DELETE | `/tasks/:id?scope=` | delete (`one` \| `following`) |
+| DELETE | `/tasks/:id` | delete the task |
+
+### Tags (`/tags`)
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/tags` | list the current user's tags (`{ tags: { id, name }[] }`, name-sorted) for the combobox |
 
 ### Files (`/files`)
 `POST /files/upload` (multipart, ≤100 MB × 5), `POST /files/remove`,
@@ -171,12 +185,23 @@ Pure functions you'll work with:
   and ends before `deadline`; scans up to `MAX_SCAN_DAYS` (90); returns `null` on conflict.
 - **`compareEdf(a, b)`** — the ordering: deadline ascending (nulls last), then `createdAt`.
 - **`scheduleAll(prefs, tasks, now)`** — full deterministic re-EDF (fixed tasks stay put,
-  flexible tasks placed around them). Used when preferences change.
+  flexible tasks EDF-packed around them). Used when preferences change.
 - **`placeOne(prefs, task, others, now, earliest?)`** — incremental placement of one new
   task, preserving everyone else's (possibly hand-moved) placement. Used on `POST /tasks`.
-- **`cascadeReschedule(prefs, tasks, targetId, requestedStart, now)`** — a manual drag:
-  pin the target at the snapped slot; if it hits a fixed anchor, route it onward and
-  re-place any flexible tasks it displaces (bounded by `MAX_CASCADE_STEPS`).
+- **`isPast(task, now)`** — `task.scheduledStartTime !== null && start < now`. **Past tasks
+  are frozen** by every scheduling path: never moved, re-placed, or re-flagged for conflict,
+  and excluded from the occupied/overlap set that drives placement + conflict for live tasks
+  (a past block can't legitimately block a future slot — `findSlot` already clamps every
+  candidate to `now`). `scheduleAll` passes them through with their stored
+  `scheduledStartTime`/`conflict`; `placeOne` skips them when scanning occupancy; `pin`/
+  `resize` skip them in the pairwise conflict recompute. In-progress tasks that started
+  before `now` count as past and are left alone.
+
+`SchedulerService.pin`/`resize` (manual drag/drop and edge-resize) place a task exactly
+where the user dropped it — no cascade — and recompute every task's conflict from real
+time-overlap via the shared `recomputeConflicts(projected, now)` helper. This is the only
+path that can leave a task **placed but conflicting** (overlapping a neighbour); the EDF
+engine itself only ever leaves a task unplaced (`scheduledStartTime: null`) on conflict.
 
 `SchedulerService` wraps these to persist placements, write `TaskEvent`s, and bump the
 `penaltyMatrix`. A `scoreSlot()` seam is reserved here for the **Phase 3 bandit** to plug
@@ -193,7 +218,7 @@ into (see [`services/bandit/README.md`](../services/bandit/README.md) and
 - **DTOs + validation:** every request body/query is a `class-validator` DTO. The global
   pipe runs `whitelist: true, forbidNonWhitelisted: true, transform: true` with implicit
   conversion — so unknown fields are rejected and query params coerce to their typed shape.
-  Custom decorators: `@IsValidTimezone()`, `@IsRRule()`, plus `@CurrentUser()`.
+  Custom decorators: `@IsValidTimezone()`, plus `@CurrentUser()`.
 - **Response shape:** controllers return `{ success: true, message, data }`; let NestJS
   `HttpException`s propagate (don't swallow). Prisma errors map via
   [`src/prisma/error-codes.ts`](src/prisma/error-codes.ts).

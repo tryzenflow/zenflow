@@ -1,5 +1,5 @@
 import type { ViewMode } from "@zenflow/shared";
-import { addDaysStr, isoWeekday } from "./slot";
+import { addDaysStr, isoWeekday, workWindowMinutes } from "./slot";
 
 /**
  * Calendar-window helpers used both for placement bounds and for the
@@ -85,7 +85,9 @@ export function sumWorkMinutes(
   workEnd: number,
   workDays: number[],
 ): number {
-  const perDay = Math.max(0, workEnd - workStart);
+  // Each workday contributes its effective minutes once (start-day anchored);
+  // an overnight window's morning tail is not double-counted on day D+1.
+  const perDay = workWindowMinutes(workStart, workEnd);
   let total = 0;
   let cur = startStr;
   for (let i = 0; i < 366 && cur <= endStr; i++) {
