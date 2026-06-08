@@ -42,6 +42,7 @@ function task(overrides: Partial<TaskWithTags> & { id: string }): TaskWithTags {
     tags: [],
     fixed: false,
     manuallyMoved: false,
+    schedulingAnchor: null,
     startTime: 0,
     status: "PENDING",
     conflict: false,
@@ -77,9 +78,9 @@ function makeService(rows: TaskWithTags[]): TasksService {
  */
 function makeCreateService(): {
   service: TasksService;
-  creates: { id: string }[];
+  creates: { id: string; data: Record<string, unknown> }[];
 } {
-  const creates: { id: string }[] = [];
+  const creates: { id: string; data: Record<string, unknown> }[] = [];
   const byId = new Map<string, TaskWithTags>();
 
   const tx = {
@@ -90,11 +91,12 @@ function makeCreateService(): {
     task: {
       create: jest.fn((args: { data: Record<string, unknown> }) => {
         const id = `task-${creates.length}`;
-        creates.push({ id });
+        creates.push({ id, data: args.data });
         const row = task({
           id,
           title: (args.data.title as string) ?? "Task",
           fixed: (args.data.fixed as boolean) ?? false,
+          schedulingAnchor: (args.data.schedulingAnchor as Date | null) ?? null,
           scheduledStartTime:
             (args.data.scheduledStartTime as Date | null) ?? null,
         });
@@ -149,6 +151,33 @@ describe("TasksService.create — single row (no recurrence)", () => {
       user,
     );
     expect(creates).toHaveLength(1);
+  });
+
+  it("persists the create-day as schedulingAnchor (start-of-day UTC) for a flexible task", async () => {
+    const { service, creates } = makeCreateService();
+    await service.create(
+      { title: "Standup", durationMinutes: 30, startDate: "2026-06-10" },
+      user,
+    );
+    const anchor = creates[0].data.schedulingAnchor as Date;
+    expect(anchor).toBeInstanceOf(Date);
+    // UTC user: 2026-06-10 local midnight maps straight to the UTC instant.
+    expect(anchor.toISOString()).toBe("2026-06-10T00:00:00.000Z");
+  });
+
+  it("does NOT set a schedulingAnchor for a fixed task", async () => {
+    const { service, creates } = makeCreateService();
+    await service.create(
+      {
+        title: "Meeting",
+        durationMinutes: 60,
+        fixed: true,
+        startTime: 600,
+        startDate: "2026-06-10",
+      },
+      user,
+    );
+    expect(creates[0].data.schedulingAnchor).toBeNull();
   });
 });
 

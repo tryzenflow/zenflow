@@ -37,6 +37,7 @@ function task(overrides: Partial<Task> & { id: string }): Task {
     deadline: null,
     fixed: false,
     manuallyMoved: false,
+    schedulingAnchor: null,
     startTime: 0,
     status: "PENDING",
     conflict: false,

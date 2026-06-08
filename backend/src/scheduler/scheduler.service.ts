@@ -39,6 +39,7 @@ export class SchedulerService {
       deadline: task.deadline,
       fixed: task.fixed,
       manuallyMoved: task.manuallyMoved,
+      schedulingAnchor: task.schedulingAnchor,
       scheduledStartTime: task.scheduledStartTime,
       createdAt: task.createdAt,
       conflict: task.conflict,
@@ -56,11 +57,12 @@ export class SchedulerService {
    * EDF rank: tasks with closer deadlines keep their earlier slots and only
    * later ones cascade. Mutates the rows; runs inside the caller's transaction.
    *
-   * The legacy `earliest` day-anchor no longer applies — a full re-EDF orders
-   * purely by deadline (then createdAt), so a freshly-created flexible task is
-   * positioned by its deadline relative to the rest of the movable set rather
-   * than pinned to the view's day. Fixed tasks still carry their own day/time,
-   * and manually-moved tasks keep their dragged slot.
+   * Ordering is by deadline (then createdAt). Each flexible task carries its own
+   * floor inside {@link scheduleAll}: a deadline-bearing task is packed from
+   * `now` by pure urgency (its create-day is ignored), while a no-deadline task
+   * is floored at its stored `schedulingAnchor` so it lands on/after the day it
+   * was created from. Fixed tasks keep their own day/time, and manually-moved
+   * tasks keep their dragged slot.
    *
    * A task that finds no slot before its deadline is left unplaced
    * (`scheduledStartTime: null`) and flagged as a conflict.

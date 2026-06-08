@@ -147,9 +147,21 @@ export function scheduleAll(
     })),
   );
 
-  // Flexible tasks fill the gaps with the usual EDF-from-now packing.
+  // Flexible tasks fill the gaps with EDF packing. Each task carries its own
+  // floor: a deadline-bearing task is packed from `now` (urgency dominates — its
+  // create-day anchor is ignored), while a no-deadline task is floored at its
+  // stored `schedulingAnchor` so it lands on/after the day it was created from.
+  // `findSlot` already clamps the floor up to `now`, so a past anchor is inert.
   for (const t of plain) {
-    const slot = findSlot(prefs, t.durationMinutes, t.deadline, occupied, now);
+    const earliest = t.deadline ? undefined : (t.schedulingAnchor ?? undefined);
+    const slot = findSlot(
+      prefs,
+      t.durationMinutes,
+      t.deadline,
+      occupied,
+      now,
+      earliest,
+    );
     if (slot) {
       occupied.push({
         start: slot.getTime(),
@@ -161,43 +173,4 @@ export function scheduleAll(
     }
   }
   return out;
-}
-
-/**
- * Incremental placement of a single new task around already-placed tasks
- * (preserves existing/ manually-moved placements). Used on POST /tasks.
- * `earliest` lower-bounds the search (e.g. the day the user was viewing), so a
- * flexible task lands on/after that day rather than the first slot from `now`.
- */
-export function placeOne(
-  prefs: SchedulerPrefs,
-  task: EdfTask,
-  others: EdfTask[],
-  now: Date,
-  earliest?: Date,
-): Placement {
-  if (task.fixed) {
-    return {
-      id: task.id,
-      scheduledStartTime: task.scheduledStartTime,
-      conflict: task.scheduledStartTime === null,
-    };
-  }
-  // Past tasks are frozen and can't block a future slot (findSlot clamps every
-  // candidate to `now`), so exclude them from the occupied set.
-  const occupied = others
-    .filter((t) => !isPast(t, now))
-    .map(intervalOf)
-    .filter((i): i is Interval => i !== null);
-  const slot = findSlot(
-    prefs,
-    task.durationMinutes,
-    task.deadline,
-    occupied,
-    now,
-    earliest,
-  );
-  return slot
-    ? { id: task.id, scheduledStartTime: slot, conflict: false }
-    : { id: task.id, scheduledStartTime: null, conflict: true };
 }

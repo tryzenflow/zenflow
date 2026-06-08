@@ -2,7 +2,6 @@ import {
   type EdfTask,
   findSlot,
   isPast,
-  placeOne,
   scheduleAll,
   type SchedulerPrefs,
 } from "./edf";
@@ -22,6 +21,7 @@ const task = (over: Partial<EdfTask> & Pick<EdfTask, "id">): EdfTask => ({
   deadline: null,
   fixed: false,
   manuallyMoved: false,
+  schedulingAnchor: null,
   scheduledStartTime: null,
   createdAt: MON_MIDNIGHT,
   conflict: false,
@@ -354,35 +354,70 @@ describe("scheduleAll — deadline-aware cascade (closer deadlines win)", () => 
   });
 });
 
-describe("placeOne", () => {
-  it("places a new task in the earliest free slot around existing ones", () => {
-    const others = [
-      task({ id: "o", scheduledStartTime: new Date("2026-06-08T09:00:00Z") }),
-    ];
-    const p = placeOne(prefs, task({ id: "n" }), others, MON_MIDNIGHT);
-    expect(iso(p.scheduledStartTime)).toBe("2026-06-08T10:00:00.000Z");
-  });
-
-  it("honours the earliest anchor (the day the task was created from)", () => {
-    const p = placeOne(
+describe("scheduleAll — per-task scheduling floor (create-day anchor)", () => {
+  it("anchors a no-deadline task to its FUTURE create day, never back-filling earlier", () => {
+    // "anchored" was created while viewing Wed 06-10; with no deadline it must
+    // land at the start of that day, NOT be packed at the first free slot from
+    // now (Mon 06-08). The deadline-bearing "urgent" packs from now regardless.
+    const out = scheduleAll(
       prefs,
-      task({ id: "n" }),
-      [],
+      [
+        task({
+          id: "anchored",
+          schedulingAnchor: new Date("2026-06-10T00:00:00Z"), // Wed
+        }),
+        task({
+          id: "urgent",
+          deadline: new Date("2026-06-09T17:00:00Z"), // Tue
+        }),
+      ],
       MON_MIDNIGHT,
-      new Date("2026-06-10T00:00:00Z"), // created while viewing Wed the 10th
     );
-    expect(iso(p.scheduledStartTime)).toBe("2026-06-10T09:00:00.000Z");
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    expect(iso(byId("urgent").scheduledStartTime)).toBe(
+      "2026-06-08T09:00:00.000Z",
+    );
+    expect(iso(byId("anchored").scheduledStartTime)).toBe(
+      "2026-06-10T09:00:00.000Z",
+    );
   });
 
-  it("never schedules before now even if the anchor is in the past", () => {
-    const p = placeOne(
+  it("a deadline-bearing task IGNORES its anchor and packs from now by EDF", () => {
+    // Even with a future create-day anchor, the presence of a deadline switches
+    // the task to pure urgency: scheduled as early as possible from now.
+    const out = scheduleAll(
       prefs,
-      task({ id: "n" }),
-      [],
-      new Date("2026-06-10T11:00:00Z"), // now: Wed the 10th, late morning
-      new Date("2026-06-08T00:00:00Z"), // anchor: Mon the 8th (past)
+      [
+        task({
+          id: "withDeadline",
+          deadline: new Date("2026-06-12T17:00:00Z"),
+          schedulingAnchor: new Date("2026-06-10T00:00:00Z"), // future — ignored
+        }),
+      ],
+      MON_MIDNIGHT,
     );
-    expect(iso(p.scheduledStartTime)).toBe("2026-06-10T11:00:00.000Z");
+    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-08T09:00:00.000Z");
+  });
+
+  it("clamps a PAST anchor up to now (no scheduling in the past)", () => {
+    // now = Wed 06-10 11:00; the anchor (Mon 06-08) is past, so the floor
+    // collapses to now and the task packs from the next slot at/after now.
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "stale",
+          schedulingAnchor: new Date("2026-06-08T00:00:00Z"), // Mon (past)
+        }),
+      ],
+      new Date("2026-06-10T11:00:00Z"),
+    );
+    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-10T11:00:00.000Z");
+  });
+
+  it("a null anchor floors at now (no day-pinning)", () => {
+    const out = scheduleAll(prefs, [task({ id: "n" })], MON_MIDNIGHT);
+    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-08T09:00:00.000Z");
   });
 });
 
@@ -470,33 +505,5 @@ describe("scheduleAll — frozen past tasks", () => {
     expect(iso(byId("future").scheduledStartTime)).toBe(
       "2026-06-08T12:00:00.000Z",
     );
-  });
-});
-
-describe("placeOne — frozen past tasks", () => {
-  const NOON = new Date("2026-06-08T12:00:00Z");
-
-  it("ignores a past task's interval when placing a new task", () => {
-    // The only other task is a past block at 09:00; a fresh task must not treat
-    // it as occupying and lands at the earliest live slot (noon).
-    const others = [
-      task({
-        id: "past",
-        scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
-      }),
-    ];
-    const p = placeOne(prefs, task({ id: "n" }), others, NOON);
-    expect(iso(p.scheduledStartTime)).toBe("2026-06-08T12:00:00.000Z");
-  });
-
-  it("never lands a new task in the past (findSlot now-clamp, unchanged)", () => {
-    const p = placeOne(
-      prefs,
-      task({ id: "n" }),
-      [],
-      NOON,
-      new Date("2026-06-08T00:00:00Z"), // anchor in the past
-    );
-    expect(iso(p.scheduledStartTime)).toBe("2026-06-08T12:00:00.000Z");
   });
 });

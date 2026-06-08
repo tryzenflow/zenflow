@@ -23,6 +23,15 @@ export interface EdfTask {
    * as occupied space rather than re-ordering it by deadline.
    */
   manuallyMoved: boolean;
+  /**
+   * Per-task lower bound (floor) for the EDF packer: a UTC instant at the
+   * start-of-day of the day the task was created from (user's tz). Consulted
+   * ONLY for flexible tasks with NO deadline — they land on/after this day
+   * rather than the first free slot from `now`. Deadline-bearing tasks ignore
+   * it and are packed from `now` by pure EDF urgency. Null = no anchor (floor
+   * collapses to `now`).
+   */
+  schedulingAnchor: Date | null;
   scheduledStartTime: Date | null;
   createdAt: Date;
   /**

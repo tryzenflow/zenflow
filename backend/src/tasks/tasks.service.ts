@@ -100,11 +100,16 @@ export class TasksService {
         // Resolve incoming tag NAMES → ids before connecting them to the task.
         const tagIds = await this.resolveTagIds(tx, user.id, rest.tags ?? []);
 
-        // Fixed: anchored at its day + time-of-day. Flexible: the anchor day
-        // lower-bounds the engine's forward search (earliest = day start).
+        // Fixed: anchored at its day + time-of-day. Flexible: persist the
+        // create/view day as the EDF floor (start-of-day UTC). The packer only
+        // consults this when the task has NO deadline — a deadline-bearing task
+        // is scheduled from `now` by pure EDF urgency, ignoring the anchor.
         const fixedStart = isFixed
           ? minutesToUtc(anchorDateStr, startTime ?? 0, tz)
           : null;
+        const schedulingAnchor = isFixed
+          ? null
+          : minutesToUtc(anchorDateStr, 0, tz);
 
         const created = await tx.task.create({
           data: {
@@ -116,6 +121,7 @@ export class TasksService {
             fixed: isFixed,
             startTime: startTime ?? 0,
             userId: user.id,
+            schedulingAnchor,
             scheduledStartTime: fixedStart,
             conflict: false,
           },

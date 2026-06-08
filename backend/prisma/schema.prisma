@@ -74,6 +74,13 @@ model Task {
   // space instead of re-ordering it by deadline.
   manuallyMoved Boolean @default(false)
 
+  // Per-task lower bound for the EDF packer (a UTC instant = start-of-day of the
+  // day the task was created from, in the user's tz). Only consulted for flexible
+  // tasks with NO deadline: such a task lands on/after this day instead of the
+  // first free slot from `now`. Deadline-bearing tasks ignore it (pure EDF from
+  // now). Null for tasks created before this column existed.
+  schedulingAnchor DateTime?
+
   scheduledStartTime DateTime? // assigned by the EDF engine
 
   userId String
