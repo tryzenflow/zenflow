@@ -37,6 +37,7 @@ frontend/
 │   │   ├── auth/              # login-form
 │   │   ├── calendar/          # day/week/month views + grid + blocks (see below)
 │   │   ├── tasks/             # create/edit dialogs, task-form, rrule-form, note-editor
+│   │   ├── settings/          # settings-dialog + preferences-fields (shared with onboarding)
 │   │   ├── common/            # date-range-select, TipTap editor + toolbar
 │   │   ├── ui/                # Radix + Tailwind primitives (button, dialog, select, …)
 │   │   ├── hoc/with-auth.tsx  # auth gate + onboarding redirect
@@ -77,6 +78,14 @@ shortcuts D/W/M via `use-view-shortcuts`); `sidebar.tsx` is the agenda list; `da
 `scheduled-block-item.tsx` is a single draggable/resizable task block with a click popover.
 Task create/edit lives in `components/tasks/` (`create-task-dialog`, `edit-task-dialog`,
 `form/task-form`, `rrule-form`, `note-editor`).
+
+**Settings** is a dialog, not a route: `components/settings/settings-dialog.tsx` edits the
+onboarding preferences (work hours / days / role archetype / timezone via
+`updatePreferences`) and hosts a Log out action. It's mounted once in `layout.tsx`; the
+sidebar footer (`sidebar.tsx`) shows the signed-in user and opens it via a
+`zenflow:open-settings` window event (same pattern as `zenflow:open-task`). The work-field
+inputs and constants are shared with onboarding through
+`components/settings/preferences-fields.tsx`.
 
 ## Calendar internals
 

@@ -48,4 +48,22 @@ test.describe("Calendar views", () => {
     await switchView(page, "m");
     await expect(page.getByText("E2E Deep Work").first()).toBeVisible();
   });
+
+  test("settings dialog opens from the sidebar and saves preferences", async ({
+    page,
+  }) => {
+    // The sidebar footer Settings button opens the dialog (no /settings route).
+    await page.getByRole("button", { name: /Account|@/ }).click();
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("heading", { name: "Settings" })).toBeVisible();
+    await expect(dialog.getByText("Work hours")).toBeVisible();
+
+    // Toggle Saturday on, then save; the dialog closes on success.
+    await dialog.getByRole("button", { name: "Sat" }).click();
+    await dialog.getByRole("button", { name: "Save changes" }).click();
+
+    await expect(dialog).toBeHidden();
+    await expect(page.getByText("Settings saved")).toBeVisible();
+  });
 });
