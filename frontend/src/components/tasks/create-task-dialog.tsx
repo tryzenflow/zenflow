@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { postData } from "@/api";
 import { useFilesTracker } from "@/hooks/use-files-tracker";
 import { useUserStore } from "@/hooks/use-user-store";
-import { generateRRule, TaskFormValues } from "@/utils/tasks";
+import { TaskFormValues } from "@/utils/tasks";
 import { TaskForm } from "./form/task-form";
 import { Plus } from "lucide-react";
 import { createTask } from "@/api/tasks";
@@ -34,7 +34,6 @@ export function CreateTaskDialog({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const user = useUserStore((state) => state.user);
-  const workDays = user?.workDays ?? [1, 2, 3, 4, 5];
   const tz = user?.timezone || "UTC";
   const form = useTaskForm({
     defaultValues: {
@@ -44,15 +43,6 @@ export function CreateTaskDialog({
       note: "",
       deadlineDate: "",
       deadlineTime: "",
-      byweeks: [1],
-      frequency: "WEEKLY",
-      interval: 1,
-      byday: ["MO"],
-      bymonthday: 1,
-      bysetpos: 1,
-      bydayMonth: "MO",
-      monthlyMode: "on",
-      yearlyMode: "on",
       isFixed: false,
       fixedStart: isZonedToday(date, tz)
         ? snapToNearestLaterQuarterHour(
@@ -64,11 +54,6 @@ export function CreateTaskDialog({
             date.getHours() * 60 + date.getMinutes(),
           ) + 60
         : 10 * 60,
-      isRecurring: false,
-      month: 1,
-      endMode: "never",
-      count: 1,
-      until: undefined,
     },
   });
   const note = form.watch("note");
@@ -104,12 +89,6 @@ export function CreateTaskDialog({
         // Always the viewed day: a fixed anchor when fixed, otherwise the
         // earliest day the flexible engine may place the task on.
         startDate: format(date, "yyyy-MM-dd"),
-        // Scopes recurrence materialization to the active week/month window.
-        view,
-        rrule:
-          values.isRecurring && view !== "day"
-            ? generateRRule(values, { view, date, workDays })
-            : "",
       });
       onCreated();
       form.reset();
@@ -174,9 +153,7 @@ export function CreateTaskDialog({
           newUploadsRef={newUploadsRef}
           loading={loading}
           onCancel={handleClose}
-          view={view}
           date={date}
-          workDays={workDays}
           submitLabel="Create Task"
         />
       </SheetContent>

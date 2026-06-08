@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import type { Event } from "@/types/schedule";
 import type { TaskCardState, TasksMeta, ViewMode } from "@zenflow/shared";
 import { toZonedTime } from "date-fns-tz";
-import { Lightbulb, LogOut, Repeat, Settings } from "lucide-react";
+import { Lightbulb, LogOut, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Logo } from "@/components/logo";
 import { logout } from "@/api/auth";
@@ -103,11 +103,6 @@ function AgendaItem({ block, tz }: { block: Event; tz: string }) {
       {tag && (
         <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-800 dark:bg-amber-950 dark:text-amber-400">
           {tag}
-        </span>
-      )}
-      {block.rrule && (
-        <span title="Recurring" className="flex shrink-0">
-          <Repeat className="h-3 w-3 text-primary" />
         </span>
       )}
       <span
