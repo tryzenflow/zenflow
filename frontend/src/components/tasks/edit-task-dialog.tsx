@@ -18,12 +18,7 @@ import { postData } from "@/api";
 import { useUserStore } from "@/hooks/use-user-store";
 import type { Task } from "@/types/tasks";
 import type { RecurrenceScope, TaskEvent } from "@zenflow/shared";
-import {
-  deleteTask,
-  EditTaskFormValues,
-  parseRRule,
-  parseTags,
-} from "@/utils/tasks";
+import { deleteTask, EditTaskFormValues, parseRRule } from "@/utils/tasks";
 import { TaskForm } from "./form/task-form";
 import { useFilesTracker } from "@/hooks/use-files-tracker";
 import { completeTask, getTaskDetails, updateTask } from "@/api/tasks";
@@ -84,7 +79,7 @@ export function EditTaskDialog({
       ...(defaultRecurringFields as any),
       title: "",
       duration: 60,
-      tags: "",
+      tags: [],
       note: "",
       deadlineDate: "",
       deadlineTime: "",
@@ -104,7 +99,7 @@ export function EditTaskDialog({
       ...parsed,
       title: task.title,
       duration: task.durationMinutes,
-      tags: task.tags.join(", "),
+      tags: task.tags,
       note: task.note ?? "",
       isFixed: task.fixed,
       fixedStart: task.startTime,
@@ -142,7 +137,7 @@ export function EditTaskDialog({
         title: values.title,
         note: values.note || null,
         deadline,
-        tags: parseTags(values.tags),
+        tags: values.tags,
         scope,
       });
       onSaved();

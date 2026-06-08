@@ -16,7 +16,7 @@ export const taskSchema = z.object({
       error: `Task duration must be at least ${TIME_GRANULARITY} minutes`,
     })
     .max(DAILY_HORIZON, { error: "Task duration must be at most 24 hours" }),
-  tags: z.string().optional(),
+  tags: z.array(z.string()).default([]),
   deadlineDate: z
     .string()
     .refine(
@@ -66,15 +66,6 @@ export const taskSchema = z.object({
 
 export type TaskFormValues = z.infer<typeof taskSchema>;
 export type EditTaskFormValues = TaskFormValues;
-
-/** Parse the comma-separated tags input into a clean string array. */
-export function parseTags(input?: string): string[] {
-  if (!input) return [];
-  return input
-    .split(",")
-    .map((t) => t.trim())
-    .filter(Boolean);
-}
 
 export async function deleteTask(taskId: string, scope?: RecurrenceScope) {
   const { data } = await getData<{ data: { task: Task } }>(`/tasks/${taskId}`);

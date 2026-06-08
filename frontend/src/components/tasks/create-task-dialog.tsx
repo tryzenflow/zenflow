@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { postData } from "@/api";
 import { useFilesTracker } from "@/hooks/use-files-tracker";
 import { useUserStore } from "@/hooks/use-user-store";
-import { generateRRule, parseTags, TaskFormValues } from "@/utils/tasks";
+import { generateRRule, TaskFormValues } from "@/utils/tasks";
 import { TaskForm } from "./form/task-form";
 import { Plus } from "lucide-react";
 import { createTask } from "@/api/tasks";
@@ -40,7 +40,7 @@ export function CreateTaskDialog({
     defaultValues: {
       title: "",
       duration: 60,
-      tags: "",
+      tags: [],
       note: "",
       deadlineDate: "",
       deadlineTime: "",
@@ -97,7 +97,7 @@ export function CreateTaskDialog({
         title: values.title,
         note: values.note || null,
         durationMinutes: values.duration,
-        tags: parseTags(values.tags),
+        tags: values.tags,
         deadline,
         fixed: values.isFixed,
         startTime: values.isFixed ? values.fixedStart : 0,
