@@ -122,11 +122,11 @@ export class TasksService {
         });
 
         if (!isFixed) {
-          await this.scheduler.placeNewTask(user, created, tx, {
-            earliest: startDate
-              ? minutesToUtc(anchorDateStr, 0, tz)
-              : undefined,
-          });
+          // Deadline-aware insert + cascade: re-EDF the movable set so the new
+          // task lands at its deadline rank (closer deadlines keep earlier
+          // slots, later ones shift). Fixed, manually-moved and frozen past
+          // tasks stay anchored.
+          await this.scheduler.cascadeReschedule(user, tx);
         }
 
         const finalTask = await tx.task.findUniqueOrThrow({
@@ -307,6 +307,23 @@ export class TasksService {
           },
           include: { tags: true },
         });
+
+        // A deadline change on a flexible task re-orders the movable set by EDF
+        // (closer deadlines win earlier slots). Fixed / manually-moved / past
+        // tasks stay anchored. No-op when the deadline is untouched, the task is
+        // fixed, or the new deadline equals the old one.
+        const deadlineChanged =
+          scalarData.deadline !== undefined &&
+          (scalarData.deadline?.getTime() ?? null) !==
+            (target.deadline?.getTime() ?? null);
+        if (deadlineChanged && !updated.fixed) {
+          await this.scheduler.cascadeReschedule(user, tx);
+          const rescheduled = await tx.task.findUniqueOrThrow({
+            where: { id },
+            include: { tags: true },
+          });
+          return this.toDto(rescheduled);
+        }
         return this.toDto(updated);
       });
     } catch (error) {

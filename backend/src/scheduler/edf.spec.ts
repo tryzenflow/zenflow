@@ -21,6 +21,7 @@ const task = (over: Partial<EdfTask> & Pick<EdfTask, "id">): EdfTask => ({
   durationMinutes: 60,
   deadline: null,
   fixed: false,
+  manuallyMoved: false,
   scheduledStartTime: null,
   createdAt: MON_MIDNIGHT,
   conflict: false,
@@ -216,6 +217,140 @@ describe("scheduleAll", () => {
     const byId = (id: string) => out.find((p) => p.id === id)!;
     expect(iso(byId("a").scheduledStartTime)).toBe("2026-06-08T09:00:00.000Z");
     expect(iso(byId("b").scheduledStartTime)).toBe("2026-06-08T10:00:00.000Z");
+  });
+});
+
+describe("scheduleAll — deadline-aware cascade (closer deadlines win)", () => {
+  it("orders a new closer-deadline task before an existing looser-deadline auto-placed task", () => {
+    // "existing" was auto-placed at 09:00 with a Wed deadline. A freshly-created
+    // "new" task with a Tue (closer) deadline must take 09:00; the looser one
+    // cascades to 10:00 — re-EDF gives the closer deadline the earlier slot.
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "existing",
+          deadline: new Date("2026-06-10T17:00:00Z"), // Wed
+          scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
+        }),
+        task({
+          id: "new",
+          deadline: new Date("2026-06-09T17:00:00Z"), // Tue — closer
+        }),
+      ],
+      MON_MIDNIGHT,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    expect(iso(byId("new").scheduledStartTime)).toBe(
+      "2026-06-08T09:00:00.000Z",
+    );
+    expect(iso(byId("existing").scheduledStartTime)).toBe(
+      "2026-06-08T10:00:00.000Z",
+    );
+  });
+
+  it("does NOT move a manually-moved task during the re-pack", () => {
+    // "manual" was dragged to 14:00. A new no-deadline flexible task must pack
+    // around it (taking 09:00) and never displace the anchored manual slot.
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "manual",
+          manuallyMoved: true,
+          scheduledStartTime: new Date("2026-06-08T14:00:00Z"),
+        }),
+        task({ id: "flex" }),
+      ],
+      MON_MIDNIGHT,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    expect(iso(byId("manual").scheduledStartTime)).toBe(
+      "2026-06-08T14:00:00.000Z",
+    );
+    expect(iso(byId("flex").scheduledStartTime)).toBe(
+      "2026-06-08T09:00:00.000Z",
+    );
+  });
+
+  it("keeps a manually-moved task even when a closer-deadline task is added", () => {
+    // A new task with a closer deadline does NOT bump a manually-moved task off
+    // its dragged slot; the manual placement is authoritative.
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "manual",
+          manuallyMoved: true,
+          deadline: new Date("2026-06-11T17:00:00Z"), // looser
+          scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
+        }),
+        task({
+          id: "urgent",
+          deadline: new Date("2026-06-09T17:00:00Z"), // closer
+        }),
+      ],
+      MON_MIDNIGHT,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    // Manual stays at 09:00; the urgent task packs around it at 10:00.
+    expect(iso(byId("manual").scheduledStartTime)).toBe(
+      "2026-06-08T09:00:00.000Z",
+    );
+    expect(iso(byId("urgent").scheduledStartTime)).toBe(
+      "2026-06-08T10:00:00.000Z",
+    );
+  });
+
+  it("preserves a manually-moved task's stored conflict flag", () => {
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "manual",
+          manuallyMoved: true,
+          conflict: true,
+          scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
+        }),
+      ],
+      MON_MIDNIGHT,
+    );
+    expect(out[0].conflict).toBe(true);
+    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-08T09:00:00.000Z");
+  });
+
+  it("still anchors fixed and past tasks while EDF-packing the rest", () => {
+    const NOON = new Date("2026-06-08T12:00:00Z");
+    const out = scheduleAll(
+      prefs,
+      [
+        // Past: started 09:00 before noon — frozen.
+        task({
+          id: "past",
+          scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
+        }),
+        // Fixed at 15:00 — anchored.
+        task({
+          id: "fixed",
+          fixed: true,
+          scheduledStartTime: new Date("2026-06-08T15:00:00Z"),
+        }),
+        // Flexible packs from noon, around the fixed block.
+        task({ id: "flex" }),
+      ],
+      NOON,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    expect(iso(byId("past").scheduledStartTime)).toBe(
+      "2026-06-08T09:00:00.000Z",
+    );
+    expect(iso(byId("fixed").scheduledStartTime)).toBe(
+      "2026-06-08T15:00:00.000Z",
+    );
+    expect(byId("fixed").conflict).toBe(false);
+    expect(iso(byId("flex").scheduledStartTime)).toBe(
+      "2026-06-08T12:00:00.000Z",
+    );
   });
 });
 

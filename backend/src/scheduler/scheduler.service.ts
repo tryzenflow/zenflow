@@ -6,7 +6,6 @@ import {
   type EdfTask,
   intervalOf,
   isPast,
-  placeOne,
   scheduleAll,
   type SchedulerPrefs,
 } from "./edf";
@@ -39,6 +38,7 @@ export class SchedulerService {
       durationMinutes: task.durationMinutes,
       deadline: task.deadline,
       fixed: task.fixed,
+      manuallyMoved: task.manuallyMoved,
       scheduledStartTime: task.scheduledStartTime,
       createdAt: task.createdAt,
       conflict: task.conflict,
@@ -50,65 +50,55 @@ export class SchedulerService {
   }
 
   /**
-   * Place a single freshly-created task around already-scheduled tasks
-   * (preserves existing placements). Mutates the row; run inside a transaction.
+   * Deadline-aware (re-)placement after a flexible task is created or has its
+   * deadline changed. Runs the full EDF re-pack around the anchors (fixed,
+   * manually-moved, and frozen past tasks) so the affected task lands at its
+   * EDF rank: tasks with closer deadlines keep their earlier slots and only
+   * later ones cascade. Mutates the rows; runs inside the caller's transaction.
    *
-   *  - `earliest` anchors a flexible task to a chosen day (the view it was
-   *    created from) instead of the first open slot from `now`.
+   * The legacy `earliest` day-anchor no longer applies — a full re-EDF orders
+   * purely by deadline (then createdAt), so a freshly-created flexible task is
+   * positioned by its deadline relative to the rest of the movable set rather
+   * than pinned to the view's day. Fixed tasks still carry their own day/time,
+   * and manually-moved tasks keep their dragged slot.
    *
    * A task that finds no slot before its deadline is left unplaced
    * (`scheduledStartTime: null`) and flagged as a conflict.
    */
-  async placeNewTask(
+  async cascadeReschedule(
     user: User,
-    task: Task,
     tx: PrismaTx,
-    opts: { earliest?: Date } = {},
     now = new Date(),
-  ): Promise<{ scheduledStartTime: Date | null; conflict: boolean }> {
-    const others = (await this.pendingTasks(user.id, tx)).filter(
-      (t) => t.id !== task.id,
-    );
-    const { scheduledStartTime, conflict } = placeOne(
+  ): Promise<void> {
+    const tasks = await this.pendingTasks(user.id, tx);
+    const placements = scheduleAll(
       this.prefsOf(user),
-      this.toEdf(task),
-      others.map((t) => this.toEdf(t)),
+      tasks.map((t) => this.toEdf(t)),
       now,
-      opts.earliest,
     );
-    await tx.task.update({
-      where: { id: task.id },
-      data: { scheduledStartTime, conflict },
-    });
-    return { scheduledStartTime, conflict };
+    const before = new Map(tasks.map((t) => [t.id, t]));
+    for (const p of placements) {
+      const prev = before.get(p.id);
+      if (!prev) continue;
+      const unchanged =
+        (prev.scheduledStartTime?.getTime() ?? null) ===
+          (p.scheduledStartTime?.getTime() ?? null) &&
+        prev.conflict === p.conflict;
+      if (unchanged) continue;
+      await tx.task.update({
+        where: { id: p.id },
+        data: {
+          scheduledStartTime: p.scheduledStartTime,
+          conflict: p.conflict,
+        },
+      });
+    }
   }
 
   /** Full deterministic re-EDF of every PENDING task (e.g. after pref change). */
   async rescheduleAll(user: User, now = new Date()): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
-      const tasks = await this.pendingTasks(user.id, tx);
-      const placements = scheduleAll(
-        this.prefsOf(user),
-        tasks.map((t) => this.toEdf(t)),
-        now,
-      );
-      const before = new Map(tasks.map((t) => [t.id, t]));
-      for (const p of placements) {
-        const prev = before.get(p.id);
-        if (!prev) continue;
-        const unchanged =
-          (prev.scheduledStartTime?.getTime() ?? null) ===
-            (p.scheduledStartTime?.getTime() ?? null) &&
-          prev.conflict === p.conflict;
-        if (unchanged) continue;
-        await tx.task.update({
-          where: { id: p.id },
-          data: {
-            scheduledStartTime: p.scheduledStartTime,
-            conflict: p.conflict,
-          },
-        });
-      }
+      await this.cascadeReschedule(user, tx, now);
     });
   }
 
@@ -147,16 +137,25 @@ export class SchedulerService {
       let updatedTarget = target;
 
       for (const t of tasks) {
-        const nextStart = t.id === taskId ? snapped : t.scheduledStartTime;
+        const isTarget = t.id === taskId;
+        const nextStart = isTarget ? snapped : t.scheduledStartTime;
         const nextConflict = conflictOf.get(t.id) ?? t.conflict;
         const startUnchanged =
           (t.scheduledStartTime?.getTime() ?? null) ===
           (nextStart?.getTime() ?? null);
-        if (startUnchanged && t.conflict === nextConflict) continue;
+        // The target is now anchored even if it didn't visibly move (snapped to
+        // the same slot): the user's drop pins it against future EDF re-packs.
+        const becomesAnchor = isTarget && !t.manuallyMoved;
+        if (startUnchanged && t.conflict === nextConflict && !becomesAnchor)
+          continue;
 
         const updated = await tx.task.update({
           where: { id: t.id },
-          data: { scheduledStartTime: nextStart, conflict: nextConflict },
+          data: {
+            scheduledStartTime: nextStart,
+            conflict: nextConflict,
+            ...(isTarget ? { manuallyMoved: true } : {}),
+          },
         });
         if (t.id === taskId) {
           updatedTarget = updated;
@@ -241,6 +240,7 @@ export class SchedulerService {
               scheduledStartTime: snappedStart,
               durationMinutes: snappedDuration,
               conflict: nextConflict,
+              manuallyMoved: true,
             },
           });
           updatedTarget = updated;

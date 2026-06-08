@@ -94,10 +94,21 @@ export function findSlot(
 }
 
 /**
- * Full deterministic re-schedule of all PENDING tasks. Fixed tasks keep their
- * anchored slot. Flexible tasks are EDF-packed from `now` around everything
- * already occupied. Used on preference changes (docs: "PUT preferences triggers
- * full EDF rescheduling").
+ * An anchored task keeps its stored slot through {@link scheduleAll}: a `fixed`
+ * task, or a flexible task the user manually dragged/resized (`manuallyMoved`).
+ * Both are passed through as occupied space; only the remaining flexible,
+ * non-anchored, non-past tasks get EDF-packed.
+ */
+function isAnchored(t: EdfTask): boolean {
+  return (t.fixed || t.manuallyMoved) && t.scheduledStartTime !== null;
+}
+
+/**
+ * Full deterministic re-schedule of all PENDING tasks. Fixed and manually-moved
+ * tasks keep their anchored slot. The remaining flexible tasks are EDF-packed
+ * from `now` around everything already occupied — closer deadlines win earlier
+ * slots, later ones cascade. Used on preference changes and on the create /
+ * deadline-edit cascade.
  */
 export function scheduleAll(
   prefs: SchedulerPrefs,
@@ -109,10 +120,11 @@ export function scheduleAll(
   const past = tasks.filter((t) => isPast(t, now));
   const live = tasks.filter((t) => !isPast(t, now));
 
-  const fixed = live.filter((t) => t.fixed && t.scheduledStartTime);
-  const plain = live.filter((t) => !t.fixed).sort(compareEdf);
+  // Fixed + manually-moved tasks are anchors; everything else is EDF-packed.
+  const anchored = live.filter(isAnchored);
+  const plain = live.filter((t) => !isAnchored(t)).sort(compareEdf);
 
-  const occupied: Interval[] = fixed
+  const occupied: Interval[] = anchored
     .map(intervalOf)
     .filter((i): i is Interval => i !== null);
 
@@ -123,11 +135,15 @@ export function scheduleAll(
     conflict: t.conflict,
   }));
 
+  // Anchors pass through with their stored slot. A `fixed` task is trusted to be
+  // conflict-free (its slot is user-chosen and authoritative); a manually-moved
+  // flexible task keeps its stored overlap verdict, since dragging it onto
+  // another task is allowed and surfaced as a conflict (see recomputeConflicts).
   out.push(
-    ...fixed.map((t) => ({
+    ...anchored.map((t) => ({
       id: t.id,
       scheduledStartTime: t.scheduledStartTime,
-      conflict: false,
+      conflict: t.fixed ? false : t.conflict,
     })),
   );
 

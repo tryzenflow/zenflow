@@ -36,6 +36,7 @@ function task(overrides: Partial<Task> & { id: string }): Task {
     durationMinutes: 60,
     deadline: null,
     fixed: false,
+    manuallyMoved: false,
     startTime: 0,
     status: "PENDING",
     conflict: false,

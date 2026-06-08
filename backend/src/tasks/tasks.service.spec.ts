@@ -41,6 +41,7 @@ function task(overrides: Partial<TaskWithTags> & { id: string }): TaskWithTags {
     // The Prisma row now carries related Tag rows; toDto maps these to names.
     tags: [],
     fixed: false,
+    manuallyMoved: false,
     startTime: 0,
     status: "PENDING",
     conflict: false,
@@ -111,7 +112,9 @@ function makeCreateService(): {
     $transaction: (fn: (t: typeof tx) => unknown) => fn(tx),
   };
   // The scheduler is stubbed: placement is exercised in scheduler specs.
-  const scheduler = { placeNewTask: jest.fn().mockResolvedValue({}) };
+  const scheduler = {
+    cascadeReschedule: jest.fn().mockResolvedValue(undefined),
+  };
 
   return {
     service: new TasksService(prisma as never, scheduler as never),

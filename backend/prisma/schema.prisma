@@ -69,6 +69,11 @@ model Task {
   status          TaskStatus @default(PENDING)
   conflict        Boolean    @default(false) // unplaced (no slot before deadline)
 
+  // A flexible task the user manually dragged/resized. Like `fixed`, this makes
+  // the task an anchor: the EDF re-pack keeps its slot and treats it as occupied
+  // space instead of re-ordering it by deadline.
+  manuallyMoved Boolean @default(false)
+
   scheduledStartTime DateTime? // assigned by the EDF engine
 
   userId String
