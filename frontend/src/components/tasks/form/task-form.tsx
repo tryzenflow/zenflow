@@ -34,6 +34,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { listTags } from "@/api/tags";
+import { toast } from "sonner";
 import { Box, Check, Lock, Plus, Tag, X } from "lucide-react";
 
 const DURATION_PRESETS = [15, 30, 45, 60, 120];
@@ -84,7 +85,13 @@ export function TaskForm({
   return (
     <Form {...form}>
       <form
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={form.handleSubmit(onSubmit, (errors) => {
+          // Surface validation failures even when the offending field is hidden
+          // (e.g. fixed-time fields while in flexible mode), so submit never
+          // silently no-ops.
+          const first = Object.values(errors)[0];
+          if (first?.message) toast.error(String(first.message));
+        })}
         className="flex min-h-0 flex-1 flex-col"
       >
         <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5">

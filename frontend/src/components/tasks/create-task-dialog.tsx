@@ -13,6 +13,7 @@ import { createTask } from "@/api/tasks";
 import { format } from "date-fns";
 import { fromZonedTime } from "date-fns-tz";
 import { snapToNearestLaterQuarterHour } from "@/utils/time";
+import { DAILY_HORIZON, TIME_GRANULARITY } from "@/utils/constants";
 import { isZonedToday } from "@/utils/tz";
 import type { ViewMode } from "@zenflow/shared";
 
@@ -35,6 +36,16 @@ export function CreateTaskDialog({
   const [loading, setLoading] = useState(false);
   const user = useUserStore((state) => state.user);
   const tz = user?.timezone || "UTC";
+  // Default fixed window starts at the next quarter-hour (today) or 9 AM, lasting
+  // an hour — but clamped to the day's horizon. Without the clamp, a same-day
+  // create after ~23:00 snaps the end past DAILY_HORIZON, and since the fixed-time
+  // fields are hidden in the default (flexible) mode their validation error is
+  // invisible — silently blocking the Create button.
+  const rawStart = isZonedToday(date, tz)
+    ? snapToNearestLaterQuarterHour(date.getHours() * 60 + date.getMinutes())
+    : 9 * 60;
+  const fixedStart = Math.min(rawStart, DAILY_HORIZON - TIME_GRANULARITY);
+  const fixedEnd = Math.min(fixedStart + 60, DAILY_HORIZON);
   const form = useTaskForm({
     defaultValues: {
       title: "",
@@ -44,16 +55,8 @@ export function CreateTaskDialog({
       deadlineDate: "",
       deadlineTime: "",
       isFixed: false,
-      fixedStart: isZonedToday(date, tz)
-        ? snapToNearestLaterQuarterHour(
-            date.getHours() * 60 + date.getMinutes(),
-          )
-        : 9 * 60,
-      fixedEnd: isZonedToday(date, tz)
-        ? snapToNearestLaterQuarterHour(
-            date.getHours() * 60 + date.getMinutes(),
-          ) + 60
-        : 10 * 60,
+      fixedStart,
+      fixedEnd,
     },
   });
   const note = form.watch("note");
