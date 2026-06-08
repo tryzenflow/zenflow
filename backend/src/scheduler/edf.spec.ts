@@ -108,6 +108,54 @@ describe("findSlot", () => {
   });
 });
 
+describe("findSlot — overnight (cross-midnight) windows", () => {
+  // 22:00 → 04:00, wraps past midnight. workDays gate the start day.
+  const owl: SchedulerPrefs = {
+    workStart: 1320, // 22:00
+    workEnd: 240, // 04:00
+    workDays: [1, 2, 3, 4, 5], // Mon–Fri (the day the shift begins)
+    timezone: "UTC",
+  };
+
+  it("places a flexible task at the window start (evening) when free", () => {
+    // Empty Monday evening: first slot is 22:00 on the start day.
+    const slot = findSlot(owl, 60, null, [], MON_MIDNIGHT);
+    expect(iso(slot)).toBe("2026-06-08T22:00:00.000Z");
+  });
+
+  it("places into the post-midnight portion when the evening is occupied", () => {
+    // Fill 22:00–04:00 of Monday's shift except the last hour (03:00–04:00),
+    // forcing the task into the post-midnight tail on Tue 06-09.
+    const occ = [
+      {
+        start: Date.parse("2026-06-08T22:00:00Z"),
+        end: Date.parse("2026-06-09T03:00:00Z"),
+      },
+    ];
+    const slot = findSlot(owl, 60, null, occ, MON_MIDNIGHT);
+    expect(iso(slot)).toBe("2026-06-09T03:00:00.000Z");
+    // Sanity: the slot is at/after midnight of the next calendar day.
+    expect(slot!.getTime()).toBeGreaterThanOrEqual(
+      Date.parse("2026-06-09T00:00:00Z"),
+    );
+  });
+
+  it("fills the remaining morning when now is in the early-morning tail (d=-1 scan)", () => {
+    // now = Tue 06-09 01:30, still inside the shift that started Mon 06-08 22:00.
+    // The wrap scan begins at d=-1, so the morning tail (until 04:00) is usable.
+    const slot = findSlot(owl, 60, null, [], new Date("2026-06-09T01:30:00Z"));
+    expect(iso(slot)).toBe("2026-06-09T01:30:00.000Z");
+  });
+
+  it("rolls a weekend-eve overflow to the next workday's evening", () => {
+    // Sat 06-13 is not a start workday; Fri 06-12 22:00→Sat 04:00 is the last
+    // shift before Mon 06-15. A task that can't fit before Sat 04:00 rolls to
+    // Monday evening (the next start workday). now just before the Sat tail end.
+    const slot = findSlot(owl, 60, null, [], new Date("2026-06-13T03:30:00Z"));
+    expect(iso(slot)).toBe("2026-06-15T22:00:00.000Z");
+  });
+});
+
 describe("scheduleAll", () => {
   it("orders by deadline ascending (EDF)", () => {
     const out = scheduleAll(

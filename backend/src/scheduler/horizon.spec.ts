@@ -84,4 +84,12 @@ describe("sumWorkMinutes", () => {
       sumWorkMinutes("2026-06-08", "2026-06-14", 540, 1020, [1, 2, 3, 4, 5]),
     ).toBe(2400);
   });
+
+  it("counts each effective minute once for a wrap window (start-day anchored)", () => {
+    // 22:00 → 04:00 = 360 min/day. Mon–Fri over the week → 5 × 360 = 1800.
+    // The post-midnight tail is NOT double-counted on the following day.
+    expect(
+      sumWorkMinutes("2026-06-08", "2026-06-14", 1320, 240, [1, 2, 3, 4, 5]),
+    ).toBe(1800);
+  });
 });

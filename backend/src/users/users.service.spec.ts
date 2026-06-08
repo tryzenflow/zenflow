@@ -80,13 +80,13 @@ describe("UsersService.updatePreferences", () => {
     expect(data.roleArchetypeId).toBeNull();
   });
 
-  it("rejects a window where workStart is not before workEnd", async () => {
+  it("rejects an empty window where workStart equals workEnd", async () => {
     const { service, update } = makeService();
 
     await expect(
       service.updatePreferences(user, {
         ...basePrefs,
-        workStart: 1020,
+        workStart: 540,
         workEnd: 540,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -101,6 +101,34 @@ describe("UsersService.updatePreferences", () => {
         ...basePrefs,
         workStart: 540,
         workEnd: 570,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("accepts a valid overnight (cross-midnight) window", async () => {
+    const { service, update, rescheduleAll } = makeService();
+
+    // 22:00 → 04:00 = 360 effective minutes (a night-owl shift).
+    await service.updatePreferences(user, {
+      ...basePrefs,
+      workStart: 1320,
+      workEnd: 240,
+    });
+
+    expect(update).toHaveBeenCalled();
+    expect(rescheduleAll).toHaveBeenCalled();
+  });
+
+  it("rejects a wrap window shorter than one hour", async () => {
+    const { service, update } = makeService();
+
+    // 23:45 → 00:15 = 30 effective minutes (wraps, but under MIN_WORKDAY).
+    await expect(
+      service.updatePreferences(user, {
+        ...basePrefs,
+        workStart: 1425,
+        workEnd: 15,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(update).not.toHaveBeenCalled();

@@ -10,7 +10,12 @@ import {
   scheduleAll,
   type SchedulerPrefs,
 } from "./edf";
-import { type Interval, SLOT_MS, penaltyIndex } from "./slot";
+import {
+  type Interval,
+  SLOT_MS,
+  penaltyIndex,
+  workWindowMinutes,
+} from "./slot";
 import { TIME_GRANULARITY } from "../common/constants";
 
 type PrismaTx = Prisma.TransactionClient;
@@ -96,7 +101,8 @@ export class SchedulerService {
       scheduledStartTime = opts.dayAnchor;
       const anchorStart = opts.dayAnchor.getTime();
       const anchorEnd = anchorStart + task.durationMinutes * 60_000;
-      const overflowsDay = user.workStart + task.durationMinutes > user.workEnd;
+      const overflowsDay =
+        task.durationMinutes > workWindowMinutes(user.workStart, user.workEnd);
       conflict =
         overflowsDay ||
         others.some((o) => {

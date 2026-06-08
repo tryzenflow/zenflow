@@ -66,16 +66,31 @@ export interface WorkWindow {
   end: number;
 }
 
-/** Absolute UTC bounds of a user's working window on a given local date. */
+/**
+ * Effective schedulable minutes of a (possibly wrapping) window.
+ * A window wraps past midnight iff `workEnd <= workStart`; in that case it runs
+ * from `workStart` on day D to `workEnd` on day D+1.
+ */
+export function workWindowMinutes(workStart: number, workEnd: number): number {
+  return workEnd > workStart ? workEnd - workStart : 1440 - workStart + workEnd;
+}
+
+/**
+ * Absolute UTC bounds of a user's working window anchored to a given local
+ * date. When the window wraps past midnight (`workEnd <= workStart`), `end`
+ * lands on the next calendar day.
+ */
 export function workWindowFor(
   dateStr: string,
   workStart: number,
   workEnd: number,
   timezone: string,
 ): WorkWindow {
+  const wraps = workEnd <= workStart;
+  const endDateStr = wraps ? addDaysStr(dateStr, 1) : dateStr;
   return {
     start: minutesToUtc(dateStr, workStart, timezone).getTime(),
-    end: minutesToUtc(dateStr, workEnd, timezone).getTime(),
+    end: minutesToUtc(endDateStr, workEnd, timezone).getTime(),
   };
 }
 

@@ -59,7 +59,12 @@ export function findSlot(
   const deadlineMs = deadline ? deadline.getTime() : null;
   const deadlineDateStr = deadline ? localDateStr(deadline, tz) : null;
 
-  for (let d = 0; d <= MAX_SCAN_DAYS; d++) {
+  // A window that wraps past midnight and started on the *previous* day spills
+  // into `now`'s morning, so when it wraps the scan begins one day earlier. The
+  // `cand` clamp below keeps every candidate ≥ now/earliest, so the prev-day
+  // evening slots that precede `now` are naturally skipped.
+  const wraps = prefs.workEnd <= prefs.workStart;
+  for (let d = wraps ? -1 : 0; d <= MAX_SCAN_DAYS; d++) {
     const dateStr = addDaysStr(fromStr, d);
     if (deadlineDateStr && dateStr > deadlineDateStr) break;
     if (!opts.ignoreWorkDays && !prefs.workDays.includes(isoWeekday(dateStr)))
