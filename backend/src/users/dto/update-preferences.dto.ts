@@ -2,9 +2,11 @@ import {
   ArrayNotEmpty,
   IsArray,
   IsInt,
+  IsOptional,
   IsString,
   Max,
   Min,
+  ValidateIf,
 } from "class-validator";
 import { IsValidTimezone } from "src/common/validators/valid-timezone.decorator";
 import { DAILY_HORIZON } from "src/common/constants";
@@ -25,4 +27,9 @@ export class UpdatePreferencesDto implements UpdatePreferencesInput {
   @IsString()
   @IsValidTimezone()
   timezone: string;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  roleArchetypeId?: string | null;
 }

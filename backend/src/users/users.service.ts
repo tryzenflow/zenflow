@@ -72,6 +72,11 @@ export class UsersService {
         workEnd: dto.workEnd,
         workDays: dto.workDays,
         timezone: dto.timezone,
+        // Only touch the archetype when the caller explicitly sent the key,
+        // so an update that omits it does not wipe an existing value.
+        ...("roleArchetypeId" in dto
+          ? { roleArchetypeId: dto.roleArchetypeId ?? null }
+          : {}),
       },
     });
     await this.scheduler.rescheduleAll(updated);

@@ -26,8 +26,8 @@ export interface UpdatePreferencesInput {
   workEnd: number;
   workDays: number[];
   timezone: string;
-}
-
-export interface OnboardingInput extends UpdatePreferencesInput {
+  /** Phase-4 cold-start cluster id; optional. Pass null to clear. */
   roleArchetypeId?: string | null;
 }
+
+export type OnboardingInput = UpdatePreferencesInput;
