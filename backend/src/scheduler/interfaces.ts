@@ -21,6 +21,11 @@ export interface EdfTask {
   createdAt: Date;
   /** Non-null for materialized recurring occurrences sharing a series. */
   seriesId: string | null;
+  /**
+   * The task's stored conflict flag. Used to pass a frozen past task's verdict
+   * through {@link scheduleAll} untouched; defaults to false elsewhere.
+   */
+  conflict: boolean;
 }
 
 export interface Placement {

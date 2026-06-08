@@ -2,6 +2,7 @@ import {
   cascadeReschedule,
   type EdfTask,
   findSlot,
+  isPast,
   placeOne,
   scheduleAll,
   type SchedulerPrefs,
@@ -24,6 +25,7 @@ const task = (over: Partial<EdfTask> & Pick<EdfTask, "id">): EdfTask => ({
   scheduledStartTime: null,
   createdAt: MON_MIDNIGHT,
   seriesId: null,
+  conflict: false,
   ...over,
 });
 
@@ -343,6 +345,178 @@ describe("placeOne", () => {
       new Date("2026-06-08T00:00:00Z"), // anchor: Mon the 8th (past)
     );
     expect(iso(p.scheduledStartTime)).toBe("2026-06-10T11:00:00.000Z");
+  });
+});
+
+describe("isPast", () => {
+  const NOON = new Date("2026-06-08T12:00:00Z");
+
+  it("is false for a task with no scheduledStartTime", () => {
+    expect(isPast({ scheduledStartTime: null }, NOON)).toBe(false);
+  });
+
+  it("is true when the start is strictly before now", () => {
+    expect(
+      isPast({ scheduledStartTime: new Date("2026-06-08T09:00:00Z") }, NOON),
+    ).toBe(true);
+  });
+
+  it("is false at exactly now and in the future", () => {
+    expect(isPast({ scheduledStartTime: NOON }, NOON)).toBe(false);
+    expect(
+      isPast({ scheduledStartTime: new Date("2026-06-08T13:00:00Z") }, NOON),
+    ).toBe(false);
+  });
+});
+
+describe("scheduleAll — frozen past tasks", () => {
+  // Mid-day clock: anything placed at 09:00 is past; the afternoon is future.
+  const NOON = new Date("2026-06-08T12:00:00Z");
+
+  it("leaves a past plain task untouched while EDF-packing future tasks", () => {
+    const out = scheduleAll(
+      prefs,
+      [
+        // Past: started 09:00, before noon. Must stay exactly here.
+        task({
+          id: "past",
+          scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
+        }),
+        // Future flexible tasks pack from now (noon) onward.
+        task({ id: "a", deadline: new Date("2026-06-09T17:00:00Z") }),
+        task({ id: "b", deadline: new Date("2026-06-10T17:00:00Z") }),
+      ],
+      NOON,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    expect(iso(byId("past").scheduledStartTime)).toBe(
+      "2026-06-08T09:00:00.000Z",
+    );
+    expect(byId("past").conflict).toBe(false);
+    // Future tasks pack from noon, EDF order, ignoring the past block entirely.
+    expect(iso(byId("a").scheduledStartTime)).toBe("2026-06-08T12:00:00.000Z");
+    expect(iso(byId("b").scheduledStartTime)).toBe("2026-06-08T13:00:00.000Z");
+  });
+
+  it("preserves a past task's stored conflict flag unchanged", () => {
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "past",
+          conflict: true,
+          scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
+        }),
+      ],
+      NOON,
+    );
+    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-08T09:00:00.000Z");
+    expect(out[0].conflict).toBe(true);
+  });
+
+  it("does NOT re-anchor or re-flag a past day-pinned recurring occurrence", () => {
+    // A past occurrence of a daily series, currently conflict-free at 09:00.
+    // Without the freeze, placePinnedOccurrence would re-anchor it on its day
+    // (and flag it as a standing conflict). It must be left exactly as stored.
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "occ-past",
+          seriesId: "s1",
+          scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
+        }),
+        task({
+          id: "occ-future",
+          seriesId: "s1",
+          scheduledStartTime: new Date("2026-06-09T09:00:00Z"),
+        }),
+      ],
+      NOON,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    expect(iso(byId("occ-past").scheduledStartTime)).toBe(
+      "2026-06-08T09:00:00.000Z",
+    );
+    expect(byId("occ-past").conflict).toBe(false);
+    // The future occurrence stays day-pinned on its own day.
+    expect(iso(byId("occ-future").scheduledStartTime)).toBe(
+      "2026-06-09T09:00:00.000Z",
+    );
+  });
+
+  it("does not let a past block displace a future task onto a later slot", () => {
+    // A future task whose earliest packing slot (noon) does not overlap the past
+    // block — it must take noon, not be pushed past the 09:00–10:00 stale block.
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "past",
+          scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
+        }),
+        task({ id: "future" }),
+      ],
+      NOON,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    expect(iso(byId("future").scheduledStartTime)).toBe(
+      "2026-06-08T12:00:00.000Z",
+    );
+  });
+});
+
+describe("placeOne — frozen past tasks", () => {
+  const NOON = new Date("2026-06-08T12:00:00Z");
+
+  it("ignores a past task's interval when placing a new task", () => {
+    // The only other task is a past block at 09:00; a fresh task must not treat
+    // it as occupying and lands at the earliest live slot (noon).
+    const others = [
+      task({
+        id: "past",
+        scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
+      }),
+    ];
+    const p = placeOne(prefs, task({ id: "n" }), others, NOON);
+    expect(iso(p.scheduledStartTime)).toBe("2026-06-08T12:00:00.000Z");
+  });
+
+  it("never lands a new task in the past (findSlot now-clamp, unchanged)", () => {
+    const p = placeOne(
+      prefs,
+      task({ id: "n" }),
+      [],
+      NOON,
+      new Date("2026-06-08T00:00:00Z"), // anchor in the past
+    );
+    expect(iso(p.scheduledStartTime)).toBe("2026-06-08T12:00:00.000Z");
+  });
+});
+
+describe("cascadeReschedule — frozen past tasks", () => {
+  const NOON = new Date("2026-06-08T12:00:00Z");
+
+  it("never displaces a past task that the moved task overlaps", () => {
+    // Move target T onto 09:00, where a past task P already sits. P is frozen:
+    // it is not evicted, not re-placed, and is absent from the output.
+    const tasks = [
+      task({ id: "T", scheduledStartTime: new Date("2026-06-08T13:00:00Z") }),
+      task({ id: "P", scheduledStartTime: new Date("2026-06-08T09:00:00Z") }),
+    ];
+    const out = cascadeReschedule(
+      prefs,
+      tasks,
+      "T",
+      new Date("2026-06-08T09:00:00Z"),
+      NOON,
+    );
+    // P never moves, so it isn't in the changed set.
+    expect(out.find((p) => p.id === "P")).toBeUndefined();
+    // T lands where requested (the past block doesn't block or evict).
+    expect(iso(out.find((p) => p.id === "T")!.scheduledStartTime)).toBe(
+      "2026-06-08T09:00:00.000Z",
+    );
   });
 });
 

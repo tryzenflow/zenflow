@@ -196,6 +196,14 @@ Pure functions you'll work with:
 - **`cascadeReschedule(prefs, tasks, targetId, requestedStart, now)`** — a manual drag:
   pin the target at the snapped slot; if it hits a fixed anchor, route it onward and
   re-place any flexible tasks it displaces (bounded by `MAX_CASCADE_STEPS`).
+- **`isPast(task, now)`** — `task.scheduledStartTime !== null && start < now`. **Past tasks
+  are frozen** by every scheduling path: never moved, re-placed, or re-flagged for conflict,
+  and excluded from the occupied/overlap set that drives placement + conflict for live tasks
+  (a past block can't legitimately block a future slot — `findSlot` already clamps every
+  candidate to `now`). `scheduleAll` passes them through with their stored
+  `scheduledStartTime`/`conflict`; `placeOne` and `cascadeReschedule` skip them when scanning
+  occupancy; `pin`/`resize` skip them in the pairwise conflict recompute. In-progress tasks
+  that started before `now` count as past and are left alone.
 
 `SchedulerService` wraps these to persist placements, write `TaskEvent`s, and bump the
 `penaltyMatrix`. A `scoreSlot()` seam is reserved here for the **Phase 3 bandit** to plug

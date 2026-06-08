@@ -6,6 +6,7 @@ import {
   cascadeReschedule,
   type EdfTask,
   intervalOf,
+  isPast,
   placeOne,
   scheduleAll,
   type SchedulerPrefs,
@@ -47,6 +48,7 @@ export class SchedulerService {
       scheduledStartTime: task.scheduledStartTime,
       createdAt: task.createdAt,
       seriesId: task.seriesId,
+      conflict: task.conflict,
     };
   }
 
@@ -222,6 +224,7 @@ export class SchedulerService {
     user: User,
     taskId: string,
     requestedStart: Date,
+    now = new Date(),
   ): Promise<{ task: Task; displaced: DisplacedTask[] }> {
     return this.prisma.$transaction(async (tx) => {
       const tasks = await this.pendingTasks(user.id, tx);
@@ -242,6 +245,11 @@ export class SchedulerService {
         a.start < b.end && b.start < a.end;
       const conflictOf = new Map<string, boolean>();
       for (const t of projected) {
+        // Past tasks are frozen: their conflict is never recomputed.
+        if (isPast(t, now)) {
+          conflictOf.set(t.id, t.conflict);
+          continue;
+        }
         const iv = intervalOf(t);
         if (!iv) {
           conflictOf.set(t.id, t.conflict); // unplaced — keep engine's verdict
@@ -251,6 +259,8 @@ export class SchedulerService {
           t.id,
           projected.some((o) => {
             if (o.id === t.id) return false;
+            // A frozen past block never causes a live task to conflict.
+            if (isPast(o, now)) return false;
             const oiv = intervalOf(o);
             return oiv ? overlaps(iv, oiv) : false;
           }),
@@ -314,6 +324,7 @@ export class SchedulerService {
     taskId: string,
     requestedStart: Date,
     durationMinutes: number,
+    now = new Date(),
   ): Promise<{ task: Task; displaced: DisplacedTask[] }> {
     return this.prisma.$transaction(async (tx) => {
       const tasks = await this.pendingTasks(user.id, tx);
@@ -344,6 +355,11 @@ export class SchedulerService {
         a.start < b.end && b.start < a.end;
       const conflictOf = new Map<string, boolean>();
       for (const t of projected) {
+        // Past tasks are frozen: their conflict is never recomputed.
+        if (isPast(t, now)) {
+          conflictOf.set(t.id, t.conflict);
+          continue;
+        }
         const iv = intervalOf(t);
         if (!iv) {
           conflictOf.set(t.id, t.conflict); // unplaced — keep engine's verdict
@@ -353,6 +369,8 @@ export class SchedulerService {
           t.id,
           projected.some((o) => {
             if (o.id === t.id) return false;
+            // A frozen past block never causes a live task to conflict.
+            if (isPast(o, now)) return false;
             const oiv = intervalOf(o);
             return oiv ? overlaps(iv, oiv) : false;
           }),

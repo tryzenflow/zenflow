@@ -27,6 +27,25 @@ export function intervalOf(t: {
   return { start, end: start + durationMs(t.durationMinutes) };
 }
 
+/**
+ * A task is "past" (frozen) iff it has a `scheduledStartTime` that already
+ * begins before `now`. Past tasks are never moved, re-placed, or re-flagged for
+ * conflict by any scheduling path, and they are excluded from the occupied set
+ * that drives placement/conflict for non-past tasks (a past block can never
+ * legitimately block a future slot — `findSlot` clamps every candidate to
+ * `now`). A task with no `scheduledStartTime` is never past. An in-progress
+ * task that started before `now` IS past and is left alone.
+ */
+export function isPast(
+  t: { scheduledStartTime: Date | null },
+  now: Date,
+): boolean {
+  return (
+    t.scheduledStartTime !== null &&
+    t.scheduledStartTime.getTime() < now.getTime()
+  );
+}
+
 /** EDF ordering: deadline ascending (nulls last), then createdAt ascending. */
 export function compareEdf(a: EdfTask, b: EdfTask): number {
   const ad = a.deadline ? a.deadline.getTime() : Infinity;
@@ -151,9 +170,14 @@ export function scheduleAll(
   tasks: EdfTask[],
   now: Date,
 ): Placement[] {
-  const fixed = tasks.filter((t) => t.fixed && t.scheduledStartTime);
-  const pinned = tasks.filter(isDayPinned).sort(compareEdf);
-  const plain = tasks
+  // Past tasks are frozen: never moved, never re-flagged, and excluded from the
+  // occupied set so they can't block or displace future placements.
+  const past = tasks.filter((t) => isPast(t, now));
+  const live = tasks.filter((t) => !isPast(t, now));
+
+  const fixed = live.filter((t) => t.fixed && t.scheduledStartTime);
+  const pinned = live.filter(isDayPinned).sort(compareEdf);
+  const plain = live
     .filter((t) => !t.fixed && !isDayPinned(t))
     .sort(compareEdf);
 
@@ -161,11 +185,20 @@ export function scheduleAll(
     .map(intervalOf)
     .filter((i): i is Interval => i !== null);
 
-  const out: Placement[] = fixed.map((t) => ({
+  // Frozen past tasks pass through with their stored placement + conflict.
+  const out: Placement[] = past.map((t) => ({
     id: t.id,
     scheduledStartTime: t.scheduledStartTime,
-    conflict: false,
+    conflict: t.conflict,
   }));
+
+  out.push(
+    ...fixed.map((t) => ({
+      id: t.id,
+      scheduledStartTime: t.scheduledStartTime,
+      conflict: false,
+    })),
+  );
 
   // Place day-pinned recurring occurrences first, each confined to its own day.
   for (const t of pinned) {
@@ -216,7 +249,10 @@ export function placeOne(
       conflict: task.scheduledStartTime === null,
     };
   }
+  // Past tasks are frozen and can't block a future slot (findSlot clamps every
+  // candidate to `now`), so exclude them from the occupied set.
   const occupied = others
+    .filter((t) => !isPast(t, now))
     .map(intervalOf)
     .filter((i): i is Interval => i !== null);
   const slot = findSlot(
@@ -257,6 +293,9 @@ export function cascadeReschedule(
   const occ: OccBlock[] = [];
   for (const t of byId.values()) {
     if (t.id === targetId) continue;
+    // Past tasks are frozen: never evicted, displaced, or re-placed, and they
+    // can't occupy a future slot, so leave them out of the scan entirely.
+    if (isPast(t, now)) continue;
     const iv = intervalOf(t);
     if (iv)
       occ.push({ id: t.id, start: iv.start, end: iv.end, fixed: t.fixed });
