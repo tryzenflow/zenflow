@@ -3,6 +3,7 @@ import { EdfTask, SchedulerPrefs, Placement, OccBlock } from "./interfaces";
 
 // Re-export the scheduler's public types so consumers can import them from "./edf".
 export type { EdfTask, SchedulerPrefs };
+import { minutesToUtc } from "../common/utils";
 import {
   Interval,
   SLOT_MS,
@@ -82,9 +83,68 @@ export function findSlot(
 }
 
 /**
+ * True for a materialized recurring occurrence whose intended day is still
+ * recoverable (it carries a `seriesId` and a current placement). On a full
+ * re-EDF these must stay on their own day rather than EDF-packing forward.
+ */
+function isDayPinned(t: EdfTask): boolean {
+  return !t.fixed && t.seriesId !== null && t.scheduledStartTime !== null;
+}
+
+/**
+ * Re-place a recurring occurrence pinned to the day of its current
+ * `scheduledStartTime`, mirroring the day-pinning `placeNewTask` applies at
+ * creation: `earliest` = that day's 00:00 (user tz), deadline capped at
+ * min(task.deadline, that day's work-end), `ignoreWorkDays` so a pinned
+ * non-working day still resolves. If no slot fits, the occurrence is anchored
+ * at that day's work start (as a standing conflict) so it never floats onto a
+ * different day.
+ */
+function placePinnedOccurrence(
+  prefs: SchedulerPrefs,
+  t: EdfTask,
+  occupied: Interval[],
+  now: Date,
+): Placement {
+  const tz = prefs.timezone;
+  const dayStr = localDateStr(t.scheduledStartTime!, tz);
+  const dayStart = minutesToUtc(dayStr, 0, tz);
+  const win = workWindowFor(dayStr, prefs.workStart, prefs.workEnd, tz);
+  const dayWorkEnd = new Date(win.end);
+  const deadlineCap =
+    t.deadline && t.deadline.getTime() < dayWorkEnd.getTime()
+      ? t.deadline
+      : dayWorkEnd;
+
+  const slot = findSlot(
+    prefs,
+    t.durationMinutes,
+    deadlineCap,
+    occupied,
+    now,
+    dayStart,
+    { ignoreWorkDays: true },
+  );
+  if (slot) return { id: t.id, scheduledStartTime: slot, conflict: false };
+
+  // No slot fit the day (full, in the past, or overflows the work window).
+  // Keep the occurrence on its day as a standing conflict rather than letting
+  // it drift to another day.
+  const anchor = new Date(win.start);
+  return { id: t.id, scheduledStartTime: anchor, conflict: true };
+}
+
+/**
  * Full deterministic re-schedule of all PENDING tasks. Fixed tasks keep their
- * anchored slot; flexible tasks are EDF-placed around them. Used on preference
- * changes (docs: "PUT preferences triggers full EDF rescheduling").
+ * anchored slot. Recurring occurrences (a `seriesId` plus a current placement)
+ * stay pinned to their own day, re-flowing only their time-of-day within that
+ * day's work window — so a daily series keeps one-per-day instead of collapsing
+ * onto the earliest workdays. Remaining ("plain") flexible tasks are EDF-packed
+ * from `now` around everything already occupied. Used on preference changes
+ * (docs: "PUT preferences triggers full EDF rescheduling").
+ *
+ * A recurring occurrence with no current `scheduledStartTime` (previously
+ * unplaced/conflict) has no recoverable day, so it is treated as plain flexible.
  */
 export function scheduleAll(
   prefs: SchedulerPrefs,
@@ -92,7 +152,10 @@ export function scheduleAll(
   now: Date,
 ): Placement[] {
   const fixed = tasks.filter((t) => t.fixed && t.scheduledStartTime);
-  const flexible = tasks.filter((t) => !t.fixed).sort(compareEdf);
+  const pinned = tasks.filter(isDayPinned).sort(compareEdf);
+  const plain = tasks
+    .filter((t) => !t.fixed && !isDayPinned(t))
+    .sort(compareEdf);
 
   const occupied: Interval[] = fixed
     .map(intervalOf)
@@ -104,7 +167,20 @@ export function scheduleAll(
     conflict: false,
   }));
 
-  for (const t of flexible) {
+  // Place day-pinned recurring occurrences first, each confined to its own day.
+  for (const t of pinned) {
+    const p = placePinnedOccurrence(prefs, t, occupied, now);
+    if (p.scheduledStartTime) {
+      occupied.push({
+        start: p.scheduledStartTime.getTime(),
+        end: p.scheduledStartTime.getTime() + durationMs(t.durationMinutes),
+      });
+    }
+    out.push(p);
+  }
+
+  // Plain flexible tasks fill the gaps with the usual EDF-from-now packing.
+  for (const t of plain) {
     const slot = findSlot(prefs, t.durationMinutes, t.deadline, occupied, now);
     if (slot) {
       occupied.push({

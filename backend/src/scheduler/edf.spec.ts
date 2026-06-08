@@ -23,8 +23,12 @@ const task = (over: Partial<EdfTask> & Pick<EdfTask, "id">): EdfTask => ({
   fixed: false,
   scheduledStartTime: null,
   createdAt: MON_MIDNIGHT,
+  seriesId: null,
   ...over,
 });
+
+/** 'YYYY-MM-DD' in UTC (the spec's prefs timezone) for an instant. */
+const dayStr = (d: Date) => d.toISOString().slice(0, 10);
 
 const iso = (d: Date | null) => (d ? d.toISOString() : null);
 
@@ -217,6 +221,96 @@ describe("scheduleAll", () => {
     const a = scheduleAll(prefs, tasks, MON_MIDNIGHT);
     const b = scheduleAll(prefs, tasks, MON_MIDNIGHT);
     expect(JSON.stringify(a)).toEqual(JSON.stringify(b));
+  });
+
+  it("keeps a recurring daily series on its own days (regression: no collapse)", () => {
+    // FREQ=DAILY-style series: one occurrence per consecutive day Mon–Fri, all
+    // sharing seriesId "s1", deadline null, each already placed at 09:00 on its
+    // day. Before the fix scheduleAll EDF-packs them onto Monday 06-08; the fix
+    // pins each back to its own day.
+    const occDays = [
+      "2026-06-08",
+      "2026-06-09",
+      "2026-06-10",
+      "2026-06-11",
+      "2026-06-12",
+    ];
+    const tasks = occDays.map((d, i) =>
+      task({
+        id: `s1-${i}`,
+        seriesId: "s1",
+        scheduledStartTime: new Date(`${d}T09:00:00Z`),
+      }),
+    );
+    const out = scheduleAll(prefs, tasks, MON_MIDNIGHT);
+    const placedDays = out.map((p) => dayStr(p.scheduledStartTime!));
+    // Each occurrence stays on its own distinct day — not collapsed onto 06-08.
+    expect(placedDays.sort()).toEqual([...occDays]);
+    expect(new Set(placedDays).size).toBe(occDays.length);
+    expect(out.every((p) => !p.conflict)).toBe(true);
+  });
+
+  it("re-flows a pinned occurrence's time-of-day into a changed work window", () => {
+    // Work window moved to 13:00–17:00; the Wednesday occurrence stays on
+    // Wed 06-10 but its start lands inside the new window.
+    const shifted: SchedulerPrefs = { ...prefs, workStart: 780 }; // 13:00
+    const out = scheduleAll(
+      shifted,
+      [
+        task({
+          id: "occ",
+          seriesId: "s1",
+          scheduledStartTime: new Date("2026-06-10T09:00:00Z"), // old window
+        }),
+      ],
+      MON_MIDNIGHT,
+    );
+    expect(dayStr(out[0].scheduledStartTime!)).toBe("2026-06-10");
+    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-10T13:00:00.000Z");
+  });
+
+  it("pins recurring occurrences on their days while plain flexible packs from now", () => {
+    // A daily series on Tue+Wed plus a plain flexible task. The plain task fills
+    // the earliest gap from now (Monday) and the occurrences keep their days.
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "occ-tue",
+          seriesId: "s1",
+          scheduledStartTime: new Date("2026-06-09T09:00:00Z"),
+        }),
+        task({
+          id: "occ-wed",
+          seriesId: "s1",
+          scheduledStartTime: new Date("2026-06-10T09:00:00Z"),
+        }),
+        task({ id: "plain" }),
+      ],
+      MON_MIDNIGHT,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    expect(iso(byId("occ-tue").scheduledStartTime)).toBe(
+      "2026-06-09T09:00:00.000Z",
+    );
+    expect(iso(byId("occ-wed").scheduledStartTime)).toBe(
+      "2026-06-10T09:00:00.000Z",
+    );
+    // Plain flexible isn't day-pinned: packs from now on Monday.
+    expect(iso(byId("plain").scheduledStartTime)).toBe(
+      "2026-06-08T09:00:00.000Z",
+    );
+  });
+
+  it("treats a recurring occurrence with no current placement as plain flexible", () => {
+    // seriesId set but scheduledStartTime null (previously unplaced): its day is
+    // unrecoverable, so it falls back to EDF-from-now packing.
+    const out = scheduleAll(
+      prefs,
+      [task({ id: "lost", seriesId: "s1", scheduledStartTime: null })],
+      MON_MIDNIGHT,
+    );
+    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-08T09:00:00.000Z");
   });
 });
 

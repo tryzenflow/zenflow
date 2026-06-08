@@ -46,6 +46,7 @@ export class SchedulerService {
       fixed: task.fixed,
       scheduledStartTime: task.scheduledStartTime,
       createdAt: task.createdAt,
+      seriesId: task.seriesId,
     };
   }
 

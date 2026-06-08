@@ -19,6 +19,8 @@ export interface EdfTask {
   fixed: boolean;
   scheduledStartTime: Date | null;
   createdAt: Date;
+  /** Non-null for materialized recurring occurrences sharing a series. */
+  seriesId: string | null;
 }
 
 export interface Placement {
