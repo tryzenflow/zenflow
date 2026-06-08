@@ -98,8 +98,13 @@ inputs and constants are shared with onboarding through
   `resizeTask` → `PATCH /tasks/:id/resize`. Both snap to the 15-min grid (`utils/snap.ts`).
 - **Overlaps:** `utils/overlap.ts` (`getOverlapLayout`) greedily lays overlapping blocks
   side-by-side (column/columns). Conflicts get the amber `conflict` card state.
-- **Work zones:** `utils/zones.ts` (`getDayZones`) tints non-work / weekend areas; day &
-  week views draw a "now" indicator.
+- **Work zones:** `utils/zones.ts` (`getDayZones`) returns the work-hour `segments` (px) for
+  a column and tints their complement as non-work / weekend; day & week views draw a "now"
+  indicator. Overnight (cross-midnight) windows — `workEnd <= workStart` — anchor to the start
+  day and render two bands: an evening segment on the workday plus a morning spill-over on the
+  next column. Time pickers + wrap-aware validation live in
+  `components/settings/preferences-fields.tsx` (`isValidWindow` / `workWindowMinutes` /
+  `windowWraps`).
 - **Recurrence:** the backend materializes a series into individual rows (shared `seriesId`);
   the frontend just renders the flat `Task[]` for the current view window. Mutations pass a
   `scope` of `"one"` or `"following"`.

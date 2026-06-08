@@ -19,8 +19,11 @@ import { logout } from "@/api/auth";
 import {
   ARCHETYPES,
   DAYS,
+  isValidWindow,
   minutesToLabel,
   TimeSelect,
+  windowWraps,
+  workWindowMinutes,
 } from "@/components/settings/preferences-fields";
 
 /** Detected IANA timezone, falling back to UTC. */
@@ -126,8 +129,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const zones = useMemo(() => timezoneOptions(timezone), [timezone]);
   const detected = useMemo(detectedTimezone, []);
 
-  const hours = Math.max(0, (workEnd - workStart) / 60);
-  const validHours = workEnd > workStart && workEnd - workStart >= 60;
+  const hours = workWindowMinutes(workStart, workEnd) / 60;
+  const validHours = isValidWindow(workStart, workEnd);
+  const wraps = windowWraps(workStart, workEnd);
   const validDays = workDays.length > 0;
   const canSave = validHours && validDays && !loading;
 
@@ -195,10 +199,15 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   <p className="text-xs font-semibold">
                     {validHours
                       ? `${hours} hours of schedulable time`
-                      : "End time must be at least an hour after start time"}
+                      : "Window must be at least an hour long"}
                   </p>
                   <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
                     {minutesToLabel(workStart)} – {minutesToLabel(workEnd)}
+                    {wraps && (
+                      <span className="ml-1 font-sans text-primary">
+                        (next day)
+                      </span>
+                    )}
                   </p>
                 </div>
               </div>

@@ -1,4 +1,11 @@
-import { ChevronDown, Clock } from "lucide-react";
+import { Clock } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 /** ISO weekdays (1=Mon … 7=Sun) with short labels — Monday-first. */
 export const DAYS = [
@@ -39,11 +46,11 @@ export const ARCHETYPES = [
   },
 ];
 
-/** Half-hour options between 05:00 and 22:00, as minutes-from-midnight. */
-export const TIME_OPTIONS = Array.from(
-  { length: (22 - 5) * 2 + 1 },
-  (_, i) => 5 * 60 + i * 30,
-);
+/**
+ * Full-day options in 15-minute steps, as minutes-from-midnight
+ * (0 = 00:00 … 1425 = 23:45). 15-min matches the scheduler's slot grid.
+ */
+export const TIME_OPTIONS = Array.from({ length: 96 }, (_, i) => i * 15);
 
 /** Format minutes-from-midnight as a 12-hour clock label, e.g. "9:00 AM". */
 export function minutesToLabel(m: number) {
@@ -52,6 +59,24 @@ export function minutesToLabel(m: number) {
   const ampm = h < 12 ? "AM" : "PM";
   const h12 = h % 12 === 0 ? 12 : h % 12;
   return `${h12}:${String(min).padStart(2, "0")} ${ampm}`;
+}
+
+/**
+ * Effective working minutes for a window. Wraps past midnight iff
+ * `end <= start`, in which case the window runs into the next calendar day.
+ */
+export function workWindowMinutes(start: number, end: number) {
+  return end > start ? end - start : 1440 - start + end;
+}
+
+/** Valid iff start≠end and the window covers at least 60 effective minutes. */
+export function isValidWindow(start: number, end: number) {
+  return start !== end && workWindowMinutes(start, end) >= 60;
+}
+
+/** True when the window crosses midnight (end on the next calendar day). */
+export function windowWraps(start: number, end: number) {
+  return end <= start;
 }
 
 export function TimeSelect({
@@ -66,21 +91,22 @@ export function TimeSelect({
   return (
     <div className="space-y-2">
       <label className="text-xs font-semibold">{label}</label>
-      <div className="relative">
-        <Clock className="pointer-events-none absolute left-3 top-1/2 h-[15px] w-[15px] -translate-y-1/2 text-muted-foreground" />
-        <select
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="h-10 w-full appearance-none rounded-md border border-border bg-card pl-9 pr-9 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-ring"
-        >
+      <Select
+        value={String(value)}
+        onValueChange={(v) => onChange(Number(v))}
+      >
+        <SelectTrigger className="relative h-10 w-full bg-card pl-9 text-sm font-medium">
+          <Clock className="pointer-events-none absolute left-3 top-1/2 h-[15px] w-[15px] -translate-y-1/2 text-muted-foreground" />
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
           {TIME_OPTIONS.map((m) => (
-            <option key={m} value={m}>
+            <SelectItem key={m} value={String(m)}>
               {minutesToLabel(m)}
-            </option>
+            </SelectItem>
           ))}
-        </select>
-        <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-      </div>
+        </SelectContent>
+      </Select>
     </div>
   );
 }

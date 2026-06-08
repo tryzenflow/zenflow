@@ -10,8 +10,11 @@ import { completeOnboarding } from "@/api/users";
 import {
   ARCHETYPES,
   DAYS,
+  isValidWindow,
   minutesToLabel,
   TimeSelect,
+  windowWraps,
+  workWindowMinutes,
 } from "@/components/settings/preferences-fields";
 
 const STEPS = ["Welcome", "Work Hours", "Work Days", "Your Role", "All Set"];
@@ -94,8 +97,9 @@ function OnboardingWizard() {
     if (user?.onboardingComplete) navigate("/");
   }, [user, navigate]);
 
-  const hours = Math.max(0, (workEnd - workStart) / 60);
-  const validHours = workEnd > workStart && workEnd - workStart >= 60;
+  const hours = workWindowMinutes(workStart, workEnd) / 60;
+  const validHours = isValidWindow(workStart, workEnd);
+  const wraps = windowWraps(workStart, workEnd);
 
   function toggleDay(iso: number) {
     setWorkDays((d) =>
@@ -216,10 +220,15 @@ function OnboardingWizard() {
                     <p className="text-xs font-semibold">
                       {validHours
                         ? `${hours} hours of schedulable time`
-                        : "End time must be after start time"}
+                        : "Window must be at least an hour long"}
                     </p>
                     <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
                       {minutesToLabel(workStart)} – {minutesToLabel(workEnd)}
+                      {wraps && (
+                        <span className="ml-1 font-sans text-primary">
+                          (next day)
+                        </span>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -294,7 +303,9 @@ function OnboardingWizard() {
               <div className="space-y-2 rounded-md border border-border bg-muted p-4 text-sm">
                 <Row
                   label="Hours"
-                  value={`${minutesToLabel(workStart)} – ${minutesToLabel(workEnd)}`}
+                  value={`${minutesToLabel(workStart)} – ${minutesToLabel(workEnd)}${
+                    wraps ? " (next day)" : ""
+                  }`}
                 />
                 <Row
                   label="Days"
