@@ -3,7 +3,6 @@ import { PrismaService } from "../prisma/prisma.service";
 import { Prisma, type Task, type User } from "../../generated/prisma";
 import { PENALTY_MATRIX_LENGTH } from "@zenflow/shared";
 import {
-  cascadeReschedule,
   type EdfTask,
   intervalOf,
   isPast,
@@ -11,12 +10,7 @@ import {
   scheduleAll,
   type SchedulerPrefs,
 } from "./edf";
-import {
-  type Interval,
-  SLOT_MS,
-  penaltyIndex,
-  workWindowMinutes,
-} from "./slot";
+import { type Interval, SLOT_MS, penaltyIndex } from "./slot";
 import { TIME_GRANULARITY } from "../common/constants";
 
 type PrismaTx = Prisma.TransactionClient;
@@ -47,7 +41,6 @@ export class SchedulerService {
       fixed: task.fixed,
       scheduledStartTime: task.scheduledStartTime,
       createdAt: task.createdAt,
-      seriesId: task.seriesId,
       conflict: task.conflict,
     };
   }
@@ -62,57 +55,27 @@ export class SchedulerService {
    *
    *  - `earliest` anchors a flexible task to a chosen day (the view it was
    *    created from) instead of the first open slot from `now`.
-   *  - `placementDeadline` caps the search without touching the stored
-   *    `deadline` — used to confine a recurring occurrence to its own day.
-   *  - `dayAnchor` keeps a recurring occurrence on its day even when no slot
-   *    fits (placed there as a standing conflict rather than floating unplaced).
-   *  - `ignoreWorkDays` lets a recurring occurrence place within its pinned
-   *    day's work hours even when that day is a non-working day (the user chose
-   *    that weekday on purpose).
+   *
+   * A task that finds no slot before its deadline is left unplaced
+   * (`scheduledStartTime: null`) and flagged as a conflict.
    */
   async placeNewTask(
     user: User,
     task: Task,
     tx: PrismaTx,
-    opts: {
-      earliest?: Date;
-      placementDeadline?: Date;
-      dayAnchor?: Date;
-      ignoreWorkDays?: boolean;
-    } = {},
+    opts: { earliest?: Date } = {},
     now = new Date(),
   ): Promise<{ scheduledStartTime: Date | null; conflict: boolean }> {
     const others = (await this.pendingTasks(user.id, tx)).filter(
       (t) => t.id !== task.id,
     );
-    const edf = this.toEdf(task);
-    if (opts.placementDeadline) edf.deadline = opts.placementDeadline;
-    const placement = placeOne(
+    const { scheduledStartTime, conflict } = placeOne(
       this.prefsOf(user),
-      edf,
+      this.toEdf(task),
       others.map((t) => this.toEdf(t)),
       now,
       opts.earliest,
-      { ignoreWorkDays: opts.ignoreWorkDays },
     );
-    let { scheduledStartTime, conflict } = placement;
-    if (scheduledStartTime === null && opts.dayAnchor) {
-      // No slot fit the day (it's full, in the past, or the task overflows the
-      // work window). Anchor the occurrence on its day anyway, but only flag a
-      // conflict when it actually overlaps another task there or can't fit the
-      // day — a lone task on an otherwise empty day is not a conflict.
-      scheduledStartTime = opts.dayAnchor;
-      const anchorStart = opts.dayAnchor.getTime();
-      const anchorEnd = anchorStart + task.durationMinutes * 60_000;
-      const overflowsDay =
-        task.durationMinutes > workWindowMinutes(user.workStart, user.workEnd);
-      conflict =
-        overflowsDay ||
-        others.some((o) => {
-          const iv = intervalOf(o);
-          return iv !== null && anchorStart < iv.end && iv.start < anchorEnd;
-        });
-    }
     await tx.task.update({
       where: { id: task.id },
       data: { scheduledStartTime, conflict },
@@ -150,70 +113,6 @@ export class SchedulerService {
   }
 
   /**
-   * Manual move with cascading realignment. Persists every moved task, records
-   * MOVE audit events, and increments the penalty matrix for the vacated slot.
-   */
-  async reschedule(
-    user: User,
-    taskId: string,
-    requestedStart: Date,
-    now = new Date(),
-  ): Promise<{ task: Task; displaced: DisplacedTask[] }> {
-    return this.prisma.$transaction(async (tx) => {
-      const tasks = await this.pendingTasks(user.id, tx);
-      const before = new Map(tasks.map((t) => [t.id, t]));
-      const target = before.get(taskId);
-      if (!target) throw new NotFoundException(`Cannot find task ${taskId}`);
-
-      const placements = cascadeReschedule(
-        this.prefsOf(user),
-        tasks.map((t) => this.toEdf(t)),
-        taskId,
-        requestedStart,
-        now,
-      );
-
-      let updatedTarget: Task = target;
-      const displaced: DisplacedTask[] = [];
-
-      for (const p of placements) {
-        const prev = before.get(p.id);
-        if (!prev) continue;
-        const updated = await tx.task.update({
-          where: { id: p.id },
-          data: {
-            scheduledStartTime: p.scheduledStartTime,
-            conflict: p.conflict,
-          },
-        });
-        await tx.taskEvent.create({
-          data: {
-            taskId: p.id,
-            userId: user.id,
-            eventType: "MOVE",
-            oldSnapshot: this.snapshot(prev),
-            newSnapshot: this.snapshot(updated),
-            rewardScore: 0.0, // user override
-          },
-        });
-        if (p.id === taskId) updatedTarget = updated;
-        else
-          displaced.push({
-            taskId: p.id,
-            newScheduledStartTime: p.scheduledStartTime,
-          });
-      }
-
-      // Telemetry: increment penalty matrix for the target's vacated slot.
-      if (target.scheduledStartTime) {
-        await this.bumpPenalty(user, target.scheduledStartTime, tx);
-      }
-
-      return { task: updatedTarget, displaced };
-    });
-  }
-
-  /**
    * Manual drag-drop placement. Pins `taskId` at the snapped `requestedStart`
    * exactly where the user dropped it — no cascade, nothing else moves. Any
    * resulting time overlap is allowed and surfaced as a conflict; conflicts are
@@ -241,31 +140,7 @@ export class SchedulerService {
       const projected = tasks.map((t) =>
         t.id === taskId ? { ...t, scheduledStartTime: snapped } : t,
       );
-      const overlaps = (a: Interval, b: Interval) =>
-        a.start < b.end && b.start < a.end;
-      const conflictOf = new Map<string, boolean>();
-      for (const t of projected) {
-        // Past tasks are frozen: their conflict is never recomputed.
-        if (isPast(t, now)) {
-          conflictOf.set(t.id, t.conflict);
-          continue;
-        }
-        const iv = intervalOf(t);
-        if (!iv) {
-          conflictOf.set(t.id, t.conflict); // unplaced — keep engine's verdict
-          continue;
-        }
-        conflictOf.set(
-          t.id,
-          projected.some((o) => {
-            if (o.id === t.id) return false;
-            // A frozen past block never causes a live task to conflict.
-            if (isPast(o, now)) return false;
-            const oiv = intervalOf(o);
-            return oiv ? overlaps(iv, oiv) : false;
-          }),
-        );
-      }
+      const conflictOf = this.recomputeConflicts(projected, now);
 
       const before = new Map(tasks.map((t) => [t.id, t]));
       const displaced: DisplacedTask[] = [];
@@ -351,31 +226,7 @@ export class SchedulerService {
             }
           : t,
       );
-      const overlaps = (a: Interval, b: Interval) =>
-        a.start < b.end && b.start < a.end;
-      const conflictOf = new Map<string, boolean>();
-      for (const t of projected) {
-        // Past tasks are frozen: their conflict is never recomputed.
-        if (isPast(t, now)) {
-          conflictOf.set(t.id, t.conflict);
-          continue;
-        }
-        const iv = intervalOf(t);
-        if (!iv) {
-          conflictOf.set(t.id, t.conflict); // unplaced — keep engine's verdict
-          continue;
-        }
-        conflictOf.set(
-          t.id,
-          projected.some((o) => {
-            if (o.id === t.id) return false;
-            // A frozen past block never causes a live task to conflict.
-            if (isPast(o, now)) return false;
-            const oiv = intervalOf(o);
-            return oiv ? overlaps(iv, oiv) : false;
-          }),
-        );
-      }
+      const conflictOf = this.recomputeConflicts(projected, now);
 
       const before = new Map(tasks.map((t) => [t.id, t]));
       const displaced: DisplacedTask[] = [];
@@ -419,6 +270,51 @@ export class SchedulerService {
 
       return { task: updatedTarget, displaced };
     });
+  }
+
+  /**
+   * Recompute each task's conflict flag from real time-overlap across the
+   * `projected` set: a placed task clashes if it overlaps another placed task.
+   * Drives the manual {@link pin}/{@link resize} drops (the only places where a
+   * placed-but-overlapping conflict can arise). Frozen past tasks keep their
+   * stored verdict and never cause a live task to conflict; unplaced tasks keep
+   * the engine's verdict.
+   */
+  private recomputeConflicts(
+    projected: {
+      id: string;
+      scheduledStartTime: Date | null;
+      durationMinutes: number;
+      conflict: boolean;
+    }[],
+    now: Date,
+  ): Map<string, boolean> {
+    const overlaps = (a: Interval, b: Interval) =>
+      a.start < b.end && b.start < a.end;
+    const conflictOf = new Map<string, boolean>();
+    for (const t of projected) {
+      // Past tasks are frozen: their conflict is never recomputed.
+      if (isPast(t, now)) {
+        conflictOf.set(t.id, t.conflict);
+        continue;
+      }
+      const iv = intervalOf(t);
+      if (!iv) {
+        conflictOf.set(t.id, t.conflict); // unplaced — keep engine's verdict
+        continue;
+      }
+      conflictOf.set(
+        t.id,
+        projected.some((o) => {
+          if (o.id === t.id) return false;
+          // A frozen past block never causes a live task to conflict.
+          if (isPast(o, now)) return false;
+          const oiv = intervalOf(o);
+          return oiv ? overlaps(iv, oiv) : false;
+        }),
+      );
+    }
+    return conflictOf;
   }
 
   private snapshot(task: Task): Prisma.InputJsonValue {

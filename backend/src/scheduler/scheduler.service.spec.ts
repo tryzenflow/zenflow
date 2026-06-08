@@ -39,8 +39,6 @@ function task(overrides: Partial<Task> & { id: string }): Task {
     startTime: 0,
     status: "PENDING",
     conflict: false,
-    rrule: "",
-    seriesId: null,
     scheduledStartTime: null,
     userId: user.id,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),

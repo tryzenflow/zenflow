@@ -19,8 +19,6 @@ export interface EdfTask {
   fixed: boolean;
   scheduledStartTime: Date | null;
   createdAt: Date;
-  /** Non-null for materialized recurring occurrences sharing a series. */
-  seriesId: string | null;
   /**
    * The task's stored conflict flag. Used to pass a frozen past task's verdict
    * through {@link scheduleAll} untouched; defaults to false elsewhere.
@@ -32,11 +30,4 @@ export interface Placement {
   id: string;
   scheduledStartTime: Date | null;
   conflict: boolean;
-}
-
-export interface OccBlock {
-  id: string;
-  start: number;
-  end: number;
-  fixed: boolean;
 }

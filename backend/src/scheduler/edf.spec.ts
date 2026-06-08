@@ -1,5 +1,4 @@
 import {
-  cascadeReschedule,
   type EdfTask,
   findSlot,
   isPast,
@@ -24,13 +23,9 @@ const task = (over: Partial<EdfTask> & Pick<EdfTask, "id">): EdfTask => ({
   fixed: false,
   scheduledStartTime: null,
   createdAt: MON_MIDNIGHT,
-  seriesId: null,
   conflict: false,
   ...over,
 });
-
-/** 'YYYY-MM-DD' in UTC (the spec's prefs timezone) for an instant. */
-const dayStr = (d: Date) => d.toISOString().slice(0, 10);
 
 const iso = (d: Date | null) => (d ? d.toISOString() : null);
 
@@ -84,8 +79,8 @@ describe("findSlot", () => {
     expect(iso(slot)).toBe("2026-06-15T09:00:00.000Z");
   });
 
-  it("skips a non-working day by default (ignoreWorkDays omitted)", () => {
-    // 2026-06-13 is a Saturday; earliest pins the search to it, but the default
+  it("skips a non-working day and rolls forward to the next workday", () => {
+    // 2026-06-13 is a Saturday; earliest pins the search to it, but the
     // workday-only behaviour rolls forward to Monday 06-15.
     const slot = findSlot(
       prefs,
@@ -96,21 +91,6 @@ describe("findSlot", () => {
       new Date("2026-06-13T00:00:00Z"), // Saturday
     );
     expect(iso(slot)).toBe("2026-06-15T09:00:00.000Z");
-  });
-
-  it("places within a non-working day's work window when ignoreWorkDays is set", () => {
-    // Saturday 06-13: with ignoreWorkDays it places at that day's work start,
-    // pinned there by the earliest anchor + same-day deadline.
-    const slot = findSlot(
-      prefs,
-      60,
-      new Date("2026-06-13T17:00:00Z"), // day work-end as placement deadline
-      [],
-      MON_MIDNIGHT,
-      new Date("2026-06-13T00:00:00Z"),
-      { ignoreWorkDays: true },
-    );
-    expect(iso(slot)).toBe("2026-06-13T09:00:00.000Z");
   });
 });
 
@@ -225,94 +205,17 @@ describe("scheduleAll", () => {
     expect(JSON.stringify(a)).toEqual(JSON.stringify(b));
   });
 
-  it("keeps a recurring daily series on its own days (regression: no collapse)", () => {
-    // FREQ=DAILY-style series: one occurrence per consecutive day Mon–Fri, all
-    // sharing seriesId "s1", deadline null, each already placed at 09:00 on its
-    // day. Before the fix scheduleAll EDF-packs them onto Monday 06-08; the fix
-    // pins each back to its own day.
-    const occDays = [
-      "2026-06-08",
-      "2026-06-09",
-      "2026-06-10",
-      "2026-06-11",
-      "2026-06-12",
-    ];
-    const tasks = occDays.map((d, i) =>
-      task({
-        id: `s1-${i}`,
-        seriesId: "s1",
-        scheduledStartTime: new Date(`${d}T09:00:00Z`),
-      }),
-    );
-    const out = scheduleAll(prefs, tasks, MON_MIDNIGHT);
-    const placedDays = out.map((p) => dayStr(p.scheduledStartTime!));
-    // Each occurrence stays on its own distinct day — not collapsed onto 06-08.
-    expect(placedDays.sort()).toEqual([...occDays]);
-    expect(new Set(placedDays).size).toBe(occDays.length);
-    expect(out.every((p) => !p.conflict)).toBe(true);
-  });
-
-  it("re-flows a pinned occurrence's time-of-day into a changed work window", () => {
-    // Work window moved to 13:00–17:00; the Wednesday occurrence stays on
-    // Wed 06-10 but its start lands inside the new window.
-    const shifted: SchedulerPrefs = { ...prefs, workStart: 780 }; // 13:00
-    const out = scheduleAll(
-      shifted,
-      [
-        task({
-          id: "occ",
-          seriesId: "s1",
-          scheduledStartTime: new Date("2026-06-10T09:00:00Z"), // old window
-        }),
-      ],
-      MON_MIDNIGHT,
-    );
-    expect(dayStr(out[0].scheduledStartTime!)).toBe("2026-06-10");
-    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-10T13:00:00.000Z");
-  });
-
-  it("pins recurring occurrences on their days while plain flexible packs from now", () => {
-    // A daily series on Tue+Wed plus a plain flexible task. The plain task fills
-    // the earliest gap from now (Monday) and the occurrences keep their days.
+  it("packs independent flexible tasks from now in EDF order", () => {
+    // Two deadline-less flexible tasks pack contiguously from the work start of
+    // the current day — no day-pinning, just earliest-fit forward packing.
     const out = scheduleAll(
       prefs,
-      [
-        task({
-          id: "occ-tue",
-          seriesId: "s1",
-          scheduledStartTime: new Date("2026-06-09T09:00:00Z"),
-        }),
-        task({
-          id: "occ-wed",
-          seriesId: "s1",
-          scheduledStartTime: new Date("2026-06-10T09:00:00Z"),
-        }),
-        task({ id: "plain" }),
-      ],
+      [task({ id: "a" }), task({ id: "b" })],
       MON_MIDNIGHT,
     );
     const byId = (id: string) => out.find((p) => p.id === id)!;
-    expect(iso(byId("occ-tue").scheduledStartTime)).toBe(
-      "2026-06-09T09:00:00.000Z",
-    );
-    expect(iso(byId("occ-wed").scheduledStartTime)).toBe(
-      "2026-06-10T09:00:00.000Z",
-    );
-    // Plain flexible isn't day-pinned: packs from now on Monday.
-    expect(iso(byId("plain").scheduledStartTime)).toBe(
-      "2026-06-08T09:00:00.000Z",
-    );
-  });
-
-  it("treats a recurring occurrence with no current placement as plain flexible", () => {
-    // seriesId set but scheduledStartTime null (previously unplaced): its day is
-    // unrecoverable, so it falls back to EDF-from-now packing.
-    const out = scheduleAll(
-      prefs,
-      [task({ id: "lost", seriesId: "s1", scheduledStartTime: null })],
-      MON_MIDNIGHT,
-    );
-    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-08T09:00:00.000Z");
+    expect(iso(byId("a").scheduledStartTime)).toBe("2026-06-08T09:00:00.000Z");
+    expect(iso(byId("b").scheduledStartTime)).toBe("2026-06-08T10:00:00.000Z");
   });
 });
 
@@ -414,37 +317,6 @@ describe("scheduleAll — frozen past tasks", () => {
     expect(out[0].conflict).toBe(true);
   });
 
-  it("does NOT re-anchor or re-flag a past day-pinned recurring occurrence", () => {
-    // A past occurrence of a daily series, currently conflict-free at 09:00.
-    // Without the freeze, placePinnedOccurrence would re-anchor it on its day
-    // (and flag it as a standing conflict). It must be left exactly as stored.
-    const out = scheduleAll(
-      prefs,
-      [
-        task({
-          id: "occ-past",
-          seriesId: "s1",
-          scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
-        }),
-        task({
-          id: "occ-future",
-          seriesId: "s1",
-          scheduledStartTime: new Date("2026-06-09T09:00:00Z"),
-        }),
-      ],
-      NOON,
-    );
-    const byId = (id: string) => out.find((p) => p.id === id)!;
-    expect(iso(byId("occ-past").scheduledStartTime)).toBe(
-      "2026-06-08T09:00:00.000Z",
-    );
-    expect(byId("occ-past").conflict).toBe(false);
-    // The future occurrence stays day-pinned on its own day.
-    expect(iso(byId("occ-future").scheduledStartTime)).toBe(
-      "2026-06-09T09:00:00.000Z",
-    );
-  });
-
   it("does not let a past block displace a future task onto a later slot", () => {
     // A future task whose earliest packing slot (noon) does not overlap the past
     // block — it must take noon, not be pushed past the 09:00–10:00 stale block.
@@ -491,72 +363,5 @@ describe("placeOne — frozen past tasks", () => {
       new Date("2026-06-08T00:00:00Z"), // anchor in the past
     );
     expect(iso(p.scheduledStartTime)).toBe("2026-06-08T12:00:00.000Z");
-  });
-});
-
-describe("cascadeReschedule — frozen past tasks", () => {
-  const NOON = new Date("2026-06-08T12:00:00Z");
-
-  it("never displaces a past task that the moved task overlaps", () => {
-    // Move target T onto 09:00, where a past task P already sits. P is frozen:
-    // it is not evicted, not re-placed, and is absent from the output.
-    const tasks = [
-      task({ id: "T", scheduledStartTime: new Date("2026-06-08T13:00:00Z") }),
-      task({ id: "P", scheduledStartTime: new Date("2026-06-08T09:00:00Z") }),
-    ];
-    const out = cascadeReschedule(
-      prefs,
-      tasks,
-      "T",
-      new Date("2026-06-08T09:00:00Z"),
-      NOON,
-    );
-    // P never moves, so it isn't in the changed set.
-    expect(out.find((p) => p.id === "P")).toBeUndefined();
-    // T lands where requested (the past block doesn't block or evict).
-    expect(iso(out.find((p) => p.id === "T")!.scheduledStartTime)).toBe(
-      "2026-06-08T09:00:00.000Z",
-    );
-  });
-});
-
-describe("cascadeReschedule", () => {
-  it("evicts and re-places a displaced flexible task", () => {
-    const tasks = [
-      task({ id: "T", scheduledStartTime: new Date("2026-06-08T09:00:00Z") }),
-      task({ id: "O", scheduledStartTime: new Date("2026-06-08T10:00:00Z") }),
-    ];
-    const out = cascadeReschedule(
-      prefs,
-      tasks,
-      "T",
-      new Date("2026-06-08T10:00:00Z"),
-      MON_MIDNIGHT,
-    );
-    const byId = (id: string) => out.find((p) => p.id === id);
-    expect(iso(byId("T")!.scheduledStartTime)).toBe("2026-06-08T10:00:00.000Z");
-    expect(iso(byId("O")!.scheduledStartTime)).toBe("2026-06-08T11:00:00.000Z");
-  });
-
-  it("routes the incoming task forward when it lands on a fixed anchor", () => {
-    const tasks = [
-      task({ id: "T", scheduledStartTime: new Date("2026-06-08T09:00:00Z") }),
-      task({
-        id: "F",
-        fixed: true,
-        scheduledStartTime: new Date("2026-06-08T11:00:00Z"),
-      }),
-    ];
-    const out = cascadeReschedule(
-      prefs,
-      tasks,
-      "T",
-      new Date("2026-06-08T11:00:00Z"),
-      MON_MIDNIGHT,
-    );
-    // T can't evict the fixed anchor at 11:00, so it goes to the next open slot.
-    expect(iso(out.find((p) => p.id === "T")!.scheduledStartTime)).toBe(
-      "2026-06-08T12:00:00.000Z",
-    );
   });
 });

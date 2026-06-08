@@ -4,26 +4,23 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
-import { randomUUID } from "node:crypto";
 import { fromZonedTime } from "date-fns-tz";
 import { PrismaService } from "../prisma/prisma.service";
 import { SchedulerService } from "../scheduler/scheduler.service";
 import { Prisma, type Task, type Tag, type User } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { minutesToUtc } from "../common/utils";
-import { addDaysStr, localDateStr } from "../scheduler/slot";
+import { localDateStr } from "../scheduler/slot";
 import {
   displayDayRange,
   viewDayRange,
   sumWorkMinutes,
 } from "../scheduler/horizon";
-import { occurrenceDays } from "./utils/recurrence";
 import { CreateTaskDto } from "./dto/create-task.dto";
 import { UpdateTaskDto } from "./dto/update-task.dto";
 import { ListTasksDto } from "./dto/list-tasks.dto";
 import type {
   CreateTaskResponse,
-  RecurrenceScope,
   Task as SharedTask,
   TaskDetailResponse,
   TasksListResponse,
@@ -56,13 +53,11 @@ export class TasksService {
       startTime: task.startTime,
       status: task.status,
       conflict: task.conflict,
-      rrule: task.rrule,
       scheduledStartTime: task.scheduledStartTime
         ? task.scheduledStartTime.toISOString()
         : null,
       createdAt: task.createdAt.toISOString(),
       updatedAt: task.updatedAt.toISOString(),
-      seriesId: task.seriesId,
       ...overrides,
     };
   }
@@ -95,129 +90,72 @@ export class TasksService {
   }
 
   async create(dto: CreateTaskDto, user: User): Promise<CreateTaskResponse> {
-    const { startDate, fixed, startTime, view, rrule: rawRrule, ...rest } = dto;
+    const { startDate, fixed, startTime, ...rest } = dto;
     const tz = user.timezone;
     const isFixed = fixed ?? false;
-    const rrule = rawRrule ?? "";
     const anchorDateStr = startDate ?? localDateStr(new Date(), tz);
-
-    // A recurring task is materialized into one concrete row per occurrence day
-    // within the active view's window (e.g. FREQ=DAILY across a week → 7 rows),
-    // every row sharing the same rrule + seriesId but owning a distinct id. The
-    // EDF engine then places each instance, confined to its own day.
-    const tod = isFixed ? (startTime ?? 0) : user.workStart;
-    // Recurrence never materializes past the deadline (the rrule's window may
-    // run later than the task is due).
-    const deadlineDateStr = rest.deadline
-      ? localDateStr(new Date(rest.deadline), tz)
-      : undefined;
-    // Recurrence starts from "now", not the window start: when today falls
-    // inside the active week/month, occurrences begin today — or tomorrow if
-    // today's working hours are already over (bound by the work day's end).
-    const now = new Date();
-    const nowDateStr = localDateStr(now, tz);
-    const todayWorkEnd = minutesToUtc(nowDateStr, user.workEnd, tz);
-    const floorDateStr =
-      now.getTime() >= todayWorkEnd.getTime()
-        ? addDaysStr(nowDateStr, 1)
-        : nowDateStr;
-    const days = occurrenceDays(
-      rrule,
-      view ?? "day",
-      anchorDateStr,
-      tz,
-      tod,
-      user.workDays,
-      deadlineDateStr,
-      floorDateStr,
-    );
-    const seriesId = rrule ? randomUUID() : null;
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const placed: TaskWithTags[] = [];
-
-        // Resolve names → ids ONCE; every occurrence connects the same tags.
+        // Resolve incoming tag NAMES → ids before connecting them to the task.
         const tagIds = await this.resolveTagIds(tx, user.id, rest.tags ?? []);
 
-        for (const dateStr of days) {
-          // Fixed: anchored at its day + time-of-day. Flexible: the day bounds
-          // the engine's search (earliest = day start, capped at day work-end).
-          const fixedStart = isFixed
-            ? minutesToUtc(dateStr, startTime ?? 0, tz)
-            : null;
+        // Fixed: anchored at its day + time-of-day. Flexible: the anchor day
+        // lower-bounds the engine's forward search (earliest = day start).
+        const fixedStart = isFixed
+          ? minutesToUtc(anchorDateStr, startTime ?? 0, tz)
+          : null;
 
-          const created = await tx.task.create({
-            data: {
-              title: rest.title,
-              note: rest.note ?? null,
-              durationMinutes: rest.durationMinutes,
-              deadline: rest.deadline ? new Date(rest.deadline) : null,
-              tags: { connect: tagIds.map((id) => ({ id })) },
-              fixed: isFixed,
-              startTime: startTime ?? 0,
-              rrule,
-              seriesId,
-              userId: user.id,
-              scheduledStartTime: fixedStart,
-              conflict: false,
-            },
-          });
+        const created = await tx.task.create({
+          data: {
+            title: rest.title,
+            note: rest.note ?? null,
+            durationMinutes: rest.durationMinutes,
+            deadline: rest.deadline ? new Date(rest.deadline) : null,
+            tags: { connect: tagIds.map((id) => ({ id })) },
+            fixed: isFixed,
+            startTime: startTime ?? 0,
+            userId: user.id,
+            scheduledStartTime: fixedStart,
+            conflict: false,
+          },
+        });
 
-          if (!isFixed) {
-            // A recurring occurrence is confined to its own day; a plain task
-            // keeps the open-ended forward search from its anchor day.
-            const recurring = rrule !== "";
-            const dayStart = minutesToUtc(dateStr, 0, tz);
-            const dayWorkEnd = minutesToUtc(dateStr, user.workEnd, tz);
-            const placementDeadline =
-              created.deadline && created.deadline < dayWorkEnd
-                ? created.deadline
-                : dayWorkEnd;
-            await this.scheduler.placeNewTask(user, created, tx, {
-              earliest: recurring || startDate ? dayStart : undefined,
-              placementDeadline: recurring ? placementDeadline : undefined,
-              dayAnchor: recurring
-                ? minutesToUtc(dateStr, user.workStart, tz)
-                : undefined,
-              // A recurring occurrence is pinned to its chosen day, which may be
-              // a non-working day; place it within that day's work hours anyway.
-              ignoreWorkDays: recurring,
-            });
-          }
-
-          const finalTask = await tx.task.findUniqueOrThrow({
-            where: { id: created.id },
-            include: { tags: true },
-          });
-          placed.push(finalTask);
-
-          await tx.taskEvent.create({
-            data: {
-              taskId: finalTask.id,
-              userId: user.id,
-              eventType: "CREATE",
-              oldSnapshot: Prisma.JsonNull,
-              newSnapshot: {
-                scheduledStartTime: finalTask.scheduledStartTime
-                  ? finalTask.scheduledStartTime.toISOString()
-                  : null,
-                durationMinutes: finalTask.durationMinutes,
-              },
-              rewardScore: 1.0,
-            },
+        if (!isFixed) {
+          await this.scheduler.placeNewTask(user, created, tx, {
+            earliest: startDate
+              ? minutesToUtc(anchorDateStr, 0, tz)
+              : undefined,
           });
         }
 
-        // Surface the first occurrence as the primary result; the client
-        // refetches the list to pick up the full series.
-        const primary = placed[0];
+        const finalTask = await tx.task.findUniqueOrThrow({
+          where: { id: created.id },
+          include: { tags: true },
+        });
+
+        await tx.taskEvent.create({
+          data: {
+            taskId: finalTask.id,
+            userId: user.id,
+            eventType: "CREATE",
+            oldSnapshot: Prisma.JsonNull,
+            newSnapshot: {
+              scheduledStartTime: finalTask.scheduledStartTime
+                ? finalTask.scheduledStartTime.toISOString()
+                : null,
+              durationMinutes: finalTask.durationMinutes,
+            },
+            rewardScore: 1.0,
+          },
+        });
+
         return {
-          task: this.toDto(primary),
+          task: this.toDto(finalTask),
           schedulingMeta: {
-            adjustedDuration: primary.durationMinutes,
-            placedAt: primary.scheduledStartTime
-              ? primary.scheduledStartTime.toISOString()
+            adjustedDuration: finalTask.durationMinutes,
+            placedAt: finalTask.scheduledStartTime
+              ? finalTask.scheduledStartTime.toISOString()
               : null,
             engine: "edf" as const,
             biasApplied: 1.0,
@@ -261,22 +199,22 @@ export class TasksService {
       include: { tags: true },
     });
 
-    // Recurring series are materialized at creation, so every occurrence is a
-    // concrete row placed on its own day — there's no virtual expansion here.
     const out: SharedTask[] = [];
-    // Meta stays scoped to the FOCAL month: padded edge-day tasks are rendered
+    // Meta stays scoped to the FOCAL window: padded edge-day tasks are rendered
     // but must not inflate capacity/conflict figures.
     let totalAllocatedMinutes = 0;
     let conflictCount = 0;
     for (const t of tasks) {
       const placedAt = t.scheduledStartTime;
-      // A placed task (even a conflicting overlap) belongs to its own day only.
-      // Truly unplaced tasks (no slot found) have no day, so surface them
-      // everywhere as standing conflicts the user still needs to fix.
+      // The EDF engine flags a conflict only when it finds no slot before the
+      // deadline (placedAt null), so unplaced conflicts have no day — surface
+      // them in every window. A placed task shows only in its own day; a manual
+      // drag/resize can still leave a placed task overlapping (conflict true),
+      // which is counted while it sits in the focal window.
       const unplaced = placedAt === null;
       const inDisplay =
         placedAt !== null && placedAt >= displayStart && placedAt <= displayEnd;
-      if (inDisplay || (t.conflict && unplaced)) out.push(this.toDto(t));
+      if (inDisplay || unplaced) out.push(this.toDto(t));
 
       const inFocal =
         placedAt !== null && placedAt >= focalStart && placedAt <= focalEnd;
@@ -334,9 +272,8 @@ export class TasksService {
     dto: UpdateTaskDto,
     user: User,
   ): Promise<SharedTask> {
-    const { scope, ...fields } = dto;
-    // Scalar metadata only — m2m tags are applied separately (updateMany can't
-    // set relations).
+    const fields = dto;
+    // Scalar metadata only — m2m tags are applied via the `set` relation op.
     const scalarData = {
       title: fields.title,
       note: fields.note,
@@ -356,37 +293,9 @@ export class TasksService {
         if (!target)
           throw new NotFoundException(`Cannot find task with id ${id}`);
 
-        // Resolve names → ids ONCE before any per-row relation set.
         const tagIds = touchTags
           ? await this.resolveTagIds(tx, user.id, fields.tags ?? [])
           : [];
-
-        // "This and following": apply the metadata to this occurrence and every
-        // later sibling in the series; otherwise just this row.
-        if (this.appliesToFollowing(scope, target)) {
-          await tx.task.updateMany({
-            where: this.followingWhere(user.id, target),
-            data: scalarData,
-          });
-          // m2m `set` must be applied per-row (updateMany can't touch relations).
-          if (touchTags) {
-            const siblings = await tx.task.findMany({
-              where: this.followingWhere(user.id, target),
-              select: { id: true },
-            });
-            for (const s of siblings) {
-              await tx.task.update({
-                where: { id: s.id },
-                data: { tags: { set: tagIds.map((id) => ({ id })) } },
-              });
-            }
-          }
-          const updated = await tx.task.findUniqueOrThrow({
-            where: { id },
-            include: { tags: true },
-          });
-          return this.toDto(updated);
-        }
 
         const updated = await tx.task.update({
           where: { id },
@@ -412,28 +321,6 @@ export class TasksService {
         message: "Something went wrong when updating a task",
       });
     }
-  }
-
-  /** True when a "following" mutation can fan out to series siblings. */
-  private appliesToFollowing(
-    scope: RecurrenceScope | undefined,
-    target: Task,
-  ): boolean {
-    return (
-      scope === "following" &&
-      target.seriesId !== null &&
-      target.scheduledStartTime !== null
-    );
-  }
-
-  /** Match this occurrence and every later one in the same series. */
-  private followingWhere(userId: string, target: Task): Prisma.TaskWhereInput {
-    return {
-      userId,
-      seriesId: target.seriesId,
-      // Non-null guaranteed by appliesToFollowing (guards both fields).
-      scheduledStartTime: { gte: target.scheduledStartTime! },
-    };
   }
 
   async reschedule(id: string, requestedStartTime: string, user: User) {
@@ -531,21 +418,13 @@ export class TasksService {
     }
   }
 
-  async remove(id: string, user: User, scope?: RecurrenceScope): Promise<void> {
+  async remove(id: string, user: User): Promise<void> {
     try {
       const target = await this.prisma.task.findFirst({
         where: { id, userId: user.id },
       });
       if (!target)
         throw new NotFoundException(`Cannot find task with id ${id}`);
-
-      // "This and following" removes this occurrence and every later sibling.
-      if (this.appliesToFollowing(scope, target)) {
-        await this.prisma.task.deleteMany({
-          where: this.followingWhere(user.id, target),
-        });
-        return;
-      }
 
       await this.prisma.task.delete({ where: { id } });
     } catch (error) {

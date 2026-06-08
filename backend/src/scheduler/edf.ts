@@ -1,9 +1,8 @@
-import { MAX_CASCADE_STEPS, MAX_SCAN_DAYS, MIN } from "./constants";
-import { EdfTask, SchedulerPrefs, Placement, OccBlock } from "./interfaces";
+import { MAX_SCAN_DAYS, MIN } from "./constants";
+import { EdfTask, SchedulerPrefs, Placement } from "./interfaces";
 
 // Re-export the scheduler's public types so consumers can import them from "./edf".
 export type { EdfTask, SchedulerPrefs };
-import { minutesToUtc } from "../common/utils";
 import {
   Interval,
   SLOT_MS,
@@ -57,11 +56,6 @@ export function compareEdf(a: EdfTask, b: EdfTask): number {
 /**
  * Earliest contiguous work-hours slot of `durationMinutes` that starts at/after
  * `earliest` (and `now`) and ends before `deadline`. Returns null on conflict.
- *
- * With `opts.ignoreWorkDays` the non-working-day skip is suppressed, so a slot
- * can be placed within the work hours of a non-working day. This is only used
- * for recurring occurrences, which are pinned to a single day via
- * `earliest`+`deadline`, so it can only ever consider that one chosen day.
  */
 export function findSlot(
   prefs: SchedulerPrefs,
@@ -70,7 +64,6 @@ export function findSlot(
   occupied: Interval[],
   now: Date,
   earliest?: Date,
-  opts: { ignoreWorkDays?: boolean } = {},
 ): Date | null {
   const tz = prefs.timezone;
   const durMs = durationMs(durationMinutes);
@@ -87,8 +80,7 @@ export function findSlot(
   for (let d = wraps ? -1 : 0; d <= MAX_SCAN_DAYS; d++) {
     const dateStr = addDaysStr(fromStr, d);
     if (deadlineDateStr && dateStr > deadlineDateStr) break;
-    if (!opts.ignoreWorkDays && !prefs.workDays.includes(isoWeekday(dateStr)))
-      continue;
+    if (!prefs.workDays.includes(isoWeekday(dateStr))) continue;
 
     const win = workWindowFor(dateStr, prefs.workStart, prefs.workEnd, tz);
     let cand = ceilToSlot(Math.max(win.start, lowerMs));
@@ -102,68 +94,10 @@ export function findSlot(
 }
 
 /**
- * True for a materialized recurring occurrence whose intended day is still
- * recoverable (it carries a `seriesId` and a current placement). On a full
- * re-EDF these must stay on their own day rather than EDF-packing forward.
- */
-function isDayPinned(t: EdfTask): boolean {
-  return !t.fixed && t.seriesId !== null && t.scheduledStartTime !== null;
-}
-
-/**
- * Re-place a recurring occurrence pinned to the day of its current
- * `scheduledStartTime`, mirroring the day-pinning `placeNewTask` applies at
- * creation: `earliest` = that day's 00:00 (user tz), deadline capped at
- * min(task.deadline, that day's work-end), `ignoreWorkDays` so a pinned
- * non-working day still resolves. If no slot fits, the occurrence is anchored
- * at that day's work start (as a standing conflict) so it never floats onto a
- * different day.
- */
-function placePinnedOccurrence(
-  prefs: SchedulerPrefs,
-  t: EdfTask,
-  occupied: Interval[],
-  now: Date,
-): Placement {
-  const tz = prefs.timezone;
-  const dayStr = localDateStr(t.scheduledStartTime!, tz);
-  const dayStart = minutesToUtc(dayStr, 0, tz);
-  const win = workWindowFor(dayStr, prefs.workStart, prefs.workEnd, tz);
-  const dayWorkEnd = new Date(win.end);
-  const deadlineCap =
-    t.deadline && t.deadline.getTime() < dayWorkEnd.getTime()
-      ? t.deadline
-      : dayWorkEnd;
-
-  const slot = findSlot(
-    prefs,
-    t.durationMinutes,
-    deadlineCap,
-    occupied,
-    now,
-    dayStart,
-    { ignoreWorkDays: true },
-  );
-  if (slot) return { id: t.id, scheduledStartTime: slot, conflict: false };
-
-  // No slot fit the day (full, in the past, or overflows the work window).
-  // Keep the occurrence on its day as a standing conflict rather than letting
-  // it drift to another day.
-  const anchor = new Date(win.start);
-  return { id: t.id, scheduledStartTime: anchor, conflict: true };
-}
-
-/**
  * Full deterministic re-schedule of all PENDING tasks. Fixed tasks keep their
- * anchored slot. Recurring occurrences (a `seriesId` plus a current placement)
- * stay pinned to their own day, re-flowing only their time-of-day within that
- * day's work window — so a daily series keeps one-per-day instead of collapsing
- * onto the earliest workdays. Remaining ("plain") flexible tasks are EDF-packed
- * from `now` around everything already occupied. Used on preference changes
- * (docs: "PUT preferences triggers full EDF rescheduling").
- *
- * A recurring occurrence with no current `scheduledStartTime` (previously
- * unplaced/conflict) has no recoverable day, so it is treated as plain flexible.
+ * anchored slot. Flexible tasks are EDF-packed from `now` around everything
+ * already occupied. Used on preference changes (docs: "PUT preferences triggers
+ * full EDF rescheduling").
  */
 export function scheduleAll(
   prefs: SchedulerPrefs,
@@ -176,10 +110,7 @@ export function scheduleAll(
   const live = tasks.filter((t) => !isPast(t, now));
 
   const fixed = live.filter((t) => t.fixed && t.scheduledStartTime);
-  const pinned = live.filter(isDayPinned).sort(compareEdf);
-  const plain = live
-    .filter((t) => !t.fixed && !isDayPinned(t))
-    .sort(compareEdf);
+  const plain = live.filter((t) => !t.fixed).sort(compareEdf);
 
   const occupied: Interval[] = fixed
     .map(intervalOf)
@@ -200,19 +131,7 @@ export function scheduleAll(
     })),
   );
 
-  // Place day-pinned recurring occurrences first, each confined to its own day.
-  for (const t of pinned) {
-    const p = placePinnedOccurrence(prefs, t, occupied, now);
-    if (p.scheduledStartTime) {
-      occupied.push({
-        start: p.scheduledStartTime.getTime(),
-        end: p.scheduledStartTime.getTime() + durationMs(t.durationMinutes),
-      });
-    }
-    out.push(p);
-  }
-
-  // Plain flexible tasks fill the gaps with the usual EDF-from-now packing.
+  // Flexible tasks fill the gaps with the usual EDF-from-now packing.
   for (const t of plain) {
     const slot = findSlot(prefs, t.durationMinutes, t.deadline, occupied, now);
     if (slot) {
@@ -240,7 +159,6 @@ export function placeOne(
   others: EdfTask[],
   now: Date,
   earliest?: Date,
-  opts: { ignoreWorkDays?: boolean } = {},
 ): Placement {
   if (task.fixed) {
     return {
@@ -262,132 +180,8 @@ export function placeOne(
     occupied,
     now,
     earliest,
-    opts,
   );
   return slot
     ? { id: task.id, scheduledStartTime: slot, conflict: false }
     : { id: task.id, scheduledStartTime: null, conflict: true };
-}
-
-/**
- * Cascading realignment for a manual move. Places `targetId` at the snapped
- * `requestedStart`; if that lands on a fixed anchor the incoming task is routed
- * to the next open slot, and any flexible tasks it displaces are re-placed
- * (recursively). Returns the new placement of every task that moved (including
- * the target). Tasks that don't move are omitted.
- */
-export function cascadeReschedule(
-  prefs: SchedulerPrefs,
-  tasks: EdfTask[],
-  targetId: string,
-  requestedStart: Date,
-  now: Date,
-): Placement[] {
-  const byId = new Map(tasks.map((t) => [t.id, { ...t }]));
-  const target = byId.get(targetId);
-  if (!target) return [];
-
-  const reqMs = Math.round(requestedStart.getTime() / SLOT_MS) * SLOT_MS;
-  const changed = new Map<string, Date | null>();
-
-  const occ: OccBlock[] = [];
-  for (const t of byId.values()) {
-    if (t.id === targetId) continue;
-    // Past tasks are frozen: never evicted, displaced, or re-placed, and they
-    // can't occupy a future slot, so leave them out of the scan entirely.
-    if (isPast(t, now)) continue;
-    const iv = intervalOf(t);
-    if (iv)
-      occ.push({ id: t.id, start: iv.start, end: iv.end, fixed: t.fixed });
-  }
-  const asIntervals = (exclude?: string): Interval[] =>
-    occ
-      .filter((o) => o.id !== exclude)
-      .map((o) => ({ start: o.start, end: o.end }));
-
-  // Resolve the target's landing slot.
-  let targetStart: number | null = reqMs;
-  const targetEnd = reqMs + durationMs(target.durationMinutes);
-  const hitsFixed = occ.some(
-    (o) => o.fixed && reqMs < o.end && targetEnd > o.start,
-  );
-  if (hitsFixed) {
-    const slot = findSlot(
-      prefs,
-      target.durationMinutes,
-      target.deadline,
-      asIntervals(),
-      now,
-      new Date(reqMs),
-    );
-    targetStart = slot ? slot.getTime() : null;
-  }
-
-  target.scheduledStartTime =
-    targetStart === null ? null : new Date(targetStart);
-  changed.set(target.id, target.scheduledStartTime);
-
-  const queue: string[] = [];
-  if (targetStart !== null) {
-    const tEnd = targetStart + durationMs(target.durationMinutes);
-    // Evict flexible tasks overlapping the target's new block.
-    for (let i = occ.length - 1; i >= 0; i--) {
-      const o = occ[i];
-      if (!o.fixed && targetStart < o.end && tEnd > o.start) {
-        occ.splice(i, 1);
-        queue.push(o.id);
-      }
-    }
-    occ.push({
-      id: target.id,
-      start: targetStart,
-      end: tEnd,
-      fixed: target.fixed,
-    });
-  }
-
-  let steps = 0;
-  while (queue.length && steps++ < MAX_CASCADE_STEPS) {
-    const id = queue.shift()!;
-    const t = byId.get(id)!;
-    const slot = findSlot(
-      prefs,
-      t.durationMinutes,
-      t.deadline,
-      asIntervals(id),
-      now,
-      t.scheduledStartTime ?? undefined,
-    );
-    if (slot) {
-      const s = slot.getTime();
-      const e = s + durationMs(t.durationMinutes);
-      // Newly placed block may itself displace others.
-      for (let i = occ.length - 1; i >= 0; i--) {
-        const o = occ[i];
-        if (o.id === id) continue;
-        if (!o.fixed && s < o.end && e > o.start) {
-          occ.splice(i, 1);
-          if (!queue.includes(o.id)) queue.push(o.id);
-        }
-      }
-      const existing = occ.find((o) => o.id === id);
-      if (existing) {
-        existing.start = s;
-        existing.end = e;
-      } else {
-        occ.push({ id, start: s, end: e, fixed: t.fixed });
-      }
-      t.scheduledStartTime = slot;
-      changed.set(id, slot);
-    } else {
-      t.scheduledStartTime = null;
-      changed.set(id, null);
-    }
-  }
-
-  return [...changed.entries()].map(([id, scheduledStartTime]) => ({
-    id,
-    scheduledStartTime,
-    conflict: scheduledStartTime === null,
-  }));
 }

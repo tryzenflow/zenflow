@@ -44,8 +44,6 @@ function task(overrides: Partial<TaskWithTags> & { id: string }): TaskWithTags {
     startTime: 0,
     status: "PENDING",
     conflict: false,
-    rrule: "",
-    seriesId: null,
     scheduledStartTime: null,
     userId: user.id,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -70,6 +68,86 @@ function makeService(rows: TaskWithTags[]): TasksService {
   // Scheduler is unused by list().
   return new TasksService(prisma as never, {} as never);
 }
+
+/**
+ * Build a TasksService over an in-memory task table for create(). Captures
+ * every `task.create` call so the test can assert exactly how many rows a
+ * single POST materializes (must be one — recurrence is gone).
+ */
+function makeCreateService(): {
+  service: TasksService;
+  creates: { id: string }[];
+} {
+  const creates: { id: string }[] = [];
+  const byId = new Map<string, TaskWithTags>();
+
+  const tx = {
+    tag: {
+      createMany: jest.fn().mockResolvedValue({}),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    task: {
+      create: jest.fn((args: { data: Record<string, unknown> }) => {
+        const id = `task-${creates.length}`;
+        creates.push({ id });
+        const row = task({
+          id,
+          title: (args.data.title as string) ?? "Task",
+          fixed: (args.data.fixed as boolean) ?? false,
+          scheduledStartTime:
+            (args.data.scheduledStartTime as Date | null) ?? null,
+        });
+        byId.set(id, row);
+        return Promise.resolve(row);
+      }),
+      findUniqueOrThrow: jest.fn((args: { where: { id: string } }) =>
+        Promise.resolve(byId.get(args.where.id)!),
+      ),
+    },
+    taskEvent: { create: jest.fn().mockResolvedValue({}) },
+  };
+
+  const prisma = {
+    $transaction: (fn: (t: typeof tx) => unknown) => fn(tx),
+  };
+  // The scheduler is stubbed: placement is exercised in scheduler specs.
+  const scheduler = { placeNewTask: jest.fn().mockResolvedValue({}) };
+
+  return {
+    service: new TasksService(prisma as never, scheduler as never),
+    creates,
+  };
+}
+
+describe("TasksService.create — single row (no recurrence)", () => {
+  it("materializes exactly one Task row per POST for a flexible task", async () => {
+    const { service, creates } = makeCreateService();
+    await service.create(
+      {
+        title: "Standup",
+        durationMinutes: 30,
+        startDate: "2026-06-10",
+      },
+      user,
+    );
+    expect(creates).toHaveLength(1);
+  });
+
+  it("materializes exactly one Task row per POST for a fixed task", async () => {
+    const { service, creates } = makeCreateService();
+    await service.create(
+      {
+        title: "Meeting",
+        durationMinutes: 60,
+        fixed: true,
+        startTime: 600,
+        startDate: "2026-06-10",
+      },
+      user,
+    );
+    expect(creates).toHaveLength(1);
+  });
+});
 
 describe("TasksService.list — display vs focal window", () => {
   describe("month view", () => {

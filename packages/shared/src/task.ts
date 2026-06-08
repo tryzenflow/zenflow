@@ -1,5 +1,3 @@
-import type { ViewMode } from "./view";
-
 /** Lifecycle status of a task. */
 export type TaskStatus = "PENDING" | "DONE";
 
@@ -35,20 +33,15 @@ export interface Task {
   /** Minutes from midnight; only meaningful when {@link fixed} is true. */
   startTime: number;
   status: TaskStatus;
-  /** True when the engine could not place the task before its deadline. */
+  /**
+   * True when the task has no valid placement (no slot before its deadline) —
+   * i.e. {@link scheduledStartTime} is null.
+   */
   conflict: boolean;
-  /** RFC 5545 recurrence rule, or "" when non-recurring. */
-  rrule: string;
   /** ISO-8601 placement assigned by the EDF engine, or null when unplaced. */
   scheduledStartTime: string | null;
   createdAt: string;
   updatedAt: string;
-  /**
-   * Shared by every materialized occurrence of a recurring series; null for a
-   * non-recurring task. Each occurrence is a real row with its own {@link id}
-   * (safe to mutate); {@link seriesId} links siblings of the same series.
-   */
-  seriesId?: string | null;
 }
 
 export interface TaskEvent {
@@ -76,21 +69,7 @@ export interface CreateTaskInput {
    * Defaults to today.
    */
   startDate?: string;
-  rrule?: string;
-  /**
-   * Active calendar perspective the task was created from. Scopes recurrence
-   * materialization to that window (week/month); omitted or "day" means a
-   * single, non-recurring instance.
-   */
-  view?: ViewMode;
 }
-
-/**
- * How a mutation on one occurrence of a recurring series propagates:
- *  - "one"       → only this occurrence (the default; also used for one-offs)
- *  - "following" → this occurrence and every later one in the same series
- */
-export type RecurrenceScope = "one" | "following";
 
 /** Metadata-only update; does not trigger rescheduling. */
 export interface UpdateTaskInput {
@@ -98,8 +77,6 @@ export interface UpdateTaskInput {
   note?: string | null;
   deadline?: string | null;
   tags?: string[];
-  /** Recurring series propagation; ignored for non-recurring tasks. */
-  scope?: RecurrenceScope;
 }
 
 export interface RescheduleInput {

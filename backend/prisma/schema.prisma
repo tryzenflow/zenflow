@@ -68,8 +68,6 @@ model Task {
   startTime       Int        @default(0) // minutes from midnight; used when fixed
   status          TaskStatus @default(PENDING)
   conflict        Boolean    @default(false) // unplaced (no slot before deadline)
-  rrule           String     @default("") // RFC 5545; "" when non-recurring
-  seriesId        String? // shared by every materialized occurrence of a recurring series; null when non-recurring
 
   scheduledStartTime DateTime? // assigned by the EDF engine
 
@@ -87,7 +85,6 @@ model Task {
   @@index([userId, deadline])
   @@index([userId, status])
   @@index([userId, scheduledStartTime])
-  @@index([userId, seriesId])
 }
 
 enum TaskEventType {
