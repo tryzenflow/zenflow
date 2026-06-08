@@ -1,6 +1,9 @@
 import { TasksService } from "./tasks.service";
-import type { Task, User } from "../../generated/prisma";
+import type { Tag, Task, User } from "../../generated/prisma";
 import type { ListTasksDto } from "./dto/list-tasks.dto";
+
+/** list() reads tasks with their related tags included. */
+type TaskWithTags = Task & { tags: Tag[] };
 
 /**
  * Focused coverage for the GET /tasks `list()` display-vs-focal split:
@@ -29,12 +32,13 @@ const user: User = {
   updatedAt: new Date("2026-01-01T00:00:00.000Z"),
 };
 
-function task(overrides: Partial<Task> & { id: string }): Task {
+function task(overrides: Partial<TaskWithTags> & { id: string }): TaskWithTags {
   return {
     title: "Task",
     note: null,
     durationMinutes: 60,
     deadline: null,
+    // The Prisma row now carries related Tag rows; toDto maps these to names.
     tags: [],
     fixed: false,
     startTime: 0,
@@ -50,7 +54,16 @@ function task(overrides: Partial<Task> & { id: string }): Task {
   };
 }
 
-function makeService(rows: Task[]): TasksService {
+function tag(name: string): Tag {
+  return {
+    id: `tag-${name}`,
+    name,
+    userId: user.id,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+  };
+}
+
+function makeService(rows: TaskWithTags[]): TasksService {
   const prisma = {
     task: { findMany: jest.fn().mockResolvedValue(rows) },
   };
@@ -141,6 +154,18 @@ describe("TasksService.list — display vs focal window", () => {
       ]);
       // Prev-month edge rendered but excluded from meta.
       expect(res.meta.totalAllocatedMinutes).toBe(60);
+    });
+
+    it("maps related Tag rows to a sorted name array on the DTO", async () => {
+      const tagged = task({
+        id: "tagged",
+        scheduledStartTime: new Date("2026-06-15T10:00:00.000Z"),
+        tags: [tag("work"), tag("admin")],
+      });
+      const service = makeService([tagged]);
+      const res = await service.list(dto, user);
+      const out = res.tasks.find((t) => t.id === "tagged");
+      expect(out?.tags).toEqual(["admin", "work"]);
     });
 
     it("still surfaces unplaced conflicts everywhere", async () => {

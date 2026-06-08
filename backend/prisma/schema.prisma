@@ -35,6 +35,22 @@ model User {
   tasks      Task[]
   files      File[]
   taskEvents TaskEvent[]
+  tags       Tag[]
+}
+
+model Tag {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Implicit many-to-many with Task.
+  tasks Task[]
+
+  @@unique([userId, name])
+  @@index([userId])
 }
 
 enum TaskStatus {
@@ -48,7 +64,6 @@ model Task {
   note            String? // rich-text (TipTap) — carried over from v1
   durationMinutes Int // positive multiple of 15
   deadline        DateTime?
-  tags            String[]   @default([]) // free-form labels (text[])
   fixed           Boolean    @default(false)
   startTime       Int        @default(0) // minutes from midnight; used when fixed
   status          TaskStatus @default(PENDING)
@@ -60,6 +75,9 @@ model Task {
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Per-user labels (implicit many-to-many).
+  tags Tag[]
 
   events TaskEvent[]
 

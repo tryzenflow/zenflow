@@ -64,7 +64,7 @@ what makes the engine unit-testable and what Phase 3 will plug into.
 
 ## Database schema
 
-Defined in [`prisma/schema.prisma`](prisma/schema.prisma). Four models.
+Defined in [`prisma/schema.prisma`](prisma/schema.prisma). Five models.
 
 ### `User`
 | Field | Type | Notes |
@@ -85,7 +85,7 @@ Defined in [`prisma/schema.prisma`](prisma/schema.prisma). Four models.
 | `title`, `note` | string | `note` is rich text (TipTap) |
 | `durationMinutes` | int | **always a positive multiple of 15** |
 | `deadline` | DateTime? | EDF ordering key (nulls last) |
-| `tags` | string[] | free-form `text[]` |
+| `tags` | `Tag[]` | implicit many-to-many with `Tag` (per-user labels) |
 | `fixed` | bool | true → immovable anchor at `startTime` |
 | `startTime` | int | minutes from midnight; only meaningful when `fixed` |
 | `status` | `TaskStatus` | `PENDING` \| `DONE` |
@@ -107,6 +107,20 @@ Indexes: `[userId, deadline]`, `[userId, status]`, `[userId, scheduledStartTime]
 | `rewardScore` | float | Phase-3 reward signal (default 1.0) |
 | `occurredAt` | DateTime | indexed desc per user |
 | `taskId` / `userId` | uuid | FKs, cascade delete (`userId` denormalized for range queries) |
+
+### `Tag`
+Per-user label in an implicit many-to-many with `Task`.
+| Field | Type | Notes |
+|-------|------|-------|
+| `id` | uuid | PK |
+| `name` | string | unique per user (`@@unique([userId, name])`) |
+| `userId` | uuid | FK → `User`, `onDelete: Cascade` |
+| `createdAt` | DateTime | |
+
+On task create/update the backend resolves an incoming array of tag **names**:
+unknown names are upserted (per user) and all are connected to the occurrence(s),
+atomically inside the task transaction. The wire format keeps `Task.tags` as a
+`string[]` of names — the `Tag` table is a backend detail.
 
 ### `File`
 `id`, `originalName`, `filename`, `path`, `mimetype`, `size`, `userId` (cascade).
@@ -150,6 +164,11 @@ Global prefix **`/api/v1`**. All routes except `POST /auth/otp/*` require
 | PATCH | `/tasks/:id/resize` | edge-resize, snaps to 15-min grid, recomputes conflicts |
 | PATCH | `/tasks/:id/complete` | mark DONE, records COMPLETE |
 | DELETE | `/tasks/:id?scope=` | delete (`one` \| `following`) |
+
+### Tags (`/tags`)
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/tags` | list the current user's tags (`{ tags: { id, name }[] }`, name-sorted) for the combobox |
 
 ### Files (`/files`)
 `POST /files/upload` (multipart, ≤100 MB × 5), `POST /files/remove`,

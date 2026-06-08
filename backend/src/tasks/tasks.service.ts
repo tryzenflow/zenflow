@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import { fromZonedTime } from "date-fns-tz";
 import { PrismaService } from "../prisma/prisma.service";
 import { SchedulerService } from "../scheduler/scheduler.service";
-import { Prisma, type Task, type User } from "../../generated/prisma";
+import { Prisma, type Task, type Tag, type User } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { minutesToUtc } from "../common/utils";
 import { addDaysStr, localDateStr } from "../scheduler/slot";
@@ -29,6 +29,9 @@ import type {
   TasksListResponse,
 } from "@zenflow/shared";
 
+/** A Task row joined with its related Tag rows (the shape toDto consumes). */
+type TaskWithTags = Task & { tags: Tag[] };
+
 @Injectable()
 export class TasksService {
   constructor(
@@ -37,14 +40,18 @@ export class TasksService {
   ) {}
 
   /** Map a Prisma row to the shared API shape (dates → ISO strings). */
-  private toDto(task: Task, overrides?: Partial<SharedTask>): SharedTask {
+  private toDto(
+    task: TaskWithTags,
+    overrides?: Partial<SharedTask>,
+  ): SharedTask {
     return {
       id: task.id,
       title: task.title,
       note: task.note,
       durationMinutes: task.durationMinutes,
       deadline: task.deadline ? task.deadline.toISOString() : null,
-      tags: task.tags,
+      // The wire format stays a string[] of tag NAMES; sort for stable output.
+      tags: task.tags.map((t) => t.name).sort((a, b) => a.localeCompare(b)),
       fixed: task.fixed,
       startTime: task.startTime,
       status: task.status,
@@ -58,6 +65,33 @@ export class TasksService {
       seriesId: task.seriesId,
       ...overrides,
     };
+  }
+
+  /**
+   * Resolve an incoming array of tag NAMES into Tag ids for this user, creating
+   * any names that don't exist yet. Names are trimmed, emptied-dropped, and
+   * deduped (exact). Runs inside the caller's transaction so tag creation is
+   * atomic with the task write. Returns the resolved tag ids.
+   */
+  private async resolveTagIds(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    names: string[],
+  ): Promise<string[]> {
+    const cleaned = Array.from(
+      new Set(names.map((n) => n.trim()).filter((n) => n.length > 0)),
+    );
+    if (cleaned.length === 0) return [];
+
+    await tx.tag.createMany({
+      data: cleaned.map((name) => ({ userId, name })),
+      skipDuplicates: true,
+    });
+    const tags = await tx.tag.findMany({
+      where: { userId, name: { in: cleaned } },
+      select: { id: true },
+    });
+    return tags.map((t) => t.id);
   }
 
   async create(dto: CreateTaskDto, user: User): Promise<CreateTaskResponse> {
@@ -101,7 +135,10 @@ export class TasksService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const placed: Task[] = [];
+        const placed: TaskWithTags[] = [];
+
+        // Resolve names → ids ONCE; every occurrence connects the same tags.
+        const tagIds = await this.resolveTagIds(tx, user.id, rest.tags ?? []);
 
         for (const dateStr of days) {
           // Fixed: anchored at its day + time-of-day. Flexible: the day bounds
@@ -116,7 +153,7 @@ export class TasksService {
               note: rest.note ?? null,
               durationMinutes: rest.durationMinutes,
               deadline: rest.deadline ? new Date(rest.deadline) : null,
-              tags: rest.tags ?? [],
+              tags: { connect: tagIds.map((id) => ({ id })) },
               fixed: isFixed,
               startTime: startTime ?? 0,
               rrule,
@@ -151,6 +188,7 @@ export class TasksService {
 
           const finalTask = await tx.task.findUniqueOrThrow({
             where: { id: created.id },
+            include: { tags: true },
           });
           placed.push(finalTask);
 
@@ -218,7 +256,10 @@ export class TasksService {
     const where: Prisma.TaskWhereInput = { userId: user.id };
     if (dto.status && dto.status !== "all") where.status = dto.status;
 
-    const tasks = await this.prisma.task.findMany({ where });
+    const tasks = await this.prisma.task.findMany({
+      where,
+      include: { tags: true },
+    });
 
     // Recurring series are materialized at creation, so every occurrence is a
     // concrete row placed on its own day — there's no virtual expansion here.
@@ -262,6 +303,7 @@ export class TasksService {
   async findById(id: string, user: User): Promise<TaskDetailResponse> {
     const task = await this.prisma.task.findUnique({
       where: { id, userId: user.id },
+      include: { tags: true },
     });
     if (!task) throw new NotFoundException(`Cannot find task with id ${id}`);
 
@@ -293,7 +335,9 @@ export class TasksService {
     user: User,
   ): Promise<SharedTask> {
     const { scope, ...fields } = dto;
-    const data = {
+    // Scalar metadata only — m2m tags are applied separately (updateMany can't
+    // set relations).
+    const scalarData = {
       title: fields.title,
       note: fields.note,
       deadline:
@@ -302,30 +346,60 @@ export class TasksService {
           : fields.deadline === null
             ? null
             : new Date(fields.deadline),
-      tags: fields.tags,
     };
+    const touchTags = fields.tags !== undefined;
     try {
-      const target = await this.prisma.task.findFirst({
-        where: { id, userId: user.id },
-      });
-      if (!target)
-        throw new NotFoundException(`Cannot find task with id ${id}`);
-
-      // "This and following": apply the metadata to this occurrence and every
-      // later sibling in the series; otherwise just this row.
-      if (this.appliesToFollowing(scope, target)) {
-        await this.prisma.task.updateMany({
-          where: this.followingWhere(user.id, target),
-          data,
+      return await this.prisma.$transaction(async (tx) => {
+        const target = await tx.task.findFirst({
+          where: { id, userId: user.id },
         });
-        const updated = await this.prisma.task.findUniqueOrThrow({
+        if (!target)
+          throw new NotFoundException(`Cannot find task with id ${id}`);
+
+        // Resolve names → ids ONCE before any per-row relation set.
+        const tagIds = touchTags
+          ? await this.resolveTagIds(tx, user.id, fields.tags ?? [])
+          : [];
+
+        // "This and following": apply the metadata to this occurrence and every
+        // later sibling in the series; otherwise just this row.
+        if (this.appliesToFollowing(scope, target)) {
+          await tx.task.updateMany({
+            where: this.followingWhere(user.id, target),
+            data: scalarData,
+          });
+          // m2m `set` must be applied per-row (updateMany can't touch relations).
+          if (touchTags) {
+            const siblings = await tx.task.findMany({
+              where: this.followingWhere(user.id, target),
+              select: { id: true },
+            });
+            for (const s of siblings) {
+              await tx.task.update({
+                where: { id: s.id },
+                data: { tags: { set: tagIds.map((id) => ({ id })) } },
+              });
+            }
+          }
+          const updated = await tx.task.findUniqueOrThrow({
+            where: { id },
+            include: { tags: true },
+          });
+          return this.toDto(updated);
+        }
+
+        const updated = await tx.task.update({
           where: { id },
+          data: {
+            ...scalarData,
+            ...(touchTags
+              ? { tags: { set: tagIds.map((id) => ({ id })) } }
+              : {}),
+          },
+          include: { tags: true },
         });
         return this.toDto(updated);
-      }
-
-      const updated = await this.prisma.task.update({ where: { id }, data });
-      return this.toDto(updated);
+      });
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       if (
@@ -371,8 +445,14 @@ export class TasksService {
       id,
       new Date(requestedStartTime),
     );
+    // The scheduler returns a bare Task (no relations); re-attach tags for the
+    // DTO so the wire format keeps its name array.
+    const withTags = await this.prisma.task.findUniqueOrThrow({
+      where: { id: task.id },
+      include: { tags: true },
+    });
     return {
-      task: this.toDto(task),
+      task: this.toDto(withTags),
       displaced: displaced.map((d) => ({
         taskId: d.taskId,
         newScheduledStartTime: d.newScheduledStartTime
@@ -396,8 +476,14 @@ export class TasksService {
       new Date(requestedStartTime),
       durationMinutes,
     );
+    // The scheduler returns a bare Task (no relations); re-attach tags for the
+    // DTO so the wire format keeps its name array.
+    const withTags = await this.prisma.task.findUniqueOrThrow({
+      where: { id: task.id },
+      include: { tags: true },
+    });
     return {
-      task: this.toDto(task),
+      task: this.toDto(withTags),
       displaced: displaced.map((d) => ({
         taskId: d.taskId,
         newScheduledStartTime: d.newScheduledStartTime
@@ -413,6 +499,7 @@ export class TasksService {
         const updated = await tx.task.update({
           where: { id, userId: user.id },
           data: { status: "DONE" },
+          include: { tags: true },
         });
         await tx.taskEvent.create({
           data: {
