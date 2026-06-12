@@ -94,6 +94,9 @@ inputs and constants are shared with onboarding through
   `utils/blocks.ts` (`taskToBlock`) and `types/schedule.ts`.
 - **Drag → reschedule:** dnd-kit (`useDraggable` + `DndContext`, sensors from
   `use-drag-sensors`). Dropping a block calls `rescheduleTask` → `PATCH /tasks/:id/reschedule`.
+  Day view restricts dragging to the vertical axis (re-time only); week view drags freely in
+  2D (cell ids encode `hour:minute:dayIndex`, so a horizontal drop also re-days the task);
+  month view drags freely across day cells (re-day only, time-of-day preserved).
 - **Edge resize:** top/bottom handles capture the pointer, preview locally, then call
   `resizeTask` → `PATCH /tasks/:id/resize`. Both snap to the 15-min grid (`utils/snap.ts`).
 - **Overlaps:** `utils/overlap.ts` (`getOverlapLayout`) greedily lays overlapping blocks
