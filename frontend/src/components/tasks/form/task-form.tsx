@@ -63,11 +63,10 @@ interface TaskFormProps {
   /** Extra actions rendered under the Cancel/Save row (e.g. delete). */
   footerExtra?: ReactNode;
   /**
-   * Disable the flexible-mode duration controls (edit mode): a flexible
-   * task's duration is changed by resizing its block on the calendar, while
-   * a fixed task's duration still follows its start/end window below.
+   * Edit mode: hide the scheduling fields (duration, scheduling type, fixed
+   * window) — placement and duration are changed on the calendar, not here.
    */
-  lockDuration?: boolean;
+  editing?: boolean;
 }
 
 export function TaskForm({
@@ -81,7 +80,7 @@ export function TaskForm({
   submitLabel = "Save",
   bodyExtra,
   footerExtra,
-  lockDuration = false,
+  editing = false,
 }: TaskFormProps) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const isFixed = form.watch("isFixed");
@@ -121,98 +120,97 @@ export function TaskForm({
             )}
           />
 
-          {/* Duration — quick-pick + custom */}
-          <FormField
-            control={form.control}
-            name="duration"
-            render={({ field }) => (
-              <FormItem className="space-y-2">
-                <FormLabel className="text-xs font-semibold">Duration</FormLabel>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {DURATION_PRESETS.map((m) => {
-                    const active = duration === m;
-                    return (
-                      <button
-                        key={m}
-                        type="button"
-                        disabled={loading || isFixed || lockDuration}
-                        onClick={() => field.onChange(m)}
-                        className={cn(
-                          "h-8 rounded-md border text-xs font-semibold transition-colors disabled:opacity-50",
-                          active
-                            ? "border-primary bg-primary/15 font-bold text-primary"
-                            : "border-border bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary",
-                        )}
-                      >
-                        {presetLabel(m)}
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="h-px flex-1 bg-border" />
-                  <span className="text-[10px] text-muted-foreground">or custom</span>
-                  <div className="h-px flex-1 bg-border" />
-                </div>
-                <DurationInput
-                  className="w-full"
-                  disabled={loading || isFixed || lockDuration}
-                  value={duration}
-                  onChange={field.onChange}
-                />
-                {lockDuration && !isFixed && (
+          {/* Duration — quick-pick + custom (create only: editing changes
+              duration by resizing the block on the calendar) */}
+          {!editing && (
+            <FormField
+              control={form.control}
+              name="duration"
+              render={({ field }) => (
+                <FormItem className="space-y-2">
+                  <FormLabel className="text-xs font-semibold">Duration</FormLabel>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {DURATION_PRESETS.map((m) => {
+                      const active = duration === m;
+                      return (
+                        <button
+                          key={m}
+                          type="button"
+                          disabled={loading || isFixed}
+                          onClick={() => field.onChange(m)}
+                          className={cn(
+                            "h-8 rounded-md border text-xs font-semibold transition-colors disabled:opacity-50",
+                            active
+                              ? "border-primary bg-primary/15 font-bold text-primary"
+                              : "border-border bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary",
+                          )}
+                        >
+                          {presetLabel(m)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-px flex-1 bg-border" />
+                    <span className="text-[10px] text-muted-foreground">or custom</span>
+                    <div className="h-px flex-1 bg-border" />
+                  </div>
+                  <DurationInput
+                    className="w-full"
+                    disabled={loading || isFixed}
+                    value={duration}
+                    onChange={field.onChange}
+                  />
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+
+          {/* Scheduling type (create only) */}
+          {!editing && (
+            <FormField
+              control={form.control}
+              name="isFixed"
+              render={({ field }) => (
+                <FormItem className="space-y-2">
+                  <FormLabel className="text-xs font-semibold">
+                    Scheduling type
+                  </FormLabel>
+                  <div className="flex overflow-hidden rounded-md border border-border text-xs font-semibold">
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => field.onChange(false)}
+                      className={cn(segBase, !field.value ? segActive : segIdle)}
+                    >
+                      <Box className="size-3" />
+                      Flexible
+                    </button>
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => field.onChange(true)}
+                      className={cn(
+                        segBase,
+                        "border-l border-border",
+                        field.value ? segActive : segIdle,
+                      )}
+                    >
+                      <Lock className="size-3" />
+                      Fixed
+                    </button>
+                  </div>
                   <p className="text-[11px] text-muted-foreground">
-                    To change a flexible task's duration, resize its block on
-                    the calendar.
+                    Flexible: the engine chooses the optimal slot. Fixed: you pick the
+                    exact time.
                   </p>
-                )}
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+                </FormItem>
+              )}
+            />
+          )}
 
-          {/* Scheduling type */}
-          <FormField
-            control={form.control}
-            name="isFixed"
-            render={({ field }) => (
-              <FormItem className="space-y-2">
-                <FormLabel className="text-xs font-semibold">
-                  Scheduling type
-                </FormLabel>
-                <div className="flex overflow-hidden rounded-md border border-border text-xs font-semibold">
-                  <button
-                    type="button"
-                    disabled={loading}
-                    onClick={() => field.onChange(false)}
-                    className={cn(segBase, !field.value ? segActive : segIdle)}
-                  >
-                    <Box className="size-3" />
-                    Flexible
-                  </button>
-                  <button
-                    type="button"
-                    disabled={loading}
-                    onClick={() => field.onChange(true)}
-                    className={cn(
-                      segBase,
-                      "border-l border-border",
-                      field.value ? segActive : segIdle,
-                    )}
-                  >
-                    <Lock className="size-3" />
-                    Fixed
-                  </button>
-                </div>
-                <p className="text-[11px] text-muted-foreground">
-                  Flexible: the engine chooses the optimal slot. Fixed: you pick the
-                  exact time.
-                </p>
-              </FormItem>
-            )}
-          />
-
-          {isFixed && (
+          {isFixed && !editing && (
             <FixedForm
               minTime={
                 date && isZonedToday(date, tz)
