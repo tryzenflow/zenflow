@@ -1,6 +1,9 @@
+import { plainToInstance } from "class-transformer";
+import { validate } from "class-validator";
 import { TasksService } from "./tasks.service";
 import type { Tag, Task, User } from "../../generated/prisma";
 import type { ListTasksDto } from "./dto/list-tasks.dto";
+import { UpdateTaskDto } from "./dto/update-task.dto";
 
 /** list() reads tasks with their related tags included. */
 type TaskWithTags = Task & { tags: Tag[] };
@@ -178,6 +181,163 @@ describe("TasksService.create — single row (no recurrence)", () => {
       user,
     );
     expect(creates[0].data.schedulingAnchor).toBeNull();
+  });
+});
+
+/**
+ * Build a TasksService over a single existing row for update(). Exposes the
+ * tx mocks + the scheduler stub so tests can assert what was persisted,
+ * whether the EDF cascade ran, and which audit events were written.
+ */
+function makeUpdateService(existing: TaskWithTags): {
+  service: TasksService;
+  updates: { data: Record<string, unknown> }[];
+  events: { data: Record<string, unknown> }[];
+  cascadeReschedule: jest.Mock;
+} {
+  const updates: { data: Record<string, unknown> }[] = [];
+  const events: { data: Record<string, unknown> }[] = [];
+  let current = existing;
+
+  const tx = {
+    tag: {
+      createMany: jest.fn().mockResolvedValue({}),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    task: {
+      findFirst: jest.fn().mockResolvedValue(existing),
+      update: jest.fn((args: { data: Record<string, unknown> }) => {
+        updates.push({ data: args.data });
+        // Apply only the defined scalar fields, like Prisma does.
+        const applied = Object.fromEntries(
+          Object.entries(args.data).filter(
+            ([k, v]) => v !== undefined && k !== "tags",
+          ),
+        );
+        current = { ...current, ...applied };
+        return Promise.resolve(current);
+      }),
+      findUniqueOrThrow: jest.fn(() => Promise.resolve(current)),
+    },
+    taskEvent: {
+      create: jest.fn((args: { data: Record<string, unknown> }) => {
+        events.push({ data: args.data });
+        return Promise.resolve({});
+      }),
+    },
+  };
+
+  const prisma = {
+    $transaction: (fn: (t: typeof tx) => unknown) => fn(tx),
+  };
+  const cascadeReschedule = jest.fn().mockResolvedValue(undefined);
+  const scheduler = { cascadeReschedule };
+
+  return {
+    service: new TasksService(prisma as never, scheduler as never),
+    updates,
+    events,
+    cascadeReschedule,
+  };
+}
+
+describe("TasksService.update — durationMinutes", () => {
+  it("persists the new duration and triggers a cascade reschedule", async () => {
+    const existing = task({
+      id: "t-1",
+      durationMinutes: 60,
+      scheduledStartTime: new Date("2026-06-15T10:00:00.000Z"),
+    });
+    const { service, updates, cascadeReschedule } = makeUpdateService(existing);
+
+    const res = await service.update("t-1", { durationMinutes: 90 }, user);
+
+    expect(updates[0].data.durationMinutes).toBe(90);
+    expect(cascadeReschedule).toHaveBeenCalledTimes(1);
+    expect(res.durationMinutes).toBe(90);
+  });
+
+  it("cascades even for a FIXED task (a longer block displaces flexible tasks)", async () => {
+    const existing = task({
+      id: "t-fixed",
+      durationMinutes: 60,
+      fixed: true,
+      startTime: 600,
+      scheduledStartTime: new Date("2026-06-15T10:00:00.000Z"),
+    });
+    const { service, cascadeReschedule } = makeUpdateService(existing);
+
+    await service.update("t-fixed", { durationMinutes: 120 }, user);
+
+    expect(cascadeReschedule).toHaveBeenCalledTimes(1);
+  });
+
+  it("writes a RESIZE audit event with old/new snapshots", async () => {
+    const existing = task({
+      id: "t-1",
+      durationMinutes: 60,
+      scheduledStartTime: new Date("2026-06-15T10:00:00.000Z"),
+    });
+    const { service, events } = makeUpdateService(existing);
+
+    await service.update("t-1", { durationMinutes: 90 }, user);
+
+    const resize = events.find((e) => e.data.eventType === "RESIZE");
+    expect(resize).toBeDefined();
+    expect(resize!.data.oldSnapshot).toEqual({
+      scheduledStartTime: "2026-06-15T10:00:00.000Z",
+      durationMinutes: 60,
+    });
+    expect(resize!.data.newSnapshot).toEqual({
+      scheduledStartTime: "2026-06-15T10:00:00.000Z",
+      durationMinutes: 90,
+    });
+  });
+
+  it("does NOT cascade when durationMinutes is omitted", async () => {
+    const existing = task({ id: "t-1", durationMinutes: 60 });
+    const { service, events, cascadeReschedule } = makeUpdateService(existing);
+
+    await service.update("t-1", { title: "Renamed" }, user);
+
+    expect(cascadeReschedule).not.toHaveBeenCalled();
+    expect(events).toHaveLength(0);
+  });
+
+  it("does NOT cascade when durationMinutes equals the stored value", async () => {
+    const existing = task({ id: "t-1", durationMinutes: 60 });
+    const { service, events, cascadeReschedule } = makeUpdateService(existing);
+
+    await service.update("t-1", { durationMinutes: 60 }, user);
+
+    expect(cascadeReschedule).not.toHaveBeenCalled();
+    expect(events).toHaveLength(0);
+  });
+});
+
+describe("UpdateTaskDto — durationMinutes validation", () => {
+  async function errorsFor(durationMinutes: unknown) {
+    const dto = plainToInstance(UpdateTaskDto, { durationMinutes });
+    return validate(dto);
+  }
+
+  it("rejects a non-multiple of 15", async () => {
+    expect(await errorsFor(50)).not.toHaveLength(0);
+  });
+
+  it("rejects zero and negatives", async () => {
+    expect(await errorsFor(0)).not.toHaveLength(0);
+    expect(await errorsFor(-15)).not.toHaveLength(0);
+  });
+
+  it("rejects values above one day (1440)", async () => {
+    expect(await errorsFor(1455)).not.toHaveLength(0);
+  });
+
+  it("accepts a positive multiple of 15 within a day, or omission", async () => {
+    expect(await errorsFor(90)).toHaveLength(0);
+    expect(await errorsFor(1440)).toHaveLength(0);
+    expect(await validate(plainToInstance(UpdateTaskDto, {}))).toHaveLength(0);
   });
 });
 
