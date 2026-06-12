@@ -279,11 +279,10 @@ export class TasksService {
     user: User,
   ): Promise<SharedTask> {
     const fields = dto;
-    // Scalar fields only — m2m tags are applied via the `set` relation op.
+    // Scalar metadata only — m2m tags are applied via the `set` relation op.
     const scalarData = {
       title: fields.title,
       note: fields.note,
-      durationMinutes: fields.durationMinutes,
       deadline:
         fields.deadline === undefined
           ? undefined
@@ -323,43 +322,12 @@ export class TasksService {
           scalarData.deadline !== undefined &&
           (scalarData.deadline?.getTime() ?? null) !==
             (target.deadline?.getTime() ?? null);
-        // A duration change re-packs the movable set for BOTH fixed and
-        // flexible tasks: a resized fixed block occupies more (or fewer) slots,
-        // so the flexible tasks around it must move too.
-        const durationChanged =
-          fields.durationMinutes !== undefined &&
-          fields.durationMinutes !== target.durationMinutes;
-        if ((deadlineChanged && !updated.fixed) || durationChanged) {
+        if (deadlineChanged && !updated.fixed) {
           await this.scheduler.cascadeReschedule(user, tx);
           const rescheduled = await tx.task.findUniqueOrThrow({
             where: { id },
             include: { tags: true },
           });
-          if (durationChanged) {
-            // Audit the size change like the /resize endpoint does. Unlike a
-            // manual edge-resize, the engine (not the user) picks the slot, so
-            // it scores as an accepted placement (1.0), not an override (0.0).
-            await tx.taskEvent.create({
-              data: {
-                taskId: id,
-                userId: user.id,
-                eventType: "RESIZE",
-                oldSnapshot: {
-                  scheduledStartTime: target.scheduledStartTime
-                    ? target.scheduledStartTime.toISOString()
-                    : null,
-                  durationMinutes: target.durationMinutes,
-                },
-                newSnapshot: {
-                  scheduledStartTime: rescheduled.scheduledStartTime
-                    ? rescheduled.scheduledStartTime.toISOString()
-                    : null,
-                  durationMinutes: rescheduled.durationMinutes,
-                },
-                rewardScore: 1.0,
-              },
-            });
-          }
           return this.toDto(rescheduled);
         }
         return this.toDto(updated);

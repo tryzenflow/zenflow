@@ -71,16 +71,10 @@ export interface CreateTaskInput {
   startDate?: string;
 }
 
-/**
- * Form-based task update. Metadata fields (`title`/`note`/`tags`) never
- * reschedule; changing `deadline` (flexible tasks) or `durationMinutes`
- * (any task) triggers an EDF cascade reschedule.
- */
+/** Metadata-only update; does not trigger rescheduling. */
 export interface UpdateTaskInput {
   title?: string;
   note?: string | null;
-  /** New duration in minutes (positive multiple of 15, max 1440). */
-  durationMinutes?: number;
   deadline?: string | null;
   tags?: string[];
 }
