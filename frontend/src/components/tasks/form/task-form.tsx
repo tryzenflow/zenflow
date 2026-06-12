@@ -62,6 +62,12 @@ interface TaskFormProps {
   bodyExtra?: ReactNode;
   /** Extra actions rendered under the Cancel/Save row (e.g. delete). */
   footerExtra?: ReactNode;
+  /**
+   * Disable the flexible-mode duration controls (edit mode): a flexible
+   * task's duration is changed by resizing its block on the calendar, while
+   * a fixed task's duration still follows its start/end window below.
+   */
+  lockDuration?: boolean;
 }
 
 export function TaskForm({
@@ -75,6 +81,7 @@ export function TaskForm({
   submitLabel = "Save",
   bodyExtra,
   footerExtra,
+  lockDuration = false,
 }: TaskFormProps) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const isFixed = form.watch("isFixed");
@@ -128,7 +135,7 @@ export function TaskForm({
                       <button
                         key={m}
                         type="button"
-                        disabled={loading || isFixed}
+                        disabled={loading || isFixed || lockDuration}
                         onClick={() => field.onChange(m)}
                         className={cn(
                           "h-8 rounded-md border text-xs font-semibold transition-colors disabled:opacity-50",
@@ -149,10 +156,16 @@ export function TaskForm({
                 </div>
                 <DurationInput
                   className="w-full"
-                  disabled={loading || isFixed}
+                  disabled={loading || isFixed || lockDuration}
                   value={duration}
                   onChange={field.onChange}
                 />
+                {lockDuration && !isFixed && (
+                  <p className="text-[11px] text-muted-foreground">
+                    To change a flexible task's duration, resize its block on
+                    the calendar.
+                  </p>
+                )}
                 <FormMessage />
               </FormItem>
             )}

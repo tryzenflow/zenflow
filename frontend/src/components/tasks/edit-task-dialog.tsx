@@ -89,6 +89,11 @@ export function EditTaskDialog({
       await updateTask(taskId, {
         title: values.title,
         note: values.note || null,
+        // Mirror TaskForm's displayed duration: a fixed task's effective
+        // duration is its time window; flexible tasks use the field directly.
+        durationMinutes: values.isFixed
+          ? values.fixedEnd - values.fixedStart
+          : values.duration,
         deadline,
         tags: values.tags,
       });
@@ -215,6 +220,7 @@ export function EditTaskDialog({
             form={form as any}
             onSubmit={onSubmit}
             loading={loading}
+            lockDuration
             onCancel={handleClose}
             newUploadsRef={newUploadsRef}
             initialNote={task?.note ?? undefined}
