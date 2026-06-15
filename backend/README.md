@@ -188,25 +188,41 @@ Pure functions you'll work with:
   flexible tasks EDF-packed around them). Used when preferences change.
 - **`placeOne(prefs, task, others, now, earliest?)`** — incremental placement of one new
   task, preserving everyone else's (possibly hand-moved) placement. Used on `POST /tasks`.
-- **`isPast(task, now)`** — `task.scheduledStartTime !== null && start < now`. **Past tasks
-  are frozen** by every scheduling path: never moved, re-placed, or re-flagged for conflict.
-  `scheduleAll` passes them through with their stored `scheduledStartTime`/`conflict`; `pin`/
-  `resize` keep their stored verdict in the pairwise recompute. An in-progress task (started
-  before `now`, ends after) is frozen too — left exactly where it is.
+**Placement is `now`-aware; conflict detection is `now`-independent.** Keep these two axes
+separate — they answer different questions:
+
+- **`isPast(task, now)`** — `task.scheduledStartTime !== null && start < now`. **Past tasks'
+  PLACEMENT is frozen**: no scheduling path ever moves or re-places them — `scheduleAll`
+  passes them through with their stored `scheduledStartTime`, and `pin`/`resize` only ever
+  write the dragged target's slot. An in-progress task (started before `now`, ends after) is
+  frozen too — left exactly where it is. Note `isPast` no longer gates the **conflict**
+  verdict: a past task's `conflict` flag IS recomputed (see below).
 - **`hasElapsed(task, now)`** — `placed && start + duration <= now`. This — NOT `isPast` —
   decides whether a placed block still **occupies future time** and so must block new
-  placements and can cause OTHER live tasks to conflict. Only a fully-elapsed block (ends
-  at/before `now`) is excluded from the occupied/overlap set (`findSlot` clamps every
-  candidate to `now`, so an elapsed block can never legitimately block a future slot). An
-  **in-progress** frozen task is past but NOT elapsed: it is added to `occupied` so the EDF
-  packer schedules around it, and it is allowed to flag a live task that a manual pin/drag
-  lands on top of it — while its own slot and conflict stay frozen.
+  PLACEMENTS. Only a fully-elapsed block (ends at/before `now`) is excluded from the
+  `occupied` set (`findSlot` clamps every candidate to `now`, so an elapsed block can never
+  legitimately block a future slot). An **in-progress** frozen task is past but NOT elapsed:
+  it is added to `occupied` so the EDF packer schedules around it. `hasElapsed` affects
+  placement only — it no longer filters the conflict-overlap pass.
+
+**Conflict detection** is pure pairwise interval overlap over **all placed tasks across the
+whole viewed window, regardless of `now`/elapsed/past**. A conflict means simply "two tasks
+overlap in time": a morning past–past or past–in-progress overlap is flagged and counted in
+the header badge even when it's now the afternoon, and a conflict self-heals to `false` the
+moment the overlap is gone. Both `scheduleAll`'s final overlap pass and the
+`recomputeConflicts` helper recompute the `conflict` flag for **every** placed task
+(anchors, freshly packed flexible tasks, and frozen past/in-progress ones); only
+`scheduledStartTime` stays frozen for past/anchored tasks. Unplaced tasks (no slot before
+their deadline) keep `conflict: true`. (Placement clamps new live slots to `>= now`, so a
+live/future task can never overlap a fully-elapsed one — making detection now-independent
+introduces no false positives; the only newly-flagged overlaps are genuine past–past /
+past–in-progress ones.)
 
 `SchedulerService.pin`/`resize` (manual drag/drop and edge-resize) place a task exactly
 where the user dropped it — no cascade — and recompute every task's conflict from real
-time-overlap via the shared `recomputeConflicts(projected, now)` helper. This is the only
-path that can leave a task **placed but conflicting** (overlapping a neighbour); the EDF
-engine itself only ever leaves a task unplaced (`scheduledStartTime: null`) on conflict.
+time-overlap via the shared `recomputeConflicts(projected)` helper. This is the only path
+that can leave a task **placed but conflicting** (overlapping a neighbour); the EDF engine
+itself only ever leaves a task unplaced (`scheduledStartTime: null`) on conflict.
 
 `SchedulerService` wraps these to persist placements, write `TaskEvent`s, and bump the
 `penaltyMatrix`. A `scoreSlot()` seam is reserved here for the **Phase 3 bandit** to plug

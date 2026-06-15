@@ -204,39 +204,31 @@ export function scheduleAll(
     }
   }
 
-  // Final overlap pass: every non-past placed task's conflict is recomputed from
-  // real pairwise half-open-interval overlap across the whole placement set
-  // (anchors + freshly packed). This is what surfaces an overlapping fixed task
-  // (the engine never places a flexible task onto an anchor, so a true overlap
-  // implies at least one anchor sits on another live block). Unplaced tasks keep
-  // the conflict verdict assigned above; frozen past tasks are left untouched.
+  // Final overlap pass: CONFLICT DETECTION is now-independent. Every placed task
+  // — anchors, freshly packed flexible tasks, AND frozen past tasks — has its
+  // `conflict` recomputed from pure pairwise half-open-interval overlap across
+  // the whole placement set, regardless of `now`/elapsed/past. A conflict means
+  // "two tasks overlap in time" anywhere in the window, so a past–past or
+  // past–in-progress overlap that lies before `now` is flagged just like a live
+  // one (and self-heals when the overlap is gone). Unplaced tasks keep the
+  // conflict verdict assigned above.
   //
-  // `durationById` covers ALL tasks (including frozen past ones) so an
-  // in-progress past task can still CAUSE a live task to conflict, even though
-  // the past task's own verdict is never recomputed (it's filtered out of the
-  // outer loop because it isn't an anchor/plain task).
-  const recomputeById = new Map<
-    string,
-    { id: string; durationMinutes: number }
-  >([...anchored, ...plain].map((t) => [t.id, t]));
+  // PLACEMENT stays now-aware: this pass only writes each task's `conflict`
+  // flag. Frozen past tasks (and anchors) keep their stored `scheduledStartTime`
+  // — only non-anchored live tasks were ever (re)positioned, above.
   const durationById = new Map<string, number>(
     tasks.map((t) => [t.id, t.durationMinutes]),
   );
   for (const p of out) {
-    const t = recomputeById.get(p.id);
-    if (!t || p.scheduledStartTime === null) continue; // past or unplaced
+    if (p.scheduledStartTime === null) continue; // unplaced — keep verdict
+    const dur = durationById.get(p.id);
+    if (dur === undefined) continue;
     const iv = {
       start: p.scheduledStartTime.getTime(),
-      end: p.scheduledStartTime.getTime() + durationMs(t.durationMinutes),
+      end: p.scheduledStartTime.getTime() + durationMs(dur),
     };
     p.conflict = out.some((o) => {
       if (o.id === p.id || o.scheduledStartTime === null) return false;
-      // A fully-elapsed block (end <= now) occupies no future time and never
-      // causes a live task to conflict. An in-progress past block still does.
-      if (
-        hasElapsed({ ...o, durationMinutes: durationById.get(o.id) ?? 0 }, now)
-      )
-        return false;
       const oDur = durationById.get(o.id);
       if (oDur === undefined) return false;
       const oStart = o.scheduledStartTime.getTime();

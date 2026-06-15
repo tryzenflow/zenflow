@@ -4,9 +4,7 @@ import { Prisma, type Task, type User } from "../../generated/prisma";
 import { PENALTY_MATRIX_LENGTH } from "@zenflow/shared";
 import {
   type EdfTask,
-  hasElapsed,
   intervalOf,
-  isPast,
   scheduleAll,
   type SchedulerPrefs,
 } from "./edf";
@@ -116,7 +114,6 @@ export class SchedulerService {
     user: User,
     taskId: string,
     requestedStart: Date,
-    now = new Date(),
   ): Promise<{ task: Task; displaced: DisplacedTask[] }> {
     return this.prisma.$transaction(async (tx) => {
       const tasks = await this.pendingTasks(user.id, tx);
@@ -133,7 +130,7 @@ export class SchedulerService {
       const projected = tasks.map((t) =>
         t.id === taskId ? { ...t, scheduledStartTime: snapped } : t,
       );
-      const conflictOf = this.recomputeConflicts(projected, now);
+      const conflictOf = this.recomputeConflicts(projected);
 
       const before = new Map(tasks.map((t) => [t.id, t]));
       const displaced: DisplacedTask[] = [];
@@ -201,7 +198,6 @@ export class SchedulerService {
     taskId: string,
     requestedStart: Date,
     durationMinutes: number,
-    now = new Date(),
   ): Promise<{ task: Task; displaced: DisplacedTask[] }> {
     return this.prisma.$transaction(async (tx) => {
       const tasks = await this.pendingTasks(user.id, tx);
@@ -228,7 +224,7 @@ export class SchedulerService {
             }
           : t,
       );
-      const conflictOf = this.recomputeConflicts(projected, now);
+      const conflictOf = this.recomputeConflicts(projected);
 
       const before = new Map(tasks.map((t) => [t.id, t]));
       const displaced: DisplacedTask[] = [];
@@ -276,12 +272,14 @@ export class SchedulerService {
   }
 
   /**
-   * Recompute each task's conflict flag from real time-overlap across the
-   * `projected` set: a placed task clashes if it overlaps another placed task.
-   * Drives the manual {@link pin}/{@link resize} drops (the only places where a
-   * placed-but-overlapping conflict can arise). Frozen past tasks keep their
-   * stored verdict and never cause a live task to conflict; unplaced tasks keep
-   * the engine's verdict.
+   * Recompute each task's conflict flag from pure time-overlap across the
+   * `projected` set: a placed task clashes if it overlaps any other placed task,
+   * anywhere in the window. Conflict detection is now-INDEPENDENT — elapsed,
+   * in-progress, and past tasks all participate, so a manual pin/drag onto an
+   * already-elapsed block surfaces a conflict and a past overlap self-heals once
+   * the overlap is gone. Drives the manual {@link pin}/{@link resize} drops.
+   * Placement is unaffected here (those methods only write the target's slot);
+   * unplaced tasks keep the engine's verdict.
    */
   private recomputeConflicts(
     projected: {
@@ -290,17 +288,11 @@ export class SchedulerService {
       durationMinutes: number;
       conflict: boolean;
     }[],
-    now: Date,
   ): Map<string, boolean> {
     const overlaps = (a: Interval, b: Interval) =>
       a.start < b.end && b.start < a.end;
     const conflictOf = new Map<string, boolean>();
     for (const t of projected) {
-      // Past tasks are frozen: their conflict is never recomputed.
-      if (isPast(t, now)) {
-        conflictOf.set(t.id, t.conflict);
-        continue;
-      }
       const iv = intervalOf(t);
       if (!iv) {
         conflictOf.set(t.id, t.conflict); // unplaced — keep engine's verdict
@@ -310,10 +302,6 @@ export class SchedulerService {
         t.id,
         projected.some((o) => {
           if (o.id === t.id) return false;
-          // A fully-elapsed block (end <= now) occupies no future time and never
-          // causes a live task to conflict. An in-progress past block still
-          // does, so a manual pin/drag onto it surfaces as a conflict.
-          if (hasElapsed(o, now)) return false;
           const oiv = intervalOf(o);
           return oiv ? overlaps(iv, oiv) : false;
         }),

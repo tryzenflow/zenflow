@@ -460,11 +460,11 @@ describe("scheduleAll — overlapping anchors are flagged as conflicts", () => {
     expect(byId("placed").conflict).toBe(false);
   });
 
-  it("does not flag a fixed task overlapping only a FROZEN past block", () => {
-    // now = noon. The past block (09:00–10:00) is frozen; a fixed task at
-    // 09:30 overlaps it in wall-clock terms but a past block never causes a
-    // live task to conflict. (The fixed task itself starts before now here, so
-    // it is also past — assert the live-vs-past rule with a future fixed task.)
+  it("does not flag non-overlapping past and future tasks (no false positive)", () => {
+    // now = noon. A past block (09:00–10:00) and a future fixed task (13:00) do
+    // NOT overlap in time, so neither is flagged. Detection is now-independent
+    // but it is still pure interval overlap — separated tasks stay clean
+    // regardless of which side of `now` they sit on.
     const NOON = new Date("2026-06-08T12:00:00Z");
     const out = scheduleAll(
       prefs,
@@ -473,8 +473,6 @@ describe("scheduleAll — overlapping anchors are flagged as conflicts", () => {
           id: "past",
           scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
         }),
-        // A future fixed task that does NOT overlap the past block stays clean;
-        // the past block is excluded from the live overlap set regardless.
         task({
           id: "futureFixed",
           fixed: true,
@@ -629,7 +627,11 @@ describe("scheduleAll — frozen past tasks", () => {
     expect(iso(byId("b").scheduledStartTime)).toBe("2026-06-08T13:00:00.000Z");
   });
 
-  it("preserves a past task's stored conflict flag unchanged", () => {
+  it("recomputes a lone past task's conflict from real overlap (self-heal, now-independent)", () => {
+    // Inverted from the old "past conflict is frozen" assertion: detection no
+    // longer freezes past verdicts. A lone past task carrying a stale
+    // `conflict: true` overlaps nothing, so the now-independent overlap pass
+    // clears it — while its stored slot is still never moved.
     const out = scheduleAll(
       prefs,
       [
@@ -642,7 +644,62 @@ describe("scheduleAll — frozen past tasks", () => {
       NOON,
     );
     expect(iso(out[0].scheduledStartTime)).toBe("2026-06-08T09:00:00.000Z");
-    expect(out[0].conflict).toBe(true);
+    expect(out[0].conflict).toBe(false);
+  });
+
+  it("flags BOTH fully-elapsed tasks that overlap (now-independent detection)", () => {
+    // Two tasks that both ended before now (08:00–09:00 and 08:30–09:30) overlap
+    // in the elapsed part of the window. Detection is now-independent, so both
+    // are flagged conflict:true (would be counted in the header badge). Neither
+    // stored slot is moved.
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "e1",
+          scheduledStartTime: new Date("2026-06-08T08:00:00Z"),
+          durationMinutes: 60,
+        }),
+        task({
+          id: "e2",
+          scheduledStartTime: new Date("2026-06-08T08:30:00Z"),
+          durationMinutes: 60,
+        }),
+      ],
+      NOON,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    expect(byId("e1").conflict).toBe(true);
+    expect(byId("e2").conflict).toBe(true);
+    expect(iso(byId("e1").scheduledStartTime)).toBe("2026-06-08T08:00:00.000Z");
+    expect(iso(byId("e2").scheduledStartTime)).toBe("2026-06-08T08:30:00.000Z");
+  });
+
+  it("self-heals an elapsed overlap once the tasks no longer overlap", () => {
+    // Same two elapsed tasks, but e2 now sits at 09:30 (after e1's 08:00–09:00).
+    // No overlap remains, so both clear to conflict:false even though both are
+    // fully in the past.
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "e1",
+          conflict: true, // stale verdict from the previous overlap
+          scheduledStartTime: new Date("2026-06-08T08:00:00Z"),
+          durationMinutes: 60,
+        }),
+        task({
+          id: "e2",
+          conflict: true, // stale verdict from the previous overlap
+          scheduledStartTime: new Date("2026-06-08T09:30:00Z"),
+          durationMinutes: 60,
+        }),
+      ],
+      NOON,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    expect(byId("e1").conflict).toBe(false);
+    expect(byId("e2").conflict).toBe(false);
   });
 
   it("does not let a FULLY-ELAPSED block displace a future task onto a later slot", () => {
@@ -764,11 +821,16 @@ describe("scheduleAll — in-progress (frozen, not elapsed) tasks block placemen
     expect(iso(byId("inprogress").scheduledStartTime)).toBe(
       "2026-06-08T16:00:00.000Z",
     );
-    // The in-progress task is frozen — its own conflict is never recomputed.
+    // The in-progress task is never MOVED (placement is frozen). Its conflict is
+    // recomputed but it overlaps nothing here (the new task is placed at 18:00),
+    // so it stays clean.
     expect(byId("inprogress").conflict).toBe(false);
   });
 
-  it("preserves a frozen in-progress task's stored conflict flag", () => {
+  it("recomputes a lone in-progress task's conflict from real overlap (self-heal)", () => {
+    // Inverted from the old "frozen conflict is preserved" assertion: detection
+    // is now-independent. A lone in-progress task carrying a stale
+    // `conflict: true` overlaps nothing, so it clears — its slot is untouched.
     const out = scheduleAll(
       lateWindow,
       [
@@ -781,13 +843,15 @@ describe("scheduleAll — in-progress (frozen, not elapsed) tasks block placemen
       ],
       NOW,
     );
-    expect(out[0].conflict).toBe(true);
+    expect(out[0].conflict).toBe(false);
+    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-08T16:00:00.000Z");
   });
 
-  it("flags a future fixed task overlapping an in-progress block as a conflict", () => {
+  it("flags BOTH a future fixed task and the in-progress block it overlaps", () => {
     // A fixed task at 17:00 lands inside the 16:00–18:00 in-progress block.
-    // The in-progress block occupies future time, so the live fixed task must
-    // surface a conflict (manual pin/drag onto an in-progress task).
+    // Detection is now-independent and pairwise, so BOTH sides surface a
+    // conflict (previously only the live fixed side was flagged). Neither slot
+    // moves.
     const out = scheduleAll(
       lateWindow,
       [
@@ -807,14 +871,18 @@ describe("scheduleAll — in-progress (frozen, not elapsed) tasks block placemen
     );
     const byId = (id: string) => out.find((p) => p.id === id)!;
     expect(byId("fixed").conflict).toBe(true);
-    // The in-progress task itself is frozen and stays clean.
-    expect(byId("inprogress").conflict).toBe(false);
+    expect(byId("inprogress").conflict).toBe(true);
+    expect(iso(byId("inprogress").scheduledStartTime)).toBe(
+      "2026-06-08T16:00:00.000Z",
+    );
   });
 
-  it("does NOT flag a future fixed task overlapping a FULLY-ELAPSED block", () => {
-    // Elapsed block 14:00–15:00 (ends before now). A fixed task at 14:30 overlaps
-    // it in wall-clock terms but the elapsed block occupies no future time, so no
-    // conflict is raised — preserves the "past block never blocks" behavior.
+  it("DOES flag an overlap with a FULLY-ELAPSED block (detection is now-independent)", () => {
+    // Inverted from the old "past block never blocks" assertion: conflict
+    // DETECTION no longer depends on `now`. Elapsed block 14:00–15:00 (ends
+    // before now) overlaps a fixed task at 14:30 in wall-clock terms, so BOTH
+    // are flagged. PLACEMENT is unaffected — the elapsed block still occupies no
+    // future time and the fixed task keeps its stored slot here.
     const out = scheduleAll(
       lateWindow,
       [
@@ -833,7 +901,14 @@ describe("scheduleAll — in-progress (frozen, not elapsed) tasks block placemen
       NOW,
     );
     const byId = (id: string) => out.find((p) => p.id === id)!;
-    expect(byId("fixed").conflict).toBe(false);
-    expect(byId("elapsed").conflict).toBe(false);
+    expect(byId("fixed").conflict).toBe(true);
+    expect(byId("elapsed").conflict).toBe(true);
+    // Neither is moved off its stored slot.
+    expect(iso(byId("elapsed").scheduledStartTime)).toBe(
+      "2026-06-08T14:00:00.000Z",
+    );
+    expect(iso(byId("fixed").scheduledStartTime)).toBe(
+      "2026-06-08T14:30:00.000Z",
+    );
   });
 });

@@ -2,17 +2,19 @@ import { SchedulerService } from "./scheduler.service";
 import type { Task, User } from "../../generated/prisma";
 
 /**
- * Focused coverage for the past-task freeze in {@link SchedulerService.pin} and
- * {@link SchedulerService.resize}: a frozen past task must never have its
- * `conflict` recomputed, and a past block must never cause a live task to be
- * flagged as conflicting. A Prisma mock captures every `task.update` so we can
- * assert exactly which rows changed and to what.
+ * Coverage for conflict DETECTION in {@link SchedulerService.pin} and
+ * {@link SchedulerService.resize}. Detection is now-INDEPENDENT: it is pure
+ * pairwise time-overlap across all placed tasks, so a manual pin/resize onto an
+ * already-elapsed or in-progress block surfaces a conflict, and a past overlap
+ * self-heals once it is gone. PLACEMENT stays now-aware — these methods only
+ * ever write the target task's slot; nothing else moves. A Prisma mock captures
+ * every `task.update` so we can assert exactly which rows changed and to what.
  *
- * `now` is injected (12:00 on 2026-06-08) so a 09:00 task is past and the
- * afternoon is live, without touching the wall clock.
+ * Because detection is now-independent, these tests no longer inject a clock:
+ * the verdicts depend only on whether the placed intervals overlap. Fixtures use
+ * a 12:00-relative layout (09:00 = elapsed, 11:00–13:00 = in-progress, the
+ * afternoon = future) purely for readability.
  */
-
-const NOON = new Date("2026-06-08T12:00:00Z");
 
 const user: User = {
   id: "user-1",
@@ -92,10 +94,11 @@ function makeService(rows: Task[]): {
   };
 }
 
-describe("SchedulerService.pin — frozen past tasks", () => {
-  it("never recomputes a past task's conflict", async () => {
-    // A past task already flagged conflict:true, and a live task being pinned
-    // elsewhere. The past task must not be updated at all.
+describe("SchedulerService.pin — now-independent conflict detection", () => {
+  it("self-heals a past task's stale conflict (now recomputed, was frozen)", async () => {
+    // Inverted from the old "never recomputes a past task's conflict": a past
+    // task carrying a stale conflict:true that now overlaps nothing has its
+    // verdict recomputed to false and IS written. Its slot is never moved.
     const past = task({
       id: "past",
       conflict: true,
@@ -107,14 +110,20 @@ describe("SchedulerService.pin — frozen past tasks", () => {
     });
     const { service, updates } = makeService([past, live]);
 
-    await service.pin(user, "live", new Date("2026-06-08T14:00:00Z"), NOON);
+    await service.pin(user, "live", new Date("2026-06-08T14:00:00Z"));
 
-    expect(updates.some((u) => u.id === "past")).toBe(false);
+    const pastUpdate = updates.find((u) => u.id === "past");
+    expect(pastUpdate?.data.conflict).toBe(false);
+    // Placement is untouched — the past block keeps its stored 09:00 slot.
+    expect(pastUpdate?.data.scheduledStartTime?.getTime()).toBe(
+      Date.parse("2026-06-08T09:00:00Z"),
+    );
   });
 
-  it("does not let a past block flag the pinned live task as a conflict", async () => {
-    // Pin the live task directly on top of the past block's time. Because the
-    // past block is excluded from overlap, the live task is conflict-free.
+  it("flags the pinned live task when it lands on an already-elapsed block", async () => {
+    // Inverted from "a past block never flags the pinned task". Pin the live
+    // task directly onto the elapsed 09:00–10:00 block — detection is
+    // now-independent, so it overlaps and BOTH are flagged conflict:true.
     const past = task({
       id: "past",
       scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
@@ -129,13 +138,15 @@ describe("SchedulerService.pin — frozen past tasks", () => {
       user,
       "live",
       new Date("2026-06-08T09:00:00Z"),
-      NOON,
     );
 
-    expect(updated.conflict).toBe(false);
-    const liveUpdate = updates.find((u) => u.id === "live");
-    expect(liveUpdate?.data.conflict).toBe(false);
-    expect(updates.some((u) => u.id === "past")).toBe(false);
+    expect(updated.conflict).toBe(true);
+    const pastUpdate = updates.find((u) => u.id === "past");
+    expect(pastUpdate?.data.conflict).toBe(true);
+    // The past block's slot is never moved — it keeps its stored 09:00 slot.
+    expect(pastUpdate?.data.scheduledStartTime?.getTime()).toBe(
+      Date.parse("2026-06-08T09:00:00Z"),
+    );
   });
 
   it("still flags a live-vs-live overlap as a conflict", async () => {
@@ -154,7 +165,6 @@ describe("SchedulerService.pin — frozen past tasks", () => {
       user,
       "b",
       new Date("2026-06-08T13:00:00Z"),
-      NOON,
     );
 
     expect(updated.conflict).toBe(true);
@@ -162,11 +172,11 @@ describe("SchedulerService.pin — frozen past tasks", () => {
 });
 
 describe("SchedulerService.pin — in-progress tasks still block conflicts", () => {
-  it("flags the pinned live task when it lands on an in-progress block", async () => {
-    // In-progress block 11:00–13:00 straddles now (noon): frozen, but still
-    // occupies future time. Pinning the live task onto 12:30 (a FUTURE slot that
-    // still overlaps the in-progress tail) must surface a conflict — while the
-    // in-progress block is never updated (frozen, conflict not recomputed).
+  it("flags BOTH the pinned live task and the in-progress block it overlaps", async () => {
+    // In-progress block 11:00–13:00 straddles now (noon). Pinning the live task
+    // onto 12:30 (which overlaps the in-progress tail) surfaces a conflict on
+    // both sides. The in-progress block's conflict IS recomputed (detection is
+    // now-independent) and written — but its slot is never moved.
     const inprogress = task({
       id: "inprogress",
       scheduledStartTime: new Date("2026-06-08T11:00:00Z"),
@@ -182,16 +192,21 @@ describe("SchedulerService.pin — in-progress tasks still block conflicts", () 
       user,
       "live",
       new Date("2026-06-08T12:30:00Z"),
-      NOON,
     );
 
     expect(updated.conflict).toBe(true);
-    expect(updates.some((u) => u.id === "inprogress")).toBe(false);
+    const inProgressUpdate = updates.find((u) => u.id === "inprogress");
+    expect(inProgressUpdate?.data.conflict).toBe(true);
+    // The in-progress block keeps its stored 11:00 slot (never moved).
+    expect(inProgressUpdate?.data.scheduledStartTime?.getTime()).toBe(
+      Date.parse("2026-06-08T11:00:00Z"),
+    );
   });
 
-  it("does NOT flag the pinned task against a fully-elapsed block", async () => {
-    // Elapsed block 09:00–10:00 (ends before noon) occupies no future time, so
-    // pinning the live task onto it raises no conflict.
+  it("flags the pinned task against a fully-elapsed block (now-independent)", async () => {
+    // Inverted from the old "elapsed block never flags". Elapsed block
+    // 09:00–10:00 (ends before noon) is still part of the window, so pinning the
+    // live task onto it raises a conflict on both.
     const elapsed = task({
       id: "elapsed",
       scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
@@ -200,21 +215,25 @@ describe("SchedulerService.pin — in-progress tasks still block conflicts", () 
       id: "live",
       scheduledStartTime: new Date("2026-06-08T13:00:00Z"),
     });
-    const { service } = makeService([elapsed, live]);
+    const { service, updates } = makeService([elapsed, live]);
 
     const { task: updated } = await service.pin(
       user,
       "live",
       new Date("2026-06-08T09:00:00Z"),
-      NOON,
     );
 
-    expect(updated.conflict).toBe(false);
+    expect(updated.conflict).toBe(true);
+    expect(updates.find((u) => u.id === "elapsed")?.data.conflict).toBe(true);
   });
 });
 
-describe("SchedulerService.resize — frozen past tasks", () => {
-  it("never recomputes a past task's conflict on resize", async () => {
+describe("SchedulerService.resize — now-independent conflict detection", () => {
+  it("self-heals a past task's stale conflict on resize (now recomputed)", async () => {
+    // Inverted from "never recomputes a past task's conflict on resize": the
+    // past task's stale conflict:true no longer overlaps anything (the live task
+    // is resized within the afternoon), so it is recomputed to false and IS
+    // written — but only the conflict flag, never the slot.
     const past = task({
       id: "past",
       conflict: true,
@@ -226,20 +245,17 @@ describe("SchedulerService.resize — frozen past tasks", () => {
     });
     const { service, updates } = makeService([past, live]);
 
-    await service.resize(
-      user,
-      "live",
-      new Date("2026-06-08T13:00:00Z"),
-      120,
-      NOON,
-    );
+    await service.resize(user, "live", new Date("2026-06-08T13:00:00Z"), 120);
 
-    expect(updates.some((u) => u.id === "past")).toBe(false);
+    const pastUpdate = updates.find((u) => u.id === "past");
+    expect(pastUpdate?.data.conflict).toBe(false);
+    expect(pastUpdate?.data.scheduledStartTime).toBeUndefined();
   });
 
-  it("does not let a past block flag a resized live task as a conflict", async () => {
-    // Resize the live task so it would overlap the past block's window; the
-    // past block is excluded, so no conflict is raised.
+  it("flags a resized live task that overlaps a past block (now-independent)", async () => {
+    // Inverted from "a past block never flags a resized live task". Resize the
+    // live task back onto the past block's window (09:30–10:30 overlaps
+    // 09:00–10:00) — detection is now-independent, so a conflict IS raised.
     const past = task({
       id: "past",
       scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
@@ -255,9 +271,8 @@ describe("SchedulerService.resize — frozen past tasks", () => {
       "live",
       new Date("2026-06-08T09:30:00Z"),
       60,
-      NOON,
     );
 
-    expect(updated.conflict).toBe(false);
+    expect(updated.conflict).toBe(true);
   });
 });
