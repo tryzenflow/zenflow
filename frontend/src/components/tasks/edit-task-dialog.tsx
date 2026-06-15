@@ -242,6 +242,7 @@ const EVENT_LABEL: Record<TaskEvent["eventType"], string> = {
   MOVE: "Moved",
   RESIZE: "Resized",
   COMPLETE: "Completed",
+  ABANDON: "Abandoned",
 };
 
 const EVENT_DOT: Record<TaskEvent["eventType"], string> = {
@@ -249,6 +250,7 @@ const EVENT_DOT: Record<TaskEvent["eventType"], string> = {
   MOVE: "bg-amber-500",
   RESIZE: "bg-amber-500",
   COMPLETE: "bg-emerald-500",
+  ABANDON: "bg-red-500",
 };
 
 function TaskHistory({ events }: { events: TaskEvent[] }) {
