@@ -245,6 +245,10 @@ export function SidebarBody({ meta, agenda, view }: SidebarProps) {
         </Label>
         <ul className="space-y-1 text-[11px] leading-snug text-muted-foreground">
           <li>
+            <span className="font-semibold text-foreground">Click</span> on a
+            task to view its details.
+          </li>
+          <li>
             <span className="font-semibold text-foreground">Drag</span> a task
             to reschedule it.
           </li>
@@ -254,7 +258,7 @@ export function SidebarBody({ meta, agenda, view }: SidebarProps) {
           </li>
           <li>
             <span className="font-semibold text-foreground">Double-click</span>{" "}
-            (or long-press on touch) to edit.
+            to mark a task as completed.
           </li>
           <li>
             <span className="font-semibold text-foreground">Flexible</span>{" "}
