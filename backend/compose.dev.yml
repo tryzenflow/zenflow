@@ -22,10 +22,10 @@ services:
 
   mail:
     container_name: zenflow-mail
-    image: jijiechen/papercut:latest
+    image: mailhog/mailhog
     ports:
-      - 25:25
-      - 37408:37408
+      - 1025:1025
+      - 8025:8025
     networks:
       - mail
 
