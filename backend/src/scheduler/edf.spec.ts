@@ -1,6 +1,7 @@
 import {
   type EdfTask,
   findSlot,
+  hasElapsed,
   isPast,
   scheduleAll,
   type SchedulerPrefs,
@@ -644,7 +645,7 @@ describe("scheduleAll — frozen past tasks", () => {
     expect(out[0].conflict).toBe(true);
   });
 
-  it("does not let a past block displace a future task onto a later slot", () => {
+  it("does not let a FULLY-ELAPSED block displace a future task onto a later slot", () => {
     // A future task whose earliest packing slot (noon) does not overlap the past
     // block — it must take noon, not be pushed past the 09:00–10:00 stale block.
     const out = scheduleAll(
@@ -662,5 +663,177 @@ describe("scheduleAll — frozen past tasks", () => {
     expect(iso(byId("future").scheduledStartTime)).toBe(
       "2026-06-08T12:00:00.000Z",
     );
+  });
+});
+
+describe("hasElapsed", () => {
+  const NOW = new Date("2026-06-08T16:16:00Z");
+
+  it("is false for a task with no scheduledStartTime", () => {
+    expect(
+      hasElapsed({ scheduledStartTime: null, durationMinutes: 60 }, NOW),
+    ).toBe(false);
+  });
+
+  it("is true when the interval ends at/before now (fully elapsed)", () => {
+    // 14:00 + 60min = 15:00 <= 16:16.
+    expect(
+      hasElapsed(
+        {
+          scheduledStartTime: new Date("2026-06-08T14:00:00Z"),
+          durationMinutes: 60,
+        },
+        NOW,
+      ),
+    ).toBe(true);
+  });
+
+  it("is false for an in-progress task (start < now < end)", () => {
+    // 16:00–18:00 straddles now.
+    expect(
+      hasElapsed(
+        {
+          scheduledStartTime: new Date("2026-06-08T16:00:00Z"),
+          durationMinutes: 120,
+        },
+        NOW,
+      ),
+    ).toBe(false);
+  });
+
+  it("is false at exactly the end boundary minus a slot, true at the boundary", () => {
+    // end == now is treated as elapsed (half-open intervals).
+    expect(
+      hasElapsed(
+        {
+          scheduledStartTime: new Date("2026-06-08T15:16:00Z"),
+          durationMinutes: 60,
+        },
+        NOW,
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("scheduleAll — in-progress (frozen, not elapsed) tasks block placement", () => {
+  // now = 16:16; an extended work window so the afternoon is schedulable.
+  const lateWindow: SchedulerPrefs = {
+    workStart: 540, // 09:00
+    workEnd: 1320, // 22:00
+    workDays: [1, 2, 3, 4, 5],
+    timezone: "UTC",
+  };
+  const NOW = new Date("2026-06-08T16:16:00Z");
+
+  it("places a new flexible task AFTER an in-progress block (the repro)", () => {
+    // In-progress task runs 16:00–18:00 (started before now, ends after). A new
+    // 1h flexible task must NOT overlap it — it lands at 18:00, not 16:30.
+    const out = scheduleAll(
+      lateWindow,
+      [
+        task({
+          id: "inprogress",
+          scheduledStartTime: new Date("2026-06-08T16:00:00Z"),
+          durationMinutes: 120,
+        }),
+        task({ id: "new", durationMinutes: 60 }),
+      ],
+      NOW,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    expect(iso(byId("new").scheduledStartTime)).toBe(
+      "2026-06-08T18:00:00.000Z",
+    );
+  });
+
+  it("does NOT move the in-progress task and leaves its conflict untouched", () => {
+    const out = scheduleAll(
+      lateWindow,
+      [
+        task({
+          id: "inprogress",
+          conflict: false,
+          scheduledStartTime: new Date("2026-06-08T16:00:00Z"),
+          durationMinutes: 120,
+        }),
+        task({ id: "new", durationMinutes: 60 }),
+      ],
+      NOW,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    expect(iso(byId("inprogress").scheduledStartTime)).toBe(
+      "2026-06-08T16:00:00.000Z",
+    );
+    // The in-progress task is frozen — its own conflict is never recomputed.
+    expect(byId("inprogress").conflict).toBe(false);
+  });
+
+  it("preserves a frozen in-progress task's stored conflict flag", () => {
+    const out = scheduleAll(
+      lateWindow,
+      [
+        task({
+          id: "inprogress",
+          conflict: true,
+          scheduledStartTime: new Date("2026-06-08T16:00:00Z"),
+          durationMinutes: 120,
+        }),
+      ],
+      NOW,
+    );
+    expect(out[0].conflict).toBe(true);
+  });
+
+  it("flags a future fixed task overlapping an in-progress block as a conflict", () => {
+    // A fixed task at 17:00 lands inside the 16:00–18:00 in-progress block.
+    // The in-progress block occupies future time, so the live fixed task must
+    // surface a conflict (manual pin/drag onto an in-progress task).
+    const out = scheduleAll(
+      lateWindow,
+      [
+        task({
+          id: "inprogress",
+          scheduledStartTime: new Date("2026-06-08T16:00:00Z"),
+          durationMinutes: 120,
+        }),
+        task({
+          id: "fixed",
+          fixed: true,
+          scheduledStartTime: new Date("2026-06-08T17:00:00Z"),
+          durationMinutes: 60,
+        }),
+      ],
+      NOW,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    expect(byId("fixed").conflict).toBe(true);
+    // The in-progress task itself is frozen and stays clean.
+    expect(byId("inprogress").conflict).toBe(false);
+  });
+
+  it("does NOT flag a future fixed task overlapping a FULLY-ELAPSED block", () => {
+    // Elapsed block 14:00–15:00 (ends before now). A fixed task at 14:30 overlaps
+    // it in wall-clock terms but the elapsed block occupies no future time, so no
+    // conflict is raised — preserves the "past block never blocks" behavior.
+    const out = scheduleAll(
+      lateWindow,
+      [
+        task({
+          id: "elapsed",
+          scheduledStartTime: new Date("2026-06-08T14:00:00Z"),
+          durationMinutes: 60,
+        }),
+        task({
+          id: "fixed",
+          fixed: true,
+          scheduledStartTime: new Date("2026-06-08T14:30:00Z"),
+          durationMinutes: 60,
+        }),
+      ],
+      NOW,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    expect(byId("fixed").conflict).toBe(false);
+    expect(byId("elapsed").conflict).toBe(false);
   });
 });

@@ -161,6 +161,58 @@ describe("SchedulerService.pin — frozen past tasks", () => {
   });
 });
 
+describe("SchedulerService.pin — in-progress tasks still block conflicts", () => {
+  it("flags the pinned live task when it lands on an in-progress block", async () => {
+    // In-progress block 11:00–13:00 straddles now (noon): frozen, but still
+    // occupies future time. Pinning the live task onto 12:30 (a FUTURE slot that
+    // still overlaps the in-progress tail) must surface a conflict — while the
+    // in-progress block is never updated (frozen, conflict not recomputed).
+    const inprogress = task({
+      id: "inprogress",
+      scheduledStartTime: new Date("2026-06-08T11:00:00Z"),
+      durationMinutes: 120,
+    });
+    const live = task({
+      id: "live",
+      scheduledStartTime: new Date("2026-06-08T15:00:00Z"),
+    });
+    const { service, updates } = makeService([inprogress, live]);
+
+    const { task: updated } = await service.pin(
+      user,
+      "live",
+      new Date("2026-06-08T12:30:00Z"),
+      NOON,
+    );
+
+    expect(updated.conflict).toBe(true);
+    expect(updates.some((u) => u.id === "inprogress")).toBe(false);
+  });
+
+  it("does NOT flag the pinned task against a fully-elapsed block", async () => {
+    // Elapsed block 09:00–10:00 (ends before noon) occupies no future time, so
+    // pinning the live task onto it raises no conflict.
+    const elapsed = task({
+      id: "elapsed",
+      scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
+    });
+    const live = task({
+      id: "live",
+      scheduledStartTime: new Date("2026-06-08T13:00:00Z"),
+    });
+    const { service } = makeService([elapsed, live]);
+
+    const { task: updated } = await service.pin(
+      user,
+      "live",
+      new Date("2026-06-08T09:00:00Z"),
+      NOON,
+    );
+
+    expect(updated.conflict).toBe(false);
+  });
+});
+
 describe("SchedulerService.resize — frozen past tasks", () => {
   it("never recomputes a past task's conflict on resize", async () => {
     const past = task({

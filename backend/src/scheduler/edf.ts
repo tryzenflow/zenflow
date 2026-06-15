@@ -29,11 +29,15 @@ export function intervalOf(t: {
 /**
  * A task is "past" (frozen) iff it has a `scheduledStartTime` that already
  * begins before `now`. Past tasks are never moved, re-placed, or re-flagged for
- * conflict by any scheduling path, and they are excluded from the occupied set
- * that drives placement/conflict for non-past tasks (a past block can never
- * legitimately block a future slot — `findSlot` clamps every candidate to
- * `now`). A task with no `scheduledStartTime` is never past. An in-progress
- * task that started before `now` IS past and is left alone.
+ * conflict by any scheduling path — they keep their stored `scheduledStartTime`
+ * and `conflict` verdict. A task with no `scheduledStartTime` is never past. An
+ * in-progress task that started before `now` (but ends after) IS past and is
+ * left alone here.
+ *
+ * Frozen is NOT the same as "blocks nothing": whether a placed block still
+ * occupies future time — and so must block placements / can cause other live
+ * tasks to conflict — is decided by {@link hasElapsed}, not by `isPast`. An
+ * in-progress frozen task still occupies future time.
  */
 export function isPast(
   t: { scheduledStartTime: Date | null },
@@ -43,6 +47,23 @@ export function isPast(
     t.scheduledStartTime !== null &&
     t.scheduledStartTime.getTime() < now.getTime()
   );
+}
+
+/**
+ * A placed task has "fully elapsed" iff its whole interval ends at/before `now`
+ * (`start + duration <= now`). Only a fully-elapsed block can never legitimately
+ * block a future slot — it occupies no future time. This is distinct from
+ * {@link isPast} (frozen / don't-move), which is true the moment a task STARTS:
+ * an in-progress task (`start < now < end`) is past/frozen but NOT elapsed, so
+ * it still occupies future time and must block placements and surface conflicts.
+ * A task with no `scheduledStartTime` has not elapsed.
+ */
+export function hasElapsed(
+  t: { scheduledStartTime: Date | null; durationMinutes: number },
+  now: Date,
+): boolean {
+  const iv = intervalOf(t);
+  return iv !== null && iv.end <= now.getTime();
 }
 
 /** EDF ordering: deadline ascending (nulls last), then createdAt ascending. */
@@ -124,7 +145,14 @@ export function scheduleAll(
   const anchored = live.filter(isAnchored);
   const plain = live.filter((t) => !isAnchored(t)).sort(compareEdf);
 
-  const occupied: Interval[] = anchored
+  // Occupied space the EDF packer must avoid: every anchored live task, plus any
+  // frozen past task that still occupies future time (an in-progress task,
+  // `start < now < end`). Fully-elapsed past tasks (`end <= now`) occupy no
+  // future time and are excluded so they never block a future slot.
+  const occupied: Interval[] = [
+    ...anchored,
+    ...past.filter((t) => !hasElapsed(t, now)),
+  ]
     .map(intervalOf)
     .filter((i): i is Interval => i !== null);
 
@@ -182,11 +210,20 @@ export function scheduleAll(
   // (the engine never places a flexible task onto an anchor, so a true overlap
   // implies at least one anchor sits on another live block). Unplaced tasks keep
   // the conflict verdict assigned above; frozen past tasks are left untouched.
-  const liveById = new Map<string, { id: string; durationMinutes: number }>(
-    [...anchored, ...plain].map((t) => [t.id, t]),
+  //
+  // `durationById` covers ALL tasks (including frozen past ones) so an
+  // in-progress past task can still CAUSE a live task to conflict, even though
+  // the past task's own verdict is never recomputed (it's filtered out of the
+  // outer loop because it isn't an anchor/plain task).
+  const recomputeById = new Map<
+    string,
+    { id: string; durationMinutes: number }
+  >([...anchored, ...plain].map((t) => [t.id, t]));
+  const durationById = new Map<string, number>(
+    tasks.map((t) => [t.id, t.durationMinutes]),
   );
   for (const p of out) {
-    const t = liveById.get(p.id);
+    const t = recomputeById.get(p.id);
     if (!t || p.scheduledStartTime === null) continue; // past or unplaced
     const iv = {
       start: p.scheduledStartTime.getTime(),
@@ -194,15 +231,16 @@ export function scheduleAll(
     };
     p.conflict = out.some((o) => {
       if (o.id === p.id || o.scheduledStartTime === null) return false;
-      // A frozen past block never causes a live task to conflict.
-      if (isPast(o, now)) return false;
-      const ot = liveById.get(o.id);
-      if (!ot) return false;
+      // A fully-elapsed block (end <= now) occupies no future time and never
+      // causes a live task to conflict. An in-progress past block still does.
+      if (
+        hasElapsed({ ...o, durationMinutes: durationById.get(o.id) ?? 0 }, now)
+      )
+        return false;
+      const oDur = durationById.get(o.id);
+      if (oDur === undefined) return false;
       const oStart = o.scheduledStartTime.getTime();
-      const oiv = {
-        start: oStart,
-        end: oStart + durationMs(ot.durationMinutes),
-      };
+      const oiv = { start: oStart, end: oStart + durationMs(oDur) };
       return iv.start < oiv.end && oiv.start < iv.end;
     });
   }

@@ -189,13 +189,18 @@ Pure functions you'll work with:
 - **`placeOne(prefs, task, others, now, earliest?)`** — incremental placement of one new
   task, preserving everyone else's (possibly hand-moved) placement. Used on `POST /tasks`.
 - **`isPast(task, now)`** — `task.scheduledStartTime !== null && start < now`. **Past tasks
-  are frozen** by every scheduling path: never moved, re-placed, or re-flagged for conflict,
-  and excluded from the occupied/overlap set that drives placement + conflict for live tasks
-  (a past block can't legitimately block a future slot — `findSlot` already clamps every
-  candidate to `now`). `scheduleAll` passes them through with their stored
-  `scheduledStartTime`/`conflict`; `placeOne` skips them when scanning occupancy; `pin`/
-  `resize` skip them in the pairwise conflict recompute. In-progress tasks that started
-  before `now` count as past and are left alone.
+  are frozen** by every scheduling path: never moved, re-placed, or re-flagged for conflict.
+  `scheduleAll` passes them through with their stored `scheduledStartTime`/`conflict`; `pin`/
+  `resize` keep their stored verdict in the pairwise recompute. An in-progress task (started
+  before `now`, ends after) is frozen too — left exactly where it is.
+- **`hasElapsed(task, now)`** — `placed && start + duration <= now`. This — NOT `isPast` —
+  decides whether a placed block still **occupies future time** and so must block new
+  placements and can cause OTHER live tasks to conflict. Only a fully-elapsed block (ends
+  at/before `now`) is excluded from the occupied/overlap set (`findSlot` clamps every
+  candidate to `now`, so an elapsed block can never legitimately block a future slot). An
+  **in-progress** frozen task is past but NOT elapsed: it is added to `occupied` so the EDF
+  packer schedules around it, and it is allowed to flag a live task that a manual pin/drag
+  lands on top of it — while its own slot and conflict stay frozen.
 
 `SchedulerService.pin`/`resize` (manual drag/drop and edge-resize) place a task exactly
 where the user dropped it — no cascade — and recompute every task's conflict from real

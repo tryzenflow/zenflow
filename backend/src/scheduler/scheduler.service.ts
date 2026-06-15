@@ -4,6 +4,7 @@ import { Prisma, type Task, type User } from "../../generated/prisma";
 import { PENALTY_MATRIX_LENGTH } from "@zenflow/shared";
 import {
   type EdfTask,
+  hasElapsed,
   intervalOf,
   isPast,
   scheduleAll,
@@ -309,8 +310,10 @@ export class SchedulerService {
         t.id,
         projected.some((o) => {
           if (o.id === t.id) return false;
-          // A frozen past block never causes a live task to conflict.
-          if (isPast(o, now)) return false;
+          // A fully-elapsed block (end <= now) occupies no future time and never
+          // causes a live task to conflict. An in-progress past block still
+          // does, so a manual pin/drag onto it surfaces as a conflict.
+          if (hasElapsed(o, now)) return false;
           const oiv = intervalOf(o);
           return oiv ? overlaps(iv, oiv) : false;
         }),
