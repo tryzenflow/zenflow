@@ -427,6 +427,12 @@ export class TasksService {
             rewardScore: 1.0,
           },
         });
+        // Re-settle the remaining PENDING set: completing this task removes it as
+        // a blocker, so any task that only overlapped it self-heals (conflict
+        // cleared via the now-independent overlap pass) and flexible tasks reflow
+        // into the freed slot. The just-completed DONE task is excluded — it is no
+        // longer PENDING and keeps its own scheduledStartTime.
+        await this.scheduler.cascadeReschedule(user, tx);
         return this.toDto(updated);
       });
     } catch (error) {
@@ -444,13 +450,22 @@ export class TasksService {
 
   async remove(id: string, user: User): Promise<void> {
     try {
-      const target = await this.prisma.task.findFirst({
-        where: { id, userId: user.id },
-      });
-      if (!target)
-        throw new NotFoundException(`Cannot find task with id ${id}`);
+      await this.prisma.$transaction(async (tx) => {
+        const target = await tx.task.findFirst({
+          where: { id, userId: user.id },
+        });
+        if (!target)
+          throw new NotFoundException(`Cannot find task with id ${id}`);
 
-      await this.prisma.task.delete({ where: { id } });
+        await tx.task.delete({ where: { id } });
+
+        // Re-settle the remaining PENDING set in the same transaction: the
+        // deleted task is gone, so any task that only overlapped it self-heals
+        // (conflict cleared via the now-independent overlap pass) and flexible
+        // tasks reflow into the freed slot — mirroring how create() cascades. A
+        // cascade failure rolls back the delete.
+        await this.scheduler.cascadeReschedule(user, tx);
+      });
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       if (

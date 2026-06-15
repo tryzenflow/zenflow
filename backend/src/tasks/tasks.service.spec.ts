@@ -1,4 +1,5 @@
 import { TasksService } from "./tasks.service";
+import { SchedulerService } from "../scheduler/scheduler.service";
 import type { Tag, Task, User } from "../../generated/prisma";
 import type { ListTasksDto } from "./dto/list-tasks.dto";
 
@@ -305,5 +306,178 @@ describe("TasksService.list — display vs focal window", () => {
       const res = await service.list(dto, user);
       expect(res.tasks.map((t) => t.id)).toEqual(["in-week"]);
     });
+  });
+});
+
+/**
+ * Stale-conflict regression: deleting or completing one of two overlapping
+ * tasks must re-settle the schedule so the survivor self-heals (conflict
+ * cleared) and flexible tasks reflow into the freed slot. Driven with a REAL
+ * {@link SchedulerService} over an in-memory task table so the now-independent
+ * overlap pass actually runs — the bug was that remove()/complete() never
+ * triggered cascadeReschedule at all.
+ */
+function makeSchedulingService(rows: TaskWithTags[]): {
+  service: TasksService;
+  table: Map<string, TaskWithTags>;
+} {
+  const table = new Map<string, TaskWithTags>(rows.map((r) => [r.id, r]));
+
+  const matchesWhere = (
+    t: TaskWithTags,
+    where: Record<string, unknown> | undefined,
+  ): boolean => {
+    if (!where) return true;
+    if (where.id !== undefined && t.id !== where.id) return false;
+    if (where.userId !== undefined && t.userId !== where.userId) return false;
+    if (where.status !== undefined && t.status !== where.status) return false;
+    return true;
+  };
+
+  const tx = {
+    task: {
+      findFirst: jest.fn((args: { where?: Record<string, unknown> }) =>
+        Promise.resolve(
+          [...table.values()].find((t) => matchesWhere(t, args.where)) ?? null,
+        ),
+      ),
+      findMany: jest.fn((args: { where?: Record<string, unknown> }) =>
+        Promise.resolve(
+          [...table.values()].filter((t) => matchesWhere(t, args.where)),
+        ),
+      ),
+      findUniqueOrThrow: jest.fn((args: { where: { id: string } }) =>
+        Promise.resolve(table.get(args.where.id)!),
+      ),
+      update: jest.fn(
+        (args: {
+          where: { id: string };
+          data: Record<string, unknown>;
+          include?: unknown;
+        }) => {
+          const row = table.get(args.where.id)!;
+          const next = { ...row, ...args.data } as TaskWithTags;
+          table.set(args.where.id, next);
+          return Promise.resolve(next);
+        },
+      ),
+      delete: jest.fn((args: { where: { id: string } }) => {
+        const row = table.get(args.where.id)!;
+        table.delete(args.where.id);
+        return Promise.resolve(row);
+      }),
+    },
+    user: { update: jest.fn().mockResolvedValue({}) },
+    taskEvent: { create: jest.fn().mockResolvedValue({}) },
+  };
+
+  const prisma = {
+    $transaction: (fn: (t: typeof tx) => unknown) => fn(tx),
+    // SchedulerService only reads/writes through the tx in these paths, but it
+    // also holds a PrismaService reference for its own $transaction wrappers
+    // (unused here). Reuse the same in-memory tx for any direct access.
+    ...tx,
+  };
+
+  const scheduler = new SchedulerService(prisma as never);
+  const service = new TasksService(prisma as never, scheduler);
+  return { service, table };
+}
+
+describe("TasksService — stale-conflict self-heal on delete/complete", () => {
+  // Far-future fixed slots keep both blocks LIVE relative to the wall clock so
+  // placement is stable; the conflict pass itself is now-independent.
+  const aStart = new Date("2030-06-15T16:00:00.000Z"); // 4:00pm, 120m → 6:00pm
+  const bStart = new Date("2030-06-15T16:30:00.000Z"); // 4:30pm, 60m → 5:30pm
+
+  function overlappingPair(): TaskWithTags[] {
+    // Two FIXED, overlapping, conflicting tasks — the exact repro shape.
+    const a = task({
+      id: "task-a",
+      fixed: true,
+      durationMinutes: 120,
+      scheduledStartTime: aStart,
+      conflict: true,
+    });
+    const b = task({
+      id: "task-b",
+      fixed: true,
+      durationMinutes: 60,
+      scheduledStartTime: bStart,
+      conflict: true,
+    });
+    return [a, b];
+  }
+
+  it("deleting one of two overlapping tasks clears conflict on the survivor", async () => {
+    const { service, table } = makeSchedulingService(overlappingPair());
+    expect(table.get("task-a")!.conflict).toBe(true);
+
+    await service.remove("task-b", user);
+
+    expect(table.has("task-b")).toBe(false);
+    expect(table.get("task-a")!.conflict).toBe(false);
+  });
+
+  it("completing one of two overlapping tasks clears conflict on the survivor", async () => {
+    const { service, table } = makeSchedulingService(overlappingPair());
+    expect(table.get("task-a")!.conflict).toBe(true);
+
+    await service.complete("task-b", user);
+
+    // task-b is DONE (excluded from the PENDING pass), task-a self-heals.
+    expect(table.get("task-b")!.status).toBe("DONE");
+    expect(table.get("task-a")!.conflict).toBe(false);
+  });
+
+  it("deleting a task reflows a later flexible task into the freed slot", async () => {
+    // A fixed block fills 9:00–11:00 on a workday; a flexible 60m task with no
+    // deadline is anchored to the same day and gets packed AFTER the block.
+    const day = "2030-06-17"; // a Monday (workday)
+    const anchor = new Date(`${day}T00:00:00.000Z`);
+    const fixedBlock = task({
+      id: "fixed-block",
+      fixed: true,
+      durationMinutes: 120,
+      scheduledStartTime: new Date(`${day}T09:00:00.000Z`),
+    });
+    const flexible = task({
+      id: "flexible",
+      durationMinutes: 60,
+      schedulingAnchor: anchor,
+      // Stale placement from before — should move earlier once the block is gone.
+      scheduledStartTime: new Date(`${day}T11:00:00.000Z`),
+    });
+    const { service, table } = makeSchedulingService([fixedBlock, flexible]);
+
+    await service.remove("fixed-block", user);
+
+    // With the 9–11 block gone, the flexible task reflows to the day's work
+    // start (9:00am for this UTC user) — proof the cascade ran.
+    expect(table.get("flexible")!.scheduledStartTime?.toISOString()).toBe(
+      `${day}T09:00:00.000Z`,
+    );
+    expect(table.get("flexible")!.conflict).toBe(false);
+  });
+
+  it("deleting a non-overlapping task leaves a clean schedule clean", async () => {
+    const day = "2030-06-17"; // Monday
+    const morning = task({
+      id: "morning",
+      fixed: true,
+      durationMinutes: 60,
+      scheduledStartTime: new Date(`${day}T09:00:00.000Z`),
+    });
+    const afternoon = task({
+      id: "afternoon",
+      fixed: true,
+      durationMinutes: 60,
+      scheduledStartTime: new Date(`${day}T14:00:00.000Z`),
+    });
+    const { service, table } = makeSchedulingService([morning, afternoon]);
+
+    await service.remove("morning", user);
+
+    expect(table.get("afternoon")!.conflict).toBe(false);
   });
 });
