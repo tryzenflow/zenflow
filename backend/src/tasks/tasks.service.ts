@@ -19,8 +19,10 @@ import {
 import { CreateTaskDto } from "./dto/create-task.dto";
 import { UpdateTaskDto } from "./dto/update-task.dto";
 import { ListTasksDto } from "./dto/list-tasks.dto";
+import { ResolveOverflowDto } from "./dto/resolve-overflow.dto";
 import type {
   CreateTaskResponse,
+  RescheduleResponse,
   Task as SharedTask,
   TaskDetailResponse,
   TasksListResponse,
@@ -90,9 +92,10 @@ export class TasksService {
   }
 
   async create(dto: CreateTaskDto, user: User): Promise<CreateTaskResponse> {
-    const { startDate, fixed, startTime, ...rest } = dto;
+    const { startDate, fixed, startTime, view, ...rest } = dto;
     const tz = user.timezone;
     const isFixed = fixed ?? false;
+    const overflowView = view ?? "day";
     const anchorDateStr = startDate ?? localDateStr(new Date(), tz);
 
     try {
@@ -157,6 +160,19 @@ export class TasksService {
           },
         });
 
+        // When the new task came back unplaced (no slot within working hours
+        // before its deadline), surface the two recovery options the frontend
+        // prompts with. Placed tasks carry no overflow.
+        const overflow =
+          finalTask.scheduledStartTime === null
+            ? await this.scheduler.computeOverflowOptions(
+                user,
+                finalTask,
+                overflowView,
+                tx,
+              )
+            : null;
+
         return {
           task: this.toDto(finalTask),
           schedulingMeta: {
@@ -167,6 +183,7 @@ export class TasksService {
             engine: "edf" as const,
             biasApplied: 1.0,
           },
+          overflow,
         };
       });
     } catch (error) {
@@ -358,6 +375,45 @@ export class TasksService {
     );
     // The scheduler returns a bare Task (no relations); re-attach tags for the
     // DTO so the wire format keeps its name array.
+    const withTags = await this.prisma.task.findUniqueOrThrow({
+      where: { id: task.id },
+      include: { tags: true },
+    });
+    return {
+      task: this.toDto(withTags),
+      displaced: displaced.map((d) => ({
+        taskId: d.taskId,
+        newScheduledStartTime: d.newScheduledStartTime
+          ? d.newScheduledStartTime.toISOString()
+          : null,
+      })),
+    };
+  }
+
+  /**
+   * Apply a recovery option the user accepted from the create-overflow toast.
+   * Re-derives the slot server-side (never trusts a client time), pins the task
+   * as a fixed anchor so the next cascade keeps it, and records the move.
+   * Mirrors {@link reschedule}'s RescheduleResponse shape.
+   */
+  async resolveOverflow(
+    id: string,
+    dto: ResolveOverflowDto,
+    user: User,
+  ): Promise<RescheduleResponse> {
+    // Ownership check up front so a cross-user id 404s before any mutation.
+    const target = await this.prisma.task.findUnique({
+      where: { id, userId: user.id },
+      select: { id: true },
+    });
+    if (!target) throw new NotFoundException(`Cannot find task with id ${id}`);
+
+    const { task, displaced } = await this.scheduler.applyOverflowOption(
+      user,
+      id,
+      dto.choice,
+      dto.view ?? "day",
+    );
     const withTags = await this.prisma.task.findUniqueOrThrow({
       where: { id: task.id },
       include: { tags: true },

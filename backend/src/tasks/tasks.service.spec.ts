@@ -117,6 +117,10 @@ function makeCreateService(): {
   // The scheduler is stubbed: placement is exercised in scheduler specs.
   const scheduler = {
     cascadeReschedule: jest.fn().mockResolvedValue(undefined),
+    // An unplaced created task triggers overflow computation; stub it out.
+    computeOverflowOptions: jest
+      .fn()
+      .mockResolvedValue({ outsideHours: null, nextAvailable: null }),
   };
 
   return {

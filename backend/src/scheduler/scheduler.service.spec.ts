@@ -53,7 +53,12 @@ function task(overrides: Partial<Task> & { id: string }): Task {
 
 interface UpdateCall {
   id: string;
-  data: { scheduledStartTime?: Date | null; conflict?: boolean };
+  data: {
+    scheduledStartTime?: Date | null;
+    conflict?: boolean;
+    fixed?: boolean;
+    startTime?: number;
+  };
 }
 
 /**
@@ -63,6 +68,7 @@ interface UpdateCall {
 function makeService(rows: Task[]): {
   service: SchedulerService;
   updates: UpdateCall[];
+  tx: PrismaTxMock;
 } {
   const updates: UpdateCall[] = [];
   const byId = new Map(rows.map((r) => [r.id, r]));
@@ -91,8 +97,18 @@ function makeService(rows: Task[]): {
   return {
     service: new SchedulerService(prisma as never),
     updates,
+    tx,
   };
 }
+
+type PrismaTxMock = {
+  task: {
+    findMany: jest.Mock;
+    update: jest.Mock;
+  };
+  taskEvent: { create: jest.Mock };
+  user: { update: jest.Mock };
+};
 
 describe("SchedulerService.pin — now-independent conflict detection", () => {
   it("self-heals a past task's stale conflict (now recomputed, was frozen)", async () => {
@@ -225,6 +241,173 @@ describe("SchedulerService.pin — in-progress tasks still block conflicts", () 
 
     expect(updated.conflict).toBe(true);
     expect(updates.find((u) => u.id === "elapsed")?.data.conflict).toBe(true);
+  });
+});
+
+describe("SchedulerService.computeOverflowOptions", () => {
+  // Mon 06-08 09:00; deadline 09:45 leaves only a 45-min window before it.
+  const NOW = new Date("2026-06-08T09:00:00Z");
+
+  it("offers an off-hours slot at now and the next-day in-hours slot", async () => {
+    const unplaced = task({
+      id: "u",
+      durationMinutes: 60,
+      deadline: new Date("2026-06-08T09:45:00Z"),
+      conflict: true,
+      scheduledStartTime: null,
+    });
+    const { service, tx } = makeService([unplaced]);
+
+    const overflow = await service.computeOverflowOptions(
+      user,
+      unplaced,
+      "day",
+      tx as never,
+      NOW,
+    );
+
+    // Off-hours: 60 min before the 09:45 deadline doesn't fit, so null.
+    expect(overflow.outsideHours).toBeNull();
+    // Next available (day): next working day Tue 06-09 09:00, deadline ignored.
+    expect(overflow.nextAvailable).toEqual({
+      scheduledStartTime: "2026-06-09T09:00:00.000Z",
+      granularity: "day",
+    });
+  });
+
+  it("offers an off-hours slot when there is room before the deadline", async () => {
+    const unplaced = task({
+      id: "u",
+      durationMinutes: 60,
+      deadline: new Date("2026-06-08T11:00:00Z"),
+      conflict: true,
+      scheduledStartTime: null,
+    });
+    const { service, tx } = makeService([unplaced]);
+
+    const overflow = await service.computeOverflowOptions(
+      user,
+      unplaced,
+      "week",
+      tx as never,
+      NOW,
+    );
+
+    expect(overflow.outsideHours).toEqual({
+      scheduledStartTime: "2026-06-08T09:00:00.000Z",
+    });
+    expect(overflow.nextAvailable?.granularity).toBe("week");
+    expect(overflow.nextAvailable?.scheduledStartTime).toBe(
+      "2026-06-15T09:00:00.000Z",
+    );
+  });
+
+  it("avoids another pending task's occupied interval for the off-hours slot", async () => {
+    const blocker = task({
+      id: "blocker",
+      durationMinutes: 60,
+      scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
+    });
+    const unplaced = task({
+      id: "u",
+      durationMinutes: 60,
+      deadline: new Date("2026-06-08T12:00:00Z"),
+      conflict: true,
+      scheduledStartTime: null,
+    });
+    const { service, tx } = makeService([blocker, unplaced]);
+
+    const overflow = await service.computeOverflowOptions(
+      user,
+      unplaced,
+      "day",
+      tx as never,
+      NOW,
+    );
+
+    // 09:00–10:00 is taken by the blocker, so the off-hours slot is 10:00.
+    expect(overflow.outsideHours).toEqual({
+      scheduledStartTime: "2026-06-08T10:00:00.000Z",
+    });
+  });
+});
+
+describe("SchedulerService.applyOverflowOption", () => {
+  const NOW = new Date("2026-06-08T09:00:00Z");
+
+  it("pins the task as a fixed anchor at the recomputed off-hours slot", async () => {
+    const unplaced = task({
+      id: "u",
+      durationMinutes: 60,
+      deadline: new Date("2026-06-08T12:00:00Z"),
+      conflict: true,
+      scheduledStartTime: null,
+    });
+    const { service, updates } = makeService([unplaced]);
+
+    const { task: updated, displaced } = await service.applyOverflowOption(
+      user,
+      "u",
+      "outsideHours",
+      "day",
+      NOW,
+    );
+
+    expect(displaced).toEqual([]);
+    expect(updated.scheduledStartTime?.toISOString()).toBe(
+      "2026-06-08T09:00:00.000Z",
+    );
+    const call = updates.find((u) => u.id === "u");
+    expect(call?.data.fixed).toBe(true);
+    // 09:00 UTC = 540 minutes from midnight.
+    expect(call?.data.startTime).toBe(540);
+    expect(call?.data.conflict).toBe(false);
+  });
+
+  it("pins the next-available slot and ignores the deadline", async () => {
+    const unplaced = task({
+      id: "u",
+      durationMinutes: 60,
+      deadline: new Date("2026-06-08T09:45:00Z"),
+      conflict: true,
+      scheduledStartTime: null,
+    });
+    const { service, updates } = makeService([unplaced]);
+
+    const { task: updated } = await service.applyOverflowOption(
+      user,
+      "u",
+      "nextAvailable",
+      "day",
+      NOW,
+    );
+
+    expect(updated.scheduledStartTime?.toISOString()).toBe(
+      "2026-06-09T09:00:00.000Z",
+    );
+    expect(updates.find((u) => u.id === "u")?.data.fixed).toBe(true);
+  });
+
+  it("throws when no off-hours slot fits before the deadline", async () => {
+    const unplaced = task({
+      id: "u",
+      durationMinutes: 60,
+      deadline: new Date("2026-06-08T09:30:00Z"),
+      conflict: true,
+      scheduledStartTime: null,
+    });
+    const { service } = makeService([unplaced]);
+
+    await expect(
+      service.applyOverflowOption(user, "u", "outsideHours", "day", NOW),
+    ).rejects.toThrow();
+  });
+
+  it("throws for an unknown task id", async () => {
+    const { service } = makeService([]);
+    await expect(
+      service.applyOverflowOption(user, "missing", "outsideHours", "day", NOW),
+    ).rejects.toThrow();
   });
 });
 

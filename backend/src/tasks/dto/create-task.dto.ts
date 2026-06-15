@@ -3,6 +3,7 @@ import {
   IsBoolean,
   IsDateString,
   IsDivisibleBy,
+  IsIn,
   IsInt,
   IsISO8601,
   IsOptional,
@@ -12,7 +13,11 @@ import {
   ValidateIf,
 } from "class-validator";
 import { DAILY_HORIZON, TIME_GRANULARITY } from "src/common/constants";
-import type { CreateTaskInput } from "@zenflow/shared";
+import {
+  VIEW_MODES,
+  type CreateTaskInput,
+  type ViewMode,
+} from "@zenflow/shared";
 
 export class CreateTaskDto implements CreateTaskInput {
   @IsString() title: string;
@@ -56,4 +61,13 @@ export class CreateTaskDto implements CreateTaskInput {
   @IsOptional()
   @IsDateString()
   startDate?: string;
+
+  /**
+   * Calendar view active when scheduling. Drives the granularity of the
+   * "next available period" overflow recovery option when the task can't be
+   * placed before its deadline. Defaults to "day".
+   */
+  @IsOptional()
+  @IsIn(VIEW_MODES)
+  view?: ViewMode;
 }

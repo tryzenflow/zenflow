@@ -1,14 +1,26 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { Prisma, type Task, type User } from "../../generated/prisma";
-import { PENALTY_MATRIX_LENGTH } from "@zenflow/shared";
+import {
+  PENALTY_MATRIX_LENGTH,
+  type OverflowGranularity,
+  type SchedulingOverflow,
+} from "@zenflow/shared";
 import {
   type EdfTask,
+  hasElapsed,
   intervalOf,
+  isPast,
   scheduleAll,
   type SchedulerPrefs,
 } from "./edf";
 import { type Interval, SLOT_MS, penaltyIndex } from "./slot";
+import { findNextAvailableSlot, findSlotIgnoringWorkHours } from "./overflow";
+import { utcToMinutes } from "../common/utils";
 import { TIME_GRANULARITY } from "../common/constants";
 
 type PrismaTx = Prisma.TransactionClient;
@@ -100,6 +112,172 @@ export class SchedulerService {
   async rescheduleAll(user: User, now = new Date()): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       await this.cascadeReschedule(user, tx, now);
+    });
+  }
+
+  /**
+   * Occupied intervals the overflow recovery slots must avoid: every OTHER
+   * PENDING task that is placed and still occupies future time (mirrors how the
+   * EDF packer builds its `occupied` set). Fully-elapsed past tasks occupy no
+   * future time and are excluded; the `excludeId` task itself is excluded so it
+   * doesn't block its own re-placement.
+   */
+  private occupiedIntervals(
+    tasks: Task[],
+    excludeId: string,
+    now: Date,
+  ): Interval[] {
+    return tasks
+      .filter((t) => t.id !== excludeId)
+      .filter((t) => !isPast(t, now) || !hasElapsed(t, now))
+      .map((t) => this.toEdf(t))
+      .map(intervalOf)
+      .filter((i): i is Interval => i !== null);
+  }
+
+  /**
+   * Compute the two recovery options offered when the EDF engine couldn't place
+   * `task` within working hours before its deadline (the created task came back
+   * unplaced). Loads the user's prefs + the other PENDING tasks' occupied
+   * intervals and delegates to the pure {@link findSlotIgnoringWorkHours} /
+   * {@link findNextAvailableSlot} helpers. Pure-core stays `now`-driven; this
+   * wrapper only does the I/O.
+   */
+  async computeOverflowOptions(
+    user: User,
+    task: Task,
+    view: OverflowGranularity,
+    tx: PrismaTx,
+    now = new Date(),
+  ): Promise<SchedulingOverflow> {
+    const prefs = this.prefsOf(user);
+    const tasks = await this.pendingTasks(user.id, tx);
+    const occupied = this.occupiedIntervals(tasks, task.id, now);
+
+    const outside = findSlotIgnoringWorkHours(
+      task.durationMinutes,
+      task.deadline,
+      occupied,
+      now,
+    );
+    const next = findNextAvailableSlot(
+      prefs,
+      task.durationMinutes,
+      occupied,
+      now,
+      view,
+    );
+
+    return {
+      outsideHours: outside
+        ? { scheduledStartTime: outside.toISOString() }
+        : null,
+      nextAvailable: next
+        ? { scheduledStartTime: next.toISOString(), granularity: view }
+        : null,
+    };
+  }
+
+  /**
+   * Apply a chosen overflow recovery option to an unplaced task. The slot is
+   * recomputed server-side (the client-supplied time is never trusted), the
+   * task is pinned there as a `fixed` anchor (so the next {@link cascadeReschedule}
+   * can't move it back into the unplaced state), conflicts are recomputed
+   * pairwise, and a MOVE audit event is recorded. Runs in its own transaction
+   * like the other mutations. Throws {@link BadRequestException} when the chosen
+   * option is no longer feasible (recompute returns null).
+   */
+  async applyOverflowOption(
+    user: User,
+    taskId: string,
+    choice: "outsideHours" | "nextAvailable",
+    view: OverflowGranularity,
+    now = new Date(),
+  ): Promise<{ task: Task; displaced: DisplacedTask[] }> {
+    return this.prisma.$transaction(async (tx) => {
+      const tasks = await this.pendingTasks(user.id, tx);
+      const target = tasks.find((t) => t.id === taskId);
+      if (!target) throw new NotFoundException(`Cannot find task ${taskId}`);
+
+      const occupied = this.occupiedIntervals(tasks, taskId, now);
+      const slot =
+        choice === "outsideHours"
+          ? findSlotIgnoringWorkHours(
+              target.durationMinutes,
+              target.deadline,
+              occupied,
+              now,
+            )
+          : findNextAvailableSlot(
+              this.prefsOf(user),
+              target.durationMinutes,
+              occupied,
+              now,
+              view,
+            );
+
+      if (!slot) {
+        throw new BadRequestException({
+          success: false,
+          message:
+            choice === "outsideHours"
+              ? "No off-hours slot is available before the deadline anymore"
+              : "No slot is available in the next period anymore",
+        });
+      }
+
+      // Pin as a fixed anchor at the recomputed slot. `fixed` + the matching
+      // startTime (minutes-of-day in the user's tz) make the placement sticky:
+      // scheduleAll treats it as an anchor and never re-EDFs it back to unplaced.
+      const startTime = utcToMinutes(slot, user.timezone);
+      const projected = tasks.map((t) =>
+        t.id === taskId ? { ...t, scheduledStartTime: slot } : t,
+      );
+      const conflictOf = this.recomputeConflicts(projected);
+
+      const before = new Map(tasks.map((t) => [t.id, t]));
+      const displaced: DisplacedTask[] = [];
+      let updatedTarget = target;
+
+      for (const t of tasks) {
+        const isTarget = t.id === taskId;
+        const nextStart = isTarget ? slot : t.scheduledStartTime;
+        const nextConflict = conflictOf.get(t.id) ?? t.conflict;
+        const startUnchanged =
+          (t.scheduledStartTime?.getTime() ?? null) ===
+          (nextStart?.getTime() ?? null);
+        if (startUnchanged && t.conflict === nextConflict && !isTarget)
+          continue;
+
+        const updated = await tx.task.update({
+          where: { id: t.id },
+          data: {
+            scheduledStartTime: nextStart,
+            conflict: nextConflict,
+            ...(isTarget ? { fixed: true, startTime } : {}),
+          },
+        });
+        if (isTarget) {
+          updatedTarget = updated;
+          await tx.taskEvent.create({
+            data: {
+              taskId: t.id,
+              userId: user.id,
+              eventType: "MOVE",
+              oldSnapshot: this.snapshot(before.get(t.id)!),
+              newSnapshot: this.snapshot(updated),
+              rewardScore: 0.0, // user accepted a recovery option
+            },
+          });
+        } else {
+          displaced.push({
+            taskId: t.id,
+            newScheduledStartTime: updated.scheduledStartTime,
+          });
+        }
+      }
+
+      return { task: updatedTarget, displaced };
     });
   }
 

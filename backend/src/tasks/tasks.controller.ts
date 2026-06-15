@@ -15,6 +15,7 @@ import { UpdateTaskDto } from "./dto/update-task.dto";
 import { ListTasksDto } from "./dto/list-tasks.dto";
 import { RescheduleTaskDto } from "./dto/reschedule-task.dto";
 import { ResizeTaskDto } from "./dto/resize-task.dto";
+import { ResolveOverflowDto } from "./dto/resolve-overflow.dto";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
 import { type User } from "../../generated/prisma";
@@ -73,6 +74,16 @@ export class TasksController {
       user,
     );
     return { success: true, message: "Task resized", data };
+  }
+
+  @Patch(":id/resolve-overflow")
+  async resolveOverflow(
+    @Param("id") id: string,
+    @Body() dto: ResolveOverflowDto,
+    @CurrentUser() user: User,
+  ) {
+    const data = await this.tasksService.resolveOverflow(id, dto, user);
+    return { success: true, message: "Task rescheduled", data };
   }
 
   @Patch(":id/complete")

@@ -151,14 +151,25 @@ Global prefix **`/api/v1`**. All routes except `POST /auth/otp/*` require
 ### Tasks (`/tasks`)
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/tasks` | create a single task (fixed anchors at `startTime`; flexible is EDF-placed) |
+| POST | `/tasks` | create a single task (fixed anchors at `startTime`; flexible is EDF-placed). Accepts an optional `view` (`day`/`week`/`month`). When the task can't be placed before its deadline, the response carries an `overflow` block of recovery options |
 | GET | `/tasks?view=&date=&status=` | list within the view window (+ unplaced conflicts) |
 | GET | `/tasks/:id` | task detail + last events |
 | PATCH | `/tasks/:id` | metadata only (title/note/deadline/tags) — **does NOT reschedule** |
 | PATCH | `/tasks/:id/reschedule` | manual drag → `pin`, records MOVE + penalty telemetry |
 | PATCH | `/tasks/:id/resize` | edge-resize, snaps to 15-min grid, recomputes conflicts |
+| PATCH | `/tasks/:id/resolve-overflow` | accept a create-overflow recovery option (`{ choice: "outsideHours"\|"nextAvailable", view? }`); re-derives the slot server-side, pins the task as a fixed anchor, records MOVE. Returns a `RescheduleResponse` |
 | PATCH | `/tasks/:id/complete` | mark DONE, records COMPLETE |
 | DELETE | `/tasks/:id` | delete the task |
+
+> **Overflow recovery.** When `POST /tasks` returns a task with `scheduledStartTime: null`
+> (no work-hours slot before its deadline), the response also carries
+> `overflow: { outsideHours, nextAvailable }`. `outsideHours` is the earliest slot ignoring
+> the work-hours window but still respecting occupied intervals **and** the deadline (null
+> if even off-hours room runs out before the deadline); `nextAvailable` is the earliest
+> work-hours slot in the next `view` period (day/week/month), **ignoring** the deadline. The
+> user picks one and the frontend calls `PATCH /tasks/:id/resolve-overflow`, which recomputes
+> the slot server-side (the client time is never trusted) and pins the task as a `fixed`
+> anchor so the next cascade can't bounce it back to unplaced.
 
 ### Tags (`/tags`)
 | Method | Path | Purpose |
@@ -188,6 +199,17 @@ Pure functions you'll work with:
   flexible tasks EDF-packed around them). Used when preferences change.
 - **`placeOne(prefs, task, others, now, earliest?)`** — incremental placement of one new
   task, preserving everyone else's (possibly hand-moved) placement. Used on `POST /tasks`.
+- **`findSlotIgnoringWorkHours(durationMinutes, deadline, occupied, now)`**
+  ([`overflow.ts`](src/scheduler/overflow.ts)) — earliest 15-min-grid slot from `now` that
+  ignores the work-hours window/work days but still avoids `occupied` and ends ≤ `deadline`;
+  `null` when even off-hours room runs out before the deadline. Backs the `outsideHours`
+  recovery option.
+- **`findNextAvailableSlot(prefs, durationMinutes, occupied, now, granularity)`**
+  ([`overflow.ts`](src/scheduler/overflow.ts)) — earliest **work-hours** slot in the next
+  period boundary (`day` → next working day, `week` → next week, `month` → next month),
+  **ignoring** the deadline; reuses `findSlot`'s window/grid math via the boundary as its
+  floor. Backs the `nextAvailable` recovery option. Both helpers stay pure (`now` in, no I/O);
+  `SchedulerService.computeOverflowOptions` / `applyOverflowOption` are the persistence wrappers.
 **Placement is `now`-aware; conflict detection is `now`-independent.** Keep these two axes
 separate — they answer different questions:
 

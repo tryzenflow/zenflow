@@ -74,6 +74,12 @@ export interface CreateTaskInput {
    * Defaults to today.
    */
   startDate?: string;
+  /**
+   * Calendar view active when scheduling; drives the granularity of the
+   * "schedule the next available period" overflow recovery option offered when
+   * a task can't be placed before its deadline. Defaults to "day".
+   */
+  view?: "day" | "week" | "month";
 }
 
 /** Metadata-only update; does not trigger rescheduling. */
