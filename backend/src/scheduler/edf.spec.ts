@@ -302,7 +302,10 @@ describe("scheduleAll — deadline-aware cascade (closer deadlines win)", () => 
     );
   });
 
-  it("preserves a manually-moved task's stored conflict flag", () => {
+  it("recomputes a manually-moved task's conflict from real overlap (self-heal)", () => {
+    // A lone manually-moved task carrying a stale `conflict: true` no longer
+    // overlaps anything, so the final overlap pass clears it. Its dragged slot
+    // is preserved.
     const out = scheduleAll(
       prefs,
       [
@@ -315,7 +318,7 @@ describe("scheduleAll — deadline-aware cascade (closer deadlines win)", () => 
       ],
       MON_MIDNIGHT,
     );
-    expect(out[0].conflict).toBe(true);
+    expect(out[0].conflict).toBe(false);
     expect(iso(out[0].scheduledStartTime)).toBe("2026-06-08T09:00:00.000Z");
   });
 
@@ -351,6 +354,160 @@ describe("scheduleAll — deadline-aware cascade (closer deadlines win)", () => 
     expect(iso(byId("flex").scheduledStartTime)).toBe(
       "2026-06-08T12:00:00.000Z",
     );
+  });
+});
+
+describe("scheduleAll — overlapping anchors are flagged as conflicts", () => {
+  it("flags BOTH a fixed task and the placed task it overlaps", () => {
+    // "placed" was auto-scheduled at 09:00–10:00; a fixed task lands at
+    // 09:30–10:30, overlapping it. Both must surface as conflicts.
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "placed",
+          manuallyMoved: true,
+          scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
+        }),
+        task({
+          id: "fixed",
+          fixed: true,
+          scheduledStartTime: new Date("2026-06-08T09:30:00Z"),
+        }),
+      ],
+      MON_MIDNIGHT,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    expect(byId("fixed").conflict).toBe(true);
+    expect(byId("placed").conflict).toBe(true);
+    // Neither anchor is moved off its stored slot.
+    expect(iso(byId("fixed").scheduledStartTime)).toBe(
+      "2026-06-08T09:30:00.000Z",
+    );
+    expect(iso(byId("placed").scheduledStartTime)).toBe(
+      "2026-06-08T09:00:00.000Z",
+    );
+  });
+
+  it("flags two overlapping fixed tasks on both sides", () => {
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "f1",
+          fixed: true,
+          scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
+        }),
+        task({
+          id: "f2",
+          fixed: true,
+          scheduledStartTime: new Date("2026-06-08T09:30:00Z"),
+        }),
+      ],
+      MON_MIDNIGHT,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    expect(byId("f1").conflict).toBe(true);
+    expect(byId("f2").conflict).toBe(true);
+  });
+
+  it("keeps a fixed task in a free slot conflict:false", () => {
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "fixed",
+          fixed: true,
+          scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
+        }),
+        task({
+          id: "other",
+          fixed: true,
+          scheduledStartTime: new Date("2026-06-08T11:00:00Z"),
+        }),
+      ],
+      MON_MIDNIGHT,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    expect(byId("fixed").conflict).toBe(false);
+    expect(byId("other").conflict).toBe(false);
+  });
+
+  it("clears the conflict once the overlapping task is moved away (self-heal)", () => {
+    // Same two anchors as the first case, but "placed" is now dragged to 14:00 —
+    // no overlap remains, so neither is flagged.
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "placed",
+          manuallyMoved: true,
+          conflict: true, // stale verdict from the previous overlap
+          scheduledStartTime: new Date("2026-06-08T14:00:00Z"),
+        }),
+        task({
+          id: "fixed",
+          fixed: true,
+          conflict: true, // stale verdict from the previous overlap
+          scheduledStartTime: new Date("2026-06-08T09:30:00Z"),
+        }),
+      ],
+      MON_MIDNIGHT,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    expect(byId("fixed").conflict).toBe(false);
+    expect(byId("placed").conflict).toBe(false);
+  });
+
+  it("does not flag a fixed task overlapping only a FROZEN past block", () => {
+    // now = noon. The past block (09:00–10:00) is frozen; a fixed task at
+    // 09:30 overlaps it in wall-clock terms but a past block never causes a
+    // live task to conflict. (The fixed task itself starts before now here, so
+    // it is also past — assert the live-vs-past rule with a future fixed task.)
+    const NOON = new Date("2026-06-08T12:00:00Z");
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "past",
+          scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
+        }),
+        // A future fixed task that does NOT overlap the past block stays clean;
+        // the past block is excluded from the live overlap set regardless.
+        task({
+          id: "futureFixed",
+          fixed: true,
+          scheduledStartTime: new Date("2026-06-08T13:00:00Z"),
+        }),
+      ],
+      NOON,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    expect(byId("past").conflict).toBe(false);
+    expect(byId("futureFixed").conflict).toBe(false);
+  });
+
+  it("never places a flexible task onto a fixed anchor (no overlap created)", () => {
+    // A fixed task occupies 09:00–10:00; a flexible no-deadline task must pack
+    // around it at 10:00 and stay conflict-free.
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "fixed",
+          fixed: true,
+          scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
+        }),
+        task({ id: "flex" }),
+      ],
+      MON_MIDNIGHT,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    expect(iso(byId("flex").scheduledStartTime)).toBe(
+      "2026-06-08T10:00:00.000Z",
+    );
+    expect(byId("flex").conflict).toBe(false);
+    expect(byId("fixed").conflict).toBe(false);
   });
 });
 

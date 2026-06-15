@@ -127,13 +127,14 @@ export class TasksService {
           },
         });
 
-        if (!isFixed) {
-          // Deadline-aware insert + cascade: re-EDF the movable set so the new
-          // task lands at its deadline rank (closer deadlines keep earlier
-          // slots, later ones shift). Fixed, manually-moved and frozen past
-          // tasks stay anchored.
-          await this.scheduler.cascadeReschedule(user, tx);
-        }
+        // Deadline-aware insert + cascade: re-EDF the movable set so the new
+        // task lands at its deadline rank (closer deadlines keep earlier slots,
+        // later ones shift). Fixed, manually-moved and frozen past tasks stay
+        // anchored. A fixed task keeps its user-chosen slot but is still run
+        // through the cascade so its time is checked for real overlap against
+        // existing placed tasks — an overlapping fixed task (and the task it
+        // overlaps) is flagged `conflict: true` instead of silently double-booked.
+        await this.scheduler.cascadeReschedule(user, tx);
 
         const finalTask = await tx.task.findUniqueOrThrow({
           where: { id: created.id },

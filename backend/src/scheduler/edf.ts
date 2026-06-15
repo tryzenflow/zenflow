@@ -135,15 +135,17 @@ export function scheduleAll(
     conflict: t.conflict,
   }));
 
-  // Anchors pass through with their stored slot. A `fixed` task is trusted to be
-  // conflict-free (its slot is user-chosen and authoritative); a manually-moved
-  // flexible task keeps its stored overlap verdict, since dragging it onto
-  // another task is allowed and surfaced as a conflict (see recomputeConflicts).
+  // Anchors pass through with their stored slot. Their conflict verdict is NOT
+  // decided here — a fixed task's user-chosen time and a manually-moved flexible
+  // task's dragged slot are both allowed to overlap something, and that overlap
+  // must surface. The real pairwise check happens below, after the flexible
+  // tasks are packed, so an anchor-vs-anchor or anchor-vs-flexible overlap is
+  // flagged on both sides.
   out.push(
     ...anchored.map((t) => ({
       id: t.id,
       scheduledStartTime: t.scheduledStartTime,
-      conflict: t.fixed ? false : t.conflict,
+      conflict: false,
     })),
   );
 
@@ -152,6 +154,7 @@ export function scheduleAll(
   // create-day anchor is ignored), while a no-deadline task is floored at its
   // stored `schedulingAnchor` so it lands on/after the day it was created from.
   // `findSlot` already clamps the floor up to `now`, so a past anchor is inert.
+  // Flexible placement always avoids `occupied` (it never lands on an anchor).
   for (const t of plain) {
     const earliest = t.deadline ? undefined : (t.schedulingAnchor ?? undefined);
     const slot = findSlot(
@@ -171,6 +174,37 @@ export function scheduleAll(
     } else {
       out.push({ id: t.id, scheduledStartTime: null, conflict: true });
     }
+  }
+
+  // Final overlap pass: every non-past placed task's conflict is recomputed from
+  // real pairwise half-open-interval overlap across the whole placement set
+  // (anchors + freshly packed). This is what surfaces an overlapping fixed task
+  // (the engine never places a flexible task onto an anchor, so a true overlap
+  // implies at least one anchor sits on another live block). Unplaced tasks keep
+  // the conflict verdict assigned above; frozen past tasks are left untouched.
+  const liveById = new Map<string, { id: string; durationMinutes: number }>(
+    [...anchored, ...plain].map((t) => [t.id, t]),
+  );
+  for (const p of out) {
+    const t = liveById.get(p.id);
+    if (!t || p.scheduledStartTime === null) continue; // past or unplaced
+    const iv = {
+      start: p.scheduledStartTime.getTime(),
+      end: p.scheduledStartTime.getTime() + durationMs(t.durationMinutes),
+    };
+    p.conflict = out.some((o) => {
+      if (o.id === p.id || o.scheduledStartTime === null) return false;
+      // A frozen past block never causes a live task to conflict.
+      if (isPast(o, now)) return false;
+      const ot = liveById.get(o.id);
+      if (!ot) return false;
+      const oStart = o.scheduledStartTime.getTime();
+      const oiv = {
+        start: oStart,
+        end: oStart + durationMs(ot.durationMinutes),
+      };
+      return iv.start < oiv.end && oiv.start < iv.end;
+    });
   }
   return out;
 }
