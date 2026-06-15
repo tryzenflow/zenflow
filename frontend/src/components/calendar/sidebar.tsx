@@ -74,6 +74,11 @@ const AGENDA_TAG: Partial<Record<TaskCardState, string>> = {
   conflict: "Conflict",
 };
 
+const AGENDA_TAG_BADGE: Partial<Record<TaskCardState, string>> = {
+  overdue: "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-400",
+  conflict: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-400",
+};
+
 function AgendaItem({ block, tz }: { block: Event; tz: string }) {
   const time = toZonedTime(new Date(block.start), tz).toLocaleTimeString([], {
     hour: "2-digit",
@@ -101,7 +106,12 @@ function AgendaItem({ block, tz }: { block: Event; tz: string }) {
         {block.title}
       </span>
       {tag && (
-        <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-800 dark:bg-amber-950 dark:text-amber-400">
+        <span
+          className={cn(
+            "shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider",
+            AGENDA_TAG_BADGE[block.state],
+          )}
+        >
           {tag}
         </span>
       )}
