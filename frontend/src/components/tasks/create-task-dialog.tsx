@@ -9,13 +9,15 @@ import { useUserStore } from "@/hooks/use-user-store";
 import { TaskFormValues } from "@/utils/tasks";
 import { TaskForm } from "./form/task-form";
 import { Plus } from "lucide-react";
-import { createTask } from "@/api/tasks";
+import { createTask, resolveOverflow } from "@/api/tasks";
+import { OverflowToast } from "./overflow-toast";
 import { format } from "date-fns";
 import { fromZonedTime } from "date-fns-tz";
 import { snapToNearestLaterQuarterHour } from "@/utils/time";
+import { isAxiosError } from "axios";
 import { DAILY_HORIZON, TIME_GRANULARITY } from "@/utils/constants";
 import { isZonedToday } from "@/utils/tz";
-import type { ViewMode } from "@zenflow/shared";
+import type { CreateTaskResponse, ViewMode } from "@zenflow/shared";
 
 const VIEW_SUBTITLE: Record<ViewMode, string> = {
   day: "EEE, MMM d",
@@ -67,6 +69,56 @@ export function CreateTaskDialog({
     updateRemovedFileIds(note || "", "");
   }, [note]);
 
+  // Render a persistent, custom toast offering the overflow recovery options.
+  // Sonner's single `action` slot can't hold two buttons, so we hand it a
+  // component and drive resolution from the button callbacks.
+  function showOverflowToast(
+    taskId: string,
+    taskTitle: string,
+    overflow: NonNullable<CreateTaskResponse["overflow"]>,
+  ) {
+    // Backend offered the overflow envelope but neither concrete slot exists:
+    // nothing actionable, so just inform the user.
+    if (!overflow.outsideHours && !overflow.nextAvailable) {
+      toast.error(
+        "Couldn't find any slot for this task — try a longer deadline or shorter duration.",
+      );
+      return;
+    }
+
+    async function resolve(choice: "outsideHours" | "nextAvailable") {
+      toast.dismiss(toastId);
+      try {
+        await resolveOverflow(
+          taskId,
+          choice,
+          choice === "nextAvailable" ? view : undefined,
+        );
+        onCreated();
+        toast.success("Task scheduled 🎉");
+      } catch (error) {
+        toast.error(
+          (isAxiosError(error) && error.response?.data?.message) ||
+            "Couldn't schedule the task — that slot may no longer be available.",
+        );
+      }
+    }
+
+    const toastId = toast.custom(
+      (id) => (
+        <div className="w-full rounded-[var(--radius)] border border-border bg-popover p-4 shadow-lg">
+          <OverflowToast
+            title={taskTitle}
+            overflow={overflow}
+            onChoose={resolve}
+            onDismiss={() => toast.dismiss(id)}
+          />
+        </div>
+      ),
+      { duration: Infinity },
+    );
+  }
+
   async function onSubmit(values: TaskFormValues) {
     if (!user) return;
     setLoading(true);
@@ -81,7 +133,7 @@ export function CreateTaskDialog({
 
     try {
       if (removed.length > 0) await postData("/files/remove", { ids: removed });
-      await createTask({
+      const response = await createTask({
         title: values.title,
         note: values.note || null,
         durationMinutes: values.duration,
@@ -92,11 +144,21 @@ export function CreateTaskDialog({
         // Always the viewed day: a fixed anchor when fixed, otherwise the
         // earliest day the flexible engine may place the task on.
         startDate: format(date, "yyyy-MM-dd"),
+        // Drives the granularity of the "next available period" recovery option.
+        view,
       });
       onCreated();
       form.reset();
-      toast.success("Task created successfully 🎉");
       setOpen(false);
+
+      // The engine couldn't place the task before its deadline: prompt the user
+      // with whatever recovery options the backend surfaced, instead of the
+      // usual success toast.
+      if (response.task.scheduledStartTime === null && response.overflow) {
+        showOverflowToast(response.task.id, response.task.title, response.overflow);
+      } else {
+        toast.success("Task created successfully 🎉");
+      }
     } catch (error: any) {
       toast.error(
         error?.response?.data?.message ||

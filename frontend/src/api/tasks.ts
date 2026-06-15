@@ -64,6 +64,18 @@ export async function resizeTask(
   return data.data;
 }
 
+export async function resolveOverflow(
+  id: string,
+  choice: "outsideHours" | "nextAvailable",
+  view?: "day" | "week" | "month",
+): Promise<RescheduleResponse> {
+  const { data } = await api.patch(`/tasks/${id}/resolve-overflow`, {
+    choice,
+    view,
+  });
+  return data.data;
+}
+
 export async function completeTask(id: string): Promise<Task> {
   const { data } = await api.patch(`/tasks/${id}/complete`);
   return data.data;
