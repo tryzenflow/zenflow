@@ -55,12 +55,11 @@ services:
       - api
 
   mail:
-    container_name: zenflow-mail-local
-    image: jijiechen/papercut:latest
-    expose:
-      - "25"
+    container_name: zenflow-mail
+    image: mailhog/mailhog
     ports:
-      - 37408:37408
+      - 1025:1025
+      - 8025:8025
     networks:
       - api
 

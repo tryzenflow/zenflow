@@ -7,7 +7,6 @@ import {
 import { WeekGrid } from "./week-grid";
 import { Event } from "@/types/schedule";
 import { DndContext, DragEndEvent } from "@dnd-kit/core";
-import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { cn } from "@/lib/utils";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useDragSensors } from "@/hooks/use-drag-sensors";
@@ -121,11 +120,11 @@ export function WeekView({
         })}
       </div>
 
-      <DndContext
-        sensors={sensors}
-        modifiers={[restrictToVerticalAxis]}
-        onDragEnd={onDragEnd}
-      >
+      {/* Free 2D drag: droppable cell ids encode `hour:minute:dayIndex`, so a
+      horizontal drop re-days the task while the vertical position re-times it.
+      Edge-resize stays vertical-only — it's pointer-event based (clientY) and
+      never enters this DndContext. */}
+      <DndContext sensors={sensors} onDragEnd={onDragEnd}>
         <div className={cn("grid", GRID_COLS)}>
           <WeekGrid weekDates={weekDates} events={events} />
         </div>

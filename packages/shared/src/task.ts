@@ -1,8 +1,13 @@
 /** Lifecycle status of a task. */
-export type TaskStatus = "PENDING" | "DONE";
+export type TaskStatus = "PENDING" | "DONE" | "ABANDONED";
 
 /** Append-only audit event types recorded for every scheduling change. */
-export type TaskEventType = "CREATE" | "MOVE" | "RESIZE" | "COMPLETE";
+export type TaskEventType =
+  | "CREATE"
+  | "MOVE"
+  | "RESIZE"
+  | "COMPLETE"
+  | "ABANDON";
 
 /** Visual states a task card can render in (see design-system.md). */
 export type TaskCardState =
