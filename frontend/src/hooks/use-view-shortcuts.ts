@@ -1,22 +1,53 @@
+import { Dispatch, SetStateAction, useEffect } from "react";
 import { ViewMode } from "@/types/schedule";
-import { useEffect } from "react";
+import { isTypingTarget } from "@/utils/editing";
+import { shiftDateByView } from "@/utils/navigation";
 
-export function useViewShortcuts(setView: (v: ViewMode) => void) {
+/**
+ * Global calendar keyboard shortcuts:
+ * - `d` / `w` / `m` switch to day / week / month view.
+ * - `ArrowLeft` / `ArrowRight` step the cursor to the previous / next period
+ *   at the active view's granularity (reusing {@link shiftDateByView}, the same
+ *   logic the header's prev/next buttons use).
+ *
+ * All shortcuts no-op while the user is typing in an editable field
+ * (see {@link isTypingTarget}) so input never doubles as a command.
+ */
+export function useViewShortcuts(
+  view: ViewMode,
+  setView: (v: ViewMode) => void,
+  setDate: Dispatch<SetStateAction<Date>>,
+) {
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (
-        e.target instanceof HTMLElement &&
-        ["INPUT", "TEXTAREA"].includes(e.target.tagName)
-      ) {
-        return;
-      }
+      if (isTypingTarget(e.target)) return;
 
-      if (e.key === "d" || e.key === "D") setView("day");
-      if (e.key === "w" || e.key === "W") setView("week");
-      if (e.key === "m" || e.key === "M") setView("month");
+      // Don't hijack browser/OS chords (e.g. Ctrl/Cmd+ArrowLeft).
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      switch (e.key) {
+        case "d":
+        case "D":
+          setView("day");
+          break;
+        case "w":
+        case "W":
+          setView("week");
+          break;
+        case "m":
+        case "M":
+          setView("month");
+          break;
+        case "ArrowLeft":
+          setDate((d) => shiftDateByView(d, view, "left"));
+          break;
+        case "ArrowRight":
+          setDate((d) => shiftDateByView(d, view, "right"));
+          break;
+      }
     }
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [setView]);
+  }, [view, setView, setDate]);
 }

@@ -30,7 +30,7 @@ export function CalendarLayout() {
     zonedNow(useUserStore.getState().user?.timezone || "UTC"),
   );
   const [viewMode, setViewMode] = useState<ViewMode>("day");
-  useViewShortcuts(setViewMode);
+  useViewShortcuts(viewMode, setViewMode, setDate);
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
 
   const [blocks, setBlocks] = useState<Event[]>([]);

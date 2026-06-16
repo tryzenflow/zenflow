@@ -73,7 +73,10 @@ The **auth gate** (`components/hoc/with-auth.tsx`) calls `me()` on mount, redire
 
 The **calendar** (`components/calendar/`): `layout.tsx` orchestrates state, data fetching,
 and dialogs; `header.tsx` has date navigation + the day/week/month view picker (keyboard
-shortcuts D/W/M via `use-view-shortcuts`); `sidebar.tsx` is the agenda list; `day-view`,
+shortcuts via `use-view-shortcuts`: D/W/M switch view, ←/→ step to the previous/next period
+at the active view's granularity — all suppressed while typing in a field, see
+`utils/editing.ts`; the prev/next step logic is shared with the header buttons in
+`utils/navigation.ts`); `sidebar.tsx` is the agenda list; `day-view`,
 `week-view`, `month-view` (+ their `*-grid` / `*-cell` children) render the time grids;
 `scheduled-block-item.tsx` is a single draggable/resizable task block with a click popover.
 Task create/edit lives in `components/tasks/` (`create-task-dialog`, `edit-task-dialog`,

@@ -2,21 +2,14 @@ import { ChevronLeft, ChevronRight, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ViewModeSelect } from "./view-mode-select";
-import {
-  addDays,
-  addMonths,
-  addWeeks,
-  endOfWeek,
-  format,
-  startOfMonth,
-  startOfWeek,
-} from "date-fns";
+import { endOfWeek, format, startOfMonth } from "date-fns";
 import { Dispatch, SetStateAction } from "react";
 import { ViewMode } from "@/types/schedule";
 import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
 import { useUserStore } from "@/hooks/use-user-store";
 import { zonedNow } from "@/utils/tz";
 import { WEEK_STARTS_ON } from "@/utils/constants";
+import { shiftDateByView, type NavDirection } from "@/utils/navigation";
 
 interface CalendarHeaderProps {
   date: Date;
@@ -39,26 +32,8 @@ export function CalendarHeader({
   onOpenNav,
 }: CalendarHeaderProps) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
-  const shift = (direction: "left" | "right") => {
-    switch (currentView) {
-      case "day":
-        setDate((d) => addDays(d, direction === "left" ? -1 : 1));
-        break;
-      case "week":
-        setDate((d) =>
-          addWeeks(
-            startOfWeek(d, { weekStartsOn: WEEK_STARTS_ON }),
-            direction === "left" ? -1 : 1,
-          ),
-        );
-        break;
-      case "month":
-        setDate((d) =>
-          addMonths(startOfMonth(d), direction === "left" ? -1 : 1),
-        );
-        break;
-    }
-  };
+  const shift = (direction: NavDirection) =>
+    setDate((d) => shiftDateByView(d, currentView, direction));
 
   const formatByView = () => {
     switch (currentView) {
