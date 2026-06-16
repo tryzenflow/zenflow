@@ -181,7 +181,7 @@ choosing only among EDF-feasible slots.
     `[1,0,1,0,0,0]`), since linear models can't read text arrays.
 
 - **Reward:** A blend of the day-one signals, not a single bit —
-  $r = w_1 \cdot \text{accepted} + w_2 \cdot \text{completed\_in\_slot} - w_3 \cdot \text{moved\_away}$.
+  $r = w_1 \cdot \text{accepted} + w_2 \cdot \text{completed in slot} - w_3 \cdot \text{moved away}$.
   Completion is weighted highest; placement acceptance is the fast, dense signal. Updates are
   applied online as events arrive.
 
@@ -233,20 +233,31 @@ before it goes online*, which the Phase 1 audit log makes possible.
 
 **Manual Adjustment Rate (MAR)** — the fraction of suggested placements the user changes:
 
-$\text{MAR} = \dfrac{\#\{\text{tasks moved or resized after suggestion}\}}{\#\{\text{tasks scheduled}\}}$
+$\text{MAR} = \dfrac{\lvert\{\text{tasks moved or resized after suggestion}\}\rvert}{\lvert\{\text{tasks scheduled}\}\rvert}$
 
 Lower is better. Phase 1's pure-EDF MAR is the **baseline**; each later phase must beat the
 phase before it.
+
+**Repeated edits to one task.** MAR is **per-task and binary**: a task counts in the numerator
+if it was touched *at all* after the suggestion, whether the user moved it once or fifteen
+times. Re-fiddling does not inflate MAR — that would conflate "the suggestion was wrong" with
+"the user kept tuning," and MAR only answers the former. The *intensity* of re-editing is
+owned by **Time-to-stable** below (it counts every edit per task), and the magnitude of the
+final correction is owned by **Move distance**. So the three metrics partition the question
+cleanly: MAR = *did we miss?*, Time-to-stable = *how much fiddling did the miss cost?*,
+Move distance = *how far off were we?*. The raw per-event signals (every individual move/resize)
+are always retained in the `task_events` log, so any phase can recompute a stricter
+edit-weighted variant offline if needed.
 
 ### Supporting metrics
 
 | Metric | Definition | Target direction |
 |--------|------------|------------------|
 | Slot acceptance rate | suggestions kept unchanged ÷ suggestions | ↑ |
-| Move distance | median minutes between suggested and chosen slot | ↓ |
+| Move distance | median minutes between suggested and the **final** chosen slot (intermediate drags ignored) | ↓ |
 | Duration error | median \|actual − suggested duration\| | ↓ (Phase 2 owns this) |
 | Completion-in-slot | tasks completed in their suggested slot ÷ scheduled | ↑ (the real outcome) |
-| Time-to-stable | edits per task before the user stops touching it | ↓ |
+| Time-to-stable | **count of edits per task** before the user stops touching it (this is where repeated moves/resizes are captured) | ↓ |
 
 ### Offline evaluation (do this *before* any model goes live)
 
