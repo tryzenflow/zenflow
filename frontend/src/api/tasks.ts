@@ -22,6 +22,16 @@ export async function listTasks(
   return data.data;
 }
 
+export async function listTaskSuggestions(
+  q: string,
+  limit = 10,
+): Promise<Task[]> {
+  const { data } = await api.get("/tasks/suggestions", {
+    params: { q, limit },
+  });
+  return data.data.suggestions;
+}
+
 export async function createTask(
   input: CreateTaskInput,
 ): Promise<CreateTaskResponse> {

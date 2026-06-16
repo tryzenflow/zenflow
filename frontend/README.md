@@ -77,7 +77,12 @@ shortcuts D/W/M via `use-view-shortcuts`); `sidebar.tsx` is the agenda list; `da
 `week-view`, `month-view` (+ their `*-grid` / `*-cell` children) render the time grids;
 `scheduled-block-item.tsx` is a single draggable/resizable task block with a click popover.
 Task create/edit lives in `components/tasks/` (`create-task-dialog`, `edit-task-dialog`,
-`form/task-form`, `rrule-form`, `note-editor`).
+`form/task-form`, `rrule-form`, `note-editor`). In **create** mode the "Task name" field is
+a combobox (`TitleField` in `form/task-form.tsx`): typing fetches the user's existing tasks
+(`GET /tasks/suggestions`, debounced ~250ms, server-ordered by recency) and picking one
+autocompletes the rest of the form — duration, scheduling type, tags, note, and a
+forward-shifted deadline (the source task's create→deadline lead time re-applied from now,
+split into date/time in the user's tz). Edit mode keeps the plain input.
 
 **Settings** is a dialog, not a route: `components/settings/settings-dialog.tsx` edits the
 onboarding preferences (work hours / days / role archetype / timezone via

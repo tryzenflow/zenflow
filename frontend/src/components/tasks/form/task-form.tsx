@@ -14,7 +14,7 @@ import { format } from "date-fns";
 import { isZonedToday } from "@/utils/tz";
 import { useUserStore } from "@/hooks/use-user-store";
 import { UseFormReturn } from "react-hook-form";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { DurationInput } from "@/components/tasks/duration-input";
 import { NoteEditor } from "@/components/tasks/note-editor";
 import { FixedForm } from "@/components/tasks/fixed-form";
@@ -34,10 +34,21 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { listTags } from "@/api/tags";
+import { listTaskSuggestions } from "@/api/tasks";
+import { DAILY_HORIZON } from "@/utils/constants";
+import { zonedDate } from "@/utils/tz";
 import { toast } from "sonner";
 import { Box, Check, Lock, Plus, Tag, X } from "lucide-react";
+import type { Task } from "@zenflow/shared";
 
 const DURATION_PRESETS = [15, 30, 45, 60, 120];
+
+const durationLabel = (m: number) =>
+  m % 60 === 0
+    ? `${m / 60}h`
+    : m >= 60
+      ? `${Math.floor(m / 60)}h ${m % 60}m`
+      : `${m}m`;
 
 const presetLabel = (m: number) =>
   m % 60 === 0 ? `${m / 60}h` : m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
@@ -88,6 +99,50 @@ export function TaskForm({
   const fixedEnd = form.watch("fixedEnd");
   const duration = isFixed ? fixedEnd - fixedStart : form.watch("duration");
 
+  // `NoteEditor` only re-renders its content when `initialValue` changes, so a
+  // bare `setValue("note", …)` updates the form but not the editor. Drive the
+  // editor's seed from state we bump when populating from a suggestion; the
+  // normal edit path still flows through `initialNote`.
+  const [noteSeed, setNoteSeed] = useState(initialNote);
+  useEffect(() => setNoteSeed(initialNote), [initialNote]);
+
+  // Populate the create form from a picked existing task. Mirrors the field
+  // layout of the form (see create-task-dialog's onSubmit for the inverse map).
+  const applySuggestion = (s: Task) => {
+    form.setValue("title", s.title, { shouldValidate: true, shouldDirty: true });
+    form.setValue("duration", s.durationMinutes, {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
+    form.setValue("isFixed", s.fixed, { shouldDirty: true });
+    form.setValue("fixedStart", s.startTime, { shouldDirty: true });
+    form.setValue(
+      "fixedEnd",
+      Math.min(s.startTime + s.durationMinutes, DAILY_HORIZON),
+      { shouldDirty: true },
+    );
+    form.setValue("tags", s.tags ?? [], { shouldDirty: true });
+    form.setValue("note", s.note ?? "", { shouldDirty: true });
+    setNoteSeed(s.note ?? "");
+
+    // Shift the source task's deadline forward by the same lead time it had at
+    // creation, so re-using an old task never yields a past deadline. Split into
+    // date/time in the user's tz wall clock (never a bare new Date for the grid).
+    let deadlineDate = "";
+    let deadlineTime = "";
+    if (s.deadline) {
+      const offsetMs =
+        new Date(s.deadline).getTime() - new Date(s.createdAt).getTime();
+      if (offsetMs >= 0) {
+        const wall = zonedDate(new Date(Date.now() + offsetMs), tz);
+        deadlineDate = format(wall, "yyyy-MM-dd");
+        deadlineTime = format(wall, "HH:mm");
+      }
+    }
+    form.setValue("deadlineDate", deadlineDate, { shouldDirty: true });
+    form.setValue("deadlineTime", deadlineTime, { shouldDirty: true });
+  };
+
   return (
     <Form {...form}>
       <form
@@ -108,13 +163,22 @@ export function TaskForm({
             render={({ field }) => (
               <FormItem className="space-y-1.5">
                 <FormLabel className="text-xs font-semibold">Task name</FormLabel>
-                <FormControl>
-                  <Input
+                {editing ? (
+                  <FormControl>
+                    <Input
+                      disabled={loading}
+                      placeholder="What needs to get done?"
+                      {...field}
+                    />
+                  </FormControl>
+                ) : (
+                  <TitleField
                     disabled={loading}
-                    placeholder="What needs to get done?"
-                    {...field}
+                    value={field.value}
+                    onChange={field.onChange}
+                    onSelect={applySuggestion}
                   />
-                </FormControl>
+                )}
                 <FormMessage />
               </FormItem>
             )}
@@ -288,7 +352,7 @@ export function TaskForm({
                 <FormLabel className="text-xs font-semibold">Description</FormLabel>
                 <FormControl>
                   <NoteEditor
-                    initialValue={initialNote}
+                    initialValue={noteSeed}
                     newUploadsRef={newUploadsRef}
                     disabled={loading}
                     value={field.value || ""}
@@ -323,6 +387,113 @@ export function TaskForm({
         </div>
       </form>
     </Form>
+  );
+}
+
+/**
+ * Title combobox (create mode only): the typed text *is* the title value, so a
+ * brand-new title that matches nothing is always submittable — selection never
+ * traps input. As the user types we fetch their existing tasks (recency-sorted,
+ * server-filtered/deduped) debounced ~250ms; picking one populates the rest of
+ * the form via the `onSelect` callback.
+ */
+function TitleField({
+  value,
+  onChange,
+  onSelect,
+  disabled,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onSelect: (task: Task) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [suggestions, setSuggestions] = useState<Task[]>([]);
+  // Monotonic request id: only the newest in-flight fetch may commit results,
+  // so a slow earlier response can never clobber a newer query's suggestions.
+  const requestSeq = useRef(0);
+
+  useEffect(() => {
+    const q = value.trim();
+    if (!q) {
+      requestSeq.current += 1; // invalidate any in-flight fetch
+      setSuggestions([]);
+      return;
+    }
+    const seq = ++requestSeq.current;
+    const handle = setTimeout(() => {
+      listTaskSuggestions(q)
+        .then((tasks) => {
+          if (seq === requestSeq.current) setSuggestions(tasks);
+        })
+        .catch(() => {
+          if (seq === requestSeq.current) setSuggestions([]);
+        });
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [value]);
+
+  const pick = (task: Task) => {
+    onSelect(task);
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open && suggestions.length > 0} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <FormControl>
+          <Input
+            disabled={disabled}
+            placeholder="What needs to get done?"
+            value={value}
+            onChange={(e) => {
+              onChange(e.target.value);
+              if (!open) setOpen(true);
+            }}
+            onFocus={() => setOpen(true)}
+            autoComplete="off"
+          />
+        </FormControl>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        // Keep typing in the input — never steal focus into the list.
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        className="w-[var(--radix-popover-trigger-width)] p-0"
+      >
+        {/* Server already filtered + ordered by recency; disable cmdk's fuzzy
+            filtering/sorting so the list renders exactly as returned. */}
+        <Command shouldFilter={false}>
+          <CommandList>
+            <CommandEmpty>No matching tasks.</CommandEmpty>
+            <CommandGroup heading="Your tasks">
+              {suggestions.map((task) => (
+                <CommandItem
+                  key={task.id}
+                  value={task.id}
+                  onSelect={() => pick(task)}
+                  className="flex-col items-start gap-0.5"
+                >
+                  <span className="truncate text-xs font-medium">
+                    {task.title}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {[
+                      durationLabel(task.durationMinutes),
+                      task.fixed ? "Fixed" : null,
+                      ...task.tags.slice(0, 2).map((t) => `#${t}`),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
