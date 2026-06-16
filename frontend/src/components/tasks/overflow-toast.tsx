@@ -28,17 +28,21 @@ export function OverflowToast({
   const fmt = (iso: string) => format(zonedDate(iso, tz), "EEE MMM d, HH:mm");
 
   const { outsideHours, nextAvailable } = overflow;
+  // The period it couldn't fit into mirrors the active calendar view; the
+  // "next available" option carries that granularity. Fall back to a generic
+  // phrasing when only the outside-hours option is available.
+  const period = nextAvailable?.granularity;
 
   return (
     <div className="flex w-full flex-col gap-3">
       <div className="flex flex-col gap-0.5">
         <p className="text-sm font-semibold text-foreground">
-          No slot before the deadline
+          {period ? `No room left this ${period}` : "Couldn't schedule this task"}
         </p>
         <p className="text-xs text-muted-foreground">
           Couldn&apos;t fit{" "}
           <span className="font-medium text-foreground">{title}</span> into your
-          working hours. Pick a recovery option:
+          working hours{period ? ` this ${period}` : ""}. Pick a recovery option:
         </p>
       </div>
 
