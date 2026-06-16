@@ -22,6 +22,7 @@ import { snapToNearestLaterQuarterHour } from "@/utils/time";
 import { cn } from "@/lib/utils";
 import {
   Popover,
+  PopoverAnchor,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
@@ -441,7 +442,10 @@ function TitleField({
 
   return (
     <Popover open={open && suggestions.length > 0} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
+      {/* Anchor (not Trigger): the input keeps its native click/focus/typing
+          behaviour; the dropdown is opened purely from focus + typing below.
+          A Trigger would hijack the input's click to toggle the popover. */}
+      <PopoverAnchor asChild>
         <FormControl>
           <Input
             disabled={disabled}
@@ -455,11 +459,13 @@ function TitleField({
             autoComplete="off"
           />
         </FormControl>
-      </PopoverTrigger>
+      </PopoverAnchor>
       <PopoverContent
         align="start"
-        // Keep typing in the input — never steal focus into the list.
+        // Keep typing in the input — never steal focus into the list, and don't
+        // bounce focus around when it closes.
         onOpenAutoFocus={(e) => e.preventDefault()}
+        onCloseAutoFocus={(e) => e.preventDefault()}
         className="w-[var(--radix-popover-trigger-width)] p-0"
       >
         {/* Server already filtered + ordered by recency; disable cmdk's fuzzy
