@@ -98,15 +98,29 @@ and complete telemetry.
   a task, the system sorts it strictly by deadline and drops it into the first available
   15-minute slot within their specified working hours (e.g., $9 \rightarrow 17$). The engine
   exposes `feasibleSlots(task, now)` so later phases can re-rank its output.
-- **Overflow recovery:** When EDF can't place a task within working hours before its deadline
-  (it comes back unplaced, `scheduledStartTime: null`, `conflict: true`), the API offers two
-  pure-computed escape hatches alongside the create response (`overflow`): **(1) schedule
-  outside working hours** — the earliest grid slot ignoring the work window but still
-  respecting occupied intervals and the deadline; and **(2) schedule the next available
-  period** — the earliest work-hours slot in the next day/week/month (per the active calendar
-  view), this time ignoring the deadline. Both are recomputed server-side when the user
-  accepts one, then the task is pinned as a fixed anchor (`PATCH /tasks/:id/resolve-overflow`).
-  Each option is still deadline-aware telemetry: the override is recorded as a MOVE event.
+- **Period-bounded placement (no-deadline tasks).** A flexible task with **no user deadline**
+  is scheduled within the working hours of the calendar period (day / ISO-week / month) it was
+  created in. The active `view` is persisted on the task; its create-day anchor and the end of
+  that period together bound the EDF packer (floor = anchor, ceiling = period end, derived as
+  `endOfPeriod(anchor, view, tz)` and carried into the pure core as the task's
+  `schedulingDeadline`). This stops a task created late in a period (e.g. at 23:00 in day view,
+  after the work window closes) from silently rolling forward into the next day/week/month —
+  it stays **unplaced** and the user is prompted instead. A **user deadline** overrides this:
+  such a task is packed from `now` by pure EDF urgency, exactly as before (the period ceiling
+  does not apply). The bound lives **inside** the scheduling logic, so an overflowing task
+  stays unplaced across every later cascade rather than being re-placed by an unrelated edit.
+- **Overflow recovery:** When EDF can't place a task — no work-hours slot before its deadline,
+  **or** no work-hours slot left inside its viewed period — it comes back unplaced
+  (`scheduledStartTime: null`, `conflict: true`) and the API offers two pure-computed escape
+  hatches alongside the create response (`overflow`), both computed relative to the task's
+  **anchor period** (not `now`): **(1) schedule outside working hours** — the earliest grid
+  slot **inside** the viewed period, ignoring the work window but still respecting occupied
+  intervals and any deadline; and **(2) schedule the next available period** — the earliest
+  work-hours slot in the **next** day/week/month (per the active view), this time ignoring the
+  deadline. Both are recomputed server-side (period-aware, from the stored anchor + view) when
+  the user accepts one, then the task is pinned as a fixed anchor
+  (`PATCH /tasks/:id/resolve-overflow`). Each option is still deadline-aware telemetry: the
+  override is recorded as a MOVE event.
 - **Data Foundation:** Implement the `task_events` audit table in PostgreSQL. To support
   native multi-tag flexibility without joining overhead at the MVP stage, tasks store tags as
   a native PostgreSQL text array (`tags: String[]` via Prisma). **Telemetry is complete from

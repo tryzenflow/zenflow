@@ -1,10 +1,15 @@
 import {
   displayDayRange,
+  endOfPeriod,
   monthRange,
+  periodBoundsStr,
+  periodRange,
   sumWorkMinutes,
   viewDayRange,
   weekStartStr,
 } from "./horizon";
+
+const iso = (d: Date) => d.toISOString();
 
 describe("weekStartStr", () => {
   it("returns the Monday of the week (2026-06-10 is a Wednesday)", () => {
@@ -74,6 +79,69 @@ describe("displayDayRange", () => {
       startStr: "2026-06-01",
       endStr: "2026-07-05",
     });
+  });
+});
+
+describe("periodBoundsStr", () => {
+  it("day → that day and the next day", () => {
+    expect(periodBoundsStr("day", "2026-06-09")).toEqual({
+      startStr: "2026-06-09",
+      nextStr: "2026-06-10",
+    });
+  });
+  it("week → Monday and the following Monday", () => {
+    // 2026-06-10 is a Wednesday → week of Mon 06-08, next week Mon 06-15.
+    expect(periodBoundsStr("week", "2026-06-10")).toEqual({
+      startStr: "2026-06-08",
+      nextStr: "2026-06-15",
+    });
+  });
+  it("month → 1st of the month and 1st of the next month", () => {
+    expect(periodBoundsStr("month", "2026-06-15")).toEqual({
+      startStr: "2026-06-01",
+      nextStr: "2026-07-01",
+    });
+  });
+  it("month → wraps December into the next year", () => {
+    expect(periodBoundsStr("month", "2026-12-20")).toEqual({
+      startStr: "2026-12-01",
+      nextStr: "2027-01-01",
+    });
+  });
+});
+
+describe("periodRange / endOfPeriod (UTC)", () => {
+  const TZ = "UTC";
+  const tue = new Date("2026-06-09T00:00:00Z"); // a Tuesday
+
+  it("day → [start of the day, start of the next day) as UTC instants", () => {
+    const { start, end } = periodRange(tue, "day", TZ);
+    expect(iso(start)).toBe("2026-06-09T00:00:00.000Z");
+    expect(iso(end)).toBe("2026-06-10T00:00:00.000Z");
+    expect(iso(endOfPeriod(tue, "day", TZ))).toBe("2026-06-10T00:00:00.000Z");
+  });
+
+  it("week → [Monday, next Monday)", () => {
+    const { start, end } = periodRange(tue, "week", TZ);
+    expect(iso(start)).toBe("2026-06-08T00:00:00.000Z");
+    expect(iso(end)).toBe("2026-06-15T00:00:00.000Z");
+  });
+
+  it("month → [1st, 1st of next month)", () => {
+    const { start, end } = periodRange(tue, "month", TZ);
+    expect(iso(start)).toBe("2026-06-01T00:00:00.000Z");
+    expect(iso(end)).toBe("2026-07-01T00:00:00.000Z");
+  });
+});
+
+describe("periodRange — non-UTC timezone localizes the anchor", () => {
+  it("day in America/New_York: a UTC instant maps to the local calendar day", () => {
+    // 2026-06-09T02:00:00Z is 2026-06-08 22:00 in New York (UTC-4 in June), so
+    // the day period is the local 06-08 → [06-08 04:00Z, 06-09 04:00Z).
+    const anchor = new Date("2026-06-09T02:00:00Z");
+    const { start, end } = periodRange(anchor, "day", "America/New_York");
+    expect(iso(start)).toBe("2026-06-08T04:00:00.000Z");
+    expect(iso(end)).toBe("2026-06-09T04:00:00.000Z");
   });
 });
 

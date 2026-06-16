@@ -151,7 +151,7 @@ Global prefix **`/api/v1`**. All routes except `POST /auth/otp/*` require
 ### Tasks (`/tasks`)
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/tasks` | create a single task (fixed anchors at `startTime`; flexible is EDF-placed). Accepts an optional `view` (`day`/`week`/`month`). When the task can't be placed before its deadline, the response carries an `overflow` block of recovery options |
+| POST | `/tasks` | create a single task (fixed anchors at `startTime`; flexible is EDF-placed). Accepts an optional `view` (`day`/`week`/`month`), persisted on the task as the **period ceiling** for flexible no-deadline tasks. When the task can't be placed — no work-hours slot before its deadline, **or** no work-hours slot left inside its viewed period — the response carries an `overflow` block of recovery options |
 | GET | `/tasks?view=&date=&status=` | list within the view window (+ unplaced conflicts) |
 | GET | `/tasks/suggestions?q=&limit=` | title-autocomplete: the user's existing tasks, **newest first** and **deduped by title** (case-insensitive), optionally filtered by the `q` substring. `limit` 1–50, default 10. Returns `TaskSuggestionsResponse` (`{ suggestions: Task[] }`). Read-only; never reschedules. Declared **before** `/tasks/:id` so it isn't matched as an id |
 | GET | `/tasks/:id` | task detail + last events |
@@ -162,15 +162,27 @@ Global prefix **`/api/v1`**. All routes except `POST /auth/otp/*` require
 | PATCH | `/tasks/:id/complete` | mark DONE, records COMPLETE |
 | DELETE | `/tasks/:id` | delete the task |
 
-> **Overflow recovery.** When `POST /tasks` returns a task with `scheduledStartTime: null`
-> (no work-hours slot before its deadline), the response also carries
-> `overflow: { outsideHours, nextAvailable }`. `outsideHours` is the earliest slot ignoring
-> the work-hours window but still respecting occupied intervals **and** the deadline (null
-> if even off-hours room runs out before the deadline); `nextAvailable` is the earliest
-> work-hours slot in the next `view` period (day/week/month), **ignoring** the deadline. The
-> user picks one and the frontend calls `PATCH /tasks/:id/resolve-overflow`, which recomputes
-> the slot server-side (the client time is never trusted) and pins the task as a `fixed`
-> anchor so the next cascade can't bounce it back to unplaced.
+> **Period-bounded scheduling + overflow recovery.** A flexible task created with **no user
+> deadline** is bounded to the working hours of the calendar period (day / ISO-week / month)
+> it was created in — its persisted `view` + `schedulingAnchor` yield a **period ceiling**
+> (`endOfPeriod`), passed into the engine as the task's `schedulingDeadline`. The packer
+> floors it at its create-day anchor **and** ceilings it at that period end, so it lands
+> within `[anchor, periodEnd]` and — crucially — does **not** silently roll into a later
+> period when it can't fit (e.g. create at 23:00 in day view with the work window already
+> over). Instead it comes back **unplaced** (`scheduledStartTime: null`, `conflict: true`)
+> and **stays** unplaced across later cascades (the ceiling is re-derived every re-pack), so
+> a no-deadline task is never quietly re-placed by an unrelated create/delete/complete.
+>
+> When `POST /tasks` returns an unplaced task the response also carries
+> `overflow: { outsideHours, nextAvailable }`, computed relative to the task's **anchor
+> period** (not to `now`). `outsideHours` is the earliest off-(working)-hours slot **inside**
+> the viewed period `[periodStart, periodEnd)`, at/after `now`, respecting occupied intervals
+> **and** any deadline (null if no off-hours slot fits the period — e.g. the period has
+> ended). `nextAvailable` is the earliest work-hours slot in the **next** period after the
+> anchor period (next day/week/month), **ignoring** the deadline. The user picks one and the
+> frontend calls `PATCH /tasks/:id/resolve-overflow`, which recomputes the slot server-side
+> (period-aware, from the stored anchor + view; the client time is never trusted) and pins
+> the task as a `fixed` anchor so the next cascade can't bounce it back to unplaced.
 
 ### Tags (`/tags`)
 | Method | Path | Purpose |
@@ -200,17 +212,31 @@ Pure functions you'll work with:
   flexible tasks EDF-packed around them). Used when preferences change.
 - **`placeOne(prefs, task, others, now, earliest?)`** — incremental placement of one new
   task, preserving everyone else's (possibly hand-moved) placement. Used on `POST /tasks`.
-- **`findSlotIgnoringWorkHours(durationMinutes, deadline, occupied, now)`**
-  ([`overflow.ts`](src/scheduler/overflow.ts)) — earliest 15-min-grid slot from `now` that
-  ignores the work-hours window/work days but still avoids `occupied` and ends ≤ `deadline`;
-  `null` when even off-hours room runs out before the deadline. Backs the `outsideHours`
-  recovery option.
-- **`findNextAvailableSlot(prefs, durationMinutes, occupied, now, granularity)`**
-  ([`overflow.ts`](src/scheduler/overflow.ts)) — earliest **work-hours** slot in the next
-  period boundary (`day` → next working day, `week` → next week, `month` → next month),
-  **ignoring** the deadline; reuses `findSlot`'s window/grid math via the boundary as its
-  floor. Backs the `nextAvailable` recovery option. Both helpers stay pure (`now` in, no I/O);
-  `SchedulerService.computeOverflowOptions` / `applyOverflowOption` are the persistence wrappers.
+- **`scheduleAll`'s ceiling.** Each flexible task is packed with floor =
+  `t.deadline ? now : (t.schedulingAnchor ?? now)` and ceiling =
+  `t.deadline ?? t.schedulingDeadline ?? null`. Floor and ceiling are **independent**: a
+  no-deadline task is bounded by **both** (its create-day anchor and its period end), so a
+  user-deadline task is byte-for-byte unchanged while a no-deadline task that can't fit its
+  period comes back unplaced and stays that way.
+- **`periodRange(anchor, view, tz)` / `endOfPeriod(anchor, view, tz)`**
+  ([`horizon.ts`](src/scheduler/horizon.ts)) — pure UTC bounds `[start, end)` of the
+  day / ISO-week / month containing `anchor` in the user's tz (`end` is the exclusive
+  next-period boundary = the task's `schedulingDeadline`). Reuses `weekStartStr`/`monthRange`
+  so FE and BE agree on period edges. `SchedulerService.toEdf` derives each flexible
+  no-deadline task's `schedulingDeadline` from `endOfPeriod`.
+- **`findSlotIgnoringWorkHours(durationMinutes, deadline, occupied, now, periodStart, periodEnd)`**
+  ([`overflow.ts`](src/scheduler/overflow.ts)) — earliest 15-min-grid slot **inside the
+  anchor period** `[periodStart, periodEnd)`, at/after `now`, ignoring the work-hours
+  window/work days but still avoiding `occupied` and ending ≤ `deadline`; `null` when no
+  off-hours slot fits the period. Backs the `outsideHours` recovery option.
+- **`findNextAvailableSlot(prefs, durationMinutes, occupied, now, anchor, granularity)`**
+  ([`overflow.ts`](src/scheduler/overflow.ts)) — earliest **work-hours** slot in the **next**
+  period after the anchor's period (`day` → next working day, `week` → next week, `month` →
+  next month), **ignoring** the deadline; reuses `findSlot`'s window/grid math via the next
+  period boundary (`periodRange(anchor).end`) as its floor. Backs the `nextAvailable`
+  recovery option. Both helpers stay pure (`now` + explicit period inputs, no I/O);
+  `SchedulerService.computeOverflowOptions` / `applyOverflowOption` are the persistence
+  wrappers that derive the period bounds from the task's stored `schedulingAnchor` + `view`.
 **Placement is `now`-aware; conflict detection is `now`-independent.** Keep these two axes
 separate — they answer different questions:
 

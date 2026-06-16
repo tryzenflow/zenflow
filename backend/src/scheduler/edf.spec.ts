@@ -577,6 +577,118 @@ describe("scheduleAll — per-task scheduling floor (create-day anchor)", () => 
   });
 });
 
+describe("scheduleAll — period ceiling (schedulingDeadline) for no-deadline tasks", () => {
+  // Period end (exclusive) of Tue 06-09 day view, UTC: Wed 06-10 00:00.
+  const WED_MIDNIGHT = new Date("2026-06-10T00:00:00Z");
+  // It is 23:00 Tue: the day's 09:00–17:00 work window is already over.
+  const TUE_11PM = new Date("2026-06-09T23:00:00Z");
+
+  it("leaves a no-deadline task UNPLACED when it can't fit the period's work hours", () => {
+    // Created 23:00 Tue, anchored on Tue, ceilinged at the end of Tue. There is
+    // no working-hours slot left before the period ends → unplaced + conflict,
+    // NOT silently rolled to Wed 09:00.
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "overflow",
+          schedulingAnchor: new Date("2026-06-09T00:00:00Z"),
+          schedulingDeadline: WED_MIDNIGHT,
+        }),
+      ],
+      TUE_11PM,
+    );
+    expect(out[0].scheduledStartTime).toBeNull();
+    expect(out[0].conflict).toBe(true);
+  });
+
+  it("STAYS unplaced on a second scheduleAll (stability across cascades)", () => {
+    // The period bound lives in the scheduling logic, so re-packing (triggered by
+    // any later create/delete/complete) must NOT silently re-place it.
+    const tasks = [
+      task({
+        id: "overflow",
+        schedulingAnchor: new Date("2026-06-09T00:00:00Z"),
+        schedulingDeadline: WED_MIDNIGHT,
+      }),
+    ];
+    const first = scheduleAll(prefs, tasks, TUE_11PM);
+    const second = scheduleAll(prefs, tasks, TUE_11PM);
+    expect(first[0].scheduledStartTime).toBeNull();
+    expect(second[0].scheduledStartTime).toBeNull();
+  });
+
+  it("PLACES a no-deadline task that DOES fit within its period", () => {
+    // Created Tue morning (anchor Tue), ceilinged at end of Tue. now is Tue
+    // 09:00, so the work window is open → lands at Tue 09:00.
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "fits",
+          schedulingAnchor: new Date("2026-06-09T00:00:00Z"),
+          schedulingDeadline: WED_MIDNIGHT,
+        }),
+      ],
+      new Date("2026-06-09T09:00:00Z"),
+    );
+    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-09T09:00:00.000Z");
+    expect(out[0].conflict).toBe(false);
+  });
+
+  it("a no-deadline task with a WEEK ceiling rolls within the week but not past it", () => {
+    // Anchor Tue, week ceiling = next Mon 06-15 00:00. now Tue 23:00 → Tue's work
+    // window is over, but Wed 06-10 09:00 is still inside the week → placed there.
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "weekly",
+          schedulingAnchor: new Date("2026-06-09T00:00:00Z"),
+          schedulingDeadline: new Date("2026-06-15T00:00:00Z"),
+        }),
+      ],
+      TUE_11PM,
+    );
+    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-10T09:00:00.000Z");
+  });
+
+  it("a USER deadline takes precedence over the period ceiling (unchanged)", () => {
+    // A deadline-bearing task ignores the anchor floor AND uses its deadline as
+    // the ceiling, not schedulingDeadline — byte-for-byte the old behavior: it
+    // packs from now by EDF urgency.
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "withDeadline",
+          deadline: new Date("2026-06-12T17:00:00Z"),
+          schedulingAnchor: new Date("2026-06-09T00:00:00Z"),
+          schedulingDeadline: new Date("2026-06-10T00:00:00Z"), // ignored
+        }),
+      ],
+      MON_MIDNIGHT,
+    );
+    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-08T09:00:00.000Z");
+  });
+
+  it("an absent schedulingDeadline is unbounded (legacy no-deadline behavior)", () => {
+    // No ceiling → the no-deadline task rolls forward to the next free working
+    // slot as before. Created 23:00 Tue with no ceiling → Wed 06-10 09:00.
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "legacy",
+          schedulingAnchor: new Date("2026-06-09T00:00:00Z"),
+        }),
+      ],
+      TUE_11PM,
+    );
+    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-10T09:00:00.000Z");
+  });
+});
+
 describe("isPast", () => {
   const NOON = new Date("2026-06-08T12:00:00Z");
 

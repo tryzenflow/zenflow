@@ -40,6 +40,7 @@ function task(overrides: Partial<Task> & { id: string }): Task {
     fixed: false,
     manuallyMoved: false,
     schedulingAnchor: null,
+    view: null,
     startTime: 0,
     status: "PENDING",
     conflict: false,
@@ -299,6 +300,68 @@ describe("SchedulerService.computeOverflowOptions", () => {
     expect(overflow.nextAvailable?.granularity).toBe("week");
     expect(overflow.nextAvailable?.scheduledStartTime).toBe(
       "2026-06-15T09:00:00.000Z",
+    );
+  });
+
+  it("11pm-Tue repro: a no-deadline task overflows its viewed day", async () => {
+    // It is 23:00 Tue, day view, a flexible no-deadline task anchored on Tue.
+    // The off-hours option lands ~23:00 Tue (inside the day) and next-available
+    // is Wed 09:00 — both relative to the task's ANCHOR period, not `now`.
+    const TUE_11PM = new Date("2026-06-09T23:00:00Z");
+    const unplaced = task({
+      id: "u",
+      durationMinutes: 30,
+      deadline: null,
+      schedulingAnchor: new Date("2026-06-09T00:00:00Z"),
+      view: "day",
+      conflict: true,
+      scheduledStartTime: null,
+    });
+    const { service, tx } = makeService([unplaced]);
+
+    const overflow = await service.computeOverflowOptions(
+      user,
+      unplaced,
+      "day",
+      tx as never,
+      TUE_11PM,
+    );
+
+    expect(overflow.outsideHours).toEqual({
+      scheduledStartTime: "2026-06-09T23:00:00.000Z",
+    });
+    expect(overflow.nextAvailable).toEqual({
+      scheduledStartTime: "2026-06-10T09:00:00.000Z",
+      granularity: "day",
+    });
+  });
+
+  it("returns a null off-hours option when the anchor period has ended", async () => {
+    // 23:45 Tue, 30-min task: no off-hours slot fits before Wed 00:00, so the
+    // outside-hours option is null while next-available (Wed) is still offered.
+    const TUE_LATE = new Date("2026-06-09T23:45:00Z");
+    const unplaced = task({
+      id: "u",
+      durationMinutes: 30,
+      deadline: null,
+      schedulingAnchor: new Date("2026-06-09T00:00:00Z"),
+      view: "day",
+      conflict: true,
+      scheduledStartTime: null,
+    });
+    const { service, tx } = makeService([unplaced]);
+
+    const overflow = await service.computeOverflowOptions(
+      user,
+      unplaced,
+      "day",
+      tx as never,
+      TUE_LATE,
+    );
+
+    expect(overflow.outsideHours).toBeNull();
+    expect(overflow.nextAvailable?.scheduledStartTime).toBe(
+      "2026-06-10T09:00:00.000Z",
     );
   });
 

@@ -32,6 +32,18 @@ export interface EdfTask {
    * collapses to `now`).
    */
   schedulingAnchor: Date | null;
+  /**
+   * Per-task UPPER bound (ceiling) for the EDF packer: the latest instant a
+   * flexible task may be placed before. Distinct from {@link deadline} — this is
+   * the END of the calendar period (day / ISO-week / month) the task was created
+   * in, derived from {@link schedulingAnchor} + the stored view. Both the floor
+   * ({@link schedulingAnchor}) and this ceiling apply to a no-deadline task, so
+   * it lands within `[anchor, periodEnd]` and comes back unplaced (rather than
+   * silently rolling into a later period) when it can't fit. Consulted ONLY when
+   * the task has no user {@link deadline}; null/absent = unbounded (legacy /
+   * deadline-bearing tasks). The service derives it; the pure core just reads it.
+   */
+  schedulingDeadline?: Date | null;
   scheduledStartTime: Date | null;
   createdAt: Date;
   /**

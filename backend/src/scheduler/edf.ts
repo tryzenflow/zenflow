@@ -177,18 +177,27 @@ export function scheduleAll(
     })),
   );
 
-  // Flexible tasks fill the gaps with EDF packing. Each task carries its own
-  // floor: a deadline-bearing task is packed from `now` (urgency dominates — its
-  // create-day anchor is ignored), while a no-deadline task is floored at its
-  // stored `schedulingAnchor` so it lands on/after the day it was created from.
-  // `findSlot` already clamps the floor up to `now`, so a past anchor is inert.
-  // Flexible placement always avoids `occupied` (it never lands on an anchor).
+  // Flexible tasks fill the gaps with EDF packing. The FLOOR and the CEILING are
+  // independent and both apply to a no-deadline task:
+  //   floor (earliest): a deadline-bearing task is packed from `now` (urgency
+  //     dominates — its create-day anchor is ignored); a no-deadline task is
+  //     floored at its stored `schedulingAnchor` so it lands on/after its create
+  //     day. `findSlot` clamps the floor up to `now`, so a past anchor is inert.
+  //   ceiling (the deadline arg to findSlot): the user `deadline` if any, else
+  //     the task's `schedulingDeadline` (the end of its viewed period), else
+  //     null (unbounded — legacy behavior). A no-deadline task is thus packed
+  //     within `[anchor, periodEnd]`: if no working-hours slot fits before the
+  //     period ends it comes back unplaced (conflict) rather than rolling into a
+  //     later period — and STAYS unplaced across re-packs (the ceiling persists).
+  // A user-deadline task is byte-for-byte unchanged (floor undefined, ceiling =
+  // its deadline). Flexible placement always avoids `occupied`.
   for (const t of plain) {
     const earliest = t.deadline ? undefined : (t.schedulingAnchor ?? undefined);
+    const ceiling = t.deadline ?? t.schedulingDeadline ?? null;
     const slot = findSlot(
       prefs,
       t.durationMinutes,
-      t.deadline,
+      ceiling,
       occupied,
       now,
       earliest,

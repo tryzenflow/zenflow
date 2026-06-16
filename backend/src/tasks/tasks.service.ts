@@ -127,6 +127,11 @@ export class TasksService {
             startTime: startTime ?? 0,
             userId: user.id,
             schedulingAnchor,
+            // Persist the active calendar view so the scheduler can bound a
+            // flexible, no-deadline task to that period's working hours (it must
+            // not silently roll past the viewed day/week/month). Null for fixed
+            // tasks — they anchor at an exact time and aren't period-bounded.
+            view: isFixed ? null : overflowView,
             scheduledStartTime: fixedStart,
             conflict: false,
           },

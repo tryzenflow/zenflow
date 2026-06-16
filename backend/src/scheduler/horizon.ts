@@ -1,5 +1,11 @@
 import type { ViewMode } from "@zenflow/shared";
-import { addDaysStr, isoWeekday, workWindowMinutes } from "./slot";
+import {
+  addDaysStr,
+  isoWeekday,
+  localDateStr,
+  workWindowMinutes,
+} from "./slot";
+import { minutesToUtc } from "../common/utils";
 
 /**
  * Calendar-window helpers used both for placement bounds and for the
@@ -61,6 +67,78 @@ export function displayDayRange(
     startStr: weekStartStr(monthStart),
     endStr: addDaysStr(weekStartStr(monthEnd), 6),
   };
+}
+
+/**
+ * Local-date 'YYYY-MM-DD' bounds of the calendar period containing `dateStr`,
+ * for the given view:
+ *  - "day"   → that day, and the next day,
+ *  - "week"  → Monday of its ISO week, and the following Monday,
+ *  - "month" → the 1st of its month, and the 1st of the next month.
+ *
+ * `startStr` is the inclusive first day of the period; `nextStr` is the
+ * EXCLUSIVE upper bound (the first day of the next period). Reuses
+ * {@link weekStartStr} / {@link monthRange} so the period definition matches the
+ * display/meta ranges the frontend calendar uses. Pure string math.
+ */
+export function periodBoundsStr(
+  view: ViewMode,
+  dateStr: string,
+): { startStr: string; nextStr: string } {
+  switch (view) {
+    case "day":
+      return { startStr: dateStr, nextStr: addDaysStr(dateStr, 1) };
+    case "week": {
+      const startStr = weekStartStr(dateStr);
+      return { startStr, nextStr: addDaysStr(startStr, 7) };
+    }
+    case "month": {
+      const { startStr } = monthRange(dateStr);
+      const [y, m] = startStr.split("-").map(Number);
+      const nextY = m === 12 ? y + 1 : y;
+      const nextM = m === 12 ? 1 : m + 1;
+      const nextStr = `${String(nextY).padStart(4, "0")}-${String(nextM).padStart(2, "0")}-01`;
+      return { startStr, nextStr };
+    }
+  }
+}
+
+/**
+ * Absolute UTC bounds of the calendar period (day / ISO-week / month) the
+ * `anchor` instant falls in, in the user's `timezone`. `start` is the period's
+ * start-of-day; `end` is the EXCLUSIVE upper bound — the start-of-day of the
+ * first day of the NEXT period — which is exactly the ceiling a no-deadline
+ * task may be placed before (findSlot requires `candEnd <= end`). The I/O/tz
+ * layer (scheduler.service) derives a task's `schedulingDeadline` from `end`.
+ * Pure: derives the local date of `anchor` in `timezone`, then walks period
+ * boundaries with pure string math.
+ */
+export function periodRange(
+  anchor: Date,
+  view: ViewMode,
+  timezone: string,
+): { start: Date; end: Date } {
+  // Local date of the anchor in the user's tz (the anchor is already a
+  // start-of-day UTC instant for the create day, but localize defensively).
+  const dateStr = localDateStr(anchor, timezone);
+  const { startStr, nextStr } = periodBoundsStr(view, dateStr);
+  return {
+    start: minutesToUtc(startStr, 0, timezone),
+    end: minutesToUtc(nextStr, 0, timezone),
+  };
+}
+
+/**
+ * Exclusive end-of-period UTC instant (the ceiling) for the period containing
+ * `anchor` — the start-of-day of the first day of the next day/week/month.
+ * Thin wrapper over {@link periodRange}; this is a task's `schedulingDeadline`.
+ */
+export function endOfPeriod(
+  anchor: Date,
+  view: ViewMode,
+  timezone: string,
+): Date {
+  return periodRange(anchor, view, timezone).end;
 }
 
 /** Walk backwards from `dateStr` (inclusive) to the nearest work day. */

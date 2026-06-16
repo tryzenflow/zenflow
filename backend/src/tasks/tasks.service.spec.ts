@@ -44,6 +44,7 @@ function task(overrides: Partial<TaskWithTags> & { id: string }): TaskWithTags {
     fixed: false,
     manuallyMoved: false,
     schedulingAnchor: null,
+    view: null,
     startTime: 0,
     status: "PENDING",
     conflict: false,
@@ -183,6 +184,45 @@ describe("TasksService.create — single row (no recurrence)", () => {
       user,
     );
     expect(creates[0].data.schedulingAnchor).toBeNull();
+  });
+
+  it("persists the active view on a flexible task (period ceiling)", async () => {
+    const { service, creates } = makeCreateService();
+    await service.create(
+      {
+        title: "Standup",
+        durationMinutes: 30,
+        startDate: "2026-06-10",
+        view: "week",
+      },
+      user,
+    );
+    expect(creates[0].data.view).toBe("week");
+  });
+
+  it("defaults a flexible task's view to 'day' when none is sent", async () => {
+    const { service, creates } = makeCreateService();
+    await service.create(
+      { title: "Standup", durationMinutes: 30, startDate: "2026-06-10" },
+      user,
+    );
+    expect(creates[0].data.view).toBe("day");
+  });
+
+  it("does NOT set a view for a fixed task (not period-bounded)", async () => {
+    const { service, creates } = makeCreateService();
+    await service.create(
+      {
+        title: "Meeting",
+        durationMinutes: 60,
+        fixed: true,
+        startTime: 600,
+        startDate: "2026-06-10",
+        view: "month",
+      },
+      user,
+    );
+    expect(creates[0].data.view).toBeNull();
   });
 });
 

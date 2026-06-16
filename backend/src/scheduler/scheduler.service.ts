@@ -18,9 +18,10 @@ import {
   scheduleAll,
   type SchedulerPrefs,
 } from "./edf";
-import { type Interval, SLOT_MS, penaltyIndex } from "./slot";
+import { type Interval, SLOT_MS, localDateStr, penaltyIndex } from "./slot";
 import { findNextAvailableSlot, findSlotIgnoringWorkHours } from "./overflow";
-import { utcToMinutes } from "../common/utils";
+import { endOfPeriod, periodRange } from "./horizon";
+import { minutesToUtc, utcToMinutes } from "../common/utils";
 import { TIME_GRANULARITY } from "../common/constants";
 
 type PrismaTx = Prisma.TransactionClient;
@@ -43,7 +44,24 @@ export class SchedulerService {
     };
   }
 
-  private toEdf(task: Task): EdfTask {
+  /**
+   * Map a Prisma row to the pure-core {@link EdfTask}. The period CEILING
+   * (`schedulingDeadline`) is derived here — the I/O/tz layer — and applies only
+   * to a FLEXIBLE task that has NO user `deadline` and DOES carry a stored
+   * `view` + `schedulingAnchor`: such a task is bounded to the working hours of
+   * the day/week/month it was created in (end of that period, in `timezone`) and
+   * must not silently roll past it. Tasks with a user deadline, fixed tasks, or
+   * legacy rows without a view get `schedulingDeadline = null` (unbounded —
+   * byte-for-byte the previous behavior). `timezone` comes from the user's prefs.
+   */
+  private toEdf(task: Task, timezone: string): EdfTask {
+    const schedulingDeadline =
+      !task.fixed &&
+      task.deadline === null &&
+      task.view !== null &&
+      task.schedulingAnchor !== null
+        ? endOfPeriod(task.schedulingAnchor, task.view, timezone)
+        : null;
     return {
       id: task.id,
       durationMinutes: task.durationMinutes,
@@ -51,6 +69,7 @@ export class SchedulerService {
       fixed: task.fixed,
       manuallyMoved: task.manuallyMoved,
       schedulingAnchor: task.schedulingAnchor,
+      schedulingDeadline,
       scheduledStartTime: task.scheduledStartTime,
       createdAt: task.createdAt,
       conflict: task.conflict,
@@ -86,7 +105,7 @@ export class SchedulerService {
     const tasks = await this.pendingTasks(user.id, tx);
     const placements = scheduleAll(
       this.prefsOf(user),
-      tasks.map((t) => this.toEdf(t)),
+      tasks.map((t) => this.toEdf(t, user.timezone)),
       now,
     );
     const before = new Map(tasks.map((t) => [t.id, t]));
@@ -130,18 +149,35 @@ export class SchedulerService {
     return tasks
       .filter((t) => t.id !== excludeId)
       .filter((t) => !isPast(t, now) || !hasElapsed(t, now))
-      .map((t) => this.toEdf(t))
-      .map(intervalOf)
+      .map((t) => intervalOf(t))
       .filter((i): i is Interval => i !== null);
   }
 
   /**
+   * The anchor a task's overflow recovery options are computed relative to: its
+   * stored `schedulingAnchor` (start-of-day of the create day) when present, or
+   * — for a legacy/fixed row without one — the start-of-day of `now` in the
+   * user's tz. Both options are period-relative to this instant, NOT to `now`.
+   */
+  private overflowAnchor(task: Task, timezone: string, now: Date): Date {
+    if (task.schedulingAnchor) return task.schedulingAnchor;
+    return minutesToUtc(localDateStr(now, timezone), 0, timezone);
+  }
+
+  /**
    * Compute the two recovery options offered when the EDF engine couldn't place
-   * `task` within working hours before its deadline (the created task came back
-   * unplaced). Loads the user's prefs + the other PENDING tasks' occupied
-   * intervals and delegates to the pure {@link findSlotIgnoringWorkHours} /
-   * {@link findNextAvailableSlot} helpers. Pure-core stays `now`-driven; this
-   * wrapper only does the I/O.
+   * `task` (it came back unplaced) — now relative to the task's ANCHOR period
+   * (the viewed day/week/month it was created in), not to `now`:
+   *  - `outsideHours`: earliest off-(working)-hours slot INSIDE the anchor
+   *    period window `[periodStart, periodEnd)`, at/after `now`, respecting
+   *    occupied and any user deadline. Null when no off-hours slot fits the
+   *    period (e.g. the period has ended).
+   *  - `nextAvailable`: earliest in-working-hours slot in the NEXT period after
+   *    the anchor period (next day/week/month), ignoring the deadline.
+   *
+   * Loads the user's prefs + the other PENDING tasks' occupied intervals and
+   * delegates to the pure helpers. Pure-core stays `now`+explicit-inputs driven;
+   * this wrapper only does the I/O (period bounds from `task.schedulingAnchor`).
    */
   async computeOverflowOptions(
     user: User,
@@ -154,17 +190,27 @@ export class SchedulerService {
     const tasks = await this.pendingTasks(user.id, tx);
     const occupied = this.occupiedIntervals(tasks, task.id, now);
 
+    const anchor = this.overflowAnchor(task, prefs.timezone, now);
+    const { start: periodStart, end: periodEnd } = periodRange(
+      anchor,
+      view,
+      prefs.timezone,
+    );
+
     const outside = findSlotIgnoringWorkHours(
       task.durationMinutes,
       task.deadline,
       occupied,
       now,
+      periodStart,
+      periodEnd,
     );
     const next = findNextAvailableSlot(
       prefs,
       task.durationMinutes,
       occupied,
       now,
+      anchor,
       view,
     );
 
@@ -184,7 +230,9 @@ export class SchedulerService {
    * task is pinned there as a `fixed` anchor (so the next {@link cascadeReschedule}
    * can't move it back into the unplaced state), conflicts are recomputed
    * pairwise, and a MOVE audit event is recorded. Runs in its own transaction
-   * like the other mutations. Throws {@link BadRequestException} when the chosen
+   * like the other mutations. The recompute is period-aware — it uses the task's
+   * stored `schedulingAnchor` + `view` so the chosen slot lands in the SAME
+   * window that was offered. Throws {@link BadRequestException} when the chosen
    * option is no longer feasible (recompute returns null).
    */
   async applyOverflowOption(
@@ -199,7 +247,14 @@ export class SchedulerService {
       const target = tasks.find((t) => t.id === taskId);
       if (!target) throw new NotFoundException(`Cannot find task ${taskId}`);
 
+      const prefs = this.prefsOf(user);
       const occupied = this.occupiedIntervals(tasks, taskId, now);
+      const anchor = this.overflowAnchor(target, prefs.timezone, now);
+      const { start: periodStart, end: periodEnd } = periodRange(
+        anchor,
+        view,
+        prefs.timezone,
+      );
       const slot =
         choice === "outsideHours"
           ? findSlotIgnoringWorkHours(
@@ -207,12 +262,15 @@ export class SchedulerService {
               target.deadline,
               occupied,
               now,
+              periodStart,
+              periodEnd,
             )
           : findNextAvailableSlot(
-              this.prefsOf(user),
+              prefs,
               target.durationMinutes,
               occupied,
               now,
+              anchor,
               view,
             );
 

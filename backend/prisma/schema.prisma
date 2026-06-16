@@ -59,6 +59,16 @@ enum TaskStatus {
   ABANDONED // deadline passed while still PENDING (set by the overdue sweep)
 }
 
+// Calendar view a task was created from. Records the period (day/week/month)
+// whose working hours bound a flexible, no-deadline task: such a task may not
+// roll past the end of this period (see Task.view). Mirrors @zenflow/shared
+// ViewMode.
+enum ViewMode {
+  day
+  week
+  month
+}
+
 model Task {
   id              String     @id @default(uuid())
   title           String
@@ -83,6 +93,14 @@ model Task {
   schedulingAnchor DateTime?
 
   scheduledStartTime DateTime? // assigned by the EDF engine
+
+  // Calendar view active when the task was created. For a flexible task with NO
+  // deadline this bounds placement to the working hours of the period (day /
+  // ISO-week / month) containing `schedulingAnchor`: the task may not silently
+  // roll past the end of that period — if it can't fit, it stays unplaced and
+  // the create response carries the overflow recovery options. Null for fixed
+  // tasks and rows created before this column existed (legacy → unbounded).
+  view ViewMode?
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
