@@ -90,6 +90,15 @@ export interface UpdateTaskInput {
   tags?: string[];
 }
 
+/**
+ * Title-autocomplete suggestions: the user's existing tasks, newest first and
+ * deduped by title, optionally filtered by the text typed so far. Each item is
+ * a full {@link Task} so selecting one can populate the rest of the create form.
+ */
+export interface TaskSuggestionsResponse {
+  suggestions: Task[];
+}
+
 export interface RescheduleInput {
   /** ISO-8601 start the user dropped the task at (snapped to the 15-min grid). */
   requestedStartTime: string;

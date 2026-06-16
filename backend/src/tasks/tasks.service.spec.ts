@@ -186,6 +186,141 @@ describe("TasksService.create — single row (no recurrence)", () => {
   });
 });
 
+/**
+ * suggestions() drives a single findMany (ordered createdAt desc) and then
+ * dedupes/limits in memory. The mock records the args so we can assert the
+ * where/orderBy/take Prisma sees, and returns the rows already ordered the way
+ * a `createdAt desc` query would — the service must preserve that order and
+ * dedupe by title.
+ */
+function makeSuggestionsService(rows: TaskWithTags[]): {
+  service: TasksService;
+  findMany: jest.Mock;
+} {
+  const findMany = jest.fn((args: { where?: Record<string, unknown> }) => {
+    const where = args.where ?? {};
+    const title = where.title as { contains?: string } | undefined;
+    const q = title?.contains?.toLowerCase();
+    const filtered = q
+      ? rows.filter((r) => r.title.toLowerCase().includes(q))
+      : rows;
+    return Promise.resolve(filtered);
+  });
+  const prisma = { task: { findMany } };
+  return { service: new TasksService(prisma as never, {} as never), findMany };
+}
+
+describe("TasksService.suggestions — title autocomplete", () => {
+  const at = (iso: string) => new Date(iso);
+
+  it("returns tasks newest-first (preserving the createdAt-desc order)", async () => {
+    // Rows arrive already ordered desc, as the real query would return them.
+    const rows = [
+      task({
+        id: "c",
+        title: "Charlie",
+        createdAt: at("2026-03-03T00:00:00Z"),
+      }),
+      task({ id: "b", title: "Bravo", createdAt: at("2026-02-02T00:00:00Z") }),
+      task({ id: "a", title: "Alpha", createdAt: at("2026-01-01T00:00:00Z") }),
+    ];
+    const { service, findMany } = makeSuggestionsService(rows);
+    const res = await service.suggestions({ limit: 10 }, user);
+    expect(res.suggestions.map((s) => s.id)).toEqual(["c", "b", "a"]);
+    // Ordering + scoping are pushed down to Prisma.
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: user.id },
+        orderBy: { createdAt: "desc" },
+      }),
+    );
+  });
+
+  it("filters by title substring, case-insensitively", async () => {
+    const rows = [
+      task({
+        id: "1",
+        title: "Write REPORT",
+        createdAt: at("2026-03-03T00:00:00Z"),
+      }),
+      task({
+        id: "2",
+        title: "Email team",
+        createdAt: at("2026-02-02T00:00:00Z"),
+      }),
+      task({
+        id: "3",
+        title: "report draft",
+        createdAt: at("2026-01-01T00:00:00Z"),
+      }),
+    ];
+    const { service, findMany } = makeSuggestionsService(rows);
+    const res = await service.suggestions({ q: "report", limit: 10 }, user);
+    expect(res.suggestions.map((s) => s.id)).toEqual(["1", "3"]);
+    // The case-insensitive contains filter is delegated to Prisma.
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          userId: user.id,
+          title: { contains: "report", mode: "insensitive" },
+        },
+      }),
+    );
+  });
+
+  it("dedupes by title (case-insensitive), keeping the newest occurrence", async () => {
+    const rows = [
+      task({
+        id: "new",
+        title: "Standup",
+        createdAt: at("2026-03-03T00:00:00Z"),
+      }),
+      task({
+        id: "mid",
+        title: "standup",
+        createdAt: at("2026-02-02T00:00:00Z"),
+      }),
+      task({
+        id: "old",
+        title: "STANDUP",
+        createdAt: at("2026-01-01T00:00:00Z"),
+      }),
+      task({
+        id: "other",
+        title: "Review",
+        createdAt: at("2025-12-01T00:00:00Z"),
+      }),
+    ];
+    const { service } = makeSuggestionsService(rows);
+    const res = await service.suggestions({ limit: 10 }, user);
+    // One row per distinct title, the newest of each kept.
+    expect(res.suggestions.map((s) => s.id)).toEqual(["new", "other"]);
+  });
+
+  it("respects limit (distinct titles), defaulting to 10", async () => {
+    const rows = Array.from({ length: 12 }, (_, i) =>
+      task({
+        id: `t${i}`,
+        title: `Task ${i}`,
+        createdAt: at(`2026-01-${String(i + 1).padStart(2, "0")}T00:00:00Z`),
+      }),
+    ).reverse(); // newest first
+    const { service } = makeSuggestionsService(rows);
+    const limited = await service.suggestions({ limit: 3 }, user);
+    expect(limited.suggestions).toHaveLength(3);
+    const dflt = await service.suggestions({}, user);
+    expect(dflt.suggestions).toHaveLength(10);
+  });
+
+  it("over-fetches enough rows to fill `limit` distinct titles", async () => {
+    const { service, findMany } = makeSuggestionsService([]);
+    await service.suggestions({ limit: 4 }, user);
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ take: 20 }),
+    );
+  });
+});
+
 describe("TasksService.list — display vs focal window", () => {
   describe("month view", () => {
     // June 2026: Jun 1 is a Monday → grid = Mon 2026-06-01 .. Sun 2026-07-05.

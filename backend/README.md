@@ -153,6 +153,7 @@ Global prefix **`/api/v1`**. All routes except `POST /auth/otp/*` require
 |--------|------|---------|
 | POST | `/tasks` | create a single task (fixed anchors at `startTime`; flexible is EDF-placed). Accepts an optional `view` (`day`/`week`/`month`). When the task can't be placed before its deadline, the response carries an `overflow` block of recovery options |
 | GET | `/tasks?view=&date=&status=` | list within the view window (+ unplaced conflicts) |
+| GET | `/tasks/suggestions?q=&limit=` | title-autocomplete: the user's existing tasks, **newest first** and **deduped by title** (case-insensitive), optionally filtered by the `q` substring. `limit` 1–50, default 10. Returns `TaskSuggestionsResponse` (`{ suggestions: Task[] }`). Read-only; never reschedules. Declared **before** `/tasks/:id` so it isn't matched as an id |
 | GET | `/tasks/:id` | task detail + last events |
 | PATCH | `/tasks/:id` | metadata only (title/note/deadline/tags) — **does NOT reschedule** |
 | PATCH | `/tasks/:id/reschedule` | manual drag → `pin`, records MOVE + penalty telemetry |

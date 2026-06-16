@@ -19,12 +19,14 @@ import {
 import { CreateTaskDto } from "./dto/create-task.dto";
 import { UpdateTaskDto } from "./dto/update-task.dto";
 import { ListTasksDto } from "./dto/list-tasks.dto";
+import { ListTaskSuggestionsDto } from "./dto/list-task-suggestions.dto";
 import { ResolveOverflowDto } from "./dto/resolve-overflow.dto";
 import type {
   CreateTaskResponse,
   RescheduleResponse,
   Task as SharedTask,
   TaskDetailResponse,
+  TaskSuggestionsResponse,
   TasksListResponse,
 } from "@zenflow/shared";
 
@@ -260,6 +262,46 @@ export class TasksService {
         conflictCount,
       },
     };
+  }
+
+  /**
+   * Title-autocomplete suggestions for the create form: the user's existing
+   * tasks, newest first, optionally filtered by the text typed so far. Recurring
+   * / materialized rows share titles, so we dedupe by title (case-insensitive),
+   * keeping the most-recent occurrence, and return up to `limit` distinct titles.
+   * Read-only metadata — never touches the scheduler.
+   */
+  async suggestions(
+    dto: ListTaskSuggestionsDto,
+    user: User,
+  ): Promise<TaskSuggestionsResponse> {
+    const limit = dto.limit ?? 10;
+    const q = dto.q?.trim();
+
+    const where: Prisma.TaskWhereInput = { userId: user.id };
+    if (q) where.title = { contains: q, mode: "insensitive" };
+
+    // Over-fetch then dedupe in memory: duplicate titles (recurring series) can
+    // otherwise flood the list, so a single page of distinct titles may need
+    // several rows' worth of source data.
+    const rows = await this.prisma.task.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      include: { tags: true },
+      take: limit * 5,
+    });
+
+    const seen = new Set<string>();
+    const suggestions: SharedTask[] = [];
+    for (const row of rows) {
+      const key = row.title.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      suggestions.push(this.toDto(row));
+      if (suggestions.length >= limit) break;
+    }
+
+    return { suggestions };
   }
 
   async findById(id: string, user: User): Promise<TaskDetailResponse> {

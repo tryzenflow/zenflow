@@ -13,6 +13,7 @@ import { TasksService } from "./tasks.service";
 import { CreateTaskDto } from "./dto/create-task.dto";
 import { UpdateTaskDto } from "./dto/update-task.dto";
 import { ListTasksDto } from "./dto/list-tasks.dto";
+import { ListTaskSuggestionsDto } from "./dto/list-task-suggestions.dto";
 import { RescheduleTaskDto } from "./dto/reschedule-task.dto";
 import { ResizeTaskDto } from "./dto/resize-task.dto";
 import { ResolveOverflowDto } from "./dto/resolve-overflow.dto";
@@ -37,6 +38,20 @@ export class TasksController {
     return {
       success: true,
       message: `Found ${data.tasks.length} tasks`,
+      data,
+    };
+  }
+
+  // NOTE: must precede @Get(":id") so "suggestions" isn't matched as an :id.
+  @Get("suggestions")
+  async suggestions(
+    @Query() dto: ListTaskSuggestionsDto,
+    @CurrentUser() user: User,
+  ) {
+    const data = await this.tasksService.suggestions(dto, user);
+    return {
+      success: true,
+      message: `Found ${data.suggestions.length} suggestions`,
       data,
     };
   }
