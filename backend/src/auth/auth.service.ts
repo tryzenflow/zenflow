@@ -6,6 +6,7 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { generateOTP } from "./utils";
@@ -14,6 +15,8 @@ import { MailService } from "../mail/mail.service";
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private usersService: UsersService,
@@ -26,6 +29,14 @@ export class AuthService {
       await this.cacheManager.set(`otp:${email}`, otpCode);
       await this.mailService.sendLoginEmail(email, otpCode);
     } catch (error) {
+      // Surface the real reason (SMTP auth failure, ECONNREFUSED, invalid
+      // from address, template strict-mode error, …) instead of swallowing it.
+      this.logger.error(
+        `Failed to send OTP email to ${email}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        error instanceof Error ? error.stack : undefined,
+      );
       throw new InternalServerErrorException({
         success: false,
         message: "Failed to send OTP code",
