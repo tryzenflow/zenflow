@@ -1,7 +1,7 @@
 name: zenflow-prod
 services:
   api:
-    container_name: zenflow-api-local
+    container_name: zenflow-api-staging
     image: zenflow-api:latest
     expose:
       - "5000"
@@ -17,17 +17,17 @@ services:
       mail:
         condition: service_started
     env_file:
-      - .env.local
+      - .env.staging
 
   postgres:
-    container_name: zenflow-db-local
+    container_name: zenflow-db-staging
     image: postgres:alpine
     expose:
       - "5432"
     volumes:
       - /var/lib/postgresql:/var/lib/postgresql
     env_file:
-      - docker.env
+      - docker.staging.env
     networks:
       - api
     healthcheck:
@@ -37,7 +37,7 @@ services:
       retries: 5
 
   redis:
-    container_name: zenflow-cache-prod
+    container_name: zenflow-cache-staging
     image: redis:alpine
     expose:
       - "6379"
@@ -45,7 +45,7 @@ services:
       - api
 
   mail:
-    container_name: zenflow-mail
+    container_name: zenflow-mail-staging
     image: mailhog/mailhog
     ports:
       - 1025:1025
@@ -55,15 +55,12 @@ services:
 
   caddy:
     image: caddy:latest
-    container_name: caddy
+    container_name: caddy-staging
     restart: unless-stopped
     ports:
       - "80:80"
-      - "443:443"
     volumes:
-      - ./Caddyfile.local:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
+      - ./Caddyfile.staging:/etc/caddy/Caddyfile
     depends_on:
       - api
     networks:
