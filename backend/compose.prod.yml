@@ -2,7 +2,7 @@ name: zenflow-prod
 services:
   api:
     container_name: zenflow-api-prod
-    image: zenflow-api:latest
+    image: zenflow-api:0.0.1
     expose:
       - "5000"
     networks:
@@ -19,7 +19,7 @@ services:
 
   postgres:
     container_name: zenflow-db-prod
-    image: postgres:alpine
+    image: postgres:18.4-alpine
     expose:
       - "5432"
     volumes:
@@ -36,14 +36,14 @@ services:
 
   redis:
     container_name: zenflow-cache-prod
-    image: redis:alpine
+    image: redis:8.8.0-alpine
     expose:
       - "6379"
     networks:
       - api
 
   caddy:
-    image: caddy:latest
+    image: caddy:2.11.4
     container_name: caddy
     restart: unless-stopped
     ports:
