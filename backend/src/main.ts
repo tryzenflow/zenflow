@@ -1,4 +1,5 @@
 import { NestFactory } from "@nestjs/core";
+import { NestExpressApplication } from "@nestjs/platform-express";
 import { AppModule } from "./app.module";
 import session from "express-session";
 import { ValidationPipe } from "@nestjs/common";
@@ -14,7 +15,13 @@ import { buildSessionOptions } from "./auth/session.config";
 const DEFAULT_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // TLS is terminated by the Caddy reverse proxy, which forwards plain HTTP to
+  // this app with the real scheme in `X-Forwarded-Proto`. Trusting the first
+  // proxy hop makes `req.secure` reflect that header, so express-session will
+  // emit the `Secure` session cookie instead of silently dropping it. This must
+  // be set before the session middleware is registered.
+  app.set("trust proxy", 1);
   const configService = app.get(ConfigService);
   app.setGlobalPrefix("api/v1");
   app.enableCors({
@@ -56,7 +63,10 @@ async function bootstrap() {
         store: redisStore,
         ttlMs:
           configService.get<number>("SESSION_TTL_MS") ?? DEFAULT_SESSION_TTL_MS,
-        isProduction: process.env.NODE_ENV === "production",
+        secure: configService.get<boolean>("COOKIE_SECURE")!,
+        sameSite: configService.get<"lax" | "none" | "strict">(
+          "COOKIE_SAMESITE",
+        )!,
       }),
     ),
   );

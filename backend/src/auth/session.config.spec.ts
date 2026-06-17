@@ -12,7 +12,8 @@ describe("buildSessionOptions", () => {
       secret: "s3cr3t",
       store,
       ttlMs,
-      isProduction: false,
+      secure: false,
+      sameSite: "lax",
       ...overrides,
     });
 
@@ -24,15 +25,33 @@ describe("buildSessionOptions", () => {
     expect(build().cookie?.maxAge).toBe(ttlMs);
   });
 
-  it("uses a secure, httpOnly, lax cookie", () => {
-    const { cookie } = build({ isProduction: true });
-    expect(cookie?.httpOnly).toBe(true);
-    expect(cookie?.sameSite).toBe("lax");
+  it("always marks the cookie httpOnly", () => {
+    expect(build().cookie?.httpOnly).toBe(true);
+  });
+
+  it("maps the secure flag onto the cookie", () => {
+    expect(build({ secure: true }).cookie?.secure).toBe(true);
+    expect(build({ secure: false }).cookie?.secure).toBe(false);
+  });
+
+  it("passes the sameSite attribute through to the cookie", () => {
+    expect(build({ sameSite: "lax" }).cookie?.sameSite).toBe("lax");
+    expect(build({ sameSite: "strict" }).cookie?.sameSite).toBe("strict");
+    expect(build({ sameSite: "none", secure: true }).cookie?.sameSite).toBe(
+      "none",
+    );
+  });
+
+  it("supports the cross-site production combo (SameSite=None + Secure)", () => {
+    const { cookie } = build({ sameSite: "none", secure: true });
+    expect(cookie?.sameSite).toBe("none");
     expect(cookie?.secure).toBe(true);
   });
 
-  it("does not mark the cookie secure outside production", () => {
-    expect(build({ isProduction: false }).cookie?.secure).toBe(false);
+  it("throws when SameSite=None is paired with an insecure cookie", () => {
+    expect(() => build({ sameSite: "none", secure: false })).toThrow(
+      /COOKIE_SAMESITE.*none.*COOKIE_SECURE/i,
+    );
   });
 
   it("keeps resave and saveUninitialized disabled", () => {

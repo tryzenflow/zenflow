@@ -16,8 +16,24 @@ export interface SessionConfigParams {
    * `maxAge` here keeps the cookie and the Redis TTL in sync by construction.
    */
   ttlMs: number;
-  /** Whether we're running in production (enables the `secure` cookie flag). */
-  isProduction: boolean;
+  /**
+   * Whether to set the `Secure` cookie flag (cookie only sent over HTTPS).
+   *
+   * Decoupled from `NODE_ENV` so it can be configured per-environment via
+   * `COOKIE_SECURE`. Must be `true` in production behind TLS; with TLS
+   * terminated by a proxy (Caddy), Express needs `trust proxy` set so it
+   * recognises the connection as secure and actually emits the cookie.
+   */
+  secure: boolean;
+  /**
+   * The `SameSite` cookie attribute, configured via `COOKIE_SAMESITE`.
+   *
+   * Use `"none"` when the frontend and API are on different registrable
+   * domains (cross-site), so the browser sends the cookie on cross-site
+   * requests. Browsers reject `SameSite=None` unless `Secure` is also set, so
+   * this builder throws if `sameSite === "none"` while `secure === false`.
+   */
+  sameSite: "lax" | "none" | "strict";
 }
 
 /**
@@ -30,10 +46,21 @@ export function buildSessionOptions({
   secret,
   store,
   ttlMs,
-  isProduction,
+  secure,
+  sameSite,
 }: SessionConfigParams): session.SessionOptions & {
   cookie: session.CookieOptions;
 } {
+  // Browsers silently reject `SameSite=None` cookies that are not also
+  // `Secure`, which would break sessions without any obvious error. Fail loudly
+  // at startup instead.
+  if (sameSite === "none" && !secure) {
+    throw new Error(
+      'Invalid cookie config: COOKIE_SAMESITE="none" requires COOKIE_SECURE=true ' +
+        "(browsers reject SameSite=None cookies without the Secure flag).",
+    );
+  }
+
   return {
     secret,
     store,
@@ -46,8 +73,8 @@ export function buildSessionOptions({
     cookie: {
       maxAge: ttlMs,
       httpOnly: true,
-      sameSite: "lax",
-      secure: isProduction,
+      sameSite,
+      secure,
     },
   };
 }

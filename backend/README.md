@@ -329,6 +329,8 @@ CORS_ORIGIN="http://localhost:5173"
 MAIL_TRANSPORT="smtp://zenflow-mail:25"
 SESSION_SECRET="change-me"
 SESSION_TTL_MS=604800000                       # optional; idle session lifetime, defaults to 7 days
+COOKIE_SECURE=true                             # optional; Secure cookie flag, defaults to true
+COOKIE_SAMESITE=lax                            # optional; lax | none | strict, defaults to lax
 GRPC_SCHEDULER_URL="zenflow-scheduler:50051"   # reserved for the future ML service
 ```
 
@@ -336,6 +338,40 @@ Sessions are **rolling**: every authenticated request resets the session cookie 
 Redis session TTL, so an actively-used session is extended on each call and won't expire
 mid-use. `SESSION_TTL_MS` is therefore an *idle* timeout (cookie `maxAge` and Redis TTL are
 kept in sync). The option building lives in `src/auth/session.config.ts` (pure, unit-tested).
+
+**Session cookie flags (`COOKIE_SECURE` / `COOKIE_SAMESITE`).** These drive the session
+cookie's `Secure` and `SameSite` attributes and are decoupled from `NODE_ENV`:
+
+- **Dev / staging** (served over HTTP): `COOKIE_SECURE=false`, `COOKIE_SAMESITE=lax`.
+- **Production** (served over HTTPS): `COOKIE_SECURE=true`. The current deployment serves the
+  frontend at `https://zenflow.alphatrann.com` and the API at `https://zenflow-api.alphatrann.com`
+  — both subdomains of `alphatrann.com`, i.e. **same-site** — so `COOKIE_SAMESITE=lax` is
+  sufficient and preferred (Lax gives some CSRF protection that None gives up). These also match
+  the built-in defaults (`COOKIE_SECURE=true`, `COOKIE_SAMESITE=lax`), so `.env.prod` needs no
+  cookie overrides for this topology:
+
+  ```env
+  COOKIE_SECURE=true
+  COOKIE_SAMESITE=lax
+  CORS_ORIGIN="https://zenflow.alphatrann.com"   # EXACT frontend origin: scheme+host, no trailing slash
+  ```
+
+  `CORS_ORIGIN` must be the exact frontend origin (no trailing slash): credentialed requests
+  (`credentials: true` in `main.ts`) require the server to echo back the precise `Origin`, not a
+  wildcard.
+
+  **Only if the frontend is moved to a cross-site origin** (e.g. a raw `*.netlify.app` domain that
+  doesn't share the API's registrable domain) does the browser require `SameSite=None; Secure` to
+  send the cookie cross-site — then set `COOKIE_SAMESITE=none` (with `COOKIE_SECURE=true`). Browsers
+  reject `SameSite=None` cookies that aren't `Secure`, so `buildSessionOptions` throws at startup if
+  `COOKIE_SAMESITE=none` is paired with `COOKIE_SECURE=false`.
+
+  **The actual prod bug this guards against:** TLS is terminated at the Caddy reverse proxy, which
+  forwards plain HTTP plus an `X-Forwarded-Proto: https` header. Without `trust proxy`, Express saw
+  `req.secure === false` and express-session silently refused to emit the `Secure` cookie at all —
+  so login "succeeded" but no session cookie ever reached the browser, causing a 403 on every
+  subsequent request and a logout on reload. `main.ts` now sets `app.set("trust proxy", 1)` so
+  Express trusts the forwarded proto and emits the cookie.
 
 ### Docker
 

@@ -37,6 +37,14 @@ import { ScheduleModule } from "@nestjs/schedule";
           .integer()
           .positive()
           .default(7 * 24 * 60 * 60 * 1000),
+        // Session cookie flags, decoupled from NODE_ENV so each environment can
+        // opt in independently. Production (cross-site FE on Netlify, API behind
+        // TLS) needs COOKIE_SECURE=true + COOKIE_SAMESITE=none; same-origin dev
+        // keeps the lax/insecure defaults.
+        COOKIE_SECURE: Joi.boolean().default(true),
+        COOKIE_SAMESITE: Joi.string()
+          .valid("lax", "none", "strict")
+          .default("lax"),
       }),
     }),
     ScheduleModule.forRoot(),
