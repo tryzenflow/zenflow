@@ -1,6 +1,11 @@
 import { TaskFormValues } from "@/utils/tasks";
 import { UseFormReturn } from "react-hook-form";
-import { FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import {
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { TimeInput } from "./time-input";
 import { DAILY_HORIZON, TIME_GRANULARITY } from "@/utils/constants";
 
@@ -14,7 +19,7 @@ export const FixedForm = ({ form, minTime = 0 }: FixedFormProps) => {
   const fixedEnd = form.watch("fixedEnd");
 
   return (
-    <div className="grid grid-cols-2 gap-2">
+    <div className="grid gap-2">
       <FormField
         control={form.control}
         name="fixedStart"
