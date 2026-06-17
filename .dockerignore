@@ -1,0 +1,29 @@
+# Build context for backend/Dockerfile is the monorepo root. Keep it lean: the
+# image only needs pnpm manifests + packages/shared + backend sources.
+
+# Dependencies / build output (reinstalled & rebuilt inside the image)
+**/node_modules
+**/dist
+**/build
+**/generated
+**/coverage
+**/.turbo
+
+# Workspaces not part of the API image
+frontend
+services
+
+# Repo tooling / docs / assets not needed to build the API
+.git
+.github
+.claude
+.playwright-mcp
+.vscode
+.idea
+docs
+assets
+
+# Local env files & secrets — provided at runtime via compose env_file, never baked in
+**/*.env*
+**/uploads
+**/*.log

@@ -1,31 +1,64 @@
-# ---- Base build image ----
-FROM node:20-alpine AS builder
+# syntax=docker/dockerfile:1
 
+# Zenflow API image.
+#
+# IMPORTANT: the build context is the MONOREPO ROOT, not backend/, because the API
+# depends on the @zenflow/shared workspace package (packages/shared). Build with:
+#   docker build -t zenflow-api:latest -f backend/Dockerfile .
+# (see backend/build_images.sh). This is a pnpm workspace — do not use npm/yarn here.
+
+# ---- Base: pnpm via corepack (+ openssl for Prisma's musl engine on alpine) ----
+FROM node:20-alpine AS base
+RUN apk add --no-cache openssl \
+ && corepack enable \
+ && corepack prepare pnpm@10.32.1 --activate
+ENV PNPM_HOME=/pnpm
+ENV PATH="$PNPM_HOME:$PATH"
 WORKDIR /app
 
-COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile
+# ---- Builder: install all deps, build @zenflow/shared + the API ----
+FROM base AS builder
 
-COPY . .
+# Copy workspace manifests first so the (slow) install layer is cached across
+# source-only changes. Only the packages in the backend's dependency graph are needed.
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
+COPY packages/shared/package.json ./packages/shared/
+COPY backend/package.json ./backend/
 
-RUN yarn prisma generate
-RUN yarn build
+# Full install (incl. devDeps) for the backend and its workspace deps.
+RUN pnpm install --frozen-lockfile --filter backend...
 
-FROM node:20-alpine AS runner
+# Sources.
+COPY packages/shared ./packages/shared
+COPY backend ./backend
 
-WORKDIR /app
+# @zenflow/shared must be built first (the backend imports its compiled dist),
+# then generate the Prisma client and compile the Nest app.
+RUN pnpm --filter @zenflow/shared build \
+ && pnpm --filter backend exec prisma generate \
+ && pnpm --filter backend build
 
-COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile --production
+# Self-contained production bundle: prod deps only, with @zenflow/shared copied in
+# (not symlinked) and the Prisma CLI present for `migrate deploy` at boot. --legacy
+# copies workspace deps in (pnpm 10 otherwise requires inject-workspace-packages).
+RUN pnpm deploy --filter=backend --prod --legacy /app/deploy
 
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/proto ./proto
-COPY --from=builder /app/generated ./generated
-
+# ---- Runner: minimal production image ----
+FROM base AS runner
 ENV NODE_ENV=production
 ENV PORT=5000
 
+# Production node_modules + manifest (npm scripts) from the deploy bundle...
+COPY --from=builder /app/deploy/node_modules ./node_modules
+COPY --from=builder /app/deploy/package.json ./package.json
+
+# ...and the build artifacts. dist/ and generated/ are gitignored, so the deploy
+# bundle omits them — copy them straight from the builder's backend workspace.
+COPY --from=builder /app/backend/dist ./dist
+COPY --from=builder /app/backend/prisma ./prisma
+COPY --from=builder /app/backend/generated ./generated
+
 EXPOSE 5000
 
-CMD ["yarn", "start:prod"]
+# start:prod = `prisma migrate deploy && node dist/main`
+CMD ["pnpm", "start:prod"]
