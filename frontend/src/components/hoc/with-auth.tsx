@@ -41,7 +41,13 @@ export function WithAuth({ children }: { children: React.ReactNode }) {
     }
   }, [user, location.pathname]);
 
-  if (loading) return null;
+  // Render the protected children only once we have an authenticated user.
+  // Until `me()` resolves (or while it's in flight) we render nothing — this is
+  // what keeps an unauthenticated visit to `/` from mounting the calendar and
+  // firing protected requests (`/tasks`, …) that 403 and spray "Forbidden
+  // resource" toasts before the redirect to /login lands. The effect above
+  // either sets the user or navigates away.
+  if (loading || !user) return null;
 
   return <>{children}</>;
 }
