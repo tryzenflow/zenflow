@@ -13,7 +13,12 @@ export class MailService {
 
   async sendLoginEmail(to: string, otp: string, from?: string) {
     await this.mailerService.sendMail({
-      from,
+      // Only set `from` when explicitly provided. nodemailer copies every key
+      // present on the message (even `from: undefined`) before applying
+      // transport defaults, and it skips a default when the key already exists —
+      // so passing `from: undefined` clobbers `defaults.from` and ships a mail
+      // with no From header, which Gmail rejects as non-RFC-5322-compliant.
+      ...(from ? { from } : {}),
       to,
       subject: "Confirm your email account",
       template: "./confirm-email",

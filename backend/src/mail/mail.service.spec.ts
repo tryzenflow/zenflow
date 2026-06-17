@@ -57,5 +57,14 @@ describe("MailService", () => {
 
       expect(sendMail.mock.calls[0][0].from).toBe("x@y.z");
     });
+
+    it("omits the from key entirely when none is provided so the transport default applies", async () => {
+      await service.sendLoginEmail("user@example.com", "123456");
+
+      // Must NOT be present (even as undefined) — nodemailer treats a present
+      // `from` key as set and skips `defaults.from`, producing a mail with no
+      // From header that Gmail rejects.
+      expect("from" in sendMail.mock.calls[0][0]).toBe(false);
+    });
   });
 });
