@@ -77,14 +77,24 @@ export function WeekView({
     // 24h grid so it spans the full scroll length — that's what gives the sticky
     // day-header row room to travel and stay pinned. With a fixed `h-full` the
     // grid would overflow this box and the header would scroll away with it.
+    //
+    // This is a plain block (not `flex`): in WebKit a `position: sticky` element
+    // that is a direct flex child of a flex item sized by `min-h-full` can lose
+    // its pin after scrolling, because the flex containing block collapses and
+    // the header has nothing to stick to. Stacking both children as normal
+    // block-flow boxes keeps the sticky header reliably pinned in Safari.
     <div
       data-slot="week-view"
-      className="flex min-h-full min-w-[48rem] flex-col lg:min-w-0"
+      className="min-h-full min-w-[48rem] lg:min-w-0"
     >
-      {/* Day headers — sticky, frosted, aligned to the grid below. */}
+      {/* Day headers — sticky, aligned to the grid below. Uses a SOLID
+      `bg-card` (no translucency / `backdrop-blur`): Safari fails to repaint a
+      sticky element that carries its own `backdrop-filter`, so the frosted
+      header would visually vanish mid-scroll. A solid token background keeps it
+      opaque and visible across browsers. */}
       <div
         className={cn(
-          "bg-card/80 border-border sticky top-0 z-30 grid border-b backdrop-blur-md",
+          "bg-card border-border sticky top-0 z-30 grid border-b",
           GRID_COLS,
         )}
       >
