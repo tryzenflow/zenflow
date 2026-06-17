@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { fromZonedTime } from "date-fns-tz";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { errorToast } from "@/lib/toast";
 import { postData } from "@/api";
 import { useUserStore } from "@/hooks/use-user-store";
 import type { Task } from "@/types/tasks";
@@ -96,7 +97,7 @@ export function EditTaskDialog({
       toast.success("Task updated 🎉");
       setOpen(false);
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || "Failed to update task");
+      errorToast(error?.response?.data?.message || "Failed to update task");
     } finally {
       setLoading(false);
     }
@@ -109,7 +110,7 @@ export function EditTaskDialog({
       toast.success("Task completed");
       setOpen(false);
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || "Failed to complete task");
+      errorToast(error?.response?.data?.message || "Failed to complete task");
     }
   }
 
@@ -120,7 +121,7 @@ export function EditTaskDialog({
       toast.success("Task deleted");
       setOpen(false);
     } catch (error: any) {
-      toast.error(error?.response?.data?.message || "Failed to delete task");
+      errorToast(error?.response?.data?.message || "Failed to delete task");
     }
   }
 

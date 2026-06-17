@@ -3,6 +3,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useTaskForm } from "@/hooks/use-task-form";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { errorToast } from "@/lib/toast";
 import { postData } from "@/api";
 import { useFilesTracker } from "@/hooks/use-files-tracker";
 import { useUserStore } from "@/hooks/use-user-store";
@@ -80,7 +81,7 @@ export function CreateTaskDialog({
     // Backend offered the overflow envelope but neither concrete slot exists:
     // nothing actionable, so just inform the user.
     if (!overflow.outsideHours && !overflow.nextAvailable) {
-      toast.error(
+      errorToast(
         "Couldn't find any slot for this task — try a longer deadline or shorter duration.",
       );
       return;
@@ -97,7 +98,7 @@ export function CreateTaskDialog({
         onCreated();
         toast.success("Task scheduled 🎉");
       } catch (error) {
-        toast.error(
+        errorToast(
           (isAxiosError(error) && error.response?.data?.message) ||
             "Couldn't schedule the task — that slot may no longer be available.",
         );
@@ -160,7 +161,7 @@ export function CreateTaskDialog({
         toast.success("Task created successfully 🎉");
       }
     } catch (error: any) {
-      toast.error(
+      errorToast(
         error?.response?.data?.message ||
           error.message ||
           "Something went wrong when creating a new task",
@@ -179,7 +180,7 @@ export function CreateTaskDialog({
       form.reset();
       setOpen(false);
     } catch (error: any) {
-      toast.error(
+      errorToast(
         error.message || "Something went wrong when cancelling task creation",
       );
     } finally {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { errorToast } from "@/lib/toast";
 import { Check, ChevronLeft, ChevronRight, Clock, Info } from "lucide-react";
 import { WithAuth } from "@/components/hoc/with-auth";
 import { Wordmark } from "@/components/logo";
@@ -128,7 +129,7 @@ function OnboardingWizard() {
       toast.success("You're all set 🎉");
       navigate("/");
     } catch (error: any) {
-      toast.error(
+      errorToast(
         error?.response?.data?.message || "Failed to complete onboarding",
       );
     } finally {

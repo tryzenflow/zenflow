@@ -19,6 +19,7 @@ import { tasksToBlocks } from "@/utils/blocks";
 import type { TasksMeta } from "@zenflow/shared";
 import { isAxiosError } from "axios";
 import { toast } from "sonner";
+import { errorToast } from "@/lib/toast";
 import { useUserStore } from "@/hooks/use-user-store";
 import { zonedDate, zonedNow } from "@/utils/tz";
 import { isSameMonth } from "date-fns";
@@ -46,7 +47,7 @@ export function CalendarLayout() {
       setMeta(data.meta);
     } catch (error) {
       if (isAxiosError(error))
-        toast.error(error.response?.data?.message || "Failed to load tasks");
+        errorToast(error.response?.data?.message || "Failed to load tasks");
     }
   }
 
@@ -81,7 +82,7 @@ export function CalendarLayout() {
       await rescheduleTask(taskId, startISO);
     } catch (error) {
       if (isAxiosError(error))
-        toast.error(error.response?.data?.message || "Failed to reschedule");
+        errorToast(error.response?.data?.message || "Failed to reschedule");
     } finally {
       await refetch(); // reconcile with the server (applies cascade / reverts)
     }
@@ -111,7 +112,7 @@ export function CalendarLayout() {
       await resizeTask(taskId, startISO, durationMinutes);
     } catch (error) {
       if (isAxiosError(error))
-        toast.error(error.response?.data?.message || "Failed to resize");
+        errorToast(error.response?.data?.message || "Failed to resize");
     } finally {
       await refetch();
     }
@@ -146,7 +147,7 @@ export function CalendarLayout() {
       toast.success("Task completed");
     } catch (error) {
       if (isAxiosError(error))
-        toast.error(error.response?.data?.message || "Failed to complete task");
+        errorToast(error.response?.data?.message || "Failed to complete task");
     } finally {
       await refetch();
     }

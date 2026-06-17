@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { isAxiosError } from "axios";
 import { toast } from "sonner";
+import { errorToast } from "@/lib/toast";
 import { ChevronDown, Clock, Globe, Info, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -156,7 +157,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       toast.success("Settings saved");
       onOpenChange(false);
     } catch (error) {
-      toast.error(
+      errorToast(
         (isAxiosError(error) && error.response?.data?.message) ||
           "Failed to save settings",
       );
