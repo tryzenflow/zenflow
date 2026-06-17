@@ -187,28 +187,22 @@ body {
 
   /* Month view: today's cell — a faint muted wash over the card base. */
   .day-today {
-    background-color: color-mix(in oklch, var(--muted) 30%, var(--card));
+    @apply bg-background/30;
   }
 
   /* Frosted task card for fluid (auto-scheduled) blocks. */
   .glass-task {
-    background-color: color-mix(in oklch, var(--card) 80%, transparent);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    @apply backdrop-blur-2xl bg-background/80;
   }
 
   /* Frosted top app bar (docs/mockups: .glass-header). */
   .glass-header {
-    background-color: color-mix(in oklch, var(--card) 70%, transparent);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    @apply backdrop-blur-xl bg-background/80;
   }
 
   /* Frosted slide-over panel — task create/detail (docs/mockups: .glass-panel). */
   .glass-panel {
-    background-color: color-mix(in oklch, var(--card) 82%, transparent);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    @apply backdrop-blur-2xl bg-background/80;
   }
 }
 
