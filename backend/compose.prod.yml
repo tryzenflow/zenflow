@@ -1,13 +1,5 @@
 name: zenflow-prod
 services:
-  scheduler:
-    container_name: zenflow-scheduler-prod
-    image: zenflow-scheduler:latest
-    expose:
-      - "50051"
-    networks:
-      - api
-
   api:
     container_name: zenflow-api-prod
     image: zenflow-api:latest
@@ -20,8 +12,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      scheduler:
-        condition: service_started
       redis:
         condition: service_started
     env_file:
