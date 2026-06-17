@@ -5,9 +5,9 @@ import { Injectable } from "@nestjs/common";
 export class MailService {
   constructor(private mailerService: MailerService) {}
 
-  async sendLoginEmail(to: string, otp: string) {
+  async sendLoginEmail(to: string, otp: string, from?: string) {
     await this.mailerService.sendMail({
-      from: "Zenflow <no-reply@zenflow.io>",
+      from,
       to,
       subject: "Confirm your email account",
       template: "./confirm-email",
