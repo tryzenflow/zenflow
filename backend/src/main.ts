@@ -7,6 +7,11 @@ import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { createClient } from "redis";
 import { RedisStore } from "connect-redis";
 import passport from "passport";
+import { buildSessionOptions } from "./auth/session.config";
+
+// 7 days. Default lifetime of an idle session; with rolling sessions an
+// actively-used session keeps getting extended on every request.
+const DEFAULT_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -45,13 +50,15 @@ async function bootstrap() {
   SwaggerModule.setup("api", app, document); // available at <API_URL>/api
 
   app.use(
-    session({
-      secret: configService.get("SESSION_SECRET")!,
-      store: redisStore,
-      // see explanations for `resave` and `saveUninitialized` at https://stackoverflow.com/a/40396102/16164473
-      resave: false,
-      saveUninitialized: false,
-    }),
+    session(
+      buildSessionOptions({
+        secret: configService.get("SESSION_SECRET")!,
+        store: redisStore,
+        ttlMs:
+          configService.get<number>("SESSION_TTL_MS") ?? DEFAULT_SESSION_TTL_MS,
+        isProduction: process.env.NODE_ENV === "production",
+      }),
+    ),
   );
   app.use(passport.initialize());
   app.use(passport.session());

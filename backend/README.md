@@ -328,8 +328,14 @@ CACHE_URL="redis://zenflow-cache:6379"
 CORS_ORIGIN="http://localhost:5173"
 MAIL_TRANSPORT="smtp://zenflow-mail:25"
 SESSION_SECRET="change-me"
+SESSION_TTL_MS=604800000                       # optional; idle session lifetime, defaults to 7 days
 GRPC_SCHEDULER_URL="zenflow-scheduler:50051"   # reserved for the future ML service
 ```
+
+Sessions are **rolling**: every authenticated request resets the session cookie and the
+Redis session TTL, so an actively-used session is extended on each call and won't expire
+mid-use. `SESSION_TTL_MS` is therefore an *idle* timeout (cookie `maxAge` and Redis TTL are
+kept in sync). The option building lives in `src/auth/session.config.ts` (pure, unit-tested).
 
 ### Docker
 
