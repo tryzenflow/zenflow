@@ -73,9 +73,13 @@ export function WeekView({
   return (
     // Below `lg`, keep a min width so the 7 columns stay legible and the
     // content area scrolls horizontally instead of crushing each day.
+    // `min-h-full` (not `h-full`) lets this box grow past the viewport with the
+    // 24h grid so it spans the full scroll length — that's what gives the sticky
+    // day-header row room to travel and stay pinned. With a fixed `h-full` the
+    // grid would overflow this box and the header would scroll away with it.
     <div
       data-slot="week-view"
-      className="flex h-full min-w-[48rem] flex-col lg:min-w-0"
+      className="flex min-h-full min-w-[48rem] flex-col lg:min-w-0"
     >
       {/* Day headers — sticky, frosted, aligned to the grid below. */}
       <div
