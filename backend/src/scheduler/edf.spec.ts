@@ -1,5 +1,7 @@
 import {
+  compareEdf,
   type EdfTask,
+  feasibleSlots,
   findSlot,
   hasElapsed,
   isPast,
@@ -93,6 +95,114 @@ describe("findSlot", () => {
       new Date("2026-06-13T00:00:00Z"), // Saturday
     );
     expect(iso(slot)).toBe("2026-06-15T09:00:00.000Z");
+  });
+});
+
+describe("feasibleSlots", () => {
+  it("enumerates EVERY grid slot of an empty work day in ascending order", () => {
+    // Bound to a single day via an end-of-day deadline. 09:00–17:00, 60-min
+    // task: starts fit at 09:00,09:15,…,16:00 → 29 slots.
+    const slots = feasibleSlots(
+      prefs,
+      60,
+      new Date("2026-06-08T17:00:00Z"),
+      [],
+      MON_MIDNIGHT,
+    );
+    expect(slots).toHaveLength(29);
+    expect(iso(slots[0])).toBe("2026-06-08T09:00:00.000Z");
+    expect(iso(slots[1])).toBe("2026-06-08T09:15:00.000Z");
+    expect(iso(slots[slots.length - 1])).toBe("2026-06-08T16:00:00.000Z");
+    // Strictly ascending.
+    for (let i = 1; i < slots.length; i++) {
+      expect(slots[i].getTime()).toBeGreaterThan(slots[i - 1].getTime());
+    }
+  });
+
+  it("drops slots overlapping an occupied interval but keeps the rest", () => {
+    // 09:00–10:00 busy: the slots starting 09:00…09:45 (which would overlap it)
+    // are excluded; the next feasible start is 10:00. Bounded to one day by an
+    // end-of-day deadline so the count is deterministic.
+    const occ = [
+      {
+        start: Date.parse("2026-06-08T09:00:00Z"),
+        end: Date.parse("2026-06-08T10:00:00Z"),
+      },
+    ];
+    const slots = feasibleSlots(
+      prefs,
+      60,
+      new Date("2026-06-08T17:00:00Z"),
+      occ,
+      MON_MIDNIGHT,
+    );
+    expect(iso(slots[0])).toBe("2026-06-08T10:00:00.000Z");
+    expect(slots).toHaveLength(25); // 29 on an empty day, minus 4 blocked starts (09:00–09:45)
+    // None of the returned slots overlaps the occupied block.
+    for (const s of slots) {
+      const start = s.getTime();
+      expect(start >= occ[0].end || start + 60 * 60_000 <= occ[0].start).toBe(
+        true,
+      );
+    }
+  });
+
+  it("returns the slots collected so far when a candidate ends past the deadline", () => {
+    // Deadline 11:00, 60-min task: feasible starts are 09:00,09:15,…,10:00 (ends
+    // 11:00). The first start that ENDS past 11:00 (10:15→11:15) halts the scan.
+    const slots = feasibleSlots(
+      prefs,
+      60,
+      new Date("2026-06-08T11:00:00Z"),
+      [],
+      MON_MIDNIGHT,
+    );
+    expect(iso(slots[slots.length - 1])).toBe("2026-06-08T10:00:00.000Z");
+    expect(
+      slots.every(
+        (s) => s.getTime() + 60 * 60_000 <= Date.parse("2026-06-08T11:00:00Z"),
+      ),
+    ).toBe(true);
+  });
+
+  it("is empty when no slot fits before the deadline (matches findSlot null)", () => {
+    const slots = feasibleSlots(
+      prefs,
+      60,
+      new Date("2026-06-08T09:30:00Z"),
+      [],
+      MON_MIDNIGHT,
+    );
+    expect(slots).toEqual([]);
+    expect(
+      findSlot(prefs, 60, new Date("2026-06-08T09:30:00Z"), [], MON_MIDNIGHT),
+    ).toBeNull();
+  });
+
+  it("findSlot is exactly feasibleSlots()[0] across the existing scenarios", () => {
+    const cases: Array<Parameters<typeof feasibleSlots>> = [
+      [prefs, 60, null, [], MON_MIDNIGHT],
+      [prefs, 60, null, [], new Date("2026-06-08T09:40:00Z")],
+      [
+        prefs,
+        60,
+        null,
+        [
+          {
+            start: Date.parse("2026-06-08T09:00:00Z"),
+            end: Date.parse("2026-06-08T10:00:00Z"),
+          },
+        ],
+        MON_MIDNIGHT,
+      ],
+      [prefs, 60, null, [], new Date("2026-06-12T16:30:00Z")],
+      [prefs, 60, null, [], MON_MIDNIGHT, new Date("2026-06-13T00:00:00Z")],
+    ];
+    for (const args of cases) {
+      const first = feasibleSlots(...args)[0] ?? null;
+      const single = findSlot(...args);
+      expect(iso(single)).toBe(iso(first));
+    }
   });
 });
 
@@ -686,6 +796,60 @@ describe("scheduleAll — period ceiling (schedulingDeadline) for no-deadline ta
       TUE_11PM,
     );
     expect(iso(out[0].scheduledStartTime)).toBe("2026-06-10T09:00:00.000Z");
+  });
+});
+
+describe("compareEdf — EDF ordering and tie-breaking", () => {
+  it("orders earlier deadlines first", () => {
+    const a = task({ id: "a", deadline: new Date("2026-06-09T17:00:00Z") });
+    const b = task({ id: "b", deadline: new Date("2026-06-10T17:00:00Z") });
+    expect(compareEdf(a, b)).toBeLessThan(0);
+    expect(compareEdf(b, a)).toBeGreaterThan(0);
+  });
+
+  it("treats a null deadline as +Infinity (sorts last)", () => {
+    const dated = task({ id: "a", deadline: new Date("2026-06-10T17:00:00Z") });
+    const undated = task({ id: "b", deadline: null });
+    expect(compareEdf(dated, undated)).toBeLessThan(0);
+    expect(compareEdf(undated, dated)).toBeGreaterThan(0);
+  });
+
+  it("breaks an equal-deadline tie by createdAt ascending", () => {
+    const dl = new Date("2026-06-10T17:00:00Z");
+    const older = task({
+      id: "older",
+      deadline: dl,
+      createdAt: new Date("2026-06-01T00:00:00Z"),
+    });
+    const newer = task({
+      id: "newer",
+      deadline: dl,
+      createdAt: new Date("2026-06-02T00:00:00Z"),
+    });
+    expect(compareEdf(older, newer)).toBeLessThan(0);
+    expect(compareEdf(newer, older)).toBeGreaterThan(0);
+  });
+
+  it("breaks a both-null-deadline tie by createdAt ascending", () => {
+    const older = task({
+      id: "older",
+      deadline: null,
+      createdAt: new Date("2026-06-01T00:00:00Z"),
+    });
+    const newer = task({
+      id: "newer",
+      deadline: null,
+      createdAt: new Date("2026-06-02T00:00:00Z"),
+    });
+    expect(compareEdf(older, newer)).toBeLessThan(0);
+  });
+
+  it("is 0 for identical deadline and createdAt", () => {
+    const dl = new Date("2026-06-10T17:00:00Z");
+    const created = new Date("2026-06-01T00:00:00Z");
+    const a = task({ id: "a", deadline: dl, createdAt: created });
+    const b = task({ id: "b", deadline: dl, createdAt: created });
+    expect(compareEdf(a, b)).toBe(0);
   });
 });
 

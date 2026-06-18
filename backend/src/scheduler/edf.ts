@@ -1,5 +1,6 @@
 import { MAX_SCAN_DAYS, MIN } from "./constants";
 import { EdfTask, SchedulerPrefs, Placement } from "./interfaces";
+import { identityReRanker, SlotReRanker } from "./reranker";
 
 // Re-export the scheduler's public types so consumers can import them from "./edf".
 export type { EdfTask, SchedulerPrefs };
@@ -75,17 +76,27 @@ export function compareEdf(a: EdfTask, b: EdfTask): number {
 }
 
 /**
- * Earliest contiguous work-hours slot of `durationMinutes` that starts at/after
- * `earliest` (and `now`) and ends before `deadline`. Returns null on conflict.
+ * ALL feasible contiguous work-hours start instants for a `durationMinutes`
+ * task, in ascending order: every 15-minute-grid slot that starts at/after
+ * `earliest` (and `now`), lies inside the working window of a working day, ends
+ * before `deadline`, and does not overlap any `occupied` interval.
+ *
+ * This is the re-ranker seam the heuristic roadmap is built on: a re-ranker
+ * scores this enumerated set and picks its preferred candidate, while the EDF
+ * packer takes the first. The deadline acts as a hard cutoff — when a candidate
+ * would END after the deadline the scan stops and the slots collected so far are
+ * returned (mirroring {@link findSlot}'s early `return null`, which terminated
+ * on the very first such candidate). The pure-core contract is unchanged: `now`
+ * is an explicit input and there is no I/O or randomness.
  */
-export function findSlot(
+export function feasibleSlots(
   prefs: SchedulerPrefs,
   durationMinutes: number,
   deadline: Date | null,
   occupied: Interval[],
   now: Date,
   earliest?: Date,
-): Date | null {
+): Date[] {
   const tz = prefs.timezone;
   const durMs = durationMs(durationMinutes);
   const lowerMs = Math.max(now.getTime(), earliest ? earliest.getTime() : 0);
@@ -93,6 +104,7 @@ export function findSlot(
   const deadlineMs = deadline ? deadline.getTime() : null;
   const deadlineDateStr = deadline ? localDateStr(deadline, tz) : null;
 
+  const out: Date[] = [];
   // A window that wraps past midnight and started on the *previous* day spills
   // into `now`'s morning, so when it wraps the scan begins one day earlier. The
   // `cand` clamp below keeps every candidate ≥ now/earliest, so the prev-day
@@ -107,11 +119,38 @@ export function findSlot(
     let cand = ceilToSlot(Math.max(win.start, lowerMs));
     for (; cand + durMs <= win.end; cand += SLOT_MS) {
       const candEnd = cand + durMs;
-      if (deadlineMs !== null && candEnd > deadlineMs) return null;
-      if (!overlapsAny(occupied, cand, candEnd)) return new Date(cand);
+      // Deadline is a hard ceiling: the first candidate that overshoots it ends
+      // the whole scan — no later slot can fit before the deadline either.
+      if (deadlineMs !== null && candEnd > deadlineMs) return out;
+      if (!overlapsAny(occupied, cand, candEnd)) out.push(new Date(cand));
     }
   }
-  return null;
+  return out;
+}
+
+/**
+ * Earliest contiguous work-hours slot of `durationMinutes` that starts at/after
+ * `earliest` (and `now`) and ends before `deadline`. Returns null on conflict.
+ * The first element of the full {@link feasibleSlots} enumeration.
+ */
+export function findSlot(
+  prefs: SchedulerPrefs,
+  durationMinutes: number,
+  deadline: Date | null,
+  occupied: Interval[],
+  now: Date,
+  earliest?: Date,
+): Date | null {
+  return (
+    feasibleSlots(
+      prefs,
+      durationMinutes,
+      deadline,
+      occupied,
+      now,
+      earliest,
+    )[0] ?? null
+  );
 }
 
 /**
@@ -135,6 +174,7 @@ export function scheduleAll(
   prefs: SchedulerPrefs,
   tasks: EdfTask[],
   now: Date,
+  reRanker: SlotReRanker = identityReRanker,
 ): Placement[] {
   // Past tasks are frozen: never moved, never re-flagged, and excluded from the
   // occupied set so they can't block or displace future placements.
@@ -194,7 +234,10 @@ export function scheduleAll(
   for (const t of plain) {
     const earliest = t.deadline ? undefined : (t.schedulingAnchor ?? undefined);
     const ceiling = t.deadline ?? t.schedulingDeadline ?? null;
-    const slot = findSlot(
+    // Re-ranker seam: enumerate the feasible set, let the re-ranker re-order it
+    // by preference, then take its first choice. The identity re-ranker leaves
+    // the EDF earliest-fit order intact, so output is unchanged from `findSlot`.
+    const candidates = feasibleSlots(
       prefs,
       t.durationMinutes,
       ceiling,
@@ -202,6 +245,7 @@ export function scheduleAll(
       now,
       earliest,
     );
+    const slot = reRanker.score(t, candidates)[0] ?? null;
     if (slot) {
       occupied.push({
         start: slot.getTime(),
