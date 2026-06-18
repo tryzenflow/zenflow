@@ -42,7 +42,7 @@ backend/
 │   ├── tasks/                 # task CRUD, reschedule, resize, complete
 │   ├── scheduler/             # the engine (see below)
 │   │   ├── edf.ts             # PURE algorithm — no I/O, fully unit-tested
-│   │   ├── slot.ts            # work-window math, 15-min slots, penalty index
+│   │   ├── slot.ts            # work-window math, 15-min slots, preference index
 │   │   ├── horizon.ts         # calendar math (view ranges, week/month, work minutes)
 │   │   └── scheduler.service.ts  # persistence wrapper around edf.ts (+ telemetry)
 │   ├── files/                 # multipart upload/download to local disk
@@ -72,7 +72,7 @@ Defined in [`prisma/schema.prisma`](prisma/schema.prisma). Five models.
 | `timezone` | string | IANA, default `"UTC"` |
 | `workStart` / `workEnd` | int | minutes from midnight (default 540 / 1020 = 09:00–17:00) |
 | `workDays` | int[] | ISO weekdays, default `[1,2,3,4,5]` (1=Mon … 7=Sun) |
-| `penaltyMatrix` | int[] | flat **336** ints (7 days × 48 half-hour slots). Written on MOVE as Phase-1 telemetry; **not yet read** by the engine. Seeded lazily. |
+| `preferenceMatrix` | int[] | flat **672** ints (7 days × 96 fifteen-minute slots, slot-grid-aligned). **Signed** Phase-1 telemetry: a move-toward/keep increments a cell (+1), a move-away decrements it (−1), empty = 0 (neutral). **Not yet read** by the engine. Seeded lazily. |
 | `roleArchetypeId` | string? | Phase-4 cold-start cluster id |
 | `onboardingComplete` | bool | gates the onboarding redirect |
 
@@ -97,8 +97,8 @@ Indexes: `[userId, deadline]`, `[userId, status]`, `[userId, scheduledStartTime]
 | Field | Type | Notes |
 |-------|------|-------|
 | `id` | BigInt | autoincrement (serialized as decimal string over the wire) |
-| `eventType` | `TaskEventType` | `CREATE` \| `MOVE` \| `RESIZE` \| `COMPLETE` |
-| `oldSnapshot` / `newSnapshot` | Json | `{ scheduledStartTime, durationMinutes }`; `oldSnapshot` null on CREATE |
+| `eventType` | `TaskEventType` | `CREATE` \| `MOVE` \| `RESIZE` \| `KEEP` \| `COMPLETE` \| `ABANDON`. `KEEP` = completed in the suggested slot (positive signal). |
+| `oldSnapshot` / `newSnapshot` | Json | `{ scheduledStartTime, durationMinutes, tags }` (tag names at event time); MOVE/RESIZE also carry `suggestedStartTime` (the overridden EDF slot). `oldSnapshot` null on CREATE/KEEP. |
 | `rewardScore` | float | Phase-3 reward signal (default 1.0) |
 | `occurredAt` | DateTime | indexed desc per user |
 | `taskId` / `userId` | uuid | FKs, cascade delete (`userId` denormalized for range queries) |
@@ -156,7 +156,7 @@ Global prefix **`/api/v1`**. All routes except `POST /auth/otp/*` require
 | GET | `/tasks/suggestions?q=&limit=` | title-autocomplete: the user's existing tasks, **newest first** and **deduped by title** (case-insensitive), optionally filtered by the `q` substring. `limit` 1–50, default 10. Returns `TaskSuggestionsResponse` (`{ suggestions: Task[] }`). Read-only; never reschedules. Declared **before** `/tasks/:id` so it isn't matched as an id |
 | GET | `/tasks/:id` | task detail + last events |
 | PATCH | `/tasks/:id` | metadata only (title/note/deadline/tags) — **does NOT reschedule** |
-| PATCH | `/tasks/:id/reschedule` | manual drag → `pin`, records MOVE + penalty telemetry |
+| PATCH | `/tasks/:id/reschedule` | manual drag → `pin`, records MOVE + signed preference telemetry |
 | PATCH | `/tasks/:id/resize` | edge-resize, snaps to 15-min grid, recomputes conflicts |
 | PATCH | `/tasks/:id/resolve-overflow` | accept a create-overflow recovery option (`{ choice: "outsideHours"\|"nextAvailable", view? }`); re-derives the slot server-side, pins the task as a fixed anchor, records MOVE. Returns a `RescheduleResponse` |
 | PATCH | `/tasks/:id/complete` | mark DONE, records COMPLETE |
@@ -204,9 +204,17 @@ deadlines.
 
 Pure functions you'll work with:
 
-- **`findSlot(prefs, durationMinutes, deadline, occupied, now, earliest?)`** — earliest
-  contiguous work-hours slot of the required length that starts at/after `earliest`/`now`
-  and ends before `deadline`; scans up to `MAX_SCAN_DAYS` (90); returns `null` on conflict.
+- **`feasibleSlots(prefs, durationMinutes, deadline, occupied, now, earliest?)`** — ALL
+  feasible 15-min-grid work-hours start instants (ascending) for the task: the re-ranker seam
+  the heuristic roadmap re-ranks over. The deadline is a hard cutoff (the scan stops at the
+  first candidate that would end past it).
+- **`findSlot(...)`** — earliest contiguous work-hours slot of the required length that
+  starts at/after `earliest`/`now` and ends before `deadline`; defined as
+  `feasibleSlots(...)[0] ?? null`, so packer and re-ranker share one feasibility definition.
+- **`reranker.ts`** — `SlotReRanker.score(task, candidates)` re-orders the feasible set by
+  preference; Phase 1 ships `identityReRanker` (returns it unchanged). `scheduleAll` routes
+  every placement through it, so Phase 2's signed matrix plugs in here without touching
+  feasibility.
 - **`compareEdf(a, b)`** — the ordering: deadline ascending (nulls last), then `createdAt`.
 - **`scheduleAll(prefs, tasks, now)`** — full deterministic re-EDF (fixed tasks stay put,
   flexible tasks EDF-packed around them). Used when preferences change.
@@ -273,8 +281,8 @@ time-overlap via the shared `recomputeConflicts(projected)` helper. This is the 
 that can leave a task **placed but conflicting** (overlapping a neighbour); the EDF engine
 itself only ever leaves a task unplaced (`scheduledStartTime: null`) on conflict.
 
-`SchedulerService` wraps these to persist placements, write `TaskEvent`s, and bump the
-`penaltyMatrix`. A `scoreSlot()` seam is reserved here for the **Phase 3 bandit** to plug
+`SchedulerService` wraps these to persist placements, write `TaskEvent`s, and apply signed
+updates to the `preferenceMatrix` (move-away −1, move-toward/keep +1). A `scoreSlot()` seam is reserved here for the **Phase 3 bandit** to plug
 into (see [`services/bandit/README.md`](../services/bandit/README.md) and
 [`docs/heuristic.md`](../docs/heuristic.md)).
 

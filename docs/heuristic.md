@@ -121,9 +121,12 @@ and complete telemetry.
   the user accepts one, then the task is pinned as a fixed anchor
   (`PATCH /tasks/:id/resolve-overflow`). Each option is still deadline-aware telemetry: the
   override is recorded as a MOVE event.
-- **Data Foundation:** Implement the `task_events` audit table in PostgreSQL. To support
-  native multi-tag flexibility without joining overhead at the MVP stage, tasks store tags as
-  a native PostgreSQL text array (`tags: String[]` via Prisma). **Telemetry is complete from
+- **Data Foundation:** Implement the `task_events` audit table in PostgreSQL. Multi-tag
+  flexibility is modelled as a per-user `Tag` relation (implicit many-to-many, with
+  `@@unique([userId, name])`) rather than a native `text[]` column — the relation dedupes tag
+  names per user and is the better long-term shape for Phase 2's per-tag aggregation, at the
+  cost of one join. Each event snapshot still records the task's tag **names at event time**
+  (captured per-event, since a task's tags can change later). **Telemetry is complete from
   day one**: every event records the slot the engine *suggested*, the slot the user *chose*,
   the task's tags and estimated duration, and the eventual outcome
   (`completed`/`rescheduled`/`abandoned`). This counterfactual pair — *suggested* vs. *chosen*

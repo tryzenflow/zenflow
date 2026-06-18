@@ -24,10 +24,15 @@ planned Python bandit service.
 
 ## The data you have to work with (already collected in Phase 1)
 
-- **`TaskEvent`** (`backend/prisma/schema.prisma`): `CREATE`/`MOVE`/`RESIZE`/`COMPLETE` with
-  `oldSnapshot`/`newSnapshot` (`{ scheduledStartTime, durationMinutes }`) and `rewardScore`.
-- **`User.penaltyMatrix`**: flat 336-int matrix (7 days × 48 half-hour slots), bumped on
-  MOVE via `SchedulerService` (`slot.ts` `penaltyIndex`). Not yet read by the engine.
+- **`TaskEvent`** (`backend/prisma/schema.prisma`): `CREATE`/`MOVE`/`RESIZE`/`COMPLETE`/
+  `KEEP`/`ABANDON` with `oldSnapshot`/`newSnapshot` (`{ scheduledStartTime, durationMinutes,
+  tags, suggestedStartTime? }`) and `rewardScore`. `KEEP` is the positive accepted-unchanged
+  signal (task completed in its suggested slot); `MOVE`/`RESIZE` snapshots carry
+  `suggestedStartTime` (the EDF slot the user overrode).
+- **`User.preferenceMatrix`**: flat **signed** 672-int matrix (7 days × 96 fifteen-minute
+  slots), updated via `SchedulerService` — move-toward/keep `+1`, move-away `-1` (`slot.ts`
+  `preferenceIndex`). Not yet read by the engine; re-rank EDF's feasible set through the
+  `SlotReRanker` seam (`scheduler/reranker.ts`, `edf.ts` `feasibleSlots`).
 - **`User.roleArchetypeId`**: reserved for Phase-4 cold-start cluster assignment.
 - **`tags: string[]`** on tasks: the multi-tag signal for bias blending and multi-hot
   vectorization.

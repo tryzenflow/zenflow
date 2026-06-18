@@ -14,17 +14,21 @@ The authoritative roadmap lives in [`docs/heuristic.md`](../../docs/heuristic.md
 
 Linear bandit and matrix-factorization models are a poor fit for the NestJS/TypeScript
 backend. The plan is a small Python service the API calls over internal HTTP
-(`BANDIT_SERVICE_URL`) only at task-creation time. The EDF engine already exposes a
-`scoreSlot()` seam in [`backend/src/scheduler/edf.ts`](../../backend/src/scheduler/edf.ts)
-(wrapped by `SchedulerService`) where bandit/penalty scoring will plug in — until then it
-is a no-op and pure EDF order wins.
+(`BANDIT_SERVICE_URL`) only at task-creation time. The EDF engine already exposes the
+`feasibleSlots()` + `SlotReRanker` seam in
+[`backend/src/scheduler/edf.ts`](../../backend/src/scheduler/edf.ts) and
+[`reranker.ts`](../../backend/src/scheduler/reranker.ts) (wrapped by `SchedulerService`)
+where bandit scoring will plug in as a re-ranker over the feasible set — Phase 1 ships the
+identity re-ranker, so pure EDF order wins until then.
 
 The data the model will consume already accumulates in Phase 1:
 
-- **`TaskEvent`** (`CREATE`/`MOVE`/`RESIZE`/`COMPLETE`) with `oldSnapshot`/`newSnapshot`
-  and a `rewardScore` field — the reward signal.
-- **`User.penaltyMatrix`** — a flat 336-int matrix (7 days × 48 half-hour slots) bumped on
-  every manual MOVE.
+- **`TaskEvent`** (`CREATE`/`MOVE`/`RESIZE`/`KEEP`/`COMPLETE`/`ABANDON`) with
+  `oldSnapshot`/`newSnapshot` (each carrying the task's tag names at event time, and the
+  EDF-`suggestedStartTime` on MOVE/RESIZE) and a `rewardScore` field — the reward signal.
+- **`User.preferenceMatrix`** — a flat **672**-int **signed** matrix (7 days × 96
+  fifteen-minute slots, slot-grid-aligned). Manual moves decrement the vacated cell (−1) and
+  increment the destination (+1); a KEEP/complete-in-slot increments the kept cell (+1).
 - **`User.roleArchetypeId`** — reserved for Phase-4 cold-start cluster assignment.
 
 ## Phase 3 — Contextual Bandits (LinUCB)
@@ -53,7 +57,7 @@ Eliminate the new-user data void using aggregate behavior across the whole user 
 - **User archetypes** from multi-tag signatures (e.g. `#dev`+`#ops` → "Night Owl
   Developer"; `#marketing`+`#copy` → "Creative Lead").
 - **Cold start:** map a new user's onboarding role to an archetype and seed their
-  multi-hot bandit weights + penalty matrix from that cluster's baseline averages
+  multi-hot bandit weights + preference matrix from that cluster's baseline averages
   (`User.roleArchetypeId`).
 
 ## Planned HTTP surface
