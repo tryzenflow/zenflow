@@ -317,13 +317,19 @@ export class SchedulerService {
         });
         if (isTarget) {
           updatedTarget = updated;
+          const prev = before.get(t.id)!;
+          const tags = await this.tagNamesOf(t.id, tx);
           await tx.taskEvent.create({
             data: {
               taskId: t.id,
               userId: user.id,
               eventType: "MOVE",
-              oldSnapshot: this.snapshot(before.get(t.id)!),
-              newSnapshot: this.snapshot(updated),
+              oldSnapshot: this.snapshot(prev, tags, prev.scheduledStartTime),
+              newSnapshot: this.snapshot(
+                updated,
+                tags,
+                prev.scheduledStartTime,
+              ),
               rewardScore: 0.0, // user accepted a recovery option
             },
           });
@@ -395,13 +401,19 @@ export class SchedulerService {
         });
         if (t.id === taskId) {
           updatedTarget = updated;
+          const prev = before.get(t.id)!;
+          const tags = await this.tagNamesOf(t.id, tx);
           await tx.taskEvent.create({
             data: {
               taskId: t.id,
               userId: user.id,
               eventType: "MOVE",
-              oldSnapshot: this.snapshot(before.get(t.id)!),
-              newSnapshot: this.snapshot(updated),
+              oldSnapshot: this.snapshot(prev, tags, prev.scheduledStartTime),
+              newSnapshot: this.snapshot(
+                updated,
+                tags,
+                prev.scheduledStartTime,
+              ),
               rewardScore: 0.0, // user override
             },
           });
@@ -489,13 +501,19 @@ export class SchedulerService {
             },
           });
           updatedTarget = updated;
+          const prev = before.get(t.id)!;
+          const tags = await this.tagNamesOf(t.id, tx);
           await tx.taskEvent.create({
             data: {
               taskId: t.id,
               userId: user.id,
               eventType: "RESIZE",
-              oldSnapshot: this.snapshot(before.get(t.id)!),
-              newSnapshot: this.snapshot(updated),
+              oldSnapshot: this.snapshot(prev, tags, prev.scheduledStartTime),
+              newSnapshot: this.snapshot(
+                updated,
+                tags,
+                prev.scheduledStartTime,
+              ),
               rewardScore: 0.0, // user override
             },
           });
@@ -556,13 +574,47 @@ export class SchedulerService {
     return conflictOf;
   }
 
-  private snapshot(task: Task): Prisma.InputJsonValue {
+  /**
+   * Build a {@link TaskSnapshot} for a TaskEvent. Records the slot + duration,
+   * plus the task's tag NAMES at event time (`tags`, captured per-event because
+   * a task's tags can change later) and — on MOVE/RESIZE — the EDF-suggested
+   * slot the user overrode (`suggestedStartTime`, the pre-edit
+   * `scheduledStartTime`). `tags` is threaded in by the caller, which holds the
+   * loaded Tag rows; the scheduler never re-queries them.
+   */
+  private snapshot(
+    task: Task,
+    tags: string[] = [],
+    suggestedStartTime?: Date | null,
+  ): Prisma.InputJsonValue {
     return {
       scheduledStartTime: task.scheduledStartTime
         ? task.scheduledStartTime.toISOString()
         : null,
       durationMinutes: task.durationMinutes,
+      tags,
+      // Only MOVE/RESIZE pass a suggested slot; CREATE/KEEP/etc. omit the key.
+      ...(suggestedStartTime !== undefined
+        ? {
+            suggestedStartTime: suggestedStartTime
+              ? suggestedStartTime.toISOString()
+              : null,
+          }
+        : {}),
     };
+  }
+
+  /**
+   * The tag NAMES of a task, loaded fresh inside `tx` for event snapshots. Kept
+   * here so the MOVE/RESIZE/overflow writers can record "tags then" without the
+   * caller pre-joining them. Sorted for stable output.
+   */
+  private async tagNamesOf(taskId: string, tx: PrismaTx): Promise<string[]> {
+    const rows = await tx.tag.findMany({
+      where: { tasks: { some: { id: taskId } } },
+      select: { name: true },
+    });
+    return rows.map((r) => r.name).sort((a, b) => a.localeCompare(b));
   }
 
   /**

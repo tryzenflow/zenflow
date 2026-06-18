@@ -6,13 +6,20 @@ import { ABANDON_BATCH_SIZE, ABANDON_GRACE_MS } from "../common/constants";
 
 /**
  * The minimal task fields the sweep needs: the id/userId to write the row +
- * event, and the slot fields the {@link snapshot} helper records as the slot the
- * task died in (mirrors how COMPLETE captures `scheduledStartTime`/duration).
+ * event, the slot fields the {@link snapshot} helper records as the slot the
+ * task died in (mirrors how COMPLETE captures `scheduledStartTime`/duration),
+ * and the related Tag rows so the snapshot records the task's tag names at event
+ * time (Phase-2 telemetry — "tags then", not "tags now").
  */
-type AbandonCandidate = Pick<
-  Prisma.TaskGetPayload<object>,
-  "id" | "userId" | "scheduledStartTime" | "durationMinutes"
->;
+type AbandonCandidate = Prisma.TaskGetPayload<{
+  select: {
+    id: true;
+    userId: true;
+    scheduledStartTime: true;
+    durationMinutes: true;
+    tags: { select: { name: true } };
+  };
+}>;
 
 /**
  * Sweeps deadline-bearing tasks whose deadline has expired into the ABANDONED
@@ -52,6 +59,8 @@ export class AbandonedTasksService {
         ? task.scheduledStartTime.toISOString()
         : null,
       durationMinutes: task.durationMinutes,
+      // Tag NAMES at abandonment (sorted) — "tags then" for Phase-2 telemetry.
+      tags: task.tags.map((t) => t.name).sort((a, b) => a.localeCompare(b)),
     };
   }
 
@@ -87,6 +96,7 @@ export class AbandonedTasksService {
           userId: true,
           scheduledStartTime: true,
           durationMinutes: true,
+          tags: { select: { name: true } },
         },
         take: ABANDON_BATCH_SIZE,
       });

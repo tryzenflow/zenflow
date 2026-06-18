@@ -162,6 +162,10 @@ export class TasksService {
                 ? finalTask.scheduledStartTime.toISOString()
                 : null,
               durationMinutes: finalTask.durationMinutes,
+              // Tag NAMES at create time (sorted) — "tags then" for Phase-2.
+              tags: finalTask.tags
+                .map((t) => t.name)
+                .sort((a, b) => a.localeCompare(b)),
             },
             rewardScore: 1.0,
           },
@@ -515,6 +519,11 @@ export class TasksService {
           data: { status: "DONE" },
           include: { tags: true },
         });
+        // Tag NAMES at completion time (sorted) — recorded on the snapshot so the
+        // Phase-2 per-tag duration bias has "tags then", not "tags now".
+        const tagNames = updated.tags
+          .map((t) => t.name)
+          .sort((a, b) => a.localeCompare(b));
         await tx.taskEvent.create({
           data: {
             taskId: updated.id,
@@ -526,6 +535,7 @@ export class TasksService {
                 ? updated.scheduledStartTime.toISOString()
                 : null,
               durationMinutes: updated.durationMinutes,
+              tags: tagNames,
             },
             rewardScore: 1.0,
           },

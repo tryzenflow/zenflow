@@ -21,6 +21,18 @@ export type TaskCardState =
 export interface TaskSnapshot {
   scheduledStartTime: string | null;
   durationMinutes: number;
+  /**
+   * The task's tag NAMES at event time. Captured per-event because a task's tags
+   * can change afterward, so the current Task.tags join would reconstruct "tags
+   * now," not "tags then" — Phase 2's per-tag duration bias needs the latter.
+   */
+  tags?: string[];
+  /**
+   * The slot the EDF engine had SUGGESTED before this edit (the pre-edit
+   * `scheduledStartTime`). Present on MOVE/RESIZE so offline replay/IPS can
+   * recover the suggestion the user overrode. Absent on CREATE/COMPLETE/etc.
+   */
+  suggestedStartTime?: string | null;
 }
 
 export interface Task {

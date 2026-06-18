@@ -79,6 +79,8 @@ function makeService(rows: Task[]): {
           userId: t.userId,
           scheduledStartTime: t.scheduledStartTime,
           durationMinutes: t.durationMinutes,
+          // The real query selects related Tag names; the base fixture has none.
+          tags: (t as Task & { tags?: { name: string }[] }).tags ?? [],
         }));
       return Promise.resolve(matches);
     }),
@@ -135,10 +137,11 @@ describe("AbandonedTasksService.sweep", () => {
     expect(ev.taskId).toBe("overdue");
     expect(ev.userId).toBe("user-1");
     expect(ev.rewardScore).toBe(-1.0);
-    // Snapshot = the slot it died in.
+    // Snapshot = the slot it died in, plus the task's tag names at event time.
     expect(ev.newSnapshot).toEqual({
       scheduledStartTime: "2026-06-18T08:00:00.000Z",
       durationMinutes: 45,
+      tags: [],
     });
   });
 
