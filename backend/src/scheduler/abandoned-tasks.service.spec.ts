@@ -1,0 +1,204 @@
+import { AbandonedTasksService } from "./abandoned-tasks.service";
+import { ABANDON_GRACE_MS } from "../common/constants";
+import type { Task } from "../../generated/prisma";
+
+/**
+ * Coverage for the abandoned-task sweep. A task is ABANDONED only when it is
+ * PENDING, carries a user `deadline`, and that deadline passed by more than the
+ * grace window. Deadline-less floaters and within-grace overdue tasks are never
+ * swept, and the update flips status away from PENDING so a second run is a
+ * no-op (idempotency).
+ *
+ * The Prisma mock is an in-memory task table that honors the
+ * `status: PENDING` + `deadline: { lt: cutoff }` filter so the idempotency test
+ * exercises the same query the next real run would. Every `taskEvent.create` is
+ * captured to assert exactly which events were emitted.
+ */
+
+const NOW = new Date("2026-06-18T12:00:00.000Z");
+
+function task(overrides: Partial<Task> & { id: string }): Task {
+  return {
+    title: "Task",
+    note: null,
+    durationMinutes: 60,
+    deadline: null,
+    fixed: false,
+    manuallyMoved: false,
+    schedulingAnchor: null,
+    view: null,
+    startTime: 0,
+    status: "PENDING",
+    conflict: false,
+    scheduledStartTime: null,
+    userId: "user-1",
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    ...overrides,
+  };
+}
+
+interface EventCall {
+  taskId: string;
+  userId: string;
+  eventType: string;
+  oldSnapshot: unknown;
+  newSnapshot: unknown;
+  rewardScore: number;
+}
+
+type FindManyArgs = {
+  where: { status: string; deadline?: { lt: Date } };
+  take: number;
+};
+
+function makeService(rows: Task[]): {
+  service: AbandonedTasksService;
+  events: EventCall[];
+  byId: Map<string, Task>;
+  findManyCalls: number;
+} {
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const events: EventCall[] = [];
+  let findManyCalls = 0;
+
+  const taskTable = {
+    findMany: jest.fn((args: FindManyArgs) => {
+      findManyCalls += 1;
+      const lt = args.where.deadline?.lt;
+      const matches = [...byId.values()]
+        .filter(
+          (t) =>
+            t.status === args.where.status &&
+            t.deadline !== null &&
+            (lt === undefined || t.deadline.getTime() < lt.getTime()),
+        )
+        .slice(0, args.take)
+        .map((t) => ({
+          id: t.id,
+          userId: t.userId,
+          scheduledStartTime: t.scheduledStartTime,
+          durationMinutes: t.durationMinutes,
+        }));
+      return Promise.resolve(matches);
+    }),
+    update: jest.fn((args: { where: { id: string }; data: Partial<Task> }) => {
+      const merged = { ...byId.get(args.where.id)!, ...args.data };
+      byId.set(args.where.id, merged);
+      return Promise.resolve(merged);
+    }),
+  };
+
+  const tx = {
+    task: taskTable,
+    taskEvent: {
+      create: jest.fn((args: { data: EventCall }) => {
+        events.push(args.data);
+        return Promise.resolve({});
+      }),
+    },
+  };
+
+  const prisma = {
+    task: taskTable,
+    $transaction: (fn: (t: typeof tx) => unknown) => fn(tx),
+  };
+
+  return {
+    service: new AbandonedTasksService(prisma as never),
+    events,
+    byId,
+    get findManyCalls() {
+      return findManyCalls;
+    },
+  };
+}
+
+describe("AbandonedTasksService.sweep", () => {
+  it("abandons a PENDING task overdue beyond the grace window", async () => {
+    const overdue = task({
+      id: "overdue",
+      // 3 hours past, well beyond the 1h grace.
+      deadline: new Date(NOW.getTime() - 3 * 60 * 60 * 1000),
+      scheduledStartTime: new Date("2026-06-18T08:00:00.000Z"),
+      durationMinutes: 45,
+    });
+    const { service, events, byId } = makeService([overdue]);
+
+    const count = await service.sweep(NOW);
+
+    expect(count).toBe(1);
+    expect(byId.get("overdue")?.status).toBe("ABANDONED");
+    expect(events).toHaveLength(1);
+    const ev = events[0];
+    expect(ev.eventType).toBe("ABANDON");
+    expect(ev.taskId).toBe("overdue");
+    expect(ev.userId).toBe("user-1");
+    expect(ev.rewardScore).toBe(-1.0);
+    // Snapshot = the slot it died in.
+    expect(ev.newSnapshot).toEqual({
+      scheduledStartTime: "2026-06-18T08:00:00.000Z",
+      durationMinutes: 45,
+    });
+  });
+
+  it("ignores deadline-less floaters", async () => {
+    const floater = task({ id: "floater", deadline: null });
+    const { service, events, byId } = makeService([floater]);
+
+    const count = await service.sweep(NOW);
+
+    expect(count).toBe(0);
+    expect(byId.get("floater")?.status).toBe("PENDING");
+    expect(events).toHaveLength(0);
+  });
+
+  it("ignores an overdue task still within the grace window", async () => {
+    const justLate = task({
+      id: "just-late",
+      // Passed, but only by half the grace window.
+      deadline: new Date(NOW.getTime() - ABANDON_GRACE_MS / 2),
+    });
+    const { service, events, byId } = makeService([justLate]);
+
+    const count = await service.sweep(NOW);
+
+    expect(count).toBe(0);
+    expect(byId.get("just-late")?.status).toBe("PENDING");
+    expect(events).toHaveLength(0);
+  });
+
+  it("ignores DONE and already-ABANDONED tasks even when overdue", async () => {
+    const deep = new Date(NOW.getTime() - 5 * 60 * 60 * 1000);
+    const done = task({ id: "done", status: "DONE", deadline: deep });
+    const already = task({
+      id: "already",
+      status: "ABANDONED",
+      deadline: deep,
+    });
+    const { service, events, byId } = makeService([done, already]);
+
+    const count = await service.sweep(NOW);
+
+    expect(count).toBe(0);
+    expect(byId.get("done")?.status).toBe("DONE");
+    expect(byId.get("already")?.status).toBe("ABANDONED");
+    expect(events).toHaveLength(0);
+  });
+
+  it("is idempotent: a second run does not re-emit for an abandoned task", async () => {
+    const overdue = task({
+      id: "overdue",
+      deadline: new Date(NOW.getTime() - 3 * 60 * 60 * 1000),
+    });
+    const { service, events } = makeService([overdue]);
+
+    const first = await service.sweep(NOW);
+    const second = await service.sweep(NOW);
+
+    expect(first).toBe(1);
+    expect(second).toBe(0);
+    // Exactly one ABANDON event across both runs.
+    expect(events).toHaveLength(1);
+  });
+});
