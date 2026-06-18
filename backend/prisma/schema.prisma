@@ -125,6 +125,7 @@ enum TaskEventType {
   CREATE
   MOVE // user dragged to another slot/day — also serves as the "rescheduled" outcome
   RESIZE
+  KEEP // user left an EDF suggestion in place (completed in its suggested slot) — positive signal
   COMPLETE // outcome: completed in its slot
   ABANDON // outcome: deadline expired unresolved (emitted by the overdue sweep)
 }

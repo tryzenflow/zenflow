@@ -643,4 +643,37 @@ export class SchedulerService {
       data: { preferenceMatrix: matrix },
     });
   }
+
+  /**
+   * Record the positive KEEP signal for a task completed in the slot the engine
+   * suggested (the user left the EDF placement untouched). Emits a KEEP
+   * TaskEvent and increments (+1) the user's preference matrix at that slot —
+   * the "prefers this interval" half of the signed matrix the heuristic spec
+   * mandates (docs/heuristic.md). The caller must only invoke this when the task
+   * is NOT `manuallyMoved` and has a non-null `scheduledStartTime`; `tags` are
+   * the task's tag names at event time. Runs inside the caller's transaction.
+   */
+  async recordKeep(
+    user: User,
+    task: Task,
+    tags: string[],
+    tx: PrismaTx,
+  ): Promise<void> {
+    if (!task.scheduledStartTime) return;
+    await tx.taskEvent.create({
+      data: {
+        taskId: task.id,
+        userId: user.id,
+        eventType: "KEEP",
+        oldSnapshot: Prisma.JsonNull,
+        newSnapshot: this.snapshot(task, tags),
+        rewardScore: 1.0, // accepted-unchanged: positive placement signal
+      },
+    });
+    await this.applyPreference(
+      user,
+      [{ at: task.scheduledStartTime, delta: +1 }],
+      tx,
+    );
+  }
 }

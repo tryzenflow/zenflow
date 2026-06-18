@@ -540,6 +540,13 @@ export class TasksService {
             rewardScore: 1.0,
           },
         });
+        // Positive KEEP signal: the task was completed in the slot the engine
+        // SUGGESTED (it was never manually dragged/resized and it had a
+        // placement). This is the +1 half of the signed preference matrix — an
+        // accepted-unchanged placement is distinguishable from an untouched one.
+        if (!updated.manuallyMoved && updated.scheduledStartTime !== null) {
+          await this.scheduler.recordKeep(user, updated, tagNames, tx);
+        }
         // Re-settle the remaining PENDING set: completing this task removes it as
         // a blocker, so any task that only overlapped it self-heals (conflict
         // cleared via the now-independent overlap pass) and flexible tasks reflow

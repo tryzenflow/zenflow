@@ -6,6 +6,7 @@ export type TaskEventType =
   | "CREATE"
   | "MOVE"
   | "RESIZE"
+  | "KEEP"
   | "COMPLETE"
   | "ABANDON";
 

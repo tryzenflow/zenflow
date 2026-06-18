@@ -499,8 +499,10 @@ describe("TasksService.list — display vs focal window", () => {
 function makeSchedulingService(rows: TaskWithTags[]): {
   service: TasksService;
   table: Map<string, TaskWithTags>;
+  events: jest.Mock;
 } {
   const table = new Map<string, TaskWithTags>(rows.map((r) => [r.id, r]));
+  const taskEventCreate = jest.fn().mockResolvedValue({});
 
   const matchesWhere = (
     t: TaskWithTags,
@@ -547,7 +549,7 @@ function makeSchedulingService(rows: TaskWithTags[]): {
       }),
     },
     user: { update: jest.fn().mockResolvedValue({}) },
-    taskEvent: { create: jest.fn().mockResolvedValue({}) },
+    taskEvent: { create: taskEventCreate },
   };
 
   const prisma = {
@@ -560,7 +562,7 @@ function makeSchedulingService(rows: TaskWithTags[]): {
 
   const scheduler = new SchedulerService(prisma as never);
   const service = new TasksService(prisma as never, scheduler);
-  return { service, table };
+  return { service, table, events: taskEventCreate };
 }
 
 describe("TasksService — stale-conflict self-heal on delete/complete", () => {
@@ -658,5 +660,61 @@ describe("TasksService — stale-conflict self-heal on delete/complete", () => {
     await service.remove("morning", user);
 
     expect(table.get("afternoon")!.conflict).toBe(false);
+  });
+});
+
+describe("TasksService.complete — KEEP positive signal", () => {
+  const slot = new Date("2026-01-05T09:00:00.000Z"); // a Monday work slot
+
+  function eventTypes(events: jest.Mock): string[] {
+    return events.mock.calls.map((c) => c[0].data.eventType);
+  }
+
+  it("emits a KEEP event when a task is completed in its suggested slot", async () => {
+    // Placed by the engine and never touched (not manuallyMoved) → completing
+    // it leaves the suggestion untouched, so KEEP fires alongside COMPLETE.
+    const kept = task({
+      id: "kept",
+      scheduledStartTime: slot,
+      manuallyMoved: false,
+    });
+    const { service, events } = makeSchedulingService([kept]);
+
+    await service.complete("kept", user);
+
+    const types = eventTypes(events);
+    expect(types).toContain("COMPLETE");
+    expect(types).toContain("KEEP");
+    // The KEEP snapshot records the slot it was kept in.
+    const keep = events.mock.calls.find((c) => c[0].data.eventType === "KEEP");
+    expect(keep![0].data.newSnapshot.scheduledStartTime).toBe(
+      slot.toISOString(),
+    );
+  });
+
+  it("does NOT emit KEEP when the task was manually moved", async () => {
+    const moved = task({
+      id: "moved",
+      scheduledStartTime: slot,
+      manuallyMoved: true,
+    });
+    const { service, events } = makeSchedulingService([moved]);
+
+    await service.complete("moved", user);
+
+    expect(eventTypes(events)).not.toContain("KEEP");
+  });
+
+  it("does NOT emit KEEP when the task had no placement", async () => {
+    const unplaced = task({
+      id: "unplaced",
+      scheduledStartTime: null,
+      manuallyMoved: false,
+    });
+    const { service, events } = makeSchedulingService([unplaced]);
+
+    await service.complete("unplaced", user);
+
+    expect(eventTypes(events)).not.toContain("KEEP");
   });
 });

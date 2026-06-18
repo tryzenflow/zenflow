@@ -242,6 +242,7 @@ const EVENT_LABEL: Record<TaskEvent["eventType"], string> = {
   CREATE: "Created",
   MOVE: "Moved",
   RESIZE: "Resized",
+  KEEP: "Kept",
   COMPLETE: "Completed",
   ABANDON: "Abandoned",
 };
@@ -250,6 +251,7 @@ const EVENT_DOT: Record<TaskEvent["eventType"], string> = {
   CREATE: "bg-muted-foreground",
   MOVE: "bg-amber-500",
   RESIZE: "bg-amber-500",
+  KEEP: "bg-emerald-500",
   COMPLETE: "bg-emerald-500",
   ABANDON: "bg-red-500",
 };
