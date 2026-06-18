@@ -6,7 +6,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { Prisma, type Task, type User } from "../../generated/prisma";
 import {
-  PENALTY_MATRIX_LENGTH,
+  PREFERENCE_MATRIX_LENGTH,
   type OverflowGranularity,
   type SchedulingOverflow,
 } from "@zenflow/shared";
@@ -18,7 +18,7 @@ import {
   scheduleAll,
   type SchedulerPrefs,
 } from "./edf";
-import { type Interval, SLOT_MS, localDateStr, penaltyIndex } from "./slot";
+import { type Interval, SLOT_MS, localDateStr, preferenceIndex } from "./slot";
 import { findNextAvailableSlot, findSlotIgnoringWorkHours } from "./overflow";
 import { endOfPeriod, periodRange } from "./horizon";
 import { minutesToUtc, utcToMinutes } from "../common/utils";
@@ -413,10 +413,20 @@ export class SchedulerService {
         }
       }
 
-      // Telemetry: the user overrode the engine's choice for this slot.
-      if (target.scheduledStartTime) {
-        await this.bumpPenalty(user, target.scheduledStartTime, tx);
+      // Telemetry: the user overrode the engine's choice for this slot. Signed
+      // preference update — the VACATED slot is disliked (-1, move-away) and the
+      // DESTINATION slot is preferred (+1, move-toward). When the task wasn't
+      // placed before (no vacated slot), only the move-toward signal applies.
+      const deltas: { at: Date; delta: number }[] = [
+        { at: snapped, delta: +1 },
+      ];
+      if (
+        target.scheduledStartTime &&
+        target.scheduledStartTime.getTime() !== snapped.getTime()
+      ) {
+        deltas.push({ at: target.scheduledStartTime, delta: -1 });
       }
+      await this.applyPreference(user, deltas, tx);
 
       return { task: updatedTarget, displaced };
     });
@@ -555,16 +565,30 @@ export class SchedulerService {
     };
   }
 
-  private async bumpPenalty(user: User, vacated: Date, tx: PrismaTx) {
+  /**
+   * Apply signed deltas to the user's 7×96 preference matrix in one update.
+   * Each entry is `{ at, delta }`: a positive delta marks a liked/kept block
+   * (move-toward / accepted), a negative delta a disliked block (move-away).
+   * The matrix is seeded lazily to all-zero when it isn't the expected length,
+   * and out-of-range indices are skipped. Transactional with the caller.
+   */
+  private async applyPreference(
+    user: User,
+    deltas: { at: Date; delta: number }[],
+    tx: PrismaTx,
+  ) {
+    if (deltas.length === 0) return;
     const matrix =
-      user.penaltyMatrix.length === PENALTY_MATRIX_LENGTH
-        ? [...user.penaltyMatrix]
-        : new Array<number>(PENALTY_MATRIX_LENGTH).fill(0);
-    const idx = penaltyIndex(vacated, user.timezone);
-    if (idx >= 0 && idx < PENALTY_MATRIX_LENGTH) matrix[idx] += 1;
+      user.preferenceMatrix.length === PREFERENCE_MATRIX_LENGTH
+        ? [...user.preferenceMatrix]
+        : new Array<number>(PREFERENCE_MATRIX_LENGTH).fill(0);
+    for (const { at, delta } of deltas) {
+      const idx = preferenceIndex(at, user.timezone);
+      if (idx >= 0 && idx < PREFERENCE_MATRIX_LENGTH) matrix[idx] += delta;
+    }
     await tx.user.update({
       where: { id: user.id },
-      data: { penaltyMatrix: matrix },
+      data: { preferenceMatrix: matrix },
     });
   }
 }

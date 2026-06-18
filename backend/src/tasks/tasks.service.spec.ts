@@ -26,7 +26,7 @@ const user: User = {
   workStart: 540,
   workEnd: 1020,
   workDays: [1, 2, 3, 4, 5],
-  penaltyMatrix: [],
+  preferenceMatrix: [],
   roleArchetypeId: null,
   onboardingComplete: true,
   createdAt: new Date("2026-01-01T00:00:00.000Z"),

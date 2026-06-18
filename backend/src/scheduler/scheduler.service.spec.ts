@@ -24,7 +24,7 @@ const user: User = {
   workStart: 540,
   workEnd: 1020,
   workDays: [1, 2, 3, 4, 5],
-  penaltyMatrix: [],
+  preferenceMatrix: [],
   roleArchetypeId: null,
   onboardingComplete: true,
   createdAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -89,6 +89,7 @@ function makeService(rows: Task[]): {
     },
     taskEvent: { create: jest.fn().mockResolvedValue({}) },
     user: { update: jest.fn().mockResolvedValue({}) },
+    tag: { findMany: jest.fn().mockResolvedValue([]) },
   };
 
   const prisma = {
@@ -109,6 +110,7 @@ type PrismaTxMock = {
   };
   taskEvent: { create: jest.Mock };
   user: { update: jest.Mock };
+  tag: { findMany: jest.Mock };
 };
 
 describe("SchedulerService.pin — now-independent conflict detection", () => {
@@ -242,6 +244,60 @@ describe("SchedulerService.pin — in-progress tasks still block conflicts", () 
 
     expect(updated.conflict).toBe(true);
     expect(updates.find((u) => u.id === "elapsed")?.data.conflict).toBe(true);
+  });
+});
+
+/** Extract the preferenceMatrix written by the first `tx.user.update` call. */
+function writtenMatrix(tx: PrismaTxMock): number[] {
+  const call = tx.user.update.mock.calls[0] as [
+    { data: { preferenceMatrix: number[] } },
+  ];
+  return call[0].data.preferenceMatrix;
+}
+
+describe("SchedulerService.pin — signed preference matrix", () => {
+  it("decrements the vacated slot and increments the destination slot", async () => {
+    // Move a placed task from Mon 09:00 (idx 36) to Mon 11:00 (idx 44). The
+    // vacated cell gets -1, the destination cell +1.
+    const placed = task({
+      id: "p",
+      scheduledStartTime: new Date("2026-06-08T09:00:00Z"), // Mon 09:00
+    });
+    const { service, tx } = makeService([placed]);
+
+    await service.pin(user, "p", new Date("2026-06-08T11:00:00Z")); // Mon 11:00
+
+    expect(tx.user.update).toHaveBeenCalledTimes(1);
+    const matrix = writtenMatrix(tx);
+    expect(matrix).toHaveLength(672);
+    expect(matrix[36]).toBe(-1); // Mon 09:00 vacated → dislike
+    expect(matrix[44]).toBe(+1); // Mon 11:00 destination → move-toward
+  });
+
+  it("only records the move-toward (+1) when the task had no prior slot", async () => {
+    const unplaced = task({ id: "u", scheduledStartTime: null });
+    const { service, tx } = makeService([unplaced]);
+
+    await service.pin(user, "u", new Date("2026-06-08T11:00:00Z")); // Mon 11:00
+
+    const matrix = writtenMatrix(tx);
+    expect(matrix[44]).toBe(+1);
+    // No vacated cell was decremented.
+    expect(matrix.filter((v) => v < 0)).toEqual([]);
+  });
+
+  it("does not write a negative when the task is pinned to the same slot", async () => {
+    const placed = task({
+      id: "p",
+      scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
+    });
+    const { service, tx } = makeService([placed]);
+
+    await service.pin(user, "p", new Date("2026-06-08T09:00:00Z")); // same slot
+
+    const matrix = writtenMatrix(tx);
+    expect(matrix[36]).toBe(+1); // only the move-toward signal
+    expect(matrix.filter((v) => v < 0)).toEqual([]);
   });
 });
 

@@ -95,10 +95,13 @@ export function workWindowFor(
 }
 
 /**
- * Index into the flat 336-int penalty matrix for an instant.
- * `(isoWeekday-1) * 48 + halfHourOfDay`.
+ * Index into the flat 672-int signed preference matrix for an instant, aligned
+ * to the 15-minute slot grid (NOT downsampled to 30 minutes):
+ * `(isoWeekday-1) * 96 + slotOfDay`, where
+ * `slotOfDay = hourOfDay * 4 + floor(minuteOfHour / 15)` (0…95).
+ * 7 days × 96 fifteen-minute blocks = 672 cells.
  */
-export function penaltyIndex(date: Date, timezone: string): number {
+export function preferenceIndex(date: Date, timezone: string): number {
   const dateStr = localDateStr(date, timezone);
   const day = isoWeekday(dateStr) - 1; // 0=Mon … 6=Sun
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -109,6 +112,6 @@ export function penaltyIndex(date: Date, timezone: string): number {
   }).formatToParts(date);
   const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0") % 24;
   const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
-  const halfHour = hour * 2 + (minute >= 30 ? 1 : 0);
-  return day * 48 + halfHour;
+  const slotOfDay = hour * 4 + Math.floor(minute / 15);
+  return day * 96 + slotOfDay;
 }

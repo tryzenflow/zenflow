@@ -9,11 +9,16 @@ export const SLOT_MINUTES = 15;
 /** Minutes in a day. */
 export const DAILY_HORIZON = 1440;
 
-/** Number of half-hour slots per day (penalty matrix granularity). */
-export const PENALTY_SLOTS_PER_DAY = 48;
+/** Number of 15-minute slots per day (preference matrix granularity). */
+export const PREFERENCE_SLOTS_PER_DAY = 96;
 
-/** Length of the flat penalty matrix: 7 days × 48 half-hour slots. */
-export const PENALTY_MATRIX_LENGTH = 7 * PENALTY_SLOTS_PER_DAY;
+/**
+ * Length of the flat SIGNED preference matrix: 7 days × 96 fifteen-minute slots
+ * = 672 cells, aligned to the slot grid (not downsampled to 30 minutes). Cells
+ * accumulate a signed score — keeps/moves-toward increment, moves-away
+ * decrement; an empty cell sits at 0 (neutral), distinct from a disliked cell.
+ */
+export const PREFERENCE_MATRIX_LENGTH = 7 * PREFERENCE_SLOTS_PER_DAY;
 
 /** Time window within which the EDF engine may place a task. */
 export interface SchedulingHorizon {

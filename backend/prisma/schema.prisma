@@ -21,9 +21,12 @@ model User {
   workEnd   Int   @default(1020) // 17:00
   workDays  Int[] @default([1, 2, 3, 4, 5]) // 1=Mon … 7=Sun
 
-  // Flat 336-int penalty matrix (7 days × 48 half-hour slots). Written on MOVE
-  // in Phase 1 (telemetry); not yet read by the scheduler. Seeded lazily.
-  penaltyMatrix Int[] @default([])
+  // Flat 672-int SIGNED preference matrix (7 days × 96 fifteen-minute slots,
+  // aligned to the slot grid — not downsampled to 30 minutes). Written as Phase-1
+  // telemetry: keeps/moves-toward increment a cell (+1), moves-away decrement it
+  // (-1); an empty cell is 0 (neutral). Not yet read by the scheduler. Seeded
+  // lazily.
+  preferenceMatrix Int[] @default([])
 
   roleArchetypeId    String? // Phase-4 cold-start cluster id
   onboardingComplete Boolean @default(false)
