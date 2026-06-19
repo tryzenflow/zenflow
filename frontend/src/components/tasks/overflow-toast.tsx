@@ -37,12 +37,15 @@ export function OverflowToast({
     <div className="flex w-full flex-col gap-3">
       <div className="flex flex-col gap-0.5">
         <p className="text-sm font-semibold text-foreground">
-          {period ? `No room left this ${period}` : "Couldn't schedule this task"}
+          {period
+            ? `No room left this ${period}`
+            : "Couldn't schedule this task"}
         </p>
         <p className="text-xs text-muted-foreground">
           Couldn&apos;t fit{" "}
           <span className="font-medium text-foreground">{title}</span> into your
-          working hours{period ? ` this ${period}` : ""}. Pick a recovery option:
+          working hours{period ? ` this ${period}` : ""}. Pick a recovery
+          option:
         </p>
       </div>
 
@@ -50,7 +53,7 @@ export function OverflowToast({
         {outsideHours && (
           <Button
             size="sm"
-            className="w-full justify-start bg-primary text-primary-foreground hover:bg-primary/90"
+            className="w-full justify-start h-fit bg-primary py-2 text-primary-foreground hover:bg-primary/90"
             onClick={() => onChoose("outsideHours")}
           >
             <MoonStar className="size-4" />
@@ -67,7 +70,7 @@ export function OverflowToast({
           <Button
             size="sm"
             variant="outline"
-            className="w-full justify-start"
+            className="w-full justify-start py-2 h-fit"
             onClick={() => onChoose("nextAvailable")}
           >
             <CalendarClock className="size-4" />
