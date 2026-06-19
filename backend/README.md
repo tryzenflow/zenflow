@@ -45,6 +45,14 @@ backend/
 │   │   ├── slot.ts            # work-window math, 15-min slots, preference index
 │   │   ├── horizon.ts         # calendar math (view ranges, week/month, work minutes)
 │   │   └── scheduler.service.ts  # persistence wrapper around edf.ts (+ telemetry)
+│   ├── simulation/            # persona simulator (synthetic telemetry — see below)
+│   │   ├── rng.ts             # PURE seeded PRNG (mulberry32) + sampling helpers
+│   │   ├── clock.ts           # PURE virtual clock over the ~1-year span
+│   │   ├── personas/          # archetypes, persona factory, preference field (PURE)
+│   │   ├── behavior/          # task generator + reaction policy (PURE)
+│   │   ├── runner.ts          # closed loop — drives the REAL Tasks/Scheduler services
+│   │   ├── run.ts             # `sim:run` entry (standalone Nest context)
+│   │   └── eval/              # MAR + metrics, IPS/SNIPS replay scaffold
 │   ├── files/                 # multipart upload/download to local disk
 │   ├── mail/                  # login email + Handlebars templates
 │   ├── prisma/                # PrismaService + Postgres error-code map
@@ -226,12 +234,24 @@ Pure functions you'll work with:
   no-deadline task is bounded by **both** (its create-day anchor and its period end), so a
   user-deadline task is byte-for-byte unchanged while a no-deadline task that can't fit its
   period comes back unplaced and stays that way.
-- **`periodRange(anchor, view, tz)` / `endOfPeriod(anchor, view, tz)`**
+- **`periodRange(anchor, view, tz, work?)` / `endOfPeriod(anchor, view, tz, work?)`**
   ([`horizon.ts`](src/scheduler/horizon.ts)) — pure UTC bounds `[start, end)` of the
   day / ISO-week / month containing `anchor` in the user's tz (`end` is the exclusive
   next-period boundary = the task's `schedulingDeadline`). Reuses `weekStartStr`/`monthRange`
   so FE and BE agree on period edges. `SchedulerService.toEdf` derives each flexible
-  no-deadline task's `schedulingDeadline` from `endOfPeriod`.
+  no-deadline task's `schedulingDeadline` from `endOfPeriod`. **Night-owl (wrapping) work
+  windows:** when the optional `work` (`{ workStart, workEnd }`) describes a window that wraps
+  past midnight (`workEnd <= workStart`, e.g. 22:00→06:00), the last work window that *starts*
+  within the period ends the next morning at `workEnd`, so `end` is **extended** from the bare
+  next-period 00:00 to `workEnd` on that following morning. This lets the engine place a
+  **single contiguous task crossing midnight** (e.g. a 4h task at 22:00→02:00) in the
+  post-midnight tail of the window — one Task row, one `scheduledStartTime`, duration spanning
+  midnight (never split into two rows). A non-wrapping window (or omitting `work`) keeps the
+  legacy 00:00 ceiling byte-for-byte; a user-deadline task is unaffected (its ceiling is its
+  own deadline). The morning tail is not double-counted in capacity — `sumWorkMinutes` is
+  start-day anchored and counts each window's minutes once. The service threads the user's
+  work window into `endOfPeriod` (`toEdf`) and into `periodRange` for the overflow
+  options.
 - **`findSlotIgnoringWorkHours(durationMinutes, deadline, occupied, now, periodStart, periodEnd)`**
   ([`overflow.ts`](src/scheduler/overflow.ts)) — earliest 15-min-grid slot **inside the
   anchor period** `[periodStart, periodEnd)`, at/after `now`, ignoring the work-hours
@@ -241,8 +261,11 @@ Pure functions you'll work with:
   ([`overflow.ts`](src/scheduler/overflow.ts)) — earliest **work-hours** slot in the **next**
   period after the anchor's period (`day` → next working day, `week` → next week, `month` →
   next month), **ignoring** the deadline; reuses `findSlot`'s window/grid math via the next
-  period boundary (`periodRange(anchor).end`) as its floor. Backs the `nextAvailable`
-  recovery option. Both helpers stay pure (`now` + explicit period inputs, no I/O);
+  period boundary (`periodRange(anchor, …, work).end`) as its floor. For a wrapping window the
+  anchor period's extended (post-midnight) end is used, so the anchor day's morning tail is
+  offered via `outsideHours` rather than re-offered here as "next available" (which rolls to
+  the next night). Backs the `nextAvailable` recovery option. Both helpers stay pure
+  (`now` + explicit period inputs, no I/O);
   `SchedulerService.computeOverflowOptions` / `applyOverflowOption` are the persistence
   wrappers that derive the period bounds from the task's stored `schedulingAnchor` + `view`.
 **Placement is `now`-aware; conflict detection is `now`-independent.** Keep these two axes
@@ -288,6 +311,51 @@ into (see [`services/bandit/README.md`](../services/bandit/README.md) and
 
 > When you change any pure scheduler function, update its `*.spec.ts` in the same change
 > (`edf.spec.ts`, `horizon.spec.ts`) and run `pnpm --filter backend test`.
+
+## Persona simulator (`src/simulation/`)
+
+A **closed-loop driver** that produces synthetic telemetry for the personalization roadmap
+(`docs/simulation-strategy.md`, `docs/seed-implementation.md`). It seeds a population of
+synthetic users with hidden "true" preferences, then drives the **real** `TasksService` /
+`SchedulerService` / `AbandonedTasksService` over a ~1-year virtual timeline — so every
+`TaskEvent`, `suggestedStartTime` snapshot, and signed `preferenceMatrix` update is produced
+through the production path, never hand-written.
+
+- **Determinism:** all randomness flows through one seeded `mulberry32` PRNG (`rng.ts`) — no
+  `Math.random()`. `rng.ts`, `clock.ts`, `personas/*`, and `behavior/*` are **pure**; only
+  `runner.ts` touches Prisma/services (same purity rule as the scheduler core).
+- **Virtual `now`:** the mutation methods (`create`, `complete`, `reschedule`, `resize`,
+  `resolveOverflow`, and `SchedulerService.pin`/`resize`/`applyOverflowOption`/`recordKeep`)
+  take an optional `now: Date = new Date()` and stamp it onto `cascadeReschedule` + every
+  `TaskEvent.occurredAt`. Controllers call with no `now`, so **production is unchanged**; the
+  simulator passes the simulated instant so events spread across the year.
+- **Anti-circularity:** the ground-truth archetype label lives **only** in the in-memory
+  `Persona` (and the eval labels output), never in a `User` column a learner reads. The
+  generator embeds drivers no Phase-2 matrix can represent — tag×time interactions (`P_tag`),
+  drift, fatigue, a noise floor — so recovery is a real finding, not a tautology.
+- **Re-ranker seam:** only `--reranker=identity` (the Phase-1 baseline) is wired today; a
+  future re-ranker drops into the same `SlotReRanker` seam.
+- **Compiled, not `ts-node`:** the repo uses baseUrl `src/*` imports that only `nest build`
+  rewrites, so `sim:run`/`sim:eval` build to `dist/` and run the compiled output (matching
+  production module resolution). `sim:run` rebuilds automatically; rerun `sim:build` before
+  `sim:eval` if you changed simulator code since the last `sim:run`.
+
+```bash
+# Dedicated DB (never dev/prod) — copy .env.dev → .env.sim, point DATABASE_URL at zenflow_sim.
+# Pass CLI flags after `--` so pnpm forwards them to the script.
+pnpm --filter backend sim:reset                                       # drop + recreate sim schema (db push --force-reset)
+pnpm --filter backend sim:run -- --seed=1 --days=30 --personas=5      # quick run (needs the DB)
+pnpm --filter backend sim:run -- --seed=1 --start=2025-01-06 --days=365   # full year
+pnpm --filter backend sim:eval                                        # MAR + supporting metrics + IPS/SNIPS
+```
+
+`sim:run` needs a reachable `zenflow_sim` Postgres; the pure pieces (`rng`, `reaction.model`,
+`metrics`) are covered by `*.spec.ts` and run without a DB. Use a span of **≥~30 days** for
+smoke runs — each persona draws vacation/idle windows sized for the span, so a handful of days
+can legitimately produce zero events. Reusing the same `--seed` reuses persona emails
+(`sim-<archetype>-<n>@zenflow.sim`); run `sim:reset` between same-seed runs to avoid the unique
+constraint. `sim:reset` is destructive; if invoked by an AI agent Prisma will block it pending
+explicit user consent.
 
 ## Conventions
 

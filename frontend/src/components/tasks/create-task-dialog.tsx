@@ -30,10 +30,13 @@ export function CreateTaskDialog({
   date,
   view,
   onCreated,
+  trigger,
 }: {
   date: Date;
   view: ViewMode;
   onCreated: () => void;
+  /** Custom trigger element; falls back to the default "New task" button. */
+  trigger?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -156,7 +159,11 @@ export function CreateTaskDialog({
       // with whatever recovery options the backend surfaced, instead of the
       // usual success toast.
       if (response.task.scheduledStartTime === null && response.overflow) {
-        showOverflowToast(response.task.id, response.task.title, response.overflow);
+        showOverflowToast(
+          response.task.id,
+          response.task.title,
+          response.overflow,
+        );
       } else {
         toast.success("Task created successfully 🎉");
       }
@@ -191,10 +198,12 @@ export function CreateTaskDialog({
   return (
     <Sheet open={open} onOpenChange={setOpen} modal={false}>
       <SheetTrigger asChild>
-        <Button size="sm">
-          <Plus className="size-4" />
-          <span className="sr-only sm:not-sr-only">New task</span>
-        </Button>
+        {trigger ?? (
+          <Button size="sm" className="hidden sm:flex">
+            <Plus className="size-4" />
+            <span className="sr-only sm:not-sr-only">New task</span>
+          </Button>
+        )}
       </SheetTrigger>
       {/* Non-modal + no overlay + offset below the 56px header so the view can
           still be switched (which re-scopes recurrence) while creating.

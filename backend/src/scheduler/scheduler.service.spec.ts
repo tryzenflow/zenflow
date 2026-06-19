@@ -578,3 +578,62 @@ describe("SchedulerService.resize — now-independent conflict detection", () =>
     expect(updated.conflict).toBe(true);
   });
 });
+
+describe("SchedulerService.cascadeReschedule — wrapping (night-owl) window", () => {
+  // 22:00 → 06:00, Mon–Fri (the day the shift starts). This is where the
+  // end-to-end derivation of the period ceiling (toEdf → endOfPeriod) must
+  // extend past midnight so a single cross-day block can be placed.
+  const owl: User = {
+    ...user,
+    workStart: 1320, // 22:00
+    workEnd: 360, // 06:00
+  };
+  // Start-of-day Mon 06-08 (the shift's start day) — also the create anchor.
+  const MON_ANCHOR = new Date("2026-06-08T00:00:00Z");
+
+  it("places a 4h day-view no-deadline task at 22:00 crossing midnight (one block)", async () => {
+    const owlTask = task({
+      id: "owl",
+      durationMinutes: 240, // 22:00 → 02:00 next day
+      deadline: null,
+      view: "day",
+      schedulingAnchor: MON_ANCHOR,
+      scheduledStartTime: null,
+      conflict: true,
+    });
+    const { service, updates, tx } = makeService([owlTask]);
+
+    await service.cascadeReschedule(owl, tx as never, MON_ANCHOR);
+
+    const upd = updates.find((u) => u.id === "owl");
+    // ONE row, one start, duration untouched — the block simply spans midnight.
+    expect(upd?.data.scheduledStartTime).toEqual(
+      new Date("2026-06-08T22:00:00.000Z"),
+    );
+    expect(upd?.data.conflict).toBe(false);
+    expect(updates).toHaveLength(1);
+  });
+
+  it("a non-wrapping (09:00–17:00) user is unaffected: a 4h task fits in-hours", async () => {
+    // Regression guard: the same 4h day-view task for a day-shift user is placed
+    // at 09:00 within hours, never spilling past the bare-00:00 day ceiling.
+    const dayTask = task({
+      id: "day",
+      durationMinutes: 240, // 09:00 → 13:00
+      deadline: null,
+      view: "day",
+      schedulingAnchor: MON_ANCHOR,
+      scheduledStartTime: null,
+      conflict: true,
+    });
+    const { service, updates, tx } = makeService([dayTask]);
+
+    await service.cascadeReschedule(user, tx as never, MON_ANCHOR);
+
+    const upd = updates.find((u) => u.id === "day");
+    expect(upd?.data.scheduledStartTime).toEqual(
+      new Date("2026-06-08T09:00:00.000Z"),
+    );
+    expect(upd?.data.conflict).toBe(false);
+  });
+});

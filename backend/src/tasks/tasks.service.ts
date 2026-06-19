@@ -11,6 +11,7 @@ import { Prisma, type Task, type Tag, type User } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { minutesToUtc } from "../common/utils";
 import { localDateStr } from "../scheduler/slot";
+import { EVENT_REWARD } from "../scheduler/telemetry";
 import {
   displayDayRange,
   viewDayRange,
@@ -93,12 +94,16 @@ export class TasksService {
     return tags.map((t) => t.id);
   }
 
-  async create(dto: CreateTaskDto, user: User): Promise<CreateTaskResponse> {
+  async create(
+    dto: CreateTaskDto,
+    user: User,
+    now: Date = new Date(),
+  ): Promise<CreateTaskResponse> {
     const { startDate, fixed, startTime, view, ...rest } = dto;
     const tz = user.timezone;
     const isFixed = fixed ?? false;
     const overflowView = view ?? "day";
-    const anchorDateStr = startDate ?? localDateStr(new Date(), tz);
+    const anchorDateStr = startDate ?? localDateStr(now, tz);
 
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -144,7 +149,7 @@ export class TasksService {
         // through the cascade so its time is checked for real overlap against
         // existing placed tasks — an overlapping fixed task (and the task it
         // overlaps) is flagged `conflict: true` instead of silently double-booked.
-        await this.scheduler.cascadeReschedule(user, tx);
+        await this.scheduler.cascadeReschedule(user, tx, now);
 
         const finalTask = await tx.task.findUniqueOrThrow({
           where: { id: created.id },
@@ -167,7 +172,8 @@ export class TasksService {
                 .map((t) => t.name)
                 .sort((a, b) => a.localeCompare(b)),
             },
-            rewardScore: 1.0,
+            rewardScore: EVENT_REWARD.CREATE,
+            occurredAt: now,
           },
         });
 
@@ -181,6 +187,7 @@ export class TasksService {
                 finalTask,
                 overflowView,
                 tx,
+                now,
               )
             : null;
 
@@ -415,7 +422,12 @@ export class TasksService {
     }
   }
 
-  async reschedule(id: string, requestedStartTime: string, user: User) {
+  async reschedule(
+    id: string,
+    requestedStartTime: string,
+    user: User,
+    now: Date = new Date(),
+  ) {
     // Drag-drop is a manual pin: place exactly where dropped, allow overlaps as
     // conflicts, and never cascade other tasks. The EDF engine only runs on
     // task create and preference edits — not on every drag.
@@ -423,6 +435,7 @@ export class TasksService {
       user,
       id,
       new Date(requestedStartTime),
+      now,
     );
     // The scheduler returns a bare Task (no relations); re-attach tags for the
     // DTO so the wire format keeps its name array.
@@ -451,6 +464,7 @@ export class TasksService {
     id: string,
     dto: ResolveOverflowDto,
     user: User,
+    now: Date = new Date(),
   ): Promise<RescheduleResponse> {
     // Ownership check up front so a cross-user id 404s before any mutation.
     const target = await this.prisma.task.findUnique({
@@ -464,6 +478,7 @@ export class TasksService {
       id,
       dto.choice,
       dto.view ?? "day",
+      now,
     );
     const withTags = await this.prisma.task.findUniqueOrThrow({
       where: { id: task.id },
@@ -485,6 +500,7 @@ export class TasksService {
     requestedStartTime: string,
     durationMinutes: number,
     user: User,
+    now: Date = new Date(),
   ) {
     // Edge-resize is a manual pin that also changes duration: place exactly
     // where dropped, allow overlaps as conflicts, never cascade other tasks.
@@ -493,6 +509,7 @@ export class TasksService {
       id,
       new Date(requestedStartTime),
       durationMinutes,
+      now,
     );
     // The scheduler returns a bare Task (no relations); re-attach tags for the
     // DTO so the wire format keeps its name array.
@@ -511,7 +528,11 @@ export class TasksService {
     };
   }
 
-  async complete(id: string, user: User): Promise<SharedTask> {
+  async complete(
+    id: string,
+    user: User,
+    now: Date = new Date(),
+  ): Promise<SharedTask> {
     try {
       return await this.prisma.$transaction(async (tx) => {
         const updated = await tx.task.update({
@@ -537,7 +558,8 @@ export class TasksService {
               durationMinutes: updated.durationMinutes,
               tags: tagNames,
             },
-            rewardScore: 1.0,
+            rewardScore: EVENT_REWARD.COMPLETE,
+            occurredAt: now,
           },
         });
         // Positive KEEP signal: the task was completed in the slot the engine
@@ -545,14 +567,14 @@ export class TasksService {
         // placement). This is the +1 half of the signed preference matrix — an
         // accepted-unchanged placement is distinguishable from an untouched one.
         if (!updated.manuallyMoved && updated.scheduledStartTime !== null) {
-          await this.scheduler.recordKeep(user, updated, tagNames, tx);
+          await this.scheduler.recordKeep(user, updated, tagNames, tx, now);
         }
         // Re-settle the remaining PENDING set: completing this task removes it as
         // a blocker, so any task that only overlapped it self-heals (conflict
         // cleared via the now-independent overlap pass) and flexible tasks reflow
         // into the freed slot. The just-completed DONE task is excluded — it is no
         // longer PENDING and keeps its own scheduledStartTime.
-        await this.scheduler.cascadeReschedule(user, tx);
+        await this.scheduler.cascadeReschedule(user, tx, now);
         return this.toDto(updated);
       });
     } catch (error) {

@@ -60,7 +60,11 @@ export function CalendarHeader({
           <Menu className="size-4" />
         </Button>
 
-        <Button variant="outline" onClick={() => setDate(zonedNow(tz))}>
+        <Button
+          className="hidden sm:flex"
+          variant="outline"
+          onClick={() => setDate(zonedNow(tz))}
+        >
           Today
         </Button>
 

@@ -6,14 +6,14 @@ import {
   PopoverAnchor,
   PopoverContent,
 } from "@/components/ui/popover";
-import { Event } from "@/types/schedule";
+import { DaySegment } from "@/types/schedule";
 import { DAILY_HORIZON, TIME_GRANULARITY } from "@/utils/constants";
 import type { BlockLayout } from "@/utils/overlap";
 import { zonedDate, zonedWallClockToUtc } from "@/utils/tz";
 import { CSS } from "@dnd-kit/utilities";
 import { useDraggable } from "@dnd-kit/core";
 import { toZonedTime } from "date-fns-tz";
-import { Lock } from "lucide-react";
+import { CornerDownRight, Lock } from "lucide-react";
 import { useRef, useState } from "react";
 
 function minutesOfDay(iso: string, tz: string) {
@@ -93,19 +93,26 @@ export function ScheduledBlockItem({
   block,
   layout,
 }: {
-  block: Event;
+  block: DaySegment;
   layout: BlockLayout;
 }) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const startMin = minutesOfDay(block.start, tz);
-  const endMin = minutesOfDay(block.end, tz);
-  // Completed tasks are historical records — the scheduler only knows about
-  // PENDING tasks, so dragging a done block would fail with "Cannot find task".
-  // Disable the drag/resize gestures entirely; the block stays openable via click.
+  // A segment ending exactly at the next midnight has minutesOfDay() === 0;
+  // treat that as the full-day bottom (1440) so the block fills to the boundary.
+  const rawEndMin = minutesOfDay(block.end, tz);
+  const endMin = block.continues || rawEndMin === 0 ? DAILY_HORIZON : rawEndMin;
+  // A task that crosses midnight renders as two segments (head + tail). Dragging
+  // or edge-resizing a clamped segment can't be expressed as a single on-grid
+  // time, so split segments are click-only; the underlying task stays editable
+  // via the detail panel. Same for completed tasks — the scheduler only knows
+  // PENDING ones, so a drag would 404 with "Cannot find task".
   const isCompleted = block.status === "DONE";
+  const isSplit = Boolean(block.continues || block.continued);
+  const isInteractive = !isCompleted && !isSplit;
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
-    id: block.id,
-    disabled: isCompleted,
+    id: block.segmentId,
+    disabled: !isInteractive,
   });
 
   // Edge-resize: while a handle is dragged we drive the block's top/height from
@@ -269,9 +276,11 @@ export function ScheduledBlockItem({
           onClick={handleClick}
           onDoubleClick={handleDoubleClick}
           title={
-            isCompleted
-              ? "Completed · click for details"
-              : "Drag to reschedule · click for details · double-click to complete"
+            isSplit
+              ? "Crosses midnight · click for details"
+              : isCompleted
+                ? "Completed · click for details"
+                : "Drag to reschedule · click for details · double-click to complete"
           }
           style={{
             top: `${(dispStart / DAILY_HORIZON) * 100}%`,
@@ -283,7 +292,7 @@ export function ScheduledBlockItem({
         >
           {/* Edge-resize handles — pointer-driven so they work for mouse and touch
           alike. They claim the gesture before dnd-kit's move-drag can start. */}
-          {!isCompleted && (
+          {isInteractive && (
             <>
               <div
                 onPointerDown={beginResize("top")}
@@ -310,10 +319,15 @@ export function ScheduledBlockItem({
           <div
             className={cn(
               "flex h-full overflow-hidden rounded border border-l-4 px-2 shadow-sm transition-shadow hover:shadow-md backdrop-blur-lg",
-              isCompleted
-                ? "cursor-pointer"
-                : "cursor-grab active:cursor-grabbing",
+              isInteractive
+                ? "cursor-grab active:cursor-grabbing"
+                : "cursor-pointer",
               isCompact ? "items-center gap-1.5" : "flex-col py-1",
+              // Cross-midnight segments visually butt against the day boundary:
+              // the head loses its bottom rounding, the tail its top, so the two
+              // halves read as one continued block split by midnight.
+              block.continues && "rounded-b-none",
+              block.continued && "rounded-t-none border-t-0 border-l-4 border-dashed",
               TASK_CARD_CLASSES[state],
             )}
           >
@@ -322,6 +336,9 @@ export function ScheduledBlockItem({
                 <div className="flex min-w-0 flex-1 items-center gap-1">
                   {block.fixed && (
                     <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />
+                  )}
+                  {block.continued && (
+                    <CornerDownRight className="h-3 w-3 shrink-0 text-muted-foreground" />
                   )}
                   <span
                     className={cn(
@@ -333,7 +350,7 @@ export function ScheduledBlockItem({
                   </span>
                 </div>
                 <span className="shrink-0 font-mono text-[9px] leading-none">
-                  {fmt(block.start, tz)}
+                  {block.continued ? `ends ${fmt(block.taskEnd, tz)}` : fmt(block.taskStart, tz)}
                 </span>
               </>
             ) : (
@@ -341,6 +358,9 @@ export function ScheduledBlockItem({
                 <div className="flex items-center gap-1">
                   {block.fixed && (
                     <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />
+                  )}
+                  {block.continued && (
+                    <CornerDownRight className="h-3 w-3 shrink-0 text-muted-foreground" />
                   )}
                   <span
                     className={cn(
@@ -352,7 +372,11 @@ export function ScheduledBlockItem({
                   </span>
                 </div>
                 <span className="font-mono text-[10px]">
-                  {fmt(block.start, tz)} – {fmt(block.end, tz)}
+                  {block.continued
+                    ? `cont. → ${fmt(block.taskEnd, tz)}`
+                    : block.continues
+                      ? `${fmt(block.taskStart, tz)} → next day`
+                      : `${fmt(block.taskStart, tz)} – ${fmt(block.taskEnd, tz)}`}
                 </span>
                 {showTags && (
                   <div className="mt-0.5 flex flex-wrap gap-1 overflow-hidden">
@@ -403,13 +427,19 @@ export function ScheduledBlockItem({
             <div className="flex justify-between gap-3">
               <dt className="text-muted-foreground">Time</dt>
               <dd className="text-right font-mono">
-                {fmt(block.start, tz)} – {fmt(block.end, tz)}
+                {fmt(block.taskStart, tz)} – {fmt(block.taskEnd, tz)}
               </dd>
             </div>
             <div className="flex justify-between gap-3">
               <dt className="text-muted-foreground">Duration</dt>
               <dd className="text-right font-mono">
-                {fmtDuration(endMin - startMin)}
+                {fmtDuration(
+                  Math.round(
+                    (new Date(block.taskEnd).getTime() -
+                      new Date(block.taskStart).getTime()) /
+                      60_000,
+                  ),
+                )}
               </dd>
             </div>
             <div className="flex justify-between gap-3">

@@ -130,7 +130,7 @@ function AgendaItem({ block, tz }: { block: Event; tz: string }) {
 /** Desktop rail — hidden below `lg`, where the content moves into a drawer. */
 export function CalendarSidebar(props: SidebarProps) {
   return (
-    <aside className="hidden w-72 shrink-0 border-r border-sidebar-border bg-sidebar lg:block">
+    <aside className="hidden w-full sm:w-72 shrink-0 border-r border-sidebar-border bg-sidebar lg:block">
       <SidebarBody {...props} />
     </aside>
   );

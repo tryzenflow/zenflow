@@ -6,7 +6,6 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { Prisma, type Task, type User } from "../../generated/prisma";
 import {
-  PREFERENCE_MATRIX_LENGTH,
   type OverflowGranularity,
   type SchedulingOverflow,
 } from "@zenflow/shared";
@@ -18,9 +17,16 @@ import {
   scheduleAll,
   type SchedulerPrefs,
 } from "./edf";
-import { type Interval, SLOT_MS, localDateStr, preferenceIndex } from "./slot";
+import { type Interval, SLOT_MS, localDateStr } from "./slot";
+import {
+  EVENT_REWARD,
+  applyPreferenceDeltas,
+  buildSnapshot,
+  recomputeConflicts,
+  toEdfTask,
+} from "./telemetry";
 import { findNextAvailableSlot, findSlotIgnoringWorkHours } from "./overflow";
-import { endOfPeriod, periodRange } from "./horizon";
+import { periodRange } from "./horizon";
 import { minutesToUtc, utcToMinutes } from "../common/utils";
 import { TIME_GRANULARITY } from "../common/constants";
 
@@ -52,28 +58,14 @@ export class SchedulerService {
    * the day/week/month it was created in (end of that period, in `timezone`) and
    * must not silently roll past it. Tasks with a user deadline, fixed tasks, or
    * legacy rows without a view get `schedulingDeadline = null` (unbounded —
-   * byte-for-byte the previous behavior). `timezone` comes from the user's prefs.
+   * byte-for-byte the previous behavior). For a night-owl window that wraps past
+   * midnight (`workEnd <= workStart`) the ceiling is extended to `workEnd` the
+   * following morning (see {@link endOfPeriod}), so a single contiguous task can
+   * occupy the post-midnight tail of the window. The user's `prefs` (tz + work
+   * window) come from the caller.
    */
-  private toEdf(task: Task, timezone: string): EdfTask {
-    const schedulingDeadline =
-      !task.fixed &&
-      task.deadline === null &&
-      task.view !== null &&
-      task.schedulingAnchor !== null
-        ? endOfPeriod(task.schedulingAnchor, task.view, timezone)
-        : null;
-    return {
-      id: task.id,
-      durationMinutes: task.durationMinutes,
-      deadline: task.deadline,
-      fixed: task.fixed,
-      manuallyMoved: task.manuallyMoved,
-      schedulingAnchor: task.schedulingAnchor,
-      schedulingDeadline,
-      scheduledStartTime: task.scheduledStartTime,
-      createdAt: task.createdAt,
-      conflict: task.conflict,
-    };
+  private toEdf(task: Task, prefs: SchedulerPrefs): EdfTask {
+    return toEdfTask(task, prefs);
   }
 
   private pendingTasks(userId: string, tx: PrismaTx) {
@@ -103,9 +95,10 @@ export class SchedulerService {
     now = new Date(),
   ): Promise<void> {
     const tasks = await this.pendingTasks(user.id, tx);
+    const prefs = this.prefsOf(user);
     const placements = scheduleAll(
-      this.prefsOf(user),
-      tasks.map((t) => this.toEdf(t, user.timezone)),
+      prefs,
+      tasks.map((t) => this.toEdf(t, prefs)),
       now,
     );
     const before = new Map(tasks.map((t) => [t.id, t]));
@@ -195,6 +188,7 @@ export class SchedulerService {
       anchor,
       view,
       prefs.timezone,
+      { workStart: prefs.workStart, workEnd: prefs.workEnd },
     );
 
     const outside = findSlotIgnoringWorkHours(
@@ -254,6 +248,7 @@ export class SchedulerService {
         anchor,
         view,
         prefs.timezone,
+        { workStart: prefs.workStart, workEnd: prefs.workEnd },
       );
       const slot =
         choice === "outsideHours"
@@ -330,7 +325,8 @@ export class SchedulerService {
                 tags,
                 prev.scheduledStartTime,
               ),
-              rewardScore: 0.0, // user accepted a recovery option
+              rewardScore: EVENT_REWARD.MOVE, // user accepted a recovery option
+              occurredAt: now,
             },
           });
         } else {
@@ -356,6 +352,7 @@ export class SchedulerService {
     user: User,
     taskId: string,
     requestedStart: Date,
+    now: Date = new Date(),
   ): Promise<{ task: Task; displaced: DisplacedTask[] }> {
     return this.prisma.$transaction(async (tx) => {
       const tasks = await this.pendingTasks(user.id, tx);
@@ -414,7 +411,8 @@ export class SchedulerService {
                 tags,
                 prev.scheduledStartTime,
               ),
-              rewardScore: 0.0, // user override
+              rewardScore: EVENT_REWARD.MOVE, // user override
+              occurredAt: now,
             },
           });
         } else {
@@ -456,6 +454,7 @@ export class SchedulerService {
     taskId: string,
     requestedStart: Date,
     durationMinutes: number,
+    now: Date = new Date(),
   ): Promise<{ task: Task; displaced: DisplacedTask[] }> {
     return this.prisma.$transaction(async (tx) => {
       const tasks = await this.pendingTasks(user.id, tx);
@@ -514,7 +513,8 @@ export class SchedulerService {
                 tags,
                 prev.scheduledStartTime,
               ),
-              rewardScore: 0.0, // user override
+              rewardScore: EVENT_REWARD.RESIZE, // user override
+              occurredAt: now,
             },
           });
         } else {
@@ -553,25 +553,7 @@ export class SchedulerService {
       conflict: boolean;
     }[],
   ): Map<string, boolean> {
-    const overlaps = (a: Interval, b: Interval) =>
-      a.start < b.end && b.start < a.end;
-    const conflictOf = new Map<string, boolean>();
-    for (const t of projected) {
-      const iv = intervalOf(t);
-      if (!iv) {
-        conflictOf.set(t.id, t.conflict); // unplaced — keep engine's verdict
-        continue;
-      }
-      conflictOf.set(
-        t.id,
-        projected.some((o) => {
-          if (o.id === t.id) return false;
-          const oiv = intervalOf(o);
-          return oiv ? overlaps(iv, oiv) : false;
-        }),
-      );
-    }
-    return conflictOf;
+    return recomputeConflicts(projected);
   }
 
   /**
@@ -587,21 +569,7 @@ export class SchedulerService {
     tags: string[] = [],
     suggestedStartTime?: Date | null,
   ): Prisma.InputJsonValue {
-    return {
-      scheduledStartTime: task.scheduledStartTime
-        ? task.scheduledStartTime.toISOString()
-        : null,
-      durationMinutes: task.durationMinutes,
-      tags,
-      // Only MOVE/RESIZE pass a suggested slot; CREATE/KEEP/etc. omit the key.
-      ...(suggestedStartTime !== undefined
-        ? {
-            suggestedStartTime: suggestedStartTime
-              ? suggestedStartTime.toISOString()
-              : null,
-          }
-        : {}),
-    };
+    return buildSnapshot(task, tags, suggestedStartTime);
   }
 
   /**
@@ -630,14 +598,11 @@ export class SchedulerService {
     tx: PrismaTx,
   ) {
     if (deltas.length === 0) return;
-    const matrix =
-      user.preferenceMatrix.length === PREFERENCE_MATRIX_LENGTH
-        ? [...user.preferenceMatrix]
-        : new Array<number>(PREFERENCE_MATRIX_LENGTH).fill(0);
-    for (const { at, delta } of deltas) {
-      const idx = preferenceIndex(at, user.timezone);
-      if (idx >= 0 && idx < PREFERENCE_MATRIX_LENGTH) matrix[idx] += delta;
-    }
+    const matrix = applyPreferenceDeltas(
+      user.preferenceMatrix,
+      deltas,
+      user.timezone,
+    );
     await tx.user.update({
       where: { id: user.id },
       data: { preferenceMatrix: matrix },
@@ -658,6 +623,7 @@ export class SchedulerService {
     task: Task,
     tags: string[],
     tx: PrismaTx,
+    now: Date = new Date(),
   ): Promise<void> {
     if (!task.scheduledStartTime) return;
     await tx.taskEvent.create({
@@ -667,7 +633,8 @@ export class SchedulerService {
         eventType: "KEEP",
         oldSnapshot: Prisma.JsonNull,
         newSnapshot: this.snapshot(task, tags),
-        rewardScore: 1.0, // accepted-unchanged: positive placement signal
+        rewardScore: EVENT_REWARD.KEEP, // accepted-unchanged: positive placement signal
+        occurredAt: now,
       },
     });
     await this.applyPreference(

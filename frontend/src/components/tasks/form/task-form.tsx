@@ -14,45 +14,28 @@ import { format } from "date-fns";
 import { isZonedToday } from "@/utils/tz";
 import { useUserStore } from "@/hooks/use-user-store";
 import { UseFormReturn } from "react-hook-form";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { DurationInput } from "@/components/tasks/duration-input";
 import { NoteEditor } from "@/components/tasks/note-editor";
 import { FixedForm } from "@/components/tasks/fixed-form";
 import { snapToNearestLaterQuarterHour } from "@/utils/time";
 import { cn } from "@/lib/utils";
-import {
-  Popover,
-  PopoverAnchor,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import { listTags } from "@/api/tags";
-import { listTaskSuggestions } from "@/api/tasks";
 import { DAILY_HORIZON } from "@/utils/constants";
 import { zonedDate } from "@/utils/tz";
 import { toast } from "sonner";
-import { Box, Check, Lock, Plus, Tag, X } from "lucide-react";
+import { Box, Lock } from "lucide-react";
 import type { Task } from "@zenflow/shared";
+import { TagsField } from "./tag-field";
+import { TitleField } from "./title-field";
 
 const DURATION_PRESETS = [15, 30, 45, 60, 120];
 
-const durationLabel = (m: number) =>
+const presetLabel = (m: number) =>
   m % 60 === 0
     ? `${m / 60}h`
     : m >= 60
       ? `${Math.floor(m / 60)}h ${m % 60}m`
       : `${m}m`;
-
-const presetLabel = (m: number) =>
-  m % 60 === 0 ? `${m / 60}h` : m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
 
 const segBase =
   "flex-1 py-2 flex items-center justify-center gap-1.5 transition-colors";
@@ -110,7 +93,10 @@ export function TaskForm({
   // Populate the create form from a picked existing task. Mirrors the field
   // layout of the form (see create-task-dialog's onSubmit for the inverse map).
   const applySuggestion = (s: Task) => {
-    form.setValue("title", s.title, { shouldValidate: true, shouldDirty: true });
+    form.setValue("title", s.title, {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
     form.setValue("duration", s.durationMinutes, {
       shouldValidate: true,
       shouldDirty: true,
@@ -163,7 +149,9 @@ export function TaskForm({
             name="title"
             render={({ field }) => (
               <FormItem className="space-y-1.5">
-                <FormLabel className="text-xs font-semibold">Task name</FormLabel>
+                <FormLabel className="text-xs font-semibold">
+                  Task name
+                </FormLabel>
                 {editing ? (
                   <FormControl>
                     <Input
@@ -193,7 +181,9 @@ export function TaskForm({
               name="duration"
               render={({ field }) => (
                 <FormItem className="space-y-2">
-                  <FormLabel className="text-xs font-semibold">Duration</FormLabel>
+                  <FormLabel className="text-xs font-semibold">
+                    Duration
+                  </FormLabel>
                   <div className="grid grid-cols-5 gap-1.5">
                     {DURATION_PRESETS.map((m) => {
                       const active = duration === m;
@@ -217,7 +207,9 @@ export function TaskForm({
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="h-px flex-1 bg-border" />
-                    <span className="text-[10px] text-muted-foreground">or custom</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      or custom
+                    </span>
                     <div className="h-px flex-1 bg-border" />
                   </div>
                   <DurationInput
@@ -247,7 +239,10 @@ export function TaskForm({
                       type="button"
                       disabled={loading}
                       onClick={() => field.onChange(false)}
-                      className={cn(segBase, !field.value ? segActive : segIdle)}
+                      className={cn(
+                        segBase,
+                        !field.value ? segActive : segIdle,
+                      )}
                     >
                       <Box className="size-3" />
                       Flexible
@@ -267,8 +262,8 @@ export function TaskForm({
                     </button>
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    Flexible: the engine chooses the optimal slot. Fixed: you pick the
-                    exact time.
+                    Flexible: the engine chooses the optimal slot. Fixed: you
+                    pick the exact time.
                   </p>
                 </FormItem>
               )}
@@ -292,7 +287,9 @@ export function TaskForm({
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <FormLabel className="text-xs font-semibold">Deadline</FormLabel>
-              <span className="text-[10px] text-muted-foreground">Optional</span>
+              <span className="text-[10px] text-muted-foreground">
+                Optional
+              </span>
             </div>
             <div className="grid grid-cols-3 gap-2">
               <FormField
@@ -332,7 +329,9 @@ export function TaskForm({
               <FormItem className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <FormLabel className="text-xs font-semibold">Tags</FormLabel>
-                  <span className="text-[10px] text-muted-foreground">Optional</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    Optional
+                  </span>
                 </div>
                 <TagsField
                   disabled={loading}
@@ -350,7 +349,9 @@ export function TaskForm({
             name="note"
             render={({ field }) => (
               <FormItem className="space-y-1.5">
-                <FormLabel className="text-xs font-semibold">Description</FormLabel>
+                <FormLabel className="text-xs font-semibold">
+                  Description
+                </FormLabel>
                 <FormControl>
                   <NoteEditor
                     initialValue={noteSeed}
@@ -388,262 +389,5 @@ export function TaskForm({
         </div>
       </form>
     </Form>
-  );
-}
-
-/**
- * Title combobox (create mode only): the typed text *is* the title value, so a
- * brand-new title that matches nothing is always submittable — selection never
- * traps input. As the user types we fetch their existing tasks (recency-sorted,
- * server-filtered/deduped) debounced ~250ms; picking one populates the rest of
- * the form via the `onSelect` callback.
- */
-function TitleField({
-  value,
-  onChange,
-  onSelect,
-  disabled,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  onSelect: (task: Task) => void;
-  disabled?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const [suggestions, setSuggestions] = useState<Task[]>([]);
-  // Monotonic request id: only the newest in-flight fetch may commit results,
-  // so a slow earlier response can never clobber a newer query's suggestions.
-  const requestSeq = useRef(0);
-
-  useEffect(() => {
-    const q = value.trim();
-    if (!q) {
-      requestSeq.current += 1; // invalidate any in-flight fetch
-      setSuggestions([]);
-      return;
-    }
-    const seq = ++requestSeq.current;
-    const handle = setTimeout(() => {
-      listTaskSuggestions(q)
-        .then((tasks) => {
-          if (seq === requestSeq.current) setSuggestions(tasks);
-        })
-        .catch(() => {
-          if (seq === requestSeq.current) setSuggestions([]);
-        });
-    }, 250);
-    return () => clearTimeout(handle);
-  }, [value]);
-
-  const pick = (task: Task) => {
-    onSelect(task);
-    setOpen(false);
-  };
-
-  return (
-    <Popover open={open && suggestions.length > 0} onOpenChange={setOpen}>
-      {/* Anchor (not Trigger): the input keeps its native click/focus/typing
-          behaviour; the dropdown is opened purely from focus + typing below.
-          A Trigger would hijack the input's click to toggle the popover. */}
-      <PopoverAnchor asChild>
-        <FormControl>
-          <Input
-            disabled={disabled}
-            placeholder="What needs to get done?"
-            value={value}
-            onChange={(e) => {
-              onChange(e.target.value);
-              if (!open) setOpen(true);
-            }}
-            onFocus={() => setOpen(true)}
-            autoComplete="off"
-          />
-        </FormControl>
-      </PopoverAnchor>
-      <PopoverContent
-        align="start"
-        // Keep typing in the input — never steal focus into the list, and don't
-        // bounce focus around when it closes.
-        onOpenAutoFocus={(e) => e.preventDefault()}
-        onCloseAutoFocus={(e) => e.preventDefault()}
-        className="w-[var(--radix-popover-trigger-width)] p-0"
-      >
-        {/* Server already filtered + ordered by recency; disable cmdk's fuzzy
-            filtering/sorting so the list renders exactly as returned. */}
-        <Command shouldFilter={false}>
-          <CommandList>
-            <CommandEmpty>No matching tasks.</CommandEmpty>
-            <CommandGroup heading="Your tasks">
-              {suggestions.map((task) => (
-                <CommandItem
-                  key={task.id}
-                  value={task.id}
-                  onSelect={() => pick(task)}
-                  className="flex-col items-start gap-0.5"
-                >
-                  <span className="truncate text-xs font-medium">
-                    {task.title}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground">
-                    {[
-                      durationLabel(task.durationMinutes),
-                      task.fixed ? "Fixed" : null,
-                      ...task.tags.slice(0, 2).map((t) => `#${t}`),
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-/**
- * Combobox tag editor backed by a `string[]` field of tag NAMES.
- *
- * Existing tags are fetched from `GET /tags` and offered in a searchable list;
- * typing a name that matches none of them surfaces a "Create …" option that
- * adds the name as a *pending* tag (no API call — the backend upserts unknown
- * names on save). Pending tags are a UI-only distinction (dashed chip + "new"
- * hint); the form value is just the flat list of names.
- */
-function TagsField({
-  value,
-  onChange,
-  disabled,
-}: {
-  value: string[];
-  onChange: (value: string[]) => void;
-  disabled?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [existing, setExisting] = useState<string[]>([]);
-
-  useEffect(() => {
-    listTags()
-      .then((tags) => setExisting(tags.map((t) => t.name)))
-      .catch(() => setExisting([]));
-  }, []);
-
-  const trimmed = query.trim();
-  // Existing tags shown in the list: not already selected (cmdk filters by text).
-  const options = useMemo(() => {
-    const selected = new Set(value);
-    return existing.filter((name) => !selected.has(name));
-  }, [existing, value]);
-  // Offer "Create" when the typed text is non-empty, not already selected, and
-  // not an exact (case-insensitive) match of an existing tag.
-  const canCreate =
-    !!trimmed &&
-    !value.some((t) => t.toLowerCase() === trimmed.toLowerCase()) &&
-    !existing.some((t) => t.toLowerCase() === trimmed.toLowerCase());
-
-  const add = (name: string) => {
-    const clean = name.trim();
-    if (!clean || value.some((t) => t.toLowerCase() === clean.toLowerCase()))
-      return;
-    onChange([...value, clean]);
-    setQuery("");
-  };
-
-  const remove = (tag: string) => onChange(value.filter((t) => t !== tag));
-
-  return (
-    <div className="space-y-2">
-      {value.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {value.map((tag) => {
-            const isPending = !existing.includes(tag);
-            return (
-              <span
-                key={tag}
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold",
-                  isPending
-                    ? "border-dashed border-primary/50 bg-primary/10 text-primary"
-                    : "border-border bg-muted text-muted-foreground",
-                )}
-                title={isPending ? "New tag — created on save" : undefined}
-              >
-                #{tag}
-                {isPending && (
-                  <span className="text-[8px] font-bold uppercase tracking-wide opacity-70">
-                    new
-                  </span>
-                )}
-                <button
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => remove(tag)}
-                  className="transition-colors hover:text-foreground"
-                  aria-label={`Remove ${tag}`}
-                >
-                  <X className="size-3" />
-                </button>
-              </span>
-            );
-          })}
-        </div>
-      )}
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            disabled={disabled}
-            className="flex h-9 w-full items-center gap-2 rounded-md border border-border bg-transparent px-3 text-sm text-muted-foreground transition-colors hover:bg-accent/50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Tag className="size-3.5 shrink-0" />
-            Add tag…
-          </button>
-        </PopoverTrigger>
-        <PopoverContent
-          align="start"
-          className="w-[var(--radix-popover-trigger-width)] p-0"
-        >
-          <Command>
-            <CommandInput
-              placeholder="Search or create…"
-              value={query}
-              onValueChange={setQuery}
-              className="h-9"
-            />
-            <CommandList>
-              {!canCreate && <CommandEmpty>No tags found.</CommandEmpty>}
-              {options.length > 0 && (
-                <CommandGroup heading="Existing">
-                  {options.map((name) => (
-                    <CommandItem
-                      key={name}
-                      value={name}
-                      onSelect={() => add(name)}
-                    >
-                      #{name}
-                      <Check className="ml-auto opacity-0" />
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              )}
-              {canCreate && (
-                <CommandGroup heading="Create">
-                  <CommandItem
-                    value={`__create__${trimmed}`}
-                    onSelect={() => add(trimmed)}
-                  >
-                    <Plus className="size-4" />
-                    Create "{trimmed}"
-                  </CommandItem>
-                </CommandGroup>
-              )}
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
-    </div>
   );
 }

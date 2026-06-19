@@ -8,7 +8,11 @@ import { MonthView } from "./month-view";
 import { CalendarSidebar, SidebarBody } from "./sidebar";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { EditTaskDialog } from "@/components/tasks/edit-task-dialog";
+import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { CalendarCheck, Plus } from "lucide-react";
 import {
   completeTask,
   listTasks,
@@ -40,14 +44,29 @@ export function CalendarLayout() {
   const [navOpen, setNavOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  async function refetch() {
-    try {
+  // Tracks an in-flight load so mutations can wait for it before issuing a PUT
+  // against a task id the server may have just deleted / re-materialized via a
+  // cascade. Dragging a block whose id is no longer in the freshly-loaded list
+  // is what produced the spurious "Cannot find task with id …" 404 toast.
+  const inFlight = useRef<Promise<Event[]> | null>(null);
+
+  async function refetch(): Promise<Event[]> {
+    const load = (async () => {
       const data = await listTasks(viewMode, date);
-      setBlocks(tasksToBlocks(data.tasks));
+      const next = tasksToBlocks(data.tasks);
+      setBlocks(next);
       setMeta(data.meta);
+      return next;
+    })();
+    inFlight.current = load;
+    try {
+      return await load;
     } catch (error) {
       if (isAxiosError(error))
         errorToast(error.response?.data?.message || "Failed to load tasks");
+      return [];
+    } finally {
+      if (inFlight.current === load) inFlight.current = null;
     }
   }
 
@@ -78,6 +97,17 @@ export function CalendarLayout() {
   }, []);
 
   async function onReschedule(taskId: string, startISO: string) {
+    // If a load is mid-flight (e.g. the cascade after a delete), wait for it so
+    // we never PUT against an id the server has already dropped. The dragged
+    // block carries the latest optimistic state; the await only blocks the
+    // network call, not the UI.
+    if (inFlight.current) {
+      const fresh = await inFlight.current;
+      // The task vanished server-side (deleted, or its recurrence row was
+      // re-materialized under a new id). Don't fire a 404; the refetch already
+      // dropped the stale block from the grid.
+      if (!fresh.some((b) => b.taskId === taskId)) return;
+    }
     try {
       await rescheduleTask(taskId, startISO);
     } catch (error) {
@@ -108,6 +138,12 @@ export function CalendarLayout() {
           : b,
       ),
     );
+    // Same stale-id guard as onReschedule: never resize a task the server has
+    // dropped while a load was in flight.
+    if (inFlight.current) {
+      const fresh = await inFlight.current;
+      if (!fresh.some((b) => b.taskId === taskId)) return;
+    }
     try {
       await resizeTask(taskId, startISO, durationMinutes);
     } catch (error) {
@@ -192,7 +228,10 @@ export function CalendarLayout() {
 
       {/* Mobile/tablet nav drawer — same content as the desktop rail. */}
       <Sheet open={navOpen} onOpenChange={setNavOpen}>
-        <SheetContent side="left" className="w-72 bg-sidebar p-0 lg:hidden">
+        <SheetContent
+          side="left"
+          className="w-full sm:w-72 bg-sidebar p-0 lg:hidden"
+        >
           <SheetTitle className="sr-only">Navigation</SheetTitle>
           <SidebarBody meta={meta} agenda={agenda} view={viewMode} />
         </SheetContent>
@@ -208,34 +247,74 @@ export function CalendarLayout() {
           onChanged={refetch}
           onOpenNav={() => setNavOpen(true)}
         />
-        <div
-          className="flex-1 overflow-auto"
-          style={{ "--week-cells-height": "64px" } as React.CSSProperties}
-        >
-          {viewMode === "day" && (
-            <DayView
-              events={blocks}
-              date={date}
-              setEvents={setBlocks}
-              onReschedule={onReschedule}
-            />
-          )}
-          {viewMode === "week" && (
-            <WeekView
-              events={blocks}
-              date={date}
-              setEvents={setBlocks}
-              onReschedule={onReschedule}
-            />
-          )}
-          {viewMode === "month" && (
-            <MonthView
-              events={blocks}
-              date={date}
-              setEvents={setBlocks}
-              onReschedule={onReschedule}
-            />
-          )}
+        {/* `relative` so the floating glass controls overlay the grid without
+            scrolling with it. */}
+        <div className="relative min-h-0 flex-1">
+          {/* Jump-to-today — floating, centered, glassmorphism. Replaces the
+              old header "Today" button. */}
+          <Button
+            variant="outline"
+            size="default"
+            onClick={() => setDate(zonedNow(tz))}
+            className={cn(
+              "absolute sm:hidden left-1/2 bottom-8 z-30 -translate-x-1/2",
+              "rounded-full border-border/60 bg-background/80 backdrop-blur-sm shadow-lg",
+            )}
+          >
+            <CalendarCheck className="size-4" />
+            Today
+          </Button>
+
+          {/* Floating add-task action — opens the same CreateTaskDialog the
+              header used to host. Glassmorphism, mirrors the today control. */}
+          <CreateTaskDialog
+            date={date}
+            view={viewMode}
+            onCreated={refetch}
+            trigger={
+              <Button
+                size="icon-lg"
+                aria-label="New task"
+                className={cn(
+                  "sm:hidden glass-header absolute right-4 bottom-8 z-30",
+                  "size-12 rounded-full border border-primary/30 text-primary-foreground shadow-lg",
+                  "hover:bg-primary hover:text-primary-foreground",
+                )}
+              >
+                <Plus className="size-5" />
+              </Button>
+            }
+          />
+
+          <div
+            className="h-full overflow-auto"
+            style={{ "--week-cells-height": "64px" } as React.CSSProperties}
+          >
+            {viewMode === "day" && (
+              <DayView
+                events={blocks}
+                date={date}
+                setEvents={setBlocks}
+                onReschedule={onReschedule}
+              />
+            )}
+            {viewMode === "week" && (
+              <WeekView
+                events={blocks}
+                date={date}
+                setEvents={setBlocks}
+                onReschedule={onReschedule}
+              />
+            )}
+            {viewMode === "month" && (
+              <MonthView
+                events={blocks}
+                date={date}
+                setEvents={setBlocks}
+                onReschedule={onReschedule}
+              />
+            )}
+          </div>
         </div>
       </div>
       {editId && (
