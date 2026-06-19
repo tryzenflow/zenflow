@@ -1,12 +1,13 @@
-import { format, isSameDay } from "date-fns";
+import { format } from "date-fns";
 import { Cell } from "./day-cell";
 import { DayColumnBackground } from "./day-column-background";
 import { TIME_GRANULARITY } from "@/utils/constants";
 import { Event } from "@/types/schedule";
 import { ScheduledBlockItem } from "./scheduled-block-item";
 import { getOverlapLayout } from "@/utils/overlap";
+import { eventsForDay } from "@/utils/blocks";
 import { useUserStore } from "@/hooks/use-user-store";
-import { isZonedToday, zonedDate, zonedNow } from "@/utils/tz";
+import { isZonedToday, zonedNow } from "@/utils/tz";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
@@ -44,9 +45,9 @@ export const WeekGrid = ({
 
       {/* Day columns */}
       {weekDates.map((date, d) => {
-        const dayEvents = events.filter((e) =>
-          isSameDay(zonedDate(e.start, tz), date),
-        );
+        // Clamp/split tasks to this column; a task crossing midnight renders its
+        // leftover portion as a continuation segment on the next day's column.
+        const dayEvents = eventsForDay(events, date, tz);
         const layout = getOverlapLayout(dayEvents);
         return (
         <div
@@ -90,9 +91,13 @@ export const WeekGrid = ({
           {dayEvents.map((e) => (
             <ScheduledBlockItem
               block={e}
-              key={e.id}
+              key={e.segmentId}
               layout={
-                layout.get(e.id) ?? { column: 0, columns: 1, conflict: false }
+                layout.get(e.segmentId) ?? {
+                  column: 0,
+                  columns: 1,
+                  conflict: false,
+                }
               }
             />
           ))}

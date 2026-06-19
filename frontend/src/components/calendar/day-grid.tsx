@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { Cell } from "./day-cell";
 import { DayColumnBackground } from "./day-column-background";
 import { getOverlapLayout } from "@/utils/overlap";
+import { eventsForDay } from "@/utils/blocks";
 import { useUserStore } from "@/hooks/use-user-store";
 import { isZonedToday, zonedNow } from "@/utils/tz";
 
@@ -28,7 +29,10 @@ export function DayGrid({ events, date }: { events: Event[]; date: Date }) {
     return `${(mins / DAILY_HORIZON) * 100}%`;
   }, [tz]);
 
-  const layout = getOverlapLayout(events);
+  // Clamp/split tasks to this day so cross-midnight tasks render their leftover
+  // portion as a continuation segment at the top of the next day.
+  const segments = eventsForDay(events, date, tz);
+  const layout = getOverlapLayout(segments);
 
   return (
     <div className="border-border grid flex-1 grid-cols-[3rem_1fr] overflow-hidden border-t sm:grid-cols-[4rem_1fr]">
@@ -79,11 +83,17 @@ export function DayGrid({ events, date }: { events: Event[]; date: Date }) {
         ))}
 
         {/* events */}
-        {events.map((event) => (
+        {segments.map((segment) => (
           <ScheduledBlockItem
-            layout={layout.get(event.id) ?? { column: 0, columns: 1, conflict: false }}
-            key={event.id}
-            block={event}
+            layout={
+              layout.get(segment.segmentId) ?? {
+                column: 0,
+                columns: 1,
+                conflict: false,
+              }
+            }
+            key={segment.segmentId}
+            block={segment}
           />
         ))}
       </div>
