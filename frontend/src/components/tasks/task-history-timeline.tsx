@@ -28,7 +28,7 @@ const EVENT_DOT: Record<TaskEvent["eventType"], string> = {
   RESIZE: "bg-brand-yellow text-white",
   KEEP: "bg-lime-500 text-white",
   COMPLETE: "bg-green-500 text-white",
-  ABANDON: "bg-brand-orange text-white",
+  ABANDON: "bg-destructive text-white",
 };
 
 const EVENT_ICON: Record<TaskEvent["eventType"], LucideIcon> = {
@@ -180,9 +180,15 @@ export function TaskHistory({ events }: { events: TaskEvent[] }) {
           aria-hidden
           className="absolute bottom-2 left-3 top-2 w-px -translate-x-1/2 bg-border"
         />
-        {events.map((event) => (
-          <TimelineEvent key={event.id} event={event} />
-        ))}
+        {events
+          .sort((a, b) => {
+            if (b.eventType === "CREATE") return -1;
+            if (a.eventType === "CREATE") return 1;
+            return 0;
+          })
+          .map((event) => (
+            <TimelineEvent key={event.id} event={event} />
+          ))}
       </ol>
     </div>
   );
