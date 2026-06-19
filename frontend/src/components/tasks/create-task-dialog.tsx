@@ -30,10 +30,13 @@ export function CreateTaskDialog({
   date,
   view,
   onCreated,
+  trigger,
 }: {
   date: Date;
   view: ViewMode;
   onCreated: () => void;
+  /** Custom trigger element; falls back to the default "New task" button. */
+  trigger?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -191,10 +194,12 @@ export function CreateTaskDialog({
   return (
     <Sheet open={open} onOpenChange={setOpen} modal={false}>
       <SheetTrigger asChild>
-        <Button size="sm">
-          <Plus className="size-4" />
-          <span className="sr-only sm:not-sr-only">New task</span>
-        </Button>
+        {trigger ?? (
+          <Button size="sm">
+            <Plus className="size-4" />
+            <span className="sr-only sm:not-sr-only">New task</span>
+          </Button>
+        )}
       </SheetTrigger>
       {/* Non-modal + no overlay + offset below the 56px header so the view can
           still be switched (which re-scopes recurrence) while creating.

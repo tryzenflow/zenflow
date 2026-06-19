@@ -4,9 +4,6 @@ import { ViewModeSelect } from "./view-mode-select";
 import { endOfWeek, format, startOfMonth } from "date-fns";
 import { Dispatch, SetStateAction } from "react";
 import { ViewMode } from "@/types/schedule";
-import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
-import { useUserStore } from "@/hooks/use-user-store";
-import { zonedNow } from "@/utils/tz";
 import { WEEK_STARTS_ON } from "@/utils/constants";
 import { shiftDateByView, type NavDirection } from "@/utils/navigation";
 
@@ -16,7 +13,6 @@ interface CalendarHeaderProps {
   currentView: ViewMode;
   setCurrentView: Dispatch<SetStateAction<ViewMode>>;
   conflictCount: number;
-  onChanged: () => void;
   /** Open the mobile nav drawer (hamburger is shown only below `lg`). */
   onOpenNav?: () => void;
 }
@@ -26,10 +22,8 @@ export function CalendarHeader({
   setDate,
   currentView,
   setCurrentView,
-  onChanged,
   onOpenNav,
 }: CalendarHeaderProps) {
-  const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const shift = (direction: NavDirection) =>
     setDate((d) => shiftDateByView(d, currentView, direction));
 
@@ -49,7 +43,7 @@ export function CalendarHeader({
 
   return (
     <div className="flex h-14 items-center justify-between gap-2 border-b border-border bg-card px-2 sm:px-4">
-      <div className="flex min-w-0 items-center gap-1 sm:gap-4">
+      <div className="flex min-w-0 items-center gap-1 sm:gap-3">
         <Button
           variant="ghost"
           size="icon-sm"
@@ -60,15 +54,12 @@ export function CalendarHeader({
           <Menu className="size-4" />
         </Button>
 
-        <Button variant="outline" onClick={() => setDate(zonedNow(tz))}>
-          Today
-        </Button>
-
         <Button
           variant="ghost"
           size="icon-sm"
           className="shrink-0"
           onClick={() => shift("left")}
+          aria-label="Previous period"
         >
           <ChevronLeft className="size-4" />
         </Button>
@@ -78,10 +69,13 @@ export function CalendarHeader({
           size="icon-sm"
           className="shrink-0"
           onClick={() => shift("right")}
+          aria-label="Next period"
         >
           <ChevronRight className="size-4" />
         </Button>
 
+        {/* The Today + Add buttons moved to floating glass controls over the
+            grid (see CalendarLayout), so the title now has room not to truncate. */}
         <h2 className="truncate text-sm font-semibold sm:text-lg">
           {formatByView()}
         </h2>
@@ -89,11 +83,6 @@ export function CalendarHeader({
 
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
         <ViewModeSelect value={currentView} onChange={setCurrentView} />
-        <CreateTaskDialog
-          date={date}
-          view={currentView}
-          onCreated={onChanged}
-        />
       </div>
     </div>
   );
