@@ -320,17 +320,27 @@ through the production path, never hand-written.
   drift, fatigue, a noise floor — so recovery is a real finding, not a tautology.
 - **Re-ranker seam:** only `--reranker=identity` (the Phase-1 baseline) is wired today; a
   future re-ranker drops into the same `SlotReRanker` seam.
+- **Compiled, not `ts-node`:** the repo uses baseUrl `src/*` imports that only `nest build`
+  rewrites, so `sim:run`/`sim:eval` build to `dist/` and run the compiled output (matching
+  production module resolution). `sim:run` rebuilds automatically; rerun `sim:build` before
+  `sim:eval` if you changed simulator code since the last `sim:run`.
 
 ```bash
-# Dedicated DB (never dev/prod) — copy .env.dev → .env.sim, point DATABASE_URL at zenflow_sim
-pnpm --filter backend sim:reset                          # create/reset the sim DB schema
-pnpm --filter backend sim:run --seed=1 --days=14 --personas=5   # smoke run (needs the DB)
-pnpm --filter backend sim:run --seed=1 --start=2025-01-06 --days=365   # full year
-pnpm --filter backend sim:eval                           # MAR + supporting metrics + IPS/SNIPS
+# Dedicated DB (never dev/prod) — copy .env.dev → .env.sim, point DATABASE_URL at zenflow_sim.
+# Pass CLI flags after `--` so pnpm forwards them to the script.
+pnpm --filter backend sim:reset                                       # drop + recreate sim schema (db push --force-reset)
+pnpm --filter backend sim:run -- --seed=1 --days=30 --personas=5      # quick run (needs the DB)
+pnpm --filter backend sim:run -- --seed=1 --start=2025-01-06 --days=365   # full year
+pnpm --filter backend sim:eval                                        # MAR + supporting metrics + IPS/SNIPS
 ```
 
 `sim:run` needs a reachable `zenflow_sim` Postgres; the pure pieces (`rng`, `reaction.model`,
-`metrics`) are covered by `*.spec.ts` and run without a DB.
+`metrics`) are covered by `*.spec.ts` and run without a DB. Use a span of **≥~30 days** for
+smoke runs — each persona draws vacation/idle windows sized for the span, so a handful of days
+can legitimately produce zero events. Reusing the same `--seed` reuses persona emails
+(`sim-<archetype>-<n>@zenflow.sim`); run `sim:reset` between same-seed runs to avoid the unique
+constraint. `sim:reset` is destructive; if invoked by an AI agent Prisma will block it pending
+explicit user consent.
 
 ## Conventions
 
