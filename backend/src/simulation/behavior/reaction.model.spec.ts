@@ -54,14 +54,14 @@ function persona(overrides: Partial<Persona> = {}): Persona {
     estDuration: { mu: Math.log(60), sigma: 0.4 },
     fixedLoadPerWeek: 3,
     driftPerMonth: { peakShiftBlocks: 0, biasDecay: 0 },
-    tagMix: [{ name: "#backend", weight: 1 }],
+    tagMix: [{ name: "backend", weight: 1 }],
     idleWindows: [],
     ...overrides,
   };
 }
 
 const task = (over: Partial<ReactionTask> = {}): ReactionTask => ({
-  tags: ["#backend"],
+  tags: ["backend"],
   deadline: null,
   durationMinutes: 60,
   trueDurationMinutes: 60,
