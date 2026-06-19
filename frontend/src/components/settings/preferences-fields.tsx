@@ -52,18 +52,14 @@ export const ARCHETYPES = [
  */
 export const TIME_OPTIONS = Array.from({ length: 96 }, (_, i) => i * 15);
 
-/** The 24 selectable hours (0 = midnight … 23 = 11 PM). */
-export const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => i);
+/** The 12 selectable hours on a 12-hour clock (1 … 12). */
+export const HOUR_OPTIONS = Array.from({ length: 12 }, (_, i) => i + 1);
 
 /** The four selectable minutes, matching the scheduler's 15-minute slot grid. */
 export const MINUTE_OPTIONS = [0, 15, 30, 45];
 
-/** Format a 24-hour hour value as a 12-hour clock label, e.g. "12 AM", "1 PM". */
-export function hourLabel(h: number) {
-  const ampm = h < 12 ? "AM" : "PM";
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12} ${ampm}`;
-}
+/** The two selectable meridiem periods. */
+export const PERIOD_OPTIONS = ["AM", "PM"] as const;
 
 /** Format minutes-from-midnight as a 12-hour clock label, e.g. "9:00 AM". */
 export function minutesToLabel(m: number) {
@@ -101,8 +97,21 @@ export function TimeSelect({
   onChange: (v: number) => void;
   label: string;
 }) {
-  const hour = Math.floor(value / 60);
+  const h24 = Math.floor(value / 60);
   const minute = value % 60;
+  const period: (typeof PERIOD_OPTIONS)[number] = h24 < 12 ? "AM" : "PM";
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+
+  /** Recombine the three parts into minutes-from-midnight and emit. */
+  const emit = (
+    nextH12: number,
+    nextMinute: number,
+    nextPeriod: (typeof PERIOD_OPTIONS)[number],
+  ) => {
+    const base = nextH12 % 12; // 12 → 0, 1–11 → 1–11
+    const nextH24 = nextPeriod === "PM" ? base + 12 : base;
+    onChange(nextH24 * 60 + nextMinute);
+  };
 
   return (
     <div className="space-y-2">
@@ -110,8 +119,8 @@ export function TimeSelect({
       <div className="flex items-center gap-2">
         <Clock className="h-[15px] w-[15px] shrink-0 text-muted-foreground" />
         <Select
-          value={String(hour)}
-          onValueChange={(v) => onChange(Number(v) * 60 + minute)}
+          value={String(h12)}
+          onValueChange={(v) => emit(Number(v), minute, period)}
         >
           <SelectTrigger className="h-10 flex-1 bg-card text-sm font-medium">
             <SelectValue />
@@ -119,7 +128,7 @@ export function TimeSelect({
           <SelectContent>
             {HOUR_OPTIONS.map((h) => (
               <SelectItem key={h} value={String(h)}>
-                {hourLabel(h)}
+                {h}
               </SelectItem>
             ))}
           </SelectContent>
@@ -127,7 +136,7 @@ export function TimeSelect({
         <span className="text-sm font-semibold text-muted-foreground">:</span>
         <Select
           value={String(minute)}
-          onValueChange={(v) => onChange(hour * 60 + Number(v))}
+          onValueChange={(v) => emit(h12, Number(v), period)}
         >
           <SelectTrigger className="h-10 flex-1 bg-card text-sm font-medium">
             <SelectValue />
@@ -136,6 +145,23 @@ export function TimeSelect({
             {MINUTE_OPTIONS.map((m) => (
               <SelectItem key={m} value={String(m)}>
                 {String(m).padStart(2, "0")}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={period}
+          onValueChange={(v) =>
+            emit(h12, minute, v as (typeof PERIOD_OPTIONS)[number])
+          }
+        >
+          <SelectTrigger className="h-10 flex-1 bg-card text-sm font-medium">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PERIOD_OPTIONS.map((p) => (
+              <SelectItem key={p} value={p}>
+                {p}
               </SelectItem>
             ))}
           </SelectContent>
