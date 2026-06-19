@@ -13,6 +13,7 @@ import type { Task } from "@/types/tasks";
 import type { TaskEvent } from "@zenflow/shared";
 import { deleteTask, EditTaskFormValues } from "@/utils/tasks";
 import { TaskForm } from "./form/task-form";
+import { TaskHistory } from "./task-history-timeline";
 import { useFilesTracker } from "@/hooks/use-files-tracker";
 import { completeTask, getTaskDetails, updateTask } from "@/api/tasks";
 import { Clock, Trash2 } from "lucide-react";
@@ -235,64 +236,5 @@ export function EditTaskDialog({
           />
         </SheetContent>
       </Sheet>
-  );
-}
-
-const EVENT_LABEL: Record<TaskEvent["eventType"], string> = {
-  CREATE: "Created",
-  MOVE: "Moved",
-  RESIZE: "Resized",
-  KEEP: "Kept",
-  COMPLETE: "Completed",
-  ABANDON: "Abandoned",
-};
-
-const EVENT_DOT: Record<TaskEvent["eventType"], string> = {
-  CREATE: "bg-muted-foreground",
-  MOVE: "bg-amber-500",
-  RESIZE: "bg-amber-500",
-  KEEP: "bg-emerald-500",
-  COMPLETE: "bg-emerald-500",
-  ABANDON: "bg-red-500",
-};
-
-function TaskHistory({ events }: { events: TaskEvent[] }) {
-  return (
-    <div className="space-y-2">
-      <h4 className="text-xs font-semibold">History</h4>
-      <div className="space-y-1.5">
-        {events.map((e) => (
-          <div key={e.id} className="flex items-start gap-3">
-            <span
-              className={cn(
-                "mt-1.5 size-1.5 shrink-0 rounded-full",
-                EVENT_DOT[e.eventType],
-              )}
-            />
-            <div>
-              <p className="text-xs font-medium">
-                {EVENT_LABEL[e.eventType]} ·{" "}
-                {format(new Date(e.occurredAt), "MMM d 'at' HH:mm")}
-              </p>
-              {e.oldSnapshot?.scheduledStartTime &&
-                e.newSnapshot?.scheduledStartTime && (
-                  <p className="text-[11px] text-muted-foreground">
-                    {format(
-                      new Date(e.oldSnapshot.scheduledStartTime),
-                      "HH:mm",
-                    )}{" "}
-                    →{" "}
-                    {format(
-                      new Date(e.newSnapshot.scheduledStartTime),
-                      "HH:mm",
-                    )}{" "}
-                    · reward {e.rewardScore.toFixed(1)}
-                  </p>
-                )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
   );
 }
