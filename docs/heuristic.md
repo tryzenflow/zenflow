@@ -102,10 +102,14 @@ and complete telemetry.
   is scheduled within the working hours of the calendar period (day / ISO-week / month) it was
   created in. The active `view` is persisted on the task; its create-day anchor and the end of
   that period together bound the EDF packer (floor = anchor, ceiling = period end, derived as
-  `endOfPeriod(anchor, view, tz)` and carried into the pure core as the task's
+  `endOfPeriod(anchor, view, tz, work)` and carried into the pure core as the task's
   `schedulingDeadline`). This stops a task created late in a period (e.g. at 23:00 in day view,
   after the work window closes) from silently rolling forward into the next day/week/month —
-  it stays **unplaced** and the user is prompted instead. A **user deadline** overrides this:
+  it stays **unplaced** and the user is prompted instead. **Night-owl windows:** when the
+  user's work window wraps past midnight (`workEnd <= workStart`, e.g. 22:00→06:00), the period
+  ceiling is extended to `workEnd` the following morning, so a single contiguous task can occupy
+  the post-midnight tail of the window (one row, one start, duration spanning midnight — never
+  split). A non-wrapping window is unchanged. A **user deadline** overrides this:
   such a task is packed from `now` by pure EDF urgency, exactly as before (the period ceiling
   does not apply). The bound lives **inside** the scheduling logic, so an overflowing task
   stays unplaced across every later cascade rather than being re-placed by an unrelated edit.

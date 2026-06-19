@@ -52,15 +52,22 @@ export class SchedulerService {
    * the day/week/month it was created in (end of that period, in `timezone`) and
    * must not silently roll past it. Tasks with a user deadline, fixed tasks, or
    * legacy rows without a view get `schedulingDeadline = null` (unbounded —
-   * byte-for-byte the previous behavior). `timezone` comes from the user's prefs.
+   * byte-for-byte the previous behavior). For a night-owl window that wraps past
+   * midnight (`workEnd <= workStart`) the ceiling is extended to `workEnd` the
+   * following morning (see {@link endOfPeriod}), so a single contiguous task can
+   * occupy the post-midnight tail of the window. The user's `prefs` (tz + work
+   * window) come from the caller.
    */
-  private toEdf(task: Task, timezone: string): EdfTask {
+  private toEdf(task: Task, prefs: SchedulerPrefs): EdfTask {
     const schedulingDeadline =
       !task.fixed &&
       task.deadline === null &&
       task.view !== null &&
       task.schedulingAnchor !== null
-        ? endOfPeriod(task.schedulingAnchor, task.view, timezone)
+        ? endOfPeriod(task.schedulingAnchor, task.view, prefs.timezone, {
+            workStart: prefs.workStart,
+            workEnd: prefs.workEnd,
+          })
         : null;
     return {
       id: task.id,
@@ -103,9 +110,10 @@ export class SchedulerService {
     now = new Date(),
   ): Promise<void> {
     const tasks = await this.pendingTasks(user.id, tx);
+    const prefs = this.prefsOf(user);
     const placements = scheduleAll(
-      this.prefsOf(user),
-      tasks.map((t) => this.toEdf(t, user.timezone)),
+      prefs,
+      tasks.map((t) => this.toEdf(t, prefs)),
       now,
     );
     const before = new Map(tasks.map((t) => [t.id, t]));
@@ -195,6 +203,7 @@ export class SchedulerService {
       anchor,
       view,
       prefs.timezone,
+      { workStart: prefs.workStart, workEnd: prefs.workEnd },
     );
 
     const outside = findSlotIgnoringWorkHours(
@@ -254,6 +263,7 @@ export class SchedulerService {
         anchor,
         view,
         prefs.timezone,
+        { workStart: prefs.workStart, workEnd: prefs.workEnd },
       );
       const slot =
         choice === "outsideHours"

@@ -104,41 +104,78 @@ export function periodBoundsStr(
 }
 
 /**
+ * A user's working-hours window, minutes-from-midnight, as carried by
+ * {@link SchedulerPrefs}. Passed (optionally) into {@link periodRange} /
+ * {@link endOfPeriod} so the period ceiling can follow a window that wraps past
+ * midnight rather than stopping dead at the next-period 00:00.
+ */
+export interface WorkWindowPrefs {
+  workStart: number; // minutes from midnight
+  workEnd: number;
+}
+
+/** A window runs from `workStart` on day D into day D+1 iff `workEnd <= workStart`. */
+function windowWraps(prefs?: WorkWindowPrefs): boolean {
+  return prefs !== undefined && prefs.workEnd <= prefs.workStart;
+}
+
+/**
  * Absolute UTC bounds of the calendar period (day / ISO-week / month) the
  * `anchor` instant falls in, in the user's `timezone`. `start` is the period's
- * start-of-day; `end` is the EXCLUSIVE upper bound — the start-of-day of the
- * first day of the NEXT period — which is exactly the ceiling a no-deadline
- * task may be placed before (findSlot requires `candEnd <= end`). The I/O/tz
- * layer (scheduler.service) derives a task's `schedulingDeadline` from `end`.
- * Pure: derives the local date of `anchor` in `timezone`, then walks period
- * boundaries with pure string math.
+ * start-of-day; `end` is the EXCLUSIVE upper bound a no-deadline task may be
+ * placed before (findSlot requires `candEnd <= end`). The I/O/tz layer
+ * (scheduler.service) derives a task's `schedulingDeadline` from `end`.
+ *
+ * For an ordinary (non-wrapping) window — and when no `work` prefs are passed —
+ * `end` is the start-of-day of the first day of the NEXT period (byte-for-byte
+ * the legacy behavior). For a NIGHT-OWL window that wraps past midnight
+ * (`workEnd <= workStart`, e.g. 22:00→06:00), the last work window that STARTS
+ * within the period ends the next morning at `workEnd` on the period's
+ * following day, so `end` is extended to that `workEnd` instant. This lets a
+ * single contiguous task occupy the post-midnight tail of the work window
+ * (e.g. a 4h task at 22:00 crossing into 02:00) instead of being capped at the
+ * bare 00:00 of the next period. Pure: derives the local date of `anchor` in
+ * `timezone`, then walks period boundaries with pure string math.
  */
 export function periodRange(
   anchor: Date,
   view: ViewMode,
   timezone: string,
+  work?: WorkWindowPrefs,
 ): { start: Date; end: Date } {
   // Local date of the anchor in the user's tz (the anchor is already a
   // start-of-day UTC instant for the create day, but localize defensively).
   const dateStr = localDateStr(anchor, timezone);
   const { startStr, nextStr } = periodBoundsStr(view, dateStr);
+  // `nextStr` is the calendar day AFTER the period's last day — i.e. the
+  // morning on which the last (wrapping) work window of the period ends. A
+  // wrapping window therefore extends the ceiling to `workEnd` on that day; a
+  // non-wrapping window (or no prefs) keeps the legacy 00:00-of-next-period
+  // ceiling. The morning tail is not double-counted: the period's first day
+  // contributes only its evening start, the extra tail comes solely from this
+  // last-day extension.
+  const endMinutes = windowWraps(work) ? work!.workEnd : 0;
   return {
     start: minutesToUtc(startStr, 0, timezone),
-    end: minutesToUtc(nextStr, 0, timezone),
+    end: minutesToUtc(nextStr, endMinutes, timezone),
   };
 }
 
 /**
  * Exclusive end-of-period UTC instant (the ceiling) for the period containing
- * `anchor` — the start-of-day of the first day of the next day/week/month.
- * Thin wrapper over {@link periodRange}; this is a task's `schedulingDeadline`.
+ * `anchor`. For a non-wrapping window (or no `work` prefs) this is the
+ * start-of-day of the first day of the next day/week/month; for a wrapping
+ * night-owl window it is `workEnd` on that following morning (see
+ * {@link periodRange}). Thin wrapper over {@link periodRange}; this is a task's
+ * `schedulingDeadline`.
  */
 export function endOfPeriod(
   anchor: Date,
   view: ViewMode,
   timezone: string,
+  work?: WorkWindowPrefs,
 ): Date {
-  return periodRange(anchor, view, timezone).end;
+  return periodRange(anchor, view, timezone, work).end;
 }
 
 /** Walk backwards from `dateStr` (inclusive) to the nearest work day. */

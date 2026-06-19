@@ -134,6 +134,50 @@ describe("periodRange / endOfPeriod (UTC)", () => {
   });
 });
 
+describe("periodRange / endOfPeriod — wrapping (night-owl) work window", () => {
+  const TZ = "UTC";
+  const tue = new Date("2026-06-09T00:00:00Z"); // a Tuesday
+  // 22:00 → 06:00 wraps past midnight.
+  const wrap = { workStart: 1320, workEnd: 360 };
+
+  it("day → ceiling extends to workEnd the next morning", () => {
+    const { start, end } = periodRange(tue, "day", TZ, wrap);
+    expect(iso(start)).toBe("2026-06-09T00:00:00.000Z");
+    // Not bare 00:00 Wed, but 06:00 Wed — the end of the last wrapping window.
+    expect(iso(end)).toBe("2026-06-10T06:00:00.000Z");
+    expect(iso(endOfPeriod(tue, "day", TZ, wrap))).toBe(
+      "2026-06-10T06:00:00.000Z",
+    );
+  });
+
+  it("week → ceiling extends to workEnd the morning after the last day", () => {
+    const { start, end } = periodRange(tue, "week", TZ, wrap);
+    expect(iso(start)).toBe("2026-06-08T00:00:00.000Z");
+    // Next Monday 00:00 is replaced by next Monday 06:00.
+    expect(iso(end)).toBe("2026-06-15T06:00:00.000Z");
+  });
+
+  it("month → ceiling extends to workEnd the morning after the last day", () => {
+    const { start, end } = periodRange(tue, "month", TZ, wrap);
+    expect(iso(start)).toBe("2026-06-01T00:00:00.000Z");
+    expect(iso(end)).toBe("2026-07-01T06:00:00.000Z");
+  });
+
+  it("non-wrapping window is byte-for-byte unchanged (00:00 ceiling)", () => {
+    const day = { workStart: 540, workEnd: 1020 }; // 09:00 → 17:00
+    expect(iso(periodRange(tue, "day", TZ, day).end)).toBe(
+      iso(periodRange(tue, "day", TZ).end),
+    );
+    expect(iso(periodRange(tue, "day", TZ, day).end)).toBe(
+      "2026-06-10T00:00:00.000Z",
+    );
+  });
+
+  it("omitting work prefs keeps the legacy 00:00 ceiling", () => {
+    expect(iso(endOfPeriod(tue, "day", TZ))).toBe("2026-06-10T00:00:00.000Z");
+  });
+});
+
 describe("periodRange — non-UTC timezone localizes the anchor", () => {
   it("day in America/New_York: a UTC instant maps to the local calendar day", () => {
     // 2026-06-09T02:00:00Z is 2026-06-08 22:00 in New York (UTC-4 in June), so

@@ -69,11 +69,15 @@ export function findNextAvailableSlot(
   // period. Passing it as `findSlot`'s `earliest` floor makes the scan begin at
   // the next-period boundary; findSlot clamps every candidate to >= now too, so
   // a period already in the past collapses to scanning from now. The deadline is
-  // deliberately null here (this option ignores the deadline).
+  // deliberately null here (this option ignores the deadline). The same work
+  // window is threaded in so a night-owl wrapping window's anchor period (which
+  // ends the next morning at `workEnd`) and its next-period floor agree — the
+  // anchor period's post-midnight tail is not re-offered as "next available".
   const { end: nextPeriodStart } = periodRange(
     anchor,
     granularity,
     prefs.timezone,
+    { workStart: prefs.workStart, workEnd: prefs.workEnd },
   );
   return findSlot(prefs, durationMinutes, null, occupied, now, nextPeriodStart);
 }

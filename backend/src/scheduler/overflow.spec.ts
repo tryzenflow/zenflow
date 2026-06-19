@@ -238,10 +238,12 @@ describe("findNextAvailableSlot — midnight-wrap work window", () => {
     timezone: "UTC",
   };
 
-  it("day: places inside the wrapping night window of the next day", () => {
-    // anchor Mon 06-08; next day boundary is Tue 06-09 00:00. The Mon-night
-    // window (started 22:00 Mon) spills into Tue 00:00–06:00, so the earliest
-    // slot on/after the Tue boundary is Tue 00:00 (Monday's morning tail).
+  it("day: rolls to the NEXT night, not the anchor day's morning tail", () => {
+    // anchor Mon 06-08. The Mon-night window (22:00 Mon → 06:00 Tue) BELONGS to
+    // the anchor day now that the period ceiling wraps past midnight to 06:00
+    // Tue — its morning tail (Tue 00:00–06:00) is offered via `outsideHours`,
+    // NOT re-offered here. So "next available" starts at the anchor period's
+    // extended end (Tue 06:00) and lands at the next night's start, Tue 22:00.
     const slot = findNextAvailableSlot(
       nightPrefs,
       60,
@@ -250,6 +252,6 @@ describe("findNextAvailableSlot — midnight-wrap work window", () => {
       new Date("2026-06-08T00:00:00Z"),
       "day",
     );
-    expect(iso(slot)).toBe("2026-06-09T00:00:00.000Z");
+    expect(iso(slot)).toBe("2026-06-09T22:00:00.000Z");
   });
 });

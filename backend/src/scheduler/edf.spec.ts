@@ -8,6 +8,7 @@ import {
   scheduleAll,
   type SchedulerPrefs,
 } from "./edf";
+import { endOfPeriod } from "./horizon";
 
 const prefs: SchedulerPrefs = {
   workStart: 540, // 09:00
@@ -796,6 +797,94 @@ describe("scheduleAll — period ceiling (schedulingDeadline) for no-deadline ta
       TUE_11PM,
     );
     expect(iso(out[0].scheduledStartTime)).toBe("2026-06-10T09:00:00.000Z");
+  });
+});
+
+describe("scheduleAll — cross-day single task for a wrapping work window", () => {
+  // Night owl: 22:00 → 06:00, Mon–Fri (the day the shift STARTS).
+  const owl: SchedulerPrefs = {
+    workStart: 1320, // 22:00
+    workEnd: 360, // 06:00
+    workDays: [1, 2, 3, 4, 5],
+    timezone: "UTC",
+  };
+  // The create-day anchor (start-of-day Mon 06-08, the shift's start day).
+  const MON_ANCHOR = new Date("2026-06-08T00:00:00Z");
+  // The day-view ceiling the SERVICE would compute for this anchor: not bare
+  // Tue 00:00 but Tue 06:00 (workEnd the next morning) for the wrapping window.
+  const dayCeiling = endOfPeriod(MON_ANCHOR, "day", owl.timezone, {
+    workStart: owl.workStart,
+    workEnd: owl.workEnd,
+  });
+
+  it("places a 4h task at 22:00 as ONE block crossing midnight (ends 02:00)", () => {
+    // The repro: a 240-min no-deadline task in day view. With the extended
+    // ceiling (Tue 06:00) the single 22:00→02:00 block fits the post-midnight
+    // tail — one row, one start, duration unchanged.
+    expect(iso(dayCeiling)).toBe("2026-06-09T06:00:00.000Z");
+    const out = scheduleAll(
+      owl,
+      [
+        task({
+          id: "owl",
+          durationMinutes: 240,
+          schedulingAnchor: MON_ANCHOR,
+          schedulingDeadline: dayCeiling,
+        }),
+      ],
+      MON_ANCHOR,
+    );
+    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-08T22:00:00.000Z");
+    expect(out[0].conflict).toBe(false);
+  });
+
+  it("would be UNPLACED under the old bare-00:00 day ceiling (regression guard)", () => {
+    // Same task, but ceilinged at Tue 00:00 (the pre-fix day ceiling): the
+    // 22:00→02:00 block overshoots midnight → no slot → unplaced. This is the
+    // exact behavior the extended ceiling fixes.
+    const out = scheduleAll(
+      owl,
+      [
+        task({
+          id: "owl",
+          durationMinutes: 240,
+          schedulingAnchor: MON_ANCHOR,
+          schedulingDeadline: new Date("2026-06-09T00:00:00Z"),
+        }),
+      ],
+      MON_ANCHOR,
+    );
+    expect(out[0].scheduledStartTime).toBeNull();
+    expect(out[0].conflict).toBe(true);
+  });
+
+  it("places the LATE-evening tail of the window when the early part is busy", () => {
+    // 22:00–01:00 occupied by a fixed anchor; a 2h task then lands at 01:00
+    // crossing into 03:00 — still one block within the extended Tue-06:00
+    // ceiling, in the post-midnight tail of the window.
+    const out = scheduleAll(
+      owl,
+      [
+        task({
+          id: "owl",
+          durationMinutes: 120,
+          schedulingAnchor: MON_ANCHOR,
+          schedulingDeadline: dayCeiling,
+        }),
+        task({
+          id: "fixedBlock",
+          fixed: true,
+          durationMinutes: 180, // 22:00 → 01:00
+          scheduledStartTime: new Date("2026-06-08T22:00:00Z"),
+        }),
+      ],
+      MON_ANCHOR,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    expect(iso(byId("owl").scheduledStartTime)).toBe(
+      "2026-06-09T01:00:00.000Z",
+    );
+    expect(byId("owl").conflict).toBe(false);
   });
 });
 

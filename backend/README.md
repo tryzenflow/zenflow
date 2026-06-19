@@ -234,12 +234,24 @@ Pure functions you'll work with:
   no-deadline task is bounded by **both** (its create-day anchor and its period end), so a
   user-deadline task is byte-for-byte unchanged while a no-deadline task that can't fit its
   period comes back unplaced and stays that way.
-- **`periodRange(anchor, view, tz)` / `endOfPeriod(anchor, view, tz)`**
+- **`periodRange(anchor, view, tz, work?)` / `endOfPeriod(anchor, view, tz, work?)`**
   ([`horizon.ts`](src/scheduler/horizon.ts)) — pure UTC bounds `[start, end)` of the
   day / ISO-week / month containing `anchor` in the user's tz (`end` is the exclusive
   next-period boundary = the task's `schedulingDeadline`). Reuses `weekStartStr`/`monthRange`
   so FE and BE agree on period edges. `SchedulerService.toEdf` derives each flexible
-  no-deadline task's `schedulingDeadline` from `endOfPeriod`.
+  no-deadline task's `schedulingDeadline` from `endOfPeriod`. **Night-owl (wrapping) work
+  windows:** when the optional `work` (`{ workStart, workEnd }`) describes a window that wraps
+  past midnight (`workEnd <= workStart`, e.g. 22:00→06:00), the last work window that *starts*
+  within the period ends the next morning at `workEnd`, so `end` is **extended** from the bare
+  next-period 00:00 to `workEnd` on that following morning. This lets the engine place a
+  **single contiguous task crossing midnight** (e.g. a 4h task at 22:00→02:00) in the
+  post-midnight tail of the window — one Task row, one `scheduledStartTime`, duration spanning
+  midnight (never split into two rows). A non-wrapping window (or omitting `work`) keeps the
+  legacy 00:00 ceiling byte-for-byte; a user-deadline task is unaffected (its ceiling is its
+  own deadline). The morning tail is not double-counted in capacity — `sumWorkMinutes` is
+  start-day anchored and counts each window's minutes once. The service threads the user's
+  work window into `endOfPeriod` (`toEdf`) and into `periodRange` for the overflow
+  options.
 - **`findSlotIgnoringWorkHours(durationMinutes, deadline, occupied, now, periodStart, periodEnd)`**
   ([`overflow.ts`](src/scheduler/overflow.ts)) — earliest 15-min-grid slot **inside the
   anchor period** `[periodStart, periodEnd)`, at/after `now`, ignoring the work-hours
@@ -249,8 +261,11 @@ Pure functions you'll work with:
   ([`overflow.ts`](src/scheduler/overflow.ts)) — earliest **work-hours** slot in the **next**
   period after the anchor's period (`day` → next working day, `week` → next week, `month` →
   next month), **ignoring** the deadline; reuses `findSlot`'s window/grid math via the next
-  period boundary (`periodRange(anchor).end`) as its floor. Backs the `nextAvailable`
-  recovery option. Both helpers stay pure (`now` + explicit period inputs, no I/O);
+  period boundary (`periodRange(anchor, …, work).end`) as its floor. For a wrapping window the
+  anchor period's extended (post-midnight) end is used, so the anchor day's morning tail is
+  offered via `outsideHours` rather than re-offered here as "next available" (which rolls to
+  the next night). Backs the `nextAvailable` recovery option. Both helpers stay pure
+  (`now` + explicit period inputs, no I/O);
   `SchedulerService.computeOverflowOptions` / `applyOverflowOption` are the persistence
   wrappers that derive the period bounds from the task's stored `schedulingAnchor` + `view`.
 **Placement is `now`-aware; conflict detection is `now`-independent.** Keep these two axes
