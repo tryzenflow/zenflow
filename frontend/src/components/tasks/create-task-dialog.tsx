@@ -159,7 +159,11 @@ export function CreateTaskDialog({
       // with whatever recovery options the backend surfaced, instead of the
       // usual success toast.
       if (response.task.scheduledStartTime === null && response.overflow) {
-        showOverflowToast(response.task.id, response.task.title, response.overflow);
+        showOverflowToast(
+          response.task.id,
+          response.task.title,
+          response.overflow,
+        );
       } else {
         toast.success("Task created successfully 🎉");
       }
@@ -195,7 +199,7 @@ export function CreateTaskDialog({
     <Sheet open={open} onOpenChange={setOpen} modal={false}>
       <SheetTrigger asChild>
         {trigger ?? (
-          <Button size="sm">
+          <Button size="sm" className="hidden sm:flex">
             <Plus className="size-4" />
             <span className="sr-only sm:not-sr-only">New task</span>
           </Button>

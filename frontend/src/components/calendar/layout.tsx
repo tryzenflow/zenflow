@@ -228,7 +228,10 @@ export function CalendarLayout() {
 
       {/* Mobile/tablet nav drawer — same content as the desktop rail. */}
       <Sheet open={navOpen} onOpenChange={setNavOpen}>
-        <SheetContent side="left" className="w-72 bg-sidebar p-0 lg:hidden">
+        <SheetContent
+          side="left"
+          className="w-full sm:w-72 bg-sidebar p-0 lg:hidden"
+        >
           <SheetTitle className="sr-only">Navigation</SheetTitle>
           <SidebarBody meta={meta} agenda={agenda} view={viewMode} />
         </SheetContent>
@@ -241,6 +244,7 @@ export function CalendarLayout() {
           currentView={viewMode}
           setCurrentView={setViewMode}
           conflictCount={meta?.conflictCount ?? 0}
+          onChanged={refetch}
           onOpenNav={() => setNavOpen(true)}
         />
         {/* `relative` so the floating glass controls overlay the grid without
@@ -250,10 +254,11 @@ export function CalendarLayout() {
               old header "Today" button. */}
           <Button
             variant="outline"
+            size="default"
             onClick={() => setDate(zonedNow(tz))}
             className={cn(
-              "glass-header absolute left-1/2 top-3 z-30 -translate-x-1/2",
-              "rounded-full border-border/60 px-4 shadow-lg",
+              "absolute sm:hidden left-1/2 bottom-8 z-30 -translate-x-1/2",
+              "rounded-full border-border/60 bg-background/80 backdrop-blur-sm shadow-lg",
             )}
           >
             <CalendarCheck className="size-4" />
@@ -271,8 +276,8 @@ export function CalendarLayout() {
                 size="icon-lg"
                 aria-label="New task"
                 className={cn(
-                  "glass-header absolute right-4 top-3 z-30",
-                  "size-12 rounded-full border border-primary/30 text-primary shadow-lg",
+                  "sm:hidden glass-header absolute right-4 bottom-8 z-30",
+                  "size-12 rounded-full border border-primary/30 text-primary-foreground shadow-lg",
                   "hover:bg-primary hover:text-primary-foreground",
                 )}
               >
