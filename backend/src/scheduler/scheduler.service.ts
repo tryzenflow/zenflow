@@ -331,6 +331,7 @@ export class SchedulerService {
                 prev.scheduledStartTime,
               ),
               rewardScore: 0.0, // user accepted a recovery option
+              occurredAt: now,
             },
           });
         } else {
@@ -356,6 +357,7 @@ export class SchedulerService {
     user: User,
     taskId: string,
     requestedStart: Date,
+    now: Date = new Date(),
   ): Promise<{ task: Task; displaced: DisplacedTask[] }> {
     return this.prisma.$transaction(async (tx) => {
       const tasks = await this.pendingTasks(user.id, tx);
@@ -415,6 +417,7 @@ export class SchedulerService {
                 prev.scheduledStartTime,
               ),
               rewardScore: 0.0, // user override
+              occurredAt: now,
             },
           });
         } else {
@@ -456,6 +459,7 @@ export class SchedulerService {
     taskId: string,
     requestedStart: Date,
     durationMinutes: number,
+    now: Date = new Date(),
   ): Promise<{ task: Task; displaced: DisplacedTask[] }> {
     return this.prisma.$transaction(async (tx) => {
       const tasks = await this.pendingTasks(user.id, tx);
@@ -515,6 +519,7 @@ export class SchedulerService {
                 prev.scheduledStartTime,
               ),
               rewardScore: 0.0, // user override
+              occurredAt: now,
             },
           });
         } else {
@@ -658,6 +663,7 @@ export class SchedulerService {
     task: Task,
     tags: string[],
     tx: PrismaTx,
+    now: Date = new Date(),
   ): Promise<void> {
     if (!task.scheduledStartTime) return;
     await tx.taskEvent.create({
@@ -668,6 +674,7 @@ export class SchedulerService {
         oldSnapshot: Prisma.JsonNull,
         newSnapshot: this.snapshot(task, tags),
         rewardScore: 1.0, // accepted-unchanged: positive placement signal
+        occurredAt: now,
       },
     });
     await this.applyPreference(
