@@ -52,6 +52,19 @@ export const ARCHETYPES = [
  */
 export const TIME_OPTIONS = Array.from({ length: 96 }, (_, i) => i * 15);
 
+/** The 24 selectable hours (0 = midnight … 23 = 11 PM). */
+export const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => i);
+
+/** The four selectable minutes, matching the scheduler's 15-minute slot grid. */
+export const MINUTE_OPTIONS = [0, 15, 30, 45];
+
+/** Format a 24-hour hour value as a 12-hour clock label, e.g. "12 AM", "1 PM". */
+export function hourLabel(h: number) {
+  const ampm = h < 12 ? "AM" : "PM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12} ${ampm}`;
+}
+
 /** Format minutes-from-midnight as a 12-hour clock label, e.g. "9:00 AM". */
 export function minutesToLabel(m: number) {
   const h = Math.floor(m / 60);
@@ -88,25 +101,46 @@ export function TimeSelect({
   onChange: (v: number) => void;
   label: string;
 }) {
+  const hour = Math.floor(value / 60);
+  const minute = value % 60;
+
   return (
     <div className="space-y-2">
       <label className="text-xs font-semibold">{label}</label>
-      <Select
-        value={String(value)}
-        onValueChange={(v) => onChange(Number(v))}
-      >
-        <SelectTrigger className="relative h-10 w-full bg-card pl-9 text-sm font-medium">
-          <Clock className="pointer-events-none absolute left-3 top-1/2 h-[15px] w-[15px] -translate-y-1/2 text-muted-foreground" />
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {TIME_OPTIONS.map((m) => (
-            <SelectItem key={m} value={String(m)}>
-              {minutesToLabel(m)}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <div className="flex items-center gap-2">
+        <Clock className="h-[15px] w-[15px] shrink-0 text-muted-foreground" />
+        <Select
+          value={String(hour)}
+          onValueChange={(v) => onChange(Number(v) * 60 + minute)}
+        >
+          <SelectTrigger className="h-10 flex-1 bg-card text-sm font-medium">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {HOUR_OPTIONS.map((h) => (
+              <SelectItem key={h} value={String(h)}>
+                {hourLabel(h)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <span className="text-sm font-semibold text-muted-foreground">:</span>
+        <Select
+          value={String(minute)}
+          onValueChange={(v) => onChange(hour * 60 + Number(v))}
+        >
+          <SelectTrigger className="h-10 flex-1 bg-card text-sm font-medium">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {MINUTE_OPTIONS.map((m) => (
+              <SelectItem key={m} value={String(m)}>
+                {String(m).padStart(2, "0")}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
     </div>
   );
 }
