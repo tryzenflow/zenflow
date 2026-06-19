@@ -34,6 +34,7 @@ import {
 } from "./behavior/reaction.model";
 import { PersonaState, type DueTask } from "./batched/engine";
 import { bulkWrite, type PersonaOutput } from "./batched/writer";
+import { toGroundTruth, type PersonaGroundTruth } from "./eval/ground-truth";
 
 /**
  * The closed-loop driver (seed doc §2.7). Per simulated day, per persona:
@@ -84,6 +85,8 @@ export interface RunResult {
   personas: { userId: string; archetypeId: ArchetypeId; index: number }[];
   /** Out-of-band labels (ground truth) — never written to a learner-visible column. */
   labels: { userId: string; archetypeId: ArchetypeId }[];
+  /** Per-persona hidden fields for the recovery sidecar (eval Step 0). */
+  groundTruth: PersonaGroundTruth[];
   eventCounts: Record<string, number>;
 }
 
@@ -580,6 +583,7 @@ async function runBatched(
   holidays: Set<number>,
 ): Promise<Omit<RunResult, "eventCounts">> {
   const personas: RunResult["personas"] = [];
+  const groundTruth: PersonaGroundTruth[] = [];
   for (const p of planned) {
     const a = archetypeById(p.archetype);
     const rec = buildPersonaRecord(
@@ -608,6 +612,7 @@ async function runBatched(
       archetypeId: rec.persona.archetypeId,
       index: rec.persona.index,
     });
+    groundTruth.push(toGroundTruth(rec.persona));
     logger.log(`Seeded persona ${personas.length}/${planned.length}`);
   }
   return {
@@ -616,6 +621,7 @@ async function runBatched(
       userId: p.userId,
       archetypeId: p.archetypeId,
     })),
+    groundTruth,
   };
 }
 
@@ -670,6 +676,7 @@ async function runService(
       userId: p.userId,
       archetypeId: p.archetypeId,
     })),
+    groundTruth: personas.map(toGroundTruth),
   };
 }
 

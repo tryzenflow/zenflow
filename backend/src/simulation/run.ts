@@ -6,6 +6,7 @@ import { SchedulerService } from "../scheduler/scheduler.service";
 import { AbandonedTasksService } from "../scheduler/abandoned-tasks.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { runSimulation, type RunOptions, type SimMode } from "./runner";
+import { groundTruthPath, writeGroundTruthFile } from "./eval/ground-truth";
 
 /**
  * Entry point: boot a STANDALONE Nest context (no HTTP), resolve the real
@@ -81,6 +82,24 @@ async function main(): Promise<void> {
     logger.log(
       `Seeded ${result.personas.length} personas; event totals: ${JSON.stringify(result.eventCounts)}`,
     );
+
+    // Write the ground-truth sidecar (eval Step 0) keyed by the real userIds this
+    // run minted — the out-of-band channel the recovery metrics read.
+    const gtPath = await writeGroundTruthFile(
+      groundTruthPath(args.seed, args.days),
+      {
+        meta: {
+          seed: args.seed,
+          start: args.start,
+          days: args.days,
+          mode: args.mode,
+          personas: result.groundTruth.length,
+          kind: "phase-2-ground-truth",
+        },
+        personas: result.groundTruth,
+      },
+    );
+    logger.log(`Ground-truth sidecar written: ${gtPath}`);
   } finally {
     await app.close();
   }
