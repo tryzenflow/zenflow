@@ -2,6 +2,7 @@ import type { CreateTaskInput, ViewMode } from "@zenflow/shared";
 import { round15, type Rng } from "../rng";
 import type { Persona } from "../personas/persona.factory";
 import type { SimClock } from "../clock";
+import { workWindowMinutes } from "../../scheduler/slot";
 
 /**
  * Per-persona daily task stream (strategy §6, §7).
@@ -79,22 +80,45 @@ const GLOBAL_TAGS = [
 ];
 
 /**
- * Sample 1–3 tags. The PRIMARY tag is the persona's signal (rarely off-profile);
- * EXTRA tags are drawn ~half from the persona mix and ~half from the global noise
- * pool, producing varied, realistic combinations.
+ * Sample a task's tag set. Two things make this realistic-messy:
+ *
+ *  - COUNT is GAUSSIAN, clamped to [0, 10] (centre ~2.6): most tasks carry a
+ *    couple of tags, a few carry none, and a long tail carries many. So tag
+ *    cardinality itself is a normal-shaped distribution, not a fixed 1–3.
+ *  - the VOCABULARY blends three pools — the persona's signal tags (the only
+ *    layer carrying bias / P_tag), the persona's SPECIFIC project tags
+ *    (`#project-x`-style), and the generic global noise pool — so a task reads
+ *    like "frontend + project-atlas + review + slack" rather than four clean
+ *    labels. The PRIMARY tag is still usually a signal tag, keeping the learnable
+ *    structure intact under the extra noise.
  */
 function sampleTags(persona: Persona, rng: Rng): string[] {
   const names = persona.tagMix.map((t) => t.name);
   const weights = persona.tagMix.map((t) => t.weight);
+  const projects = persona.projectTags;
+
+  // Tag cardinality ~ N(2.6, 1.8), clamped to [0, 10]. 0 → an untagged task.
+  const count = Math.max(0, Math.min(10, Math.round(rng.normal(2.6, 1.8))));
+  if (count === 0) return [];
+
   const out = new Set<string>();
 
-  // Primary: usually the persona's signal; ~6% an off-profile global tag.
-  out.add(rng.bool(0.06) ? rng.pick(GLOBAL_TAGS) : rng.weighted(names, weights));
+  // Primary tag: usually the persona's signal (keeps the bias/P_tag signal
+  // recoverable), sometimes a specific project tag, rarely off-profile noise.
+  if (rng.bool(0.74)) out.add(rng.weighted(names, weights));
+  else if (projects.length && rng.bool(0.6)) out.add(rng.pick(projects));
+  else out.add(rng.pick(GLOBAL_TAGS));
 
-  // 0–2 extras, mostly 0–1, each split between persona mix and the noise pool.
-  const extras = rng.weighted([0, 1, 2], [5, 4, 2]);
-  for (let i = 0; i < extras; i++) {
-    out.add(rng.bool(0.5) ? rng.pick(GLOBAL_TAGS) : rng.weighted(names, weights));
+  // Remaining tags: a weighted blend across signal / project / noise pools.
+  const pools = ["signal", "project", "noise"] as const;
+  const poolWeights = [3, projects.length ? 3 : 0, 4];
+  const maxDistinct = names.length + projects.length + GLOBAL_TAGS.length;
+  let guard = 0;
+  while (out.size < count && out.size < maxDistinct && guard++ < 40) {
+    const pool = rng.weighted(pools, poolWeights);
+    if (pool === "signal") out.add(rng.weighted(names, weights));
+    else if (pool === "project" && projects.length) out.add(rng.pick(projects));
+    else out.add(rng.pick(GLOBAL_TAGS));
   }
   return Array.from(out);
 }
@@ -146,7 +170,11 @@ function sampleView(persona: Persona, rng: Rng): ViewMode {
 /**
  * Sample a deadline horizon for a task arriving on `day` (strategy §7): tight
  * near cycle ends for high-procrastination personas, looser otherwise. Returns
- * an ISO string or null. The deadline lands at end-of-day of `day + horizon`.
+ * an ISO string or null. The deadline normally lands at end-of-day of
+ * `day + horizon`, but a slice of deadline-bearing tasks arrive ALREADY OVERDUE
+ * (a deadline 1–3 days in the past) — the everyday reality of logging something
+ * you should have done last week. Those surface as overdue PENDING work until
+ * the abandon sweep reaches them.
  */
 function sampleDeadline(
   persona: Persona,
@@ -155,6 +183,13 @@ function sampleDeadline(
   rng: Rng,
 ): string | null {
   if (!rng.bool(persona.deadlineProb)) return null;
+
+  // ~12% of deadline tasks are entered after the fact, already past due.
+  if (day > 0 && rng.bool(0.12)) {
+    const overdueDays = 1 + rng.int(3); // 1…3 days late
+    return deadlineAt(persona, clock, Math.max(0, day - overdueDays));
+  }
+
   const sp = clock.sprintPhase(day);
   // Closer to cycle end → tighter horizon. Procrastinators get tighter windows.
   const base = persona.procrastination > 0.2 ? 3 : 7;
@@ -255,14 +290,62 @@ interface RareEvent {
 }
 
 const RARE_EVENTS: RareEvent[] = [
-  { tags: ["incident", "urgent"], durMin: 30, durMax: 120, deadlineDays: 0, weight: 3 },
-  { tags: ["escalation", "customer"], durMin: 30, durMax: 90, deadlineDays: 1, weight: 2 },
-  { tags: ["outage", "oncall"], durMin: 60, durMax: 180, deadlineDays: 0, weight: 1 },
-  { tags: ["interview", "hiring"], durMin: 45, durMax: 60, deadlineDays: 2, weight: 2 },
-  { tags: ["offsite", "planning"], durMin: 180, durMax: 360, deadlineDays: 5, weight: 1 },
-  { tags: ["deepwork", "project"], durMin: 180, durMax: 300, deadlineDays: 7, weight: 2 },
-  { tags: ["audit", "compliance"], durMin: 60, durMax: 150, deadlineDays: 4, weight: 1 },
-  { tags: ["demo", "customer"], durMin: 30, durMax: 90, deadlineDays: 2, weight: 1 },
+  {
+    tags: ["incident", "urgent"],
+    durMin: 30,
+    durMax: 120,
+    deadlineDays: 0,
+    weight: 3,
+  },
+  {
+    tags: ["escalation", "customer"],
+    durMin: 30,
+    durMax: 90,
+    deadlineDays: 1,
+    weight: 2,
+  },
+  {
+    tags: ["outage", "oncall"],
+    durMin: 60,
+    durMax: 180,
+    deadlineDays: 0,
+    weight: 1,
+  },
+  {
+    tags: ["interview", "hiring"],
+    durMin: 45,
+    durMax: 60,
+    deadlineDays: 2,
+    weight: 2,
+  },
+  {
+    tags: ["offsite", "planning"],
+    durMin: 180,
+    durMax: 360,
+    deadlineDays: 5,
+    weight: 1,
+  },
+  {
+    tags: ["deepwork", "project"],
+    durMin: 180,
+    durMax: 300,
+    deadlineDays: 7,
+    weight: 2,
+  },
+  {
+    tags: ["audit", "compliance"],
+    durMin: 60,
+    durMax: 150,
+    deadlineDays: 4,
+    weight: 1,
+  },
+  {
+    tags: ["demo", "customer"],
+    durMin: 30,
+    durMax: 90,
+    deadlineDays: 2,
+    weight: 1,
+  },
 ];
 
 /** Build one rare/sudden task spec (off-profile tags, own duration/deadline). */
@@ -280,8 +363,16 @@ function makeRareSpec(
   // Neutral-ish realized duration (these tags carry no learned bias).
   const trueDur = round15(est * Math.exp(rng.normal(0, 0.2)));
   const deadline =
-    ev.deadlineDays === null ? null : deadlineAt(persona, clock, day + ev.deadlineDays);
-  const span = Math.max(60, persona.prefs.workEnd - persona.prefs.workStart);
+    ev.deadlineDays === null
+      ? null
+      : deadlineAt(persona, clock, day + ev.deadlineDays);
+  // Wrap-aware working span: a night-owl window (workStart > workEnd) runs past
+  // midnight, so arrivals can land after 24:00 (the clock rolls them into the
+  // next calendar day). workWindowMinutes returns the true span either way.
+  const span = Math.max(
+    60,
+    workWindowMinutes(persona.prefs.workStart, persona.prefs.workEnd),
+  );
   const arrivalMinute = Math.floor(persona.prefs.workStart + rng.next() * span);
   const tags = [...ev.tags];
   return {
@@ -311,7 +402,13 @@ function makeNormalSpec(
   const view = sampleView(persona, rng);
   const deadline = sampleDeadline(persona, clock, day, rng);
   const { est, trueDur } = sampleDurations(persona, tags, rng);
-  const span = Math.max(60, persona.prefs.workEnd - persona.prefs.workStart);
+  // Wrap-aware working span: a night-owl window (workStart > workEnd) runs past
+  // midnight, so arrivals can land after 24:00 (the clock rolls them into the
+  // next calendar day). workWindowMinutes returns the true span either way.
+  const span = Math.max(
+    60,
+    workWindowMinutes(persona.prefs.workStart, persona.prefs.workEnd),
+  );
   const arrivalMinute = Math.floor(persona.prefs.workStart + rng.next() * span);
   return {
     input: {

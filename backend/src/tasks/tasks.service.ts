@@ -11,6 +11,7 @@ import { Prisma, type Task, type Tag, type User } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { minutesToUtc } from "../common/utils";
 import { localDateStr } from "../scheduler/slot";
+import { EVENT_REWARD } from "../scheduler/telemetry";
 import {
   displayDayRange,
   viewDayRange,
@@ -171,7 +172,7 @@ export class TasksService {
                 .map((t) => t.name)
                 .sort((a, b) => a.localeCompare(b)),
             },
-            rewardScore: 1.0,
+            rewardScore: EVENT_REWARD.CREATE,
             occurredAt: now,
           },
         });
@@ -557,7 +558,7 @@ export class TasksService {
               durationMinutes: updated.durationMinutes,
               tags: tagNames,
             },
-            rewardScore: 1.0,
+            rewardScore: EVENT_REWARD.COMPLETE,
             occurredAt: now,
           },
         });

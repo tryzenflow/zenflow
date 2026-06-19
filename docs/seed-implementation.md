@@ -2,10 +2,24 @@
 
 > Concrete code changes to produce the synthetic telemetry described in
 > [`docs/simulation-strategy.md`](./simulation-strategy.md). The simulator is a
-> **closed-loop driver**: it calls the *real* `TasksService` / `SchedulerService` /
-> `AbandonedTasksService`, so every `TaskEvent`, `suggestedStartTime` snapshot, and
-> signed `preferenceMatrix` update is produced through the production path — never
-> hand-written rows. Read the strategy doc first for the *what*; this is the *how*.
+> **closed-loop driver**: per simulated day it generates tasks, reacts to the EDF
+> suggestions, and settles outcomes — producing the exact `TaskEvent` /
+> `suggestedStartTime` / signed `preferenceMatrix` telemetry the production app
+> would. Read the strategy doc first for the *what*; this is the *how*.
+>
+> **Two persistence modes share one decision loop (`runner.ts`, via an `Actuator`
+> seam):**
+> - **`--mode=batched` (default)** computes the whole population's lifecycle in
+>   memory and bulk-writes it in 50k-row `createMany` batches. It does NOT call the
+>   services row-by-row (a year × ~50 personas is hundreds of thousands of
+>   transactions); instead it calls the SAME pure builders the services use — see
+>   §7. This is the fast path used to seed the sim DB.
+> - **`--mode=service`** drives the literal `TasksService` / `SchedulerService` /
+>   `AbandonedTasksService` so telemetry is produced through the production code
+>   path exactly. Slower; kept as the reference path.
+>
+> Both share the pure scheduler core + the extracted telemetry builders, so they
+> emit the same shape of telemetry — see §7 for what was extracted and why.
 
 ---
 
@@ -360,6 +374,97 @@ needed — the data model is complete (strategy §1, §0 here).
   (CLAUDE.md invariant #2 — pure code carries its `*.spec.ts`).
 - `pnpm --filter backend sim:run --days=14 --seed=1` populates the sim DB; spot-check events
   in studio.
-- Re-running with the same `--seed` reproduces identical row counts (determinism, strategy §14).
+- Re-running with the same `--seed` reproduces identical per-persona decision streams
+  (determinism, strategy §14). Row *ids* are random UUIDs, so they differ run-to-run.
 - Production untouched: existing `pnpm --filter backend test` / `test:e2e` still pass (the
   `now` params default to `new Date()`).
+
+---
+
+## 7. Batched mode + shared telemetry builders
+
+The closed loop is identical in both modes; only persistence differs. The day-by-day
+logic lives once in `runner.ts:drivePersona(act, …)` and is parameterised over an
+`Actuator` (see the two implementations: `ServiceActuator`, `BatchedActuator`).
+
+### 7.1 Shared pure builders — `backend/src/scheduler/telemetry.ts`
+
+The event-snapshot shape, the signed `preferenceMatrix` math, the pairwise conflict
+recompute, and the `Task → EdfTask` mapping used to live as private methods inside
+`SchedulerService`. They are now **pure functions** in `scheduler/telemetry.ts`, called by
+BOTH the services and the batched engine — a single source of truth so the in-memory path
+can't drift from production:
+
+| Builder | Replaces (was private in `SchedulerService`) |
+|---------|----------------------------------------------|
+| `EVENT_REWARD` | the inline `rewardScore` literals (CREATE/KEEP/COMPLETE=+1, MOVE/RESIZE=0, ABANDON=−1) |
+| `buildSnapshot(task, tags, suggested?)` | `snapshot(...)` |
+| `applyPreferenceDeltas(matrix, deltas, tz)` | the matrix math inside `applyPreference(...)` |
+| `recomputeConflicts(projected)` | `recomputeConflicts(...)` |
+| `toEdfTask(task, prefs)` | `toEdf(...)` (period-ceiling derivation) |
+
+The services now delegate to these; behavior is byte-for-byte unchanged (guarded by the
+existing scheduler specs). `EVENT_REWARD` is also used by `TasksService` (CREATE/COMPLETE)
+and `AbandonedTasksService` (ABANDON).
+
+### 7.2 In-memory engine — `backend/src/simulation/batched/`
+
+- `engine.ts` — `PersonaState` reproduces the production lifecycle in memory
+  (`create`/`reschedule`(pin)/`resize`/`resolveOverflow`/`complete`/`sweep`), each emitting
+  the same events + matrix updates via the §7.1 builders, plus the EDF cascade
+  (`scheduleAll`) and overflow helpers. Holds one user's tasks/events/tags + matrix.
+- `writer.ts` — `bulkWrite()` flushes users → tags → tasks → the implicit `_TagToTask`
+  join (a chunked raw `INSERT`, since `createMany` can't express implicit M2M) → events,
+  all in 50k-row chunks. The runner flushes **per persona** to bound memory.
+- Persona seeding is split so both modes draw an identical RNG stream:
+  `persona.factory.ts:buildPersonaRecord()` builds the `User` row + `Persona` in memory
+  (UUID minted up front); `seedPersona()` (service mode) wraps it and persists.
+
+### 7.3 One concurrency-safety change to production
+
+`AbandonedTasksService.sweep(now, userId?)` gained an optional `userId` scope. The cron
+still sweeps everyone (`userId` omitted); the simulator scopes each sweep to its own
+persona so the service path can drive personas concurrently without two sweeps
+double-abandoning a shared row. Default behavior is unchanged.
+
+### 7.4 CLI
+
+`sim:run` accepts `--mode=batched|service` (default `batched`), `--concurrency=<n>`
+(service mode persona parallelism; default 8), plus the existing `--seed`, `--start`,
+`--days`, `--personas`. Seed the full year with:
+
+```
+pnpm --filter backend sim:reset      # destructive; sim DB only
+pnpm --filter backend exec -- dotenv -e .env.sim -- \
+  node dist/simulation/run.js --days=365 --start=2025-06-19 --mode=batched
+```
+
+`eval/count.ts` (`node dist/simulation/eval/count.js`) prints a quality snapshot
+(status/event counts, timezones, night-owl windows, tags-per-task histogram, max
+conflict-stack depth, create-before-adjust violations).
+
+### 7.5 Behavioral realism (strategy §4–§7 calibration)
+
+The persona/behaviour model was tuned for human realism:
+
+- **Night-owl wrap window.** The `night_owl` archetype now works **18:00 → 03:00 next
+  day** (`workStart > workEnd`); arrivals/peaks live in the night hours. The pure
+  scheduler already supports wrap windows (`slot.ts:workWindowFor`); the generator's
+  arrival span uses `workWindowMinutes` so post-midnight arrivals roll correctly.
+- **Real timezones only.** No persona is seeded in `UTC` anymore.
+- **Creation precedes adjustments.** Each task's MOVE/RESIZE events are stamped on a
+  per-task action clock strictly *after* its CREATE (a human creates, then nudges).
+- **Done-but-unmarked backlog.** A persona marks only `markCompleteRate` of the work it
+  actually finishes; the rest lingers as PENDING (revisited later) — so the board shows a
+  realistic pile of completed-but-unticked tasks.
+- **Shallow conflicts.** Next-day reschedules spread across feasible slots instead of all
+  piling on work-start, capping the conflict-stack depth at ~2–3 (was 4–5).
+- **Intermediate fidgeting.** A few extra in-day small moves / minor resizes (gated by
+  `editPropensity`) add realistic MOVE/RESIZE telemetry noise without manufacturing
+  conflicts.
+- **Richer tags.** Per-task tag count is Gaussian, clamped to **0–10** (mean ~2.6); the
+  vocabulary blends the persona's signal tags, its specific **project tags** (`project-x`,
+  `acme-corp`, …), and the global noise pool.
+- **More + overdue deadlines.** `deadlineProb` is higher across archetypes, a slice of
+  deadline tasks arrive already past-due, and the abandon sweep is held back during the
+  held-out tail so a realistic **overdue PENDING** backlog survives at snapshot.

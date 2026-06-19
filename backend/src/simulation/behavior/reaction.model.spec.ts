@@ -48,6 +48,8 @@ function persona(overrides: Partial<Persona> = {}): Persona {
     noiseFloor: 0,
     procrastination: 0,
     discipline: { complete: 0.8, reschedule: 0.15, abandon: 0.05 },
+    markCompleteRate: 1,
+    projectTags: [],
     deadlineProb: 0.4,
     dailyVolume: 3,
     viewWeights: { day: 0.5, week: 0.4, month: 0.1 },

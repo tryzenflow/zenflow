@@ -3,6 +3,7 @@ import { Cron, CronExpression } from "@nestjs/schedule";
 import { PrismaService } from "../prisma/prisma.service";
 import { Prisma } from "../../generated/prisma";
 import { ABANDON_BATCH_SIZE, ABANDON_GRACE_MS } from "../common/constants";
+import { EVENT_REWARD } from "./telemetry";
 
 /**
  * The minimal task fields the sweep needs: the id/userId to write the row +
@@ -82,15 +83,24 @@ export class AbandonedTasksService {
    * in its own transaction, so a large overdue backlog never opens one giant
    * unbounded transaction. Returns the number of tasks abandoned.
    */
-  async sweep(now = new Date()): Promise<number> {
+  async sweep(now = new Date(), userId?: string): Promise<number> {
     const cutoff = new Date(now.getTime() - ABANDON_GRACE_MS);
     let total = 0;
+
+    // Optional `userId` scope: the cron sweeps everyone, but the simulator runs
+    // personas concurrently and scopes each sweep to its own (disjoint) user so
+    // two parallel sweeps can never select — and double-abandon — the same row.
+    const where: Prisma.TaskWhereInput = {
+      status: "PENDING",
+      deadline: { lt: cutoff },
+      ...(userId ? { userId } : {}),
+    };
 
     // Re-query each round: the previous batch's update flips those rows away
     // from PENDING, so they can never be re-selected (idempotency).
     for (;;) {
       const candidates = await this.prisma.task.findMany({
-        where: { status: "PENDING", deadline: { lt: cutoff } },
+        where,
         select: {
           id: true,
           userId: true,
@@ -117,7 +127,7 @@ export class AbandonedTasksService {
               oldSnapshot: Prisma.JsonNull,
               newSnapshot: this.snapshot(task),
               // Strongest negative outcome signal (COMPLETE = +1.0, MOVE = 0.0).
-              rewardScore: -1.0,
+              rewardScore: EVENT_REWARD.ABANDON,
             },
           });
         }

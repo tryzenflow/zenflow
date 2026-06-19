@@ -71,6 +71,12 @@ export interface Archetype {
   moveThreshold: MeanSd;
   /** Outcome simplex centers (normalised per persona). */
   discipline: { complete: number; reschedule: number; abandon: number };
+  /**
+   * P(a task the persona actually FINISHED gets MARKED complete in the app).
+   * Real users finish far more than they tick off — a chunk of done work is
+   * never marked, so it lingers as PENDING. < 1 leaves a realistic backlog.
+   */
+  markCompleteRate: MeanSd;
   /** P(random / out-of-character action). */
   noiseFloor: MeanSd;
   /** Weight pulling preferred slots toward the deadline (crammers high). */
@@ -98,7 +104,7 @@ export const ARCHETYPES: Archetype[] = [
     id: "dev",
     label: "Steady 9–5 Developer",
     work: { start: [540, 20], end: [1020, 20], days: [1, 2, 3, 4, 5] },
-    timezones: ["Europe/Berlin", "Europe/Paris", "UTC"],
+    timezones: ["Europe/Berlin", "Europe/Paris", "Europe/Amsterdam"],
     peaks: [
       // Strong morning deep-work peak 09:30–12:00; post-lunch dip disliked.
       { day: -1, block: H(10, 30), height: 3.0, spread: 6 },
@@ -123,10 +129,11 @@ export const ARCHETYPES: Archetype[] = [
     ],
     editPropensity: [0.45, 0.08],
     moveThreshold: [1.2, 0.2],
-    discipline: { complete: 0.8, reschedule: 0.15, abandon: 0.05 },
+    discipline: { complete: 0.7, reschedule: 0.2, abandon: 0.1 },
+    markCompleteRate: [0.8, 0.06],
     noiseFloor: [0.1, 0.02],
     procrastination: [0.05, 0.02],
-    deadlineProb: [0.4, 0.05],
+    deadlineProb: [0.55, 0.06],
     dailyVolume: [3.2, 0.6],
     viewWeights: { day: 0.5, week: 0.4, month: 0.1 },
     estDuration: { mu: [Math.log(75), 0.05], sigma: [0.45, 0.05] },
@@ -138,12 +145,17 @@ export const ARCHETYPES: Archetype[] = [
   {
     id: "night_owl",
     label: "Night-Owl Builder",
-    work: { start: [720, 30], end: [1200, 40], days: [1, 2, 3, 4, 5, 7] },
-    timezones: ["America/New_York", "America/Los_Angeles", "UTC"],
+    // Works EVENINGS INTO THE NIGHT: 18:00 → 03:00 the next day. The window
+    // wraps past midnight (workStart > workEnd) — the scheduler handles the
+    // wrap (slot.ts workWindowFor), and arrivals/peaks live in the night hours.
+    work: { start: [1080, 30], end: [180, 40], days: [1, 2, 3, 4, 5, 7] },
+    timezones: ["America/New_York", "America/Los_Angeles", "America/Chicago"],
     peaks: [
-      // Strong late-afternoon/evening peak 16:00–20:00; mornings disliked.
-      { day: -1, block: H(18, 0), height: 3.2, spread: 7 },
-      { day: -1, block: H(12, 30), height: -1.2, spread: 5 },
+      // Strong night peak ~21:00–00:30; a secondary after-midnight focus block;
+      // late mornings (when they're asleep) are firmly disliked.
+      { day: -1, block: H(22, 0), height: 3.2, spread: 7 },
+      { day: -1, block: H(1, 0), height: 1.8, spread: 5 },
+      { day: -1, block: H(10, 30), height: -1.4, spread: 5 },
     ],
     tagMix: [
       { name: "frontend", weight: 4 },
@@ -157,15 +169,17 @@ export const ARCHETYPES: Archetype[] = [
       sidequest: { mu: [Math.log(1.2), 0.04], sigma: [0.25, 0.03] },
     },
     tagTimeInteractions: [
-      { tag: "design", block: H(19, 0), spread: 5, delta: 1.6 },
-      { tag: "frontend", block: H(17, 0), spread: 6, delta: 1.4 },
+      // Tag affinities sit in the night window now: design late, frontend ~21:00.
+      { tag: "design", block: H(23, 0), spread: 5, delta: 1.6 },
+      { tag: "frontend", block: H(21, 0), spread: 6, delta: 1.4 },
     ],
     editPropensity: [0.55, 0.08],
     moveThreshold: [1.0, 0.2],
-    discipline: { complete: 0.7, reschedule: 0.2, abandon: 0.1 },
+    discipline: { complete: 0.62, reschedule: 0.23, abandon: 0.15 },
+    markCompleteRate: [0.68, 0.07],
     noiseFloor: [0.15, 0.03],
     procrastination: [0.1, 0.03],
-    deadlineProb: [0.35, 0.05],
+    deadlineProb: [0.5, 0.06],
     dailyVolume: [3.0, 0.7],
     viewWeights: { day: 0.4, week: 0.45, month: 0.15 },
     estDuration: { mu: [Math.log(90), 0.05], sigma: [0.5, 0.05] },
@@ -178,7 +192,7 @@ export const ARCHETYPES: Archetype[] = [
     id: "ops",
     label: "Interrupt-driven Ops/SRE",
     work: { start: [480, 20], end: [1080, 30], days: [1, 2, 3, 4, 5, 6, 7] },
-    timezones: ["Europe/London", "UTC", "Asia/Singapore"],
+    timezones: ["Europe/London", "Asia/Singapore", "Australia/Sydney"],
     peaks: [
       // Fragmented: mornings kept reactive (low pref), short midday focus.
       { day: -1, block: H(13, 0), height: 1.6, spread: 4 },
@@ -203,11 +217,13 @@ export const ARCHETYPES: Archetype[] = [
     ],
     editPropensity: [0.65, 0.08],
     moveThreshold: [0.8, 0.2],
-    discipline: { complete: 0.5, reschedule: 0.4, abandon: 0.1 },
+    discipline: { complete: 0.45, reschedule: 0.4, abandon: 0.15 },
+    // Interrupt-driven: closes tickets but rarely circles back to tick the rest.
+    markCompleteRate: [0.6, 0.07],
     noiseFloor: [0.25, 0.04],
     procrastination: [0.08, 0.03],
-    deadlineProb: [0.5, 0.06],
-    dailyVolume: [5.0, 1.2],
+    deadlineProb: [0.6, 0.06],
+    dailyVolume: [4.2, 1.0],
     viewWeights: { day: 0.7, week: 0.25, month: 0.05 },
     // Many short tasks.
     estDuration: { mu: [Math.log(35), 0.05], sigma: [0.55, 0.06] },
@@ -220,7 +236,7 @@ export const ARCHETYPES: Archetype[] = [
     id: "pm",
     label: "Meeting-heavy PM",
     work: { start: [540, 20], end: [1080, 20], days: [1, 2, 3, 4, 5] },
-    timezones: ["Europe/Berlin", "America/New_York", "UTC"],
+    timezones: ["Europe/Berlin", "America/New_York", "Europe/Madrid"],
     peaks: [
       // Focus early (08:00–09:30) or late (16:30–18:00); midday meeting band.
       { day: -1, block: H(9, 0), height: 2.2, spread: 4 },
@@ -247,10 +263,11 @@ export const ARCHETYPES: Archetype[] = [
     ],
     editPropensity: [0.45, 0.08],
     moveThreshold: [1.1, 0.2],
-    discipline: { complete: 0.65, reschedule: 0.25, abandon: 0.1 },
+    discipline: { complete: 0.6, reschedule: 0.25, abandon: 0.15 },
+    markCompleteRate: [0.7, 0.06],
     noiseFloor: [0.15, 0.03],
     procrastination: [0.07, 0.03],
-    deadlineProb: [0.45, 0.05],
+    deadlineProb: [0.55, 0.06],
     dailyVolume: [3.5, 0.7],
     viewWeights: { day: 0.35, week: 0.45, month: 0.2 },
     estDuration: { mu: [Math.log(60), 0.05], sigma: [0.4, 0.05] },
@@ -264,7 +281,7 @@ export const ARCHETYPES: Archetype[] = [
     id: "crammer",
     label: "Deadline-crammer Student/Researcher",
     work: { start: [600, 40], end: [1320, 40], days: [1, 2, 3, 4, 5, 6, 7] },
-    timezones: ["Europe/Madrid", "America/Sao_Paulo", "UTC"],
+    timezones: ["Europe/Madrid", "America/Sao_Paulo", "Asia/Tokyo"],
     peaks: [
       // Strong evening peak; bursty. (Deadline pull is added separately via ρ.)
       { day: -1, block: H(20, 0), height: 2.6, spread: 8 },
@@ -290,10 +307,12 @@ export const ARCHETYPES: Archetype[] = [
     moveThreshold: [1.3, 0.2],
     // Bursty: high abandon early, high complete near deadline (modulated at
     // outcome time by deadline pressure).
-    discipline: { complete: 0.55, reschedule: 0.2, abandon: 0.25 },
+    discipline: { complete: 0.5, reschedule: 0.2, abandon: 0.3 },
+    // Chaotic worker: finishes in bursts near deadlines, often forgets to mark.
+    markCompleteRate: [0.58, 0.08],
     noiseFloor: [0.2, 0.04],
     procrastination: [0.4, 0.08],
-    deadlineProb: [0.7, 0.06],
+    deadlineProb: [0.82, 0.05],
     dailyVolume: [2.8, 1.0],
     viewWeights: { day: 0.2, week: 0.5, month: 0.3 },
     estDuration: { mu: [Math.log(110), 0.05], sigma: [0.55, 0.06] },
