@@ -198,7 +198,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85vh] flex-col gap-0 p-0 sm:max-w-2xl">
+      <DialogContent className="flex h-[85vh] flex-col gap-0 p-0 sm:max-w-4xl">
         <DialogHeader className="border-b border-border px-6 py-4 text-left">
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription>
@@ -210,17 +210,16 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         <Tabs
           value={tab}
           onValueChange={(v) => setTab(v as TabId)}
-          className="flex min-h-0 flex-1 flex-col gap-0"
+          className="flex min-h-0 flex-1 mt-4 px-6 flex-col gap-0"
         >
-          <div className="border-b border-border px-6 pt-3">
-            <TabsList className="w-full justify-start gap-1 bg-transparent p-0">
+
+            <TabsList className="w-full">
               {TABS.map((t) => {
                 const Icon = t.icon;
                 return (
                   <TabsTrigger
                     key={t.id}
                     value={t.id}
-                    className="data-[state=active]:bg-muted"
                   >
                     <Icon className="size-3.5" />
                     {t.label}
@@ -228,9 +227,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 );
               })}
             </TabsList>
-          </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+
+          <div className="min-h-0 flex-1 overflow-y-auto py-6">
             {/* Work hours / days / role / timezone */}
             <TabsContent value="work" className="mt-0 space-y-6">
               <Section
@@ -426,16 +425,28 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         </Tabs>
 
         <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-4">
-          <Button
-            variant="ghost"
-            onClick={() => onOpenChange(false)}
-            disabled={loading}
-          >
-            Cancel
-          </Button>
-          <Button onClick={save} disabled={!canSave}>
-            {loading ? "Saving…" : "Save changes"}
-          </Button>
+          {tab === "work" || tab === "scheduling" ? (
+            <>
+              <Button
+                variant="ghost"
+                onClick={() => onOpenChange(false)}
+                disabled={loading}
+              >
+                Cancel
+              </Button>
+              <Button onClick={save} disabled={!canSave}>
+                {loading ? "Saving…" : "Save changes"}
+              </Button>
+            </>
+          ) : (
+            <Button
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={loading}
+            >
+              Close
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>

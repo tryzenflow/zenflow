@@ -8,22 +8,52 @@ import type { PreferenceMatrixResponse } from "@/types/phase2";
 
 /** ISO-weekday row labels (1=Mon … 7=Sun), matching the matrix's day index. */
 const ROW_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-/** Hour columns we draw axis ticks at (every 4 blocks = 1 hour is too dense). */
-const HOUR_TICKS = [0, 6, 12, 18];
+/** Hours we label along the top axis (every 3h reads cleanly at this cell size). */
+const HOUR_TICKS = [0, 3, 6, 9, 12, 15, 18, 21];
+
+/** GitHub-contribution-style cell geometry (px). Shared by cells + axis ticks. */
+const CELL = 14;
+const GAP = 3;
+const STEP = CELL + GAP;
+/** 4 fifteen-minute blocks per hour. */
+const BLOCKS_PER_HOUR = 4;
 
 /**
- * Map a signed cell score to a diverging fill. Positive (preferred) scores warm
- * toward the amber accent; negative (avoided) scores cool toward slate. Opacity
- * scales with magnitude relative to the matrix's peak so a flat matrix reads
- * faint rather than saturated.
+ * Discrete diverging scale: positive (preferred) scores climb an orange ramp,
+ * negative (avoided) scores climb a blue ramp, both deepening with magnitude
+ * relative to the matrix's peak. A zero / cold cell reads as neutral. Full
+ * literal class names so Tailwind's scanner emits them.
  */
-function cellColor(score: number, peak: number) {
-  if (score === 0 || peak === 0) return "transparent";
+const ORANGE_SCALE = [
+  "bg-orange-100",
+  "bg-orange-200",
+  "bg-orange-300",
+  "bg-orange-400",
+  "bg-orange-500",
+  "bg-orange-600",
+  "bg-orange-700",
+  "bg-orange-800",
+  "bg-orange-900",
+];
+const BLUE_SCALE = [
+  "bg-blue-100",
+  "bg-blue-200",
+  "bg-blue-300",
+  "bg-blue-400",
+  "bg-blue-500",
+  "bg-blue-600",
+  "bg-blue-700",
+  "bg-blue-800",
+  "bg-blue-900",
+];
+const NEUTRAL_CLASS = "bg-muted";
+
+function cellClass(score: number, peak: number) {
+  if (score === 0 || peak === 0) return NEUTRAL_CLASS;
   const intensity = Math.min(1, Math.abs(score) / peak);
-  const alpha = 0.12 + intensity * 0.78;
-  return score > 0
-    ? `oklch(0.769 0.188 70.08 / ${alpha})` // amber — preferred
-    : `oklch(0.55 0.05 255 / ${alpha})`; // cool slate — avoided
+  // intensity in (0,1] → step 0..8 (at least the lightest shade when nonzero).
+  const step = Math.min(8, Math.max(0, Math.ceil(intensity * 9) - 1));
+  return score > 0 ? ORANGE_SCALE[step] : BLUE_SCALE[step];
 }
 
 /**
@@ -97,84 +127,99 @@ export function PreferenceHeatmap() {
     );
   }
 
+  const gridWidth = blocks * STEP - GAP;
+
   return (
     <div className="space-y-3">
-      <div className="flex gap-1">
-        {/* Row label gutter */}
-        <div className="flex flex-col justify-around pr-1 pt-0">
+      <div className="flex gap-2">
+        {/* Pinned day-label gutter — stays put while the grid scrolls. */}
+        <div className="flex shrink-0 flex-col" style={{ gap: GAP }}>
+          {/* Spacer aligning the labels below the hour-tick row. */}
+          <div className="h-4" />
           {Array.from({ length: days }).map((_, d) => (
             <span
               key={d}
-              className="text-[9px] font-medium leading-none text-muted-foreground"
+              className="flex items-center text-[11px] font-medium text-muted-foreground"
+              style={{ height: CELL }}
             >
               {ROW_LABELS[d] ?? `D${d + 1}`}
             </span>
           ))}
         </div>
 
-        {/* Grid */}
-        <div className="min-w-0 flex-1">
-          <div
-            className="grid gap-px rounded-sm border border-border bg-border"
-            style={{
-              gridTemplateColumns: `repeat(${blocks}, minmax(0, 1fr))`,
-            }}
-          >
-            {Array.from({ length: days }).flatMap((_, d) =>
-              Array.from({ length: blocks }).map((__, b) => {
-                const score = matrix[d * blocks + b] ?? 0;
-                return (
-                  <div
-                    key={`${d}:${b}`}
-                    className="aspect-square bg-card"
-                    style={{ backgroundColor: cellColor(score, peak) }}
-                    title={`${ROW_LABELS[d] ?? `Day ${d + 1}`} ${minutesToLabel(
-                      b * 15,
-                    )} · score ${score > 0 ? "+" : ""}${score}`}
-                  />
-                );
-              }),
-            )}
-          </div>
+        {/* Horizontally scrollable grid (96 fifteen-minute columns). */}
+        <div className="min-w-0 flex-1 overflow-x-auto pb-1">
+          <div style={{ width: gridWidth }}>
+            {/* Hour axis ticks */}
+            <div className="relative h-4">
+              {HOUR_TICKS.map((h) => (
+                <span
+                  key={h}
+                  className="absolute top-0 text-[10px] tabular-nums text-muted-foreground"
+                  style={{ left: h * BLOCKS_PER_HOUR * STEP }}
+                >
+                  {minutesToLabel(h * 60)}
+                </span>
+              ))}
+            </div>
 
-          {/* Hour axis ticks */}
-          <div className="relative mt-1 h-3">
-            {HOUR_TICKS.map((h) => (
-              <span
-                key={h}
-                className="absolute -translate-x-1/2 text-[9px] text-muted-foreground"
-                style={{ left: `${((h * 4) / blocks) * 100}%` }}
-              >
-                {minutesToLabel(h * 60)}
-              </span>
-            ))}
+            {/* Cells */}
+            <div className="flex flex-col" style={{ gap: GAP }}>
+              {Array.from({ length: days }).map((_, d) => (
+                <div key={d} className="flex" style={{ gap: GAP }}>
+                  {Array.from({ length: blocks }).map((__, b) => {
+                    const score = matrix[d * blocks + b] ?? 0;
+                    return (
+                      <div
+                        key={`${d}:${b}`}
+                        className={cn(
+                          "rounded-[3px] border border-border/60 transition-shadow hover:ring-1 hover:ring-ring",
+                          cellClass(score, peak),
+                        )}
+                        style={{ width: CELL, height: CELL }}
+                        title={`${ROW_LABELS[d] ?? `Day ${d + 1}`} ${minutesToLabel(
+                          b * 15,
+                        )} · score ${score > 0 ? "+" : ""}${score}`}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
+      <div className="flex items-center justify-between gap-4 text-[10px] text-muted-foreground">
         <span className="flex items-center gap-1.5">
-          <span
-            className="inline-block h-3 w-3 rounded-sm"
-            style={{ backgroundColor: cellColor(peak, peak) }}
-          />
-          Prefer
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span
-            className="inline-block h-3 w-3 rounded-sm"
-            style={{ backgroundColor: cellColor(-peak, peak) }}
-          />
           Avoid
+          <span className="flex gap-1">
+            {[2, 4, 6, 8].map((s) => (
+              <span
+                key={s}
+                className={cn("inline-block h-3 w-3 rounded-[3px]", BLUE_SCALE[s])}
+              />
+            ))}
+          </span>
         </span>
-        <span
-          className={cn(
-            "flex items-center gap-1.5",
-          )}
-        >
-          <span className="inline-block h-3 w-3 rounded-sm border border-border bg-card" />
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-[3px] border border-border/60 bg-muted" />
           Neutral
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="flex gap-1">
+            {[2, 4, 6, 8].map((s) => (
+              <span
+                key={s}
+                className={cn(
+                  "inline-block h-3 w-3 rounded-[3px]",
+                  ORANGE_SCALE[s],
+                )}
+              />
+            ))}
+          </span>
+          Prefer
         </span>
       </div>
     </div>
