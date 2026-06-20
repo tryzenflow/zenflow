@@ -421,8 +421,8 @@ sequenceDiagram
   FE->>API: POST /tasks (CreateTaskInput)
   API->>SVC: create(dto, user, now)
   SVC->>DB: aggregate per-tag bias from TaskEvent
-  SVC->>SVC: bias = Σ(nₜ·bₜ)/Σ(nₜ); corrected = ceil15(est × bias)
-  Note over SVC: corrector ALWAYS learns; "never" just skips applying
+  SVC->>SVC: bias = sum(n_t*b_t)/sum(n_t), corrected = ceil15(est * bias)
+  Note over SVC: corrector ALWAYS learns, "never" just skips applying
   alt mode = never
     SVC->>SVC: feed est (uncorrected) to EDF
   else mode = auto or ask
@@ -485,11 +485,11 @@ sequenceDiagram
   participant DB as Postgres
 
   CRON->>DB: for each user → load preferenceMatrix + lastDecayedAt
-  CRON->>PURE: decay(matrix, Δdays, MATRIX_HALF_LIFE_DAYS=21)
-  PURE->>PURE: cell *= 2^(−Δdays / HALF_LIFE)
+  CRON->>PURE: decay(matrix, deltaDays, MATRIX_HALF_LIFE_DAYS=21)
+  PURE->>PURE: cell *= 2^(-deltaDays / HALF_LIFE)
   PURE-->>CRON: decayed matrix
   CRON->>DB: write back matrix (I/O layer only)
-  Note over CRON,PURE: decay math is pure; only the job touches Prisma
+  Note over CRON,PURE: decay math is pure, only the job touches Prisma
 ```
 
 ---
