@@ -158,7 +158,7 @@ export function PreferenceHeatmap() {
       <div className="flex items-center justify-center gap-4 text-[10px] text-muted-foreground">
         <span className="flex items-center gap-1.5">
           Avoid
-          <span className="flex gap-px">
+          <span className="flex gap-1">
             {[2, 4, 6, 8].map((s) => (
               <span
                 key={s}
@@ -172,7 +172,7 @@ export function PreferenceHeatmap() {
           Neutral
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="flex gap-px">
+          <span className="flex gap-1">
             {[2, 4, 6, 8].map((s) => (
               <span
                 key={s}
