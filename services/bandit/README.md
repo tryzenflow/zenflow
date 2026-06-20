@@ -8,6 +8,17 @@ The authoritative roadmap lives in [`docs/heuristic.md`](../../docs/heuristic.md
 > NestJS API ([`backend/src/scheduler`](../../backend/src/scheduler)). This directory
 > reserves the path and documents the intended surface; there is no runnable code yet.
 
+> **Scope note (Phase 2 ≠ here).** The Phase-2 heuristics (signed-matrix re-ranker,
+> per-tag duration corrector, matrix decay) and the simulation/evaluation harness live
+> in the **NestJS backend**, not this service — they are pure TypeScript that re-ranks
+> EDF's feasible set, so they belong next to the scheduler core
+> ([`backend/src/scheduler/reranker.ts`](../../backend/src/scheduler/reranker.ts),
+> `duration-bias.ts`, `matrix-decay.ts`) and the harness in
+> [`backend/src/simulation`](../../backend/src/simulation) (`pnpm sim:run | sim:eval |
+> sim:recovery | sim:significance`). This Python service is reserved for **Phase 3+**
+> (LinUCB) where a linear model genuinely needs a non-TS runtime. See
+> [`docs/phase-2-evaluation-steps.md`](../../docs/phase-2-evaluation-steps.md).
+
 ---
 
 ## Why a separate service

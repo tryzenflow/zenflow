@@ -13,7 +13,7 @@ import { groundTruthPath, writeGroundTruthFile } from "./eval/ground-truth";
  * providers, parse CLI args, run the closed loop, then close.
  *
  * Args (all optional): `--seed=<int>`, `--start=YYYY-MM-DD`, `--days=<int>`,
- * `--reranker=identity`, `--personas=<int>` (cap, for smoke runs),
+ * `--reranker=identity|phase2`, `--personas=<int>` (cap, for smoke runs),
  * `--concurrency=<int>` (service-mode personas in parallel; default 8),
  * `--mode=batched|service` (persistence strategy; default batched: compute the
  * whole population in memory, then bulk-write in 50k-row batches).
@@ -23,11 +23,13 @@ import { groundTruthPath, writeGroundTruthFile } from "./eval/ground-truth";
  * DB only (`dotenv -e .env.sim`).
  */
 
+import type { RerankerKind } from "./runner";
+
 interface ParsedArgs {
   seed: number;
   start: string;
   days: number;
-  reranker: "identity";
+  reranker: RerankerKind;
   personaLimit?: number;
   concurrency: number;
   mode: SimMode;
@@ -51,12 +53,12 @@ function parseArgs(argv: string[]): ParsedArgs {
     throw new Error(`--mode must be 'batched' or 'service' (got '${modeArg}')`);
   const mode = modeArg satisfies SimMode;
 
-  if (rerankerArg !== "identity") {
+  if (rerankerArg !== "identity" && rerankerArg !== "phase2") {
     throw new Error(
-      `Only --reranker=identity is wired today (got '${rerankerArg}'). A Phase-2+ re-ranker drops into the same seam.`,
+      `--reranker must be 'identity' or 'phase2' (got '${rerankerArg}').`,
     );
   }
-  const reranker = "identity" as const;
+  const reranker: RerankerKind = rerankerArg;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(start))
     throw new Error(`--start must be YYYY-MM-DD (got '${start}')`);
 

@@ -2,9 +2,8 @@ import { NestFactory } from "@nestjs/core";
 import { Logger } from "@nestjs/common";
 import { SimulationModule } from "../simulation.module";
 import { PrismaService } from "../../prisma/prisma.service";
-import { identityReRanker } from "../../scheduler/reranker";
 import { computeMetrics } from "./metrics";
-import { estimateReplay, loadDecisions } from "./replay";
+import { replayPhase2 } from "./replay";
 
 /**
  * `sim:eval` entry point: boot a standalone Nest context against the sim DB,
@@ -25,14 +24,14 @@ async function main(): Promise<void> {
       `Aggregate (n=${report.aggregate.personas}): MAR mean=${report.aggregate.marMean.toFixed(3)} median=${report.aggregate.marMedian.toFixed(3)}, completion-in-slot=${report.aggregate.completionInSlotMean.toFixed(3)}, move-dist median=${report.aggregate.moveDistanceMedianMin.toFixed(0)}min, dur-error median=${report.aggregate.durationErrorMedianMin.toFixed(0)}min`,
     );
 
-    const decisions = await loadDecisions(prisma);
-    const replay = estimateReplay(
-      decisions,
-      identityReRanker,
-      identityReRanker,
-    );
+    // Offline gate (Step 4): replay BOTH the identity incumbent (sanity-check,
+    // ratio ≈ 1) and the Phase-2 candidate reconstructed from the frozen log. The
+    // Phase-2 SNIPS clearing the identity SNIPS is the cheap pre-filter before the
+    // closed-loop A/B.
+    const replay = await replayPhase2(prisma);
     logger.log(
-      `Offline replay (identity baseline): IPS=${replay.ips.toFixed(3)} SNIPS=${replay.snips.toFixed(3)} over ${replay.decisions} decisions`,
+      `Offline replay — identity: IPS=${replay.identity.ips.toFixed(3)} SNIPS=${replay.identity.snips.toFixed(3)} | ` +
+        `phase2: IPS=${replay.phase2.ips.toFixed(3)} SNIPS=${replay.phase2.snips.toFixed(3)} over ${replay.phase2.decisions} decisions`,
     );
 
     // Full machine-readable dump.

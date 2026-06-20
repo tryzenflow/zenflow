@@ -1,7 +1,12 @@
+import { PREFERENCE_MATRIX_LENGTH } from "@zenflow/shared";
 import type { PrismaService } from "../../prisma/prisma.service";
 import type { SlotReRanker } from "../../scheduler/reranker";
-import { identityReRanker } from "../../scheduler/reranker";
+import {
+  identityReRanker,
+  preferenceMatrixReRanker,
+} from "../../scheduler/reranker";
 import type { EdfTask } from "../../scheduler/edf";
+import { applyPreferenceDeltas } from "../../scheduler/telemetry";
 
 /**
  * Offline counterfactual replay scaffold (strategy §13 Step 1, the cheap gate
@@ -174,4 +179,120 @@ export async function loadDecisions(
     });
   }
   return out;
+}
+
+// ──────────────────────────── Phase-2 replay candidate ──────────────────────
+
+/**
+ * Reconstruct each user's signed 672-cell preference matrix from the SAME
+ * telemetry the production `SchedulerService` writes (the move-toward `+1` /
+ * move-away `−1` deltas on MOVE, the `+1` on a completed-in-slot KEEP), using the
+ * shared pure {@link applyPreferenceDeltas}. This is the matrix the Phase-2
+ * re-ranker reads. Returns the matrix + the user's timezone (needed for the grid
+ * index). Cold-start users (no deltas) get an all-zero matrix → identity.
+ */
+export async function reconstructUserMatrices(
+  prisma: PrismaService,
+): Promise<Map<string, { matrix: number[]; timezone: string }>> {
+  const users = await prisma.user.findMany({
+    select: { id: true, timezone: true },
+  });
+  const tzById = new Map(users.map((u) => [u.id, u.timezone]));
+
+  const events = await prisma.taskEvent.findMany({
+    where: { eventType: { in: ["MOVE", "KEEP"] } },
+    orderBy: { occurredAt: "asc" },
+    select: {
+      userId: true,
+      eventType: true,
+      oldSnapshot: true,
+      newSnapshot: true,
+    },
+  });
+
+  const out = new Map<string, { matrix: number[]; timezone: string }>();
+  for (const e of events) {
+    const tz = tzById.get(e.userId);
+    if (!tz) continue;
+    const newS = e.newSnapshot as { scheduledStartTime?: string | null } | null;
+    const oldS = e.oldSnapshot as { scheduledStartTime?: string | null } | null;
+    const chosen = newS?.scheduledStartTime
+      ? new Date(newS.scheduledStartTime)
+      : null;
+    if (!chosen) continue;
+
+    const deltas: { at: Date; delta: number }[] = [{ at: chosen, delta: +1 }];
+    if (e.eventType === "MOVE") {
+      const vacated = oldS?.scheduledStartTime
+        ? new Date(oldS.scheduledStartTime)
+        : null;
+      if (vacated && vacated.getTime() !== chosen.getTime())
+        deltas.push({ at: vacated, delta: -1 });
+    }
+    const prev =
+      out.get(e.userId)?.matrix ??
+      new Array<number>(PREFERENCE_MATRIX_LENGTH).fill(0);
+    out.set(e.userId, {
+      matrix: applyPreferenceDeltas(prev, deltas, tz),
+      timezone: tz,
+    });
+  }
+  return out;
+}
+
+/**
+ * The Phase-2 placement candidate for offline replay (eval Step 4 / ADR-0001 §5):
+ * a single {@link SlotReRanker} that dispatches each scored decision to the
+ * RIGHT user's {@link preferenceMatrixReRanker} (keyed by the task id → user it
+ * sees in the decision context). Built over the reconstructed per-user matrices
+ * so `estimateReplay(decisions, phase2Candidate)` estimates the Phase-2 policy's
+ * off-policy reward against the frozen Phase-1 log.
+ *
+ * `estimateReplay` calls `score(task, candidates)` without a userId, so the
+ * candidate routes by `task.id` (which equals the decision's `taskId`) via the
+ * supplied `userOf` map; an unknown task falls back to identity.
+ */
+export function phase2ReplayCandidate(
+  matrices: Map<string, { matrix: number[]; timezone: string }>,
+  userOf: Map<string, string>,
+): SlotReRanker {
+  return {
+    score(task: EdfTask, candidates: Date[]): Date[] {
+      const userId = userOf.get(task.id);
+      const entry = userId ? matrices.get(userId) : undefined;
+      if (!entry) return identityReRanker.score(task, candidates);
+      return preferenceMatrixReRanker(entry.matrix, entry.timezone).score(
+        task,
+        candidates,
+      );
+    },
+  };
+}
+
+/** Map each decision's `taskId` → `userId`, so the candidate can route per user. */
+export function decisionUserMap(
+  decisions: LoggedDecision[],
+): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const d of decisions) out.set(d.taskId, d.userId);
+  return out;
+}
+
+/**
+ * Convenience: run the offline replay of the Phase-2 candidate against the
+ * identity incumbent, over the frozen log. Returns both estimates so the caller
+ * can report the Phase-2 lift (Step-4 gate: Phase-2 SNIPS must clear identity).
+ */
+export async function replayPhase2(prisma: PrismaService): Promise<{
+  identity: ReplayEstimate;
+  phase2: ReplayEstimate;
+}> {
+  const decisions = await loadDecisions(prisma);
+  const matrices = await reconstructUserMatrices(prisma);
+  const userOf = decisionUserMap(decisions);
+  const candidate = phase2ReplayCandidate(matrices, userOf);
+  return {
+    identity: estimateReplay(decisions, identityReRanker, identityReRanker),
+    phase2: estimateReplay(decisions, candidate, identityReRanker),
+  };
 }

@@ -19,6 +19,14 @@ import {
 } from "../../scheduler/edf";
 import { type Interval, SLOT_MS, localDateStr } from "../../scheduler/slot";
 import {
+  identityReRanker,
+  preferenceMatrixReRanker,
+  type SlotReRanker,
+} from "../../scheduler/reranker";
+import { blendBias, correctDuration } from "../../scheduler/duration-bias";
+import { aggregateTagBias } from "../eval/tag-bias";
+import type { RerankerKind } from "../runner";
+import {
   EVENT_REWARD,
   applyPreferenceDeltas,
   buildSnapshot,
@@ -112,8 +120,53 @@ export class PersonaState {
     readonly prefs: SchedulerPrefs,
     /** Tag names to pre-register so they exist even if never attached. */
     preTags: string[] = [],
+    /**
+     * Placement policy for this run/arm (eval Step 5). `identity` = Phase-1 EDF
+     * earliest-fit; `phase2` = signed-matrix re-rank + per-tag duration
+     * correction. Defaults to `identity` so existing runs are byte-for-byte
+     * unchanged.
+     */
+    private readonly reranker: RerankerKind = "identity",
   ) {
     for (const name of cleanTagNames(preTags)) this.tagId(name);
+  }
+
+  /**
+   * The re-ranker for THIS persona's current state. Phase-2 builds a fresh
+   * {@link preferenceMatrixReRanker} from the matrix as it accumulates (so each
+   * cascade sees the latest learned preference), exactly as the production
+   * service would on a fresh `User` read; Phase-1 is the identity baseline.
+   */
+  private reRanker(): SlotReRanker {
+    return this.reranker === "phase2"
+      ? preferenceMatrixReRanker(this.matrix, this.prefs.timezone)
+      : identityReRanker;
+  }
+
+  /**
+   * Phase-2 duration preprocessing: blend the per-tag bias aggregated from THIS
+   * persona's telemetry so far, then ceil-correct the estimate to the grid. The
+   * `identity` arm returns the estimate untouched. Pure-helper-driven
+   * (`duration-bias.ts` + `eval/tag-bias.ts`), so it matches the production
+   * corrector and the recovery estimator.
+   */
+  private correctEstimate(estimatedMin: number, tags: string[]): number {
+    if (this.reranker !== "phase2" || tags.length === 0) return estimatedMin;
+    const table = aggregateTagBias(
+      this.events.map((e) => ({
+        eventType: e.eventType,
+        taskId: e.taskId,
+        newSnapshot: e.newSnapshot as {
+          durationMinutes?: number;
+          tags?: string[];
+        } | null,
+      })),
+    );
+    const perTag = tags
+      .map((t) => table.get(t))
+      .filter((b): b is NonNullable<typeof b> => b !== undefined);
+    if (perTag.length === 0) return estimatedMin;
+    return correctDuration(estimatedMin, blendBias(perTag));
   }
 
   /** All Tag rows for this user (id + name), for the bulk writer. */
@@ -145,6 +198,7 @@ export class PersonaState {
       this.prefs,
       pending.map((t) => toEdfTask(t, this.prefs)),
       now,
+      this.reRanker(),
     );
     const map = new Map(pending.map((t) => [t.id, t]));
     for (const p of placements) {
@@ -231,6 +285,13 @@ export class PersonaState {
     const tagIds = cleaned.map((n) => this.tagId(n));
     const tagNames = sortNames(cleaned);
 
+    // Phase-2 duration preprocessing (ADR-0001 §2): bias-correct the estimate
+    // BEFORE EDF sees it. The `identity` arm leaves it untouched.
+    const durationMinutes = this.correctEstimate(
+      input.durationMinutes,
+      tagNames,
+    );
+
     const fixedStart = isFixed
       ? minutesToUtc(anchorDateStr, input.startTime ?? 0, tz)
       : null;
@@ -242,7 +303,7 @@ export class PersonaState {
       id: randomUUID(),
       title: input.title,
       note: input.note ?? null,
-      durationMinutes: input.durationMinutes,
+      durationMinutes,
       deadline: input.deadline ? new Date(input.deadline) : null,
       fixed: isFixed,
       startTime: input.startTime ?? 0,

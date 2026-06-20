@@ -157,10 +157,10 @@ is statistically significant with a meaningful effect size (5–6); recovery imp
 | Phase-1 closed-loop run | `pnpm sim:run` (`simulation/run.ts`, `runner.ts`) | ✅ |
 | Metrics (§12) | `pnpm sim:eval` (`eval/run-metrics.ts`, `metrics.ts`) | ✅ |
 | Quality snapshot | `node dist/simulation/eval/count.js` | ✅ |
-| Offline replay scaffold | `eval/replay.ts` (identity-vs-identity only) | ⚠️ scaffold |
-| **Ground-truth sidecar** | `eval/ground-truth.ts` (Step 0) | ✅ (this change) |
-| Phase-2 re-ranker | `scheduler/reranker.ts` + `--reranker=phase2` | ❌ not built |
-| Recovery scoring | reads sidecar + matrix | ❌ not built (needs Step 3) |
-| Significance / sweeps | stats over per-persona MAR | ❌ not built |
+| Offline replay (IPS/SNIPS) | `eval/replay.ts` — identity baseline **+ Phase-2 candidate** (`replayPhase2`, surfaced by `sim:eval`) | ✅ |
+| **Ground-truth sidecar** | `eval/ground-truth.ts` (Step 0) | ✅ |
+| Phase-2 re-ranker | `scheduler/reranker.ts` (`preferenceMatrixReRanker`) + duration corrector (`duration-bias.ts`) + decay (`matrix-decay.ts`), threaded via `--reranker=phase2` (batched engine) | ✅ |
+| Recovery scoring | `pnpm sim:recovery` (`eval/recovery.ts` + pure `recovery-metrics.ts`): reads sidecar + reconstructs matrix/bias | ✅ |
+| Significance / sweeps | `pnpm sim:significance` (`eval/significance.ts`): paired Wilcoxon + Cliff's δ + 95% CI + multi-seed sweep over per-arm `sim:eval` dumps | ✅ |
 </content>
 </invoke>

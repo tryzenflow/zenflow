@@ -58,6 +58,16 @@ import { toGroundTruth, type PersonaGroundTruth } from "./eval/ground-truth";
 
 export type SimMode = "batched" | "service";
 
+/**
+ * Which placement re-ranker an arm drives (eval Step 5 A/B):
+ *  - `identity` — Phase-1 EDF earliest-fit (Arm A, the baseline).
+ *  - `phase2`   — the signed-matrix {@link preferenceMatrixReRanker} re-ranking
+ *    EDF's feasible set, plus per-tag duration correction as preprocessing
+ *    (Arm B). Both read the persona's OWN accumulating matrix + telemetry, so the
+ *    learner sees exactly what production would.
+ */
+export type RerankerKind = "identity" | "phase2";
+
 export interface RunOptions {
   tasks: TasksService;
   scheduler: SchedulerService;
@@ -66,8 +76,8 @@ export interface RunOptions {
   seed: number;
   start: string; // YYYY-MM-DD
   days: number;
-  /** Only the Phase-1 identity re-ranker is wired today (seed doc §2.8). */
-  reranker: "identity";
+  /** Placement policy for this run/arm (eval Step 5). Defaults to `identity`. */
+  reranker: RerankerKind;
   /** Optional cap on personas (smoke runs); defaults to the full POPULATION. */
   personaLimit?: number;
   /**
@@ -596,6 +606,7 @@ async function runBatched(
       rec.persona.userId,
       rec.persona.prefs,
       rec.tagNames,
+      opts.reranker,
     );
     await drivePersona(
       new BatchedActuator(state),
@@ -632,6 +643,18 @@ async function runService(
   planned: { archetype: ArchetypeId; index: number }[],
   holidays: Set<number>,
 ): Promise<Omit<RunResult, "eventCounts">> {
+  // The Phase-2 placement re-rank + duration correction live in the pure core and
+  // are threaded through the BATCHED engine here. In `--mode=service`, placement
+  // goes through the real `TasksService`/`SchedulerService`, whose live Phase-2
+  // wiring is the backend-engineer's scope; until that lands, a `phase2`
+  // service-mode run would silently behave like `identity`. Fail loudly rather
+  // than report a misleading A/B — run Phase-2 arms in the default batched mode.
+  if (opts.reranker === "phase2") {
+    throw new Error(
+      "--reranker=phase2 is wired through the batched engine; run Phase-2 arms with --mode=batched " +
+        "(service-mode Phase-2 depends on the live SchedulerService wiring).",
+    );
+  }
   const personas: Persona[] = [];
   for (const p of planned) {
     const a = archetypeById(p.archetype);
