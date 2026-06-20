@@ -198,7 +198,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[85vh] flex-col gap-0 p-0 sm:max-w-4xl">
+      <DialogContent className="flex h-[92vh] flex-col gap-0 p-0 sm:max-w-3xl">
         <DialogHeader className="border-b border-border px-6 py-4 text-left">
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription>
