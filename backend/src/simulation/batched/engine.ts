@@ -23,9 +23,13 @@ import {
   preferenceMatrixReRanker,
   type SlotReRanker,
 } from "../../scheduler/reranker";
-import { blendBias, correctDuration } from "../../scheduler/duration-bias";
+import {
+  blendBias,
+  correctDuration,
+  maxBias,
+} from "../../scheduler/duration-bias";
 import { aggregateTagBias } from "../eval/tag-bias";
-import type { RerankerKind } from "../runner";
+import type { DurationBiasMode, RerankerKind } from "../runner";
 import {
   EVENT_REWARD,
   applyPreferenceDeltas,
@@ -127,6 +131,12 @@ export class PersonaState {
      * unchanged.
      */
     private readonly reranker: RerankerKind = "identity",
+    /**
+     * Multi-tag duration-bias resolution for the `phase2` arm (Step-8 ablation):
+     * `blend` (default, sample-weighted) or `max` (Conservative Max-Bias). The
+     * default keeps existing runs byte-for-byte unchanged.
+     */
+    private readonly durationBias: DurationBiasMode = "blend",
   ) {
     for (const name of cleanTagNames(preTags)) this.tagId(name);
   }
@@ -166,7 +176,9 @@ export class PersonaState {
       .map((t) => table.get(t))
       .filter((b): b is NonNullable<typeof b> => b !== undefined);
     if (perTag.length === 0) return estimatedMin;
-    return correctDuration(estimatedMin, blendBias(perTag));
+    const bias =
+      this.durationBias === "max" ? maxBias(perTag) : blendBias(perTag);
+    return correctDuration(estimatedMin, bias);
   }
 
   /** All Tag rows for this user (id + name), for the bulk writer. */

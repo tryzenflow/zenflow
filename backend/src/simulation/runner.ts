@@ -68,6 +68,16 @@ export type SimMode = "batched" | "service";
  */
 export type RerankerKind = "identity" | "phase2";
 
+/**
+ * Multi-tag duration-bias resolution (Step-8 ablation; `--duration-bias`):
+ *  - `blend` — sample-weighted blend Σ(nₜ·bₜ)/Σ(nₜ) (the DEFAULT, heuristic §Phase 2).
+ *  - `max`   — Conservative Max-Bias: take the largest multiplier (over-reserves →
+ *    schedule inflation). The §8 discriminator cohort is `ops` (near-unbiased
+ *    means, high variance). Only affects the `phase2` arm; `identity` never
+ *    corrects durations.
+ */
+export type DurationBiasMode = "blend" | "max";
+
 export interface RunOptions {
   tasks: TasksService;
   scheduler: SchedulerService;
@@ -81,6 +91,14 @@ export interface RunOptions {
   /** Optional cap on personas (smoke runs); defaults to the full POPULATION. */
   personaLimit?: number;
   /**
+   * Optional per-cohort cap: keep the FIRST N personas of EACH archetype. Unlike
+   * {@link personaLimit} (which slices the flat ordered list and would drop later
+   * cohorts), this keeps every archetype represented — required by the Step-6
+   * per-persona Wilcoxon and the Step-7 "no cohort regresses" guardrail. When both
+   * are set, the per-cohort cap is applied first, then `personaLimit` truncates.
+   */
+  perCohortLimit?: number;
+  /**
    * Service path only: how many personas to drive CONCURRENTLY. Personas own
    * disjoint `User` rows + independent seeded RNG streams, so a batch only
    * interleaves DB I/O. Defaults to 1. (Ignored by the batched path, which is
@@ -89,6 +107,21 @@ export interface RunOptions {
   concurrency?: number;
   /** Persistence strategy. Defaults to `batched`. */
   mode?: SimMode;
+  /**
+   * Step-8 multi-tag duration-bias resolution. Defaults to `blend` (today's
+   * behavior). Only affects the `phase2` arm's duration preprocessing.
+   */
+  durationBias?: DurationBiasMode;
+  /**
+   * Step-8 sensitivity: scales each persona's drawn noise floor ε (kept clamped
+   * to [0, 1]). Defaults to `1.0` (no scaling).
+   */
+  noiseMult?: number;
+  /**
+   * Step-8 sensitivity: scales drift magnitude (peak shift + bias decay per
+   * month). Defaults to `1.0` (no scaling).
+   */
+  driftMult?: number;
 }
 
 export interface RunResult {
@@ -136,15 +169,31 @@ interface Actuator {
 
 // ─────────────────────────────── helpers ───────────────────────────────────
 
-/** Build the ordered list of (archetype, index) to seed. */
-function plannedPersonas(
+/**
+ * Build the ordered list of (archetype, index) to seed.
+ *
+ * `index` is the GLOBAL population index (the per-persona seed key) and is
+ * assigned over the full POPULATION first, so capping does NOT renumber the
+ * personas that survive — a `dev` persona keeps the same seed (hence identical
+ * latent draws + telemetry) whether or not the cohort cap is applied.
+ *
+ * `perCohortLimit` keeps only the first N personas of EACH archetype (every
+ * cohort survives), then `limit` truncates the flat result.
+ */
+export function plannedPersonas(
   limit?: number,
+  perCohortLimit?: number,
 ): { archetype: ArchetypeId; index: number }[] {
   const out: { archetype: ArchetypeId; index: number }[] = [];
   let idx = 0;
   for (const p of POPULATION) {
-    for (let i = 0; i < p.count; i++)
-      out.push({ archetype: p.archetype, index: idx++ });
+    let kept = 0;
+    for (let i = 0; i < p.count; i++) {
+      const index = idx++;
+      if (perCohortLimit !== undefined && kept >= perCohortLimit) continue;
+      out.push({ archetype: p.archetype, index });
+      kept++;
+    }
   }
   return limit ? out.slice(0, limit) : out;
 }
@@ -567,7 +616,7 @@ async function tallyEvents(
 export async function runSimulation(opts: RunOptions): Promise<RunResult> {
   const mode: SimMode = opts.mode ?? "batched";
   const clock = new SimClock(opts.start, opts.days);
-  const planned = plannedPersonas(opts.personaLimit);
+  const planned = plannedPersonas(opts.personaLimit, opts.perCohortLimit);
   const holidays = sampleHolidays(opts.seed, opts.days);
 
   logger.log(
@@ -601,12 +650,14 @@ async function runBatched(
       seedFor(opts.seed, p.index, 1),
       p.index,
       opts.days,
+      { noiseMult: opts.noiseMult, driftMult: opts.driftMult },
     );
     const state = new PersonaState(
       rec.persona.userId,
       rec.persona.prefs,
       rec.tagNames,
       opts.reranker,
+      opts.durationBias ?? "blend",
     );
     await drivePersona(
       new BatchedActuator(state),
@@ -665,6 +716,7 @@ async function runService(
         seedFor(opts.seed, p.index, 1),
         p.index,
         opts.days,
+        { noiseMult: opts.noiseMult, driftMult: opts.driftMult },
       ),
     );
   }

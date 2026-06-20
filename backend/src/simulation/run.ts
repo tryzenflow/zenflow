@@ -14,16 +14,26 @@ import { groundTruthPath, writeGroundTruthFile } from "./eval/ground-truth";
  *
  * Args (all optional): `--seed=<int>`, `--start=YYYY-MM-DD`, `--days=<int>`,
  * `--reranker=identity|phase2`, `--personas=<int>` (cap, for smoke runs),
+ * `--personas-per-cohort=<int>` (keep the FIRST N personas of EACH archetype, so
+ * every cohort survives a shrunken population — Step 6/7 need all 5 cohorts;
+ * a plain `--personas` cap slices the flat list and would drop later cohorts),
  * `--concurrency=<int>` (service-mode personas in parallel; default 8),
  * `--mode=batched|service` (persistence strategy; default batched: compute the
  * whole population in memory, then bulk-write in 50k-row batches).
+ *
+ * Step-8 ablation / sensitivity knobs (defaults reproduce today's behavior EXACTLY):
+ *   `--duration-bias=blend|max` (default `blend`) — multi-tag duration resolution:
+ *     `blend` = sample-weighted blend (default); `max` = Conservative Max-Bias.
+ *   `--noise-mult=<float>` (default `1.0`) — scales each persona's noise floor ε.
+ *   `--drift-mult=<float>`  (default `1.0`) — scales drift magnitude (peak shift +
+ *     bias decay per month).
  *
  * Determinism: every random draw flows from the seeded PRNG; the start date is
  * supplied here so the timeline is reproducible. Run against the dedicated sim
  * DB only (`dotenv -e .env.sim`).
  */
 
-import type { RerankerKind } from "./runner";
+import type { DurationBiasMode, RerankerKind } from "./runner";
 
 interface ParsedArgs {
   seed: number;
@@ -31,8 +41,12 @@ interface ParsedArgs {
   days: number;
   reranker: RerankerKind;
   personaLimit?: number;
+  perCohortLimit?: number;
   concurrency: number;
   mode: SimMode;
+  durationBias: DurationBiasMode;
+  noiseMult: number;
+  driftMult: number;
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -47,6 +61,8 @@ function parseArgs(argv: string[]): ParsedArgs {
   const rerankerArg = get("reranker") ?? "identity";
   const personasArg = get("personas");
   const personaLimit = personasArg ? Number(personasArg) : undefined;
+  const perCohortArg = get("personas-per-cohort");
+  const perCohortLimit = perCohortArg ? Number(perCohortArg) : undefined;
   const concurrency = Number(get("concurrency") ?? 8);
   const modeArg = get("mode") ?? "batched";
   if (modeArg !== "batched" && modeArg !== "service")
@@ -62,7 +78,37 @@ function parseArgs(argv: string[]): ParsedArgs {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(start))
     throw new Error(`--start must be YYYY-MM-DD (got '${start}')`);
 
-  return { seed, start, days, reranker, personaLimit, concurrency, mode };
+  // ── Step-8 ablation / sensitivity knobs (defaults reproduce today exactly) ──
+  const durationBiasArg = get("duration-bias") ?? "blend";
+  if (durationBiasArg !== "blend" && durationBiasArg !== "max")
+    throw new Error(
+      `--duration-bias must be 'blend' or 'max' (got '${durationBiasArg}')`,
+    );
+  const durationBias: DurationBiasMode = durationBiasArg;
+  const noiseMult = Number(get("noise-mult") ?? 1);
+  const driftMult = Number(get("drift-mult") ?? 1);
+  if (!(noiseMult >= 0) || !Number.isFinite(noiseMult))
+    throw new Error(
+      `--noise-mult must be a finite number ≥ 0 (got '${noiseMult}')`,
+    );
+  if (!Number.isFinite(driftMult))
+    throw new Error(
+      `--drift-mult must be a finite number (got '${driftMult}')`,
+    );
+
+  return {
+    seed,
+    start,
+    days,
+    reranker,
+    personaLimit,
+    perCohortLimit,
+    concurrency,
+    mode,
+    durationBias,
+    noiseMult,
+    driftMult,
+  };
 }
 
 async function main(): Promise<void> {

@@ -134,14 +134,19 @@ improve; the rest must merely hold):
 - **No schedule inflation** — total reserved time must not worsen (blend-vs-max-bias).
 
 ### Step 8 — Ablation + sensitivity
-- **Blend vs. max-bias** duration ablation — `ops` is the discriminator
-  (`archetypes.ts`: near-unbiased means, σ ≈ 0.45); blend should avoid the inflation
-  max-bias causes.
+Three `run.ts` CLI knobs exist for this step (defaults reproduce the baseline run
+exactly): `--duration-bias=blend|max`, `--noise-mult=<float>`, `--drift-mult=<float>`.
+There is also `--personas-per-cohort=<N>` to run a shrunken-but-balanced population
+(keeps the first N of every archetype, so no cohort is dropped).
+- **Blend vs. max-bias** duration ablation — `--duration-bias=max` vs the default
+  `blend`; `ops` is the discriminator (`archetypes.ts`: near-unbiased means, σ ≈ 0.45);
+  blend should avoid the inflation max-bias causes.
 - **Sample-complexity sweep** — MAR vs. history length: vary `--days`
   (14 / 30 / 90 / 365) or evaluate over rolling windows; does "~1–2 weeks/user" hold?
-- **Sensitivity** — re-run at higher noise floor `ε` and drift magnitude (these live
-  in `archetypes.ts` as `noiseFloor` / `driftPerMonth`, **not** CLI args today — edit
-  them or add a multiplier knob). Report where the win breaks down.
+- **Sensitivity** — re-run at higher noise floor `ε` (`--noise-mult=1.5`, `2.0`) and
+  drift magnitude (`--drift-mult=1.5`, `2.0`); the multipliers scale each persona's
+  drawn `noiseFloor` / `driftPerMonth` without perturbing the RNG stream. Report where
+  the win breaks down.
 
 ### Promotion decision
 Promote Phase 2 only when **all** hold: offline gate passed (4); closed-loop MAR drop

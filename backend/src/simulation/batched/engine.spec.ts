@@ -108,3 +108,68 @@ describe("PersonaState (batched engine)", () => {
     expect(s.tasks.find((t) => t.id === taskId)!.status).toBe("PENDING");
   });
 });
+
+describe("PersonaState duration-bias mode (Step-8 --duration-bias)", () => {
+  // Seed telemetry so two tags have very different observed biases, then create a
+  // task carrying BOTH and read its corrected duration: blend averages the two,
+  // max takes the larger — so the max arm reserves a strictly longer block.
+  // 'lo' resizes 60→60 (ratio 1.0); 'hi' resizes 60→120 (ratio 2.0).
+  const seedBiasTelemetry = (s: PersonaState): void => {
+    const lo = s.create(
+      { ...baseInput, tags: ["lo"], durationMinutes: 60 },
+      at("09:00"),
+    );
+    s.resize(lo.taskId, at("09:00"), 60, at("09:05")); // ratio 1.0
+    const hi = s.create(
+      { ...baseInput, tags: ["hi"], durationMinutes: 60 },
+      at("10:00"),
+    );
+    s.resize(hi.taskId, at("10:00"), 120, at("10:05")); // ratio 2.0
+  };
+
+  it("phase2 + blend averages the two tag biases (the default)", () => {
+    const s = new PersonaState("u1", PREFS, ["lo", "hi"], "phase2", "blend");
+    seedBiasTelemetry(s);
+    // Both tags n=1: blend = (1.0 + 2.0)/2 = 1.5 → 60 × 1.5 = 90.
+    const t = s.create(
+      { ...baseInput, tags: ["lo", "hi"], durationMinutes: 60 },
+      at("11:00"),
+    );
+    expect(s.tasks.find((x) => x.id === t.taskId)!.durationMinutes).toBe(90);
+  });
+
+  it("phase2 + max takes the largest tag bias (over-reserves vs blend)", () => {
+    const s = new PersonaState("u1", PREFS, ["lo", "hi"], "phase2", "max");
+    seedBiasTelemetry(s);
+    // max = 2.0 → 60 × 2.0 = 120, strictly longer than the blend's 90.
+    const t = s.create(
+      { ...baseInput, tags: ["lo", "hi"], durationMinutes: 60 },
+      at("11:00"),
+    );
+    expect(s.tasks.find((x) => x.id === t.taskId)!.durationMinutes).toBe(120);
+  });
+
+  it("defaults to blend when the mode arg is omitted (byte-for-byte unchanged)", () => {
+    const withDefault = new PersonaState("u1", PREFS, ["lo", "hi"], "phase2");
+    const withBlend = new PersonaState(
+      "u1",
+      PREFS,
+      ["lo", "hi"],
+      "phase2",
+      "blend",
+    );
+    seedBiasTelemetry(withDefault);
+    seedBiasTelemetry(withBlend);
+    const a = withDefault.create(
+      { ...baseInput, tags: ["lo", "hi"], durationMinutes: 60 },
+      at("11:00"),
+    );
+    const b = withBlend.create(
+      { ...baseInput, tags: ["lo", "hi"], durationMinutes: 60 },
+      at("11:00"),
+    );
+    expect(
+      withDefault.tasks.find((x) => x.id === a.taskId)!.durationMinutes,
+    ).toBe(withBlend.tasks.find((x) => x.id === b.taskId)!.durationMinutes);
+  });
+});
