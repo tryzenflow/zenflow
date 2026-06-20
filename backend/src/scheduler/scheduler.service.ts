@@ -29,6 +29,18 @@ import { findNextAvailableSlot, findSlotIgnoringWorkHours } from "./overflow";
 import { periodRange } from "./horizon";
 import { minutesToUtc, utcToMinutes } from "../common/utils";
 import { TIME_GRANULARITY } from "../common/constants";
+import { preferenceMatrixReRanker, type SlotReRanker } from "./reranker";
+import { blendBias, correctDuration, type TagBias } from "./duration-bias";
+import { buildRationale } from "./rationale";
+
+/** The corrected-duration outcome assembled for the create-task response. */
+export interface DurationCorrection {
+  estimatedDuration: number;
+  adjustedDuration: number;
+  biasApplied: number;
+  /** Short reason naming the driving tag(s); null when no bias applied. */
+  durationReason: string | null;
+}
 
 type PrismaTx = Prisma.TransactionClient;
 
@@ -48,6 +60,160 @@ export class SchedulerService {
       workDays: user.workDays,
       timezone: user.timezone,
     };
+  }
+
+  /**
+   * Build the Phase-2 placement re-ranker from the user's signed 672-cell
+   * preference matrix. The pure {@link preferenceMatrixReRanker} (owned by the
+   * ml-engineer) re-orders EDF's feasible slots by descending cell score — a
+   * pure permutation. A cold-start / wrong-length matrix degenerates to the
+   * identity re-ranker, so a fresh user keeps byte-for-byte Phase-1 behaviour.
+   * The matrix is computed HERE (the service) and passed INTO the pure core
+   * (invariant #2) — `scheduleAll` and the pure reranker never read Prisma.
+   */
+  private phase2ReRanker(user: User): SlotReRanker {
+    // The pure re-ranker degrades to identity for a cold-start / wrong-length
+    // matrix internally, so we hand it the raw column.
+    return preferenceMatrixReRanker(user.preferenceMatrix, user.timezone);
+  }
+
+  /**
+   * Aggregate the per-tag duration-bias table `{ b, n }` from `TaskEvent`
+   * telemetry for the given tag NAMES. `b` is the rolling mean of
+   * `actual ÷ estimated` and `n` the sample count, drawn from COMPLETE/KEEP
+   * events whose snapshot carries the tag (tags are captured per-event). This is
+   * the I/O half of the corrector (it reads Prisma); the pure blend math lives
+   * in {@link blendBias}/{@link correctDuration}. Returns one sample per tag the
+   * task actually carries that has ≥1 observation; tags with no history are
+   * dropped (no signal). `never` mode still calls this so the heatmap/analytics
+   * learn — application is gated by the caller.
+   *
+   * Estimated vs actual: the CREATE event records the typed estimate; COMPLETE
+   * records the duration the task was completed at. We approximate `actual` as
+   * the task's duration at completion and `estimated` as its duration at create,
+   * both already on the snapshot, so a resized-then-completed task contributes a
+   * real ratio. Tags absent from the snapshot are skipped.
+   */
+  private async aggregateTagBias(
+    userId: string,
+    tagNames: string[],
+    tx: PrismaTx,
+  ): Promise<Map<string, TagBias>> {
+    const wanted = new Set(tagNames.map((t) => t.trim()).filter(Boolean));
+    if (wanted.size === 0) return new Map();
+
+    // Pull the recent outcome events for this user; the per-event snapshot holds
+    // the tag names + duration at the event time. We pair each COMPLETE/KEEP
+    // (actual) with the matching CREATE (estimate) by task id.
+    const events = await tx.taskEvent.findMany({
+      where: {
+        userId,
+        eventType: { in: ["CREATE", "COMPLETE", "KEEP"] },
+      },
+      select: {
+        taskId: true,
+        eventType: true,
+        newSnapshot: true,
+      },
+      orderBy: { occurredAt: "desc" },
+      take: 2000,
+    });
+
+    type Snap = { durationMinutes?: number; tags?: string[] };
+    const estimateByTask = new Map<string, number>();
+    const outcomes: { taskId: string; duration: number; tags: string[] }[] = [];
+
+    for (const e of events) {
+      const snap = (e.newSnapshot ?? {}) as Snap;
+      const dur =
+        typeof snap.durationMinutes === "number" ? snap.durationMinutes : null;
+      const tags = Array.isArray(snap.tags) ? snap.tags : [];
+      if (dur === null) continue;
+      if (e.eventType === "CREATE") {
+        if (!estimateByTask.has(e.taskId)) estimateByTask.set(e.taskId, dur);
+      } else {
+        outcomes.push({ taskId: e.taskId, duration: dur, tags });
+      }
+    }
+
+    // sum of ratios + count, per tag, over tasks we have both an estimate and an
+    // outcome for. ratio = actual / estimated (>1 ⇒ tag runs long).
+    const acc = new Map<string, { sum: number; n: number }>();
+    for (const o of outcomes) {
+      const estimated = estimateByTask.get(o.taskId);
+      if (!estimated || estimated <= 0) continue;
+      const ratio = o.duration / estimated;
+      for (const tag of o.tags) {
+        if (!wanted.has(tag)) continue;
+        const cur = acc.get(tag) ?? { sum: 0, n: 0 };
+        cur.sum += ratio;
+        cur.n += 1;
+        acc.set(tag, cur);
+      }
+    }
+
+    const out = new Map<string, TagBias>();
+    for (const [tag, { sum, n }] of acc) {
+      if (n > 0) out.set(tag, { n, b: sum / n });
+    }
+    return out;
+  }
+
+  /**
+   * Compute the duration correction for a task carrying `tagNames` with the
+   * user's typed `estimatedDuration`. Aggregates per-tag bias from telemetry,
+   * blends it (sample-weighted, via the pure {@link blendBias}) and rounds the
+   * corrected duration up to the 15-min grid (pure {@link correctDuration}).
+   * Returns the estimate, the corrected duration, the blended multiplier, and a
+   * short human reason naming the driving tag(s) — or a 1.0 / no-reason result
+   * when there's no signal. The CORRECTOR ALWAYS RUNS (so it always learns);
+   * whether the corrected value is fed to EDF is gated by the user's mode at the
+   * call site.
+   */
+  async computeDurationCorrection(
+    userId: string,
+    tagNames: string[],
+    estimatedDuration: number,
+    tx: PrismaTx,
+  ): Promise<DurationCorrection> {
+    const table = await this.aggregateTagBias(userId, tagNames, tx);
+    const samples = [...table.values()];
+    const bias = blendBias(samples);
+    const adjustedDuration = correctDuration(estimatedDuration, bias);
+
+    let durationReason: string | null = null;
+    if (samples.length > 0 && adjustedDuration !== estimatedDuration) {
+      // Name the tag with the most extreme multiplier as the driver.
+      let driverTag: string | null = null;
+      let driverB = 1;
+      for (const [tag, s] of table) {
+        if (Math.abs(s.b - 1) > Math.abs(driverB - 1)) {
+          driverB = s.b;
+          driverTag = tag;
+        }
+      }
+      if (driverTag) {
+        const pct = Math.round(Math.abs(driverB - 1) * 100);
+        const dir = driverB >= 1 ? "longer" : "shorter";
+        durationReason = `#${driverTag} ~${pct}% ${dir}`;
+      }
+    }
+
+    return {
+      estimatedDuration,
+      adjustedDuration,
+      biasApplied: bias,
+      durationReason,
+    };
+  }
+
+  /**
+   * PURE-helper-backed rationale for a placement at `placedAt`, from the user's
+   * matrix. Null when the placement wasn't preference-favoured (cold-start /
+   * neutral slot) so the FE shows no rationale toast.
+   */
+  rationaleFor(user: User, placedAt: Date | null) {
+    return buildRationale(user.preferenceMatrix, placedAt, user.timezone);
   }
 
   /**
@@ -96,10 +262,15 @@ export class SchedulerService {
   ): Promise<void> {
     const tasks = await this.pendingTasks(user.id, tx);
     const prefs = this.prefsOf(user);
+    // Phase-2 live wiring: re-rank EDF-feasible slots by the user's preference
+    // matrix on the real (non-simulation) scheduling path. The matrix is read
+    // here and passed INTO the pure core; a cold-start matrix degenerates to
+    // identity, so a fresh user is byte-for-byte Phase-1.
     const placements = scheduleAll(
       prefs,
       tasks.map((t) => this.toEdf(t, prefs)),
       now,
+      this.phase2ReRanker(user),
     );
     const before = new Map(tasks.map((t) => [t.id, t]));
     for (const p of placements) {

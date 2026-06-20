@@ -45,4 +45,10 @@ export class UsersController {
     const updated = await this.usersService.completeOnboarding(user, dto);
     return { success: true, message: "Onboarding complete", data: updated };
   }
+
+  @Get("me/preference-matrix")
+  async preferenceMatrix(@CurrentUser() user: User) {
+    const data = await this.usersService.getPreferenceMatrix(user);
+    return { success: true, data };
+  }
 }

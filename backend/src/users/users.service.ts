@@ -13,9 +13,18 @@ import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { UpdatePreferencesDto } from "./dto/update-preferences.dto";
 import { OnboardingDto } from "./dto/onboarding.dto";
+import {
+  PREFERENCE_MATRIX_LENGTH,
+  PREFERENCE_SLOTS_PER_DAY,
+  type PreferenceMatrixResponse,
+} from "@zenflow/shared";
 
 /** Minimum length of the working window, in minutes (docs invariant). */
 const MIN_WORKDAY_MINUTES = 60;
+
+/** Day rows in the signed preference matrix (7 ISO weekdays). */
+const PREFERENCE_MATRIX_DAYS =
+  PREFERENCE_MATRIX_LENGTH / PREFERENCE_SLOTS_PER_DAY;
 
 @Injectable()
 export class UsersService {
@@ -80,6 +89,11 @@ export class UsersService {
         ...("roleArchetypeId" in dto
           ? { roleArchetypeId: dto.roleArchetypeId ?? null }
           : {}),
+        // Likewise the duration-adjustment mode is a partial update: only write
+        // it when explicitly sent so omitting it preserves the existing value.
+        ...(dto.durationAdjustmentMode !== undefined
+          ? { durationAdjustmentMode: dto.durationAdjustmentMode }
+          : {}),
       },
     });
     await this.scheduler.rescheduleAll(updated);
@@ -97,9 +111,31 @@ export class UsersService {
         workDays: dto.workDays,
         timezone: dto.timezone,
         roleArchetypeId: dto.roleArchetypeId ?? null,
+        // Onboarding may set the mode; default 'auto' (the schema default) when
+        // the client doesn't send it.
+        ...(dto.durationAdjustmentMode !== undefined
+          ? { durationAdjustmentMode: dto.durationAdjustmentMode }
+          : {}),
         onboardingComplete: true,
       },
     });
+  }
+
+  /**
+   * The current user's flat 672-int SIGNED preference matrix for the Insights
+   * heatmap (fetch-on-open). A cold-start / wrong-length matrix is normalised to
+   * all-zero so the FE never has to special-case the length. Read-only.
+   */
+  async getPreferenceMatrix(user: User): Promise<PreferenceMatrixResponse> {
+    const matrix =
+      user.preferenceMatrix.length === PREFERENCE_MATRIX_LENGTH
+        ? user.preferenceMatrix
+        : new Array<number>(PREFERENCE_MATRIX_LENGTH).fill(0);
+    return {
+      matrix,
+      days: PREFERENCE_MATRIX_DAYS,
+      blocks: PREFERENCE_SLOTS_PER_DAY,
+    };
   }
 
   async findByEmail(email: string) {

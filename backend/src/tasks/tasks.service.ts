@@ -110,6 +110,24 @@ export class TasksService {
         // Resolve incoming tag NAMES → ids before connecting them to the task.
         const tagIds = await this.resolveTagIds(tx, user.id, rest.tags ?? []);
 
+        // Phase-2 per-tag duration corrector. ALWAYS computed (so it always
+        // LEARNS, even in `never` mode) but only APPLIED when the user's mode is
+        // not `never`. The corrected value is rounded up to the 15-min grid.
+        const estimatedDuration = rest.durationMinutes;
+        const cleanTags = (rest.tags ?? [])
+          .map((t) => t.trim())
+          .filter(Boolean);
+        const correction = await this.scheduler.computeDurationCorrection(
+          user.id,
+          cleanTags,
+          estimatedDuration,
+          tx,
+        );
+        const applyCorrection = user.durationAdjustmentMode !== "never";
+        const effectiveDuration = applyCorrection
+          ? correction.adjustedDuration
+          : estimatedDuration;
+
         // Fixed: anchored at its day + time-of-day. Flexible: persist the
         // create/view day as the EDF floor (start-of-day UTC). The packer only
         // consults this when the task has NO deadline — a deadline-bearing task
@@ -125,7 +143,7 @@ export class TasksService {
           data: {
             title: rest.title,
             note: rest.note ?? null,
-            durationMinutes: rest.durationMinutes,
+            durationMinutes: effectiveDuration,
             deadline: rest.deadline ? new Date(rest.deadline) : null,
             tags: { connect: tagIds.map((id) => ({ id })) },
             fixed: isFixed,
@@ -194,12 +212,19 @@ export class TasksService {
         return {
           task: this.toDto(finalTask),
           schedulingMeta: {
+            // The duration actually fed to EDF (corrected unless `never` mode).
             adjustedDuration: finalTask.durationMinutes,
             placedAt: finalTask.scheduledStartTime
               ? finalTask.scheduledStartTime.toISOString()
               : null,
             engine: "edf" as const,
-            biasApplied: 1.0,
+            // Real Phase-2 metadata. `biasApplied` is the blended multiplier the
+            // corrector LEARNED (even in `never` mode, where it isn't applied);
+            // `estimatedDuration` is the user's typed value before correction.
+            biasApplied: correction.biasApplied,
+            estimatedDuration: correction.estimatedDuration,
+            durationAdjustmentMode: user.durationAdjustmentMode,
+            durationReason: applyCorrection ? correction.durationReason : null,
           },
           overflow,
         };
@@ -451,6 +476,9 @@ export class TasksService {
           ? d.newScheduledStartTime.toISOString()
           : null,
       })),
+      // Phase-2 transparency: surface WHY the slot is a good one when it lands in
+      // a preference-favoured cell (null otherwise → FE shows no toast).
+      rationale: this.scheduler.rationaleFor(user, withTags.scheduledStartTime),
     };
   }
 
@@ -492,6 +520,7 @@ export class TasksService {
           ? d.newScheduledStartTime.toISOString()
           : null,
       })),
+      rationale: this.scheduler.rationaleFor(user, withTags.scheduledStartTime),
     };
   }
 
@@ -525,6 +554,7 @@ export class TasksService {
           ? d.newScheduledStartTime.toISOString()
           : null,
       })),
+      rationale: this.scheduler.rationaleFor(user, withTags.scheduledStartTime),
     };
   }
 

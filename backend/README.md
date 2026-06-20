@@ -81,6 +81,8 @@ Defined in [`prisma/schema.prisma`](prisma/schema.prisma). Five models.
 | `workStart` / `workEnd` | int | minutes from midnight (default 540 / 1020 = 09:00–17:00) |
 | `workDays` | int[] | ISO weekdays, default `[1,2,3,4,5]` (1=Mon … 7=Sun) |
 | `preferenceMatrix` | int[] | flat **672** ints (7 days × 96 fifteen-minute slots, slot-grid-aligned). **Signed** Phase-1 telemetry: a move-toward/keep increments a cell (+1), a move-away decrements it (−1), empty = 0 (neutral). **Not yet read** by the engine. Seeded lazily. |
+| `durationAdjustmentMode` | `DurationAdjustmentMode` | `auto` \| `ask` \| `never`; default `auto`. Gates whether the Phase-2 per-tag duration corrector is *applied* (it always *learns*). |
+| `preferenceMatrixDecayedAt` | DateTime? | When the daily decay cron last decayed `preferenceMatrix`; null until the first pass |
 | `roleArchetypeId` | string? | Phase-4 cold-start cluster id |
 | `onboardingComplete` | bool | gates the onboarding redirect |
 
@@ -153,8 +155,9 @@ Global prefix **`/api/v1`**. All routes except `POST /auth/otp/*` require
 |--------|------|---------|
 | GET | `/users/me` | profile |
 | PATCH | `/users/update/basic-info` | update name/email |
-| PUT | `/users/me/preferences` | update work hours/days/timezone — **triggers a full EDF reschedule of all PENDING tasks** |
-| POST | `/users/me/onboarding` | finish onboarding (sets schedule + optional role archetype) |
+| PUT | `/users/me/preferences` | update work hours/days/timezone (+ optional `durationAdjustmentMode`) — **triggers a full EDF reschedule of all PENDING tasks** |
+| POST | `/users/me/onboarding` | finish onboarding (sets schedule + optional role archetype + optional `durationAdjustmentMode`) |
+| GET | `/users/me/preference-matrix` | the current user's flat 672-int signed preference matrix for the Insights heatmap (`PreferenceMatrixResponse`; cold-start → all-zero). Read-only |
 
 ### Tasks (`/tasks`)
 | Method | Path | Purpose |
@@ -308,6 +311,33 @@ itself only ever leaves a task unplaced (`scheduledStartTime: null`) on conflict
 updates to the `preferenceMatrix` (move-away −1, move-toward/keep +1). A `scoreSlot()` seam is reserved here for the **Phase 3 bandit** to plug
 into (see [`services/bandit/README.md`](../services/bandit/README.md) and
 [`docs/heuristic.md`](../docs/heuristic.md)).
+
+### Phase 2 — personalized scheduling (live)
+
+The matrix/bias/decay are computed in the **service** and passed into the **pure** core
+(invariant #2). The pure pieces (`reranker.ts`, `duration-bias.ts`, `matrix-decay.ts`) take
+inputs as params and do no I/O; the service is the only thing that reads Prisma.
+
+- **Placement re-ranker** (`reranker.ts` → `preferenceMatrixReRanker(matrix, tz)`): a pure
+  permutation that re-orders EDF's feasible slots by descending signed-cell score.
+  `SchedulerService.cascadeReschedule` builds it from `user.preferenceMatrix` and threads it
+  through `scheduleAll`. A cold-start / wrong-length matrix degenerates to identity, so a
+  fresh user is byte-for-byte Phase-1.
+- **Duration corrector** (`duration-bias.ts` → `blendBias` / `correctDuration`):
+  `SchedulerService.computeDurationCorrection` aggregates per-tag `{ n, b }` from `TaskEvent`
+  telemetry (rolling `actual ÷ estimated`), blends it sample-weighted, and rounds the
+  corrected duration **up** to the 15-min grid. `TasksService.create` applies it as
+  preprocessing **before** EDF — gated by `user.durationAdjustmentMode`: `never` feeds the
+  uncorrected estimate to EDF but **still learns** the bias. The real `biasApplied`,
+  `estimatedDuration`, `durationAdjustmentMode`, and `durationReason` are surfaced on the
+  create response's `schedulingMeta`.
+- **Rationale** (`rationale.ts` → `buildRationale`): `schedule`/`reschedule`/`resize`/
+  `resolve-overflow` responses carry an optional `SchedulingRationale` describing the
+  preferred work window + top cells that drove the placement (null when the slot wasn't
+  preference-favoured).
+- **Matrix-decay cron** (`matrix-decay.service.ts`, `@Cron` daily): the I/O wrapper loads each
+  user's `preferenceMatrix` + `preferenceMatrixDecayedAt`, calls the pure `decayMatrix`
+  (`cell *= 2^(−Δdays / MATRIX_HALF_LIFE_DAYS)`, 21-day half-life), and writes back.
 
 > When you change any pure scheduler function, update its `*.spec.ts` in the same change
 > (`edf.spec.ts`, `horizon.spec.ts`) and run `pnpm --filter backend test`.

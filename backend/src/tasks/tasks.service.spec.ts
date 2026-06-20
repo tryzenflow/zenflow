@@ -27,6 +27,8 @@ const user: User = {
   workEnd: 1020,
   workDays: [1, 2, 3, 4, 5],
   preferenceMatrix: [],
+  preferenceMatrixDecayedAt: null,
+  durationAdjustmentMode: "auto",
   roleArchetypeId: null,
   onboardingComplete: true,
   createdAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -122,6 +124,22 @@ function makeCreateService(): {
     computeOverflowOptions: jest
       .fn()
       .mockResolvedValue({ outsideHours: null, nextAvailable: null }),
+    // Phase-2 duration corrector: default to a no-op (bias 1.0, unchanged
+    // duration) so the create-path specs don't depend on telemetry.
+    computeDurationCorrection: jest.fn(
+      (
+        _userId: string,
+        _tags: string[],
+        estimatedDuration: number,
+      ): Promise<unknown> =>
+        Promise.resolve({
+          estimatedDuration,
+          adjustedDuration: estimatedDuration,
+          biasApplied: 1.0,
+          durationReason: null,
+        }),
+    ),
+    rationaleFor: jest.fn().mockReturnValue(null),
   };
 
   return {

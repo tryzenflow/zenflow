@@ -28,6 +28,15 @@ model User {
   // lazily.
   preferenceMatrix Int[] @default([])
 
+  // When the daily decay cron last applied exponential time-decay to
+  // `preferenceMatrix` (see MatrixDecayService). Null until the first decay
+  // pass; the cron treats null as "no elapsed days" and only stamps the time.
+  preferenceMatrixDecayedAt DateTime?
+
+  // Duration-corrector UX mode (auto | ask | never), surfaced on the user
+  // profile and editable via preferences/onboarding. `never` still LEARNS bias.
+  durationAdjustmentMode DurationAdjustmentMode @default(auto)
+
   roleArchetypeId    String? // Phase-4 cold-start cluster id
   onboardingComplete Boolean @default(false)
 
@@ -60,6 +69,18 @@ enum TaskStatus {
   PENDING
   DONE // completed
   ABANDONED // deadline passed while still PENDING (set by the overdue sweep)
+}
+
+// How the per-tag duration corrector surfaces its adjustment to the user:
+//   auto  → apply the corrected duration + show an undoable toast
+//   ask   → prompt before applying (accept corrected / keep estimate)
+//   never → never apply (still LEARNS bias for the heatmap/analytics)
+// Mirrors @zenflow/shared DurationAdjustmentMode. Lowercase string enum, like
+// the ViewMode precedent.
+enum DurationAdjustmentMode {
+  auto
+  ask
+  never
 }
 
 // Calendar view a task was created from. Records the period (day/week/month)
