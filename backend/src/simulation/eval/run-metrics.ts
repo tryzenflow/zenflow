@@ -4,6 +4,7 @@ import { SimulationModule } from "../simulation.module";
 import { PrismaService } from "../../prisma/prisma.service";
 import { computeMetrics } from "./metrics";
 import { replayPhase2 } from "./replay";
+import { scoreDurationBacktest } from "./duration-backtest";
 
 /**
  * `sim:eval` entry point: boot a standalone Nest context against the sim DB,
@@ -34,9 +35,24 @@ async function main(): Promise<void> {
         `phase2: IPS=${replay.phase2.ips.toFixed(3)} SNIPS=${replay.phase2.snips.toFixed(3)} over ${replay.phase2.decisions} decisions`,
     );
 
+    // Offline gate (Step 4) — duration backtest: recompute the bias-corrected
+    // duration for every historical task from THIS log and gate on
+    // median|true − corrected| < median|true − est| (heuristic §Phase 2).
+    const durationBacktest = await scoreDurationBacktest(prisma);
+    logger.log(
+      `Duration backtest (n=${durationBacktest.tasks}): median|true−est|=${durationBacktest.medianEstError.toFixed(
+        1,
+      )}min, |true−corrected| blend=${durationBacktest.medianCorrectedErrorBlend.toFixed(
+        1,
+      )}min max=${durationBacktest.medianCorrectedErrorMax.toFixed(1)}min → ` +
+        `gate ${durationBacktest.passesBlend ? "PASS" : "FAIL"} (blend)`,
+    );
+
     // Full machine-readable dump.
 
-    console.log(JSON.stringify({ metrics: report, replay }, null, 2));
+    console.log(
+      JSON.stringify({ metrics: report, replay, durationBacktest }, null, 2),
+    );
   } finally {
     await app.close();
   }
