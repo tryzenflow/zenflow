@@ -24,6 +24,7 @@ import type { TasksMeta } from "@zenflow/shared";
 import { isAxiosError } from "axios";
 import { toast } from "sonner";
 import { errorToast } from "@/lib/toast";
+import { maybeShowRationaleToast } from "@/lib/scheduling-toasts";
 import { useUserStore } from "@/hooks/use-user-store";
 import { zonedDate, zonedNow } from "@/utils/tz";
 import { isSameMonth } from "date-fns";
@@ -109,7 +110,10 @@ export function CalendarLayout() {
       if (!fresh.some((b) => b.taskId === taskId)) return;
     }
     try {
-      await rescheduleTask(taskId, startISO);
+      const res = await rescheduleTask(taskId, startISO);
+      // Phase-2: surface the placement rationale when the re-ranker favoured a
+      // preferred slot (no-op when the response carries none).
+      maybeShowRationaleToast(res);
     } catch (error) {
       if (isAxiosError(error))
         errorToast(error.response?.data?.message || "Failed to reschedule");
@@ -145,7 +149,8 @@ export function CalendarLayout() {
       if (!fresh.some((b) => b.taskId === taskId)) return;
     }
     try {
-      await resizeTask(taskId, startISO, durationMinutes);
+      const res = await resizeTask(taskId, startISO, durationMinutes);
+      maybeShowRationaleToast(res);
     } catch (error) {
       if (isAxiosError(error))
         errorToast(error.response?.data?.message || "Failed to resize");

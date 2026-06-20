@@ -19,6 +19,10 @@ import { isAxiosError } from "axios";
 import { DAILY_HORIZON, TIME_GRANULARITY } from "@/utils/constants";
 import { isZonedToday } from "@/utils/tz";
 import type { CreateTaskResponse, ViewMode } from "@zenflow/shared";
+import {
+  handleDurationAdjustment,
+  maybeShowRationaleToast,
+} from "@/lib/scheduling-toasts";
 
 const VIEW_SUBTITLE: Record<ViewMode, string> = {
   day: "EEE, MMM d",
@@ -93,12 +97,15 @@ export function CreateTaskDialog({
     async function resolve(choice: "outsideHours" | "nextAvailable") {
       toast.dismiss(toastId);
       try {
-        await resolveOverflow(
+        const res = await resolveOverflow(
           taskId,
           choice,
           choice === "nextAvailable" ? view : undefined,
         );
         onCreated();
+        // Phase-2: a resolved overflow may also land in a preference-favoured
+        // slot; surface the rationale alongside the success confirmation.
+        maybeShowRationaleToast(res);
         toast.success("Task scheduled 🎉");
       } catch (error) {
         errorToast(
@@ -165,7 +172,15 @@ export function CreateTaskDialog({
           response.overflow,
         );
       } else {
-        toast.success("Task created successfully 🎉");
+        // Phase-2: when the per-tag corrector adjusted the duration, the
+        // auto/ask/never UX (ADR Sequence 1) replaces the plain success toast.
+        // `never`/no-adjustment falls through to the usual confirmation.
+        const handled = handleDurationAdjustment(
+          response.task,
+          response.schedulingMeta,
+          onCreated,
+        );
+        if (!handled) toast.success("Task created successfully 🎉");
       }
     } catch (error: any) {
       errorToast(

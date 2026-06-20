@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { isAxiosError } from "axios";
 import { toast } from "sonner";
 import { errorToast } from "@/lib/toast";
 import { Check, ChevronLeft, ChevronRight, Clock, Info } from "lucide-react";
@@ -17,8 +18,20 @@ import {
   windowWraps,
   workWindowMinutes,
 } from "@/components/settings/preferences-fields";
+import {
+  DURATION_MODES,
+  DurationModeField,
+} from "@/components/settings/duration-mode-field";
+import type { DurationAdjustmentMode } from "@/types/phase2";
 
-const STEPS = ["Welcome", "Work Hours", "Work Days", "Your Role", "All Set"];
+const STEPS = [
+  "Welcome",
+  "Work Hours",
+  "Work Days",
+  "Your Role",
+  "Adjustments",
+  "All Set",
+];
 
 function StepRail({ current }: { current: number }) {
   return (
@@ -87,6 +100,8 @@ function OnboardingWizard() {
   const [workEnd, setWorkEnd] = useState(1020);
   const [workDays, setWorkDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const [roleArchetypeId, setRole] = useState<string | null>(null);
+  const [durationMode, setDurationMode] =
+    useState<DurationAdjustmentMode>("auto");
 
   const timezone = useMemo(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
@@ -113,7 +128,8 @@ function OnboardingWizard() {
     (step === 2 && workDays.length > 0) ||
     step === 0 ||
     step === 3 ||
-    step === 4;
+    step === 4 ||
+    step === 5;
 
   async function finish() {
     setLoading(true);
@@ -124,13 +140,15 @@ function OnboardingWizard() {
         workDays,
         timezone,
         roleArchetypeId,
+        durationAdjustmentMode: durationMode,
       });
       setUser(updated);
       toast.success("You're all set 🎉");
       navigate("/");
-    } catch (error: any) {
+    } catch (error) {
       errorToast(
-        error?.response?.data?.message || "Failed to complete onboarding",
+        (isAxiosError(error) && error.response?.data?.message) ||
+          "Failed to complete onboarding",
       );
     } finally {
       setLoading(false);
@@ -189,6 +207,17 @@ function OnboardingWizard() {
               </>
             )}
             {step === 4 && (
+              <>
+                <h1 className="mb-2 text-2xl font-bold tracking-tight">
+                  Duration adjustments
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  Zenflow learns how long your tasks really take. Pick how it
+                  applies what it learns — you can change this anytime.
+                </p>
+              </>
+            )}
+            {step === 5 && (
               <>
                 <h1 className="mb-2 text-2xl font-bold tracking-tight">
                   You're all set
@@ -301,6 +330,13 @@ function OnboardingWizard() {
             )}
 
             {step === 4 && (
+              <DurationModeField
+                value={durationMode}
+                onChange={setDurationMode}
+              />
+            )}
+
+            {step === 5 && (
               <div className="space-y-2 rounded-md border border-border bg-muted p-4 text-sm">
                 <Row
                   label="Hours"
@@ -319,6 +355,13 @@ function OnboardingWizard() {
                   value={
                     ARCHETYPES.find((a) => a.id === roleArchetypeId)?.name ??
                     "Not set"
+                  }
+                />
+                <Row
+                  label="Adjustments"
+                  value={
+                    DURATION_MODES.find((m) => m.id === durationMode)?.name ??
+                    "Automatic"
                   }
                 />
                 <Row label="Timezone" value={timezone} />

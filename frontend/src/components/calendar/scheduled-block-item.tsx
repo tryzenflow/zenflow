@@ -195,6 +195,15 @@ export function ScheduledBlockItem({
   const dispStart = preview?.start ?? startMin;
   const dispEnd = preview?.end ?? endMin;
   const dispDuration = dispEnd - dispStart;
+
+  // Phase-2 delta styling: while a resize is in flight, render the minutes being
+  // added (grown) or removed (shrunk) versus the persisted extent as a distinct
+  // band at the changing edge. Purely visual — driven off the existing preview
+  // state, so it adds nothing to the drag/resize gesture path.
+  const baseStart = startMin;
+  const baseEnd = endMin;
+  const deltaMinutes = preview ? dispDuration - (baseEnd - baseStart) : 0;
+  const growingEdge: "top" | "bottom" | null = resizing.current?.edge ?? null;
   // Hour rows are 64px, so a block under 30 min (<32px) can't fit the stacked
   // title + time + tags layout. Short blocks render as a single compact row.
   const isCompact = dispDuration < 30;
@@ -316,9 +325,43 @@ export function ScheduledBlockItem({
               </div>
             </>
           )}
+          {/* Phase-2 duration-delta indicator. A grow band (amber, +N) hugs the
+          edge being dragged; a shrink reads as a dashed rose outline + −N. Only
+          shown mid-resize, so it never interferes with the persisted block. */}
+          {preview && deltaMinutes !== 0 && (
+            <>
+              {deltaMinutes > 0 && (
+                <div
+                  aria-hidden
+                  className={cn(
+                    "pointer-events-none absolute inset-x-0.5 z-20 rounded bg-primary/15 ring-1 ring-inset ring-primary/40",
+                    growingEdge === "top" ? "top-0" : "bottom-0",
+                  )}
+                  style={{
+                    height: `${(Math.abs(deltaMinutes) / Math.max(dispDuration, 1)) * 100}%`,
+                  }}
+                />
+              )}
+              <span
+                className={cn(
+                  "pointer-events-none absolute right-1 z-30 rounded px-1 py-0.5 font-mono text-[9px] font-bold leading-none shadow-sm",
+                  deltaMinutes > 0
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-rose-500 text-white",
+                  growingEdge === "top" ? "top-1" : "bottom-1",
+                )}
+              >
+                {deltaMinutes > 0 ? "+" : "−"}
+                {Math.abs(deltaMinutes)}m
+              </span>
+            </>
+          )}
           <div
             className={cn(
               "flex h-full overflow-hidden rounded border border-l-4 px-2 shadow-sm transition-shadow hover:shadow-md backdrop-blur-lg",
+              // While shrinking, outline the block in rose so the removed extent
+              // reads distinctly from a normal resize.
+              preview && deltaMinutes < 0 && "ring-1 ring-rose-400/60",
               isInteractive
                 ? "cursor-grab active:cursor-grabbing"
                 : "cursor-pointer",
