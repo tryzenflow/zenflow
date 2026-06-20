@@ -78,6 +78,21 @@ cold-start matrix degenerates to identity). The cell index reuses the existing
 and BE agree on the grid. `edf.ts` already routes `scheduleAll(..., reRanker)` through
 `reRanker.score(t, candidates)[0]`; **no core change to feasibility** is required.
 
+**View-bounded candidate window.** The re-ranker permutes *only the candidates it is handed* —
+a set already shaped by the task's stored `view`. The pure core never sees `view`; it enters
+scheduling indirectly via `toEdfTask` (`telemetry.ts`), which derives the period **floor**
+(`schedulingAnchor`, start-of-day of the create day) and, for a flexible no-deadline task, the
+period **ceiling** (`schedulingDeadline = endOfPeriod(anchor, view, tz, work)` — end of the
+viewed day / week / month). Consequence for placement leverage: a **day**-view task's candidates
+all share one ISO-weekday column of the 7×96 matrix, so the re-ranker can only reorder by
+**block/time**; **week** / **month** views span multiple day-columns, giving it room to reorder
+across **day-of-week *and* block**. The re-ranker's ability to recover the hidden `pGlobal` field
+therefore scales with how week/month-heavy a persona's `viewWeights` are — read the §6
+sample-complexity / sensitivity sweeps with that in mind. (Note the move/`feasibleSlots` helper
+enumerates forward from the anchor floor and is **not** capped at the ceiling — only the
+`scheduleAll` cascade enforces it; this is existing Phase-1 behaviour, identical between the
+simulator and production, so it is not a substrate defect and requires no Phase-1 re-run.)
+
 ### 2. Per-tag duration corrector (preprocessing, pure helper + service blend)
 
 A pure helper computes `corrected = ceilTo15(estimated × bias)` where
@@ -287,6 +302,12 @@ shared union) is followed.
   hard cutoffs; the constant is configurable for the §8 drift-sensitivity sweep.
 - **`never` still learns.** Bias is accumulated regardless of mode so the heatmap/analytics stay
   meaningful — only *application* is gated. This is a deliberate (documented) surprise.
+- **View-bounded re-rank leverage.** The re-ranker's reorder room is set by the task's `view`
+  (day = one weekday column, week/month = many) — see §1. The Phase-1 frozen substrate already
+  encodes this (the simulator and production place through the same `toEdfTask`), so it is **not**
+  a data defect and needs **no Phase-1 re-run**; it only means the §6 sweeps must be read against
+  each persona's `viewWeights`, and a day-view-heavy cohort is the natural floor on the achievable
+  MAR drop.
 
 ### Open questions — RESOLVED
 
