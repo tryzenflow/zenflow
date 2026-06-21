@@ -174,6 +174,17 @@ export class TasksService {
           include: { tags: true },
         });
 
+        // The stochastic logging policy's propensity for the slot it
+        // auto-placed this task into — recorded so off-policy IPS/SNIPS can
+        // divide by the TRUE propensity of the suggestion (docs/heuristic.md
+        // §Evaluation). Null when unplaced / cold-start. Stored in the snapshot
+        // JSON (no migration, no shared-type change).
+        const propensity = await this.scheduler.placementPropensity(
+          user,
+          finalTask,
+          tx,
+          now,
+        );
         await tx.taskEvent.create({
           data: {
             taskId: finalTask.id,
@@ -189,6 +200,7 @@ export class TasksService {
               tags: finalTask.tags
                 .map((t) => t.name)
                 .sort((a, b) => a.localeCompare(b)),
+              ...(propensity !== null ? { propensity } : {}),
             },
             rewardScore: EVENT_REWARD.CREATE,
             occurredAt: now,

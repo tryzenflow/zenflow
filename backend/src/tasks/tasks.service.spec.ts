@@ -140,6 +140,10 @@ function makeCreateService(): {
         }),
     ),
     rationaleFor: jest.fn().mockReturnValue(null),
+    // Phase-2 softmax logging propensity for the auto-placed slot, recorded on
+    // the CREATE snapshot. Stubbed null so the create-path specs don't depend on
+    // the matrix / feasible-set recompute (exercised in scheduler specs).
+    placementPropensity: jest.fn().mockResolvedValue(null),
   };
 
   return {
