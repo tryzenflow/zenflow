@@ -20,11 +20,21 @@ function snap(scheduledStartTime: string | null, durationMinutes: number) {
   return { scheduledStartTime, durationMinutes, tags: [] };
 }
 
-/** Build a Prisma mock whose taskEvent.findMany returns `events`. */
-function mockPrisma(events: Ev[]): PrismaService {
+/**
+ * Build a Prisma mock whose `taskEvent.findMany` returns `events` and whose
+ * `user.findMany` returns the `users` (id + email) the metrics join for the
+ * stable per-persona key. Unknown users fall back to an empty key.
+ */
+function mockPrisma(
+  events: Ev[],
+  users: { id: string; email: string }[] = [],
+): PrismaService {
   return {
     taskEvent: {
       findMany: jest.fn().mockResolvedValue(events),
+    },
+    user: {
+      findMany: jest.fn().mockResolvedValue(users),
     },
   } as unknown as PrismaService;
 }
@@ -105,9 +115,14 @@ describe("computeMetrics", () => {
       },
     ];
 
-    const report = await computeMetrics(mockPrisma(events));
+    const report = await computeMetrics(
+      mockPrisma(events, [{ id: "u1", email: "sim-dev-0-1@zenflow.sim" }]),
+    );
     expect(report.perPersona).toHaveLength(1);
     const m = report.perPersona[0];
+
+    // Stable per-persona key joined from the User row (the deterministic email).
+    expect(m.personaKey).toBe("sim-dev-0-1@zenflow.sim");
 
     // 3 scheduled, 2 adjusted (A moved, C resized) → MAR = 2/3.
     expect(m.scheduled).toBe(3);
@@ -150,6 +165,8 @@ describe("computeMetrics", () => {
     ];
     const report = await computeMetrics(mockPrisma(events));
     const m = report.perPersona[0];
+    // No user row supplied → key falls back to an empty string (never throws).
+    expect(m.personaKey).toBe("");
     expect(m.mar).toBe(0);
     expect(m.completionInSlotRate).toBe(1);
     expect(m.moveDistanceMedianMin).toBe(0);

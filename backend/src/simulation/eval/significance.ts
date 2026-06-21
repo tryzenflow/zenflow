@@ -209,26 +209,40 @@ export function summarizeSweep(results: SeedResult[]): SweepSummary {
 
 // ───────────────────────────────── I/O wrapper ─────────────────────────────
 
-/** The shape `sim:eval` emits ({ metrics: { perPersona: [{ userId, mar }] } }). */
-interface MetricsDump {
-  metrics?: { perPersona?: { userId: string; mar: number }[] };
-  perPersona?: { userId: string; mar: number }[];
+/**
+ * The shape `sim:eval` emits
+ * ({ metrics: { perPersona: [{ userId, personaKey, mar }] } }). `personaKey` is
+ * the deterministic persona email — the STABLE cross-arm key. `userId` (a random
+ * per-run UUID) is the fallback for legacy dumps that predate the key.
+ */
+export interface MetricsDump {
+  metrics?: {
+    perPersona?: { userId: string; personaKey?: string; mar: number }[];
+  };
+  perPersona?: { userId: string; personaKey?: string; mar: number }[];
 }
 
-function perPersonaMar(dump: MetricsDump): Map<string, number> {
+/**
+ * Index a dump's per-persona MAR by its STABLE pairing key: the deterministic
+ * `personaKey` (persona email) when present, else the legacy `userId`. Keying on
+ * `personaKey` is what lets two arms be paired directly — the same persona has
+ * the SAME email across arms but a different random `userId` — so the throwaway
+ * out-of-band re-key step the eval doc described is no longer needed.
+ */
+export function perPersonaMar(dump: MetricsDump): Map<string, number> {
   const rows = dump.metrics?.perPersona ?? dump.perPersona ?? [];
-  return new Map(rows.map((r) => [r.userId, r.mar]));
+  return new Map(rows.map((r) => [r.personaKey || r.userId, r.mar]));
 }
 
-/** Pair two arms' per-persona MAR by userId, dropping unmatched personas. */
-function pairByUser(
+/** Pair two arms' per-persona MAR by their stable key, dropping unmatched. */
+export function pairByUser(
   a: Map<string, number>,
   b: Map<string, number>,
 ): { marA: number[]; marB: number[] } {
   const marA: number[] = [];
   const marB: number[] = [];
-  for (const [userId, va] of a) {
-    const vb = b.get(userId);
+  for (const [key, va] of a) {
+    const vb = b.get(key);
     if (vb !== undefined) {
       marA.push(va);
       marB.push(vb);

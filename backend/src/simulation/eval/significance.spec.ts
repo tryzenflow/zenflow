@@ -2,9 +2,12 @@ import {
   bootstrapMeanCI,
   cliffsDelta,
   normalCdf,
+  pairByUser,
   pairedMarAnalysis,
+  perPersonaMar,
   summarizeSweep,
   wilcoxonSignedRank,
+  type MetricsDump,
   type SeedResult,
 } from "./significance";
 
@@ -75,6 +78,84 @@ describe("pairedMarAnalysis", () => {
     expect(an.deltaMean).toBeGreaterThan(0);
     expect(an.cliffsDelta).toBeGreaterThan(0);
     expect(an.ci95.lo).toBeGreaterThan(0); // whole CI above zero
+  });
+});
+
+describe("perPersonaMar + pairByUser (stable per-persona key)", () => {
+  it("keys by the deterministic personaKey, not the random userId", () => {
+    const m = perPersonaMar({
+      metrics: {
+        perPersona: [
+          { userId: "uuid-1", personaKey: "sim-dev-0-1@zenflow.sim", mar: 0.3 },
+        ],
+      },
+    });
+    expect(m.get("sim-dev-0-1@zenflow.sim")).toBe(0.3);
+    expect(m.get("uuid-1")).toBeUndefined();
+  });
+
+  it("pairs the two arms by personaKey even when userIds differ across arms", () => {
+    // Same persona (same email) gets a DIFFERENT random userId in each arm —
+    // the whole point of the stable key. Pairing must still align them.
+    const armA: MetricsDump = {
+      metrics: {
+        perPersona: [
+          {
+            userId: "a-uuid-1",
+            personaKey: "sim-dev-0-1@zenflow.sim",
+            mar: 0.8,
+          },
+          {
+            userId: "a-uuid-2",
+            personaKey: "sim-crammer-1-1@zenflow.sim",
+            mar: 0.85,
+          },
+        ],
+      },
+    };
+    const armB: MetricsDump = {
+      metrics: {
+        perPersona: [
+          // Note: userIds are different from arm A, ordering shuffled.
+          {
+            userId: "b-uuid-9",
+            personaKey: "sim-crammer-1-1@zenflow.sim",
+            mar: 0.6,
+          },
+          {
+            userId: "b-uuid-8",
+            personaKey: "sim-dev-0-1@zenflow.sim",
+            mar: 0.5,
+          },
+        ],
+      },
+    };
+    const { marA, marB } = pairByUser(perPersonaMar(armA), perPersonaMar(armB));
+    // dev paired: 0.8↔0.5 ; crammer paired: 0.85↔0.6 (order follows arm A's map).
+    expect(marA).toEqual([0.8, 0.85]);
+    expect(marB).toEqual([0.5, 0.6]);
+  });
+
+  it("falls back to userId for legacy dumps without a personaKey", () => {
+    const m = perPersonaMar({
+      perPersona: [{ userId: "legacy-1", mar: 0.42 }],
+    });
+    expect(m.get("legacy-1")).toBe(0.42);
+  });
+
+  it("drops personas present in only one arm", () => {
+    const a = perPersonaMar({
+      perPersona: [
+        { userId: "x", personaKey: "k1", mar: 0.7 },
+        { userId: "y", personaKey: "k2", mar: 0.6 },
+      ],
+    });
+    const b = perPersonaMar({
+      perPersona: [{ userId: "z", personaKey: "k1", mar: 0.5 }],
+    });
+    const { marA, marB } = pairByUser(a, b);
+    expect(marA).toEqual([0.7]);
+    expect(marB).toEqual([0.5]);
   });
 });
 

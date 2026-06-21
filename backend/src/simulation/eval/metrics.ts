@@ -37,6 +37,15 @@ function asSnapshot(v: unknown): Snapshot | null {
 
 export interface PersonaMetrics {
   userId: string;
+  /**
+   * STABLE per-persona key — the deterministic persona email
+   * `sim-{archetype}-{index}-{seed}@zenflow.sim` (persona.factory.ts). Unlike
+   * `userId` (a random UUID minted per run), this key is identical for the SAME
+   * persona across the two A/B arms, so the paired significance tool can match
+   * arms by it directly without an out-of-band re-key step. Empty string for any
+   * user row without an email (should not happen for sim personas).
+   */
+  personaKey: string;
   scheduled: number; // tasks that received a suggested placement (CREATE w/ slot)
   adjusted: number; // tasks moved or resized after suggestion (MAR numerator)
   mar: number;
@@ -100,9 +109,16 @@ export async function computeMetrics(
     byUser.set(e.userId, list);
   }
 
+  // The deterministic persona email is the stable cross-arm pairing key (the
+  // random `userId` differs between arms). Join it from the `User` rows.
+  const users = await prisma.user.findMany({
+    select: { id: true, email: true },
+  });
+  const emailById = new Map(users.map((u) => [u.id, u.email]));
+
   const perPersona: PersonaMetrics[] = [];
   for (const [userId, evs] of byUser) {
-    perPersona.push(personaMetrics(userId, evs));
+    perPersona.push(personaMetrics(userId, emailById.get(userId) ?? "", evs));
   }
   perPersona.sort((a, b) => a.userId.localeCompare(b.userId));
 
@@ -124,7 +140,11 @@ export async function computeMetrics(
 }
 
 /** Per-task event grouping → the §12 metrics for one persona. */
-function personaMetrics(userId: string, evs: EventRow[]): PersonaMetrics {
+function personaMetrics(
+  userId: string,
+  personaKey: string,
+  evs: EventRow[],
+): PersonaMetrics {
   const counts: Record<string, number> = {};
   for (const e of evs) counts[e.eventType] = (counts[e.eventType] ?? 0) + 1;
 
@@ -198,6 +218,7 @@ function personaMetrics(userId: string, evs: EventRow[]): PersonaMetrics {
   const mar = scheduled > 0 ? adjusted / scheduled : 0;
   return {
     userId,
+    personaKey,
     scheduled,
     adjusted,
     mar,
