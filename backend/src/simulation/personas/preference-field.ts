@@ -107,6 +107,26 @@ export function driftPGlobal(
   return out;
 }
 
+/**
+ * The drifted preference field a persona reacts against after `monthsElapsed` of
+ * slow non-stationary drift (strategy §4.3). `shiftBlocks = peakShiftBlocks ×
+ * monthsElapsed` slides the global temporal peaks along the slot-of-day axis;
+ * `pTag` is left as-is (per-tag tag×time interactions are a Phase-3 concern and
+ * carry their own `biasDecay` accounting elsewhere). Returns the SAME field
+ * object when there is no net shift, so a persona with zero drift (or `--drift-
+ * mult=0`) reproduces the un-drifted behaviour byte-for-byte. PURE: no RNG, no
+ * clock — the only input is the elapsed months the runner threads in.
+ */
+export function driftedFieldFor(
+  field: PreferenceField,
+  peakShiftBlocks: number,
+  monthsElapsed: number,
+): PreferenceField {
+  const shift = peakShiftBlocks * monthsElapsed;
+  if (Math.round(shift) === 0) return field;
+  return { ...field, pGlobal: driftPGlobal(field.pGlobal, shift) };
+}
+
 /** The persona's latent fields + the scalar reaction parameters. */
 export interface PreferenceField {
   pGlobal: Float64Array;

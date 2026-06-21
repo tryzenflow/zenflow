@@ -19,10 +19,14 @@ import type { ArchetypeId } from "../personas/archetypes";
  * DIFFERENT ids — there is no way to regenerate ground truth and join it back to
  * the DB rows. It must be emitted by the same run that writes the DB.
  *
- * Drift note: `driftPGlobal` exists but is currently dormant (the reaction model
- * scores against the base `field.pGlobal`), so the exported `pGlobal` is exactly
- * the field every persona reacted against for the whole span. `driftPerMonth` is
- * carried through so a future drifted-recovery variant can account for it.
+ * Drift note: the reaction model now scores against a DRIFTED field — the runner
+ * advances `driftPGlobal` by `peakShiftBlocks × (day / 30)` at each placement
+ * decision (`runner.ts` via `driftedFieldFor`), so `driftPerMonth` /
+ * `--drift-mult` is a live sensitivity axis rather than a no-op. The exported
+ * `pGlobal` below is still the BASE (day-0, un-drifted) field — the recovery
+ * target a Phase-2 matrix can approximate at span start — and `driftPerMonth` is
+ * exported alongside it so a drift-aware recovery variant can reconstruct the
+ * field at any later day as `driftPGlobal(pGlobal, peakShiftBlocks × monthsAt(d))`.
  */
 
 /** Round to 6 decimals to keep the sidecar compact without losing recovery precision. */
@@ -71,7 +75,11 @@ export interface GroundTruthFile {
 export function toGroundTruth(persona: Persona): PersonaGroundTruth {
   const tagBias: PersonaGroundTruth["tagBias"] = {};
   for (const [tag, b] of persona.tagBias) {
-    tagBias[tag] = { mu: r6(b.mu), sigma: r6(b.sigma), bias: r6(Math.exp(b.mu)) };
+    tagBias[tag] = {
+      mu: r6(b.mu),
+      sigma: r6(b.sigma),
+      bias: r6(Math.exp(b.mu)),
+    };
   }
   return {
     userId: persona.userId,

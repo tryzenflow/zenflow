@@ -35,6 +35,14 @@ import {
 import { PersonaState, type DueTask } from "./batched/engine";
 import { bulkWrite, type PersonaOutput } from "./batched/writer";
 import { toGroundTruth, type PersonaGroundTruth } from "./eval/ground-truth";
+import { driftedFieldFor } from "./personas/preference-field";
+
+/**
+ * Span days per "month" for drift accounting. `driftPerMonth.peakShiftBlocks` is
+ * defined per 30-day month, so the elapsed-months factor the reaction loop drifts
+ * by is `day / 30`.
+ */
+const DAYS_PER_MONTH = 30;
 
 /**
  * The closed-loop driver (seed doc §2.7). Per simulated day, per persona:
@@ -299,7 +307,23 @@ async function drivePersona(
       let currentDur = spec.input.durationMinutes;
 
       const feasible = await act.feasible(taskId, actionAt);
-      const move = decidePlacement(persona, rt, suggested, feasible, rng);
+      // Score against the drifted field for this point in the span so slow
+      // non-stationary drift (`driftPerMonth` / `--drift-mult`) actually reaches
+      // the reaction loop. `driftedFieldFor` is pure (no RNG), so the seeded
+      // random stream is untouched and a zero-drift persona is unchanged.
+      const driftedField = driftedFieldFor(
+        persona.field,
+        persona.driftPerMonth.peakShiftBlocks,
+        day / DAYS_PER_MONTH,
+      );
+      const move = decidePlacement(
+        persona,
+        rt,
+        suggested,
+        feasible,
+        rng,
+        driftedField,
+      );
       if (move) {
         await act.reschedule(taskId, move, actionAt);
         currentStart = move;

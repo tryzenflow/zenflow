@@ -2,6 +2,7 @@ import { PREFERENCE_MATRIX_LENGTH } from "@zenflow/shared";
 import { makeRng } from "../rng";
 import type { Persona } from "../personas/persona.factory";
 import type { PreferenceField } from "../personas/preference-field";
+import { driftedFieldFor } from "../personas/preference-field";
 import { preferenceIndex } from "../../scheduler/slot";
 import {
   decideOutcome,
@@ -130,6 +131,63 @@ describe("decidePlacement", () => {
   it("returns null on an empty feasible set", () => {
     const p = persona();
     expect(decidePlacement(p, task(), suggested, [], makeRng(5))).toBeNull();
+  });
+
+  it("scores against the drifted field when one is supplied", () => {
+    // Base peak at the 10:00 slot (feasible[1]); high edit propensity, no noise.
+    // Un-drifted → the persona moves to feasible[1]. With a +4-block (one hour)
+    // drift the peak slides to the 11:00 slot (feasible[2]), so the SAME persona
+    // moves there instead — proving drift reaches the reaction loop.
+    const p = persona({
+      field: fieldPeakedAt(feasible[1]),
+      editPropensity: 1,
+      moveThreshold: 0.5,
+      noiseFloor: 0,
+    });
+
+    const undrifted = decidePlacement(
+      p,
+      task(),
+      suggested,
+      feasible,
+      makeRng(2),
+    );
+    expect(undrifted!.getTime()).toBe(feasible[1].getTime());
+
+    // One 15-min slot = 1 block; one hour = 4 blocks. A +4-block shift moves the
+    // peak forward from the 10:00 slot to the 11:00 slot.
+    const drifted = driftedFieldFor(p.field, 4, 1);
+    const moved = decidePlacement(
+      p,
+      task(),
+      suggested,
+      feasible,
+      makeRng(2),
+      drifted,
+    );
+    expect(moved!.getTime()).toBe(feasible[2].getTime());
+  });
+
+  it("defaults to the base field (zero drift is a no-op)", () => {
+    const p = persona({
+      field: fieldPeakedAt(feasible[2]),
+      editPropensity: 1,
+      moveThreshold: 0.5,
+      noiseFloor: 0,
+    });
+    // Explicit zero-drift field === omitting the field argument.
+    const zeroDrift = driftedFieldFor(p.field, 0.2, 0); // 0 months → same object
+    expect(zeroDrift).toBe(p.field);
+    const a = decidePlacement(p, task(), suggested, feasible, makeRng(2));
+    const b = decidePlacement(
+      p,
+      task(),
+      suggested,
+      feasible,
+      makeRng(2),
+      zeroDrift,
+    );
+    expect(a!.getTime()).toBe(b!.getTime());
   });
 
   it("noise floor of 1 acts out of character but stays in the feasible set", () => {
