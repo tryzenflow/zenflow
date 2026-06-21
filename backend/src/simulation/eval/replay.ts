@@ -5,7 +5,10 @@ import {
   identityReRanker,
   preferenceMatrixReRanker,
 } from "../../scheduler/reranker";
-import type { EdfTask } from "../../scheduler/edf";
+import type { EdfTask, SchedulerPrefs } from "../../scheduler/edf";
+import { feasibleSlots } from "../../scheduler/edf";
+import { localDateStr } from "../../scheduler/slot";
+import { minutesToUtc } from "../../common/utils";
 import { applyPreferenceDeltas } from "../../scheduler/telemetry";
 
 /**
@@ -41,7 +44,12 @@ interface LoggedDecision {
 export interface ReplayContext {
   task: Pick<EdfTask, "durationMinutes" | "deadline">;
   tags: string[];
-  /** Candidate slots the incumbent enumerated (only suggested+chosen known from log). */
+  /**
+   * The feasible candidate set for this decision, reconstructed by re-running the
+   * pure `feasibleSlots` over the logged task context (see
+   * {@link reconstructCandidates}) — the real set the off-policy estimator ranks,
+   * not just the suggested+chosen pair.
+   */
   candidates: Date[];
 }
 
@@ -128,15 +136,90 @@ function propensity(
 }
 
 /**
- * Build the replay decision set from the logged `TaskEvent`s. The candidate set
- * a decision was made over is not fully stored, so we reconstruct the minimal
- * pair (suggested, chosen) the log DOES carry — enough for the propensity
- * sanity-check. A richer reconstruction (re-running `feasibleSlots` per decision)
- * is left as the Phase-2/3 follow-up when a real candidate re-ranker exists.
+ * Reconstruct the REAL feasible candidate set a decision was made over by
+ * re-running the pure scheduler core's {@link feasibleSlots} for the logged task
+ * context — the Phase-2 follow-up the old docstring flagged. The log stores only
+ * (suggested, chosen), which gives the off-policy estimator ≤2 candidates per
+ * decision and so cannot discriminate two re-rankers (both rank a 2-element set
+ * almost identically). Enumerating the genuine feasible set restores the
+ * discrimination.
+ *
+ * Pure + deterministic: enumerated from `prefs`, the task `durationMinutes` /
+ * `deadline`, and a `now` floor derived from the decision instants — no I/O, no
+ * randomness, no `Date.now()`. We pin `now` to the START OF DAY (user tz) of the
+ * earliest of {suggested, chosen} and pass it as both `now` and `earliest`, so
+ * the enumeration spans that working day forward and necessarily contains both
+ * the suggested and chosen slots (both lie at/after the day start). `occupied` is
+ * left empty: the frozen log does not carry the full board at decision time, so
+ * we reconstruct the unconstrained working-window candidate set (a superset that
+ * always contains the two slots the decision actually ranged over). As a
+ * belt-and-braces guard the suggested + chosen slots are unioned in and the set
+ * is de-duplicated + sorted, so a slot off the enumerated grid (an out-of-hours
+ * override) is never dropped.
+ */
+export function reconstructCandidates(
+  prefs: SchedulerPrefs,
+  durationMinutes: number,
+  deadline: Date | null,
+  suggested: Date | null,
+  chosen: Date | null,
+): Date[] {
+  const anchors = [suggested, chosen].filter((d): d is Date => d !== null);
+  const byTime = new Map<number, Date>();
+  if (anchors.length > 0) {
+    const earliest = anchors.reduce((a, b) => (a <= b ? a : b));
+    const dayStart = minutesToUtc(
+      localDateStr(earliest, prefs.timezone),
+      0,
+      prefs.timezone,
+    );
+    for (const c of feasibleSlots(
+      prefs,
+      durationMinutes,
+      deadline,
+      [],
+      dayStart,
+      dayStart,
+    )) {
+      byTime.set(c.getTime(), c);
+    }
+  }
+  // Union the two logged slots in case either fell outside the enumerated grid.
+  for (const d of anchors) byTime.set(d.getTime(), d);
+  return [...byTime.values()].sort((a, b) => a.getTime() - b.getTime());
+}
+
+/**
+ * Build the replay decision set from the logged `TaskEvent`s, reconstructing the
+ * real feasible candidate set per decision via {@link reconstructCandidates}
+ * (re-running the pure `feasibleSlots` over the logged task context + the user's
+ * scheduler prefs). This gives the placement IPS/SNIPS the genuine candidate set
+ * to discriminate re-rankers, rather than the ≤2-element (suggested, chosen) pair.
  */
 export async function loadDecisions(
   prisma: PrismaService,
 ): Promise<LoggedDecision[]> {
+  const users = await prisma.user.findMany({
+    select: {
+      id: true,
+      workStart: true,
+      workEnd: true,
+      workDays: true,
+      timezone: true,
+    },
+  });
+  const prefsById = new Map<string, SchedulerPrefs>(
+    users.map((u) => [
+      u.id,
+      {
+        workStart: u.workStart,
+        workEnd: u.workEnd,
+        workDays: u.workDays,
+        timezone: u.timezone,
+      },
+    ]),
+  );
+
   const events = await prisma.taskEvent.findMany({
     where: { eventType: { in: ["MOVE", "RESIZE", "KEEP"] } },
     orderBy: { occurredAt: "asc" },
@@ -151,12 +234,16 @@ export async function loadDecisions(
 
   const out: LoggedDecision[] = [];
   for (const e of events) {
-    const oldS = e.oldSnapshot as { suggestedStartTime?: string | null } | null;
+    const oldS = e.oldSnapshot as {
+      suggestedStartTime?: string | null;
+      deadline?: string | null;
+    } | null;
     const newS = e.newSnapshot as {
       scheduledStartTime?: string | null;
       tags?: string[];
       durationMinutes?: number;
       suggestedStartTime?: string | null;
+      deadline?: string | null;
     } | null;
     if (!newS) continue;
     const suggestedIso =
@@ -164,7 +251,21 @@ export async function loadDecisions(
     const chosenIso = newS.scheduledStartTime ?? null;
     const suggested = suggestedIso ? new Date(suggestedIso) : null;
     const chosen = chosenIso ? new Date(chosenIso) : null;
-    const candidates = [suggested, chosen].filter((d): d is Date => d !== null);
+    const deadlineIso = newS.deadline ?? oldS?.deadline ?? null;
+    const deadline = deadlineIso ? new Date(deadlineIso) : null;
+    const durationMinutes = newS.durationMinutes ?? 15;
+
+    const prefs = prefsById.get(e.userId);
+    const candidates = prefs
+      ? reconstructCandidates(
+          prefs,
+          durationMinutes,
+          deadline,
+          suggested,
+          chosen,
+        )
+      : [suggested, chosen].filter((d): d is Date => d !== null);
+
     out.push({
       taskId: e.taskId,
       userId: e.userId,
@@ -172,7 +273,7 @@ export async function loadDecisions(
       chosen,
       reward: e.rewardScore,
       context: {
-        task: { durationMinutes: newS.durationMinutes ?? 15, deadline: null },
+        task: { durationMinutes, deadline },
         tags: newS.tags ?? [],
         candidates,
       },
