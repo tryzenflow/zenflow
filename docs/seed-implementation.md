@@ -557,3 +557,86 @@ The persona/behaviour model was tuned for human realism:
 - **More + overdue deadlines.** `deadlineProb` is higher across archetypes, a slice of
   deadline tasks arrive already past-due, and the abandon sweep is held back during the
   held-out tail so a realistic **overdue PENDING** backlog survives at snapshot.
+
+---
+
+## 8. Seeding performance: parallel multi-DB arm runs
+
+A Phase-2 A/B is several **arms** — the SAME seed / start / days / population run under
+DIFFERENT re-ranker knobs (e.g. `identity` vs greedy `phase2` vs softmax `phase2`). Each
+arm produces its own `TaskEvent` log, so each genuinely needs its own DB state.
+
+The old throwaway drivers (`run-mar-arms.sh`, `_reconfirm-50.sh`) ran arms **serially
+against one shared `zenflow_sim`**: truncate → `sim:run` → `sim:eval`, one at a time. Total
+wall-clock ≈ **Σ arms** (and `_reconfirm-50.sh` paid the full `prisma db push --force-reset`
+schema rebuild between every arm). The expensive part is `sim:run` (population generation +
+the closed loop + the bulk write); evaluation is cheap by comparison.
+
+### 8.1 Design — one container, N logical databases, arms in parallel
+
+- **Multiple databases, one container.** Every arm gets its OWN logical database
+  (`zenflow_sim_<arm>`) inside the SAME dev postgres container (`zenflow-db`). Creating a
+  database is cheap; nothing else changes in the dev/test/prod stacks.
+- **Near-instant fresh schema via a TEMPLATE clone.** A driver-owned, never-connected
+  template DB (`zenflow_sim_template`) is migrated once (`prisma db push`), then each arm DB
+  is `CREATE DATABASE <arm> TEMPLATE zenflow_sim_template` — a near-instant schema clone (no
+  per-arm `prisma db push`). A TEMPLATE clone requires zero sessions on the source, which is
+  why the template is separate from the single `zenflow_sim` (the dev backend / prisma may
+  hold connections to that one).
+- **Fast reset for an existing arm DB.** Re-running an arm `TRUNCATE … RESTART IDENTITY
+  CASCADE`s only the data tables (`TaskEvent`, `Task`, `Tag`, `_TagToTask`, `File`, `User`)
+  — milliseconds, vs. dropping and recreating the whole schema.
+- **Arms run concurrently.** Each arm process is handed its OWN `DATABASE_URL` (its arm DB),
+  so the expensive `sim:run`s overlap. Wall-clock drops toward **max(arm) + eval** instead
+  of Σ arms (bounded by CPU cores / DB throughput). `sim:eval` then runs per arm (cheap,
+  serial), and `sim:significance` pairs every arm against the first (baseline).
+- **No collisions.** Distinct `DATABASE_URL` per arm ⇒ no shared rows. The ground-truth
+  sidecar (`groundTruthPath(seed, days)`) would otherwise clobber across arms that share
+  seed/days, so each arm is given its OWN `SIM_OUTPUT_DIR` (an opt-in env hook read in
+  `run.ts`; **no `eval/*` edits** — the eval reads from the same dir). Unset ⇒ today's
+  `<cwd>/sim-output` path, so the single-DB flow is byte-for-byte unchanged.
+- **Determinism preserved.** Arms share `--seed` / `--start` / `--days` / population and
+  differ only in re-ranker flags; every draw still flows from the seeded PRNG.
+
+### 8.2 Scripts (all OPT-IN; the single-DB path is unchanged)
+
+| Script | What it does |
+|--------|--------------|
+| `sim:reset` | Safe full reset (`prisma db push --force-reset`) of the `.env.sim` DB — the fallback. |
+| `sim:reset:fast` | Fast TRUNCATE of the `.env.sim` DB (`scripts/truncate-sim.js`, via the `pg` driver — no docker/psql client; refuses any DB whose name lacks `sim`). |
+| `sim:db <cmd> <arm>…` | Provision / reset / drop / url the per-arm DBs (`scripts/sim-db.sh`: `ensure-template`, `create`, `reset`, `drop`, `url`). |
+| `sim:arms [flags]` | The committed parallel multi-arm driver (`scripts/sim-arms.sh`): build → provision arm DBs → run all arms' `sim:run` concurrently → `sim:eval` per arm → `sim:significance` over the pairs. Replaces the throwaway shells. |
+
+`sim-db.sh` config is env-overridable (`DB_CONTAINER`, `DB_USER`, `DB_PASS`, `DB_HOST`,
+`DB_PORT`, `TEMPLATE_DB`, `DB_PREFIX`); defaults target the local dev stack.
+
+### 8.3 Running it
+
+The default reproduces the 3-arm MAR comparison (identity / greedy / softmax), seed 42,
+90 days, full population:
+
+```bash
+# Git Bash (or via PowerShell: bash backend/scripts/sim-arms.sh …)
+pnpm --filter backend sim:arms
+# or with flags:
+pnpm --filter backend sim:arms -- --seed=42 --days=90 --jobs=3
+```
+
+A quick smoke against two databases concurrently (proves the mechanism without a full run):
+
+```bash
+pnpm --filter backend sim:arms -- \
+  --personas-per-cohort=2 --days=21 --seed=7 --out=sim-output/smoke --keep-dbs \
+  --arm="identity:--reranker=identity" \
+  --arm="greedy:--reranker=phase2 --temperature=1e-6"
+```
+
+Flags: `--seed`, `--start`, `--days`, `--personas-per-cohort`, `--personas`, `--mode`,
+`--out`, `--jobs` (max concurrent arms), `--no-build`, `--keep-dbs`, and repeatable
+`--arm="name:flags"` (defining any `--arm` replaces the default arm set; `flags` pass to
+`run.js` verbatim). Artifacts land under `<out>/<arm>/` (`run.std*`, `eval.json`,
+`eval.stderr`, the arm's ground-truth sidecar) plus `<out>/significance.txt`. `sim-output/`
+is gitignored.
+
+> Requires Docker Desktop up (the driver provisions DBs via `docker exec zenflow-db psql`).
+> The single-DB `sim:run` / `sim:eval` / `sim:reset` flow is untouched — this is additive.

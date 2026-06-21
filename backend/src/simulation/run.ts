@@ -1,3 +1,4 @@
+import { basename, join } from "node:path";
 import { NestFactory } from "@nestjs/core";
 import { Logger } from "@nestjs/common";
 import { SimulationModule } from "./simulation.module";
@@ -31,6 +32,13 @@ import { groundTruthPath, writeGroundTruthFile } from "./eval/ground-truth";
  * Determinism: every random draw flows from the seeded PRNG; the start date is
  * supplied here so the timeline is reproducible. Run against the dedicated sim
  * DB only (`dotenv -e .env.sim`).
+ *
+ * Env (optional): `SIM_OUTPUT_DIR` overrides where the ground-truth sidecar is
+ * written (default `<cwd>/sim-output`). The parallel multi-arm driver
+ * (`scripts/sim-arms.sh`) sets a distinct dir per arm so arms that share
+ * `--seed`/`--days` don't clobber each other's sidecar; the eval reads from the
+ * same dir. `DATABASE_URL` (already the sim DB selector) is overridden per arm so
+ * each arm targets its OWN database and they can run concurrently.
  */
 
 import type { DurationBiasMode, RerankerKind } from "./runner";
@@ -133,20 +141,28 @@ async function main(): Promise<void> {
 
     // Write the ground-truth sidecar (eval Step 0) keyed by the real userIds this
     // run minted — the out-of-band channel the recovery metrics read.
-    const gtPath = await writeGroundTruthFile(
-      groundTruthPath(args.seed, args.days),
-      {
-        meta: {
-          seed: args.seed,
-          start: args.start,
-          days: args.days,
-          mode: args.mode,
-          personas: result.groundTruth.length,
-          kind: "phase-2-ground-truth",
-        },
-        personas: result.groundTruth,
+    //
+    // Parallel multi-arm runs share the same `--seed`/`--days`, so the default
+    // `ground-truth-seed{seed}-days{days}.json` filename would collide across arms
+    // and the last writer would clobber the rest. `SIM_OUTPUT_DIR` lets the
+    // multi-arm driver point each arm at its OWN sidecar directory (one per DB),
+    // keeping the sidecars isolated WITHOUT touching `eval/*` — the eval reader is
+    // pointed at the matching directory the same way. Unset ⇒ today's
+    // `<cwd>/sim-output` path, so single-DB `sim:run` is byte-for-byte unchanged.
+    const outDir = process.env.SIM_OUTPUT_DIR;
+    const defaultPath = groundTruthPath(args.seed, args.days);
+    const gtTarget = outDir ? join(outDir, basename(defaultPath)) : defaultPath;
+    const gtPath = await writeGroundTruthFile(gtTarget, {
+      meta: {
+        seed: args.seed,
+        start: args.start,
+        days: args.days,
+        mode: args.mode,
+        personas: result.groundTruth.length,
+        kind: "phase-2-ground-truth",
       },
-    );
+      personas: result.groundTruth,
+    });
     logger.log(`Ground-truth sidecar written: ${gtPath}`);
   } finally {
     await app.close();
