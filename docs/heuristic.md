@@ -1,11 +1,55 @@
 # Zenflow Heuristic Algorithm
 
-Zenflow uses Earliest-Deadline First (EDF) to help schedule tasks by prioritizing the deadlines.
+> **What this doc is:** the design of Zenflow's task scheduler and the four-phase roadmap
+> that turns it from a plain deadline-sorter into a personalized one.
+> **Who should read it:** any engineer (especially a new ML engineer) who needs to understand
+> how we place tasks on the calendar, what signals we log, and how each learning phase is
+> built and validated. Read this before [`docs/simulation-strategy.md`](simulation-strategy.md),
+> which describes how we test these phases on synthetic data.
+
+---
+
+## Concepts & terminology
+
+Read this once; the rest of the doc assumes it. Terms are defined before their first use.
+
+| Term | Plain definition | Why it matters here |
+|------|------------------|---------------------|
+| **EDF (Earliest-Deadline First)** | A scheduling rule: sort tasks by deadline, then drop each into the first free slot. | Our Phase-1 engine. It is *deterministic* (same inputs → same output) and never learned. |
+| **Slot** | A 15-minute block of calendar time. The day is a grid of these. | All scheduling happens on this grid; durations are always multiples of 15 min. |
+| **Feasible set** | The slots EDF says a task *could* legally occupy — ones that respect the deadline, work hours, and the 15-min grid. | The intelligence layer is only ever allowed to choose *within* this set. |
+| **Re-ranker** | A function that reorders the feasible set so a more-preferred slot comes first, without removing any slot. | This is where every learned model plugs in. If the set has one slot, it does nothing. |
+| **Telemetry / `task_events`** | An audit log: one row per user action (created, moved, resized, completed…), recording what was suggested vs. what the user chose. | This log is the *only* data the learners ever see; it makes offline evaluation possible. |
+| **Tag** | A user-defined label on a task (`#backend`, `#writing`). A task can have several. | Used both for duration correction and, later, as a model feature. |
+| **Duration bias** | A per-tag multiplier = (actual time taken) ÷ (estimated time). >1 means the user underestimates. | We use it to correct the user's estimate *before* scheduling, so blocks are the right size. |
+| **Preference matrix** | A per-user 7×96 grid (7 weekdays × 96 fifteen-min blocks) of signed scores: + for liked time blocks, − for disliked. | Phase 2's memory of *when* a user likes to work. |
+| **Contextual bandit** | An online learner that, given a *context* (features), picks one *arm* (action) to maximize *reward*, while balancing trying new arms vs. repeating known-good ones. | Phase 3's model. "Contextual" = the best arm depends on the situation. |
+| **Arm** | One choosable action for the bandit. Here, a time-of-day block, not a raw 15-min slot. | Fewer arms → less data needed before the bandit learns. |
+| **LinUCB** | A specific contextual-bandit algorithm that assumes reward is *linear* in the features and adds an *uncertainty bonus* (UCB) to under-tried arms. | Phase 3's chosen algorithm. "Hybrid" = it mixes shared weights with per-arm weights. |
+| **UCB (Upper Confidence Bound)** | Pick the arm with the highest (estimated reward + uncertainty bonus). The bonus shrinks as an arm is tried more. | This is *how* the bandit explores: rarely-seen arms get a benefit-of-the-doubt boost. |
+| **Multi-hot vector** | A fixed-width 0/1 vector marking which tags are present, e.g. 6 tags → `[1,0,1,0,0,0]`. | Linear models can't read text lists, so tags are encoded this way. |
+| **Softmax / Boltzmann sampling** | Turn scores into probabilities (`p_i ∝ exp(score_i / T)`) and draw randomly. Temperature `T` controls randomness. | Phase 2 uses this so logging is *stochastic*, which off-policy evaluation requires. |
+| **Gumbel-top trick** | A trick to draw one softmax sample by adding random "Gumbel" noise to each score and taking the max. | Lets us sample a slot while still returning a clean ordering of the feasible set. |
+| **Propensity** | The probability the logging policy assigned to the action it actually took. | Recorded per decision so later off-policy estimators can reweight by it. |
+| **Off-policy / counterfactual evaluation** | Estimating how a *new* policy would have performed, using logs collected under the *old* policy. | Lets us score a model on history with zero user exposure. |
+| **IPS (Inverse-Propensity-Scoring)** | An off-policy estimator that reweights each logged outcome by 1 / (its logged propensity). | Our core replay estimator. It *requires* a stochastic logging policy with known propensities. |
+| **SNIPS** | Self-Normalized IPS: IPS divided by the sum of the weights. Lower variance than raw IPS. | A more stable variant used in the replay gate. |
+| **Matrix factorization** | Approximate a big (users × items) matrix as the product of two small ones, revealing latent factors. | Phase 4 uses it to discover user *archetypes* from the preference matrices. |
+| **Archetype** | A cluster of users with a similar behavioral signature (e.g. "Night Owl"). | Phase 4 seeds a brand-new user from the nearest archetype to beat the cold-start. |
+| **Cold start** | The problem of giving good suggestions to a user with no history yet. | Phase 4's whole job: borrow from the population instead of starting from zero. |
+| **MAR (Manual Adjustment Rate)** | Our north-star metric: fraction of suggested placements the user changes. Lower = better. | Every phase must beat the previous one's MAR. Defined precisely in [Evaluation](#evaluation). |
+
+---
+
+## How Phase 1 EDF works (the starting point)
+
+Zenflow uses **Earliest-Deadline First (EDF)** to schedule tasks: it prioritizes the tasks
+whose deadlines are soonest.
 
 The user provides:
 
 - Task name
-- Estimated duration (must be multiple of 15 mins)
+- Estimated duration (must be a multiple of 15 minutes)
 - Earliest date to perform the task
 - Deadline (latest date by which the task needs to be completed)
 - Tags (optional)
@@ -13,27 +57,30 @@ The user provides:
 
 Underlying attributes:
 
-- Work hours (default is 9-17 converted to minutes as 540-1020)
+- Work hours (default is 9–17, stored in minutes as 540–1020)
 
-Then, depending on the view, the slots will be determined. For example, in the week view:
+The view determines which slots are available. For example, in the week view:
 
-- The options are 15-minute slots
-- The start `s` is 9am Monday, end `e` is 5pm Friday
-- Task earliest start is `ts = max(s, ts)` , end is `te = min(deadline, e)`
-- Task deadline needs to satisfy `s <= deadline <= e`
+- The options are 15-minute slots.
+- The start `s` is 9am Monday, end `e` is 5pm Friday.
+- Task earliest start is `ts = max(s, ts)`; end is `te = min(deadline, e)`.
+- The task deadline must satisfy `s <= deadline <= e`.
 
-EDF will:
+EDF then:
 
-- Schedule early for tasks with tight deadlines (in order), which is O(1)
+- Schedules tasks with tight deadlines early, in deadline order — an O(1) drop into the first
+  free slot.
 
 # Intelligence Layer
 
-The schedule generated by EDF is basic and not personalized. The user manually adjusts the
-schedule; we track every manual edit, which is used to personalize future schedules.
+The schedule EDF produces is basic and not personalized. Today the user manually adjusts it,
+and we log every manual edit. Those edits are the raw material for personalizing future
+schedules.
 
 ## Architecture invariant: hard constraint vs. soft re-ranker
 
-This split holds across **every** phase below and is the spine of the whole roadmap:
+This split holds across **every** phase below and is the spine of the whole roadmap. The
+intuition: *deadlines are non-negotiable; preferences only break ties.*
 
 - **EDF is a hard constraint, never learned.** EDF produces the set of *feasible* slots for a
   task — those that respect the deadline, work hours, and the 15-minute grid
@@ -44,26 +91,28 @@ This split holds across **every** phase below and is the spine of the whole road
   another; it can never return an infeasible one. If the feasible set is a single slot, the
   re-ranker is a no-op.
 
-Concretely: `candidates = edf.feasibleSlots(task, now)` → `ranked = reRanker.score(task,
-candidates)` → pick `ranked[0]`. Phase 1 ships an identity re-ranker; later phases swap in
-smarter ones behind the same interface.
+Concretely, the pipeline is: `candidates = edf.feasibleSlots(task, now)` → `ranked =
+reRanker.score(task, candidates)` → pick `ranked[0]`. Phase 1 ships an *identity* re-ranker
+(returns the feasible set unchanged); later phases swap in smarter ones behind the same
+interface.
 
 ## Persistent layers (on from day one, never removed)
 
 Two threads run through all phases and must not be dropped when a later phase lands:
 
 1. **Duration correction (preprocessing).** From Phase 2 on, the estimated duration is
-   bias-corrected *before* it reaches EDF. This is orthogonal to slot selection and stays a
-   permanent preprocessing step feeding **every** later scheduler. Corrected durations are
-   always rounded **up to the next 15-minute multiple** to preserve the grid invariant.
+   bias-corrected *before* it reaches EDF. This is orthogonal to slot selection (it fixes
+   *how long*, not *where*) and stays a permanent preprocessing step feeding **every** later
+   scheduler. Corrected durations are always rounded **up to the next 15-minute multiple** to
+   preserve the grid invariant.
 2. **Telemetry (the `task_events` audit log).** Recorded from Phase 1. This is what makes
    personalization *and its evaluation* possible — see [Evaluation](#evaluation).
 
 ## Signals tracked (from day one)
 
 We log both **negative and positive** placement signals plus **outcome** — not just edits.
-An untouched slot and a deliberately-kept slot must be distinguishable, otherwise the system
-can only learn what to avoid, never what to prefer.
+The intuition: an *untouched* slot and a *deliberately-kept* slot must be distinguishable.
+If we only logged edits, the system could learn what to avoid but never what to prefer.
 
 | Signal | Event | Interpretation |
 |--------|-------|----------------|
@@ -73,22 +122,25 @@ can only learn what to avoid, never what to prefer.
 | Outcome | task marked `completed` / `rescheduled` / `abandoned` in its slot | did the placement actually *work* — the real reward proxy |
 
 Placement (move/keep) is a noisy proxy for preference; **completion-in-slot is the ground
-truth** a productivity scheduler ultimately optimizes. Both are logged so later phases can
-weight them.
+truth** a productivity scheduler ultimately optimizes (a user can keep a slot and then fail to
+do the task there). Both are logged so later phases can weight them.
 
 # Evolution
+
+The roadmap has four phases. Each adds intelligence *on top of* EDF without ever weakening the
+hard-constraint / soft-re-ranker split above. Phase 1 is shipped; Phases 2–4 are planned.
 
 ---
 
 ## Phase 1: The Deterministic MVP (Core Utility)
 
 **Goal:** Build the foundational CRUD application and the core EDF scheduling engine with
-elegant multi-tag structural rendering. No intelligence yet—just strict, deterministic logic,
+elegant multi-tag structural rendering. No intelligence yet — just strict, deterministic logic,
 and complete telemetry.
 
 ### Technical Focus
 
-- **Frontend/Backend:** Setup the NestJS API and React PWA. Build the main calendar UI
+- **Frontend/Backend:** Set up the NestJS API and React PWA. Build the main calendar UI
   (day/week/month views).
 - **Multi-Tag UI Layout:** To preserve hyper-constrained grid space on the timeline canvas,
   the UI implements an intelligent overflow pattern. Cards render the highest-priority tag
@@ -96,8 +148,8 @@ and complete telemetry.
   full tag drawer is exposed on card click or hover.
 - **The Engine:** Implement a pure Earliest-Deadline First (EDF) algorithm. When a user adds
   a task, the system sorts it strictly by deadline and drops it into the first available
-  15-minute slot within their specified working hours (e.g., $9 \rightarrow 17$). The engine
-  exposes `feasibleSlots(task, now)` so later phases can re-rank its output.
+  15-minute slot within their working hours (e.g., $9 \rightarrow 17$). The engine exposes
+  `feasibleSlots(task, now)` so later phases can re-rank its output.
 - **Period-bounded placement (no-deadline tasks).** A flexible task with **no user deadline**
   is scheduled within the working hours of the calendar period (day / ISO-week / month) it was
   created in. The active `view` is persisted on the task; its create-day anchor and the end of
@@ -141,15 +193,19 @@ and complete telemetry.
 ## Phase 2: Heuristic & Rule-Based Adaptation
 
 **Goal:** Introduce immediate personalization using hardcoded statistical rules and rolling
-averages to make the engine feel inherently "smart" with zero machine learning overhead. All
+averages to make the engine feel inherently "smart" with zero machine-learning overhead. All
 of this re-ranks within EDF's feasible set; none of it overrides a deadline.
 
 ### Technical Focus
 
-- **Multi-Tag Duration Correction (Bias Blending):** A daily background cron job in NestJS
-  calculates a user's historical "estimation bias" *per tag* (actual ÷ estimated, a rolling
-  average). Because a task can carry multiple tags, the engine resolves conflicting
-  multipliers with a **sample-weighted blend**, not a raw max:
+- **Multi-Tag Duration Correction (Bias Blending).**
+  *Problem it solves:* users systematically mis-estimate how long tasks take, and a task can
+  carry several tags with different biases. *Intuition:* learn a per-tag multiplier from
+  history, then blend the multipliers, trusting the better-evidenced tag more.
+
+  A daily background cron job in NestJS computes each user's historical "estimation bias"
+  *per tag* (actual ÷ estimated, a rolling average). Because a task can carry multiple tags,
+  the engine resolves conflicting multipliers with a **sample-weighted blend**, not a raw max:
 
     $\text{bias} = \dfrac{\sum_{t \in \text{tags}} n_t \cdot b_t}{\sum_{t \in \text{tags}} n_t}$
 
@@ -161,25 +217,66 @@ of this re-ranks within EDF's feasible set; none of it overrides a deadline.
     because applied to every multi-tagged task it systematically inflates the schedule and
     wastes reserved time.)
 
-- **Signed Preference Matrix:** Build one **7×96 matrix per user** (7 days × ninety-six
-  15-minute blocks — aligned to the slot grid, *not* downsampled to 30 minutes). Each cell
-  accumulates a **signed** score: dragging a task *out* of a block decrements it; keeping or
-  dragging *into* a block increments it. EDF's feasible slots are then re-ranked by descending
-  cell score, routing tasks toward liked blocks and away from disliked ones. Empty cells sit
-  at 0 (neutral) — distinct from a disliked cell.
+- **Signed Preference Matrix.**
+  *Problem it solves:* we want to route tasks toward the time blocks a user actually likes.
+  *Intuition:* keep a running tally per (weekday, time-block) — reward blocks the user keeps
+  tasks in, penalize ones they drag tasks out of.
+
+  Build one **7×96 matrix per user** (7 days × ninety-six 15-minute blocks — aligned to the
+  slot grid, *not* downsampled to 30 minutes). Each cell accumulates a **signed** score:
+  dragging a task *out* of a block decrements it; keeping or dragging *into* a block increments
+  it. EDF's feasible slots are then re-ranked by cell score, routing tasks toward liked blocks
+  and away from disliked ones. Empty cells sit at 0 (neutral) — distinct from a disliked cell
+  (negative).
+
+- **Softmax exploration + propensity logging (the logging policy).**
+  *Problem it solves:* if we always picked the single top-scored slot, we'd only ever collect
+  outcome data for that one slot, biasing what later phases can learn and breaking off-policy
+  evaluation. *Intuition:* introduce a small, *known* amount of randomness into which slot we
+  suggest, and record the probability of each choice.
+
+  So the re-ranker does **not** pick the single highest-scored feasible slot by a deterministic
+  argmax. A pure argmax (a) **biases the telemetry** later phases learn from — only one slot per
+  context ever gets outcome data — and (b) makes **off-policy Inverse-Propensity-Scoring (IPS)**
+  degenerate, because IPS needs a *stochastic* logging policy whose action probabilities are
+  known. Instead the re-ranker is a **softmax / Boltzmann** sampler over the feasible cell
+  scores at a tunable temperature `T`: `p_i ∝ exp(cellScore_i / T)`. It is implemented with the
+  **Gumbel-top trick** — `logit_i = cellScore_i / T + gumbel`, take the argmax — so the chosen
+  slot is a genuine softmax draw while the returned ordering is still a pure permutation of EDF's
+  feasible set (deadline feasibility is never traded away). `T → 0` recovers the greedy argmax;
+  larger `T` explores more. For each auto-placement we **persist the chosen slot's propensity**
+  `π(chosen | feasible set) = exp(score_chosen/T) / Σ_j exp(score_j/T)` into the event snapshot,
+  so the offline IPS/SNIPS replay (see [Evaluation](#evaluation)) can divide by the *true* logged
+  probability rather than a hand-rolled floor. This is the prerequisite the roadmap requires
+  before Phase 3's bandit can be evaluated honestly on historical logs.
+
+  **Cold-start safety + stability.** When every feasible slot scores equally (an all-zero /
+  neutral matrix — the common new-user case) there is no preference to act on, so the
+  re-ranker returns EDF's earliest-fit order **unchanged** rather than randomly shuffling a
+  fresh user's tasks; its propensity is uniform `1/n`. The Gumbel seed is derived from the
+  **task id only** (never from `now`), so re-packing the same task on an unrelated cascade
+  yields the same draw — no slot churn (this protects the *Time-to-stable* metric). Randomness
+  enters the otherwise-pure core **only via an injected seed**, so the re-ranker stays a
+  reproducible function of `(inputs + seed)` (see CLAUDE.md invariant #2).
 
 - **Why no per-tag matrices yet:** Tag-conditioned placement multiplies the data requirement
   far past the "~1–2 weeks of single-user history" this phase targets, so the matrix stays
-  **global per user** here. Tag-conditioned placement preferences are deferred to Phase 3,
-  where they enter naturally as bandit *features* rather than as a sparse stack of matrices.
+  **global per user** here (one matrix capturing *when* the user works, ignoring *what*).
+  Tag-conditioned placement preferences are deferred to Phase 3, where they enter naturally as
+  bandit *features* rather than as a sparse stack of matrices.
 
 ---
 
 ## Phase 3: Contextual Bandits
 
 **Goal:** Transition from rigid heuristic rules to an algorithmic framework that balances
-exploring new schedule distributions with exploiting known user habits in real-time — still
+*exploring* new schedule distributions with *exploiting* known user habits in real time — still
 choosing only among EDF-feasible slots.
+
+*Why a bandit, and why now:* Phase 2's single global matrix can't say "this user likes
+`#backend` in the morning but `#review` in the afternoon" — it knows *when*, not *when-for-what*.
+A contextual bandit reads tags **and** time together as features, so it can learn those
+interactions; it also keeps exploring instead of locking onto a possibly-stale habit.
 
 ### Technical Focus
 
@@ -203,8 +300,8 @@ choosing only among EDF-feasible slots.
 
 - **Reward:** A blend of the day-one signals, not a single bit —
   $r = w_1 \cdot \text{accepted} + w_2 \cdot \text{completed in slot} - w_3 \cdot \text{moved away}$.
-  Completion is weighted highest; placement acceptance is the fast, dense signal. Updates are
-  applied online as events arrive.
+  Completion is weighted highest (it's the real outcome); placement acceptance is the fast,
+  dense signal that arrives immediately. Updates are applied online as events arrive.
 
 - **The Loop:**
     1. EDF returns the feasible arms; NestJS flattens the multi-tag + arm context per arm and
@@ -221,6 +318,10 @@ choosing only among EDF-feasible slots.
 
 **Goal:** Eliminate the initial data-void for new users by leveraging aggregate behavioral
 signatures across the entire user base.
+
+*The problem:* a brand-new user has no history, so Phases 2–3 have nothing to personalize from.
+*Intuition:* people cluster into recognizable types ("Night Owl"); find those clusters across
+all users, then seed a newcomer from the cluster their onboarding role points to.
 
 ### Technical Focus
 
@@ -282,15 +383,22 @@ edit-weighted variant offline if needed.
 
 ### Offline evaluation (do this *before* any model goes live)
 
-Because every event logs the **suggested slot, the chosen slot, the tags, the duration, and
-the outcome**, a new model can be scored on historical data with no user exposure:
+*Why offline first:* it lets us reject a bad model using only history, with zero risk to real
+users. Because every event logs the **suggested slot, the chosen slot, the tags, the duration,
+and the outcome**, a new model can be scored on historical data with no user exposure:
 
 - **Replay / counterfactual estimation.** For each logged decision, run the candidate model
   on the same context and compare its choice to what the user actually did. Use
   **Inverse-Propensity-Scoring (IPS)** off-policy evaluation: a model that would have suggested
   the slot the user *kept* scores higher; one that suggests slots the user *moved away from*
   scores lower. This estimates the new policy's expected reward from old logs. Phase 3's
-  bandit must clear the Phase 2 heuristic on replay before it's allowed online.
+  bandit must clear the Phase 2 heuristic on replay before it's allowed online. **IPS requires
+  the logging policy to be stochastic with known action probabilities** — which is exactly why
+  Phase 2's placement re-ranker is a softmax sampler that **records the chosen slot's
+  propensity** on each auto-placement event (see §Phase 2 §Signed Preference Matrix). The
+  importance weight is `w = π_candidate(chosen | x) / π_logging(chosen | x)`; both propensities
+  are each policy's closed-form softmax first-choice marginal (uniform `1/n` for the identity
+  baseline), with a small floor on the denominator to keep the estimator well-defined.
 - **Duration backtest (Phase 2).** Recompute the bias-corrected duration for every historical
   task and measure the reduction in \|actual − corrected\| versus \|actual − original
   estimate\|. Ship the correction only if the error drops.

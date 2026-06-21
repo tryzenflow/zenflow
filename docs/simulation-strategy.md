@@ -1,10 +1,45 @@
 # Zenflow Simulation Strategy
 
-> Synthetic-data strategy for evaluating the personalization roadmap
-> (`docs/heuristic.md` Phases 2–4) when real data from a 3-person team is
-> insufficient. This document defines **what to simulate** — personas, tasks, and
-> behavior — over a **~1-year** time series, and how that data validates each
+> **What this doc is:** the plan for generating *synthetic* user data to test Zenflow's
+> personalization roadmap ([`docs/heuristic.md`](heuristic.md) Phases 2–4) when the real
+> 3-person pilot is too small to learn from. It defines **what to simulate** — personas,
+> tasks, and behavior — over a **~1-year** time series, and how that data validates each
 > phase without falling into the circularity trap.
+> **Who should read it:** the ML engineer building or evaluating the learners. Read
+> [`docs/heuristic.md`](heuristic.md) first — this doc assumes its phases, metrics (MAR), and
+> terms (EDF, re-ranker, preference matrix, LinUCB, IPS) are already understood. The
+> step-by-step promotion procedure lives in [`docs/phase-2-evaluation-steps.md`](phase-2-evaluation-steps.md).
+
+---
+
+## 0. Concepts & terminology (this doc's own jargon)
+
+[`docs/heuristic.md`](heuristic.md) defines the shared ML terms (EDF, re-ranker, preference
+matrix, bandit, LinUCB, IPS/SNIPS, MAR). The terms below are specific to *this* simulation
+doc. Each is defined before its first use.
+
+| Term | Plain definition | Why it's here |
+|------|------------------|---------------|
+| **Generator** | The synthetic data-producing process: it invents users, their hidden tastes, their tasks, and how they react. | The "world" the learners live in. We control it, so we know the ground truth. |
+| **Learner** | Any model a phase trains (the Phase-2 heuristic, the Phase-3 bandit, the Phase-4 factorizer). | It only sees the telemetry log, never the generator's hidden parameters. |
+| **Generator ⊋ learner (the cardinal rule)** | The generator must be *strictly richer* than any learner — it embeds drivers no learner can observe. | Stops the result being a tautology ("I recovered exactly what I injected"). |
+| **Archetype** | A *cluster* of users defined by distributions over hidden traits (e.g. "Night Owl"). The ground-truth label Phase 4 must recover. | The population is built from 5 of these. |
+| **Persona** | One *individual* user — a single random draw from an archetype, plus personal jitter. | Members of an archetype share traits but are never identical; that variance is what makes the problem non-trivial. |
+| **Latent / hidden field** | A persona's true, unobservable preferences (e.g. `P_global`, `P_tag`). | Learners must *recover* these from behavior alone; we grade them against the truth. |
+| **`P_global(day, block)`** | A persona's smooth preference for each (weekday, time-block), ignoring tags. | The ground truth the Phase-2 preference matrix approximates. |
+| **`P_tag(tag, block)`** | Per-tag deviations from `P_global` — e.g. likes `#backend` mornings specifically. | The interaction only Phase 3 can exploit; the reason Phase 3 can beat Phase 2. |
+| **Drift** | Slow change in a persona's preferences/skill across the year (non-stationarity). | Tests whether a learner keeps up as the user changes. |
+| **Noise floor `ε`** | Probability a persona acts randomly / out of character on any decision. | No real user is perfectly consistent; this sets a *floor* MAR no learner can beat. |
+| **Feasibility wall** | A persona can only react within EDF's feasible set — it can't move to a slot EDF never offered. | Forces some "legitimate" manual moves that no learner can remove. |
+| **Duration bias `b_tag`** | Per-tag multiplier (actual ÷ estimated) the persona's true durations follow. | The ground truth Phase 2's duration corrector must learn. |
+| **Edit propensity `π_edit`** | Probability the persona acts on a mismatch (moves/resizes) rather than letting it ride. | Controls how dense the edit signal is. |
+| **Fatigue / sequence effect** | Reaction to a task depends on recent load, not just the task itself. | A hidden driver that makes reschedules cluster realistically. |
+| **Procrastination `ρ`** | A weight pulling a persona's preferred slots toward the deadline. | Lets "deadline-crammer" behavior emerge. |
+| **Calibration** | Fitting the generator's *parameter ranges* to the real 3-person pilot. | Keeps the synthetic distributions honest rather than invented. |
+| **Anti-circularity / ablation** | Re-running with the mechanism a phase exploits *turned off* in the generator. | If the phase still "wins," the gain was fake. The strongest sanity check. |
+| **ARI / purity** | Two scores for how well recovered clusters match the true archetype labels. | Phase 4's cluster-recovery metrics (higher = better). |
+| **IPS / SNIPS** | Off-policy estimators (defined in [`heuristic.md`](heuristic.md)) that score a new policy from an old log. | The cheap offline pre-filter in §13. |
+| **Paired design** | Run *each persona twice* — once per policy — sharing the same seeds, differing only in the re-ranker. | Cancels persona/seed variance so small true effects are detectable. |
 
 ---
 
@@ -28,6 +63,10 @@ What this study legitimately proves:
 Online A/B testing on real users is explicitly **future work**.
 
 ### 1.1 The cardinal rule: generator ⊋ learner
+
+*Intuition:* if you test a model on data produced by that same model, it will of course
+"win" — you only proved your code can recover its own assumptions. To avoid that, the
+fake world must be harder than any single learner.
 
 The single thing that makes this defensible: **the data-generating process must be
 strictly richer than any model that learns from it.** If the simulator generates
@@ -160,7 +199,15 @@ The persona factory draws these once (seeded, reproducible) and seeds the `User`
 
 ## 5. Behavior model (the reaction policy)
 
-Two **independent** signal channels — never conflate them:
+*What this section does:* it defines exactly how a persona reacts to a suggestion. This is
+the engine that turns hidden preferences into the `MOVE`/`KEEP`/`RESIZE`/`COMPLETE` events the
+learners see.
+
+Two **independent** signal channels — never conflate them (placement vs. duration); a third
+subsection (§5.3) covers the eventual outcome.
+<!-- TODO: verify — original text said "Two independent signal channels" but three channels
+     are described below (5.1 placement, 5.2 duration, 5.3 outcome). -->
+
 
 ### 5.1 Placement channel → `MOVE` / `KEEP`
 
@@ -370,8 +417,14 @@ Reported as **sweeps**, which is where simulation earns its keep:
 
 ## 13. Verifying that phase N+1 beats phase N
 
+*The question this section answers:* "Is the new phase actually better, or did I just get
+lucky / fool myself?" The short version: there is a **cheap test** (replay on an old log) and
+an **expensive test** (re-run the whole simulation with the new policy live). A phase must pass
+the cheap one first, then the expensive one, then a battery of sanity checks. The full
+step-by-step procedure also lives in [`docs/phase-2-evaluation-steps.md`](phase-2-evaluation-steps.md).
+
 This is the operationalization of the heuristic's "Ships only if…" gate
-(`docs/heuristic.md` §Roadmap Summary). The core methodological point: there are
+([`docs/heuristic.md`](heuristic.md) §Roadmap Summary). The core methodological point: there are
 **two distinct evaluation regimes**, and a phase must pass the cheap one before the
 expensive one.
 
