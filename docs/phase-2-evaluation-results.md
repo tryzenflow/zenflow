@@ -1,11 +1,122 @@
 # Phase 2 Evaluation — Results (Steps 4–8 + Promotion Verdict)
 
-> Execution log + numbers for the Phase-2 promotion gate defined in
-> [phase-2-evaluation-steps.md](phase-2-evaluation-steps.md). Part A (the Step-8
-> CLI knobs, commit `f8c7c04`) is assumed; this doc is Part B (Steps 4–8 + the
-> verdict). **Every number below comes from a command actually executed against
-> the dedicated sim DB (`.env.sim` → `localhost:5432/zenflow_sim`, never
-> dev/prod);** the exact command lines are listed per step.
+> **What this doc is:** the execution log and final numbers for the Phase-2
+> "should we ship it?" gate. The gate itself (what each step tests and why) is
+> defined in [phase-2-evaluation-steps.md](phase-2-evaluation-steps.md); this doc
+> is the *results* half. Part A (the Step-8 CLI knobs, commit `f8c7c04`) is
+> assumed; this doc is Part B (Steps 4–8 + the verdict).
+>
+> **Who should read it:** anyone deciding whether Phase-2 personalization is good
+> enough to turn on by default, or anyone who wants to see how we measure a
+> scheduler change end to end. **Every number below comes from a command actually
+> executed against the dedicated sim DB** (`.env.sim` → `localhost:5432/zenflow_sim`,
+> never dev/prod); the exact command lines are listed per step.
+
+---
+
+## Concepts & terminology
+
+Read this once before the results. Every term used later is defined here, with the
+intuition (why we care) and, for metrics, how it is measured.
+
+**EDF (Earliest-Deadline-First).** The deterministic Phase-1 scheduler. Given a set
+of tasks, it places each one in the earliest feasible slot that respects its
+deadline. It has no personalization — it does not know that *this* user hates
+mornings. Phase-2 adds a personalization layer on top of EDF without replacing it.
+
+**Re-ranker.** A small hook that re-orders EDF's list of feasible slots before one
+is chosen. `identity` = the no-op re-ranker (= pure Phase-1 EDF, our baseline).
+`phase2` = the personalized re-ranker we are evaluating. We compare the two.
+
+**Persona / archetype.** The simulator invents synthetic users to test against.
+An **archetype** is a *type* of user (we have 5: `dev`, `night_owl`, `ops`, `pm`,
+`crammer`), each with its own hidden preferences. A **persona** is one concrete
+sampled user drawn from an archetype. `--personas-per-cohort=3` means 3 personas per
+archetype → 15 personas total. A **cohort** here is just "all personas of one
+archetype".
+
+**Ground truth / sidecar.** Each simulated persona has *hidden* true preferences
+(when they actually like to work, how badly they underestimate durations). These
+hidden parameters are dumped to a JSON file next to the run — the **sidecar**
+(`sim-output/ground-truth-seed1-days60.json`). "Ground truth" = the real answer we
+secretly know but never feed to the learner, so we can later check whether the
+learner recovered it.
+
+**Closed-loop A/B.** The decisive experiment. We run the whole simulation twice with
+the same random seed — once with `identity` (Arm A), once with `phase2` (Arm B) —
+and compare outcomes. "Closed-loop" means the simulated users *react* to the
+scheduler's suggestions (accept, move, resize), so the scheduler's choices actually
+change the data, exactly like production. This is stronger evidence than replaying a
+frozen log.
+
+**MAR (Move-Away Rate) — the north-star metric.** The fraction of placement
+decisions where the user *rejected* the suggested slot and moved the task somewhere
+else. **Lower is better** (fewer overrides = better suggestions). Measured from the
+`TaskEvent` log as move-type events over total placements. Because lower is better, a
+Phase-2 "win" looks like **MAR going down** (Arm B < Arm A).
+
+**Completion-in-slot.** The fraction of tasks the user actually completed in the
+slot the scheduler suggested. **Higher is better.** A complementary positive signal
+to MAR.
+
+**Reward (for the offline replay).** A per-decision score: `1.0` if the user
+accepted the suggestion unchanged (a KEEP), `0.0` if they moved it, `0.5` if they
+only resized it. Used by the offline replay below.
+
+**Offline replay / IPS / SNIPS.** "Offline" = estimate how a *new* policy would have
+done using a *log collected under the old policy*, without running a fresh
+simulation. **IPS (Inverse Propensity Scoring)** and **SNIPS (Self-Normalized IPS)**
+are the standard estimators for this; SNIPS is the variance-reduced, normalized
+version. Intuition: re-weight logged rewards by how likely the new policy was to make
+the same choice. Caveat used heavily below: this estimate is only meaningful if the
+log records the *full set of candidate slots* per decision — if it only recorded 2
+candidates, the estimator cannot tell two re-rankers apart.
+
+**Duration backtest.** A check of the duration **corrector** — the Phase-2 component
+that nudges a task's reserved time toward the user's true duration (people
+systematically under/over-estimate). It asks: is the *corrected* duration closer to
+the true duration than the raw *estimate* was? Measured as the error
+`|true − corrected|` vs `|true − est|`. "tag bias" below = the per-tag multiplier the
+corrector learns (e.g. tasks tagged `dev` actually take 1.3× the estimate).
+
+**blend vs. max-bias.** Two ways to combine per-tag corrections when a task has
+several tags. **max** takes the single largest multiplier (most conservative, reserves
+the most time). **blend** combines them more gently. We ablate the two below; `blend`
+is the default.
+
+**pGlobal.** The persona's hidden *temporal* preference field — a 7-day × 96-slot map
+of "how much do I like working at this time". Phase-2 tries to learn it from behavior.
+"Recovery" below measures how close the learner got.
+
+**Recovery.** How well an arm reconstructed the hidden ground-truth field. Measured
+with **cosine similarity** (higher = better aligned), **distance** (lower = closer),
+and **MAE** (mean absolute error, lower = better) against the sidecar. Recovery
+improving alongside a MAR drop is reassuring: it means the win comes from learning the
+*right* preferences, not from luck.
+
+**Paired Wilcoxon / Cliff's δ / 95% CI.** The statistics for "is the MAR drop real
+or noise?". The unit is a persona, paired across arms (same persona under A and B).
+The **paired Wilcoxon signed-rank test** is a non-parametric paired test; its
+**p-value** is the chance of seeing this difference if there were truly no effect
+(smaller = more convincing; we want p < 0.05). **Cliff's δ** is a non-parametric
+effect *size* (how big the effect is, not just whether it exists); here positive δ
+means Phase-2 wins, and ~0.3 is "small–medium". The **95% CI** (confidence interval)
+is the plausible range for the true MAR difference; a CI that **excludes 0** means the
+effect is unlikely to be zero.
+
+**Seed sweep.** Re-running the whole experiment with different random seeds (each seed
+= a freshly sampled population). If the direction of the effect is consistent across
+seeds, the result is robust and not an artifact of one lucky population.
+
+**Schedule inflation.** Total reserved minutes across all placed tasks. Watched as a
+guardrail: if the duration corrector reserves *true* (longer) durations, total
+reserved time rises — that can be correct behavior, but we flag it.
+
+**Drift.** Slow change in a persona's preferences over time. A sensitivity knob
+(`--drift-mult`) is meant to stress-test the learner against drift — but see Step 8:
+drift is currently dormant in the generator, so doubling it is a no-op.
+
+---
 
 ## Frozen substrate (Step 1)
 
@@ -82,6 +193,11 @@ node dist/simulation/eval/significance.js --pairs=A1=B1,A2=B2,A3=B3
 
 ## Step 4 — Offline gate (frozen Arm-A identity log)
 
+**Question:** before spending hours on a full closed-loop run, can a cheap offline
+check on the frozen Phase-1 log rule Phase-2 out as hopeless? This gate is a
+**conservative pre-filter** — passing it is *necessary but not sufficient*; the real
+proof is the closed-loop A/B.
+
 `sim:eval` over the frozen Phase-1 log (15 personas, 2060 CREATE events).
 
 - **Baseline MAR = 0.829** (mean) / 0.833 (median) — matches the doc's ≈0.82.
@@ -113,7 +229,13 @@ and the placement re-rank both take effect live.
 
 ## Step 5 — Closed-loop A/B (paired, seed 1, days 60)
 
+**Question:** when simulated users actually react to the suggestions, does Phase-2
+lower the override rate (MAR) versus pure EDF? **A win = MAR drops (Δ(A−B) > 0)** and
+completion-in-slot does not fall.
+
 Arm A = identity, Arm B = phase2 (blend), isolated DBs (reset between arms).
+(`Δ(A−B)` is positive when Arm B's MAR is lower, i.e. Phase-2 wins. `Comp` =
+completion-in-slot, higher is better.)
 
 | Cohort | n | MAR_A | MAR_B | Δ(A−B) | Comp_A | Comp_B |
 |--------|---|-------|-------|--------|--------|--------|
@@ -136,11 +258,16 @@ Event totals (Arm B vs A): MOVE **2226 vs 2349** (fewer overrides), KEEP **510 v
 
 ### Significance (paired Wilcoxon, unit = persona)
 
+**Question:** is the MAR drop statistically real, or could it be noise? We pair each
+persona's MAR across arms and run the paired Wilcoxon test; we want **p < 0.05**, a
+**95% CI that excludes 0**, and a **positive Cliff's δ** (Phase-2 wins).
+
 Seed 1 (n=15): MAR_A=0.8294, MAR_B=0.7817, **Δ=0.0477**, 95% CI **[0.0222,
 0.0701]** (excludes 0), **Wilcoxon p=0.0059**, **Cliff's δ=0.307** (small–medium,
 positive = Phase-2 wins). All 15 per-persona deltas non-zero.
 
-Seed sweep (outer robustness loop, 3 independently-seeded populations):
+Seed sweep (outer robustness loop, 3 independently-seeded populations) — does the
+effect survive on freshly sampled populations?
 
 | Seed | MAR_A | MAR_B | Δ | 95% CI | Wilcoxon p | Cliff's δ |
 |------|-------|-------|------|--------|-----------|-----------|
@@ -153,13 +280,19 @@ Seed sweep (outer robustness loop, 3 independently-seeded populations):
 cohort** — with a positive Cliff's δ throughout (small–medium). But at the strict
 p<0.05 bar only seed 1 clears firmly (seed 3 borderline 0.052; seed 2 0.106), so
 `fractionSignificantWins`=33%. The honest read: with only **3 personas/cohort
-(n=15) the per-population Wilcoxon is underpowered**; all three CIs are ≥≈0 and the
+(n=15) the per-population Wilcoxon is underpowered** (too few samples to reach
+significance even when the effect is real); all three CIs are ≥≈0 and the
 effect direction never flips, so a fuller population (the full 50, or a larger
 `--personas-per-cohort`) would very likely push every seed under 0.05. The effect
 is **real and robust in sign and magnitude**, modest in per-population
 significance at this sample size.
 
 ### Recovery (vs ground-truth sidecar)
+
+**Question:** did Phase-2's MAR win actually come from learning the persona's hidden
+temporal field (`pGlobal`), or from luck? We compare each arm's learned field to the
+sidecar ground truth. Better recovery (higher cosine, lower distance) alongside a MAR
+drop means the win is "earned".
 
 | Arm | placement cosine ↑ | placement dist ↓ | dur-bias MAE ↓ |
 |-----|--------------------|------------------|----------------|
@@ -177,6 +310,9 @@ directly by the Step-4 mean backtest and the Step-7 reserved-time check).
 
 ## Step 7 — Guardrails
 
+**Question:** does Phase-2 break anything else while improving MAR? Each guardrail
+must HOLD.
+
 - **Completion-in-slot not down:** overall 0.153→0.185 (**up**); up in 4/5
   cohorts, ~flat in `ops` (0.085→0.078). **HOLDS.**
 - **No cohort regresses (MAR):** every cohort Δ ≥ 0 (crammer +0.041, dev +0.072,
@@ -193,6 +329,11 @@ directly by the Step-4 mean backtest and the Step-7 reserved-time check).
 ## Step 8 — Ablation + sensitivity
 
 ### Blend vs. max-bias (duration ablation; `ops` is the discriminator), seed 1
+
+**Question:** for multi-tag tasks, should the corrector take the single largest tag
+multiplier (`max`) or combine them (`blend`)? We want whichever keeps MAR low without
+over-reserving time. `ops` is the cohort that best separates the two (it has
+high-variance tags).
 
 | Arm | overall MAR | `ops` MAR | total reserved | placed | reserved/task | `ops` mean dur |
 |-----|-------------|-----------|----------------|--------|---------------|----------------|
@@ -213,6 +354,9 @@ schedule-inflation the closed loop exposes).
 
 ### Sample-complexity sweep (MAR vs. history length, days 14 / 30 / 60), seed 1
 
+**Question:** how much user history does Phase-2 need before it helps? We re-run with
+14, 30, and 60 days of history and watch the win grow.
+
 | history | MAR_A | MAR_B | Δ(A−B) |
 |---------|-------|-------|--------|
 | 14 days | 0.7882 | 0.7780 | +0.0102 |
@@ -227,6 +371,10 @@ improving with a month-plus of history. (Per the doc, the sweep used 14/30/60,
 **not** 365.)
 
 ### Sensitivity (noise floor ε ×2.0, drift ×2.0), seed 1, paired
+
+**Question:** does the win survive harsher conditions — twice the random
+out-of-character noise, and twice the preference drift? A robust win should degrade
+gracefully, not collapse.
 
 | condition | MAR_A | MAR_B | Δ(A−B) | vs baseline Δ=+0.0477 |
 |-----------|-------|-------|--------|------------------------|

@@ -1,11 +1,17 @@
 # Seed / Simulator Implementation
 
-> Concrete code changes to produce the synthetic telemetry described in
-> [`docs/simulation-strategy.md`](./simulation-strategy.md). The simulator is a
-> **closed-loop driver**: per simulated day it generates tasks, reacts to the EDF
-> suggestions, and settles outcomes — producing the exact `TaskEvent` /
-> `suggestedStartTime` / signed `preferenceMatrix` telemetry the production app
-> would. Read the strategy doc first for the *what*; this is the *how*.
+> **What this doc is:** the *how* — the concrete code changes that build the
+> simulator which produces synthetic telemetry for the strategy described in
+> [`docs/simulation-strategy.md`](./simulation-strategy.md). Read the strategy doc
+> first for the *what*; this is the implementation guide.
+>
+> **Who should read it:** anyone building, debugging, or extending the simulator,
+> or trying to understand where the Phase-2 evaluation data comes from.
+>
+> The simulator is a **closed-loop driver**: per simulated day it generates tasks,
+> reacts to the EDF suggestions, and settles outcomes — producing the exact
+> `TaskEvent` / `suggestedStartTime` / signed `preferenceMatrix` telemetry the
+> production app would.
 >
 > **Two persistence modes share one decision loop (`runner.ts`, via an `Actuator`
 > seam):**
@@ -20,6 +26,73 @@
 >
 > Both share the pure scheduler core + the extracted telemetry builders, so they
 > emit the same shape of telemetry — see §7 for what was extracted and why.
+
+---
+
+## Concepts & terminology
+
+New to this codebase? Read this once. Terms are defined before their first use below.
+
+**Telemetry / `TaskEvent`.** The behavioral log the app records as users interact
+with their schedule: a row per `CREATE` / `MOVE` / `RESIZE` / `KEEP` / `COMPLETE` /
+`ABANDON`. Phase-2 and beyond *learn* from this log, so the simulator's whole job is
+to manufacture realistic telemetry we can train and evaluate on.
+
+**Closed-loop driver.** A simulator where the synthetic user *reacts* to what the
+scheduler suggests (accept it, move it, resize it), and those reactions feed the next
+decision — exactly like a real user. Contrast with replaying a fixed log. Closed-loop
+data is what makes the Phase-2 A/B test trustworthy.
+
+**EDF.** The deterministic Earliest-Deadline-First scheduler (Phase 1). The simulator
+drives the *real* EDF code so the telemetry matches production exactly.
+
+**Persona vs. archetype.** An **archetype** is a *type* of user (`dev`, `night_owl`,
+`ops`, `pm`, `crammer`), defined as parameter **distributions**. A **persona** is one
+concrete user sampled from an archetype. Sampling from distributions (not fixed
+values) gives a varied population.
+
+**Latent / ground-truth fields (`pGlobal`, `pTag`, `tagBias`).** Each persona has
+*hidden* preferences the learner never sees directly:
+- `pGlobal` — a 672-cell (7 days × 96 slots) field of how much the persona likes each
+  time-of-week slot.
+- `pTag` — per-tag deviations from `pGlobal` (a Phase-3-only signal).
+- `tagBias` — how badly the persona under/over-estimates durations, per tag
+  (the duration corrector's target).
+
+These are "ground truth": we know them because we generated them, and we keep them
+*out* of any column a learner reads, so later "recovery" checks aren't circular.
+
+**`preferenceMatrix` (signed matrix).** A per-user accumulator the app updates from
+behavior: +1 toward a slot the user keeps/moves toward, −1 away from a slot they move
+away from. The Phase-2 signal builds up here. **It is read-modify-write**, which is
+why §1.2 matters.
+
+**Reaction model.** The probabilistic policy that decides what a persona *does* with a
+suggestion — keep it, move it, resize it, complete it, abandon it — bounded by the EDF
+feasible set so it can never pick an impossible slot.
+
+**Feasible set / `feasibleSlots`.** The list of slots EDF says a task could legally go
+in. The reaction model only ever chooses from this set, so the "feasibility wall"
+holds for free.
+
+**Actuator seam.** The one decision loop (`runner.ts`) is parameterized over an
+`Actuator` so the same logic can either call the real services (`ServiceActuator`,
+service mode) or mutate in-memory state and bulk-write (`BatchedActuator`, batched
+mode).
+
+**Virtual `now` / clock.** The simulator runs a ~1-year timeline in minutes, not real
+wall-clock time. A virtual `now` is threaded through every call so events are stamped
+across the simulated year (see §1.1) — essential for any time-bucketed metric.
+
+**Determinism / seeded PRNG.** All randomness comes from one seeded pseudo-random
+generator (no `Math.random()`), so the same `--seed` reproduces the same decisions
+byte-for-byte. Row UUIDs still differ run-to-run; the *decision stream* does not.
+
+**MAR / IPS / SNIPS (evaluation outputs).** MAR = Move-Away Rate, the north-star
+metric (fraction of suggestions the user overrode; lower is better). IPS/SNIPS are
+off-policy estimators used by the offline replay scaffold to estimate a new
+re-ranker's reward from a logged run. Full definitions live in the evaluation docs;
+here they are just the outputs `eval/` produces.
 
 ---
 
@@ -47,6 +120,11 @@ These are the **only** edits to existing files. Both default to today's behavior
 production is byte-for-byte unchanged.
 
 ### 1.1 Thread a virtual `now` (so the year-long timeline is faithful) — REQUIRED
+
+**Why:** the services default to real wall-clock time. In a 1-year simulation that
+would place every task relative to *today* and stamp every event at the seed-run
+instant, flattening the timeline. The fix lets the simulator say "pretend it is this
+simulated moment".
 
 Today `TasksService.create` calls `cascadeReschedule(user, tx)` with the default
 `now = new Date()`, and every `tx.taskEvent.create` omits `occurredAt` (DB default
@@ -85,6 +163,11 @@ don't use `now` for placement (they snap `requestedStart`), so there it's only f
 
 ### 1.2 Re-fetch the `User` before every matrix-mutating call — REQUIRED (correctness)
 
+**Why:** the signed `preferenceMatrix` is read-modify-write. Reuse a stale in-memory
+`User` across calls and each call overwrites the others' accumulated +1/−1 updates,
+silently corrupting the very Phase-2 signal we are trying to generate. This is the
+easiest bug to introduce, hence the explicit call-out.
+
 `SchedulerService.applyPreference` reads `user.preferenceMatrix` **from the passed object**
 and writes the result back (`scheduler.service.ts:627`). If the simulator caches one `User`
 object and reuses it across many `complete`/`reschedule` calls, each call starts from the
@@ -97,6 +180,12 @@ called out here.
 ---
 
 ## 2. New module: `backend/src/simulation/`
+
+This is the simulator itself. Reading order mirrors the data flow: seeded randomness
+(`rng`) and a virtual `clock` underpin everything; `personas/` defines and samples the
+synthetic users and their hidden fields; `behavior/` generates tasks and decides
+reactions; `runner.ts` is the closed loop that ties them to the real services; `eval/`
+reads the resulting log back out as metrics.
 
 ```
 backend/src/simulation/
