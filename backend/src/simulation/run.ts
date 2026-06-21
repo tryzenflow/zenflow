@@ -28,6 +28,9 @@ import { groundTruthPath, writeGroundTruthFile } from "./eval/ground-truth";
  *   `--noise-mult=<float>` (default `1.0`) — scales each persona's noise floor ε.
  *   `--drift-mult=<float>`  (default `1.0`) — scales drift magnitude (peak shift +
  *     bias decay per month).
+ *   `--temperature=<float>` (default = core `RERANKER_TEMPERATURE`) — softmax
+ *     exploration temperature for the `phase2` re-ranker. A tiny value (`1e-6`)
+ *     reproduces GREEDY argmax Phase-2 for the softmax-vs-greedy A/B.
  *
  * Determinism: every random draw flows from the seeded PRNG; the start date is
  * supplied here so the timeline is reproducible. Run against the dedicated sim
@@ -55,6 +58,7 @@ interface ParsedArgs {
   durationBias: DurationBiasMode;
   noiseMult: number;
   driftMult: number;
+  temperature?: number;
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -95,6 +99,16 @@ function parseArgs(argv: string[]): ParsedArgs {
   const durationBias: DurationBiasMode = durationBiasArg;
   const noiseMult = Number(get("noise-mult") ?? 1);
   const driftMult = Number(get("drift-mult") ?? 1);
+  const temperatureArg = get("temperature");
+  const temperature =
+    temperatureArg !== undefined ? Number(temperatureArg) : undefined;
+  if (
+    temperature !== undefined &&
+    (!Number.isFinite(temperature) || temperature <= 0)
+  )
+    throw new Error(
+      `--temperature must be a finite number > 0 (got '${temperatureArg}')`,
+    );
   if (!(noiseMult >= 0) || !Number.isFinite(noiseMult))
     throw new Error(
       `--noise-mult must be a finite number ≥ 0 (got '${noiseMult}')`,
@@ -116,6 +130,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     durationBias,
     noiseMult,
     driftMult,
+    temperature,
   };
 }
 

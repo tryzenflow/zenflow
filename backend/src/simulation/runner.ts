@@ -130,6 +130,13 @@ export interface RunOptions {
    * month). Defaults to `1.0` (no scaling).
    */
   driftMult?: number;
+  /**
+   * Softmax/Boltzmann temperature for the `phase2` placement re-ranker. Higher =
+   * more exploration; a tiny value (e.g. `1e-6`) recovers the GREEDY argmax
+   * Phase-2 (the pre-softmax behaviour). Defaults to the core
+   * {@link RERANKER_TEMPERATURE}. Only affects the `phase2` arm.
+   */
+  temperature?: number;
 }
 
 export interface RunResult {
@@ -682,6 +689,7 @@ async function runBatched(
       rec.tagNames,
       opts.reranker,
       opts.durationBias ?? "blend",
+      opts.temperature,
     );
     await drivePersona(
       new BatchedActuator(state),

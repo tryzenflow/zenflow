@@ -77,11 +77,11 @@ export interface ReplayEstimate {
  * Estimate a candidate re-ranker's reward from the logged decisions.
  *
  * For each decision we form the importance weight `w = π_candidate(chosen | x) /
- * π_incumbent(chosen | x)`. The incumbent (identity / Phase-1) is deterministic
- * earliest-fit, so its propensity for the chosen slot is modelled as a softened
- * indicator (a small floor avoids division by zero). The candidate's propensity
- * is the softmax mass it would assign the chosen slot. IPS = mean(w·r); SNIPS =
- * Σ(w·r) / Σw.
+ * π_incumbent(chosen | x)`, where BOTH propensities are the re-ranker's OWN
+ * first-choice marginal {@link SlotReRanker.propensity} — the closed-form softmax
+ * mass for the Phase-2 candidate, uniform `1/n` for the identity incumbent. A
+ * small floor on the incumbent denominator keeps the estimator well-defined.
+ * IPS = mean(w·r); SNIPS = Σ(w·r) / Σw.
  */
 export function estimateReplay(
   decisions: LoggedDecision[],
@@ -107,10 +107,10 @@ export function estimateReplay(
       conflict: false,
     } as EdfTask;
 
-    const pCand = propensity(candidate, task, d.context.candidates, d.chosen);
+    const pCand = candidate.propensity(task, d.context.candidates, d.chosen);
     const pIncum = Math.max(
       0.05,
-      propensity(incumbent, task, d.context.candidates, d.chosen),
+      incumbent.propensity(task, d.context.candidates, d.chosen),
     );
     const w = pCand / pIncum;
     ipsSum += w * d.reward;
@@ -124,27 +124,6 @@ export function estimateReplay(
     snips: wSum > 0 ? wrSum / wSum : 0,
     decisions: n,
   };
-}
-
-/**
- * Softmax-style propensity a re-ranker assigns to `chosen`: it ranks the
- * candidates and converts rank position to a probability (rank 0 = most mass).
- * A deterministic re-ranker thus concentrates mass on its top choice; the floor
- * keeps the estimator well-defined.
- */
-function propensity(
-  reranker: SlotReRanker,
-  task: EdfTask,
-  candidates: Date[],
-  chosen: Date,
-): number {
-  const ordered = reranker.score(task, candidates);
-  const idx = ordered.findIndex((c) => c.getTime() === chosen.getTime());
-  if (idx < 0) return 0.05;
-  // Geometric decay over rank: top choice ~0.5, then halving.
-  const masses = ordered.map((_, i) => Math.pow(0.5, i + 1));
-  const total = masses.reduce((a, b) => a + b, 0) || 1;
-  return masses[idx] / total;
 }
 
 /**
@@ -382,15 +361,21 @@ export function phase2ReplayCandidate(
   matrices: Map<string, { matrix: number[]; timezone: string }>,
   userOf: Map<string, string>,
 ): SlotReRanker {
+  const rerankerFor = (task: EdfTask): SlotReRanker => {
+    const userId = userOf.get(task.id);
+    const entry = userId ? matrices.get(userId) : undefined;
+    return entry
+      ? preferenceMatrixReRanker(entry.matrix, entry.timezone)
+      : identityReRanker;
+  };
   return {
     score(task: EdfTask, candidates: Date[]): Date[] {
-      const userId = userOf.get(task.id);
-      const entry = userId ? matrices.get(userId) : undefined;
-      if (!entry) return identityReRanker.score(task, candidates);
-      return preferenceMatrixReRanker(entry.matrix, entry.timezone).score(
-        task,
-        candidates,
-      );
+      return rerankerFor(task).score(task, candidates);
+    },
+    propensity(task: EdfTask, candidates: Date[], chosen: Date): number {
+      // The genuine softmax first-choice marginal the Phase-2 policy would have
+      // assigned the chosen slot — the propensity off-policy IPS/SNIPS needs.
+      return rerankerFor(task).propensity(task, candidates, chosen);
     },
   };
 }

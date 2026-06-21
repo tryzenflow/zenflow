@@ -23,6 +23,7 @@ import {
   preferenceMatrixReRanker,
   type SlotReRanker,
 } from "../../scheduler/reranker";
+import { hashSeed } from "../../scheduler/rng";
 import {
   blendBias,
   correctDuration,
@@ -137,6 +138,12 @@ export class PersonaState {
      * default keeps existing runs byte-for-byte unchanged.
      */
     private readonly durationBias: DurationBiasMode = "blend",
+    /**
+     * Softmax temperature for the `phase2` re-ranker. `undefined` → the core
+     * default ({@link RERANKER_TEMPERATURE}); a tiny value recovers GREEDY
+     * argmax Phase-2 (the pre-softmax behaviour, for the A/B comparison).
+     */
+    private readonly temperature?: number,
   ) {
     for (const name of cleanTagNames(preTags)) this.tagId(name);
   }
@@ -146,10 +153,18 @@ export class PersonaState {
    * {@link preferenceMatrixReRanker} from the matrix as it accumulates (so each
    * cascade sees the latest learned preference), exactly as the production
    * service would on a fresh `User` read; Phase-1 is the identity baseline.
+   *
+   * The base seed is the persona's userId hash (mirroring the production service
+   * `phase2ReRanker`), so the SOFTMAX exploration is independent per persona but
+   * stable per task — the re-ranker derives the per-task Gumbel seed from the
+   * task id, so re-packs don't churn the sampled slot.
    */
   private reRanker(): SlotReRanker {
     return this.reranker === "phase2"
-      ? preferenceMatrixReRanker(this.matrix, this.prefs.timezone)
+      ? preferenceMatrixReRanker(this.matrix, this.prefs.timezone, {
+          seed: hashSeed(this.userId),
+          temperature: this.temperature,
+        })
       : identityReRanker;
   }
 
@@ -251,6 +266,24 @@ export class PersonaState {
     );
   }
 
+  /**
+   * The Phase-2 softmax policy's first-choice propensity for `task`'s placed
+   * slot — `π(scheduledStartTime | feasible set)` — mirroring the production
+   * `SchedulerService.placementPropensity`. Returns `undefined` when the task is
+   * unplaced or the slot fell outside the recomputed feasible set, so the CREATE
+   * snapshot omits the field (matching production).
+   */
+  private placementPropensity(task: SimTask, now: Date): number | undefined {
+    if (!task.scheduledStartTime) return undefined;
+    const candidates = this.feasible(task.id, now);
+    if (candidates.length === 0) return undefined;
+    return this.reRanker().propensity(
+      toEdfTask(task, this.prefs),
+      candidates,
+      task.scheduledStartTime,
+    );
+  }
+
   readTask(taskId: string): DueTask | undefined {
     const t = this.byId(taskId);
     return t
@@ -336,10 +369,17 @@ export class PersonaState {
     // Deadline-aware insert + cascade (the create-time EDF re-pack).
     this.cascade(now);
 
+    // Record the stochastic logging policy's propensity for the auto-placed
+    // slot (Phase-2 arm only) so the simulated telemetry carries the same
+    // `propensity` field production writes — the value off-policy IPS divides by.
+    const propensity =
+      this.reranker === "phase2"
+        ? this.placementPropensity(task, now)
+        : undefined;
     this.events.push({
       eventType: "CREATE",
       oldSnapshot: null,
-      newSnapshot: buildSnapshot(task, task.tagNames),
+      newSnapshot: buildSnapshot(task, task.tagNames, undefined, propensity),
       rewardScore: EVENT_REWARD.CREATE,
       occurredAt: now,
       taskId: task.id,
