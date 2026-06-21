@@ -86,11 +86,21 @@ export interface SnapshotTask {
  * Build a {@link TaskSnapshot} for a TaskEvent: the slot + duration, the task's
  * tag NAMES at event time, and — on MOVE/RESIZE — the EDF-suggested slot the user
  * overrode (`suggestedStartTime`, omitted entirely for CREATE/KEEP/COMPLETE/etc.).
+ *
+ * `propensity` (optional) is the stochastic logging policy's first-choice
+ * probability for the slot it actually suggested — `π(chosen slot | feasible
+ * set)` under the Phase-2 softmax re-ranker. It is recorded on the
+ * auto-placement / CREATE event so off-policy IPS/SNIPS can divide by the TRUE
+ * propensity of the logged decision instead of a hand-rolled floor
+ * (docs/heuristic.md §Evaluation). Stored in the snapshot JSON
+ * (`Prisma.InputJsonValue`) — no Prisma migration, no shared-type change. Omitted
+ * entirely when undefined (Phase-1 / cold-start callers that don't compute it).
  */
 export function buildSnapshot(
   task: SnapshotTask,
   tags: string[] = [],
   suggestedStartTime?: Date | null,
+  propensity?: number,
 ): Prisma.InputJsonValue {
   return {
     scheduledStartTime: task.scheduledStartTime
@@ -106,6 +116,9 @@ export function buildSnapshot(
             : null,
         }
       : {}),
+    // The policy's first-choice propensity for the suggested slot (IPS). Omitted
+    // when the caller didn't compute it (Phase-1 / cold-start paths).
+    ...(propensity !== undefined ? { propensity } : {}),
   };
 }
 

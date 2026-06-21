@@ -11,12 +11,14 @@ import {
 } from "@zenflow/shared";
 import {
   type EdfTask,
+  feasibleSlots,
   hasElapsed,
   intervalOf,
   isPast,
   scheduleAll,
   type SchedulerPrefs,
 } from "./edf";
+import { hashSeed } from "./rng";
 import { type Interval, SLOT_MS, localDateStr } from "./slot";
 import {
   EVENT_REWARD,
@@ -65,16 +67,66 @@ export class SchedulerService {
   /**
    * Build the Phase-2 placement re-ranker from the user's signed 672-cell
    * preference matrix. The pure {@link preferenceMatrixReRanker} (owned by the
-   * ml-engineer) re-orders EDF's feasible slots by descending cell score — a
-   * pure permutation. A cold-start / wrong-length matrix degenerates to the
-   * identity re-ranker, so a fresh user keeps byte-for-byte Phase-1 behaviour.
-   * The matrix is computed HERE (the service) and passed INTO the pure core
-   * (invariant #2) — `scheduleAll` and the pure reranker never read Prisma.
+   * ml-engineer) re-ranks EDF's feasible slots via SOFTMAX/BOLTZMANN
+   * exploration (the Gumbel-top trick) — a pure permutation with a recorded
+   * propensity, so the logging policy is stochastic and off-policy IPS is
+   * well-defined (docs/heuristic.md §Evaluation). A cold-start / all-equal
+   * matrix degenerates to deterministic EDF earliest-fit, so a fresh user keeps
+   * byte-for-byte Phase-1 behaviour.
+   *
+   * Invariant #2 (refined): the core may use randomness only via an injected
+   * seed. The matrix, the temperature, and the per-USER base seed are all
+   * computed HERE (the service) and passed INTO the pure core; the re-ranker
+   * itself derives a STABLE per-task seed from the task id (not `now`), so a
+   * re-pack on an unrelated cascade doesn't churn the sampled slot.
    */
   private phase2ReRanker(user: User): SlotReRanker {
-    // The pure re-ranker degrades to identity for a cold-start / wrong-length
+    // The pure re-ranker degrades to identity for a cold-start / all-equal
     // matrix internally, so we hand it the raw column.
-    return preferenceMatrixReRanker(user.preferenceMatrix, user.timezone);
+    return preferenceMatrixReRanker(user.preferenceMatrix, user.timezone, {
+      seed: hashSeed(user.id),
+    });
+  }
+
+  /**
+   * The stochastic logging policy's first-choice propensity for the slot a
+   * just-created task was auto-placed into — `π(placedAt | feasible set)` under
+   * the Phase-2 softmax re-ranker. Recomputes the single task's `feasibleSlots`
+   * (O(one task), pure, cheap) around the OTHER pending tasks, then reads the
+   * pure {@link SlotReRanker.propensity}. This is the value persisted on the
+   * CREATE snapshot so off-policy IPS divides by the TRUE propensity of the
+   * logged decision. Returns `null` when the task is unplaced (no decision to
+   * score) or the placed slot fell outside the recomputed feasible set.
+   */
+  async placementPropensity(
+    user: User,
+    task: Task,
+    tx: PrismaTx,
+    now: Date = new Date(),
+  ): Promise<number | null> {
+    if (!task.scheduledStartTime) return null;
+    const prefs = this.prefsOf(user);
+    const tasks = await this.pendingTasks(user.id, tx);
+    const occupied = this.occupiedIntervals(tasks, task.id, now);
+    const edf = this.toEdf(task, prefs);
+    const earliest = edf.deadline
+      ? undefined
+      : (edf.schedulingAnchor ?? undefined);
+    const ceiling = edf.deadline ?? edf.schedulingDeadline ?? null;
+    const candidates = feasibleSlots(
+      prefs,
+      edf.durationMinutes,
+      ceiling,
+      occupied,
+      now,
+      earliest,
+    );
+    if (candidates.length === 0) return null;
+    return this.phase2ReRanker(user).propensity(
+      edf,
+      candidates,
+      task.scheduledStartTime,
+    );
   }
 
   /**
