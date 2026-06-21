@@ -138,7 +138,7 @@ export function handleDurationAdjustment(
         <div className="flex w-full flex-col gap-3">
           <div className="flex flex-col gap-0.5">
             <p className="text-sm font-semibold text-foreground">
-              Adjust the duration for {task.title}?
+              Adjust the duration for this task?
             </p>
             <p className="text-xs text-muted-foreground">{summary}</p>
             {reason && (
