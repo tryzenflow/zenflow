@@ -36,16 +36,23 @@ async function main(): Promise<void> {
     );
 
     // Offline gate (Step 4) — duration backtest: recompute the bias-corrected
-    // duration for every historical task from THIS log and gate on
-    // median|true − corrected| < median|true − est| (heuristic §Phase 2).
+    // duration for every historical task from THIS log and gate on the MEAN
+    // error reduction, mean|true − corrected| < mean|true − est| (the median is
+    // grid-floor-pinned and reported for reference only; heuristic §Phase 2).
     const durationBacktest = await scoreDurationBacktest(prisma);
     logger.log(
-      `Duration backtest (n=${durationBacktest.tasks}): median|true−est|=${durationBacktest.medianEstError.toFixed(
+      `Duration backtest (n=${durationBacktest.tasks}): mean|true−est|=${durationBacktest.meanEstError.toFixed(
         1,
-      )}min, |true−corrected| blend=${durationBacktest.medianCorrectedErrorBlend.toFixed(
+      )}min, mean|true−corrected| blend=${durationBacktest.meanCorrectedErrorBlend.toFixed(
         1,
-      )}min max=${durationBacktest.medianCorrectedErrorMax.toFixed(1)}min → ` +
-        `gate ${durationBacktest.passesBlend ? "PASS" : "FAIL"} (blend)`,
+      )}min (−${(durationBacktest.meanReductionBlend * 100).toFixed(0)}%, ` +
+        `${(durationBacktest.fractionImprovedBlend * 100).toFixed(0)}% improved) ` +
+        `max=${durationBacktest.meanCorrectedErrorMax.toFixed(1)}min, ` +
+        `trimmed-mean est=${durationBacktest.trimmedMeanEstError.toFixed(1)} ` +
+        `blend=${durationBacktest.trimmedMeanCorrectedErrorBlend.toFixed(1)}, ` +
+        `median(ref) est=${durationBacktest.medianEstError.toFixed(1)} ` +
+        `blend=${durationBacktest.medianCorrectedErrorBlend.toFixed(1)} → ` +
+        `gate ${durationBacktest.passesBlend ? "PASS" : "FAIL"} (mean, blend)`,
     );
 
     // Full machine-readable dump.
