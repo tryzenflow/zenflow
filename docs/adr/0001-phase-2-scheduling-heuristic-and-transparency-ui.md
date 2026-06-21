@@ -8,6 +8,103 @@
 
 ---
 
+## Reader's guide / glossary (for newcomers)
+
+New to this codebase? Read this first. It plain-defines the jargon used below and gives the
+intuition (what problem each piece solves). It changes no decision — it's a map, not new content.
+
+**Domain & scheduling terms**
+
+- **EDF (Earliest-Deadline-First)** — the Phase-1 scheduler. Given tasks with deadlines and a
+  set of legal time slots, it places the most-urgent task first into the earliest slot that fits.
+  It is **deterministic** and knows nothing about personal preference. Phase 2 keeps EDF in charge
+  of *what's feasible* and only personalizes *which feasible slot to prefer*.
+- **Slot / block / 15-minute grid** — the day is chopped into 15-minute units. A whole day =
+  96 blocks; `DAILY_HORIZON = 1440` minutes. Durations and start times must land on this grid
+  (positive multiples of 15), so we round to it.
+- **Feasible slots / candidates** — the set of slots EDF says a task *could* legally go in
+  (respects deadline, work hours, the grid). Phase 2 never adds or removes from this set; it only
+  reorders it.
+- **Re-ranker (`SlotReRanker`)** — a pluggable step that takes EDF's feasible candidate list and
+  **reorders** it by personal preference, then EDF takes the first one. Phase 1 used an *identity*
+  re-ranker (no reordering). The interface (the "seam") is locked; Phase 2 ships a real
+  implementation behind it. Intuition: EDF says "any of these slots is legal"; the re-ranker says
+  "but you tend to like *this* one."
+- **Preference matrix** — a per-user table that learns *when* you like to work. It's a signed
+  **7×96** grid (7 ISO weekdays × 96 fifteen-minute blocks = **672 cells**), stored flat as
+  `User.preferenceMatrix Int[]`. Each cell's score nudges up `+1` when you keep/move a task toward
+  that time, down `−1` when you move away. Higher cell = more preferred. The re-ranker sorts
+  candidates by their cell scores. Cold start = an empty/neutral matrix → behaves like plain EDF.
+- **`preferenceIndex(date, tz)`** — the helper that maps a wall-clock time to its cell in the flat
+  672-array: `(isoWeekday−1)·96 + (hour·4 + ⌊minute/15⌋)`. Frontend and backend both use it so the
+  heatmap and the scheduler agree on the grid.
+- **Duration bias / per-tag duration corrector** — learns *how long* tasks really take vs. your
+  estimate, grouped by **tag**. If your `#backend` tasks historically run ~30% longer than
+  estimated, the corrector multiplies the estimate up before scheduling. `bias` is the multiplier
+  (`1.0` = no change). Applied as **preprocessing before EDF**, rounded up to the next 15 minutes.
+- **Tags** — free-form labels on a task (e.g. `#backend`, `#email`). On the wire they're a
+  `string[]`. A task can have several, which is why multi-tag blending (below) matters.
+- **Blend vs. max-bias** — ways to combine a multi-tagged task's per-tag biases into one
+  multiplier. **Blend** (the default) = sample-weighted average `Σ(nₜ·bₜ)/Σ(nₜ)` (each tag weighted
+  by how many samples `nₜ` back it). **Max-bias** = take the single largest multiplier; it
+  over-reserves time on multi-tagged tasks, so it's kept only as an opt-in experiment knob.
+- **Decay / half-life** — old preferences should fade. A daily job multiplies each matrix cell by
+  `2^(−Δdays / 21)`, i.e. a **21-day half-life**: a preference left untouched for 21 days counts
+  half as much. Keeps the matrix tracking *current* habits without hard cutoffs.
+- **`pGlobal` / `tagBias` (ground truth)** — in simulation, each synthetic user ("persona") has a
+  *hidden true* time preference (`pGlobal`) and hidden true per-tag duration multipliers
+  (`tagBias[tag] = { mu, sigma, bias }`, with `bias = exp(mu)`). These are the answers the learners
+  are *supposed* to discover. "Recovery" (below) measures how close the learned matrix/bias get to
+  these hidden truths.
+- **Transparency UI** — the product surfaces that *explain* the learned decisions to the user:
+  a "why was this placed here" rationale toast, duration-adjustment toasts, calendar delta styling,
+  a preference heatmap, and the settings/onboarding controls. The point is to make personalization
+  legible rather than a black box.
+
+**Metrics & evaluation**
+
+- **MAR (Manual Adjustment Rate)** — the north-star metric, **lower is better**. The fraction of
+  the scheduler's suggested placements a user manually moves or resizes. Phase 1 sits at
+  **MAR ≈ 0.82** (≈82% get adjusted by hand); Phase 2's job is to beat that. Each phase must win
+  **offline** (in simulation) before going live.
+- **Persona / synthetic population** — simulated users with known hidden preferences, used to test
+  the learners offline before real users are involved.
+- **Offline gate / closed-loop A/B / significance / recovery / guardrails / ablation / sensitivity**
+  — the staged proof an experiment must pass before it ships: it must beat the baseline offline,
+  win in a simulated A/B, show a statistically significant and meaningful MAR drop, actually
+  recover the hidden truth, not regress any safety metric, and survive turning features off
+  (ablation) and parameter sweeps (sensitivity).
+- **Softmax / Boltzmann exploration, temperature `T`** — instead of always taking the single
+  top-scored slot (greedy argmax), the re-ranker *samples* a slot with probability proportional to
+  `exp(cellScore / T)`. `T` controls randomness: `T → 0` ⇒ greedy (always the top), larger `T` ⇒
+  more exploration. Why explore at all? See "stochastic logging policy."
+- **Gumbel-top trick** — a way to draw that softmax sample while keeping the function *pure* (no
+  hidden state): add Gumbel noise to each score, sort, take the top. Mathematically identical to
+  sampling from the softmax, but it's just a deterministic permutation of the candidates given a
+  seed.
+- **Propensity** — the probability the logging policy *actually had* of choosing the slot it chose
+  (here the softmax first-choice probability `exp(score_chosen/T) / Σ exp(score_j/T)`). We store it
+  so later off-policy evaluation can correct for it.
+- **IPS / SNIPS, off-policy / replay** — techniques to estimate "how would a *different* policy
+  have scored?" from logs of the policy we actually ran, by reweighting each logged outcome by
+  `1/propensity`. They require the logging policy to be **stochastic with known probabilities** —
+  which is exactly why the re-ranker samples and records propensity rather than acting greedily.
+- **Pure core / service split** — a hard architectural rule (CLAUDE.md invariant #2). The scheduler
+  *core* (`edf.ts`, `slot.ts`, `horizon.ts`, `reranker.ts`) is **pure**: no I/O, no clock, no
+  uncontrolled randomness — same inputs (plus an injected seed) always give the same output, so it's
+  trivially testable. Anything stateful (DB reads, the matrix, bias tables, the RNG seed) is computed
+  in `scheduler.service.ts` and **passed in**.
+- **View / `viewWeights`** — a task is created in a day, week, or month **view**, which bounds its
+  candidate slots. Day-view ⇒ candidates all sit in one weekday column of the matrix (re-ranker can
+  only reorder by time-of-day); week/month ⇒ candidates span many day-columns (re-ranker can reorder
+  across both day-of-week *and* time). So a persona's mix of views (`viewWeights`) caps how much the
+  re-ranker can learn/help.
+- **Sidecar / ground-truth file** — a JSON file the simulator writes alongside a run
+  (`sim-output/ground-truth-*.json`) holding each persona's hidden `pGlobal` and `tagBias`, so the
+  recovery scripts can compare learned vs. true.
+
+---
+
 ## Context
 
 Phase 1 ships a **pure Earliest-Deadline-First (EDF)** scheduler (`backend/src/scheduler/edf.ts`,
@@ -16,6 +113,10 @@ Phase 1 ships a **pure Earliest-Deadline-First (EDF)** scheduler (`backend/src/s
 suggested placements get moved or resized by hand. MAR (Manual Adjustment Rate) is the
 roadmap's north-star (lower is better); each phase must beat the previous one offline before
 going online.
+
+In short: Phase 1 places tasks correctly but impersonally, and users override most placements.
+Phase 2's goal is to cut that override rate (MAR) by learning each user's *when* (placement) and
+*how long* (duration) — while keeping the proven EDF core untouched.
 
 Phase 2 (heuristic.md §Phase 2, phase-2-evaluation-steps.md) introduces **two independent,
 tag-blind learners** that personalize *without touching the pure scheduler core*:
@@ -40,9 +141,13 @@ dialog, a preference-matrix heatmap, and an onboarding step.
 - **#1 — `@zenflow/shared` is the API contract.** New request/response shapes go in
   `packages/shared/src` then `pnpm shared:build`; never duplicated in FE/BE.
 - **#2 — the scheduler core is pure.** `edf.ts`, `slot.ts`, `horizon.ts`, `reranker.ts` take
-  inputs as parameters, do no I/O or randomness. Only `scheduler.service.ts` touches Prisma /
-  telemetry. The matrix, the per-tag bias tables, and the decay are **computed in the service
-  and passed IN**. Any pure-fn change updates its `*.spec.ts`.
+  inputs as parameters and do no I/O. **No *uncontrolled* randomness:** the core may use
+  randomness only via an **injected seed**, so it stays a pure, reproducible function of
+  `(inputs + seed)` — never `Math.random()` or the clock. (Phase 2's softmax re-ranker needs
+  Gumbel noise; it draws it from a tiny seeded PRNG in `rng.ts`, seeded per-task from the task
+  id by the service.) Only `scheduler.service.ts` touches Prisma / telemetry. The matrix, the
+  per-tag bias tables, the decay, the temperature, and the RNG seed are all **computed in the
+  service and passed IN**. Any pure-fn change updates its `*.spec.ts`.
 - **#3 — 15-minute grid.** Durations are positive multiples of 15; `DAILY_HORIZON = 1440`. The
   corrected duration is rounded **up** to the next 15-min unit (no off-grid times).
 - **#6 — response envelope** `{ success, message, data }`.
@@ -71,15 +176,47 @@ dialog, a preference-matrix heatmap, and an onboarding step.
 Add a Phase-2 `SlotReRanker` in `backend/src/scheduler/reranker.ts` behind the existing locked
 seam. It is constructed with the user's **672-cell signed matrix** (passed in by the service)
 and a pure cell-index function. `score(task, candidates)` returns the **same** candidate set
-**re-ordered** by descending cell score — a **pure permutation** that adds nothing and drops
-nothing (a stable tie-break on the original EDF time order keeps it deterministic; an empty /
-cold-start matrix degenerates to identity). The cell index reuses the existing
+**re-ordered** toward higher cell scores — a **pure permutation** that adds nothing and drops
+nothing. The cell index reuses the existing
 `preferenceIndex(date, tz) = (isoWeekday−1)·96 + (hour·4 + ⌊minute/15⌋)` from `slot.ts`, so FE
 and BE agree on the grid. `edf.ts` already routes `scheduleAll(..., reRanker)` through
 `reRanker.score(t, candidates)[0]`; **no core change to feasibility** is required.
 
-**View-bounded candidate window.** The re-ranker permutes *only the candidates it is handed* —
-a set already shaped by the task's stored `view`. The pure core never sees `view`; it enters
+**Softmax/Boltzmann exploration, not greedy argmax.** Intuition: if we always picked the single
+best-scoring slot, we'd only ever *see* outcomes for that one slot and never learn whether the
+runner-up slots were actually better — and later off-policy math (IPS, below) breaks without some
+randomness. So the re-ranker samples among the good slots, weighted toward the better ones, instead
+of deterministically taking the top one. The re-ranker does not pick the single
+top-scored slot deterministically. A pure argmax only ever logs outcomes for the top slot,
+which biases the telemetry later phases learn from and makes off-policy IPS evaluation
+degenerate (it needs a *stochastic* logging policy with known action probabilities). So
+`score` samples via the **Gumbel-top trick** — `logit_i = cellScore_i / T + gumbel(rng)`, sort
+by logit, take `[0]` — which draws exactly from the softmax `p_i ∝ exp(cellScore_i / T)` over
+the feasible set while remaining a pure permutation. `T` is a tunable constant
+(`RERANKER_TEMPERATURE` in `constants.ts`, default `1.0`); `T → 0` recovers the greedy argmax,
+larger `T` explores more. The re-ranker also exposes `propensity(task, candidates, chosen)` —
+the closed-form softmax first-choice marginal `exp(score_chosen/T) / Σ_j exp(score_j/T)` — and
+`SchedulerService` **persists the chosen slot's propensity** onto the CREATE/auto-placement
+event snapshot (`TaskEvent.newSnapshot.propensity`, a JSON field — **no Prisma migration, no
+`@zenflow/shared` change**) so the IPS/SNIPS replay divides by the true logged probability.
+
+**Cold-start + determinism guarantees.** When every feasible candidate scores equally (an
+empty / wrong-length / neutral matrix — the common cold-start case) the re-ranker returns EDF
+earliest-fit order **unchanged** (no random shuffle of a new user's tasks); its propensity is
+uniform `1/n`. The Gumbel seed is derived from the **task id only** (a stable hash, never
+`now`), computed in the service and passed in, so re-packing the same task on an unrelated
+cascade yields the same draw — no slot churn (protects the Time-to-stable metric) — and the
+core remains a pure, reproducible function of `(inputs + seed)`. `*.spec.ts` covers: `T → 0`
+== argmax; cold/neutral == identity earliest-fit; output is always a permutation; same seed →
+same result; a peaked matrix picks the peak w.h.p.; and the propensity matches the softmax
+marginal.
+
+**View-bounded candidate window.** Intuition: the re-ranker can only reorder the slots it's given,
+and how wide that set is depends on whether the task was created in a day, week, or month view.
+A day-view task's slots all fall on one weekday, so the re-ranker can only shuffle by time-of-day;
+a week/month task's slots span several days, giving it more room to express preference. This is why
+the evaluation sweeps must be read against each persona's mix of views. The re-ranker permutes
+*only the candidates it is handed* — a set already shaped by the task's stored `view`. The pure core never sees `view`; it enters
 scheduling indirectly via `toEdfTask` (`telemetry.ts`), which derives the period **floor**
 (`schedulingAnchor`, start-of-day of the create day) and, for a flexible no-deadline task, the
 period **ceiling** (`schedulingDeadline = endOfPeriod(anchor, view, tz, work)` — end of the
@@ -94,6 +231,10 @@ enumerates forward from the anchor floor and is **not** capped at the ceiling �
 simulator and production, so it is not a substrate defect and requires no Phase-1 re-run.)
 
 ### 2. Per-tag duration corrector (preprocessing, pure helper + service blend)
+
+Intuition: users systematically mis-estimate how long certain *kinds* of work take. This learner
+watches actual vs. estimated durations per tag, and scales a new task's estimate by what its tags
+historically imply — so the schedule reserves a realistic amount of time.
 
 A pure helper computes `corrected = ceilTo15(estimated × bias)` where
 `bias = Σ(nₜ·bₜ)/Σ(nₜ)` (sample-weighted blend). The per-tag `{ bₜ, nₜ }` table is **aggregated
@@ -296,8 +437,13 @@ shared union) is followed.
   by cell score (O(n log n) over a small candidate list) and runs the per-tag blend. Both are
   cheap; the matrix is a single column read already loaded with the `User`.
 - **Re-ranker permutation guarantee.** The Phase-2 re-ranker must provably neither add nor drop
-  candidates; a `*.spec.ts` asserts the output is a permutation of the input (same multiset),
-  and that an empty matrix == identity.
+  candidates; a `*.spec.ts` asserts the output is a permutation of the input (same multiset)
+  for every seed, and that an all-equal / cold-start matrix == identity earliest-fit.
+- **Stochastic logging policy.** The re-ranker samples (softmax/Gumbel) rather than taking the
+  argmax, so exploration is on by the temperature `T`. This trades a little immediate greedy
+  exploitation for the unbiased telemetry + well-defined propensities IPS needs. The §Online
+  evaluation guardrail still applies: cap exploration (lower `T`) if a cohort's MAR regresses;
+  `T → 0` falls back to greedy.
 - **Decay is global per cell, daily.** A 21-day half-life means stale preferences fade without
   hard cutoffs; the constant is configurable for the §8 drift-sensitivity sweep.
 - **`never` still learns.** Bias is accumulated regardless of mode so the heatmap/analytics stay
