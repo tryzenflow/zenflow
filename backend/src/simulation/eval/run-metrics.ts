@@ -1,5 +1,4 @@
 import { NestFactory } from "@nestjs/core";
-import { Logger } from "@nestjs/common";
 import { SimulationModule } from "../simulation.module";
 import { PrismaService } from "../../prisma/prisma.service";
 import { computeMetrics } from "./metrics";
@@ -13,15 +12,19 @@ import { scoreDurationBacktest } from "./duration-backtest";
  * report; a future ml-engineer plugs a real candidate re-ranker into the replay.
  */
 async function main(): Promise<void> {
-  const logger = new Logger("sim:eval");
+  // The machine-readable JSON dump is the ONLY thing written to stdout (callers
+  // do `> eval.json`). Nest's `log`-level lines go to stdout and would corrupt
+  // that JSON, so we keep only warn/error (which Nest writes to stderr) and route
+  // the human-readable progress summaries to stderr via console.error too.
+  const log = (msg: string) => process.stderr.write(msg + "\n");
   const app = await NestFactory.createApplicationContext(SimulationModule, {
-    logger: ["log", "warn", "error"],
+    logger: ["warn", "error"],
   });
   try {
     const prisma = app.get(PrismaService);
 
     const report = await computeMetrics(prisma);
-    logger.log(
+    log(
       `Aggregate (n=${report.aggregate.personas}): MAR mean=${report.aggregate.marMean.toFixed(3)} median=${report.aggregate.marMedian.toFixed(3)}, completion-in-slot=${report.aggregate.completionInSlotMean.toFixed(3)}, move-dist median=${report.aggregate.moveDistanceMedianMin.toFixed(0)}min, dur-error median=${report.aggregate.durationErrorMedianMin.toFixed(0)}min`,
     );
 
@@ -30,7 +33,7 @@ async function main(): Promise<void> {
     // Phase-2 SNIPS clearing the identity SNIPS is the cheap pre-filter before the
     // closed-loop A/B.
     const replay = await replayPhase2(prisma);
-    logger.log(
+    log(
       `Offline replay — identity: IPS=${replay.identity.ips.toFixed(3)} SNIPS=${replay.identity.snips.toFixed(3)} | ` +
         `phase2: IPS=${replay.phase2.ips.toFixed(3)} SNIPS=${replay.phase2.snips.toFixed(3)} over ${replay.phase2.decisions} decisions`,
     );
@@ -40,7 +43,7 @@ async function main(): Promise<void> {
     // error reduction, mean|true − corrected| < mean|true − est| (the median is
     // grid-floor-pinned and reported for reference only; heuristic §Phase 2).
     const durationBacktest = await scoreDurationBacktest(prisma);
-    logger.log(
+    log(
       `Duration backtest (n=${durationBacktest.tasks}): mean|true−est|=${durationBacktest.meanEstError.toFixed(
         1,
       )}min, mean|true−corrected| blend=${durationBacktest.meanCorrectedErrorBlend.toFixed(
