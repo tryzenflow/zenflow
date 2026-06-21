@@ -71,6 +71,20 @@ describe("reconstructCandidates", () => {
     expect(cs[0].getTime()).toBe(offGrid.getTime());
   });
 
+  it("bounds a no-deadline task to a short horizon (OOM guard, not the full 90-day scan)", () => {
+    // Without a deadline the underlying feasibleSlots would scan MAX_SCAN_DAYS
+    // (90d); loadDecisions holds every decision's candidate array at once, so an
+    // unbounded scan over the whole log exhausts the heap. The reconstruction
+    // must cap the window a couple of days past the decision's day-start.
+    const cs = reconstructCandidates(prefs, 60, null, MON_09, MON_11);
+    // Mon (start day) + Tue only — nothing on/after Wednesday 2025-01-08 00:00.
+    const wed = new Date("2025-01-08T00:00:00.000Z").getTime();
+    expect(cs.every((c) => c.getTime() < wed)).toBe(true);
+    // Two working days of a 7h window on the 15-min grid ⇒ well under 100 slots,
+    // nowhere near the thousands an unbounded 90-day scan would emit.
+    expect(cs.length).toBeLessThan(100);
+  });
+
   it("returns an empty set when neither slot is known", () => {
     expect(reconstructCandidates(prefs, 60, null, null, null)).toEqual([]);
   });

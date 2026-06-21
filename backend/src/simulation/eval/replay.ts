@@ -12,6 +12,18 @@ import { minutesToUtc } from "../../common/utils";
 import { applyPreferenceDeltas } from "../../scheduler/telemetry";
 
 /**
+ * Bounded reconstruction horizon (days from the decision's day-start) for the
+ * replay candidate set — see {@link reconstructCandidates}. The pure
+ * `feasibleSlots` scans the full {@link MAX_SCAN_DAYS} (90-day) horizon for a
+ * task with no/distant deadline, and {@link loadDecisions} holds EVERY decision's
+ * candidate array in memory at once; an unbounded scan over the ~10⁴-event log
+ * exhausts the heap (OOM). The suggested/chosen slots are local to the decision's
+ * working day(s), so a short horizon is a faithful and tractable reconstruction.
+ */
+const REPLAY_HORIZON_DAYS = 2;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
  * Offline counterfactual replay scaffold (strategy §13 Step 1, the cheap gate
  * BEFORE a closed-loop A/B). Re-scores each logged decision under a candidate
  * `SlotReRanker` and estimates its expected reward off-policy with IPS / SNIPS
@@ -148,8 +160,9 @@ function propensity(
  * `deadline`, and a `now` floor derived from the decision instants — no I/O, no
  * randomness, no `Date.now()`. We pin `now` to the START OF DAY (user tz) of the
  * earliest of {suggested, chosen} and pass it as both `now` and `earliest`, so
- * the enumeration spans that working day forward and necessarily contains both
- * the suggested and chosen slots (both lie at/after the day start). `occupied` is
+ * the enumeration spans that working day forward, bounded to a short
+ * {@link REPLAY_HORIZON_DAYS} window (or the real deadline, whichever is sooner)
+ * to stay tractable across the whole log. `occupied` is
  * left empty: the frozen log does not carry the full board at decision time, so
  * we reconstruct the unconstrained working-window candidate set (a superset that
  * always contains the two slots the decision actually ranged over). As a
@@ -173,10 +186,22 @@ export function reconstructCandidates(
       0,
       prefs.timezone,
     );
+    // Bound the enumeration to a short horizon from dayStart (the real user
+    // deadline still applies when it is sooner) so a no-deadline task can't drag
+    // the scan across the full MAX_SCAN_DAYS horizon — unbounded, that OOMs over
+    // the whole log. Both logged slots are unioned in below regardless, so a
+    // chosen slot beyond the horizon is never dropped.
+    const horizonCap = new Date(
+      dayStart.getTime() + REPLAY_HORIZON_DAYS * DAY_MS,
+    );
+    const ceiling =
+      deadline && deadline.getTime() < horizonCap.getTime()
+        ? deadline
+        : horizonCap;
     for (const c of feasibleSlots(
       prefs,
       durationMinutes,
-      deadline,
+      ceiling,
       [],
       dayStart,
       dayStart,
