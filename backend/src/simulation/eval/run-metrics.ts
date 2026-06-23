@@ -4,6 +4,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { computeMetrics } from "./metrics";
 import { replayPhase2 } from "./replay";
 import { scoreDurationBacktest } from "./duration-backtest";
+import { loadGroundTruthFile } from "./ground-truth";
 
 /**
  * `sim:eval` entry point: boot a standalone Nest context against the sim DB,
@@ -23,9 +24,32 @@ async function main(): Promise<void> {
   try {
     const prisma = app.get(PrismaService);
 
-    const report = await computeMetrics(prisma);
+    // Optional --ground-truth=<path> flag: load the sidecar to enable MAR
+    // decomposition (avoidable vs unavoidable). Without it, marAvoidable === mar.
+    const gtArg = process.argv
+      .slice(2)
+      .find((a) => a.startsWith("--ground-truth="));
+    let urgencyByUser: Map<string, Set<string>> | undefined;
+    if (gtArg) {
+      const gtPath = gtArg.slice("--ground-truth=".length);
+      log(`Loading ground-truth sidecar: ${gtPath}`);
+      const gt = await loadGroundTruthFile(gtPath);
+      urgencyByUser = new Map(
+        gt.personas.map((p) => [p.userId, new Set(p.urgencyMovedTaskIds)]),
+      );
+      log(
+        `Loaded urgency sets for ${urgencyByUser.size} personas from sidecar`,
+      );
+    }
+
+    const report = await computeMetrics(prisma, urgencyByUser);
+    const hasDecomp = urgencyByUser !== undefined;
     log(
-      `Aggregate (n=${report.aggregate.personas}): MAR mean=${report.aggregate.marMean.toFixed(3)} median=${report.aggregate.marMedian.toFixed(3)}, completion-in-slot=${report.aggregate.completionInSlotMean.toFixed(3)}, move-dist median=${report.aggregate.moveDistanceMedianMin.toFixed(0)}min, dur-error median=${report.aggregate.durationErrorMedianMin.toFixed(0)}min`,
+      `Aggregate (n=${report.aggregate.personas}): MAR mean=${report.aggregate.marMean.toFixed(3)} median=${report.aggregate.marMedian.toFixed(3)}` +
+        (hasDecomp
+          ? ` | avoidable=${report.aggregate.marAvoidableMean.toFixed(3)} unavoidable=${report.aggregate.marUnavoidableMean.toFixed(3)}`
+          : "") +
+        `, completion-in-slot=${report.aggregate.completionInSlotMean.toFixed(3)}, move-dist median=${report.aggregate.moveDistanceMedianMin.toFixed(0)}min, dur-error median=${report.aggregate.durationErrorMedianMin.toFixed(0)}min`,
     );
 
     // Offline gate (Step 4): replay BOTH the identity incumbent (sanity-check,

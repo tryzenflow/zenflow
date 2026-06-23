@@ -56,6 +56,12 @@ export interface PersonaGroundTruth {
   tagBias: Record<string, { mu: number; sigma: number; bias: number }>;
   /** Slow non-stationary drift (dormant today; kept for a drifted-recovery variant). */
   driftPerMonth: { peakShiftBlocks: number; biasDecay: number };
+  /**
+   * Task IDs that were urgency-moved during the simulation run (§5.6).
+   * Used by `computeMetrics` to decompose MAR into avoidable vs unavoidable.
+   * A MOVE for a task in this set is `MAR_unavoidable`; all others are `MAR_avoidable`.
+   */
+  urgencyMovedTaskIds: string[];
 }
 
 export interface GroundTruthFile {
@@ -71,8 +77,17 @@ export interface GroundTruthFile {
   personas: PersonaGroundTruth[];
 }
 
-/** Project a live {@link Persona} to its serialisable ground truth. */
-export function toGroundTruth(persona: Persona): PersonaGroundTruth {
+/**
+ * Project a live {@link Persona} to its serialisable ground truth.
+ *
+ * @param urgencyMovedIds - Task IDs that received an urgency-spike MOVE during
+ *   the run. Pass the set collected by the drive loop; defaults to empty (no
+ *   urgency decomposition available for this persona).
+ */
+export function toGroundTruth(
+  persona: Persona,
+  urgencyMovedIds: Set<string> = new Set(),
+): PersonaGroundTruth {
   const tagBias: PersonaGroundTruth["tagBias"] = {};
   for (const [tag, b] of persona.tagBias) {
     tagBias[tag] = {
@@ -89,6 +104,7 @@ export function toGroundTruth(persona: Persona): PersonaGroundTruth {
     pGlobal: Array.from(persona.field.pGlobal, r6),
     tagBias,
     driftPerMonth: { ...persona.driftPerMonth },
+    urgencyMovedTaskIds: Array.from(urgencyMovedIds),
   };
 }
 

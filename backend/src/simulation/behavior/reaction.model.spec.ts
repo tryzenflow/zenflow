@@ -59,6 +59,12 @@ function persona(overrides: Partial<Persona> = {}): Persona {
     driftPerMonth: { peakShiftBlocks: 0, biasDecay: 0 },
     tagMix: [{ name: "backend", weight: 1 }],
     idleWindows: [],
+    urgencySpikeProbPerTask: 0.01,
+    urgencyMoveThreshold: 0.7,
+    energyBaseline: 0.7,
+    energySensitivity: 0.2,
+    splitThresholdMinutes: 90,
+    splitRate: 0.1,
     ...overrides,
   };
 }
@@ -271,5 +277,27 @@ describe("decideOutcome", () => {
       return c;
     };
     expect(countComplete(soon)).toBeGreaterThan(countComplete(far));
+  });
+
+  it("high fatigue (low energy) raises reschedule rate vs low fatigue (high energy)", () => {
+    // The runner passes `1 - energyT` as fatigue, so fatigue=0.9 means energyT=0.1
+    // and fatigue=0.1 means energyT=0.9. The existing `reschedule += fatigue * 0.3`
+    // logic ensures more reschedules when fatigued.
+    const p = persona({
+      discipline: { complete: 0.5, reschedule: 0.3, abandon: 0.2 },
+    });
+    const countReschedule = (fatigue: number) => {
+      const rng = makeRng(12);
+      let r = 0;
+      for (let i = 0; i < 2000; i++) {
+        if (
+          decideOutcome(p, { deadline: null }, now, fatigue, rng) ===
+          "reschedule"
+        )
+          r++;
+      }
+      return r;
+    };
+    expect(countReschedule(0.9)).toBeGreaterThan(countReschedule(0.1));
   });
 });

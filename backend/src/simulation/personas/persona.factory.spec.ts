@@ -77,6 +77,47 @@ describe("persona.factory sensitivity multipliers", () => {
       expect(variant.dailyVolume).toBe(base.dailyVolume);
       expect(variant.projectTags).toEqual(base.projectTags);
       expect(variant.idleWindows).toEqual(base.idleWindows);
+      // New fields drawn after idleWindows are also unaffected by multipliers.
+      expect(variant.urgencySpikeProbPerTask).toBe(
+        base.urgencySpikeProbPerTask,
+      );
+      expect(variant.urgencyMoveThreshold).toBe(base.urgencyMoveThreshold);
+      expect(variant.energyBaseline).toBe(base.energyBaseline);
+      expect(variant.energySensitivity).toBe(base.energySensitivity);
+      expect(variant.splitThresholdMinutes).toBe(base.splitThresholdMinutes);
+      expect(variant.splitRate).toBe(base.splitRate);
     }
+  });
+
+  it("new fields are sampled in valid ranges for all archetypes", () => {
+    for (const archetypeId of [
+      "dev",
+      "night_owl",
+      "ops",
+      "pm",
+      "crammer",
+    ] as const) {
+      const p = build(archetypeId);
+      expect(p.urgencySpikeProbPerTask).toBeGreaterThanOrEqual(0);
+      expect(p.urgencySpikeProbPerTask).toBeLessThanOrEqual(1);
+      expect(p.urgencyMoveThreshold).toBeGreaterThanOrEqual(0);
+      expect(p.urgencyMoveThreshold).toBeLessThanOrEqual(1);
+      expect(p.energyBaseline).toBeGreaterThanOrEqual(0.1);
+      expect(p.energyBaseline).toBeLessThanOrEqual(1);
+      expect(p.energySensitivity).toBeGreaterThanOrEqual(0);
+      expect(p.splitThresholdMinutes).toBeGreaterThan(0);
+      expect(p.splitRate).toBeGreaterThanOrEqual(0);
+      expect(p.splitRate).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("splitThresholdMinutes is fixed per archetype (not jittered per persona)", () => {
+    // splitThresholdMinutes comes directly from the archetype, not a RNG draw.
+    const p1 = build("dev", undefined);
+    const p2 = build("dev", { noiseMult: 2 });
+    // Different seeds → different personas, but same archetype threshold.
+    expect(p1.splitThresholdMinutes).toBe(p2.splitThresholdMinutes);
+    expect(p1.splitThresholdMinutes).toBe(90); // dev archetype value
+    expect(build("crammer").splitThresholdMinutes).toBe(60); // crammer value
   });
 });

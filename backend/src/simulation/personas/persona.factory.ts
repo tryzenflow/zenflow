@@ -58,6 +58,27 @@ export interface Persona {
   tagMix: { name: string; weight: number }[];
   /** Idle windows (vacations/sick days) as [startDay, endDay] inclusive. */
   idleWindows: [number, number][];
+  /**
+   * Daily probability per pending task that an urgency spike fires (§5.6).
+   * When it fires the task is pulled forward to the earliest feasible slot.
+   */
+  urgencySpikeProbPerTask: number;
+  /**
+   * Urgency level threshold above which a spike triggers a pull-forward MOVE.
+   * Sampled as a [0,1] value; the fired urgency is drawn from [threshold, 1].
+   */
+  urgencyMoveThreshold: number;
+  /** Resting energy level ∈ [0,1] (§5.5). Overnight recovery pulls toward this. */
+  energyBaseline: number;
+  /** β coefficient: how strongly energy modulates reschedule probability (§5.5). */
+  energySensitivity: number;
+  /**
+   * Minimum true duration (minutes) for a task to be split-eligible (§5.7).
+   * Sampled at archetype level — same threshold for all personas in the archetype.
+   */
+  splitThresholdMinutes: number;
+  /** Probability a split-eligible long task is split rather than completed whole. */
+  splitRate: number;
 }
 
 /**
@@ -217,6 +238,18 @@ export function buildPersona(
     driftPerMonth: scaleDrift(a.driftPerMonth, driftMult),
     tagMix: a.tagMix,
     idleWindows: sampleIdleWindows(rng, spanDays),
+    urgencySpikeProbPerTask: Math.max(
+      0,
+      Math.min(1, draw(rng, a.urgencySpikeProbPerTask)),
+    ),
+    urgencyMoveThreshold: Math.max(
+      0,
+      Math.min(1, draw(rng, a.urgencyMoveThreshold)),
+    ),
+    energyBaseline: Math.max(0.1, Math.min(1, draw(rng, a.energyBaseline))),
+    energySensitivity: Math.max(0, draw(rng, a.energySensitivity)),
+    splitThresholdMinutes: a.splitThresholdMinutes,
+    splitRate: Math.max(0, Math.min(1, draw(rng, a.splitRate))),
   };
 }
 

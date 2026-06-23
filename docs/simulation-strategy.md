@@ -378,7 +378,7 @@ Per arrival:
 preference matrix. **Needs:** ~1–2 weeks/user — abundant in a year.
 
 - **Duration backtest** — recompute bias-corrected duration for every historical task;
-  ship only if `|true − corrected|` < `|true − est|` median. The §5.2 channel provides
+  ship only if `mean|true − corrected| < mean|true − est|`. The §5.2 channel provides
   the ground-truth `true` durations to score against.
 - **Placement** — the signed matrix should converge toward each persona's
   `P_global`. Measure recovery error `‖matrix_normalized − P_global‖` (possible only
@@ -534,7 +534,7 @@ Cheap pre-filter; run **before** promoting a policy.
    (**IPS / SNIPS**, heuristic §Offline evaluation): it scores higher when it would have
    picked the slot the user *kept* and lower when it picks slots the user *moved away from*.
 4. Phase-specific direct backtests on the same log:
-   - **Phase 2:** duration backtest — `median|true − corrected| < median|true − est|`.
+   - **Phase 2:** duration backtest — `mean|true − corrected| < mean|true − est|`.
    - **Phase 3:** IPS reward must clear the Phase-2 heuristic.
 5. **Gate:** fails here ⇒ do not promote. (Replay is conservative: passing is necessary,
    not sufficient.)

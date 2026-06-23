@@ -93,6 +93,37 @@ export interface Archetype {
   fixedLoadPerWeek: MeanSd;
   /** Slow non-stationary drift applied per simulated month. */
   driftPerMonth: { peakShiftBlocks: number; biasDecay: number };
+  /**
+   * Daily probability per pending task that an urgency spike fires (§5.6).
+   * [mean, sd] — higher for reactive archetypes (C/E).
+   */
+  urgencySpikeProbPerTask: MeanSd;
+  /**
+   * Urgency level threshold above which a spike triggers a pull-forward MOVE (§5.6).
+   * [mean, sd] — sampled per persona.
+   */
+  urgencyMoveThreshold: MeanSd;
+  /**
+   * Persona-specific resting energy level ∈ [0,1] (§5.5). [mean, sd].
+   * Higher baseline → more resilient to fatigue.
+   */
+  energyBaseline: MeanSd;
+  /**
+   * β coefficient for energy→preference modulation in the outcome channel (§5.5).
+   * Higher → stronger fatigue effect on reschedule rate.
+   */
+  energySensitivity: MeanSd;
+  /**
+   * Minimum true duration (minutes) for a task to be split-eligible (§5.7).
+   * Stored as a fixed number per archetype (not a distribution — same threshold
+   * for every persona in the archetype).
+   */
+  splitThresholdMinutes: number;
+  /**
+   * Probability a split-eligible task is split on completion (§5.7). [mean, sd].
+   * High for crammer (E), low for dev (A).
+   */
+  splitRate: MeanSd;
 }
 
 // Slot-of-day helper: a wall-clock hour → block index (4 blocks/hour).
@@ -139,6 +170,12 @@ export const ARCHETYPES: Archetype[] = [
     estDuration: { mu: [Math.log(75), 0.05], sigma: [0.45, 0.05] },
     fixedLoadPerWeek: [3, 1],
     driftPerMonth: { peakShiftBlocks: -0.4, biasDecay: 0.01 },
+    urgencySpikeProbPerTask: [0.01, 0.003],
+    urgencyMoveThreshold: [0.75, 0.05],
+    energyBaseline: [0.72, 0.06],
+    energySensitivity: [0.15, 0.03],
+    splitThresholdMinutes: 90,
+    splitRate: [0.05, 0.02],
   },
 
   // ──────────────────────────── B · Night-Owl Builder ──────────────────────
@@ -185,6 +222,12 @@ export const ARCHETYPES: Archetype[] = [
     estDuration: { mu: [Math.log(90), 0.05], sigma: [0.5, 0.05] },
     fixedLoadPerWeek: [2, 1],
     driftPerMonth: { peakShiftBlocks: 0.3, biasDecay: 0.005 },
+    urgencySpikeProbPerTask: [0.02, 0.005],
+    urgencyMoveThreshold: [0.7, 0.06],
+    energyBaseline: [0.68, 0.07],
+    energySensitivity: [0.2, 0.04],
+    splitThresholdMinutes: 75,
+    splitRate: [0.15, 0.04],
   },
 
   // ─────────────────────── C · Interrupt-driven Ops/SRE ────────────────────
@@ -229,6 +272,12 @@ export const ARCHETYPES: Archetype[] = [
     estDuration: { mu: [Math.log(35), 0.05], sigma: [0.55, 0.06] },
     fixedLoadPerWeek: [5, 2],
     driftPerMonth: { peakShiftBlocks: 0.2, biasDecay: 0.0 },
+    urgencySpikeProbPerTask: [0.04, 0.008],
+    urgencyMoveThreshold: [0.62, 0.07],
+    energyBaseline: [0.65, 0.07],
+    energySensitivity: [0.35, 0.05],
+    splitThresholdMinutes: 75,
+    splitRate: [0.08, 0.02],
   },
 
   // ───────────────────────────── D · Meeting-heavy PM ──────────────────────
@@ -274,6 +323,12 @@ export const ARCHETYPES: Archetype[] = [
     // Many fixed blocks.
     fixedLoadPerWeek: [10, 3],
     driftPerMonth: { peakShiftBlocks: 0.1, biasDecay: 0.01 },
+    urgencySpikeProbPerTask: [0.015, 0.004],
+    urgencyMoveThreshold: [0.72, 0.05],
+    energyBaseline: [0.7, 0.06],
+    energySensitivity: [0.2, 0.04],
+    splitThresholdMinutes: 90,
+    splitRate: [0.1, 0.03],
   },
 
   // ──────────────────── E · Deadline-crammer Student/Researcher ────────────
@@ -318,6 +373,12 @@ export const ARCHETYPES: Archetype[] = [
     estDuration: { mu: [Math.log(110), 0.05], sigma: [0.55, 0.06] },
     fixedLoadPerWeek: [1, 1],
     driftPerMonth: { peakShiftBlocks: -0.2, biasDecay: 0.02 },
+    urgencySpikeProbPerTask: [0.03, 0.007],
+    urgencyMoveThreshold: [0.65, 0.07],
+    energyBaseline: [0.62, 0.08],
+    energySensitivity: [0.22, 0.05],
+    splitThresholdMinutes: 60,
+    splitRate: [0.3, 0.06],
   },
 ];
 

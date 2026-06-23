@@ -172,6 +172,90 @@ describe("computeMetrics", () => {
     expect(m.moveDistanceMedianMin).toBe(0);
   });
 
+  it("without sidecar, marAvoidable === mar and marUnavoidable === 0", async () => {
+    const events: Ev[] = [
+      {
+        taskId: "A",
+        userId: "u1",
+        eventType: "CREATE",
+        oldSnapshot: null,
+        newSnapshot: snap(T0, 60),
+        occurredAt: new Date(T0),
+      },
+      {
+        taskId: "A",
+        userId: "u1",
+        eventType: "MOVE",
+        oldSnapshot: snap(T0, 60),
+        newSnapshot: snap(T1, 60),
+        occurredAt: new Date(T1),
+      },
+    ];
+    // No urgencyByUser supplied → conservative baseline.
+    const report = await computeMetrics(mockPrisma(events));
+    const m = report.perPersona[0];
+    expect(m.marUnavoidable).toBe(0);
+    expect(m.marAvoidable).toBeCloseTo(m.mar, 10);
+  });
+
+  it("with sidecar, urgency-moved tasks count as marUnavoidable", async () => {
+    const events: Ev[] = [
+      // taskA was moved (urgency spike → unavoidable).
+      {
+        taskId: "A",
+        userId: "u1",
+        eventType: "CREATE",
+        oldSnapshot: null,
+        newSnapshot: snap(T0, 60),
+        occurredAt: new Date(T0),
+      },
+      {
+        taskId: "A",
+        userId: "u1",
+        eventType: "MOVE",
+        oldSnapshot: snap(T0, 60),
+        newSnapshot: snap(T1, 60),
+        occurredAt: new Date(T1),
+      },
+      // taskB was moved (preference-based → avoidable).
+      {
+        taskId: "B",
+        userId: "u1",
+        eventType: "CREATE",
+        oldSnapshot: null,
+        newSnapshot: snap(T0, 60),
+        occurredAt: new Date(T0),
+      },
+      {
+        taskId: "B",
+        userId: "u1",
+        eventType: "MOVE",
+        oldSnapshot: snap(T0, 60),
+        newSnapshot: snap(T1, 60),
+        occurredAt: new Date(T1),
+      },
+      // taskC: kept (no move, not adjusted).
+      {
+        taskId: "C",
+        userId: "u1",
+        eventType: "CREATE",
+        oldSnapshot: null,
+        newSnapshot: snap(T0, 60),
+        occurredAt: new Date(T0),
+      },
+    ];
+    const urgencyByUser = new Map([["u1", new Set(["A"])]]);
+    const report = await computeMetrics(mockPrisma(events), urgencyByUser);
+    const m = report.perPersona[0];
+    // 3 scheduled, 2 adjusted (A + B moved).
+    expect(m.scheduled).toBe(3);
+    expect(m.adjusted).toBe(2);
+    expect(m.mar).toBeCloseTo(2 / 3, 6);
+    // A is urgency-moved → 1 unavoidable; B is avoidable → 1 avoidable.
+    expect(m.marUnavoidable).toBeCloseTo(1 / 3, 6);
+    expect(m.marAvoidable).toBeCloseTo(1 / 3, 6);
+  });
+
   it("aggregates per persona (unit of analysis = persona)", async () => {
     const events: Ev[] = [
       // u1: 1 scheduled, moved → MAR 1.

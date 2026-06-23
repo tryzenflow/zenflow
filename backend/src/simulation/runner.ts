@@ -175,6 +175,7 @@ interface Actuator {
     scheduledStartTime: Date | null;
     durationMinutes: number;
   } | null>;
+  readTaskTags(taskId: string): Awaitable<string[]>;
   reschedule(taskId: string, to: Date, now: Date): Awaitable<void>;
   resize(taskId: string, start: Date, dur: number, now: Date): Awaitable<void>;
   duePending(cutoff: Date): Awaitable<DueTask[]>;
@@ -238,7 +239,11 @@ function toReactionTask(spec: TaskSpec): ReactionTask {
 
 // ─────────────────────────── the shared drive loop ─────────────────────────
 
-/** Drive a single persona across the full span through the {@link Actuator}. */
+/**
+ * Drive a single persona across the full span through the {@link Actuator}.
+ * Returns the set of task IDs that were urgency-spike-moved (§5.6), for the
+ * ground-truth sidecar's MAR decomposition.
+ */
 async function drivePersona(
   act: Actuator,
   persona: Persona,
@@ -246,8 +251,13 @@ async function drivePersona(
   holidays: Set<number>,
   rng: Rng,
   days: number,
-): Promise<void> {
-  let recentLoad = 0; // rolling fatigue proxy
+): Promise<Set<string>> {
+  // Energy model (§5.5): replaces the old `recentLoad` scalar.
+  // Initialised to the persona's resting baseline.
+  let energyT = persona.energyBaseline;
+
+  // Urgency-moved task IDs (§5.6): accumulated and returned for the sidecar.
+  const urgencyMovedIds = new Set<string>();
 
   for (let day = 0; day < days; day++) {
     if (isIdle(persona, day, holidays)) continue;
@@ -384,35 +394,110 @@ async function drivePersona(
     const cutoff = clock.endOf(day, persona.prefs.timezone);
     const due = await act.duePending(cutoff);
     for (const t of due) {
-      const fatigue = Math.min(1, recentLoad / 4);
+      // Energy model (§5.5): pass `1 - energyT` as fatigue so high energy →
+      // low fatigue → more completions (the existing fatigue logic captures this).
+      const fatigue = 1 - energyT;
       const outcome = decideOutcome(persona, t, cutoff, fatigue, rng);
       if (outcome === "complete") {
         // Finished — but real users only TICK OFF a fraction of finished work,
         // so a chunk stays PENDING (revisited later). This is why a realistic
         // board shows lots of done-but-unmarked tasks lingering.
         if (!rng.bool(persona.markCompleteRate)) {
-          recentLoad += t.durationMinutes / 120; // effort spent, just not marked
+          // Effort spent, just not marked — deplete energy accordingly.
+          energyT = Math.max(0, energyT - t.durationMinutes / 600);
           continue;
         }
         const completionAt = new Date(
           t.scheduledStartTime!.getTime() + t.durationMinutes * 60_000,
         );
+
+        // Task splitting (§5.7): long tasks may be split into a partial
+        // completion + a remainder task queued for the next day.
+        if (
+          t.durationMinutes >= persona.splitThresholdMinutes &&
+          rng.bool(persona.splitRate)
+        ) {
+          const dPartial = round15(
+            t.durationMinutes * (0.3 + rng.next() * 0.4),
+          );
+          const dRemainder = t.durationMinutes - dPartial;
+          if (dPartial >= 15 && dRemainder >= 15) {
+            // RESIZE down to the partial duration, then complete.
+            await act.resize(t.id, t.scheduledStartTime!, dPartial, cutoff);
+            await act.complete(t.id, completionAt);
+            // Re-queue remainder as a new task for the next day.
+            const tags = await act.readTaskTags(t.id);
+            const nextDayStart = clock.at(
+              day + 1,
+              persona.prefs.workStart,
+              persona.prefs.timezone,
+            );
+            try {
+              await act.create(
+                {
+                  title: "Remainder (split)",
+                  durationMinutes: dRemainder,
+                  tags,
+                  view: "day",
+                  startDate: nextDayStart.toISOString().slice(0, 10),
+                },
+                nextDayStart,
+              );
+            } catch {
+              /* remainder create failure is non-fatal */
+            }
+            energyT = Math.max(0, energyT - dPartial / 600);
+            continue;
+          }
+        }
+
         await act.complete(t.id, completionAt);
-        recentLoad += t.durationMinutes / 120;
+        // Deplete energy by effort expended (§5.5).
+        energyT = Math.max(0, energyT - t.durationMinutes / 600);
       } else if (outcome === "reschedule") {
         const next = await nextDaySlot(act, persona, t, clock, day, rng);
         if (next) await act.reschedule(t.id, next, cutoff);
-        recentLoad += 0.2;
+        // Small energy cost from context-switching / rescheduling overhead.
+        energyT = Math.max(0, energyT - 0.03);
       }
       // 'abandon' is left to the overdue sweep below.
     }
-    recentLoad *= 0.6; // decay fatigue overnight
+
+    // Energy overnight recovery (§5.5): partial reset toward baseline.
+    // Formula: energyT = min(1, baseline + 0.8 * (baseline - energyT))
+    // which means if energyT < baseline, it moves 80% of the gap toward baseline.
+    energyT = Math.min(
+      1,
+      persona.energyBaseline + 0.8 * (persona.energyBaseline - energyT),
+    );
+
+    // Urgency spikes (§5.6): after settling outcomes, each still-PENDING task
+    // has a small chance of receiving an urgency spike. When it fires, the task
+    // is pulled forward to the earliest feasible slot that precedes the current
+    // slot. The resulting MOVE is tagged in `urgencyMovedIds` for the sidecar.
+    const urgencyNow = clock.endOf(day, persona.prefs.timezone);
+    const pending = await act.duePending(
+      new Date(urgencyNow.getTime() + 365 * 24 * 60 * 60_000), // all future pending
+    );
+    for (const t of pending) {
+      if (!rng.bool(persona.urgencySpikeProbPerTask)) continue;
+      const slots = await act.feasible(t.id, urgencyNow);
+      if (slots.length === 0) continue;
+      const currentMs = t.scheduledStartTime?.getTime() ?? Infinity;
+      // Find the earliest feasible slot strictly before the current placement.
+      const sooner = slots.find((s) => s.getTime() < currentMs);
+      if (!sooner) continue;
+      await act.reschedule(t.id, sooner, urgencyNow);
+      urgencyMovedIds.add(t.id);
+    }
 
     // ABANDON deadline-expired PENDING tasks. Held back during the held-out TAIL
     // so deadline tasks that expire there survive as a realistic backlog of
     // OVERDUE pending work at snapshot.
     if (clock.phase(day) !== "tail") await act.sweep(cutoff);
   }
+
+  return urgencyMovedIds;
 }
 
 /**
@@ -530,6 +615,14 @@ class ServiceActuator implements Actuator {
     return t ?? null;
   }
 
+  async readTaskTags(taskId: string): Promise<string[]> {
+    const t = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      select: { tags: { select: { name: true } } },
+    });
+    return t?.tags.map((tg) => tg.name) ?? [];
+  }
+
   async reschedule(taskId: string, to: Date, now: Date): Promise<void> {
     await this.tasks.reschedule(
       taskId,
@@ -602,6 +695,9 @@ class BatchedActuator implements Actuator {
   }
   readTask(taskId: string) {
     return this.state.readTask(taskId) ?? null;
+  }
+  readTaskTags(taskId: string): string[] {
+    return this.state.readTaskTags(taskId);
   }
   reschedule(taskId: string, to: Date, now: Date): void {
     this.state.reschedule(taskId, to, now);
@@ -691,7 +787,7 @@ async function runBatched(
       opts.durationBias ?? "blend",
       opts.temperature,
     );
-    await drivePersona(
+    const urgencyMovedIds = await drivePersona(
       new BatchedActuator(state),
       rec.persona,
       clock,
@@ -706,7 +802,7 @@ async function runBatched(
       archetypeId: rec.persona.archetypeId,
       index: rec.persona.index,
     });
-    groundTruth.push(toGroundTruth(rec.persona));
+    groundTruth.push(toGroundTruth(rec.persona, urgencyMovedIds));
     logger.log(`Seeded persona ${personas.length}/${planned.length}`);
   }
   return {
@@ -754,9 +850,11 @@ async function runService(
   }
 
   const concurrency = Math.max(1, opts.concurrency ?? 1);
+  // Per-persona urgency-moved sets, keyed by persona index for post-loop join.
+  const urgencyByIndex = new Map<number, Set<string>>();
   for (let i = 0; i < personas.length; i += concurrency) {
     const batch = personas.slice(i, i + concurrency);
-    await Promise.all(
+    const results = await Promise.all(
       batch.map((persona) =>
         drivePersona(
           new ServiceActuator(persona, opts.tasks, opts.abandoned, opts.prisma),
@@ -767,6 +865,9 @@ async function runService(
           opts.days,
         ),
       ),
+    );
+    batch.forEach((persona, j) =>
+      urgencyByIndex.set(persona.index, results[j]),
     );
     logger.log(
       `Driven ${Math.min(i + concurrency, personas.length)}/${personas.length} personas`,
@@ -783,7 +884,9 @@ async function runService(
       userId: p.userId,
       archetypeId: p.archetypeId,
     })),
-    groundTruth: personas.map(toGroundTruth),
+    groundTruth: personas.map((p) =>
+      toGroundTruth(p, urgencyByIndex.get(p.index)),
+    ),
   };
 }
 

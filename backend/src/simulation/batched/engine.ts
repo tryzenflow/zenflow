@@ -119,6 +119,12 @@ export class PersonaState {
   matrix: number[] = [];
   /** name → tag id for this user (the `(userId, name)` unique vocabulary). */
   private readonly tagIdByName = new Map<string, string>();
+  /**
+   * Task IDs that were urgency-spike-moved during this run (§5.6).
+   * Collected by the drive loop via urgency spike logic; exported to the
+   * ground-truth sidecar so `computeMetrics` can decompose MAR.
+   */
+  readonly urgencyMovedIds = new Set<string>();
 
   constructor(
     readonly userId: string,
@@ -294,6 +300,11 @@ export class PersonaState {
           deadline: t.deadline,
         }
       : undefined;
+  }
+
+  /** Tag names for a task (used by task-splitting to seed the remainder task). */
+  readTaskTags(taskId: string): string[] {
+    return this.byId(taskId)?.tagNames ?? [];
   }
 
   /** PENDING tasks whose placed slot has passed by `cutoff`. */
