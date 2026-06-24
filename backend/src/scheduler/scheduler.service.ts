@@ -578,9 +578,25 @@ export class SchedulerService {
     now: Date = new Date(),
   ): Promise<{ task: Task; displaced: DisplacedTask[] }> {
     return this.prisma.$transaction(async (tx) => {
-      const tasks = await this.pendingTasks(user.id, tx);
-      const target = tasks.find((t) => t.id === taskId);
+      // Ownership check: look up the task directly (no status filter) so the
+      // 404 reflects true absence/wrong-user rather than a stale PENDING-only
+      // query. The original code relied on pendingTasks() — a DONE task owned by
+      // this user was missing from that set, producing a spurious 404 while the
+      // PATCH /tasks/:id edit endpoint (which uses findFirst with no status
+      // filter) found it fine.
+      const target = await tx.task.findUnique({
+        where: { id: taskId, userId: user.id },
+      });
       if (!target) throw new NotFoundException(`Cannot find task ${taskId}`);
+
+      const pendingRows = await this.pendingTasks(user.id, tx);
+      // Merge the target into the working set if it isn't already PENDING (e.g.
+      // it's DONE). The conflict-recompute loop needs to see the dragged task so
+      // its placement is updated; other non-PENDING tasks are not included (they
+      // don't participate in future EDF scheduling).
+      const tasks = pendingRows.some((t) => t.id === taskId)
+        ? pendingRows
+        : [...pendingRows, target];
 
       // Snap to the 15-minute grid the calendar drops onto.
       const snapped = new Date(

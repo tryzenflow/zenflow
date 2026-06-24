@@ -79,6 +79,9 @@ function makeService(rows: Task[]): {
   const tx = {
     task: {
       findMany: jest.fn().mockResolvedValue(rows),
+      findUnique: jest.fn((args: { where: { id: string } }) =>
+        Promise.resolve(byId.get(args.where.id) ?? null),
+      ),
       update: jest.fn(
         (args: { where: { id: string }; data: UpdateCall["data"] }) => {
           const { where, data } = args;
@@ -108,6 +111,7 @@ function makeService(rows: Task[]): {
 type PrismaTxMock = {
   task: {
     findMany: jest.Mock;
+    findUnique: jest.Mock;
     update: jest.Mock;
   };
   taskEvent: { create: jest.Mock };
@@ -246,6 +250,48 @@ describe("SchedulerService.pin — in-progress tasks still block conflicts", () 
 
     expect(updated.conflict).toBe(true);
     expect(updates.find((u) => u.id === "elapsed")?.data.conflict).toBe(true);
+  });
+});
+
+describe("SchedulerService.pin — ownership check (bug: non-PENDING task returned 404)", () => {
+  // Regression: pin() used to locate the target via pendingTasks() (status=PENDING
+  // filter). Any non-PENDING task owned by the user was absent from that set, so
+  // pin() threw NotFoundException even though PATCH /tasks/:id (no status filter)
+  // found it fine. The confirmed real-world case is an ABANDONED task (deadline
+  // expired) being dragged on the calendar. The fix adds a status-agnostic
+  // findUnique ownership check before the PENDING-set load.
+
+  it("finds an ABANDONED task and does not throw NotFoundException", async () => {
+    const abandoned = task({
+      id: "abandoned-task",
+      status: "ABANDONED",
+      scheduledStartTime: new Date("2026-06-08T10:00:00Z"),
+    });
+    const { service } = makeService([abandoned]);
+
+    await expect(
+      service.pin(user, "abandoned-task", new Date("2026-06-08T11:00:00Z")),
+    ).resolves.toBeDefined();
+  });
+
+  it("finds a DONE task and does not throw NotFoundException", async () => {
+    const done = task({
+      id: "done-task",
+      status: "DONE",
+      scheduledStartTime: new Date("2026-06-08T10:00:00Z"),
+    });
+    const { service } = makeService([done]);
+
+    await expect(
+      service.pin(user, "done-task", new Date("2026-06-08T11:00:00Z")),
+    ).resolves.toBeDefined();
+  });
+
+  it("still throws NotFoundException for a task that does not belong to the user", async () => {
+    const { service } = makeService([]);
+    await expect(
+      service.pin(user, "nonexistent-id", new Date("2026-06-08T11:00:00Z")),
+    ).rejects.toThrow(expect.objectContaining({ status: 404 }));
   });
 });
 
