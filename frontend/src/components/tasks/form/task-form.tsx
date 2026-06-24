@@ -28,6 +28,11 @@ import type { Task } from "@zenflow/shared";
 import { TagsField } from "./tag-field";
 import { TitleField } from "./title-field";
 
+/** Duration in minutes, correctly handling cross-midnight fixed windows. */
+function fixedDuration(start: number, end: number): number {
+  return end >= start ? end - start : DAILY_HORIZON - start + end;
+}
+
 const DURATION_PRESETS = [15, 30, 45, 60, 120];
 
 const presetLabel = (m: number) =>
@@ -81,7 +86,9 @@ export function TaskForm({
   const isFixed = form.watch("isFixed");
   const fixedStart = form.watch("fixedStart");
   const fixedEnd = form.watch("fixedEnd");
-  const duration = isFixed ? fixedEnd - fixedStart : form.watch("duration");
+  const duration = isFixed
+    ? fixedDuration(fixedStart, fixedEnd)
+    : form.watch("duration");
 
   // `NoteEditor` only re-renders its content when `initialValue` changes, so a
   // bare `setValue("note", …)` updates the form but not the editor. Drive the
