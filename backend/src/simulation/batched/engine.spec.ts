@@ -17,12 +17,13 @@ const PREFS: SchedulerPrefs = {
   timezone: "UTC",
 };
 
-// 2025-01-06 is a Monday. Mon 09:00 → block 36, 10:00 → 40, 11:00 → 44.
+// 2025-01-06 is a Monday.
+// With 3-hour buckets: 09:00/10:00/11:00 all → bucket 3 (09–12), 12:00 → bucket 4 (12–15).
 const MON = "2025-01-06";
 const at = (hhmm: string) => new Date(`${MON}T${hhmm}:00.000Z`);
-const MON_0900 = preferenceIndex(at("09:00"), "UTC");
-const MON_1000 = preferenceIndex(at("10:00"), "UTC");
-const MON_1100 = preferenceIndex(at("11:00"), "UTC");
+const MON_0900 = preferenceIndex(at("09:00"), "UTC"); // bucket 3
+const MON_1200 = preferenceIndex(at("12:00"), "UTC"); // bucket 4
+const MON_1100 = preferenceIndex(at("11:00"), "UTC"); // bucket 3
 
 const baseInput = {
   title: "t",
@@ -46,14 +47,16 @@ describe("PersonaState (batched engine)", () => {
   it("MOVE emits a suggested-slot snapshot and applies the signed ±1 matrix", () => {
     const s = new PersonaState("u1", PREFS, ["backend"]);
     const { taskId } = s.create({ ...baseInput }, at("09:00"));
-    s.reschedule(taskId, at("10:00"), at("09:05"));
+    // Move from 09:00 (bucket 3) to 12:00 (bucket 4) so the ±1 deltas land on
+    // distinct matrix cells — same-bucket moves net to zero.
+    s.reschedule(taskId, at("12:00"), at("09:05"));
 
     const move = s.events.find((e) => e.eventType === "MOVE")!;
     const snap = move.newSnapshot as Record<string, unknown>;
     expect(snap.suggestedStartTime).toBe(at("09:00").toISOString());
-    expect(snap.scheduledStartTime).toBe(at("10:00").toISOString());
-    // +1 at the destination, −1 at the vacated slot.
-    expect(s.matrix[MON_1000]).toBe(1);
+    expect(snap.scheduledStartTime).toBe(at("12:00").toISOString());
+    // +1 at the destination bucket (12–15 = index 4), −1 at the vacated bucket (09–12 = index 3).
+    expect(s.matrix[MON_1200]).toBe(1);
     expect(s.matrix[MON_0900]).toBe(-1);
   });
 

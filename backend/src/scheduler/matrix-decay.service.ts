@@ -10,7 +10,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const DECAY_BATCH_SIZE = 200;
 
 /**
- * Daily exponential time-decay of every user's signed 7×96 preference matrix.
+ * Daily exponential time-decay of every user's signed 7×8 preference matrix.
  *
  * This is the I/O wrapper — the ONLY layer that touches Prisma — around the PURE
  * {@link decayMatrix} helper (`matrix-decay.ts`, owned + unit-tested by the

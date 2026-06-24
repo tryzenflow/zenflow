@@ -78,11 +78,12 @@ const task = (over: Partial<ReactionTask> = {}): ReactionTask => ({
 });
 
 describe("decidePlacement", () => {
-  // Three feasible Monday slots, 09:00 / 10:00 / 11:00 UTC.
+  // Three feasible Monday slots in DIFFERENT 3-hour buckets so preference scores
+  // are distinct: 09:00 (bucket 3), 12:00 (bucket 4), 15:00 (bucket 5).
   const feasible = [
-    new Date("2025-01-06T09:00:00.000Z"),
-    new Date("2025-01-06T10:00:00.000Z"),
-    new Date("2025-01-06T11:00:00.000Z"),
+    new Date("2025-01-06T09:00:00.000Z"), // bucket 3
+    new Date("2025-01-06T12:00:00.000Z"), // bucket 4
+    new Date("2025-01-06T15:00:00.000Z"), // bucket 5
   ];
   const suggested = feasible[0];
 
@@ -140,10 +141,10 @@ describe("decidePlacement", () => {
   });
 
   it("scores against the drifted field when one is supplied", () => {
-    // Base peak at the 10:00 slot (feasible[1]); high edit propensity, no noise.
-    // Un-drifted → the persona moves to feasible[1]. With a +4-block (one hour)
-    // drift the peak slides to the 11:00 slot (feasible[2]), so the SAME persona
-    // moves there instead — proving drift reaches the reaction loop.
+    // Base peak at the 12:00 slot (feasible[1], bucket 4); high edit propensity,
+    // no noise. Un-drifted → the persona moves to feasible[1]. With a +1-bucket
+    // drift the peak slides to the 15:00 slot (feasible[2], bucket 5), so the
+    // SAME persona moves there instead — proving drift reaches the reaction loop.
     const p = persona({
       field: fieldPeakedAt(feasible[1]),
       editPropensity: 1,
@@ -160,9 +161,9 @@ describe("decidePlacement", () => {
     );
     expect(undrifted!.getTime()).toBe(feasible[1].getTime());
 
-    // One 15-min slot = 1 block; one hour = 4 blocks. A +4-block shift moves the
-    // peak forward from the 10:00 slot to the 11:00 slot.
-    const drifted = driftedFieldFor(p.field, 4, 1);
+    // A +1-bucket shift moves the peak forward from the 12:00 bucket (4) to the
+    // 15:00 bucket (5). In the 3-hour grid one bucket = 1 shift unit.
+    const drifted = driftedFieldFor(p.field, 1, 1);
     const moved = decidePlacement(
       p,
       task(),

@@ -305,31 +305,32 @@ function writtenMatrix(tx: PrismaTxMock): number[] {
 
 describe("SchedulerService.pin — signed preference matrix", () => {
   it("decrements the vacated slot and increments the destination slot", async () => {
-    // Move a placed task from Mon 09:00 (idx 36) to Mon 11:00 (idx 44). The
-    // vacated cell gets -1, the destination cell +1.
+    // Move a placed task from Mon 09:00 (bucket 3, idx 3) to Mon 12:00 (bucket 4,
+    // idx 4). The vacated cell gets -1, the destination cell +1.
+    // (09:00 and 11:00 are the SAME bucket in the 3-hour grid, so we use 12:00.)
     const placed = task({
       id: "p",
       scheduledStartTime: new Date("2026-06-08T09:00:00Z"), // Mon 09:00
     });
     const { service, tx } = makeService([placed]);
 
-    await service.pin(user, "p", new Date("2026-06-08T11:00:00Z")); // Mon 11:00
+    await service.pin(user, "p", new Date("2026-06-08T12:00:00Z")); // Mon 12:00
 
     expect(tx.user.update).toHaveBeenCalledTimes(1);
     const matrix = writtenMatrix(tx);
-    expect(matrix).toHaveLength(672);
-    expect(matrix[36]).toBe(-1); // Mon 09:00 vacated → dislike
-    expect(matrix[44]).toBe(+1); // Mon 11:00 destination → move-toward
+    expect(matrix).toHaveLength(56);
+    expect(matrix[3]).toBe(-1); // Mon 09:00 bucket 3 vacated → dislike
+    expect(matrix[4]).toBe(+1); // Mon 12:00 bucket 4 destination → move-toward
   });
 
   it("only records the move-toward (+1) when the task had no prior slot", async () => {
     const unplaced = task({ id: "u", scheduledStartTime: null });
     const { service, tx } = makeService([unplaced]);
 
-    await service.pin(user, "u", new Date("2026-06-08T11:00:00Z")); // Mon 11:00
+    await service.pin(user, "u", new Date("2026-06-08T12:00:00Z")); // Mon 12:00 (bucket 4, idx 4)
 
     const matrix = writtenMatrix(tx);
-    expect(matrix[44]).toBe(+1);
+    expect(matrix[4]).toBe(+1);
     // No vacated cell was decremented.
     expect(matrix.filter((v) => v < 0)).toEqual([]);
   });
@@ -344,7 +345,7 @@ describe("SchedulerService.pin — signed preference matrix", () => {
     await service.pin(user, "p", new Date("2026-06-08T09:00:00Z")); // same slot
 
     const matrix = writtenMatrix(tx);
-    expect(matrix[36]).toBe(+1); // only the move-toward signal
+    expect(matrix[3]).toBe(+1); // Mon 09:00 bucket 3, only the move-toward signal
     expect(matrix.filter((v) => v < 0)).toEqual([]);
   });
 });

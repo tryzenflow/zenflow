@@ -56,9 +56,9 @@ export const identityReRanker: SlotReRanker = {
 };
 
 /**
- * Read a cell from the flat 672-cell signed preference matrix for an instant in
+ * Read a cell from the flat 56-cell signed preference matrix for an instant in
  * the user's `timezone`, via the shared {@link preferenceIndex} grid math
- * (`(isoWeekday-1)*96 + slotOfDay`). A cold-start / wrong-length matrix and any
+ * (`(isoWeekday-1)*8 + slotOfDay`). A cold-start / wrong-length matrix and any
  * out-of-range index read as `0` (neutral), so the re-ranker degrades to
  * identity rather than throwing.
  */
@@ -120,8 +120,8 @@ export interface ReRankerOptions {
  * Phase-2 placement re-ranker (docs/heuristic.md §Phase 2, ADR-0001 §1) with
  * SOFTMAX/BOLTZMANN EXPLORATION.
  *
- * Constructed with the user's **672-cell signed** preference matrix (7 ISO
- * weekdays × 96 fifteen-minute blocks) and their IANA `timezone` — both passed
+ * Constructed with the user's **56-cell signed** preference matrix (7 ISO
+ * weekdays × 8 three-hour buckets) and their IANA `timezone` — both passed
  * in by `SchedulerService` (invariant #2: the core stays pure; the matrix, the
  * temperature, and the RNG seed are all computed in the service and handed in).
  *

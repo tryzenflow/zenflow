@@ -17,11 +17,17 @@ export const MIN = 60_000;
  *
  * Choosing T: the signed matrix accumulates `±1` per move/keep, so a "meaningful"
  * preference delta between two feasible slots is on the order of a few units (a
- * cell visited a handful of times). `T = 1.0` makes a 1-unit gap an `e¹ ≈ 2.7×`
- * odds ratio and a 3-unit gap ≈ `20×` — i.e. it still strongly prefers liked
- * slots while leaving real exploration mass on the rest. Larger T over-explores
- * (→ uniform, MAR regresses); `T → 0` recovers the deterministic argmax (today's
- * greedy Phase-2). Validated against the sim MAR guardrail (must not regress vs
- * greedy Phase-2; must still beat Phase-1) — tune DOWN if a run regresses.
+ * cell visited a handful of times). With 3-hour buckets cells accumulate signal
+ * ~12× faster than the old 15-min slots, so meaningful deltas appear sooner —
+ * a user needs far fewer interactions before the matrix has actionable signal.
+ * `T = 1.0` makes a 1-unit gap an `e¹ ≈ 2.7×` odds ratio and a 3-unit gap
+ * ≈ `20×` — i.e. it still strongly prefers liked buckets while leaving real
+ * exploration mass on the rest. A 3-unit delta will be reached faster now that
+ * each move/keep touches a coarser cell. Larger T over-explores (→ uniform,
+ * MAR regresses); `T → 0` recovers the deterministic argmax (today's greedy
+ * Phase-2). T=1.0 remains valid but may benefit from downward tuning once real
+ * data confirms faster convergence. Validated against the sim MAR guardrail
+ * (must not regress vs greedy Phase-2; must still beat Phase-1) — tune DOWN if
+ * a run regresses.
  */
 export const RERANKER_TEMPERATURE = 1.0;

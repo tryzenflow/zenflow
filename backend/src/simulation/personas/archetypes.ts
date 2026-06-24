@@ -25,28 +25,28 @@ export type ArchetypeId = "dev" | "night_owl" | "ops" | "pm" | "crammer";
 export type MeanSd = [number, number];
 
 /**
- * A Gaussian bump on the 7×96 preference grid. `day` is an ISO weekday (1=Mon …
- * 7=Sun) or -1 for "every working day". `block` is the slot-of-day center
- * (0…95, i.e. 15-min blocks). `height` is the peak value; `spread` is the
- * std-dev in blocks (a wider, gentler hill vs a sharp peak).
+ * A Gaussian bump on the 7×8 preference grid. `day` is an ISO weekday (1=Mon …
+ * 7=Sun) or -1 for "every working day". `block` is the bucket-of-day center
+ * (0…7, i.e. 3-hour buckets). `height` is the peak value; `spread` is the
+ * std-dev in buckets (a wider, gentler hill vs a sharp peak).
  */
 export interface PeakSpec {
   day: number; // ISO weekday, or -1 = all working days
-  block: number; // 0…95 slot-of-day center
+  block: number; // 0…7 bucket-of-day center
   height: number;
-  spread: number; // blocks
+  spread: number; // buckets
 }
 
 /**
  * A tag×time interaction: for tasks carrying `tag`, the preference at `block`
- * (slot-of-day, all working days) is shifted by `delta`. Positive = the persona
+ * (bucket-of-day, all working days) is shifted by `delta`. Positive = the persona
  * prefers that tag at that time of day; negative = avoids it. This is the
  * Phase-3-only latent layer.
  */
 export interface TagTimeInteraction {
   tag: string;
-  block: number; // 0…95 slot-of-day center
-  spread: number; // blocks
+  block: number; // 0…7 bucket-of-day center
+  spread: number; // buckets
   delta: number;
 }
 
@@ -126,8 +126,8 @@ export interface Archetype {
   splitRate: MeanSd;
 }
 
-// Slot-of-day helper: a wall-clock hour → block index (4 blocks/hour).
-const H = (hour: number, minute = 0) => hour * 4 + Math.floor(minute / 15);
+// Bucket-of-day helper: a wall-clock hour → bucket index (floor(hour/3), 0…7).
+const H = (hour: number) => Math.floor(hour / 3);
 
 export const ARCHETYPES: Archetype[] = [
   // ───────────────────────────── A · Steady 9–5 Developer ──────────────────
@@ -138,8 +138,8 @@ export const ARCHETYPES: Archetype[] = [
     timezones: ["Europe/Berlin", "Europe/Paris", "Europe/Amsterdam"],
     peaks: [
       // Strong morning deep-work peak 09:30–12:00; post-lunch dip disliked.
-      { day: -1, block: H(10, 30), height: 3.0, spread: 6 },
-      { day: -1, block: H(14, 0), height: -1.0, spread: 4 },
+      { day: -1, block: H(10), height: 3.0, spread: 0.5 },
+      { day: -1, block: H(14), height: -1.0, spread: 0.33 },
     ],
     tagMix: [
       { name: "backend", weight: 4 },
@@ -154,9 +154,9 @@ export const ARCHETYPES: Archetype[] = [
     },
     tagTimeInteractions: [
       // Prefers #backend in the morning, tolerates #review in the afternoon.
-      { tag: "backend", block: H(10, 0), spread: 5, delta: 2.0 },
-      { tag: "review", block: H(15, 0), spread: 5, delta: 1.5 },
-      { tag: "review", block: H(10, 0), spread: 5, delta: -0.8 },
+      { tag: "backend", block: H(10), spread: 0.42, delta: 2.0 },
+      { tag: "review", block: H(15), spread: 0.42, delta: 1.5 },
+      { tag: "review", block: H(10), spread: 0.42, delta: -0.8 },
     ],
     editPropensity: [0.45, 0.08],
     moveThreshold: [1.2, 0.2],
@@ -169,7 +169,7 @@ export const ARCHETYPES: Archetype[] = [
     viewWeights: { day: 0.5, week: 0.4, month: 0.1 },
     estDuration: { mu: [Math.log(75), 0.05], sigma: [0.45, 0.05] },
     fixedLoadPerWeek: [3, 1],
-    driftPerMonth: { peakShiftBlocks: -0.4, biasDecay: 0.01 },
+    driftPerMonth: { peakShiftBlocks: -0.033, biasDecay: 0.01 },
     urgencySpikeProbPerTask: [0.01, 0.003],
     urgencyMoveThreshold: [0.75, 0.05],
     energyBaseline: [0.72, 0.06],
@@ -190,9 +190,9 @@ export const ARCHETYPES: Archetype[] = [
     peaks: [
       // Strong night peak ~21:00–00:30; a secondary after-midnight focus block;
       // late mornings (when they're asleep) are firmly disliked.
-      { day: -1, block: H(22, 0), height: 3.2, spread: 7 },
-      { day: -1, block: H(1, 0), height: 1.8, spread: 5 },
-      { day: -1, block: H(10, 30), height: -1.4, spread: 5 },
+      { day: -1, block: H(22), height: 3.2, spread: 0.58 },
+      { day: -1, block: H(1), height: 1.8, spread: 0.42 },
+      { day: -1, block: H(10), height: -1.4, spread: 0.42 },
     ],
     tagMix: [
       { name: "frontend", weight: 4 },
@@ -207,8 +207,8 @@ export const ARCHETYPES: Archetype[] = [
     },
     tagTimeInteractions: [
       // Tag affinities sit in the night window now: design late, frontend ~21:00.
-      { tag: "design", block: H(23, 0), spread: 5, delta: 1.6 },
-      { tag: "frontend", block: H(21, 0), spread: 6, delta: 1.4 },
+      { tag: "design", block: H(23), spread: 0.42, delta: 1.6 },
+      { tag: "frontend", block: H(21), spread: 0.5, delta: 1.4 },
     ],
     editPropensity: [0.55, 0.08],
     moveThreshold: [1.0, 0.2],
@@ -221,7 +221,7 @@ export const ARCHETYPES: Archetype[] = [
     viewWeights: { day: 0.4, week: 0.45, month: 0.15 },
     estDuration: { mu: [Math.log(90), 0.05], sigma: [0.5, 0.05] },
     fixedLoadPerWeek: [2, 1],
-    driftPerMonth: { peakShiftBlocks: 0.3, biasDecay: 0.005 },
+    driftPerMonth: { peakShiftBlocks: 0.025, biasDecay: 0.005 },
     urgencySpikeProbPerTask: [0.02, 0.005],
     urgencyMoveThreshold: [0.7, 0.06],
     energyBaseline: [0.68, 0.07],
@@ -238,8 +238,8 @@ export const ARCHETYPES: Archetype[] = [
     timezones: ["Europe/London", "Asia/Singapore", "Australia/Sydney"],
     peaks: [
       // Fragmented: mornings kept reactive (low pref), short midday focus.
-      { day: -1, block: H(13, 0), height: 1.6, spread: 4 },
-      { day: -1, block: H(9, 0), height: -1.4, spread: 4 },
+      { day: -1, block: H(13), height: 1.6, spread: 0.33 },
+      { day: -1, block: H(9), height: -1.4, spread: 0.33 },
     ],
     tagMix: [
       { name: "incident", weight: 4 },
@@ -255,8 +255,8 @@ export const ARCHETYPES: Archetype[] = [
       oncall: { mu: [Math.log(1.0), 0.05], sigma: [0.5, 0.06] },
     },
     tagTimeInteractions: [
-      { tag: "incident", block: H(13, 0), spread: 3, delta: 0.8 },
-      { tag: "ops", block: H(11, 0), spread: 4, delta: 0.6 },
+      { tag: "incident", block: H(13), spread: 0.25, delta: 0.8 },
+      { tag: "ops", block: H(11), spread: 0.33, delta: 0.6 },
     ],
     editPropensity: [0.65, 0.08],
     moveThreshold: [0.8, 0.2],
@@ -271,7 +271,7 @@ export const ARCHETYPES: Archetype[] = [
     // Many short tasks.
     estDuration: { mu: [Math.log(35), 0.05], sigma: [0.55, 0.06] },
     fixedLoadPerWeek: [5, 2],
-    driftPerMonth: { peakShiftBlocks: 0.2, biasDecay: 0.0 },
+    driftPerMonth: { peakShiftBlocks: 0.017, biasDecay: 0.0 },
     urgencySpikeProbPerTask: [0.04, 0.008],
     urgencyMoveThreshold: [0.62, 0.07],
     energyBaseline: [0.65, 0.07],
@@ -288,9 +288,9 @@ export const ARCHETYPES: Archetype[] = [
     timezones: ["Europe/Berlin", "America/New_York", "Europe/Madrid"],
     peaks: [
       // Focus early (08:00–09:30) or late (16:30–18:00); midday meeting band.
-      { day: -1, block: H(9, 0), height: 2.2, spread: 4 },
-      { day: -1, block: H(17, 0), height: 2.0, spread: 4 },
-      { day: -1, block: H(12, 30), height: -1.6, spread: 6 },
+      { day: -1, block: H(9), height: 2.2, spread: 0.33 },
+      { day: -1, block: H(17), height: 2.0, spread: 0.33 },
+      { day: -1, block: H(12), height: -1.6, spread: 0.5 },
     ],
     tagMix: [
       { name: "planning", weight: 3 },
@@ -306,9 +306,9 @@ export const ARCHETYPES: Archetype[] = [
     },
     tagTimeInteractions: [
       // Prefers #writing early, #1on1 midday — a strong P_tag interaction.
-      { tag: "writing", block: H(8, 30), spread: 4, delta: 1.8 },
-      { tag: "1on1", block: H(13, 0), spread: 4, delta: 1.6 },
-      { tag: "writing", block: H(13, 0), spread: 4, delta: -1.0 },
+      { tag: "writing", block: H(8), spread: 0.33, delta: 1.8 },
+      { tag: "1on1", block: H(13), spread: 0.33, delta: 1.6 },
+      { tag: "writing", block: H(13), spread: 0.33, delta: -1.0 },
     ],
     editPropensity: [0.45, 0.08],
     moveThreshold: [1.1, 0.2],
@@ -322,7 +322,7 @@ export const ARCHETYPES: Archetype[] = [
     estDuration: { mu: [Math.log(60), 0.05], sigma: [0.4, 0.05] },
     // Many fixed blocks.
     fixedLoadPerWeek: [10, 3],
-    driftPerMonth: { peakShiftBlocks: 0.1, biasDecay: 0.01 },
+    driftPerMonth: { peakShiftBlocks: 0.008, biasDecay: 0.01 },
     urgencySpikeProbPerTask: [0.015, 0.004],
     urgencyMoveThreshold: [0.72, 0.05],
     energyBaseline: [0.7, 0.06],
@@ -339,8 +339,8 @@ export const ARCHETYPES: Archetype[] = [
     timezones: ["Europe/Madrid", "America/Sao_Paulo", "Asia/Tokyo"],
     peaks: [
       // Strong evening peak; bursty. (Deadline pull is added separately via ρ.)
-      { day: -1, block: H(20, 0), height: 2.6, spread: 8 },
-      { day: -1, block: H(11, 0), height: -0.8, spread: 6 },
+      { day: -1, block: H(20), height: 2.6, spread: 0.67 },
+      { day: -1, block: H(11), height: -0.8, spread: 0.5 },
     ],
     tagMix: [
       { name: "writing", weight: 4 },
@@ -355,8 +355,8 @@ export const ARCHETYPES: Archetype[] = [
       analysis: { mu: [Math.log(1.45), 0.05], sigma: [0.32, 0.04] },
     },
     tagTimeInteractions: [
-      { tag: "writing", block: H(21, 0), spread: 6, delta: 1.4 },
-      { tag: "reading", block: H(15, 0), spread: 6, delta: 0.9 },
+      { tag: "writing", block: H(21), spread: 0.5, delta: 1.4 },
+      { tag: "reading", block: H(15), spread: 0.5, delta: 0.9 },
     ],
     editPropensity: [0.35, 0.08],
     moveThreshold: [1.3, 0.2],
@@ -372,7 +372,7 @@ export const ARCHETYPES: Archetype[] = [
     viewWeights: { day: 0.2, week: 0.5, month: 0.3 },
     estDuration: { mu: [Math.log(110), 0.05], sigma: [0.55, 0.06] },
     fixedLoadPerWeek: [1, 1],
-    driftPerMonth: { peakShiftBlocks: -0.2, biasDecay: 0.02 },
+    driftPerMonth: { peakShiftBlocks: -0.017, biasDecay: 0.02 },
     urgencySpikeProbPerTask: [0.03, 0.007],
     urgencyMoveThreshold: [0.65, 0.07],
     energyBaseline: [0.62, 0.08],

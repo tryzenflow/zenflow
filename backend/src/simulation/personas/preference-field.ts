@@ -12,28 +12,28 @@ import type { Rng } from "../rng";
  * Pure: builds the latent ground-truth fields from an archetype's distributions
  * (the only randomness is the seeded `rng` passed in by the factory), and scores
  * candidate slots. NO I/O — `scoreSlot` reuses the production `preferenceIndex`
- * (`scheduler/slot.ts`) so the 7×96 grid the persona reasons over is byte-for-
+ * (`scheduler/slot.ts`) so the 7×8 grid the persona reasons over is byte-for-
  * byte the same grid Phase 2's `preferenceMatrix` accumulates into.
  *
  * Two strictly separate layers (the cardinal anti-circularity rule, strategy
  * §1.1, §4.2):
- *  - `pGlobal` (672 cells): the global temporal field — what a Phase-2 matrix can
+ *  - `pGlobal` (56 cells): the global temporal field — what a Phase-2 matrix can
  *    approximate.
- *  - `pTag` (per-tag 672-cell deviations): the tag×time interactions only a
+ *  - `pTag` (per-tag 56-cell deviations): the tag×time interactions only a
  *    Phase-3 context bandit can exploit. A persona that has none cannot let
  *    Phase 3 beat Phase 2 — so it must be present and distinct.
  */
 
-const SLOTS = PREFERENCE_SLOTS_PER_DAY; // 96
+const SLOTS = PREFERENCE_SLOTS_PER_DAY; // 8
 const DAYS = 7;
 
-/** Add a Gaussian bump to a 672-cell grid, wrapping the slot-of-day axis. */
+/** Add a Gaussian bump to a 56-cell grid, wrapping the bucket-of-day axis. */
 function addBump(
   grid: Float64Array,
   day: number, // ISO weekday 1…7, or -1 = all days
-  block: number, // 0…95 center
+  block: number, // 0…7 center
   height: number,
-  spread: number, // blocks
+  spread: number, // buckets
 ): void {
   const days = day === -1 ? [1, 2, 3, 4, 5, 6, 7] : [day];
   const twoSigmaSq = 2 * spread * spread;
@@ -58,7 +58,7 @@ export function buildPGlobal(
   for (const p of peaks) {
     // Per-persona jitter on height + a small block shift so members differ.
     const height = p.height * (1 + rng.normal(0, jitter));
-    const block = p.block + Math.round(rng.normal(0, 1.5));
+    const block = p.block + Math.round(rng.normal(0, 0.1));
     addBump(grid, p.day, ((block % SLOTS) + SLOTS) % SLOTS, height, p.spread);
   }
   return grid;
@@ -78,7 +78,7 @@ export function buildPTag(
       out.set(it.tag, grid);
     }
     const delta = it.delta * (1 + rng.normal(0, jitter));
-    const block = it.block + Math.round(rng.normal(0, 1));
+    const block = it.block + Math.round(rng.normal(0, 0.1));
     addBump(grid, -1, ((block % SLOTS) + SLOTS) % SLOTS, delta, it.spread);
   }
   return out;

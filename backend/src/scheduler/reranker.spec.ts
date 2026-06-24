@@ -36,7 +36,7 @@ function task(id = "t1", durationMinutes = 60): EdfTask {
   };
 }
 
-/** A fresh all-zero 672-cell matrix. */
+/** A fresh all-zero 56-cell matrix. */
 function zeroMatrix(): number[] {
   return new Array<number>(PREFERENCE_MATRIX_LENGTH).fill(0);
 }
@@ -46,14 +46,16 @@ function multiset(dates: Date[]): number[] {
   return dates.map((d) => d.getTime()).sort((a, b) => a - b);
 }
 
-// A handful of ascending Monday slots (the order EDF would hand in).
+// A handful of ascending Monday slots, each in a DIFFERENT 3-hour bucket so
+// the matrix can assign distinct cell scores (2026-06-08 is a Monday).
+// Buckets: 09:00=3, 12:00=4, 15:00=5, 18:00=6, 21:00=7.
 const MONDAY = "2026-06-08T"; // a Monday
 const candidates = [
-  new Date(`${MONDAY}09:00:00Z`),
-  new Date(`${MONDAY}09:15:00Z`),
-  new Date(`${MONDAY}09:30:00Z`),
-  new Date(`${MONDAY}09:45:00Z`),
-  new Date(`${MONDAY}10:00:00Z`),
+  new Date(`${MONDAY}09:00:00Z`), // bucket 3
+  new Date(`${MONDAY}12:00:00Z`), // bucket 4
+  new Date(`${MONDAY}15:00:00Z`), // bucket 5
+  new Date(`${MONDAY}18:00:00Z`), // bucket 6
+  new Date(`${MONDAY}21:00:00Z`), // bucket 7
 ];
 
 describe("preferenceMatrixReRanker — permutation guarantee", () => {
@@ -101,7 +103,7 @@ describe("preferenceMatrixReRanker — cold-start / all-equal == identity earlie
     expect(r.score(task(), candidates)).toEqual(candidates);
   };
 
-  it("an all-zero 672-cell matrix preserves EDF order exactly (byte-for-byte identity)", () => {
+  it("an all-zero 56-cell matrix preserves EDF order exactly (byte-for-byte identity)", () => {
     const r = preferenceMatrixReRanker(zeroMatrix(), TZ);
     expect(r.score(task(), candidates)).toEqual(candidates);
     expect(r.score(task(), candidates)).toEqual(
@@ -133,12 +135,13 @@ describe("preferenceMatrixReRanker — cold-start / all-equal == identity earlie
 
 describe("preferenceMatrixReRanker — T → 0 recovers deterministic argmax", () => {
   it("at a tiny temperature, picks the highest-cell-score slot first, descending", () => {
+    // Each candidate is in a distinct 3-hour bucket so the scores are unambiguous.
     const matrix = zeroMatrix();
-    matrix[preferenceIndex(candidates[0], TZ)] = 1;
-    matrix[preferenceIndex(candidates[1], TZ)] = 4; // highest
-    matrix[preferenceIndex(candidates[2], TZ)] = -2; // lowest
-    matrix[preferenceIndex(candidates[3], TZ)] = 3;
-    // candidates[4] stays 0
+    matrix[preferenceIndex(candidates[0], TZ)] = 1; // bucket 3
+    matrix[preferenceIndex(candidates[1], TZ)] = 4; // bucket 4, highest
+    matrix[preferenceIndex(candidates[2], TZ)] = -2; // bucket 5, lowest
+    matrix[preferenceIndex(candidates[3], TZ)] = 3; // bucket 6
+    // candidates[4] (bucket 7) stays 0
 
     // T → 0: the score/T term swamps the O(1) Gumbel noise, so the order is the
     // pure descending-cell-score argmax for ANY seed.
@@ -237,10 +240,12 @@ describe("preferenceMatrixReRanker — strongly-peaked matrix picks the peak w.h
   });
 
   it("honours the user's timezone when reading the cell", () => {
+    // UTC-4 in June. Use candidates in distinct NY 3-hour buckets:
+    // 13:00Z = NY 09:00 (bucket 3, liked), 16:00Z = NY 12:00 (bucket 4), 12:00Z = NY 08:00 (bucket 2).
     const nyCandidates = [
-      new Date("2026-06-08T12:00:00Z"), // NY 08:00
-      new Date("2026-06-08T13:00:00Z"), // NY 09:00 (liked)
-      new Date("2026-06-08T14:00:00Z"), // NY 10:00
+      new Date("2026-06-08T12:00:00Z"), // NY 08:00 (bucket 2)
+      new Date("2026-06-08T13:00:00Z"), // NY 09:00 (bucket 3, liked)
+      new Date("2026-06-08T16:00:00Z"), // NY 12:00 (bucket 4)
     ];
     const matrix = zeroMatrix();
     matrix[preferenceIndex(nyCandidates[1], "America/New_York")] = 10;
@@ -296,8 +301,9 @@ describe("preferenceMatrixReRanker — propensity (softmax first-choice marginal
     const matrix = zeroMatrix();
     matrix[preferenceIndex(candidates[0], TZ)] = 3;
     const r = preferenceMatrixReRanker(matrix, TZ);
+    // 06:00 is not in the candidates array (which starts at 09:00).
     expect(
-      r.propensity(task(), candidates, new Date(`${MONDAY}15:00:00Z`)),
+      r.propensity(task(), candidates, new Date(`${MONDAY}06:00:00Z`)),
     ).toBe(0);
   });
 });
