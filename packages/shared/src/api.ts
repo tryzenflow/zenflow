@@ -108,13 +108,13 @@ export interface RescheduleResponse {
   rationale?: SchedulingRationale | null;
 }
 
-/** 7×96 signed preference matrix for the Insights heatmap. */
+/** 7×8 signed preference matrix for the Insights heatmap. */
 export interface PreferenceMatrixResponse {
-  /** Flat 672-int row-major [day0..6][block0..95], signed scores. */
+  /** Flat 56-int row-major [day0..6][block0..7], signed scores. */
   matrix: number[];
   /** Grid dims so the FE doesn't hard-code them. */
   days: number; // 7
-  blocks: number; // 96
+  blocks: number; // 8
 }
 
 export interface TaskDetailResponse {

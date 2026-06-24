@@ -21,11 +21,9 @@ model User {
   workEnd   Int   @default(1020) // 17:00
   workDays  Int[] @default([1, 2, 3, 4, 5]) // 1=Mon … 7=Sun
 
-  // Flat 672-int SIGNED preference matrix (7 days × 96 fifteen-minute slots,
-  // aligned to the slot grid — not downsampled to 30 minutes). Written as Phase-1
-  // telemetry: keeps/moves-toward increment a cell (+1), moves-away decrement it
-  // (-1); an empty cell is 0 (neutral). Not yet read by the scheduler. Seeded
-  // lazily.
+  // Flat 56-int SIGNED preference matrix (7 days × 8 three-hour buckets).
+  // Written as Phase-1 telemetry: keeps/moves-toward increment a cell (+1),
+  // moves-away decrement it (-1); an empty cell is 0 (neutral). Seeded lazily.
   preferenceMatrix Int[] @default([])
 
   // When the daily decay cron last applied exponential time-decay to
