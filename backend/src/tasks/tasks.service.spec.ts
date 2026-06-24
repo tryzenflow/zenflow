@@ -685,6 +685,104 @@ describe("TasksService — stale-conflict self-heal on delete/complete", () => {
   });
 });
 
+describe("TasksService.create — cross-midnight fixed tasks (endTime)", () => {
+  it("derives durationMinutes from startTime + endTime (same day)", async () => {
+    const { service, creates } = makeCreateService();
+    await service.create(
+      {
+        title: "Morning block",
+        fixed: true,
+        startTime: 540, // 09:00
+        endTime: 600, // 10:00 → 60 min
+        startDate: "2026-06-10",
+      },
+      user,
+    );
+    expect(creates[0].data.durationMinutes).toBe(60);
+  });
+
+  it("derives durationMinutes from startTime + endTime (cross-midnight)", async () => {
+    const { service, creates } = makeCreateService();
+    await service.create(
+      {
+        title: "Night shift",
+        fixed: true,
+        startTime: 1380, // 23:00
+        endTime: 60, // 01:00 next day → 120 min
+        startDate: "2026-06-10",
+      },
+      user,
+    );
+    expect(creates[0].data.durationMinutes).toBe(120);
+  });
+
+  it("cross-midnight: 22:00 → 06:00 = 480 min", async () => {
+    const { service, creates } = makeCreateService();
+    await service.create(
+      {
+        title: "Overnight",
+        fixed: true,
+        startTime: 1320, // 22:00
+        endTime: 360, // 06:00 → 480 min
+        startDate: "2026-06-10",
+      },
+      user,
+    );
+    expect(creates[0].data.durationMinutes).toBe(480);
+  });
+
+  it("explicit durationMinutes wins over endTime when both are supplied", async () => {
+    const { service, creates } = makeCreateService();
+    await service.create(
+      {
+        title: "Override",
+        fixed: true,
+        startTime: 540, // 09:00
+        endTime: 600, // 10:00 (would be 60 min)
+        durationMinutes: 90, // explicit — wins
+        startDate: "2026-06-10",
+      },
+      user,
+    );
+    expect(creates[0].data.durationMinutes).toBe(90);
+  });
+
+  it("still sets scheduledStartTime from startTime on a cross-midnight fixed task", async () => {
+    const { service, creates } = makeCreateService();
+    await service.create(
+      {
+        title: "Night owl",
+        fixed: true,
+        startTime: 1380, // 23:00 → UTC start: 2026-06-10T23:00:00Z for a UTC user
+        endTime: 60, // 01:00
+        startDate: "2026-06-10",
+      },
+      user,
+    );
+    const sst = creates[0].data.scheduledStartTime as Date;
+    expect(sst).toBeInstanceOf(Date);
+    expect(sst.toISOString()).toBe("2026-06-10T23:00:00.000Z");
+  });
+
+  it("cross-midnight duration is always a positive multiple of 15", async () => {
+    const { service, creates } = makeCreateService();
+    // 22:30 → 00:05 = 95 min raw → ceil to 105
+    await service.create(
+      {
+        title: "Off-grid span",
+        fixed: true,
+        startTime: 1350, // 22:30
+        endTime: 5, // 00:05
+        startDate: "2026-06-10",
+      },
+      user,
+    );
+    const dur = creates[0].data.durationMinutes as number;
+    expect(dur % 15).toBe(0);
+    expect(dur).toBe(105);
+  });
+});
+
 describe("TasksService.complete — KEEP positive signal", () => {
   const slot = new Date("2026-01-05T09:00:00.000Z"); // a Monday work slot
 

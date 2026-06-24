@@ -343,8 +343,10 @@ export class PersonaState {
 
     // Phase-2 duration preprocessing (ADR-0001 §2): bias-correct the estimate
     // BEFORE EDF sees it. The `identity` arm leaves it untouched.
+    // Simulation always supplies durationMinutes explicitly (never uses the
+    // cross-midnight endTime path that makes it optional in CreateTaskInput).
     const durationMinutes = this.correctEstimate(
-      input.durationMinutes,
+      input.durationMinutes!,
       tagNames,
     );
 

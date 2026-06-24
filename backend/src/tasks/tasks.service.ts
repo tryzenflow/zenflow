@@ -9,7 +9,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { SchedulerService } from "../scheduler/scheduler.service";
 import { Prisma, type Task, type Tag, type User } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
-import { minutesToUtc } from "../common/utils";
+import { fixedTaskDuration, minutesToUtc } from "../common/utils";
 import { localDateStr } from "../scheduler/slot";
 import { EVENT_REWARD } from "../scheduler/telemetry";
 import {
@@ -99,7 +99,7 @@ export class TasksService {
     user: User,
     now: Date = new Date(),
   ): Promise<CreateTaskResponse> {
-    const { startDate, fixed, startTime, view, ...rest } = dto;
+    const { startDate, fixed, startTime, endTime, view, ...rest } = dto;
     const tz = user.timezone;
     const isFixed = fixed ?? false;
     const overflowView = view ?? "day";
@@ -110,10 +110,19 @@ export class TasksService {
         // Resolve incoming tag NAMES → ids before connecting them to the task.
         const tagIds = await this.resolveTagIds(tx, user.id, rest.tags ?? []);
 
+        // For fixed tasks with an endTime but no explicit durationMinutes, derive
+        // duration from the start→end span — correctly handling cross-midnight
+        // (startTime > endTime) by adding one full day (1440 min) before rounding
+        // up to the 15-min grid. When both are supplied, durationMinutes wins.
+        const resolvedDurationMinutes: number =
+          isFixed && endTime !== undefined && rest.durationMinutes === undefined
+            ? fixedTaskDuration(startTime ?? 0, endTime)
+            : (rest.durationMinutes as number);
+
         // Phase-2 per-tag duration corrector. ALWAYS computed (so it always
         // LEARNS, even in `never` mode) but only APPLIED when the user's mode is
         // not `never`. The corrected value is rounded up to the 15-min grid.
-        const estimatedDuration = rest.durationMinutes;
+        const estimatedDuration = resolvedDurationMinutes;
         const cleanTags = (rest.tags ?? [])
           .map((t) => t.trim())
           .filter(Boolean);

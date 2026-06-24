@@ -76,11 +76,26 @@ export interface TaskEvent {
 export interface CreateTaskInput {
   title: string;
   note?: string | null;
-  durationMinutes: number;
+  /**
+   * Task duration in minutes (positive multiple of 15). For non-fixed tasks this
+   * is required. For fixed tasks you may omit it and provide `endTime` instead —
+   * the server derives `durationMinutes` from `startTime` + `endTime`, handling
+   * the cross-midnight case (`startTime > endTime`) as
+   * `endTime + 1440 − startTime` rounded to the nearest 15-minute multiple.
+   */
+  durationMinutes?: number;
   deadline?: string | null;
   tags?: string[];
   fixed?: boolean;
+  /** Minutes from midnight (0–1439); only meaningful when `fixed` is true. */
   startTime?: number;
+  /**
+   * Fixed-task end time in minutes from midnight (0–1439). Optional alternative
+   * to `durationMinutes` for fixed tasks: when provided the server computes the
+   * duration, correctly handling cross-midnight spans (`startTime > endTime`).
+   * Ignored for non-fixed tasks.
+   */
+  endTime?: number;
   /**
    * 'YYYY-MM-DD' day the task was created from, in the user's tz. Fixed: the
    * exact anchor day. Flexible: the earliest day the engine may place it on.
