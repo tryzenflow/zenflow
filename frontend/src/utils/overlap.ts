@@ -24,9 +24,12 @@ export interface BlockLayout {
  *
  * A completed task no longer occupies its slot — the user already did it — so it
  * never raises a conflict and is never flagged itself: a live task scheduled on
- * top of a finished one is not a clash. A block is therefore flagged as a
- * conflict only when its cluster holds two or more LIVE (non-DONE) blocks.
- * Completed blocks still take a column so they keep rendering side-by-side.
+ * top of a finished one is not a clash. A block is flagged as a conflict only
+ * when it genuinely overlaps in time another LIVE (non-DONE) block in its
+ * cluster, using the strict half-open rule `aStart < bEnd && bStart < aEnd`.
+ * Blocks that merely touch at a boundary (`aEnd === bStart`) do NOT clash, even
+ * though they share a cluster for column packing. Completed blocks still take a
+ * column so they keep rendering side-by-side.
  *
  * The input array is treated as read-only — it is cloned before sorting.
  */
@@ -60,12 +63,25 @@ export function getOverlapLayout(
       colOf.set(keyOf(ev), col);
     }
     const columns = colEnds.length;
-    const liveMembers = cluster.filter((ev) => ev.status !== "DONE").length;
+    // A block conflicts only when it is live AND genuinely overlaps (strict
+    // half-open) some OTHER live block in the cluster. Touching boundaries
+    // (aEnd === bStart) do not clash; live-on-DONE is never a clash.
+    const live = cluster.filter((ev) => ev.status !== "DONE");
     for (const ev of cluster) {
+      const conflict =
+        ev.status !== "DONE" &&
+        live.some((other) => {
+          if (keyOf(other) === keyOf(ev)) return false;
+          const aStart = new Date(ev.start).getTime();
+          const aEnd = new Date(ev.end).getTime();
+          const bStart = new Date(other.start).getTime();
+          const bEnd = new Date(other.end).getTime();
+          return aStart < bEnd && bStart < aEnd;
+        });
       layout.set(keyOf(ev), {
         column: colOf.get(keyOf(ev)) ?? 0,
         columns,
-        conflict: ev.status !== "DONE" && liveMembers > 1,
+        conflict,
       });
     }
     cluster = [];
