@@ -27,8 +27,8 @@ export interface BlockLayout {
  * top of a finished one is not a clash. A block is flagged as a conflict only
  * when it genuinely overlaps in time another LIVE (non-DONE) block in its
  * cluster, using the strict half-open rule `aStart < bEnd && bStart < aEnd`.
- * Blocks that merely touch at a boundary (`aEnd === bStart`) do NOT clash, even
- * though they share a cluster for column packing. Completed blocks still take a
+ * Blocks that merely touch at a boundary (`aEnd === bStart`) are placed into a
+ * fresh cluster and always render at full width. Completed blocks still take a
  * column so they keep rendering side-by-side.
  *
  * The input array is treated as read-only — it is cloned before sorting.
@@ -90,11 +90,12 @@ export function getOverlapLayout(
 
   for (const ev of sorted) {
     const start = new Date(ev.start).getTime();
-    // A gap (start strictly after the running cluster end) closes the current
-    // cluster. The strict `>` (rather than `>=`) keeps events that touch exactly
-    // at a millisecond boundary in the same cluster so they receive side-by-side
-    // columns instead of each independently falling back to full-width.
-    if (cluster.length > 0 && start > clusterEnd) flush();
+    // A new cluster starts whenever the next event begins at or after the
+    // running cluster end — i.e. both a gap and a touching boundary (start ===
+    // clusterEnd) close the current cluster. Touching events do NOT share a
+    // column group: Task C starting exactly when Task B ends should render at
+    // full width, not inherit the multi-column layout of the A-B overlap group.
+    if (cluster.length > 0 && start >= clusterEnd) flush();
     cluster.push(ev);
     clusterEnd = Math.max(clusterEnd, new Date(ev.end).getTime());
   }
