@@ -7,9 +7,8 @@ import type { PreferenceMatrixResponse } from "@/types/phase2";
 
 /** Column labels — ISO weekdays 1=Mon … 7=Sun, matching the matrix's day index. */
 const COL_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-/** Rows are the 24 hours of the day; 4 fifteen-minute blocks make up each hour. */
+/** Rows are the 24 hours of the day; each maps directly to one matrix block. */
 const HOURS = 24;
-const BLOCKS_PER_HOUR = 4;
 /** Row height (px) and inter-cell gap; the hour-label gutter width. */
 const ROW_H = 22;
 const GAP = 3;
@@ -62,10 +61,10 @@ function cellClass(score: number, peak: number) {
 
 /**
  * Preference heatmap for the Settings → Insights tab, oriented as a week grid:
- * 24 hourly rows × 7 day columns. Each hour cell is the mean of its four
- * fifteen-minute blocks (:00/:15/:30/:45) from the underlying 7×96 signed
- * matrix. Fetches on mount (the tab only mounts this when opened → fetch-on-open)
- * and degrades gracefully for a cold-start user whose matrix is all zeros.
+ * 24 hourly rows × 7 day columns. The backend returns a 7×24 signed matrix
+ * (one cell per hour), so each cell maps 1:1 to a displayed row. Fetches on
+ * mount (tab only mounts when opened → fetch-on-open) and degrades gracefully
+ * for a cold-start user whose matrix is all zeros.
  */
 export function PreferenceHeatmap() {
   const [data, setData] = useState<PreferenceMatrixResponse | null>(null);
@@ -113,20 +112,11 @@ export function PreferenceHeatmap() {
 
   const matrix = data?.matrix ?? [];
   const days = data?.days ?? 7;
-  const blocks = data?.blocks ?? 96;
+  const blocks = data?.blocks ?? 24; // 7×24 matrix: one cell per hour
 
-  /** Mean signed score of hour `h`'s four blocks for day column `d`. */
+  /** Signed score for hour `h` of day column `d` (direct 1:1 cell lookup). */
   function hourScore(d: number, h: number) {
-    let sum = 0;
-    let n = 0;
-    for (let k = 0; k < BLOCKS_PER_HOUR; k++) {
-      const b = h * BLOCKS_PER_HOUR + k;
-      if (b < blocks) {
-        sum += matrix[d * blocks + b] ?? 0;
-        n++;
-      }
-    }
-    return n ? sum / n : 0;
+    return h < blocks ? (matrix[d * blocks + h] ?? 0) : 0;
   }
 
   let peak = 0;
