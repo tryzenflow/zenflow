@@ -9,12 +9,12 @@ export const SLOT_MINUTES = 15;
 /** Minutes in a day. */
 export const DAILY_HORIZON = 1440;
 
-/** Number of 3-hour buckets per day (preference matrix granularity): 00–03, 03–06, 06–09, 09–12, 12–15, 15–18, 18–21, 21–24. */
-export const PREFERENCE_SLOTS_PER_DAY = 8;
+/** Number of 1-hour buckets per day (preference matrix granularity): 00–01, 01–02, …, 23–24. */
+export const PREFERENCE_SLOTS_PER_DAY = 24;
 
 /**
- * Length of the flat SIGNED preference matrix: 7 days × 8 three-hour buckets
- * = 56 cells. Cells accumulate a signed score — keeps/moves-toward increment,
+ * Length of the flat SIGNED preference matrix: 7 days × 24 one-hour buckets
+ * = 168 cells. Cells accumulate a signed score — keeps/moves-toward increment,
  * moves-away decrement; an empty cell sits at 0 (neutral), distinct from a
  * disliked cell.
  */

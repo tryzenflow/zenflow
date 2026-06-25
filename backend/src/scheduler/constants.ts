@@ -17,8 +17,8 @@ export const MIN = 60_000;
  *
  * Choosing T: the signed matrix accumulates `±1` per move/keep, so a "meaningful"
  * preference delta between two feasible slots is on the order of a few units (a
- * cell visited a handful of times). With 3-hour buckets cells accumulate signal
- * ~12× faster than the old 15-min slots, so meaningful deltas appear sooner —
+ * cell visited a handful of times). With 1-hour buckets cells accumulate signal
+ * ~4× faster than the old 15-min slots, so meaningful deltas appear sooner —
  * a user needs far fewer interactions before the matrix has actionable signal.
  * `T = 1.0` makes a 1-unit gap an `e¹ ≈ 2.7×` odds ratio and a 3-unit gap
  * ≈ `20×` — i.e. it still strongly prefers liked buckets while leaving real

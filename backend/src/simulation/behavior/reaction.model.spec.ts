@@ -78,12 +78,12 @@ const task = (over: Partial<ReactionTask> = {}): ReactionTask => ({
 });
 
 describe("decidePlacement", () => {
-  // Three feasible Monday slots in DIFFERENT 3-hour buckets so preference scores
-  // are distinct: 09:00 (bucket 3), 12:00 (bucket 4), 15:00 (bucket 5).
+  // Three feasible Monday slots at different hours so preference scores
+  // are distinct: 09:00 (hour 9), 12:00 (hour 12), 15:00 (hour 15).
   const feasible = [
-    new Date("2025-01-06T09:00:00.000Z"), // bucket 3
-    new Date("2025-01-06T12:00:00.000Z"), // bucket 4
-    new Date("2025-01-06T15:00:00.000Z"), // bucket 5
+    new Date("2025-01-06T09:00:00.000Z"), // hour 9
+    new Date("2025-01-06T12:00:00.000Z"), // hour 12
+    new Date("2025-01-06T15:00:00.000Z"), // hour 15
   ];
   const suggested = feasible[0];
 
@@ -141,9 +141,9 @@ describe("decidePlacement", () => {
   });
 
   it("scores against the drifted field when one is supplied", () => {
-    // Base peak at the 12:00 slot (feasible[1], bucket 4); high edit propensity,
+    // Base peak at the 12:00 slot (feasible[1], hour 12); high edit propensity,
     // no noise. Un-drifted → the persona moves to feasible[1]. With a +1-bucket
-    // drift the peak slides to the 15:00 slot (feasible[2], bucket 5), so the
+    // drift the peak slides to the 15:00 slot (feasible[2], hour 15), so the
     // SAME persona moves there instead — proving drift reaches the reaction loop.
     const p = persona({
       field: fieldPeakedAt(feasible[1]),
@@ -161,9 +161,9 @@ describe("decidePlacement", () => {
     );
     expect(undrifted!.getTime()).toBe(feasible[1].getTime());
 
-    // A +1-bucket shift moves the peak forward from the 12:00 bucket (4) to the
-    // 15:00 bucket (5). In the 3-hour grid one bucket = 1 shift unit.
-    const drifted = driftedFieldFor(p.field, 1, 1);
+    // A +3-bucket shift moves the peak forward from the 12:00 (hour 12) to the
+    // 15:00 (hour 15). In the 1-hour grid one bucket = 1 hour, so 3 buckets = 3 hours.
+    const drifted = driftedFieldFor(p.field, 3, 1);
     const moved = decidePlacement(
       p,
       task(),

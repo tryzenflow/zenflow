@@ -289,7 +289,7 @@ export async function loadDecisions(
 // ──────────────────────────── Phase-2 replay candidate ──────────────────────
 
 /**
- * Reconstruct each user's signed 56-cell preference matrix from the SAME
+ * Reconstruct each user's signed 168-cell preference matrix from the SAME
  * telemetry the production `SchedulerService` writes (the move-toward `+1` /
  * move-away `−1` deltas on MOVE, the `+1` on a completed-in-slot KEEP), using the
  * shared pure {@link applyPreferenceDeltas}. This is the matrix the Phase-2

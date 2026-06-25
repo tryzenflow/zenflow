@@ -25,27 +25,27 @@ export type ArchetypeId = "dev" | "night_owl" | "ops" | "pm" | "crammer";
 export type MeanSd = [number, number];
 
 /**
- * A Gaussian bump on the 7×8 preference grid. `day` is an ISO weekday (1=Mon …
- * 7=Sun) or -1 for "every working day". `block` is the bucket-of-day center
- * (0…7, i.e. 3-hour buckets). `height` is the peak value; `spread` is the
+ * A Gaussian bump on the 7×24 preference grid. `day` is an ISO weekday (1=Mon …
+ * 7=Sun) or -1 for "every working day". `block` is the hour-of-day center
+ * (0…23, i.e. 1-hour buckets). `height` is the peak value; `spread` is the
  * std-dev in buckets (a wider, gentler hill vs a sharp peak).
  */
 export interface PeakSpec {
   day: number; // ISO weekday, or -1 = all working days
-  block: number; // 0…7 bucket-of-day center
+  block: number; // 0…23 hour-of-day center
   height: number;
   spread: number; // buckets
 }
 
 /**
  * A tag×time interaction: for tasks carrying `tag`, the preference at `block`
- * (bucket-of-day, all working days) is shifted by `delta`. Positive = the persona
+ * (hour-of-day, all working days) is shifted by `delta`. Positive = the persona
  * prefers that tag at that time of day; negative = avoids it. This is the
  * Phase-3-only latent layer.
  */
 export interface TagTimeInteraction {
   tag: string;
-  block: number; // 0…7 bucket-of-day center
+  block: number; // 0…23 hour-of-day center
   spread: number; // buckets
   delta: number;
 }
@@ -126,8 +126,8 @@ export interface Archetype {
   splitRate: MeanSd;
 }
 
-// Bucket-of-day helper: a wall-clock hour → bucket index (floor(hour/3), 0…7).
-const H = (hour: number) => Math.floor(hour / 3);
+// Bucket-of-day helper: wall-clock hour → bucket index (identity for 1-hour buckets, 0…23).
+const H = (hour: number) => hour;
 
 export const ARCHETYPES: Archetype[] = [
   // ───────────────────────────── A · Steady 9–5 Developer ──────────────────

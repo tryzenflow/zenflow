@@ -36,7 +36,7 @@ function task(id = "t1", durationMinutes = 60): EdfTask {
   };
 }
 
-/** A fresh all-zero 56-cell matrix. */
+/** A fresh all-zero 168-cell matrix. */
 function zeroMatrix(): number[] {
   return new Array<number>(PREFERENCE_MATRIX_LENGTH).fill(0);
 }
@@ -46,16 +46,16 @@ function multiset(dates: Date[]): number[] {
   return dates.map((d) => d.getTime()).sort((a, b) => a - b);
 }
 
-// A handful of ascending Monday slots, each in a DIFFERENT 3-hour bucket so
+// A handful of ascending Monday slots, each in a different hour so
 // the matrix can assign distinct cell scores (2026-06-08 is a Monday).
-// Buckets: 09:00=3, 12:00=4, 15:00=5, 18:00=6, 21:00=7.
+// Hours: 09:00=9, 12:00=12, 15:00=15, 18:00=18, 21:00=21.
 const MONDAY = "2026-06-08T"; // a Monday
 const candidates = [
-  new Date(`${MONDAY}09:00:00Z`), // bucket 3
-  new Date(`${MONDAY}12:00:00Z`), // bucket 4
-  new Date(`${MONDAY}15:00:00Z`), // bucket 5
-  new Date(`${MONDAY}18:00:00Z`), // bucket 6
-  new Date(`${MONDAY}21:00:00Z`), // bucket 7
+  new Date(`${MONDAY}09:00:00Z`), // hour 9
+  new Date(`${MONDAY}12:00:00Z`), // hour 12
+  new Date(`${MONDAY}15:00:00Z`), // hour 15
+  new Date(`${MONDAY}18:00:00Z`), // hour 18
+  new Date(`${MONDAY}21:00:00Z`), // hour 21
 ];
 
 describe("preferenceMatrixReRanker — permutation guarantee", () => {
@@ -103,7 +103,7 @@ describe("preferenceMatrixReRanker — cold-start / all-equal == identity earlie
     expect(r.score(task(), candidates)).toEqual(candidates);
   };
 
-  it("an all-zero 56-cell matrix preserves EDF order exactly (byte-for-byte identity)", () => {
+  it("an all-zero 168-cell matrix preserves EDF order exactly (byte-for-byte identity)", () => {
     const r = preferenceMatrixReRanker(zeroMatrix(), TZ);
     expect(r.score(task(), candidates)).toEqual(candidates);
     expect(r.score(task(), candidates)).toEqual(
@@ -135,13 +135,13 @@ describe("preferenceMatrixReRanker — cold-start / all-equal == identity earlie
 
 describe("preferenceMatrixReRanker — T → 0 recovers deterministic argmax", () => {
   it("at a tiny temperature, picks the highest-cell-score slot first, descending", () => {
-    // Each candidate is in a distinct 3-hour bucket so the scores are unambiguous.
+    // Each candidate is in a distinct hour so the scores are unambiguous.
     const matrix = zeroMatrix();
-    matrix[preferenceIndex(candidates[0], TZ)] = 1; // bucket 3
-    matrix[preferenceIndex(candidates[1], TZ)] = 4; // bucket 4, highest
-    matrix[preferenceIndex(candidates[2], TZ)] = -2; // bucket 5, lowest
-    matrix[preferenceIndex(candidates[3], TZ)] = 3; // bucket 6
-    // candidates[4] (bucket 7) stays 0
+    matrix[preferenceIndex(candidates[0], TZ)] = 1; // hour 9
+    matrix[preferenceIndex(candidates[1], TZ)] = 4; // hour 12, highest
+    matrix[preferenceIndex(candidates[2], TZ)] = -2; // hour 15, lowest
+    matrix[preferenceIndex(candidates[3], TZ)] = 3; // hour 18
+    // candidates[4] (hour 21) stays 0
 
     // T → 0: the score/T term swamps the O(1) Gumbel noise, so the order is the
     // pure descending-cell-score argmax for ANY seed.
@@ -240,12 +240,12 @@ describe("preferenceMatrixReRanker — strongly-peaked matrix picks the peak w.h
   });
 
   it("honours the user's timezone when reading the cell", () => {
-    // UTC-4 in June. Use candidates in distinct NY 3-hour buckets:
-    // 13:00Z = NY 09:00 (bucket 3, liked), 16:00Z = NY 12:00 (bucket 4), 12:00Z = NY 08:00 (bucket 2).
+    // UTC-4 in June. Use candidates in distinct NY hours:
+    // 13:00Z = NY 09:00 (hour 9, liked), 16:00Z = NY 12:00 (hour 12), 12:00Z = NY 08:00 (hour 8).
     const nyCandidates = [
-      new Date("2026-06-08T12:00:00Z"), // NY 08:00 (bucket 2)
-      new Date("2026-06-08T13:00:00Z"), // NY 09:00 (bucket 3, liked)
-      new Date("2026-06-08T16:00:00Z"), // NY 12:00 (bucket 4)
+      new Date("2026-06-08T12:00:00Z"), // NY 08:00 (hour 8)
+      new Date("2026-06-08T13:00:00Z"), // NY 09:00 (hour 9, liked)
+      new Date("2026-06-08T16:00:00Z"), // NY 12:00 (hour 12)
     ];
     const matrix = zeroMatrix();
     matrix[preferenceIndex(nyCandidates[1], "America/New_York")] = 10;

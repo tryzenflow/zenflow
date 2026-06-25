@@ -46,7 +46,7 @@ export interface PersonaGroundTruth {
     workDays: number[];
     timezone: string;
   };
-  /** The true global temporal field (7×8 = 56 cells) — Phase-2 placement target. */
+  /** The true global temporal field (7×24 = 168 cells) — Phase-2 placement target. */
   pGlobal: number[];
   /**
    * Per-tag duration bias: `mu`/`sigma` are lognormal params (log-space); `bias`

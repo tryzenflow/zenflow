@@ -6,13 +6,13 @@ import { preferenceIndex } from "./slot";
 
 /**
  * PURE rationale assembly (no I/O) for the Phase-2 transparency UI. Given the
- * user's signed 672-cell preference matrix and the instant a task was placed at,
+ * user's signed 168-cell preference matrix and the instant a task was placed at,
  * derive a {@link SchedulingRationale}: the cell that drove the pick, the
  * surrounding preferred work window, and a human-readable summary. Lives here —
  * not in the service — so it is trivially unit-testable and shared by every
  * placement path (schedule / reschedule / resize / resolve-overflow).
  *
- * The matrix is row-major `[day0..6][block0..95]`. A cell's score is the signed
+ * The matrix is row-major `[day0..6][block0..23]`. A cell's score is the signed
  * telemetry tally (keeps/moves-toward +1, moves-away −1, 0 = neutral). A
  * placement is only "preference-favoured" when its own cell scores STRICTLY
  * POSITIVE — a cold-start (all-zero) matrix or a neutral/disliked slot yields
@@ -21,7 +21,7 @@ import { preferenceIndex } from "./slot";
  */
 
 const DAYS = 7;
-const BLOCKS = PREFERENCE_SLOTS_PER_DAY; // 96
+const BLOCKS = PREFERENCE_SLOTS_PER_DAY; // 24
 const MS_PER_DAY_NAMES = [
   "Monday",
   "Tuesday",

@@ -95,10 +95,9 @@ export function workWindowFor(
 }
 
 /**
- * Index into the flat 56-int signed preference matrix for an instant, using
- * 3-hour buckets: `(isoWeekday-1) * 8 + slotOfDay`, where
- * `slotOfDay = floor(hour / 3)` (0…7, three-hour buckets).
- * 7 days × 8 three-hour buckets = 56 cells.
+ * Index into the flat 168-int signed preference matrix for an instant, using
+ * 1-hour buckets: `(isoWeekday-1) * 24 + hour`, where `hour` is the wall-clock
+ * hour (0…23). 7 days × 24 one-hour buckets = 168 cells.
  */
 export function preferenceIndex(date: Date, timezone: string): number {
   const dateStr = localDateStr(date, timezone);
@@ -110,6 +109,5 @@ export function preferenceIndex(date: Date, timezone: string): number {
     hour12: false,
   }).formatToParts(date);
   const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0") % 24;
-  const slotOfDay = Math.floor(hour / 3);
-  return day * 8 + slotOfDay;
+  return day * 24 + hour;
 }
