@@ -1,6 +1,6 @@
 {
   "name": "@zenflow/shared",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "private": true,
   "type": "commonjs",
   "main": "dist/index.js",
