@@ -121,3 +121,18 @@ export interface TaskDetailResponse {
   task: Task;
   events: TaskEvent[];
 }
+
+/** One tag's learned duration multiplier. */
+export interface TagBiasEntry {
+  tag: string;
+  /** Sample count (COMPLETE/KEEP events with this tag). Higher = more evidence. */
+  n: number;
+  /** Duration multiplier: actual ÷ estimated. 1.0 = no correction. */
+  b: number;
+}
+
+/** Per-tag duration-multiplier summary for the Insights panel. */
+export interface TagBiasResponse {
+  /** All tags with ≥1 sample, sorted by n descending. */
+  tags: TagBiasEntry[];
+}

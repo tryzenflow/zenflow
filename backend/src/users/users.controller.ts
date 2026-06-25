@@ -51,4 +51,10 @@ export class UsersController {
     const data = await this.usersService.getPreferenceMatrix(user);
     return { success: true, data };
   }
+
+  @Get("me/tag-bias")
+  async tagBias(@CurrentUser() user: User) {
+    const data = await this.usersService.getUserTagBias(user);
+    return { success: true, data };
+  }
 }

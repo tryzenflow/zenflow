@@ -17,6 +17,7 @@ import {
   PREFERENCE_MATRIX_LENGTH,
   PREFERENCE_SLOTS_PER_DAY,
   type PreferenceMatrixResponse,
+  type TagBiasResponse,
 } from "@zenflow/shared";
 
 /** Minimum length of the working window, in minutes (docs invariant). */
@@ -136,6 +137,78 @@ export class UsersService {
       days: PREFERENCE_MATRIX_DAYS,
       blocks: PREFERENCE_SLOTS_PER_DAY,
     };
+  }
+
+  /**
+   * Return per-tag duration multipliers for the user, sorted by sample count
+   * descending (most-used tag first). Aggregates COMPLETE/KEEP `TaskEvent` rows
+   * for all of the user's tags using the same telemetry query pattern as
+   * `SchedulerService.aggregateTagBias` — but scoped to ALL user tags rather
+   * than a specific task's tags. Tags with zero samples are omitted.
+   */
+  async getUserTagBias(user: User): Promise<TagBiasResponse> {
+    const tagRows = await this.prisma.tag.findMany({
+      where: { userId: user.id },
+      select: { name: true },
+    });
+    if (tagRows.length === 0) return { tags: [] };
+
+    const wanted = new Set(tagRows.map((r) => r.name));
+
+    // Pull recent outcome events for this user. Pair each COMPLETE/KEEP (actual
+    // duration) with the matching CREATE (estimated duration) by taskId.
+    const events = await this.prisma.taskEvent.findMany({
+      where: {
+        userId: user.id,
+        eventType: { in: ["CREATE", "COMPLETE", "KEEP"] },
+      },
+      select: {
+        taskId: true,
+        eventType: true,
+        newSnapshot: true,
+      },
+      orderBy: { occurredAt: "desc" },
+      take: 2000,
+    });
+
+    type Snap = { durationMinutes?: number; tags?: string[] };
+    const estimateByTask = new Map<string, number>();
+    const outcomes: { taskId: string; duration: number; tags: string[] }[] = [];
+
+    for (const e of events) {
+      const snap = (e.newSnapshot ?? {}) as Snap;
+      const dur =
+        typeof snap.durationMinutes === "number" ? snap.durationMinutes : null;
+      const tags = Array.isArray(snap.tags) ? snap.tags : [];
+      if (dur === null) continue;
+      if (e.eventType === "CREATE") {
+        if (!estimateByTask.has(e.taskId)) estimateByTask.set(e.taskId, dur);
+      } else {
+        outcomes.push({ taskId: e.taskId, duration: dur, tags });
+      }
+    }
+
+    // Accumulate actual÷estimated ratio per tag.
+    const acc = new Map<string, { sum: number; n: number }>();
+    for (const o of outcomes) {
+      const estimated = estimateByTask.get(o.taskId);
+      if (!estimated || estimated <= 0) continue;
+      const ratio = o.duration / estimated;
+      for (const tag of o.tags) {
+        if (!wanted.has(tag)) continue;
+        const cur = acc.get(tag) ?? { sum: 0, n: 0 };
+        cur.sum += ratio;
+        cur.n += 1;
+        acc.set(tag, cur);
+      }
+    }
+
+    const result = [...acc.entries()]
+      .filter(([, { n }]) => n > 0)
+      .map(([tag, { sum, n }]) => ({ tag, n, b: sum / n }))
+      .sort((a, b) => b.n - a.n);
+
+    return { tags: result };
   }
 
   async findByEmail(email: string) {
