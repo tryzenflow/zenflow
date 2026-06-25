@@ -74,8 +74,11 @@ export function getOverlapLayout(
 
   for (const ev of sorted) {
     const start = new Date(ev.start).getTime();
-    // A gap (start at/after the running cluster end) closes the current cluster.
-    if (cluster.length > 0 && start >= clusterEnd) flush();
+    // A gap (start strictly after the running cluster end) closes the current
+    // cluster. The strict `>` (rather than `>=`) keeps events that touch exactly
+    // at a millisecond boundary in the same cluster so they receive side-by-side
+    // columns instead of each independently falling back to full-width.
+    if (cluster.length > 0 && start > clusterEnd) flush();
     cluster.push(ev);
     clusterEnd = Math.max(clusterEnd, new Date(ev.end).getTime());
   }

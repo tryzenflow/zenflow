@@ -113,6 +113,9 @@ export function CalendarLayout() {
       // The rationale toast is only shown on task creation (where the AI
       // scheduler assigns an initial slot). A manual drag is a deliberate user
       // action so we never override it with scheduling commentary.
+      window.dispatchEvent(
+        new CustomEvent("zenflow:task-updated", { detail: taskId }),
+      );
     } catch (error) {
       if (isAxiosError(error))
         errorToast(error.response?.data?.message || "Failed to reschedule");
@@ -151,6 +154,9 @@ export function CalendarLayout() {
       // Rationale toast is suppressed here for the same reason as onReschedule:
       // a manual resize is an explicit user action, not an AI-scheduled placement.
       await resizeTask(taskId, startISO, durationMinutes);
+      window.dispatchEvent(
+        new CustomEvent("zenflow:task-updated", { detail: taskId }),
+      );
     } catch (error) {
       if (isAxiosError(error))
         errorToast(error.response?.data?.message || "Failed to resize");

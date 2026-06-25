@@ -45,6 +45,23 @@ export function EditTaskDialog({
     });
   }, [taskId, open]);
 
+  // Refresh task details and history when the calendar dispatches a drag/resize
+  // update for this task (e.g. user drags the block while the panel is open).
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: Event) => {
+      const updatedId = (e as CustomEvent<string>).detail;
+      if (updatedId === taskId) {
+        getTaskDetails(taskId).then((res) => {
+          setTask(res.task);
+          setEvents(res.events);
+        });
+      }
+    };
+    window.addEventListener("zenflow:task-updated", handler);
+    return () => window.removeEventListener("zenflow:task-updated", handler);
+  }, [taskId, open]);
+
   const form = useTaskForm({
     defaultValues: {
       title: "",
