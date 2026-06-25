@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Event, ViewMode } from "@/types/schedule";
 import { CalendarHeader } from "./header";
 import { useViewShortcuts } from "@/hooks/use-view-shortcuts";
@@ -26,17 +27,54 @@ import { toast } from "sonner";
 import { errorToast } from "@/lib/toast";
 import { useUserStore } from "@/hooks/use-user-store";
 import { zonedDate, zonedNow } from "@/utils/tz";
-import { isSameMonth } from "date-fns";
+import { format, isSameMonth, isValid } from "date-fns";
+import { fromZonedTime, toZonedTime } from "date-fns-tz";
+
+const VALID_VIEWS: ViewMode[] = ["day", "week", "month"];
+const DATE_PARAM_FORMAT = "yyyy-MM-dd";
+
+/**
+ * Parse a `YYYY-MM-DD` string as the user's wall-clock midnight in their
+ * IANA timezone, returning a Date whose local fields match the given date.
+ * Returns `null` when the string is missing or invalid.
+ */
+function parseDateParam(dateStr: string | null, tz: string): Date | null {
+  if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
+  // Interpret the date string as midnight wall-clock in user-tz.
+  const utc = fromZonedTime(dateStr + "T12:00:00", tz);
+  if (!isValid(utc)) return null;
+  return toZonedTime(utc, tz);
+}
 
 export function CalendarLayout() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tz = useUserStore((s) => s.user?.timezone) || "UTC";
+
   // The cursor day is held in user-tz space (its local fields are the user's
   // wall clock), so every downstream day comparison stays in that tz.
-  const [date, setDate] = useState<Date>(() =>
-    zonedNow(useUserStore.getState().user?.timezone || "UTC"),
-  );
-  const [viewMode, setViewMode] = useState<ViewMode>("day");
+  const [date, setDate] = useState<Date>(() => {
+    const resolved = useUserStore.getState().user?.timezone || "UTC";
+    return (
+      parseDateParam(searchParams.get("date"), resolved) ??
+      zonedNow(resolved)
+    );
+  });
+
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const raw = searchParams.get("view");
+    return VALID_VIEWS.includes(raw as ViewMode) ? (raw as ViewMode) : "day";
+  });
+
+  // Sync view + date back into the URL whenever they change.  Use `replace`
+  // so every date navigation doesn't flood the browser history stack.
+  useEffect(() => {
+    setSearchParams(
+      { view: viewMode, date: format(date, DATE_PARAM_FORMAT) },
+      { replace: true },
+    );
+  }, [date, viewMode, setSearchParams]);
+
   useViewShortcuts(viewMode, setViewMode, setDate);
-  const tz = useUserStore((s) => s.user?.timezone) || "UTC";
 
   const [blocks, setBlocks] = useState<Event[]>([]);
   const [meta, setMeta] = useState<TasksMeta | null>(null);
