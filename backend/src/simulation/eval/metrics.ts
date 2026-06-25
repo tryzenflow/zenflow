@@ -37,9 +37,30 @@ function asSnapshot(v: unknown): Snapshot | null {
 
 export interface PersonaMetrics {
   userId: string;
+  /**
+   * STABLE per-persona key — the deterministic persona email
+   * `sim-{archetype}-{index}-{seed}@zenflow.sim` (persona.factory.ts). Unlike
+   * `userId` (a random UUID minted per run), this key is identical for the SAME
+   * persona across the two A/B arms, so the paired significance tool can match
+   * arms by it directly without an out-of-band re-key step. Empty string for any
+   * user row without an email (should not happen for sim personas).
+   */
+  personaKey: string;
   scheduled: number; // tasks that received a suggested placement (CREATE w/ slot)
   adjusted: number; // tasks moved or resized after suggestion (MAR numerator)
   mar: number;
+  /**
+   * MAR decomposition (§5.6, §12): MOVEs caused by an urgency spike — not the
+   * scheduler's fault. Only populated when the ground-truth sidecar is supplied
+   * to `computeMetrics`; otherwise equals `mar` (conservative: treats all as
+   * avoidable, which is the Phase-1 baseline behaviour).
+   */
+  marAvoidable: number;
+  /**
+   * MAR from urgency spikes / feasibility-forced moves — unavoidable regardless
+   * of how good the scheduler is. Only populated with the sidecar; otherwise 0.
+   */
+  marUnavoidable: number;
   slotAcceptanceRate: number; // 1 - MAR
   /** Median minutes between suggested and final chosen slot (adjusted tasks). */
   moveDistanceMedianMin: number;
@@ -60,6 +81,10 @@ export interface MetricsReport {
     personas: number;
     marMean: number;
     marMedian: number;
+    /** Mean avoidable MAR across personas (populated when sidecar is supplied). */
+    marAvoidableMean: number;
+    /** Mean unavoidable MAR across personas (populated when sidecar is supplied). */
+    marUnavoidableMean: number;
     completionInSlotMean: number;
     moveDistanceMedianMin: number;
     durationErrorMedianMin: number;
@@ -77,9 +102,18 @@ function mean(xs: number[]): number {
   return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
 }
 
-/** Compute per-persona + aggregate metrics from all logged events. */
+/**
+ * Compute per-persona + aggregate metrics from all logged events.
+ *
+ * @param urgencyByUser - Optional map of `userId → Set<taskId>` for tasks that
+ *   were urgency-spike-moved. When supplied, MOVEs for tasks in the set count as
+ *   `MAR_unavoidable` (not the scheduler's fault); all others are `MAR_avoidable`.
+ *   Without it, `marAvoidable === mar` (conservative Phase-1 baseline).
+ *   Build this from a loaded ground-truth sidecar (`PersonaGroundTruth.urgencyMovedTaskIds`).
+ */
 export async function computeMetrics(
   prisma: PrismaService,
+  urgencyByUser?: Map<string, Set<string>>,
 ): Promise<MetricsReport> {
   const events = (await prisma.taskEvent.findMany({
     orderBy: { occurredAt: "asc" },
@@ -100,9 +134,23 @@ export async function computeMetrics(
     byUser.set(e.userId, list);
   }
 
+  // The deterministic persona email is the stable cross-arm pairing key (the
+  // random `userId` differs between arms). Join it from the `User` rows.
+  const users = await prisma.user.findMany({
+    select: { id: true, email: true },
+  });
+  const emailById = new Map(users.map((u) => [u.id, u.email]));
+
   const perPersona: PersonaMetrics[] = [];
   for (const [userId, evs] of byUser) {
-    perPersona.push(personaMetrics(userId, evs));
+    perPersona.push(
+      personaMetrics(
+        userId,
+        emailById.get(userId) ?? "",
+        evs,
+        urgencyByUser?.get(userId),
+      ),
+    );
   }
   perPersona.sort((a, b) => a.userId.localeCompare(b.userId));
 
@@ -111,6 +159,8 @@ export async function computeMetrics(
     personas: perPersona.length,
     marMean: mean(mars),
     marMedian: median(mars),
+    marAvoidableMean: mean(perPersona.map((p) => p.marAvoidable)),
+    marUnavoidableMean: mean(perPersona.map((p) => p.marUnavoidable)),
     completionInSlotMean: mean(perPersona.map((p) => p.completionInSlotRate)),
     moveDistanceMedianMin: median(
       perPersona.map((p) => p.moveDistanceMedianMin),
@@ -124,7 +174,12 @@ export async function computeMetrics(
 }
 
 /** Per-task event grouping → the §12 metrics for one persona. */
-function personaMetrics(userId: string, evs: EventRow[]): PersonaMetrics {
+function personaMetrics(
+  userId: string,
+  personaKey: string,
+  evs: EventRow[],
+  urgencyMovedIds?: Set<string>,
+): PersonaMetrics {
   const counts: Record<string, number> = {};
   for (const e of evs) counts[e.eventType] = (counts[e.eventType] ?? 0) + 1;
 
@@ -138,6 +193,7 @@ function personaMetrics(userId: string, evs: EventRow[]): PersonaMetrics {
 
   let scheduled = 0;
   let adjusted = 0;
+  let adjustedUnavoidable = 0;
   let completedInSlot = 0;
   let abandoned = 0;
   const moveDistances: number[] = [];
@@ -156,6 +212,12 @@ function personaMetrics(userId: string, evs: EventRow[]): PersonaMetrics {
     if (wasScheduled && edits.length > 0) {
       adjusted++; // MAR is per-task binary
       editCounts.push(edits.length);
+      // If any MOVE for this task is urgency-driven, the whole adjustment is
+      // unavoidable (the urgency spike was the primary cause).
+      const taskId = list[0]?.taskId;
+      if (taskId && urgencyMovedIds?.has(taskId)) {
+        adjustedUnavoidable++;
+      }
     }
 
     // Move distance: suggested (CREATE slot) → FINAL chosen slot.
@@ -196,11 +258,21 @@ function personaMetrics(userId: string, evs: EventRow[]): PersonaMetrics {
   }
 
   const mar = scheduled > 0 ? adjusted / scheduled : 0;
+  // When the urgency sidecar is absent, treat all adjustments as avoidable
+  // (conservative Phase-1 baseline: marAvoidable === mar, marUnavoidable === 0).
+  const marUnavoidable =
+    urgencyMovedIds !== undefined && scheduled > 0
+      ? adjustedUnavoidable / scheduled
+      : 0;
+  const marAvoidable = mar - marUnavoidable;
   return {
     userId,
+    personaKey,
     scheduled,
     adjusted,
     mar,
+    marAvoidable,
+    marUnavoidable,
     slotAcceptanceRate: 1 - mar,
     moveDistanceMedianMin: median(moveDistances),
     durationErrorMedianMin: median(durationErrors),

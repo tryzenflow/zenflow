@@ -58,6 +58,27 @@ export interface Persona {
   tagMix: { name: string; weight: number }[];
   /** Idle windows (vacations/sick days) as [startDay, endDay] inclusive. */
   idleWindows: [number, number][];
+  /**
+   * Daily probability per pending task that an urgency spike fires (§5.6).
+   * When it fires the task is pulled forward to the earliest feasible slot.
+   */
+  urgencySpikeProbPerTask: number;
+  /**
+   * Urgency level threshold above which a spike triggers a pull-forward MOVE.
+   * Sampled as a [0,1] value; the fired urgency is drawn from [threshold, 1].
+   */
+  urgencyMoveThreshold: number;
+  /** Resting energy level ∈ [0,1] (§5.5). Overnight recovery pulls toward this. */
+  energyBaseline: number;
+  /** β coefficient: how strongly energy modulates reschedule probability (§5.5). */
+  energySensitivity: number;
+  /**
+   * Minimum true duration (minutes) for a task to be split-eligible (§5.7).
+   * Sampled at archetype level — same threshold for all personas in the archetype.
+   */
+  splitThresholdMinutes: number;
+  /** Probability a split-eligible long task is split rather than completed whole. */
+  splitRate: number;
 }
 
 /**
@@ -93,6 +114,36 @@ const PROJECT_TAG_POOL = [
 const draw = (rng: Rng, [mean, sd]: MeanSd) => rng.normal(mean, sd);
 const drawClamped = (rng: Rng, ms: MeanSd, min: number, max: number) =>
   Math.min(max, Math.max(min, draw(rng, ms)));
+
+/**
+ * Step-8 sensitivity multipliers (run.ts `--noise-mult` / `--drift-mult`). Both
+ * default to 1.0 so an unflagged run reproduces today's draws EXACTLY (the
+ * multipliers are applied AFTER the same RNG draw, so the random stream is
+ * untouched and only the resulting scalar is scaled).
+ */
+export interface SensitivityOpts {
+  /** Scales the drawn noise floor ε (kept clamped to [0, 1]). Default 1.0. */
+  noiseMult?: number;
+  /** Scales drift magnitude (peakShiftBlocks + biasDecay). Default 1.0. */
+  driftMult?: number;
+}
+
+/** Draw the noise floor, scale by the sensitivity multiplier, keep it in [0, 1]. */
+function drawNoiseFloor(rng: Rng, a: Archetype, noiseMult: number): number {
+  const drawn = draw(rng, a.noiseFloor);
+  return Math.min(1, Math.max(0, drawn * noiseMult));
+}
+
+/** Scale an archetype's drift magnitude by the sensitivity multiplier. */
+function scaleDrift(
+  drift: Archetype["driftPerMonth"],
+  driftMult: number,
+): Archetype["driftPerMonth"] {
+  return {
+    peakShiftBlocks: drift.peakShiftBlocks * driftMult,
+    biasDecay: drift.biasDecay * driftMult,
+  };
+}
 
 /** Normalise a discipline simplex to sum 1. */
 function normaliseSimplex(
@@ -144,7 +195,10 @@ export function buildPersona(
   rng: Rng,
   index: number,
   spanDays: number,
+  sensitivity: SensitivityOpts = {},
 ): Persona {
+  const noiseMult = sensitivity.noiseMult ?? 1;
+  const driftMult = sensitivity.driftMult ?? 1;
   const procrastination = Math.max(0, draw(rng, a.procrastination));
   const tagBias = new Map<string, { mu: number; sigma: number }>();
   for (const [name, b] of Object.entries(a.tagBias)) {
@@ -168,7 +222,7 @@ export function buildPersona(
     tagBias,
     editPropensity: drawClamped(rng, a.editPropensity, 0, 1),
     moveThreshold: Math.max(0, draw(rng, a.moveThreshold)),
-    noiseFloor: drawClamped(rng, a.noiseFloor, 0, 1),
+    noiseFloor: drawNoiseFloor(rng, a, noiseMult),
     procrastination,
     discipline: normaliseSimplex(a.discipline, rng),
     markCompleteRate: drawClamped(rng, a.markCompleteRate, 0.2, 1),
@@ -181,9 +235,21 @@ export function buildPersona(
       sigma: Math.max(0.05, draw(rng, a.estDuration.sigma)),
     },
     fixedLoadPerWeek: Math.max(0, draw(rng, a.fixedLoadPerWeek)),
-    driftPerMonth: a.driftPerMonth,
+    driftPerMonth: scaleDrift(a.driftPerMonth, driftMult),
     tagMix: a.tagMix,
     idleWindows: sampleIdleWindows(rng, spanDays),
+    urgencySpikeProbPerTask: Math.max(
+      0,
+      Math.min(1, draw(rng, a.urgencySpikeProbPerTask)),
+    ),
+    urgencyMoveThreshold: Math.max(
+      0,
+      Math.min(1, draw(rng, a.urgencyMoveThreshold)),
+    ),
+    energyBaseline: Math.max(0.1, Math.min(1, draw(rng, a.energyBaseline))),
+    energySensitivity: Math.max(0, draw(rng, a.energySensitivity)),
+    splitThresholdMinutes: a.splitThresholdMinutes,
+    splitRate: Math.max(0, Math.min(1, draw(rng, a.splitRate))),
   };
 }
 
@@ -230,6 +296,7 @@ export function buildPersonaRecord(
   seed: number,
   index: number,
   spanDays: number,
+  sensitivity: SensitivityOpts = {},
 ): PersonaRecord {
   const rng = makeRng(seed);
   const id = randomUUID();
@@ -246,7 +313,14 @@ export function buildPersonaRecord(
     roleArchetypeId: null, // Phase-4 cold-start fills this; ground truth lives in Persona.
   };
   // buildPersona only reads id + the four prefs fields off the User.
-  const persona = buildPersona({ ...user } as User, a, rng, index, spanDays);
+  const persona = buildPersona(
+    { ...user } as User,
+    a,
+    rng,
+    index,
+    spanDays,
+    sensitivity,
+  );
   const tagNames = Array.from(
     new Set([...a.tagMix.map((t) => t.name), ...persona.projectTags]),
   );
@@ -264,12 +338,14 @@ export async function seedPersona(
   seed: number,
   index: number,
   spanDays: number,
+  sensitivity: SensitivityOpts = {},
 ): Promise<Persona> {
   const { persona, user, tagNames } = buildPersonaRecord(
     a,
     seed,
     index,
     spanDays,
+    sensitivity,
   );
   await prisma.user.create({ data: { ...user } });
   await prisma.tag.createMany({

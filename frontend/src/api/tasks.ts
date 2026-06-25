@@ -3,13 +3,16 @@ import { api } from "./base";
 import type {
   CreateTaskInput,
   CreateTaskResponse,
-  RescheduleResponse,
   Task,
   TaskDetailResponse,
   TasksListResponse,
   UpdateTaskInput,
   ViewMode,
 } from "@zenflow/shared";
+// Phase-2: reschedule/resize/resolve-overflow responses may carry a
+// SchedulingRationale. Consume the extended shape (drops to BaseRescheduleResponse
+// once @zenflow/shared ships `rationale`).
+import type { RescheduleResponse } from "@/types/phase2";
 
 export async function listTasks(
   view: ViewMode,

@@ -38,9 +38,12 @@ frontend `dev | build | typecheck | lint | test:e2e`.
    the new types. Don't duplicate these shapes in either app.
 
 2. **The scheduler core is pure.** `backend/src/scheduler/edf.ts` (and `slot.ts`,
-   `horizon.ts`) take `now` as a parameter and do no I/O or randomness. Only
-   `scheduler.service.ts` touches Prisma / writes telemetry. Keep that split. Any change to
-   a pure function must update its `*.spec.ts` in the same change.
+   `horizon.ts`, `reranker.ts`) take `now` as a parameter and do no I/O. **No *uncontrolled*
+   randomness** — the core may use randomness only via an **injected seed**, so it stays a
+   pure, reproducible function of `(inputs + seed)` (never `Math.random()` or the clock; the
+   softmax re-ranker's Gumbel noise comes from a seeded PRNG, seeded per-task by the service).
+   Only `scheduler.service.ts` touches Prisma / writes telemetry. Keep that split. Any change
+   to a pure function must update its `*.spec.ts` in the same change.
 
 3. **Durations are always positive multiples of 15** (minutes). Slots are 15-minute;
    `DAILY_HORIZON` = 1440. Don't introduce off-grid times.

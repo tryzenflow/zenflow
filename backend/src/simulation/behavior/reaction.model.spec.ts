@@ -2,6 +2,7 @@ import { PREFERENCE_MATRIX_LENGTH } from "@zenflow/shared";
 import { makeRng } from "../rng";
 import type { Persona } from "../personas/persona.factory";
 import type { PreferenceField } from "../personas/preference-field";
+import { driftedFieldFor } from "../personas/preference-field";
 import { preferenceIndex } from "../../scheduler/slot";
 import {
   decideOutcome,
@@ -58,6 +59,12 @@ function persona(overrides: Partial<Persona> = {}): Persona {
     driftPerMonth: { peakShiftBlocks: 0, biasDecay: 0 },
     tagMix: [{ name: "backend", weight: 1 }],
     idleWindows: [],
+    urgencySpikeProbPerTask: 0.01,
+    urgencyMoveThreshold: 0.7,
+    energyBaseline: 0.7,
+    energySensitivity: 0.2,
+    splitThresholdMinutes: 90,
+    splitRate: 0.1,
     ...overrides,
   };
 }
@@ -71,11 +78,12 @@ const task = (over: Partial<ReactionTask> = {}): ReactionTask => ({
 });
 
 describe("decidePlacement", () => {
-  // Three feasible Monday slots, 09:00 / 10:00 / 11:00 UTC.
+  // Three feasible Monday slots at different hours so preference scores
+  // are distinct: 09:00 (hour 9), 12:00 (hour 12), 15:00 (hour 15).
   const feasible = [
-    new Date("2025-01-06T09:00:00.000Z"),
-    new Date("2025-01-06T10:00:00.000Z"),
-    new Date("2025-01-06T11:00:00.000Z"),
+    new Date("2025-01-06T09:00:00.000Z"), // hour 9
+    new Date("2025-01-06T12:00:00.000Z"), // hour 12
+    new Date("2025-01-06T15:00:00.000Z"), // hour 15
   ];
   const suggested = feasible[0];
 
@@ -130,6 +138,63 @@ describe("decidePlacement", () => {
   it("returns null on an empty feasible set", () => {
     const p = persona();
     expect(decidePlacement(p, task(), suggested, [], makeRng(5))).toBeNull();
+  });
+
+  it("scores against the drifted field when one is supplied", () => {
+    // Base peak at the 12:00 slot (feasible[1], hour 12); high edit propensity,
+    // no noise. Un-drifted → the persona moves to feasible[1]. With a +1-bucket
+    // drift the peak slides to the 15:00 slot (feasible[2], hour 15), so the
+    // SAME persona moves there instead — proving drift reaches the reaction loop.
+    const p = persona({
+      field: fieldPeakedAt(feasible[1]),
+      editPropensity: 1,
+      moveThreshold: 0.5,
+      noiseFloor: 0,
+    });
+
+    const undrifted = decidePlacement(
+      p,
+      task(),
+      suggested,
+      feasible,
+      makeRng(2),
+    );
+    expect(undrifted!.getTime()).toBe(feasible[1].getTime());
+
+    // A +3-bucket shift moves the peak forward from the 12:00 (hour 12) to the
+    // 15:00 (hour 15). In the 1-hour grid one bucket = 1 hour, so 3 buckets = 3 hours.
+    const drifted = driftedFieldFor(p.field, 3, 1);
+    const moved = decidePlacement(
+      p,
+      task(),
+      suggested,
+      feasible,
+      makeRng(2),
+      drifted,
+    );
+    expect(moved!.getTime()).toBe(feasible[2].getTime());
+  });
+
+  it("defaults to the base field (zero drift is a no-op)", () => {
+    const p = persona({
+      field: fieldPeakedAt(feasible[2]),
+      editPropensity: 1,
+      moveThreshold: 0.5,
+      noiseFloor: 0,
+    });
+    // Explicit zero-drift field === omitting the field argument.
+    const zeroDrift = driftedFieldFor(p.field, 0.2, 0); // 0 months → same object
+    expect(zeroDrift).toBe(p.field);
+    const a = decidePlacement(p, task(), suggested, feasible, makeRng(2));
+    const b = decidePlacement(
+      p,
+      task(),
+      suggested,
+      feasible,
+      makeRng(2),
+      zeroDrift,
+    );
+    expect(a!.getTime()).toBe(b!.getTime());
   });
 
   it("noise floor of 1 acts out of character but stays in the feasible set", () => {
@@ -213,5 +278,27 @@ describe("decideOutcome", () => {
       return c;
     };
     expect(countComplete(soon)).toBeGreaterThan(countComplete(far));
+  });
+
+  it("high fatigue (low energy) raises reschedule rate vs low fatigue (high energy)", () => {
+    // The runner passes `1 - energyT` as fatigue, so fatigue=0.9 means energyT=0.1
+    // and fatigue=0.1 means energyT=0.9. The existing `reschedule += fatigue * 0.3`
+    // logic ensures more reschedules when fatigued.
+    const p = persona({
+      discipline: { complete: 0.5, reschedule: 0.3, abandon: 0.2 },
+    });
+    const countReschedule = (fatigue: number) => {
+      const rng = makeRng(12);
+      let r = 0;
+      for (let i = 0; i < 2000; i++) {
+        if (
+          decideOutcome(p, { deadline: null }, now, fatigue, rng) ===
+          "reschedule"
+        )
+          r++;
+      }
+      return r;
+    };
+    expect(countReschedule(0.9)).toBeGreaterThan(countReschedule(0.1));
   });
 });

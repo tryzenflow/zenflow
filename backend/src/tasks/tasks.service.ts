@@ -9,7 +9,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { SchedulerService } from "../scheduler/scheduler.service";
 import { Prisma, type Task, type Tag, type User } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
-import { minutesToUtc } from "../common/utils";
+import { fixedTaskDuration, minutesToUtc } from "../common/utils";
 import { localDateStr } from "../scheduler/slot";
 import { EVENT_REWARD } from "../scheduler/telemetry";
 import {
@@ -99,7 +99,7 @@ export class TasksService {
     user: User,
     now: Date = new Date(),
   ): Promise<CreateTaskResponse> {
-    const { startDate, fixed, startTime, view, ...rest } = dto;
+    const { startDate, fixed, startTime, endTime, view, ...rest } = dto;
     const tz = user.timezone;
     const isFixed = fixed ?? false;
     const overflowView = view ?? "day";
@@ -109,6 +109,33 @@ export class TasksService {
       return await this.prisma.$transaction(async (tx) => {
         // Resolve incoming tag NAMES → ids before connecting them to the task.
         const tagIds = await this.resolveTagIds(tx, user.id, rest.tags ?? []);
+
+        // For fixed tasks with an endTime but no explicit durationMinutes, derive
+        // duration from the start→end span — correctly handling cross-midnight
+        // (startTime > endTime) by adding one full day (1440 min) before rounding
+        // up to the 15-min grid. When both are supplied, durationMinutes wins.
+        const resolvedDurationMinutes: number =
+          isFixed && endTime !== undefined && rest.durationMinutes === undefined
+            ? fixedTaskDuration(startTime ?? 0, endTime)
+            : (rest.durationMinutes as number);
+
+        // Phase-2 per-tag duration corrector. ALWAYS computed (so it always
+        // LEARNS, even in `never` mode) but only APPLIED when the user's mode is
+        // not `never`. The corrected value is rounded up to the 15-min grid.
+        const estimatedDuration = resolvedDurationMinutes;
+        const cleanTags = (rest.tags ?? [])
+          .map((t) => t.trim())
+          .filter(Boolean);
+        const correction = await this.scheduler.computeDurationCorrection(
+          user.id,
+          cleanTags,
+          estimatedDuration,
+          tx,
+        );
+        const applyCorrection = user.durationAdjustmentMode !== "never";
+        const effectiveDuration = applyCorrection
+          ? correction.adjustedDuration
+          : estimatedDuration;
 
         // Fixed: anchored at its day + time-of-day. Flexible: persist the
         // create/view day as the EDF floor (start-of-day UTC). The packer only
@@ -125,7 +152,7 @@ export class TasksService {
           data: {
             title: rest.title,
             note: rest.note ?? null,
-            durationMinutes: rest.durationMinutes,
+            durationMinutes: effectiveDuration,
             deadline: rest.deadline ? new Date(rest.deadline) : null,
             tags: { connect: tagIds.map((id) => ({ id })) },
             fixed: isFixed,
@@ -156,6 +183,17 @@ export class TasksService {
           include: { tags: true },
         });
 
+        // The stochastic logging policy's propensity for the slot it
+        // auto-placed this task into — recorded so off-policy IPS/SNIPS can
+        // divide by the TRUE propensity of the suggestion (docs/heuristic.md
+        // §Evaluation). Null when unplaced / cold-start. Stored in the snapshot
+        // JSON (no migration, no shared-type change).
+        const propensity = await this.scheduler.placementPropensity(
+          user,
+          finalTask,
+          tx,
+          now,
+        );
         await tx.taskEvent.create({
           data: {
             taskId: finalTask.id,
@@ -171,6 +209,7 @@ export class TasksService {
               tags: finalTask.tags
                 .map((t) => t.name)
                 .sort((a, b) => a.localeCompare(b)),
+              ...(propensity !== null ? { propensity } : {}),
             },
             rewardScore: EVENT_REWARD.CREATE,
             occurredAt: now,
@@ -194,12 +233,19 @@ export class TasksService {
         return {
           task: this.toDto(finalTask),
           schedulingMeta: {
+            // The duration actually fed to EDF (corrected unless `never` mode).
             adjustedDuration: finalTask.durationMinutes,
             placedAt: finalTask.scheduledStartTime
               ? finalTask.scheduledStartTime.toISOString()
               : null,
             engine: "edf" as const,
-            biasApplied: 1.0,
+            // Real Phase-2 metadata. `biasApplied` is the blended multiplier the
+            // corrector LEARNED (even in `never` mode, where it isn't applied);
+            // `estimatedDuration` is the user's typed value before correction.
+            biasApplied: correction.biasApplied,
+            estimatedDuration: correction.estimatedDuration,
+            durationAdjustmentMode: user.durationAdjustmentMode,
+            durationReason: applyCorrection ? correction.durationReason : null,
           },
           overflow,
         };
@@ -451,6 +497,9 @@ export class TasksService {
           ? d.newScheduledStartTime.toISOString()
           : null,
       })),
+      // Phase-2 transparency: surface WHY the slot is a good one when it lands in
+      // a preference-favoured cell (null otherwise → FE shows no toast).
+      rationale: this.scheduler.rationaleFor(user, withTags.scheduledStartTime),
     };
   }
 
@@ -492,6 +541,7 @@ export class TasksService {
           ? d.newScheduledStartTime.toISOString()
           : null,
       })),
+      rationale: this.scheduler.rationaleFor(user, withTags.scheduledStartTime),
     };
   }
 
@@ -525,6 +575,7 @@ export class TasksService {
           ? d.newScheduledStartTime.toISOString()
           : null,
       })),
+      rationale: this.scheduler.rationaleFor(user, withTags.scheduledStartTime),
     };
   }
 

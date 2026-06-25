@@ -25,6 +25,8 @@ const user: User = {
   workEnd: 1020,
   workDays: [1, 2, 3, 4, 5],
   preferenceMatrix: [],
+  preferenceMatrixDecayedAt: null,
+  durationAdjustmentMode: "auto",
   roleArchetypeId: null,
   onboardingComplete: true,
   createdAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -77,6 +79,9 @@ function makeService(rows: Task[]): {
   const tx = {
     task: {
       findMany: jest.fn().mockResolvedValue(rows),
+      findUnique: jest.fn((args: { where: { id: string } }) =>
+        Promise.resolve(byId.get(args.where.id) ?? null),
+      ),
       update: jest.fn(
         (args: { where: { id: string }; data: UpdateCall["data"] }) => {
           const { where, data } = args;
@@ -106,6 +111,7 @@ function makeService(rows: Task[]): {
 type PrismaTxMock = {
   task: {
     findMany: jest.Mock;
+    findUnique: jest.Mock;
     update: jest.Mock;
   };
   taskEvent: { create: jest.Mock };
@@ -247,6 +253,48 @@ describe("SchedulerService.pin — in-progress tasks still block conflicts", () 
   });
 });
 
+describe("SchedulerService.pin — ownership check (bug: non-PENDING task returned 404)", () => {
+  // Regression: pin() used to locate the target via pendingTasks() (status=PENDING
+  // filter). Any non-PENDING task owned by the user was absent from that set, so
+  // pin() threw NotFoundException even though PATCH /tasks/:id (no status filter)
+  // found it fine. The confirmed real-world case is an ABANDONED task (deadline
+  // expired) being dragged on the calendar. The fix adds a status-agnostic
+  // findUnique ownership check before the PENDING-set load.
+
+  it("finds an ABANDONED task and does not throw NotFoundException", async () => {
+    const abandoned = task({
+      id: "abandoned-task",
+      status: "ABANDONED",
+      scheduledStartTime: new Date("2026-06-08T10:00:00Z"),
+    });
+    const { service } = makeService([abandoned]);
+
+    await expect(
+      service.pin(user, "abandoned-task", new Date("2026-06-08T11:00:00Z")),
+    ).resolves.toBeDefined();
+  });
+
+  it("finds a DONE task and does not throw NotFoundException", async () => {
+    const done = task({
+      id: "done-task",
+      status: "DONE",
+      scheduledStartTime: new Date("2026-06-08T10:00:00Z"),
+    });
+    const { service } = makeService([done]);
+
+    await expect(
+      service.pin(user, "done-task", new Date("2026-06-08T11:00:00Z")),
+    ).resolves.toBeDefined();
+  });
+
+  it("still throws NotFoundException for a task that does not belong to the user", async () => {
+    const { service } = makeService([]);
+    await expect(
+      service.pin(user, "nonexistent-id", new Date("2026-06-08T11:00:00Z")),
+    ).rejects.toThrow(expect.objectContaining({ status: 404 }));
+  });
+});
+
 /** Extract the preferenceMatrix written by the first `tx.user.update` call. */
 function writtenMatrix(tx: PrismaTxMock): number[] {
   const call = tx.user.update.mock.calls[0] as [
@@ -257,31 +305,31 @@ function writtenMatrix(tx: PrismaTxMock): number[] {
 
 describe("SchedulerService.pin — signed preference matrix", () => {
   it("decrements the vacated slot and increments the destination slot", async () => {
-    // Move a placed task from Mon 09:00 (idx 36) to Mon 11:00 (idx 44). The
-    // vacated cell gets -1, the destination cell +1.
+    // Move a placed task from Mon 09:00 (hour 9, idx 9) to Mon 12:00 (hour 12,
+    // idx 12). The vacated cell gets -1, the destination cell +1.
     const placed = task({
       id: "p",
       scheduledStartTime: new Date("2026-06-08T09:00:00Z"), // Mon 09:00
     });
     const { service, tx } = makeService([placed]);
 
-    await service.pin(user, "p", new Date("2026-06-08T11:00:00Z")); // Mon 11:00
+    await service.pin(user, "p", new Date("2026-06-08T12:00:00Z")); // Mon 12:00
 
     expect(tx.user.update).toHaveBeenCalledTimes(1);
     const matrix = writtenMatrix(tx);
-    expect(matrix).toHaveLength(672);
-    expect(matrix[36]).toBe(-1); // Mon 09:00 vacated → dislike
-    expect(matrix[44]).toBe(+1); // Mon 11:00 destination → move-toward
+    expect(matrix).toHaveLength(168);
+    expect(matrix[9]).toBe(-1); // Mon 09:00 hour 9 vacated → dislike
+    expect(matrix[12]).toBe(+1); // Mon 12:00 hour 12 destination → move-toward
   });
 
   it("only records the move-toward (+1) when the task had no prior slot", async () => {
     const unplaced = task({ id: "u", scheduledStartTime: null });
     const { service, tx } = makeService([unplaced]);
 
-    await service.pin(user, "u", new Date("2026-06-08T11:00:00Z")); // Mon 11:00
+    await service.pin(user, "u", new Date("2026-06-08T12:00:00Z")); // Mon 12:00 (hour 12, idx 12)
 
     const matrix = writtenMatrix(tx);
-    expect(matrix[44]).toBe(+1);
+    expect(matrix[12]).toBe(+1);
     // No vacated cell was decremented.
     expect(matrix.filter((v) => v < 0)).toEqual([]);
   });
@@ -296,7 +344,7 @@ describe("SchedulerService.pin — signed preference matrix", () => {
     await service.pin(user, "p", new Date("2026-06-08T09:00:00Z")); // same slot
 
     const matrix = writtenMatrix(tx);
-    expect(matrix[36]).toBe(+1); // only the move-toward signal
+    expect(matrix[9]).toBe(+1); // Mon 09:00 hour 9, only the move-toward signal
     expect(matrix.filter((v) => v < 0)).toEqual([]);
   });
 });

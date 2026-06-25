@@ -14,7 +14,7 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
       useFactory: async (config: ConfigService) => ({
         transport: config.get("MAIL_TRANSPORT"),
         defaults: {
-          from: `"No Reply" <${config.get("MAIL_FROM")}>`,
+          from: `"Zenflow" <${config.get("MAIL_FROM")}>`,
         },
         template: {
           dir: join(__dirname, "templates"),

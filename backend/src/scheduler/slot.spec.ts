@@ -51,39 +51,42 @@ describe("workWindowMinutes", () => {
   });
 });
 
-describe("preferenceIndex — 7×96 (15-min) signed matrix index", () => {
-  it("maps Monday 00:00 to index 0 (day 0, slot 0)", () => {
+describe("preferenceIndex — 7×24 (1-hour) signed matrix index", () => {
+  it("maps Monday 00:00 to index 0 (day 0, hour 0)", () => {
     // 2026-06-08 is a Monday.
     expect(preferenceIndex(new Date("2026-06-08T00:00:00Z"), "UTC")).toBe(0);
   });
 
-  it("maps the 15-min slots of an hour to consecutive indices (not 30-min)", () => {
-    // Monday 09:00 → slotOfDay = 9*4 + 0 = 36; the next three 15-min slots are
-    // 37, 38, 39 — proof the grid is 15-min, not downsampled to 30.
+  it("maps all four 15-min sub-slots within an hour to the same bucket", () => {
+    // Monday 09:00–09:45 → hour 9; all four 15-min marks within the 09:xx hour
+    // fall in the same 1-hour bucket (index 9).
     const base = "2026-06-08T09:";
-    expect(preferenceIndex(new Date(`${base}00:00Z`), "UTC")).toBe(36);
-    expect(preferenceIndex(new Date(`${base}15:00Z`), "UTC")).toBe(37);
-    expect(preferenceIndex(new Date(`${base}30:00Z`), "UTC")).toBe(38);
-    expect(preferenceIndex(new Date(`${base}45:00Z`), "UTC")).toBe(39);
+    expect(preferenceIndex(new Date(`${base}00:00Z`), "UTC")).toBe(9);
+    expect(preferenceIndex(new Date(`${base}15:00Z`), "UTC")).toBe(9);
+    expect(preferenceIndex(new Date(`${base}30:00Z`), "UTC")).toBe(9);
+    expect(preferenceIndex(new Date(`${base}45:00Z`), "UTC")).toBe(9);
   });
 
-  it("offsets each weekday by 96 slots", () => {
-    // 2026-06-09 is a Tuesday (day 1): 09:00 → 96 + 36 = 132.
-    expect(preferenceIndex(new Date("2026-06-09T09:00:00Z"), "UTC")).toBe(132);
+  it("offsets each weekday by 24 buckets", () => {
+    // 2026-06-09 is a Tuesday (day 1): 09:00 → 1*24 + 9 = 33.
+    expect(preferenceIndex(new Date("2026-06-09T09:00:00Z"), "UTC")).toBe(33);
   });
 
-  it("maps Sunday 23:45 to the last cell (671), in-bounds", () => {
-    // 2026-06-14 is a Sunday (day 6): slotOfDay = 23*4 + 3 = 95 → 6*96 + 95 = 671.
-    const idx = preferenceIndex(new Date("2026-06-14T23:45:00Z"), "UTC");
-    expect(idx).toBe(671);
+  it("maps Sunday 23:00–23:59 to the last cell (167), in-bounds", () => {
+    // 2026-06-14 is a Sunday (day 6): hour 23 → 6*24 + 23 = 167.
+    const idx = preferenceIndex(new Date("2026-06-14T23:00:00Z"), "UTC");
+    expect(idx).toBe(167);
     expect(idx).toBe(PREFERENCE_MATRIX_LENGTH - 1);
+    // 23:59 falls in the same bucket (hour 23).
+    expect(preferenceIndex(new Date("2026-06-14T23:59:00Z"), "UTC")).toBe(167);
   });
 
-  it("honours the user's timezone for the wall-clock slot", () => {
+  it("honours the user's timezone for the wall-clock bucket", () => {
     // 2026-06-08T13:00:00Z is Monday 09:00 in New York (UTC-4 in June).
+    // hour 9 → index 9.
     expect(
       preferenceIndex(new Date("2026-06-08T13:00:00Z"), "America/New_York"),
-    ).toBe(36);
+    ).toBe(9);
   });
 });
 

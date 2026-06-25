@@ -19,6 +19,19 @@ import {
 } from "../../scheduler/edf";
 import { type Interval, SLOT_MS, localDateStr } from "../../scheduler/slot";
 import {
+  identityReRanker,
+  preferenceMatrixReRanker,
+  type SlotReRanker,
+} from "../../scheduler/reranker";
+import { hashSeed } from "../../scheduler/rng";
+import {
+  blendBias,
+  correctDuration,
+  maxBias,
+} from "../../scheduler/duration-bias";
+import { aggregateTagBias } from "../eval/tag-bias";
+import type { DurationBiasMode, RerankerKind } from "../runner";
+import {
   EVENT_REWARD,
   applyPreferenceDeltas,
   buildSnapshot,
@@ -106,14 +119,87 @@ export class PersonaState {
   matrix: number[] = [];
   /** name → tag id for this user (the `(userId, name)` unique vocabulary). */
   private readonly tagIdByName = new Map<string, string>();
+  /**
+   * Task IDs that were urgency-spike-moved during this run (§5.6).
+   * Collected by the drive loop via urgency spike logic; exported to the
+   * ground-truth sidecar so `computeMetrics` can decompose MAR.
+   */
+  readonly urgencyMovedIds = new Set<string>();
 
   constructor(
     readonly userId: string,
     readonly prefs: SchedulerPrefs,
     /** Tag names to pre-register so they exist even if never attached. */
     preTags: string[] = [],
+    /**
+     * Placement policy for this run/arm (eval Step 5). `identity` = Phase-1 EDF
+     * earliest-fit; `phase2` = signed-matrix re-rank + per-tag duration
+     * correction. Defaults to `identity` so existing runs are byte-for-byte
+     * unchanged.
+     */
+    private readonly reranker: RerankerKind = "identity",
+    /**
+     * Multi-tag duration-bias resolution for the `phase2` arm (Step-8 ablation):
+     * `blend` (default, sample-weighted) or `max` (Conservative Max-Bias). The
+     * default keeps existing runs byte-for-byte unchanged.
+     */
+    private readonly durationBias: DurationBiasMode = "blend",
+    /**
+     * Softmax temperature for the `phase2` re-ranker. `undefined` → the core
+     * default ({@link RERANKER_TEMPERATURE}); a tiny value recovers GREEDY
+     * argmax Phase-2 (the pre-softmax behaviour, for the A/B comparison).
+     */
+    private readonly temperature?: number,
   ) {
     for (const name of cleanTagNames(preTags)) this.tagId(name);
+  }
+
+  /**
+   * The re-ranker for THIS persona's current state. Phase-2 builds a fresh
+   * {@link preferenceMatrixReRanker} from the matrix as it accumulates (so each
+   * cascade sees the latest learned preference), exactly as the production
+   * service would on a fresh `User` read; Phase-1 is the identity baseline.
+   *
+   * The base seed is the persona's userId hash (mirroring the production service
+   * `phase2ReRanker`), so the SOFTMAX exploration is independent per persona but
+   * stable per task — the re-ranker derives the per-task Gumbel seed from the
+   * task id, so re-packs don't churn the sampled slot.
+   */
+  private reRanker(): SlotReRanker {
+    return this.reranker === "phase2"
+      ? preferenceMatrixReRanker(this.matrix, this.prefs.timezone, {
+          seed: hashSeed(this.userId),
+          temperature: this.temperature,
+        })
+      : identityReRanker;
+  }
+
+  /**
+   * Phase-2 duration preprocessing: blend the per-tag bias aggregated from THIS
+   * persona's telemetry so far, then ceil-correct the estimate to the grid. The
+   * `identity` arm returns the estimate untouched. Pure-helper-driven
+   * (`duration-bias.ts` + `eval/tag-bias.ts`), so it matches the production
+   * corrector and the recovery estimator.
+   */
+  private correctEstimate(estimatedMin: number, tags: string[]): number {
+    if (this.reranker !== "phase2" || tags.length === 0) return estimatedMin;
+    const table = aggregateTagBias(
+      this.events.map((e) => ({
+        eventType: e.eventType,
+        taskId: e.taskId,
+        newSnapshot: e.newSnapshot as {
+          durationMinutes?: number;
+          tags?: string[];
+        } | null,
+      })),
+    );
+    const perTag = tags
+      .map((t) => table.get(t))
+      .filter((b): b is NonNullable<typeof b> => b !== undefined);
+    if (perTag.length === 0) return estimatedMin;
+    const bias =
+      this.durationBias === "max" ? maxBias(perTag) : blendBias(perTag);
+    return correctDuration(estimatedMin, bias);
   }
 
   /** All Tag rows for this user (id + name), for the bulk writer. */
@@ -145,6 +231,7 @@ export class PersonaState {
       this.prefs,
       pending.map((t) => toEdfTask(t, this.prefs)),
       now,
+      this.reRanker(),
     );
     const map = new Map(pending.map((t) => [t.id, t]));
     for (const p of placements) {
@@ -185,6 +272,24 @@ export class PersonaState {
     );
   }
 
+  /**
+   * The Phase-2 softmax policy's first-choice propensity for `task`'s placed
+   * slot — `π(scheduledStartTime | feasible set)` — mirroring the production
+   * `SchedulerService.placementPropensity`. Returns `undefined` when the task is
+   * unplaced or the slot fell outside the recomputed feasible set, so the CREATE
+   * snapshot omits the field (matching production).
+   */
+  private placementPropensity(task: SimTask, now: Date): number | undefined {
+    if (!task.scheduledStartTime) return undefined;
+    const candidates = this.feasible(task.id, now);
+    if (candidates.length === 0) return undefined;
+    return this.reRanker().propensity(
+      toEdfTask(task, this.prefs),
+      candidates,
+      task.scheduledStartTime,
+    );
+  }
+
   readTask(taskId: string): DueTask | undefined {
     const t = this.byId(taskId);
     return t
@@ -195,6 +300,11 @@ export class PersonaState {
           deadline: t.deadline,
         }
       : undefined;
+  }
+
+  /** Tag names for a task (used by task-splitting to seed the remainder task). */
+  readTaskTags(taskId: string): string[] {
+    return this.byId(taskId)?.tagNames ?? [];
   }
 
   /** PENDING tasks whose placed slot has passed by `cutoff`. */
@@ -231,6 +341,15 @@ export class PersonaState {
     const tagIds = cleaned.map((n) => this.tagId(n));
     const tagNames = sortNames(cleaned);
 
+    // Phase-2 duration preprocessing (ADR-0001 §2): bias-correct the estimate
+    // BEFORE EDF sees it. The `identity` arm leaves it untouched.
+    // Simulation always supplies durationMinutes explicitly (never uses the
+    // cross-midnight endTime path that makes it optional in CreateTaskInput).
+    const durationMinutes = this.correctEstimate(
+      input.durationMinutes!,
+      tagNames,
+    );
+
     const fixedStart = isFixed
       ? minutesToUtc(anchorDateStr, input.startTime ?? 0, tz)
       : null;
@@ -242,7 +361,7 @@ export class PersonaState {
       id: randomUUID(),
       title: input.title,
       note: input.note ?? null,
-      durationMinutes: input.durationMinutes,
+      durationMinutes,
       deadline: input.deadline ? new Date(input.deadline) : null,
       fixed: isFixed,
       startTime: input.startTime ?? 0,
@@ -263,10 +382,17 @@ export class PersonaState {
     // Deadline-aware insert + cascade (the create-time EDF re-pack).
     this.cascade(now);
 
+    // Record the stochastic logging policy's propensity for the auto-placed
+    // slot (Phase-2 arm only) so the simulated telemetry carries the same
+    // `propensity` field production writes — the value off-policy IPS divides by.
+    const propensity =
+      this.reranker === "phase2"
+        ? this.placementPropensity(task, now)
+        : undefined;
     this.events.push({
       eventType: "CREATE",
       oldSnapshot: null,
-      newSnapshot: buildSnapshot(task, task.tagNames),
+      newSnapshot: buildSnapshot(task, task.tagNames, undefined, propensity),
       rewardScore: EVENT_REWARD.CREATE,
       occurredAt: now,
       taskId: task.id,

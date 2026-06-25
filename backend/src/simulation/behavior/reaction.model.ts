@@ -1,6 +1,6 @@
 import type { Rng } from "../rng";
 import type { Persona } from "../personas/persona.factory";
-import { scoreSlot } from "../personas/preference-field";
+import { scoreSlot, type PreferenceField } from "../personas/preference-field";
 
 /**
  * The probabilistic, feasibility-bounded reaction policy (strategy §5).
@@ -29,6 +29,16 @@ const ARGMAX_JITTER = 0.1; // humans aren't perfect optimizers (strategy §5.2)
  * Placement channel → MOVE / KEEP (strategy §5.1). Returns the slot to move to,
  * or `null` to KEEP the suggestion. The result is always a member of `feasible`
  * (or null), so it can never violate the feasibility wall.
+ *
+ * `field` is the latent preference field the persona scores against. It defaults
+ * to `persona.field` (the base, un-drifted ground truth). The runner passes a
+ * DRIFTED copy (`driftPGlobal` advanced by the elapsed months) so non-stationary
+ * drift (`driftPerMonth` / `--drift-mult`) actually reaches the reaction loop —
+ * previously the model always scored against the base field, so drift was a
+ * dormant no-op. Drift is a pure function of elapsed time (no RNG), so passing it
+ * here leaves the seeded random stream byte-for-byte unchanged: a drift-mult=1
+ * run with archetypes that carry drift differs only by the drift itself, and a
+ * persona with zero drift reproduces the previous behaviour exactly.
  */
 export function decidePlacement(
   persona: Persona,
@@ -36,17 +46,12 @@ export function decidePlacement(
   suggested: Date,
   feasible: Date[],
   rng: Rng,
+  field: PreferenceField = persona.field,
 ): Date | null {
   if (feasible.length === 0) return null;
 
   const score = (c: Date) =>
-    scoreSlot(
-      persona.field,
-      c,
-      persona.prefs.timezone,
-      task.tags,
-      task.deadline,
-    );
+    scoreSlot(field, c, persona.prefs.timezone, task.tags, task.deadline);
 
   // Noise floor: an out-of-character action regardless of preference. May land
   // on the suggestion itself (→ effectively a KEEP), which is correct — even

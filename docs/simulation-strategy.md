@@ -1,10 +1,45 @@
 # Zenflow Simulation Strategy
 
-> Synthetic-data strategy for evaluating the personalization roadmap
-> (`docs/heuristic.md` Phases 2–4) when real data from a 3-person team is
-> insufficient. This document defines **what to simulate** — personas, tasks, and
-> behavior — over a **~1-year** time series, and how that data validates each
+> **What this doc is:** the plan for generating *synthetic* user data to test Zenflow's
+> personalization roadmap ([`docs/heuristic.md`](heuristic.md) Phases 2–4) when the real
+> 3-person pilot is too small to learn from. It defines **what to simulate** — personas,
+> tasks, and behavior — over a **~1-year** time series, and how that data validates each
 > phase without falling into the circularity trap.
+> **Who should read it:** the ML engineer building or evaluating the learners. Read
+> [`docs/heuristic.md`](heuristic.md) first — this doc assumes its phases, metrics (MAR), and
+> terms (EDF, re-ranker, preference matrix, LinUCB, IPS) are already understood. The
+> step-by-step promotion procedure lives in [`docs/phase-2-evaluation-steps.md`](phase-2-evaluation-steps.md).
+
+---
+
+## 0. Concepts & terminology (this doc's own jargon)
+
+[`docs/heuristic.md`](heuristic.md) defines the shared ML terms (EDF, re-ranker, preference
+matrix, bandit, LinUCB, IPS/SNIPS, MAR). The terms below are specific to *this* simulation
+doc. Each is defined before its first use.
+
+| Term | Plain definition | Why it's here |
+|------|------------------|---------------|
+| **Generator** | The synthetic data-producing process: it invents users, their hidden tastes, their tasks, and how they react. | The "world" the learners live in. We control it, so we know the ground truth. |
+| **Learner** | Any model a phase trains (the Phase-2 heuristic, the Phase-3 bandit, the Phase-4 factorizer). | It only sees the telemetry log, never the generator's hidden parameters. |
+| **Generator ⊋ learner (the cardinal rule)** | The generator must be *strictly richer* than any learner — it embeds drivers no learner can observe. | Stops the result being a tautology ("I recovered exactly what I injected"). |
+| **Archetype** | A *cluster* of users defined by distributions over hidden traits (e.g. "Night Owl"). The ground-truth label Phase 4 must recover. | The population is built from 5 of these. |
+| **Persona** | One *individual* user — a single random draw from an archetype, plus personal jitter. | Members of an archetype share traits but are never identical; that variance is what makes the problem non-trivial. |
+| **Latent / hidden field** | A persona's true, unobservable preferences (e.g. `P_global`, `P_tag`). | Learners must *recover* these from behavior alone; we grade them against the truth. |
+| **`P_global(day, block)`** | A persona's smooth preference for each (weekday, time-block), ignoring tags. | The ground truth the Phase-2 preference matrix approximates. |
+| **`P_tag(tag, block)`** | Per-tag deviations from `P_global` — e.g. likes `#backend` mornings specifically. | The interaction only Phase 3 can exploit; the reason Phase 3 can beat Phase 2. |
+| **Drift** | Slow change in a persona's preferences/skill across the year (non-stationarity). | Tests whether a learner keeps up as the user changes. |
+| **Noise floor `ε`** | Probability a persona acts randomly / out of character on any decision. | No real user is perfectly consistent; this sets a *floor* MAR no learner can beat. |
+| **Feasibility wall** | A persona can only react within EDF's feasible set — it can't move to a slot EDF never offered. | Forces some "legitimate" manual moves that no learner can remove. |
+| **Duration bias `b_tag`** | Per-tag multiplier (actual ÷ estimated) the persona's true durations follow. | The ground truth Phase 2's duration corrector must learn. |
+| **Edit propensity `π_edit`** | Probability the persona acts on a mismatch (moves/resizes) rather than letting it ride. | Controls how dense the edit signal is. |
+| **Fatigue / sequence effect** | Reaction to a task depends on recent load, not just the task itself. | A hidden driver that makes reschedules cluster realistically. |
+| **Procrastination `ρ`** | A weight pulling a persona's preferred slots toward the deadline. | Lets "deadline-crammer" behavior emerge. |
+| **Calibration** | Fitting the generator's *parameter ranges* to the real 3-person pilot. | Keeps the synthetic distributions honest rather than invented. |
+| **Anti-circularity / ablation** | Re-running with the mechanism a phase exploits *turned off* in the generator. | If the phase still "wins," the gain was fake. The strongest sanity check. |
+| **ARI / purity** | Two scores for how well recovered clusters match the true archetype labels. | Phase 4's cluster-recovery metrics (higher = better). |
+| **IPS / SNIPS** | Off-policy estimators (defined in [`heuristic.md`](heuristic.md)) that score a new policy from an old log. | The cheap offline pre-filter in §13. |
+| **Paired design** | Run *each persona twice* — once per policy — sharing the same seeds, differing only in the re-ranker. | Cancels persona/seed variance so small true effects are detectable. |
 
 ---
 
@@ -28,6 +63,10 @@ What this study legitimately proves:
 Online A/B testing on real users is explicitly **future work**.
 
 ### 1.1 The cardinal rule: generator ⊋ learner
+
+*Intuition:* if you test a model on data produced by that same model, it will of course
+"win" — you only proved your code can recover its own assumptions. To avoid that, the
+fake world must be harder than any single learner.
 
 The single thing that makes this defensible: **the data-generating process must be
 strictly richer than any model that learns from it.** If the simulator generates
@@ -160,7 +199,15 @@ The persona factory draws these once (seeded, reproducible) and seeds the `User`
 
 ## 5. Behavior model (the reaction policy)
 
-Two **independent** signal channels — never conflate them:
+*What this section does:* it defines exactly how a persona reacts to a suggestion. This is
+the engine that turns hidden preferences into the `MOVE`/`KEEP`/`RESIZE`/`COMPLETE` events the
+learners see.
+
+Two **independent** signal channels — never conflate them (placement vs. duration); a third
+subsection (§5.3) covers the eventual outcome.
+<!-- TODO: verify — original text said "Two independent signal channels" but three channels
+     are described below (5.1 placement, 5.2 duration, 5.3 outcome). -->
+
 
 ### 5.1 Placement channel → `MOVE` / `KEEP`
 
@@ -199,6 +246,66 @@ At the scheduled time, draw from `(p_complete, p_reschedule, p_abandon)`, modula
 - **Feasibility**: an abandoned task whose deadline passed while PENDING is the
   `ABANDON` outcome (mirrors the production overdue sweep).
 
+### 5.4 Task dependencies / ordering constraints
+
+20–40 % of tasks carry a `project_id` and an optional list of `prerequisite_task_ids`.
+A dependent task is infeasible until all prerequisites reach `COMPLETE`; EDF treats it
+as a hard constraint (no slot offered until unblocked).
+
+Why it matters: without this, some `MOVE` events attributed to "time preference" are
+actually ordering violations — the user moves the task because it was scheduled before
+its prerequisite, not because the time-of-day was wrong. This inflates MAR in a way
+no preference learner can fix, so it must be modelled as a distinct cause. Archetype A
+(developer) and D (PM) have the highest project density; archetype C (ops/SRE) has
+mostly independent reactive tasks.
+
+### 5.5 Energy / cognitive load state
+
+A latent `energy_t ∈ [0, 1]` per persona, updated each simulated step:
+
+- **Depletion**: each meeting block or long task subtracts from energy, scaled by
+  duration. Context-switch cost (back-to-back different-tag tasks) adds a penalty.
+- **Recovery**: partial overnight reset toward a persona-specific baseline; short
+  breaks restore a fraction mid-day.
+
+Effect on behavior: `p_complete` is scaled by `energy_t` (low energy → more
+reschedules). The effective preference used in §5.1 is modulated:
+`pref_eff = pGlobal + P_tag − ρ·deadline + β·energy_t`, where `β` is a
+persona-level sensitivity weight. Archetype C (Ops/SRE) has a high `β`; Archetype A
+(Developer) moderate.
+
+This accounts for moves caused by fatigue or context overload that have nothing to do
+with time-of-day preference, providing a more honest noise floor.
+
+### 5.6 Task urgency drift
+
+Each task has a latent `urgency_t` that can change after creation. On each simulated
+step, with a small persona-specific probability, a pending task receives an urgency
+spike (e.g. a random external trigger such as a stakeholder request). When `urgency_t`
+exceeds a threshold the persona may pull the task forward regardless of the
+re-ranker's suggestion.
+
+The resulting `MOVE` is tagged with cause `urgency_shift` in the sidecar. This lets
+the evaluation decompose:
+- **MAR_avoidable** — the re-ranker placed the task in a slot the persona dislikes.
+- **MAR_unavoidable** — urgency spike, emergency, feasibility-forced move; not the
+  scheduler's fault.
+
+Phase 2 is graded on MAR_avoidable. See §12.
+
+### 5.7 Task splitting behavior
+
+Long tasks (true duration > a persona-specific threshold — typically 90 min for A/D,
+60 min for E) may be **split** across sessions. On the scheduled slot, the persona
+works a partial duration `d_partial < true`, emits a `RESIZE` down to `d_partial`,
+and re-queues a remainder task for a future slot. The total planned duration is
+preserved across the split.
+
+Archetype E (crammer) has a high split rate; Archetype A (deep-work developer) prefers
+uninterrupted blocks and splits rarely. Without this mechanism the simulator
+over-estimates the need for long contiguous blocks, which distorts duration-error
+metrics and completion rates for writing/research tasks.
+
 ---
 
 ## 6. Realism & noise checklist
@@ -218,6 +325,28 @@ The series must look like real users, not a clean generator. Required mechanisms
 - [ ] **Mixed deadline use** — only a fraction of tasks carry explicit deadlines; the
       rest rely on period-bounded placement (`view`), per persona.
 - [ ] **View mix** — day/week/month weighting differs by persona (E plans in weeks; C in days).
+- [ ] **Task dependency DAGs** — 20–40 % of tasks carry a `project_id` +
+      `prerequisite_task_ids`; a task is blocked until all prerequisites complete (§5.4).
+      Ordering violations are a distinct MAR source, not attributable to time preference.
+- [ ] **Energy / cognitive load state** — latent `energy_t ∈ [0,1]` per persona;
+      depletes with meetings and long tasks, recovers overnight; modifies `p_complete`
+      and effective slot preference (§5.5).
+- [ ] **Task urgency drift** — latent `urgency_t` can spike post-creation; urgency-driven
+      moves are tagged `urgency_shift` in the sidecar to support MAR decomposition (§5.6).
+- [ ] **Task splitting** — long tasks may be split across sessions; remainder re-queued,
+      preserving total planned duration (§5.7).
+
+### Medium-value / Phase 3 nice-to-have
+
+These improve credibility but are unlikely to change Phase 2 pass/fail conclusions.
+Defer unless Phase 3 evaluation demands them.
+
+- [ ] **Dynamic calendar fragmentation** — exogenous meetings added mid-span beyond the
+      initial fixed-block rate; especially realistic for archetype D (PM).
+- [ ] **Habit formation** — `π_edit(t)` that increases as past scheduler accuracy builds
+      trust; creates a feedback loop between suggestion quality and edit density.
+- [ ] **Structured seasonal events** — punctuated regime shifts (exam crunch, product
+      launch, burnout stretch) rather than purely gradual drift.
 
 All randomness flows from a **single seeded PRNG** (e.g. mulberry32) keyed by persona
 index + step, so any run is byte-reproducible (no `Math.random`).
@@ -236,6 +365,9 @@ Per arrival:
 - **Deadline**: present with persona-specific probability; horizon sampled (tight for
   C/E near cycle ends, loose for A). Absent ⇒ period-bounded by `view`.
 - **View**: sampled from the persona's day/week/month weights.
+- **Project / dependency**: 20–40 % of tasks carry a `project_id` and optional
+  `prerequisite_task_ids`. Prerequisite tasks must reach `COMPLETE` before a dependent
+  task is schedulable; EDF treats them as infeasible until unblocked (§5.4).
 - **Title/note**: templated from tag (cosmetic; not learned).
 
 ---
@@ -246,7 +378,7 @@ Per arrival:
 preference matrix. **Needs:** ~1–2 weeks/user — abundant in a year.
 
 - **Duration backtest** — recompute bias-corrected duration for every historical task;
-  ship only if `|true − corrected|` < `|true − est|` median. The §5.2 channel provides
+  ship only if `mean|true − corrected| < mean|true − est|`. The §5.2 channel provides
   the ground-truth `true` durations to score against.
 - **Placement** — the signed matrix should converge toward each persona's
   `P_global`. Measure recovery error `‖matrix_normalized − P_global‖` (possible only
@@ -352,7 +484,7 @@ All metrics computed from the generated `task_events` log (definitions in
 
 | Metric | Role |
 |--------|------|
-| **MAR** (Manual Adjustment Rate) | north-star; each phase must beat the prior on replay, down toward the persona noise floor |
+| **MAR** (Manual Adjustment Rate) | north-star; split into **MAR_avoidable** (scheduler placed the task in a slot the persona dislikes — scheduler's fault) and **MAR_unavoidable** (urgency spike, sudden external event, feasibility-forced move — not the scheduler's fault). Report both; phases are graded on MAR_avoidable. Total MAR = avoidable + unavoidable, each phase must beat the prior on avoidable MAR, down toward the persona noise floor. |
 | Slot acceptance | ↑ keeps/suggestions |
 | Move distance | ↓ minutes between suggested & final slot |
 | Duration error | ↓ (Phase 2 owns) |
@@ -370,8 +502,14 @@ Reported as **sweeps**, which is where simulation earns its keep:
 
 ## 13. Verifying that phase N+1 beats phase N
 
+*The question this section answers:* "Is the new phase actually better, or did I just get
+lucky / fool myself?" The short version: there is a **cheap test** (replay on an old log) and
+an **expensive test** (re-run the whole simulation with the new policy live). A phase must pass
+the cheap one first, then the expensive one, then a battery of sanity checks. The full
+step-by-step procedure also lives in [`docs/phase-2-evaluation-steps.md`](phase-2-evaluation-steps.md).
+
 This is the operationalization of the heuristic's "Ships only if…" gate
-(`docs/heuristic.md` §Roadmap Summary). The core methodological point: there are
+([`docs/heuristic.md`](heuristic.md) §Roadmap Summary). The core methodological point: there are
 **two distinct evaluation regimes**, and a phase must pass the cheap one before the
 expensive one.
 
@@ -396,7 +534,7 @@ Cheap pre-filter; run **before** promoting a policy.
    (**IPS / SNIPS**, heuristic §Offline evaluation): it scores higher when it would have
    picked the slot the user *kept* and lower when it picks slots the user *moved away from*.
 4. Phase-specific direct backtests on the same log:
-   - **Phase 2:** duration backtest — `median|true − corrected| < median|true − est|`.
+   - **Phase 2:** duration backtest — `mean|true − corrected| < mean|true − est|`.
    - **Phase 3:** IPS reward must clear the Phase-2 heuristic.
 5. **Gate:** fails here ⇒ do not promote. (Replay is conservative: passing is necessary,
    not sufficient.)

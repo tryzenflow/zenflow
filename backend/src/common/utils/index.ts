@@ -82,3 +82,31 @@ export function getDayOfWeek(dayNumber: number) {
 export const clamp = (value: number, min: number, max: number) => {
   return Math.min(Math.max(value, min), max);
 };
+
+/**
+ * Compute the duration in minutes for a fixed task given its `startTime` and
+ * `endTime` (both minutes from midnight, 0–1439). Handles the cross-midnight
+ * case: when `endTime < startTime` the task spans into the next day, so the
+ * raw difference is negative and we add one full day (1440 minutes). The
+ * result is always rounded UP to the nearest 15-minute grid slot and is at
+ * least 15 minutes.
+ *
+ * Examples:
+ *   - startTime 540 (09:00), endTime 600 (10:00) → 60 min (same day)
+ *   - startTime 1380 (23:00), endTime 60 (01:00) → 120 min (cross-midnight)
+ *   - startTime 1350 (22:30), endTime 5 (00:05) → 95 min raw → 105 min (ceil)
+ *
+ * Pure: no I/O or side effects.
+ */
+export function fixedTaskDuration(
+  startTime: number,
+  endTime: number,
+  granularity = 15,
+): number {
+  const rawMinutes =
+    endTime >= startTime ? endTime - startTime : endTime + 1440 - startTime;
+  return Math.max(
+    granularity,
+    Math.ceil(rawMinutes / granularity) * granularity,
+  );
+}

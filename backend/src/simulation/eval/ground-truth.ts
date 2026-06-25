@@ -19,10 +19,14 @@ import type { ArchetypeId } from "../personas/archetypes";
  * DIFFERENT ids — there is no way to regenerate ground truth and join it back to
  * the DB rows. It must be emitted by the same run that writes the DB.
  *
- * Drift note: `driftPGlobal` exists but is currently dormant (the reaction model
- * scores against the base `field.pGlobal`), so the exported `pGlobal` is exactly
- * the field every persona reacted against for the whole span. `driftPerMonth` is
- * carried through so a future drifted-recovery variant can account for it.
+ * Drift note: the reaction model now scores against a DRIFTED field — the runner
+ * advances `driftPGlobal` by `peakShiftBlocks × (day / 30)` at each placement
+ * decision (`runner.ts` via `driftedFieldFor`), so `driftPerMonth` /
+ * `--drift-mult` is a live sensitivity axis rather than a no-op. The exported
+ * `pGlobal` below is still the BASE (day-0, un-drifted) field — the recovery
+ * target a Phase-2 matrix can approximate at span start — and `driftPerMonth` is
+ * exported alongside it so a drift-aware recovery variant can reconstruct the
+ * field at any later day as `driftPGlobal(pGlobal, peakShiftBlocks × monthsAt(d))`.
  */
 
 /** Round to 6 decimals to keep the sidecar compact without losing recovery precision. */
@@ -42,7 +46,7 @@ export interface PersonaGroundTruth {
     workDays: number[];
     timezone: string;
   };
-  /** The true global temporal field (7×96 = 672 cells) — Phase-2 placement target. */
+  /** The true global temporal field (7×24 = 168 cells) — Phase-2 placement target. */
   pGlobal: number[];
   /**
    * Per-tag duration bias: `mu`/`sigma` are lognormal params (log-space); `bias`
@@ -52,6 +56,12 @@ export interface PersonaGroundTruth {
   tagBias: Record<string, { mu: number; sigma: number; bias: number }>;
   /** Slow non-stationary drift (dormant today; kept for a drifted-recovery variant). */
   driftPerMonth: { peakShiftBlocks: number; biasDecay: number };
+  /**
+   * Task IDs that were urgency-moved during the simulation run (§5.6).
+   * Used by `computeMetrics` to decompose MAR into avoidable vs unavoidable.
+   * A MOVE for a task in this set is `MAR_unavoidable`; all others are `MAR_avoidable`.
+   */
+  urgencyMovedTaskIds: string[];
 }
 
 export interface GroundTruthFile {
@@ -67,11 +77,24 @@ export interface GroundTruthFile {
   personas: PersonaGroundTruth[];
 }
 
-/** Project a live {@link Persona} to its serialisable ground truth. */
-export function toGroundTruth(persona: Persona): PersonaGroundTruth {
+/**
+ * Project a live {@link Persona} to its serialisable ground truth.
+ *
+ * @param urgencyMovedIds - Task IDs that received an urgency-spike MOVE during
+ *   the run. Pass the set collected by the drive loop; defaults to empty (no
+ *   urgency decomposition available for this persona).
+ */
+export function toGroundTruth(
+  persona: Persona,
+  urgencyMovedIds: Set<string> = new Set(),
+): PersonaGroundTruth {
   const tagBias: PersonaGroundTruth["tagBias"] = {};
   for (const [tag, b] of persona.tagBias) {
-    tagBias[tag] = { mu: r6(b.mu), sigma: r6(b.sigma), bias: r6(Math.exp(b.mu)) };
+    tagBias[tag] = {
+      mu: r6(b.mu),
+      sigma: r6(b.sigma),
+      bias: r6(Math.exp(b.mu)),
+    };
   }
   return {
     userId: persona.userId,
@@ -81,6 +104,7 @@ export function toGroundTruth(persona: Persona): PersonaGroundTruth {
     pGlobal: Array.from(persona.field.pGlobal, r6),
     tagBias,
     driftPerMonth: { ...persona.driftPerMonth },
+    urgencyMovedTaskIds: Array.from(urgencyMovedIds),
   };
 }
 

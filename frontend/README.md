@@ -87,13 +87,35 @@ autocompletes the rest of the form — duration, scheduling type, tags, note, an
 forward-shifted deadline (the source task's create→deadline lead time re-applied from now,
 split into date/time in the user's tz). Edit mode keeps the plain input.
 
-**Settings** is a dialog, not a route: `components/settings/settings-dialog.tsx` edits the
-onboarding preferences (work hours / days / role archetype / timezone via
-`updatePreferences`) and hosts a Log out action. It's mounted once in `layout.tsx`; the
-sidebar footer (`sidebar.tsx`) shows the signed-in user and opens it via a
-`zenflow:open-settings` window event (same pattern as `zenflow:open-task`). The work-field
-inputs and constants are shared with onboarding through
-`components/settings/preferences-fields.tsx`.
+**Settings** is a dialog, not a route: `components/settings/settings-dialog.tsx` is a
+Todoist-style **tabbed** dialog — **Work** (hours / days / role archetype / timezone via
+`updatePreferences`), **Scheduling** (the Phase-2 `auto | ask | never` duration-adjustment
+mode, `components/settings/duration-mode-field.tsx`), **Insights** (`UserPreferencesPanel`
+in `components/settings/preferences.tsx`, two sections: the 7×24 signed preference heatmap
+fetched from `GET /users/me/preference-matrix` and per-tag learned duration multipliers
+fetched from `GET /users/me/tag-bias`, both with cold-start empty states), and **Account**
+(the Log out action). It's mounted once in `layout.tsx`; the sidebar footer (`sidebar.tsx`) shows the
+signed-in user and opens it via a `zenflow:open-settings` window event (same pattern as
+`zenflow:open-task`). The work-field inputs and constants are shared with onboarding through
+`components/settings/preferences-fields.tsx`; the duration-mode control is shared via
+`duration-mode-field.tsx`.
+
+**Onboarding** (`pages/onboarding.tsx`) is a wizard whose steps are Welcome · Work Hours ·
+Work Days · Your Role · **Adjustments** (the same `auto | ask | never` control) · All Set;
+the chosen mode is wired into `OnboardingInput.durationAdjustmentMode`.
+
+**Phase-2 transparency UI (issue #13).** Scheduling decisions are surfaced as sonner
+`toast.custom` bodies that mirror `overflow-toast.tsx`: `tasks/rationale-toast.tsx` (why a
+task was placed, from `RescheduleResponse.rationale`) and the duration-adjustment toasts in
+`lib/scheduling-toasts.tsx` (`auto` → apply + **Undo**; `ask` → blocking Accept/Keep; both
+revert via `PATCH /tasks/:id/resize`). The rationale toast is shown from `layout.tsx`
+(reschedule/resize) and `create-task-dialog.tsx` (resolve-overflow); the duration toast from
+`create-task-dialog.tsx` off the create response's `schedulingMeta`. While a block is being
+edge-resized, `scheduled-block-item.tsx` renders the added/removed minutes as a distinct
+delta band/label (purely visual, driven off the existing resize-preview state so it doesn't
+touch the drag/resize gesture path). The Phase-2 `@zenflow/shared` type deltas are consumed
+through `src/types/phase2.ts` — a temporary shim that mirrors the ADR shapes until the
+backend ships them in `@zenflow/shared` (see the file header for the one-line migration).
 
 ## Calendar internals
 

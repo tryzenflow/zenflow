@@ -1,4 +1,5 @@
 import type { Task, TaskEvent } from "./task";
+import type { DurationAdjustmentMode } from "./user";
 
 /** Standard success envelope used by the Zenflow API. */
 export interface ApiSuccess<T> {
@@ -27,12 +28,29 @@ export interface TasksListResponse {
   meta: TasksMeta;
 }
 
+/** Why the engine put a task where it did (Phase-2 placement re-ranker). */
+export interface SchedulingRationale {
+  /** Human-readable summary, e.g. "You usually keep work in the morning". */
+  summary: string;
+  /** Dominant preferred work window (minutes-from-midnight), if any. */
+  preferredWindow?: { startMin: number; endMin: number } | null;
+  /** Top day×block cells that drove the pick (matrix coords + score). */
+  topCells?: { day: number; block: number; score: number }[];
+}
+
 export interface SchedulingMeta {
+  /** Corrected duration actually fed to EDF (rounded up to 15-min). */
   adjustedDuration: number;
   placedAt: string | null;
   engine: "edf";
-  /** Phase-2+ bias multiplier; 1.0 in Phase 1. */
+  /** Per-tag blended bias multiplier; 1.0 when no bias applied. */
   biasApplied?: number;
+  /** User's typed estimate before correction (minutes). */
+  estimatedDuration?: number;
+  /** Active mode at create time (drives the FE toast behaviour). */
+  durationAdjustmentMode?: DurationAdjustmentMode;
+  /** Short reason naming the driving tag(s), e.g. "#backend ~30% longer". */
+  durationReason?: string | null;
 }
 
 /** Granularity of the "next available period" overflow recovery option. */
@@ -86,9 +104,35 @@ export interface RescheduleResponse {
   task: Task;
   /** Tasks cascade-moved as a side effect of the reschedule. */
   displaced: DisplacedTask[];
+  /** Present when a preference-favoured slot drove the placement. */
+  rationale?: SchedulingRationale | null;
+}
+
+/** 7×24 signed preference matrix for the Insights heatmap. */
+export interface PreferenceMatrixResponse {
+  /** Flat 168-int row-major [day0..6][block0..23], signed scores. */
+  matrix: number[];
+  /** Grid dims so the FE doesn't hard-code them. */
+  days: number; // 7
+  blocks: number; // 24
 }
 
 export interface TaskDetailResponse {
   task: Task;
   events: TaskEvent[];
+}
+
+/** One tag's learned duration multiplier. */
+export interface TagBiasEntry {
+  tag: string;
+  /** Sample count (COMPLETE/KEEP events with this tag). Higher = more evidence. */
+  n: number;
+  /** Duration multiplier: actual ÷ estimated. 1.0 = no correction. */
+  b: number;
+}
+
+/** Per-tag duration-multiplier summary for the Insights panel. */
+export interface TagBiasResponse {
+  /** All tags with ≥1 sample, sorted by n descending. */
+  tags: TagBiasEntry[];
 }

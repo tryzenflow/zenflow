@@ -11,13 +11,17 @@ import { cn } from "@/lib/utils";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useDragSensors } from "@/hooks/use-drag-sensors";
 import { DEFAULT_WORK_PREFS, getDayZones } from "@/utils/zones";
-import { WEEK_STARTS_ON } from "@/utils/constants";
+import { DAILY_HORIZON, TIME_GRANULARITY, WEEK_STARTS_ON } from "@/utils/constants";
 import {
   isZonedToday,
   tzAbbrev,
   zonedDate,
   zonedWallClockToUtc,
 } from "@/utils/tz";
+
+/** px height of one hour row — mirrors the --week-cells-height CSS variable. */
+const HOUR_PX = 64;
+const PX_PER_MIN = HOUR_PX / 60;
 
 /** Shared column template: a fixed time gutter + 7 equal day columns. */
 const GRID_COLS = "grid-cols-[3rem_repeat(7,minmax(0,1fr))] sm:grid-cols-[4rem_repeat(7,minmax(0,1fr))]";
@@ -42,17 +46,74 @@ export function WeekView({
     end: endOfWeek(date, { weekStartsOn: WEEK_STARTS_ON }),
   });
 
-  function onDragEnd({ over, active }: DragEndEvent) {
-    if (!over) return;
+  function onDragEnd({ over, active, delta }: DragEndEvent) {
     const activeId = active.id.toString();
     const block = events.find((e) => e.id === activeId);
     if (!block) return;
-    const [hours, minutes, dayIndex] = over.id.toString().split(":").map(Number);
 
     const duration =
       new Date(block.end).getTime() - new Date(block.start).getTime();
+
+    let hours: number;
+    let minutes: number;
+    let targetDay: Date;
+
+    if (over) {
+      // Normal drop: cell id encodes "hour:minute:dayIndex"
+      const [h, m, dayIndex] = over.id.toString().split(":").map(Number);
+      hours = h;
+      minutes = m;
+      targetDay = new Date(weekDates[dayIndex] ?? zonedDate(block.start, tz));
+    } else {
+      // Dragged past the bottom (or off a column edge): compute intended time
+      // from the drag delta and the block's original start.
+      const blockZoned = zonedDate(block.start, tz);
+      const blockStartMin =
+        blockZoned.getHours() * 60 + blockZoned.getMinutes();
+      const rawMin = blockStartMin + delta.y / PX_PER_MIN;
+      const snappedMin =
+        Math.round(rawMin / TIME_GRANULARITY) * TIME_GRANULARITY;
+
+      // Find which week column the block originally lived in.
+      const originDayIdx = weekDates.findIndex((d) => {
+        const bd = zonedDate(block.start, tz);
+        return (
+          d.getFullYear() === bd.getFullYear() &&
+          d.getMonth() === bd.getMonth() &&
+          d.getDate() === bd.getDate()
+        );
+      });
+      const baseDayIdx = originDayIdx >= 0 ? originDayIdx : 0;
+
+      if (snappedMin >= DAILY_HORIZON) {
+        // Overflowed past midnight — advance to the next day column in the week
+        // if one exists, otherwise keep the last column and clamp to 23:45.
+        const extraDays = Math.floor(snappedMin / DAILY_HORIZON);
+        const overflowMin = snappedMin % DAILY_HORIZON;
+        const nextIdx = Math.min(baseDayIdx + extraDays, weekDates.length - 1);
+        targetDay = new Date(weekDates[nextIdx]);
+        if (baseDayIdx + extraDays > weekDates.length - 1) {
+          // No next column — place at end of last day.
+          hours = Math.floor((DAILY_HORIZON - TIME_GRANULARITY) / 60);
+          minutes = (DAILY_HORIZON - TIME_GRANULARITY) % 60;
+        } else {
+          hours = Math.floor(overflowMin / 60);
+          minutes = overflowMin % 60;
+        }
+      } else if (snappedMin < 0) {
+        // Dragged above the top — clamp to 00:00 of the current day.
+        targetDay = new Date(weekDates[baseDayIdx]);
+        hours = 0;
+        minutes = 0;
+      } else {
+        targetDay = new Date(weekDates[baseDayIdx]);
+        hours = Math.floor(snappedMin / 60);
+        minutes = snappedMin % 60;
+      }
+    }
+
     // Target day (user-tz) + dropped wall-clock time → real UTC instant.
-    const wall = new Date(weekDates[dayIndex] ?? zonedDate(block.start, tz));
+    const wall = new Date(targetDay);
     wall.setHours(hours, minutes, 0, 0);
     const newStart = zonedWallClockToUtc(wall, tz);
     const newEnd = new Date(newStart.getTime() + duration);

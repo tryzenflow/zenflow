@@ -20,11 +20,21 @@ function snap(scheduledStartTime: string | null, durationMinutes: number) {
   return { scheduledStartTime, durationMinutes, tags: [] };
 }
 
-/** Build a Prisma mock whose taskEvent.findMany returns `events`. */
-function mockPrisma(events: Ev[]): PrismaService {
+/**
+ * Build a Prisma mock whose `taskEvent.findMany` returns `events` and whose
+ * `user.findMany` returns the `users` (id + email) the metrics join for the
+ * stable per-persona key. Unknown users fall back to an empty key.
+ */
+function mockPrisma(
+  events: Ev[],
+  users: { id: string; email: string }[] = [],
+): PrismaService {
   return {
     taskEvent: {
       findMany: jest.fn().mockResolvedValue(events),
+    },
+    user: {
+      findMany: jest.fn().mockResolvedValue(users),
     },
   } as unknown as PrismaService;
 }
@@ -105,9 +115,14 @@ describe("computeMetrics", () => {
       },
     ];
 
-    const report = await computeMetrics(mockPrisma(events));
+    const report = await computeMetrics(
+      mockPrisma(events, [{ id: "u1", email: "sim-dev-0-1@zenflow.sim" }]),
+    );
     expect(report.perPersona).toHaveLength(1);
     const m = report.perPersona[0];
+
+    // Stable per-persona key joined from the User row (the deterministic email).
+    expect(m.personaKey).toBe("sim-dev-0-1@zenflow.sim");
 
     // 3 scheduled, 2 adjusted (A moved, C resized) → MAR = 2/3.
     expect(m.scheduled).toBe(3);
@@ -150,9 +165,95 @@ describe("computeMetrics", () => {
     ];
     const report = await computeMetrics(mockPrisma(events));
     const m = report.perPersona[0];
+    // No user row supplied → key falls back to an empty string (never throws).
+    expect(m.personaKey).toBe("");
     expect(m.mar).toBe(0);
     expect(m.completionInSlotRate).toBe(1);
     expect(m.moveDistanceMedianMin).toBe(0);
+  });
+
+  it("without sidecar, marAvoidable === mar and marUnavoidable === 0", async () => {
+    const events: Ev[] = [
+      {
+        taskId: "A",
+        userId: "u1",
+        eventType: "CREATE",
+        oldSnapshot: null,
+        newSnapshot: snap(T0, 60),
+        occurredAt: new Date(T0),
+      },
+      {
+        taskId: "A",
+        userId: "u1",
+        eventType: "MOVE",
+        oldSnapshot: snap(T0, 60),
+        newSnapshot: snap(T1, 60),
+        occurredAt: new Date(T1),
+      },
+    ];
+    // No urgencyByUser supplied → conservative baseline.
+    const report = await computeMetrics(mockPrisma(events));
+    const m = report.perPersona[0];
+    expect(m.marUnavoidable).toBe(0);
+    expect(m.marAvoidable).toBeCloseTo(m.mar, 10);
+  });
+
+  it("with sidecar, urgency-moved tasks count as marUnavoidable", async () => {
+    const events: Ev[] = [
+      // taskA was moved (urgency spike → unavoidable).
+      {
+        taskId: "A",
+        userId: "u1",
+        eventType: "CREATE",
+        oldSnapshot: null,
+        newSnapshot: snap(T0, 60),
+        occurredAt: new Date(T0),
+      },
+      {
+        taskId: "A",
+        userId: "u1",
+        eventType: "MOVE",
+        oldSnapshot: snap(T0, 60),
+        newSnapshot: snap(T1, 60),
+        occurredAt: new Date(T1),
+      },
+      // taskB was moved (preference-based → avoidable).
+      {
+        taskId: "B",
+        userId: "u1",
+        eventType: "CREATE",
+        oldSnapshot: null,
+        newSnapshot: snap(T0, 60),
+        occurredAt: new Date(T0),
+      },
+      {
+        taskId: "B",
+        userId: "u1",
+        eventType: "MOVE",
+        oldSnapshot: snap(T0, 60),
+        newSnapshot: snap(T1, 60),
+        occurredAt: new Date(T1),
+      },
+      // taskC: kept (no move, not adjusted).
+      {
+        taskId: "C",
+        userId: "u1",
+        eventType: "CREATE",
+        oldSnapshot: null,
+        newSnapshot: snap(T0, 60),
+        occurredAt: new Date(T0),
+      },
+    ];
+    const urgencyByUser = new Map([["u1", new Set(["A"])]]);
+    const report = await computeMetrics(mockPrisma(events), urgencyByUser);
+    const m = report.perPersona[0];
+    // 3 scheduled, 2 adjusted (A + B moved).
+    expect(m.scheduled).toBe(3);
+    expect(m.adjusted).toBe(2);
+    expect(m.mar).toBeCloseTo(2 / 3, 6);
+    // A is urgency-moved → 1 unavoidable; B is avoidable → 1 avoidable.
+    expect(m.marUnavoidable).toBeCloseTo(1 / 3, 6);
+    expect(m.marAvoidable).toBeCloseTo(1 / 3, 6);
   });
 
   it("aggregates per persona (unit of analysis = persona)", async () => {
