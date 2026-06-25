@@ -139,9 +139,12 @@ export function ScheduledBlockItem({
     const snap = (m: number) =>
       Math.round(m / TIME_GRANULARITY) * TIME_GRANULARITY;
     if (r.edge === "bottom") {
-      const end = Math.min(
-        DAILY_HORIZON,
-        Math.max(r.baseStart + TIME_GRANULARITY, snap(r.baseEnd + deltaMin)),
+      // Allow the end to exceed DAILY_HORIZON so the user can resize a task
+      // past midnight (cross-midnight resize). The duration passed to the API
+      // is `end - start`, which is valid regardless of crossing midnight.
+      const end = Math.max(
+        r.baseStart + TIME_GRANULARITY,
+        snap(r.baseEnd + deltaMin),
       );
       return { start: r.baseStart, end };
     }

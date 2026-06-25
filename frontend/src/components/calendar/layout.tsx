@@ -24,7 +24,6 @@ import type { TasksMeta } from "@zenflow/shared";
 import { isAxiosError } from "axios";
 import { toast } from "sonner";
 import { errorToast } from "@/lib/toast";
-import { maybeShowRationaleToast } from "@/lib/scheduling-toasts";
 import { useUserStore } from "@/hooks/use-user-store";
 import { zonedDate, zonedNow } from "@/utils/tz";
 import { isSameMonth } from "date-fns";
@@ -110,10 +109,10 @@ export function CalendarLayout() {
       if (!fresh.some((b) => b.taskId === taskId)) return;
     }
     try {
-      const res = await rescheduleTask(taskId, startISO);
-      // Phase-2: surface the placement rationale when the re-ranker favoured a
-      // preferred slot (no-op when the response carries none).
-      maybeShowRationaleToast(res);
+      await rescheduleTask(taskId, startISO);
+      // The rationale toast is only shown on task creation (where the AI
+      // scheduler assigns an initial slot). A manual drag is a deliberate user
+      // action so we never override it with scheduling commentary.
     } catch (error) {
       if (isAxiosError(error))
         errorToast(error.response?.data?.message || "Failed to reschedule");
@@ -149,8 +148,9 @@ export function CalendarLayout() {
       if (!fresh.some((b) => b.taskId === taskId)) return;
     }
     try {
-      const res = await resizeTask(taskId, startISO, durationMinutes);
-      maybeShowRationaleToast(res);
+      // Rationale toast is suppressed here for the same reason as onReschedule:
+      // a manual resize is an explicit user action, not an AI-scheduled placement.
+      await resizeTask(taskId, startISO, durationMinutes);
     } catch (error) {
       if (isAxiosError(error))
         errorToast(error.response?.data?.message || "Failed to resize");
