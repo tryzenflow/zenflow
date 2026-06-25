@@ -90,10 +90,11 @@ split into date/time in the user's tz). Edit mode keeps the plain input.
 **Settings** is a dialog, not a route: `components/settings/settings-dialog.tsx` is a
 Todoist-style **tabbed** dialog — **Work** (hours / days / role archetype / timezone via
 `updatePreferences`), **Scheduling** (the Phase-2 `auto | ask | never` duration-adjustment
-mode, `components/settings/duration-mode-field.tsx`), **Insights** (the 7×96 signed
-preference heatmap, `components/settings/preference-heatmap.tsx`, fetch-on-open from
-`GET /users/me/preference-matrix` with a cold-start empty state), and **Account** (the Log
-out action). It's mounted once in `layout.tsx`; the sidebar footer (`sidebar.tsx`) shows the
+mode, `components/settings/duration-mode-field.tsx`), **Insights** (`UserPreferencesPanel`
+in `components/settings/preferences.tsx`, two sections: the 7×24 signed preference heatmap
+fetched from `GET /users/me/preference-matrix` and per-tag learned duration multipliers
+fetched from `GET /users/me/tag-bias`, both with cold-start empty states), and **Account**
+(the Log out action). It's mounted once in `layout.tsx`; the sidebar footer (`sidebar.tsx`) shows the
 signed-in user and opens it via a `zenflow:open-settings` window event (same pattern as
 `zenflow:open-task`). The work-field inputs and constants are shared with onboarding through
 `components/settings/preferences-fields.tsx`; the duration-mode control is shared via

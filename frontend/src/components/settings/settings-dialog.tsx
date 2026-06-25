@@ -37,7 +37,7 @@ import {
   workWindowMinutes,
 } from "@/components/settings/preferences-fields";
 import { DurationModeField } from "@/components/settings/duration-mode-field";
-import { PreferenceHeatmap } from "@/components/settings/preference-heatmap";
+import { UserPreferencesPanel } from "@/components/settings/preferences";
 import type { DurationAdjustmentMode } from "@/types/phase2";
 
 /** Detected IANA timezone, falling back to UTC. */
@@ -394,7 +394,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 title="Your preference map"
                 description="When Zenflow tends to keep your work (amber) or move it away (slate), by day and time."
               >
-                {tab === "insights" && <PreferenceHeatmap />}
+                {tab === "insights" && <UserPreferencesPanel />}
               </Section>
             </TabsContent>
 

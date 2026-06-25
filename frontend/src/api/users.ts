@@ -1,6 +1,8 @@
 import { api } from "./base";
 import type {
+  ApiSuccess,
   OnboardingInput,
+  TagBiasResponse,
   UpdatePreferencesInput,
   User,
 } from "@zenflow/shared";
@@ -28,4 +30,15 @@ export async function updatePreferences(
 export async function getPreferenceMatrix(): Promise<PreferenceMatrixResponse> {
   const { data } = await api.get("/users/me/preference-matrix");
   return data.data;
+}
+
+/**
+ * Per-tag learned duration multipliers for the Insights panel. Sorted by
+ * sample count descending; an empty `tags` array means no tag history yet.
+ */
+export async function getTagBias(): Promise<TagBiasResponse> {
+  const res = await api.get<ApiSuccess<TagBiasResponse>>(
+    "/users/me/tag-bias",
+  );
+  return res.data.data;
 }
