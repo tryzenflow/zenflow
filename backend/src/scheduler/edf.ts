@@ -67,10 +67,19 @@ export function hasElapsed(
   return iv !== null && iv.end <= now.getTime();
 }
 
-/** EDF ordering: deadline ascending (nulls last), then createdAt ascending. */
+/**
+ * EDF ordering: effective deadline ascending (nulls last), then createdAt
+ * ascending. The effective deadline is the earlier of the user-set `deadline`
+ * and the period ceiling `schedulingDeadline` — for tasks that have only a
+ * `schedulingDeadline` (period-bounded, no user deadline) this gives them a
+ * real urgency rank instead of lumping them with fully-unbounded legacy tasks
+ * at +Infinity. A task with BOTH fields always uses `deadline` first (it is
+ * always ≤ `schedulingDeadline` by construction: `toEdfTask` only sets
+ * `schedulingDeadline` when `deadline === null`).
+ */
 export function compareEdf(a: EdfTask, b: EdfTask): number {
-  const ad = a.deadline ? a.deadline.getTime() : Infinity;
-  const bd = b.deadline ? b.deadline.getTime() : Infinity;
+  const ad = (a.deadline ?? a.schedulingDeadline)?.getTime() ?? Infinity;
+  const bd = (b.deadline ?? b.schedulingDeadline)?.getTime() ?? Infinity;
   if (ad !== bd) return ad - bd;
   return a.createdAt.getTime() - b.createdAt.getTime();
 }

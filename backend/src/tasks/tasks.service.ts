@@ -477,7 +477,7 @@ export class TasksService {
     // Drag-drop is a manual pin: place exactly where dropped, allow overlaps as
     // conflicts, and never cascade other tasks. The EDF engine only runs on
     // task create and preference edits — not on every drag.
-    const { task, displaced } = await this.scheduler.pin(
+    const { task, displaced, outsideViewPeriod } = await this.scheduler.pin(
       user,
       id,
       new Date(requestedStartTime),
@@ -500,6 +500,10 @@ export class TasksService {
       // Phase-2 transparency: surface WHY the slot is a good one when it lands in
       // a preference-favoured cell (null otherwise → FE shows no toast).
       rationale: this.scheduler.rationaleFor(user, withTags.scheduledStartTime),
+      // Soft period flag: true when the drag landed outside the task's stored
+      // view-period (day/week/month it was created in). The move is committed;
+      // the frontend uses this to confirm cross-period moves with the user.
+      outsideViewPeriod,
     };
   }
 

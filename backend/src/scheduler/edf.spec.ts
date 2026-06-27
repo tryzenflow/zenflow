@@ -798,6 +798,37 @@ describe("scheduleAll — period ceiling (schedulingDeadline) for no-deadline ta
     );
     expect(iso(out[0].scheduledStartTime)).toBe("2026-06-10T09:00:00.000Z");
   });
+
+  it("schedules a period-bounded task BEFORE an unbounded legacy task (Fix 3)", () => {
+    // The period-bounded task has schedulingDeadline = end-of-week, giving it a
+    // real urgency rank. The unbounded task has no ceiling (Infinity rank). EDF
+    // must schedule the bounded one first so it claims the earlier slot — if the
+    // unbounded task went first it might push the bounded task past its ceiling.
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "unbounded",
+          schedulingAnchor: new Date("2026-06-08T00:00:00Z"),
+          // no schedulingDeadline — sorts at Infinity
+        }),
+        task({
+          id: "bounded",
+          schedulingAnchor: new Date("2026-06-08T00:00:00Z"),
+          schedulingDeadline: new Date("2026-06-15T00:00:00Z"), // end of week
+        }),
+      ],
+      MON_MIDNIGHT,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    // "bounded" wins the earlier slot because its effective deadline sorts first.
+    expect(iso(byId("bounded").scheduledStartTime)).toBe(
+      "2026-06-08T09:00:00.000Z",
+    );
+    expect(iso(byId("unbounded").scheduledStartTime)).toBe(
+      "2026-06-08T10:00:00.000Z",
+    );
+  });
 });
 
 describe("scheduleAll — cross-day single task for a wrapping work window", () => {
@@ -931,6 +962,50 @@ describe("compareEdf — EDF ordering and tie-breaking", () => {
       createdAt: new Date("2026-06-02T00:00:00Z"),
     });
     expect(compareEdf(older, newer)).toBeLessThan(0);
+  });
+
+  it("uses schedulingDeadline as the sort key when deadline is null", () => {
+    // A period-bounded task (schedulingDeadline set, no user deadline) should
+    // sort BEFORE a fully-unbounded legacy task (neither deadline) so it
+    // claims the earlier slot and its period ceiling is respected.
+    const bounded = task({
+      id: "bounded",
+      deadline: null,
+      schedulingDeadline: new Date("2026-06-12T17:00:00Z"), // end of week
+    });
+    const unbounded = task({ id: "unbounded", deadline: null });
+    expect(compareEdf(bounded, unbounded)).toBeLessThan(0);
+    expect(compareEdf(unbounded, bounded)).toBeGreaterThan(0);
+  });
+
+  it("sorts a user-deadline task before a schedulingDeadline-only task when user deadline is earlier", () => {
+    // A user deadline of Tue and a period bound of Fri → user-deadline task first.
+    const userDl = task({
+      id: "user",
+      deadline: new Date("2026-06-09T17:00:00Z"), // Tue
+    });
+    const periodBound = task({
+      id: "period",
+      deadline: null,
+      schedulingDeadline: new Date("2026-06-12T17:00:00Z"), // Fri
+    });
+    expect(compareEdf(userDl, periodBound)).toBeLessThan(0);
+    expect(compareEdf(periodBound, userDl)).toBeGreaterThan(0);
+  });
+
+  it("sorts a schedulingDeadline-only task first when it is earlier than a user deadline", () => {
+    // Period bound of Tue, user deadline of Fri → period-bounded task sorts first
+    // because its effective ceiling is sooner.
+    const periodBound = task({
+      id: "period",
+      deadline: null,
+      schedulingDeadline: new Date("2026-06-09T17:00:00Z"), // Tue
+    });
+    const userDl = task({
+      id: "user",
+      deadline: new Date("2026-06-12T17:00:00Z"), // Fri
+    });
+    expect(compareEdf(periodBound, userDl)).toBeLessThan(0);
   });
 
   it("is 0 for identical deadline and createdAt", () => {

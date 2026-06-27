@@ -8,6 +8,7 @@ import { Prisma, type Task, type User } from "../../generated/prisma";
 import {
   type OverflowGranularity,
   type SchedulingOverflow,
+  type ViewMode,
 } from "@zenflow/shared";
 import {
   type EdfTask,
@@ -570,13 +571,22 @@ export class SchedulerService {
    * resulting time overlap is allowed and surfaced as a conflict; conflicts are
    * recomputed pairwise across all pending tasks so they self-heal when a task
    * is dragged back off another. The EDF engine only runs on create/pref edits.
+   *
+   * Also performs a SOFT period check: if the snapped slot falls outside the
+   * task's stored view-period bounds (the day/week/month it was created in) the
+   * move is still committed, but `outsideViewPeriod: true` is included in the
+   * return value so the caller can surface a confirmation prompt to the frontend.
    */
   async pin(
     user: User,
     taskId: string,
     requestedStart: Date,
     now: Date = new Date(),
-  ): Promise<{ task: Task; displaced: DisplacedTask[] }> {
+  ): Promise<{
+    task: Task;
+    displaced: DisplacedTask[];
+    outsideViewPeriod: boolean;
+  }> {
     return this.prisma.$transaction(async (tx) => {
       // Ownership check: look up the task directly (no status filter) so the
       // 404 reflects true absence/wrong-user rather than a stale PENDING-only
@@ -602,6 +612,25 @@ export class SchedulerService {
       const snapped = new Date(
         Math.round(requestedStart.getTime() / SLOT_MS) * SLOT_MS,
       );
+
+      // Soft period validation: check whether the snapped slot falls outside the
+      // task's stored view-period (the day/week/month it was created in). When
+      // no anchor or view is stored (fixed tasks, legacy rows) we default the
+      // anchor to `snapped` itself and the view to "day" — the period then
+      // always contains the snapped time, so outsideViewPeriod is false (no
+      // false positives for tasks that were never period-bounded).
+      const prefs = this.prefsOf(user);
+      const anchor = target.schedulingAnchor ?? snapped;
+      const view: ViewMode = target.view ?? "day";
+      const { start: periodStart, end: periodEnd } = periodRange(
+        anchor,
+        view,
+        prefs.timezone,
+        { workStart: prefs.workStart, workEnd: prefs.workEnd },
+      );
+      const outsideViewPeriod =
+        snapped.getTime() < periodStart.getTime() ||
+        snapped.getTime() >= periodEnd.getTime();
 
       // Project the move, then recompute every task's conflict from real
       // time-overlap (a placed task clashes if it overlaps another placed task).
@@ -677,7 +706,7 @@ export class SchedulerService {
       }
       await this.applyPreference(user, deltas, tx);
 
-      return { task: updatedTarget, displaced };
+      return { task: updatedTarget, displaced, outsideViewPeriod };
     });
   }
 

@@ -106,6 +106,13 @@ export interface RescheduleResponse {
   displaced: DisplacedTask[];
   /** Present when a preference-favoured slot drove the placement. */
   rationale?: SchedulingRationale | null;
+  /**
+   * True when the dragged slot falls outside the task's stored view-period
+   * bounds (the day/week/month the task was created in). The move is committed
+   * regardless — this flag lets the frontend prompt the user for confirmation
+   * after the fact rather than hard-rejecting the drag.
+   */
+  outsideViewPeriod?: boolean;
 }
 
 /** 7×24 signed preference matrix for the Insights heatmap. */
