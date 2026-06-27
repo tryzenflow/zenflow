@@ -10,12 +10,18 @@ import { CalendarClock, MoonStar } from "lucide-react";
  * deadline. Offers up to two recovery actions; whichever are non-null on the
  * `overflow` payload. The proposed times are formatted in the user's tz via
  * {@link zonedDate} so they obey the calendar wall-clock rule.
+ *
+ * @param viewRange Optional human-readable label for the current view period
+ *   (e.g. "the week of Jun 22–28" or "June 2026"). When provided, the heading
+ *   and body copy reference the specific period rather than the generic
+ *   granularity label from the overflow payload.
  */
 export function OverflowToast({
   title,
   overflow,
   onChoose,
   onDismiss,
+  viewRange,
 }: {
   title: string;
   overflow: SchedulingOverflow;
@@ -23,6 +29,12 @@ export function OverflowToast({
   onChoose: (choice: "outsideHours" | "nextAvailable") => void;
   /** Keep the task unplaced. */
   onDismiss: () => void;
+  /**
+   * Human-readable label for the current view period, e.g.
+   * "the week of Jun 22–28" or "June 2026". Supersedes the generic
+   * granularity-based copy when present.
+   */
+  viewRange?: string;
 }) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const fmt = (iso: string) => format(zonedDate(iso, tz), "EEE MMM d, HH:mm");
@@ -33,19 +45,23 @@ export function OverflowToast({
   // phrasing when only the outside-hours option is available.
   const period = nextAvailable?.granularity;
 
+  // Prefer the specific date-range label from the caller; fall back to the
+  // generic granularity label from the backend payload ("this week", etc.).
+  const periodLabel = viewRange ?? (period ? `this ${period}` : null);
+
   return (
     <div className="flex w-full flex-col gap-3">
       <div className="flex flex-col gap-0.5">
         <p className="text-sm font-semibold text-foreground">
-          {period
-            ? `No room left this ${period}`
+          {periodLabel
+            ? `No room left in ${periodLabel}`
             : "Couldn't schedule this task"}
         </p>
         <p className="text-xs text-muted-foreground">
           Couldn&apos;t fit{" "}
           <span className="font-medium text-foreground">{title}</span> into your
-          working hours{period ? ` this ${period}` : ""}. Pick a recovery
-          option:
+          working hours{periodLabel ? ` in ${periodLabel}` : ""}. Pick a
+          recovery option:
         </p>
       </div>
 

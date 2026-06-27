@@ -81,7 +81,6 @@ export function CalendarLayout() {
   const [editId, setEditId] = useState<string | null>(null);
   const [navOpen, setNavOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-
   // Tracks an in-flight load so mutations can wait for it before issuing a PUT
   // against a task id the server may have just deleted / re-materialized via a
   // cascade. Dragging a block whose id is no longer in the freshly-loaded list
@@ -135,6 +134,11 @@ export function CalendarLayout() {
   }, []);
 
   async function onReschedule(taskId: string, startISO: string) {
+    // Capture the original start for a potential undo after an outside-view-period
+    // move (the backend commits the move regardless and flags it post-hoc).
+    const originalBlock = blocks.find((b) => b.taskId === taskId);
+    const originalStartISO = originalBlock?.start ?? null;
+
     // If a load is mid-flight (e.g. the cascade after a delete), wait for it so
     // we never PUT against an id the server has already dropped. The dragged
     // block carries the latest optimistic state; the await only blocks the
@@ -147,7 +151,67 @@ export function CalendarLayout() {
       if (!fresh.some((b) => b.taskId === taskId)) return;
     }
     try {
-      await rescheduleTask(taskId, startISO);
+      const response = await rescheduleTask(taskId, startISO);
+      // The backend committed the move but it lands outside the current view
+      // period. Surface a non-blocking toast so the user can undo without
+      // requiring an explicit confirmation before the move is applied.
+      // refetch() in `finally` syncs the calendar; the task will disappear
+      // from the current view until the user navigates to where it landed.
+      if (response.outsideViewPeriod && originalStartISO) {
+        toast.custom(
+          (id) => (
+            <div className="w-full rounded-[var(--radius)] border border-border bg-popover p-4 shadow-lg">
+              <div className="flex w-full flex-col gap-3">
+                <div className="flex flex-col gap-0.5">
+                  <p className="text-sm font-semibold text-foreground">
+                    Task moved outside this {viewMode}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    It won&apos;t appear here until you navigate to the{" "}
+                    {viewMode} it now lives in.
+                  </p>
+                </div>
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => toast.dismiss(id)}
+                    className="rounded-md border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted"
+                  >
+                    Keep
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      toast.dismiss(id);
+                      try {
+                        await rescheduleTask(taskId, originalStartISO);
+                        window.dispatchEvent(
+                          new CustomEvent("zenflow:task-updated", {
+                            detail: taskId,
+                          }),
+                        );
+                      } catch (err) {
+                        if (isAxiosError(err))
+                          errorToast(
+                            err.response?.data?.message ||
+                              "Failed to undo the move",
+                          );
+                      } finally {
+                        await refetch();
+                      }
+                    }}
+                    className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+                  >
+                    Undo
+                  </button>
+                </div>
+              </div>
+            </div>
+          ),
+          { duration: 8000 },
+        );
+        return;
+      }
       // The rationale toast is only shown on task creation (where the AI
       // scheduler assigns an initial slot). A manual drag is a deliberate user
       // action so we never override it with scheduling commentary.

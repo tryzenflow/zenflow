@@ -12,11 +12,11 @@ import { TaskForm } from "./form/task-form";
 import { Plus } from "lucide-react";
 import { createTask, resolveOverflow } from "@/api/tasks";
 import { OverflowToast } from "./overflow-toast";
-import { format } from "date-fns";
+import { endOfWeek, format, startOfWeek } from "date-fns";
 import { fromZonedTime } from "date-fns-tz";
 import { snapToNearestLaterQuarterHour } from "@/utils/time";
 import { isAxiosError } from "axios";
-import { DAILY_HORIZON, TIME_GRANULARITY } from "@/utils/constants";
+import { DAILY_HORIZON, TIME_GRANULARITY, WEEK_STARTS_ON } from "@/utils/constants";
 import { isZonedToday } from "@/utils/tz";
 import type { CreateTaskResponse, ViewMode } from "@zenflow/shared";
 import {
@@ -29,6 +29,32 @@ const VIEW_SUBTITLE: Record<ViewMode, string> = {
   week: "'week of' MMM d",
   month: "MMMM yyyy",
 };
+
+/**
+ * Build a human-readable label for the currently active view period.
+ * Used as context in the overflow-recovery toast so the user knows which
+ * specific period had no room (e.g. "the week of Jun 22–28" rather than just
+ * "this week").
+ */
+function viewPeriodLabel(date: Date, view: ViewMode): string {
+  switch (view) {
+    case "day":
+      return format(date, "EEE, MMM d");
+    case "month":
+      return format(date, "MMMM yyyy");
+    case "week": {
+      const start = startOfWeek(date, { weekStartsOn: WEEK_STARTS_ON });
+      const end = endOfWeek(date, { weekStartsOn: WEEK_STARTS_ON });
+      const startStr = format(start, "MMM d");
+      // Omit the month on the end label when the week doesn't cross a month boundary.
+      const endStr = format(
+        end,
+        start.getMonth() === end.getMonth() ? "d" : "MMM d",
+      );
+      return `the week of ${startStr}–${endStr}`;
+    }
+  }
+}
 
 export function CreateTaskDialog({
   date,
@@ -84,6 +110,7 @@ export function CreateTaskDialog({
     taskId: string,
     taskTitle: string,
     overflow: NonNullable<CreateTaskResponse["overflow"]>,
+    viewRange: string,
   ) {
     // Backend offered the overflow envelope but neither concrete slot exists:
     // nothing actionable, so just inform the user.
@@ -123,6 +150,7 @@ export function CreateTaskDialog({
             overflow={overflow}
             onChoose={resolve}
             onDismiss={() => toast.dismiss(id)}
+            viewRange={viewRange}
           />
         </div>
       ),
@@ -170,6 +198,7 @@ export function CreateTaskDialog({
           response.task.id,
           response.task.title,
           response.overflow,
+          viewPeriodLabel(date, view),
         );
       } else {
         // Phase-2: when the per-tag corrector adjusted the duration, the
