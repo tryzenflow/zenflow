@@ -5,6 +5,39 @@ All notable changes to Zenflow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0/).
 
+## [1.1.0] — 2026-06-27
+
+### Fixed
+
+- **Scheduler: tasks no longer silently auto-bump past the current view period.**
+  The EDF sort (`compareEdf`) previously ranked period-bounded tasks (those with a
+  `schedulingDeadline` but no explicit user deadline) at the same priority as fully
+  unbounded tasks. They could lose slots to unbounded tasks until their period closed,
+  then overflow without prompting. The sort key is now
+  `min(deadline, schedulingDeadline)`, so period-bounded tasks claim earlier slots
+  first and stay within the day/week/month they were created in.
+
+### Added
+
+- **Drag-drop: undo toast when a task is moved outside its view period.**
+  After dragging a task to a slot outside the day/week/month it was created in, a
+  toast appears ("Task moved outside this week") with **Keep** and **Undo** actions.
+  Undo reverts the move by re-calling the reschedule endpoint with the original start
+  time and refreshes the calendar. The move is committed immediately so the drag feels
+  instant; no confirmation dialog blocks the interaction.
+
+- **Create-task overflow: specific date range in the overflow modal.**
+  When a newly created task cannot be scheduled within the current view period (e.g.
+  the week is fully booked), the overflow modal now reads "No room left in the week of
+  Jun 22–28" rather than the generic period label. The date range is computed from the
+  calendar's active view on the frontend.
+
+- **`RescheduleResponse.outsideViewPeriod?: boolean`** _(shared API contract)_
+  The reschedule endpoint now returns this flag when a drag lands outside the task's
+  stored view period. Existing consumers that do not read the field are unaffected.
+
+---
+
 ## [1.0.0] — 2026-06-25
 
 First tagged release. The headline of this version is **Phase 2 personalized

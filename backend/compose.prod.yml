@@ -2,7 +2,7 @@ name: zenflow-prod
 services:
   api:
     container_name: zenflow-api-prod
-    image: zenflow-api:1.0.0
+    image: zenflow-api:1.1.0
     expose:
       - "5000"
     networks:
