@@ -5,6 +5,54 @@ All notable changes to Zenflow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0/).
 
+## [1.1.1] — 2026-06-28
+
+### Fixed
+
+- **Bandit: preference matrix no longer zeroed by nightly decay.**
+  The root cause was `preferenceMatrix` being declared as `Int[]` (`INTEGER[]`) in Prisma.
+  The pg driver truncates JavaScript floats when writing to integer columns, so a cell
+  holding a single `+1` signal was written as `0` on the very first decay run
+  (`0.9677 → 0`). Even with rounding, integer storage breaks the exponential
+  accumulation — each day reads `1`, multiplies by `0.9677`, and rounds back to `1`
+  forever, so the 21-day half-life never ran. Fixed via migration
+  `20260628120000_preference_matrix_float`: the column is now `Float[]`
+  (`DOUBLE PRECISION[]`); existing integer values are widened losslessly. The heatmap
+  "quickly became all gray" symptom is resolved.
+
+- **Calendar: drag and resize now work correctly on tasks that cross midnight.**
+  Head segments (`continues: true`) carry the real task start time and are fully
+  interactive: dragging preserves the original duration; bottom-resize can extend
+  end past `DAILY_HORIZON`; top-resize computes duration as
+  `DAILY_HORIZON + tailMinutes − newStart` so the next-day end stays fixed rather
+  than being truncated at midnight. Tail segments (`continued: true`) remain
+  click-only because their clamped midnight start has no meaningful on-grid meaning
+  for top-edge resize.
+
+### Added
+
+- **Calendar: scroll-to and ring-glow highlight for newly scheduled tasks.**
+  After a task is created the day-grid smoothly scrolls to the scheduled block and
+  plays a ring-glow pulse animation so the user's eye is drawn to where the EDF
+  engine placed it. The signal is carried through a lightweight Zustand store
+  (`use-highlight-store`); the animation clears itself via `onAnimationEnd`. Works
+  for both the direct-schedule and overflow-resolve paths.
+
+- **UI: exact scheduled time in the creation toast.**
+  The toast now reads "Scheduled for Mon Jun 23, 14:00" instead of a generic success
+  message. The overflow toast is also triggered whenever the backend returns an
+  overflow condition (task placed outside the view period or unplaced), not only when
+  `scheduledStartTime` is `null`.
+
+- **Scheduler: per-update learning rate (η = 0.1) for preference-matrix nudges.**
+  `applyPreferenceDeltas` now scales each delta by `PREFERENCE_LEARNING_RATE` (0.1)
+  before adding it to the cell, so ten consistent signals are needed to reach the
+  ±1 ceiling. The existing exponential decay (half-life 21 days) continues to handle
+  forgetting stale preferences independently. New `telemetry.spec.ts` covers the
+  learning-rate invariants.
+
+---
+
 ## [1.1.0] — 2026-06-27
 
 ### Fixed
