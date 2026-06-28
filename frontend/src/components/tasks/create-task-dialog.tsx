@@ -12,12 +12,20 @@ import { TaskForm } from "./form/task-form";
 import { Plus } from "lucide-react";
 import { createTask, resolveOverflow } from "@/api/tasks";
 import { OverflowToast } from "./overflow-toast";
-import { endOfWeek, format, startOfWeek } from "date-fns";
+import {
+  endOfDay,
+  endOfMonth,
+  endOfWeek,
+  format,
+  startOfDay,
+  startOfMonth,
+  startOfWeek,
+} from "date-fns";
 import { fromZonedTime } from "date-fns-tz";
 import { snapToNearestLaterQuarterHour } from "@/utils/time";
 import { isAxiosError } from "axios";
 import { DAILY_HORIZON, TIME_GRANULARITY, WEEK_STARTS_ON } from "@/utils/constants";
-import { isZonedToday } from "@/utils/tz";
+import { isZonedToday, zonedDate, zonedWallClockToUtc } from "@/utils/tz";
 import type { CreateTaskResponse, ViewMode } from "@zenflow/shared";
 import {
   handleDurationAdjustment,
@@ -29,6 +37,44 @@ const VIEW_SUBTITLE: Record<ViewMode, string> = {
   week: "'week of' MMM d",
   month: "MMMM yyyy",
 };
+
+/**
+ * Compute the UTC ISO-8601 start and end of the currently visible view window.
+ * The `date` argument carries the user-tz wall clock in its local fields (as
+ * produced by {@link toZonedTime} / {@link zonedNow}). Date-fns operations on
+ * those local fields give the correct start/end of the period in user-tz, which
+ * {@link zonedWallClockToUtc} then converts back to a real UTC instant.
+ *
+ * These bounds are passed as `viewStart`/`viewEnd` in the create-task request so
+ * the backend can surface an overflow when the EDF engine places the task outside
+ * the visible window.
+ */
+function viewBounds(
+  date: Date,
+  view: ViewMode,
+  tz: string,
+): { viewStart: string; viewEnd: string } {
+  let start: Date;
+  let end: Date;
+  switch (view) {
+    case "day":
+      start = startOfDay(date);
+      end = endOfDay(date);
+      break;
+    case "week":
+      start = startOfWeek(date, { weekStartsOn: WEEK_STARTS_ON });
+      end = endOfWeek(date, { weekStartsOn: WEEK_STARTS_ON });
+      break;
+    case "month":
+      start = startOfMonth(date);
+      end = endOfMonth(date);
+      break;
+  }
+  return {
+    viewStart: zonedWallClockToUtc(start, tz).toISOString(),
+    viewEnd: zonedWallClockToUtc(end, tz).toISOString(),
+  };
+}
 
 /**
  * Build a human-readable label for the currently active view period.
@@ -72,6 +118,9 @@ export function CreateTaskDialog({
   const [loading, setLoading] = useState(false);
   const user = useUserStore((state) => state.user);
   const tz = user?.timezone || "UTC";
+  // Format a UTC ISO string as a readable wall-clock time in the user's tz,
+  // matching the pattern used by <OverflowToast> (e.g. "Mon Jun 23, 14:00").
+  const fmt = (iso: string) => format(zonedDate(iso, tz), "EEE MMM d, HH:mm");
   // Default fixed window starts at the next quarter-hour (today) or 9 AM, lasting
   // an hour — but clamped to the day's horizon. Without the clamp, a same-day
   // create after ~23:00 snaps the end past DAILY_HORIZON, and since the fixed-time
@@ -133,7 +182,10 @@ export function CreateTaskDialog({
         // Phase-2: a resolved overflow may also land in a preference-favoured
         // slot; surface the rationale alongside the success confirmation.
         maybeShowRationaleToast(res);
-        toast.success("Task scheduled 🎉");
+        const resolvedAt = res.task.scheduledStartTime;
+        toast.success(
+          resolvedAt ? `Scheduled for ${fmt(resolvedAt)}` : "Task scheduled",
+        );
       } catch (error) {
         errorToast(
           (isAxiosError(error) && error.response?.data?.message) ||
@@ -172,6 +224,7 @@ export function CreateTaskDialog({
 
     try {
       if (removed.length > 0) await postData("/files/remove", { ids: removed });
+      const bounds = viewBounds(date, view, tz);
       const response = await createTask({
         title: values.title,
         note: values.note || null,
@@ -185,15 +238,20 @@ export function CreateTaskDialog({
         startDate: format(date, "yyyy-MM-dd"),
         // Drives the granularity of the "next available period" recovery option.
         view,
+        // Tells the backend which slice of the calendar is visible so it can
+        // flag an overflow even when the task is placed (but outside this window).
+        viewStart: bounds.viewStart,
+        viewEnd: bounds.viewEnd,
       });
       onCreated();
       form.reset();
       setOpen(false);
 
-      // The engine couldn't place the task before its deadline: prompt the user
-      // with whatever recovery options the backend surfaced, instead of the
-      // usual success toast.
-      if (response.task.scheduledStartTime === null && response.overflow) {
+      // The engine couldn't fit the task in the current view period (it was
+      // placed outside [viewStart, viewEnd] or left unplaced entirely): prompt
+      // the user with whatever recovery options the backend surfaced, instead of
+      // the usual success toast.
+      if (response.overflow) {
         showOverflowToast(
           response.task.id,
           response.task.title,
@@ -203,13 +261,20 @@ export function CreateTaskDialog({
       } else {
         // Phase-2: when the per-tag corrector adjusted the duration, the
         // auto/ask/never UX (ADR Sequence 1) replaces the plain success toast.
-        // `never`/no-adjustment falls through to the usual confirmation.
+        // `never`/no-adjustment falls through to the timed confirmation below.
         const handled = handleDurationAdjustment(
           response.task,
           response.schedulingMeta,
           onCreated,
         );
-        if (!handled) toast.success("Task created successfully 🎉");
+        if (!handled) {
+          const scheduledAt = response.task.scheduledStartTime;
+          toast.success(
+            scheduledAt
+              ? `Scheduled for ${fmt(scheduledAt)}`
+              : "Task created successfully",
+          );
+        }
       }
     } catch (error: any) {
       errorToast(
