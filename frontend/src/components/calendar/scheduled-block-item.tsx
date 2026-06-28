@@ -1,4 +1,5 @@
 import { useUserStore } from "@/hooks/use-user-store";
+import { useHighlightStore } from "@/hooks/use-highlight-store";
 import { cn } from "@/lib/utils";
 import { TASK_CARD_CLASSES, withOverlap } from "@/lib/task-card";
 import {
@@ -14,7 +15,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { useDraggable } from "@dnd-kit/core";
 import { toZonedTime } from "date-fns-tz";
 import { CornerDownRight, Lock } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 function minutesOfDay(iso: string, tz: string) {
   const d = toZonedTime(new Date(iso), tz);
@@ -97,6 +98,10 @@ export function ScheduledBlockItem({
   layout: BlockLayout;
 }) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
+  const highlightTaskId = useHighlightStore((s) => s.highlightTaskId);
+  const clearHighlight = useHighlightStore((s) => s.clearHighlight);
+  const isHighlighted = highlightTaskId === block.taskId;
+
   const startMin = minutesOfDay(block.start, tz);
   // A segment ending exactly at the next midnight has minutesOfDay() === 0;
   // treat that as the full-day bottom (1440) so the block fills to the boundary.
@@ -122,6 +127,14 @@ export function ScheduledBlockItem({
     nodeRef.current = node;
     setNodeRef(node);
   };
+
+  // Scroll the block into view whenever it becomes the highlighted target.
+  // Fires after the DOM update (mount or refetch) so nodeRef.current is set.
+  useEffect(() => {
+    if (!isHighlighted || !nodeRef.current) return;
+    nodeRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [isHighlighted]);
+
   const resizing = useRef<{
     edge: "top" | "bottom";
     originY: number;
@@ -375,7 +388,11 @@ export function ScheduledBlockItem({
               block.continues && "rounded-b-none",
               block.continued && "rounded-t-none border-t-0 border-l-4 border-dashed",
               TASK_CARD_CLASSES[state],
+              // Ring-glow pulse that fires once after the task is created so the
+              // user's eye is drawn to where it landed on the grid.
+              isHighlighted && "animate-block-highlight",
             )}
+            onAnimationEnd={isHighlighted ? clearHighlight : undefined}
           >
             {isCompact ? (
               <>

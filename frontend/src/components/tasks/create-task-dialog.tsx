@@ -7,6 +7,7 @@ import { errorToast } from "@/lib/toast";
 import { postData } from "@/api";
 import { useFilesTracker } from "@/hooks/use-files-tracker";
 import { useUserStore } from "@/hooks/use-user-store";
+import { useHighlightStore } from "@/hooks/use-highlight-store";
 import { TaskFormValues } from "@/utils/tasks";
 import { TaskForm } from "./form/task-form";
 import { Plus } from "lucide-react";
@@ -118,6 +119,7 @@ export function CreateTaskDialog({
   const [loading, setLoading] = useState(false);
   const user = useUserStore((state) => state.user);
   const tz = user?.timezone || "UTC";
+  const setHighlight = useHighlightStore((s) => s.setHighlight);
   // Format a UTC ISO string as a readable wall-clock time in the user's tz,
   // matching the pattern used by <OverflowToast> (e.g. "Mon Jun 23, 14:00").
   const fmt = (iso: string) => format(zonedDate(iso, tz), "EEE MMM d, HH:mm");
@@ -178,6 +180,9 @@ export function CreateTaskDialog({
           choice,
           choice === "nextAvailable" ? view : undefined,
         );
+        // Highlight the resolved block so the user's eye is drawn to it.
+        // Set before onCreated() so the signal is ready when refetch completes.
+        setHighlight(res.task.id);
         onCreated();
         // Phase-2: a resolved overflow may also land in a preference-favoured
         // slot; surface the rationale alongside the success confirmation.
@@ -243,6 +248,12 @@ export function CreateTaskDialog({
         viewStart: bounds.viewStart,
         viewEnd: bounds.viewEnd,
       });
+
+      // When the task landed in the current view, pre-arm the highlight signal
+      // before triggering refetch so the block animates into focus once it renders.
+      if (!response.overflow) {
+        setHighlight(response.task.id);
+      }
       onCreated();
       form.reset();
       setOpen(false);

@@ -20,6 +20,31 @@ body {
   }
 }
 
+/* Ring-glow pulse that fires once on a newly scheduled task block. Applied to
+   the inner card div so it doesn't conflict with dnd-kit's outer transform. */
+@keyframes block-highlight {
+  0% {
+    box-shadow:
+      0 0 0 0 oklch(0.74 0.195 46 / 0.7),
+      0 0 12px oklch(0.74 0.195 46 / 0.4);
+  }
+  40% {
+    box-shadow:
+      0 0 0 5px oklch(0.74 0.195 46 / 0.35),
+      0 0 20px oklch(0.74 0.195 46 / 0.25);
+  }
+  70% {
+    box-shadow:
+      0 0 0 8px oklch(0.74 0.195 46 / 0.1),
+      0 0 8px oklch(0.74 0.195 46 / 0.1);
+  }
+  100% {
+    box-shadow:
+      0 0 0 0 oklch(0.74 0.195 46 / 0),
+      0 0 0 oklch(0.74 0.195 46 / 0);
+  }
+}
+
 ::-webkit-scrollbar {
   @apply w-2.5 h-2.5;
 }
@@ -36,6 +61,7 @@ body {
   --font-sans: "Geist", "Geist Fallback", system-ui, sans-serif;
   --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
   --animate-breathe: breathe 4s ease-in-out infinite;
+  --animate-block-highlight: block-highlight 0.75s ease-out forwards;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
