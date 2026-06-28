@@ -107,13 +107,18 @@ export function ScheduledBlockItem({
   // treat that as the full-day bottom (1440) so the block fills to the boundary.
   const rawEndMin = minutesOfDay(block.end, tz);
   const endMin = block.continues || rawEndMin === 0 ? DAILY_HORIZON : rawEndMin;
-  // A task that crosses midnight renders as two segments (head + tail). Dragging
-  // or edge-resizing a clamped segment can't be expressed as a single on-grid
-  // time, so split segments are click-only; the underlying task stays editable
-  // via the detail panel. Same for completed tasks — the scheduler only knows
-  // PENDING ones, so a drag would 404 with "Cannot find task".
+  // A task that crosses midnight renders as two segments (head + tail).
+  // Head segments (continues: true) carry the real task start and support
+  // drag + resize: dragging preserves the full duration; bottom-resize can
+  // extend past midnight; top-resize moves the start while keeping the actual
+  // task end fixed (see endResize below).
+  // Tail segments (continued: true) start at the clamped day boundary (00:00),
+  // so their top-edge has no meaningful on-grid meaning — they stay click-only
+  // and the underlying task is editable via the detail panel.
+  // Completed tasks are also non-interactive — the scheduler only tracks PENDING
+  // ones, so a drag would 404 with "Cannot find task".
   const isCompleted = block.status === "DONE";
-  const isSplit = Boolean(block.continues || block.continued);
+  const isSplit = Boolean(block.continued);
   const isInteractive = !isCompleted && !isSplit;
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: block.segmentId,
@@ -204,7 +209,17 @@ export function ScheduledBlockItem({
     const wall = zonedDate(block.start, tz);
     wall.setHours(Math.floor(next.start / 60), next.start % 60, 0, 0);
     const startISO = zonedWallClockToUtc(wall, tz).toISOString();
-    requestResize(block.taskId, startISO, next.end - next.start);
+    // For head segments (continues: true) the block's visible bottom is clamped
+    // to DAILY_HORIZON (midnight), but the task's actual end is in the next day.
+    // When the user moves the top handle the end must stay fixed, so we extend
+    // next.end past DAILY_HORIZON by the tail portion (minutesOfDay(taskEnd)).
+    // Bottom-resize already produces end > DAILY_HORIZON via computeResize, so
+    // next.end - next.start is already correct in that case.
+    const durationMinutes =
+      block.continues && r.edge === "top"
+        ? DAILY_HORIZON + minutesOfDay(block.taskEnd, tz) - next.start
+        : next.end - next.start;
+    requestResize(block.taskId, startISO, durationMinutes);
   };
 
   // Displayed extent: the live preview while resizing, else the real times.
