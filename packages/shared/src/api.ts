@@ -118,7 +118,9 @@ export interface RescheduleResponse {
 
 /** 7×24 signed preference matrix for the Insights heatmap. */
 export interface PreferenceMatrixResponse {
-  /** Flat 168-int row-major [day0..6][block0..23], signed scores. */
+  /** Flat 168-element float row-major [day0..6][block0..23], signed scores.
+   * Values are floats (not integers) because the daily exponential decay
+   * accumulates sub-integer precision; the FE normalises them for colour. */
   matrix: number[];
   /** Grid dims so the FE doesn't hard-code them. */
   days: number; // 7

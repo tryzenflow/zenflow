@@ -66,14 +66,14 @@ export class SchedulerService {
   }
 
   /**
-   * Build the Phase-2 placement re-ranker from the user's signed 672-cell
-   * preference matrix. The pure {@link preferenceMatrixReRanker} (owned by the
-   * ml-engineer) re-ranks EDF's feasible slots via SOFTMAX/BOLTZMANN
-   * exploration (the Gumbel-top trick) — a pure permutation with a recorded
-   * propensity, so the logging policy is stochastic and off-policy IPS is
-   * well-defined (docs/heuristic.md §Evaluation). A cold-start / all-equal
-   * matrix degenerates to deterministic EDF earliest-fit, so a fresh user keeps
-   * byte-for-byte Phase-1 behaviour.
+   * Build the Phase-2 placement re-ranker from the user's signed 168-cell
+   * (7 days × 24 one-hour buckets) float preference matrix. The pure
+   * {@link preferenceMatrixReRanker} (owned by the ml-engineer) re-ranks EDF's
+   * feasible slots via SOFTMAX/BOLTZMANN exploration (the Gumbel-top trick) —
+   * a pure permutation with a recorded propensity, so the logging policy is
+   * stochastic and off-policy IPS is well-defined (docs/heuristic.md
+   * §Evaluation). A cold-start / all-equal matrix degenerates to deterministic
+   * EDF earliest-fit, so a fresh user keeps byte-for-byte Phase-1 behaviour.
    *
    * Invariant #2 (refined): the core may use randomness only via an injected
    * seed. The matrix, the temperature, and the per-USER base seed are all

@@ -123,9 +123,11 @@ export class UsersService {
   }
 
   /**
-   * The current user's flat 672-int SIGNED preference matrix for the Insights
-   * heatmap (fetch-on-open). A cold-start / wrong-length matrix is normalised to
-   * all-zero so the FE never has to special-case the length. Read-only.
+   * The current user's flat 168-element float SIGNED preference matrix for the
+   * Insights heatmap (fetch-on-open). Values are floats (not integers) because
+   * the daily exponential decay accumulates sub-integer precision. A cold-start
+   * / wrong-length matrix is normalised to all-zero so the FE never has to
+   * special-case the length. Read-only.
    */
   async getPreferenceMatrix(user: User): Promise<PreferenceMatrixResponse> {
     const matrix =

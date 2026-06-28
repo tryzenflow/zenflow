@@ -20,6 +20,11 @@ const DECAY_BATCH_SIZE = 200;
  * decayed matrix back, stamping `preferenceMatrixDecayedAt = now`. Stale
  * preferences fade with a ~3-week half-life without hard cutoffs.
  *
+ * The matrix is stored as DOUBLE PRECISION[] (Prisma Float[]) so the fractional
+ * decay values (e.g. 0.9677 after one day) are persisted without truncation.
+ * Earlier INT[] storage caused the pg driver to truncate 0.9677 → 0, wiping
+ * all single-signal cells overnight and making the heatmap quickly go all gray.
+ *
  * Skips rows that have no full elapsed day or no matrix yet (just stamps the
  * time on first sight), so re-running the cron within a day is a no-op.
  */

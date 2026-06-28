@@ -21,10 +21,14 @@ model User {
   workEnd   Int   @default(1020) // 17:00
   workDays  Int[] @default([1, 2, 3, 4, 5]) // 1=Mon … 7=Sun
 
-  // Flat 168-int SIGNED preference matrix (7 days × 24 one-hour buckets).
+  // Flat 168-float SIGNED preference matrix (7 days × 24 one-hour buckets).
   // Written as Phase-2 telemetry: keeps/moves-toward increment a cell (+1),
   // moves-away decrement it (-1); an empty cell is 0 (neutral). Seeded lazily.
-  preferenceMatrix Int[] @default([])
+  // Float (not Int) so the daily exponential decay (cell *= 2^(−Δdays/21))
+  // accumulates sub-integer precision without truncation — integer storage
+  // caused the pg driver to truncate 0.9677 → 0 on the first nightly decay,
+  // zeroing all cells that were only incremented once.
+  preferenceMatrix Float[] @default([])
 
   // When the daily decay cron last applied exponential time-decay to
   // `preferenceMatrix` (see MatrixDecayService). Null until the first decay
