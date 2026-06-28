@@ -99,7 +99,16 @@ export class TasksService {
     user: User,
     now: Date = new Date(),
   ): Promise<CreateTaskResponse> {
-    const { startDate, fixed, startTime, endTime, view, ...rest } = dto;
+    const {
+      startDate,
+      fixed,
+      startTime,
+      endTime,
+      view,
+      viewStart,
+      viewEnd,
+      ...rest
+    } = dto;
     const tz = user.timezone;
     const isFixed = fixed ?? false;
     const overflowView = view ?? "day";
@@ -216,11 +225,26 @@ export class TasksService {
           },
         });
 
-        // When the new task came back unplaced (no slot within working hours
-        // before its deadline), surface the two recovery options the frontend
-        // prompts with. Placed tasks carry no overflow.
+        // Surface recovery options when:
+        //   (a) task is unplaced (no slot within working hours before its
+        //       deadline) — the existing overflow-toast flow; OR
+        //   (b) task was placed but landed OUTSIDE the active calendar view
+        //       window supplied by the frontend (viewStart/viewEnd). This
+        //       catches the silent-bump case where EDF places a deadline-bearing
+        //       task on a day outside the user's current week/month view because
+        //       every in-view slot was already occupied. Without explicit view
+        //       bounds the behaviour is unchanged (placed tasks carry no overflow).
+        const viewWindowStart = viewStart ? new Date(viewStart) : null;
+        const viewWindowEnd = viewEnd ? new Date(viewEnd) : null;
+        const placedOutsideView =
+          finalTask.scheduledStartTime !== null &&
+          viewWindowStart !== null &&
+          viewWindowEnd !== null &&
+          (finalTask.scheduledStartTime.getTime() < viewWindowStart.getTime() ||
+            finalTask.scheduledStartTime.getTime() >= viewWindowEnd.getTime());
+
         const overflow =
-          finalTask.scheduledStartTime === null
+          finalTask.scheduledStartTime === null || placedOutsideView
             ? await this.scheduler.computeOverflowOptions(
                 user,
                 finalTask,

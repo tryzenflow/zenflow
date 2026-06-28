@@ -89,8 +89,9 @@ export interface CreateTaskResponse {
   task: Task;
   schedulingMeta: SchedulingMeta;
   /**
-   * Recovery options, populated ONLY when the created task is unplaced
-   * (`task.scheduledStartTime === null`); otherwise omitted/null.
+   * Recovery options, populated when the created task is unplaced OR when it
+   * was placed but landed outside the requested [viewStart, viewEnd] window.
+   * Omitted/null when the task was placed successfully within the view.
    */
   overflow?: SchedulingOverflow | null;
 }

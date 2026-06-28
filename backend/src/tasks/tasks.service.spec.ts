@@ -838,3 +838,186 @@ describe("TasksService.complete — KEEP positive signal", () => {
     expect(eventTypes(events)).not.toContain("KEEP");
   });
 });
+
+/**
+ * Build a TasksService where the final task's `scheduledStartTime` is
+ * controlled by the test. `cascadeReschedule` is a no-op stub, so whatever
+ * `scheduledStartTime` is baked into the mock `findUniqueOrThrow` result is
+ * exactly what the service sees as `finalTask`.
+ *
+ * Returns the service and the `computeOverflowOptions` mock so tests can
+ * assert whether it was called and what the response carries.
+ */
+function makeCreateServiceWithPlacement(scheduledStartTime: Date | null): {
+  service: TasksService;
+  computeOverflowOptions: jest.Mock;
+} {
+  const taskRow: TaskWithTags = task({
+    id: "placed-task",
+    scheduledStartTime,
+    // Give the row a week-view anchor so computeOverflowOptions (when called)
+    // can derive the Jun 22–28 period from task.schedulingAnchor + task.view.
+    schedulingAnchor: new Date("2026-06-22T00:00:00.000Z"),
+    view: "week" as const,
+  });
+
+  const tx = {
+    tag: {
+      createMany: jest.fn().mockResolvedValue({}),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    task: {
+      create: jest.fn().mockResolvedValue(taskRow),
+      findUniqueOrThrow: jest.fn().mockResolvedValue(taskRow),
+    },
+    taskEvent: { create: jest.fn().mockResolvedValue({}) },
+  };
+
+  const prisma = {
+    $transaction: (fn: (t: typeof tx) => unknown) => fn(tx),
+  };
+
+  const computeOverflowOptions = jest
+    .fn()
+    .mockResolvedValue({ outsideHours: null, nextAvailable: null });
+
+  const scheduler = {
+    cascadeReschedule: jest.fn().mockResolvedValue(undefined),
+    computeOverflowOptions,
+    computeDurationCorrection: jest.fn(
+      (_u: string, _t: string[], estimatedDuration: number): Promise<unknown> =>
+        Promise.resolve({
+          estimatedDuration,
+          adjustedDuration: estimatedDuration,
+          biasApplied: 1.0,
+          durationReason: null,
+        }),
+    ),
+    placementPropensity: jest.fn().mockResolvedValue(null),
+  };
+
+  return {
+    service: new TasksService(prisma as never, scheduler as never),
+    computeOverflowOptions,
+  };
+}
+
+describe("TasksService.create — view-bounds overflow detection", () => {
+  // Week view Jun 22–28 2026 (Mon–Sun); viewEnd is exclusive.
+  const WEEK_START = "2026-06-22T00:00:00.000Z";
+  const WEEK_END = "2026-06-29T00:00:00.000Z";
+
+  it("surfaces overflow when a placed task falls OUTSIDE the explicit view window", async () => {
+    // Simulates EDF silently bumping a deadline-bearing task to Jul 6 because
+    // the Jun 22-28 week is fully packed.
+    const { service, computeOverflowOptions } = makeCreateServiceWithPlacement(
+      new Date("2026-07-06T09:00:00.000Z"),
+    );
+
+    const result = await service.create(
+      {
+        title: "Outside view",
+        durationMinutes: 60,
+        view: "week",
+        viewStart: WEEK_START,
+        viewEnd: WEEK_END,
+      },
+      user,
+    );
+
+    expect(computeOverflowOptions).toHaveBeenCalledTimes(1);
+    expect(result.overflow).not.toBeNull();
+    // The task itself IS placed — scheduledStartTime is not null.
+    expect(result.task.scheduledStartTime).toBe("2026-07-06T09:00:00.000Z");
+  });
+
+  it("does NOT surface overflow when a task is placed WITHIN the view window", async () => {
+    // Jun 24 09:00 is inside Jun 22-28 → no overflow needed.
+    const { service, computeOverflowOptions } = makeCreateServiceWithPlacement(
+      new Date("2026-06-24T09:00:00.000Z"),
+    );
+
+    const result = await service.create(
+      {
+        title: "Within view",
+        durationMinutes: 60,
+        view: "week",
+        viewStart: WEEK_START,
+        viewEnd: WEEK_END,
+      },
+      user,
+    );
+
+    expect(computeOverflowOptions).not.toHaveBeenCalled();
+    expect(result.overflow).toBeNull();
+    expect(result.task.scheduledStartTime).toBe("2026-06-24T09:00:00.000Z");
+  });
+
+  it("surfaces overflow for an unplaced task even without view bounds (existing behaviour)", async () => {
+    const { service, computeOverflowOptions } =
+      makeCreateServiceWithPlacement(null);
+
+    const result = await service.create(
+      { title: "Unplaced", durationMinutes: 60 },
+      user,
+    );
+
+    expect(computeOverflowOptions).toHaveBeenCalledTimes(1);
+    expect(result.overflow).not.toBeNull();
+    expect(result.task.scheduledStartTime).toBeNull();
+  });
+
+  it("does NOT surface overflow for a placed task when viewStart/viewEnd are absent (backward-compat)", async () => {
+    // Without explicit view bounds a placed task never triggers the view-bounds
+    // overflow check — old callers that omit the new fields are unaffected.
+    const { service, computeOverflowOptions } = makeCreateServiceWithPlacement(
+      new Date("2026-07-06T09:00:00.000Z"),
+    );
+
+    const result = await service.create(
+      { title: "No bounds", durationMinutes: 60 },
+      user,
+    );
+
+    expect(computeOverflowOptions).not.toHaveBeenCalled();
+    expect(result.overflow).toBeNull();
+  });
+
+  it("treats viewEnd as exclusive — placement AT viewEnd is outside the window", async () => {
+    // Jun 29 00:00 is the exclusive upper boundary; a slot exactly there is outside.
+    const { service, computeOverflowOptions } = makeCreateServiceWithPlacement(
+      new Date(WEEK_END),
+    );
+
+    await service.create(
+      {
+        title: "At boundary",
+        durationMinutes: 60,
+        viewStart: WEEK_START,
+        viewEnd: WEEK_END,
+      },
+      user,
+    );
+
+    expect(computeOverflowOptions).toHaveBeenCalledTimes(1);
+  });
+
+  it("placement immediately before viewEnd is INSIDE the window", async () => {
+    // Jun 28 23:45 is the last 15-min slot before Jun 29 00:00 → inside view.
+    const { service, computeOverflowOptions } = makeCreateServiceWithPlacement(
+      new Date("2026-06-28T23:45:00.000Z"),
+    );
+
+    await service.create(
+      {
+        title: "Last slot",
+        durationMinutes: 60,
+        viewStart: WEEK_START,
+        viewEnd: WEEK_END,
+      },
+      user,
+    );
+
+    expect(computeOverflowOptions).not.toHaveBeenCalled();
+  });
+});

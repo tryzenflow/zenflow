@@ -131,4 +131,24 @@ export class CreateTaskDto implements CreateTaskInput {
   @IsOptional()
   @IsIn(VIEW_MODES)
   view?: ViewMode;
+
+  /**
+   * ISO-8601 inclusive start of the active calendar view window
+   * (e.g. "2026-06-22T00:00:00.000Z"). When provided with viewEnd the backend
+   * detects whether the task is placed outside the window and surfaces a
+   * SchedulingOverflow in the response so the frontend can show the overflow
+   * toast instead of silently accepting the out-of-view placement.
+   */
+  @IsOptional()
+  @IsISO8601()
+  viewStart?: string;
+
+  /**
+   * ISO-8601 exclusive end of the active calendar view window
+   * (e.g. "2026-06-29T00:00:00.000Z" for the Mon 22 – Sun 28 Jun week).
+   * See viewStart.
+   */
+  @IsOptional()
+  @IsISO8601()
+  viewEnd?: string;
 }

@@ -108,6 +108,16 @@ export interface CreateTaskInput {
    * a task can't be placed before its deadline. Defaults to "day".
    */
   view?: "day" | "week" | "month";
+  /**
+   * ISO-8601 start of the active view window (inclusive). When provided the
+   * backend surfaces a {@link SchedulingOverflow} when the task is placed outside
+   * [viewStart, viewEnd], not only when it is unplaced.
+   */
+  viewStart?: string;
+  /**
+   * ISO-8601 end of the active view window (exclusive).
+   */
+  viewEnd?: string;
 }
 
 /** Metadata-only update; does not trigger rescheduling. */
