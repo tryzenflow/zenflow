@@ -318,8 +318,8 @@ describe("SchedulerService.pin — signed preference matrix", () => {
     expect(tx.user.update).toHaveBeenCalledTimes(1);
     const matrix = writtenMatrix(tx);
     expect(matrix).toHaveLength(168);
-    expect(matrix[9]).toBe(-1); // Mon 09:00 hour 9 vacated → dislike
-    expect(matrix[12]).toBe(+1); // Mon 12:00 hour 12 destination → move-toward
+    expect(matrix[9]).toBeCloseTo(-0.1); // Mon 09:00 hour 9 vacated → dislike (η × −1)
+    expect(matrix[12]).toBeCloseTo(0.1); // Mon 12:00 hour 12 destination → move-toward (η × +1)
   });
 
   it("only records the move-toward (+1) when the task had no prior slot", async () => {
@@ -329,7 +329,7 @@ describe("SchedulerService.pin — signed preference matrix", () => {
     await service.pin(user, "u", new Date("2026-06-08T12:00:00Z")); // Mon 12:00 (hour 12, idx 12)
 
     const matrix = writtenMatrix(tx);
-    expect(matrix[12]).toBe(+1);
+    expect(matrix[12]).toBeCloseTo(0.1); // move-toward (η × +1)
     // No vacated cell was decremented.
     expect(matrix.filter((v) => v < 0)).toEqual([]);
   });
@@ -344,7 +344,7 @@ describe("SchedulerService.pin — signed preference matrix", () => {
     await service.pin(user, "p", new Date("2026-06-08T09:00:00Z")); // same slot
 
     const matrix = writtenMatrix(tx);
-    expect(matrix[9]).toBe(+1); // Mon 09:00 hour 9, only the move-toward signal
+    expect(matrix[9]).toBeCloseTo(0.1); // Mon 09:00 hour 9, only the move-toward signal (η × +1)
     expect(matrix.filter((v) => v < 0)).toEqual([]);
   });
 });

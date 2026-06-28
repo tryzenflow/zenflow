@@ -3,6 +3,7 @@ import { Prisma } from "../../generated/prisma";
 import { intervalOf, type EdfTask, type SchedulerPrefs } from "./edf";
 import { preferenceIndex, type Interval } from "./slot";
 import { endOfPeriod } from "./horizon";
+import { PREFERENCE_LEARNING_RATE } from "./constants";
 
 /**
  * Shared, PURE telemetry builders (no I/O). These encode the exact event-snapshot
@@ -128,6 +129,13 @@ export function buildSnapshot(
  * delta a disliked block (move-away). The matrix is seeded to all-zero when it
  * isn't the expected length, and out-of-range indices are skipped. Pure — the
  * caller persists the result.
+ *
+ * Each event contributes `PREFERENCE_LEARNING_RATE × delta` rather than a raw
+ * `±1`, so a single action nudges the weight instead of spiking it. At the
+ * default η=0.1, ten consecutive COMPLETE events in the same bucket converge
+ * to +1.0 — the same theoretical ceiling as before, reached gradually. The
+ * existing exponential time-decay in `matrix-decay.ts` (half-life 21 days)
+ * erodes stale values on the nightly cron schedule independently of this step.
  */
 export function applyPreferenceDeltas(
   matrix: readonly number[],
@@ -140,7 +148,8 @@ export function applyPreferenceDeltas(
       : new Array<number>(PREFERENCE_MATRIX_LENGTH).fill(0);
   for (const { at, delta } of deltas) {
     const idx = preferenceIndex(at, timezone);
-    if (idx >= 0 && idx < PREFERENCE_MATRIX_LENGTH) out[idx] += delta;
+    if (idx >= 0 && idx < PREFERENCE_MATRIX_LENGTH)
+      out[idx] += PREFERENCE_LEARNING_RATE * delta;
   }
   return out;
 }
