@@ -55,9 +55,9 @@ describe("PersonaState (batched engine)", () => {
     const snap = move.newSnapshot as Record<string, unknown>;
     expect(snap.suggestedStartTime).toBe(at("09:00").toISOString());
     expect(snap.scheduledStartTime).toBe(at("12:00").toISOString());
-    // +1 at the destination (hour 12 = index 12), −1 at the vacated (hour 9 = index 9).
-    expect(s.matrix[MON_1200]).toBe(1);
-    expect(s.matrix[MON_0900]).toBe(-1);
+    // η×(+1) at the destination (hour 12 = index 12), η×(−1) at the vacated (hour 9 = index 9).
+    expect(s.matrix[MON_1200]).toBeCloseTo(0.1);
+    expect(s.matrix[MON_0900]).toBeCloseTo(-0.1);
   });
 
   it("a moved task completes with NO KEEP; an untouched one emits KEEP +1", () => {
@@ -84,7 +84,7 @@ describe("PersonaState (batched engine)", () => {
       "COMPLETE", // b
       "KEEP", // b kept in suggested slot
     ]);
-    expect(s.matrix[MON_1100]).toBe(1);
+    expect(s.matrix[MON_1100]).toBeCloseTo(0.1);
   });
 
   it("sweep ABANDONs an overdue, deadline-bearing PENDING task", () => {
