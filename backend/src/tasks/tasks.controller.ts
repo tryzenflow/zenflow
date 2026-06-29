@@ -72,6 +72,9 @@ export class TasksController {
       id,
       dto.requestedStartTime,
       user,
+      new Date(),
+      dto.viewStart,
+      dto.viewEnd,
     );
     return { success: true, message: "Task rescheduled", data };
   }

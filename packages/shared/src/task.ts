@@ -140,6 +140,14 @@ export interface TaskSuggestionsResponse {
 export interface RescheduleInput {
   /** ISO-8601 start the user dropped the task at (snapped to the 15-min grid). */
   requestedStartTime: string;
+  /**
+   * ISO-8601 start of the user's currently visible view window (inclusive).
+   * When provided, `outsideViewPeriod` is computed against this window instead
+   * of the task's stored creation period.
+   */
+  viewStart?: string;
+  /** ISO-8601 end of the user's currently visible view window (exclusive). */
+  viewEnd?: string;
 }
 
 export interface ResizeInput {

@@ -582,6 +582,8 @@ export class SchedulerService {
     taskId: string,
     requestedStart: Date,
     now: Date = new Date(),
+    viewStart?: Date,
+    viewEnd?: Date,
   ): Promise<{
     task: Task;
     displaced: DisplacedTask[];
@@ -614,23 +616,35 @@ export class SchedulerService {
       );
 
       // Soft period validation: check whether the snapped slot falls outside the
-      // task's stored view-period (the day/week/month it was created in). When
-      // no anchor or view is stored (fixed tasks, legacy rows) we default the
-      // anchor to `snapped` itself and the view to "day" — the period then
-      // always contains the snapped time, so outsideViewPeriod is false (no
-      // false positives for tasks that were never period-bounded).
-      const prefs = this.prefsOf(user);
-      const anchor = target.schedulingAnchor ?? snapped;
-      const view: ViewMode = target.view ?? "day";
-      const { start: periodStart, end: periodEnd } = periodRange(
-        anchor,
-        view,
-        prefs.timezone,
-        { workStart: prefs.workStart, workEnd: prefs.workEnd },
-      );
-      const outsideViewPeriod =
-        snapped.getTime() < periodStart.getTime() ||
-        snapped.getTime() >= periodEnd.getTime();
+      // user's current view window. When the caller supplies explicit view bounds
+      // (the frontend's currently visible day/week/month), use those directly so
+      // the check reflects WHERE THE USER IS NOW, not where the task was created.
+      // Fallback: use the task's stored creation period (legacy / no bounds
+      // supplied). For tasks with no anchor or view stored (fixed tasks, legacy
+      // rows) we default the anchor to `snapped` itself and the view to "day" —
+      // the period then always contains the snapped time, so outsideViewPeriod is
+      // false (no false positives for tasks that were never period-bounded).
+      let outsideViewPeriod: boolean;
+      if (viewStart && viewEnd) {
+        // Frontend supplied current view bounds — compare against those.
+        outsideViewPeriod =
+          snapped.getTime() < viewStart.getTime() ||
+          snapped.getTime() >= viewEnd.getTime();
+      } else {
+        // Fallback: use the stored creation period.
+        const prefs = this.prefsOf(user);
+        const anchor = target.schedulingAnchor ?? snapped;
+        const view: ViewMode = target.view ?? "day";
+        const { start: periodStart, end: periodEnd } = periodRange(
+          anchor,
+          view,
+          prefs.timezone,
+          { workStart: prefs.workStart, workEnd: prefs.workEnd },
+        );
+        outsideViewPeriod =
+          snapped.getTime() < periodStart.getTime() ||
+          snapped.getTime() >= periodEnd.getTime();
+      }
 
       // Project the move, then recompute every task's conflict from real
       // time-overlap (a placed task clashes if it overlaps another placed task).

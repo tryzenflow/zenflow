@@ -497,6 +497,8 @@ export class TasksService {
     requestedStartTime: string,
     user: User,
     now: Date = new Date(),
+    viewStart?: string,
+    viewEnd?: string,
   ) {
     // Drag-drop is a manual pin: place exactly where dropped, allow overlaps as
     // conflicts, and never cascade other tasks. The EDF engine only runs on
@@ -506,6 +508,8 @@ export class TasksService {
       id,
       new Date(requestedStartTime),
       now,
+      viewStart ? new Date(viewStart) : undefined,
+      viewEnd ? new Date(viewEnd) : undefined,
     );
     // The scheduler returns a bare Task (no relations); re-attach tags for the
     // DTO so the wire format keeps its name array.
