@@ -58,9 +58,12 @@ export async function getTaskDetails(id: string): Promise<TaskDetailResponse> {
 export async function rescheduleTask(
   id: string,
   requestedStartTime: string,
+  viewStart?: string,
+  viewEnd?: string,
 ): Promise<RescheduleResponse> {
   const { data } = await api.patch(`/tasks/${id}/reschedule`, {
     requestedStartTime,
+    ...(viewStart && viewEnd ? { viewStart, viewEnd } : {}),
   });
   return data.data;
 }

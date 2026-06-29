@@ -26,8 +26,19 @@ import { isAxiosError } from "axios";
 import { toast } from "sonner";
 import { errorToast } from "@/lib/toast";
 import { useUserStore } from "@/hooks/use-user-store";
-import { zonedDate, zonedNow } from "@/utils/tz";
-import { format, isSameMonth, isValid } from "date-fns";
+import { zonedDate, zonedNow, zonedWallClockToUtc } from "@/utils/tz";
+import { WEEK_STARTS_ON } from "@/utils/constants";
+import {
+  endOfDay,
+  endOfMonth,
+  endOfWeek,
+  format,
+  isSameMonth,
+  isValid,
+  startOfDay,
+  startOfMonth,
+  startOfWeek,
+} from "date-fns";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
 
 const VALID_VIEWS: ViewMode[] = ["day", "week", "month"];
@@ -150,8 +161,30 @@ export function CalendarLayout() {
       // dropped the stale block from the grid.
       if (!fresh.some((b) => b.taskId === taskId)) return;
     }
+    const { viewStart, viewEnd } = (() => {
+      let start: Date;
+      let end: Date;
+      switch (viewMode) {
+        case "day":
+          start = startOfDay(date);
+          end = endOfDay(date);
+          break;
+        case "week":
+          start = startOfWeek(date, { weekStartsOn: WEEK_STARTS_ON });
+          end = endOfWeek(date, { weekStartsOn: WEEK_STARTS_ON });
+          break;
+        case "month":
+          start = startOfMonth(date);
+          end = endOfMonth(date);
+          break;
+      }
+      return {
+        viewStart: zonedWallClockToUtc(start, tz).toISOString(),
+        viewEnd: zonedWallClockToUtc(end, tz).toISOString(),
+      };
+    })();
     try {
-      const response = await rescheduleTask(taskId, startISO);
+      const response = await rescheduleTask(taskId, startISO, viewStart, viewEnd);
       // The backend committed the move but it lands outside the current view
       // period. Surface a non-blocking toast so the user can undo without
       // requiring an explicit confirmation before the move is applied.
