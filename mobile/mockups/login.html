@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Zenflow Mobile — Login</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/geist@5.2.6/index.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/geist-mono@5.2.6/index.css" />
+<link rel="stylesheet" href="dist/output.css" />
+<link rel="stylesheet" href="gallery-chrome.css" />
+</head>
+<body>
+  <div class="page-head">
+    <h1><span class="dot"></span> Login — 2-stage OTP</h1>
+    <p>Passwordless email + one-time-password sign-in (CLAUDE.md §7 — OTP, no JWT). Mirrors <code>frontend/src/pages/login.tsx</code> + <code>components/auth/login-form.tsx</code>, rebuilt full-screen for touch. Stage 1 collects the email; stage 2 auto-submits on the 6th digit.</p>
+    <div class="crumbs"><a href="index.html">← All mobile mockups</a></div>
+  </div>
+
+  <!-- ============ STAGE 1: EMAIL ============ -->
+  <div class="state-section"><h2>Stage 1 — Email</h2><p>Request an OTP. <code>onBlur</code> validation; the button shows a spinner while the code is sent.</p></div>
+  <div class="gallery">
+
+    <!-- Empty -->
+    <div class="frame">
+      <div class="caption"><span class="tag">Empty</span><div class="sub">First load — placeholder, idle button</div></div>
+      <div class="device">
+        <div class="island"></div>
+        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
+          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+            <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor"><path d="M8.5 2.5c2.3 0 4.4.9 6 2.4l1.2-1.3A10.4 10.4 0 0 0 8.5.8 10.4 10.4 0 0 0 1.3 3.6L2.5 4.9A8.4 8.4 0 0 1 8.5 2.5Z"/><path d="M8.5 6c1.3 0 2.5.5 3.4 1.4l1.2-1.3A6.4 6.4 0 0 0 8.5 4.2 6.4 6.4 0 0 0 4 6.1l1.2 1.3A4.4 4.4 0 0 1 8.5 6Z"/><circle cx="8.5" cy="10" r="1.6"/></svg>
+            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
+          </span></div>
+          <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden"><div class="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0 px-5">
+            <div class="flex flex-col items-center text-center gap-3.5 pt-[30px] pb-[26px]">
+              <img src="logo.svg" alt="Zenflow logo" class="size-[60px] rounded-full shadow-lg shadow-brand-orange/30" />
+              <div><h1 class="text-[22px] font-bold tracking-[-0.02em]">Login to Zenflow</h1><p class="text-[13.5px] text-muted-foreground">A focus-first planner that schedules for you.</p></div>
+            </div>
+            <div class="mb-[18px]">
+              <label class="block text-[13.5px] font-semibold mb-2 text-foreground">Email</label>
+              <input class="h-[50px] w-full rounded-xl border border-input bg-card px-4 text-base text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] dark:bg-input/30" placeholder="m@example.com" />
+            </div>
+            <button class="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl h-[52px] px-5 text-base font-semibold shrink-0 transition-all outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px] [&_svg]:size-[18px] bg-primary text-primary-foreground hover:bg-primary/90">Send OTP</button>
+            <p class="text-[11.5px] text-muted-foreground text-center leading-normal mt-[22px] px-2.5">By continuing, you agree to our <a class="text-foreground underline underline-offset-2" href="#">Terms of Service</a> and <a class="text-foreground underline underline-offset-2" href="#">Privacy Policy</a>.</p>
+          </div></div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filled / focused -->
+    <div class="frame">
+      <div class="caption"><span class="tag">Filled</span><div class="sub">Valid email entered, field focused</div></div>
+      <div class="device">
+        <div class="island"></div>
+        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
+          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
+          </span></div>
+          <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden"><div class="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0 px-5">
+            <div class="flex flex-col items-center text-center gap-3.5 pt-[30px] pb-[26px]">
+              <img src="logo.svg" alt="Zenflow logo" class="size-[60px] rounded-full shadow-lg shadow-brand-orange/30" />
+              <div><h1 class="text-[22px] font-bold tracking-[-0.02em]">Login to Zenflow</h1><p class="text-[13.5px] text-muted-foreground">A focus-first planner that schedules for you.</p></div>
+            </div>
+            <div class="mb-[18px]">
+              <label class="block text-[13.5px] font-semibold mb-2 text-foreground">Email</label>
+              <input class="h-[50px] w-full rounded-xl border border-input bg-card px-4 text-base text-foreground outline-none placeholder:text-muted-foreground border-ring ring-[3px] ring-ring/50 dark:bg-input/30" value="user@zenflow.com" />
+            </div>
+            <button class="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl h-[52px] px-5 text-base font-semibold shrink-0 transition-all outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px] [&_svg]:size-[18px] bg-primary text-primary-foreground hover:bg-primary/90">Send OTP</button>
+            <p class="text-[11.5px] text-muted-foreground text-center leading-normal mt-[22px] px-2.5">By continuing, you agree to our <a class="text-foreground underline underline-offset-2" href="#">Terms of Service</a> and <a class="text-foreground underline underline-offset-2" href="#">Privacy Policy</a>.</p>
+          </div></div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div class="frame">
+      <div class="caption"><span class="tag">Loading</span><div class="sub">Requesting code — button disabled + spinner</div></div>
+      <div class="device">
+        <div class="island"></div>
+        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
+          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
+          </span></div>
+          <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden"><div class="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0 px-5">
+            <div class="flex flex-col items-center text-center gap-3.5 pt-[30px] pb-[26px]">
+              <img src="logo.svg" alt="Zenflow logo" class="size-[60px] rounded-full shadow-lg shadow-brand-orange/30" />
+              <div><h1 class="text-[22px] font-bold tracking-[-0.02em]">Login to Zenflow</h1><p class="text-[13.5px] text-muted-foreground">A focus-first planner that schedules for you.</p></div>
+            </div>
+            <div class="mb-[18px]">
+              <label class="block text-[13.5px] font-semibold mb-2 text-foreground">Email</label>
+              <input class="h-[50px] w-full rounded-xl border border-input bg-card px-4 text-base text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-50 dark:bg-input/30" value="user@zenflow.com" disabled />
+            </div>
+            <button class="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl h-[52px] px-5 text-base font-semibold shrink-0 transition-all outline-none [&_svg]:size-[18px] bg-primary text-primary-foreground/70 pointer-events-none"><span class="inline-block size-[18px] rounded-full border-[2.5px] border-current/30 border-t-current animate-spin"></span> Sending…</button>
+            <p class="text-[11.5px] text-muted-foreground text-center leading-normal mt-[22px] px-2.5">By continuing, you agree to our <a class="text-foreground underline underline-offset-2" href="#">Terms of Service</a> and <a class="text-foreground underline underline-offset-2" href="#">Privacy Policy</a>.</p>
+          </div></div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error -->
+    <div class="frame">
+      <div class="caption"><span class="tag">Error</span><div class="sub">Invalid address / network failure</div></div>
+      <div class="device">
+        <div class="island"></div>
+        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
+          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
+          </span></div>
+          <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden"><div class="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0 px-5">
+            <div class="flex flex-col items-center text-center gap-3.5 pt-[30px] pb-[26px]">
+              <img src="logo.svg" alt="Zenflow logo" class="size-[60px] rounded-full shadow-lg shadow-brand-orange/30" />
+              <div><h1 class="text-[22px] font-bold tracking-[-0.02em]">Login to Zenflow</h1><p class="text-[13.5px] text-muted-foreground">A focus-first planner that schedules for you.</p></div>
+            </div>
+            <div class="mb-[18px]">
+              <label class="block text-[13.5px] font-semibold mb-2 text-foreground">Email</label>
+              <input class="h-[50px] w-full rounded-xl border border-input bg-card px-4 text-base text-foreground outline-none placeholder:text-muted-foreground border-destructive ring-[3px] ring-destructive/20 dark:ring-destructive/40 dark:bg-input/30" value="user@zenflow" />
+              <div class="flex items-center gap-1.5 mt-2 text-[13px] font-medium text-destructive [&_svg]:size-[15px] [&_svg]:shrink-0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Invalid email address.</div>
+            </div>
+            <button class="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl h-[52px] px-5 text-base font-semibold shrink-0 transition-all outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px] [&_svg]:size-[18px] bg-primary text-primary-foreground hover:bg-primary/90">Send OTP</button>
+            <p class="text-[11.5px] text-muted-foreground text-center leading-normal mt-[22px] px-2.5">By continuing, you agree to our <a class="text-foreground underline underline-offset-2" href="#">Terms of Service</a> and <a class="text-foreground underline underline-offset-2" href="#">Privacy Policy</a>.</p>
+          </div></div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============ STAGE 2: OTP ============ -->
+  <div class="state-section"><h2>Stage 2 — One-time password</h2><p>6-digit code; auto-submits on the final digit (<code>onComplete</code>). "Change email" returns to stage 1; "Resend code" re-requests.</p></div>
+  <div class="gallery">
+
+    <!-- OTP empty -->
+    <div class="frame">
+      <div class="caption"><span class="tag">Empty</span><div class="sub">Code sent — awaiting input, first slot caret</div></div>
+      <div class="device">
+        <div class="island"></div>
+        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
+          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
+          </span></div>
+          <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden"><div class="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0 px-5">
+            <div class="flex flex-col items-center text-center gap-3.5 pt-[30px] pb-[26px]">
+              <img src="logo.svg" alt="Zenflow logo" class="size-[60px] rounded-full shadow-lg shadow-brand-orange/30" />
+              <div><h1 class="text-[22px] font-bold tracking-[-0.02em]">Enter your code</h1><p class="text-[13.5px] text-muted-foreground">Sent to u••r@zenflow.com</p></div>
+            </div>
+            <a class="text-[13px] font-semibold text-foreground underline underline-offset-[3px]" href="#">Change email</a>
+            <div class="mb-[18px]" style="margin-top:18px">
+              <label class="block text-[13.5px] font-semibold mb-2 text-foreground">One-Time Password</label>
+              <div class="flex justify-between gap-[9px]">
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums text-foreground border-ring ring-[3px] ring-ring/50"></div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums text-foreground"></div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums text-foreground"></div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums text-foreground"></div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums text-foreground"></div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums text-foreground"></div>
+              </div>
+            </div>
+            <button class="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl h-12 px-5 text-sm font-semibold shrink-0 transition-all outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px] [&_svg]:size-[18px] bg-transparent text-muted-foreground hover:bg-accent">Resend code</button>
+          </div></div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- OTP partial -->
+    <div class="frame">
+      <div class="caption"><span class="tag">Partial</span><div class="sub">3 / 6 digits entered</div></div>
+      <div class="device">
+        <div class="island"></div>
+        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
+          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
+          </span></div>
+          <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden"><div class="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0 px-5">
+            <div class="flex flex-col items-center text-center gap-3.5 pt-[30px] pb-[26px]">
+              <img src="logo.svg" alt="Zenflow logo" class="size-[60px] rounded-full shadow-lg shadow-brand-orange/30" />
+              <div><h1 class="text-[22px] font-bold tracking-[-0.02em]">Enter your code</h1><p class="text-[13.5px] text-muted-foreground">Sent to u••r@zenflow.com</p></div>
+            </div>
+            <a class="text-[13px] font-semibold text-foreground underline underline-offset-[3px]" href="#">Change email</a>
+            <div class="mb-[18px]" style="margin-top:18px">
+              <label class="block text-[13.5px] font-semibold mb-2 text-foreground">One-Time Password</label>
+              <div class="flex justify-between gap-[9px]">
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums text-foreground border-ring/50">4</div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums text-foreground border-ring/50">2</div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums text-foreground border-ring/50">9</div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums text-foreground border-ring ring-[3px] ring-ring/50"></div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums text-foreground"></div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums text-foreground"></div>
+              </div>
+            </div>
+            <button class="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl h-12 px-5 text-sm font-semibold shrink-0 transition-all outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px] [&_svg]:size-[18px] bg-transparent text-muted-foreground hover:bg-accent">Resend code</button>
+          </div></div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- OTP loading (auto-submit) -->
+    <div class="frame">
+      <div class="caption"><span class="tag">Loading</span><div class="sub">6th digit entered → auto-verifying</div></div>
+      <div class="device">
+        <div class="island"></div>
+        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
+          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
+          </span></div>
+          <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden"><div class="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0 px-5">
+            <div class="flex flex-col items-center text-center gap-3.5 pt-[30px] pb-[26px]">
+              <img src="logo.svg" alt="Zenflow logo" class="size-[60px] rounded-full shadow-lg shadow-brand-orange/30" />
+              <div><h1 class="text-[22px] font-bold tracking-[-0.02em]">Enter your code</h1><p class="text-[13.5px] text-muted-foreground">Sent to u••r@zenflow.com</p></div>
+            </div>
+            <a class="text-[13px] font-semibold text-foreground underline underline-offset-[3px]" href="#">Change email</a>
+            <div class="mb-[18px]" style="margin-top:18px">
+              <label class="block text-[13.5px] font-semibold mb-2 text-foreground">One-Time Password</label>
+              <div class="flex justify-between gap-[9px]">
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums text-foreground border-ring/50">4</div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums text-foreground border-ring/50">2</div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums text-foreground border-ring/50">9</div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums text-foreground border-ring/50">1</div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums text-foreground border-ring/50">0</div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums text-foreground border-ring/50">7</div>
+              </div>
+            </div>
+            <div class="flex items-center justify-center gap-[9px] text-[13.5px] text-muted-foreground"><span class="inline-block size-[18px] rounded-full border-[2.5px] border-current/30 border-t-current animate-spin"></span> Verifying code…</div>
+          </div></div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- OTP error -->
+    <div class="frame">
+      <div class="caption"><span class="tag">Error</span><div class="sub">Invalid / expired code</div></div>
+      <div class="device">
+        <div class="island"></div>
+        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
+          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
+          </span></div>
+          <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden"><div class="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0 px-5">
+            <div class="flex flex-col items-center text-center gap-3.5 pt-[30px] pb-[26px]">
+              <img src="logo.svg" alt="Zenflow logo" class="size-[60px] rounded-full shadow-lg shadow-brand-orange/30" />
+              <div><h1 class="text-[22px] font-bold tracking-[-0.02em]">Enter your code</h1><p class="text-[13.5px] text-muted-foreground">Sent to u••r@zenflow.com</p></div>
+            </div>
+            <a class="text-[13px] font-semibold text-foreground underline underline-offset-[3px]" href="#">Change email</a>
+            <div class="mb-[18px]" style="margin-top:18px">
+              <label class="block text-[13.5px] font-semibold mb-2 text-foreground">One-Time Password</label>
+              <div class="flex justify-between gap-[9px]">
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums border-destructive text-destructive">4</div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums border-destructive text-destructive">2</div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums border-destructive text-destructive">9</div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums border-destructive text-destructive">1</div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums border-destructive text-destructive">0</div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums border-destructive text-destructive">0</div>
+              </div>
+              <div class="flex items-center gap-1.5 mt-2 text-[13px] font-medium text-destructive [&_svg]:size-[15px] [&_svg]:shrink-0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> That code is incorrect or expired.</div>
+            </div>
+            <button class="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl h-12 px-5 text-sm font-semibold shrink-0 transition-all outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px] [&_svg]:size-[18px] bg-transparent text-muted-foreground hover:bg-accent">Resend code</button>
+          </div></div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dark variant -->
+    <div class="frame">
+      <div class="caption"><span class="tag dark-tag">Dark · Partial</span><div class="sub">Same OTP stage in dark theme</div></div>
+      <div class="device dark">
+        <div class="island"></div>
+        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground dark">
+          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
+          </span></div>
+          <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden"><div class="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0 px-5">
+            <div class="flex flex-col items-center text-center gap-3.5 pt-[30px] pb-[26px]">
+              <img src="logo.svg" alt="Zenflow logo" class="size-[60px] rounded-full shadow-lg shadow-brand-orange/30" />
+              <div><h1 class="text-[22px] font-bold tracking-[-0.02em]">Enter your code</h1><p class="text-[13.5px] text-muted-foreground">Sent to u••r@zenflow.com</p></div>
+            </div>
+            <a class="text-[13px] font-semibold text-foreground underline underline-offset-[3px]" href="#">Change email</a>
+            <div class="mb-[18px]" style="margin-top:18px">
+              <label class="block text-[13.5px] font-semibold mb-2 text-foreground">One-Time Password</label>
+              <div class="flex justify-between gap-[9px]">
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums text-foreground border-ring/50">4</div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums text-foreground border-ring/50">2</div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums text-foreground border-ring/50">9</div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums text-foreground border-ring ring-[3px] ring-ring/50"></div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums text-foreground"></div>
+                <div class="flex flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card text-[26px] font-semibold tabular-nums text-foreground"></div>
+              </div>
+            </div>
+            <button class="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl h-12 px-5 text-sm font-semibold shrink-0 transition-all outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px] [&_svg]:size-[18px] bg-transparent text-muted-foreground hover:bg-accent">Resend code</button>
+          </div></div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Zenflow Mobile — Week View</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/geist@5.2.6/index.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/geist-mono@5.2.6/index.css" />
+<link rel="stylesheet" href="dist/output.css" />
+<link rel="stylesheet" href="gallery-chrome.css" />
+</head>
+<body>
+  <div class="page-head">
+    <h1><span class="dot"></span> Week View — swipeable day pages</h1>
+    <p>The RN redesign of <code>frontend/src/components/calendar/week-view.tsx</code> + <code>week-grid.tsx</code>. The 7-column desktop grid becomes a horizontal <code>FlatList</code> of full-height single-day timelines (<code>snapToInterval = screenWidth</code>), under a sticky 7-chip week header. Adjacent days "peek" at the screen edge to advertise the swipe. Today = Tue Jun 30, 2026; week of Jun 29 – Jul 5.</p>
+    <div class="crumbs"><a href="index.html">← All mobile mockups</a></div>
+  </div>
+
+  <!-- ============ NORMAL ============ -->
+  <div class="state-section"><h2>Normal week</h2><p>Sticky week strip (today highlighted), one focused day timeline with a live now-line, and a sliver of the next day at the right edge signalling the swipe gesture.</p></div>
+  <div class="gallery">
+
+    <div class="frame">
+      <div class="caption"><span class="tag">Normal · Tue Jun 30</span><div class="sub">Focused day + next-day peek; thumb-reachable FAB</div></div>
+      <div class="device">
+        <div class="island"></div>
+        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
+          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+            <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor"><path d="M8.5 2.5c2.3 0 4.4.9 6 2.4l1.2-1.3A10.4 10.4 0 0 0 8.5.8 10.4 10.4 0 0 0 1.3 3.6L2.5 4.9A8.4 8.4 0 0 1 8.5 2.5Z"/><path d="M8.5 6c1.3 0 2.5.5 3.4 1.4l1.2-1.3A6.4 6.4 0 0 0 8.5 4.2 6.4 6.4 0 0 0 4 6.1l1.2 1.3A4.4 4.4 0 0 1 8.5 6Z"/><circle cx="8.5" cy="10" r="1.6"/></svg>
+            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
+          </span></div>
+
+          <div class="relative z-30 flex items-center gap-3 px-4 pt-1.5 pb-3.5 bg-background/80 backdrop-blur-[18px] backdrop-saturate-[1.4] border-b border-border/70">
+            <div><div class="text-[19px] font-bold tracking-[-0.02em]">June 2026</div><div class="text-[11.5px] text-muted-foreground font-medium mt-px">Jun 29 – Jul 5</div></div>
+            <div class="flex-1"></div>
+            <div class="inline-flex bg-muted border border-border rounded-[11px] p-[3px] gap-0.5"><button class="text-[13px] font-semibold text-muted-foreground border-0 bg-transparent px-3.5 py-1.5 rounded-lg">Day</button><button class="text-[13px] font-semibold text-foreground border-0 bg-card px-3.5 py-1.5 rounded-lg shadow-sm">Week</button><button class="text-[13px] font-semibold text-muted-foreground border-0 bg-transparent px-3.5 py-1.5 rounded-lg">Month</button></div>
+          </div>
+
+          <div class="flex-1 min-h-0 flex flex-col">
+            <div class="relative z-20 px-3 pt-1.5 pb-2 bg-background/80 backdrop-blur-[14px] backdrop-saturate-[1.3] border-b border-border/70">
+              <div class="flex gap-1.5 pt-1 pb-0.5">
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Mon</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">29</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl bg-muted"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Tue</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full bg-primary text-primary-foreground">30</div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Wed</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">1</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Thu</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">2</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Fri</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">3</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Sat</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">4</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Sun</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">5</span></div>
+              </div>
+            </div>
+
+            <div class="relative flex-1 min-h-0 overflow-hidden">
+              <div class="h-full overflow-y-auto [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0">
+                <div class="relative pt-1.5 pb-7">
+                  <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">8 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                  <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">9 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                  <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">10 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                  <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">11 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                  <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">12 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                  <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">1 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                  <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">2 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                  <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">3 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                  <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">4 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                  <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">5 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                  <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">6 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                  <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">7 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+
+                  <div class="absolute left-14 right-[15px] top-1.5 bottom-0">
+                    <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm bg-muted/60 border-l-success/60" style="top:0;height:32px">
+                      <div class="truncate shrink-0 text-xs font-semibold text-muted-foreground line-through">Email triage</div>
+                    </div>
+                    <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm bg-muted/50 border-dashed border-l-muted-foreground/50" style="top:64px;height:48px">
+                      <div class="flex min-w-0 items-center gap-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3 shrink-0 text-muted-foreground"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><div class="truncate text-xs font-semibold">Daily standup</div></div>
+                      <div class="font-mono text-[10px] text-muted-foreground">9:00 – 9:45</div>
+                    </div>
+                    <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm glass-task border-l-primary" style="top:128px;height:96px">
+                      <div class="truncate text-xs font-semibold">Design review</div>
+                      <div class="font-mono text-[10px] text-muted-foreground">10:00 – 11:30 · 90m</div>
+                    </div>
+                    <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm bg-muted/50 border-dashed border-l-muted-foreground/50" style="top:320px;height:64px">
+                      <div class="flex min-w-0 items-center gap-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3 shrink-0 text-muted-foreground"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><div class="truncate text-xs font-semibold">1:1 with Priya</div></div>
+                      <div class="font-mono text-[10px] text-muted-foreground">1:00 – 2:00</div>
+                    </div>
+                    <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm hatch-conflict border-l-amber-500 ring-1 ring-inset ring-amber-500/40" style="top:416px;height:96px;left:6px;right:50%">
+                      <span class="inline-flex w-fit items-center justify-center gap-1 rounded-md border border-transparent bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" class="size-2.5"><path d="M8 1.6 1.2 13.6h13.6L8 1.6Z"/><line x1="8" y1="6.2" x2="8" y2="9.4"/><circle cx="8" cy="11.6" r="0.9" fill="currentColor" stroke="none"/></svg>Overlap</span>
+                      <div class="truncate text-xs font-semibold text-amber-700 dark:text-amber-300">Focus: scheduler spec</div>
+                      <div class="font-mono text-[10px] text-amber-700 dark:text-amber-300">2:30 – 4:00 · 90m</div>
+                    </div>
+                    <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm hatch-conflict border-l-amber-500 ring-1 ring-inset ring-amber-500/40" style="top:432px;height:80px;left:50%;right:6px">
+                      <span class="inline-flex w-fit items-center justify-center gap-1 rounded-md border border-transparent bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" class="size-2.5"><path d="M8 1.6 1.2 13.6h13.6L8 1.6Z"/><line x1="8" y1="6.2" x2="8" y2="9.4"/><circle cx="8" cy="11.6" r="0.9" fill="currentColor" stroke="none"/></svg>Overlap</span>
+                      <div class="truncate text-xs font-semibold text-amber-700 dark:text-amber-300">Sync w/ Marco</div>
+                      <div class="font-mono text-[10px] text-amber-700 dark:text-amber-300">2:45 – 4:00</div>
+                    </div>
+                    <div class="absolute inset-x-0 z-[6]" style="top:107px">
+                      <div class="border-t-2 border-brand-orange"></div>
+                      <div class="absolute -left-[5px] -top-[5px] size-[9px] rounded-full bg-brand-orange ring-4 ring-brand-orange/25"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="absolute top-0 right-0 bottom-0 w-3.5 z-[6] bg-card border-l border-border shadow-[-8px_0_18px_-10px_rgba(0,0,0,0.22)] flex flex-col gap-[7px] pt-[70px] pl-[3px] pointer-events-none">
+                <i class="block w-2.5 rounded h-[30px] bg-brand-orange/32"></i>
+                <i class="block w-2.5 rounded h-[48px] bg-brand-orange/26"></i>
+                <i class="block w-2.5 rounded h-[26px] bg-muted"></i>
+              </div>
+            </div>
+          </div>
+
+          <button class="absolute right-[18px] bottom-24 z-[35] size-[58px] rounded-[20px] inline-flex items-center justify-center bg-primary text-primary-foreground border border-primary/60 shadow-lg shadow-primary/40 [&_svg]:size-[26px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+
+          <div class="relative z-30 flex items-stretch px-2 pt-2 pb-[22px] bg-background/[0.82] backdrop-blur-[20px] backdrop-saturate-[1.4] border-t border-border/70">
+            <a class="flex-1 flex flex-col items-center gap-1 no-underline text-muted-foreground text-[10.5px] font-semibold [&_svg]:size-[23px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><rect x="7" y="13" width="6" height="4" rx="1" fill="currentColor" stroke="none"/></svg>Day</a>
+            <a class="flex-1 flex flex-col items-center gap-1 no-underline text-primary text-[10.5px] font-semibold [&_svg]:size-[23px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="9" x2="9" y2="21"/><line x1="15" y1="9" x2="15" y2="21"/></svg>Week</a>
+            <a class="flex-1 flex flex-col items-center gap-1 no-underline text-muted-foreground text-[10.5px] font-semibold [&_svg]:size-[23px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="9" y1="9" x2="9" y2="21"/><line x1="15" y1="9" x2="15" y2="21"/></svg>Month</a>
+            <a class="flex-1 flex flex-col items-center gap-1 no-underline text-muted-foreground text-[10.5px] font-semibold [&_svg]:size-[23px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a>
+          </div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============ GESTURES ============ -->
+  <div class="state-section"><h2>Swipe &amp; cross-day drag</h2><p>The two native gestures the web app lacked: horizontal page-swipe between days and dragging a block off the edge to reschedule to an adjacent day.</p></div>
+  <div class="gallery">
+
+    <!-- Swipe transition -->
+    <div class="frame">
+      <div class="caption"><span class="tag">Swipe transition</span><div class="sub">Wed Jul 1 parallaxing in; selection sliding</div></div>
+      <div class="device">
+        <div class="island"></div>
+        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
+          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
+          </span></div>
+
+          <div class="relative z-30 flex items-center gap-3 px-4 pt-1.5 pb-3.5 bg-background/80 backdrop-blur-[18px] backdrop-saturate-[1.4] border-b border-border/70">
+            <div><div class="text-[19px] font-bold tracking-[-0.02em]">June 2026</div><div class="text-[11.5px] text-muted-foreground font-medium mt-px">Jun 29 – Jul 5</div></div>
+            <div class="flex-1"></div>
+            <div class="inline-flex bg-muted border border-border rounded-[11px] p-[3px] gap-0.5"><button class="text-[13px] font-semibold text-muted-foreground border-0 bg-transparent px-3.5 py-1.5 rounded-lg">Day</button><button class="text-[13px] font-semibold text-foreground border-0 bg-card px-3.5 py-1.5 rounded-lg shadow-sm">Week</button><button class="text-[13px] font-semibold text-muted-foreground border-0 bg-transparent px-3.5 py-1.5 rounded-lg">Month</button></div>
+          </div>
+
+          <div class="flex-1 min-h-0 flex flex-col">
+            <div class="relative z-20 px-3 pt-1.5 pb-2 bg-background/80 backdrop-blur-[14px] backdrop-saturate-[1.3] border-b border-border/70">
+              <div class="flex gap-1.5 pt-1 pb-0.5">
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Mon</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">29</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Tue</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full bg-primary text-primary-foreground">30</div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl bg-muted"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Wed</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">1</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Thu</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">2</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Fri</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">3</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Sat</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">4</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Sun</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">5</span></div>
+              </div>
+            </div>
+
+            <div class="relative flex-1 min-h-0 overflow-hidden">
+              <!-- outgoing day (parallax + dimmed) -->
+              <div class="absolute inset-0 -translate-x-[9%] opacity-50">
+                <div class="h-full overflow-y-auto [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0"><div class="relative pt-1.5 pb-7">
+                  <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">8 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                  <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">9 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                  <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">10 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                  <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">11 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                  <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">12 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                  <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">1 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                  <div class="absolute left-14 right-[15px] top-1.5 bottom-0">
+                    <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm bg-muted/50 border-dashed border-l-muted-foreground/50" style="top:64px;height:48px"><div class="flex min-w-0 items-center gap-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3 shrink-0 text-muted-foreground"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><div class="truncate text-xs font-semibold">Daily standup</div></div></div>
+                    <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm glass-task border-l-primary" style="top:128px;height:96px"><div class="truncate text-xs font-semibold">Design review</div></div>
+                    <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm bg-muted/50 border-dashed border-l-muted-foreground/50" style="top:320px;height:64px"><div class="flex min-w-0 items-center gap-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3 shrink-0 text-muted-foreground"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><div class="truncate text-xs font-semibold">1:1 with Priya</div></div></div>
+                  </div>
+                </div></div>
+              </div>
+              <!-- incoming day (sliding in from the right) -->
+              <div class="absolute inset-0 translate-x-[72%] z-[8] bg-background border-l border-border shadow-[-16px_0_36px_-12px_rgba(0,0,0,0.32)]">
+                <div class="h-full overflow-y-auto [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0 pointer-events-none"><div class="relative pt-1.5 pb-7">
+                  <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">8 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                  <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">9 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                  <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">10 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                  <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">11 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                  <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">12 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                  <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">1 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                  <div class="absolute left-14 right-[15px] top-1.5 bottom-0">
+                    <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm bg-muted/50 border-dashed border-l-muted-foreground/50" style="top:64px;height:64px"><div class="flex min-w-0 items-center gap-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3 shrink-0 text-muted-foreground"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><div class="truncate text-xs font-semibold">Sprint planning</div></div></div>
+                    <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm glass-task border-l-primary" style="top:192px;height:80px"><div class="truncate text-xs font-semibold">Write RFC</div></div>
+                  </div>
+                </div></div>
+              </div>
+            </div>
+          </div>
+
+          <button class="absolute right-[18px] bottom-24 z-[35] size-[58px] rounded-[20px] inline-flex items-center justify-center bg-primary text-primary-foreground border border-primary/60 shadow-lg shadow-primary/40 [&_svg]:size-[26px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+          <div class="relative z-30 flex items-stretch px-2 pt-2 pb-[22px] bg-background/[0.82] backdrop-blur-[20px] backdrop-saturate-[1.4] border-t border-border/70">
+            <a class="flex-1 flex flex-col items-center gap-1 no-underline text-muted-foreground text-[10.5px] font-semibold [&_svg]:size-[23px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><rect x="7" y="13" width="6" height="4" rx="1" fill="currentColor" stroke="none"/></svg>Day</a>
+            <a class="flex-1 flex flex-col items-center gap-1 no-underline text-primary text-[10.5px] font-semibold [&_svg]:size-[23px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="9" x2="9" y2="21"/><line x1="15" y1="9" x2="15" y2="21"/></svg>Week</a>
+            <a class="flex-1 flex flex-col items-center gap-1 no-underline text-muted-foreground text-[10.5px] font-semibold [&_svg]:size-[23px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="9" y1="9" x2="9" y2="21"/><line x1="15" y1="9" x2="15" y2="21"/></svg>Month</a>
+            <a class="flex-1 flex flex-col items-center gap-1 no-underline text-muted-foreground text-[10.5px] font-semibold [&_svg]:size-[23px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a>
+          </div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cross-day drag -->
+    <div class="frame">
+      <div class="caption"><span class="tag">Cross-day drag</span><div class="sub">Lifted block at the edge → jumps to Wed Jul 1</div></div>
+      <div class="device">
+        <div class="island"></div>
+        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
+          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
+          </span></div>
+
+          <div class="relative z-30 flex items-center gap-3 px-4 pt-1.5 pb-3.5 bg-background/80 backdrop-blur-[18px] backdrop-saturate-[1.4] border-b border-border/70">
+            <div><div class="text-[19px] font-bold tracking-[-0.02em]">June 2026</div><div class="text-[11.5px] text-muted-foreground font-medium mt-px">Jun 29 – Jul 5</div></div>
+            <div class="flex-1"></div>
+            <div class="inline-flex bg-muted border border-border rounded-[11px] p-[3px] gap-0.5"><button class="text-[13px] font-semibold text-muted-foreground border-0 bg-transparent px-3.5 py-1.5 rounded-lg">Day</button><button class="text-[13px] font-semibold text-foreground border-0 bg-card px-3.5 py-1.5 rounded-lg shadow-sm">Week</button><button class="text-[13px] font-semibold text-muted-foreground border-0 bg-transparent px-3.5 py-1.5 rounded-lg">Month</button></div>
+          </div>
+
+          <div class="flex-1 min-h-0 flex flex-col">
+            <div class="relative z-20 px-3 pt-1.5 pb-2 bg-background/80 backdrop-blur-[14px] backdrop-saturate-[1.3] border-b border-border/70">
+              <div class="flex gap-1.5 pt-1 pb-0.5">
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Mon</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">29</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl bg-muted"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Tue</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full bg-primary text-primary-foreground">30</div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Wed</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">1</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Thu</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">2</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Fri</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">3</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Sat</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">4</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Sun</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">5</span></div>
+              </div>
+            </div>
+
+            <div class="relative flex-1 min-h-0 overflow-hidden">
+              <div class="h-full overflow-y-auto [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0"><div class="relative pt-1.5 pb-7">
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">8 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">9 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">10 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">11 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">12 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">1 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">2 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">3 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="absolute left-14 right-[15px] top-1.5 bottom-0">
+                  <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm bg-muted/50 border-dashed border-l-muted-foreground/50" style="top:64px;height:48px"><div class="flex min-w-0 items-center gap-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3 shrink-0 text-muted-foreground"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><div class="truncate text-xs font-semibold">Daily standup</div></div><div class="font-mono text-[10px] text-muted-foreground">9:00 – 9:45</div></div>
+                  <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm bg-muted/50 border-dashed border-l-muted-foreground/50" style="top:320px;height:64px"><div class="flex min-w-0 items-center gap-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3 shrink-0 text-muted-foreground"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><div class="truncate text-xs font-semibold">1:1 with Priya</div></div><div class="font-mono text-[10px] text-muted-foreground">1:00 – 2:00</div></div>
+                  <!-- the dragged block: lifted + nudged toward the right edge -->
+                  <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] glass-task border-l-primary z-20 rotate-1 scale-[1.02] shadow-xl" style="top:150px;height:96px;left:42px;right:-10px">
+                    <div class="truncate text-xs font-semibold">Design review</div>
+                    <div class="font-mono text-[10px] text-muted-foreground">10:30 – 12:00 · 90m</div>
+                  </div>
+                </div>
+              </div></div>
+              <div class="absolute top-0 bottom-0 right-0 w-14 z-[8] bg-gradient-to-r from-transparent to-brand-orange/34 pointer-events-none"></div>
+              <div class="absolute right-2.5 top-[130px] z-[12] inline-flex items-center gap-1.5 text-[11px] font-bold text-primary-foreground bg-brand-orange px-2.5 py-1.5 rounded-full shadow-lg shadow-brand-orange/40 [&_svg]:size-[13px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg> Wed, Jul 1</div>
+            </div>
+          </div>
+
+          <button class="absolute right-[18px] bottom-24 z-[35] size-[58px] rounded-[20px] inline-flex items-center justify-center bg-primary text-primary-foreground border border-primary/60 shadow-lg shadow-primary/40 [&_svg]:size-[26px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+          <div class="relative z-30 flex items-stretch px-2 pt-2 pb-[22px] bg-background/[0.82] backdrop-blur-[20px] backdrop-saturate-[1.4] border-t border-border/70">
+            <a class="flex-1 flex flex-col items-center gap-1 no-underline text-muted-foreground text-[10.5px] font-semibold [&_svg]:size-[23px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><rect x="7" y="13" width="6" height="4" rx="1" fill="currentColor" stroke="none"/></svg>Day</a>
+            <a class="flex-1 flex flex-col items-center gap-1 no-underline text-primary text-[10.5px] font-semibold [&_svg]:size-[23px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="9" x2="9" y2="21"/><line x1="15" y1="9" x2="15" y2="21"/></svg>Week</a>
+            <a class="flex-1 flex flex-col items-center gap-1 no-underline text-muted-foreground text-[10.5px] font-semibold [&_svg]:size-[23px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="9" y1="9" x2="9" y2="21"/><line x1="15" y1="9" x2="15" y2="21"/></svg>Month</a>
+            <a class="flex-1 flex flex-col items-center gap-1 no-underline text-muted-foreground text-[10.5px] font-semibold [&_svg]:size-[23px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a>
+          </div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============ EMPTY / LOADING ============ -->
+  <div class="state-section"><h2>Empty &amp; loading</h2><p>An empty day surfaces the long-press affordance directly on the timeline; the loading page renders a skeleton timeline while <code>GET /tasks</code> resolves.</p></div>
+  <div class="gallery">
+
+    <!-- Empty -->
+    <div class="frame">
+      <div class="caption"><span class="tag">Empty · Sat Jul 4</span><div class="sub">No tasks — "Long press to add" ghost hint</div></div>
+      <div class="device">
+        <div class="island"></div>
+        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
+          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
+          </span></div>
+
+          <div class="relative z-30 flex items-center gap-3 px-4 pt-1.5 pb-3.5 bg-background/80 backdrop-blur-[18px] backdrop-saturate-[1.4] border-b border-border/70">
+            <div><div class="text-[19px] font-bold tracking-[-0.02em]">June 2026</div><div class="text-[11.5px] text-muted-foreground font-medium mt-px">Jun 29 – Jul 5</div></div>
+            <div class="flex-1"></div>
+            <div class="inline-flex bg-muted border border-border rounded-[11px] p-[3px] gap-0.5"><button class="text-[13px] font-semibold text-muted-foreground border-0 bg-transparent px-3.5 py-1.5 rounded-lg">Day</button><button class="text-[13px] font-semibold text-foreground border-0 bg-card px-3.5 py-1.5 rounded-lg shadow-sm">Week</button><button class="text-[13px] font-semibold text-muted-foreground border-0 bg-transparent px-3.5 py-1.5 rounded-lg">Month</button></div>
+          </div>
+
+          <div class="flex-1 min-h-0 flex flex-col">
+            <div class="relative z-20 px-3 pt-1.5 pb-2 bg-background/80 backdrop-blur-[14px] backdrop-saturate-[1.3] border-b border-border/70">
+              <div class="flex gap-1.5 pt-1 pb-0.5">
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Mon</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">29</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Tue</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full bg-primary text-primary-foreground">30</div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Wed</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">1</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Thu</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">2</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Fri</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">3</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl bg-muted"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Sat</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">4</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Sun</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">5</span></div>
+              </div>
+            </div>
+
+            <div class="relative flex-1 min-h-0 overflow-hidden">
+              <div class="h-full overflow-y-auto [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0"><div class="relative pt-1.5 pb-7">
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">8 AM</span></div><div class="flex-1 border-t border-grid relative zone-weekend"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">9 AM</span></div><div class="flex-1 border-t border-grid relative zone-weekend"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">10 AM</span></div><div class="flex-1 border-t border-grid relative zone-weekend"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">11 AM</span></div><div class="flex-1 border-t border-grid relative zone-weekend"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">12 PM</span></div><div class="flex-1 border-t border-grid relative zone-weekend"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">1 PM</span></div><div class="flex-1 border-t border-grid relative zone-weekend"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">2 PM</span></div><div class="flex-1 border-t border-grid relative zone-weekend"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">3 PM</span></div><div class="flex-1 border-t border-grid relative zone-weekend"></div></div>
+              </div></div>
+              <div class="absolute left-[62px] right-5 top-[150px] h-14 rounded-xl border-[1.5px] border-dashed border-brand-orange/55 bg-brand-orange/[0.07] flex items-center justify-center gap-[7px] text-brand-orange text-[12.5px] font-semibold [&_svg]:size-[15px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Long-press to add a task</div>
+            </div>
+          </div>
+
+          <button class="absolute right-[18px] bottom-24 z-[35] size-[58px] rounded-[20px] inline-flex items-center justify-center bg-primary text-primary-foreground border border-primary/60 shadow-lg shadow-primary/40 [&_svg]:size-[26px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+          <div class="relative z-30 flex items-stretch px-2 pt-2 pb-[22px] bg-background/[0.82] backdrop-blur-[20px] backdrop-saturate-[1.4] border-t border-border/70">
+            <a class="flex-1 flex flex-col items-center gap-1 no-underline text-muted-foreground text-[10.5px] font-semibold [&_svg]:size-[23px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><rect x="7" y="13" width="6" height="4" rx="1" fill="currentColor" stroke="none"/></svg>Day</a>
+            <a class="flex-1 flex flex-col items-center gap-1 no-underline text-primary text-[10.5px] font-semibold [&_svg]:size-[23px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="9" x2="9" y2="21"/><line x1="15" y1="9" x2="15" y2="21"/></svg>Week</a>
+            <a class="flex-1 flex flex-col items-center gap-1 no-underline text-muted-foreground text-[10.5px] font-semibold [&_svg]:size-[23px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="9" y1="9" x2="9" y2="21"/><line x1="15" y1="9" x2="15" y2="21"/></svg>Month</a>
+            <a class="flex-1 flex flex-col items-center gap-1 no-underline text-muted-foreground text-[10.5px] font-semibold [&_svg]:size-[23px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a>
+          </div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading skeleton -->
+    <div class="frame">
+      <div class="caption"><span class="tag">Loading</span><div class="sub">Skeleton timeline while tasks fetch</div></div>
+      <div class="device">
+        <div class="island"></div>
+        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
+          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
+          </span></div>
+
+          <div class="relative z-30 flex items-center gap-3 px-4 pt-1.5 pb-3.5 bg-background/80 backdrop-blur-[18px] backdrop-saturate-[1.4] border-b border-border/70">
+            <div><div class="text-[19px] font-bold tracking-[-0.02em]">June 2026</div><div class="text-[11.5px] text-muted-foreground font-medium mt-px">Jun 29 – Jul 5</div></div>
+            <div class="flex-1"></div>
+            <div class="inline-flex bg-muted border border-border rounded-[11px] p-[3px] gap-0.5"><button class="text-[13px] font-semibold text-muted-foreground border-0 bg-transparent px-3.5 py-1.5 rounded-lg">Day</button><button class="text-[13px] font-semibold text-foreground border-0 bg-card px-3.5 py-1.5 rounded-lg shadow-sm">Week</button><button class="text-[13px] font-semibold text-muted-foreground border-0 bg-transparent px-3.5 py-1.5 rounded-lg">Month</button></div>
+          </div>
+
+          <div class="flex-1 min-h-0 flex flex-col">
+            <div class="relative z-20 px-3 pt-1.5 pb-2 bg-background/80 backdrop-blur-[14px] backdrop-saturate-[1.3] border-b border-border/70">
+              <div class="flex gap-1.5 pt-1 pb-0.5">
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Mon</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">29</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl bg-muted"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Tue</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full bg-primary text-primary-foreground">30</div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Wed</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">1</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Thu</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">2</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Fri</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">3</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Sat</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">4</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Sun</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">5</span></div>
+              </div>
+            </div>
+
+            <div class="relative flex-1 min-h-0 overflow-hidden">
+              <div class="h-full overflow-y-auto [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0"><div class="relative pt-1.5 pb-7">
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">8 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">9 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">10 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">11 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">12 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">1 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">2 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">3 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="absolute left-14 right-[15px] top-1.5 bottom-0">
+                  <div class="bg-muted animate-pulse rounded-xl" style="position:absolute;top:8px;height:46px;left:0;right:0"></div>
+                  <div class="bg-muted animate-pulse rounded-xl" style="position:absolute;top:128px;height:88px;left:0;right:0"></div>
+                  <div class="bg-muted animate-pulse rounded-xl" style="position:absolute;top:300px;height:60px;left:0;right:0"></div>
+                  <div class="bg-muted animate-pulse rounded-xl" style="position:absolute;top:392px;height:74px;left:0;right:0"></div>
+                </div>
+              </div></div>
+            </div>
+          </div>
+
+          <button class="absolute right-[18px] bottom-24 z-[35] size-[58px] rounded-[20px] inline-flex items-center justify-center bg-primary text-primary-foreground border border-primary/60 shadow-lg shadow-primary/40 [&_svg]:size-[26px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+          <div class="relative z-30 flex items-stretch px-2 pt-2 pb-[22px] bg-background/[0.82] backdrop-blur-[20px] backdrop-saturate-[1.4] border-t border-border/70">
+            <a class="flex-1 flex flex-col items-center gap-1 no-underline text-muted-foreground text-[10.5px] font-semibold [&_svg]:size-[23px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><rect x="7" y="13" width="6" height="4" rx="1" fill="currentColor" stroke="none"/></svg>Day</a>
+            <a class="flex-1 flex flex-col items-center gap-1 no-underline text-primary text-[10.5px] font-semibold [&_svg]:size-[23px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="9" x2="9" y2="21"/><line x1="15" y1="9" x2="15" y2="21"/></svg>Week</a>
+            <a class="flex-1 flex flex-col items-center gap-1 no-underline text-muted-foreground text-[10.5px] font-semibold [&_svg]:size-[23px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="9" y1="9" x2="9" y2="21"/><line x1="15" y1="9" x2="15" y2="21"/></svg>Month</a>
+            <a class="flex-1 flex flex-col items-center gap-1 no-underline text-muted-foreground text-[10.5px] font-semibold [&_svg]:size-[23px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a>
+          </div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============ DARK ============ -->
+  <div class="state-section"><h2>Dark</h2><p>Same focused-day layout under the dark "Warm Sunrise" tokens — calmer borders, amber accent retained.</p></div>
+  <div class="gallery">
+
+    <div class="frame">
+      <div class="caption"><span class="tag dark-tag">Dark · Tue Jun 30</span><div class="sub">Normal week, dark theme</div></div>
+      <div class="device dark">
+        <div class="island"></div>
+        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground dark">
+          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+            <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor"><path d="M8.5 2.5c2.3 0 4.4.9 6 2.4l1.2-1.3A10.4 10.4 0 0 0 8.5.8 10.4 10.4 0 0 0 1.3 3.6L2.5 4.9A8.4 8.4 0 0 1 8.5 2.5Z"/><path d="M8.5 6c1.3 0 2.5.5 3.4 1.4l1.2-1.3A6.4 6.4 0 0 0 8.5 4.2 6.4 6.4 0 0 0 4 6.1l1.2 1.3A4.4 4.4 0 0 1 8.5 6Z"/><circle cx="8.5" cy="10" r="1.6"/></svg>
+            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
+          </span></div>
+
+          <div class="relative z-30 flex items-center gap-3 px-4 pt-1.5 pb-3.5 bg-background/80 backdrop-blur-[18px] backdrop-saturate-[1.4] border-b border-border/70">
+            <div><div class="text-[19px] font-bold tracking-[-0.02em]">June 2026</div><div class="text-[11.5px] text-muted-foreground font-medium mt-px">Jun 29 – Jul 5</div></div>
+            <div class="flex-1"></div>
+            <div class="inline-flex bg-muted border border-border rounded-[11px] p-[3px] gap-0.5"><button class="text-[13px] font-semibold text-muted-foreground border-0 bg-transparent px-3.5 py-1.5 rounded-lg">Day</button><button class="text-[13px] font-semibold text-foreground border-0 bg-card px-3.5 py-1.5 rounded-lg shadow-sm">Week</button><button class="text-[13px] font-semibold text-muted-foreground border-0 bg-transparent px-3.5 py-1.5 rounded-lg">Month</button></div>
+          </div>
+
+          <div class="flex-1 min-h-0 flex flex-col">
+            <div class="relative z-20 px-3 pt-1.5 pb-2 bg-background/80 backdrop-blur-[14px] backdrop-saturate-[1.3] border-b border-border/70">
+              <div class="flex gap-1.5 pt-1 pb-0.5">
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Mon</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">29</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl bg-muted"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Tue</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full bg-primary text-primary-foreground">30</div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Wed</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">1</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Thu</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">2</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Fri</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">3</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Sat</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">4</span></div>
+                <div class="flex-1 flex flex-col items-center gap-1 py-1.5 rounded-xl"><span class="text-[10.5px] font-semibold text-muted-foreground uppercase">Sun</span><span class="text-base font-semibold w-[30px] h-[30px] flex items-center justify-center rounded-full">5</span></div>
+              </div>
+            </div>
+
+            <div class="relative flex-1 min-h-0 overflow-hidden">
+              <div class="h-full overflow-y-auto [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0"><div class="relative pt-1.5 pb-7">
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">8 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">9 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">10 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">11 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">12 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">1 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">2 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">3 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">4 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">5 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="absolute left-14 right-[15px] top-1.5 bottom-0">
+                  <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm bg-muted/60 border-l-success/60" style="top:0;height:32px"><div class="truncate shrink-0 text-xs font-semibold text-muted-foreground line-through">Email triage</div></div>
+                  <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm bg-muted/50 border-dashed border-l-muted-foreground/50" style="top:64px;height:48px"><div class="flex min-w-0 items-center gap-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3 shrink-0 text-muted-foreground"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><div class="truncate text-xs font-semibold">Daily standup</div></div><div class="font-mono text-[10px] text-muted-foreground">9:00 – 9:45</div></div>
+                  <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm glass-task border-l-primary" style="top:128px;height:96px"><div class="truncate text-xs font-semibold">Design review</div><div class="font-mono text-[10px] text-muted-foreground">10:00 – 11:30 · 90m</div></div>
+                  <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm bg-muted/50 border-dashed border-l-muted-foreground/50" style="top:320px;height:64px"><div class="flex min-w-0 items-center gap-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-3 shrink-0 text-muted-foreground"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><div class="truncate text-xs font-semibold">1:1 with Priya</div></div><div class="font-mono text-[10px] text-muted-foreground">1:00 – 2:00</div></div>
+                  <div class="absolute inset-x-0 z-[6]" style="top:107px">
+                    <div class="border-t-2 border-brand-orange"></div>
+                    <div class="absolute -left-[5px] -top-[5px] size-[9px] rounded-full bg-brand-orange ring-4 ring-brand-orange/25"></div>
+                  </div>
+                </div>
+              </div></div>
+              <div class="absolute top-0 right-0 bottom-0 w-3.5 z-[6] bg-card border-l border-border shadow-[-8px_0_18px_-10px_rgba(0,0,0,0.22)] flex flex-col gap-[7px] pt-[70px] pl-[3px] pointer-events-none">
+                <i class="block w-2.5 rounded h-[30px] bg-brand-orange/32"></i>
+                <i class="block w-2.5 rounded h-[48px] bg-brand-orange/26"></i>
+                <i class="block w-2.5 rounded h-[26px] bg-muted"></i>
+              </div>
+            </div>
+          </div>
+
+          <button class="absolute right-[18px] bottom-24 z-[35] size-[58px] rounded-[20px] inline-flex items-center justify-center bg-primary text-primary-foreground border border-primary/60 shadow-lg shadow-primary/40 [&_svg]:size-[26px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+          <div class="relative z-30 flex items-stretch px-2 pt-2 pb-[22px] bg-background/[0.82] backdrop-blur-[20px] backdrop-saturate-[1.4] border-t border-border/70">
+            <a class="flex-1 flex flex-col items-center gap-1 no-underline text-muted-foreground text-[10.5px] font-semibold [&_svg]:size-[23px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><rect x="7" y="13" width="6" height="4" rx="1" fill="currentColor" stroke="none"/></svg>Day</a>
+            <a class="flex-1 flex flex-col items-center gap-1 no-underline text-primary text-[10.5px] font-semibold [&_svg]:size-[23px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="9" x2="9" y2="21"/><line x1="15" y1="9" x2="15" y2="21"/></svg>Week</a>
+            <a class="flex-1 flex flex-col items-center gap-1 no-underline text-muted-foreground text-[10.5px] font-semibold [&_svg]:size-[23px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="9" y1="9" x2="9" y2="21"/><line x1="15" y1="9" x2="15" y2="21"/></svg>Month</a>
+            <a class="flex-1 flex flex-col items-center gap-1 no-underline text-muted-foreground text-[10.5px] font-semibold [&_svg]:size-[23px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a>
+          </div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>
