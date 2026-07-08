@@ -174,7 +174,7 @@ and complete telemetry.
   intervals and any deadline; and **(2) schedule the next available period** — the earliest
   work-hours slot in the **next** day/week/month (per the active view), this time ignoring the
   deadline. Both are recomputed server-side (period-aware, from the stored anchor + view) when
-  the user accepts one, then the task is pinned as a fixed anchor
+  the user accepts one, then the task is pinned as manually-moved
   (`PATCH /tasks/:id/resolve-overflow`). Each option is still deadline-aware telemetry: the
   override is recorded as a MOVE event.
 - **Data Foundation:** Implement the `task_events` audit table in PostgreSQL. Multi-tag

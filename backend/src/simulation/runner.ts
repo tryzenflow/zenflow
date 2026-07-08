@@ -232,9 +232,7 @@ function toReactionTask(spec: TaskSpec): ReactionTask {
   return {
     tags: spec.tags,
     deadline: spec.input.deadline ? new Date(spec.input.deadline) : null,
-    // Simulation always supplies durationMinutes; non-null assert matches the
-    // CreateTaskInput change that made it optional (for the endTime path).
-    durationMinutes: spec.input.durationMinutes!,
+    durationMinutes: spec.input.durationMinutes,
     trueDurationMinutes: spec.trueDurationMinutes,
   };
 }
@@ -323,7 +321,7 @@ async function drivePersona(
       // (a human creates, then nudges — never simultaneously).
       let actionAt = laterThan(arriveAt, rng);
       let currentStart = suggested;
-      let currentDur = spec.input.durationMinutes!;
+      let currentDur = spec.input.durationMinutes;
 
       const feasible = await act.feasible(taskId, actionAt);
       // Score against the drifted field for this point in the span so slow
@@ -596,16 +594,12 @@ class ServiceActuator implements Actuator {
       where: { userId: this.persona.userId, status: "PENDING" },
     });
     const occupied = occupiedOf(others, task.id);
-    const earliest = task.deadline
-      ? undefined
-      : (task.schedulingAnchor ?? undefined);
     return feasibleSlots(
       this.persona.prefs,
       task.durationMinutes,
       task.deadline,
       occupied,
       now,
-      earliest,
     );
   }
 

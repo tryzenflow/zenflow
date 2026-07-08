@@ -6,9 +6,9 @@ import {
   hasElapsed,
   isPast,
   scheduleAll,
+  type ScheduleScope,
   type SchedulerPrefs,
 } from "./edf";
-import { endOfPeriod } from "./horizon";
 
 const prefs: SchedulerPrefs = {
   workStart: 540, // 09:00
@@ -23,9 +23,7 @@ const MON_MIDNIGHT = new Date("2026-06-08T00:00:00Z");
 const task = (over: Partial<EdfTask> & Pick<EdfTask, "id">): EdfTask => ({
   durationMinutes: 60,
   deadline: null,
-  fixed: false,
   manuallyMoved: false,
-  schedulingAnchor: null,
   scheduledStartTime: null,
   createdAt: MON_MIDNIGHT,
   conflict: false,
@@ -96,6 +94,16 @@ describe("findSlot", () => {
       new Date("2026-06-13T00:00:00Z"), // Saturday
     );
     expect(iso(slot)).toBe("2026-06-15T09:00:00.000Z");
+  });
+
+  it("finds a slot for a no-deadline task on a completely empty day (todo.md bug #8)", () => {
+    // Regression: an artificial per-task period ceiling (derived from the now-
+    // removed schedulingAnchor/view) used to be able to produce an empty
+    // feasible window even on a visibly-empty day. With that ceiling gone, a
+    // no-deadline task on an empty day must always find a slot.
+    const slot = findSlot(prefs, 60, null, [], MON_MIDNIGHT);
+    expect(slot).not.toBeNull();
+    expect(iso(slot)).toBe("2026-06-08T09:00:00.000Z");
   });
 });
 
@@ -270,13 +278,13 @@ describe("scheduleAll", () => {
     expect(iso(byId("a").scheduledStartTime)).toBe("2026-06-08T10:00:00.000Z");
   });
 
-  it("routes flexible tasks around fixed anchors", () => {
+  it("routes flexible tasks around manually-moved anchors", () => {
     const out = scheduleAll(
       prefs,
       [
         task({
-          id: "fixed",
-          fixed: true,
+          id: "anchor",
+          manuallyMoved: true,
           scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
         }),
         task({ id: "flex" }),
@@ -284,7 +292,7 @@ describe("scheduleAll", () => {
       MON_MIDNIGHT,
     );
     const byId = (id: string) => out.find((p) => p.id === id)!;
-    expect(iso(byId("fixed").scheduledStartTime)).toBe(
+    expect(iso(byId("anchor").scheduledStartTime)).toBe(
       "2026-06-08T09:00:00.000Z",
     );
     expect(iso(byId("flex").scheduledStartTime)).toBe(
@@ -434,7 +442,7 @@ describe("scheduleAll — deadline-aware cascade (closer deadlines win)", () => 
     expect(iso(out[0].scheduledStartTime)).toBe("2026-06-08T09:00:00.000Z");
   });
 
-  it("still anchors fixed and past tasks while EDF-packing the rest", () => {
+  it("still anchors manually-moved and past tasks while EDF-packing the rest", () => {
     const NOON = new Date("2026-06-08T12:00:00Z");
     const out = scheduleAll(
       prefs,
@@ -444,13 +452,13 @@ describe("scheduleAll — deadline-aware cascade (closer deadlines win)", () => 
           id: "past",
           scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
         }),
-        // Fixed at 15:00 — anchored.
+        // Manually-moved at 15:00 — anchored.
         task({
-          id: "fixed",
-          fixed: true,
+          id: "manual",
+          manuallyMoved: true,
           scheduledStartTime: new Date("2026-06-08T15:00:00Z"),
         }),
-        // Flexible packs from noon, around the fixed block.
+        // Flexible packs from noon, around the manually-moved block.
         task({ id: "flex" }),
       ],
       NOON,
@@ -459,10 +467,10 @@ describe("scheduleAll — deadline-aware cascade (closer deadlines win)", () => 
     expect(iso(byId("past").scheduledStartTime)).toBe(
       "2026-06-08T09:00:00.000Z",
     );
-    expect(iso(byId("fixed").scheduledStartTime)).toBe(
+    expect(iso(byId("manual").scheduledStartTime)).toBe(
       "2026-06-08T15:00:00.000Z",
     );
-    expect(byId("fixed").conflict).toBe(false);
+    expect(byId("manual").conflict).toBe(false);
     expect(iso(byId("flex").scheduledStartTime)).toBe(
       "2026-06-08T12:00:00.000Z",
     );
@@ -470,8 +478,8 @@ describe("scheduleAll — deadline-aware cascade (closer deadlines win)", () => 
 });
 
 describe("scheduleAll — overlapping anchors are flagged as conflicts", () => {
-  it("flags BOTH a fixed task and the placed task it overlaps", () => {
-    // "placed" was auto-scheduled at 09:00–10:00; a fixed task lands at
+  it("flags BOTH manually-moved anchors that overlap", () => {
+    // "placed" was dragged to 09:00–10:00; another manually-moved task lands at
     // 09:30–10:30, overlapping it. Both must surface as conflicts.
     const out = scheduleAll(
       prefs,
@@ -482,18 +490,18 @@ describe("scheduleAll — overlapping anchors are flagged as conflicts", () => {
           scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
         }),
         task({
-          id: "fixed",
-          fixed: true,
+          id: "other",
+          manuallyMoved: true,
           scheduledStartTime: new Date("2026-06-08T09:30:00Z"),
         }),
       ],
       MON_MIDNIGHT,
     );
     const byId = (id: string) => out.find((p) => p.id === id)!;
-    expect(byId("fixed").conflict).toBe(true);
+    expect(byId("other").conflict).toBe(true);
     expect(byId("placed").conflict).toBe(true);
     // Neither anchor is moved off its stored slot.
-    expect(iso(byId("fixed").scheduledStartTime)).toBe(
+    expect(iso(byId("other").scheduledStartTime)).toBe(
       "2026-06-08T09:30:00.000Z",
     );
     expect(iso(byId("placed").scheduledStartTime)).toBe(
@@ -501,48 +509,26 @@ describe("scheduleAll — overlapping anchors are flagged as conflicts", () => {
     );
   });
 
-  it("flags two overlapping fixed tasks on both sides", () => {
+  it("keeps a manually-moved task in a free slot conflict:false", () => {
     const out = scheduleAll(
       prefs,
       [
         task({
-          id: "f1",
-          fixed: true,
+          id: "a",
+          manuallyMoved: true,
           scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
         }),
         task({
-          id: "f2",
-          fixed: true,
-          scheduledStartTime: new Date("2026-06-08T09:30:00Z"),
-        }),
-      ],
-      MON_MIDNIGHT,
-    );
-    const byId = (id: string) => out.find((p) => p.id === id)!;
-    expect(byId("f1").conflict).toBe(true);
-    expect(byId("f2").conflict).toBe(true);
-  });
-
-  it("keeps a fixed task in a free slot conflict:false", () => {
-    const out = scheduleAll(
-      prefs,
-      [
-        task({
-          id: "fixed",
-          fixed: true,
-          scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
-        }),
-        task({
-          id: "other",
-          fixed: true,
+          id: "b",
+          manuallyMoved: true,
           scheduledStartTime: new Date("2026-06-08T11:00:00Z"),
         }),
       ],
       MON_MIDNIGHT,
     );
     const byId = (id: string) => out.find((p) => p.id === id)!;
-    expect(byId("fixed").conflict).toBe(false);
-    expect(byId("other").conflict).toBe(false);
+    expect(byId("a").conflict).toBe(false);
+    expect(byId("b").conflict).toBe(false);
   });
 
   it("clears the conflict once the overlapping task is moved away (self-heal)", () => {
@@ -558,8 +544,8 @@ describe("scheduleAll — overlapping anchors are flagged as conflicts", () => {
           scheduledStartTime: new Date("2026-06-08T14:00:00Z"),
         }),
         task({
-          id: "fixed",
-          fixed: true,
+          id: "other",
+          manuallyMoved: true,
           conflict: true, // stale verdict from the previous overlap
           scheduledStartTime: new Date("2026-06-08T09:30:00Z"),
         }),
@@ -567,15 +553,15 @@ describe("scheduleAll — overlapping anchors are flagged as conflicts", () => {
       MON_MIDNIGHT,
     );
     const byId = (id: string) => out.find((p) => p.id === id)!;
-    expect(byId("fixed").conflict).toBe(false);
+    expect(byId("other").conflict).toBe(false);
     expect(byId("placed").conflict).toBe(false);
   });
 
   it("does not flag non-overlapping past and future tasks (no false positive)", () => {
-    // now = noon. A past block (09:00–10:00) and a future fixed task (13:00) do
-    // NOT overlap in time, so neither is flagged. Detection is now-independent
-    // but it is still pure interval overlap — separated tasks stay clean
-    // regardless of which side of `now` they sit on.
+    // now = noon. A past block (09:00–10:00) and a future manually-moved task
+    // (13:00) do NOT overlap in time, so neither is flagged. Detection is
+    // now-independent but it is still pure interval overlap — separated tasks
+    // stay clean regardless of which side of `now` they sit on.
     const NOON = new Date("2026-06-08T12:00:00Z");
     const out = scheduleAll(
       prefs,
@@ -585,8 +571,8 @@ describe("scheduleAll — overlapping anchors are flagged as conflicts", () => {
           scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
         }),
         task({
-          id: "futureFixed",
-          fixed: true,
+          id: "futureAnchor",
+          manuallyMoved: true,
           scheduledStartTime: new Date("2026-06-08T13:00:00Z"),
         }),
       ],
@@ -594,18 +580,18 @@ describe("scheduleAll — overlapping anchors are flagged as conflicts", () => {
     );
     const byId = (id: string) => out.find((p) => p.id === id)!;
     expect(byId("past").conflict).toBe(false);
-    expect(byId("futureFixed").conflict).toBe(false);
+    expect(byId("futureAnchor").conflict).toBe(false);
   });
 
-  it("never places a flexible task onto a fixed anchor (no overlap created)", () => {
-    // A fixed task occupies 09:00–10:00; a flexible no-deadline task must pack
-    // around it at 10:00 and stay conflict-free.
+  it("never places a flexible task onto a manually-moved anchor (no overlap created)", () => {
+    // A manually-moved task occupies 09:00–10:00; a flexible no-deadline task
+    // must pack around it at 10:00 and stay conflict-free.
     const out = scheduleAll(
       prefs,
       [
         task({
-          id: "fixed",
-          fixed: true,
+          id: "anchor",
+          manuallyMoved: true,
           scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
         }),
         task({ id: "flex" }),
@@ -617,305 +603,7 @@ describe("scheduleAll — overlapping anchors are flagged as conflicts", () => {
       "2026-06-08T10:00:00.000Z",
     );
     expect(byId("flex").conflict).toBe(false);
-    expect(byId("fixed").conflict).toBe(false);
-  });
-});
-
-describe("scheduleAll — per-task scheduling floor (create-day anchor)", () => {
-  it("anchors a no-deadline task to its FUTURE create day, never back-filling earlier", () => {
-    // "anchored" was created while viewing Wed 06-10; with no deadline it must
-    // land at the start of that day, NOT be packed at the first free slot from
-    // now (Mon 06-08). The deadline-bearing "urgent" packs from now regardless.
-    const out = scheduleAll(
-      prefs,
-      [
-        task({
-          id: "anchored",
-          schedulingAnchor: new Date("2026-06-10T00:00:00Z"), // Wed
-        }),
-        task({
-          id: "urgent",
-          deadline: new Date("2026-06-09T17:00:00Z"), // Tue
-        }),
-      ],
-      MON_MIDNIGHT,
-    );
-    const byId = (id: string) => out.find((p) => p.id === id)!;
-    expect(iso(byId("urgent").scheduledStartTime)).toBe(
-      "2026-06-08T09:00:00.000Z",
-    );
-    expect(iso(byId("anchored").scheduledStartTime)).toBe(
-      "2026-06-10T09:00:00.000Z",
-    );
-  });
-
-  it("a deadline-bearing task IGNORES its anchor and packs from now by EDF", () => {
-    // Even with a future create-day anchor, the presence of a deadline switches
-    // the task to pure urgency: scheduled as early as possible from now.
-    const out = scheduleAll(
-      prefs,
-      [
-        task({
-          id: "withDeadline",
-          deadline: new Date("2026-06-12T17:00:00Z"),
-          schedulingAnchor: new Date("2026-06-10T00:00:00Z"), // future — ignored
-        }),
-      ],
-      MON_MIDNIGHT,
-    );
-    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-08T09:00:00.000Z");
-  });
-
-  it("clamps a PAST anchor up to now (no scheduling in the past)", () => {
-    // now = Wed 06-10 11:00; the anchor (Mon 06-08) is past, so the floor
-    // collapses to now and the task packs from the next slot at/after now.
-    const out = scheduleAll(
-      prefs,
-      [
-        task({
-          id: "stale",
-          schedulingAnchor: new Date("2026-06-08T00:00:00Z"), // Mon (past)
-        }),
-      ],
-      new Date("2026-06-10T11:00:00Z"),
-    );
-    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-10T11:00:00.000Z");
-  });
-
-  it("a null anchor floors at now (no day-pinning)", () => {
-    const out = scheduleAll(prefs, [task({ id: "n" })], MON_MIDNIGHT);
-    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-08T09:00:00.000Z");
-  });
-});
-
-describe("scheduleAll — period ceiling (schedulingDeadline) for no-deadline tasks", () => {
-  // Period end (exclusive) of Tue 06-09 day view, UTC: Wed 06-10 00:00.
-  const WED_MIDNIGHT = new Date("2026-06-10T00:00:00Z");
-  // It is 23:00 Tue: the day's 09:00–17:00 work window is already over.
-  const TUE_11PM = new Date("2026-06-09T23:00:00Z");
-
-  it("leaves a no-deadline task UNPLACED when it can't fit the period's work hours", () => {
-    // Created 23:00 Tue, anchored on Tue, ceilinged at the end of Tue. There is
-    // no working-hours slot left before the period ends → unplaced + conflict,
-    // NOT silently rolled to Wed 09:00.
-    const out = scheduleAll(
-      prefs,
-      [
-        task({
-          id: "overflow",
-          schedulingAnchor: new Date("2026-06-09T00:00:00Z"),
-          schedulingDeadline: WED_MIDNIGHT,
-        }),
-      ],
-      TUE_11PM,
-    );
-    expect(out[0].scheduledStartTime).toBeNull();
-    expect(out[0].conflict).toBe(true);
-  });
-
-  it("STAYS unplaced on a second scheduleAll (stability across cascades)", () => {
-    // The period bound lives in the scheduling logic, so re-packing (triggered by
-    // any later create/delete/complete) must NOT silently re-place it.
-    const tasks = [
-      task({
-        id: "overflow",
-        schedulingAnchor: new Date("2026-06-09T00:00:00Z"),
-        schedulingDeadline: WED_MIDNIGHT,
-      }),
-    ];
-    const first = scheduleAll(prefs, tasks, TUE_11PM);
-    const second = scheduleAll(prefs, tasks, TUE_11PM);
-    expect(first[0].scheduledStartTime).toBeNull();
-    expect(second[0].scheduledStartTime).toBeNull();
-  });
-
-  it("PLACES a no-deadline task that DOES fit within its period", () => {
-    // Created Tue morning (anchor Tue), ceilinged at end of Tue. now is Tue
-    // 09:00, so the work window is open → lands at Tue 09:00.
-    const out = scheduleAll(
-      prefs,
-      [
-        task({
-          id: "fits",
-          schedulingAnchor: new Date("2026-06-09T00:00:00Z"),
-          schedulingDeadline: WED_MIDNIGHT,
-        }),
-      ],
-      new Date("2026-06-09T09:00:00Z"),
-    );
-    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-09T09:00:00.000Z");
-    expect(out[0].conflict).toBe(false);
-  });
-
-  it("a no-deadline task with a WEEK ceiling rolls within the week but not past it", () => {
-    // Anchor Tue, week ceiling = next Mon 06-15 00:00. now Tue 23:00 → Tue's work
-    // window is over, but Wed 06-10 09:00 is still inside the week → placed there.
-    const out = scheduleAll(
-      prefs,
-      [
-        task({
-          id: "weekly",
-          schedulingAnchor: new Date("2026-06-09T00:00:00Z"),
-          schedulingDeadline: new Date("2026-06-15T00:00:00Z"),
-        }),
-      ],
-      TUE_11PM,
-    );
-    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-10T09:00:00.000Z");
-  });
-
-  it("a USER deadline takes precedence over the period ceiling (unchanged)", () => {
-    // A deadline-bearing task ignores the anchor floor AND uses its deadline as
-    // the ceiling, not schedulingDeadline — byte-for-byte the old behavior: it
-    // packs from now by EDF urgency.
-    const out = scheduleAll(
-      prefs,
-      [
-        task({
-          id: "withDeadline",
-          deadline: new Date("2026-06-12T17:00:00Z"),
-          schedulingAnchor: new Date("2026-06-09T00:00:00Z"),
-          schedulingDeadline: new Date("2026-06-10T00:00:00Z"), // ignored
-        }),
-      ],
-      MON_MIDNIGHT,
-    );
-    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-08T09:00:00.000Z");
-  });
-
-  it("an absent schedulingDeadline is unbounded (legacy no-deadline behavior)", () => {
-    // No ceiling → the no-deadline task rolls forward to the next free working
-    // slot as before. Created 23:00 Tue with no ceiling → Wed 06-10 09:00.
-    const out = scheduleAll(
-      prefs,
-      [
-        task({
-          id: "legacy",
-          schedulingAnchor: new Date("2026-06-09T00:00:00Z"),
-        }),
-      ],
-      TUE_11PM,
-    );
-    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-10T09:00:00.000Z");
-  });
-
-  it("schedules a period-bounded task BEFORE an unbounded legacy task (Fix 3)", () => {
-    // The period-bounded task has schedulingDeadline = end-of-week, giving it a
-    // real urgency rank. The unbounded task has no ceiling (Infinity rank). EDF
-    // must schedule the bounded one first so it claims the earlier slot — if the
-    // unbounded task went first it might push the bounded task past its ceiling.
-    const out = scheduleAll(
-      prefs,
-      [
-        task({
-          id: "unbounded",
-          schedulingAnchor: new Date("2026-06-08T00:00:00Z"),
-          // no schedulingDeadline — sorts at Infinity
-        }),
-        task({
-          id: "bounded",
-          schedulingAnchor: new Date("2026-06-08T00:00:00Z"),
-          schedulingDeadline: new Date("2026-06-15T00:00:00Z"), // end of week
-        }),
-      ],
-      MON_MIDNIGHT,
-    );
-    const byId = (id: string) => out.find((p) => p.id === id)!;
-    // "bounded" wins the earlier slot because its effective deadline sorts first.
-    expect(iso(byId("bounded").scheduledStartTime)).toBe(
-      "2026-06-08T09:00:00.000Z",
-    );
-    expect(iso(byId("unbounded").scheduledStartTime)).toBe(
-      "2026-06-08T10:00:00.000Z",
-    );
-  });
-});
-
-describe("scheduleAll — cross-day single task for a wrapping work window", () => {
-  // Night owl: 22:00 → 06:00, Mon–Fri (the day the shift STARTS).
-  const owl: SchedulerPrefs = {
-    workStart: 1320, // 22:00
-    workEnd: 360, // 06:00
-    workDays: [1, 2, 3, 4, 5],
-    timezone: "UTC",
-  };
-  // The create-day anchor (start-of-day Mon 06-08, the shift's start day).
-  const MON_ANCHOR = new Date("2026-06-08T00:00:00Z");
-  // The day-view ceiling the SERVICE would compute for this anchor: not bare
-  // Tue 00:00 but Tue 06:00 (workEnd the next morning) for the wrapping window.
-  const dayCeiling = endOfPeriod(MON_ANCHOR, "day", owl.timezone, {
-    workStart: owl.workStart,
-    workEnd: owl.workEnd,
-  });
-
-  it("places a 4h task at 22:00 as ONE block crossing midnight (ends 02:00)", () => {
-    // The repro: a 240-min no-deadline task in day view. With the extended
-    // ceiling (Tue 06:00) the single 22:00→02:00 block fits the post-midnight
-    // tail — one row, one start, duration unchanged.
-    expect(iso(dayCeiling)).toBe("2026-06-09T06:00:00.000Z");
-    const out = scheduleAll(
-      owl,
-      [
-        task({
-          id: "owl",
-          durationMinutes: 240,
-          schedulingAnchor: MON_ANCHOR,
-          schedulingDeadline: dayCeiling,
-        }),
-      ],
-      MON_ANCHOR,
-    );
-    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-08T22:00:00.000Z");
-    expect(out[0].conflict).toBe(false);
-  });
-
-  it("would be UNPLACED under the old bare-00:00 day ceiling (regression guard)", () => {
-    // Same task, but ceilinged at Tue 00:00 (the pre-fix day ceiling): the
-    // 22:00→02:00 block overshoots midnight → no slot → unplaced. This is the
-    // exact behavior the extended ceiling fixes.
-    const out = scheduleAll(
-      owl,
-      [
-        task({
-          id: "owl",
-          durationMinutes: 240,
-          schedulingAnchor: MON_ANCHOR,
-          schedulingDeadline: new Date("2026-06-09T00:00:00Z"),
-        }),
-      ],
-      MON_ANCHOR,
-    );
-    expect(out[0].scheduledStartTime).toBeNull();
-    expect(out[0].conflict).toBe(true);
-  });
-
-  it("places the LATE-evening tail of the window when the early part is busy", () => {
-    // 22:00–01:00 occupied by a fixed anchor; a 2h task then lands at 01:00
-    // crossing into 03:00 — still one block within the extended Tue-06:00
-    // ceiling, in the post-midnight tail of the window.
-    const out = scheduleAll(
-      owl,
-      [
-        task({
-          id: "owl",
-          durationMinutes: 120,
-          schedulingAnchor: MON_ANCHOR,
-          schedulingDeadline: dayCeiling,
-        }),
-        task({
-          id: "fixedBlock",
-          fixed: true,
-          durationMinutes: 180, // 22:00 → 01:00
-          scheduledStartTime: new Date("2026-06-08T22:00:00Z"),
-        }),
-      ],
-      MON_ANCHOR,
-    );
-    const byId = (id: string) => out.find((p) => p.id === id)!;
-    expect(iso(byId("owl").scheduledStartTime)).toBe(
-      "2026-06-09T01:00:00.000Z",
-    );
-    expect(byId("owl").conflict).toBe(false);
+    expect(byId("anchor").conflict).toBe(false);
   });
 });
 
@@ -962,50 +650,6 @@ describe("compareEdf — EDF ordering and tie-breaking", () => {
       createdAt: new Date("2026-06-02T00:00:00Z"),
     });
     expect(compareEdf(older, newer)).toBeLessThan(0);
-  });
-
-  it("uses schedulingDeadline as the sort key when deadline is null", () => {
-    // A period-bounded task (schedulingDeadline set, no user deadline) should
-    // sort BEFORE a fully-unbounded legacy task (neither deadline) so it
-    // claims the earlier slot and its period ceiling is respected.
-    const bounded = task({
-      id: "bounded",
-      deadline: null,
-      schedulingDeadline: new Date("2026-06-12T17:00:00Z"), // end of week
-    });
-    const unbounded = task({ id: "unbounded", deadline: null });
-    expect(compareEdf(bounded, unbounded)).toBeLessThan(0);
-    expect(compareEdf(unbounded, bounded)).toBeGreaterThan(0);
-  });
-
-  it("sorts a user-deadline task before a schedulingDeadline-only task when user deadline is earlier", () => {
-    // A user deadline of Tue and a period bound of Fri → user-deadline task first.
-    const userDl = task({
-      id: "user",
-      deadline: new Date("2026-06-09T17:00:00Z"), // Tue
-    });
-    const periodBound = task({
-      id: "period",
-      deadline: null,
-      schedulingDeadline: new Date("2026-06-12T17:00:00Z"), // Fri
-    });
-    expect(compareEdf(userDl, periodBound)).toBeLessThan(0);
-    expect(compareEdf(periodBound, userDl)).toBeGreaterThan(0);
-  });
-
-  it("sorts a schedulingDeadline-only task first when it is earlier than a user deadline", () => {
-    // Period bound of Tue, user deadline of Fri → period-bounded task sorts first
-    // because its effective ceiling is sooner.
-    const periodBound = task({
-      id: "period",
-      deadline: null,
-      schedulingDeadline: new Date("2026-06-09T17:00:00Z"), // Tue
-    });
-    const userDl = task({
-      id: "user",
-      deadline: new Date("2026-06-12T17:00:00Z"), // Fri
-    });
-    expect(compareEdf(periodBound, userDl)).toBeLessThan(0);
   });
 
   it("is 0 for identical deadline and createdAt", () => {
@@ -1287,11 +931,10 @@ describe("scheduleAll — in-progress (frozen, not elapsed) tasks block placemen
     expect(iso(out[0].scheduledStartTime)).toBe("2026-06-08T16:00:00.000Z");
   });
 
-  it("flags BOTH a future fixed task and the in-progress block it overlaps", () => {
-    // A fixed task at 17:00 lands inside the 16:00–18:00 in-progress block.
-    // Detection is now-independent and pairwise, so BOTH sides surface a
-    // conflict (previously only the live fixed side was flagged). Neither slot
-    // moves.
+  it("flags BOTH a future manually-moved task and the in-progress block it overlaps", () => {
+    // A manually-moved task at 17:00 lands inside the 16:00–18:00 in-progress
+    // block. Detection is now-independent and pairwise, so BOTH sides surface a
+    // conflict. Neither slot moves.
     const out = scheduleAll(
       lateWindow,
       [
@@ -1301,8 +944,8 @@ describe("scheduleAll — in-progress (frozen, not elapsed) tasks block placemen
           durationMinutes: 120,
         }),
         task({
-          id: "fixed",
-          fixed: true,
+          id: "anchor",
+          manuallyMoved: true,
           scheduledStartTime: new Date("2026-06-08T17:00:00Z"),
           durationMinutes: 60,
         }),
@@ -1310,7 +953,7 @@ describe("scheduleAll — in-progress (frozen, not elapsed) tasks block placemen
       NOW,
     );
     const byId = (id: string) => out.find((p) => p.id === id)!;
-    expect(byId("fixed").conflict).toBe(true);
+    expect(byId("anchor").conflict).toBe(true);
     expect(byId("inprogress").conflict).toBe(true);
     expect(iso(byId("inprogress").scheduledStartTime)).toBe(
       "2026-06-08T16:00:00.000Z",
@@ -1320,9 +963,9 @@ describe("scheduleAll — in-progress (frozen, not elapsed) tasks block placemen
   it("DOES flag an overlap with a FULLY-ELAPSED block (detection is now-independent)", () => {
     // Inverted from the old "past block never blocks" assertion: conflict
     // DETECTION no longer depends on `now`. Elapsed block 14:00–15:00 (ends
-    // before now) overlaps a fixed task at 14:30 in wall-clock terms, so BOTH
-    // are flagged. PLACEMENT is unaffected — the elapsed block still occupies no
-    // future time and the fixed task keeps its stored slot here.
+    // before now) overlaps a manually-moved task at 14:30 in wall-clock terms,
+    // so BOTH are flagged. PLACEMENT is unaffected — the elapsed block still
+    // occupies no future time and the anchor keeps its stored slot here.
     const out = scheduleAll(
       lateWindow,
       [
@@ -1332,8 +975,8 @@ describe("scheduleAll — in-progress (frozen, not elapsed) tasks block placemen
           durationMinutes: 60,
         }),
         task({
-          id: "fixed",
-          fixed: true,
+          id: "anchor",
+          manuallyMoved: true,
           scheduledStartTime: new Date("2026-06-08T14:30:00Z"),
           durationMinutes: 60,
         }),
@@ -1341,14 +984,200 @@ describe("scheduleAll — in-progress (frozen, not elapsed) tasks block placemen
       NOW,
     );
     const byId = (id: string) => out.find((p) => p.id === id)!;
-    expect(byId("fixed").conflict).toBe(true);
+    expect(byId("anchor").conflict).toBe(true);
     expect(byId("elapsed").conflict).toBe(true);
     // Neither is moved off its stored slot.
     expect(iso(byId("elapsed").scheduledStartTime)).toBe(
       "2026-06-08T14:00:00.000Z",
     );
-    expect(iso(byId("fixed").scheduledStartTime)).toBe(
+    expect(iso(byId("anchor").scheduledStartTime)).toBe(
       "2026-06-08T14:30:00.000Z",
     );
+  });
+});
+
+describe("scheduleAll — wrapping (night-owl) work window places a single task across midnight", () => {
+  // Night owl: 22:00 → 06:00, Mon–Fri (the day the shift STARTS). No more
+  // per-task period ceiling is involved here — a wrapping work window simply
+  // extends past midnight in `workWindowFor`, so a no-deadline task with
+  // enough room still lands as ONE contiguous block.
+  const owl: SchedulerPrefs = {
+    workStart: 1320, // 22:00
+    workEnd: 360, // 06:00
+    workDays: [1, 2, 3, 4, 5],
+    timezone: "UTC",
+  };
+
+  it("places a 4h task at 22:00 as ONE block crossing midnight (ends 02:00)", () => {
+    const out = scheduleAll(
+      owl,
+      [task({ id: "owl", durationMinutes: 240 })],
+      MON_MIDNIGHT,
+    );
+    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-08T22:00:00.000Z");
+    expect(out[0].conflict).toBe(false);
+  });
+
+  it("places the LATE-evening tail of the window when the early part is busy", () => {
+    // 22:00–01:00 occupied by a manually-moved anchor; a 2h task then lands at
+    // 01:00 crossing into 03:00 — still one block within the wrapping window.
+    const out = scheduleAll(
+      owl,
+      [
+        task({ id: "owl", durationMinutes: 120 }),
+        task({
+          id: "anchorBlock",
+          manuallyMoved: true,
+          durationMinutes: 180, // 22:00 → 01:00
+          scheduledStartTime: new Date("2026-06-08T22:00:00Z"),
+        }),
+      ],
+      MON_MIDNIGHT,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    expect(iso(byId("owl").scheduledStartTime)).toBe(
+      "2026-06-09T01:00:00.000Z",
+    );
+    expect(byId("owl").conflict).toBe(false);
+  });
+});
+
+describe("scheduleAll — view-scoped cascade (ScheduleScope)", () => {
+  // A day with plenty of room: 09:00–17:00 Mon–Fri.
+  const dayViewStart = new Date("2026-06-08T00:00:00Z"); // Mon
+  const dayViewEnd = new Date("2026-06-09T00:00:00Z"); // Tue (exclusive)
+
+  it("never moves a task placed OUTSIDE the view range, even when an in-range task's placement changes", () => {
+    // "outOfView" sits on Wednesday — outside the Monday view — and must stay
+    // frozen. "inView" already sits inside the Monday view at 10:00; adding
+    // "urgent" (the includeTaskId, a closer-deadline 2h task) into the same
+    // view bumps "inView" from 10:00 to 11:00 — proof the in-range task DOES
+    // get re-placed by the cascade while the out-of-range one never budges.
+    const scope: ScheduleScope = {
+      viewStart: dayViewStart,
+      viewEnd: dayViewEnd,
+      includeTaskId: "urgent",
+    };
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "outOfView",
+          scheduledStartTime: new Date("2026-06-10T09:00:00Z"), // Wed
+        }),
+        task({
+          id: "inView",
+          scheduledStartTime: new Date("2026-06-08T10:00:00Z"), // Mon (stale)
+        }),
+        task({
+          id: "urgent",
+          durationMinutes: 120,
+          deadline: new Date("2026-06-08T17:00:00Z"), // Mon — tightest
+        }),
+      ],
+      MON_MIDNIGHT,
+      undefined,
+      scope,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    // The out-of-view task is frozen exactly where it was.
+    expect(iso(byId("outOfView").scheduledStartTime)).toBe(
+      "2026-06-10T09:00:00.000Z",
+    );
+    // "urgent" claims 09:00–11:00 (EDF-first); "inView" is bumped to 11:00.
+    expect(iso(byId("urgent").scheduledStartTime)).toBe(
+      "2026-06-08T09:00:00.000Z",
+    );
+    expect(iso(byId("inView").scheduledStartTime)).toBe(
+      "2026-06-08T11:00:00.000Z",
+    );
+  });
+
+  it("a manuallyMoved task never moves regardless of the view range", () => {
+    const scope: ScheduleScope = {
+      viewStart: dayViewStart,
+      viewEnd: dayViewEnd,
+      includeTaskId: "new",
+    };
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "manual",
+          manuallyMoved: true,
+          scheduledStartTime: new Date("2026-06-08T09:00:00Z"), // inside the view
+        }),
+        task({ id: "new", deadline: new Date("2026-06-08T17:00:00Z") }),
+      ],
+      MON_MIDNIGHT,
+      undefined,
+      scope,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    expect(iso(byId("manual").scheduledStartTime)).toBe(
+      "2026-06-08T09:00:00.000Z",
+    );
+    // The new task packs around the manual anchor instead of onto it.
+    expect(iso(byId("new").scheduledStartTime)).toBe(
+      "2026-06-08T10:00:00.000Z",
+    );
+  });
+
+  it("includeTaskId is always movable even when unplaced and outside any placed range", () => {
+    const scope: ScheduleScope = {
+      viewStart: dayViewStart,
+      viewEnd: dayViewEnd,
+      includeTaskId: "brandNew",
+    };
+    const out = scheduleAll(
+      prefs,
+      [task({ id: "brandNew", scheduledStartTime: null })],
+      MON_MIDNIGHT,
+      undefined,
+      scope,
+    );
+    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-08T09:00:00.000Z");
+  });
+
+  it("an unplaced task that is NOT includeTaskId is frozen (never re-attempted)", () => {
+    const scope: ScheduleScope = {
+      viewStart: dayViewStart,
+      viewEnd: dayViewEnd,
+      includeTaskId: "new",
+    };
+    const out = scheduleAll(
+      prefs,
+      [
+        task({ id: "staleConflict", scheduledStartTime: null, conflict: true }),
+        task({ id: "new" }),
+      ],
+      MON_MIDNIGHT,
+      undefined,
+      scope,
+    );
+    const byId = (id: string) => out.find((p) => p.id === id)!;
+    // Frozen unplaced task keeps its null placement and stale conflict verdict
+    // untouched — it was never fed through the EDF packer this run.
+    expect(byId("staleConflict").scheduledStartTime).toBeNull();
+    expect(byId("staleConflict").conflict).toBe(true);
+    expect(byId("new").scheduledStartTime).not.toBeNull();
+  });
+
+  it("omitting the scope falls back to today's global (unscoped) behavior", () => {
+    // Without a scope, an out-of-"view" task (there is no view) is still
+    // movable by EDF ordering exactly like before scoping existed.
+    const out = scheduleAll(
+      prefs,
+      [
+        task({
+          id: "far",
+          deadline: new Date("2026-06-08T17:00:00Z"), // Mon — tightest
+          scheduledStartTime: new Date("2026-06-10T09:00:00Z"), // Wed — stale
+        }),
+      ],
+      MON_MIDNIGHT,
+    );
+    // Re-EDF'd back onto Monday (its real deadline rank), not frozen on Wed.
+    expect(iso(out[0].scheduledStartTime)).toBe("2026-06-08T09:00:00.000Z");
   });
 });

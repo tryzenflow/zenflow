@@ -85,49 +85,17 @@ enum DurationAdjustmentMode {
   never
 }
 
-// Calendar view a task was created from. Records the period (day/week/month)
-// whose working hours bound a flexible, no-deadline task: such a task may not
-// roll past the end of this period (see Task.view). Mirrors @zenflow/shared
-// ViewMode.
-enum ViewMode {
-  day
-  week
-  month
-}
-
 model Task {
   id              String     @id @default(uuid())
   title           String
-  note            String? // rich-text (TipTap) — carried over from v1
+  note            String?
   durationMinutes Int // positive multiple of 15
   deadline        DateTime?
-  fixed           Boolean    @default(false)
-  startTime       Int        @default(0) // minutes from midnight; used when fixed
+  startTime       Int        @default(0) // minutes from midnight of the last manual placement (informational only)
   status          TaskStatus @default(PENDING)
   conflict        Boolean    @default(false) // unplaced (no slot before deadline)
-
-  // A flexible task the user manually dragged/resized. Like `fixed`, this makes
-  // the task an anchor: the EDF re-pack keeps its slot and treats it as occupied
-  // space instead of re-ordering it by deadline.
   manuallyMoved Boolean @default(false)
-
-  // Per-task lower bound for the EDF packer (a UTC instant = start-of-day of the
-  // day the task was created from, in the user's tz). Only consulted for flexible
-  // tasks with NO deadline: such a task lands on/after this day instead of the
-  // first free slot from `now`. Deadline-bearing tasks ignore it (pure EDF from
-  // now). Null for tasks created before this column existed.
-  schedulingAnchor DateTime?
-
   scheduledStartTime DateTime? // assigned by the EDF engine
-
-  // Calendar view active when the task was created. For a flexible task with NO
-  // deadline this bounds placement to the working hours of the period (day /
-  // ISO-week / month) containing `schedulingAnchor`: the task may not silently
-  // roll past the end of that period — if it can't fit, it stays unplaced and
-  // the create response carries the overflow recovery options. Null for fixed
-  // tasks and rows created before this column existed (legacy → unbounded).
-  view ViewMode?
-
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 

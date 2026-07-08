@@ -94,9 +94,9 @@ Defined in [`prisma/schema.prisma`](prisma/schema.prisma). Five models.
 | `durationMinutes` | int | **always a positive multiple of 15** |
 | `deadline` | DateTime? | EDF ordering key (nulls last) |
 | `tags` | `Tag[]` | implicit many-to-many with `Tag` (per-user labels) |
-| `fixed` | bool | true → immovable anchor at `startTime` |
-| `startTime` | int | minutes from midnight; only meaningful when `fixed` |
-| `status` | `TaskStatus` | `PENDING` \| `DONE` |
+| `manuallyMoved` | bool | true → the user dragged/resized this task (or accepted an overflow-recovery slot); the ONLY "don't move this" mechanism — there is no more `fixed` task concept |
+| `startTime` | int | minutes from midnight of the last manual placement; informational only, not consulted by the scheduler |
+| `status` | `TaskStatus` | `PENDING` \| `DONE` \| `ABANDONED` |
 | `conflict` | bool | true when the task has no valid placement (no slot before its deadline) — i.e. `scheduledStartTime` is null |
 | `scheduledStartTime` | DateTime? | placement assigned by the EDF engine |
 | `userId` | uuid | FK → `User`, `onDelete: Cascade` |
@@ -130,10 +130,12 @@ atomically inside the task transaction. The wire format keeps `Task.tags` as a
 ### `File`
 `id`, `originalName`, `filename`, `path`, `mimetype`, `size`, `userId` (cascade).
 
-> **Tasks are one-off.** A `POST /tasks` always creates exactly one `Task` row — fixed
-> tasks anchor at `startTime`, flexible tasks are EDF-placed from `startDate` (or `now`).
-> There is no recurrence: no `rrule`, no `seriesId`, no `scope`. True recurrence may be
-> reintroduced later as a deliberate feature on top of this simplified scheduler.
+> **Tasks are one-off, and every task is flexible.** A `POST /tasks` always creates
+> exactly one `Task` row, always EDF-placed (no more "fixed" tasks — that isn't the point
+> of a smart scheduler). The only way a task stops moving is `manuallyMoved` (set when the
+> user drags/resizes it, or accepts an overflow-recovery slot). There is no recurrence: no
+> `rrule`, no `seriesId`, no `scope`. True recurrence may be reintroduced later as a
+> deliberate feature on top of this simplified scheduler.
 
 ## API endpoints
 
@@ -162,38 +164,45 @@ Global prefix **`/api/v1`**. All routes except `POST /auth/otp/*` require
 ### Tasks (`/tasks`)
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/tasks` | create a single task (fixed anchors at `startTime`; flexible is EDF-placed). Accepts an optional `view` (`day`/`week`/`month`), persisted on the task as the **period ceiling** for flexible no-deadline tasks. Also accepts optional `viewStart`/`viewEnd` (ISO-8601 UTC bounds of the active calendar window): when provided, the server detects whether the auto-placed task fell **outside** that window (the "silent-bump" case where EDF places a deadline-bearing task in a later period because the current view is full) and includes an `overflow` block. The `overflow` block is populated when the task is unplaced, **or** when it is placed but outside `[viewStart, viewEnd)`. |
+| POST | `/tasks` | create a single task — always flexible, always EDF-placed (`durationMinutes` is a plain required field; there is no more `fixed`/`startTime`/`endTime`). Accepts an optional `view` (`day`/`week`/`month`) that only drives the overflow-recovery granularity, and optional `viewStart`/`viewEnd` (ISO-8601 UTC bounds of the active calendar window): these scope the **view-scoped cascade** (see below) and, when the auto-placed task fell **outside** that window, populate an `overflow` block. `overflow` is populated when the task is unplaced, **or** when it is placed but outside `[viewStart, viewEnd)`. |
 | GET | `/tasks?view=&date=&status=` | list within the view window (+ unplaced conflicts) |
 | GET | `/tasks/suggestions?q=&limit=` | title-autocomplete: the user's existing tasks, **newest first** and **deduped by title** (case-insensitive), optionally filtered by the `q` substring. `limit` 1–50, default 10. Returns `TaskSuggestionsResponse` (`{ suggestions: Task[] }`). Read-only; never reschedules. Declared **before** `/tasks/:id` so it isn't matched as an id |
 | GET | `/tasks/:id` | task detail + last events |
-| PATCH | `/tasks/:id` | metadata only (title/note/deadline/tags) — **does NOT reschedule** |
+| PATCH | `/tasks/:id` | metadata only (title/note/deadline/tags), saved immediately at the task's current slot — **does NOT reschedule**. A `deadline` change sets `UpdateTaskResponse.deadlineChanged: true` so the frontend can prompt for a confirm-before-reschedule (see `reschedule-cascade` below) instead of auto-cascading. A `tags` change runs the same Phase-2 duration corrector `POST /tasks` uses and returns it as `schedulingMeta` (never auto-applied) |
+| POST | `/tasks/:id/reschedule-cascade` | explicitly run the **view-scoped cascade** for one task — the deadline-edit confirm flow, and the tag-driven duration-adjustment accept flow (optionally supply `durationMinutes` to apply an accepted correction before the cascade runs). Body: `RescheduleCascadeInput` (`viewStart?`, `viewEnd?`, `durationMinutes?`). Returns a `RescheduleResponse` |
 | PATCH | `/tasks/:id/reschedule` | manual drag → `pin`, records MOVE + signed preference telemetry |
 | PATCH | `/tasks/:id/resize` | edge-resize, snaps to 15-min grid, recomputes conflicts |
-| PATCH | `/tasks/:id/resolve-overflow` | accept a create-overflow recovery option (`{ choice: "outsideHours"\|"nextAvailable", view? }`); re-derives the slot server-side, pins the task as a fixed anchor, records MOVE. Returns a `RescheduleResponse` |
-| PATCH | `/tasks/:id/complete` | mark DONE, records COMPLETE |
-| DELETE | `/tasks/:id` | delete the task |
+| PATCH | `/tasks/:id/resolve-overflow` | accept a create-overflow recovery option (`{ choice: "outsideHours"\|"nextAvailable", view? }`); re-derives the slot server-side, pins the task via `manuallyMoved` (the only anchor mechanism now that fixed tasks are gone), records MOVE. Returns a `RescheduleResponse` |
+| PATCH | `/tasks/:id/complete?viewStart=&viewEnd=` | mark DONE, records COMPLETE; re-settles the remaining set via the view-scoped cascade (optional query bounds) |
+| DELETE | `/tasks/:id?viewStart=&viewEnd=` | delete the task; re-settles the remaining set via the view-scoped cascade (optional query bounds) |
 
-> **Period-bounded scheduling + overflow recovery.** A flexible task created with **no user
-> deadline** is bounded to the working hours of the calendar period (day / ISO-week / month)
-> it was created in — its persisted `view` + `schedulingAnchor` yield a **period ceiling**
-> (`endOfPeriod`), passed into the engine as the task's `schedulingDeadline`. The packer
-> floors it at its create-day anchor **and** ceilings it at that period end, so it lands
-> within `[anchor, periodEnd]` and — crucially — does **not** silently roll into a later
-> period when it can't fit (e.g. create at 23:00 in day view with the work window already
-> over). Instead it comes back **unplaced** (`scheduledStartTime: null`, `conflict: true`)
-> and **stays** unplaced across later cascades (the ceiling is re-derived every re-pack), so
-> a no-deadline task is never quietly re-placed by an unrelated create/delete/complete.
+> **View-scoped cascade (the blast-radius fix).** `cascadeReschedule` no longer re-derives
+> placement for every PENDING task on every create/complete/delete — that "big hammer" was
+> the direct cause of an unrelated already-placed task silently moving/conflicting as a side
+> effect of scheduling something else. Now, when the caller supplies the active calendar
+> view's `viewStart`/`viewEnd`, only **non-manual tasks currently placed inside
+> `[viewStart, viewEnd)`** — plus the task the caller is specifically trying to place (the
+> newly-created task, or the target of an explicit `reschedule-cascade`) — are eligible to
+> move; everything else (out-of-view tasks, and every `manuallyMoved` task regardless of
+> range) is frozen as occupied space. `POST /tasks`, `PATCH /tasks/:id/complete`,
+> `DELETE /tasks/:id`, and `POST /tasks/:id/reschedule-cascade` all apply this scoping.
+> Omitting the bounds falls back to the unscoped (full) cascade — the one remaining case is
+> the background reschedule `PUT /users/me/preferences` triggers, which has no "current
+> view" to bound to. There is also no more per-task creation-day anchor or period ceiling
+> (`schedulingAnchor`/`view` columns, `schedulingDeadline`) — a no-deadline task is simply
+> packed from `now` forward with no artificial per-task ceiling, which also fixes a task
+> showing "out of slot" even when the day is completely empty.
 >
-> When `POST /tasks` returns an unplaced task the response also carries
-> `overflow: { outsideHours, nextAvailable }`, computed relative to the task's **anchor
-> period** (not to `now`). `outsideHours` is the earliest off-(working)-hours slot **inside**
-> the viewed period `[periodStart, periodEnd)`, at/after `now`, respecting occupied intervals
-> **and** any deadline (null if no off-hours slot fits the period — e.g. the period has
-> ended). `nextAvailable` is the earliest work-hours slot in the **next** period after the
-> anchor period (next day/week/month), **ignoring** the deadline. The user picks one and the
-> frontend calls `PATCH /tasks/:id/resolve-overflow`, which recomputes the slot server-side
-> (period-aware, from the stored anchor + view; the client time is never trusted) and pins
-> the task as a `fixed` anchor so the next cascade can't bounce it back to unplaced.
+> **Overflow recovery.** When `POST /tasks` returns an unplaced task the response also
+> carries `overflow: { outsideHours, nextAvailable }`, computed relative to **today** (the
+> calendar period containing `now`), not to any stored per-task context. `outsideHours` is
+> the earliest off-(working)-hours slot **inside** today's period `[periodStart, periodEnd)`,
+> at/after `now`, respecting occupied intervals **and** any deadline (null if no off-hours
+> slot fits — e.g. the period has ended). `nextAvailable` is the earliest work-hours slot in
+> the **next** period (next day/week/month), **ignoring** the deadline. The user picks one and
+> the frontend calls `PATCH /tasks/:id/resolve-overflow`, which recomputes the slot
+> server-side (the client time is never trusted) and pins the task via `manuallyMoved` so the
+> next cascade can't bounce it back to unplaced.
 
 ### Tags (`/tags`)
 | Method | Path | Purpose |
@@ -227,50 +236,46 @@ Pure functions you'll work with:
   every placement through it, so Phase 2's signed matrix plugs in here without touching
   feasibility.
 - **`compareEdf(a, b)`** — the ordering: deadline ascending (nulls last), then `createdAt`.
-- **`scheduleAll(prefs, tasks, now)`** — full deterministic re-EDF (fixed tasks stay put,
-  flexible tasks EDF-packed around them). Used when preferences change.
-- **`placeOne(prefs, task, others, now, earliest?)`** — incremental placement of one new
-  task, preserving everyone else's (possibly hand-moved) placement. Used on `POST /tasks`.
-- **`scheduleAll`'s ceiling.** Each flexible task is packed with floor =
-  `t.deadline ? now : (t.schedulingAnchor ?? now)` and ceiling =
-  `t.deadline ?? t.schedulingDeadline ?? null`. Floor and ceiling are **independent**: a
-  no-deadline task is bounded by **both** (its create-day anchor and its period end), so a
-  user-deadline task is byte-for-byte unchanged while a no-deadline task that can't fit its
-  period comes back unplaced and stays that way.
+  There is no more per-task period ceiling — a no-deadline task simply sorts last (rank
+  `+Infinity`) and is packed from `now` with no artificial upper bound (up to `MAX_SCAN_DAYS`).
+- **`scheduleAll(prefs, tasks, now, reRanker?, scope?)`** — deterministic re-EDF.
+  `manuallyMoved` tasks stay put; every other movable task is EDF-packed around them and
+  everything else occupied. The optional `ScheduleScope` (`{ viewStart, viewEnd,
+  includeTaskId? }`) bounds the blast radius: with a scope, only non-manual tasks currently
+  placed inside `[viewStart, viewEnd)` — plus `includeTaskId` regardless of its own placement
+  — are movable; everything else (out-of-range tasks, every `manuallyMoved` task) is frozen as
+  occupied space instead of being re-derived. Omitting `scope` is the unscoped (full) re-pack
+  — used for preference changes, which have no "current view" to bound to.
 - **`periodRange(anchor, view, tz, work?)` / `endOfPeriod(anchor, view, tz, work?)`**
   ([`horizon.ts`](src/scheduler/horizon.ts)) — pure UTC bounds `[start, end)` of the
-  day / ISO-week / month containing `anchor` in the user's tz (`end` is the exclusive
-  next-period boundary = the task's `schedulingDeadline`). Reuses `weekStartStr`/`monthRange`
-  so FE and BE agree on period edges. `SchedulerService.toEdf` derives each flexible
-  no-deadline task's `schedulingDeadline` from `endOfPeriod`. **Night-owl (wrapping) work
-  windows:** when the optional `work` (`{ workStart, workEnd }`) describes a window that wraps
-  past midnight (`workEnd <= workStart`, e.g. 22:00→06:00), the last work window that *starts*
-  within the period ends the next morning at `workEnd`, so `end` is **extended** from the bare
-  next-period 00:00 to `workEnd` on that following morning. This lets the engine place a
-  **single contiguous task crossing midnight** (e.g. a 4h task at 22:00→02:00) in the
-  post-midnight tail of the window — one Task row, one `scheduledStartTime`, duration spanning
-  midnight (never split into two rows). A non-wrapping window (or omitting `work`) keeps the
-  legacy 00:00 ceiling byte-for-byte; a user-deadline task is unaffected (its ceiling is its
-  own deadline). The morning tail is not double-counted in capacity — `sumWorkMinutes` is
-  start-day anchored and counts each window's minutes once. The service threads the user's
-  work window into `endOfPeriod` (`toEdf`) and into `periodRange` for the overflow
-  options.
+  day / ISO-week / month containing `anchor` in the user's tz. Reuses `weekStartStr`/
+  `monthRange` so FE and BE agree on period edges. Used ONLY by the overflow-recovery helpers
+  below (there is no more per-task period ceiling on ordinary placement). **Night-owl
+  (wrapping) work windows:** when the optional `work` (`{ workStart, workEnd }`) describes a
+  window that wraps past midnight (`workEnd <= workStart`, e.g. 22:00→06:00), the last work
+  window that *starts* within the period ends the next morning at `workEnd`, so `end` is
+  **extended** from the bare next-period 00:00 to `workEnd` on that following morning — this
+  is also why `scheduleAll` can place a **single contiguous task crossing midnight** (e.g. a
+  4h task at 22:00→02:00): `workWindowFor`'s wrap-aware window math applies regardless of any
+  ceiling. A non-wrapping window (or omitting `work`) keeps the legacy 00:00 boundary
+  byte-for-byte. The morning tail is not double-counted in capacity — `sumWorkMinutes` is
+  start-day anchored and counts each window's minutes once.
 - **`findSlotIgnoringWorkHours(durationMinutes, deadline, occupied, now, periodStart, periodEnd)`**
-  ([`overflow.ts`](src/scheduler/overflow.ts)) — earliest 15-min-grid slot **inside the
-  anchor period** `[periodStart, periodEnd)`, at/after `now`, ignoring the work-hours
-  window/work days but still avoiding `occupied` and ending ≤ `deadline`; `null` when no
-  off-hours slot fits the period. Backs the `outsideHours` recovery option.
+  ([`overflow.ts`](src/scheduler/overflow.ts)) — earliest 15-min-grid slot **inside**
+  `[periodStart, periodEnd)` (today's period — see below), at/after `now`, ignoring the
+  work-hours window/work days but still avoiding `occupied` and ending ≤ `deadline`; `null`
+  when no off-hours slot fits the period. Backs the `outsideHours` recovery option.
 - **`findNextAvailableSlot(prefs, durationMinutes, occupied, now, anchor, granularity)`**
   ([`overflow.ts`](src/scheduler/overflow.ts)) — earliest **work-hours** slot in the **next**
-  period after the anchor's period (`day` → next working day, `week` → next week, `month` →
+  period after `anchor`'s period (`day` → next working day, `week` → next week, `month` →
   next month), **ignoring** the deadline; reuses `findSlot`'s window/grid math via the next
   period boundary (`periodRange(anchor, …, work).end`) as its floor. For a wrapping window the
-  anchor period's extended (post-midnight) end is used, so the anchor day's morning tail is
-  offered via `outsideHours` rather than re-offered here as "next available" (which rolls to
-  the next night). Backs the `nextAvailable` recovery option. Both helpers stay pure
-  (`now` + explicit period inputs, no I/O);
+  period's extended (post-midnight) end is used, so the morning tail is offered via
+  `outsideHours` rather than re-offered here as "next available". Backs the `nextAvailable`
+  recovery option. Both helpers stay pure (`now` + explicit period inputs, no I/O);
   `SchedulerService.computeOverflowOptions` / `applyOverflowOption` are the persistence
-  wrappers that derive the period bounds from the task's stored `schedulingAnchor` + `view`.
+  wrappers — `anchor` is simply the start-of-day of `now` (there is no more per-task stored
+  creation context to prefer; every recovery option is relative to "today").
 **Placement is `now`-aware; conflict detection is `now`-independent.** Keep these two axes
 separate — they answer different questions:
 

@@ -8,7 +8,6 @@ import { Prisma, type Task, type User } from "../../generated/prisma";
 import {
   type OverflowGranularity,
   type SchedulingOverflow,
-  type ViewMode,
 } from "@zenflow/shared";
 import {
   type EdfTask,
@@ -17,6 +16,7 @@ import {
   intervalOf,
   isPast,
   scheduleAll,
+  type ScheduleScope,
   type SchedulerPrefs,
 } from "./edf";
 import { hashSeed } from "./rng";
@@ -30,7 +30,7 @@ import {
 } from "./telemetry";
 import { findNextAvailableSlot, findSlotIgnoringWorkHours } from "./overflow";
 import { periodRange } from "./horizon";
-import { minutesToUtc, utcToMinutes } from "../common/utils";
+import { minutesToUtc } from "../common/utils";
 import { TIME_GRANULARITY } from "../common/constants";
 import { preferenceMatrixReRanker, type SlotReRanker } from "./reranker";
 import { blendBias, correctDuration, type TagBias } from "./duration-bias";
@@ -109,18 +109,13 @@ export class SchedulerService {
     const prefs = this.prefsOf(user);
     const tasks = await this.pendingTasks(user.id, tx);
     const occupied = this.occupiedIntervals(tasks, task.id, now);
-    const edf = this.toEdf(task, prefs);
-    const earliest = edf.deadline
-      ? undefined
-      : (edf.schedulingAnchor ?? undefined);
-    const ceiling = edf.deadline ?? edf.schedulingDeadline ?? null;
+    const edf = this.toEdf(task);
     const candidates = feasibleSlots(
       prefs,
       edf.durationMinutes,
-      ceiling,
+      edf.deadline,
       occupied,
       now,
-      earliest,
     );
     if (candidates.length === 0) return null;
     return this.phase2ReRanker(user).propensity(
@@ -270,62 +265,79 @@ export class SchedulerService {
   }
 
   /**
-   * Map a Prisma row to the pure-core {@link EdfTask}. The period CEILING
-   * (`schedulingDeadline`) is derived here — the I/O/tz layer — and applies only
-   * to a FLEXIBLE task that has NO user `deadline` and DOES carry a stored
-   * `view` + `schedulingAnchor`: such a task is bounded to the working hours of
-   * the day/week/month it was created in (end of that period, in `timezone`) and
-   * must not silently roll past it. Tasks with a user deadline, fixed tasks, or
-   * legacy rows without a view get `schedulingDeadline = null` (unbounded —
-   * byte-for-byte the previous behavior). For a night-owl window that wraps past
-   * midnight (`workEnd <= workStart`) the ceiling is extended to `workEnd` the
-   * following morning (see {@link endOfPeriod}), so a single contiguous task can
-   * occupy the post-midnight tail of the window. The user's `prefs` (tz + work
-   * window) come from the caller.
+   * Map a Prisma row to the pure-core {@link EdfTask}. Now a thin passthrough —
+   * there is no more per-task creation-day anchor/period-ceiling to derive
+   * (fixed tasks and `schedulingAnchor`/`view` are gone; see docs/heuristic.md).
+   * Kept as a named method so call sites read the same either way.
    */
-  private toEdf(task: Task, prefs: SchedulerPrefs): EdfTask {
-    return toEdfTask(task, prefs);
+  private toEdf(task: Task): EdfTask {
+    return toEdfTask(task);
   }
 
+  /**
+   * The live working set for EDF placement: PENDING tasks only. Completed
+   * (`DONE`) and deadline-expired (`ABANDONED`) tasks must NEVER re-enter
+   * placement — an abandoned task re-appearing in `scheduleAll`'s movable set
+   * was the mechanism behind a previously-placed, unrelated task silently
+   * moving/duplicating-looking after an unconnected create (todo.md bug #6).
+   */
   private pendingTasks(userId: string, tx: PrismaTx) {
     return tx.task.findMany({ where: { userId, status: "PENDING" } });
   }
 
   /**
-   * Deadline-aware (re-)placement after a flexible task is created or has its
-   * deadline changed. Runs the full EDF re-pack around the anchors (fixed,
-   * manually-moved, and frozen past tasks) so the affected task lands at its
-   * EDF rank: tasks with closer deadlines keep their earlier slots and only
-   * later ones cascade. Mutates the rows; runs inside the caller's transaction.
+   * Deadline-aware (re-)placement after a flexible task is created, completed,
+   * deleted, or has a confirmed deadline/tags change. Runs the EDF re-pack
+   * around the anchors (manually-moved tasks, frozen past tasks, and — with a
+   * `viewStart`/`viewEnd` scope — everything outside that view range) so the
+   * movable set lands at its EDF rank: tasks with closer deadlines keep their
+   * earlier slots and only later ones cascade. Mutates the rows; runs inside
+   * the caller's transaction. Returns the tasks whose placement/conflict
+   * verdict actually changed (id + new slot), so callers that need a
+   * `RescheduleResponse`-shaped "displaced" list can build one directly.
    *
-   * Ordering is by deadline (then createdAt). Each flexible task carries its own
-   * floor inside {@link scheduleAll}: a deadline-bearing task is packed from
-   * `now` by pure urgency (its create-day is ignored), while a no-deadline task
-   * is floored at its stored `schedulingAnchor` so it lands on/after the day it
-   * was created from. Fixed tasks keep their own day/time, and manually-moved
-   * tasks keep their dragged slot.
+   * **View-scoped cascade (the blast-radius fix for todo.md bugs #1/#5).** When
+   * `viewStart`/`viewEnd` are supplied, only non-manual tasks currently placed
+   * inside `[viewStart, viewEnd)` — plus `includeTaskId` regardless of its
+   * placement (the task the caller is specifically trying to place, e.g. a
+   * just-created task or the target of an explicit reschedule-cascade request)
+   * — are eligible to move; every other task (out of view, or `manuallyMoved`
+   * regardless of range) is frozen as occupied space. Omitting the bounds falls
+   * back to the unscoped (full) re-pack — the only remaining callers of that
+   * fallback are background/no-view-context paths (e.g. a preference-change
+   * recompute with no calendar view open), which is a deliberate exception, not
+   * an oversight.
    *
-   * A task that finds no slot before its deadline is left unplaced
-   * (`scheduledStartTime: null`) and flagged as a conflict.
+   * Ordering is by deadline (then createdAt), floored at `now` for every
+   * movable task (no more per-task creation-day anchor). A task that finds no
+   * slot before its deadline is left unplaced (`scheduledStartTime: null`) and
+   * flagged as a conflict.
    */
   async cascadeReschedule(
     user: User,
     tx: PrismaTx,
     now = new Date(),
-  ): Promise<void> {
+    viewStart?: Date,
+    viewEnd?: Date,
+    includeTaskId?: string,
+  ): Promise<DisplacedTask[]> {
     const tasks = await this.pendingTasks(user.id, tx);
     const prefs = this.prefsOf(user);
+    const scope: ScheduleScope | undefined =
+      viewStart && viewEnd ? { viewStart, viewEnd, includeTaskId } : undefined;
     // Phase-2 live wiring: re-rank EDF-feasible slots by the user's preference
     // matrix on the real (non-simulation) scheduling path. The matrix is read
     // here and passed INTO the pure core; a cold-start matrix degenerates to
     // identity, so a fresh user is byte-for-byte Phase-1.
     const placements = scheduleAll(
       prefs,
-      tasks.map((t) => this.toEdf(t, prefs)),
+      tasks.map((t) => this.toEdf(t)),
       now,
       this.phase2ReRanker(user),
+      scope,
     );
     const before = new Map(tasks.map((t) => [t.id, t]));
+    const displaced: DisplacedTask[] = [];
     for (const p of placements) {
       const prev = before.get(p.id);
       if (!prev) continue;
@@ -341,10 +353,20 @@ export class SchedulerService {
           conflict: p.conflict,
         },
       });
+      displaced.push({
+        taskId: p.id,
+        newScheduledStartTime: p.scheduledStartTime,
+      });
     }
+    return displaced;
   }
 
-  /** Full deterministic re-EDF of every PENDING task (e.g. after pref change). */
+  /**
+   * Full deterministic re-EDF of every PENDING task (e.g. after a work-hours /
+   * preference change). Deliberately UNSCOPED (no view bounds) — a background
+   * preference update has no "current calendar view" to bound the blast radius
+   * to, so it falls back to the documented full-cascade exception.
+   */
   async rescheduleAll(user: User, now = new Date()): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       await this.cascadeReschedule(user, tx, now);
@@ -371,20 +393,20 @@ export class SchedulerService {
   }
 
   /**
-   * The anchor a task's overflow recovery options are computed relative to: its
-   * stored `schedulingAnchor` (start-of-day of the create day) when present, or
-   * — for a legacy/fixed row without one — the start-of-day of `now` in the
-   * user's tz. Both options are period-relative to this instant, NOT to `now`.
+   * The anchor a task's overflow recovery options are computed relative to:
+   * the start-of-day of `now`, in the user's tz. There is no more per-task
+   * creation-day anchor to prefer (fixed tasks and `schedulingAnchor` are
+   * gone) — every recovery option is period-relative to "today", not to the
+   * exact instant `now`.
    */
-  private overflowAnchor(task: Task, timezone: string, now: Date): Date {
-    if (task.schedulingAnchor) return task.schedulingAnchor;
+  private overflowAnchor(timezone: string, now: Date): Date {
     return minutesToUtc(localDateStr(now, timezone), 0, timezone);
   }
 
   /**
    * Compute the two recovery options offered when the EDF engine couldn't place
-   * `task` (it came back unplaced) — now relative to the task's ANCHOR period
-   * (the viewed day/week/month it was created in), not to `now`:
+   * `task` (it came back unplaced) — relative to "today"'s period (the viewed
+   * day/week/month containing `now`):
    *  - `outsideHours`: earliest off-(working)-hours slot INSIDE the anchor
    *    period window `[periodStart, periodEnd)`, at/after `now`, respecting
    *    occupied and any user deadline. Null when no off-hours slot fits the
@@ -394,7 +416,7 @@ export class SchedulerService {
    *
    * Loads the user's prefs + the other PENDING tasks' occupied intervals and
    * delegates to the pure helpers. Pure-core stays `now`+explicit-inputs driven;
-   * this wrapper only does the I/O (period bounds from `task.schedulingAnchor`).
+   * this wrapper only does the I/O (period bounds derived from `now`).
    */
   async computeOverflowOptions(
     user: User,
@@ -407,7 +429,7 @@ export class SchedulerService {
     const tasks = await this.pendingTasks(user.id, tx);
     const occupied = this.occupiedIntervals(tasks, task.id, now);
 
-    const anchor = this.overflowAnchor(task, prefs.timezone, now);
+    const anchor = this.overflowAnchor(prefs.timezone, now);
     const { start: periodStart, end: periodEnd } = periodRange(
       anchor,
       view,
@@ -445,13 +467,15 @@ export class SchedulerService {
   /**
    * Apply a chosen overflow recovery option to an unplaced task. The slot is
    * recomputed server-side (the client-supplied time is never trusted), the
-   * task is pinned there as a `fixed` anchor (so the next {@link cascadeReschedule}
-   * can't move it back into the unplaced state), conflicts are recomputed
-   * pairwise, and a MOVE audit event is recorded. Runs in its own transaction
-   * like the other mutations. The recompute is period-aware — it uses the task's
-   * stored `schedulingAnchor` + `view` so the chosen slot lands in the SAME
-   * window that was offered. Throws {@link BadRequestException} when the chosen
-   * option is no longer feasible (recompute returns null).
+   * task is pinned there as `manuallyMoved` (so the next
+   * {@link cascadeReschedule} can't move it back into the unplaced state —
+   * the same anchoring mechanism a manual drag/resize uses, now that fixed
+   * tasks are gone), conflicts are recomputed pairwise, and a MOVE audit event
+   * is recorded. Runs in its own transaction like the other mutations. The
+   * recompute is period-relative to "today" (see {@link overflowAnchor}) so
+   * the chosen slot lands in the SAME window that was offered. Throws
+   * {@link BadRequestException} when the chosen option is no longer feasible
+   * (recompute returns null).
    */
   async applyOverflowOption(
     user: User,
@@ -467,7 +491,7 @@ export class SchedulerService {
 
       const prefs = this.prefsOf(user);
       const occupied = this.occupiedIntervals(tasks, taskId, now);
-      const anchor = this.overflowAnchor(target, prefs.timezone, now);
+      const anchor = this.overflowAnchor(prefs.timezone, now);
       const { start: periodStart, end: periodEnd } = periodRange(
         anchor,
         view,
@@ -503,10 +527,9 @@ export class SchedulerService {
         });
       }
 
-      // Pin as a fixed anchor at the recomputed slot. `fixed` + the matching
-      // startTime (minutes-of-day in the user's tz) make the placement sticky:
+      // Pin via `manuallyMoved` at the recomputed slot — the same anchoring
+      // mechanism a manual drag/resize uses. This makes the placement sticky:
       // scheduleAll treats it as an anchor and never re-EDFs it back to unplaced.
-      const startTime = utcToMinutes(slot, user.timezone);
       const projected = tasks.map((t) =>
         t.id === taskId ? { ...t, scheduledStartTime: slot } : t,
       );
@@ -531,7 +554,7 @@ export class SchedulerService {
           data: {
             scheduledStartTime: nextStart,
             conflict: nextConflict,
-            ...(isTarget ? { fixed: true, startTime } : {}),
+            ...(isTarget ? { manuallyMoved: true } : {}),
           },
         });
         if (isTarget) {
@@ -619,32 +642,15 @@ export class SchedulerService {
       // user's current view window. When the caller supplies explicit view bounds
       // (the frontend's currently visible day/week/month), use those directly so
       // the check reflects WHERE THE USER IS NOW, not where the task was created.
-      // Fallback: use the task's stored creation period (legacy / no bounds
-      // supplied). For tasks with no anchor or view stored (fixed tasks, legacy
-      // rows) we default the anchor to `snapped` itself and the view to "day" —
-      // the period then always contains the snapped time, so outsideViewPeriod is
-      // false (no false positives for tasks that were never period-bounded).
-      let outsideViewPeriod: boolean;
-      if (viewStart && viewEnd) {
-        // Frontend supplied current view bounds — compare against those.
-        outsideViewPeriod =
-          snapped.getTime() < viewStart.getTime() ||
-          snapped.getTime() >= viewEnd.getTime();
-      } else {
-        // Fallback: use the stored creation period.
-        const prefs = this.prefsOf(user);
-        const anchor = target.schedulingAnchor ?? snapped;
-        const view: ViewMode = target.view ?? "day";
-        const { start: periodStart, end: periodEnd } = periodRange(
-          anchor,
-          view,
-          prefs.timezone,
-          { workStart: prefs.workStart, workEnd: prefs.workEnd },
-        );
-        outsideViewPeriod =
-          snapped.getTime() < periodStart.getTime() ||
-          snapped.getTime() >= periodEnd.getTime();
-      }
+      // There is no more per-task stored creation period to fall back to (fixed
+      // tasks and `schedulingAnchor`/`view` are gone), so without explicit bounds
+      // there's nothing to compare against — default to false (no false
+      // positives).
+      const outsideViewPeriod: boolean =
+        viewStart && viewEnd
+          ? snapped.getTime() < viewStart.getTime() ||
+            snapped.getTime() >= viewEnd.getTime()
+          : false;
 
       // Project the move, then recompute every task's conflict from real
       // time-overlap (a placed task clashes if it overlaps another placed task).

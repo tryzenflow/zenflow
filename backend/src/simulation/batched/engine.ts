@@ -4,11 +4,7 @@ import type {
   TaskEventType,
   TaskStatus,
 } from "../../../generated/prisma";
-import type {
-  CreateTaskInput,
-  SchedulingOverflow,
-  ViewMode,
-} from "@zenflow/shared";
+import type { CreateTaskInput, SchedulingOverflow } from "@zenflow/shared";
 import {
   feasibleSlots,
   hasElapsed,
@@ -43,7 +39,7 @@ import {
   findSlotIgnoringWorkHours,
 } from "../../scheduler/overflow";
 import { periodRange } from "../../scheduler/horizon";
-import { minutesToUtc, utcToMinutes } from "../../common/utils";
+import { minutesToUtc } from "../../common/utils";
 import { ABANDON_GRACE_MS, TIME_GRANULARITY } from "../../common/constants";
 
 /**
@@ -68,14 +64,11 @@ export interface SimTask {
   note: string | null;
   durationMinutes: number;
   deadline: Date | null;
-  fixed: boolean;
   startTime: number;
   status: TaskStatus;
   conflict: boolean;
   manuallyMoved: boolean;
-  schedulingAnchor: Date | null;
   scheduledStartTime: Date | null;
-  view: ViewMode | null;
   userId: string;
   createdAt: Date;
   updatedAt: Date;
@@ -224,12 +217,16 @@ export class PersonaState {
     return this.tasks.filter((t) => t.status === "PENDING");
   }
 
-  /** EDF re-pack of every PENDING task (mirrors `cascadeReschedule`). */
+  /**
+   * EDF re-pack of every PENDING task (mirrors `cascadeReschedule`'s UNSCOPED
+   * fallback — the batched simulator has no interactive "current calendar
+   * view" to bound the blast radius to, so it always does the full re-pack).
+   */
   private cascade(now: Date): void {
     const pending = this.pending();
     const placements = scheduleAll(
       this.prefs,
-      pending.map((t) => toEdfTask(t, this.prefs)),
+      pending.map((t) => toEdfTask(t)),
       now,
       this.reRanker(),
     );
@@ -259,16 +256,12 @@ export class PersonaState {
       .filter((t) => t.id !== taskId && t.scheduledStartTime !== null)
       .map((t) => intervalOf(t))
       .filter((i): i is Interval => i !== null);
-    const earliest = task.deadline
-      ? undefined
-      : (task.schedulingAnchor ?? undefined);
     return feasibleSlots(
       this.prefs,
       task.durationMinutes,
       task.deadline,
       occupied,
       now,
-      earliest,
     );
   }
 
@@ -284,7 +277,7 @@ export class PersonaState {
     const candidates = this.feasible(task.id, now);
     if (candidates.length === 0) return undefined;
     return this.reRanker().propensity(
-      toEdfTask(task, this.prefs),
+      toEdfTask(task),
       candidates,
       task.scheduledStartTime,
     );
@@ -332,10 +325,7 @@ export class PersonaState {
     overflow: SchedulingOverflow | null;
     taskId: string;
   } {
-    const tz = this.prefs.timezone;
-    const isFixed = input.fixed ?? false;
     const overflowView = input.view ?? "day";
-    const anchorDateStr = input.startDate ?? localDateStr(now, tz);
 
     const cleaned = cleanTagNames(input.tags ?? []);
     const tagIds = cleaned.map((n) => this.tagId(n));
@@ -343,34 +333,24 @@ export class PersonaState {
 
     // Phase-2 duration preprocessing (ADR-0001 §2): bias-correct the estimate
     // BEFORE EDF sees it. The `identity` arm leaves it untouched.
-    // Simulation always supplies durationMinutes explicitly (never uses the
-    // cross-midnight endTime path that makes it optional in CreateTaskInput).
     const durationMinutes = this.correctEstimate(
-      input.durationMinutes!,
+      input.durationMinutes,
       tagNames,
     );
 
-    const fixedStart = isFixed
-      ? minutesToUtc(anchorDateStr, input.startTime ?? 0, tz)
-      : null;
-    const schedulingAnchor = isFixed
-      ? null
-      : minutesToUtc(anchorDateStr, 0, tz);
-
+    // Every task is flexible now (no more fixed anchors): created unplaced,
+    // then placed by the cascade below.
     const task: SimTask = {
       id: randomUUID(),
       title: input.title,
       note: input.note ?? null,
       durationMinutes,
       deadline: input.deadline ? new Date(input.deadline) : null,
-      fixed: isFixed,
-      startTime: input.startTime ?? 0,
+      startTime: 0,
       status: "PENDING",
       conflict: false,
       manuallyMoved: false,
-      schedulingAnchor,
-      scheduledStartTime: fixedStart,
-      view: isFixed ? null : overflowView,
+      scheduledStartTime: null,
       userId: this.userId,
       createdAt: now,
       updatedAt: now,
@@ -413,8 +393,7 @@ export class PersonaState {
   ): SchedulingOverflow {
     const tz = this.prefs.timezone;
     const occupied = this.occupied(task.id, now);
-    const anchor =
-      task.schedulingAnchor ?? minutesToUtc(localDateStr(now, tz), 0, tz);
+    const anchor = minutesToUtc(localDateStr(now, tz), 0, tz);
     const { start: periodStart, end: periodEnd } = periodRange(
       anchor,
       view,
@@ -461,8 +440,7 @@ export class PersonaState {
     if (!target || target.status !== "PENDING") return false;
     const tz = this.prefs.timezone;
     const occupied = this.occupied(taskId, now);
-    const anchor =
-      target.schedulingAnchor ?? minutesToUtc(localDateStr(now, tz), 0, tz);
+    const anchor = minutesToUtc(localDateStr(now, tz), 0, tz);
     const { start: periodStart, end: periodEnd } = periodRange(
       anchor,
       view,
@@ -501,8 +479,7 @@ export class PersonaState {
       t.conflict = conflictOf.get(t.id) ?? t.conflict;
     }
     target.scheduledStartTime = slot;
-    target.fixed = true;
-    target.startTime = utcToMinutes(slot, tz);
+    target.manuallyMoved = true;
 
     this.events.push({
       eventType: "MOVE",

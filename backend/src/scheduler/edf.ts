@@ -1,9 +1,14 @@
 import { MAX_SCAN_DAYS, MIN } from "./constants";
-import { EdfTask, SchedulerPrefs, Placement } from "./interfaces";
+import {
+  EdfTask,
+  SchedulerPrefs,
+  Placement,
+  ScheduleScope,
+} from "./interfaces";
 import { identityReRanker, SlotReRanker } from "./reranker";
 
 // Re-export the scheduler's public types so consumers can import them from "./edf".
-export type { EdfTask, SchedulerPrefs };
+export type { EdfTask, SchedulerPrefs, ScheduleScope };
 import {
   Interval,
   SLOT_MS,
@@ -68,18 +73,12 @@ export function hasElapsed(
 }
 
 /**
- * EDF ordering: effective deadline ascending (nulls last), then createdAt
- * ascending. The effective deadline is the earlier of the user-set `deadline`
- * and the period ceiling `schedulingDeadline` — for tasks that have only a
- * `schedulingDeadline` (period-bounded, no user deadline) this gives them a
- * real urgency rank instead of lumping them with fully-unbounded legacy tasks
- * at +Infinity. A task with BOTH fields always uses `deadline` first (it is
- * always ≤ `schedulingDeadline` by construction: `toEdfTask` only sets
- * `schedulingDeadline` when `deadline === null`).
+ * EDF ordering: deadline ascending (nulls last, i.e. +Infinity), then
+ * `createdAt` ascending.
  */
 export function compareEdf(a: EdfTask, b: EdfTask): number {
-  const ad = (a.deadline ?? a.schedulingDeadline)?.getTime() ?? Infinity;
-  const bd = (b.deadline ?? b.schedulingDeadline)?.getTime() ?? Infinity;
+  const ad = a.deadline?.getTime() ?? Infinity;
+  const bd = b.deadline?.getTime() ?? Infinity;
   if (ad !== bd) return ad - bd;
   return a.createdAt.getTime() - b.createdAt.getTime();
 }
@@ -163,36 +162,55 @@ export function findSlot(
 }
 
 /**
- * An anchored task keeps its stored slot through {@link scheduleAll}: a `fixed`
- * task, or a flexible task the user manually dragged/resized (`manuallyMoved`).
- * Both are passed through as occupied space; only the remaining flexible,
- * non-anchored, non-past tasks get EDF-packed.
+ * An anchored task keeps its stored slot through {@link scheduleAll}: a
+ * flexible task the user manually dragged/resized (`manuallyMoved`), or —
+ * when a {@link ScheduleScope} is supplied — any task outside the scope's
+ * blast radius. Anchors are passed through as occupied space; only the
+ * remaining movable, non-past tasks get EDF-packed.
+ *
+ * Scoping rule (view-scoped cascade, see `ScheduleScope`): with no scope,
+ * everything non-`manuallyMoved` is movable (today's global behavior). With a
+ * scope, a task is movable iff it is `scope.includeTaskId` (always, regardless
+ * of its placement), OR it has a placement that falls inside
+ * `[viewStart, viewEnd)`. An unplaced task that isn't `includeTaskId` is
+ * frozen — it contributes no occupied interval either way, so freezing it
+ * just means the cascade doesn't attempt to re-place it.
  */
-function isAnchored(t: EdfTask): boolean {
-  return (t.fixed || t.manuallyMoved) && t.scheduledStartTime !== null;
+function isAnchored(t: EdfTask, scope?: ScheduleScope): boolean {
+  if (t.manuallyMoved && t.scheduledStartTime !== null) return true;
+  if (!scope) return false;
+  if (t.id === scope.includeTaskId) return false;
+  if (t.scheduledStartTime === null) return true;
+  const start = t.scheduledStartTime.getTime();
+  const within =
+    start >= scope.viewStart.getTime() && start < scope.viewEnd.getTime();
+  return !within;
 }
 
 /**
- * Full deterministic re-schedule of all PENDING tasks. Fixed and manually-moved
- * tasks keep their anchored slot. The remaining flexible tasks are EDF-packed
- * from `now` around everything already occupied — closer deadlines win earlier
- * slots, later ones cascade. Used on preference changes and on the create /
- * deadline-edit cascade.
+ * Full deterministic re-schedule of all PENDING tasks. Manually-moved tasks
+ * (and, with a `scope`, anything outside its view range) keep their anchored
+ * slot. The remaining movable tasks are EDF-packed from `now` around
+ * everything already occupied — closer deadlines win earlier slots, later
+ * ones cascade. Used on preference changes and on the create /
+ * deadline-edit-confirm / complete / delete cascade.
  */
 export function scheduleAll(
   prefs: SchedulerPrefs,
   tasks: EdfTask[],
   now: Date,
   reRanker: SlotReRanker = identityReRanker,
+  scope?: ScheduleScope,
 ): Placement[] {
   // Past tasks are frozen: never moved, never re-flagged, and excluded from the
   // occupied set so they can't block or displace future placements.
   const past = tasks.filter((t) => isPast(t, now));
   const live = tasks.filter((t) => !isPast(t, now));
 
-  // Fixed + manually-moved tasks are anchors; everything else is EDF-packed.
-  const anchored = live.filter(isAnchored);
-  const plain = live.filter((t) => !isAnchored(t)).sort(compareEdf);
+  // Anchors (manually-moved, and anything the scope excludes) vs the movable
+  // EDF-packed set.
+  const anchored = live.filter((t) => isAnchored(t, scope));
+  const plain = live.filter((t) => !isAnchored(t, scope)).sort(compareEdf);
 
   // Occupied space the EDF packer must avoid: every anchored live task, plus any
   // frozen past task that still occupies future time (an in-progress task,
@@ -212,47 +230,38 @@ export function scheduleAll(
     conflict: t.conflict,
   }));
 
-  // Anchors pass through with their stored slot. Their conflict verdict is NOT
-  // decided here — a fixed task's user-chosen time and a manually-moved flexible
-  // task's dragged slot are both allowed to overlap something, and that overlap
-  // must surface. The real pairwise check happens below, after the flexible
-  // tasks are packed, so an anchor-vs-anchor or anchor-vs-flexible overlap is
-  // flagged on both sides.
+  // Anchors pass through with their stored slot. For a PLACED anchor the
+  // conflict verdict is NOT decided here — a manually-moved task's dragged
+  // slot (and an out-of-scope frozen task's stored slot) is allowed to overlap
+  // something, and that overlap must surface via the real pairwise check
+  // below, after the movable tasks are packed (an anchor-vs-anchor or
+  // anchor-vs-movable overlap is flagged on both sides). An UNPLACED anchor
+  // (a frozen out-of-scope conflict, `scheduledStartTime: null`) has no
+  // interval to re-check — the overlap pass skips null placements — so its
+  // stored `conflict` verdict is carried through UNCHANGED rather than reset:
+  // otherwise a frozen conflicted task would silently read back as resolved.
   out.push(
     ...anchored.map((t) => ({
       id: t.id,
       scheduledStartTime: t.scheduledStartTime,
-      conflict: false,
+      conflict: t.scheduledStartTime === null ? t.conflict : false,
     })),
   );
 
-  // Flexible tasks fill the gaps with EDF packing. The FLOOR and the CEILING are
-  // independent and both apply to a no-deadline task:
-  //   floor (earliest): a deadline-bearing task is packed from `now` (urgency
-  //     dominates — its create-day anchor is ignored); a no-deadline task is
-  //     floored at its stored `schedulingAnchor` so it lands on/after its create
-  //     day. `findSlot` clamps the floor up to `now`, so a past anchor is inert.
-  //   ceiling (the deadline arg to findSlot): the user `deadline` if any, else
-  //     the task's `schedulingDeadline` (the end of its viewed period), else
-  //     null (unbounded — legacy behavior). A no-deadline task is thus packed
-  //     within `[anchor, periodEnd]`: if no working-hours slot fits before the
-  //     period ends it comes back unplaced (conflict) rather than rolling into a
-  //     later period — and STAYS unplaced across re-packs (the ceiling persists).
-  // A user-deadline task is byte-for-byte unchanged (floor undefined, ceiling =
-  // its deadline). Flexible placement always avoids `occupied`.
+  // Movable tasks fill the gaps with EDF packing, floored at `now` (no more
+  // per-task creation-day anchor/period-ceiling — see docs/heuristic.md and
+  // the scheduler README) and ceilinged at the user `deadline`, if any (null =
+  // unbounded, searched up to MAX_SCAN_DAYS). Placement always avoids `occupied`.
   for (const t of plain) {
-    const earliest = t.deadline ? undefined : (t.schedulingAnchor ?? undefined);
-    const ceiling = t.deadline ?? t.schedulingDeadline ?? null;
     // Re-ranker seam: enumerate the feasible set, let the re-ranker re-order it
     // by preference, then take its first choice. The identity re-ranker leaves
     // the EDF earliest-fit order intact, so output is unchanged from `findSlot`.
     const candidates = feasibleSlots(
       prefs,
       t.durationMinutes,
-      ceiling,
+      t.deadline,
       occupied,
       now,
-      earliest,
     );
     const slot = reRanker.score(t, candidates)[0] ?? null;
     if (slot) {

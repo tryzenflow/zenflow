@@ -32,7 +32,6 @@ const baseInput = {
   tags: ["backend"],
   view: "day" as const,
   startDate: MON,
-  fixed: false,
 };
 
 describe("PersonaState (batched engine)", () => {

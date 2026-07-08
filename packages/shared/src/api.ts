@@ -96,6 +96,25 @@ export interface CreateTaskResponse {
   overflow?: SchedulingOverflow | null;
 }
 
+/** Response for `PATCH /tasks/:id` (metadata-only update). */
+export interface UpdateTaskResponse {
+  task: Task;
+  /**
+   * Present when `tags` changed on this update: the same duration-correction
+   * data `POST /tasks` returns, so the frontend can drive its existing
+   * duration-adjustment toast. The suggestion is NOT auto-applied — the
+   * frontend calls `POST /tasks/:id/reschedule-cascade` with the accepted
+   * `durationMinutes` if the user accepts it and it needs a new slot.
+   */
+  schedulingMeta?: SchedulingMeta;
+  /**
+   * True when `deadline` actually changed on this update. The frontend uses
+   * this (or an equivalent client-side diff) to decide whether to prompt for
+   * a confirm-before-reschedule via `POST /tasks/:id/reschedule-cascade`.
+   */
+  deadlineChanged?: boolean;
+}
+
 export interface DisplacedTask {
   taskId: string;
   newScheduledStartTime: string | null;

@@ -97,6 +97,11 @@ export class UsersService {
           : {}),
       },
     });
+    // A work-hours/timezone change can invalidate every current placement, so
+    // re-EDF the full PENDING set. This is a background recompute with no
+    // "current calendar view" to bound the blast radius to (unlike the
+    // create/edit-in-view cascades), so it deliberately runs UNSCOPED (no view
+    // bounds) — the one documented exception to the view-scoped cascade rule.
     await this.scheduler.rescheduleAll(updated);
     return updated;
   }

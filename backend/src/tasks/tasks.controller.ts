@@ -15,8 +15,10 @@ import { UpdateTaskDto } from "./dto/update-task.dto";
 import { ListTasksDto } from "./dto/list-tasks.dto";
 import { ListTaskSuggestionsDto } from "./dto/list-task-suggestions.dto";
 import { RescheduleTaskDto } from "./dto/reschedule-task.dto";
+import { RescheduleCascadeDto } from "./dto/reschedule-cascade.dto";
 import { ResizeTaskDto } from "./dto/resize-task.dto";
 import { ResolveOverflowDto } from "./dto/resolve-overflow.dto";
+import { ViewBoundsDto } from "./dto/view-bounds.dto";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
 import { type User } from "../../generated/prisma";
@@ -104,9 +106,29 @@ export class TasksController {
     return { success: true, message: "Task rescheduled", data };
   }
 
+  @Post(":id/reschedule-cascade")
+  async rescheduleCascade(
+    @Param("id") id: string,
+    @Body() dto: RescheduleCascadeDto,
+    @CurrentUser() user: User,
+  ) {
+    const data = await this.tasksService.rescheduleCascade(id, dto, user);
+    return { success: true, message: "Task rescheduled", data };
+  }
+
   @Patch(":id/complete")
-  async complete(@Param("id") id: string, @CurrentUser() user: User) {
-    const data = await this.tasksService.complete(id, user);
+  async complete(
+    @Param("id") id: string,
+    @Query() bounds: ViewBoundsDto,
+    @CurrentUser() user: User,
+  ) {
+    const data = await this.tasksService.complete(
+      id,
+      user,
+      new Date(),
+      bounds.viewStart,
+      bounds.viewEnd,
+    );
     return { success: true, message: "Task completed", data };
   }
 
@@ -121,8 +143,12 @@ export class TasksController {
   }
 
   @Delete(":id")
-  async remove(@Param("id") id: string, @CurrentUser() user: User) {
-    await this.tasksService.remove(id, user);
+  async remove(
+    @Param("id") id: string,
+    @Query() bounds: ViewBoundsDto,
+    @CurrentUser() user: User,
+  ) {
+    await this.tasksService.remove(id, user, bounds.viewStart, bounds.viewEnd);
     return { success: true, message: "Task deleted" };
   }
 }

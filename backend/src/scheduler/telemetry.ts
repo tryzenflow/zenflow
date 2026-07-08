@@ -1,8 +1,7 @@
-import { PREFERENCE_MATRIX_LENGTH, type ViewMode } from "@zenflow/shared";
+import { PREFERENCE_MATRIX_LENGTH } from "@zenflow/shared";
 import { Prisma } from "../../generated/prisma";
-import { intervalOf, type EdfTask, type SchedulerPrefs } from "./edf";
+import { intervalOf, type EdfTask } from "./edf";
 import { preferenceIndex, type Interval } from "./slot";
-import { endOfPeriod } from "./horizon";
 import { PREFERENCE_LEARNING_RATE } from "./constants";
 
 /**
@@ -35,42 +34,25 @@ export interface EdfSourceTask {
   id: string;
   durationMinutes: number;
   deadline: Date | null;
-  fixed: boolean;
   manuallyMoved: boolean;
-  schedulingAnchor: Date | null;
-  view: ViewMode | null;
   scheduledStartTime: Date | null;
   createdAt: Date;
   conflict: boolean;
 }
 
 /**
- * Map a task row to the pure-core {@link EdfTask}, deriving the period CEILING
- * (`schedulingDeadline`). The ceiling applies ONLY to a flexible task with no
- * user `deadline` that carries a stored `view` + `schedulingAnchor`: it is bound
- * to the working hours of the day/week/month it was created in and must not roll
- * past that period's end (in `prefs.timezone`). Everything else is unbounded
- * (`null`). Shared so the service and the batched simulator place identically.
+ * Map a task row to the pure-core {@link EdfTask}. A thin, direct mapping now
+ * that fixed tasks and the per-task creation-day anchor/period-ceiling are
+ * gone (see docs/heuristic.md) — kept as a named function (rather than inlined
+ * at call sites) so the service and the batched simulator build the exact same
+ * shape from a single source of truth.
  */
-export function toEdfTask(task: EdfSourceTask, prefs: SchedulerPrefs): EdfTask {
-  const schedulingDeadline =
-    !task.fixed &&
-    task.deadline === null &&
-    task.view !== null &&
-    task.schedulingAnchor !== null
-      ? endOfPeriod(task.schedulingAnchor, task.view, prefs.timezone, {
-          workStart: prefs.workStart,
-          workEnd: prefs.workEnd,
-        })
-      : null;
+export function toEdfTask(task: EdfSourceTask): EdfTask {
   return {
     id: task.id,
     durationMinutes: task.durationMinutes,
     deadline: task.deadline,
-    fixed: task.fixed,
     manuallyMoved: task.manuallyMoved,
-    schedulingAnchor: task.schedulingAnchor,
-    schedulingDeadline,
     scheduledStartTime: task.scheduledStartTime,
     createdAt: task.createdAt,
     conflict: task.conflict,

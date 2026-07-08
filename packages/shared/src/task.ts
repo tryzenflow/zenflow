@@ -11,12 +11,7 @@ export type TaskEventType =
   | "ABANDON";
 
 /** Visual states a task card can render in (see design-system.md). */
-export type TaskCardState =
-  | "fluid"
-  | "fixed"
-  | "overdue"
-  | "conflict"
-  | "completed";
+export type TaskCardState = "fluid" | "overdue" | "conflict" | "completed";
 
 /** Snapshot stored on a {@link TaskEvent} for audit/replay. */
 export interface TaskSnapshot {
@@ -46,10 +41,17 @@ export interface Task {
   deadline: string | null;
   /** Free-form labels (Postgres text[]). */
   tags: string[];
-  /** When true the task is an immovable anchor at {@link startTime}. */
-  fixed: boolean;
-  /** Minutes from midnight; only meaningful when {@link fixed} is true. */
+  /**
+   * Minutes from midnight of the last manually-pinned placement (informational
+   * only; the scheduler never consults this — see {@link manuallyMoved}).
+   */
   startTime: number;
+  /**
+   * True when the task was manually dragged/resized (or pinned via an
+   * accepted overflow-recovery option) and so is anchored: the EDF engine
+   * treats its slot as occupied space and never repositions it.
+   */
+  manuallyMoved: boolean;
   status: TaskStatus;
   /**
    * True when the task has no valid placement (no slot before its deadline) —
@@ -76,30 +78,14 @@ export interface TaskEvent {
 export interface CreateTaskInput {
   title: string;
   note?: string | null;
-  /**
-   * Task duration in minutes (positive multiple of 15). For non-fixed tasks this
-   * is required. For fixed tasks you may omit it and provide `endTime` instead —
-   * the server derives `durationMinutes` from `startTime` + `endTime`, handling
-   * the cross-midnight case (`startTime > endTime`) as
-   * `endTime + 1440 − startTime` rounded to the nearest 15-minute multiple.
-   */
-  durationMinutes?: number;
+  /** Task duration in minutes (always a positive multiple of 15, required). */
+  durationMinutes: number;
   deadline?: string | null;
   tags?: string[];
-  fixed?: boolean;
-  /** Minutes from midnight (0–1439); only meaningful when `fixed` is true. */
-  startTime?: number;
   /**
-   * Fixed-task end time in minutes from midnight (0–1439). Optional alternative
-   * to `durationMinutes` for fixed tasks: when provided the server computes the
-   * duration, correctly handling cross-midnight spans (`startTime > endTime`).
-   * Ignored for non-fixed tasks.
-   */
-  endTime?: number;
-  /**
-   * 'YYYY-MM-DD' day the task was created from, in the user's tz. Fixed: the
-   * exact anchor day. Flexible: the earliest day the engine may place it on.
-   * Defaults to today.
+   * 'YYYY-MM-DD' day the task was created from, in the user's tz. Informational
+   * only — the engine no longer anchors placement to it (every task is
+   * flexible). Defaults to today.
    */
   startDate?: string;
   /**
@@ -120,7 +106,15 @@ export interface CreateTaskInput {
   viewEnd?: string;
 }
 
-/** Metadata-only update; does not trigger rescheduling. */
+/**
+ * Metadata-only update: title/note/deadline/tags are saved immediately and the
+ * task keeps its current slot. A `deadline` change no longer auto-cascades — the
+ * frontend surfaces a confirmation toast and, if accepted, calls
+ * `POST /tasks/:id/reschedule-cascade` to actually re-place the movable set. A
+ * `tags` change may return a `schedulingMeta` duration-adjustment suggestion
+ * (see `UpdateTaskResponse`); accepting a new duration also goes through
+ * `reschedule-cascade` (with `durationMinutes` set) if it needs a new slot.
+ */
 export interface UpdateTaskInput {
   title?: string;
   note?: string | null;
@@ -158,4 +152,29 @@ export interface ResizeInput {
   requestedStartTime: string;
   /** New duration in minutes (positive multiple of 15). */
   durationMinutes: number;
+}
+
+/**
+ * Body for `POST /tasks/:id/reschedule-cascade`: explicitly triggers the
+ * view-scoped `cascadeReschedule` for this task (see the scheduler README) —
+ * used after the user confirms a deadline-change reschedule prompt, or accepts
+ * a tag-driven duration-adjustment suggestion that needs a new slot.
+ */
+export interface RescheduleCascadeInput {
+  /**
+   * ISO-8601 inclusive start of the caller's active calendar view window. Only
+   * non-manual tasks currently placed inside `[viewStart, viewEnd)` (plus this
+   * task) are eligible to move; everything else is frozen. Omit for the
+   * unscoped (full) cascade.
+   */
+  viewStart?: string;
+  /** ISO-8601 exclusive end of the active calendar view window. */
+  viewEnd?: string;
+  /**
+   * When provided, applied to the task's `durationMinutes` BEFORE the cascade
+   * runs — e.g. accepting a tag-driven duration-adjustment suggestion that
+   * needs a new slot. Omit to reschedule at the task's current duration (e.g.
+   * after a deadline edit).
+   */
+  durationMinutes?: number;
 }

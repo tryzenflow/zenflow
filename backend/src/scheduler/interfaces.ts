@@ -16,34 +16,14 @@ export interface EdfTask {
   id: string;
   durationMinutes: number;
   deadline: Date | null;
-  fixed: boolean;
   /**
-   * A flexible task the user manually dragged/resized. Anchored like {@link fixed}:
-   * {@link scheduleAll} keeps its stored `scheduledStartTime` and treats its slot
-   * as occupied space rather than re-ordering it by deadline.
+   * A flexible task the user manually dragged/resized (or pinned via an
+   * accepted overflow-recovery option). {@link scheduleAll} keeps its stored
+   * `scheduledStartTime` and treats its slot as occupied space rather than
+   * re-ordering it by deadline — the ONLY "don't move this" mechanism now that
+   * fixed tasks are gone.
    */
   manuallyMoved: boolean;
-  /**
-   * Per-task lower bound (floor) for the EDF packer: a UTC instant at the
-   * start-of-day of the day the task was created from (user's tz). Consulted
-   * ONLY for flexible tasks with NO deadline — they land on/after this day
-   * rather than the first free slot from `now`. Deadline-bearing tasks ignore
-   * it and are packed from `now` by pure EDF urgency. Null = no anchor (floor
-   * collapses to `now`).
-   */
-  schedulingAnchor: Date | null;
-  /**
-   * Per-task UPPER bound (ceiling) for the EDF packer: the latest instant a
-   * flexible task may be placed before. Distinct from {@link deadline} — this is
-   * the END of the calendar period (day / ISO-week / month) the task was created
-   * in, derived from {@link schedulingAnchor} + the stored view. Both the floor
-   * ({@link schedulingAnchor}) and this ceiling apply to a no-deadline task, so
-   * it lands within `[anchor, periodEnd]` and comes back unplaced (rather than
-   * silently rolling into a later period) when it can't fit. Consulted ONLY when
-   * the task has no user {@link deadline}; null/absent = unbounded (legacy /
-   * deadline-bearing tasks). The service derives it; the pure core just reads it.
-   */
-  schedulingDeadline?: Date | null;
   scheduledStartTime: Date | null;
   createdAt: Date;
   /**
@@ -52,6 +32,28 @@ export interface EdfTask {
    * untouched; defaults to false elsewhere.
    */
   conflict: boolean;
+}
+
+/**
+ * Optional view-range scope for {@link scheduleAll} (the create/edit cascade).
+ * When present, only non-manual tasks currently placed inside
+ * `[viewStart, viewEnd)` — plus `includeTaskId` regardless of its placement —
+ * are eligible to be re-positioned; everything else (out-of-range tasks, and
+ * every `manuallyMoved` task) is frozen as occupied space. Omit for the
+ * unscoped (full) re-pack — today's global behavior.
+ */
+export interface ScheduleScope {
+  /** Inclusive UTC lower bound of the caller's active calendar view window. */
+  viewStart: Date;
+  /** Exclusive UTC upper bound of the caller's active calendar view window. */
+  viewEnd: Date;
+  /**
+   * A task that must be treated as movable regardless of its current
+   * placement (in/out of the view range, or unplaced) — the task the caller
+   * is specifically trying to (re-)place, e.g. the task just created, or the
+   * task under an explicit reschedule-cascade request.
+   */
+  includeTaskId?: string;
 }
 
 export interface Placement {

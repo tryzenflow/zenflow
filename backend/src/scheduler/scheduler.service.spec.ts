@@ -39,10 +39,7 @@ function task(overrides: Partial<Task> & { id: string }): Task {
     note: null,
     durationMinutes: 60,
     deadline: null,
-    fixed: false,
     manuallyMoved: false,
-    schedulingAnchor: null,
-    view: null,
     startTime: 0,
     status: "PENDING",
     conflict: false,
@@ -59,8 +56,7 @@ interface UpdateCall {
   data: {
     scheduledStartTime?: Date | null;
     conflict?: boolean;
-    fixed?: boolean;
-    startTime?: number;
+    manuallyMoved?: boolean;
   };
 }
 
@@ -78,7 +74,16 @@ function makeService(rows: Task[]): {
 
   const tx = {
     task: {
-      findMany: jest.fn().mockResolvedValue(rows),
+      // Mirrors the real `pendingTasks()` query: filters by `where.status`
+      // when present (today only `status: "PENDING"` is ever queried), so a
+      // fixture with a non-PENDING status (DONE/ABANDONED) is correctly
+      // excluded from the movable set — the bug #6 regression relies on this.
+      findMany: jest.fn((args?: { where?: { status?: string } }) => {
+        const status = args?.where?.status;
+        return Promise.resolve(
+          status === undefined ? rows : rows.filter((r) => r.status === status),
+        );
+      }),
       findUnique: jest.fn((args: { where: { id: string } }) =>
         Promise.resolve(byId.get(args.where.id) ?? null),
       ),
@@ -408,16 +413,14 @@ describe("SchedulerService.computeOverflowOptions", () => {
   });
 
   it("11pm-Tue repro: a no-deadline task overflows its viewed day", async () => {
-    // It is 23:00 Tue, day view, a flexible no-deadline task anchored on Tue.
-    // The off-hours option lands ~23:00 Tue (inside the day) and next-available
-    // is Wed 09:00 — both relative to the task's ANCHOR period, not `now`.
+    // It is 23:00 Tue, day view, a flexible no-deadline task. The off-hours
+    // option lands ~23:00 Tue (inside "today") and next-available is Wed
+    // 09:00 — both relative to "today" (derived from `now`), not the task.
     const TUE_11PM = new Date("2026-06-09T23:00:00Z");
     const unplaced = task({
       id: "u",
       durationMinutes: 30,
       deadline: null,
-      schedulingAnchor: new Date("2026-06-09T00:00:00Z"),
-      view: "day",
       conflict: true,
       scheduledStartTime: null,
     });
@@ -448,8 +451,6 @@ describe("SchedulerService.computeOverflowOptions", () => {
       id: "u",
       durationMinutes: 30,
       deadline: null,
-      schedulingAnchor: new Date("2026-06-09T00:00:00Z"),
-      view: "day",
       conflict: true,
       scheduledStartTime: null,
     });
@@ -502,7 +503,7 @@ describe("SchedulerService.computeOverflowOptions", () => {
 describe("SchedulerService.applyOverflowOption", () => {
   const NOW = new Date("2026-06-08T09:00:00Z");
 
-  it("pins the task as a fixed anchor at the recomputed off-hours slot", async () => {
+  it("pins the task via manuallyMoved at the recomputed off-hours slot", async () => {
     const unplaced = task({
       id: "u",
       durationMinutes: 60,
@@ -525,9 +526,7 @@ describe("SchedulerService.applyOverflowOption", () => {
       "2026-06-08T09:00:00.000Z",
     );
     const call = updates.find((u) => u.id === "u");
-    expect(call?.data.fixed).toBe(true);
-    // 09:00 UTC = 540 minutes from midnight.
-    expect(call?.data.startTime).toBe(540);
+    expect(call?.data.manuallyMoved).toBe(true);
     expect(call?.data.conflict).toBe(false);
   });
 
@@ -552,7 +551,7 @@ describe("SchedulerService.applyOverflowOption", () => {
     expect(updated.scheduledStartTime?.toISOString()).toBe(
       "2026-06-09T09:00:00.000Z",
     );
-    expect(updates.find((u) => u.id === "u")?.data.fixed).toBe(true);
+    expect(updates.find((u) => u.id === "u")?.data.manuallyMoved).toBe(true);
   });
 
   it("throws when no off-hours slot fits before the deadline", async () => {
@@ -628,24 +627,21 @@ describe("SchedulerService.resize — now-independent conflict detection", () =>
 });
 
 describe("SchedulerService.cascadeReschedule — wrapping (night-owl) window", () => {
-  // 22:00 → 06:00, Mon–Fri (the day the shift starts). This is where the
-  // end-to-end derivation of the period ceiling (toEdf → endOfPeriod) must
-  // extend past midnight so a single cross-day block can be placed.
+  // 22:00 → 06:00, Mon–Fri (the day the shift starts). A wrapping work window
+  // simply extends past midnight in the pure `workWindowFor` grid math — no
+  // per-task period ceiling is involved anymore.
   const owl: User = {
     ...user,
     workStart: 1320, // 22:00
     workEnd: 360, // 06:00
   };
-  // Start-of-day Mon 06-08 (the shift's start day) — also the create anchor.
   const MON_ANCHOR = new Date("2026-06-08T00:00:00Z");
 
-  it("places a 4h day-view no-deadline task at 22:00 crossing midnight (one block)", async () => {
+  it("places a 4h no-deadline task at 22:00 crossing midnight (one block)", async () => {
     const owlTask = task({
       id: "owl",
       durationMinutes: 240, // 22:00 → 02:00 next day
       deadline: null,
-      view: "day",
-      schedulingAnchor: MON_ANCHOR,
       scheduledStartTime: null,
       conflict: true,
     });
@@ -663,14 +659,10 @@ describe("SchedulerService.cascadeReschedule — wrapping (night-owl) window", (
   });
 
   it("a non-wrapping (09:00–17:00) user is unaffected: a 4h task fits in-hours", async () => {
-    // Regression guard: the same 4h day-view task for a day-shift user is placed
-    // at 09:00 within hours, never spilling past the bare-00:00 day ceiling.
     const dayTask = task({
       id: "day",
       durationMinutes: 240, // 09:00 → 13:00
       deadline: null,
-      view: "day",
-      schedulingAnchor: MON_ANCHOR,
       scheduledStartTime: null,
       conflict: true,
     });
@@ -683,5 +675,42 @@ describe("SchedulerService.cascadeReschedule — wrapping (night-owl) window", (
       new Date("2026-06-08T09:00:00.000Z"),
     );
     expect(upd?.data.conflict).toBe(false);
+  });
+});
+
+describe("SchedulerService.cascadeReschedule — bug #6 regression (abandoned tasks excluded)", () => {
+  it("never re-enters an ABANDONED task into the movable set", async () => {
+    // An ABANDONED task must not be selected by pendingTasks() at all (it must
+    // never re-enter live EDF placement) — the direct mechanism behind
+    // todo.md bug #6 (an abandoned task reappearing/duplicating-looking after
+    // an unrelated create). Simulate one ABANDONED row alongside one real
+    // PENDING task; only the PENDING one may be touched.
+    const abandoned = task({
+      id: "abandoned",
+      status: "ABANDONED",
+      deadline: new Date("2026-06-01T17:00:00Z"),
+      scheduledStartTime: new Date("2026-06-01T09:00:00Z"),
+      conflict: false,
+    });
+    const pending = task({
+      id: "pending",
+      deadline: null,
+      scheduledStartTime: null,
+      conflict: true,
+    });
+    const { service, updates, tx } = makeService([abandoned, pending]);
+
+    await service.cascadeReschedule(
+      user,
+      tx as never,
+      new Date("2026-06-08T09:00:00.000Z"), // Monday, within working hours
+    );
+
+    // The abandoned task is never written — it wasn't even part of the
+    // pendingTasks() query result the cascade re-packs.
+    expect(updates.find((u) => u.id === "abandoned")).toBeUndefined();
+    // The real pending task IS placed.
+    const upd = updates.find((u) => u.id === "pending");
+    expect(upd?.data.scheduledStartTime).not.toBeNull();
   });
 });

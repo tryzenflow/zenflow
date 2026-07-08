@@ -9,8 +9,6 @@ import { PrismaService } from "../prisma/prisma.service";
 import { SchedulerService } from "../scheduler/scheduler.service";
 import { Prisma, type Task, type Tag, type User } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
-import { fixedTaskDuration, minutesToUtc } from "../common/utils";
-import { localDateStr } from "../scheduler/slot";
 import { EVENT_REWARD } from "../scheduler/telemetry";
 import {
   displayDayRange,
@@ -22,6 +20,7 @@ import { UpdateTaskDto } from "./dto/update-task.dto";
 import { ListTasksDto } from "./dto/list-tasks.dto";
 import { ListTaskSuggestionsDto } from "./dto/list-task-suggestions.dto";
 import { ResolveOverflowDto } from "./dto/resolve-overflow.dto";
+import { RescheduleCascadeDto } from "./dto/reschedule-cascade.dto";
 import type {
   CreateTaskResponse,
   RescheduleResponse,
@@ -29,6 +28,7 @@ import type {
   TaskDetailResponse,
   TaskSuggestionsResponse,
   TasksListResponse,
+  UpdateTaskResponse,
 } from "@zenflow/shared";
 
 /** A Task row joined with its related Tag rows (the shape toDto consumes). */
@@ -54,8 +54,8 @@ export class TasksService {
       deadline: task.deadline ? task.deadline.toISOString() : null,
       // The wire format stays a string[] of tag NAMES; sort for stable output.
       tags: task.tags.map((t) => t.name).sort((a, b) => a.localeCompare(b)),
-      fixed: task.fixed,
       startTime: task.startTime,
+      manuallyMoved: task.manuallyMoved,
       status: task.status,
       conflict: task.conflict,
       scheduledStartTime: task.scheduledStartTime
@@ -99,39 +99,20 @@ export class TasksService {
     user: User,
     now: Date = new Date(),
   ): Promise<CreateTaskResponse> {
-    const {
-      startDate,
-      fixed,
-      startTime,
-      endTime,
-      view,
-      viewStart,
-      viewEnd,
-      ...rest
-    } = dto;
-    const tz = user.timezone;
-    const isFixed = fixed ?? false;
+    const { view, viewStart, viewEnd, ...rest } = dto;
     const overflowView = view ?? "day";
-    const anchorDateStr = startDate ?? localDateStr(now, tz);
+    const viewWindowStart = viewStart ? new Date(viewStart) : undefined;
+    const viewWindowEnd = viewEnd ? new Date(viewEnd) : undefined;
 
     try {
       return await this.prisma.$transaction(async (tx) => {
         // Resolve incoming tag NAMES → ids before connecting them to the task.
         const tagIds = await this.resolveTagIds(tx, user.id, rest.tags ?? []);
 
-        // For fixed tasks with an endTime but no explicit durationMinutes, derive
-        // duration from the start→end span — correctly handling cross-midnight
-        // (startTime > endTime) by adding one full day (1440 min) before rounding
-        // up to the 15-min grid. When both are supplied, durationMinutes wins.
-        const resolvedDurationMinutes: number =
-          isFixed && endTime !== undefined && rest.durationMinutes === undefined
-            ? fixedTaskDuration(startTime ?? 0, endTime)
-            : (rest.durationMinutes as number);
-
         // Phase-2 per-tag duration corrector. ALWAYS computed (so it always
         // LEARNS, even in `never` mode) but only APPLIED when the user's mode is
         // not `never`. The corrected value is rounded up to the 15-min grid.
-        const estimatedDuration = resolvedDurationMinutes;
+        const estimatedDuration = rest.durationMinutes;
         const cleanTags = (rest.tags ?? [])
           .map((t) => t.trim())
           .filter(Boolean);
@@ -146,17 +127,8 @@ export class TasksService {
           ? correction.adjustedDuration
           : estimatedDuration;
 
-        // Fixed: anchored at its day + time-of-day. Flexible: persist the
-        // create/view day as the EDF floor (start-of-day UTC). The packer only
-        // consults this when the task has NO deadline — a deadline-bearing task
-        // is scheduled from `now` by pure EDF urgency, ignoring the anchor.
-        const fixedStart = isFixed
-          ? minutesToUtc(anchorDateStr, startTime ?? 0, tz)
-          : null;
-        const schedulingAnchor = isFixed
-          ? null
-          : minutesToUtc(anchorDateStr, 0, tz);
-
+        // Every task is flexible now (no more fixed anchors): created unplaced,
+        // then placed by the cascade below.
         const created = await tx.task.create({
           data: {
             title: rest.title,
@@ -164,28 +136,26 @@ export class TasksService {
             durationMinutes: effectiveDuration,
             deadline: rest.deadline ? new Date(rest.deadline) : null,
             tags: { connect: tagIds.map((id) => ({ id })) },
-            fixed: isFixed,
-            startTime: startTime ?? 0,
             userId: user.id,
-            schedulingAnchor,
-            // Persist the active calendar view so the scheduler can bound a
-            // flexible, no-deadline task to that period's working hours (it must
-            // not silently roll past the viewed day/week/month). Null for fixed
-            // tasks — they anchor at an exact time and aren't period-bounded.
-            view: isFixed ? null : overflowView,
-            scheduledStartTime: fixedStart,
+            scheduledStartTime: null,
             conflict: false,
           },
         });
 
-        // Deadline-aware insert + cascade: re-EDF the movable set so the new
-        // task lands at its deadline rank (closer deadlines keep earlier slots,
-        // later ones shift). Fixed, manually-moved and frozen past tasks stay
-        // anchored. A fixed task keeps its user-chosen slot but is still run
-        // through the cascade so its time is checked for real overlap against
-        // existing placed tasks — an overlapping fixed task (and the task it
-        // overlaps) is flagged `conflict: true` instead of silently double-booked.
-        await this.scheduler.cascadeReschedule(user, tx, now);
+        // Deadline-aware insert + view-scoped cascade: re-EDF the movable set —
+        // non-manual tasks currently placed within [viewStart, viewEnd), plus
+        // this newly-created task itself — so the new task lands at its
+        // deadline rank while everything off-screen (and every manually-moved
+        // task) stays frozen. Without explicit view bounds this falls back to
+        // the unscoped (full) cascade.
+        await this.scheduler.cascadeReschedule(
+          user,
+          tx,
+          now,
+          viewWindowStart,
+          viewWindowEnd,
+          created.id,
+        );
 
         const finalTask = await tx.task.findUniqueOrThrow({
           where: { id: created.id },
@@ -234,12 +204,10 @@ export class TasksService {
         //       task on a day outside the user's current week/month view because
         //       every in-view slot was already occupied. Without explicit view
         //       bounds the behaviour is unchanged (placed tasks carry no overflow).
-        const viewWindowStart = viewStart ? new Date(viewStart) : null;
-        const viewWindowEnd = viewEnd ? new Date(viewEnd) : null;
         const placedOutsideView =
           finalTask.scheduledStartTime !== null &&
-          viewWindowStart !== null &&
-          viewWindowEnd !== null &&
+          viewWindowStart !== undefined &&
+          viewWindowEnd !== undefined &&
           (finalTask.scheduledStartTime.getTime() < viewWindowStart.getTime() ||
             finalTask.scheduledStartTime.getTime() >= viewWindowEnd.getTime());
 
@@ -419,11 +387,24 @@ export class TasksService {
     };
   }
 
+  /**
+   * Metadata-only update: title/note/deadline/tags are saved immediately and
+   * the task KEEPS its current slot — this endpoint never cascades anymore.
+   *  - A `deadline` change is saved as-is; `deadlineChanged` on the response
+   *    tells the frontend a reschedule may be warranted so it can surface a
+   *    confirm-before-reschedule toast (accepting it calls
+   *    `rescheduleCascade`/`POST /tasks/:id/reschedule-cascade`).
+   *  - A `tags` change runs the same duration-corrector `create()` uses (never
+   *    applied here) and returns it as `schedulingMeta` so the frontend can
+   *    drive its duration-adjustment toast; accepting it also goes through
+   *    `reschedule-cascade` (with the accepted `durationMinutes`) if it needs
+   *    a new slot.
+   */
   async update(
     id: string,
     dto: UpdateTaskDto,
     user: User,
-  ): Promise<SharedTask> {
+  ): Promise<UpdateTaskResponse> {
     const fields = dto;
     // Scalar metadata only — m2m tags are applied via the `set` relation op.
     const scalarData = {
@@ -460,23 +441,41 @@ export class TasksService {
           include: { tags: true },
         });
 
-        // A deadline change on a flexible task re-orders the movable set by EDF
-        // (closer deadlines win earlier slots). Fixed / manually-moved / past
-        // tasks stay anchored. No-op when the deadline is untouched, the task is
-        // fixed, or the new deadline equals the old one.
         const deadlineChanged =
           scalarData.deadline !== undefined &&
           (scalarData.deadline?.getTime() ?? null) !==
             (target.deadline?.getTime() ?? null);
-        if (deadlineChanged && !updated.fixed) {
-          await this.scheduler.cascadeReschedule(user, tx);
-          const rescheduled = await tx.task.findUniqueOrThrow({
-            where: { id },
-            include: { tags: true },
-          });
-          return this.toDto(rescheduled);
+
+        // Tag change → Phase-2 duration-corrector suggestion, NEVER auto-applied
+        // here: the frontend decides (per `durationAdjustmentMode`) whether to
+        // prompt, then calls `reschedule-cascade` with the accepted duration.
+        let schedulingMeta: UpdateTaskResponse["schedulingMeta"];
+        if (touchTags) {
+          const newTagNames = updated.tags.map((t) => t.name);
+          const correction = await this.scheduler.computeDurationCorrection(
+            user.id,
+            newTagNames,
+            updated.durationMinutes,
+            tx,
+          );
+          schedulingMeta = {
+            adjustedDuration: correction.adjustedDuration,
+            placedAt: updated.scheduledStartTime
+              ? updated.scheduledStartTime.toISOString()
+              : null,
+            engine: "edf" as const,
+            biasApplied: correction.biasApplied,
+            estimatedDuration: correction.estimatedDuration,
+            durationAdjustmentMode: user.durationAdjustmentMode,
+            durationReason: correction.durationReason,
+          };
         }
-        return this.toDto(updated);
+
+        return {
+          task: this.toDto(updated),
+          ...(schedulingMeta ? { schedulingMeta } : {}),
+          ...(deadlineChanged ? { deadlineChanged } : {}),
+        };
       });
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
@@ -488,6 +487,80 @@ export class TasksService {
       throw new InternalServerErrorException({
         success: false,
         message: "Something went wrong when updating a task",
+      });
+    }
+  }
+
+  /**
+   * Explicitly trigger the view-scoped cascade for one task — the deadline-edit
+   * confirm-before-reschedule flow, and the tag-driven duration-adjustment
+   * accept flow (both share this endpoint; see `UpdateTaskResponse` /
+   * `RescheduleCascadeDto`). When `durationMinutes` is supplied it is applied
+   * BEFORE the cascade runs; the target task is always treated as movable
+   * (`includeTaskId`) regardless of its current placement or the view bounds.
+   */
+  async rescheduleCascade(
+    id: string,
+    dto: RescheduleCascadeDto,
+    user: User,
+    now: Date = new Date(),
+  ): Promise<RescheduleResponse> {
+    const { viewStart, viewEnd, durationMinutes } = dto;
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const target = await tx.task.findFirst({
+          where: { id, userId: user.id },
+        });
+        if (!target)
+          throw new NotFoundException(`Cannot find task with id ${id}`);
+
+        if (
+          durationMinutes !== undefined &&
+          durationMinutes !== target.durationMinutes
+        ) {
+          await tx.task.update({ where: { id }, data: { durationMinutes } });
+        }
+
+        const displaced = await this.scheduler.cascadeReschedule(
+          user,
+          tx,
+          now,
+          viewStart ? new Date(viewStart) : undefined,
+          viewEnd ? new Date(viewEnd) : undefined,
+          id,
+        );
+
+        const withTags = await tx.task.findUniqueOrThrow({
+          where: { id },
+          include: { tags: true },
+        });
+
+        return {
+          task: this.toDto(withTags),
+          displaced: displaced
+            .filter((d) => d.taskId !== id)
+            .map((d) => ({
+              taskId: d.taskId,
+              newScheduledStartTime: d.newScheduledStartTime
+                ? d.newScheduledStartTime.toISOString()
+                : null,
+            })),
+          rationale: this.scheduler.rationaleFor(
+            user,
+            withTags.scheduledStartTime,
+          ),
+        };
+      });
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === PostgresErrorCode.RecordNotFound
+      )
+        throw new NotFoundException(`Cannot find task with id ${id}`);
+      throw new InternalServerErrorException({
+        success: false,
+        message: "Something went wrong when rescheduling a task",
       });
     }
   }
@@ -537,9 +610,9 @@ export class TasksService {
 
   /**
    * Apply a recovery option the user accepted from the create-overflow toast.
-   * Re-derives the slot server-side (never trusts a client time), pins the task
-   * as a fixed anchor so the next cascade keeps it, and records the move.
-   * Mirrors {@link reschedule}'s RescheduleResponse shape.
+   * Re-derives the slot server-side (never trusts a client time), pins the
+   * task via `manuallyMoved` so the next cascade keeps it, and records the
+   * move. Mirrors {@link reschedule}'s RescheduleResponse shape.
    */
   async resolveOverflow(
     id: string,
@@ -615,6 +688,8 @@ export class TasksService {
     id: string,
     user: User,
     now: Date = new Date(),
+    viewStart?: string,
+    viewEnd?: string,
   ): Promise<SharedTask> {
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -654,10 +729,18 @@ export class TasksService {
         }
         // Re-settle the remaining PENDING set: completing this task removes it as
         // a blocker, so any task that only overlapped it self-heals (conflict
-        // cleared via the now-independent overlap pass) and flexible tasks reflow
-        // into the freed slot. The just-completed DONE task is excluded — it is no
-        // longer PENDING and keeps its own scheduledStartTime.
-        await this.scheduler.cascadeReschedule(user, tx, now);
+        // cleared via the now-independent overlap pass) and movable tasks reflow
+        // into the freed slot. The just-completed DONE task is excluded — it is
+        // no longer PENDING and keeps its own scheduledStartTime. View-scoped
+        // when the caller supplies the current calendar view bounds; falls back
+        // to the unscoped cascade otherwise.
+        await this.scheduler.cascadeReschedule(
+          user,
+          tx,
+          now,
+          viewStart ? new Date(viewStart) : undefined,
+          viewEnd ? new Date(viewEnd) : undefined,
+        );
         return this.toDto(updated);
       });
     } catch (error) {
@@ -673,7 +756,13 @@ export class TasksService {
     }
   }
 
-  async remove(id: string, user: User): Promise<void> {
+  async remove(
+    id: string,
+    user: User,
+    viewStart?: string,
+    viewEnd?: string,
+    now: Date = new Date(),
+  ): Promise<void> {
     try {
       await this.prisma.$transaction(async (tx) => {
         const target = await tx.task.findFirst({
@@ -686,10 +775,18 @@ export class TasksService {
 
         // Re-settle the remaining PENDING set in the same transaction: the
         // deleted task is gone, so any task that only overlapped it self-heals
-        // (conflict cleared via the now-independent overlap pass) and flexible
+        // (conflict cleared via the now-independent overlap pass) and movable
         // tasks reflow into the freed slot — mirroring how create() cascades. A
-        // cascade failure rolls back the delete.
-        await this.scheduler.cascadeReschedule(user, tx);
+        // cascade failure rolls back the delete. View-scoped when the caller
+        // supplies the current calendar view bounds; falls back to the
+        // unscoped cascade otherwise.
+        await this.scheduler.cascadeReschedule(
+          user,
+          tx,
+          now,
+          viewStart ? new Date(viewStart) : undefined,
+          viewEnd ? new Date(viewEnd) : undefined,
+        );
       });
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
