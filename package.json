@@ -26,7 +26,8 @@
     ],
     "overrides": {
       "sharp": "0.32.6",
-      "sharp-ico": "0.1.5"
+      "sharp-ico": "0.1.5",
+      "jest-environment-node": "30.4.1"
     }
   }
 }
