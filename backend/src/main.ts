@@ -24,8 +24,15 @@ async function bootstrap() {
   app.set("trust proxy", 1);
   const configService = app.get(ConfigService);
   app.setGlobalPrefix("api/v1");
+  // Comma-separated list: the web frontend and Expo's web dev server are
+  // separate origins. `cors` only echoes a single origin back, so this must be
+  // an array for it to match the request and reflect the right one.
+  const corsOrigins = (configService.get<string>("CORS_ORIGIN") ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
   app.enableCors({
-    origin: configService.get("CORS_ORIGIN"),
+    origin: corsOrigins,
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
     allowedHeaders: "Content-Type, Accept, Authorization, x-timezone", // Include necessary headers
     credentials: true,

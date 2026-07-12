@@ -49,10 +49,6 @@ lerna-debug.log*
 .temp
 .tmp
 
-# simulation eval outputs (ground-truth sidecars, ad-hoc metric dumps)
-/sim-output
-/sim-eval-out.json
-
 # Runtime data
 pids
 *.pid

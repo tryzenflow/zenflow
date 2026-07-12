@@ -41,18 +41,11 @@ backend/
 │   │   └── decorators/        # @CurrentUser()
 │   ├── tasks/                 # task CRUD, reschedule, resize, complete
 │   ├── scheduler/             # the engine (see below)
-│   │   ├── edf.ts             # PURE algorithm — no I/O, fully unit-tested
-│   │   ├── slot.ts            # work-window math, 15-min slots, preference index
-│   │   ├── horizon.ts         # calendar math (view ranges, week/month, work minutes)
-│   │   └── scheduler.service.ts  # persistence wrapper around edf.ts (+ telemetry)
-│   ├── simulation/            # persona simulator (synthetic telemetry — see below)
-│   │   ├── rng.ts             # PURE seeded PRNG (mulberry32) + sampling helpers
-│   │   ├── clock.ts           # PURE virtual clock over the ~1-year span
-│   │   ├── personas/          # archetypes, persona factory, preference field (PURE)
-│   │   ├── behavior/          # task generator + reaction policy (PURE)
-│   │   ├── runner.ts          # closed loop — drives the REAL Tasks/Scheduler services
-│   │   ├── run.ts             # `sim:run` entry (standalone Nest context)
-│   │   └── eval/              # MAR + metrics, IPS/SNIPS replay scaffold
+│   │   ├── utils/             # PURE algorithm — no I/O, fully unit-tested
+│   │   │   ├── edf.ts         # the EDF placement core
+│   │   │   ├── slot.ts        # work-window math, 15-min slots, preference index
+│   │   │   └── horizon.ts     # calendar math (period ceilings, work minutes)
+│   │   └── scheduler.service.ts  # persistence wrapper around utils/ (+ telemetry)
 │   ├── files/                 # multipart upload/download to local disk
 │   ├── mail/                  # login email + Handlebars templates
 │   ├── prisma/                # PrismaService + Postgres error-code map
@@ -63,7 +56,7 @@ backend/
 └── .env.{dev,prod,test} + docker.env
 ```
 
-**Key layering rule:** `scheduler/edf.ts` is a **pure, deterministic** module (no
+**Key layering rule:** `scheduler/utils/` is **pure and deterministic** (no
 database, no clock, no randomness — `now` is always passed in). `SchedulerService`
 is the only thing that touches Prisma and records telemetry. Keep that split: it's
 what makes the engine unit-testable and what Phase 3 will plug into.
@@ -347,51 +340,6 @@ inputs as params and do no I/O; the service is the only thing that reads Prisma.
 
 > When you change any pure scheduler function, update its `*.spec.ts` in the same change
 > (`edf.spec.ts`, `horizon.spec.ts`) and run `pnpm --filter backend test`.
-
-## Persona simulator (`src/simulation/`)
-
-A **closed-loop driver** that produces synthetic telemetry for the personalization roadmap
-(`docs/simulation-strategy.md`, `docs/seed-implementation.md`). It seeds a population of
-synthetic users with hidden "true" preferences, then drives the **real** `TasksService` /
-`SchedulerService` / `AbandonedTasksService` over a ~1-year virtual timeline — so every
-`TaskEvent`, `suggestedStartTime` snapshot, and signed `preferenceMatrix` update is produced
-through the production path, never hand-written.
-
-- **Determinism:** all randomness flows through one seeded `mulberry32` PRNG (`rng.ts`) — no
-  `Math.random()`. `rng.ts`, `clock.ts`, `personas/*`, and `behavior/*` are **pure**; only
-  `runner.ts` touches Prisma/services (same purity rule as the scheduler core).
-- **Virtual `now`:** the mutation methods (`create`, `complete`, `reschedule`, `resize`,
-  `resolveOverflow`, and `SchedulerService.pin`/`resize`/`applyOverflowOption`/`recordKeep`)
-  take an optional `now: Date = new Date()` and stamp it onto `cascadeReschedule` + every
-  `TaskEvent.occurredAt`. Controllers call with no `now`, so **production is unchanged**; the
-  simulator passes the simulated instant so events spread across the year.
-- **Anti-circularity:** the ground-truth archetype label lives **only** in the in-memory
-  `Persona` (and the eval labels output), never in a `User` column a learner reads. The
-  generator embeds drivers no Phase-2 matrix can represent — tag×time interactions (`P_tag`),
-  drift, fatigue, a noise floor — so recovery is a real finding, not a tautology.
-- **Re-ranker seam:** only `--reranker=identity` (the Phase-1 baseline) is wired today; a
-  future re-ranker drops into the same `SlotReRanker` seam.
-- **Compiled, not `ts-node`:** the repo uses baseUrl `src/*` imports that only `nest build`
-  rewrites, so `sim:run`/`sim:eval` build to `dist/` and run the compiled output (matching
-  production module resolution). `sim:run` rebuilds automatically; rerun `sim:build` before
-  `sim:eval` if you changed simulator code since the last `sim:run`.
-
-```bash
-# Dedicated DB (never dev/prod) — copy .env.dev → .env.sim, point DATABASE_URL at zenflow_sim.
-# Pass CLI flags after `--` so pnpm forwards them to the script.
-pnpm --filter backend sim:reset                                       # drop + recreate sim schema (db push --force-reset)
-pnpm --filter backend sim:run -- --seed=1 --days=30 --personas=5      # quick run (needs the DB)
-pnpm --filter backend sim:run -- --seed=1 --start=2025-01-06 --days=365   # full year
-pnpm --filter backend sim:eval                                        # MAR + supporting metrics + IPS/SNIPS
-```
-
-`sim:run` needs a reachable `zenflow_sim` Postgres; the pure pieces (`rng`, `reaction.model`,
-`metrics`) are covered by `*.spec.ts` and run without a DB. Use a span of **≥~30 days** for
-smoke runs — each persona draws vacation/idle windows sized for the span, so a handful of days
-can legitimately produce zero events. Reusing the same `--seed` reuses persona emails
-(`sim-<archetype>-<n>@zenflow.sim`); run `sim:reset` between same-seed runs to avoid the unique
-constraint. `sim:reset` is destructive; if invoked by an AI agent Prisma will block it pending
-explicit user consent.
 
 ## Conventions
 
