@@ -5,6 +5,86 @@ All notable changes to Zenflow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0/).
 
+## [2.0.0] — 2026-07-12
+
+Scheduling is now **deadline-first**. Until now a task was scheduled inside the
+calendar view the user happened to have open — the same task created from the day
+view and the month view could be placed differently, and "fixed" tasks let a user
+pin a slot the scheduler then had to work around. Both concepts are gone. A task
+now carries a deadline and nothing else, the scheduler owns placement within
+`[now, deadline]`, and any edit that would disturb other tasks asks first.
+
+### Changed
+
+- **A deadline is required on every task, and it is entered as a chip.** The task
+  form's deadline field is now six quick actions — Today, Tomorrow, This week,
+  Next week, This month, No rush — plus Custom. Today/Tomorrow/Custom reveal a time
+  input (a new `ui/time-picker`, replacing the raw browser control). The chip values
+  come from `GET /tasks/deadline-options`, which derives them from the scheduler's
+  own `endOfPeriod` ceiling math, so they respect the night-owl wraparound exactly
+  as placement does.
+
+- **Creating a task proposes a slot before it writes anything.** The form calls
+  `POST /tasks/simulate` — a read-only dry run of the scheduler — and shows the slot
+  it picked in a confirmation toast. The task is only created once the user accepts,
+  at which point the schedule is cascaded within the new task's deadline window.
+
+- **Edits that disturb other tasks now ask first.** Changing a deadline, changing
+  tags in a way that shifts the corrected duration, or deleting a task prompts with
+  three choices: reschedule only auto-scheduled tasks, reschedule everything
+  (including manually-moved tasks), or do nothing. Whatever the cascade moves is
+  reported back in a "displaced" summary toast. Tasks already in the past or in
+  progress never prompt — their placement is history.
+
+- **`POST /tasks/:id/reschedule-cascade` → `POST /tasks/reschedule-cascade`.** The
+  cascade is no longer anchored to one task; it takes a window
+  (`windowStart`/`windowEnd`) plus an `includeManual` flag, and every non-frozen task
+  placed inside that window is eligible to move. It is the single target for all
+  three confirm-before-reschedule triggers above.
+
+- **Overflow recovery follows the deadline, not the view.** When no slot exists
+  before the deadline, the options offered are the earliest out-of-working-hours slot
+  and the earliest in-hours slot searching forward *past* the deadline. The old
+  day/week/month "next period" granularity is gone.
+
+- **Task history distinguishes an auto-move from a user move.** A task repositioned
+  as collateral in someone else's cascade now records a `RESCHEDULED` event rather
+  than `MOVE`, so the preference matrix no longer learns from placements the user
+  never chose.
+
+### Removed
+
+- **Fixed (pinned) tasks**, the `schedulingAnchor`, and the per-task `view`. Dropped
+  from the schema (`Task.fixed`, `Task.schedulingAnchor`, `Task.view`, the `ViewMode`
+  enum), the API (no more `view` / `viewStart` / `viewEnd` on create, reschedule,
+  complete, or delete), and the UI (the fixed-task form, the "outside view period"
+  after-the-fact prompt).
+
+- **The unused Phase-4 `User.roleArchetypeId`** cold-start cluster field.
+
+- **The offline simulation & evaluation harness** (`backend/src/simulation/`, added in
+  1.1.0). It had become a second, divergent copy of the scheduling logic that every
+  scheduler change had to be re-taught, while the behaviour it checked is now covered
+  by the unit specs and e2e suites. Note that the `sim:*` scripts in
+  `backend/package.json` still reference the deleted sources.
+
+### Added
+
+- **Mobile app scaffold** (`mobile/`): an Expo Router app on uniwind +
+  react-native-reusables, with the login screen, the shared UI primitives, and the
+  "Warm Sunrise" theme. It joins the pnpm workspace; `android/`/`ios/` are not tracked
+  (Expo CNG regenerates them from `app.json`). Backend `CORS_ORIGIN` now accepts a
+  comma-separated list so Expo's web target on `:8081` can reach the API in dev.
+
+### Internal
+
+- The pure scheduler primitives moved to `backend/src/scheduler/utils/` (edf, slot,
+  horizon, overflow, reranker, rationale, duration-bias, telemetry, matrix-decay, rng)
+  and gained `displace.ts`. The purity split is unchanged: `scheduler.service.ts`
+  remains the only file touching Prisma or writing telemetry.
+
+---
+
 ## [1.1.1] — 2026-06-28
 
 ### Fixed
