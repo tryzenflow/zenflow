@@ -65,8 +65,17 @@ now carries a deadline and nothing else, the scheduler owns placement within
 - **The offline simulation & evaluation harness** (`backend/src/simulation/`, added in
   1.1.0). It had become a second, divergent copy of the scheduling logic that every
   scheduler change had to be re-taught, while the behaviour it checked is now covered
-  by the unit specs and e2e suites. Note that the `sim:*` scripts in
-  `backend/package.json` still reference the deleted sources.
+  by the unit specs and e2e suites. The `sim:*` scripts, `scripts/sim-*.sh`,
+  `truncate-sim.js` and `.env.sim` go with it. Past eval dumps under
+  `backend/sim-output/` are untouched but are no longer regenerable.
+
+### Fixed
+
+- **`CORS_ORIGIN` now accepts more than one origin.** It was handed to `enableCors`
+  as a single string, so a comma-separated value was echoed back whole in
+  `Access-Control-Allow-Origin` — which browsers reject outright ("contains multiple
+  values, but only one is allowed"), blocking the web frontend. It is now split into
+  a list, and the matching origin alone is reflected.
 
 ### Added
 
