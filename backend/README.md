@@ -83,7 +83,6 @@ Defined in [`prisma/schema.prisma`](prisma/schema.prisma). Five models.
 | `preferenceMatrix` | int[] | flat **672** ints (7 days × 96 fifteen-minute slots, slot-grid-aligned). **Signed** Phase-1 telemetry: a move-toward/keep increments a cell (+1), a move-away decrements it (−1), empty = 0 (neutral). **Not yet read** by the engine. Seeded lazily. |
 | `durationAdjustmentMode` | `DurationAdjustmentMode` | `auto` \| `ask` \| `never`; default `auto`. Gates whether the Phase-2 per-tag duration corrector is *applied* (it always *learns*). |
 | `preferenceMatrixDecayedAt` | DateTime? | When the daily decay cron last decayed `preferenceMatrix`; null until the first pass |
-| `roleArchetypeId` | string? | Phase-4 cold-start cluster id |
 | `onboardingComplete` | bool | gates the onboarding redirect |
 
 ### `Task`
@@ -158,18 +157,18 @@ Global prefix **`/api/v1`**. All routes except `POST /auth/otp/*` require
 | GET | `/users/me` | profile |
 | PATCH | `/users/update/basic-info` | update name/email |
 | PUT | `/users/me/preferences` | update work hours/days/timezone (+ optional `durationAdjustmentMode`) — **triggers a full EDF reschedule of all PENDING tasks** |
-| POST | `/users/me/onboarding` | finish onboarding (sets schedule + optional role archetype + optional `durationAdjustmentMode`) |
+| POST | `/users/me/onboarding` | finish onboarding (sets schedule + optional `durationAdjustmentMode`) |
 | GET | `/users/me/preference-matrix` | the current user's flat 672-int signed preference matrix for the Insights heatmap (`PreferenceMatrixResponse`; cold-start → all-zero). Read-only |
 
 ### Tasks (`/tasks`)
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/tasks` | create a single task — always flexible, always EDF-placed (`durationMinutes` is a plain required field; there is no more `fixed`/`startTime`/`endTime`). Accepts an optional `view` (`day`/`week`/`month`) that only drives the overflow-recovery granularity, and optional `viewStart`/`viewEnd` (ISO-8601 UTC bounds of the active calendar window): these scope the **view-scoped cascade** (see below) and, when the auto-placed task fell **outside** that window, populate an `overflow` block. `overflow` is populated when the task is unplaced, **or** when it is placed but outside `[viewStart, viewEnd)`. |
+| POST | `/tasks` | create a single task — always flexible, always EDF-placed (`durationMinutes` is a plain required field; there is no more `fixed`/`startTime`/`endTime`). Placement is **solo**: the new task only lands in genuinely free space (a zero-width cascade scope freezes every already-placed task), so a create never silently displaces anything, same as an edit/delete. `overflow` is populated whenever the task can't find room this way (unplaced) — the frontend offers the same `reschedule-cascade` confirm prompt (below) before falling back to the outside-hours/next-available recovery options |
 | GET | `/tasks?view=&date=&status=` | list within the view window (+ unplaced conflicts) |
 | GET | `/tasks/suggestions?q=&limit=` | title-autocomplete: the user's existing tasks, **newest first** and **deduped by title** (case-insensitive), optionally filtered by the `q` substring. `limit` 1–50, default 10. Returns `TaskSuggestionsResponse` (`{ suggestions: Task[] }`). Read-only; never reschedules. Declared **before** `/tasks/:id` so it isn't matched as an id |
 | GET | `/tasks/:id` | task detail + last events |
-| PATCH | `/tasks/:id` | metadata only (title/note/deadline/tags), saved immediately at the task's current slot — **does NOT reschedule**. A `deadline` change sets `UpdateTaskResponse.deadlineChanged: true` so the frontend can prompt for a confirm-before-reschedule (see `reschedule-cascade` below) instead of auto-cascading. A `tags` change runs the same Phase-2 duration corrector `POST /tasks` uses and returns it as `schedulingMeta` (never auto-applied) |
-| POST | `/tasks/:id/reschedule-cascade` | explicitly run the **view-scoped cascade** for one task — the deadline-edit confirm flow, and the tag-driven duration-adjustment accept flow (optionally supply `durationMinutes` to apply an accepted correction before the cascade runs). Body: `RescheduleCascadeInput` (`viewStart?`, `viewEnd?`, `durationMinutes?`). Returns a `RescheduleResponse` |
+| PATCH | `/tasks/:id` | metadata only (title/note/deadline/tags), saved immediately at the task's current slot — **does NOT reschedule**. A `deadline` change sets `UpdateTaskResponse.deadlineChanged: true` so the frontend can prompt for a confirm-before-reschedule (see `reschedule-cascade` below). A `tags` change runs the Phase-2 duration corrector `POST /tasks` uses and applies the corrected duration in the same write (unless the user's `durationAdjustmentMode` is `"never"`), returning it as `schedulingMeta` for the frontend to show what changed |
+| POST | `/tasks/reschedule-cascade` | the shared confirm-before-reschedule target for a deadline edit, a tags-driven duration change, or a delete — no anchor task, every non-frozen task currently placed inside the window is eligible to move. The frontend computes the window client-side (±3 workdays around the affected task's own placement, clamped to `now` and re-balanced into the future when the past side is clamped) and only prompts when that task's own placement is still in the future. Body: `RescheduleCascadeInput` (`windowStart`, `windowEnd`, `includeManual?`). Returns `{ displaced: DisplacedTask[] }` |
 | PATCH | `/tasks/:id/reschedule` | manual drag → `pin`, records MOVE + signed preference telemetry |
 | PATCH | `/tasks/:id/resize` | edge-resize, snaps to 15-min grid, recomputes conflicts |
 | PATCH | `/tasks/:id/resolve-overflow` | accept a create-overflow recovery option (`{ choice: "outsideHours"\|"nextAvailable", view? }`); re-derives the slot server-side, pins the task via `manuallyMoved` (the only anchor mechanism now that fixed tasks are gone), records MOVE. Returns a `RescheduleResponse` |
@@ -181,11 +180,13 @@ Global prefix **`/api/v1`**. All routes except `POST /auth/otp/*` require
 > the direct cause of an unrelated already-placed task silently moving/conflicting as a side
 > effect of scheduling something else. Now, when the caller supplies the active calendar
 > view's `viewStart`/`viewEnd`, only **non-manual tasks currently placed inside
-> `[viewStart, viewEnd)`** — plus the task the caller is specifically trying to place (the
-> newly-created task, or the target of an explicit `reschedule-cascade`) — are eligible to
-> move; everything else (out-of-view tasks, and every `manuallyMoved` task regardless of
-> range) is frozen as occupied space. `POST /tasks`, `PATCH /tasks/:id/complete`,
-> `DELETE /tasks/:id`, and `POST /tasks/:id/reschedule-cascade` all apply this scoping.
+> `[viewStart, viewEnd)`** are eligible to move; everything else (out-of-view tasks, and every
+> `manuallyMoved` task regardless of range) is frozen as occupied space. `POST /tasks` now uses
+> a zero-width scope (solo placement — see above), so it never widens this window; the
+> newly-created task is still eligible regardless, since an unplaced task (no
+> `scheduledStartTime` yet) is never "outside" a window in the first place. `PATCH
+> /tasks/:id/complete`, `DELETE /tasks/:id`, and `POST /tasks/reschedule-cascade` apply the
+> same scoping.
 > Omitting the bounds falls back to the unscoped (full) cascade — the one remaining case is
 > the background reschedule `PUT /users/me/preferences` triggers, which has no "current
 > view" to bound to. There is also no more per-task creation-day anchor or period ceiling
