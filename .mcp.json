@@ -7,12 +7,9 @@
         "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
       }
     },
-    "figma": {
+    "figma-mcp-go": {
       "command": "npx",
-      "args": ["-y", "figma-developer-mcp", "--stdio"],
-      "env": {
-        "FIGMA_API_KEY": "${FIGMA_API_KEY}"
-      }
+      "args": ["-y", "@vkhanhqui/figma-mcp-go"]
     },
     "playwright": {
       "command": "npx",
