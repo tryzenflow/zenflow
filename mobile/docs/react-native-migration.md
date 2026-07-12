@@ -5,6 +5,12 @@
 > **Prerequisites:** Read [CLAUDE.md](../CLAUDE.md) (invariants §1–§7) and
 > [frontend/README.md](../frontend/README.md) before touching calendar or timezone logic.
 > **Related:** [heuristic.md](heuristic.md) (scheduling invariants that calendar logic must preserve)
+> **Superseded:** the styling choice below (NativeWind v4) was changed to **uniwind** when the
+> project was actually scaffolded — see [mobile/README.md](../README.md#why-uniwind-not-nativewind)
+> for why. uniwind's build-time compiler + `culori` dependency also handles OKLch → native color
+> conversion directly, so the `tokens.ts` hex-translation step this doc describes wasn't needed.
+> The rest of the plan (phases, calendar redesign, file structure) is still the target — only the
+> styling library and its consequences differ.
 
 ---
 
@@ -15,12 +21,12 @@
 | `mobile/` | The new Expo + React Native package, added at repo root alongside `frontend/` |
 | `packages/core/` | New workspace package `@zenflow/core` — pure utilities extracted from `frontend/src/utils/` |
 | Expo Router | File-based navigation for React Native (mirrors React Router's mental model; routes are files) |
-| NativeWind v4 | Tailwind CSS utility classes compiled for React Native's `StyleSheet` — no DOM dependency |
+| uniwind | Tailwind CSS compiled to native styles at build time — no DOM dependency. **Used instead of** the NativeWind v4 this doc originally scoped; see the superseded note above |
 | Reanimated | `react-native-reanimated` — worklet-based 60 fps gesture/animation library replacing dnd-kit |
 | RNGH | `react-native-gesture-handler` — native recognizers (pan, long-press, pinch) |
 | Bottom Sheet | `@gorhom/bottom-sheet` — native slide-up panel; replaces every Radix Dialog/Sheet |
 | EAS Build | Expo Application Services — cloud native builds for App Store / Play Store |
-| OKLch | The color space used in Tailwind v4 design tokens; **not** supported in RN `StyleSheet` |
+| OKLch | The color space used in Tailwind v4 design tokens; **not** supported in RN `StyleSheet` directly, but uniwind converts it to native colors at build time (via `culori`) |
 | Wall-clock rule | All calendar `Date`s carry user-tz local fields — enforced by `tz.ts` helpers (CLAUDE.md §5) |
 
 ---
@@ -66,10 +72,10 @@ This plan:
 |----------|-------------|--------------------------|-------|
 | Drag & drop | `@dnd-kit/core` + pointer sensors | `react-native-gesture-handler` `PanGestureHandler` + `react-native-reanimated` | dnd-kit is DOM-only |
 | Resize handles | Pointer-driven 10px strips at block edges | Long-press task → bottom-sheet "Change duration" slider | 10px handles untouchable on phone |
-| All Radix UI primitives | `@radix-ui/*` (20+ packages) | `@gorhom/bottom-sheet` (sheet/dialog), NativeWind (dropdown), RN built-ins (tabs) | Radix is DOM-only |
+| All Radix UI primitives | `@radix-ui/*` (20+ packages) | `@gorhom/bottom-sheet` (sheet/dialog), React Native Reusables + `@rn-primitives/*` (dropdown), RN built-ins (tabs) | Radix is DOM-only |
 | Rich text note editor | Tiptap / ProseMirror | Native `TextInput` multiline (Phase 1); `@10play/tentap-editor` (Phase 2) | Tiptap has no RN port |
-| Navigation | React Router v7 | Expo Router v4 (file-based, same mental model) | |
-| CSS layout + OKLch design tokens | Tailwind v4 Vite plugin | NativeWind v4 + `tokens.ts` (OKLch → hex/RGB) | RN `StyleSheet` rejects OKLch |
+| Navigation | React Router v7 | Expo Router (file-based, same mental model) | |
+| CSS layout + OKLch design tokens | Tailwind v4 Vite plugin | uniwind (build-time Tailwind → native styles; OKLch converted via `culori`, no manual hex `tokens.ts`) | RN `StyleSheet` rejects OKLch directly |
 | `position: absolute` % values | `top/left/width/height` as `%` strings | Same math; output numeric dp values (`(min / 1440) × totalHeight`) | |
 | Cookie session management | Browser HTTP-only cookies (automatic) | `@react-native-cookies/cookies` + axios interceptor + `expo-secure-store` | |
 | File uploads | `<input type="file">` multipart | `expo-image-picker` + `expo-document-picker` + `expo-file-system` | |
@@ -77,7 +83,7 @@ This plan:
 | Icons | `lucide-react` | `lucide-react-native` (drop-in name parity) | |
 | Keyboard shortcuts | `useViewShortcuts` (d/w/m, arrows) | Remove; replace with tab bar + swipe navigation | Not applicable on mobile |
 | PWA offline / service worker | `vite-plugin-pwa` | `expo-updates` OTA | |
-| Dark mode | `next-themes` + CSS `prefers-color-scheme` | `useColorScheme()` + NativeWind `dark:` variant | |
+| Dark mode | `next-themes` + CSS `prefers-color-scheme` | uniwind's theme system (`dark:` variant, `Uniwind.setTheme()`, syncs with `useColorScheme()` by default) | |
 
 ---
 
@@ -117,7 +123,7 @@ zenflow/
 │   │   │   └── overflow-sheet.tsx     # Overflow resolution bottom sheet
 │   │   ├── onboarding/step-*.tsx
 │   │   ├── settings/preferences-form.tsx
-│   │   └── ui/                        # NativeWind primitive components
+│   │   └── ui/                        # uniwind / React Native Reusables primitive components
 │   ├── hooks/
 │   │   ├── use-user-store.ts          # Zustand (same as web)
 │   │   ├── use-task-form.ts           # Ported RHF hook
@@ -127,7 +133,7 @@ zenflow/
 │   │   ├── task-card.ts               # Same state logic → RN style objects
 │   │   └── api-client.ts              # Cookie-aware axios instance
 │   ├── src/api/                       # Ported from frontend/src/api/
-│   ├── src/tokens.ts                  # OKLch → hex/RGB design token translation
+│   ├── global.css                     # uniwind theme source (@layer theme / @variant light|dark) — already scaffolded
 │   ├── app.json                       # Expo config (APP_API_URL, bundle ID, etc.)
 │   ├── babel.config.js
 │   ├── package.json
@@ -156,12 +162,12 @@ zenflow/
 
 ```json
 {
-  "expo": "~53.x",
-  "expo-router": "~4.x",
-  "react-native": "0.79.x",
-  "react-native-gesture-handler": "~2.21.x",
-  "react-native-reanimated": "~3.17.x",
-  "nativewind": "^4.1.x",
+  "expo": "^56",
+  "expo-router": "~56.x",
+  "react-native": "0.85.x",
+  "react-native-gesture-handler": "~2.31.x",
+  "react-native-reanimated": "4.3.x",
+  "uniwind": "^1.9.x",
   "tailwindcss": "^4.x",
   "react-hook-form": "^7.x",
   "zod": "^3.x",
@@ -169,22 +175,29 @@ zenflow/
   "axios": "^1.x",
   "date-fns": "^4.x",
   "date-fns-tz": "^3.x",
-  "expo-haptics": "~14.x",
-  "expo-secure-store": "~14.x",
+  "expo-haptics": "~56.x",
+  "expo-secure-store": "~56.x",
   "expo-image-picker": "~16.x",
   "expo-document-picker": "~12.x",
   "expo-file-system": "~18.x",
   "@gorhom/bottom-sheet": "^5.x",
   "react-native-toast-message": "^2.x",
-  "lucide-react-native": "latest",
+  "lucide-react-native": "^1.21.x",
   "@react-native-cookies/cookies": "^5.x"
 }
 ```
 
-**Design token translation.** The "Warm Sunrise" palette uses OKLch — unsupported in RN `StyleSheet`.
-Maintain `mobile/src/tokens.ts` mapping every `--brand-*`, `--background`, `--foreground`, `--card`,
-`--muted`, `--border`, `--destructive` token to light/dark hex pairs. Use this as the single source of
-truth for RN styles; never hardcode hex values in component files.
+(Actual installed versions in `mobile/package.json` are the source of truth — this is
+illustrative, not pinned.)
+
+**Design tokens.** The "Warm Sunrise" palette uses OKLch. Unlike the original NativeWind
+plan, this doesn't need manual hex translation: `mobile/global.css` ports the tokens
+directly as `oklch(...)` values (uniwind's build-time compiler, via `culori`, converts
+them to native colors). The one place OKLch genuinely can't reach is React Navigation's
+native header/tab-bar chrome, which takes plain color strings — `mobile/lib/theme.ts`
+keeps a hand-maintained hex mirror of the same tokens for that purpose only. Everything
+else should read tokens from `global.css` via `className`; never hardcode hex values in
+component files.
 
 ---
 
@@ -324,13 +337,25 @@ showing typography scale (Geist), spacing scale, and border-radius.
 
 ### Phase 1 — Scaffold `mobile/` + Auth + Onboarding (3–4 days)
 
-1. Run `npx create-expo-app@latest mobile --template expo-router` at repo root.
-2. Configure NativeWind v4 (`babel.config.js` preset, `tailwind.config.js` with `content` pointing at `app/**` and `components/**`).
-3. Add `mobile/src/tokens.ts`: convert all OKLch design tokens to hex/RGB light/dark pairs.
+1. ~~Run `npx create-expo-app@latest mobile --template expo-router`~~ **Done, differently:**
+   scaffolded from React Native Reusables' `minimal-uniwind` template (cloned via
+   `git sparse-checkout` from `founded-labs/react-native-reusables-templates`) instead —
+   it already had uniwind + RN Reusables + the Metro/babel/root-layout wiring done
+   correctly, so there was nothing left to configure by hand.
+2. ~~Configure NativeWind v4~~ **Done, differently:** uniwind's `metro.config.js` wrapper
+   (`withUniwindConfig`) is the equivalent step; see `mobile/README.md`'s pnpm-workspace
+   notes for the monorepo-specific additions (`watchFolders`, symlink resolution) layered
+   on top of it.
+3. ~~Add `mobile/src/tokens.ts`~~ **Not needed:** `mobile/global.css` ports the OKLch tokens
+   directly (uniwind converts them at build time). `mobile/lib/theme.ts` is the one
+   hand-maintained hex mirror, and it's only for React Navigation's native chrome colors.
 4. Add `@zenflow/shared` and `@zenflow/core` as workspace deps (`pnpm --filter mobile add @zenflow/shared @zenflow/core`).
 5. Port `frontend/src/api/` → `mobile/src/api/`; replace `VITE_API_URL` with `process.env.EXPO_PUBLIC_API_URL`.
 6. Create `mobile/src/lib/api-client.ts`: axios instance with `@react-native-cookies/cookies` jar.
 7. Implement `app/(auth)/login.tsx` — 2-stage OTP form (port logic from `frontend/src/pages/login.tsx`).
+   **Stage 1 (email) scaffolded** as a local-state-only screen (no API call yet) to prove
+   the Expo/uniwind/RN Reusables/theme setup works — see `mobile/README.md`. Stage 2
+   (code entry) and the actual OTP request/verify calls are still open, blocked on step 6.
 8. Implement `app/(onboarding)/[step].tsx` — 6-step wizard (port validation from `frontend/src/pages/onboarding.tsx`).
 9. Implement root `app/_layout.tsx` auth gate using Expo Router `<Redirect>` (replaces `WithAuth` HOC).
 10. Implement `app/(app)/_layout.tsx` with 4-tab bar (Day | Week | Month | Settings).
@@ -377,7 +402,7 @@ showing typography scale (Geist), spacing scale, and border-radius.
 ### Phase 6 — Polish + EAS (ongoing)
 
 1. Haptic tuning: `Haptics.impactAsync(Medium)` on snap, `Light` on hover, `Success` on complete, `Error` on conflict.
-2. Dark mode: `useColorScheme()` + NativeWind `dark:` classes + token-aware RN styles.
+2. Dark mode: uniwind's `dark:` classes (already adaptive by default via `useUniwind()`/`Uniwind.setTheme()`) + token-aware RN styles.
 3. `eas.json`: `development` (dev client), `preview` (internal TestFlight/Play), `production` profiles.
 4. E2e tests: Maestro flows for login → create task → verify in day view.
 

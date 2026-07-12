@@ -90,6 +90,10 @@ frontend `dev | build | typecheck | lint | test:e2e`.
 
 - API → `http://localhost:5000`; Swagger UI → `http://localhost:5000/api`.
 - Frontend dev → `http://localhost:5173` (`VITE_API_URL` points at the API).
+- Mobile dev → `http://localhost:8081` (Expo/Metro, web target only —
+  `EXPO_PUBLIC_API_URL` points at the API; native iOS/Android isn't
+  origin-based). Backend `CORS_ORIGIN` (`.env.dev`/`.env.sim`) is
+  comma-separated and must list both dev web origins.
 - OTP login emails are caught by MailHog in the local Docker stack.
 
 ## Keeping docs in sync
