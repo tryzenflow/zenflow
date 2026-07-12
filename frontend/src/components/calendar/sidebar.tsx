@@ -53,7 +53,6 @@ function groupByDay(
 /** Row treatment per state — mirrors the calendar card colours (mockup 02). */
 const AGENDA_ROW: Record<TaskCardState, string> = {
   fluid: "border-border bg-card hover:bg-sidebar-accent",
-  fixed: "border-border bg-card hover:bg-sidebar-accent",
   overdue:
     "border-rose-400/60 bg-rose-50/60 dark:border-rose-900/30 dark:bg-rose-950/20",
   conflict:
@@ -63,7 +62,6 @@ const AGENDA_ROW: Record<TaskCardState, string> = {
 
 const AGENDA_TIME: Record<TaskCardState, string> = {
   fluid: "text-muted-foreground",
-  fixed: "text-muted-foreground",
   overdue: "text-rose-600 dark:text-rose-400",
   conflict: "text-amber-600 dark:text-amber-400",
   completed: "text-muted-foreground",
@@ -271,10 +269,9 @@ export function SidebarBody({ meta, agenda, view }: SidebarProps) {
             to mark a task as completed.
           </li>
           <li>
-            <span className="font-semibold text-foreground">Flexible</span>{" "}
-            tasks are auto-placed by the engine;{" "}
-            <span className="font-semibold text-foreground">fixed</span> ones
-            stay where you put them.
+            The engine auto-places your tasks; ones you{" "}
+            <span className="font-semibold text-foreground">drag or resize</span>{" "}
+            stay pinned where you put them.
           </li>
           <li>
             Overlapping tasks are flagged as{" "}

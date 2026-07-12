@@ -22,11 +22,10 @@ test("onboarding exposes the duration-adjustment mode step and persists it", asy
   // Step rail should list the new "Adjustments" step.
   await expect(page.getByText("Adjustments")).toBeVisible();
 
-  // Click through Welcome → Work Hours → Work Days → Your Role → Adjustments.
+  // Click through Welcome → Work Hours → Work Days → Adjustments.
   const next = page.getByRole("button", { name: /continue/i });
   await next.click(); // → Work Hours
   await next.click(); // → Work Days
-  await next.click(); // → Your Role
   await next.click(); // → Adjustments
 
   await expect(

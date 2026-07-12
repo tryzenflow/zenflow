@@ -12,10 +12,16 @@ import { DAILY_HORIZON, TIME_GRANULARITY } from "@/utils/constants";
 import type { BlockLayout } from "@/utils/overlap";
 import { zonedDate, zonedWallClockToUtc } from "@/utils/tz";
 import { CSS } from "@dnd-kit/utilities";
-import { useDraggable } from "@dnd-kit/core";
+import { useDndMonitor, useDraggable, type DragEndEvent } from "@dnd-kit/core";
 import { toZonedTime } from "date-fns-tz";
 import { CornerDownRight, Lock } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 function minutesOfDay(iso: string, tz: string) {
   const d = toZonedTime(new Date(iso), tz);
@@ -120,10 +126,11 @@ export function ScheduledBlockItem({
   const isCompleted = block.status === "DONE";
   const isSplit = Boolean(block.continued);
   const isInteractive = !isCompleted && !isSplit;
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({
-    id: block.segmentId,
-    disabled: !isInteractive,
-  });
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({
+      id: block.segmentId,
+      disabled: !isInteractive,
+    });
 
   // Edge-resize: while a handle is dragged we drive the block's top/height from
   // these preview minutes; on release we persist the new start + duration.
@@ -132,6 +139,44 @@ export function ScheduledBlockItem({
     nodeRef.current = node;
     setNodeRef(node);
   };
+
+  // A drop must land instantly under the pointer — only the scheduler's own
+  // moves glide (see the transition class below).
+  //
+  // dnd-kit clears the drag transform in the same batched update that the view's
+  // optimistic start/end lands in, so one commit both snaps the block back to its
+  // pre-drag `top` (transform gone) and moves `top` to the dropped slot. Left
+  // armed, the transition plays that as a rewind-and-glide from where the block
+  // was picked up. Suppressing it via a render-time flag doesn't work: React
+  // flushes pending passive effects before it renders, so any effect that resets
+  // such a flag can fire between drag-end and the drop's render. So we turn
+  // transitions off on the node itself, which no React commit can undo.
+  const dropped = useRef(false);
+  useDndMonitor(
+    useMemo(
+      () => ({
+        // Dispatched synchronously inside dnd-kit's batched drag-end update, so
+        // this lands before React renders the drop.
+        onDragEnd: ({ active }: DragEndEvent) => {
+          if (active.id !== block.segmentId) return;
+          dropped.current = true;
+          if (nodeRef.current) nodeRef.current.style.transitionProperty = "none";
+        },
+      }),
+      [block.segmentId],
+    ),
+  );
+  // Runs in the commit phase (never deferred, unlike a passive effect), so it
+  // always sees the dropped position in the DOM. Reading a layout property
+  // flushes styles while transitions are still off, which re-bases the block at
+  // the drop target — handing the class back afterwards then has nothing to
+  // animate, and the next scheduler-driven move transitions normally.
+  useLayoutEffect(() => {
+    if (!dropped.current || !nodeRef.current) return;
+    dropped.current = false;
+    void nodeRef.current.offsetTop;
+    nodeRef.current.style.transitionProperty = "";
+  });
 
   // Scroll the block into view whenever it becomes the highlighted target.
   // Fires after the DOM update (mount or refetch) so nodeRef.current is set.
@@ -305,7 +350,18 @@ export function ScheduledBlockItem({
     <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
       <PopoverAnchor asChild>
         <div
-          className="group absolute z-10 px-0.5"
+          className={cn(
+            "group absolute z-10 px-0.5",
+            // Animate position/size changes that come from data (server-confirmed
+            // reschedules, other clients, scheduler re-runs) so blocks glide to
+            // their new slot instead of popping there. Suppressed while the user
+            // is actively dragging/resizing so direct manipulation stays 1:1 with
+            // the pointer — and, for the drop itself, by the inline
+            // `transitionProperty` override above.
+            !preview &&
+              !isDragging &&
+              "transition-[top,left,width,height] duration-300 ease-out",
+          )}
           ref={setRefs}
           {...attributes}
           {...listeners}
@@ -412,7 +468,7 @@ export function ScheduledBlockItem({
             {isCompact ? (
               <>
                 <div className="flex min-w-0 flex-1 items-center gap-1">
-                  {block.fixed && (
+                  {block.manuallyMoved && (
                     <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />
                   )}
                   {block.continued && (
@@ -434,7 +490,7 @@ export function ScheduledBlockItem({
             ) : (
               <>
                 <div className="flex items-center gap-1">
-                  {block.fixed && (
+                  {block.manuallyMoved && (
                     <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />
                   )}
                   {block.continued && (
@@ -528,9 +584,9 @@ export function ScheduledBlockItem({
             </div>
           </dl>
 
-          {(block.fixed || block.conflict) && (
+          {(block.manuallyMoved || block.conflict) && (
             <div className="flex flex-wrap gap-2 text-xs">
-              {block.fixed && (
+              {block.manuallyMoved && (
                 <span className="inline-flex items-center gap-1 text-muted-foreground">
                   <Lock className="h-3 w-3" /> Pinned
                 </span>

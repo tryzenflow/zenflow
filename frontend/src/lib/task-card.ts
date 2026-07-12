@@ -3,7 +3,6 @@ import type { TaskCardState } from "@zenflow/shared";
 interface StateInput {
   status: string;
   conflict: boolean;
-  fixed: boolean;
   deadline: string | null;
   scheduledStartTime: string | null;
 }
@@ -14,7 +13,6 @@ export function deriveState(t: StateInput, now = new Date()): TaskCardState {
   if (t.conflict) return "conflict";
   if (t.deadline && new Date(t.deadline).getTime() < now.getTime())
     return "overdue";
-  if (t.fixed) return "fixed";
   return "fluid";
 }
 
@@ -35,7 +33,6 @@ export function withOverlap(
 /** Semantic status classes — left-accent border + background per state. */
 export const TASK_CARD_CLASSES: Record<TaskCardState, string> = {
   fluid: "glass-task border-l-primary",
-  fixed: "bg-muted/50 border-dashed border-l-muted-foreground/50",
   overdue:
     "bg-rose-50/40 dark:bg-rose-950/10 border-l-rose-500 text-rose-950 dark:text-rose-100",
   conflict:

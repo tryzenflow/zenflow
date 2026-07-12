@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { format } from "date-fns";
 import { Cell } from "./day-cell";
 import { DayColumnBackground } from "./day-column-background";
@@ -7,7 +8,8 @@ import { ScheduledBlockItem } from "./scheduled-block-item";
 import { getOverlapLayout } from "@/utils/overlap";
 import { eventsForDay } from "@/utils/blocks";
 import { useUserStore } from "@/hooks/use-user-store";
-import { isZonedToday, zonedNow } from "@/utils/tz";
+import { useNow } from "@/hooks/use-now";
+import { isZonedToday, zonedDate } from "@/utils/tz";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
@@ -25,6 +27,8 @@ export const WeekGrid = ({
   weekDates: Date[];
 }) => {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
+  const now = useNow();
+  const zonedNowDate = useMemo(() => zonedDate(now, tz), [now, tz]);
   return (
     <>
       {/* Time ruler */}
@@ -58,13 +62,14 @@ export const WeekGrid = ({
 
           {isZonedToday(date, tz) && (
             <div
-              className="pointer-events-none absolute right-0 left-0 z-20"
+              className="pointer-events-none absolute right-0 left-0 z-20 transition-[top] duration-1000 ease-linear"
               style={{
-                top: `${64 * zonedNow(tz).getHours() + zonedNow(tz).getMinutes()}px`,
+                top: `${64 * zonedNowDate.getHours() + zonedNowDate.getMinutes()}px`,
               }}
             >
               <div className="relative flex items-center">
                 <div className="absolute -left-1 h-2 w-2 rounded-full bg-rose-500 shadow-sm" />
+                <div className="absolute animate-ping -left-1 h-2 w-2 rounded-full bg-rose-500 shadow-sm" />
                 <div className="h-[2px] w-full bg-gradient-to-r from-rose-500 via-rose-400/50 to-transparent" />
               </div>
             </div>

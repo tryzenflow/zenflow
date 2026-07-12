@@ -7,6 +7,7 @@ import {
   Pin,
   Plus,
   Scaling,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import type { TaskEvent, TaskSnapshot } from "@zenflow/shared";
@@ -19,9 +20,10 @@ const EVENT_LABEL: Record<TaskEvent["eventType"], string> = {
   KEEP: "kept the current slot",
   COMPLETE: "completed this task",
   ABANDON: "abandoned this task",
+  RESCHEDULED: "rescheduled this task",
 };
 
-/** Dot color semantics — neutral / amber / emerald / red. */
+/** Dot color semantics — neutral / amber / emerald / red / brand (auto). */
 const EVENT_DOT: Record<TaskEvent["eventType"], string> = {
   CREATE: "bg-muted-foreground text-background",
   MOVE: "bg-brand-yellow text-white",
@@ -29,6 +31,7 @@ const EVENT_DOT: Record<TaskEvent["eventType"], string> = {
   KEEP: "bg-lime-500 text-white",
   COMPLETE: "bg-green-500 text-white",
   ABANDON: "bg-destructive text-white",
+  RESCHEDULED: "bg-primary/30 text-primary",
 };
 
 const EVENT_ICON: Record<TaskEvent["eventType"], LucideIcon> = {
@@ -38,6 +41,7 @@ const EVENT_ICON: Record<TaskEvent["eventType"], LucideIcon> = {
   KEEP: Pin,
   COMPLETE: Check,
   ABANDON: Ban,
+  RESCHEDULED: Sparkles,
 };
 
 interface Range {

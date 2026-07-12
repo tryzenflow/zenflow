@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { ViewModeSelect } from "./view-mode-select";
 import { endOfWeek, format, startOfMonth } from "date-fns";
 import { Dispatch, SetStateAction } from "react";
-import { ViewMode } from "@/types/schedule";
+import { Event, ViewMode } from "@/types/schedule";
 import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
 import { useUserStore } from "@/hooks/use-user-store";
 import { zonedNow } from "@/utils/tz";
@@ -19,6 +19,9 @@ interface CalendarHeaderProps {
   onChanged: () => void;
   /** Open the mobile nav drawer (hamburger is shown only below `lg`). */
   onOpenNav?: () => void;
+  /** The calendar's currently-loaded blocks, threaded into `CreateTaskDialog`
+   * for displaced-task title lookups. */
+  blocks: Event[];
 }
 
 export function CalendarHeader({
@@ -28,6 +31,7 @@ export function CalendarHeader({
   setCurrentView,
   onChanged,
   onOpenNav,
+  blocks,
 }: CalendarHeaderProps) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const shift = (direction: NavDirection) =>
@@ -96,6 +100,7 @@ export function CalendarHeader({
         <CreateTaskDialog
           date={date}
           view={currentView}
+          blocks={blocks}
           onCreated={onChanged}
         />
       </div>

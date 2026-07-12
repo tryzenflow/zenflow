@@ -8,7 +8,8 @@ import { DayColumnBackground } from "./day-column-background";
 import { getOverlapLayout } from "@/utils/overlap";
 import { eventsForDay } from "@/utils/blocks";
 import { useUserStore } from "@/hooks/use-user-store";
-import { isZonedToday, zonedNow } from "@/utils/tz";
+import { useNow } from "@/hooks/use-now";
+import { isZonedToday, zonedDate } from "@/utils/tz";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
@@ -24,10 +25,11 @@ function formatHour(hour: number) {
 
 export function DayGrid({ events, date }: { events: Event[]; date: Date }) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
+  const now = useNow();
   const nowTop = useMemo(() => {
-    const mins = minutesSinceStartOfDay(zonedNow(tz));
+    const mins = minutesSinceStartOfDay(zonedDate(now, tz));
     return `${(mins / DAILY_HORIZON) * 100}%`;
-  }, [tz]);
+  }, [now, tz]);
 
   // Clamp/split tasks to this day so cross-midnight tasks render their leftover
   // portion as a continuation segment at the top of the next day.
@@ -55,11 +57,12 @@ export function DayGrid({ events, date }: { events: Event[]; date: Date }) {
 
         {isZonedToday(date, tz) && (
           <div
-            className="pointer-events-none absolute inset-x-0 z-20"
+            className="pointer-events-none absolute inset-x-0 z-20 transition-[top] duration-1000 ease-linear"
             style={{ top: nowTop }}
           >
             <div className="relative flex items-center">
               <div className="absolute -left-1 h-2 w-2 rounded-full bg-rose-500 shadow-sm" />
+              <div className="absolute animate-ping -left-1 h-2 w-2 rounded-full bg-rose-500 shadow-sm" />
               <div className="h-[2px] w-full bg-gradient-to-r from-rose-500 via-rose-400/50 to-transparent" />
             </div>
           </div>

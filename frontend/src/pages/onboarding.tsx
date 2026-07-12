@@ -10,7 +10,6 @@ import { cn } from "@/lib/utils";
 import { useUserStore } from "@/hooks/use-user-store";
 import { completeOnboarding } from "@/api/users";
 import {
-  ARCHETYPES,
   DAYS,
   isValidWindow,
   minutesToLabel,
@@ -24,14 +23,7 @@ import {
 } from "@/components/settings/duration-mode-field";
 import type { DurationAdjustmentMode } from "@/types/phase2";
 
-const STEPS = [
-  "Welcome",
-  "Work Hours",
-  "Work Days",
-  "Your Role",
-  "Adjustments",
-  "All Set",
-];
+const STEPS = ["Welcome", "Work Hours", "Work Days", "Adjustments", "All Set"];
 
 function StepRail({ current }: { current: number }) {
   return (
@@ -99,7 +91,6 @@ function OnboardingWizard() {
   const [workStart, setWorkStart] = useState(540);
   const [workEnd, setWorkEnd] = useState(1020);
   const [workDays, setWorkDays] = useState<number[]>([1, 2, 3, 4, 5]);
-  const [roleArchetypeId, setRole] = useState<string | null>(null);
   const [durationMode, setDurationMode] =
     useState<DurationAdjustmentMode>("auto");
 
@@ -128,8 +119,7 @@ function OnboardingWizard() {
     (step === 2 && workDays.length > 0) ||
     step === 0 ||
     step === 3 ||
-    step === 4 ||
-    step === 5;
+    step === 4;
 
   async function finish() {
     setLoading(true);
@@ -139,7 +129,6 @@ function OnboardingWizard() {
         workEnd,
         workDays,
         timezone,
-        roleArchetypeId,
         durationAdjustmentMode: durationMode,
       });
       setUser(updated);
@@ -199,16 +188,6 @@ function OnboardingWizard() {
             {step === 3 && (
               <>
                 <h1 className="mb-2 text-2xl font-bold tracking-tight">
-                  What's your role?
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  Optional — helps Zenflow seed smarter defaults from day one.
-                </p>
-              </>
-            )}
-            {step === 4 && (
-              <>
-                <h1 className="mb-2 text-2xl font-bold tracking-tight">
                   Duration adjustments
                 </h1>
                 <p className="text-sm text-muted-foreground">
@@ -217,7 +196,7 @@ function OnboardingWizard() {
                 </p>
               </>
             )}
-            {step === 5 && (
+            {step === 4 && (
               <>
                 <h1 className="mb-2 text-2xl font-bold tracking-tight">
                   You're all set
@@ -299,44 +278,13 @@ function OnboardingWizard() {
             )}
 
             {step === 3 && (
-              <div className="space-y-2">
-                {ARCHETYPES.map((a) => {
-                  const on = roleArchetypeId === a.id;
-                  return (
-                    <button
-                      key={a.id}
-                      type="button"
-                      onClick={() => setRole(on ? null : a.id)}
-                      className={cn(
-                        "w-full rounded-md border p-3 text-left transition-colors",
-                        on
-                          ? "border-primary bg-primary/10"
-                          : "border-border bg-card hover:border-primary/50",
-                      )}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-semibold">{a.name}</span>
-                        <span className="font-mono text-[10px] text-muted-foreground">
-                          {a.sig}
-                        </span>
-                      </div>
-                      <p className="mt-0.5 text-[11px] text-muted-foreground">
-                        {a.blurb}
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {step === 4 && (
               <DurationModeField
                 value={durationMode}
                 onChange={setDurationMode}
               />
             )}
 
-            {step === 5 && (
+            {step === 4 && (
               <div className="space-y-2 rounded-md border border-border bg-muted p-4 text-sm">
                 <Row
                   label="Hours"
@@ -349,13 +297,6 @@ function OnboardingWizard() {
                   value={DAYS.filter((d) => workDays.includes(d.iso))
                     .map((d) => d.label)
                     .join(", ")}
-                />
-                <Row
-                  label="Role"
-                  value={
-                    ARCHETYPES.find((a) => a.id === roleArchetypeId)?.name ??
-                    "Not set"
-                  }
                 />
                 <Row
                   label="Adjustments"

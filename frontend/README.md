@@ -83,15 +83,79 @@ Task create/edit lives in `components/tasks/` (`create-task-dialog`, `edit-task-
 `form/task-form`, `rrule-form`, `note-editor`). In **create** mode the "Task name" field is
 a combobox (`TitleField` in `form/task-form.tsx`): typing fetches the user's existing tasks
 (`GET /tasks/suggestions`, debounced ~250ms, server-ordered by recency) and picking one
-autocompletes the rest of the form — duration, scheduling type, tags, note, and a
-forward-shifted deadline (the source task's create→deadline lead time re-applied from now,
-split into date/time in the user's tz). Edit mode keeps the plain input.
+autocompletes the rest of the form — duration, tags, note, and a forward-shifted deadline
+(the source task's create→deadline lead time re-applied from now). Edit mode keeps the plain
+input. There is no "fixed vs flexible" scheduling-type toggle anymore — every task is
+flexible; a task only stays put once it's `manuallyMoved` (dragged/resized, or an accepted
+overflow-recovery option), rendered as a lock icon on the block, not a distinct card state.
+
+**Deadline is required** and is set entirely through quick-action chips
+(`components/tasks/form/deadline-chip-field.tsx`) — Today / Tomorrow / This week / Next week
+/ This month / No rush / Custom (the old date+time inputs and the view-scoped "no deadline"
+mode are gone). The six non-custom values are prefetched once per form-open from
+`GET /tasks/deadline-options` (`getDeadlineOptions` in `api/tasks.ts`) so every click is
+instant; Today/Tomorrow pin the calendar day and let the user fine-tune only the time,
+Custom exposes both the existing `DatePicker` and the new `components/ui/time-picker.tsx` (a
+Popover-based hour/minute/AM-PM picker — todo.md explicitly rejects the native
+`<input type="time">`).
+
+**Create is direct, but never silently displaces.** Submitting the form calls `POST /tasks`
+immediately — no simulate-then-confirm step for the common case, since the backend places the
+new task solo (a zero-width cascade scope, so it only lands in genuinely free space — see
+`backend/README.md`). A non-empty `displaced` array (any cascade response — edit, delete,
+drag/resize, or the rare case where creating this task let some OTHER already-unplaced task
+also find a home) drives the shared `tasks/displaced-summary-toast.tsx` ("N other tasks
+moved…", expandable). When the new task can't fit without displacing something, `overflow` is
+populated and `create-task-dialog.tsx` offers the SAME confirm-before-reschedule prompt
+described below (window `[now, deadline]` — the task's own full feasible range) before falling
+back to `overflow-toast.tsx` (outside-working-hours vs. next-available-working-hours, which
+reposition the new task itself rather than moving anything else) if declined.
+
+Editing a task's deadline or tags, deleting a task, and now creating one, all fold through one
+shared confirm-before-reschedule path: `tasks/prompt-reschedule-cascade.ts`'s
+`promptRescheduleCascade` (`edit-task-dialog.tsx` calls it after `updateTask`/`deleteTask`,
+having captured the task's pre-delete `scheduledStartTime` since the row is gone by confirm
+time; `create-task-dialog.tsx` calls it when `overflow` comes back). Each caller owns its own
+window and gating, since the triggers differ:
+- **Deadline edit** — no-ops for a past/in-progress task or one with no placement (todo.md
+  §Rescheduling Design). Window is `[now, newDeadline]`: a deadline change's meaningful search
+  range IS the new deadline (shortening it can conflict with anything up to the old bound,
+  lengthening it opens room anywhere up to the new one), so there's no natural fixed size to
+  cap the search at.
+- **Tags-driven duration change** and **delete** — same past/in-progress/no-placement no-op,
+  but a fixed ±3-workday band (`utils/tasks.ts`'s `cascadeWindow`: the 3 nearest workdays each
+  side of the task's placement, back-clamped to `now` with any clamped-away day shifted onto
+  the forward side), since these are point-in-time disruptions with no natural range to search.
+  The corrected duration itself is applied immediately by `PATCH /tasks/:id`, not deferred to
+  the cascade confirm; the tags-change prompt only fires when the tags actually changed
+  (`edit-task-dialog.tsx` diffs the submitted tags against the task's pre-edit tags —
+  `schedulingMeta` alone isn't reliable, since the backend returns it whenever the update
+  touches the `tags` field at all, not only when it changed).
+- **Create** — no-ops unless `overflow` came back (the new task itself couldn't find room).
+  Window is `[now, deadline]`, same reasoning as a deadline edit.
+
+Confirming any of these calls `POST /tasks/reschedule-cascade` (`RescheduleCascadeInput` —
+`windowStart`/`windowEnd` computed client-side, `includeManual?`; no anchor task). The 2-button
+variant (`tasks/reschedule-confirm-toast.tsx`) is built on the shared `ConfirmToastShell`
+(title + description + 1-3 action buttons) in `lib/scheduling-toasts.tsx`, itself wrapped in
+the same `shell()` popover `overflow-toast.tsx` always used — no new AlertDialog primitive.
+
+**3-option manual-vs-auto reschedule choice** (todo.md §Rescheduling Design):
+`promptRescheduleCascade` checks the caller's window (`utils/tasks.ts`'s
+`hasManualTaskInWindow`, against the currently-loaded calendar `blocks`) for any
+`manuallyMoved` task. If one is in scope, it shows `tasks/reschedule-choice-toast.tsx` instead
+of the plain 2-button confirm — "Only move auto-scheduled tasks" (`rescheduleCascade` with
+`includeManual` omitted, the default), "Reschedule everyone" (`includeManual: true` — the
+backend un-pins any manual task it ends up moving), or "I'll do it myself" (no call; fires
+`onDecline` if the caller gave one — create's only use of it, to fall back to overflow-recovery).
+When nothing manual is in the window the two options are behaviorally identical, so the
+original 2-button toast stays as-is.
 
 **Settings** is a dialog, not a route: `components/settings/settings-dialog.tsx` is a
-Todoist-style **tabbed** dialog — **Work** (hours / days / role archetype / timezone via
+Todoist-style **tabbed** dialog — **Work** (hours / days / timezone via
 `updatePreferences`), **Scheduling** (the Phase-2 `auto | ask | never` duration-adjustment
-mode, `components/settings/duration-mode-field.tsx`), **Insights** (`UserPreferencesPanel`
-in `components/settings/preferences.tsx`, two sections: the 7×24 signed preference heatmap
+mode via `components/settings/duration-mode-field.tsx`), **Insights** (`UserPreferencesPanel` in
+`components/settings/preferences.tsx`, two sections: the 7×24 signed preference heatmap
 fetched from `GET /users/me/preference-matrix` and per-tag learned duration multipliers
 fetched from `GET /users/me/tag-bias`, both with cold-start empty states), and **Account**
 (the Log out action). It's mounted once in `layout.tsx`; the sidebar footer (`sidebar.tsx`) shows the
@@ -101,7 +165,7 @@ signed-in user and opens it via a `zenflow:open-settings` window event (same pat
 `duration-mode-field.tsx`.
 
 **Onboarding** (`pages/onboarding.tsx`) is a wizard whose steps are Welcome · Work Hours ·
-Work Days · Your Role · **Adjustments** (the same `auto | ask | never` control) · All Set;
+Work Days · **Adjustments** (the same `auto | ask | never` control) · All Set;
 the chosen mode is wired into `OnboardingInput.durationAdjustmentMode`.
 
 **Phase-2 transparency UI (issue #13).** Scheduling decisions are surfaced as sonner
@@ -114,8 +178,8 @@ revert via `PATCH /tasks/:id/resize`). The rationale toast is shown from `layout
 edge-resized, `scheduled-block-item.tsx` renders the added/removed minutes as a distinct
 delta band/label (purely visual, driven off the existing resize-preview state so it doesn't
 touch the drag/resize gesture path). The Phase-2 `@zenflow/shared` type deltas are consumed
-through `src/types/phase2.ts` — a temporary shim that mirrors the ADR shapes until the
-backend ships them in `@zenflow/shared` (see the file header for the one-line migration).
+through `src/types/phase2.ts` — a thin re-export aggregator, not a shim (every type it
+re-exports now ships directly from `@zenflow/shared`).
 
 ## Calendar internals
 

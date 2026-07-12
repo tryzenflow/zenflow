@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { DatePicker } from "@/components/ui/datepicker";
 import {
   Form,
   FormControl,
@@ -10,27 +9,26 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { TaskFormValues } from "@/utils/tasks";
-import { format } from "date-fns";
-import { isZonedToday } from "@/utils/tz";
-import { useUserStore } from "@/hooks/use-user-store";
 import { UseFormReturn } from "react-hook-form";
 import { useEffect, useState, type ReactNode } from "react";
 import { DurationInput } from "@/components/tasks/duration-input";
 import { NoteEditor } from "@/components/tasks/note-editor";
-import { FixedForm } from "@/components/tasks/fixed-form";
-import { snapToNearestLaterQuarterHour } from "@/utils/time";
 import { cn } from "@/lib/utils";
-import { DAILY_HORIZON } from "@/utils/constants";
-import { zonedDate } from "@/utils/tz";
 import { toast } from "sonner";
-import { Box, Lock } from "lucide-react";
 import type { Task } from "@zenflow/shared";
 import { TagsField } from "./tag-field";
 import { TitleField } from "./title-field";
+import { DeadlineChipField } from "./deadline-chip-field";
 
-/** Duration in minutes, correctly handling cross-midnight fixed windows. */
-function fixedDuration(start: number, end: number): number {
-  return end >= start ? end - start : DAILY_HORIZON - start + end;
+/** Shift a deadline forward by the same lead time it had at creation, in
+ * user-tz wall-clock terms, so re-using an old task never yields a past
+ * deadline. Returns "" when the source has no deadline. */
+function shiftedDeadline(task: Task): string {
+  if (!task.deadline) return "";
+  const offsetMs =
+    new Date(task.deadline).getTime() - new Date(task.createdAt).getTime();
+  if (offsetMs < 0) return "";
+  return new Date(Date.now() + offsetMs).toISOString();
 }
 
 const DURATION_PRESETS = [15, 30, 45, 60, 120];
@@ -42,20 +40,12 @@ const presetLabel = (m: number) =>
       ? `${Math.floor(m / 60)}h ${m % 60}m`
       : `${m}m`;
 
-const segBase =
-  "flex-1 py-2 flex items-center justify-center gap-1.5 transition-colors";
-const segActive = "bg-primary text-primary-foreground";
-const segIdle =
-  "bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary";
-
 interface TaskFormProps {
   form: UseFormReturn<TaskFormValues>;
   newUploadsRef?: React.RefObject<string[]>;
   onSubmit: (values: TaskFormValues) => void;
   onCancel: () => void;
   loading: boolean;
-  /** The day the task is being scheduled into (anchors fixed-time minimums). */
-  date?: Date;
   initialNote?: string;
   submitLabel?: string;
   /** Extra sections rendered inside the scrollable body (e.g. history). */
@@ -63,8 +53,8 @@ interface TaskFormProps {
   /** Extra actions rendered under the Cancel/Save row (e.g. delete). */
   footerExtra?: ReactNode;
   /**
-   * Edit mode: hide the scheduling fields (duration, scheduling type, fixed
-   * window) — placement and duration are changed on the calendar, not here.
+   * Edit mode: hide the scheduling fields (duration) — placement and
+   * duration are changed on the calendar, not here.
    */
   editing?: boolean;
 }
@@ -76,19 +66,12 @@ export function TaskForm({
   newUploadsRef,
   loading,
   initialNote,
-  date,
   submitLabel = "Save",
   bodyExtra,
   footerExtra,
   editing = false,
 }: TaskFormProps) {
-  const tz = useUserStore((s) => s.user?.timezone) || "UTC";
-  const isFixed = form.watch("isFixed");
-  const fixedStart = form.watch("fixedStart");
-  const fixedEnd = form.watch("fixedEnd");
-  const duration = isFixed
-    ? fixedDuration(fixedStart, fixedEnd)
-    : form.watch("duration");
+  const duration = form.watch("duration");
 
   // `NoteEditor` only re-renders its content when `initialValue` changes, so a
   // bare `setValue("note", …)` updates the form but not the editor. Drive the
@@ -108,33 +91,13 @@ export function TaskForm({
       shouldValidate: true,
       shouldDirty: true,
     });
-    form.setValue("isFixed", s.fixed, { shouldDirty: true });
-    form.setValue("fixedStart", s.startTime, { shouldDirty: true });
-    form.setValue(
-      "fixedEnd",
-      Math.min(s.startTime + s.durationMinutes, DAILY_HORIZON),
-      { shouldDirty: true },
-    );
     form.setValue("tags", s.tags ?? [], { shouldDirty: true });
     form.setValue("note", s.note ?? "", { shouldDirty: true });
     setNoteSeed(s.note ?? "");
-
-    // Shift the source task's deadline forward by the same lead time it had at
-    // creation, so re-using an old task never yields a past deadline. Split into
-    // date/time in the user's tz wall clock (never a bare new Date for the grid).
-    let deadlineDate = "";
-    let deadlineTime = "";
-    if (s.deadline) {
-      const offsetMs =
-        new Date(s.deadline).getTime() - new Date(s.createdAt).getTime();
-      if (offsetMs >= 0) {
-        const wall = zonedDate(new Date(Date.now() + offsetMs), tz);
-        deadlineDate = format(wall, "yyyy-MM-dd");
-        deadlineTime = format(wall, "HH:mm");
-      }
-    }
-    form.setValue("deadlineDate", deadlineDate, { shouldDirty: true });
-    form.setValue("deadlineTime", deadlineTime, { shouldDirty: true });
+    form.setValue("deadline", shiftedDeadline(s), {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
   };
 
   return (
@@ -198,7 +161,7 @@ export function TaskForm({
                         <button
                           key={m}
                           type="button"
-                          disabled={loading || isFixed}
+                          disabled={loading}
                           onClick={() => field.onChange(m)}
                           className={cn(
                             "h-8 rounded-md border text-xs font-semibold transition-colors disabled:opacity-50",
@@ -221,7 +184,7 @@ export function TaskForm({
                   </div>
                   <DurationInput
                     className="w-full"
-                    disabled={loading || isFixed}
+                    disabled={loading}
                     value={duration}
                     onChange={field.onChange}
                   />
@@ -231,102 +194,22 @@ export function TaskForm({
             />
           )}
 
-          {/* Scheduling type (create only) */}
-          {!editing && (
-            <FormField
-              control={form.control}
-              name="isFixed"
-              render={({ field }) => (
-                <FormItem className="space-y-2">
-                  <FormLabel className="text-xs font-semibold">
-                    Scheduling type
-                  </FormLabel>
-                  <div className="flex overflow-hidden rounded-md border border-border text-xs font-semibold">
-                    <button
-                      type="button"
-                      disabled={loading}
-                      onClick={() => field.onChange(false)}
-                      className={cn(
-                        segBase,
-                        !field.value ? segActive : segIdle,
-                      )}
-                    >
-                      <Box className="size-3" />
-                      Flexible
-                    </button>
-                    <button
-                      type="button"
-                      disabled={loading}
-                      onClick={() => field.onChange(true)}
-                      className={cn(
-                        segBase,
-                        "border-l border-border",
-                        field.value ? segActive : segIdle,
-                      )}
-                    >
-                      <Lock className="size-3" />
-                      Fixed
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    Flexible: the engine chooses the optimal slot. Fixed: you
-                    pick the exact time.
-                  </p>
-                </FormItem>
-              )}
-            />
-          )}
-
-          {isFixed && !editing && (
-            <FixedForm
-              minTime={
-                date && isZonedToday(date, tz)
-                  ? snapToNearestLaterQuarterHour(
-                      date.getHours() * 60 + date.getMinutes(),
-                    )
-                  : 0
-              }
-              form={form}
-            />
-          )}
-
-          {/* Deadline */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <FormLabel className="text-xs font-semibold">Deadline</FormLabel>
-              <span className="text-[10px] text-muted-foreground">
-                Optional
-              </span>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <FormField
-                control={form.control}
-                name="deadlineDate"
-                render={({ field }) => (
-                  <FormItem className="col-span-2 space-y-0">
-                    <DatePicker
-                      placeholder="Select date"
-                      disabled={loading || { before: new Date() }}
-                      date={field.value ? new Date(field.value) : undefined}
-                      onSelect={(value) =>
-                        field.onChange(value ? format(value, "yyyy-MM-dd") : "")
-                      }
-                    />
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="deadlineTime"
-                render={({ field }) => (
-                  <FormItem className="space-y-0">
-                    <Input disabled={loading} type="time" {...field} />
-                  </FormItem>
-                )}
-              />
-            </div>
-          </div>
+          {/* Deadline — quick-action chips (todo.md); required now. */}
+          <FormField
+            control={form.control}
+            name="deadline"
+            render={({ field }) => (
+              <FormItem className="space-y-1.5">
+                <FormLabel className="text-xs font-semibold">Deadline</FormLabel>
+                <DeadlineChipField
+                  value={field.value}
+                  onChange={field.onChange}
+                  disabled={loading}
+                />
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
           {/* Tags */}
           <FormField

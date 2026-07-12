@@ -15,6 +15,10 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
+      // Always render toasts at full height/position instead of sonner's
+      // default collapsed-stack-until-hover look — that default causes a
+      // visible downward shift the instant the cursor enters the stack.
+      expand
       // Tint each toast by type: green success, red error, yellow warning,
       // blue info. The per-type CSS variables below feed sonner's rich colors.
       richColors

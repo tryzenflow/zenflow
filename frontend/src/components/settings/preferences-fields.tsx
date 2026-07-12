@@ -18,34 +18,6 @@ export const DAYS = [
   { iso: 7, label: "Sun" },
 ];
 
-/** Role archetype cold-start clusters offered during onboarding/settings. */
-export const ARCHETYPES = [
-  {
-    id: "night-owl-dev",
-    name: "Developer",
-    sig: "#backend #ops",
-    blurb: "Peaks mid-afternoon, avoids early mornings",
-  },
-  {
-    id: "creative-lead",
-    name: "Creative Lead",
-    sig: "#marketing #copy",
-    blurb: "Mornings, hard-avoids Friday afternoons",
-  },
-  {
-    id: "finance-ops",
-    name: "Finance / Ops",
-    sig: "#finance #admin",
-    blurb: "Structured 09–12 blocks, cutoff at 17:00",
-  },
-  {
-    id: "generalist-pm",
-    name: "Generalist PM",
-    sig: "#planning #meetings",
-    blurb: "Distributed across the day, high recurrence",
-  },
-];
-
 /**
  * Full-day options in 15-minute steps, as minutes-from-midnight
  * (0 = 00:00 … 1425 = 23:45). 15-min matches the scheduler's slot grid.

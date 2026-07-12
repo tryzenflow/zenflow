@@ -42,7 +42,18 @@ test.describe("duration adjustment toast", () => {
       await tagInput.fill(tag);
       await tagInput.press("Enter");
     }
+    // Deadline is required now (todo.md) — "This week" needs no further UI
+    // (unlike Today/Tomorrow/Custom, which reveal a time picker).
+    await page.getByRole("button", { name: /^this week$/i }).click();
     await page.getByRole("button", { name: /create task/i }).click();
+    // Propose-then-confirm (todo.md): the create is staged behind a toast
+    // unless the account opted into auto-scheduling (default off). Lock in
+    // the suggested slot so the rest of the test can assert on the real
+    // create response.
+    const lockItIn = page.getByRole("button", { name: /lock it in/i });
+    if (await lockItIn.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      await lockItIn.click();
+    }
   }
 
   test("auto mode shows an Undo affordance when the duration is corrected", async ({

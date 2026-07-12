@@ -28,7 +28,6 @@ import { useUserStore } from "@/hooks/use-user-store";
 import { updatePreferences } from "@/api/users";
 import { logout } from "@/api/auth";
 import {
-  ARCHETYPES,
   DAYS,
   isValidWindow,
   minutesToLabel,
@@ -133,9 +132,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const [workDays, setWorkDays] = useState<number[]>(
     user?.workDays ?? [1, 2, 3, 4, 5],
   );
-  const [roleArchetypeId, setRole] = useState<string | null>(
-    user?.roleArchetypeId ?? null,
-  );
   const [timezone, setTimezone] = useState(
     user?.timezone ?? detectedTimezone(),
   );
@@ -151,7 +147,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     setWorkStart(user?.workStart ?? 540);
     setWorkEnd(user?.workEnd ?? 1020);
     setWorkDays(user?.workDays ?? [1, 2, 3, 4, 5]);
-    setRole(user?.roleArchetypeId ?? null);
     setTimezone(user?.timezone ?? detectedTimezone());
     setDurationMode(user?.durationAdjustmentMode ?? "auto");
   }, [open, user]);
@@ -180,7 +175,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         workEnd,
         workDays,
         timezone,
-        roleArchetypeId,
         durationAdjustmentMode: durationMode,
       });
       setUser(updated);
@@ -230,7 +224,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
 
           <div className="min-h-0 flex-1 overflow-y-auto py-6">
-            {/* Work hours / days / role / timezone */}
+            {/* Work hours / days / timezone */}
             <TabsContent value="work" className="mt-0 space-y-6">
               <Section
                 title="Work hours"
@@ -302,40 +296,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               </Section>
 
               <Section
-                title="Your role"
-                description="Optional — helps Zenflow seed smarter defaults. Tap again to clear."
-              >
-                <div className="space-y-2">
-                  {ARCHETYPES.map((a) => {
-                    const on = roleArchetypeId === a.id;
-                    return (
-                      <button
-                        key={a.id}
-                        type="button"
-                        onClick={() => setRole(on ? null : a.id)}
-                        className={cn(
-                          "w-full rounded-md border p-3 text-left transition-colors",
-                          on
-                            ? "border-primary bg-primary/10"
-                            : "border-border bg-card hover:border-primary/50",
-                        )}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-semibold">{a.name}</span>
-                          <span className="font-mono text-[10px] text-muted-foreground">
-                            {a.sig}
-                          </span>
-                        </div>
-                        <p className="mt-0.5 text-[11px] text-muted-foreground">
-                          {a.blurb}
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
-              </Section>
-
-              <Section
                 title="Timezone"
                 description="All calendar times are shown in this timezone."
               >
@@ -392,7 +352,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             <TabsContent value="insights" className="mt-0 space-y-6">
               <Section
                 title="Your preference map"
-                description="When Zenflow tends to keep your work (amber) or move it away (slate), by day and time."
+                description="When Zenflow schedules your tasks on the hot zones highlighted in green."
               >
                 {tab === "insights" && <UserPreferencesPanel />}
               </Section>

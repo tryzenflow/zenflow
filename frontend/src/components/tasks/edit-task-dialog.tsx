@@ -3,19 +3,28 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTaskForm } from "@/hooks/use-task-form";
 import { format } from "date-fns";
-import { fromZonedTime } from "date-fns-tz";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { isAxiosError } from "axios";
 import { errorToast } from "@/lib/toast";
 import { postData } from "@/api";
 import { useUserStore } from "@/hooks/use-user-store";
 import type { Task } from "@/types/tasks";
+import type { Event as CalendarBlock } from "@/types/schedule";
 import type { TaskEvent } from "@zenflow/shared";
-import { deleteTask, EditTaskFormValues } from "@/utils/tasks";
+import {
+  cascadeWindow,
+  deleteTask,
+  EditTaskFormValues,
+  needsRescheduleWindow,
+} from "@/utils/tasks";
+import { formatMinutes } from "@/utils/time";
 import { TaskForm } from "./form/task-form";
 import { TaskHistory } from "./task-history-timeline";
 import { useFilesTracker } from "@/hooks/use-files-tracker";
 import { completeTask, getTaskDetails, updateTask } from "@/api/tasks";
+import { promptRescheduleCascade } from "./prompt-reschedule-cascade";
+import { zonedDate } from "@/utils/tz";
 import { Clock, Trash2 } from "lucide-react";
 
 interface EditTaskDialogProps {
@@ -23,6 +32,17 @@ interface EditTaskDialogProps {
   setOpen: (open: boolean) => void;
   taskId: string;
   onSaved: () => void;
+  /** The calendar's currently-loaded blocks — feeds displaced-task title
+   * lookups for the cascade summary toasts, and the manual-task-in-window
+   * check that decides whether to show the 3-option reschedule choice. */
+  blocks?: CalendarBlock[];
+}
+
+/** Order-insensitive set-equality for tag arrays. */
+function sameTags(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const setA = new Set(a);
+  return b.every((t) => setA.has(t));
 }
 
 export function EditTaskDialog({
@@ -30,11 +50,14 @@ export function EditTaskDialog({
   setOpen,
   taskId,
   onSaved,
+  blocks = [],
 }: EditTaskDialogProps) {
   const [loading, setLoading] = useState(false);
   const [task, setTask] = useState<Task | null>(null);
   const [events, setEvents] = useState<TaskEvent[]>([]);
   const user = useUserStore((s) => s.user);
+  const tz = user?.timezone || "UTC";
+  const titleFor = (id: string) => blocks.find((b) => b.taskId === id)?.title;
   const { newUploadsRef } = useFilesTracker();
 
   useEffect(() => {
@@ -68,11 +91,7 @@ export function EditTaskDialog({
       duration: 60,
       tags: [],
       note: "",
-      deadlineDate: "",
-      deadlineTime: "",
-      isFixed: false,
-      fixedStart: 9 * 60,
-      fixedEnd: 10 * 60,
+      deadline: "",
     },
   });
 
@@ -83,39 +102,124 @@ export function EditTaskDialog({
       duration: task.durationMinutes,
       tags: task.tags,
       note: task.note ?? "",
-      isFixed: task.fixed,
-      fixedStart: task.startTime,
-      fixedEnd: task.startTime + task.durationMinutes,
-      deadlineDate: task.deadline
-        ? format(new Date(task.deadline), "yyyy-MM-dd")
-        : "",
-      deadlineTime: task.deadline
-        ? format(new Date(task.deadline), "HH:mm")
-        : "",
+      deadline: task.deadline ?? "",
     });
   }, [task, form]);
+
+  /**
+   * `promptRescheduleCascade` bound to this panel's `blocks`/`tz`/`onSaved` —
+   * every call site below still owns its own window computation and gating
+   * (whether to prompt at all), since a deadline edit, a tags-driven duration
+   * change, and a delete anchor and skip differently.
+   */
+  function promptCascade(
+    args: Omit<
+      Parameters<typeof promptRescheduleCascade>[0],
+      "blocks" | "tz" | "titleFor" | "onDone"
+    >,
+  ) {
+    promptRescheduleCascade({ ...args, blocks, tz, titleFor, onDone: onSaved });
+  }
 
   async function onSubmit(values: EditTaskFormValues) {
     if (!user) return;
     setLoading(true);
-    const deadline = values.deadlineDate
-      ? fromZonedTime(
-          `${values.deadlineDate}T${values.deadlineTime || "23:59"}:00`,
-          user.timezone,
-        ).toISOString()
-      : null;
     try {
-      await updateTask(taskId, {
+      const response = await updateTask(taskId, {
         title: values.title,
         note: values.note || null,
-        deadline,
+        deadline: values.deadline,
         tags: values.tags,
       });
       onSaved();
       toast.success("Task updated 🎉");
       setOpen(false);
-    } catch (error: any) {
-      errorToast(error?.response?.data?.message || "Failed to update task");
+
+      const now = new Date();
+
+      // Confirm-before-reschedule (todo.md §Rescheduling Design). A deadline
+      // edit's meaningful search range IS the new deadline itself — shortening
+      // it can conflict with anything up to the old bound, lengthening it
+      // opens room anywhere up to the new one — so the window spans
+      // [now, newDeadline] (unlike the fixed ±3-workday band below, a
+      // deadline has no natural size to cap the search at). No-ops for a
+      // past/in-progress task or one with no placement.
+      if (
+        response.deadlineChanged &&
+        needsRescheduleWindow(response.task.scheduledStartTime, now)
+      ) {
+        const newDeadline = response.task.deadline ?? values.deadline;
+        promptCascade({
+          window: { windowStart: now.toISOString(), windowEnd: newDeadline },
+          title: `Deadline changed for ${response.task.title}`,
+          description: (
+            <>
+              New deadline is{" "}
+              {format(zonedDate(newDeadline, tz), "EEE MMM d, HH:mm")}.
+              Reschedule affected tasks to fit the new window?
+            </>
+          ),
+          manualDescription: (
+            <>
+              New deadline is{" "}
+              {format(zonedDate(newDeadline, tz), "EEE MMM d, HH:mm")}. Some
+              tasks in this window were moved manually — how should they be
+              handled?
+            </>
+          ),
+        });
+      }
+
+      // `schedulingMeta` comes back whenever `dto.tags !== undefined`
+      // (i.e. whenever the form submits a `tags` array at all — which is
+      // every save, since the form always includes it), NOT only when the
+      // tags actually changed. Diff against the task's pre-edit tags so an
+      // unrelated title/note/deadline-only save doesn't misfire this prompt.
+      // The corrected duration is already applied server-side (`update()`);
+      // this prompt is only about resolving any conflict it left behind. A
+      // duration change is a point-in-time disruption (unlike a deadline
+      // edit's open-ended range), so it uses the fixed ±3-workday band
+      // (`cascadeWindow`) anchored to the task's own placement.
+      if (
+        response.schedulingMeta &&
+        task &&
+        !sameTags(task.tags, values.tags) &&
+        needsRescheduleWindow(response.task.scheduledStartTime, now)
+      ) {
+        const { estimatedDuration, adjustedDuration, durationReason } =
+          response.schedulingMeta;
+        const changed =
+          estimatedDuration != null && estimatedDuration !== adjustedDuration;
+        promptCascade({
+          window: cascadeWindow(
+            response.task.scheduledStartTime!,
+            tz,
+            user,
+            now,
+          ),
+          title: `Tags changed for ${response.task.title}`,
+          description: (
+            <>
+              {changed
+                ? `Duration corrected ${formatMinutes(estimatedDuration!)} → ${formatMinutes(adjustedDuration)} for the new tags.`
+                : "Duration re-checked for the new tags (no change)."}{" "}
+              Reschedule to avoid conflicts?
+              {durationReason && (
+                <p className="font-mono text-[11px] text-muted-foreground">
+                  {durationReason}
+                </p>
+              )}
+            </>
+          ),
+          manualDescription:
+            "The new tags changed this task's duration. Some tasks in this window were moved manually — how should they be handled?",
+        });
+      }
+    } catch (error) {
+      errorToast(
+        (isAxiosError(error) && error.response?.data?.message) ||
+          "Failed to update task",
+      );
     } finally {
       setLoading(false);
     }
@@ -127,19 +231,47 @@ export function EditTaskDialog({
       onSaved();
       toast.success("Task completed");
       setOpen(false);
-    } catch (error: any) {
-      errorToast(error?.response?.data?.message || "Failed to complete task");
+    } catch (error) {
+      errorToast(
+        (isAxiosError(error) && error.response?.data?.message) ||
+          "Failed to complete task",
+      );
     }
   }
 
   async function onDelete() {
+    // Captured BEFORE the delete — the task is gone from the DB afterward,
+    // so this is the only chance to anchor the gap-fill cascade window.
+    const taskTitle = task?.title ?? "Task";
+    const scheduledStartTime = task?.scheduledStartTime ?? null;
     try {
       await deleteTask(taskId);
       onSaved();
       toast.success("Task deleted");
       setOpen(false);
-    } catch (error: any) {
-      errorToast(error?.response?.data?.message || "Failed to delete task");
+
+      // Confirm-before-reschedule (todo.md §Rescheduling Design): the delete
+      // already happened — this only offers to fill the gap it left behind,
+      // through the same cascade prompt a deadline/tags-change edit uses. A
+      // delete is a point-in-time disruption, so it uses the same fixed
+      // ±3-workday band tags-change does, anchored to the deleted task's
+      // (now-gone) placement. No-ops if it had no placement, or was already
+      // past/in-progress.
+      if (user && needsRescheduleWindow(scheduledStartTime, new Date())) {
+        promptCascade({
+          window: cascadeWindow(scheduledStartTime!, tz, user, new Date()),
+          title: `${taskTitle} deleted`,
+          description:
+            "This left a gap in your schedule. Reschedule other tasks to fill it?",
+          manualDescription:
+            "This left a gap in your schedule. Some tasks in this window were moved manually — how should they be handled while filling it?",
+        });
+      }
+    } catch (error) {
+      errorToast(
+        (isAxiosError(error) && error.response?.data?.message) ||
+          "Failed to delete task",
+      );
     }
   }
 
@@ -170,88 +302,89 @@ export function EditTaskDialog({
 
   return (
     <Sheet open={open} onOpenChange={setOpen} modal={false}>
-        {/* Non-modal + no overlay + offset below the 56px header so the calendar
+      {/* Non-modal + no overlay + offset below the 56px header so the calendar
           stays navigable while editing. Outside interactions are swallowed so
           paging the date range or switching view never closes the panel. */}
-        <SheetContent
-          showOverlay={false}
-          onInteractOutside={(e) => e.preventDefault()}
-          className="inset-y-auto top-14 h-[calc(100vh-3.5rem)] w-full gap-0 p-0 sm:w-[30rem] sm:max-w-[30rem]"
-        >
-          {/* Header */}
-          <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-5">
-            <span className={cn("size-2 shrink-0 rounded-full", statusColor)} />
-            <div className="min-w-0">
-              <h2 className="truncate text-sm font-bold tracking-tight">
-                {task?.title || "Task detail"}
-              </h2>
-              {task && (
-                <p className="truncate text-[11px] text-muted-foreground">
-                  Created {format(new Date(task.createdAt), "MMM d")}
-                  {scheduledStart &&
-                    ` · Scheduled ${format(scheduledStart, "EEE HH:mm")}`}
-                </p>
-              )}
-            </div>
+      <SheetContent
+        showOverlay={false}
+        onInteractOutside={(e) => e.preventDefault()}
+        className="inset-y-auto top-14 h-[calc(100vh-3.5rem)] w-full gap-0 p-0 sm:w-[30rem] sm:max-w-[30rem]"
+      >
+        {/* Header */}
+        <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-5">
+          <span className={cn("size-2 shrink-0 rounded-full", statusColor)} />
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-bold tracking-tight">
+              {task?.title || "Task detail"}
+            </h2>
+            {task && (
+              <p className="truncate text-[11px] text-muted-foreground">
+                Created {format(new Date(task.createdAt), "MMM d")}
+                {scheduledStart &&
+                  ` · Scheduled ${format(scheduledStart, "EEE HH:mm")}`}
+              </p>
+            )}
           </div>
+        </div>
 
-          {/* Status banner */}
-          {task && (
-            <div className="mx-5 mt-4 flex shrink-0 items-center justify-between rounded-md border border-border bg-muted p-3">
-              <div className="flex items-center gap-2.5">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-card">
-                  <Clock className="size-3.5 text-muted-foreground" />
-                </div>
-                <div>
-                  <p className="text-xs font-bold">
-                    {scheduledStart && scheduledEnd
-                      ? `${format(scheduledStart, "EEE MMM d, HH:mm")} – ${format(scheduledEnd, "HH:mm")}`
-                      : "Not yet scheduled"}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {task.durationMinutes} min ·{" "}
-                    {isDone
-                      ? "Completed"
-                      : task.fixed
-                        ? "Fixed placement"
-                        : "EDF engine placed"}
-                  </p>
-                </div>
+        {/* Status banner */}
+        {task && (
+          <div className="mx-5 mt-4 flex shrink-0 items-center justify-between rounded-md border border-border bg-muted p-3">
+            <div className="flex items-center gap-2.5">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-card">
+                <Clock className="size-3.5 text-muted-foreground" />
               </div>
-              {!isDone && (
-                <Button
-                  size="sm"
-                  className="h-7 px-2.5 text-[10px] font-bold"
-                  onClick={onComplete}
-                >
-                  Mark Done
-                </Button>
-              )}
+              <div>
+                <p className="text-xs font-bold">
+                  {scheduledStart && scheduledEnd
+                    ? `${format(scheduledStart, "EEE MMM d, HH:mm")} – ${format(scheduledEnd, "HH:mm")}`
+                    : "Not yet scheduled"}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  {task.durationMinutes} min ·{" "}
+                  {isDone
+                    ? "Completed"
+                    : task.manuallyMoved
+                      ? "Manually placed"
+                      : "EDF engine placed"}
+                </p>
+              </div>
             </div>
-          )}
-
-          <TaskForm
-            form={form as any}
-            onSubmit={onSubmit}
-            loading={loading}
-            editing
-            onCancel={handleClose}
-            newUploadsRef={newUploadsRef}
-            initialNote={task?.note ?? undefined}
-            submitLabel="Save Changes"
-            bodyExtra={events.length > 0 && <TaskHistory events={events} />}
-            footerExtra={
+            {!isDone && (
               <Button
-                type="button"
-                variant="outline"
-                onClick={onDelete}
-                className="h-8 w-full border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive"
+                size="sm"
+                className="h-7 px-2.5 text-[10px] font-bold"
+                onClick={onComplete}
               >
-                <Trash2 className="size-3.5" /> Delete Task
+                Mark Done
               </Button>
-            }
-          />
-        </SheetContent>
-      </Sheet>
+            )}
+          </div>
+        )}
+
+        <TaskForm
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          form={form as any}
+          onSubmit={onSubmit}
+          loading={loading}
+          editing
+          onCancel={handleClose}
+          newUploadsRef={newUploadsRef}
+          initialNote={task?.note ?? undefined}
+          submitLabel="Save Changes"
+          bodyExtra={events.length > 0 && <TaskHistory events={events} />}
+          footerExtra={
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onDelete}
+              className="h-8 w-full border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
+              <Trash2 className="size-3.5" /> Delete Task
+            </Button>
+          }
+        />
+      </SheetContent>
+    </Sheet>
   );
 }

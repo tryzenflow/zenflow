@@ -16,7 +16,7 @@ export function taskToBlock(task: Task): Event | null {
     start: start.toISOString(),
     end: end.toISOString(),
     status: task.status,
-    fixed: task.fixed,
+    manuallyMoved: task.manuallyMoved,
     conflict: task.conflict,
     tags: task.tags,
     state: deriveState(task),

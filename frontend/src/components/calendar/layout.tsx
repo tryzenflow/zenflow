@@ -26,19 +26,8 @@ import { isAxiosError } from "axios";
 import { toast } from "sonner";
 import { errorToast } from "@/lib/toast";
 import { useUserStore } from "@/hooks/use-user-store";
-import { zonedDate, zonedNow, zonedWallClockToUtc } from "@/utils/tz";
-import { WEEK_STARTS_ON } from "@/utils/constants";
-import {
-  endOfDay,
-  endOfMonth,
-  endOfWeek,
-  format,
-  isSameMonth,
-  isValid,
-  startOfDay,
-  startOfMonth,
-  startOfWeek,
-} from "date-fns";
+import { zonedDate, zonedNow } from "@/utils/tz";
+import { format, isSameMonth, isValid } from "date-fns";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
 
 const VALID_VIEWS: ViewMode[] = ["day", "week", "month"];
@@ -145,11 +134,6 @@ export function CalendarLayout() {
   }, []);
 
   async function onReschedule(taskId: string, startISO: string) {
-    // Capture the original start for a potential undo after an outside-view-period
-    // move (the backend commits the move regardless and flags it post-hoc).
-    const originalBlock = blocks.find((b) => b.taskId === taskId);
-    const originalStartISO = originalBlock?.start ?? null;
-
     // If a load is mid-flight (e.g. the cascade after a delete), wait for it so
     // we never PUT against an id the server has already dropped. The dragged
     // block carries the latest optimistic state; the await only blocks the
@@ -161,93 +145,10 @@ export function CalendarLayout() {
       // dropped the stale block from the grid.
       if (!fresh.some((b) => b.taskId === taskId)) return;
     }
-    const { viewStart, viewEnd } = (() => {
-      let start: Date;
-      let end: Date;
-      switch (viewMode) {
-        case "day":
-          start = startOfDay(date);
-          end = endOfDay(date);
-          break;
-        case "week":
-          start = startOfWeek(date, { weekStartsOn: WEEK_STARTS_ON });
-          end = endOfWeek(date, { weekStartsOn: WEEK_STARTS_ON });
-          break;
-        case "month":
-          start = startOfMonth(date);
-          end = endOfMonth(date);
-          break;
-      }
-      return {
-        viewStart: zonedWallClockToUtc(start, tz).toISOString(),
-        viewEnd: zonedWallClockToUtc(end, tz).toISOString(),
-      };
-    })();
     try {
-      const response = await rescheduleTask(taskId, startISO, viewStart, viewEnd);
-      // The backend committed the move but it lands outside the current view
-      // period. Surface a non-blocking toast so the user can undo without
-      // requiring an explicit confirmation before the move is applied.
-      // refetch() in `finally` syncs the calendar; the task will disappear
-      // from the current view until the user navigates to where it landed.
-      if (response.outsideViewPeriod && originalStartISO) {
-        toast.custom(
-          (id) => (
-            <div className="w-full rounded-[var(--radius)] border border-border bg-popover p-4 shadow-lg">
-              <div className="flex w-full flex-col gap-3">
-                <div className="flex flex-col gap-0.5">
-                  <p className="text-sm font-semibold text-foreground">
-                    Task moved outside this {viewMode}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    It won&apos;t appear here until you navigate to the{" "}
-                    {viewMode} it now lives in.
-                  </p>
-                </div>
-                <div className="flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => toast.dismiss(id)}
-                    className="rounded-md border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted"
-                  >
-                    Keep
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      toast.dismiss(id);
-                      try {
-                        await rescheduleTask(taskId, originalStartISO);
-                        window.dispatchEvent(
-                          new CustomEvent("zenflow:task-updated", {
-                            detail: taskId,
-                          }),
-                        );
-                      } catch (err) {
-                        if (isAxiosError(err))
-                          errorToast(
-                            err.response?.data?.message ||
-                              "Failed to undo the move",
-                          );
-                      } finally {
-                        await refetch();
-                      }
-                    }}
-                    className="rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90"
-                  >
-                    Undo
-                  </button>
-                </div>
-              </div>
-            </div>
-          ),
-          { duration: 8000 },
-        );
-        return;
-      }
-      // The rationale toast is only shown on task creation (where the AI
-      // scheduler assigns an initial slot). A manual drag is a deliberate user
-      // action so we never override it with scheduling commentary.
+      // The backend just pins this task `manuallyMoved` at the dropped slot —
+      // no cascade, so no other task is ever touched by a drag.
+      await rescheduleTask(taskId, startISO);
       window.dispatchEvent(
         new CustomEvent("zenflow:task-updated", { detail: taskId }),
       );
@@ -286,8 +187,7 @@ export function CalendarLayout() {
       if (!fresh.some((b) => b.taskId === taskId)) return;
     }
     try {
-      // Rationale toast is suppressed here for the same reason as onReschedule:
-      // a manual resize is an explicit user action, not an AI-scheduled placement.
+      // Same as onReschedule: pins this task only, no cascade.
       await resizeTask(taskId, startISO, durationMinutes);
       window.dispatchEvent(
         new CustomEvent("zenflow:task-updated", { detail: taskId }),
@@ -392,6 +292,7 @@ export function CalendarLayout() {
           conflictCount={meta?.conflictCount ?? 0}
           onChanged={refetch}
           onOpenNav={() => setNavOpen(true)}
+          blocks={blocks}
         />
         {/* `relative` so the floating glass controls overlay the grid without
             scrolling with it. */}
@@ -416,6 +317,7 @@ export function CalendarLayout() {
           <CreateTaskDialog
             date={date}
             view={viewMode}
+            blocks={blocks}
             onCreated={refetch}
             trigger={
               <Button
@@ -469,6 +371,7 @@ export function CalendarLayout() {
           setOpen={(o) => !o && setEditId(null)}
           taskId={editId}
           onSaved={refetch}
+          blocks={blocks}
         />
       )}
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />

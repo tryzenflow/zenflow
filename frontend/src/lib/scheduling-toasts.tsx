@@ -5,13 +5,82 @@ import { resizeTask } from "@/api/tasks";
 import { errorToast } from "@/lib/toast";
 import { formatMinutes } from "@/utils/time";
 import { RationaleToast } from "@/components/tasks/rationale-toast";
+import { cn } from "@/lib/utils";
 import type { RescheduleResponse, SchedulingMeta, Task } from "@/types/phase2";
 
 /** Wrap a custom toast body in the same popover shell the overflow toast uses. */
-function shell(node: React.ReactNode) {
+export function shell(node: React.ReactNode) {
   return (
     <div className="w-full rounded-[var(--radius)] border border-border bg-popover p-4 shadow-lg">
       {node}
+    </div>
+  );
+}
+
+export interface ConfirmToastAction {
+  label: string;
+  onClick: () => void;
+  /** `primary` (default) / `outline` / `ghost` — matches the button styles the
+   * confirm-before-reschedule toasts have used since the Phase-2 rewrite. */
+  variant?: "primary" | "outline" | "ghost";
+  /** Optional one-line explanation of what this action does, shown under the
+   * label when actions are stacked (see `stacked` below). */
+  description?: string;
+}
+
+/**
+ * Shared body for the confirm-before-reschedule family of toasts (deadline
+ * change, tags change, delete gap-fill, manual-vs-auto reschedule choice):
+ * a title + description, followed by 1-3 action buttons. Two actions lay out
+ * as an even row (existing look); three or more stack vertically so labels
+ * don't get cramped.
+ */
+export function ConfirmToastShell({
+  title,
+  description,
+  actions,
+}: {
+  title: string;
+  description: React.ReactNode;
+  actions: ConfirmToastAction[];
+}) {
+  const stacked = actions.length > 2;
+  return (
+    <div className="flex font-sans w-full flex-col gap-3">
+      <div className="flex flex-col gap-0.5">
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+        <div className="text-xs text-muted-foreground">{description}</div>
+      </div>
+      <div className={cn("flex gap-2", stacked ? "flex-col" : "items-center")}>
+        {actions.map((action, i) => (
+          <button
+            key={i}
+            type="button"
+            onClick={action.onClick}
+            className={cn(
+              stacked ? "w-full flex flex-col items-start gap-0.5" : "flex-1",
+              "rounded-md px-3 py-1.5 text-xs transition-colors",
+              (!action.variant || action.variant === "primary") &&
+                "bg-primary font-semibold text-primary-foreground hover:opacity-90",
+              action.variant === "outline" &&
+                "border border-border font-medium hover:bg-muted",
+              action.variant === "ghost" &&
+                "font-medium text-muted-foreground hover:bg-muted",
+            )}
+          >
+            <span>{action.label}</span>
+            {stacked && action.description && (
+              <span
+                className={cn(
+                  "text-left text-[11px] font-normal leading-snug opacity-80",
+                )}
+              >
+                {action.description}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

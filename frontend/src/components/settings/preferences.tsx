@@ -31,36 +31,26 @@ function hourLabel(h: number) {
  * relative to the matrix's peak. A zero / cold cell reads as neutral. Full
  * literal class names so Tailwind's scanner emits them.
  */
-const ORANGE_SCALE = [
-  "bg-orange-100",
-  "bg-orange-200",
-  "bg-orange-300",
-  "bg-orange-400",
-  "bg-orange-500",
-  "bg-orange-600",
-  "bg-orange-700",
-  "bg-orange-800",
-  "bg-orange-900",
+const SCALE = [
+  "bg-lime-100",
+  "bg-lime-200",
+  "bg-lime-300",
+  "bg-lime-400",
+  "bg-lime-500",
+  "bg-lime-600",
+  "bg-lime-700",
+  "bg-lime-800",
+  "bg-lime-900",
 ];
-const BLUE_SCALE = [
-  "bg-blue-100",
-  "bg-blue-200",
-  "bg-blue-300",
-  "bg-blue-400",
-  "bg-blue-500",
-  "bg-blue-600",
-  "bg-blue-700",
-  "bg-blue-800",
-  "bg-blue-900",
-];
+
 const NEUTRAL_CLASS = "bg-muted";
 
 function cellClass(score: number, peak: number) {
-  if (score === 0 || peak === 0) return NEUTRAL_CLASS;
+  if (score <= 0 || peak === 0) return NEUTRAL_CLASS;
   const intensity = Math.min(1, Math.abs(score) / peak);
   // intensity in (0,1] → step 0..8 (at least the lightest shade when nonzero).
   const step = Math.min(8, Math.max(0, Math.ceil(intensity * 9) - 1));
-  return score > 0 ? ORANGE_SCALE[step] : BLUE_SCALE[step];
+  return SCALE[step];
 }
 
 // ---------------------------------------------------------------------------
@@ -209,17 +199,6 @@ export function UserPreferencesPanel() {
         {/* Legend (top) */}
         <div className="flex items-center justify-center gap-4 text-[10px] text-muted-foreground">
           <span className="flex items-center gap-1.5">
-            Avoid
-            <span className="flex gap-1">
-              {[2, 4, 6, 8].map((s) => (
-                <span
-                  key={s}
-                  className={cn("inline-block h-3 w-3 rounded-[3px]", BLUE_SCALE[s])}
-                />
-              ))}
-            </span>
-          </span>
-          <span className="flex items-center gap-1.5">
             <span className="inline-block h-3 w-3 rounded-[3px] border border-border/60 bg-muted" />
             Neutral
           </span>
@@ -230,7 +209,7 @@ export function UserPreferencesPanel() {
                   key={s}
                   className={cn(
                     "inline-block h-3 w-3 rounded-[3px]",
-                    ORANGE_SCALE[s],
+                    SCALE[s],
                   )}
                 />
               ))}

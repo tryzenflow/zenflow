@@ -119,7 +119,7 @@ export function TitleField({
                   <span className="text-[10px] text-muted-foreground">
                     {[
                       durationLabel(task.durationMinutes),
-                      task.fixed ? "Fixed" : null,
+                      task.manuallyMoved ? "Pinned" : null,
                       ...task.tags.slice(0, 2).map((t) => `#${t}`),
                     ]
                       .filter(Boolean)

@@ -15,7 +15,8 @@ export interface Event {
   start: string; // ISO
   end: string; // ISO
   status: TaskStatus;
-  fixed: boolean;
+  /** True when the task is pinned (manually dragged/resized, or an accepted overflow choice). */
+  manuallyMoved: boolean;
   conflict: boolean;
   tags: string[];
   state: TaskCardState;
