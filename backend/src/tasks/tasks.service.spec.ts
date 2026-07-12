@@ -8,14 +8,14 @@ import { deadlineOptions } from "./utils/deadline-options";
 type TaskWithTags = Task & { tags: Tag[] };
 
 /**
- * Focused coverage for `TasksService`: the rewritten create/update/cascade/
- * overflow/delete orchestration that delegates all placement math to
- * `SchedulerService` (unit-tested independently in `scheduler.service.spec.ts`
- * and the pure `edf`/`reranker`/`overflow`/`rationale` specs). Most tests here
- * stub the scheduler to assert TasksService's OWN wiring (what it persists
- * immediately vs. defers, how it shapes responses); a few integration-style
- * tests drive a REAL `SchedulerService` over an in-memory task table to prove
- * the cascade actually runs end-to-end.
+ * Focused coverage for `TasksService`: create/update/displace/resize/remove
+ * orchestration, all of which now delegate placement to `SchedulerService.
+ * reoptimize` (unit-tested independently in `scheduler.service.spec.ts` and
+ * the pure `edf`/`reranker`/`rationale` specs). Most tests here stub the
+ * scheduler to assert TasksService's OWN wiring (what it persists immediately
+ * vs. defers, how it shapes responses); a few integration-style tests drive a
+ * REAL `SchedulerService` over an in-memory task table to prove the inline
+ * reoptimize actually runs end-to-end.
  */
 
 // UTC user so a 'YYYY-MM-DD' wall clock maps straight to the same UTC instant.
@@ -98,8 +98,7 @@ function makeCreateService(): {
   creates: { id: string; data: Record<string, unknown> }[];
   scheduler: {
     prefsOf: jest.Mock;
-    cascadeReschedule: jest.Mock;
-    computeOverflowOptions: jest.Mock;
+    reoptimize: jest.Mock;
     computeDurationCorrection: jest.Mock;
     recordEvent: jest.Mock;
   };
@@ -144,10 +143,7 @@ function makeCreateService(): {
       workDays: user.workDays,
       timezone: user.timezone,
     })),
-    cascadeReschedule: jest.fn().mockResolvedValue([]),
-    computeOverflowOptions: jest
-      .fn()
-      .mockResolvedValue({ outsideHours: null, nextAvailable: null }),
+    reoptimize: jest.fn().mockResolvedValue({ displaced: [], batchId: null }),
     computeDurationCorrection: makeCorrectionStub(),
     recordEvent: jest.fn().mockResolvedValue(undefined),
   };
@@ -187,7 +183,7 @@ describe("TasksService.create — single row (no recurrence)", () => {
     expect(creates[0].data.conflict).toBe(false);
   });
 
-  it("places the new task solo — a zero-width scope freezes every already-placed task", async () => {
+  it("places the new task through the unified reoptimize pass, tagged fixedTaskId so its own CREATE event isn't double-logged", async () => {
     const { service, scheduler } = makeCreateService();
     const now = new Date("2026-06-08T08:00:00.000Z");
     await service.create(
@@ -199,13 +195,12 @@ describe("TasksService.create — single row (no recurrence)", () => {
       user,
       now,
     );
-    // No fixedTaskId needed: the new task starts unplaced, which
-    // `isInsideWindow` always treats as movable regardless of scope.
-    expect(scheduler.cascadeReschedule).toHaveBeenCalledWith(
+    expect(scheduler.reoptimize).toHaveBeenCalledWith(
       user.id,
       expect.anything(),
-      { windowStart: now, windowEnd: now },
+      now,
       expect.anything(), // tx
+      { fixedTaskId: "task-0" },
     );
   });
 
@@ -229,8 +224,8 @@ describe("TasksService.create — single row (no recurrence)", () => {
     );
   });
 
-  it("computes overflow when the created task comes back unplaced", async () => {
-    const { service, scheduler } = makeCreateService();
+  it("comes back unplaced (conflict: true) with no overflow field when the cascade can't place it — the 3-tier fallback lives in the pure scheduler now", async () => {
+    const { service } = makeCreateService();
     const result = await service.create(
       {
         title: "Standup",
@@ -239,25 +234,27 @@ describe("TasksService.create — single row (no recurrence)", () => {
       },
       user,
     );
-    expect(scheduler.computeOverflowOptions).toHaveBeenCalledTimes(1);
-    expect(result.overflow).not.toBeNull();
     expect(result.task.scheduledStartTime).toBeNull();
+    expect(result).not.toHaveProperty("overflow");
   });
 
   it("returns displaced tasks from the cascade, excluding the new task itself", async () => {
     const { service, scheduler } = makeCreateService();
-    scheduler.cascadeReschedule.mockResolvedValueOnce([
-      {
-        id: "task-0",
-        scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
-        conflict: false,
-      },
-      {
-        id: "other",
-        scheduledStartTime: new Date("2026-06-08T10:00:00Z"),
-        conflict: false,
-      },
-    ]);
+    scheduler.reoptimize.mockResolvedValueOnce({
+      displaced: [
+        {
+          id: "task-0",
+          scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
+          conflict: false,
+        },
+        {
+          id: "other",
+          scheduledStartTime: new Date("2026-06-08T10:00:00Z"),
+          conflict: false,
+        },
+      ],
+      batchId: "batch-1",
+    });
     const result = await service.create(
       {
         title: "Standup",
@@ -453,16 +450,15 @@ describe("TasksService.list — display vs focal window", () => {
 
 /**
  * Build a TasksService over an in-memory task table with a fully mocked
- * SchedulerService, for update()/rescheduleCascade() tests that assert
- * TasksService's OWN orchestration (what it saves immediately, what it defers
- * to a cascade).
+ * SchedulerService, for update() tests that assert TasksService's OWN
+ * orchestration (what it saves immediately, what it defers to reoptimize).
  */
 function makeUpdateService(rows: TaskWithTags[]): {
   service: TasksService;
   table: Map<string, TaskWithTags>;
   scheduler: {
     prefsOf: jest.Mock;
-    cascadeReschedule: jest.Mock;
+    reoptimize: jest.Mock;
     computeDurationCorrection: jest.Mock;
     recordEvent: jest.Mock;
   };
@@ -518,7 +514,7 @@ function makeUpdateService(rows: TaskWithTags[]): {
       workDays: user.workDays,
       timezone: user.timezone,
     })),
-    cascadeReschedule: jest.fn().mockResolvedValue([]),
+    reoptimize: jest.fn().mockResolvedValue({ displaced: [], batchId: null }),
     computeDurationCorrection: makeCorrectionStub(),
     recordEvent: jest.fn().mockResolvedValue(undefined),
   };
@@ -530,8 +526,8 @@ function makeUpdateService(rows: TaskWithTags[]): {
   };
 }
 
-describe("TasksService.update — metadata-only, no auto-cascade", () => {
-  it("saves a deadline change immediately WITHOUT cascading", async () => {
+describe("TasksService.update — metadata-only", () => {
+  it("saves a deadline change immediately; skips the reoptimize pass for a task already in the past", async () => {
     const existing = task({
       id: "t1",
       deadline: new Date("2026-06-10T17:00:00Z"),
@@ -543,12 +539,13 @@ describe("TasksService.update — metadata-only, no auto-cascade", () => {
       "t1",
       { deadline: "2026-06-09T17:00:00.000Z" },
       user,
+      new Date("2026-06-08T10:00:00Z"), // "now" — after the task's own start
     );
 
     expect(table.get("t1")!.deadline?.toISOString()).toBe(
       "2026-06-09T17:00:00.000Z",
     );
-    expect(scheduler.cascadeReschedule).not.toHaveBeenCalled();
+    expect(scheduler.reoptimize).not.toHaveBeenCalled();
     expect(res.task.scheduledStartTime).toBe("2026-06-08T09:00:00.000Z");
     expect(res.deadlineChanged).toBe(true);
   });
@@ -623,80 +620,6 @@ describe("TasksService.update — metadata-only, no auto-cascade", () => {
   });
 });
 
-describe("TasksService.rescheduleCascade — shared confirm-before-reschedule target", () => {
-  it("runs the window-scoped cascade with no anchor task", async () => {
-    const { service, scheduler } = makeUpdateService([]);
-
-    await service.rescheduleCascade(
-      {
-        windowStart: "2026-06-08T00:00:00.000Z",
-        windowEnd: "2026-06-15T00:00:00.000Z",
-      },
-      user,
-    );
-
-    expect(scheduler.cascadeReschedule).toHaveBeenCalledWith(
-      user.id,
-      expect.anything(),
-      {
-        windowStart: new Date("2026-06-08T00:00:00.000Z"),
-        windowEnd: new Date("2026-06-15T00:00:00.000Z"),
-        includeManual: undefined,
-      },
-      expect.anything(),
-    );
-  });
-
-  it("passes includeManual through to the cascade scope", async () => {
-    const { service, scheduler } = makeUpdateService([]);
-
-    await service.rescheduleCascade(
-      {
-        windowStart: "2026-06-08T00:00:00.000Z",
-        windowEnd: "2026-06-15T00:00:00.000Z",
-        includeManual: true,
-      },
-      user,
-    );
-
-    expect(scheduler.cascadeReschedule).toHaveBeenCalledWith(
-      user.id,
-      expect.anything(),
-      expect.objectContaining({ includeManual: true }),
-      expect.anything(),
-    );
-  });
-
-  it("reports every task the cascade moved as displaced", async () => {
-    const { service, scheduler } = makeUpdateService([]);
-    scheduler.cascadeReschedule.mockResolvedValueOnce([
-      {
-        id: "a",
-        scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
-        conflict: false,
-      },
-      {
-        id: "b",
-        scheduledStartTime: new Date("2026-06-08T10:00:00Z"),
-        conflict: false,
-      },
-    ]);
-
-    const res = await service.rescheduleCascade(
-      {
-        windowStart: "2026-06-08T00:00:00.000Z",
-        windowEnd: "2026-06-15T00:00:00.000Z",
-      },
-      user,
-    );
-
-    expect(res.displaced).toEqual([
-      { taskId: "a", newScheduledStartTime: "2026-06-08T09:00:00.000Z" },
-      { taskId: "b", newScheduledStartTime: "2026-06-08T10:00:00.000Z" },
-    ]);
-  });
-});
-
 describe("deadlineOptions (pure) — used directly by TasksController", () => {
   it("returns six ISO chip values derived from horizon ceiling math", () => {
     const res = deadlineOptions("2026-06-08T10:00:00.000Z", user); // Monday
@@ -726,6 +649,11 @@ function makeIntegrationService(rows: TaskWithTags[]): {
   userUpdate: jest.Mock;
 } {
   const table = new Map<string, TaskWithTags>(rows.map((r) => [r.id, r]));
+  let nextId = 0;
+  // Backs the fake `taskEvent.create`/`createMany`/`findMany` below — a real
+  // in-memory store so `undoBatch`'s `findMany({ where: { userId, batchId }
+  // })` can find what `reoptimize` actually wrote.
+  const events: Record<string, unknown>[] = [];
 
   const matchesStatus = (t: TaskWithTags, filter: unknown): boolean => {
     if (filter === undefined) return true;
@@ -798,10 +726,28 @@ function makeIntegrationService(rows: TaskWithTags[]): {
         table.delete(args.where.id);
         return Promise.resolve(row);
       }),
+      create: jest.fn((args: { data: Record<string, unknown> }) => {
+        const id = `new-${nextId++}`;
+        const row = task({
+          id,
+          title: (args.data.title as string) ?? "Task",
+          durationMinutes: (args.data.durationMinutes as number) ?? 60,
+          deadline: (args.data.deadline as Date | null) ?? null,
+          scheduledStartTime:
+            (args.data.scheduledStartTime as Date | null) ?? null,
+          conflict: (args.data.conflict as boolean) ?? false,
+        });
+        table.set(id, row);
+        return Promise.resolve(row);
+      }),
     },
-    // cascadeReschedule reads the user's preference matrix to re-rank
-    // candidates; cold-start (empty matrix) keeps this integration coverage
-    // earliest-first, matching every existing assertion below.
+    tag: {
+      createMany: jest.fn().mockResolvedValue({}),
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    // reoptimize reads the user's preference matrix to re-rank candidates;
+    // cold-start (empty matrix) keeps this integration coverage earliest-
+    // first, matching every existing assertion below.
     user: {
       findUniqueOrThrow: jest
         .fn()
@@ -809,9 +755,73 @@ function makeIntegrationService(rows: TaskWithTags[]): {
       update: jest.fn().mockResolvedValue({}),
     },
     taskEvent: {
-      create: jest.fn().mockResolvedValue({}),
-      createMany: jest.fn().mockResolvedValue({}),
+      // A real in-memory store (not just a call-tracking stub) so
+      // `SchedulerService.undoBatch`'s `findMany({ where: { userId, batchId
+      // } })` can actually find what `reoptimize` wrote — needed for the
+      // undo-integration tests below.
+      create: jest.fn((args: { data: Record<string, unknown> }) => {
+        events.push({ ...args.data });
+        return Promise.resolve(args.data);
+      }),
+      createMany: jest.fn((args: { data: Record<string, unknown>[] }) => {
+        events.push(...args.data.map((d) => ({ ...d })));
+        return Promise.resolve({ count: args.data.length });
+      }),
+      findMany: jest.fn((args: { where?: Record<string, unknown> }) => {
+        const where = args.where ?? {};
+        return Promise.resolve(
+          events.filter((e) => {
+            if (where.userId !== undefined && e.userId !== where.userId)
+              return false;
+            if (where.batchId !== undefined && e.batchId !== where.batchId)
+              return false;
+            return true;
+          }),
+        );
+      }),
     },
+    /**
+     * Fans out to whichever shape the caller's raw UPDATE used (detected from
+     * the fixed SQL text around the `VALUES` interpolation):
+     *  - `persistPlacements`: a flat run of (id, scheduledStartTime,
+     *    conflict, manuallyMoved).
+     *  - `SchedulerService.undoBatch`'s restore step: a flat run of (id,
+     *    scheduledStartTime, durationMinutes) — always also forces
+     *    manuallyMoved: false.
+     * Changing either tuple order means changing this decode.
+     */
+    $executeRaw: jest.fn(
+      (strings: TemplateStringsArray, ...params: { values: unknown[] }[]) => {
+        const flat = params[0]?.values ?? [];
+        const isRestore = strings.some((s) => s.includes("durationMinutes"));
+        const width = isRestore ? 3 : 4;
+        for (let i = 0; i < flat.length; i += width) {
+          const row = table.get(flat[i] as string)!;
+          if (isRestore) {
+            const [id, scheduledStartTime, durationMinutes] = flat.slice(
+              i,
+              i + 3,
+            ) as [string, Date | null, number];
+            table.set(id, {
+              ...row,
+              scheduledStartTime,
+              durationMinutes,
+              manuallyMoved: false,
+            });
+          } else {
+            const [id, scheduledStartTime, conflict, manuallyMoved] =
+              flat.slice(i, i + 4) as [string, Date | null, boolean, boolean];
+            table.set(id, {
+              ...row,
+              scheduledStartTime,
+              conflict,
+              manuallyMoved,
+            });
+          }
+        }
+        return Promise.resolve(flat.length / width);
+      },
+    ),
   };
 
   const prisma = {
@@ -830,8 +840,62 @@ function makeIntegrationService(rows: TaskWithTags[]): {
   };
 }
 
-describe("TasksService.remove — plain delete, no cascade", () => {
-  it("deletes the row without touching any other task's placement", async () => {
+describe("TasksService.create — real scheduler, can legitimately displace a far-out task", () => {
+  it("nudges a far-anchored, cost-cheap-to-move task out of the way when placing the new task well requires it", async () => {
+    const day = "2030-06-17"; // Monday
+    const farDay = "2030-06-27"; // Thursday, +10 days — beyond the deviation horizon
+    const now = new Date(`${day}T08:00:00.000Z`);
+    const addDays = (iso: string, n: number): string =>
+      new Date(new Date(`${iso}T00:00:00.000Z`).getTime() + n * 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+
+    // Block every workday strictly between "day" and "farDay" (weekend
+    // offsets need no wall — nothing gets scheduled on a non-work day
+    // anyway) so the new task's earliest-feasible search can't just grab an
+    // early, unrelated day — it has to reach the far task's own day to find
+    // room.
+    const walls = [0, 1, 2, 3, 4, 7, 8, 9].map((offset) => {
+      const d = addDays(day, offset);
+      return task({
+        id: `wall-${offset}`,
+        deadline: new Date(`${d}T17:00:00.000Z`),
+        durationMinutes: 480,
+        scheduledStartTime: new Date(`${d}T09:00:00.000Z`),
+      });
+    });
+    const far = task({
+      id: "far",
+      durationMinutes: 60,
+      scheduledStartTime: new Date(`${farDay}T09:00:00.000Z`),
+    });
+    const { service, table } = makeIntegrationService([...walls, far]);
+
+    const result = await service.create(
+      {
+        title: "Urgent",
+        durationMinutes: 60,
+        deadline: new Date(`${farDay}T10:00:00.000Z`).toISOString(),
+      },
+      user,
+      now,
+    );
+
+    // The new task gets the slot it needed...
+    expect(result.task.scheduledStartTime).toBe(`${farDay}T09:00:00.000Z`);
+    // ...and the far-anchored task — cheap to renegotiate given how far in
+    // the future it sits — gave it up, rather than the create silently
+    // failing to find room or leaving a conflict. This is the OLD "create
+    // never displaces anything" guarantee being deliberately gone.
+    expect(table.get("far")!.scheduledStartTime?.toISOString()).not.toBe(
+      `${farDay}T09:00:00.000Z`,
+    );
+    expect(result.displaced.some((d) => d.taskId === "far")).toBe(true);
+  });
+});
+
+describe("TasksService.remove", () => {
+  it("deletes the row, leaving an unrelated task's placement untouched when nothing contests it", async () => {
     const day = "2030-06-17"; // a Monday (workday)
     const fixedBlock = task({
       id: "fixed-block",
@@ -846,96 +910,49 @@ describe("TasksService.remove — plain delete, no cascade", () => {
     });
     const { service, table } = makeIntegrationService([fixedBlock, flexible]);
 
-    await service.remove("fixed-block", user);
+    await service.remove("fixed-block", user, new Date(`${day}T08:00:00.000Z`));
 
     expect(table.has("fixed-block")).toBe(false);
-    // The gap this left behind is only closed by a separate, explicit
-    // rescheduleCascade() call (see below) — never automatically.
+    // Nothing else wants "flexible"'s slot, so 0 deviation cost keeps it
+    // exactly where it already was — staying is always at least as cheap as
+    // moving when nothing is contested.
     expect(table.get("flexible")!.scheduledStartTime?.toISOString()).toBe(
       `${day}T11:00:00.000Z`,
     );
   });
-});
 
-describe("TasksService.rescheduleCascade — real scheduler, window repack", () => {
-  it("repacks movable tasks to close a gap a delete left behind", async () => {
-    const day = "2030-06-17";
+  it("closes the gap it leaves behind inline — no separate confirm step", async () => {
+    const day = "2030-06-17"; // Monday
+    const farDay = "2030-06-27"; // 10 days out — beyond the deviation horizon
+    const fixedBlock = task({
+      id: "fixed-block",
+      durationMinutes: 30,
+      scheduledStartTime: new Date(`${farDay}T09:00:00.000Z`),
+    });
+    // Currently off-hours (before the 09:00 work start) on the SAME far day —
+    // its cheapest legitimate improvement is the slot "fixed-block" is
+    // sitting on, but it can't have it until "fixed-block" is gone.
     const flexible = task({
       id: "flexible",
-      durationMinutes: 60,
-      scheduledStartTime: new Date(`${day}T11:00:00.000Z`),
+      durationMinutes: 30,
+      scheduledStartTime: new Date(`${farDay}T08:00:00.000Z`),
     });
-    const { service, table } = makeIntegrationService([flexible]);
+    const { service, table } = makeIntegrationService([fixedBlock, flexible]);
 
-    const res = await service.rescheduleCascade(
-      {
-        windowStart: `${day}T00:00:00.000Z`,
-        windowEnd: "2030-06-18T00:00:00.000Z",
-      },
-      user,
-    );
+    await service.remove("fixed-block", user, new Date(`${day}T08:00:00.000Z`));
 
-    // With the gap now open, the flexible task reflows to the work-day start.
+    expect(table.has("fixed-block")).toBe(false);
     expect(table.get("flexible")!.scheduledStartTime?.toISOString()).toBe(
-      `${day}T09:00:00.000Z`,
+      `${farDay}T09:00:00.000Z`,
     );
-    expect(res.displaced.some((d) => d.taskId === "flexible")).toBe(true);
-  });
-
-  it("leaves a manually-moved task frozen without includeManual", async () => {
-    const day = "2030-06-17";
-    const manual = task({
-      id: "manual",
-      manuallyMoved: true,
-      durationMinutes: 60,
-      scheduledStartTime: new Date(`${day}T09:00:00.000Z`),
-    });
-    const { service, table } = makeIntegrationService([manual]);
-
-    const res = await service.rescheduleCascade(
-      {
-        windowStart: `${day}T00:00:00.000Z`,
-        windowEnd: "2030-06-18T00:00:00.000Z",
-      },
-      user,
-    );
-
-    expect(table.get("manual")!.scheduledStartTime?.toISOString()).toBe(
-      `${day}T09:00:00.000Z`,
-    );
-    expect(res.displaced.some((d) => d.taskId === "manual")).toBe(false);
-  });
-
-  it("with includeManual: true repositions a manually-moved task and clears its flag", async () => {
-    const day = "2030-06-17";
-    const manual = task({
-      id: "manual",
-      manuallyMoved: true,
-      durationMinutes: 60,
-      scheduledStartTime: new Date(`${day}T11:00:00.000Z`),
-    });
-    const { service, table } = makeIntegrationService([manual]);
-
-    const res = await service.rescheduleCascade(
-      {
-        windowStart: `${day}T00:00:00.000Z`,
-        windowEnd: "2030-06-18T00:00:00.000Z",
-        includeManual: true,
-      },
-      user,
-    );
-
-    expect(table.get("manual")!.scheduledStartTime?.toISOString()).toBe(
-      `${day}T09:00:00.000Z`,
-    );
-    expect(table.get("manual")!.manuallyMoved).toBe(false);
-    expect(res.displaced.some((d) => d.taskId === "manual")).toBe(true);
   });
 });
 
-describe("TasksService.displace / resize — pin + day-scoped cascade", () => {
+describe("TasksService.displace / resize — pin + inline reoptimize", () => {
+  const day = "2030-06-17"; // Monday
+  const now = new Date(`${day}T08:00:00.000Z`);
+
   it("displace() pins the task manuallyMoved at the requested slot", async () => {
-    const day = "2030-06-17"; // Monday
     const moved = task({
       id: "a",
       durationMinutes: 60,
@@ -943,7 +960,7 @@ describe("TasksService.displace / resize — pin + day-scoped cascade", () => {
     });
     const { service, table, taskEventCreate } = makeIntegrationService([moved]);
 
-    await service.displace("a", `${day}T14:00:00.000Z`, user);
+    await service.displace("a", `${day}T14:00:00.000Z`, user, now);
 
     expect(table.get("a")!.manuallyMoved).toBe(true);
     expect(table.get("a")!.scheduledStartTime?.toISOString()).toBe(
@@ -959,7 +976,6 @@ describe("TasksService.displace / resize — pin + day-scoped cascade", () => {
   });
 
   it("resize() updates duration and pins manuallyMoved", async () => {
-    const day = "2030-06-17";
     const resized = task({
       id: "a",
       durationMinutes: 60,
@@ -969,7 +985,7 @@ describe("TasksService.displace / resize — pin + day-scoped cascade", () => {
       resized,
     ]);
 
-    await service.resize("a", `${day}T09:00:00.000Z`, 120, user);
+    await service.resize("a", `${day}T09:00:00.000Z`, 120, user, now);
 
     expect(table.get("a")!.durationMinutes).toBe(120);
     expect(table.get("a")!.manuallyMoved).toBe(true);
@@ -982,28 +998,285 @@ describe("TasksService.displace / resize — pin + day-scoped cascade", () => {
     expect(resizeCalls[0][0].data.taskId).toBe("a");
   });
 
-  it("displace() never touches any other task, even one it now overlaps", async () => {
-    const day = "2030-06-17"; // Monday
+  it("manuallyMoved grants a neighbor NO special protection anymore — displace() can evict it too, when cost-favorable", async () => {
     const dragged = task({
       id: "a",
       durationMinutes: 60,
+      // A tighter deadline than "b"'s (below) puts "a" first in EDF order —
+      // matching what the drag itself already established: this is the task
+      // the user is actively acting on.
+      deadline: new Date(`${day}T16:00:00.000Z`),
       scheduledStartTime: new Date(`${day}T13:00:00.000Z`),
     });
-    // The dragged task lands right on top of this one, but a drag is not a
-    // cascade — `other` must come out completely untouched.
+    // The dragged task lands right on top of this one, which happens to be
+    // manually-moved — under the old hard freeze this was untouchable; under
+    // the continuous cost model it's just another task with an anchor.
     const other = task({
       id: "b",
       manuallyMoved: true,
+      deadline: new Date(`${day}T17:00:00.000Z`),
       durationMinutes: 60,
       scheduledStartTime: new Date(`${day}T09:00:00.000Z`),
       conflict: false,
     });
     const { service, table } = makeIntegrationService([dragged, other]);
 
-    const res = await service.displace("a", `${day}T09:30:00.000Z`, user);
+    const res = await service.displace("a", `${day}T09:00:00.000Z`, user, now);
 
-    expect(table.get("b")).toEqual(other);
-    expect(res.displaced).toHaveLength(0);
+    // "a" claims the exact slot it was dropped on.
+    expect(table.get("a")!.scheduledStartTime?.toISOString()).toBe(
+      `${day}T09:00:00.000Z`,
+    );
+    expect(table.get("a")!.conflict).toBe(false);
+    // "b" reflows out of the way, and — having actually been relocated by
+    // the algorithm rather than the user — its manual pin is cleared.
+    expect(table.get("b")!.scheduledStartTime?.toISOString()).toBe(
+      `${day}T10:00:00.000Z`,
+    );
+    expect(table.get("b")!.manuallyMoved).toBe(false);
+    expect(table.get("b")!.conflict).toBe(false);
+    expect(res.displaced).toEqual([
+      { taskId: "b", newScheduledStartTime: `${day}T10:00:00.000Z` },
+    ]);
+    expect(res.batchId).toEqual(expect.any(String));
+  });
+
+  it("displace() pushes an auto-scheduled neighbor out of the way instead of leaving conflict: true", async () => {
+    const dragged = task({
+      id: "a",
+      durationMinutes: 60,
+      // A tighter deadline than "b"'s (below) puts "a" first in EDF order —
+      // matching what the drag itself already established: this is the task
+      // the user is actively acting on.
+      deadline: new Date(`${day}T16:00:00.000Z`),
+      scheduledStartTime: new Date(`${day}T13:00:00.000Z`),
+    });
+    // An ordinary auto-scheduled (non-manual) neighbor sitting right where
+    // the drag lands.
+    const neighbor = task({
+      id: "b",
+      manuallyMoved: false,
+      durationMinutes: 60,
+      deadline: new Date(`${day}T17:00:00.000Z`),
+      scheduledStartTime: new Date(`${day}T09:00:00.000Z`),
+      conflict: false,
+    });
+    const { service, table } = makeIntegrationService([dragged, neighbor]);
+
+    const res = await service.displace("a", `${day}T09:00:00.000Z`, user, now);
+
+    // The dragged task lands exactly where requested.
+    expect(table.get("a")!.scheduledStartTime?.toISOString()).toBe(
+      `${day}T09:00:00.000Z`,
+    );
+    expect(table.get("a")!.conflict).toBe(false);
+    // The neighbor reflowed out of the way instead of staying in conflict.
+    expect(table.get("b")!.scheduledStartTime?.toISOString()).toBe(
+      `${day}T10:00:00.000Z`,
+    );
+    expect(table.get("b")!.conflict).toBe(false);
+    expect(res.displaced).toEqual([
+      { taskId: "b", newScheduledStartTime: `${day}T10:00:00.000Z` },
+    ]);
+    expect(res.batchId).toEqual(expect.any(String));
+  });
+
+  it("resize() pushes an auto-scheduled neighbor out of the way instead of leaving conflict: true", async () => {
+    const resized = task({
+      id: "a",
+      durationMinutes: 60,
+      scheduledStartTime: new Date(`${day}T09:00:00.000Z`),
+    });
+    const neighbor = task({
+      id: "b",
+      manuallyMoved: false,
+      durationMinutes: 60,
+      deadline: new Date(`${day}T17:00:00.000Z`),
+      scheduledStartTime: new Date(`${day}T10:00:00.000Z`),
+      conflict: false,
+    });
+    const { service, table } = makeIntegrationService([resized, neighbor]);
+
+    // Growing "a" to 90 minutes now reaches into "b"'s 10:00-11:00 slot.
+    const res = await service.resize(
+      "a",
+      `${day}T09:00:00.000Z`,
+      90,
+      user,
+      now,
+    );
+
+    expect(table.get("a")!.durationMinutes).toBe(90);
+    expect(table.get("a")!.conflict).toBe(false);
+    expect(table.get("b")!.scheduledStartTime?.toISOString()).toBe(
+      `${day}T10:30:00.000Z`,
+    );
+    expect(table.get("b")!.conflict).toBe(false);
+    expect(res.displaced).toEqual([
+      { taskId: "b", newScheduledStartTime: `${day}T10:30:00.000Z` },
+    ]);
+    expect(res.batchId).toEqual(expect.any(String));
+  });
+});
+
+describe("TasksService.update — inline reoptimize (no second call)", () => {
+  it("a deadline edit that leaves the task's own slot in conflict auto-resolves the neighbor inline", async () => {
+    const day = "2030-06-17"; // Monday
+    const anchor = task({
+      id: "a",
+      durationMinutes: 60,
+      deadline: new Date(`${day}T12:00:00.000Z`),
+      scheduledStartTime: new Date(`${day}T09:00:00.000Z`),
+    });
+    // A neighbor that only conflicts with "a" AFTER some other state change —
+    // here we simulate "the edit revealed a conflict" by having the neighbor
+    // already overlap "a"'s (unchanged) slot; update() must resolve it
+    // inline, in the SAME call, without a separate reschedule-cascade.
+    const neighbor = task({
+      id: "b",
+      manuallyMoved: false,
+      durationMinutes: 60,
+      deadline: new Date(`${day}T17:00:00.000Z`),
+      scheduledStartTime: new Date(`${day}T09:30:00.000Z`), // overlaps "a"
+      conflict: true,
+    });
+    const { service, table } = makeIntegrationService([anchor, neighbor]);
+
+    const res = await service.update(
+      "a",
+      { deadline: new Date(`${day}T13:00:00.000Z`).toISOString() },
+      user,
+      new Date(`${day}T08:00:00.000Z`), // "now" — both tasks are still future
+    );
+
+    // "a" itself never moves — update() only ever touches its metadata.
+    expect(table.get("a")!.scheduledStartTime?.toISOString()).toBe(
+      `${day}T09:00:00.000Z`,
+    );
+    // The neighbor reflowed out of the way, inline, in this same call.
+    expect(table.get("b")!.scheduledStartTime?.toISOString()).toBe(
+      `${day}T10:00:00.000Z`,
+    );
+    expect(res.deadlineChanged).toBe(true);
+    expect(res.displaced).toEqual([
+      { taskId: "b", newScheduledStartTime: `${day}T10:00:00.000Z` },
+    ]);
+    expect(res.batchId).toEqual(expect.any(String));
+  });
+
+  it("actually relocates the edited task when a tightened deadline no longer fits its current slot — the bug this redesign fixes", async () => {
+    const day = "2030-06-17"; // Monday
+    const anchor = task({
+      id: "a",
+      durationMinutes: 60,
+      scheduledStartTime: new Date(`${day}T14:00:00.000Z`),
+    });
+    const { service, table } = makeIntegrationService([anchor]);
+
+    const res = await service.update(
+      "a",
+      { deadline: new Date(`${day}T13:00:00.000Z`).toISOString() }, // before its own current end (15:00)
+      user,
+      new Date(`${day}T08:00:00.000Z`),
+    );
+
+    const finalStart = table.get("a")!.scheduledStartTime!;
+    expect(finalStart.toISOString()).not.toBe(`${day}T14:00:00.000Z`);
+    // Relocated to a slot that respects the NEW deadline.
+    expect(finalStart.getTime() + 60 * 60_000).toBeLessThanOrEqual(
+      new Date(`${day}T13:00:00.000Z`).getTime(),
+    );
+    // The response's `task` reflects the FINAL slot, not the pre-reoptimize one.
+    expect(res.task.scheduledStartTime).toBe(finalStart.toISOString());
+    expect(res.deadlineChanged).toBe(true);
+  });
+
+  it("does not attempt a resolve when neither the deadline nor the duration changed", async () => {
+    const day = "2030-06-17";
+    const anchor = task({
+      id: "a",
+      durationMinutes: 60,
+      scheduledStartTime: new Date(`${day}T09:00:00.000Z`),
+    });
+    const { service } = makeIntegrationService([anchor]);
+
+    const res = await service.update("a", { title: "Renamed" }, user);
+
+    expect(res.displaced).toEqual([]);
+    expect(res.batchId).toBeUndefined();
+  });
+
+  it("skips the resolve for a task already in the past", async () => {
+    const day = "2020-06-15"; // Monday, safely in the past
+    const anchor = task({
+      id: "a",
+      durationMinutes: 60,
+      deadline: new Date(`${day}T12:00:00.000Z`),
+      scheduledStartTime: new Date(`${day}T09:00:00.000Z`),
+    });
+    const { service, table } = makeIntegrationService([anchor]);
+
+    const res = await service.update(
+      "a",
+      { deadline: new Date(`${day}T13:00:00.000Z`).toISOString() },
+      user,
+      new Date(`${day}T10:00:00.000Z`), // "now" is after the task's own start
+    );
+
+    expect(res.deadlineChanged).toBe(true);
+    expect(res.displaced).toEqual([]);
+    expect(table.get("a")!.scheduledStartTime?.toISOString()).toBe(
+      `${day}T09:00:00.000Z`,
+    );
+  });
+});
+
+describe("TasksService.undoBatch", () => {
+  it("reverts a reoptimize auto-cascade's displaced task back to its prior slot", async () => {
+    const day = "2030-06-17"; // Monday
+    const dragged = task({
+      id: "a",
+      durationMinutes: 60,
+      // Tighter deadline than "b"'s puts "a" first in EDF order.
+      deadline: new Date(`${day}T16:00:00.000Z`),
+      scheduledStartTime: new Date(`${day}T13:00:00.000Z`),
+    });
+    const neighbor = task({
+      id: "b",
+      manuallyMoved: false,
+      durationMinutes: 60,
+      deadline: new Date(`${day}T17:00:00.000Z`),
+      scheduledStartTime: new Date(`${day}T09:00:00.000Z`),
+      conflict: false,
+    });
+    const { service, table } = makeIntegrationService([dragged, neighbor]);
+
+    const displaceResult = await service.displace(
+      "a",
+      `${day}T09:00:00.000Z`,
+      user,
+      new Date(`${day}T08:00:00.000Z`),
+    );
+    expect(table.get("b")!.scheduledStartTime?.toISOString()).toBe(
+      `${day}T10:00:00.000Z`,
+    );
+    expect(displaceResult.batchId).toEqual(expect.any(String));
+
+    const undone = await service.undoBatch(displaceResult.batchId!, user);
+
+    expect(table.get("b")!.scheduledStartTime?.toISOString()).toBe(
+      `${day}T09:00:00.000Z`,
+    );
+    expect(undone.displaced).toEqual([
+      { taskId: "b", newScheduledStartTime: `${day}T09:00:00.000Z` },
+    ]);
+  });
+
+  it("throws NotFoundException for a batchId that matches no event", async () => {
+    const { service } = makeIntegrationService([]);
+    await expect(service.undoBatch("nonexistent-batch", user)).rejects.toThrow(
+      "Cannot find reschedule batch with id nonexistent-batch",
+    );
   });
 });
 

@@ -1,4 +1,4 @@
-import type { SchedulingMeta, SchedulingOverflow } from "./api";
+import type { SchedulingMeta } from "./api";
 
 /** Lifecycle status of a task. */
 export type TaskStatus = "PENDING" | "DONE" | "ABANDONED";
@@ -50,9 +50,11 @@ export interface Task {
    */
   startTime: number;
   /**
-   * True when the task was manually dragged/resized (or pinned via an
-   * accepted overflow-recovery option) and so is anchored: the EDF engine
-   * treats its slot as occupied space and never repositions it.
+   * True when the task was manually dragged/resized. PURELY INFORMATIONAL
+   * (drives the "Manually placed" badge/telemetry) — the scheduler no longer
+   * treats this as a freeze signal. Every task's tolerance for being
+   * repositioned instead scales continuously with how far in the future its
+   * current `scheduledStartTime` sits (see `docs/heuristic.md`).
    */
   manuallyMoved: boolean;
   status: TaskStatus;
@@ -106,20 +108,17 @@ export interface SimulateTaskInput {
 
 export interface SimulateTaskResponse {
   schedulingMeta: SchedulingMeta;
-  /** Populated when no feasible slot exists before the deadline. */
-  overflow?: SchedulingOverflow | null;
 }
 
 /**
- * Metadata-only update: title/note/deadline/tags are saved immediately and the
- * task keeps its current slot — a `deadline` or `tags` change never
- * auto-cascades. A `tags` change also applies the Phase-2 per-tag duration
- * correction immediately (unless the user's `durationAdjustmentMode` is
- * `"never"`) and returns it as `schedulingMeta` (see `UpdateTaskResponse`) so
- * the frontend can surface what changed. Either kind of change can leave a
- * conflict in its wake, which the frontend resolves by prompting for
- * `POST /tasks/reschedule-cascade` if the task's own placement is still in
- * the future (see `RescheduleCascadeInput`).
+ * Metadata-only update: title/note/deadline/tags are saved immediately. A
+ * `tags` change also applies the Phase-2 per-tag duration correction
+ * immediately (unless the user's `durationAdjustmentMode` is `"never"`) and
+ * returns it as `schedulingMeta` (see `UpdateTaskResponse`) so the frontend
+ * can surface what changed. A `deadline`/duration change that leaves the
+ * task's own slot no longer cost-optimal (past the new deadline, or
+ * overlapping a neighbour) is auto-resolved INLINE, in the same request —
+ * see `UpdateTaskResponse.displaced`/`batchId`. No separate confirm step.
  */
 export interface UpdateTaskInput {
   title?: string;
@@ -150,33 +149,6 @@ export interface ResizeInput {
   requestedStartTime: string;
   /** New duration in minutes (positive multiple of 15). */
   durationMinutes: number;
-}
-
-/**
- * Body for `POST /tasks/reschedule-cascade`: the shared confirm-before-
- * reschedule target for every trigger that can leave a schedule gap/conflict
- * behind — a deadline edit, a tags-driven duration change, or a delete. No
- * anchor task: every non-frozen task currently placed inside the window is
- * eligible to move. The frontend computes the window (todo.md §Rescheduling
- * Design: ±3 workdays around the affected task's current placement, clamped
- * to `now` and re-balanced into the future when the past side is clamped)
- * and only calls this endpoint when that task's own placement is still in
- * the future — a past/in-progress task's edit or delete never prompts.
- */
-export interface RescheduleCascadeInput {
-  /** ISO-8601 inclusive start of the window to cascade-reschedule within. */
-  windowStart: string;
-  /** ISO-8601 exclusive end of the cascade window. */
-  windowEnd: string;
-  /**
-   * The 3-option manual-vs-auto reschedule choice (todo.md §Rescheduling
-   * Design): when true, manually-moved tasks in the window are ALSO eligible
-   * to move ("reschedule everyone"); when false/omitted, they stay frozen
-   * ("reschedule only auto-scheduled tasks"). The third option ("do nothing")
-   * needs no backend representation — the frontend simply doesn't call this
-   * endpoint.
-   */
-  includeManual?: boolean;
 }
 
 /**

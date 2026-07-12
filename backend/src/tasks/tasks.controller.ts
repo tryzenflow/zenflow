@@ -16,9 +16,7 @@ import { UpdateTaskDto } from "./dto/update-task.dto";
 import { ListTasksDto } from "./dto/list-tasks.dto";
 import { ListTaskSuggestionsDto } from "./dto/list-task-suggestions.dto";
 import { RescheduleTaskDto } from "./dto/reschedule-task.dto";
-import { RescheduleCascadeDto } from "./dto/reschedule-cascade.dto";
 import { ResizeTaskDto } from "./dto/resize-task.dto";
-import { ResolveOverflowDto } from "./dto/resolve-overflow.dto";
 import { DeadlineOptionsDto } from "./dto/deadline-options.dto";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
@@ -108,23 +106,16 @@ export class TasksController {
     return { success: true, message: "Task resized", data };
   }
 
-  @Post("reschedule-cascade")
-  async rescheduleCascade(
-    @Body() dto: RescheduleCascadeDto,
+  // NOTE: a static "reschedule" prefix, distinct from the ":id/reschedule"
+  // drag endpoint above — no route-matching ambiguity (different HTTP method
+  // and path shape).
+  @Post("reschedule/undo/:batchId")
+  async undoBatch(
+    @Param("batchId") batchId: string,
     @CurrentUser() user: User,
   ) {
-    const data = await this.tasksService.rescheduleCascade(dto, user);
-    return { success: true, message: "Tasks rescheduled", data };
-  }
-
-  @Patch(":id/resolve-overflow")
-  async resolveOverflow(
-    @Param("id") id: string,
-    @Body() dto: ResolveOverflowDto,
-    @CurrentUser() user: User,
-  ) {
-    const data = await this.tasksService.resolveOverflow(id, dto.choice, user);
-    return { success: true, message: "Task rescheduled", data };
+    const data = await this.tasksService.undoBatch(batchId, user);
+    return { success: true, message: "Reschedule undone", data };
   }
 
   @Patch(":id/complete")

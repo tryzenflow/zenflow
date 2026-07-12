@@ -86,7 +86,7 @@ Defined in [`prisma/schema.prisma`](prisma/schema.prisma). Five models.
 | `durationMinutes` | int | **always a positive multiple of 15** |
 | `deadline` | DateTime? | EDF ordering key (nulls last) |
 | `tags` | `Tag[]` | implicit many-to-many with `Tag` (per-user labels) |
-| `manuallyMoved` | bool | true → the user dragged/resized this task (or accepted an overflow-recovery slot); the ONLY "don't move this" mechanism — there is no more `fixed` task concept |
+| `manuallyMoved` | bool | true → the user dragged/resized this task. **Purely informational** (drives the "Manually placed" badge/telemetry) — the scheduler never reads it to decide what can move; see "The EDF engine" below for the continuous cost model that replaced the old hard freeze |
 | `startTime` | int | minutes from midnight of the last manual placement; informational only, not consulted by the scheduler |
 | `status` | `TaskStatus` | `PENDING` \| `DONE` \| `ABANDONED` |
 | `conflict` | bool | true when the task has no valid placement (no slot before its deadline) — i.e. `scheduledStartTime` is null |
@@ -99,10 +99,11 @@ Indexes: `[userId, deadline]`, `[userId, status]`, `[userId, scheduledStartTime]
 | Field | Type | Notes |
 |-------|------|-------|
 | `id` | BigInt | autoincrement (serialized as decimal string over the wire) |
-| `eventType` | `TaskEventType` | `CREATE` \| `MOVE` \| `RESIZE` \| `KEEP` \| `COMPLETE` \| `ABANDON`. `KEEP` = completed in the suggested slot (positive signal). |
-| `oldSnapshot` / `newSnapshot` | Json | `{ scheduledStartTime, durationMinutes, tags }` (tag names at event time); MOVE/RESIZE also carry `suggestedStartTime` (the overridden EDF slot). `oldSnapshot` null on CREATE/KEEP. |
+| `eventType` | `TaskEventType` | `CREATE` \| `MOVE` \| `RESIZE` \| `KEEP` \| `COMPLETE` \| `ABANDON` \| `RESCHEDULED`. `KEEP` = completed in the suggested slot (positive signal); `RESCHEDULED` = auto-repositioned as collateral in someone else's cascade (not a user drag). |
+| `oldSnapshot` / `newSnapshot` | Json | `{ scheduledStartTime, durationMinutes, tags }` (tag names at event time); MOVE/RESIZE also carry `suggestedStartTime` (the overridden EDF slot); RESCHEDULED carries `propensity` when the softmax re-ranker actually chose the slot. `oldSnapshot` null on CREATE/KEEP. |
 | `rewardScore` | float | Phase-3 reward signal (default 1.0) |
 | `occurredAt` | DateTime | indexed desc per user |
+| `batchId` | string? | groups every RESCHEDULED event one `SchedulerService.reoptimize` auto-cascade wrote, so the whole batch can be undone atomically via `SchedulerService.undoBatch` / `POST /tasks/reschedule/undo/:batchId`. Null outside a reoptimize batch. Indexed `[userId, batchId]`. |
 | `taskId` / `userId` | uuid | FKs, cascade delete (`userId` denormalized for range queries) |
 
 ### `Tag`
@@ -124,8 +125,8 @@ atomically inside the task transaction. The wire format keeps `Task.tags` as a
 
 > **Tasks are one-off, and every task is flexible.** A `POST /tasks` always creates
 > exactly one `Task` row, always EDF-placed (no more "fixed" tasks — that isn't the point
-> of a smart scheduler). The only way a task stops moving is `manuallyMoved` (set when the
-> user drags/resizes it, or accepts an overflow-recovery slot). There is no recurrence: no
+> of a smart scheduler). There is no hard "don't move this" flag anymore — see "The EDF
+> engine" below for the continuous cost model that replaced it. There is no recurrence: no
 > `rrule`, no `seriesId`, no `scope`. True recurrence may be reintroduced later as a
 > deliberate feature on top of this simplified scheduler.
 
@@ -156,47 +157,49 @@ Global prefix **`/api/v1`**. All routes except `POST /auth/otp/*` require
 ### Tasks (`/tasks`)
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/tasks` | create a single task — always flexible, always EDF-placed (`durationMinutes` is a plain required field; there is no more `fixed`/`startTime`/`endTime`). Placement is **solo**: the new task only lands in genuinely free space (a zero-width cascade scope freezes every already-placed task), so a create never silently displaces anything, same as an edit/delete. `overflow` is populated whenever the task can't find room this way (unplaced) — the frontend offers the same `reschedule-cascade` confirm prompt (below) before falling back to the outside-hours/next-available recovery options |
+| POST | `/tasks` | create a single task — always flexible, always EDF-placed (`durationMinutes` is a plain required field; there is no more `fixed`/`startTime`/`endTime`). The new task enters the SAME unified `reoptimize` pass as every other pending task (see "The EDF engine" below); since it starts with no anchor, placing it well can legitimately nudge a far-out, cost-cheap-to-move task out of the way — a create is no longer guaranteed "solo". Only comes back unplaced (`conflict: true`) in the rare genuinely-saturated-calendar case |
 | GET | `/tasks?view=&date=&status=` | list within the view window (+ unplaced conflicts) |
 | GET | `/tasks/suggestions?q=&limit=` | title-autocomplete: the user's existing tasks, **newest first** and **deduped by title** (case-insensitive), optionally filtered by the `q` substring. `limit` 1–50, default 10. Returns `TaskSuggestionsResponse` (`{ suggestions: Task[] }`). Read-only; never reschedules. Declared **before** `/tasks/:id` so it isn't matched as an id |
 | GET | `/tasks/:id` | task detail + last events |
-| PATCH | `/tasks/:id` | metadata only (title/note/deadline/tags), saved immediately at the task's current slot — **does NOT reschedule**. A `deadline` change sets `UpdateTaskResponse.deadlineChanged: true` so the frontend can prompt for a confirm-before-reschedule (see `reschedule-cascade` below). A `tags` change runs the Phase-2 duration corrector `POST /tasks` uses and applies the corrected duration in the same write (unless the user's `durationAdjustmentMode` is `"never"`), returning it as `schedulingMeta` for the frontend to show what changed |
-| POST | `/tasks/reschedule-cascade` | the shared confirm-before-reschedule target for a deadline edit, a tags-driven duration change, or a delete — no anchor task, every non-frozen task currently placed inside the window is eligible to move. The frontend computes the window client-side (±3 workdays around the affected task's own placement, clamped to `now` and re-balanced into the future when the past side is clamped) and only prompts when that task's own placement is still in the future. Body: `RescheduleCascadeInput` (`windowStart`, `windowEnd`, `includeManual?`). Returns `{ displaced: DisplacedTask[] }` |
-| PATCH | `/tasks/:id/reschedule` | manual drag → `pin`, records MOVE + signed preference telemetry |
-| PATCH | `/tasks/:id/resize` | edge-resize, snaps to 15-min grid, recomputes conflicts |
-| PATCH | `/tasks/:id/resolve-overflow` | accept a create-overflow recovery option (`{ choice: "outsideHours"\|"nextAvailable", view? }`); re-derives the slot server-side, pins the task via `manuallyMoved` (the only anchor mechanism now that fixed tasks are gone), records MOVE. Returns a `RescheduleResponse` |
-| PATCH | `/tasks/:id/complete?viewStart=&viewEnd=` | mark DONE, records COMPLETE; re-settles the remaining set via the view-scoped cascade (optional query bounds) |
-| DELETE | `/tasks/:id?viewStart=&viewEnd=` | delete the task; re-settles the remaining set via the view-scoped cascade (optional query bounds) |
+| PATCH | `/tasks/:id` | metadata only (title/note/deadline/tags) saved immediately. A `deadline`/duration-correcting `tags` change that leaves the task's own slot no longer cost-optimal (past its new deadline, or overlapping a neighbor) is auto-resolved **inline, in the same request** via `SchedulerService.reoptimize` — `UpdateTaskResponse.displaced`/`batchId` surface what moved; `task` always reflects the FINAL slot, even when the edit itself cost-forced the edited task's own placement to move (the bug a tightened deadline used to silently violate). `deadlineChanged` is informational only |
+| PATCH | `/tasks/:id/reschedule` | manual drag → pin (`manuallyMoved: true`, informational only), records MOVE + signed preference telemetry, then **inline** `reoptimize` of anything the drop now overlaps. Returns `RescheduleResponse` with `displaced`/`batchId` |
+| PATCH | `/tasks/:id/resize` | edge-resize, snaps to 15-min grid, pins `manuallyMoved: true` (informational), then the same inline `reoptimize` `reschedule` uses |
+| POST | `/tasks/reschedule/undo/:batchId` | undo one `reoptimize` batch (from `create`/`update`/`reschedule`/`resize`'s `batchId`): reverts every task it displaced back to its prior slot/duration, restored from each tagged `RESCHEDULED` `TaskEvent`'s `oldSnapshot`. 404 when `batchId` matches no event for this user. Returns `UndoBatchResponse` (`{ displaced: DisplacedTask[] }`) |
+| PATCH | `/tasks/:id/complete` | mark DONE, records COMPLETE |
+| DELETE | `/tasks/:id` | delete the task, then **inline** `reoptimize` to close whatever gap it left behind — no separate confirm step |
 
-> **View-scoped cascade (the blast-radius fix).** `cascadeReschedule` no longer re-derives
-> placement for every PENDING task on every create/complete/delete — that "big hammer" was
-> the direct cause of an unrelated already-placed task silently moving/conflicting as a side
-> effect of scheduling something else. Now, when the caller supplies the active calendar
-> view's `viewStart`/`viewEnd`, only **non-manual tasks currently placed inside
-> `[viewStart, viewEnd)`** are eligible to move; everything else (out-of-view tasks, and every
-> `manuallyMoved` task regardless of range) is frozen as occupied space. `POST /tasks` now uses
-> a zero-width scope (solo placement — see above), so it never widens this window; the
-> newly-created task is still eligible regardless, since an unplaced task (no
-> `scheduledStartTime` yet) is never "outside" a window in the first place. `PATCH
-> /tasks/:id/complete`, `DELETE /tasks/:id`, and `POST /tasks/reschedule-cascade` apply the
-> same scoping.
-> Omitting the bounds falls back to the unscoped (full) cascade — the one remaining case is
-> the background reschedule `PUT /users/me/preferences` triggers, which has no "current
-> view" to bound to. There is also no more per-task creation-day anchor or period ceiling
-> (`schedulingAnchor`/`view` columns, `schedulingDeadline`) — a no-deadline task is simply
-> packed from `now` forward with no artificial per-task ceiling, which also fixes a task
-> showing "out of slot" even when the day is completely empty.
+> **`POST /tasks/reschedule-cascade` is gone.** It used to be the shared wide
+> confirm-before-reschedule fallback (±3 workdays, a manual "reschedule everyone /
+> reschedule only auto-scheduled tasks" choice) for whenever the narrow auto-resolve
+> couldn't find room, chiefly because a manually-moved neighbor was in the way and the old
+> model refused to touch it. That whole "ask before moving other tasks" step is gone: with
+> the continuous cost model below there's no more manual/auto distinction to ask about, and
+> every mutation already reoptimizes the user's FULL pending schedule inline (no more
+> window-scoped "narrow" cascade either) — a second, wider confirm call is redundant. Along
+> with it, `RescheduleCascadeInput`/`RescheduleCascadeDto` and `TasksService.
+> rescheduleCascade` were removed from `@zenflow/shared` and the backend.
 >
-> **Overflow recovery.** When `POST /tasks` returns an unplaced task the response also
-> carries `overflow: { outsideHours, nextAvailable }`, computed relative to **today** (the
-> calendar period containing `now`), not to any stored per-task context. `outsideHours` is
-> the earliest off-(working)-hours slot **inside** today's period `[periodStart, periodEnd)`,
-> at/after `now`, respecting occupied intervals **and** any deadline (null if no off-hours
-> slot fits — e.g. the period has ended). `nextAvailable` is the earliest work-hours slot in
-> the **next** period (next day/week/month), **ignoring** the deadline. The user picks one and
-> the frontend calls `PATCH /tasks/:id/resolve-overflow`, which recomputes the slot
-> server-side (the client time is never trusted) and pins the task via `manuallyMoved` so the
-> next cascade can't bounce it back to unplaced.
+> **The continuous cost model (replaces the old hard `manuallyMoved` freeze + hard deadline
+> cutoff + 3-tier fallback + view-scoped cascade).** See "The EDF engine" below for the full
+> `placementCost` breakdown; the summary: EVERY non-past task's tolerance for being moved now
+> scales continuously with how far in the future its current `scheduledStartTime` (its
+> "anchor") sits — near-term anchors are expensive to move, far-future ones are cheap — and a
+> tightened deadline or an off-hours slot is a cost penalty rather than a hard wall. The ONLY
+> hard rules left: no two tasks may ever overlap, and a task already started/elapsed
+> (`isPast`) is completely frozen. `manuallyMoved` plays no role in any of this anymore — it's
+> purely informational (the "Manually placed" badge/telemetry).
+>
+> **`SchedulerService.reoptimize(userId, prefs, now, db?, opts?)`** is the single cascade
+> primitive behind every mutation now (`create`/`update`/`reschedule`/`resize`/`remove`,
+> collapsing the old `cascadeReschedule` + `narrowResolve` into one method): it loads ALL of
+> this user's PENDING tasks (bounded only by the existing `MAX_SCAN_DAYS` query ceiling — no
+> more window scoping), runs the pure cost-aware `scheduleAll`, recomputes true pairwise
+> conflicts, diffs against the DB, and writes back every changed row in one statement. A
+> fresh `batchId` is generated every call and stamped on every RESCHEDULED event it writes,
+> so `undoBatch` can always revert a call's collateral moves — reported as `null` when
+> nothing actually moved. `opts.fixedTaskId` marks a task whose own placement event is the
+> CALLER's to log (e.g. `create`'s own CREATE event) so `reoptimize` doesn't double-log it as
+> a collateral RESCHEDULED.
 
 ### Tags (`/tags`)
 | Method | Path | Purpose |
@@ -211,104 +214,101 @@ Full live schema: **Swagger UI at `<API_URL>/api`**.
 
 ## The EDF engine
 
-Source: [`src/scheduler/edf.ts`](src/scheduler/edf.ts) (pure) +
-[`scheduler.service.ts`](src/scheduler/scheduler.service.ts) (persistence). Tasks are
-placed into contiguous 15-minute slots inside each `User`'s work window, respecting
-deadlines.
+Source: [`src/scheduler/utils/edf.ts`](src/scheduler/utils/edf.ts) (pure) +
+[`scheduler.service.ts`](src/scheduler/scheduler.service.ts) (persistence). Tasks are placed
+into 15-minute-grid slots. Placement is governed by a single continuous, cost-based
+soft-constraint model — there is no more hard `manuallyMoved` freeze, hard deadline cutoff,
+or window-scoped cascade (CLAUDE.md invariant #2's redesign).
 
-Pure functions you'll work with:
+### The cost model
 
-- **`feasibleSlots(prefs, durationMinutes, deadline, occupied, now, earliest?)`** — ALL
-  feasible 15-min-grid work-hours start instants (ascending) for the task: the re-ranker seam
-  the heuristic roadmap re-ranks over. The deadline is a hard cutoff (the scan stops at the
-  first candidate that would end past it).
-- **`findSlot(...)`** — earliest contiguous work-hours slot of the required length that
-  starts at/after `earliest`/`now` and ends before `deadline`; defined as
-  `feasibleSlots(...)[0] ?? null`, so packer and re-ranker share one feasibility definition.
-- **`reranker.ts`** — `SlotReRanker.score(task, candidates)` re-orders the feasible set by
-  preference; Phase 1 ships `identityReRanker` (returns it unchanged). `scheduleAll` routes
-  every placement through it, so Phase 2's signed matrix plugs in here without touching
-  feasibility.
-- **`compareEdf(a, b)`** — the ordering: deadline ascending (nulls last), then `createdAt`.
-  There is no more per-task period ceiling — a no-deadline task simply sorts last (rank
-  `+Infinity`) and is packed from `now` with no artificial upper bound (up to `MAX_SCAN_DAYS`).
-- **`scheduleAll(prefs, tasks, now, reRanker?, scope?)`** — deterministic re-EDF.
-  `manuallyMoved` tasks stay put; every other movable task is EDF-packed around them and
-  everything else occupied. The optional `ScheduleScope` (`{ viewStart, viewEnd,
-  includeTaskId? }`) bounds the blast radius: with a scope, only non-manual tasks currently
-  placed inside `[viewStart, viewEnd)` — plus `includeTaskId` regardless of its own placement
-  — are movable; everything else (out-of-range tasks, every `manuallyMoved` task) is frozen as
-  occupied space instead of being re-derived. Omitting `scope` is the unscoped (full) re-pack
-  — used for preference changes, which have no "current view" to bound to.
-- **`periodRange(anchor, view, tz, work?)` / `endOfPeriod(anchor, view, tz, work?)`**
-  ([`horizon.ts`](src/scheduler/horizon.ts)) — pure UTC bounds `[start, end)` of the
-  day / ISO-week / month containing `anchor` in the user's tz. Reuses `weekStartStr`/
-  `monthRange` so FE and BE agree on period edges. Used ONLY by the overflow-recovery helpers
-  below (there is no more per-task period ceiling on ordinary placement). **Night-owl
-  (wrapping) work windows:** when the optional `work` (`{ workStart, workEnd }`) describes a
-  window that wraps past midnight (`workEnd <= workStart`, e.g. 22:00→06:00), the last work
-  window that *starts* within the period ends the next morning at `workEnd`, so `end` is
-  **extended** from the bare next-period 00:00 to `workEnd` on that following morning — this
-  is also why `scheduleAll` can place a **single contiguous task crossing midnight** (e.g. a
-  4h task at 22:00→02:00): `workWindowFor`'s wrap-aware window math applies regardless of any
-  ceiling. A non-wrapping window (or omitting `work`) keeps the legacy 00:00 boundary
-  byte-for-byte. The morning tail is not double-counted in capacity — `sumWorkMinutes` is
-  start-day anchored and counts each window's minutes once.
-- **`findSlotIgnoringWorkHours(durationMinutes, deadline, occupied, now, periodStart, periodEnd)`**
-  ([`overflow.ts`](src/scheduler/overflow.ts)) — earliest 15-min-grid slot **inside**
-  `[periodStart, periodEnd)` (today's period — see below), at/after `now`, ignoring the
-  work-hours window/work days but still avoiding `occupied` and ending ≤ `deadline`; `null`
-  when no off-hours slot fits the period. Backs the `outsideHours` recovery option.
-- **`findNextAvailableSlot(prefs, durationMinutes, occupied, now, anchor, granularity)`**
-  ([`overflow.ts`](src/scheduler/overflow.ts)) — earliest **work-hours** slot in the **next**
-  period after `anchor`'s period (`day` → next working day, `week` → next week, `month` →
-  next month), **ignoring** the deadline; reuses `findSlot`'s window/grid math via the next
-  period boundary (`periodRange(anchor, …, work).end`) as its floor. For a wrapping window the
-  period's extended (post-midnight) end is used, so the morning tail is offered via
-  `outsideHours` rather than re-offered here as "next available". Backs the `nextAvailable`
-  recovery option. Both helpers stay pure (`now` + explicit period inputs, no I/O);
-  `SchedulerService.computeOverflowOptions` / `applyOverflowOption` are the persistence
-  wrappers — `anchor` is simply the start-of-day of `now` (there is no more per-task stored
-  creation context to prefer; every recovery option is relative to "today").
-**Placement is `now`-aware; conflict detection is `now`-independent.** Keep these two axes
-separate — they answer different questions:
+For a task `t` currently anchored at `anchor(t)` — its stored `scheduledStartTime`,
+literally wherever it sits right now, regardless of whether a human dragged it there or the
+algorithm placed it — being evaluated at candidate slot `c`:
 
-- **`isPast(task, now)`** — `task.scheduledStartTime !== null && start < now`. **Past tasks'
-  PLACEMENT is frozen**: no scheduling path ever moves or re-places them — `scheduleAll`
-  passes them through with their stored `scheduledStartTime`, and `pin`/`resize` only ever
-  write the dragged target's slot. An in-progress task (started before `now`, ends after) is
-  frozen too — left exactly where it is. Note `isPast` no longer gates the **conflict**
-  verdict: a past task's `conflict` flag IS recomputed (see below).
-- **`hasElapsed(task, now)`** — `placed && start + duration <= now`. This — NOT `isPast` —
-  decides whether a placed block still **occupies future time** and so must block new
-  PLACEMENTS. Only a fully-elapsed block (ends at/before `now`) is excluded from the
-  `occupied` set (`findSlot` clamps every candidate to `now`, so an elapsed block can never
-  legitimately block a future slot). An **in-progress** frozen task is past but NOT elapsed:
-  it is added to `occupied` so the EDF packer schedules around it. `hasElapsed` affects
-  placement only — it no longer filters the conflict-overlap pass.
+```
+cost(t, c) = deviationCost(t, c) + latenessCost(t, c) + offHoursCost(c) − preferenceBonus(c)
 
-**Conflict detection** is pure pairwise interval overlap over **all placed tasks across the
-whole viewed window, regardless of `now`/elapsed/past**. A conflict means simply "two tasks
-overlap in time": a morning past–past or past–in-progress overlap is flagged and counted in
-the header badge even when it's now the afternoon, and a conflict self-heals to `false` the
-moment the overlap is gone. Both `scheduleAll`'s final overlap pass and the
-`recomputeConflicts` helper recompute the `conflict` flag for **every** placed task
-(anchors, freshly packed flexible tasks, and frozen past/in-progress ones); only
-`scheduledStartTime` stays frozen for past/anchored tasks. Unplaced tasks (no slot before
-their deadline) keep `conflict: true`. (Placement clamps new live slots to `>= now`, so a
-live/future task can never overlap a fully-elapsed one — making detection now-independent
-introduces no false positives; the only newly-flagged overlaps are genuine past–past /
-past–in-progress ones.)
+deviationCost(t, c)  = deviationWeight(t) × |c.start − anchor(t)|      (minutes)
+deviationWeight(t)   = lerp(DEVIATION_WEIGHT_NEAR, DEVIATION_WEIGHT_FAR,
+                             clamp((anchor(t) − now) / (DEVIATION_HORIZON_DAYS days), 0, 1))
+latenessCost(t, c)   = LATENESS_RATE × max(0, c.end − deadline(t))    (0 if no deadline)
+offHoursCost(c)      = HOURS_RATE × minutesOutsideWorkWindow(c)
+preferenceBonus(c)   = the signed preference-matrix cell score for c (reranker.ts's `cellScore`)
+```
 
-`SchedulerService.pin`/`resize` (manual drag/drop and edge-resize) place a task exactly
-where the user dropped it — no cascade — and recompute every task's conflict from real
-time-overlap via the shared `recomputeConflicts(projected)` helper. This is the only path
-that can leave a task **placed but conflicting** (overlapping a neighbour); the EDF engine
-itself only ever leaves a task unplaced (`scheduledStartTime: null`) on conflict.
+A task with **no anchor** (brand new, or currently unplaced) has `deviationCost = 0` for
+every candidate — nothing to preserve, it's placed purely by the other terms. All five
+constants live in [`constants.ts`](src/scheduler/constants.ts) (`DEVIATION_HORIZON_DAYS = 7`,
+`DEVIATION_WEIGHT_NEAR = 1.0`, `DEVIATION_WEIGHT_FAR = 0.1`, `LATENESS_RATE = 4`,
+`HOURS_RATE = 2`) — v1 defaults, deliberately plain, tunable later.
+`LATENESS_RATE > HOURS_RATE` is deliberate: deadline pressure must keep beating work-hours
+preference (the priority the old 3-tier fallback used to enforce structurally is now an
+emergent property of these weights).
 
-`SchedulerService` wraps these to persist placements, write `TaskEvent`s, and apply signed
-updates to the `preferenceMatrix` (move-away −1, move-toward/keep +1). A `scoreSlot()` seam is reserved here for the **Phase 3 bandit** to plug
-into (see [`services/bandit/README.md`](../services/bandit/README.md) and
+**What stays hard** (not part of the blend, no exceptions): (1) no two tasks may ever
+overlap; (2) a task whose placement has already started/elapsed (`isPast(task, now)` —
+`scheduledStartTime <= now`) is completely frozen — the floor of the deviation curve, not a
+tunable weight. Everything else — the old deadline cutoff, the work-hours window, the
+`manuallyMoved` freeze — is now just a cost term. `manuallyMoved` keeps its DB column (set on
+a real drag/resize, surfaced for the "Manually placed" badge/telemetry) but the scheduler
+never reads it to decide what can move.
+
+### `scheduleAll(prefs, tasks, now, matrix?)`
+
+The greedy, cost-aware EDF core. Non-past tasks are processed in EDF order (deadline
+ascending, then `createdAt` — `compareMovable`, unchanged). The occupied baseline seeds from
+**every** pending task's CURRENT placement (not just past ones) — this is what keeps an
+already-good schedule stable: a task first checks whether its own anchor slot is still free
+and cost-optimal (against a candidate pool pooled from three sources — `feasibleSlots`
+in-hours-before-deadline, `findSlotIgnoringWorkHours` outside-hours-before-deadline,
+`findNextAvailableSlot` in-hours-past-deadline — no more priority tiering between them, cost
+alone decides) and, if so, is kept unmoved. If its cheapest candidate collides with a
+not-yet-processed (lower-or-equal-priority) task's anchor, a **single-level bounded
+eviction** decides whether to bump it: compare (the incoming task's cost taking its own
+next-best genuinely-free slot) against (its cost at the contested slot + the occupant's own
+relocation cost) — ties favor eviction (the task currently being placed is the higher-
+priority one), but never when the occupant has nowhere to go at all. This never cascades — an
+evicted task always relocates to its own next-best free candidate, never triggering a second
+eviction. A task placeable by none of the sources (including its own eviction-relocation
+attempt) comes back `{ scheduledStartTime: null, conflict: true }` — a rare,
+genuinely-saturated-calendar case. Near-ties among comparably-costed candidates are broken by
+the same seeded-softmax stochastic mechanism `reranker.ts` uses (`rankByScores`, fed
+`-placementCost` instead of a preference-only score), so IPS/propensity logging keeps
+working; candidates far from the true minimum are excluded from that ranking pool entirely
+(pooling them in would let Gumbel noise occasionally hand the placement to a much-worse
+fallback candidate, and would corrupt the deterministic earliest-first tie-break among
+genuinely-tied ones).
+
+### Other pure pieces
+
+- **`feasibleSlots(task, now, prefs, occupied, earliestStart?)`** — every 15-min-grid
+  in-work-hours start before the task's deadline (or `now + MAX_SCAN_DAYS` with no deadline)
+  that doesn't overlap `occupied`, ascending. Cross-midnight-aware via `workWindowFor`.
+- **`findSlotIgnoringWorkHours(task, now, occupied, prefs, ceiling?)`** — a candidate ignoring
+  the work-hours window (still respecting `occupied` and an optional deadline `ceiling`),
+  preferring the gap closest to that day's work window.
+- **`findNextAvailableSlot(task, searchFrom, occupied, prefs)`** — the earliest in-work-hours
+  slot at/after `searchFrom`, ignoring the deadline entirely (the "deadline actually missed"
+  case).
+- **`fallbackSlot(task, now, occupied, prefs)`** — chains the two above; used directly by
+  `SchedulerService.simulate()`'s not-yet-created draft-task preview, which has no anchor to
+  weigh against and so doesn't need `scheduleAll`'s full cost-scored candidate pool.
+- **`isPast(task, now)`** — the one hard freeze (see above).
+- **`compareMovable(a, b)`** — deadline ascending (nulls last), then `createdAt` ascending.
+
+### Conflict detection
+
+Pure pairwise interval overlap over **all placed tasks**, independent of `now`/elapsed/past.
+`recomputeConflicts` (in `telemetry.ts`) recomputes the `conflict` flag for every placed task
+after each `reoptimize` pass; unplaced tasks (no valid slot at all) keep `conflict: true`.
+
+`SchedulerService` wraps the pure core to persist placements (`persistPlacements`, one raw
+`UPDATE … FROM (VALUES …)` per cascade — never N sequential `task.update` calls, which used
+to blow the 5s interactive-transaction budget), write `TaskEvent`s, and apply signed updates
+to `preferenceMatrix` (move-away −1, move-toward/keep +1). A `scoreSlot()`-shaped seam is
+reserved here for the **Phase 3 bandit** to plug into (see
+[`services/bandit/README.md`](../services/bandit/README.md) and
 [`docs/heuristic.md`](../docs/heuristic.md)).
 
 ### Phase 2 — personalized scheduling (live)
@@ -317,11 +317,13 @@ The matrix/bias/decay are computed in the **service** and passed into the **pure
 (invariant #2). The pure pieces (`reranker.ts`, `duration-bias.ts`, `matrix-decay.ts`) take
 inputs as params and do no I/O; the service is the only thing that reads Prisma.
 
-- **Placement re-ranker** (`reranker.ts` → `preferenceMatrixReRanker(matrix, tz)`): a pure
-  permutation that re-orders EDF's feasible slots by descending signed-cell score.
-  `SchedulerService.cascadeReschedule` builds it from `user.preferenceMatrix` and threads it
-  through `scheduleAll`. A cold-start / wrong-length matrix degenerates to identity, so a
-  fresh user is byte-for-byte Phase-1.
+- **Placement re-ranker** (`reranker.ts` → `rankCandidates`/`cellScore`/`rankByScores`): the
+  shared softmax/Gumbel stochastic-logging mechanism, driving both `SchedulerService.
+  simulate()`'s preference-only re-ranking and `scheduleAll`'s cost-scored candidate ranking
+  (fed `-placementCost` instead of a raw preference score — see "The EDF engine" above).
+  `SchedulerService.reoptimize`/`simulate` build the matrix from `user.preferenceMatrix`. A
+  cold-start / wrong-length matrix, or a genuine tie, degenerates to deterministic
+  earliest-first order with uniform propensity rather than injecting noise.
 - **Duration corrector** (`duration-bias.ts` → `blendBias` / `correctDuration`):
   `SchedulerService.computeDurationCorrection` aggregates per-tag `{ n, b }` from `TaskEvent`
   telemetry (rolling `actual ÷ estimated`), blends it sample-weighted, and rounds the
@@ -330,10 +332,9 @@ inputs as params and do no I/O; the service is the only thing that reads Prisma.
   uncorrected estimate to EDF but **still learns** the bias. The real `biasApplied`,
   `estimatedDuration`, `durationAdjustmentMode`, and `durationReason` are surfaced on the
   create response's `schedulingMeta`.
-- **Rationale** (`rationale.ts` → `buildRationale`): `schedule`/`reschedule`/`resize`/
-  `resolve-overflow` responses carry an optional `SchedulingRationale` describing the
-  preferred work window + top cells that drove the placement (null when the slot wasn't
-  preference-favoured).
+- **Rationale** (`rationale.ts` → `buildRationale`): `POST /tasks/simulate` surfaces a
+  human-readable summary (`schedulingMeta.rationale`) describing the preferred work window +
+  top cells that drove the top proposed slot (omitted when it wasn't preference-favoured).
 - **Matrix-decay cron** (`matrix-decay.service.ts`, `@Cron` daily): the I/O wrapper loads each
   user's `preferenceMatrix` + `preferenceMatrixDecayedAt`, calls the pure `decayMatrix`
   (`cell *= 2^(−Δdays / MATRIX_HALF_LIFE_DAYS)`, 21-day half-life), and writes back.

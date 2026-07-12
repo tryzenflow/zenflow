@@ -55,43 +55,22 @@ export interface SchedulingMeta {
   durationReason?: string | null;
 }
 
-/** A recovery slot offered when a task can't be placed before its deadline. */
-export interface OverflowOption {
-  /** ISO-8601 start the task would be placed at if this option is chosen. */
-  scheduledStartTime: string;
-}
-
-/**
- * Recovery options surfaced when the EDF engine can't place a created task
- * within working hours before its deadline (the task comes back unplaced).
- */
-export interface SchedulingOverflow {
-  /**
-   * Earliest slot that ignores the working-hours window but still respects
-   * occupied intervals; null when even off-hours room doesn't exist within the
-   * scan horizon.
-   */
-  outsideHours: OverflowOption | null;
-  /**
-   * Earliest in-working-hours slot searching forward from the task's deadline,
-   * ignoring the deadline bound; null when impossible (rare).
-   */
-  nextAvailable: OverflowOption | null;
-}
-
 export interface CreateTaskResponse {
   task: Task;
   schedulingMeta: SchedulingMeta;
   /** Tasks cascade-moved as a side effect of placing the new task. */
   displaced: DisplacedTask[];
-  /**
-   * Recovery options, populated when the created task couldn't be placed
-   * before its deadline. Omitted/null when the task was placed successfully.
-   */
-  overflow?: SchedulingOverflow | null;
 }
 
-/** Response for `PATCH /tasks/:id` (metadata-only update). */
+/**
+ * Response for `PATCH /tasks/:id` (metadata-only update). A deadline/duration
+ * change that leaves the task's own slot no longer cost-optimal (past its new
+ * deadline, or overlapping a neighbour) is now auto-resolved INLINE (same
+ * request/transaction) via a full schedule reoptimize — `displaced`/`batchId`
+ * surface what that repack did, if anything. `task` always reflects the
+ * task's FINAL slot, even when the edit itself (e.g. a tightened deadline)
+ * cost-forced its own placement to move.
+ */
 export interface UpdateTaskResponse {
   task: Task;
   /**
@@ -102,11 +81,19 @@ export interface UpdateTaskResponse {
    */
   schedulingMeta?: SchedulingMeta;
   /**
-   * True when `deadline` actually changed on this update. The frontend uses
-   * this (or an equivalent client-side diff) to decide whether to prompt for
-   * a confirm-before-reschedule via `POST /tasks/reschedule-cascade`.
+   * True when `deadline` actually changed on this update. Purely
+   * informational — the inline reoptimize (see `displaced`/`batchId`) already
+   * ran; there's no separate confirm step to gate.
    */
   deadlineChanged?: boolean;
+  /** Tasks moved by the inline auto-resolve, if any ran (never includes this task itself). */
+  displaced: DisplacedTask[];
+  /**
+   * Present when `displaced` is non-empty: groups the RESCHEDULED TaskEvents
+   * the auto-resolve wrote, so the frontend can offer an undo via
+   * `POST /tasks/reschedule/undo/:batchId`. Null/omitted when nothing moved.
+   */
+  batchId?: string | null;
 }
 
 export interface DisplacedTask {
@@ -114,12 +101,37 @@ export interface DisplacedTask {
   newScheduledStartTime: string | null;
 }
 
+/**
+ * Response for the drag (`PATCH /tasks/:id/reschedule`) and resize
+ * (`PATCH /tasks/:id/resize`) endpoints. A drag/resize that lands the pinned
+ * task on top of another task now auto-resolves the overlap inline via a full
+ * schedule reoptimize — `displaced`/`batchId` surface that. `task` always
+ * reflects the dropped task's FINAL slot, which is usually exactly where it
+ * was dropped (its just-set anchor is naturally cost-favoured to stay) but,
+ * rarely, a genuinely cost-favourable eviction can move it again.
+ */
 export interface RescheduleResponse {
   task: Task;
-  /** Tasks cascade-moved as a side effect of the reschedule. */
+  /** Tasks cascade-moved as a side effect of the reschedule (never includes this task itself). */
   displaced: DisplacedTask[];
   /** Present when a preference-favoured slot drove the placement. */
   rationale?: SchedulingRationale | null;
+  /**
+   * Present when `displaced` is non-empty: groups the RESCHEDULED TaskEvents
+   * the inline auto-resolve wrote, so the frontend can offer an undo via
+   * `POST /tasks/reschedule/undo/:batchId`. Null/omitted when nothing moved.
+   */
+  batchId?: string | null;
+}
+
+/**
+ * Response for `POST /tasks/reschedule/undo/:batchId`: reverts every task one
+ * `reoptimize` auto-cascade moved back to its prior slot/duration, restored
+ * from each RESCHEDULED TaskEvent's `oldSnapshot`. Same shape as
+ * `RescheduleResponse.displaced` — the set of tasks that moved (back).
+ */
+export interface UndoBatchResponse {
+  displaced: DisplacedTask[];
 }
 
 /** 7×24 signed preference matrix for the Insights heatmap. */

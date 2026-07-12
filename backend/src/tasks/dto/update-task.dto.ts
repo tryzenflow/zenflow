@@ -8,11 +8,11 @@ import {
 import type { UpdateTaskInput } from "@zenflow/shared";
 
 /**
- * Metadata-only update: title/note/deadline/tags are saved immediately and the
- * task keeps its current slot. A `deadline` change is saved but no longer
- * auto-cascades — see `UpdateTaskResponse.deadlineChanged` and
- * `POST /tasks/:id/reschedule-cascade`. A `tags` change may surface a duration
- * correction via `UpdateTaskResponse.schedulingMeta`.
+ * Metadata-only update: title/note/deadline/tags are saved immediately. A
+ * `deadline`/duration change that leaves the task's own slot no longer
+ * cost-optimal auto-resolves INLINE (same request) — see
+ * `UpdateTaskResponse.displaced`/`batchId`. A `tags` change may surface a
+ * duration correction via `UpdateTaskResponse.schedulingMeta`.
  */
 export class UpdateTaskDto implements UpdateTaskInput {
   @IsOptional()

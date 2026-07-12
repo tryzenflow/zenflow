@@ -1,13 +1,14 @@
 import { PREFERENCE_MATRIX_LENGTH } from "@zenflow/shared";
 import { SchedulerService } from "./scheduler.service";
 import type { SchedulerPrefs } from "./interfaces";
+import * as edfUtils from "./utils/edf";
 
 /**
  * `SchedulerService` is the ONLY I/O layer (CLAUDE.md invariant #2) — these
  * tests drive it against an in-memory Prisma-shaped fake so the persistence
  * wiring (load → pure-core call → diff → write-back) is exercised without a
- * real DB. The pure math itself is covered by `edf`/`reranker`/`overflow`/
- * `rationale`/`duration-bias` specs.
+ * real DB. The pure math itself is covered by `edf`/`reranker`/`rationale`/
+ * `duration-bias` specs.
  */
 
 const prefs: SchedulerPrefs = {
@@ -107,6 +108,10 @@ function makeFakePrisma(
         if (!row) return Promise.reject(new Error("not found"));
         return Promise.resolve(row);
       }),
+      findUnique: jest.fn((args: { where: { id: string } }) => {
+        const row = table.get(args.where.id);
+        return Promise.resolve(row ?? null);
+      }),
     },
     user: {
       findUniqueOrThrow: jest.fn().mockResolvedValue(user),
@@ -117,6 +122,50 @@ function makeFakePrisma(
       createMany: jest.fn().mockResolvedValue({}),
       findMany: jest.fn().mockResolvedValue([]),
     },
+    /**
+     * Fans out to whichever shape the caller's raw UPDATE used, detected from
+     * the fixed SQL text around the `VALUES` interpolation:
+     *  - `persistPlacements`: one `UPDATE … FROM (VALUES …)` instead of a
+     *    `task.update` per row — `Prisma.join` flattens the per-row
+     *    `Prisma.sql` fragments into a flat run of (id, scheduledStartTime,
+     *    conflict, manuallyMoved).
+     *  - `SchedulerService.undoBatch`'s restore step: a flat run of (id,
+     *    scheduledStartTime, durationMinutes) — always also forces
+     *    manuallyMoved: false.
+     * Anything that changes either tuple order must change this decode with it.
+     */
+    $executeRaw: jest.fn(
+      (strings: TemplateStringsArray, ...params: { values: unknown[] }[]) => {
+        const flat = params[0]?.values ?? [];
+        const isRestore = strings.some((s) => s.includes("durationMinutes"));
+        const width = isRestore ? 3 : 4;
+        for (let i = 0; i < flat.length; i += width) {
+          const row = table.get(flat[i] as string)!;
+          if (isRestore) {
+            const [id, scheduledStartTime, durationMinutes] = flat.slice(
+              i,
+              i + 3,
+            ) as [string, Date | null, number];
+            table.set(id, {
+              ...row,
+              scheduledStartTime,
+              durationMinutes,
+              manuallyMoved: false,
+            });
+          } else {
+            const [id, scheduledStartTime, conflict, manuallyMoved] =
+              flat.slice(i, i + 4) as [string, Date | null, boolean, boolean];
+            table.set(id, {
+              ...row,
+              scheduledStartTime,
+              conflict,
+              manuallyMoved,
+            });
+          }
+        }
+        return Promise.resolve(flat.length / width);
+      },
+    ),
   };
 
   const prisma = {
@@ -175,8 +224,8 @@ describe("SchedulerService.computeDurationCorrection", () => {
   });
 });
 
-describe("SchedulerService.cascadeReschedule", () => {
-  it("loads PENDING tasks and writes back only CHANGED placements", async () => {
+describe("SchedulerService.reoptimize", () => {
+  it("loads PENDING tasks and places an unplaced one, reporting it as displaced", async () => {
     const now = new Date("2026-06-08T08:00:00Z"); // Monday
     const a = fakeTask({
       id: "a",
@@ -186,10 +235,7 @@ describe("SchedulerService.cascadeReschedule", () => {
     const { prisma, table } = makeFakePrisma([a]);
     const service = new SchedulerService(prisma as never);
 
-    const displaced = await service.cascadeReschedule("u1", prefs, {
-      windowStart: now,
-      windowEnd: a.deadline!,
-    });
+    const { displaced } = await service.reoptimize("u1", prefs, now);
 
     expect(displaced).toHaveLength(1);
     expect(table.get("a")!.scheduledStartTime?.toISOString()).toBe(
@@ -197,7 +243,7 @@ describe("SchedulerService.cascadeReschedule", () => {
     );
   });
 
-  it("does not rewrite a task whose placement didn't change", async () => {
+  it("does not rewrite a task whose placement didn't change (a plain reoptimize pass is a no-op)", async () => {
     const now = new Date("2026-06-08T08:00:00Z");
     const already = fakeTask({
       id: "a",
@@ -207,98 +253,50 @@ describe("SchedulerService.cascadeReschedule", () => {
     const { prisma } = makeFakePrisma([already]);
     const service = new SchedulerService(prisma as never);
 
-    const displaced = await service.cascadeReschedule("u1", prefs, {
-      windowStart: now,
-      windowEnd: new Date("2026-06-09T00:00:00Z"),
-    });
+    const { displaced, batchId } = await service.reoptimize("u1", prefs, now);
     expect(displaced).toHaveLength(0);
+    expect(batchId).toBeNull();
   });
 
-  it("recomputes true pairwise-overlap conflicts across manually-moved tasks", async () => {
+  it("resolves a genuine pre-existing overlap between two anchored tasks — manuallyMoved no longer freezes either one", async () => {
     const now = new Date("2030-06-17T08:00:00Z"); // far future Monday
     const a = fakeTask({
       id: "a",
       manuallyMoved: true,
-      durationMinutes: 120,
+      durationMinutes: 60,
       scheduledStartTime: new Date("2030-06-17T09:00:00Z"),
-      conflict: true,
+      createdAt: new Date("2026-01-01T00:00:00Z"),
     });
     const b = fakeTask({
       id: "b",
       manuallyMoved: true,
       durationMinutes: 60,
-      scheduledStartTime: new Date("2030-06-17T09:30:00Z"),
-      conflict: true,
+      scheduledStartTime: new Date("2030-06-17T09:30:00Z"), // overlaps "a"
+      createdAt: new Date("2026-01-02T00:00:00Z"),
     });
     const { prisma, table } = makeFakePrisma([a, b]);
     const service = new SchedulerService(prisma as never);
 
-    await service.cascadeReschedule("u1", prefs, {
-      windowStart: now,
-      windowEnd: new Date("2030-06-18T00:00:00Z"),
-    });
-    // Still overlapping → conflict stays true (self-heal happens once one is removed).
-    expect(table.get("a")!.conflict).toBe(true);
-    expect(table.get("b")!.conflict).toBe(true);
-  });
+    await service.reoptimize("u1", prefs, now);
 
-  it("writes a conflict-flag flip to the DB but doesn't report it as displaced", async () => {
-    const now = new Date("2030-06-17T08:00:00Z"); // far future Monday
-    // Neither task's stored `scheduledStartTime` will change — only their
-    // conflict flags flip true once the pairwise-overlap recompute sees them
-    // clash. Nothing about either task actually moved, so this must not
-    // surface in the returned (== "displaced") list.
-    const a = fakeTask({
-      id: "a",
-      manuallyMoved: true,
-      durationMinutes: 120,
-      scheduledStartTime: new Date("2030-06-17T09:00:00Z"),
-      conflict: false,
-    });
-    const b = fakeTask({
-      id: "b",
-      manuallyMoved: true,
-      durationMinutes: 60,
-      scheduledStartTime: new Date("2030-06-17T09:30:00Z"),
-      conflict: false,
-    });
-    const { prisma, table } = makeFakePrisma([a, b]);
-    const service = new SchedulerService(prisma as never);
-
-    const displaced = await service.cascadeReschedule("u1", prefs, {
-      windowStart: now,
-      windowEnd: new Date("2030-06-18T00:00:00Z"),
-    });
-
-    expect(table.get("a")!.conflict).toBe(true);
-    expect(table.get("b")!.conflict).toBe(true);
-    expect(displaced).toHaveLength(0);
-  });
-
-  it("scopes the cascade to a window, freezing tasks placed outside it", async () => {
-    const outside = fakeTask({
-      id: "outside",
-      scheduledStartTime: new Date("2026-06-20T09:00:00Z"),
-    });
-    const { prisma, table } = makeFakePrisma([outside]);
-    const service = new SchedulerService(prisma as never);
-
-    await service.cascadeReschedule("u1", prefs, {
-      windowStart: new Date("2026-06-08T00:00:00Z"),
-      windowEnd: new Date("2026-06-09T00:00:00Z"),
-    });
-
-    expect(table.get("outside")!.scheduledStartTime?.toISOString()).toBe(
-      "2026-06-20T09:00:00.000Z",
+    // "a" (processed first — earlier createdAt, both null-deadline) is
+    // cost-cheapest to leave exactly where it is; "b" — cheaper to relocate
+    // than to evict "a" — reflows to the next free slot.
+    expect(table.get("a")!.scheduledStartTime?.toISOString()).toBe(
+      "2030-06-17T09:00:00.000Z",
     );
+    expect(table.get("b")!.scheduledStartTime?.toISOString()).toBe(
+      "2030-06-17T10:00:00.000Z",
+    );
+    expect(table.get("a")!.conflict).toBe(false);
+    expect(table.get("b")!.conflict).toBe(false);
+    // "b" actually moved, so its manual pin is cleared; "a" never moved, so
+    // its pin survives.
+    expect(table.get("a")!.manuallyMoved).toBe(true);
+    expect(table.get("b")!.manuallyMoved).toBe(false);
   });
 
-  it("a zero-width (create) window still loads already-placed tasks as occupied space", async () => {
-    // Regression: the create path calls cascadeReschedule with
-    // `windowStart === windowEnd === now`, which freezes every placed task.
-    // The row load must NOT be bounded by that window — otherwise the existing
-    // 09:00 task isn't loaded, `occupied` is empty, and the new unplaced task
-    // gets dropped straight on top of it.
+  it("loads already-placed tasks as occupied space so a fresh unplaced task doesn't land on top of them", async () => {
     const now = new Date("2026-06-08T08:00:00Z"); // Monday
     const existing = fakeTask({
       id: "existing",
@@ -308,13 +306,8 @@ describe("SchedulerService.cascadeReschedule", () => {
     const { prisma, table } = makeFakePrisma([existing, fresh]);
     const service = new SchedulerService(prisma as never);
 
-    await service.cascadeReschedule("u1", prefs, {
-      windowStart: now,
-      windowEnd: now, // zero-width — the create-path scope
-    });
+    await service.reoptimize("u1", prefs, now);
 
-    // The existing 09:00 task is untouched, and the new task lands AFTER it
-    // (10:00), not on top of it.
     expect(table.get("existing")!.scheduledStartTime?.toISOString()).toBe(
       "2026-06-08T09:00:00.000Z",
     );
@@ -323,54 +316,31 @@ describe("SchedulerService.cascadeReschedule", () => {
     );
   });
 
-  it("includeManual: true repositions a manually-moved task and clears its manuallyMoved column", async () => {
+  it("manuallyMoved no longer freezes a task — a tightened deadline past its anchor still forces it to relocate", async () => {
     const now = new Date("2026-06-08T08:00:00Z"); // Monday
     const a = fakeTask({
       id: "a",
       manuallyMoved: true,
-      deadline: new Date("2026-06-08T17:00:00Z"),
-      scheduledStartTime: new Date("2026-06-08T10:00:00Z"),
+      durationMinutes: 60,
+      scheduledStartTime: new Date("2026-06-08T14:00:00Z"),
+      deadline: new Date("2026-06-08T13:00:00Z"), // already past its own end
     });
     const { prisma, table } = makeFakePrisma([a]);
     const service = new SchedulerService(prisma as never);
 
-    const displaced = await service.cascadeReschedule("u1", prefs, {
-      windowStart: now,
-      windowEnd: a.deadline!,
-      includeManual: true,
-    });
+    const { displaced } = await service.reoptimize("u1", prefs, now);
 
-    expect(displaced).toHaveLength(1);
-    expect(table.get("a")!.scheduledStartTime?.toISOString()).toBe(
-      "2026-06-08T09:00:00.000Z",
+    expect(displaced.some((d) => d.id === "a")).toBe(true);
+    const finalStart = table.get("a")!.scheduledStartTime!;
+    expect(finalStart.getTime()).not.toBe(
+      new Date("2026-06-08T14:00:00Z").getTime(),
     );
-    expect(table.get("a")!.manuallyMoved).toBe(false);
+    expect(finalStart.getTime() + 60 * 60_000).toBeLessThanOrEqual(
+      a.deadline!.getTime(),
+    );
   });
 
-  it("without includeManual, a manually-moved task inside the window stays frozen at its slot", async () => {
-    const now = new Date("2026-06-08T08:00:00Z");
-    const a = fakeTask({
-      id: "a",
-      manuallyMoved: true,
-      deadline: new Date("2026-06-08T17:00:00Z"),
-      scheduledStartTime: new Date("2026-06-08T10:00:00Z"),
-    });
-    const { prisma, table } = makeFakePrisma([a]);
-    const service = new SchedulerService(prisma as never);
-
-    const displaced = await service.cascadeReschedule("u1", prefs, {
-      windowStart: now,
-      windowEnd: a.deadline!,
-    });
-
-    expect(displaced).toHaveLength(0);
-    expect(table.get("a")!.scheduledStartTime?.toISOString()).toBe(
-      "2026-06-08T10:00:00.000Z",
-    );
-    expect(table.get("a")!.manuallyMoved).toBe(true);
-  });
-
-  it("logs a RESCHEDULED event for a collateral task the ranker actually re-placed", async () => {
+  it("logs a RESCHEDULED event for a collateral task the core actually re-placed", async () => {
     const now = new Date("2026-06-08T08:00:00Z"); // Monday
     const a = fakeTask({
       id: "a",
@@ -380,10 +350,7 @@ describe("SchedulerService.cascadeReschedule", () => {
     const { prisma, table, taskEventCreateMany } = makeFakePrisma([a]);
     const service = new SchedulerService(prisma as never);
 
-    await service.cascadeReschedule("u1", prefs, {
-      windowStart: now,
-      windowEnd: a.deadline!,
-    });
+    await service.reoptimize("u1", prefs, now);
 
     expect(table.get("a")!.scheduledStartTime).not.toBeNull();
     expect(taskEventCreateMany).toHaveBeenCalledTimes(1);
@@ -407,7 +374,7 @@ describe("SchedulerService.cascadeReschedule", () => {
     );
   });
 
-  it("does not log a RESCHEDULED event for `scope.fixedTaskId` — the caller owns that event", async () => {
+  it("does not log a RESCHEDULED event for `opts.fixedTaskId` — the caller owns that event", async () => {
     const now = new Date("2026-06-08T08:00:00Z"); // Monday
     const a = fakeTask({
       id: "a",
@@ -417,62 +384,48 @@ describe("SchedulerService.cascadeReschedule", () => {
     const { prisma, taskEventCreateMany } = makeFakePrisma([a]);
     const service = new SchedulerService(prisma as never);
 
-    await service.cascadeReschedule("u1", prefs, {
-      windowStart: now,
-      windowEnd: a.deadline!,
+    await service.reoptimize("u1", prefs, now, prisma as never, {
       fixedTaskId: "a",
     });
 
     expect(taskEventCreateMany).not.toHaveBeenCalled();
   });
 
-  it("logs RESCHEDULED for an includeManual-swept-in task regardless of its prior manuallyMoved flag", async () => {
-    const now = new Date("2026-06-08T08:00:00Z"); // Monday
-    const a = fakeTask({
-      id: "a",
-      manuallyMoved: true,
-      deadline: new Date("2026-06-08T17:00:00Z"),
-      scheduledStartTime: new Date("2026-06-08T10:00:00Z"),
-    });
-    const { prisma, taskEventCreateMany } = makeFakePrisma([a]);
-    const service = new SchedulerService(prisma as never);
-
-    await service.cascadeReschedule("u1", prefs, {
-      windowStart: now,
-      windowEnd: a.deadline!,
-      includeManual: true,
-    });
-
-    expect(taskEventCreateMany).toHaveBeenCalledTimes(1);
-    const calls = taskEventCreateMany.mock.calls as {
-      data: { taskId: string; eventType: string }[];
-    }[][];
-    expect(calls[0][0].data[0]).toEqual(
-      expect.objectContaining({ taskId: "a", eventType: "RESCHEDULED" }),
-    );
-  });
-
-  it("does not log an event when a manually-moved task inside the window stays frozen (no propensity, no diff)", async () => {
+  it("does not log an event or generate a reportable batchId when nothing changed", async () => {
     const now = new Date("2026-06-08T08:00:00Z");
     const a = fakeTask({
       id: "a",
       manuallyMoved: true,
       deadline: new Date("2026-06-08T17:00:00Z"),
-      scheduledStartTime: new Date("2026-06-08T10:00:00Z"),
+      scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
     });
     const { prisma, taskEventCreateMany } = makeFakePrisma([a]);
     const service = new SchedulerService(prisma as never);
 
-    await service.cascadeReschedule("u1", prefs, {
-      windowStart: now,
-      windowEnd: a.deadline!,
-    });
+    const { batchId } = await service.reoptimize("u1", prefs, now);
 
     expect(taskEventCreateMany).not.toHaveBeenCalled();
+    expect(batchId).toBeNull();
+  });
+
+  it("returns a non-null batchId (grouping every RESCHEDULED event this call wrote) when something actually moved", async () => {
+    const now = new Date("2026-06-08T08:00:00Z");
+    const a = fakeTask({
+      id: "a",
+      deadline: new Date("2026-06-08T17:00:00Z"),
+      createdAt: new Date("2026-01-01T00:00:00Z"),
+    });
+    const { prisma } = makeFakePrisma([a]);
+    const service = new SchedulerService(prisma as never);
+
+    const { batchId } = await service.reoptimize("u1", prefs, now);
+    expect(batchId).toEqual(expect.any(String));
   });
 });
 
 describe("SchedulerService.simulate — read-only", () => {
+  afterEach(() => jest.restoreAllMocks());
+
   it("never writes to the DB", async () => {
     const { prisma, table } = makeFakePrisma([]);
     const service = new SchedulerService(prisma as never);
@@ -507,87 +460,116 @@ describe("SchedulerService.simulate — read-only", () => {
     expect(result.proposals.length).toBeGreaterThan(0);
   });
 
-  it("returns no proposals when the draft can't fit before its deadline", async () => {
+  it("falls back to the Tier 2/3 deterministic fallback (a single, rationale-less proposal) when Tier 1 is empty", async () => {
     const { prisma } = makeFakePrisma([]);
     const service = new SchedulerService(prisma as never);
 
     const result = await service.simulate(
       "u1",
       prefs,
+      // Deadline (08:15) leaves no room for a 60-min task in-hours — Tier 1
+      // is empty, so this now falls to Tier 3 (in-hours, past the deadline).
       { durationMinutes: 60, deadline: new Date("2026-06-08T08:15:00Z") },
       new Date("2026-06-08T08:00:00Z"),
+    );
+    expect(result.proposals).toEqual([
+      {
+        scheduledStartTime: new Date("2026-06-08T09:00:00.000Z"),
+        rationale: null,
+      },
+    ]);
+  });
+
+  it("still returns [] when every tier is exhausted (a genuinely saturated horizon)", async () => {
+    const { prisma } = makeFakePrisma([]);
+    const service = new SchedulerService(prisma as never);
+    const now = new Date("2026-06-08T08:00:00Z");
+
+    // No occupied intervals are actually passed to `simulate` (it only reads
+    // `this.prisma`'s currently-placed tasks, and the fake table is empty),
+    // so to genuinely exhaust every tier we need a task that can't fit ANY
+    // 15-min-aligned slot at all: a duration of 0 is invalid elsewhere, so
+    // instead push the deadline before `now` AND rely on Tier 3 ignoring it —
+    // Tier 3 always finds room on an empty calendar. A truly-saturated
+    // horizon is already covered by `edf.spec.ts`'s `placeTask`/`fallbackSlot`
+    // suite (pure-core, cheap to fill 90 days of occupied intervals); this
+    // test instead pins down that `simulate` propagates a real null result
+    // through by stubbing the pure fallback to "nothing found".
+    jest.spyOn(edfUtils, "fallbackSlot").mockReturnValueOnce(null);
+    jest.spyOn(edfUtils, "feasibleSlots").mockReturnValueOnce([]);
+
+    const result = await service.simulate(
+      "u1",
+      prefs,
+      { durationMinutes: 60, deadline: new Date("2026-06-08T08:15:00Z") },
+      now,
     );
     expect(result.proposals).toEqual([]);
   });
 });
 
-describe("SchedulerService.resolveOverflow", () => {
-  it("pins the task at the resolved slot and persists the MOVE event", async () => {
-    const now = new Date("2026-06-08T20:00:00Z"); // past work hours
-    const overflowed = fakeTask({
-      id: "a",
-      deadline: new Date("2026-06-08T09:00:00Z"), // already overdue
-      conflict: true,
-    });
-    const { prisma, table, taskEventCreateMany } = makeFakePrisma([overflowed]);
-    const service = new SchedulerService(prisma as never);
-
-    const result = await service.resolveOverflow(
-      "a",
-      "outsideHours",
-      "u1",
-      prefs,
-      now,
-    );
-
-    expect(table.get("a")!.manuallyMoved).toBe(true);
-    expect(table.get("a")!.scheduledStartTime).not.toBeNull();
-    expect(result.task.conflict).toBe(false);
-    expect(taskEventCreateMany).toHaveBeenCalled();
-  });
-
-  it("does NOT mislabel a secondary auto-healed neighbor as a user action", async () => {
-    const now = new Date("2026-06-08T20:00:00Z"); // past work hours, Monday
-    const overflowed = fakeTask({
-      id: "a",
-      deadline: new Date("2026-06-08T09:00:00Z"), // already overdue
-      conflict: true,
-    });
-    // A second PENDING task, movable (not manuallyMoved), whose currently
-    // stored slot does NOT match where a fresh EDF repack places it once "a"
-    // occupies its own slot — the auto-heal displaces it as a pure algorithmic
-    // side-effect of resolving "a"'s overflow, not a real user action.
-    const neighbor = fakeTask({
+describe("SchedulerService.undoBatch", () => {
+  it("restores a batch-tagged task's prior scheduledStartTime/durationMinutes", async () => {
+    // 2030 dates: safely "in the future" for undoBatch's own internal
+    // now-based conflict-recompute pass regardless of when this test runs.
+    const restoredStart = new Date("2030-06-17T09:00:00Z");
+    const displacedTo = new Date("2030-06-17T10:00:00Z");
+    const b = fakeTask({
       id: "b",
+      durationMinutes: 60,
+      scheduledStartTime: displacedTo, // where reoptimize had moved it TO
       manuallyMoved: false,
       conflict: false,
-      scheduledStartTime: new Date("2026-06-10T09:00:00Z"), // Wednesday — stale
     });
-    const originalNeighborStart = neighbor.scheduledStartTime!.toISOString();
-    const { prisma, table, taskEventCreateMany } = makeFakePrisma([
-      overflowed,
-      neighbor,
+    const { prisma, table } = makeFakePrisma([b]);
+    prisma.taskEvent.findMany.mockResolvedValueOnce([
+      {
+        taskId: "b",
+        oldSnapshot: {
+          scheduledStartTime: restoredStart.toISOString(),
+          durationMinutes: 60,
+        },
+      },
     ]);
     const service = new SchedulerService(prisma as never);
 
-    await service.resolveOverflow("a", "outsideHours", "u1", prefs, now);
+    const result = await service.undoBatch("u1", "batch-1");
 
-    // (a) the neighbor's slot in `table` DID change (the auto-heal repositioned it).
-    expect(table.get("b")!.scheduledStartTime).not.toBeNull();
-    expect(table.get("b")!.scheduledStartTime!.toISOString()).not.toBe(
-      originalNeighborStart,
+    expect(table.get("b")!.scheduledStartTime?.toISOString()).toBe(
+      restoredStart.toISOString(),
     );
-    // (b) it must NOT have been force-pinned as manuallyMoved.
+    expect(table.get("b")!.durationMinutes).toBe(60);
     expect(table.get("b")!.manuallyMoved).toBe(false);
-    // (c) only the resolved task's own MOVE event is in the batch — the
-    // neighbor's silent reposition must not fabricate a TaskEvent.
-    const calls = taskEventCreateMany.mock.calls as {
-      data: { taskId: string }[];
-    }[][];
-    const batch = calls[0][0].data;
-    expect(batch).toHaveLength(1);
-    expect(batch.map((e) => e.taskId)).not.toContain("b");
-    expect(batch.map((e) => e.taskId)).toContain("a");
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("b");
+  });
+
+  it("restores a null scheduledStartTime (the task had been unplaced before the batch)", async () => {
+    const b = fakeTask({
+      id: "b",
+      durationMinutes: 30,
+      scheduledStartTime: new Date("2030-06-17T10:00:00Z"),
+    });
+    const { prisma, table } = makeFakePrisma([b]);
+    prisma.taskEvent.findMany.mockResolvedValueOnce([
+      {
+        taskId: "b",
+        oldSnapshot: { scheduledStartTime: null, durationMinutes: 30 },
+      },
+    ]);
+    const service = new SchedulerService(prisma as never);
+
+    await service.undoBatch("u1", "batch-1");
+
+    expect(table.get("b")!.scheduledStartTime).toBeNull();
+  });
+
+  it("is a no-op ([]) when batchId matches no event for this user", async () => {
+    const { prisma } = makeFakePrisma([]);
+    const service = new SchedulerService(prisma as never);
+
+    const result = await service.undoBatch("u1", "nonexistent");
+    expect(result).toEqual([]);
   });
 });
 

@@ -1,26 +1,17 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
+import { randomUUID } from "crypto";
+import { Injectable } from "@nestjs/common";
 import type { SchedulingRationale } from "@zenflow/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { Prisma, type TaskEventType } from "../../generated/prisma";
-import type {
-  CascadeScope,
-  EdfTask,
-  Placement,
-  SchedulerPrefs,
-} from "./interfaces";
-import { feasibleSlots, intervalOf, scheduleAll } from "./utils/edf";
+import type { EdfTask, Placement, SchedulerPrefs } from "./interfaces";
+import {
+  fallbackSlot,
+  feasibleSlots,
+  intervalOf,
+  scheduleAll,
+} from "./utils/edf";
 import { MAX_SCAN_DAYS } from "./constants";
 import { topN as rerankTopN } from "./utils/reranker";
-import {
-  applyOverflowChoice,
-  computeOverflowOptions as computeOverflowOptionsPure,
-  findNextAvailableSlot,
-  findSlotIgnoringWorkHours,
-} from "./utils/overflow";
 import { buildRationale } from "./utils/rationale";
 import {
   NEUTRAL_BIAS,
@@ -45,8 +36,8 @@ type Db = PrismaService | Prisma.TransactionClient;
 /**
  * The ONLY layer that touches Prisma or writes telemetry (CLAUDE.md invariant
  * #2). Every pure scheduling decision is delegated to `edf.ts` / `reranker.ts`
- * / `overflow.ts` / `rationale.ts` / `duration-bias.ts`; this service loads
- * rows, calls the pure core, diffs the result against the DB, and persists.
+ * / `rationale.ts` / `duration-bias.ts`; this service loads rows, calls the
+ * pure core, diffs the result against the DB, and persists.
  */
 @Injectable()
 export class SchedulerService {
@@ -186,53 +177,47 @@ export class SchedulerService {
   }
 
   /**
-   * The single cascade primitive behind every mutation: create, deadline/tag
-   * confirm, delete gap-fill, drag, resize. Loads this user's PENDING tasks,
-   * runs the pure EDF core, recomputes true pairwise-overlap conflicts across
-   * the projected result (so e.g. two manually-moved tasks that now overlap
-   * are flagged even though `scheduleAll` never reorders them), diffs against
-   * the DB, and writes back every CHANGED row in one pass (including a bare
+   * The single cascade primitive behind every mutation: create, edit
+   * (deadline/tags), drag, resize — every one of them now reoptimizes the
+   * user's ENTIRE pending schedule inline, in the same transaction, rather
+   * than asking for confirmation first. Loads this user's PENDING tasks (no
+   * window ceiling beyond the existing {@link MAX_SCAN_DAYS} query bound —
+   * there's no more window-scoped "narrow" vs. "wide" cascade, the continuous
+   * cost model in `edf.ts` is what keeps an untouched schedule stable, not a
+   * freeze window), runs the pure cost-aware EDF core, recomputes true
+   * pairwise-overlap conflicts across the projected result, diffs against the
+   * DB, and writes back every CHANGED row in one pass (including a bare
    * conflict-flag flip). Returns only the placements that actually moved or
    * lost their manual pin — what callers report as `displaced` — so a task
    * whose slot didn't change doesn't get reported as "moved to make room"
    * just because another task was dragged on/off of it.
+   *
+   * A fresh `batchId` is generated every call and stamped on every RESCHEDULED
+   * event it writes, so {@link undoBatch} can always revert this call's
+   * collateral moves — returned as `null` when nothing actually moved.
+   * `opts.fixedTaskId` (optional) marks a task whose own placement decision is
+   * the CALLER's to log (e.g. the just-created task's CREATE event) so it
+   * isn't double-recorded here as a collateral RESCHEDULED — it's still
+   * included in the returned `displaced` array; callers that don't want their
+   * own task in that list filter it out themselves (see `TasksService.create`).
    */
-  async cascadeReschedule(
+  async reoptimize(
     userId: string,
     prefs: SchedulerPrefs,
-    scope: CascadeScope,
+    now: Date,
     db: Db = this.prisma,
-  ): Promise<Placement[]> {
-    // The freeze WINDOW (`scope`) decides which loaded tasks are movable vs.
-    // frozen — it must NOT bound which rows we load. Placed tasks beyond
-    // `windowEnd` are frozen occupied space the movable set has to avoid, so we
-    // load the full scan horizon regardless of the window. In particular a
-    // zero-width create window (`windowStart === windowEnd`) would otherwise
-    // load nothing but unplaced tasks, leaving `occupied` empty and dropping
-    // the new task straight on top of already-placed ones.
+    opts: { fixedTaskId?: string } = {},
+  ): Promise<{ displaced: Placement[]; batchId: string | null }> {
     const loadCeiling = new Date(
-      Math.max(
-        scope.windowEnd.getTime(),
-        scope.windowStart.getTime() + MAX_SCAN_DAYS * 24 * 60 * 60 * 1000,
-      ),
+      now.getTime() + MAX_SCAN_DAYS * 24 * 60 * 60 * 1000,
     );
-    const rows = await this.loadPendingRows(
-      userId,
-      db,
-      loadCeiling,
-      scope.windowStart,
-    );
+    const rows = await this.loadPendingRows(userId, db, loadCeiling, now);
     const edfTasks = rows.map(toEdfTask);
     const user = await db.user.findUniqueOrThrow({
       where: { id: userId },
       select: { preferenceMatrix: true },
     });
-    const placements = scheduleAll(
-      prefs,
-      edfTasks,
-      scope,
-      user.preferenceMatrix,
-    );
+    const placements = scheduleAll(prefs, edfTasks, now, user.preferenceMatrix);
 
     const byId = new Map(rows.map((r) => [r.id, r]));
     const projected: ConflictTask[] = placements.map((p) => ({
@@ -243,9 +228,11 @@ export class SchedulerService {
     }));
     const conflictOf = recomputeConflicts(projected);
 
+    const batchId = randomUUID();
     const occurredAt = new Date();
     const events: Prisma.TaskEventCreateManyArgs["data"] = [];
     const changed: Placement[] = [];
+    const writes: Placement[] = [];
     for (const p of placements) {
       const row = byId.get(p.id)!;
       const finalConflict = conflictOf.get(p.id) ?? p.conflict;
@@ -269,21 +256,17 @@ export class SchedulerService {
         // must still be persisted below, but surfacing it as "displaced"
         // would tell the user a task moved when it didn't.
         if (timeChanged || manualChanged) changed.push(placement);
-        await db.task.update({
-          where: { id: p.id },
-          data: {
-            scheduledStartTime: p.scheduledStartTime,
-            conflict: finalConflict,
-            manuallyMoved: p.manuallyMoved,
-          },
-        });
+        writes.push(placement);
 
-        // The ranker actually chose this slot for a movable task (not a
-        // frozen pass-through) — log it, UNLESS it's `scope.fixedTaskId`: that
-        // task's own placement decision is the caller's to log (CREATE at
-        // tasks.service.ts, or an explicit RESCHEDULED at the
-        // reschedule-cascade call site) so it isn't double-recorded here.
-        if (p.propensity !== undefined && p.id !== scope.fixedTaskId) {
+        // The cost-aware core actually (re-)decided this task's placement —
+        // every non-frozen, successfully-placed task always carries a
+        // propensity now (the softmax mechanism runs over every candidate
+        // pool, not just an in-hours tier) — log it, UNLESS it's
+        // `opts.fixedTaskId`: that task's own placement decision is the
+        // caller's to log (CREATE at `tasks.service.ts`) so it isn't
+        // double-recorded here.
+        const isCollateral = p.id !== opts.fixedTaskId;
+        if (isCollateral && p.propensity !== undefined) {
           events.push({
             taskId: p.id,
             userId,
@@ -303,19 +286,61 @@ export class SchedulerService {
             ),
             rewardScore: EVENT_REWARD.RESCHEDULED,
             occurredAt,
+            batchId,
           });
         }
       }
     }
+    await this.persistPlacements(db, writes);
     if (events.length > 0) await db.taskEvent.createMany({ data: events });
-    return changed;
+    return { displaced: changed, batchId: changed.length > 0 ? batchId : null };
+  }
+
+  /**
+   * Write back every changed placement in ONE statement.
+   *
+   * A cascade can re-place every pending task in the scan horizon, and this
+   * runs inside the caller's interactive transaction — which Prisma pins to a
+   * single connection and serializes. Issuing `task.update` per row therefore
+   * costs N sequential round trips, which is what blew the 5s transaction
+   * budget in production (P2028) once a user had enough tasks to displace.
+   * One `UPDATE … FROM (VALUES …)` keeps it at exactly one round trip
+   * regardless of N.
+   *
+   * `updatedAt` is set here explicitly: Prisma's `@updatedAt` is applied by the
+   * client on its own generated UPDATEs, so a raw statement has to maintain the
+   * column itself or the row would keep a stale timestamp.
+   */
+  private async persistPlacements(db: Db, writes: Placement[]): Promise<void> {
+    if (writes.length === 0) return;
+
+    const tuples = writes.map(
+      (p) =>
+        Prisma.sql`(${p.id}::text, ${p.scheduledStartTime}::timestamp(3), ${p.conflict}::boolean, ${p.manuallyMoved}::boolean)`,
+    );
+
+    await db.$executeRaw`
+      UPDATE "Task" AS t
+      SET "scheduledStartTime" = v."scheduledStartTime",
+          "conflict"           = v."conflict",
+          "manuallyMoved"      = v."manuallyMoved",
+          "updatedAt"          = NOW()
+      FROM (VALUES ${Prisma.join(tuples)})
+        AS v(id, "scheduledStartTime", "conflict", "manuallyMoved")
+      WHERE t.id = v.id
+    `;
   }
 
   /**
    * Read-only dry-run of the scheduler for a not-yet-created task: never
    * writes to the DB. Builds `occupied` from the user's currently-placed
    * tasks, computes the draft task's feasible set, re-ranks it by the user's
-   * preference matrix, and attaches a rationale per candidate.
+   * preference matrix, and attaches a rationale per candidate. When Tier 1
+   * (the in-hours-before-deadline feasible set) is empty, falls back to the
+   * same Tier 2/3 deterministic fallback `scheduleAll` uses ({@link
+   * fallbackSlot}) rather than returning zero proposals — a single
+   * (un-ranked, rationale-less) proposal, since Tier 2/3 never had more than
+   * one candidate to begin with.
    */
   async simulate(
     userId: string,
@@ -329,10 +354,20 @@ export class SchedulerService {
       rationale: SchedulingRationale | null;
     }[];
   }> {
+    // Tier 1 only ever needs occupied data up to `draft.deadline`, but the
+    // Tier 2/3 fallback (see below) can scan well past it — load a horizon
+    // that covers both, mirroring the `now + MAX_SCAN_DAYS` bound
+    // `feasibleSlots`'s own no-deadline ceiling and `reoptimize`'s load use.
+    const loadCeiling = new Date(
+      Math.max(
+        draft.deadline.getTime(),
+        now.getTime() + MAX_SCAN_DAYS * 24 * 60 * 60 * 1000,
+      ),
+    );
     const rows = await this.loadPendingRows(
       userId,
       this.prisma,
-      draft.deadline,
+      loadCeiling,
       now,
     );
     const occupied = rows
@@ -350,7 +385,14 @@ export class SchedulerService {
     };
 
     const candidates = feasibleSlots(draftTask, now, prefs, occupied);
-    if (candidates.length === 0) return { proposals: [] };
+    if (candidates.length === 0) {
+      const fallback = fallbackSlot(draftTask, now, occupied, prefs);
+      return {
+        proposals: fallback
+          ? [{ scheduledStartTime: new Date(fallback.start), rationale: null }]
+          : [],
+      };
+    }
 
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
@@ -377,143 +419,98 @@ export class SchedulerService {
     };
   }
 
-  /** Both overflow-recovery options for a task that couldn't be placed. */
-  async computeOverflowOptions(
-    userId: string,
-    task: { id: string; durationMinutes: number; deadline: Date },
-    prefs: SchedulerPrefs,
-    now: Date,
-    db: Db = this.prisma,
-  ): Promise<{
-    outsideHours: Interval | null;
-    nextAvailable: Interval | null;
-  }> {
-    const rows = await this.loadPendingRows(userId, db, task.deadline, now);
-    const occupied = rows
-      .filter((r) => r.id !== task.id)
-      .map((r) => intervalOf(toEdfTask(r)))
-      .filter((iv): iv is Interval => iv !== null);
-    const edfTask: EdfTask = {
-      id: task.id,
-      durationMinutes: task.durationMinutes,
-      deadline: task.deadline,
-      manuallyMoved: false,
-      scheduledStartTime: null,
-      createdAt: now,
-      conflict: true,
-    };
-    return computeOverflowOptionsPure(edfTask, now, occupied, prefs);
-  }
-
   /**
-   * Persist the user's accepted overflow-recovery choice: computes the
-   * concrete slot for `choice`, pins the task there (`manuallyMoved: true`),
-   * auto-heals any secondary overflow it causes (see `overflow.ts`), writes
-   * every changed row + one MOVE event per displaced task in a transaction.
+   * Reverts every task one `reoptimize` auto-cascade moved, restored from
+   * each tagged RESCHEDULED `TaskEvent`'s `oldSnapshot`
+   * (`scheduledStartTime`/`durationMinutes`) — writes every restored row in
+   * ONE statement (never N sequential `task.update` calls — the same P2028
+   * concern {@link persistPlacements}'s doc comment documents), then
+   * re-derives true pairwise-overlap conflicts across this user's pending
+   * tasks, since reverting a collateral task can reintroduce the very overlap
+   * the auto-resolve had cleared. Returns `[]` (a no-op) when `batchId`
+   * matches no event for this user.
    */
-  async resolveOverflow(
-    taskId: string,
-    choice: "outsideHours" | "nextAvailable",
+  async undoBatch(
     userId: string,
-    prefs: SchedulerPrefs,
-    now: Date,
-  ): Promise<{ task: Placement; displaced: Placement[] }> {
-    return this.prisma.$transaction(async (tx) => {
-      const { deadline } = await tx.task.findUniqueOrThrow({
-        where: { id: taskId, userId },
-        select: { deadline: true },
-      }); // ensure the task exists and belongs to the user
-      const isNightOwl = prefs.workStart > prefs.workEnd;
-      const rows = await this.loadPendingRows(
-        userId,
-        tx,
-        new Date(
-          deadline!.getTime() + (isNightOwl ? 8 : 7) * 24 * 60 * 60 * 1000,
-        ),
-        now,
-      );
-      const byId = new Map(rows.map((r) => [r.id, r]));
-      if (!byId.has(taskId))
-        throw new NotFoundException(`Cannot find task with id ${taskId}`);
-
-      const edfTasks = rows.map(toEdfTask);
-      const targetEdf = edfTasks.find((t) => t.id === taskId)!;
-      const occupied = edfTasks
-        .filter((t) => t.id !== taskId)
-        .map((t) => intervalOf(t))
-        .filter((iv): iv is Interval => iv !== null);
-
-      const chosenSlot =
-        choice === "outsideHours"
-          ? findSlotIgnoringWorkHours(targetEdf, now, occupied, prefs)
-          : findNextAvailableSlot(
-              targetEdf,
-              targetEdf.deadline ?? now,
-              occupied,
-              prefs,
-            );
-      if (!chosenSlot)
-        throw new BadRequestException(
-          "No feasible recovery slot found within the scan horizon",
-        );
-
-      const { placements, displaced } = applyOverflowChoice(
-        choice,
-        targetEdf,
-        chosenSlot,
-        edfTasks,
-        prefs,
-        now,
-      );
-      const batch: Prisma.TaskEventCreateManyArgs["data"] = [];
-
-      for (const p of placements) {
-        const row = byId.get(p.id)!;
-        const prevTime = row.scheduledStartTime?.getTime() ?? null;
-        const nextTime = p.scheduledStartTime?.getTime() ?? null;
-        const pinned = p.id === taskId;
-        if (prevTime !== nextTime || row.conflict !== p.conflict || pinned) {
-          await tx.task.update({
-            where: { id: p.id },
-            data: {
-              scheduledStartTime: p.scheduledStartTime,
-              conflict: p.conflict,
-              ...(pinned ? { manuallyMoved: true } : {}),
-            },
-          });
-        }
-        if (pinned) {
-          const oldSnapshot = buildSnapshot({
-            scheduledStartTime: row.scheduledStartTime,
-            durationMinutes: row.durationMinutes,
-          });
-          batch.push({
-            taskId: p.id,
-            userId,
-            eventType: "MOVE",
-            oldSnapshot,
-            newSnapshot: buildSnapshot(
-              {
-                scheduledStartTime: p.scheduledStartTime,
-                durationMinutes: row.durationMinutes,
-              },
-              [],
-              row.scheduledStartTime,
-            ),
-            rewardScore: EVENT_REWARD.MOVE,
-            occurredAt: now,
-          });
-        }
-      }
-
-      await tx.taskEvent.createMany({ data: batch });
-
-      const targetPlacement = placements.find((p) => p.id === taskId)!;
-      return {
-        task: targetPlacement,
-        displaced: displaced.filter((d) => d.id !== taskId),
-      };
+    batchId: string,
+    db: Db = this.prisma,
+  ): Promise<Placement[]> {
+    const events = await db.taskEvent.findMany({
+      where: { userId, batchId },
+      select: { taskId: true, oldSnapshot: true },
     });
+    if (events.length === 0) return [];
+
+    interface OldSnap {
+      scheduledStartTime?: string | null;
+      durationMinutes?: number;
+    }
+    const restored = new Map<
+      string,
+      { scheduledStartTime: Date | null; durationMinutes: number }
+    >();
+    for (const e of events) {
+      const snap = (e.oldSnapshot ?? {}) as OldSnap;
+      if (typeof snap.durationMinutes !== "number") continue; // defensive
+      restored.set(e.taskId, {
+        scheduledStartTime: snap.scheduledStartTime
+          ? new Date(snap.scheduledStartTime)
+          : null,
+        durationMinutes: snap.durationMinutes,
+      });
+    }
+    if (restored.size === 0) return [];
+
+    const tuples = [...restored.entries()].map(
+      ([id, r]) =>
+        Prisma.sql`(${id}::text, ${r.scheduledStartTime}::timestamp(3), ${r.durationMinutes}::int)`,
+    );
+    await db.$executeRaw`
+      UPDATE "Task" AS t
+      SET "scheduledStartTime" = v."scheduledStartTime",
+          "durationMinutes"    = v."durationMinutes",
+          "manuallyMoved"      = false,
+          "updatedAt"          = NOW()
+      FROM (VALUES ${Prisma.join(tuples)})
+        AS v(id, "scheduledStartTime", "durationMinutes")
+      WHERE t.id = v.id
+    `;
+
+    // Re-derive true pairwise-overlap conflicts across every PENDING task now
+    // that the restore may have reintroduced an overlap the reoptimize call
+    // had cleared (or cleared one it had introduced).
+    const rows = await this.loadPendingRows(
+      userId,
+      db,
+      new Date(Date.now() + MAX_SCAN_DAYS * 24 * 60 * 60 * 1000),
+    );
+    const projected: ConflictTask[] = rows.map((r) => ({
+      id: r.id,
+      scheduledStartTime: r.scheduledStartTime,
+      durationMinutes: r.durationMinutes,
+      conflict: r.conflict,
+    }));
+    const conflictOf = recomputeConflicts(projected);
+    const conflictWrites: Placement[] = [];
+    for (const r of rows) {
+      const finalConflict = conflictOf.get(r.id) ?? r.conflict;
+      if (finalConflict !== r.conflict) {
+        conflictWrites.push({
+          id: r.id,
+          scheduledStartTime: r.scheduledStartTime,
+          conflict: finalConflict,
+          manuallyMoved: r.manuallyMoved,
+        });
+      }
+    }
+    await this.persistPlacements(db, conflictWrites);
+
+    return [...restored.entries()].map(([id, r]) => ({
+      id,
+      scheduledStartTime: r.scheduledStartTime,
+      conflict: conflictOf.get(id) ?? false,
+      manuallyMoved: false,
+    }));
   }
 
   /**

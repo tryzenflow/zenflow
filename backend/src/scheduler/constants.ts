@@ -45,3 +45,50 @@ export const MIN = 60_000;
  * a run regresses.
  */
 export const RERANKER_TEMPERATURE = 1.0;
+
+/**
+ * Continuous soft-constraint cost model (replaces the old hard
+ * `manuallyMoved` freeze + hard deadline cutoff — see `edf.ts`'s module doc
+ * comment). Tolerance for moving a task off its current anchor scales
+ * continuously with how far in the future that anchor sits; deadlines and
+ * work-hours preference are now cost terms instead of hard tiers. v1
+ * defaults — deliberately plain, tunable later once real telemetry exists.
+ */
+
+/**
+ * Beyond this many days out from `now`, an anchor's deviation weight bottoms
+ * out at {@link DEVIATION_WEIGHT_FAR} (never goes lower — there's no bonus for
+ * being EVEN further out).
+ */
+export const DEVIATION_HORIZON_DAYS = 7;
+
+/**
+ * Deviation weight for a task anchored at (or before) `now`: moving it 1
+ * minute away from its current slot costs 1 unit. Tasks already in progress
+ * or past never reach this — they're hard-frozen (see `isPast`) — this is the
+ * weight for a task anchored in the very near future.
+ */
+export const DEVIATION_WEIGHT_NEAR = 1.0;
+
+/**
+ * Deviation weight for a task anchored at/beyond {@link DEVIATION_HORIZON_DAYS}
+ * out: 10× cheaper to move than a near-term anchor, so far-future tasks
+ * negotiate readily when a nearer-term task needs their slot.
+ */
+export const DEVIATION_WEIGHT_FAR = 0.1;
+
+/**
+ * Cost per minute a candidate placement ends past a task's deadline, in the
+ * same "minutes of deviation" units `deviationCost` uses. Deliberately >
+ * {@link HOURS_RATE}: deadline pressure must keep beating work-hours
+ * preference, the same priority the old 3-tier fallback enforced structurally
+ * (Tier 2 outside-hours-before-deadline beats Tier 3 in-hours-past-deadline).
+ */
+export const LATENESS_RATE = 4;
+
+/**
+ * Cost per minute a candidate placement falls outside the user's work-hours
+ * window, in the same units. See {@link LATENESS_RATE}'s doc comment for why
+ * this must stay smaller than it.
+ */
+export const HOURS_RATE = 2;

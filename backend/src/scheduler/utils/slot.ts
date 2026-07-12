@@ -95,6 +95,63 @@ export function workWindowFor(
 }
 
 /**
+ * Total minutes of `candidate` that fall OUTSIDE every work-hours window it
+ * touches (the `offHoursCost` term of the placement cost model — `edf.ts`).
+ * Scans a small band of calendar days around the candidate (one day before
+ * through one day past its span) so a work window anchored the PRIOR day but
+ * wrapping past midnight (`workEnd <= workStart`) is still accounted for,
+ * unions every window's overlap with `candidate` (de-duplicating any overlap
+ * between a wrapping window and the next day's own window), and returns the
+ * leftover duration. 0 when `candidate` sits entirely inside work hours.
+ */
+export function minutesOutsideWorkWindow(
+  candidate: Interval,
+  prefs: {
+    workStart: number;
+    workEnd: number;
+    workDays: number[];
+    timezone: string;
+  },
+): number {
+  const totalMs = candidate.end - candidate.start;
+  if (totalMs <= 0) return 0;
+
+  const spanDays = Math.ceil(totalMs / (24 * 60 * MS_PER_MINUTE)) + 2; // + a day of slack on each side
+  const covered: Interval[] = [];
+  let dateStr = addDaysStr(
+    localDateStr(new Date(candidate.start), prefs.timezone),
+    -1,
+  );
+  for (let i = 0; i < spanDays; i++) {
+    if (prefs.workDays.includes(isoWeekday(dateStr))) {
+      const win = workWindowFor(
+        dateStr,
+        prefs.workStart,
+        prefs.workEnd,
+        prefs.timezone,
+      );
+      const start = Math.max(win.start, candidate.start);
+      const end = Math.min(win.end, candidate.end);
+      if (start < end) covered.push({ start, end });
+    }
+    dateStr = addDaysStr(dateStr, 1);
+  }
+
+  covered.sort((a, b) => a.start - b.start);
+  let coveredMs = 0;
+  let mergedEnd = -Infinity;
+  for (const c of covered) {
+    const start = Math.max(c.start, mergedEnd);
+    if (c.end > start) {
+      coveredMs += c.end - start;
+      mergedEnd = Math.max(mergedEnd, c.end);
+    }
+  }
+
+  return Math.max(0, (totalMs - coveredMs) / MS_PER_MINUTE);
+}
+
+/**
  * Index into the flat 168-int signed preference matrix for an instant, using
  * 1-hour buckets: `(isoWeekday-1) * 24 + hour`, where `hour` is the wall-clock
  * hour (0…23). 7 days × 24 one-hour buckets = 168 cells.
