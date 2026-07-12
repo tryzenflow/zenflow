@@ -5,7 +5,7 @@ import {
   localDateStr,
   workWindowMinutes,
 } from "./slot";
-import { minutesToUtc } from "../common/utils";
+import { minutesToUtc } from "../../common/utils";
 
 /**
  * Calendar-window helpers used both for placement bounds and for the

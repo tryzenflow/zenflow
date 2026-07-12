@@ -43,6 +43,8 @@ export interface SchedulingMeta {
   adjustedDuration: number;
   placedAt: string | null;
   engine: "edf";
+  /** The rationale behind the task placement */
+  rationale?: string;
   /** Per-tag blended bias multiplier; 1.0 when no bias applied. */
   biasApplied?: number;
   /** User's typed estimate before correction (minutes). */
@@ -53,18 +55,10 @@ export interface SchedulingMeta {
   durationReason?: string | null;
 }
 
-/** Granularity of the "next available period" overflow recovery option. */
-export type OverflowGranularity = "day" | "week" | "month";
-
 /** A recovery slot offered when a task can't be placed before its deadline. */
 export interface OverflowOption {
   /** ISO-8601 start the task would be placed at if this option is chosen. */
   scheduledStartTime: string;
-}
-
-/** The "next available period" option, tagged with the period granularity. */
-export interface NextAvailableOption extends OverflowOption {
-  granularity: OverflowGranularity;
 }
 
 /**
@@ -74,24 +68,25 @@ export interface NextAvailableOption extends OverflowOption {
 export interface SchedulingOverflow {
   /**
    * Earliest slot that ignores the working-hours window but still respects
-   * occupied intervals and the task's deadline; null when even off-hours room
-   * doesn't exist before the deadline.
+   * occupied intervals; null when even off-hours room doesn't exist within the
+   * scan horizon.
    */
   outsideHours: OverflowOption | null;
   /**
-   * Earliest in-working-hours slot in the next period (day/week/month per the
-   * active view), ignoring the deadline; null when impossible (rare).
+   * Earliest in-working-hours slot searching forward from the task's deadline,
+   * ignoring the deadline bound; null when impossible (rare).
    */
-  nextAvailable: NextAvailableOption | null;
+  nextAvailable: OverflowOption | null;
 }
 
 export interface CreateTaskResponse {
   task: Task;
   schedulingMeta: SchedulingMeta;
+  /** Tasks cascade-moved as a side effect of placing the new task. */
+  displaced: DisplacedTask[];
   /**
-   * Recovery options, populated when the created task is unplaced OR when it
-   * was placed but landed outside the requested [viewStart, viewEnd] window.
-   * Omitted/null when the task was placed successfully within the view.
+   * Recovery options, populated when the created task couldn't be placed
+   * before its deadline. Omitted/null when the task was placed successfully.
    */
   overflow?: SchedulingOverflow | null;
 }
@@ -101,16 +96,15 @@ export interface UpdateTaskResponse {
   task: Task;
   /**
    * Present when `tags` changed on this update: the same duration-correction
-   * data `POST /tasks` returns, so the frontend can drive its existing
-   * duration-adjustment toast. The suggestion is NOT auto-applied — the
-   * frontend calls `POST /tasks/:id/reschedule-cascade` with the accepted
-   * `durationMinutes` if the user accepts it and it needs a new slot.
+   * data `POST /tasks` returns. The corrected duration is already applied to
+   * `task` (unless the user's `durationAdjustmentMode` is `"never"`) — this
+   * is informational, so the frontend can show what changed.
    */
   schedulingMeta?: SchedulingMeta;
   /**
    * True when `deadline` actually changed on this update. The frontend uses
    * this (or an equivalent client-side diff) to decide whether to prompt for
-   * a confirm-before-reschedule via `POST /tasks/:id/reschedule-cascade`.
+   * a confirm-before-reschedule via `POST /tasks/reschedule-cascade`.
    */
   deadlineChanged?: boolean;
 }
@@ -126,13 +120,6 @@ export interface RescheduleResponse {
   displaced: DisplacedTask[];
   /** Present when a preference-favoured slot drove the placement. */
   rationale?: SchedulingRationale | null;
-  /**
-   * True when the dragged slot falls outside the task's stored view-period
-   * bounds (the day/week/month the task was created in). The move is committed
-   * regardless — this flag lets the frontend prompt the user for confirmation
-   * after the fact rather than hard-rejecting the drag.
-   */
-  outsideViewPeriod?: boolean;
 }
 
 /** 7×24 signed preference matrix for the Insights heatmap. */

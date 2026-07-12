@@ -39,9 +39,7 @@ model User {
   // profile and editable via preferences/onboarding. `never` still LEARNS bias.
   durationAdjustmentMode DurationAdjustmentMode @default(auto)
 
-  roleArchetypeId    String? // Phase-4 cold-start cluster id
   onboardingComplete Boolean @default(false)
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -114,11 +112,12 @@ model Task {
 
 enum TaskEventType {
   CREATE
-  MOVE // user dragged to another slot/day — also serves as the "rescheduled" outcome
+  MOVE // user dragged to another slot/day
   RESIZE
   KEEP // user left an EDF suggestion in place (completed in its suggested slot) — positive signal
   COMPLETE // outcome: completed in its slot
   ABANDON // outcome: deadline expired unresolved (emitted by the overdue sweep)
+  RESCHEDULED // task auto-repositioned as collateral in someone else's cascadeReschedule (not a user drag)
 }
 
 model TaskEvent {

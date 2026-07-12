@@ -1,5 +1,5 @@
-import { minutesToUtc } from "../common/utils";
-import { TIME_GRANULARITY } from "../common/constants";
+import { minutesToUtc } from "../../common/utils";
+import { TIME_GRANULARITY } from "../../common/constants";
 
 /**
  * Slot / work-window math for the EDF engine. All calendar reasoning is done in

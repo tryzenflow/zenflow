@@ -3,7 +3,7 @@ import { Cron, CronExpression } from "@nestjs/schedule";
 import { PrismaService } from "../prisma/prisma.service";
 import { Prisma } from "../../generated/prisma";
 import { ABANDON_BATCH_SIZE, ABANDON_GRACE_MS } from "../common/constants";
-import { EVENT_REWARD } from "./telemetry";
+import { EVENT_REWARD } from "./utils/telemetry";
 
 /**
  * The minimal task fields the sweep needs: the id/userId to write the row +

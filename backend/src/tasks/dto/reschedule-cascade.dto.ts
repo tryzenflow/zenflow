@@ -1,32 +1,24 @@
-import {
-  IsDivisibleBy,
-  IsInt,
-  IsISO8601,
-  IsOptional,
-  Min,
-} from "class-validator";
-import { TIME_GRANULARITY } from "src/common/constants";
+import { IsBoolean, IsISO8601, IsOptional } from "class-validator";
 import type { RescheduleCascadeInput } from "@zenflow/shared";
 
 /**
- * Body for `POST /tasks/:id/reschedule-cascade`: explicitly triggers the
- * view-scoped `cascadeReschedule` for this task. Used after the user confirms
- * a deadline-change reschedule prompt (`durationMinutes` omitted), or accepts
- * a tag-driven duration-adjustment suggestion that needs a new slot
- * (`durationMinutes` supplied — applied before the cascade runs).
+ * Body for `POST /tasks/reschedule-cascade`: the shared confirm-before-
+ * reschedule target for a deadline edit, a tags-driven duration change, or a
+ * delete — no anchor task, every non-frozen task in the window is eligible.
  */
 export class RescheduleCascadeDto implements RescheduleCascadeInput {
-  @IsOptional()
   @IsISO8601()
-  viewStart?: string;
+  windowStart: string;
 
-  @IsOptional()
   @IsISO8601()
-  viewEnd?: string;
+  windowEnd: string;
 
+  /**
+   * The 3-option manual-vs-auto reschedule choice (todo.md §Rescheduling
+   * Design): true reschedules manually-moved tasks too; false/omitted keeps
+   * them frozen.
+   */
   @IsOptional()
-  @IsInt()
-  @Min(TIME_GRANULARITY)
-  @IsDivisibleBy(TIME_GRANULARITY)
-  durationMinutes?: number;
+  @IsBoolean()
+  includeManual?: boolean;
 }

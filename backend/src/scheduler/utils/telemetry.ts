@@ -1,8 +1,9 @@
 import { PREFERENCE_MATRIX_LENGTH } from "@zenflow/shared";
-import { Prisma } from "../../generated/prisma";
-import { intervalOf, type EdfTask } from "./edf";
+import { Prisma } from "../../../generated/prisma";
+import { intervalOf } from "./edf";
+import type { EdfTask } from "../interfaces";
 import { preferenceIndex, type Interval } from "./slot";
-import { PREFERENCE_LEARNING_RATE } from "./constants";
+import { PREFERENCE_LEARNING_RATE } from "../constants";
 
 /**
  * Shared, PURE telemetry builders (no I/O). These encode the exact event-snapshot
@@ -17,8 +18,10 @@ import { PREFERENCE_LEARNING_RATE } from "./constants";
 /**
  * Reward score written on each TaskEvent type (the Phase-3 signal). COMPLETE/KEEP
  * are the positive placement signal (+1), ABANDON the strongest negative (−1),
- * and MOVE/RESIZE are neutral overrides (0). Single source of truth for both the
- * services and the simulator.
+ * and MOVE/RESIZE are neutral overrides (0). RESCHEDULED is an auto-placement —
+ * same "outcome pending" placeholder as CREATE (+1) — the real preference signal
+ * still arrives later via that task's own KEEP/MOVE/COMPLETE/ABANDON. Single
+ * source of truth for both the services and the simulator.
  */
 export const EVENT_REWARD = {
   CREATE: 1.0,
@@ -27,6 +30,7 @@ export const EVENT_REWARD = {
   KEEP: 1.0,
   COMPLETE: 1.0,
   ABANDON: -1.0,
+  RESCHEDULED: 1.0,
 } as const;
 
 /** The DB-row fields the EDF mapping reads (satisfied by a Prisma `Task`). */

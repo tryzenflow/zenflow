@@ -1,5 +1,5 @@
 import { IsDivisibleBy, IsInt, IsISO8601, Min } from "class-validator";
-import { TIME_GRANULARITY } from "src/common/constants";
+import { TIME_GRANULARITY } from "../../common/constants";
 import type { ResizeInput } from "@zenflow/shared";
 
 /** Manual edge-resize from the calendar; pins the task and recomputes conflicts. */

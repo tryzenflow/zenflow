@@ -1,10 +1,13 @@
 import { BadRequestException } from "@nestjs/common";
 import { UsersService } from "./users.service";
+import { SchedulerService } from "../scheduler/scheduler.service";
 import type { UpdatePreferencesDto } from "./dto/update-preferences.dto";
 import type { User } from "../../generated/prisma";
 
 // ---------------------------------------------------------------------------
-// Helpers for getUserTagBias tests
+// Helpers for getUserTagBias tests — routed through a REAL SchedulerService
+// (SchedulerService.aggregateTagBias is the single source of truth for this
+// query now; UsersService only supplies the user's own tag names).
 // ---------------------------------------------------------------------------
 
 type MockEvent = {
@@ -26,8 +29,8 @@ function makeTagBiasService(
     tag: { findMany: findManyTag },
     taskEvent: { findMany: findManyEvent },
   };
-  const scheduler = { rescheduleAll: jest.fn() };
-  return new UsersService(prisma as never, scheduler as never);
+  const scheduler = new SchedulerService(prisma as never);
+  return new UsersService(prisma as never, scheduler);
 }
 
 const user = { id: "user-1" } as User;
@@ -49,17 +52,16 @@ function makeService() {
     }),
   );
   const prisma = { user: { update } };
-  const rescheduleAll = jest.fn().mockResolvedValue(undefined);
-  const scheduler = { rescheduleAll };
+  const scheduler = {};
   const service = new UsersService(prisma as never, scheduler as never);
-  return { service, update, rescheduleAll };
+  return { service, update };
 }
 
 describe("UsersService.updatePreferences", () => {
-  it("persists the schedule and re-schedules all tasks", async () => {
-    const { service, update, rescheduleAll } = makeService();
+  it("persists the schedule (metadata-only — no auto-cascade)", async () => {
+    const { service, update } = makeService();
 
-    const result = await service.updatePreferences(user, { ...basePrefs });
+    await service.updatePreferences(user, { ...basePrefs });
 
     expect(update).toHaveBeenCalledWith({
       where: { id: user.id },
@@ -70,41 +72,6 @@ describe("UsersService.updatePreferences", () => {
         timezone: "Asia/Ho_Chi_Minh",
       },
     });
-    expect(rescheduleAll).toHaveBeenCalledWith(result);
-  });
-
-  it("leaves roleArchetypeId untouched when the key is omitted", async () => {
-    const { service, update } = makeService();
-
-    await service.updatePreferences(user, { ...basePrefs });
-
-    const { data } = update.mock.calls[0][0];
-    expect("roleArchetypeId" in data).toBe(false);
-  });
-
-  it("updates roleArchetypeId when a value is provided", async () => {
-    const { service, update } = makeService();
-
-    await service.updatePreferences(user, {
-      ...basePrefs,
-      roleArchetypeId: "night-owl-dev",
-    });
-
-    const { data } = update.mock.calls[0][0];
-    expect(data.roleArchetypeId).toBe("night-owl-dev");
-  });
-
-  it("clears roleArchetypeId when null is provided", async () => {
-    const { service, update } = makeService();
-
-    await service.updatePreferences(user, {
-      ...basePrefs,
-      roleArchetypeId: null,
-    });
-
-    const { data } = update.mock.calls[0][0];
-    expect("roleArchetypeId" in data).toBe(true);
-    expect(data.roleArchetypeId).toBeNull();
   });
 
   it("rejects an empty window where workStart equals workEnd", async () => {
@@ -134,7 +101,7 @@ describe("UsersService.updatePreferences", () => {
   });
 
   it("accepts a valid overnight (cross-midnight) window", async () => {
-    const { service, update, rescheduleAll } = makeService();
+    const { service, update } = makeService();
 
     // 22:00 → 04:00 = 360 effective minutes (a night-owl shift).
     await service.updatePreferences(user, {
@@ -144,7 +111,6 @@ describe("UsersService.updatePreferences", () => {
     });
 
     expect(update).toHaveBeenCalled();
-    expect(rescheduleAll).toHaveBeenCalled();
   });
 
   it("rejects a wrap window shorter than one hour", async () => {

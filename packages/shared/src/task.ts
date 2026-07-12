@@ -1,3 +1,5 @@
+import type { SchedulingMeta, SchedulingOverflow } from "./api";
+
 /** Lifecycle status of a task. */
 export type TaskStatus = "PENDING" | "DONE" | "ABANDONED";
 
@@ -8,7 +10,8 @@ export type TaskEventType =
   | "RESIZE"
   | "KEEP"
   | "COMPLETE"
-  | "ABANDON";
+  | "ABANDON"
+  | "RESCHEDULED";
 
 /** Visual states a task card can render in (see design-system.md). */
 export type TaskCardState = "fluid" | "overdue" | "conflict" | "completed";
@@ -80,7 +83,8 @@ export interface CreateTaskInput {
   note?: string | null;
   /** Task duration in minutes (always a positive multiple of 15, required). */
   durationMinutes: number;
-  deadline?: string | null;
+  /** ISO-8601 deadline. Required — the view-scoped scheduling model is gone. */
+  deadline: string;
   tags?: string[];
   /**
    * 'YYYY-MM-DD' day the task was created from, in the user's tz. Informational
@@ -88,32 +92,34 @@ export interface CreateTaskInput {
    * flexible). Defaults to today.
    */
   startDate?: string;
-  /**
-   * Calendar view active when scheduling; drives the granularity of the
-   * "schedule the next available period" overflow recovery option offered when
-   * a task can't be placed before its deadline. Defaults to "day".
-   */
-  view?: "day" | "week" | "month";
-  /**
-   * ISO-8601 start of the active view window (inclusive). When provided the
-   * backend surfaces a {@link SchedulingOverflow} when the task is placed outside
-   * [viewStart, viewEnd], not only when it is unplaced.
-   */
-  viewStart?: string;
-  /**
-   * ISO-8601 end of the active view window (exclusive).
-   */
-  viewEnd?: string;
+}
+
+/**
+ * Body for `POST /tasks/simulate`: read-only dry-run of the scheduler for a
+ * not-yet-created task. No DB write.
+ */
+export interface SimulateTaskInput {
+  durationMinutes: number;
+  deadline: string;
+  tags?: string[];
+}
+
+export interface SimulateTaskResponse {
+  schedulingMeta: SchedulingMeta;
+  /** Populated when no feasible slot exists before the deadline. */
+  overflow?: SchedulingOverflow | null;
 }
 
 /**
  * Metadata-only update: title/note/deadline/tags are saved immediately and the
- * task keeps its current slot. A `deadline` change no longer auto-cascades — the
- * frontend surfaces a confirmation toast and, if accepted, calls
- * `POST /tasks/:id/reschedule-cascade` to actually re-place the movable set. A
- * `tags` change may return a `schedulingMeta` duration-adjustment suggestion
- * (see `UpdateTaskResponse`); accepting a new duration also goes through
- * `reschedule-cascade` (with `durationMinutes` set) if it needs a new slot.
+ * task keeps its current slot — a `deadline` or `tags` change never
+ * auto-cascades. A `tags` change also applies the Phase-2 per-tag duration
+ * correction immediately (unless the user's `durationAdjustmentMode` is
+ * `"never"`) and returns it as `schedulingMeta` (see `UpdateTaskResponse`) so
+ * the frontend can surface what changed. Either kind of change can leave a
+ * conflict in its wake, which the frontend resolves by prompting for
+ * `POST /tasks/reschedule-cascade` if the task's own placement is still in
+ * the future (see `RescheduleCascadeInput`).
  */
 export interface UpdateTaskInput {
   title?: string;
@@ -134,14 +140,6 @@ export interface TaskSuggestionsResponse {
 export interface RescheduleInput {
   /** ISO-8601 start the user dropped the task at (snapped to the 15-min grid). */
   requestedStartTime: string;
-  /**
-   * ISO-8601 start of the user's currently visible view window (inclusive).
-   * When provided, `outsideViewPeriod` is computed against this window instead
-   * of the task's stored creation period.
-   */
-  viewStart?: string;
-  /** ISO-8601 end of the user's currently visible view window (exclusive). */
-  viewEnd?: string;
 }
 
 export interface ResizeInput {
@@ -155,26 +153,43 @@ export interface ResizeInput {
 }
 
 /**
- * Body for `POST /tasks/:id/reschedule-cascade`: explicitly triggers the
- * view-scoped `cascadeReschedule` for this task (see the scheduler README) —
- * used after the user confirms a deadline-change reschedule prompt, or accepts
- * a tag-driven duration-adjustment suggestion that needs a new slot.
+ * Body for `POST /tasks/reschedule-cascade`: the shared confirm-before-
+ * reschedule target for every trigger that can leave a schedule gap/conflict
+ * behind — a deadline edit, a tags-driven duration change, or a delete. No
+ * anchor task: every non-frozen task currently placed inside the window is
+ * eligible to move. The frontend computes the window (todo.md §Rescheduling
+ * Design: ±3 workdays around the affected task's current placement, clamped
+ * to `now` and re-balanced into the future when the past side is clamped)
+ * and only calls this endpoint when that task's own placement is still in
+ * the future — a past/in-progress task's edit or delete never prompts.
  */
 export interface RescheduleCascadeInput {
+  /** ISO-8601 inclusive start of the window to cascade-reschedule within. */
+  windowStart: string;
+  /** ISO-8601 exclusive end of the cascade window. */
+  windowEnd: string;
   /**
-   * ISO-8601 inclusive start of the caller's active calendar view window. Only
-   * non-manual tasks currently placed inside `[viewStart, viewEnd)` (plus this
-   * task) are eligible to move; everything else is frozen. Omit for the
-   * unscoped (full) cascade.
+   * The 3-option manual-vs-auto reschedule choice (todo.md §Rescheduling
+   * Design): when true, manually-moved tasks in the window are ALSO eligible
+   * to move ("reschedule everyone"); when false/omitted, they stay frozen
+   * ("reschedule only auto-scheduled tasks"). The third option ("do nothing")
+   * needs no backend representation — the frontend simply doesn't call this
+   * endpoint.
    */
-  viewStart?: string;
-  /** ISO-8601 exclusive end of the active calendar view window. */
-  viewEnd?: string;
-  /**
-   * When provided, applied to the task's `durationMinutes` BEFORE the cascade
-   * runs — e.g. accepting a tag-driven duration-adjustment suggestion that
-   * needs a new slot. Omit to reschedule at the task's current duration (e.g.
-   * after a deadline edit).
-   */
-  durationMinutes?: number;
+  includeManual?: boolean;
+}
+
+/**
+ * Response for `GET /tasks/deadline-options`: the six deadline quick-action
+ * chip values (see `docs/heuristic.md` / todo.md), each an ISO-8601 instant
+ * derived from `horizon.ts`'s `endOfPeriod` ceiling math relative to the
+ * request's `anchor`.
+ */
+export interface DeadlineOptionsResponse {
+  today: string;
+  tomorrow: string;
+  thisWeek: string;
+  nextWeek: string;
+  thisMonth: string;
+  noRush: string;
 }

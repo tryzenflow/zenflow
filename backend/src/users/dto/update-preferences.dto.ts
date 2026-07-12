@@ -7,10 +7,9 @@ import {
   IsString,
   Max,
   Min,
-  ValidateIf,
 } from "class-validator";
-import { IsValidTimezone } from "src/common/validators/valid-timezone.decorator";
-import { DAILY_HORIZON } from "src/common/constants";
+import { IsValidTimezone } from "../../common/validators/valid-timezone.decorator";
+import { DAILY_HORIZON } from "../../common/constants";
 import type {
   DurationAdjustmentMode,
   UpdatePreferencesInput,
@@ -31,11 +30,6 @@ export class UpdatePreferencesDto implements UpdatePreferencesInput {
   @IsString()
   @IsValidTimezone()
   timezone: string;
-
-  @IsOptional()
-  @ValidateIf((_, v) => v !== null)
-  @IsString()
-  roleArchetypeId?: string | null;
 
   /** Duration-corrector UX mode; optional (partial update). */
   @IsOptional()

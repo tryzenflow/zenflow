@@ -1,5 +1,5 @@
 import { IsEmail, IsString, Length } from "class-validator";
-import { IsValidTimezone } from "src/common/validators/valid-timezone.decorator";
+import { IsValidTimezone } from "../../common/validators/valid-timezone.decorator";
 
 export class CreateUserDto {
   @IsEmail()

@@ -8,7 +8,7 @@ import { Prisma, type User } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { PrismaService } from "../prisma/prisma.service";
 import { SchedulerService } from "../scheduler/scheduler.service";
-import { workWindowMinutes } from "../scheduler/slot";
+import { workWindowMinutes } from "../scheduler/utils/slot";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { UpdatePreferencesDto } from "./dto/update-preferences.dto";
@@ -75,7 +75,11 @@ export class UsersService {
       throw new BadRequestException("Working window must be at least 1 hour");
   }
 
-  /** Update the work schedule, then full-re-EDF all PENDING tasks. */
+  /**
+   * Update the user's work schedule + scheduling preferences. Metadata-only —
+   * it does NOT cascade-reschedule existing tasks (not requested by
+   * todo.md); the frontend's own confirm-before-reschedule flows own that.
+   */
   async updatePreferences(user: User, dto: UpdatePreferencesDto) {
     this.assertValidWindow(dto.workStart, dto.workEnd);
     const updated = await this.prisma.user.update({
@@ -85,28 +89,17 @@ export class UsersService {
         workEnd: dto.workEnd,
         workDays: dto.workDays,
         timezone: dto.timezone,
-        // Only touch the archetype when the caller explicitly sent the key,
-        // so an update that omits it does not wipe an existing value.
-        ...("roleArchetypeId" in dto
-          ? { roleArchetypeId: dto.roleArchetypeId ?? null }
-          : {}),
-        // Likewise the duration-adjustment mode is a partial update: only write
-        // it when explicitly sent so omitting it preserves the existing value.
+        // The duration-adjustment mode is a partial update: only write it when
+        // explicitly sent so omitting it preserves the existing value.
         ...(dto.durationAdjustmentMode !== undefined
           ? { durationAdjustmentMode: dto.durationAdjustmentMode }
           : {}),
       },
     });
-    // A work-hours/timezone change can invalidate every current placement, so
-    // re-EDF the full PENDING set. This is a background recompute with no
-    // "current calendar view" to bound the blast radius to (unlike the
-    // create/edit-in-view cascades), so it deliberately runs UNSCOPED (no view
-    // bounds) — the one documented exception to the view-scoped cascade rule.
-    await this.scheduler.rescheduleAll(updated);
     return updated;
   }
 
-  /** Complete onboarding: set the schedule, archetype, and the completion flag. */
+  /** Complete onboarding: set the schedule and the completion flag. */
   async completeOnboarding(user: User, dto: OnboardingDto) {
     this.assertValidWindow(dto.workStart, dto.workEnd);
     return this.prisma.user.update({
@@ -116,7 +109,6 @@ export class UsersService {
         workEnd: dto.workEnd,
         workDays: dto.workDays,
         timezone: dto.timezone,
-        roleArchetypeId: dto.roleArchetypeId ?? null,
         // Onboarding may set the mode; default 'auto' (the schema default) when
         // the client doesn't send it.
         ...(dto.durationAdjustmentMode !== undefined
@@ -148,10 +140,12 @@ export class UsersService {
 
   /**
    * Return per-tag duration multipliers for the user, sorted by sample count
-   * descending (most-used tag first). Aggregates COMPLETE/KEEP `TaskEvent` rows
-   * for all of the user's tags using the same telemetry query pattern as
-   * `SchedulerService.aggregateTagBias` — but scoped to ALL user tags rather
-   * than a specific task's tags. Tags with zero samples are omitted.
+   * descending (most-used tag first). Delegates the aggregation to
+   * `SchedulerService.aggregateTagBias` — the single source of truth for this
+   * COMPLETE/KEEP `TaskEvent` query, also used by
+   * `SchedulerService.computeDurationCorrection` — scoped here to ALL of the
+   * user's tags rather than a specific task's tags. Tags with zero samples are
+   * omitted.
    */
   async getUserTagBias(user: User): Promise<TagBiasResponse> {
     const tagRows = await this.prisma.tag.findMany({
@@ -160,59 +154,13 @@ export class UsersService {
     });
     if (tagRows.length === 0) return { tags: [] };
 
-    const wanted = new Set(tagRows.map((r) => r.name));
+    const perTag = await this.scheduler.aggregateTagBias(
+      user.id,
+      tagRows.map((r) => r.name),
+    );
 
-    // Pull recent outcome events for this user. Pair each COMPLETE/KEEP (actual
-    // duration) with the matching CREATE (estimated duration) by taskId.
-    const events = await this.prisma.taskEvent.findMany({
-      where: {
-        userId: user.id,
-        eventType: { in: ["CREATE", "COMPLETE", "KEEP"] },
-      },
-      select: {
-        taskId: true,
-        eventType: true,
-        newSnapshot: true,
-      },
-      orderBy: { occurredAt: "desc" },
-      take: 2000,
-    });
-
-    type Snap = { durationMinutes?: number; tags?: string[] };
-    const estimateByTask = new Map<string, number>();
-    const outcomes: { taskId: string; duration: number; tags: string[] }[] = [];
-
-    for (const e of events) {
-      const snap = (e.newSnapshot ?? {}) as Snap;
-      const dur =
-        typeof snap.durationMinutes === "number" ? snap.durationMinutes : null;
-      const tags = Array.isArray(snap.tags) ? snap.tags : [];
-      if (dur === null) continue;
-      if (e.eventType === "CREATE") {
-        if (!estimateByTask.has(e.taskId)) estimateByTask.set(e.taskId, dur);
-      } else {
-        outcomes.push({ taskId: e.taskId, duration: dur, tags });
-      }
-    }
-
-    // Accumulate actual÷estimated ratio per tag.
-    const acc = new Map<string, { sum: number; n: number }>();
-    for (const o of outcomes) {
-      const estimated = estimateByTask.get(o.taskId);
-      if (!estimated || estimated <= 0) continue;
-      const ratio = o.duration / estimated;
-      for (const tag of o.tags) {
-        if (!wanted.has(tag)) continue;
-        const cur = acc.get(tag) ?? { sum: 0, n: 0 };
-        cur.sum += ratio;
-        cur.n += 1;
-        acc.set(tag, cur);
-      }
-    }
-
-    const result = [...acc.entries()]
-      .filter(([, { n }]) => n > 0)
-      .map(([tag, { sum, n }]) => ({ tag, n, b: sum / n }))
+    const result = [...perTag.entries()]
+      .map(([tag, { n, b }]) => ({ tag, n, b }))
       .sort((a, b) => b.n - a.n);
 
     return { tags: result };

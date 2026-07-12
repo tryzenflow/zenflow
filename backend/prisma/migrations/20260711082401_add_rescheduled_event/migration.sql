@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "TaskEventType" ADD VALUE 'RESCHEDULED';

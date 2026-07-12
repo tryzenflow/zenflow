@@ -2,7 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { PrismaService } from "../prisma/prisma.service";
 import { PREFERENCE_MATRIX_LENGTH } from "@zenflow/shared";
-import { decayMatrix, MATRIX_HALF_LIFE_DAYS } from "./matrix-decay";
+import { decayMatrix, MATRIX_HALF_LIFE_DAYS } from "./utils/matrix-decay";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 

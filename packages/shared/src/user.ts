@@ -19,8 +19,6 @@ export interface User extends UserPreferences {
   id: string;
   name: string;
   email: string;
-  /** Phase-4 cold-start cluster id; null until set during onboarding. */
-  roleArchetypeId: string | null;
   onboardingComplete: boolean;
   createdAt: string;
   updatedAt: string;
@@ -31,8 +29,6 @@ export interface UpdatePreferencesInput {
   workEnd: number;
   workDays: number[];
   timezone: string;
-  /** Phase-4 cold-start cluster id; optional. Pass null to clear. */
-  roleArchetypeId?: string | null;
   /** Duration-corrector UX mode; optional (partial update). */
   durationAdjustmentMode?: DurationAdjustmentMode;
 }

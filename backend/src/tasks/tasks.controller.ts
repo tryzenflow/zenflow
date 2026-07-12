@@ -11,6 +11,7 @@ import {
 } from "@nestjs/common";
 import { TasksService } from "./tasks.service";
 import { CreateTaskDto } from "./dto/create-task.dto";
+import { SimulateTaskDto } from "./dto/simulate-task.dto";
 import { UpdateTaskDto } from "./dto/update-task.dto";
 import { ListTasksDto } from "./dto/list-tasks.dto";
 import { ListTaskSuggestionsDto } from "./dto/list-task-suggestions.dto";
@@ -18,10 +19,11 @@ import { RescheduleTaskDto } from "./dto/reschedule-task.dto";
 import { RescheduleCascadeDto } from "./dto/reschedule-cascade.dto";
 import { ResizeTaskDto } from "./dto/resize-task.dto";
 import { ResolveOverflowDto } from "./dto/resolve-overflow.dto";
-import { ViewBoundsDto } from "./dto/view-bounds.dto";
+import { DeadlineOptionsDto } from "./dto/deadline-options.dto";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
 import { type User } from "../../generated/prisma";
+import { deadlineOptions } from "./utils/deadline-options";
 
 @Controller("tasks")
 @UseGuards(CookieAuthGuard)
@@ -32,6 +34,12 @@ export class TasksController {
   async create(@Body() dto: CreateTaskDto, @CurrentUser() user: User) {
     const data = await this.tasksService.create(dto, user);
     return { success: true, message: "Task created", data };
+  }
+
+  @Post("simulate")
+  async simulate(@Body() dto: SimulateTaskDto, @CurrentUser() user: User) {
+    const data = await this.tasksService.simulate(dto, user);
+    return { success: true, message: "Simulated placement", data };
   }
 
   @Get()
@@ -58,6 +66,13 @@ export class TasksController {
     };
   }
 
+  // NOTE: must precede @Get(":id") so "deadline-options" isn't matched as an :id.
+  @Get("deadline-options")
+  deadlineOptions(@Query() dto: DeadlineOptionsDto, @CurrentUser() user: User) {
+    const data = deadlineOptions(dto.anchor, user);
+    return { success: true, message: "Deadline options", data };
+  }
+
   @Get(":id")
   async findOne(@Param("id") id: string, @CurrentUser() user: User) {
     const data = await this.tasksService.findById(id, user);
@@ -70,13 +85,10 @@ export class TasksController {
     @Body() dto: RescheduleTaskDto,
     @CurrentUser() user: User,
   ) {
-    const data = await this.tasksService.reschedule(
+    const data = await this.tasksService.displace(
       id,
       dto.requestedStartTime,
       user,
-      new Date(),
-      dto.viewStart,
-      dto.viewEnd,
     );
     return { success: true, message: "Task rescheduled", data };
   }
@@ -96,39 +108,28 @@ export class TasksController {
     return { success: true, message: "Task resized", data };
   }
 
+  @Post("reschedule-cascade")
+  async rescheduleCascade(
+    @Body() dto: RescheduleCascadeDto,
+    @CurrentUser() user: User,
+  ) {
+    const data = await this.tasksService.rescheduleCascade(dto, user);
+    return { success: true, message: "Tasks rescheduled", data };
+  }
+
   @Patch(":id/resolve-overflow")
   async resolveOverflow(
     @Param("id") id: string,
     @Body() dto: ResolveOverflowDto,
     @CurrentUser() user: User,
   ) {
-    const data = await this.tasksService.resolveOverflow(id, dto, user);
-    return { success: true, message: "Task rescheduled", data };
-  }
-
-  @Post(":id/reschedule-cascade")
-  async rescheduleCascade(
-    @Param("id") id: string,
-    @Body() dto: RescheduleCascadeDto,
-    @CurrentUser() user: User,
-  ) {
-    const data = await this.tasksService.rescheduleCascade(id, dto, user);
+    const data = await this.tasksService.resolveOverflow(id, dto.choice, user);
     return { success: true, message: "Task rescheduled", data };
   }
 
   @Patch(":id/complete")
-  async complete(
-    @Param("id") id: string,
-    @Query() bounds: ViewBoundsDto,
-    @CurrentUser() user: User,
-  ) {
-    const data = await this.tasksService.complete(
-      id,
-      user,
-      new Date(),
-      bounds.viewStart,
-      bounds.viewEnd,
-    );
+  async complete(@Param("id") id: string, @CurrentUser() user: User) {
+    const data = await this.tasksService.complete(id, user, new Date());
     return { success: true, message: "Task completed", data };
   }
 
@@ -143,12 +144,8 @@ export class TasksController {
   }
 
   @Delete(":id")
-  async remove(
-    @Param("id") id: string,
-    @Query() bounds: ViewBoundsDto,
-    @CurrentUser() user: User,
-  ) {
-    await this.tasksService.remove(id, user, bounds.viewStart, bounds.viewEnd);
+  async remove(@Param("id") id: string, @CurrentUser() user: User) {
+    await this.tasksService.remove(id, user);
     return { success: true, message: "Task deleted" };
   }
 }

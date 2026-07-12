@@ -1,6 +1,6 @@
 import { PREFERENCE_MATRIX_LENGTH } from "@zenflow/shared";
 import { applyPreferenceDeltas, EVENT_REWARD } from "./telemetry";
-import { PREFERENCE_LEARNING_RATE } from "./constants";
+import { PREFERENCE_LEARNING_RATE } from "../constants";
 
 /**
  * Unit tests for the PURE `applyPreferenceDeltas` helper in telemetry.ts.

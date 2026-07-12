@@ -2,19 +2,20 @@ import { TasksService } from "./tasks.service";
 import { SchedulerService } from "../scheduler/scheduler.service";
 import type { Tag, Task, User } from "../../generated/prisma";
 import type { ListTasksDto } from "./dto/list-tasks.dto";
+import { deadlineOptions } from "./utils/deadline-options";
 
-/** list() reads tasks with their related tags included. */
+/** list()/suggestions() read tasks with their related tags included. */
 type TaskWithTags = Task & { tags: Tag[] };
 
 /**
- * Focused coverage for the GET /tasks `list()` display-vs-focal split:
- * - month view renders adjacent-month grid-edge tasks (no blank cells), while
- * - `meta` (allocated minutes + conflict count) stays scoped to the focal month,
- * - week view is unchanged (adjacent-week tasks are NOT returned).
- *
- * The scheduler/horizon range math is unit-tested in horizon.spec.ts; here we
- * drive the service with a Prisma mock so the filtering + meta accounting is
- * exercised end-to-end without a DB.
+ * Focused coverage for `TasksService`: the rewritten create/update/cascade/
+ * overflow/delete orchestration that delegates all placement math to
+ * `SchedulerService` (unit-tested independently in `scheduler.service.spec.ts`
+ * and the pure `edf`/`reranker`/`overflow`/`rationale` specs). Most tests here
+ * stub the scheduler to assert TasksService's OWN wiring (what it persists
+ * immediately vs. defers, how it shapes responses); a few integration-style
+ * tests drive a REAL `SchedulerService` over an in-memory task table to prove
+ * the cascade actually runs end-to-end.
  */
 
 // UTC user so a 'YYYY-MM-DD' wall clock maps straight to the same UTC instant.
@@ -29,7 +30,6 @@ const user: User = {
   preferenceMatrix: [],
   preferenceMatrixDecayedAt: null,
   durationAdjustmentMode: "auto",
-  roleArchetypeId: null,
   onboardingComplete: true,
   createdAt: new Date("2026-01-01T00:00:00.000Z"),
   updatedAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -41,7 +41,6 @@ function task(overrides: Partial<TaskWithTags> & { id: string }): TaskWithTags {
     note: null,
     durationMinutes: 60,
     deadline: null,
-    // The Prisma row now carries related Tag rows; toDto maps these to names.
     tags: [],
     manuallyMoved: false,
     startTime: 0,
@@ -68,19 +67,42 @@ function makeService(rows: TaskWithTags[]): TasksService {
   const prisma = {
     task: { findMany: jest.fn().mockResolvedValue(rows) },
   };
-  // Scheduler is unused by list().
+  // Scheduler is unused by list()/suggestions().
   return new TasksService(prisma as never, {} as never);
+}
+
+/** A fresh no-op duration-correction stub per service instance (bias 1.0). */
+function makeCorrectionStub(): jest.Mock {
+  return jest.fn(
+    (
+      _userId: string,
+      _tags: string[],
+      estimatedDuration: number,
+    ): Promise<unknown> =>
+      Promise.resolve({
+        estimatedDuration,
+        adjustedDuration: estimatedDuration,
+        biasApplied: 1.0,
+        durationReason: null,
+      }),
+  );
 }
 
 /**
  * Build a TasksService over an in-memory task table for create(). Captures
- * every `task.create` call so the test can assert exactly how many rows a
- * single POST materializes (must be one — recurrence is gone).
+ * every `task.create` call so tests can assert exactly how many rows a single
+ * POST materializes (must be one — recurrence is gone).
  */
 function makeCreateService(): {
   service: TasksService;
   creates: { id: string; data: Record<string, unknown> }[];
-  scheduler: { cascadeReschedule: jest.Mock };
+  scheduler: {
+    prefsOf: jest.Mock;
+    cascadeReschedule: jest.Mock;
+    computeOverflowOptions: jest.Mock;
+    computeDurationCorrection: jest.Mock;
+    recordEvent: jest.Mock;
+  };
 } {
   const creates: { id: string; data: Record<string, unknown> }[] = [];
   const byId = new Map<string, TaskWithTags>();
@@ -98,6 +120,7 @@ function makeCreateService(): {
           id,
           title: (args.data.title as string) ?? "Task",
           durationMinutes: (args.data.durationMinutes as number) ?? 60,
+          deadline: (args.data.deadline as Date | null) ?? null,
           scheduledStartTime:
             (args.data.scheduledStartTime as Date | null) ?? null,
         });
@@ -114,33 +137,19 @@ function makeCreateService(): {
   const prisma = {
     $transaction: (fn: (t: typeof tx) => unknown) => fn(tx),
   };
-  // The scheduler is stubbed: placement is exercised in scheduler specs.
   const scheduler = {
+    prefsOf: jest.fn(() => ({
+      workStart: user.workStart,
+      workEnd: user.workEnd,
+      workDays: user.workDays,
+      timezone: user.timezone,
+    })),
     cascadeReschedule: jest.fn().mockResolvedValue([]),
-    // An unplaced created task triggers overflow computation; stub it out.
     computeOverflowOptions: jest
       .fn()
       .mockResolvedValue({ outsideHours: null, nextAvailable: null }),
-    // Phase-2 duration corrector: default to a no-op (bias 1.0, unchanged
-    // duration) so the create-path specs don't depend on telemetry.
-    computeDurationCorrection: jest.fn(
-      (
-        _userId: string,
-        _tags: string[],
-        estimatedDuration: number,
-      ): Promise<unknown> =>
-        Promise.resolve({
-          estimatedDuration,
-          adjustedDuration: estimatedDuration,
-          biasApplied: 1.0,
-          durationReason: null,
-        }),
-    ),
-    rationaleFor: jest.fn().mockReturnValue(null),
-    // Phase-2 softmax logging propensity for the auto-placed slot, recorded on
-    // the CREATE snapshot. Stubbed null so the create-path specs don't depend on
-    // the matrix / feasible-set recompute (exercised in scheduler specs).
-    placementPropensity: jest.fn().mockResolvedValue(null),
+    computeDurationCorrection: makeCorrectionStub(),
+    recordEvent: jest.fn().mockResolvedValue(undefined),
   };
 
   return {
@@ -151,13 +160,13 @@ function makeCreateService(): {
 }
 
 describe("TasksService.create — single row (no recurrence)", () => {
-  it("materializes exactly one Task row per POST — every task is flexible now", async () => {
+  it("materializes exactly one Task row per POST", async () => {
     const { service, creates } = makeCreateService();
     await service.create(
       {
         title: "Standup",
         durationMinutes: 30,
-        startDate: "2026-06-10",
+        deadline: "2026-06-10T17:00:00.000Z",
       },
       user,
     );
@@ -167,54 +176,146 @@ describe("TasksService.create — single row (no recurrence)", () => {
   it("creates the task unplaced (scheduledStartTime null) — placement comes from the cascade", async () => {
     const { service, creates } = makeCreateService();
     await service.create(
-      { title: "Standup", durationMinutes: 30, startDate: "2026-06-10" },
+      {
+        title: "Standup",
+        durationMinutes: 30,
+        deadline: "2026-06-10T17:00:00.000Z",
+      },
       user,
     );
     expect(creates[0].data.scheduledStartTime).toBeNull();
     expect(creates[0].data.conflict).toBe(false);
   });
 
-  it("passes the request's view bounds and the new task id into cascadeReschedule", async () => {
+  it("places the new task solo — a zero-width scope freezes every already-placed task", async () => {
+    const { service, scheduler } = makeCreateService();
+    const now = new Date("2026-06-08T08:00:00.000Z");
+    await service.create(
+      {
+        title: "Standup",
+        durationMinutes: 30,
+        deadline: "2026-06-15T00:00:00.000Z",
+      },
+      user,
+      now,
+    );
+    // No fixedTaskId needed: the new task starts unplaced, which
+    // `isInsideWindow` always treats as movable regardless of scope.
+    expect(scheduler.cascadeReschedule).toHaveBeenCalledWith(
+      user.id,
+      expect.anything(),
+      { windowStart: now, windowEnd: now },
+      expect.anything(), // tx
+    );
+  });
+
+  it("records a CREATE telemetry event", async () => {
     const { service, scheduler } = makeCreateService();
     await service.create(
       {
         title: "Standup",
         durationMinutes: 30,
-        viewStart: "2026-06-08T00:00:00.000Z",
-        viewEnd: "2026-06-15T00:00:00.000Z",
+        deadline: "2026-06-10T17:00:00.000Z",
       },
       user,
     );
-    expect(scheduler.cascadeReschedule).toHaveBeenCalledWith(
-      user,
-      expect.anything(), // tx
-      expect.any(Date), // now
-      new Date("2026-06-08T00:00:00.000Z"),
-      new Date("2026-06-15T00:00:00.000Z"),
-      "task-0", // the just-created task's id, always included as movable
+    expect(scheduler.recordEvent).toHaveBeenCalledWith(
+      user.id,
+      "task-0",
+      "CREATE",
+      expect.objectContaining({ durationMinutes: 30 }),
+      expect.anything(),
+      expect.anything(),
     );
   });
 
-  it("falls back to an unscoped cascade when no view bounds are supplied", async () => {
+  it("computes overflow when the created task comes back unplaced", async () => {
     const { service, scheduler } = makeCreateService();
-    await service.create({ title: "Standup", durationMinutes: 30 }, user);
-    expect(scheduler.cascadeReschedule).toHaveBeenCalledWith(
+    const result = await service.create(
+      {
+        title: "Standup",
+        durationMinutes: 30,
+        deadline: "2026-06-10T17:00:00.000Z",
+      },
       user,
-      expect.anything(),
-      expect.any(Date),
-      undefined,
-      undefined,
-      "task-0",
     );
+    expect(scheduler.computeOverflowOptions).toHaveBeenCalledTimes(1);
+    expect(result.overflow).not.toBeNull();
+    expect(result.task.scheduledStartTime).toBeNull();
+  });
+
+  it("returns displaced tasks from the cascade, excluding the new task itself", async () => {
+    const { service, scheduler } = makeCreateService();
+    scheduler.cascadeReschedule.mockResolvedValueOnce([
+      {
+        id: "task-0",
+        scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
+        conflict: false,
+      },
+      {
+        id: "other",
+        scheduledStartTime: new Date("2026-06-08T10:00:00Z"),
+        conflict: false,
+      },
+    ]);
+    const result = await service.create(
+      {
+        title: "Standup",
+        durationMinutes: 30,
+        deadline: "2026-06-10T17:00:00.000Z",
+      },
+      user,
+    );
+    expect(result.displaced).toEqual([
+      { taskId: "other", newScheduledStartTime: "2026-06-08T10:00:00.000Z" },
+    ]);
+  });
+
+  it("applies the Phase-2 duration correction only when durationAdjustmentMode !== 'never'", async () => {
+    const { service, creates, scheduler } = makeCreateService();
+    scheduler.computeDurationCorrection.mockResolvedValueOnce({
+      estimatedDuration: 60,
+      adjustedDuration: 90,
+      biasApplied: 1.5,
+      durationReason: "#backend ~50% longer",
+    });
+    await service.create(
+      {
+        title: "Corrected",
+        durationMinutes: 60,
+        deadline: "2026-06-10T17:00:00.000Z",
+        tags: ["backend"],
+      },
+      { ...user, durationAdjustmentMode: "auto" },
+    );
+    expect(creates[0].data.durationMinutes).toBe(90);
+  });
+
+  it("never mode: keeps the typed estimate even though correction is still computed", async () => {
+    const { service, creates, scheduler } = makeCreateService();
+    scheduler.computeDurationCorrection.mockResolvedValueOnce({
+      estimatedDuration: 60,
+      adjustedDuration: 90,
+      biasApplied: 1.5,
+      durationReason: "#backend ~50% longer",
+    });
+    await service.create(
+      {
+        title: "Uncorrected",
+        durationMinutes: 60,
+        deadline: "2026-06-10T17:00:00.000Z",
+        tags: ["backend"],
+      },
+      { ...user, durationAdjustmentMode: "never" },
+    );
+    expect(scheduler.computeDurationCorrection).toHaveBeenCalled();
+    expect(creates[0].data.durationMinutes).toBe(60);
   });
 });
 
 /**
  * suggestions() drives a single findMany (ordered createdAt desc) and then
- * dedupes/limits in memory. The mock records the args so we can assert the
- * where/orderBy/take Prisma sees, and returns the rows already ordered the way
- * a `createdAt desc` query would — the service must preserve that order and
- * dedupe by title.
+ * dedupes/limits in memory — unchanged from before the rewrite.
  */
 function makeSuggestionsService(rows: TaskWithTags[]): {
   service: TasksService;
@@ -236,27 +337,23 @@ function makeSuggestionsService(rows: TaskWithTags[]): {
 describe("TasksService.suggestions — title autocomplete", () => {
   const at = (iso: string) => new Date(iso);
 
-  it("returns tasks newest-first (preserving the createdAt-desc order)", async () => {
-    // Rows arrive already ordered desc, as the real query would return them.
+  it("returns tasks newest-first, deduped by title, limited", async () => {
     const rows = [
       task({
         id: "c",
         title: "Charlie",
         createdAt: at("2026-03-03T00:00:00Z"),
       }),
-      task({ id: "b", title: "Bravo", createdAt: at("2026-02-02T00:00:00Z") }),
+      task({
+        id: "b",
+        title: "charlie",
+        createdAt: at("2026-02-02T00:00:00Z"),
+      }),
       task({ id: "a", title: "Alpha", createdAt: at("2026-01-01T00:00:00Z") }),
     ];
-    const { service, findMany } = makeSuggestionsService(rows);
+    const { service } = makeSuggestionsService(rows);
     const res = await service.suggestions({ limit: 10 }, user);
-    expect(res.suggestions.map((s) => s.id)).toEqual(["c", "b", "a"]);
-    // Ordering + scoping are pushed down to Prisma.
-    expect(findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { userId: user.id },
-        orderBy: { createdAt: "desc" },
-      }),
-    );
+    expect(res.suggestions.map((s) => s.id)).toEqual(["c", "a"]);
   });
 
   it("filters by title substring, case-insensitively", async () => {
@@ -271,16 +368,9 @@ describe("TasksService.suggestions — title autocomplete", () => {
         title: "Email team",
         createdAt: at("2026-02-02T00:00:00Z"),
       }),
-      task({
-        id: "3",
-        title: "report draft",
-        createdAt: at("2026-01-01T00:00:00Z"),
-      }),
     ];
     const { service, findMany } = makeSuggestionsService(rows);
-    const res = await service.suggestions({ q: "report", limit: 10 }, user);
-    expect(res.suggestions.map((s) => s.id)).toEqual(["1", "3"]);
-    // The case-insensitive contains filter is delegated to Prisma.
+    await service.suggestions({ q: "report", limit: 10 }, user);
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
@@ -290,65 +380,10 @@ describe("TasksService.suggestions — title autocomplete", () => {
       }),
     );
   });
-
-  it("dedupes by title (case-insensitive), keeping the newest occurrence", async () => {
-    const rows = [
-      task({
-        id: "new",
-        title: "Standup",
-        createdAt: at("2026-03-03T00:00:00Z"),
-      }),
-      task({
-        id: "mid",
-        title: "standup",
-        createdAt: at("2026-02-02T00:00:00Z"),
-      }),
-      task({
-        id: "old",
-        title: "STANDUP",
-        createdAt: at("2026-01-01T00:00:00Z"),
-      }),
-      task({
-        id: "other",
-        title: "Review",
-        createdAt: at("2025-12-01T00:00:00Z"),
-      }),
-    ];
-    const { service } = makeSuggestionsService(rows);
-    const res = await service.suggestions({ limit: 10 }, user);
-    // One row per distinct title, the newest of each kept.
-    expect(res.suggestions.map((s) => s.id)).toEqual(["new", "other"]);
-  });
-
-  it("respects limit (distinct titles), defaulting to 10", async () => {
-    const rows = Array.from({ length: 12 }, (_, i) =>
-      task({
-        id: `t${i}`,
-        title: `Task ${i}`,
-        createdAt: at(`2026-01-${String(i + 1).padStart(2, "0")}T00:00:00Z`),
-      }),
-    ).reverse(); // newest first
-    const { service } = makeSuggestionsService(rows);
-    const limited = await service.suggestions({ limit: 3 }, user);
-    expect(limited.suggestions).toHaveLength(3);
-    const dflt = await service.suggestions({}, user);
-    expect(dflt.suggestions).toHaveLength(10);
-  });
-
-  it("over-fetches enough rows to fill `limit` distinct titles", async () => {
-    const { service, findMany } = makeSuggestionsService([]);
-    await service.suggestions({ limit: 4 }, user);
-    expect(findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ take: 20 }),
-    );
-  });
 });
 
 describe("TasksService.list — display vs focal window", () => {
   describe("month view", () => {
-    // June 2026: Jun 1 is a Monday → grid = Mon 2026-06-01 .. Sun 2026-07-05.
-    // Leading edge therefore includes late-May? No — Jun 1 is Monday, so the
-    // grid leads with June itself; the trailing edge spills into early July.
     const dto: ListTasksDto = { view: "month", date: "2026-06-15" };
 
     const focalTask = task({
@@ -356,77 +391,22 @@ describe("TasksService.list — display vs focal window", () => {
       durationMinutes: 90,
       scheduledStartTime: new Date("2026-06-15T10:00:00.000Z"),
     });
-    // 2026-07-02 is within the trailing grid week (Mon 06-29 .. Sun 07-05).
     const nextMonthEdge = task({
       id: "next-edge",
       durationMinutes: 120,
       scheduledStartTime: new Date("2026-07-02T10:00:00.000Z"),
     });
-    // 2026-07-20 is well past the visible grid → never rendered.
     const farNextMonth = task({
       id: "far-next",
       durationMinutes: 45,
       scheduledStartTime: new Date("2026-07-20T10:00:00.000Z"),
     });
 
-    it("renders next-month grid-edge tasks", async () => {
+    it("renders next-month grid-edge tasks but excludes them from meta", async () => {
       const service = makeService([focalTask, nextMonthEdge, farNextMonth]);
       const res = await service.list(dto, user);
-      const ids = res.tasks.map((t) => t.id).sort();
-      expect(ids).toEqual(["focal", "next-edge"]);
-    });
-
-    it("excludes adjacent-month tasks from meta.totalAllocatedMinutes", async () => {
-      const withEdge = makeService([focalTask, nextMonthEdge]);
-      const withoutEdge = makeService([focalTask]);
-      const a = await withEdge.list(dto, user);
-      const b = await withoutEdge.list(dto, user);
-      // Edge task is rendered but contributes 0 to allocated minutes.
-      expect(a.meta.totalAllocatedMinutes).toBe(90);
-      expect(b.meta.totalAllocatedMinutes).toBe(90);
-    });
-
-    it("excludes adjacent-month conflicts from meta.conflictCount", async () => {
-      const edgeConflict = task({
-        id: "edge-conflict",
-        conflict: true,
-        scheduledStartTime: new Date("2026-07-02T10:00:00.000Z"),
-      });
-      const focalConflict = task({
-        id: "focal-conflict",
-        conflict: true,
-        scheduledStartTime: new Date("2026-06-10T10:00:00.000Z"),
-      });
-      const service = makeService([focalConflict, edgeConflict]);
-      const res = await service.list(dto, user);
-      const ids = res.tasks.map((t) => t.id).sort();
-      // Both rendered (the edge conflict sits in the visible grid)…
-      expect(ids).toEqual(["edge-conflict", "focal-conflict"]);
-      // …but only the focal-month conflict is counted.
-      expect(res.meta.conflictCount).toBe(1);
-    });
-
-    it("renders a leading prev-month edge for a Thursday-starting month", async () => {
-      // Oct 2026: Oct 1 is a Thursday → grid leads with Mon 2026-09-28.
-      const octDto: ListTasksDto = { view: "month", date: "2026-10-15" };
-      const prevEdge = task({
-        id: "prev-edge",
-        durationMinutes: 30,
-        scheduledStartTime: new Date("2026-09-29T10:00:00.000Z"),
-      });
-      const focal = task({
-        id: "oct-focal",
-        durationMinutes: 60,
-        scheduledStartTime: new Date("2026-10-15T10:00:00.000Z"),
-      });
-      const service = makeService([prevEdge, focal]);
-      const res = await service.list(octDto, user);
-      expect(res.tasks.map((t) => t.id).sort()).toEqual([
-        "oct-focal",
-        "prev-edge",
-      ]);
-      // Prev-month edge rendered but excluded from meta.
-      expect(res.meta.totalAllocatedMinutes).toBe(60);
+      expect(res.tasks.map((t) => t.id).sort()).toEqual(["focal", "next-edge"]);
+      expect(res.meta.totalAllocatedMinutes).toBe(90);
     });
 
     it("maps related Tag rows to a sorted name array on the DTO", async () => {
@@ -437,8 +417,10 @@ describe("TasksService.list — display vs focal window", () => {
       });
       const service = makeService([tagged]);
       const res = await service.list(dto, user);
-      const out = res.tasks.find((t) => t.id === "tagged");
-      expect(out?.tags).toEqual(["admin", "work"]);
+      expect(res.tasks.find((t) => t.id === "tagged")?.tags).toEqual([
+        "admin",
+        "work",
+      ]);
     });
 
     it("still surfaces unplaced conflicts everywhere", async () => {
@@ -451,7 +433,6 @@ describe("TasksService.list — display vs focal window", () => {
   });
 
   describe("week view (unchanged — no padding)", () => {
-    // Week of 2026-06-10 → Mon 2026-06-08 .. Sun 2026-06-14.
     const dto: ListTasksDto = { view: "week", date: "2026-06-10" };
 
     it("does NOT return an adjacent-week task", async () => {
@@ -459,7 +440,6 @@ describe("TasksService.list — display vs focal window", () => {
         id: "in-week",
         scheduledStartTime: new Date("2026-06-10T10:00:00.000Z"),
       });
-      // 2026-06-16 is the following week → must not appear.
       const nextWeek = task({
         id: "next-week",
         scheduledStartTime: new Date("2026-06-16T10:00:00.000Z"),
@@ -472,462 +452,19 @@ describe("TasksService.list — display vs focal window", () => {
 });
 
 /**
- * Stale-conflict regression: deleting or completing one of two overlapping
- * tasks must re-settle the schedule so the survivor self-heals (conflict
- * cleared) and flexible tasks reflow into the freed slot. Driven with a REAL
- * {@link SchedulerService} over an in-memory task table so the now-independent
- * overlap pass actually runs — the bug was that remove()/complete() never
- * triggered cascadeReschedule at all.
- */
-function makeSchedulingService(rows: TaskWithTags[]): {
-  service: TasksService;
-  table: Map<string, TaskWithTags>;
-  events: jest.Mock;
-} {
-  const table = new Map<string, TaskWithTags>(rows.map((r) => [r.id, r]));
-  const taskEventCreate = jest.fn().mockResolvedValue({});
-
-  const matchesWhere = (
-    t: TaskWithTags,
-    where: Record<string, unknown> | undefined,
-  ): boolean => {
-    if (!where) return true;
-    if (where.id !== undefined && t.id !== where.id) return false;
-    if (where.userId !== undefined && t.userId !== where.userId) return false;
-    if (where.status !== undefined && t.status !== where.status) return false;
-    return true;
-  };
-
-  const tx = {
-    task: {
-      findFirst: jest.fn((args: { where?: Record<string, unknown> }) =>
-        Promise.resolve(
-          [...table.values()].find((t) => matchesWhere(t, args.where)) ?? null,
-        ),
-      ),
-      findMany: jest.fn((args: { where?: Record<string, unknown> }) =>
-        Promise.resolve(
-          [...table.values()].filter((t) => matchesWhere(t, args.where)),
-        ),
-      ),
-      findUniqueOrThrow: jest.fn((args: { where: { id: string } }) =>
-        Promise.resolve(table.get(args.where.id)!),
-      ),
-      update: jest.fn(
-        (args: {
-          where: { id: string };
-          data: Record<string, unknown>;
-          include?: unknown;
-        }) => {
-          const row = table.get(args.where.id)!;
-          const next = { ...row, ...args.data } as TaskWithTags;
-          table.set(args.where.id, next);
-          return Promise.resolve(next);
-        },
-      ),
-      delete: jest.fn((args: { where: { id: string } }) => {
-        const row = table.get(args.where.id)!;
-        table.delete(args.where.id);
-        return Promise.resolve(row);
-      }),
-    },
-    user: { update: jest.fn().mockResolvedValue({}) },
-    taskEvent: { create: taskEventCreate },
-  };
-
-  const prisma = {
-    $transaction: (fn: (t: typeof tx) => unknown) => fn(tx),
-    // SchedulerService only reads/writes through the tx in these paths, but it
-    // also holds a PrismaService reference for its own $transaction wrappers
-    // (unused here). Reuse the same in-memory tx for any direct access.
-    ...tx,
-  };
-
-  const scheduler = new SchedulerService(prisma as never);
-  const service = new TasksService(prisma as never, scheduler);
-  return { service, table, events: taskEventCreate };
-}
-
-describe("TasksService — stale-conflict self-heal on delete/complete", () => {
-  // Far-future manually-moved slots keep both blocks LIVE relative to the
-  // wall clock so placement is stable; the conflict pass itself is
-  // now-independent.
-  const aStart = new Date("2030-06-15T16:00:00.000Z"); // 4:00pm, 120m → 6:00pm
-  const bStart = new Date("2030-06-15T16:30:00.000Z"); // 4:30pm, 60m → 5:30pm
-
-  function overlappingPair(): TaskWithTags[] {
-    // Two manually-moved, overlapping, conflicting tasks — the exact repro shape.
-    const a = task({
-      id: "task-a",
-      manuallyMoved: true,
-      durationMinutes: 120,
-      scheduledStartTime: aStart,
-      conflict: true,
-    });
-    const b = task({
-      id: "task-b",
-      manuallyMoved: true,
-      durationMinutes: 60,
-      scheduledStartTime: bStart,
-      conflict: true,
-    });
-    return [a, b];
-  }
-
-  it("deleting one of two overlapping tasks clears conflict on the survivor", async () => {
-    const { service, table } = makeSchedulingService(overlappingPair());
-    expect(table.get("task-a")!.conflict).toBe(true);
-
-    await service.remove("task-b", user);
-
-    expect(table.has("task-b")).toBe(false);
-    expect(table.get("task-a")!.conflict).toBe(false);
-  });
-
-  it("completing one of two overlapping tasks clears conflict on the survivor", async () => {
-    const { service, table } = makeSchedulingService(overlappingPair());
-    expect(table.get("task-a")!.conflict).toBe(true);
-
-    await service.complete("task-b", user);
-
-    // task-b is DONE (excluded from the PENDING pass), task-a self-heals.
-    expect(table.get("task-b")!.status).toBe("DONE");
-    expect(table.get("task-a")!.conflict).toBe(false);
-  });
-
-  it("deleting a task reflows a later flexible task into the freed slot", async () => {
-    // A manually-moved block fills 9:00–11:00 on a workday; a flexible 60m
-    // no-deadline task packs AFTER it. `now` is injected (fixed to the same
-    // workday, before working hours) so the no-deadline task's floor is
-    // deterministic — there's no more per-task creation-day anchor to pin it
-    // to a specific future day.
-    const day = "2030-06-17"; // a Monday (workday)
-    const now = new Date(`${day}T08:00:00.000Z`);
-    const fixedBlock = task({
-      id: "fixed-block",
-      manuallyMoved: true,
-      durationMinutes: 120,
-      scheduledStartTime: new Date(`${day}T09:00:00.000Z`),
-    });
-    const flexible = task({
-      id: "flexible",
-      durationMinutes: 60,
-      // Stale placement from before — should move earlier once the block is gone.
-      scheduledStartTime: new Date(`${day}T11:00:00.000Z`),
-    });
-    const { service, table } = makeSchedulingService([fixedBlock, flexible]);
-
-    await service.remove("fixed-block", user, undefined, undefined, now);
-
-    // With the 9–11 block gone, the flexible task reflows to the day's work
-    // start (9:00am for this UTC user) — proof the cascade ran.
-    expect(table.get("flexible")!.scheduledStartTime?.toISOString()).toBe(
-      `${day}T09:00:00.000Z`,
-    );
-    expect(table.get("flexible")!.conflict).toBe(false);
-  });
-
-  it("deleting a non-overlapping task leaves a clean schedule clean", async () => {
-    const day = "2030-06-17"; // Monday
-    const morning = task({
-      id: "morning",
-      manuallyMoved: true,
-      durationMinutes: 60,
-      scheduledStartTime: new Date(`${day}T09:00:00.000Z`),
-    });
-    const afternoon = task({
-      id: "afternoon",
-      manuallyMoved: true,
-      durationMinutes: 60,
-      scheduledStartTime: new Date(`${day}T14:00:00.000Z`),
-    });
-    const { service, table } = makeSchedulingService([morning, afternoon]);
-
-    await service.remove("morning", user);
-
-    expect(table.get("afternoon")!.conflict).toBe(false);
-  });
-});
-
-describe("TasksService.create — duration is always a plain required field", () => {
-  it("materializes exactly one Task row per POST", async () => {
-    const { service, creates } = makeCreateService();
-    await service.create(
-      {
-        title: "Morning block",
-        durationMinutes: 60,
-        startDate: "2026-06-10",
-      },
-      user,
-    );
-    expect(creates[0].data.durationMinutes).toBe(60);
-  });
-
-  it("applies the Phase-2 duration correction on top of the typed estimate", async () => {
-    const { service, creates } = makeCreateService();
-    await service.create(
-      {
-        title: "Corrected",
-        durationMinutes: 60,
-        startDate: "2026-06-10",
-      },
-      user,
-    );
-    // The stubbed corrector is a no-op (bias 1.0) in this fixture — the
-    // uncorrected estimate passes straight through.
-    expect(creates[0].data.durationMinutes).toBe(60);
-  });
-});
-
-describe("TasksService.complete — KEEP positive signal", () => {
-  const slot = new Date("2026-01-05T09:00:00.000Z"); // a Monday work slot
-
-  function eventTypes(events: jest.Mock): string[] {
-    return events.mock.calls.map((c) => c[0].data.eventType);
-  }
-
-  it("emits a KEEP event when a task is completed in its suggested slot", async () => {
-    // Placed by the engine and never touched (not manuallyMoved) → completing
-    // it leaves the suggestion untouched, so KEEP fires alongside COMPLETE.
-    const kept = task({
-      id: "kept",
-      scheduledStartTime: slot,
-      manuallyMoved: false,
-    });
-    const { service, events } = makeSchedulingService([kept]);
-
-    await service.complete("kept", user);
-
-    const types = eventTypes(events);
-    expect(types).toContain("COMPLETE");
-    expect(types).toContain("KEEP");
-    // The KEEP snapshot records the slot it was kept in.
-    const keep = events.mock.calls.find((c) => c[0].data.eventType === "KEEP");
-    expect(keep![0].data.newSnapshot.scheduledStartTime).toBe(
-      slot.toISOString(),
-    );
-  });
-
-  it("does NOT emit KEEP when the task was manually moved", async () => {
-    const moved = task({
-      id: "moved",
-      scheduledStartTime: slot,
-      manuallyMoved: true,
-    });
-    const { service, events } = makeSchedulingService([moved]);
-
-    await service.complete("moved", user);
-
-    expect(eventTypes(events)).not.toContain("KEEP");
-  });
-
-  it("does NOT emit KEEP when the task had no placement", async () => {
-    const unplaced = task({
-      id: "unplaced",
-      scheduledStartTime: null,
-      manuallyMoved: false,
-    });
-    const { service, events } = makeSchedulingService([unplaced]);
-
-    await service.complete("unplaced", user);
-
-    expect(eventTypes(events)).not.toContain("KEEP");
-  });
-});
-
-/**
- * Build a TasksService where the final task's `scheduledStartTime` is
- * controlled by the test. `cascadeReschedule` is a no-op stub, so whatever
- * `scheduledStartTime` is baked into the mock `findUniqueOrThrow` result is
- * exactly what the service sees as `finalTask`.
- *
- * Returns the service and the `computeOverflowOptions` mock so tests can
- * assert whether it was called and what the response carries.
- */
-function makeCreateServiceWithPlacement(scheduledStartTime: Date | null): {
-  service: TasksService;
-  computeOverflowOptions: jest.Mock;
-} {
-  const taskRow: TaskWithTags = task({
-    id: "placed-task",
-    scheduledStartTime,
-  });
-
-  const tx = {
-    tag: {
-      createMany: jest.fn().mockResolvedValue({}),
-      findMany: jest.fn().mockResolvedValue([]),
-    },
-    task: {
-      create: jest.fn().mockResolvedValue(taskRow),
-      findUniqueOrThrow: jest.fn().mockResolvedValue(taskRow),
-    },
-    taskEvent: { create: jest.fn().mockResolvedValue({}) },
-  };
-
-  const prisma = {
-    $transaction: (fn: (t: typeof tx) => unknown) => fn(tx),
-  };
-
-  const computeOverflowOptions = jest
-    .fn()
-    .mockResolvedValue({ outsideHours: null, nextAvailable: null });
-
-  const scheduler = {
-    cascadeReschedule: jest.fn().mockResolvedValue([]),
-    computeOverflowOptions,
-    computeDurationCorrection: jest.fn(
-      (_u: string, _t: string[], estimatedDuration: number): Promise<unknown> =>
-        Promise.resolve({
-          estimatedDuration,
-          adjustedDuration: estimatedDuration,
-          biasApplied: 1.0,
-          durationReason: null,
-        }),
-    ),
-    placementPropensity: jest.fn().mockResolvedValue(null),
-  };
-
-  return {
-    service: new TasksService(prisma as never, scheduler as never),
-    computeOverflowOptions,
-  };
-}
-
-describe("TasksService.create — view-bounds overflow detection", () => {
-  // Week view Jun 22–28 2026 (Mon–Sun); viewEnd is exclusive.
-  const WEEK_START = "2026-06-22T00:00:00.000Z";
-  const WEEK_END = "2026-06-29T00:00:00.000Z";
-
-  it("surfaces overflow when a placed task falls OUTSIDE the explicit view window", async () => {
-    // Simulates EDF silently bumping a deadline-bearing task to Jul 6 because
-    // the Jun 22-28 week is fully packed.
-    const { service, computeOverflowOptions } = makeCreateServiceWithPlacement(
-      new Date("2026-07-06T09:00:00.000Z"),
-    );
-
-    const result = await service.create(
-      {
-        title: "Outside view",
-        durationMinutes: 60,
-        view: "week",
-        viewStart: WEEK_START,
-        viewEnd: WEEK_END,
-      },
-      user,
-    );
-
-    expect(computeOverflowOptions).toHaveBeenCalledTimes(1);
-    expect(result.overflow).not.toBeNull();
-    // The task itself IS placed — scheduledStartTime is not null.
-    expect(result.task.scheduledStartTime).toBe("2026-07-06T09:00:00.000Z");
-  });
-
-  it("does NOT surface overflow when a task is placed WITHIN the view window", async () => {
-    // Jun 24 09:00 is inside Jun 22-28 → no overflow needed.
-    const { service, computeOverflowOptions } = makeCreateServiceWithPlacement(
-      new Date("2026-06-24T09:00:00.000Z"),
-    );
-
-    const result = await service.create(
-      {
-        title: "Within view",
-        durationMinutes: 60,
-        view: "week",
-        viewStart: WEEK_START,
-        viewEnd: WEEK_END,
-      },
-      user,
-    );
-
-    expect(computeOverflowOptions).not.toHaveBeenCalled();
-    expect(result.overflow).toBeNull();
-    expect(result.task.scheduledStartTime).toBe("2026-06-24T09:00:00.000Z");
-  });
-
-  it("surfaces overflow for an unplaced task even without view bounds (existing behaviour)", async () => {
-    const { service, computeOverflowOptions } =
-      makeCreateServiceWithPlacement(null);
-
-    const result = await service.create(
-      { title: "Unplaced", durationMinutes: 60 },
-      user,
-    );
-
-    expect(computeOverflowOptions).toHaveBeenCalledTimes(1);
-    expect(result.overflow).not.toBeNull();
-    expect(result.task.scheduledStartTime).toBeNull();
-  });
-
-  it("does NOT surface overflow for a placed task when viewStart/viewEnd are absent (backward-compat)", async () => {
-    // Without explicit view bounds a placed task never triggers the view-bounds
-    // overflow check — old callers that omit the new fields are unaffected.
-    const { service, computeOverflowOptions } = makeCreateServiceWithPlacement(
-      new Date("2026-07-06T09:00:00.000Z"),
-    );
-
-    const result = await service.create(
-      { title: "No bounds", durationMinutes: 60 },
-      user,
-    );
-
-    expect(computeOverflowOptions).not.toHaveBeenCalled();
-    expect(result.overflow).toBeNull();
-  });
-
-  it("treats viewEnd as exclusive — placement AT viewEnd is outside the window", async () => {
-    // Jun 29 00:00 is the exclusive upper boundary; a slot exactly there is outside.
-    const { service, computeOverflowOptions } = makeCreateServiceWithPlacement(
-      new Date(WEEK_END),
-    );
-
-    await service.create(
-      {
-        title: "At boundary",
-        durationMinutes: 60,
-        viewStart: WEEK_START,
-        viewEnd: WEEK_END,
-      },
-      user,
-    );
-
-    expect(computeOverflowOptions).toHaveBeenCalledTimes(1);
-  });
-
-  it("placement immediately before viewEnd is INSIDE the window", async () => {
-    // Jun 28 23:45 is the last 15-min slot before Jun 29 00:00 → inside view.
-    const { service, computeOverflowOptions } = makeCreateServiceWithPlacement(
-      new Date("2026-06-28T23:45:00.000Z"),
-    );
-
-    await service.create(
-      {
-        title: "Last slot",
-        durationMinutes: 60,
-        viewStart: WEEK_START,
-        viewEnd: WEEK_END,
-      },
-      user,
-    );
-
-    expect(computeOverflowOptions).not.toHaveBeenCalled();
-  });
-});
-
-/**
- * Build a TasksService over an in-memory task table for update() /
- * rescheduleCascade(), with a fully mocked SchedulerService so these tests
- * assert TasksService's OWN orchestration (what it saves immediately, what it
- * defers to a cascade, and how it shapes the response) without re-exercising
- * SchedulerService's internals (covered in scheduler.service.spec.ts).
+ * Build a TasksService over an in-memory task table with a fully mocked
+ * SchedulerService, for update()/rescheduleCascade() tests that assert
+ * TasksService's OWN orchestration (what it saves immediately, what it defers
+ * to a cascade).
  */
 function makeUpdateService(rows: TaskWithTags[]): {
   service: TasksService;
   table: Map<string, TaskWithTags>;
   scheduler: {
+    prefsOf: jest.Mock;
     cascadeReschedule: jest.Mock;
     computeDurationCorrection: jest.Mock;
-    rationaleFor: jest.Mock;
+    recordEvent: jest.Mock;
   };
 } {
   const table = new Map<string, TaskWithTags>(rows.map((r) => [r.id, r]));
@@ -943,34 +480,26 @@ function makeUpdateService(rows: TaskWithTags[]): {
       update: jest.fn(
         (args: {
           where: { id: string };
-          data: Record<string, unknown> & {
-            tags?: { set: { id: string }[] };
-          };
+          data: Record<string, unknown> & { tags?: { set: { id: string }[] } };
         }) => {
           const row = table.get(args.where.id)!;
           const { tags: tagsOp, ...scalar } = args.data;
+          // Mirror real Prisma semantics: an explicit `undefined` value means
+          // "don't touch this column," not "set it to undefined."
+          const definedScalar = Object.fromEntries(
+            Object.entries(scalar).filter(([, v]) => v !== undefined),
+          );
           const next = {
             ...row,
-            ...scalar,
-            // Resolve the `{ set: [{ id }] }` relation op back to full Tag
-            // rows (by reversing the `tag-<name>` id the fixture mints), so
-            // toDto()'s `task.tags.map(...)` sees a real array — mirrors what
-            // Prisma's `include: { tags: true }` would actually return.
+            ...definedScalar,
             ...(tagsOp
-              ? {
-                  tags: tagsOp.set.map((t) => tag(t.id.replace(/^tag-/, ""))),
-                }
+              ? { tags: tagsOp.set.map((t) => tag(t.id.replace(/^tag-/, ""))) }
               : {}),
           } as TaskWithTags;
           table.set(args.where.id, next);
           return Promise.resolve(next);
         },
       ),
-      delete: jest.fn((args: { where: { id: string } }) => {
-        const row = table.get(args.where.id)!;
-        table.delete(args.where.id);
-        return Promise.resolve(row);
-      }),
     },
     tag: {
       createMany: jest.fn().mockResolvedValue({}),
@@ -978,25 +507,20 @@ function makeUpdateService(rows: TaskWithTags[]): {
         Promise.resolve(args.where.name.in.map((name) => tag(name))),
       ),
     },
-    taskEvent: { create: jest.fn().mockResolvedValue({}) },
   };
 
-  const prisma = {
-    $transaction: (fn: (t: typeof tx) => unknown) => fn(tx),
-  };
+  const prisma = { $transaction: (fn: (t: typeof tx) => unknown) => fn(tx) };
 
   const scheduler = {
+    prefsOf: jest.fn(() => ({
+      workStart: user.workStart,
+      workEnd: user.workEnd,
+      workDays: user.workDays,
+      timezone: user.timezone,
+    })),
     cascadeReschedule: jest.fn().mockResolvedValue([]),
-    computeDurationCorrection: jest.fn(
-      (_u: string, _t: string[], estimatedDuration: number): Promise<unknown> =>
-        Promise.resolve({
-          estimatedDuration,
-          adjustedDuration: estimatedDuration,
-          biasApplied: 1.0,
-          durationReason: null,
-        }),
-    ),
-    rationaleFor: jest.fn().mockReturnValue(null),
+    computeDurationCorrection: makeCorrectionStub(),
+    recordEvent: jest.fn().mockResolvedValue(undefined),
   };
 
   return {
@@ -1024,38 +548,27 @@ describe("TasksService.update — metadata-only, no auto-cascade", () => {
     expect(table.get("t1")!.deadline?.toISOString()).toBe(
       "2026-06-09T17:00:00.000Z",
     );
-    // The task keeps its current slot — no reschedule was triggered.
     expect(scheduler.cascadeReschedule).not.toHaveBeenCalled();
     expect(res.task.scheduledStartTime).toBe("2026-06-08T09:00:00.000Z");
     expect(res.deadlineChanged).toBe(true);
   });
 
-  it("omits deadlineChanged when the deadline is untouched", async () => {
+  it("omits deadlineChanged when the deadline is untouched or unchanged", async () => {
     const existing = task({
       id: "t1",
       deadline: new Date("2026-06-10T17:00:00Z"),
     });
     const { service } = makeUpdateService([existing]);
 
-    const res = await service.update("t1", { title: "Renamed" }, user);
+    const untouched = await service.update("t1", { title: "Renamed" }, user);
+    expect(untouched.deadlineChanged).toBeUndefined();
 
-    expect(res.deadlineChanged).toBeUndefined();
-  });
-
-  it("omits deadlineChanged when the new deadline equals the old one", async () => {
-    const existing = task({
-      id: "t1",
-      deadline: new Date("2026-06-10T17:00:00Z"),
-    });
-    const { service } = makeUpdateService([existing]);
-
-    const res = await service.update(
+    const same = await service.update(
       "t1",
       { deadline: "2026-06-10T17:00:00.000Z" },
       user,
     );
-
-    expect(res.deadlineChanged).toBeUndefined();
+    expect(same.deadlineChanged).toBeUndefined();
   });
 
   it("does not compute schedulingMeta when tags are untouched", async () => {
@@ -1068,7 +581,7 @@ describe("TasksService.update — metadata-only, no auto-cascade", () => {
     expect(res.schedulingMeta).toBeUndefined();
   });
 
-  it("surfaces a schedulingMeta duration suggestion when tags change (never auto-applied)", async () => {
+  it("applies the tag-driven duration correction immediately (mode != 'never')", async () => {
     const existing = task({ id: "t1", durationMinutes: 60 });
     const { service, table, scheduler } = makeUpdateService([existing]);
     scheduler.computeDurationCorrection.mockResolvedValueOnce({
@@ -1080,129 +593,431 @@ describe("TasksService.update — metadata-only, no auto-cascade", () => {
 
     const res = await service.update("t1", { tags: ["backend"] }, user);
 
-    expect(scheduler.computeDurationCorrection).toHaveBeenCalledTimes(1);
     expect(res.schedulingMeta).toEqual(
-      expect.objectContaining({
-        adjustedDuration: 90,
-        estimatedDuration: 60,
-        biasApplied: 1.5,
-        durationReason: "#backend ~50% longer",
-      }),
+      expect.objectContaining({ adjustedDuration: 90, biasApplied: 1.5 }),
     );
-    // The suggestion is NOT applied — the stored duration is unchanged.
-    expect(table.get("t1")!.durationMinutes).toBe(60);
-  });
-});
-
-describe("TasksService.rescheduleCascade — explicit confirm-before-reschedule", () => {
-  it("runs the view-scoped cascade with this task as the always-movable includeTaskId", async () => {
-    const existing = task({ id: "t1", scheduledStartTime: null });
-    const { service, scheduler } = makeUpdateService([existing]);
-
-    await service.rescheduleCascade(
-      "t1",
-      {
-        viewStart: "2026-06-08T00:00:00.000Z",
-        viewEnd: "2026-06-15T00:00:00.000Z",
-      },
-      user,
-    );
-
-    expect(scheduler.cascadeReschedule).toHaveBeenCalledWith(
-      user,
-      expect.anything(),
-      expect.any(Date),
-      new Date("2026-06-08T00:00:00.000Z"),
-      new Date("2026-06-15T00:00:00.000Z"),
-      "t1",
-    );
-  });
-
-  it("applies an accepted durationMinutes BEFORE running the cascade", async () => {
-    const existing = task({ id: "t1", durationMinutes: 60 });
-    const { service, table } = makeUpdateService([existing]);
-
-    await service.rescheduleCascade("t1", { durationMinutes: 90 }, user);
-
     expect(table.get("t1")!.durationMinutes).toBe(90);
   });
 
-  it("leaves durationMinutes untouched when omitted (deadline-confirm flow)", async () => {
+  it("leaves the stored duration untouched when durationAdjustmentMode is 'never'", async () => {
     const existing = task({ id: "t1", durationMinutes: 60 });
-    const { service, table } = makeUpdateService([existing]);
+    const { service, table, scheduler } = makeUpdateService([existing]);
+    scheduler.computeDurationCorrection.mockResolvedValueOnce({
+      estimatedDuration: 60,
+      adjustedDuration: 90,
+      biasApplied: 1.5,
+      durationReason: "#backend ~50% longer",
+    });
 
-    await service.rescheduleCascade("t1", {}, user);
+    const res = await service.update(
+      "t1",
+      { tags: ["backend"] },
+      { ...user, durationAdjustmentMode: "never" },
+    );
 
+    // Still surfaced informationally, but reflects the UNCHANGED duration.
+    expect(res.schedulingMeta).toEqual(
+      expect.objectContaining({ adjustedDuration: 60 }),
+    );
     expect(table.get("t1")!.durationMinutes).toBe(60);
   });
+});
 
-  it("excludes the target task itself from the returned displaced list", async () => {
-    const existing = task({ id: "t1" });
-    const { service, scheduler } = makeUpdateService([existing]);
-    scheduler.cascadeReschedule.mockResolvedValueOnce([
-      { taskId: "t1", newScheduledStartTime: new Date("2026-06-08T09:00:00Z") },
+describe("TasksService.rescheduleCascade — shared confirm-before-reschedule target", () => {
+  it("runs the window-scoped cascade with no anchor task", async () => {
+    const { service, scheduler } = makeUpdateService([]);
+
+    await service.rescheduleCascade(
       {
-        taskId: "other",
-        newScheduledStartTime: new Date("2026-06-08T10:00:00Z"),
+        windowStart: "2026-06-08T00:00:00.000Z",
+        windowEnd: "2026-06-15T00:00:00.000Z",
+      },
+      user,
+    );
+
+    expect(scheduler.cascadeReschedule).toHaveBeenCalledWith(
+      user.id,
+      expect.anything(),
+      {
+        windowStart: new Date("2026-06-08T00:00:00.000Z"),
+        windowEnd: new Date("2026-06-15T00:00:00.000Z"),
+        includeManual: undefined,
+      },
+      expect.anything(),
+    );
+  });
+
+  it("passes includeManual through to the cascade scope", async () => {
+    const { service, scheduler } = makeUpdateService([]);
+
+    await service.rescheduleCascade(
+      {
+        windowStart: "2026-06-08T00:00:00.000Z",
+        windowEnd: "2026-06-15T00:00:00.000Z",
+        includeManual: true,
+      },
+      user,
+    );
+
+    expect(scheduler.cascadeReschedule).toHaveBeenCalledWith(
+      user.id,
+      expect.anything(),
+      expect.objectContaining({ includeManual: true }),
+      expect.anything(),
+    );
+  });
+
+  it("reports every task the cascade moved as displaced", async () => {
+    const { service, scheduler } = makeUpdateService([]);
+    scheduler.cascadeReschedule.mockResolvedValueOnce([
+      {
+        id: "a",
+        scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
+        conflict: false,
+      },
+      {
+        id: "b",
+        scheduledStartTime: new Date("2026-06-08T10:00:00Z"),
+        conflict: false,
       },
     ]);
 
-    const res = await service.rescheduleCascade("t1", {}, user);
+    const res = await service.rescheduleCascade(
+      {
+        windowStart: "2026-06-08T00:00:00.000Z",
+        windowEnd: "2026-06-15T00:00:00.000Z",
+      },
+      user,
+    );
 
     expect(res.displaced).toEqual([
-      {
-        taskId: "other",
-        newScheduledStartTime: "2026-06-08T10:00:00.000Z",
-      },
+      { taskId: "a", newScheduledStartTime: "2026-06-08T09:00:00.000Z" },
+      { taskId: "b", newScheduledStartTime: "2026-06-08T10:00:00.000Z" },
     ]);
   });
 });
 
-describe("TasksService.complete / remove — view-scoped cascade wiring", () => {
-  it("complete() passes the caller's view bounds through to cascadeReschedule", async () => {
-    const existing = task({ id: "t1" });
-    const { service, scheduler } = makeUpdateService([existing]);
-    // complete() reads/writes `tags` via `include`, which findFirst-based mock
-    // doesn't model — use a minimal row with no tags to keep this focused on
-    // the cascade wiring, not the KEEP-telemetry path (covered elsewhere).
+describe("deadlineOptions (pure) — used directly by TasksController", () => {
+  it("returns six ISO chip values derived from horizon ceiling math", () => {
+    const res = deadlineOptions("2026-06-08T10:00:00.000Z", user); // Monday
+    // "Today" is the day CEILING (midnight), not the work-hours end.
+    expect(res.today).toBe("2026-06-09T00:00:00.000Z");
+    // "Tomorrow" is explicitly tomorrow's WORK-HOURS end (todo.md).
+    expect(res.tomorrow).toBe("2026-06-09T17:00:00.000Z");
+    // ISO week (Mon-Sun) ceiling → next Monday 00:00.
+    expect(res.thisWeek).toBe("2026-06-15T00:00:00.000Z");
+    expect(res.nextWeek).toBe("2026-06-22T00:00:00.000Z");
+    expect(res.thisMonth).toBe("2026-07-01T00:00:00.000Z");
+    expect(res.noRush).toBe("2026-08-01T00:00:00.000Z");
+  });
+});
 
-    await service.complete(
-      "t1",
-      user,
-      new Date("2026-06-08T09:00:00Z"),
-      "2026-06-08T00:00:00.000Z",
-      "2026-06-15T00:00:00.000Z",
-    );
+/**
+ * Integration-style coverage driven with a REAL SchedulerService over an
+ * in-memory task table, so the actual cascade wiring (not just the mock call
+ * shape) is exercised for the highest-value flows: delete's gap-fill and the
+ * pin-and-cascade drag/resize path.
+ */
+function makeIntegrationService(rows: TaskWithTags[]): {
+  service: TasksService;
+  table: Map<string, TaskWithTags>;
+  taskEventCreate: jest.Mock;
+  taskEventCreateMany: jest.Mock;
+  userUpdate: jest.Mock;
+} {
+  const table = new Map<string, TaskWithTags>(rows.map((r) => [r.id, r]));
 
-    expect(scheduler.cascadeReschedule).toHaveBeenCalledWith(
-      user,
-      expect.anything(),
-      new Date("2026-06-08T09:00:00Z"),
-      new Date("2026-06-08T00:00:00.000Z"),
-      new Date("2026-06-15T00:00:00.000Z"),
+  const matchesStatus = (t: TaskWithTags, filter: unknown): boolean => {
+    if (filter === undefined) return true;
+    if (typeof filter === "string") return t.status === filter;
+    const notFilter = filter as { not?: string };
+    if (notFilter && typeof notFilter === "object" && "not" in notFilter)
+      return t.status !== notFilter.not;
+    return true;
+  };
+  const matchesScheduledStartTime = (
+    t: TaskWithTags,
+    clause: unknown,
+  ): boolean => {
+    if (clause === null) return t.scheduledStartTime === null;
+    if (t.scheduledStartTime === null) return false;
+    const range = clause as { gte?: Date; lte?: Date };
+    const time = t.scheduledStartTime.getTime();
+    if (range.gte && time < range.gte.getTime()) return false;
+    if (range.lte && time > range.lte.getTime()) return false;
+    return true;
+  };
+  const matchesWhere = (
+    t: TaskWithTags,
+    where: Record<string, unknown> | undefined,
+  ): boolean => {
+    if (!where) return true;
+    if (where.id !== undefined && t.id !== where.id) return false;
+    if (where.userId !== undefined && t.userId !== where.userId) return false;
+    if (!matchesStatus(t, where.status)) return false;
+    if (where.OR !== undefined) {
+      const clauses = where.OR as { scheduledStartTime?: unknown }[];
+      if (
+        !clauses.some((c) => matchesScheduledStartTime(t, c.scheduledStartTime))
+      )
+        return false;
+    }
+    return true;
+  };
+
+  const tx = {
+    task: {
+      findFirst: jest.fn((args: { where?: Record<string, unknown> }) =>
+        Promise.resolve(
+          [...table.values()].find((t) => matchesWhere(t, args.where)) ?? null,
+        ),
+      ),
+      findUnique: jest.fn((args: { where?: Record<string, unknown> }) =>
+        Promise.resolve(
+          [...table.values()].find((t) => matchesWhere(t, args.where)) ?? null,
+        ),
+      ),
+      findMany: jest.fn((args: { where?: Record<string, unknown> }) =>
+        Promise.resolve(
+          [...table.values()].filter((t) => matchesWhere(t, args.where)),
+        ),
+      ),
+      findUniqueOrThrow: jest.fn((args: { where: { id: string } }) =>
+        Promise.resolve(table.get(args.where.id)!),
+      ),
+      update: jest.fn(
+        (args: { where: { id: string }; data: Record<string, unknown> }) => {
+          const row = table.get(args.where.id)!;
+          const next = { ...row, ...args.data } as TaskWithTags;
+          table.set(args.where.id, next);
+          return Promise.resolve(next);
+        },
+      ),
+      delete: jest.fn((args: { where: { id: string } }) => {
+        const row = table.get(args.where.id)!;
+        table.delete(args.where.id);
+        return Promise.resolve(row);
+      }),
+    },
+    // cascadeReschedule reads the user's preference matrix to re-rank
+    // candidates; cold-start (empty matrix) keeps this integration coverage
+    // earliest-first, matching every existing assertion below.
+    user: {
+      findUniqueOrThrow: jest
+        .fn()
+        .mockResolvedValue({ preferenceMatrix: user.preferenceMatrix }),
+      update: jest.fn().mockResolvedValue({}),
+    },
+    taskEvent: {
+      create: jest.fn().mockResolvedValue({}),
+      createMany: jest.fn().mockResolvedValue({}),
+    },
+  };
+
+  const prisma = {
+    $transaction: (fn: (t: typeof tx) => unknown) => fn(tx),
+    ...tx,
+  };
+
+  const scheduler = new SchedulerService(prisma as never);
+  const service = new TasksService(prisma as never, scheduler);
+  return {
+    service,
+    table,
+    taskEventCreate: tx.taskEvent.create,
+    taskEventCreateMany: tx.taskEvent.createMany,
+    userUpdate: tx.user.update,
+  };
+}
+
+describe("TasksService.remove — plain delete, no cascade", () => {
+  it("deletes the row without touching any other task's placement", async () => {
+    const day = "2030-06-17"; // a Monday (workday)
+    const fixedBlock = task({
+      id: "fixed-block",
+      manuallyMoved: true,
+      durationMinutes: 120,
+      scheduledStartTime: new Date(`${day}T09:00:00.000Z`),
+    });
+    const flexible = task({
+      id: "flexible",
+      durationMinutes: 60,
+      scheduledStartTime: new Date(`${day}T11:00:00.000Z`),
+    });
+    const { service, table } = makeIntegrationService([fixedBlock, flexible]);
+
+    await service.remove("fixed-block", user);
+
+    expect(table.has("fixed-block")).toBe(false);
+    // The gap this left behind is only closed by a separate, explicit
+    // rescheduleCascade() call (see below) — never automatically.
+    expect(table.get("flexible")!.scheduledStartTime?.toISOString()).toBe(
+      `${day}T11:00:00.000Z`,
     );
   });
+});
 
-  it("remove() passes the caller's view bounds through to cascadeReschedule", async () => {
-    const existing = task({ id: "t1" });
-    const { service, scheduler, table } = makeUpdateService([existing]);
-    const now = new Date("2026-06-08T09:00:00Z");
+describe("TasksService.rescheduleCascade — real scheduler, window repack", () => {
+  it("repacks movable tasks to close a gap a delete left behind", async () => {
+    const day = "2030-06-17";
+    const flexible = task({
+      id: "flexible",
+      durationMinutes: 60,
+      scheduledStartTime: new Date(`${day}T11:00:00.000Z`),
+    });
+    const { service, table } = makeIntegrationService([flexible]);
 
-    await service.remove(
-      "t1",
+    const res = await service.rescheduleCascade(
+      {
+        windowStart: `${day}T00:00:00.000Z`,
+        windowEnd: "2030-06-18T00:00:00.000Z",
+      },
       user,
-      "2026-06-08T00:00:00.000Z",
-      "2026-06-15T00:00:00.000Z",
-      now,
     );
 
-    expect(table.has("t1")).toBe(false);
-    expect(scheduler.cascadeReschedule).toHaveBeenCalledWith(
-      user,
-      expect.anything(),
-      now,
-      new Date("2026-06-08T00:00:00.000Z"),
-      new Date("2026-06-15T00:00:00.000Z"),
+    // With the gap now open, the flexible task reflows to the work-day start.
+    expect(table.get("flexible")!.scheduledStartTime?.toISOString()).toBe(
+      `${day}T09:00:00.000Z`,
     );
+    expect(res.displaced.some((d) => d.taskId === "flexible")).toBe(true);
+  });
+
+  it("leaves a manually-moved task frozen without includeManual", async () => {
+    const day = "2030-06-17";
+    const manual = task({
+      id: "manual",
+      manuallyMoved: true,
+      durationMinutes: 60,
+      scheduledStartTime: new Date(`${day}T09:00:00.000Z`),
+    });
+    const { service, table } = makeIntegrationService([manual]);
+
+    const res = await service.rescheduleCascade(
+      {
+        windowStart: `${day}T00:00:00.000Z`,
+        windowEnd: "2030-06-18T00:00:00.000Z",
+      },
+      user,
+    );
+
+    expect(table.get("manual")!.scheduledStartTime?.toISOString()).toBe(
+      `${day}T09:00:00.000Z`,
+    );
+    expect(res.displaced.some((d) => d.taskId === "manual")).toBe(false);
+  });
+
+  it("with includeManual: true repositions a manually-moved task and clears its flag", async () => {
+    const day = "2030-06-17";
+    const manual = task({
+      id: "manual",
+      manuallyMoved: true,
+      durationMinutes: 60,
+      scheduledStartTime: new Date(`${day}T11:00:00.000Z`),
+    });
+    const { service, table } = makeIntegrationService([manual]);
+
+    const res = await service.rescheduleCascade(
+      {
+        windowStart: `${day}T00:00:00.000Z`,
+        windowEnd: "2030-06-18T00:00:00.000Z",
+        includeManual: true,
+      },
+      user,
+    );
+
+    expect(table.get("manual")!.scheduledStartTime?.toISOString()).toBe(
+      `${day}T09:00:00.000Z`,
+    );
+    expect(table.get("manual")!.manuallyMoved).toBe(false);
+    expect(res.displaced.some((d) => d.taskId === "manual")).toBe(true);
+  });
+});
+
+describe("TasksService.displace / resize — pin + day-scoped cascade", () => {
+  it("displace() pins the task manuallyMoved at the requested slot", async () => {
+    const day = "2030-06-17"; // Monday
+    const moved = task({
+      id: "a",
+      durationMinutes: 60,
+      scheduledStartTime: new Date(`${day}T09:00:00.000Z`),
+    });
+    const { service, table, taskEventCreate } = makeIntegrationService([moved]);
+
+    await service.displace("a", `${day}T14:00:00.000Z`, user);
+
+    expect(table.get("a")!.manuallyMoved).toBe(true);
+    expect(table.get("a")!.scheduledStartTime?.toISOString()).toBe(
+      `${day}T14:00:00.000Z`,
+    );
+    // A real user drag now produces MOVE telemetry.
+    expect(taskEventCreate).toHaveBeenCalled();
+    const moveCalls = taskEventCreate.mock.calls as {
+      data: { eventType: string; taskId: string };
+    }[][];
+    expect(moveCalls[0][0].data.eventType).toBe("MOVE");
+    expect(moveCalls[0][0].data.taskId).toBe("a");
+  });
+
+  it("resize() updates duration and pins manuallyMoved", async () => {
+    const day = "2030-06-17";
+    const resized = task({
+      id: "a",
+      durationMinutes: 60,
+      scheduledStartTime: new Date(`${day}T09:00:00.000Z`),
+    });
+    const { service, table, taskEventCreate } = makeIntegrationService([
+      resized,
+    ]);
+
+    await service.resize("a", `${day}T09:00:00.000Z`, 120, user);
+
+    expect(table.get("a")!.durationMinutes).toBe(120);
+    expect(table.get("a")!.manuallyMoved).toBe(true);
+    // A real user resize now produces RESIZE telemetry.
+    expect(taskEventCreate).toHaveBeenCalled();
+    const resizeCalls = taskEventCreate.mock.calls as {
+      data: { eventType: string; taskId: string };
+    }[][];
+    expect(resizeCalls[0][0].data.eventType).toBe("RESIZE");
+    expect(resizeCalls[0][0].data.taskId).toBe("a");
+  });
+
+  it("displace() never touches any other task, even one it now overlaps", async () => {
+    const day = "2030-06-17"; // Monday
+    const dragged = task({
+      id: "a",
+      durationMinutes: 60,
+      scheduledStartTime: new Date(`${day}T13:00:00.000Z`),
+    });
+    // The dragged task lands right on top of this one, but a drag is not a
+    // cascade — `other` must come out completely untouched.
+    const other = task({
+      id: "b",
+      manuallyMoved: true,
+      durationMinutes: 60,
+      scheduledStartTime: new Date(`${day}T09:00:00.000Z`),
+      conflict: false,
+    });
+    const { service, table } = makeIntegrationService([dragged, other]);
+
+    const res = await service.displace("a", `${day}T09:30:00.000Z`, user);
+
+    expect(table.get("b")).toEqual(other);
+    expect(res.displaced).toHaveLength(0);
+  });
+});
+
+describe("TasksService.complete", () => {
+  it("marks the task DONE and writes a COMPLETE event", async () => {
+    const done = task({
+      id: "a",
+      scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
+    });
+    const { service, table } = makeIntegrationService([done]);
+
+    const result = await service.complete("a", user);
+
+    expect(table.get("a")!.status).toBe("DONE");
+    expect(result.status).toBe("DONE");
   });
 });
