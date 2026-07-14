@@ -45,13 +45,6 @@ function dayAnchor(tz: string, offsetDays: 0 | 1): Date {
   return day;
 }
 
-/** Seed the time-picker from the backend's ceiling ISO, falling back to
- * end-of-day when the ceiling instant doesn't land on `targetDay`. */
-function seedMinutes(iso: string, targetDay: Date, tz: string): number {
-  const zoned = zonedDate(iso, tz);
-  return isSameDay(zoned, targetDay) ? minutesOfDay(zoned) : END_OF_DAY_MINUTES;
-}
-
 /** Combine a wall-clock day anchor + minutes-of-day into a real UTC instant. */
 function combine(day: Date, minutes: number, tz: string): string {
   const wall = new Date(day);
@@ -109,16 +102,17 @@ export function DeadlineChipField({
     if (!value || value === lastEmitted.current) return;
     const zoned = zonedDate(value, tz);
     if (options) {
-      if (value === options.today) {
+      // Check if the calendar day matches (allows time adjustments on the same day)
+      const todayDate = zonedDate(options.today, tz);
+      if (isSameDay(zoned, todayDate)) {
         setChip("today");
-        setTodayTomorrowMinutes(seedMinutes(options.today, dayAnchor(tz, 0), tz));
+        setTodayTomorrowMinutes(minutesOfDay(zoned));
         return;
       }
-      if (value === options.tomorrow) {
+      const tomorrowDate = zonedDate(options.tomorrow, tz);
+      if (isSameDay(zoned, tomorrowDate)) {
         setChip("tomorrow");
-        setTodayTomorrowMinutes(
-          seedMinutes(options.tomorrow, dayAnchor(tz, 1), tz),
-        );
+        setTodayTomorrowMinutes(minutesOfDay(zoned));
         return;
       }
       if (value === options.thisWeek) return setChip("thisWeek");
@@ -141,18 +135,22 @@ export function DeadlineChipField({
 
   const pickTodayTomorrow = (which: "today" | "tomorrow") => {
     setChip(which);
-    const target = dayAnchor(tz, which === "tomorrow" ? 1 : 0);
-    const minutes = options
-      ? seedMinutes(options[which], target, tz)
-      : END_OF_DAY_MINUTES;
+    if (!options) return;
+    // Extract the calendar day and time from the server's value
+    const baseDeadline = zonedDate(options[which], tz);
+    const minutes = minutesOfDay(baseDeadline);
     setTodayTomorrowMinutes(minutes);
-    emit(combine(target, minutes, tz));
+    emit(options[which]);
   };
 
   const handleTodayTomorrowTime = (minutes: number) => {
     setTodayTomorrowMinutes(minutes);
-    const target = dayAnchor(tz, chip === "tomorrow" ? 1 : 0);
-    emit(combine(target, minutes, tz));
+    if (!options || !chip || (chip !== "today" && chip !== "tomorrow")) return;
+    // Preserve the calendar day from the server's value, adjust only the time
+    const baseDeadline = zonedDate(options[chip], tz);
+    const adjusted = new Date(baseDeadline);
+    adjusted.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+    emit(zonedWallClockToUtc(adjusted, tz).toISOString());
   };
 
   const handleCustomDate = (date: Date | undefined) => {

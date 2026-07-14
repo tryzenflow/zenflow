@@ -13,10 +13,9 @@ import {
 import { User } from "../../../generated/prisma";
 
 /**
- * The six deadline quick-action chip values (todo.md), each derived from
- * `horizon.ts`'s `endOfPeriod` ceiling math relative to `anchor` — the
- * single source of truth for the night-owl-wrap math shared with the
- * period-bound placement logic.
+ * The six deadline quick-action chip values: "Today" and "Tomorrow" are
+ * midnight of the next two calendar days (avoiding 15-min grid); the rest
+ * use `endOfPeriod` ceiling math relative to `anchor`.
  */
 export function deadlineOptions(
   anchor: string,
@@ -27,16 +26,11 @@ export function deadlineOptions(
   const anchorDate = new Date(anchor);
   const dateStr = localDateStr(anchorDate, tz);
 
-  const today = endOfPeriod(anchorDate, "day", tz, work);
+  // "Today" = tomorrow at 12:00 AM (midnight start of next day)
+  const today = minutesToUtc(addDaysStr(dateStr, 1), 0, tz);
 
-  // Tomorrow is explicitly "next calendar day's WORK-HOURS end" (todo.md) —
-  // a different, more specific value than the "day ceiling" (midnight)
-  // "Today" uses, so this reads `workWindowFor` directly rather than
-  // `endOfPeriod`. Wrap-aware: a night-owl window's end already lands on
-  // the following morning.
-  const tomorrow = new Date(
-    workWindowFor(addDaysStr(dateStr, 1), user.workStart, user.workEnd, tz).end,
-  );
+  // "Tomorrow" = day after tomorrow at 12:00 AM
+  const tomorrow = minutesToUtc(addDaysStr(dateStr, 2), 0, tz);
 
   const thisWeek = endOfPeriod(anchorDate, "week", tz, work);
 

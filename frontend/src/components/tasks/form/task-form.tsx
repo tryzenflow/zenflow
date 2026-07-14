@@ -20,19 +20,28 @@ import { TagsField } from "./tag-field";
 import { TitleField } from "./title-field";
 import { DeadlineChipField } from "./deadline-chip-field";
 
-/** Shift a deadline forward by the same lead time it had at creation, in
- * user-tz wall-clock terms, so re-using an old task never yields a past
- * deadline. Returns "" when the source has no deadline or if the offset would
- * result in a past deadline. */
+/** Shift a deadline forward by the same lead time it had at creation. If
+ * the shifted deadline is in the future, use it; otherwise, round up to the
+ * nearest 30-minute block from now. Returns "" when the source has no deadline
+ * or has a negative offset. */
 function shiftedDeadline(task: Task): string {
   if (!task.deadline || !task.createdAt) return "";
   const offsetMs =
     new Date(task.deadline).getTime() - new Date(task.createdAt).getTime();
   if (offsetMs < 0) return "";
+
   const shifted = new Date(Date.now() + offsetMs);
-  // Avoid suggesting a deadline that's already past
-  if (shifted.getTime() <= Date.now()) return "";
-  return shifted.toISOString();
+
+  // If the shifted deadline is already in the future, use it as-is
+  if (shifted.getTime() > Date.now()) {
+    return shifted.toISOString();
+  }
+
+  // Otherwise, round up to the nearest 30-minute block from now
+  const now = Date.now();
+  const thirtyMinMs = 30 * 60 * 1000;
+  const roundedUp = new Date(Math.ceil(now / thirtyMinMs) * thirtyMinMs);
+  return roundedUp.toISOString();
 }
 
 const DURATION_PRESETS = [15, 30, 45, 60, 120];
