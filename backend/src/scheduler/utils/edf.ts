@@ -46,9 +46,10 @@ import { cellScore, rankByScores, type RankedCandidate } from "./reranker";
  * hard tiers (deadline cutoff, work-hours window) with per-minute penalties,
  * so a tightened deadline or an off-hours slot is now just expensive, not
  * impossible. The ONLY hard constraints left are (1) no two tasks may ever
- * overlap, and (2) a task whose placement has already started/elapsed
- * (`isPast`) is completely frozen — the floor of the deviation curve, not a
- * tunable weight.
+ * overlap, (2) a task whose placement has already started/elapsed
+ * (`isPast`) is completely frozen, and (3) a task whose OWN deadline has
+ * already passed (`isOverdue`) is likewise frozen — both are the floor of
+ * the deviation curve, not a tunable weight.
  *
  * `feasibleSlots` (in-hours, respecting the deadline), `findSlotIgnoringWorkHours`
  * (ignores work hours, still respects the deadline) and `findNextAvailableSlot`
@@ -58,6 +59,26 @@ import { cellScore, rankByScores, type RankedCandidate } from "./reranker";
  * produce and picks the minimum-cost candidate, with near-ties broken by the
  * existing seeded-softmax stochastic logging policy ({@link
  * "./reranker".rankByScores}) so IPS/propensity logging keeps working.
+ *
+ * A task's `manuallyMoved` flag by itself grants NO protection under the cost
+ * model — it's informational only (the "Manually placed" badge/telemetry),
+ * and a manually-pinned task is exactly as evictable as any other anchored
+ * task once its turn comes up in EDF order. What DOES exist is a separate,
+ * explicit, PER-CALL pin: {@link scheduleAll}'s optional `pinnedTaskId`
+ * parameter. `SchedulerService.reoptimize` sets it to the task a caller just
+ * directly dragged/resized (`TasksService.displace`/`resize`), so THAT one
+ * `scheduleAll` invocation treats it exactly like an `isPast` task — hard-
+ * frozen at its just-written slot, seeded into occupied space before any
+ * other task is placed, entirely excluded from the EDF eviction/placement
+ * race. This closes the gap the pure cost model alone left open: EDF order
+ * only lets a task evict a LOWER-priority (later-deadline) occupant of a
+ * contested slot, so a just-dragged task without the earliest deadline among
+ * contenders could lose the race for its own requested slot to a task
+ * processed earlier in the loop, even though no cost comparison ever
+ * favored moving it. The pin is scoped to exactly one `scheduleAll` call —
+ * nothing is written to the DB about it, so the very next reoptimize (for
+ * any other create/edit/drag) leaves this task fully subject to the cost
+ * model again, like any other anchor.
  */
 
 /** Map a placed task to its occupied {@link Interval}; null when unplaced. */
@@ -74,13 +95,40 @@ export function intervalOf(task: {
  * A task is "past" (frozen, no longer reorderable) once its placement has
  * already started — whether it's currently in progress or has fully elapsed,
  * both satisfy `scheduledStartTime <= now`. Unplaced tasks are never past.
- * This is the ONLY hard freeze left in the cost model — the floor of the
- * deviation curve (an infinitely-expensive-to-move anchor), not a tunable
- * weight.
+ * This is a hard freeze in the cost model — the floor of the deviation curve
+ * (an infinitely-expensive-to-move anchor), not a tunable weight. The only
+ * other hard freeze is {@link scheduleAll}'s per-call `pinnedTaskId`, which
+ * this function has no awareness of (it's applied directly in `scheduleAll`'s
+ * past/rest split, not folded into `isPast` itself).
  */
 export function isPast(task: EdfTask, now: Date): boolean {
   if (task.scheduledStartTime === null) return false;
   return task.scheduledStartTime.getTime() <= now.getTime();
+}
+
+/**
+ * A task is "overdue" once its own deadline has already passed —
+ * `deadline <= now` — regardless of whether (or where) it's currently
+ * placed. Like {@link isPast}, this is a hard freeze in {@link scheduleAll}:
+ * once a deadline is missed there's no "correct" slot left for the cost
+ * model to route toward (lateness is unavoidable everywhere), so rather than
+ * having it search for a placement anyway — which, worse, can land BEFORE
+ * `now` (see `findNextAvailableSlot`'s `searchFrom` clamp in
+ * {@link candidatesFor}/{@link fallbackSlot} for why an un-clamped search can
+ * do that once its `deadline ?? now` floor is itself in the past) — an
+ * overdue task is simply left exactly where it is, surfaced to the user to
+ * act on rather than silently auto-placed. A task with no deadline is never
+ * overdue.
+ */
+export function isOverdue(task: EdfTask, now: Date): boolean {
+  return task.deadline !== null && task.deadline.getTime() <= now.getTime();
+}
+
+/** Never search earlier than `now` — a deadline that's already passed must
+ * not pull a fallback search's floor into the past (see `isOverdue`'s doc
+ * comment). */
+function laterOf(a: Date, b: Date): Date {
+  return a.getTime() > b.getTime() ? a : b;
 }
 
 /**
@@ -274,7 +322,8 @@ export function fallbackSlot(
     : now.getTime() + MAX_SCAN_DAYS * 24 * 60 * MS_PER_MINUTE;
   const tier2 = findSlotIgnoringWorkHours(task, now, occupied, prefs, ceiling);
   if (tier2) return tier2;
-  return findNextAvailableSlot(task, task.deadline ?? now, occupied, prefs);
+  const searchFrom = task.deadline ? laterOf(task.deadline, now) : now;
+  return findNextAvailableSlot(task, searchFrom, occupied, prefs);
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -400,7 +449,8 @@ function candidatesFor(
     ? task.deadline.getTime()
     : now.getTime() + MAX_SCAN_DAYS * 24 * 60 * MS_PER_MINUTE;
   add(findSlotIgnoringWorkHours(task, now, occupied, prefs, ceiling));
-  add(findNextAvailableSlot(task, task.deadline ?? now, occupied, prefs));
+  const searchFrom = task.deadline ? laterOf(task.deadline, now) : now;
+  add(findNextAvailableSlot(task, searchFrom, occupied, prefs));
 
   const anchor = intervalOf(task);
   if (anchor && !overlapsAny(occupied, anchor.start, anchor.end)) add(anchor);
@@ -466,24 +516,53 @@ function compareMovable(a: EdfTask, b: EdfTask): number {
 }
 
 /**
- * Greedy EDF core, now cost-aware. `tasks` splits into PAST (hard-frozen —
- * `isPast`, seeded as occupied space, passed through unchanged) and every
- * other task, processed in EDF order (deadline ascending, then createdAt).
+ * Greedy EDF core, now cost-aware. `tasks` splits into a hard-FROZEN bucket
+ * (seeded as occupied space up front, echoed through unchanged) and every
+ * other task, processed in EDF order (deadline ascending, then createdAt). A
+ * task lands in the frozen bucket for any of three independent reasons: it's
+ * `isPast(task, now)` (its placement already started/elapsed), it's
+ * `isOverdue(task, now)` (its own deadline already passed — see that
+ * function's doc comment for why the algorithm must not try to place it
+ * anyway), OR its id matches the optional `pinnedTaskId` param (a one-off,
+ * PER-CALL freeze — see below). All three share the exact same "seed
+ * occupiedFinal, echo the placement unchanged" handling since the
+ * requirement is identical (nothing may ever move or re-evaluate them), but
+ * they mean different things: `isPast`/`isOverdue` are intrinsic properties
+ * of the task itself, unrelated to any particular call; `pinnedTaskId` is NOT
+ * a property of the task at all — it's an instruction from THIS CALLER for
+ * THIS CALL ONLY, and carries no state beyond it (the next `scheduleAll`
+ * invocation, with `pinnedTaskId` unset or pointing elsewhere, is free to
+ * move this task like any other anchor again).
  *
- * The occupied baseline starts from EVERY pending task's CURRENT placement
- * (not just past ones) — this is what keeps an already-good schedule stable:
- * a task about to be processed first checks whether its own anchor slot is
- * still free and cost-optimal (its {@link placementCost} against the pooled
- * candidate set, ignoring not-yet-processed tasks' anchors); if so it's kept
- * unmoved. If its best candidate collides with a not-yet-processed (hence
- * lower- or equal-priority) task's anchor, a single-level bounded eviction
- * decides whether to bump that task (only if genuinely cost-favorable to do
- * so — comparing the incoming task's cost at the contested slot plus the
- * occupant's relocation cost, against the incoming task simply taking its own
- * next-best FREE slot instead) or to leave both exactly where the collision
- * found them, deferring the occupant to its own turn later in the loop. This
- * never cascades past one level — an evicted task always relocates to its own
- * next-best genuinely-free candidate (never triggering a second eviction).
+ * `pinnedTaskId` exists to close a gap the pure cost model alone leaves open:
+ * EDF order only lets a task evict a LOWER-priority (later-deadline) occupant
+ * of a contested slot it wants — it can never touch a task that was already
+ * finalized earlier in the loop (an earlier deadline). So a task with no
+ * special protection could simply lose the race for its own slot to an
+ * earlier-deadline task that claims it first via ordinary placement, never
+ * even going through a cost comparison. `SchedulerService.reoptimize` uses
+ * `pinnedTaskId` to hard-pin the ONE task a caller just directly
+ * dragged/resized (`TasksService.displace`/`resize`), so that task's just-
+ * written slot is guaranteed to survive the very reoptimize call triggered
+ * by that same drag/resize, regardless of EDF order — every other task's
+ * candidate search naturally routes around it because it's already occupied
+ * space before anything else is placed.
+ *
+ * The occupied baseline starts from EVERY pending (non-frozen) task's CURRENT
+ * placement too — this is what keeps an already-good schedule stable beyond
+ * the frozen bucket: a task about to be processed first checks whether its
+ * own anchor slot is still free and cost-optimal (its {@link placementCost}
+ * against the pooled candidate set, ignoring not-yet-processed tasks'
+ * anchors); if so it's kept unmoved. If its best candidate collides with a
+ * not-yet-processed (hence lower- or equal-priority) task's anchor, a
+ * single-level bounded eviction decides whether to bump that task (only if
+ * genuinely cost-favorable to do so — comparing the incoming task's cost at
+ * the contested slot plus the occupant's relocation cost, against the
+ * incoming task simply taking its own next-best FREE slot instead) or to
+ * leave both exactly where the collision found them, deferring the occupant
+ * to its own turn later in the loop. This never cascades past one level — an
+ * evicted task always relocates to its own next-best genuinely-free
+ * candidate (never triggering a second eviction).
  *
  * A task placeable by NONE of the candidate sources (including its own
  * eviction-relocation attempt) comes back `{ scheduledStartTime: null,
@@ -494,25 +573,29 @@ function compareMovable(a: EdfTask, b: EdfTask): number {
  * one thing the old `CascadeScope.fixedTaskId` did — marking which task's
  * placement event is the CALLER's to log, not double-logged as collateral
  * RESCHEDULED — turned out to be purely a `SchedulerService`-layer concern
- * (see `reoptimize`'s `opts.fixedTaskId`); the pure core never needed it.
+ * (see `reoptimize`'s `opts.fixedTaskId`, a DIFFERENT option from
+ * `pinnedTaskId` — one is event-attribution bookkeeping, the other is a
+ * placement constraint); the pure core never needed that one.
  */
 export function scheduleAll(
   prefs: SchedulerPrefs,
   tasks: EdfTask[],
   now: Date,
   matrix: readonly number[] = [],
+  pinnedTaskId?: string,
 ): Placement[] {
-  const past: EdfTask[] = [];
+  const frozen: EdfTask[] = [];
   const rest: EdfTask[] = [];
   for (const task of tasks) {
-    if (isPast(task, now)) past.push(task);
+    if (isPast(task, now) || isOverdue(task, now) || task.id === pinnedTaskId)
+      frozen.push(task);
     else rest.push(task);
   }
 
   const occupiedFinal: Interval[] = [];
   const placements = new Map<string, Placement>();
 
-  for (const task of past) {
+  for (const task of frozen) {
     const iv = intervalOf(task);
     if (iv) occupiedFinal.push(iv);
     placements.set(task.id, {

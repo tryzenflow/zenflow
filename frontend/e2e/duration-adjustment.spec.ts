@@ -22,8 +22,13 @@ test.describe("duration adjustment toast", () => {
     const email = uniqueEmail("dur-adj");
     await login(page, request, email);
     if (/\/onboarding$/.test(page.url())) {
-      const next = page.getByRole("button", { name: /continue/i });
-      for (let i = 0; i < 5; i++) await next.click();
+      // Click through however many "Continue" steps the wizard has (rather
+      // than a hardcoded count) so this doesn't break if a step is added.
+      const next = page.getByRole("button", { name: /^continue$/i });
+      while (await next.isVisible().catch(() => false)) {
+        await next.click();
+        await page.waitForTimeout(150);
+      }
       await page.getByRole("button", { name: /start planning/i }).click();
       await expect(page).toHaveURL(/\/$/);
     }

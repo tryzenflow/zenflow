@@ -8,35 +8,22 @@ import { postData } from "@/api";
 import { useFilesTracker } from "@/hooks/use-files-tracker";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useHighlightStore } from "@/hooks/use-highlight-store";
-import { TaskFormValues } from "@/utils/tasks";
+import { placementQualifier, TaskFormValues } from "@/utils/tasks";
 import { TaskForm } from "./form/task-form";
 import { Plus } from "lucide-react";
-import { createTask, resolveOverflow } from "@/api/tasks";
-import { OverflowToast } from "./overflow-toast";
-import { showDisplacedSummaryToast } from "./displaced-summary-toast";
-import { promptRescheduleCascade } from "./prompt-reschedule-cascade";
+import { createTask } from "@/api/tasks";
 import { format } from "date-fns";
 import { isAxiosError } from "axios";
 import { zonedDate } from "@/utils/tz";
-import type { CreateTaskResponse, ViewMode } from "@zenflow/shared";
-import type { Event } from "@/types/schedule";
-import {
-  handleDurationAdjustment,
-  maybeShowRationaleToast,
-  shell,
-} from "@/lib/scheduling-toasts";
-
+import type { ViewMode } from "@zenflow/shared";
+import { handleDurationAdjustment } from "@/lib/scheduling-toasts";
 
 export function CreateTaskDialog({
-  blocks = [],
   onCreated,
   trigger,
 }: {
   date: Date;
   view: ViewMode;
-  /** The calendar's currently-loaded blocks — feeds displaced-task title
-   * lookups for the cascade summary toast. */
-  blocks?: Event[];
   onCreated: () => void;
   /** Custom trigger element; falls back to the default "New task" button. */
   trigger?: React.ReactNode;
@@ -46,11 +33,8 @@ export function CreateTaskDialog({
   const user = useUserStore((state) => state.user);
   const tz = user?.timezone || "UTC";
   const setHighlight = useHighlightStore((s) => s.setHighlight);
-  // Format a UTC ISO string as a readable wall-clock time in the user's tz,
-  // matching the pattern used by <OverflowToast> (e.g. "Mon Jun 23, 14:00").
+  // Format a UTC ISO string as a readable wall-clock time in the user's tz.
   const fmt = (iso: string) => format(zonedDate(iso, tz), "EEE MMM d, HH:mm");
-  const titleFor = (taskId: string) =>
-    blocks.find((b) => b.taskId === taskId)?.title;
 
   const form = useTaskForm({
     defaultValues: {
@@ -69,61 +53,6 @@ export function CreateTaskDialog({
     updateRemovedFileIds(note || "", "");
   }, [note]);
 
-  // Render a persistent, custom toast offering the overflow recovery options.
-  // Sonner's single `action` slot can't hold two buttons, so we hand it a
-  // component and drive resolution from the button callbacks.
-  function showOverflowToast(
-    taskId: string,
-    taskTitle: string,
-    overflow: NonNullable<CreateTaskResponse["overflow"]>,
-  ) {
-    // Backend offered the overflow envelope but neither concrete slot exists:
-    // nothing actionable, so just inform the user.
-    if (!overflow.outsideHours && !overflow.nextAvailable) {
-      errorToast(
-        "Couldn't find any slot for this task — try a longer deadline or shorter duration.",
-      );
-      return;
-    }
-
-    async function resolve(choice: "outsideHours" | "nextAvailable") {
-      toast.dismiss(toastId);
-      try {
-        const res = await resolveOverflow(taskId, choice);
-        // Highlight the resolved block so the user's eye is drawn to it.
-        // Set before onCreated() so the signal is ready when refetch completes.
-        setHighlight(res.task.id);
-        onCreated();
-        // Phase-2: a resolved overflow may also land in a preference-favoured
-        // slot; surface the rationale alongside the success confirmation.
-        maybeShowRationaleToast(res);
-        const resolvedAt = res.task.scheduledStartTime;
-        toast.success(
-          resolvedAt ? `Scheduled for ${fmt(resolvedAt)}` : "Task scheduled",
-        );
-        showDisplacedSummaryToast(res.displaced, tz, titleFor);
-      } catch (error) {
-        errorToast(
-          (isAxiosError(error) && error.response?.data?.message) ||
-            "Couldn't schedule the task — that slot may no longer be available.",
-        );
-      }
-    }
-
-    const toastId = toast.custom(
-      (id) =>
-        shell(
-          <OverflowToast
-            title={taskTitle}
-            overflow={overflow}
-            onChoose={resolve}
-            onDismiss={() => toast.dismiss(id)}
-          />,
-        ),
-      { duration: Infinity },
-    );
-  }
-
   // Persist the task — the only place that calls `createTask`.
   async function finalizeCreate(values: TaskFormValues) {
     if (!user) return;
@@ -137,44 +66,20 @@ export function CreateTaskDialog({
         deadline: values.deadline,
       });
 
-      // When the task landed successfully, pre-arm the highlight signal before
-      // triggering refetch so the block animates into focus once it renders.
-      if (!response.overflow) {
+      // The pure scheduler always tries in-hours-before-deadline, then
+      // outside-hours-before-deadline, then in-hours-past-deadline before
+      // ever giving up — so a create now ALWAYS returns a concrete
+      // placement except the rare last-resort case where no slot exists
+      // anywhere in the scan horizon (`task.conflict` still true). Pre-arm
+      // the highlight signal before triggering refetch so the block animates
+      // into focus once it renders; skip it for the conflict case, since
+      // there's nothing to highlight.
+      if (!response.task.conflict) {
         setHighlight(response.task.id);
       }
       onCreated();
       form.reset();
       setOpen(false);
-
-      // The engine couldn't place the task without displacing anything (a
-      // create is solo-placed now — see tasks.service.ts's `create()` — so it
-      // never silently bumps another task). Offer the same confirm-before-
-      // reschedule prompt edit/delete use — its window is [now, deadline],
-      // the task's own full feasible range, since there's no existing
-      // placement to anchor a fixed band around. Declining falls back to
-      // today's overflow-recovery options (place the new task elsewhere
-      // instead of moving others).
-      if (response.overflow) {
-        const overflow = response.overflow;
-        promptRescheduleCascade({
-          window: {
-            windowStart: new Date().toISOString(),
-            windowEnd: response.task.deadline!,
-          },
-          title: `No room for ${response.task.title}`,
-          description:
-            "There's no free slot before its deadline. Reschedule other tasks to fit it in?",
-          manualDescription:
-            "There's no free slot before its deadline. Some tasks in this window were moved manually — how should they be handled?",
-          blocks,
-          tz,
-          titleFor,
-          onDone: onCreated,
-          onDecline: () =>
-            showOverflowToast(response.task.id, response.task.title, overflow),
-        });
-        return;
-      }
 
       // Phase-2: when the per-tag corrector adjusted the duration, the
       // auto/ask/never UX (ADR Sequence 1) replaces the plain success toast.
@@ -186,13 +91,19 @@ export function CreateTaskDialog({
       );
       if (!handled) {
         const scheduledAt = response.task.scheduledStartTime;
+        const qualifier = placementQualifier(response.task, user);
+        const qualifierSuffix =
+          qualifier === "pastDeadline"
+            ? " — past its deadline"
+            : qualifier === "outsideHours"
+              ? " — outside your usual work hours"
+              : "";
         toast.success(
           scheduledAt
-            ? `Scheduled for ${fmt(scheduledAt)}`
+            ? `Scheduled for ${fmt(scheduledAt)}${qualifierSuffix}`
             : "Task created successfully",
         );
       }
-      showDisplacedSummaryToast(response.displaced, tz, titleFor);
     } catch (error) {
       errorToast(
         (isAxiosError(error) && error.response?.data?.message) ||

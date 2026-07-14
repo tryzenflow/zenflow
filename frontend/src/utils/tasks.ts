@@ -3,10 +3,52 @@ import * as z from "zod";
 import { DAILY_HORIZON, TIME_GRANULARITY } from "./constants";
 import { getData, postData } from "@/api";
 import { Task } from "@/types/tasks";
-import type { Event as CalendarBlock } from "@/types/schedule";
 import { extractFileIdsFromNoteContent } from "./files";
 import { removeTask } from "@/api/tasks";
-import { zonedDate, zonedWallClockToUtc } from "./tz";
+import { zonedDate } from "./tz";
+
+/**
+ * Client-side signal for why a task's placement is unusual — the backend no
+ * longer returns *why* a concrete placement was chosen (the `overflow`
+ * envelope is gone; every create/update now always resolves to a concrete
+ * slot), so callers derive this themselves to annotate the success toast.
+ * `null` when the task has no placement at all (still a last-resort
+ * `conflict`) — nothing meaningful to qualify.
+ */
+export type PlacementQualifier = "onTime" | "outsideHours" | "pastDeadline";
+
+/**
+ * Compares a task's `scheduledStartTime` against its deadline and the user's
+ * work window (checked in the user's tz, same wall-clock rule as the rest of
+ * the calendar — see `utils/tz.ts`). `pastDeadline` is checked first since
+ * it's the more informative signal when both are true (e.g. an overdue task
+ * placed at 2am is more useful described as "past its deadline").
+ */
+export function placementQualifier(
+  task: Task,
+  user: { workStart: number; workEnd: number; workDays: number[]; timezone: string },
+): PlacementQualifier | null {
+  if (!task.scheduledStartTime) return null;
+
+  const start = new Date(task.scheduledStartTime);
+  if (task.deadline && start > new Date(task.deadline)) return "pastDeadline";
+
+  const zoned = zonedDate(task.scheduledStartTime, user.timezone);
+  const minutesOfDay = zoned.getHours() * 60 + zoned.getMinutes();
+  const isoWeekday = zoned.getDay() === 0 ? 7 : zoned.getDay();
+
+  if (!user.workDays.includes(isoWeekday)) return "outsideHours";
+
+  // Overnight windows (workEnd <= workStart) wrap past midnight, so "inside
+  // hours" is the union of [workStart, 1440) and [0, workEnd) instead of a
+  // single contiguous range.
+  const inWindow =
+    user.workEnd <= user.workStart
+      ? minutesOfDay >= user.workStart || minutesOfDay < user.workEnd
+      : minutesOfDay >= user.workStart && minutesOfDay < user.workEnd;
+
+  return inWindow ? "onTime" : "outsideHours";
+}
 
 export const taskSchema = z.object({
   title: z.string().min(1, { error: "Task name is required" }),
@@ -44,104 +86,3 @@ export async function deleteTask(taskId: string) {
   return removeTask(taskId);
 }
 
-/**
- * Whether a deadline/tags edit or a delete should prompt for a
- * confirm-before-reschedule at all. A task with no placement has no window
- * to reschedule around; a task already past or in progress (`start <= now`)
- * is edited/deleted outright — todo.md §Rescheduling Design says a
- * past/in-progress change never prompts.
- */
-export function needsRescheduleWindow(
-  scheduledStartTime: string | null,
-  now: Date,
-): boolean {
-  return scheduledStartTime !== null && new Date(scheduledStartTime) > now;
-}
-
-/**
- * The shared confirm-before-reschedule window (todo.md §Rescheduling
- * Design) for every trigger that can leave a schedule gap/conflict behind —
- * a deadline edit, a tags-driven duration change, or a delete. Normally ±3
- * workdays around the affected task's own placement (`scheduledStartTime`,
- * captured BEFORE the edit/delete since the edit doesn't reposition the task
- * and a delete removes it). The back side is clamped to `now`: any of the 3
- * preceding workdays whose start has already passed is dropped, and the
- * forward side gains one workday for each one dropped, so the total window
- * always spans 6 workdays around the anchor day (plus the anchor day
- * itself). Only call this when {@link needsRescheduleWindow} is true.
- */
-export function cascadeWindow(
-  scheduledStartTime: string,
-  tz: string,
-  user: { workStart: number; workEnd: number; workDays: number[] },
-  now: Date,
-): { windowStart: string; windowEnd: string } {
-  const isWorkDay = (d: Date) => {
-    const iso = d.getDay() === 0 ? 7 : d.getDay();
-    return user.workDays.includes(iso);
-  };
-  const workDaysFrom = (from: Date, dir: 1 | -1, count: number): Date[] => {
-    const days: Date[] = [];
-    let cur = from;
-    // Bounded scan: a `workDays` misconfigured to empty would otherwise spin
-    // forever looking for a workday that doesn't exist.
-    for (let i = 0; days.length < count && i < 365; i++) {
-      cur = new Date(cur);
-      cur.setDate(cur.getDate() + dir);
-      if (isWorkDay(cur)) days.push(cur);
-    }
-    return days;
-  };
-  /** Exclusive end of the working day starting at local midnight `dayStart`. */
-  const dayEnd = (dayStart: Date): Date => {
-    const end = new Date(dayStart);
-    end.setDate(end.getDate() + (user.workEnd <= user.workStart ? 2 : 1));
-    return end;
-  };
-
-  const anchorDay = zonedDate(scheduledStartTime, tz);
-  anchorDay.setHours(0, 0, 0, 0);
-
-  const backCandidates = workDaysFrom(anchorDay, -1, 3); // nearest→farthest
-  const survivingBack = backCandidates.filter(
-    (d) => zonedWallClockToUtc(d, tz) >= now,
-  );
-  const clamped = backCandidates.length - survivingBack.length;
-  const forwardDays = workDaysFrom(anchorDay, 1, 3 + clamped);
-
-  const earliestDay =
-    survivingBack.length > 0 ? survivingBack[survivingBack.length - 1] : anchorDay;
-  const latestDay = forwardDays[forwardDays.length - 1];
-
-  const rawStart = zonedWallClockToUtc(earliestDay, tz);
-  const windowStart = rawStart < now ? now : rawStart;
-  const windowEnd = zonedWallClockToUtc(dayEnd(latestDay), tz);
-
-  return {
-    windowStart: windowStart.toISOString(),
-    windowEnd: windowEnd.toISOString(),
-  };
-}
-
-/**
- * Whether any currently-loaded calendar block is a manually-moved task
- * (`manuallyMoved: true`) whose scheduled start falls inside
- * `[windowStart, windowEnd)` (both ISO-8601 instants). Used to decide
- * whether a deadline/tags-change reschedule needs the 3-option
- * manual-vs-auto choice (todo.md §Rescheduling Design) instead of the plain
- * 2-button confirm — when nothing manual is in scope, "only auto" and
- * "everyone" are behaviorally identical.
- */
-export function hasManualTaskInWindow(
-  blocks: CalendarBlock[],
-  windowStart: string,
-  windowEnd: string,
-): boolean {
-  const start = new Date(windowStart).getTime();
-  const end = new Date(windowEnd).getTime();
-  return blocks.some((b) => {
-    if (!b.manuallyMoved) return false;
-    const blockStart = new Date(b.start).getTime();
-    return blockStart >= start && blockStart < end;
-  });
-}

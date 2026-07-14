@@ -1,5 +1,3 @@
-import type { SchedulingMeta } from "./api";
-
 /** Lifecycle status of a task. */
 export type TaskStatus = "PENDING" | "DONE" | "ABANDONED";
 
@@ -94,20 +92,6 @@ export interface CreateTaskInput {
    * flexible). Defaults to today.
    */
   startDate?: string;
-}
-
-/**
- * Body for `POST /tasks/simulate`: read-only dry-run of the scheduler for a
- * not-yet-created task. No DB write.
- */
-export interface SimulateTaskInput {
-  durationMinutes: number;
-  deadline: string;
-  tags?: string[];
-}
-
-export interface SimulateTaskResponse {
-  schedulingMeta: SchedulingMeta;
 }
 
 /**

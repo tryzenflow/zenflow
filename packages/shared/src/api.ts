@@ -102,6 +102,25 @@ export interface DisplacedTask {
 }
 
 /**
+ * Response for `DELETE /tasks/:id`. The delete itself already auto-
+ * reoptimizes the whole pending schedule inline (same transaction) — this
+ * surfaces what that repack did, if anything, so the frontend can offer the
+ * same cascade-toast + undo transparency the other three mutations
+ * (create/update/reschedule) already get. Mirrors `UpdateTaskResponse`'s
+ * `displaced`/`batchId` shape.
+ */
+export interface RemoveTaskResponse {
+  /** Tasks moved by the inline auto-resolve, if any ran. */
+  displaced: DisplacedTask[];
+  /**
+   * Present when `displaced` is non-empty: groups the RESCHEDULED TaskEvents
+   * the auto-resolve wrote, so the frontend can offer an undo via
+   * `POST /tasks/reschedule/undo/:batchId`. Null/omitted when nothing moved.
+   */
+  batchId?: string | null;
+}
+
+/**
  * Response for the drag (`PATCH /tasks/:id/reschedule`) and resize
  * (`PATCH /tasks/:id/resize`) endpoints. A drag/resize that lands the pinned
  * task on top of another task now auto-resolves the overlap inline via a full

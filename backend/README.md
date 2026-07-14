@@ -166,7 +166,7 @@ Global prefix **`/api/v1`**. All routes except `POST /auth/otp/*` require
 | PATCH | `/tasks/:id/resize` | edge-resize, snaps to 15-min grid, pins `manuallyMoved: true` (informational), then the same inline `reoptimize` `reschedule` uses |
 | POST | `/tasks/reschedule/undo/:batchId` | undo one `reoptimize` batch (from `create`/`update`/`reschedule`/`resize`'s `batchId`): reverts every task it displaced back to its prior slot/duration, restored from each tagged `RESCHEDULED` `TaskEvent`'s `oldSnapshot`. 404 when `batchId` matches no event for this user. Returns `UndoBatchResponse` (`{ displaced: DisplacedTask[] }`) |
 | PATCH | `/tasks/:id/complete` | mark DONE, records COMPLETE |
-| DELETE | `/tasks/:id` | delete the task, then **inline** `reoptimize` to close whatever gap it left behind — no separate confirm step |
+| DELETE | `/tasks/:id` | delete the task, then **inline** `reoptimize` to close whatever gap it left behind — no separate confirm step. Returns `RemoveTaskResponse` (`{ displaced: DisplacedTask[], batchId? }`), the same cascade-transparency shape `update`/`reschedule`/`resize` return |
 
 > **`POST /tasks/reschedule-cascade` is gone.** It used to be the shared wide
 > confirm-before-reschedule fallback (±3 workdays, a manual "reschedule everyone /
@@ -291,9 +291,12 @@ genuinely-tied ones).
 - **`findNextAvailableSlot(task, searchFrom, occupied, prefs)`** — the earliest in-work-hours
   slot at/after `searchFrom`, ignoring the deadline entirely (the "deadline actually missed"
   case).
-- **`fallbackSlot(task, now, occupied, prefs)`** — chains the two above; used directly by
-  `SchedulerService.simulate()`'s not-yet-created draft-task preview, which has no anchor to
-  weigh against and so doesn't need `scheduleAll`'s full cost-scored candidate pool.
+- **`fallbackSlot(task, now, occupied, prefs)`** — chains the two above into a single
+  best-effort candidate for a not-yet-created draft task (no anchor to weigh against, so it
+  doesn't need `scheduleAll`'s full cost-scored candidate pool). No current caller —
+  previously wired to the now-removed `SchedulerService.simulate()` preview
+  (`POST /tasks/simulate` was deleted along with the preview-before-commit flow; see
+  [`docs/heuristic.md`](../docs/heuristic.md)'s overflow-recovery note).
 - **`isPast(task, now)`** — the one hard freeze (see above).
 - **`compareMovable(a, b)`** — deadline ascending (nulls last), then `createdAt` ascending.
 
@@ -318,12 +321,14 @@ The matrix/bias/decay are computed in the **service** and passed into the **pure
 inputs as params and do no I/O; the service is the only thing that reads Prisma.
 
 - **Placement re-ranker** (`reranker.ts` → `rankCandidates`/`cellScore`/`rankByScores`): the
-  shared softmax/Gumbel stochastic-logging mechanism, driving both `SchedulerService.
-  simulate()`'s preference-only re-ranking and `scheduleAll`'s cost-scored candidate ranking
-  (fed `-placementCost` instead of a raw preference score — see "The EDF engine" above).
-  `SchedulerService.reoptimize`/`simulate` build the matrix from `user.preferenceMatrix`. A
-  cold-start / wrong-length matrix, or a genuine tie, degenerates to deterministic
-  earliest-first order with uniform propensity rather than injecting noise.
+  shared softmax/Gumbel stochastic-logging mechanism. `scheduleAll`'s cost-scored candidate
+  ranking uses `rankByScores` directly (fed `-placementCost` instead of a raw preference score
+  — see "The EDF engine" above); `rankCandidates`/`pickBest`/`topN` are the preference-only
+  variant, currently unused now that `SchedulerService.simulate()` (their only caller) has been
+  removed — see `docs/heuristic.md`'s overflow-recovery note. `SchedulerService.reoptimize`
+  builds the matrix from `user.preferenceMatrix`. A cold-start / wrong-length matrix, or a
+  genuine tie, degenerates to deterministic earliest-first order with uniform propensity
+  rather than injecting noise.
 - **Duration corrector** (`duration-bias.ts` → `blendBias` / `correctDuration`):
   `SchedulerService.computeDurationCorrection` aggregates per-tag `{ n, b }` from `TaskEvent`
   telemetry (rolling `actual ÷ estimated`), blends it sample-weighted, and rounds the
@@ -332,9 +337,12 @@ inputs as params and do no I/O; the service is the only thing that reads Prisma.
   uncorrected estimate to EDF but **still learns** the bias. The real `biasApplied`,
   `estimatedDuration`, `durationAdjustmentMode`, and `durationReason` are surfaced on the
   create response's `schedulingMeta`.
-- **Rationale** (`rationale.ts` → `buildRationale`): `POST /tasks/simulate` surfaces a
-  human-readable summary (`schedulingMeta.rationale`) describing the preferred work window +
-  top cells that drove the top proposed slot (omitted when it wasn't preference-favoured).
+- **Rationale** (`rationale.ts` → `buildRationale`): a human-readable summary
+  (`schedulingMeta.rationale` / `RescheduleResponse.rationale`) describing the preferred work
+  window + top cells that drove a placement (omitted when it wasn't preference-favoured). Its
+  only current wiring was `SchedulerService.simulate()`'s draft-task preview, now removed
+  along with `POST /tasks/simulate`; `displace()`/`resize()` still return the field
+  (hard-coded `null` today).
 - **Matrix-decay cron** (`matrix-decay.service.ts`, `@Cron` daily): the I/O wrapper loads each
   user's `preferenceMatrix` + `preferenceMatrixDecayedAt`, calls the pure `decayMatrix`
   (`cell *= 2^(−Δdays / MATRIX_HALF_LIFE_DAYS)`, 21-day half-life), and writes back.

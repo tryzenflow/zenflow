@@ -15,8 +15,13 @@ import { login, uniqueEmail } from "./helpers/auth";
 
 async function skipOnboardingIfNeeded(page: Page) {
   if (/\/onboarding$/.test(page.url())) {
-    const next = page.getByRole("button", { name: /continue/i });
-    for (let i = 0; i < 5; i++) await next.click();
+    // Click through however many "Continue" steps the wizard has (rather
+    // than a hardcoded count) so this doesn't break if a step is added.
+    const next = page.getByRole("button", { name: /^continue$/i });
+    while (await next.isVisible().catch(() => false)) {
+      await next.click();
+      await page.waitForTimeout(150);
+    }
     await page.getByRole("button", { name: /start planning/i }).click();
     await expect(page).toHaveURL(/\/$/);
   }
@@ -38,22 +43,25 @@ test.describe("deadline chips", () => {
     page,
   }) => {
     await openCreateSheet(page, "Deadline chip check");
+    // Scoped to the create sheet — the calendar also has its own floating
+    // "Today" (jump-to-today) button with the same accessible name.
+    const dialog = page.getByRole("dialog");
 
-    const timePickerTrigger = page.getByRole("button", {
+    const timePickerTrigger = dialog.getByRole("button", {
       name: /\d{1,2}:\d{2}\s*(AM|PM)/i,
     });
 
-    await page.getByRole("button", { name: /^today$/i }).click();
+    await dialog.getByRole("button", { name: /^today$/i }).click();
     await expect(timePickerTrigger).toBeVisible();
 
-    await page.getByRole("button", { name: /^tomorrow$/i }).click();
+    await dialog.getByRole("button", { name: /^tomorrow$/i }).click();
     await expect(timePickerTrigger).toBeVisible();
 
-    await page.getByRole("button", { name: /^this week$/i }).click();
+    await dialog.getByRole("button", { name: /^this week$/i }).click();
     await expect(timePickerTrigger).toBeHidden();
 
-    await page.getByRole("button", { name: /^custom$/i }).click();
-    await expect(page.getByRole("button", { name: /select date/i })).toBeVisible();
+    await dialog.getByRole("button", { name: /^custom$/i }).click();
+    await expect(dialog.getByRole("button", { name: /select date/i })).toBeVisible();
     await expect(timePickerTrigger).toBeVisible();
   });
 
@@ -61,6 +69,8 @@ test.describe("deadline chips", () => {
     page,
   }) => {
     await openCreateSheet(page, "Deadline chip distinctness");
+    // Scoped to the create sheet — same "Today" collision as above.
+    const dialog = page.getByRole("dialog");
 
     const seen = new Set<string>();
     for (const label of [
@@ -71,8 +81,10 @@ test.describe("deadline chips", () => {
       "this month",
       "no rush",
     ]) {
-      await page.getByRole("button", { name: new RegExp(`^${label}$`, "i") }).click();
-      const due = await page.getByText(/^due /i).textContent();
+      await dialog
+        .getByRole("button", { name: new RegExp(`^${label}$`, "i") })
+        .click();
+      const due = await dialog.getByText(/^due /i).textContent();
       expect(due).toBeTruthy();
       seen.add(due!);
     }

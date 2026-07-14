@@ -11,7 +11,6 @@ import {
 } from "@nestjs/common";
 import { TasksService } from "./tasks.service";
 import { CreateTaskDto } from "./dto/create-task.dto";
-import { SimulateTaskDto } from "./dto/simulate-task.dto";
 import { UpdateTaskDto } from "./dto/update-task.dto";
 import { ListTasksDto } from "./dto/list-tasks.dto";
 import { ListTaskSuggestionsDto } from "./dto/list-task-suggestions.dto";
@@ -32,12 +31,6 @@ export class TasksController {
   async create(@Body() dto: CreateTaskDto, @CurrentUser() user: User) {
     const data = await this.tasksService.create(dto, user);
     return { success: true, message: "Task created", data };
-  }
-
-  @Post("simulate")
-  async simulate(@Body() dto: SimulateTaskDto, @CurrentUser() user: User) {
-    const data = await this.tasksService.simulate(dto, user);
-    return { success: true, message: "Simulated placement", data };
   }
 
   @Get()
@@ -136,7 +129,7 @@ export class TasksController {
 
   @Delete(":id")
   async remove(@Param("id") id: string, @CurrentUser() user: User) {
-    await this.tasksService.remove(id, user);
-    return { success: true, message: "Task deleted" };
+    const data = await this.tasksService.remove(id, user);
+    return { success: true, message: "Task deleted", data };
   }
 }

@@ -61,4 +61,12 @@ export async function login(
   }
 
   await expect(page).toHaveURL(/\/(onboarding)?$/, { timeout: 15_000 });
+
+  // `WithAuth` (React StrictMode double-invokes its mount effects in dev)
+  // can bounce the URL "/" → "/onboarding" → "/" a couple of times right
+  // after login before settling — the assertion above can resolve mid-bounce,
+  // handing back a URL that's about to change again. Give it a beat to
+  // settle so callers checking `page.url()` for the onboarding redirect
+  // don't race it.
+  await page.waitForTimeout(500);
 }

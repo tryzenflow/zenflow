@@ -11,11 +11,11 @@ function blockLabel(block: number) {
 }
 
 /**
- * Toast body shown when a reschedule/resize/resolve-overflow placed a task into
- * a preference-favoured slot and the backend returned a {@link SchedulingRationale}.
- * Mirrors {@link OverflowToast}: a custom sonner body (not the single-line
- * `action` slot) so we can render the human summary plus the optional preferred
- * window / top day×block cells that drove the pick.
+ * Toast body shown when a reschedule/resize placed a task into a
+ * preference-favoured slot and the backend returned a
+ * {@link SchedulingRationale}. A custom sonner body (not the single-line
+ * `action` slot) so we can render the human summary plus the optional
+ * preferred window / top day×block cells that drove the pick.
  */
 export function RationaleToast({
   title,

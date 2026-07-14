@@ -1,18 +1,10 @@
 import { randomUUID } from "crypto";
 import { Injectable } from "@nestjs/common";
-import type { SchedulingRationale } from "@zenflow/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { Prisma, type TaskEventType } from "../../generated/prisma";
-import type { EdfTask, Placement, SchedulerPrefs } from "./interfaces";
-import {
-  fallbackSlot,
-  feasibleSlots,
-  intervalOf,
-  scheduleAll,
-} from "./utils/edf";
+import type { Placement, SchedulerPrefs } from "./interfaces";
+import { scheduleAll } from "./utils/edf";
 import { MAX_SCAN_DAYS } from "./constants";
-import { topN as rerankTopN } from "./utils/reranker";
-import { buildRationale } from "./utils/rationale";
 import {
   NEUTRAL_BIAS,
   blendBias,
@@ -28,7 +20,6 @@ import {
   type ConflictTask,
   type EdfSourceTask,
 } from "./utils/telemetry";
-import type { Interval } from "./utils/slot";
 
 /** Either a live `PrismaService` or an open `$transaction` client. */
 type Db = PrismaService | Prisma.TransactionClient;
@@ -200,13 +191,22 @@ export class SchedulerService {
    * isn't double-recorded here as a collateral RESCHEDULED — it's still
    * included in the returned `displaced` array; callers that don't want their
    * own task in that list filter it out themselves (see `TasksService.create`).
+   * `opts.pinnedTaskId` (optional, unrelated to `fixedTaskId`) is a PLACEMENT
+   * constraint, not an event-attribution one: it's forwarded straight to
+   * `scheduleAll`'s `pinnedTaskId` param, hard-freezing that one task at its
+   * current (just-written) `scheduledStartTime` for this call only, exactly
+   * like an `isPast` task — every other task's candidate search routes around
+   * it instead of contesting it in the EDF eviction/placement race.
+   * `TasksService.displace`/`resize` set it to the task the user just
+   * dragged/resized, so that drag/resize's OWN inline reoptimize can never
+   * bounce it back off its own requested slot.
    */
   async reoptimize(
     userId: string,
     prefs: SchedulerPrefs,
     now: Date,
     db: Db = this.prisma,
-    opts: { fixedTaskId?: string } = {},
+    opts: { fixedTaskId?: string; pinnedTaskId?: string } = {},
   ): Promise<{ displaced: Placement[]; batchId: string | null }> {
     const loadCeiling = new Date(
       now.getTime() + MAX_SCAN_DAYS * 24 * 60 * 60 * 1000,
@@ -217,7 +217,13 @@ export class SchedulerService {
       where: { id: userId },
       select: { preferenceMatrix: true },
     });
-    const placements = scheduleAll(prefs, edfTasks, now, user.preferenceMatrix);
+    const placements = scheduleAll(
+      prefs,
+      edfTasks,
+      now,
+      user.preferenceMatrix,
+      opts.pinnedTaskId,
+    );
 
     const byId = new Map(rows.map((r) => [r.id, r]));
     const projected: ConflictTask[] = placements.map((p) => ({
@@ -329,94 +335,6 @@ export class SchedulerService {
         AS v(id, "scheduledStartTime", "conflict", "manuallyMoved")
       WHERE t.id = v.id
     `;
-  }
-
-  /**
-   * Read-only dry-run of the scheduler for a not-yet-created task: never
-   * writes to the DB. Builds `occupied` from the user's currently-placed
-   * tasks, computes the draft task's feasible set, re-ranks it by the user's
-   * preference matrix, and attaches a rationale per candidate. When Tier 1
-   * (the in-hours-before-deadline feasible set) is empty, falls back to the
-   * same Tier 2/3 deterministic fallback `scheduleAll` uses ({@link
-   * fallbackSlot}) rather than returning zero proposals — a single
-   * (un-ranked, rationale-less) proposal, since Tier 2/3 never had more than
-   * one candidate to begin with.
-   */
-  async simulate(
-    userId: string,
-    prefs: SchedulerPrefs,
-    draft: { durationMinutes: number; deadline: Date; tags?: string[] },
-    now: Date,
-    topN = 1,
-  ): Promise<{
-    proposals: {
-      scheduledStartTime: Date;
-      rationale: SchedulingRationale | null;
-    }[];
-  }> {
-    // Tier 1 only ever needs occupied data up to `draft.deadline`, but the
-    // Tier 2/3 fallback (see below) can scan well past it — load a horizon
-    // that covers both, mirroring the `now + MAX_SCAN_DAYS` bound
-    // `feasibleSlots`'s own no-deadline ceiling and `reoptimize`'s load use.
-    const loadCeiling = new Date(
-      Math.max(
-        draft.deadline.getTime(),
-        now.getTime() + MAX_SCAN_DAYS * 24 * 60 * 60 * 1000,
-      ),
-    );
-    const rows = await this.loadPendingRows(
-      userId,
-      this.prisma,
-      loadCeiling,
-      now,
-    );
-    const occupied = rows
-      .map((r) => intervalOf(toEdfTask(r)))
-      .filter((iv): iv is Interval => iv !== null);
-
-    const draftTask: EdfTask = {
-      id: "__draft__",
-      durationMinutes: draft.durationMinutes,
-      deadline: draft.deadline,
-      manuallyMoved: false,
-      scheduledStartTime: null,
-      createdAt: now,
-      conflict: false,
-    };
-
-    const candidates = feasibleSlots(draftTask, now, prefs, occupied);
-    if (candidates.length === 0) {
-      const fallback = fallbackSlot(draftTask, now, occupied, prefs);
-      return {
-        proposals: fallback
-          ? [{ scheduledStartTime: new Date(fallback.start), rationale: null }]
-          : [],
-      };
-    }
-
-    const user = await this.prisma.user.findUniqueOrThrow({
-      where: { id: userId },
-      select: { preferenceMatrix: true },
-    });
-    const n = Math.max(1, Math.min(5, topN));
-    const ranked = rerankTopN(
-      candidates,
-      user.preferenceMatrix,
-      prefs.timezone,
-      draftTask.id,
-      n,
-    );
-
-    return {
-      proposals: ranked.map((r) => ({
-        scheduledStartTime: r.start,
-        rationale: buildRationale(
-          r.start,
-          user.preferenceMatrix,
-          prefs.timezone,
-        ),
-      })),
-    };
   }
 
   /**

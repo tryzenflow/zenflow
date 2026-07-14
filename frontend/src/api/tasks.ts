@@ -4,14 +4,13 @@ import type {
   CreateTaskInput,
   CreateTaskResponse,
   DeadlineOptionsResponse,
-  DisplacedTask,
-  RescheduleCascadeInput,
   RescheduleResponse,
   SimulateTaskInput,
   SimulateTaskResponse,
   Task,
   TaskDetailResponse,
   TasksListResponse,
+  UndoBatchResponse,
   UpdateTaskInput,
   UpdateTaskResponse,
   ViewMode,
@@ -103,24 +102,12 @@ export async function resizeTask(
 }
 
 /**
- * The shared confirm-before-reschedule target for a deadline edit, a
- * tags-driven duration change, or a delete's gap-fill — no anchor task, every
- * non-frozen task currently placed inside `input`'s window is eligible.
+ * Undo the inline narrow same-day auto-resolve a create/update/drag/resize
+ * ran (see `UpdateTaskResponse.batchId` / `RescheduleResponse.batchId`) —
+ * reverts every task that batch moved back to its prior slot/duration.
  */
-export async function rescheduleCascade(
-  input: RescheduleCascadeInput,
-): Promise<{ displaced: DisplacedTask[] }> {
-  const { data } = await api.post("/tasks/reschedule-cascade", input);
-  return data.data;
-}
-
-export async function resolveOverflow(
-  id: string,
-  choice: "outsideHours" | "nextAvailable",
-): Promise<RescheduleResponse> {
-  const { data } = await api.patch(`/tasks/${id}/resolve-overflow`, {
-    choice,
-  });
+export async function undoBatch(batchId: string): Promise<UndoBatchResponse> {
+  const { data } = await api.post(`/tasks/reschedule/undo/${batchId}`);
   return data.data;
 }
 
@@ -130,10 +117,8 @@ export async function completeTask(id: string): Promise<Task> {
 }
 
 /**
- * Deletes the task. Never cascades — the caller is responsible for capturing
- * the task's placement BEFORE calling this (e.g. from already-loaded task
- * state) and, if it's still in the future, offering a gap-fill reschedule via
- * {@link rescheduleCascade}.
+ * Deletes the task. Never cascades — any gap it leaves behind is only filled
+ * organically, by a later create/edit/drag landing on it.
  */
 export async function removeTask(id: string): Promise<void> {
   await api.delete(`/tasks/${id}`);

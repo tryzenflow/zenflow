@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { format, isSameDay } from "date-fns";
 import type { DeadlineOptionsResponse } from "@zenflow/shared";
 import { getDeadlineOptions } from "@/api/tasks";
@@ -72,11 +72,16 @@ export function DeadlineChipField({
   value,
   onChange,
   disabled,
+  editing,
 }: {
   /** The resolved deadline, as a UTC ISO-8601 instant (or "" when unset). */
   value: string;
   onChange: (iso: string) => void;
   disabled?: boolean;
+  /** Edit mode: an empty `value` just means the task hasn't loaded yet (its
+   * real deadline is on the way via `form.reset`), NOT "unset" — so the
+   * no-rush default below must not fire. */
+  editing?: boolean;
 }) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const [options, setOptions] = useState<DeadlineOptionsResponse | null>(null);
@@ -91,10 +96,14 @@ export function DeadlineChipField({
   const lastEmitted = useRef<string | null>(null);
 
   useEffect(() => {
-    getDeadlineOptions(new Date().toISOString())
+    // Anchor the deadline options to midnight of the current day in the user's
+    // timezone, not the current time. This ensures "Today" means "end of today"
+    // and "Tomorrow" means "end of tomorrow", not "next minute" / "next second".
+    const anchor = zonedWallClockToUtc(dayAnchor(tz, 0), tz).toISOString();
+    getDeadlineOptions(anchor)
       .then(setOptions)
       .catch(() => setOptions(null));
-  }, []);
+  }, [tz]);
 
   useEffect(() => {
     if (!value || value === lastEmitted.current) return;
@@ -122,10 +131,13 @@ export function DeadlineChipField({
     setCustomMinutes(minutesOfDay(zoned));
   }, [value, options, tz]);
 
-  const emit = (iso: string) => {
-    lastEmitted.current = iso;
-    onChange(iso);
-  };
+  const emit = useCallback(
+    (iso: string) => {
+      lastEmitted.current = iso;
+      onChange(iso);
+    },
+    [onChange],
+  );
 
   const pickTodayTomorrow = (which: "today" | "tomorrow") => {
     setChip(which);
@@ -159,6 +171,17 @@ export function DeadlineChipField({
     if (id === "custom" || !options) return;
     emit(options[id]);
   };
+
+  // New-task default: a required field with nothing visibly selected reads
+  // as broken, so once the options load, silently default to "No rush"
+  // rather than leaving every chip unselected until the user picks one.
+  const defaultedRef = useRef(false);
+  useEffect(() => {
+    if (editing || defaultedRef.current || !options || value) return;
+    defaultedRef.current = true;
+    setChip("noRush");
+    if (options) emit(options.noRush);
+  }, [editing, options, value, emit]);
 
   const preview = value
     ? format(zonedDate(value, tz), "EEE MMM d, h:mm a")

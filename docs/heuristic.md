@@ -15,10 +15,10 @@ Read this once; the rest of the doc assumes it. Terms are defined before their f
 
 | Term | Plain definition | Why it matters here |
 |------|------------------|---------------------|
-| **EDF (Earliest-Deadline First)** | A scheduling rule: sort tasks by deadline, then drop each into the first free slot. | Our Phase-1 engine. It is *deterministic* (same inputs → same output) and never learned. |
+| **EDF (Earliest-Deadline First)** | Originally a hard rule ("sort by deadline, drop into the first free slot"); today deadline pressure is one continuous cost term (`latenessCost`, see the cost model below) in a single blended score, not a separate gating pass. | Historically our Phase-1 engine name, and `scheduleAll` still *processes* tasks in EDF order (deadline ascending, `compareMovable`) — but meeting a deadline is now a weighted cost, never a hard constraint (a task can be placed past its deadline if every other option costs more). |
 | **Slot** | A 15-minute block of calendar time. The day is a grid of these. | All scheduling happens on this grid; durations are always multiples of 15 min. |
-| **Feasible set** | The slots EDF says a task *could* legally occupy — ones that respect the deadline, work hours, and the 15-min grid. | The intelligence layer is only ever allowed to choose *within* this set. |
-| **Re-ranker** | A function that reorders the feasible set so a more-preferred slot comes first, without removing any slot. | This is where every learned model plugs in. If the set has one slot, it does nothing. |
+| **Feasible set** | Originally "the slots that legally respect the deadline/work hours/grid"; now a bounded pool of *candidate* slots — pooled from `feasibleSlots` (in-hours-before-deadline), `findSlotIgnoringWorkHours`, and `findNextAvailableSlot` — each scored by the continuous `placementCost`, with deadline and work-hours no longer hard gates on membership. The only slots ever excluded outright are ones that would overlap another task, one that falls on a task already in progress/past (`isPast`), or — for the one task a single `reoptimize` call is told to freeze — the transient per-call `pinnedTaskId`. | The intelligence layer re-ranks *within* this cost-ranked candidate pool, not a strict deadline/work-hours-filtered set. |
+| **Re-ranker** | A function that re-ranks a pool of cost-ranked candidates (pooled from the three sources above, not a strict tiered fallback) so a more-preferred slot is favoured, via the same seeded-softmax mechanism used for cost tie-breaking. | This is where every learned model plugs in — Phase 2's preference bonus is itself one term inside `placementCost`; later phases (the bandit) replace/extend the scoring function the pool is ranked by. |
 | **Telemetry / `task_events`** | An audit log: one row per user action (created, moved, resized, completed…), recording what was suggested vs. what the user chose. | This log is the *only* data the learners ever see; it makes offline evaluation possible. |
 | **Tag** | A user-defined label on a task (`#backend`, `#writing`). A task can have several. | Used both for duration correction and, later, as a model feature. |
 | **Duration bias** | A per-tag multiplier = (actual time taken) ÷ (estimated time). >1 means the user underestimates. | We use it to correct the user's estimate *before* scheduling, so blocks are the right size. |
@@ -77,24 +77,46 @@ The schedule EDF produces is basic and not personalized. Today the user manually
 and we log every manual edit. Those edits are the raw material for personalizing future
 schedules.
 
-## Architecture invariant: hard constraint vs. soft re-ranker
+## Architecture invariant: a single continuous cost model
 
-This split holds across **every** phase below and is the spine of the whole roadmap. The
-intuition: *deadlines are non-negotiable; preferences only break ties.*
+The July 12 rewrite replaced the old hard-constraint / feasible-set-then-rerank split with one
+continuous, cost-based soft-constraint model (`backend/src/scheduler/utils/edf.ts`'s module doc
+comment + `constants.ts`). Placement no longer walks a deadline → work-hours → grid gate
+before preference ever gets a vote; instead every candidate slot `c` for a task `t` currently
+anchored at `anchor(t)` (its stored `scheduledStartTime`, wherever it sits right now — a
+brand-new/unplaced task has no anchor) gets one blended score:
 
-- **EDF is a hard constraint, never learned.** EDF produces the set of *feasible* slots for a
-  task — those that respect the deadline, work hours, and the 15-minute grid
-  ([CLAUDE.md invariant #3](../CLAUDE.md)). Deadline feasibility is never traded away for
-  preference.
-- **The intelligence layer is a soft re-ranker.** Every phase from 2 onward only **re-ranks
-  within the feasible set** EDF hands it. A learned model can prefer one feasible slot over
-  another; it can never return an infeasible one. If the feasible set is a single slot, the
-  re-ranker is a no-op.
+```
+placementCost(t, c) = deviationCost(t, c) + latenessCost(t, c) + offHoursCost(c) − preferenceBonus(c)
+```
 
-Concretely, the pipeline is: `candidates = edf.feasibleSlots(task, now)` → `ranked =
-reRanker.score(task, candidates)` → pick `ranked[0]`. Phase 1 ships an *identity* re-ranker
-(returns the feasible set unchanged); later phases swap in smarter ones behind the same
-interface.
+- **`deviationCost`** scales by how far `c` sits from `anchor(t)`, weighted by how far in the
+  *future* that anchor is: `DEVIATION_WEIGHT_NEAR = 1.0` for an anchor at/near `now`, lerping
+  down to `DEVIATION_WEIGHT_FAR = 0.1` once the anchor is `DEVIATION_HORIZON_DAYS = 7` days out
+  or beyond — a near-term placement is expensive to disturb, a far-future one is cheap to
+  renegotiate. A task with no anchor has zero deviation cost.
+- **`latenessCost`** and **`offHoursCost`** replace what used to be hard tiers (the deadline
+  cutoff, the work-hours window) with per-minute penalties (`LATENESS_RATE = 4`,
+  `HOURS_RATE = 2`). `LATENESS_RATE > HOURS_RATE` is deliberate: it preserves the *old tier
+  priority* (missing the deadline was always worse than landing outside work hours) as a cost
+  ordering rather than a structural gate.
+- **`preferenceBonus`** is the Phase 2 signed-preference-matrix cell score — see below.
+
+**What's still actually hard** (no blend, no exceptions): no two tasks may ever overlap; a
+task already in progress/past (`isPast`) or whose own deadline has already elapsed
+(`isOverdue`) is completely frozen; and, for the one call that just placed it, the task named
+by that call's transient `pinnedTaskId` (a drag/resize's just-dropped slot, hard-pinned for
+that single `reoptimize` invocation only). Everything else — deadlines, work hours, the old
+`manuallyMoved` freeze — is a cost term now: `manuallyMoved` is purely cosmetic telemetry (the
+"Manually placed" badge), the scheduler never reads it to decide what can move.
+
+The re-ranker framing still holds for the Phase 2/3 preference layer below, just not as
+"EDF's feasible set, then re-rank": `scheduleAll` pools candidates from three sources
+(`feasibleSlots` in-hours-before-deadline, `findSlotIgnoringWorkHours` outside-hours-before-
+deadline, `findNextAvailableSlot` in-hours-past-deadline — no more priority tiering between
+them, cost alone decides), ranks the pool by `-placementCost`, and near-ties are broken by the
+same seeded-softmax stochastic mechanism the Phase 2 preference re-ranker uses (`rankByScores`),
+so propensity logging for IPS/SNIPS keeps working either way.
 
 ## Persistent layers (on from day one, never removed)
 
@@ -165,18 +187,15 @@ and complete telemetry.
   such a task is packed from `now` by pure EDF urgency, exactly as before (the period ceiling
   does not apply). The bound lives **inside** the scheduling logic, so an overflowing task
   stays unplaced across every later cascade rather than being re-placed by an unrelated edit.
-- **Overflow recovery:** When EDF can't place a task — no work-hours slot before its deadline,
-  **or** no work-hours slot left inside its viewed period — it comes back unplaced
-  (`scheduledStartTime: null`, `conflict: true`) and the API offers two pure-computed escape
-  hatches alongside the create response (`overflow`), both computed relative to the task's
-  **anchor period** (not `now`): **(1) schedule outside working hours** — the earliest grid
-  slot **inside** the viewed period, ignoring the work window but still respecting occupied
-  intervals and any deadline; and **(2) schedule the next available period** — the earliest
-  work-hours slot in the **next** day/week/month (per the active view), this time ignoring the
-  deadline. Both are recomputed server-side (period-aware, from the stored anchor + view) when
-  the user accepts one, then the task is pinned as manually-moved
-  (`PATCH /tasks/:id/resolve-overflow`). Each option is still deadline-aware telemetry: the
-  override is recorded as a MOVE event.
+- **Overflow recovery:** When the cost-based scheduler genuinely can't place a task anywhere in
+  the scan horizon (`MAX_SCAN_DAYS`) — a saturated calendar, not a deadline/work-hours gate
+  failure, since those are now cost terms it will place *past* rather than give up on — it
+  comes back unplaced (`scheduledStartTime: null`, `conflict: true`). There is no interactive
+  escape-hatch endpoint for this anymore (the old two-option `PATCH /tasks/:id/resolve-overflow`
+  is gone); instead the count of such tasks is surfaced via `TasksMeta.conflictCount` (a
+  calendar-header badge, computed server-side on every list call) plus a toast on create, so the
+  user is told *that* something needs attention without a blocking dialog forcing a choice
+  before the task even exists.
 - **Data Foundation:** Implement the `task_events` audit table in PostgreSQL. Multi-tag
   flexibility is modelled as a per-user `Tag` relation (implicit many-to-many, with
   `@@unique([userId, name])`) rather than a native `text[]` column — the relation dedupes tag

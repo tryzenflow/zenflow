@@ -86,8 +86,8 @@ a combobox (`TitleField` in `form/task-form.tsx`): typing fetches the user's exi
 autocompletes the rest of the form — duration, tags, note, and a forward-shifted deadline
 (the source task's create→deadline lead time re-applied from now). Edit mode keeps the plain
 input. There is no "fixed vs flexible" scheduling-type toggle anymore — every task is
-flexible; a task only stays put once it's `manuallyMoved` (dragged/resized, or an accepted
-overflow-recovery option), rendered as a lock icon on the block, not a distinct card state.
+flexible; a task only stays put once it's `manuallyMoved` (dragged or resized), rendered as a
+lock icon on the block, not a distinct card state.
 
 **Deadline is required** and is set entirely through quick-action chips
 (`components/tasks/form/deadline-chip-field.tsx`) — Today / Tomorrow / This week / Next week
@@ -99,57 +99,45 @@ Custom exposes both the existing `DatePicker` and the new `components/ui/time-pi
 Popover-based hour/minute/AM-PM picker — todo.md explicitly rejects the native
 `<input type="time">`).
 
-**Create is direct, but never silently displaces.** Submitting the form calls `POST /tasks`
-immediately — no simulate-then-confirm step for the common case, since the backend places the
-new task solo (a zero-width cascade scope, so it only lands in genuinely free space — see
-`backend/README.md`). A non-empty `displaced` array (any cascade response — edit, delete,
-drag/resize, or the rare case where creating this task let some OTHER already-unplaced task
-also find a home) drives the shared `tasks/displaced-summary-toast.tsx` ("N other tasks
-moved…", expandable). When the new task can't fit without displacing something, `overflow` is
-populated and `create-task-dialog.tsx` offers the SAME confirm-before-reschedule prompt
-described below (window `[now, deadline]` — the task's own full feasible range) before falling
-back to `overflow-toast.tsx` (outside-working-hours vs. next-available-working-hours, which
-reposition the new task itself rather than moving anything else) if declined.
+**Create is direct, and always lands somewhere concrete.** Submitting the form calls
+`POST /tasks` immediately — no simulate-then-confirm step. The pure scheduler tries
+in-hours-before-deadline, then outside-hours-before-deadline, then in-hours-past-deadline
+before ever giving up, so a create response's `task` always carries a real placement except
+the rare last-resort case where `task.conflict` is still true (genuinely no room anywhere in
+the scan horizon). `create-task-dialog.tsx` derives a client-side "why is this unusual?" signal
+for the success toast — `utils/tasks.ts`'s `placementQualifier(task, user)` compares the
+placement against the deadline and the user's work window and returns `"onTime"`,
+`"outsideHours"`, or `"pastDeadline"` (checked in that priority), appending " — outside your
+usual work hours" / " — past its deadline" to the toast copy when relevant (the backend no
+longer returns *why* a placement is unusual, only where it landed).
 
-Editing a task's deadline or tags, deleting a task, and now creating one, all fold through one
-shared confirm-before-reschedule path: `tasks/prompt-reschedule-cascade.ts`'s
-`promptRescheduleCascade` (`edit-task-dialog.tsx` calls it after `updateTask`/`deleteTask`,
-having captured the task's pre-delete `scheduledStartTime` since the row is gone by confirm
-time; `create-task-dialog.tsx` calls it when `overflow` comes back). Each caller owns its own
-window and gating, since the triggers differ:
-- **Deadline edit** — no-ops for a past/in-progress task or one with no placement (todo.md
-  §Rescheduling Design). Window is `[now, newDeadline]`: a deadline change's meaningful search
-  range IS the new deadline (shortening it can conflict with anything up to the old bound,
-  lengthening it opens room anywhere up to the new one), so there's no natural fixed size to
-  cap the search at.
-- **Tags-driven duration change** and **delete** — same past/in-progress/no-placement no-op,
-  but a fixed ±3-workday band (`utils/tasks.ts`'s `cascadeWindow`: the 3 nearest workdays each
-  side of the task's placement, back-clamped to `now` with any clamped-away day shifted onto
-  the forward side), since these are point-in-time disruptions with no natural range to search.
-  The corrected duration itself is applied immediately by `PATCH /tasks/:id`, not deferred to
-  the cascade confirm; the tags-change prompt only fires when the tags actually changed
-  (`edit-task-dialog.tsx` diffs the submitted tags against the task's pre-edit tags —
-  `schedulingMeta` alone isn't reliable, since the backend returns it whenever the update
-  touches the `tags` field at all, not only when it changed).
-- **Create** — no-ops unless `overflow` came back (the new task itself couldn't find room).
-  Window is `[now, deadline]`, same reasoning as a deadline edit.
+**Auto-resolve, not ask-first.** A deadline/tags edit, a drag, or a resize that would leave the
+task's own slot conflicting with a neighbour is now auto-resolved INLINE by the backend (a
+narrow, same-day repack, same request/transaction — no confirm toast, no second round-trip).
+Every one of these calls — create, `updateTask`, `rescheduleTask` (drag), `resizeTask`
+(resize) — returns a `displaced: DisplacedTask[]` array of whatever the repack moved, plus an
+optional `batchId` grouping the RESCHEDULED events it wrote. The frontend no longer surfaces a
+toast for this (the previous "N other tasks moved to make room" summary — `tasks/
+displaced-summary-toast.tsx` — was removed: it fired even for inconsequential moves and its
+expandable list often couldn't resolve a title). `create-task-dialog.tsx`, `edit-task-dialog.tsx`,
+and `calendar/layout.tsx`'s `onReschedule`/`onResize` all still receive `response.displaced` /
+`response.batchId` but ignore them; `refetch()`/`onSaved()`/`onCreated()` (already called
+unconditionally) picks up whatever moved. `api/tasks.ts`'s `undoBatch` (`POST
+/tasks/reschedule/undo/:batchId`) remains available but currently has no UI call site.
 
-Confirming any of these calls `POST /tasks/reschedule-cascade` (`RescheduleCascadeInput` —
-`windowStart`/`windowEnd` computed client-side, `includeManual?`; no anchor task). The 2-button
-variant (`tasks/reschedule-confirm-toast.tsx`) is built on the shared `ConfirmToastShell`
-(title + description + 1-3 action buttons) in `lib/scheduling-toasts.tsx`, itself wrapped in
-the same `shell()` popover `overflow-toast.tsx` always used — no new AlertDialog primitive.
-
-**3-option manual-vs-auto reschedule choice** (todo.md §Rescheduling Design):
-`promptRescheduleCascade` checks the caller's window (`utils/tasks.ts`'s
-`hasManualTaskInWindow`, against the currently-loaded calendar `blocks`) for any
-`manuallyMoved` task. If one is in scope, it shows `tasks/reschedule-choice-toast.tsx` instead
-of the plain 2-button confirm — "Only move auto-scheduled tasks" (`rescheduleCascade` with
-`includeManual` omitted, the default), "Reschedule everyone" (`includeManual: true` — the
-backend un-pins any manual task it ends up moving), or "I'll do it myself" (no call; fires
-`onDecline` if the caller gave one — create's only use of it, to fall back to overflow-recovery).
-When nothing manual is in the window the two options are behaviorally identical, so the
-original 2-button toast stays as-is.
+**The wide ±3-workday/`[now, deadline]` cascade is gone.** The backend's cost-based scheduler
+rewrite dropped the window-scoped "narrow vs. wide" cascade distinction entirely — `reoptimize`
+is the one mechanism now, already run inline on every create/update/drag/resize, with no
+follow-up action left to offer. `POST /tasks/reschedule-cascade` no longer exists server-side, so
+the frontend's `tasks/prompt-reschedule-cascade.ts` (`promptRescheduleCascade`),
+`tasks/reschedule-confirm-toast.tsx`, and `tasks/reschedule-choice-toast.tsx` were deleted along
+with it, and `utils/tasks.ts`'s `cascadeWindow`/`needsRescheduleWindow`/`hasManualTaskInWindow`
+helpers that only fed them. A `task.conflict` that survives the inline reoptimize now just means
+a genuinely saturated calendar (no slot found anywhere in the scan horizon) — there's no
+follow-up prompt for it; the task stays flagged `conflict` (surfaced via the amber status dot /
+`conflictCount`) until something frees up room. Deleting a task no longer offers a gap-fill
+prompt either — any gap it leaves is only filled organically, by a later create/edit/drag
+landing on it.
 
 **Settings** is a dialog, not a route: `components/settings/settings-dialog.tsx` is a
 Todoist-style **tabbed** dialog — **Work** (hours / days / timezone via
@@ -169,12 +157,11 @@ Work Days · **Adjustments** (the same `auto | ask | never` control) · All Set;
 the chosen mode is wired into `OnboardingInput.durationAdjustmentMode`.
 
 **Phase-2 transparency UI (issue #13).** Scheduling decisions are surfaced as sonner
-`toast.custom` bodies that mirror `overflow-toast.tsx`: `tasks/rationale-toast.tsx` (why a
-task was placed, from `RescheduleResponse.rationale`) and the duration-adjustment toasts in
-`lib/scheduling-toasts.tsx` (`auto` → apply + **Undo**; `ask` → blocking Accept/Keep; both
-revert via `PATCH /tasks/:id/resize`). The rationale toast is shown from `layout.tsx`
-(reschedule/resize) and `create-task-dialog.tsx` (resolve-overflow); the duration toast from
-`create-task-dialog.tsx` off the create response's `schedulingMeta`. While a block is being
+`toast.custom` bodies: `tasks/rationale-toast.tsx` (why a task was placed, from
+`RescheduleResponse.rationale` — `lib/scheduling-toasts.tsx`'s `maybeShowRationaleToast`) and
+the duration-adjustment toasts in `lib/scheduling-toasts.tsx` (`auto` → apply + **Undo**;
+`ask` → blocking Accept/Keep; both revert via `PATCH /tasks/:id/resize`). The duration toast is
+shown from `create-task-dialog.tsx` off the create response's `schedulingMeta`. While a block is being
 edge-resized, `scheduled-block-item.tsx` renders the added/removed minutes as a distinct
 delta band/label (purely visual, driven off the existing resize-preview state so it doesn't
 touch the drag/resize gesture path). The Phase-2 `@zenflow/shared` type deltas are consumed

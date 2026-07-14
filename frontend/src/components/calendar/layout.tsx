@@ -21,11 +21,15 @@ import {
   resizeTask,
 } from "@/api/tasks";
 import { tasksToBlocks } from "@/utils/blocks";
-import type { TasksMeta } from "@zenflow/shared";
+import type { TasksMeta, RescheduleResponse } from "@zenflow/shared";
 import { isAxiosError } from "axios";
 import { toast } from "sonner";
 import { errorToast } from "@/lib/toast";
 import { useUserStore } from "@/hooks/use-user-store";
+import {
+  maybeShowCascadeToast,
+  maybeShowRationaleToast,
+} from "@/lib/scheduling-toasts";
 import { zonedDate, zonedNow } from "@/utils/tz";
 import { format, isSameMonth, isValid } from "date-fns";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
@@ -145,18 +149,28 @@ export function CalendarLayout() {
       // dropped the stale block from the grid.
       if (!fresh.some((b) => b.taskId === taskId)) return;
     }
+    let response: RescheduleResponse | undefined;
     try {
-      // The backend just pins this task `manuallyMoved` at the dropped slot —
-      // no cascade, so no other task is ever touched by a drag.
-      await rescheduleTask(taskId, startISO);
+      // The backend pins this task `manuallyMoved` at the dropped slot, and
+      // now also auto-resolves a same-day overlap with another task inline
+      // (narrow same-day repack) instead of just leaving `conflict: true`.
+      response = await rescheduleTask(taskId, startISO);
       window.dispatchEvent(
         new CustomEvent("zenflow:task-updated", { detail: taskId }),
       );
+      maybeShowRationaleToast(response);
+      maybeShowCascadeToast(response, refetch);
     } catch (error) {
       if (isAxiosError(error))
         errorToast(error.response?.data?.message || "Failed to reschedule");
     } finally {
-      await refetch(); // reconcile with the server (applies cascade / reverts)
+      // Only refetch if there's no cascade undo to handle (which will refetch
+      // on undo). If there's a batchId, the cascade toast's undo callback
+      // will handle the refetch, avoiding a race condition where we overwrite
+      // optimistic state before the user sees and possibly undoes the cascade.
+      if (!response?.batchId) {
+        await refetch(); // reconcile with the server
+      }
     }
   }
 
@@ -186,17 +200,28 @@ export function CalendarLayout() {
       const fresh = await inFlight.current;
       if (!fresh.some((b) => b.taskId === taskId)) return;
     }
+    let response: RescheduleResponse | undefined;
     try {
-      // Same as onReschedule: pins this task only, no cascade.
-      await resizeTask(taskId, startISO, durationMinutes);
+      // Same as onReschedule: pins this task, and now also auto-resolves a
+      // same-day overlap the resize creates inline instead of just flagging
+      // `conflict: true`.
+      response = await resizeTask(taskId, startISO, durationMinutes);
       window.dispatchEvent(
         new CustomEvent("zenflow:task-updated", { detail: taskId }),
       );
+      maybeShowRationaleToast(response);
+      maybeShowCascadeToast(response, refetch);
     } catch (error) {
       if (isAxiosError(error))
         errorToast(error.response?.data?.message || "Failed to resize");
     } finally {
-      await refetch();
+      // Only refetch if there's no cascade undo to handle (which will refetch
+      // on completion). If there's a batchId, the cascade toast's undo callback
+      // will handle the refetch, avoiding a race where we overwrite optimistic
+      // state before the user sees the cascade toast.
+      if (!response?.batchId) {
+        await refetch();
+      }
     }
   }
 
@@ -292,7 +317,6 @@ export function CalendarLayout() {
           conflictCount={meta?.conflictCount ?? 0}
           onChanged={refetch}
           onOpenNav={() => setNavOpen(true)}
-          blocks={blocks}
         />
         {/* `relative` so the floating glass controls overlay the grid without
             scrolling with it. */}
@@ -317,7 +341,6 @@ export function CalendarLayout() {
           <CreateTaskDialog
             date={date}
             view={viewMode}
-            blocks={blocks}
             onCreated={refetch}
             trigger={
               <Button
@@ -371,7 +394,6 @@ export function CalendarLayout() {
           setOpen={(o) => !o && setEditId(null)}
           taskId={editId}
           onSaved={refetch}
-          blocks={blocks}
         />
       )}
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />

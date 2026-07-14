@@ -2,18 +2,27 @@ import { test, expect, type Page } from "@playwright/test";
 import { login, uniqueEmail } from "./helpers/auth";
 
 /**
- * Confirm-before-reschedule flows (todo.md): editing a task's deadline, and
- * deleting a task, both surface a toast asking whether to cascade-reschedule
- * — this only exercises that the prompts appear and are dismissable; the
- * cascade math itself is covered by the backend's scheduler specs.
+ * Reschedule redesign (todo.md): a deadline/tags edit or a delete that would
+ * leave a same-day conflict/gap behind is now handled INLINE by the
+ * backend's cost-based scheduler — there's no more separate
+ * confirm-before-reschedule prompt (the old "wide cascade" fallback and its
+ * `POST /tasks/reschedule-cascade` endpoint are gone). This exercises that
+ * neither a deadline edit nor a delete surfaces the old blocking prompt. The
+ * cost-based placement math itself is covered by the backend's scheduler
+ * specs.
  *
  * Requires: backend stack + MailHog (see playwright.config.ts).
  */
 
 async function skipOnboardingIfNeeded(page: Page) {
   if (/\/onboarding$/.test(page.url())) {
-    const next = page.getByRole("button", { name: /continue/i });
-    for (let i = 0; i < 5; i++) await next.click();
+    // Click through however many "Continue" steps the wizard has (rather
+    // than a hardcoded count) so this doesn't break if a step is added.
+    const next = page.getByRole("button", { name: /^continue$/i });
+    while (await next.isVisible().catch(() => false)) {
+      await next.click();
+      await page.waitForTimeout(150);
+    }
     await page.getByRole("button", { name: /start planning/i }).click();
     await expect(page).toHaveURL(/\/$/);
   }
@@ -43,10 +52,10 @@ test.describe("edit/delete confirm toasts", () => {
     await skipOnboardingIfNeeded(page);
   });
 
-  test("changing the deadline prompts a reschedule-cascade confirm toast", async ({
+  test("changing the deadline auto-resolves inline, with no confirm prompt", async ({
     page,
   }) => {
-    const title = "Deadline change confirm";
+    const title = "Deadline change auto-resolve";
     await createTask(page, title);
 
     // Open the task from the sidebar agenda (mirrors clicking a calendar block).
@@ -56,13 +65,17 @@ test.describe("edit/delete confirm toasts", () => {
     await page.getByRole("button", { name: /save changes/i }).click();
 
     await expect(page.getByText(/task updated/i)).toBeVisible();
-    await expect(page.getByText(/deadline changed for/i)).toBeVisible({
-      timeout: 5_000,
+    // The backend already auto-resolved any conflict this left behind
+    // inline — the old blocking confirm-before-reschedule prompt no longer
+    // fires for the common (non-conflict) case.
+    await expect(page.getByText(/deadline changed for/i)).toBeHidden({
+      timeout: 3_000,
     });
-    await page.getByRole("button", { name: /not now/i }).click();
   });
 
-  test("deleting a task prompts a gap-fill confirm toast", async ({ page }) => {
+  test("deleting a task no longer prompts a gap-fill confirm toast", async ({
+    page,
+  }) => {
     const title = "Delete gap confirm";
     await createTask(page, title);
 
@@ -70,9 +83,8 @@ test.describe("edit/delete confirm toasts", () => {
     await page.getByRole("button", { name: /delete task/i }).click();
 
     await expect(page.getByText(/task deleted/i)).toBeVisible();
-    await expect(page.getByText(/reschedule the rest of/i)).toBeVisible({
-      timeout: 5_000,
-    });
-    await page.getByRole("button", { name: /leave it/i }).click();
+    await expect(
+      page.getByText(/left a gap in your schedule/i),
+    ).toBeHidden({ timeout: 3_000 });
   });
 });

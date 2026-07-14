@@ -1,7 +1,5 @@
-import { PREFERENCE_MATRIX_LENGTH } from "@zenflow/shared";
 import { SchedulerService } from "./scheduler.service";
 import type { SchedulerPrefs } from "./interfaces";
-import * as edfUtils from "./utils/edf";
 
 /**
  * `SchedulerService` is the ONLY I/O layer (CLAUDE.md invariant #2) — these
@@ -420,91 +418,6 @@ describe("SchedulerService.reoptimize", () => {
 
     const { batchId } = await service.reoptimize("u1", prefs, now);
     expect(batchId).toEqual(expect.any(String));
-  });
-});
-
-describe("SchedulerService.simulate — read-only", () => {
-  afterEach(() => jest.restoreAllMocks());
-
-  it("never writes to the DB", async () => {
-    const { prisma, table } = makeFakePrisma([]);
-    const service = new SchedulerService(prisma as never);
-
-    await service.simulate(
-      "u1",
-      prefs,
-      { durationMinutes: 60, deadline: new Date("2026-06-08T17:00:00Z") },
-      new Date("2026-06-08T08:00:00Z"),
-    );
-
-    expect(prisma.task.update).not.toHaveBeenCalled();
-    expect(table.size).toBe(0);
-  });
-
-  it("returns a proposal with a rationale when the matrix has signal", async () => {
-    const matrix = new Array<number>(PREFERENCE_MATRIX_LENGTH).fill(0);
-    matrix[0 * 24 + 9] = 5; // Monday 09:00 liked
-    const { prisma } = makeFakePrisma([], {
-      preferenceMatrix: matrix,
-      timezone: "UTC",
-    });
-    const service = new SchedulerService(prisma as never);
-
-    const result = await service.simulate(
-      "u1",
-      prefs,
-      { durationMinutes: 60, deadline: new Date("2026-06-08T17:00:00Z") },
-      new Date("2026-06-08T08:00:00Z"),
-    );
-
-    expect(result.proposals.length).toBeGreaterThan(0);
-  });
-
-  it("falls back to the Tier 2/3 deterministic fallback (a single, rationale-less proposal) when Tier 1 is empty", async () => {
-    const { prisma } = makeFakePrisma([]);
-    const service = new SchedulerService(prisma as never);
-
-    const result = await service.simulate(
-      "u1",
-      prefs,
-      // Deadline (08:15) leaves no room for a 60-min task in-hours — Tier 1
-      // is empty, so this now falls to Tier 3 (in-hours, past the deadline).
-      { durationMinutes: 60, deadline: new Date("2026-06-08T08:15:00Z") },
-      new Date("2026-06-08T08:00:00Z"),
-    );
-    expect(result.proposals).toEqual([
-      {
-        scheduledStartTime: new Date("2026-06-08T09:00:00.000Z"),
-        rationale: null,
-      },
-    ]);
-  });
-
-  it("still returns [] when every tier is exhausted (a genuinely saturated horizon)", async () => {
-    const { prisma } = makeFakePrisma([]);
-    const service = new SchedulerService(prisma as never);
-    const now = new Date("2026-06-08T08:00:00Z");
-
-    // No occupied intervals are actually passed to `simulate` (it only reads
-    // `this.prisma`'s currently-placed tasks, and the fake table is empty),
-    // so to genuinely exhaust every tier we need a task that can't fit ANY
-    // 15-min-aligned slot at all: a duration of 0 is invalid elsewhere, so
-    // instead push the deadline before `now` AND rely on Tier 3 ignoring it —
-    // Tier 3 always finds room on an empty calendar. A truly-saturated
-    // horizon is already covered by `edf.spec.ts`'s `placeTask`/`fallbackSlot`
-    // suite (pure-core, cheap to fill 90 days of occupied intervals); this
-    // test instead pins down that `simulate` propagates a real null result
-    // through by stubbing the pure fallback to "nothing found".
-    jest.spyOn(edfUtils, "fallbackSlot").mockReturnValueOnce(null);
-    jest.spyOn(edfUtils, "feasibleSlots").mockReturnValueOnce([]);
-
-    const result = await service.simulate(
-      "u1",
-      prefs,
-      { durationMinutes: 60, deadline: new Date("2026-06-08T08:15:00Z") },
-      now,
-    );
-    expect(result.proposals).toEqual([]);
   });
 });
 

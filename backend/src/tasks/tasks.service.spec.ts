@@ -910,7 +910,11 @@ describe("TasksService.remove", () => {
     });
     const { service, table } = makeIntegrationService([fixedBlock, flexible]);
 
-    await service.remove("fixed-block", user, new Date(`${day}T08:00:00.000Z`));
+    const result = await service.remove(
+      "fixed-block",
+      user,
+      new Date(`${day}T08:00:00.000Z`),
+    );
 
     expect(table.has("fixed-block")).toBe(false);
     // Nothing else wants "flexible"'s slot, so 0 deviation cost keeps it
@@ -919,6 +923,9 @@ describe("TasksService.remove", () => {
     expect(table.get("flexible")!.scheduledStartTime?.toISOString()).toBe(
       `${day}T11:00:00.000Z`,
     );
+    // Nothing moved, so the response carries no cascade to surface.
+    expect(result.displaced).toEqual([]);
+    expect(result.batchId).toBeUndefined();
   });
 
   it("closes the gap it leaves behind inline — no separate confirm step", async () => {
@@ -939,12 +946,25 @@ describe("TasksService.remove", () => {
     });
     const { service, table } = makeIntegrationService([fixedBlock, flexible]);
 
-    await service.remove("fixed-block", user, new Date(`${day}T08:00:00.000Z`));
+    const result = await service.remove(
+      "fixed-block",
+      user,
+      new Date(`${day}T08:00:00.000Z`),
+    );
 
     expect(table.has("fixed-block")).toBe(false);
     expect(table.get("flexible")!.scheduledStartTime?.toISOString()).toBe(
       `${farDay}T09:00:00.000Z`,
     );
+    // The gap-fill is reported back as a cascade so the caller can offer the
+    // same "N task(s) shifted — Undo" transparency the other mutations get.
+    expect(result.displaced).toEqual([
+      {
+        taskId: "flexible",
+        newScheduledStartTime: `${farDay}T09:00:00.000Z`,
+      },
+    ]);
+    expect(result.batchId).toEqual(expect.any(String));
   });
 });
 
@@ -1115,6 +1135,52 @@ describe("TasksService.displace / resize — pin + inline reoptimize", () => {
     expect(res.displaced).toEqual([
       { taskId: "b", newScheduledStartTime: `${day}T10:30:00.000Z` },
     ]);
+    expect(res.batchId).toEqual(expect.any(String));
+  });
+
+  it("displace() pins the dragged task's exact slot even when a DIFFERENT pending task has an earlier deadline and would otherwise win the EDF-order race for it — the reported bug", async () => {
+    const dragged = task({
+      id: "a",
+      durationMinutes: 60,
+      // Looser deadline than "c"'s below — sorts AFTER it in EDF order, so
+      // without a hard pin "c" gets processed (and would naturally claim
+      // the contested slot as its own zero-deviation-cost anchor) before
+      // "a"'s own turn ever comes up.
+      deadline: new Date(`${day}T17:00:00.000Z`),
+      scheduledStartTime: new Date(`${day}T13:00:00.000Z`),
+    });
+    // A different pending task, already anchored to the exact slot "a" is
+    // about to be dropped on (mirroring what displace()'s raw write produces
+    // right before reoptimize runs), with a tighter deadline that forces
+    // exactly that slot as its own preferred placement.
+    const other = task({
+      id: "c",
+      durationMinutes: 60,
+      deadline: new Date(`${day}T10:00:00.000Z`),
+      scheduledStartTime: new Date(`${day}T09:00:00.000Z`),
+      createdAt: new Date("2026-01-01T00:00:01.000Z"),
+    });
+    const { service, table } = makeIntegrationService([dragged, other]);
+
+    const res = await service.displace("a", `${day}T09:00:00.000Z`, user, now);
+
+    // "a" — the task the user just dragged — keeps the EXACT slot it was
+    // dropped on.
+    expect(table.get("a")!.scheduledStartTime?.toISOString()).toBe(
+      `${day}T09:00:00.000Z`,
+    );
+    expect(table.get("a")!.conflict).toBe(false);
+    expect(table.get("a")!.manuallyMoved).toBe(true);
+    // "c" is the one that reflows elsewhere instead.
+    expect(table.get("c")!.scheduledStartTime?.toISOString()).not.toBe(
+      `${day}T09:00:00.000Z`,
+    );
+    expect(table.get("c")!.conflict).toBe(false);
+    expect(res.displaced).toEqual([
+      { taskId: "c", newScheduledStartTime: `${day}T08:00:00.000Z` },
+    ]);
+    // "a" itself never shows up in `displaced` — it didn't move.
+    expect(res.displaced.some((d) => d.taskId === "a")).toBe(false);
     expect(res.batchId).toEqual(expect.any(String));
   });
 });

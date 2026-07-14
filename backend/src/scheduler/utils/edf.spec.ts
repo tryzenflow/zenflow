@@ -7,6 +7,7 @@ import {
   findNextAvailableSlot,
   findSlotIgnoringWorkHours,
   intervalOf,
+  isOverdue,
   isPast,
   latenessCost,
   offHoursCost,
@@ -115,6 +116,28 @@ describe("isPast — frozen/in-progress test", () => {
         now,
       ),
     ).toBe(false);
+  });
+});
+
+describe("isOverdue", () => {
+  const now = at("13:00");
+
+  it("is false for a task with no deadline", () => {
+    expect(isOverdue(task({ id: "a", deadline: null }), now)).toBe(false);
+  });
+
+  it("is false for a deadline still in the future", () => {
+    expect(isOverdue(task({ id: "a", deadline: at("17:00") }), now)).toBe(
+      false,
+    );
+  });
+
+  it("is true for a deadline that has already passed", () => {
+    expect(isOverdue(task({ id: "a", deadline: at("09:00") }), now)).toBe(true);
+  });
+
+  it("is true for a deadline exactly at now", () => {
+    expect(isOverdue(task({ id: "a", deadline: now }), now)).toBe(true);
   });
 });
 
@@ -528,6 +551,74 @@ describe("scheduleAll", () => {
     );
   });
 
+  describe("overdue tasks — frozen, never auto-placed", () => {
+    it("leaves an overdue, unplaced task untouched rather than scheduling it into a slot before now (the reported bug)", () => {
+      // Reproduces the report exactly: now is Monday 13:00, the task's own
+      // deadline (09:00) already passed while it sat unplaced. Before the
+      // `isOverdue` freeze, `candidatesFor`'s `findNextAvailableSlot` fallback
+      // searched from `task.deadline` (09:00, already in the past) instead of
+      // `now`, and could hand back a "next available" in-hours slot that's
+      // STILL before `now` — e.g. 09:00 itself, if nothing else occupied it.
+      const now = at("13:00");
+      const overdue = task({
+        id: "o",
+        scheduledStartTime: null,
+        deadline: at("09:00"),
+        durationMinutes: 60,
+      });
+      const placements = scheduleAll(prefs, [overdue], now);
+      const p = placements.find((x) => x.id === "o")!;
+
+      expect(p.scheduledStartTime).toBeNull();
+      expect(p.conflict).toBe(overdue.conflict);
+    });
+
+    it("leaves an overdue task's existing FUTURE placement exactly where it is (frozen, not just avoided)", () => {
+      const now = at("13:00");
+      const overdue = task({
+        id: "o",
+        scheduledStartTime: at("15:00"), // placed in the future, but its own deadline already passed
+        deadline: at("09:00"),
+        durationMinutes: 60,
+      });
+      const placements = scheduleAll(prefs, [overdue], now);
+      const p = placements.find((x) => x.id === "o")!;
+
+      expect(p.scheduledStartTime?.toISOString()).toBe(
+        at("15:00").toISOString(),
+      );
+    });
+
+    it("seeds an overdue task's slot as occupied space for other movable tasks to route around", () => {
+      const now = at("13:00");
+      const overdue = task({
+        id: "o",
+        scheduledStartTime: at("14:00"),
+        deadline: at("09:00"),
+        durationMinutes: 60, // occupies 14:00–15:00
+      });
+      const urgent = task({
+        id: "urgent",
+        scheduledStartTime: null,
+        deadline: at("15:00"), // would otherwise want exactly 14:00-15:00
+        durationMinutes: 60,
+        createdAt: at("00:01"),
+      });
+      const placements = scheduleAll(prefs, [overdue, urgent], now);
+
+      const overdueP = placements.find((p) => p.id === "o")!;
+      const urgentP = placements.find((p) => p.id === "urgent")!;
+      expect(overdueP.scheduledStartTime?.toISOString()).toBe(
+        at("14:00").toISOString(),
+      );
+      // Routed around the frozen overdue task's slot (14:00-15:00) into the
+      // only remaining non-overlapping in-hours slot before its own deadline.
+      expect(urgentP.scheduledStartTime?.toISOString()).toBe(
+        at("13:00").toISOString(),
+      );
+    });
+  });
+
   it("only comes back conflict: true, null slot when every candidate source is exhausted (a genuinely saturated horizon)", () => {
     const now = at("08:00");
     const t = task({ id: "a", deadline: at("17:00"), durationMinutes: 60 });
@@ -806,6 +897,82 @@ describe("scheduleAll", () => {
     });
   });
 
+  describe("pinnedTaskId — per-call hard pin closes the EDF-order race gap", () => {
+    // A task can only ever evict a LOWER-priority (later-deadline) occupant
+    // of a contested slot — it can never touch a task already finalized
+    // earlier in the loop. So a task with a LATER deadline than some other
+    // pending task that also wants its slot can lose the race for its own
+    // anchor outright (or via a "genuinely cost-favorable" eviction the
+    // other task wins), even when nothing about the drag itself changed.
+    // `pinnedTaskId` closes that gap by freezing the pinned task before the
+    // EDF loop ever runs, so every other task's own placement search simply
+    // routes around it.
+    const now = at("08:00");
+    const dragged = () =>
+      task({
+        id: "dragged",
+        manuallyMoved: true,
+        scheduledStartTime: at("09:00"),
+        // Looser deadline than "urgent"'s below — sorts AFTER it in EDF
+        // order, so without the pin "urgent" is processed first.
+        deadline: at("17:00"),
+        durationMinutes: 60,
+      });
+    // A different pending task that already occupies the exact same slot
+    // (mirroring what `TasksService.displace()`'s raw write produces right
+    // before `reoptimize` runs) with a tighter deadline that forces exactly
+    // that slot as its own zero-deviation-cost anchor.
+    const urgent = () =>
+      task({
+        id: "urgent",
+        scheduledStartTime: at("09:00"),
+        deadline: at("10:00"),
+        durationMinutes: 60,
+        createdAt: at("00:01"),
+      });
+
+    it("without a pin, the earlier-deadline task can win the contested slot and bump the just-dragged task off its own anchor — the bug", () => {
+      const placements = scheduleAll(prefs, [dragged(), urgent()], now);
+      const draggedP = placements.find((p) => p.id === "dragged")!;
+      const urgentP = placements.find((p) => p.id === "urgent")!;
+
+      // "urgent" claims the contested slot...
+      expect(urgentP.scheduledStartTime?.toISOString()).toBe(
+        at("09:00").toISOString(),
+      );
+      // ...and "dragged" — the task the user just acted on — loses the exact
+      // slot it was just placed on, despite nothing else about IT changing.
+      expect(draggedP.scheduledStartTime?.toISOString()).not.toBe(
+        at("09:00").toISOString(),
+      );
+    });
+
+    it("with pinnedTaskId set to the dragged task, it keeps its exact slot and the earlier-deadline task is routed elsewhere instead", () => {
+      const placements = scheduleAll(
+        prefs,
+        [dragged(), urgent()],
+        now,
+        [],
+        "dragged",
+      );
+      const draggedP = placements.find((p) => p.id === "dragged")!;
+      const urgentP = placements.find((p) => p.id === "urgent")!;
+
+      // The pinned task never moves — not evicted, not outright bumped by
+      // ordinary EDF-order placement.
+      expect(draggedP.scheduledStartTime?.toISOString()).toBe(
+        at("09:00").toISOString(),
+      );
+      expect(draggedP.conflict).toBe(false);
+      expect(draggedP.manuallyMoved).toBe(true);
+      // The other task is routed around the pinned slot instead of stealing it.
+      expect(urgentP.scheduledStartTime?.toISOString()).not.toBe(
+        at("09:00").toISOString(),
+      );
+      expect(urgentP.conflict).toBe(false);
+    });
+  });
+
   describe("LATENESS_RATE > HOURS_RATE ordering (emergent, not a hard tier)", () => {
     it("still prefers an off-hours-before-deadline slot over an on-time-in-hours-but-past-deadline one, when both are available", () => {
       expect(LATENESS_RATE).toBeGreaterThan(HOURS_RATE);
@@ -1044,6 +1211,19 @@ describe("fallbackSlot — outside-hours-before-deadline → in-hours-past-deadl
     expect(new Date(slot.start).getTime()).toBeGreaterThan(
       t.deadline!.getTime(),
     );
+  });
+
+  it("never returns a slot before `now`, even when the deadline itself is already in the past", () => {
+    // Regression: the tier-3 fallback used to search from `task.deadline`
+    // itself, so an already-overdue deadline pulled the search floor into
+    // the past — e.g. a 09:00 deadline with `now` at 13:00 could hand back
+    // 09:00 as the "next available" slot, a slot already 4 hours gone.
+    const now = at("13:00");
+    const t = task({ id: "a", durationMinutes: 60, deadline: at("09:00") });
+    const slot = fallbackSlot(t, now, [], prefs)!;
+    expect(slot).not.toBeNull();
+    expect(slot.start).toBeGreaterThanOrEqual(now.getTime());
+    expect(new Date(slot.start).toISOString()).toBe(at("13:00").toISOString());
   });
 
   it("returns null only once both searches are exhausted", () => {

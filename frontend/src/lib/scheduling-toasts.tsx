@@ -8,7 +8,7 @@ import { RationaleToast } from "@/components/tasks/rationale-toast";
 import { cn } from "@/lib/utils";
 import type { RescheduleResponse, SchedulingMeta, Task } from "@/types/phase2";
 
-/** Wrap a custom toast body in the same popover shell the overflow toast uses. */
+/** Wrap a custom toast body in the same popover shell the scheduling toasts use. */
 export function shell(node: React.ReactNode) {
   return (
     <div className="w-full rounded-[var(--radius)] border border-border bg-popover p-4 shadow-lg">

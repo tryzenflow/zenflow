@@ -23,7 +23,6 @@ type Status = 'idle' | 'loading' | 'sent';
 // the email and requests a code. CLAUDE.md §7: OTP + Redis sessions, no
 // passwords/JWT. Stage 2 (6-digit code entry) lands with the API client.
 export default function LoginScreen() {
-  console.log('[LoginScreen] render');
   const [email, setEmail] = React.useState('');
   const [touched, setTouched] = React.useState(false);
   const [status, setStatus] = React.useState<Status>('idle');

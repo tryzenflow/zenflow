@@ -20,44 +20,18 @@ export {
 
 SplashScreen.preventAutoHideAsync();
 
-const g = globalThis as unknown as {
-  ErrorUtils?: { setGlobalHandler: (h: (e: unknown, isFatal?: boolean) => void) => void; getGlobalHandler: () => (e: unknown, isFatal?: boolean) => void };
-  HermesInternal?: { hasPromise?: () => boolean; enablePromiseRejectionTracker?: (opts: unknown) => void };
-};
-if (g.ErrorUtils) {
-  const defaultHandler = g.ErrorUtils.getGlobalHandler();
-  g.ErrorUtils.setGlobalHandler((error, isFatal) => {
-    console.log('[GlobalError]', isFatal, (error as Error)?.message, (error as Error)?.stack);
-    defaultHandler(error, isFatal);
-  });
-}
-if (g.HermesInternal?.enablePromiseRejectionTracker) {
-  g.HermesInternal.enablePromiseRejectionTracker({
-    allRejections: true,
-    onUnhandled: (id: number, rejection: unknown) => {
-      console.log('[UnhandledRejection]', id, (rejection as Error)?.message, (rejection as Error)?.stack);
-    },
-  });
-}
-
 export default function RootLayout() {
-  console.log('[RootLayout] render start');
   const { theme } = useUniwind();
-  console.log('[RootLayout] useUniwind ok, theme=', theme);
-  const [fontsLoaded, fontError] = useFonts({
+  const [fontsLoaded] = useFonts({
     Geist_400Regular,
     Geist_600SemiBold,
     Geist_700Bold,
     GeistMono_400Regular,
   });
-  console.log('[RootLayout] fontsLoaded=', fontsLoaded, 'fontError=', fontError);
 
   React.useEffect(() => {
     if (fontsLoaded) {
-      console.log('[RootLayout] calling SplashScreen.hideAsync()');
-      SplashScreen.hideAsync()
-        .then(() => console.log('[RootLayout] hideAsync resolved'))
-        .catch((e) => console.log('[RootLayout] hideAsync REJECTED', e?.message, e?.stack));
+      SplashScreen.hideAsync();
     }
   }, [fontsLoaded]);
 
@@ -65,7 +39,6 @@ export default function RootLayout() {
     return null;
   }
 
-  console.log('[RootLayout] about to render tree');
   return (
     <SafeAreaProvider>
       <ThemeProvider value={NAV_THEME[theme ?? 'light']}>

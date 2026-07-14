@@ -15,7 +15,7 @@ export interface Event {
   start: string; // ISO
   end: string; // ISO
   status: TaskStatus;
-  /** True when the task is pinned (manually dragged/resized, or an accepted overflow choice). */
+  /** True when the task is pinned (manually dragged/resized). */
   manuallyMoved: boolean;
   conflict: boolean;
   tags: string[];

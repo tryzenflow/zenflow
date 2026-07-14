@@ -7,10 +7,10 @@ import {
 import type {
   CreateTaskResponse,
   DisplacedTask,
+  RemoveTaskResponse,
   RescheduleResponse,
   SchedulingMeta,
   Task as SharedTask,
-  SimulateTaskResponse,
   TaskDetailResponse,
   TaskSuggestionsResponse,
   TasksListResponse,
@@ -32,9 +32,7 @@ import {
 import { CreateTaskDto } from "./dto/create-task.dto";
 import { ListTaskSuggestionsDto } from "./dto/list-task-suggestions.dto";
 import { ListTasksDto } from "./dto/list-tasks.dto";
-import { SimulateTaskDto } from "./dto/simulate-task.dto";
 import { UpdateTaskDto } from "./dto/update-task.dto";
-import { getRerankK } from "./utils/rerank_k";
 
 /** A Task row joined with its related Tag rows (the shape toDto consumes). */
 type TaskWithTags = Task & { tags: Tag[] };
@@ -509,54 +507,6 @@ export class TasksService {
     }
   }
 
-  async simulate(
-    dto: SimulateTaskDto,
-    user: User,
-    now: Date = new Date(),
-  ): Promise<SimulateTaskResponse> {
-    const prefs = this.scheduler.prefsOf(user);
-    const cleanTags = (dto.tags ?? []).map((t) => t.trim()).filter(Boolean);
-    const correction = await this.scheduler.computeDurationCorrection(
-      user.id,
-      cleanTags,
-      dto.durationMinutes,
-    );
-    const applyCorrection = user.durationAdjustmentMode !== "never";
-    const effectiveDuration = applyCorrection
-      ? correction.adjustedDuration
-      : dto.durationMinutes;
-    const deadline = new Date(dto.deadline);
-
-    // `SchedulerService.simulate` already falls back to an outside-hours /
-    // past-deadline slot (see `edf.ts`'s `fallbackSlot`) when nothing fits
-    // in-hours before the deadline, so `proposals` only comes back empty in
-    // the rare genuinely-saturated-calendar case. The draft task has no
-    // anchor, so it doesn't need the full cost-scored pool `scheduleAll`
-    // builds for pending tasks — a single best fallback candidate suffices.
-    const { proposals } = await this.scheduler.simulate(
-      user.id,
-      prefs,
-      { durationMinutes: effectiveDuration, deadline, tags: cleanTags },
-      now,
-      getRerankK(deadline, this.scheduler.prefsOf(user), now),
-    );
-
-    const schedulingMeta: SchedulingMeta = {
-      adjustedDuration: effectiveDuration,
-      placedAt: proposals[0]?.scheduledStartTime.toISOString() ?? null,
-      engine: "edf",
-      rationale: proposals[0]?.rationale?.summary,
-      biasApplied: correction.biasApplied,
-      estimatedDuration: correction.estimatedDuration,
-      durationAdjustmentMode: user.durationAdjustmentMode,
-      durationReason: correction.durationReason,
-    };
-
-    return {
-      schedulingMeta,
-    };
-  }
-
   /**
    * Undo one `reoptimize` auto-cascade: reverts every task it displaced back
    * to its prior slot/duration. Wires straight to `SchedulerService.
@@ -579,12 +529,17 @@ export class TasksService {
    * (`manuallyMoved: true` — kept for the "Manually placed" badge/telemetry
    * only; the cost model never reads it), then — same transaction — runs a
    * full `reoptimize` to push anything it now overlaps out of the way,
-   * instead of leaving a bare `conflict: true`. The just-dropped slot is
-   * naturally protected by the cost model (its anchor is now literally
-   * `requested`, so re-moving it costs real deviation) without any special
-   * pinning — but it's not IMMUNE: a genuinely cost-favorable eviction can
-   * still relocate it again, which shows up in `displaced` like any other
-   * collateral move.
+   * instead of leaving a bare `conflict: true`. The just-dropped slot is a
+   * HARD PIN for that one `reoptimize` call (`{ pinnedTaskId: id }`): this
+   * task is frozen at `requested` exactly like an already-past task, so it
+   * cannot be bumped back off the slot the user just dropped it on — not by
+   * a cost-favorable eviction, and not by simply losing the EDF-order race
+   * for that slot to some other pending task with an earlier deadline (the
+   * bug a merely cost-favored anchor left open: a task only ever evicts a
+   * LOWER-priority occupant, so it could still lose its own requested slot
+   * outright to a task processed earlier in the loop). The pin lasts only
+   * for this call — the next time reoptimize runs for any other reason, this
+   * task is fully movable again like any other anchor.
    */
   async displace(
     id: string,
@@ -640,6 +595,7 @@ export class TasksService {
         prefs,
         now,
         tx,
+        { pinnedTaskId: id },
       );
 
       const finalTask = await tx.task.findUniqueOrThrow({
@@ -659,7 +615,11 @@ export class TasksService {
   /**
    * Manual edge-resize: updates duration + pins `manuallyMoved: true`
    * (informational only — see `displace()`'s doc comment), then — same
-   * transaction — the same full `reoptimize` `displace()` uses.
+   * transaction — the same full `reoptimize` `displace()` uses, with the
+   * same `{ pinnedTaskId: id }` hard pin so the just-resized slot can't be
+   * bumped back off by that same inline reoptimize either — see
+   * `displace()`'s doc comment for why a merely cost-favored anchor wasn't
+   * enough.
    */
   async resize(
     id: string,
@@ -714,6 +674,7 @@ export class TasksService {
         prefs,
         now,
         tx,
+        { pinnedTaskId: id },
       );
 
       const finalTask = await tx.task.findUniqueOrThrow({
@@ -784,14 +745,29 @@ export class TasksService {
    * transaction (CLAUDE.md invariant #2 redesign), so a delete — which can
    * free up a slot a later-deadline task would rather have — does the same
    * rather than leaving a stale gap for a separate confirm step that no
-   * longer exists.
+   * longer exists. Returns `displaced`/`batchId` so the caller can offer the
+   * same cascade-toast + undo transparency the other three mutations already
+   * get (see `RemoveTaskResponse`).
    */
-  async remove(id: string, user: User, now: Date = new Date()): Promise<void> {
+  async remove(
+    id: string,
+    user: User,
+    now: Date = new Date(),
+  ): Promise<RemoveTaskResponse> {
     try {
       const prefs = this.scheduler.prefsOf(user);
-      await this.prisma.$transaction(async (tx) => {
+      return await this.prisma.$transaction(async (tx) => {
         await tx.task.delete({ where: { id, userId: user.id } });
-        await this.scheduler.reoptimize(user.id, prefs, now, tx);
+        const { displaced, batchId } = await this.scheduler.reoptimize(
+          user.id,
+          prefs,
+          now,
+          tx,
+        );
+        return {
+          displaced: toDisplaced(displaced),
+          ...(batchId ? { batchId } : {}),
+        };
       });
     } catch (error) {
       if (

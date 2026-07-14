@@ -10,21 +10,12 @@ import { errorToast } from "@/lib/toast";
 import { postData } from "@/api";
 import { useUserStore } from "@/hooks/use-user-store";
 import type { Task } from "@/types/tasks";
-import type { Event as CalendarBlock } from "@/types/schedule";
 import type { TaskEvent } from "@zenflow/shared";
-import {
-  cascadeWindow,
-  deleteTask,
-  EditTaskFormValues,
-  needsRescheduleWindow,
-} from "@/utils/tasks";
-import { formatMinutes } from "@/utils/time";
+import { deleteTask, EditTaskFormValues } from "@/utils/tasks";
 import { TaskForm } from "./form/task-form";
 import { TaskHistory } from "./task-history-timeline";
 import { useFilesTracker } from "@/hooks/use-files-tracker";
 import { completeTask, getTaskDetails, updateTask } from "@/api/tasks";
-import { promptRescheduleCascade } from "./prompt-reschedule-cascade";
-import { zonedDate } from "@/utils/tz";
 import { Clock, Trash2 } from "lucide-react";
 
 interface EditTaskDialogProps {
@@ -32,17 +23,6 @@ interface EditTaskDialogProps {
   setOpen: (open: boolean) => void;
   taskId: string;
   onSaved: () => void;
-  /** The calendar's currently-loaded blocks — feeds displaced-task title
-   * lookups for the cascade summary toasts, and the manual-task-in-window
-   * check that decides whether to show the 3-option reschedule choice. */
-  blocks?: CalendarBlock[];
-}
-
-/** Order-insensitive set-equality for tag arrays. */
-function sameTags(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) return false;
-  const setA = new Set(a);
-  return b.every((t) => setA.has(t));
 }
 
 export function EditTaskDialog({
@@ -50,14 +30,11 @@ export function EditTaskDialog({
   setOpen,
   taskId,
   onSaved,
-  blocks = [],
 }: EditTaskDialogProps) {
   const [loading, setLoading] = useState(false);
   const [task, setTask] = useState<Task | null>(null);
   const [events, setEvents] = useState<TaskEvent[]>([]);
   const user = useUserStore((s) => s.user);
-  const tz = user?.timezone || "UTC";
-  const titleFor = (id: string) => blocks.find((b) => b.taskId === id)?.title;
   const { newUploadsRef } = useFilesTracker();
 
   useEffect(() => {
@@ -106,26 +83,11 @@ export function EditTaskDialog({
     });
   }, [task, form]);
 
-  /**
-   * `promptRescheduleCascade` bound to this panel's `blocks`/`tz`/`onSaved` —
-   * every call site below still owns its own window computation and gating
-   * (whether to prompt at all), since a deadline edit, a tags-driven duration
-   * change, and a delete anchor and skip differently.
-   */
-  function promptCascade(
-    args: Omit<
-      Parameters<typeof promptRescheduleCascade>[0],
-      "blocks" | "tz" | "titleFor" | "onDone"
-    >,
-  ) {
-    promptRescheduleCascade({ ...args, blocks, tz, titleFor, onDone: onSaved });
-  }
-
   async function onSubmit(values: EditTaskFormValues) {
     if (!user) return;
     setLoading(true);
     try {
-      const response = await updateTask(taskId, {
+      await updateTask(taskId, {
         title: values.title,
         note: values.note || null,
         deadline: values.deadline,
@@ -134,87 +96,6 @@ export function EditTaskDialog({
       onSaved();
       toast.success("Task updated 🎉");
       setOpen(false);
-
-      const now = new Date();
-
-      // Confirm-before-reschedule (todo.md §Rescheduling Design). A deadline
-      // edit's meaningful search range IS the new deadline itself — shortening
-      // it can conflict with anything up to the old bound, lengthening it
-      // opens room anywhere up to the new one — so the window spans
-      // [now, newDeadline] (unlike the fixed ±3-workday band below, a
-      // deadline has no natural size to cap the search at). No-ops for a
-      // past/in-progress task or one with no placement.
-      if (
-        response.deadlineChanged &&
-        needsRescheduleWindow(response.task.scheduledStartTime, now)
-      ) {
-        const newDeadline = response.task.deadline ?? values.deadline;
-        promptCascade({
-          window: { windowStart: now.toISOString(), windowEnd: newDeadline },
-          title: `Deadline changed for ${response.task.title}`,
-          description: (
-            <>
-              New deadline is{" "}
-              {format(zonedDate(newDeadline, tz), "EEE MMM d, HH:mm")}.
-              Reschedule affected tasks to fit the new window?
-            </>
-          ),
-          manualDescription: (
-            <>
-              New deadline is{" "}
-              {format(zonedDate(newDeadline, tz), "EEE MMM d, HH:mm")}. Some
-              tasks in this window were moved manually — how should they be
-              handled?
-            </>
-          ),
-        });
-      }
-
-      // `schedulingMeta` comes back whenever `dto.tags !== undefined`
-      // (i.e. whenever the form submits a `tags` array at all — which is
-      // every save, since the form always includes it), NOT only when the
-      // tags actually changed. Diff against the task's pre-edit tags so an
-      // unrelated title/note/deadline-only save doesn't misfire this prompt.
-      // The corrected duration is already applied server-side (`update()`);
-      // this prompt is only about resolving any conflict it left behind. A
-      // duration change is a point-in-time disruption (unlike a deadline
-      // edit's open-ended range), so it uses the fixed ±3-workday band
-      // (`cascadeWindow`) anchored to the task's own placement.
-      if (
-        response.schedulingMeta &&
-        task &&
-        !sameTags(task.tags, values.tags) &&
-        needsRescheduleWindow(response.task.scheduledStartTime, now)
-      ) {
-        const { estimatedDuration, adjustedDuration, durationReason } =
-          response.schedulingMeta;
-        const changed =
-          estimatedDuration != null && estimatedDuration !== adjustedDuration;
-        promptCascade({
-          window: cascadeWindow(
-            response.task.scheduledStartTime!,
-            tz,
-            user,
-            now,
-          ),
-          title: `Tags changed for ${response.task.title}`,
-          description: (
-            <>
-              {changed
-                ? `Duration corrected ${formatMinutes(estimatedDuration!)} → ${formatMinutes(adjustedDuration)} for the new tags.`
-                : "Duration re-checked for the new tags (no change)."}{" "}
-              Reschedule to avoid conflicts?
-              {durationReason && (
-                <p className="font-mono text-[11px] text-muted-foreground">
-                  {durationReason}
-                </p>
-              )}
-            </>
-          ),
-          manualDescription:
-            "The new tags changed this task's duration. Some tasks in this window were moved manually — how should they be handled?",
-        });
-      }
     } catch (error) {
       errorToast(
         (isAxiosError(error) && error.response?.data?.message) ||
@@ -240,33 +121,11 @@ export function EditTaskDialog({
   }
 
   async function onDelete() {
-    // Captured BEFORE the delete — the task is gone from the DB afterward,
-    // so this is the only chance to anchor the gap-fill cascade window.
-    const taskTitle = task?.title ?? "Task";
-    const scheduledStartTime = task?.scheduledStartTime ?? null;
     try {
       await deleteTask(taskId);
       onSaved();
       toast.success("Task deleted");
       setOpen(false);
-
-      // Confirm-before-reschedule (todo.md §Rescheduling Design): the delete
-      // already happened — this only offers to fill the gap it left behind,
-      // through the same cascade prompt a deadline/tags-change edit uses. A
-      // delete is a point-in-time disruption, so it uses the same fixed
-      // ±3-workday band tags-change does, anchored to the deleted task's
-      // (now-gone) placement. No-ops if it had no placement, or was already
-      // past/in-progress.
-      if (user && needsRescheduleWindow(scheduledStartTime, new Date())) {
-        promptCascade({
-          window: cascadeWindow(scheduledStartTime!, tz, user, new Date()),
-          title: `${taskTitle} deleted`,
-          description:
-            "This left a gap in your schedule. Reschedule other tasks to fill it?",
-          manualDescription:
-            "This left a gap in your schedule. Some tasks in this window were moved manually — how should they be handled while filling it?",
-        });
-      }
     } catch (error) {
       errorToast(
         (isAxiosError(error) && error.response?.data?.message) ||
