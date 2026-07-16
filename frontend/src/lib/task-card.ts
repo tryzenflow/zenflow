@@ -5,14 +5,31 @@ interface StateInput {
   conflict: boolean;
   deadline: string | null;
   scheduledStartTime: string | null;
+  durationMinutes: number;
 }
 
-/** Derive the visual card state for a task (see docs/design-system.md). */
+/**
+ * Derive the visual card state for a task (see docs/design-system.md).
+ *
+ * A task is "overdue" both once its deadline has already passed AND when the
+ * cost-based scheduler (backend/src/scheduler/utils/edf.ts) couldn't find room
+ * before a tight deadline and placed it past it anyway — that placement is
+ * itself an overdue result the moment it lands, not just once the clock
+ * catches up to the deadline.
+ */
 export function deriveState(t: StateInput, now = new Date()): TaskCardState {
   if (t.status === "DONE") return "completed";
   if (t.conflict) return "conflict";
-  if (t.deadline && new Date(t.deadline).getTime() < now.getTime())
-    return "overdue";
+  if (t.deadline) {
+    const deadlineMs = new Date(t.deadline).getTime();
+    if (deadlineMs < now.getTime()) return "overdue";
+    if (
+      t.scheduledStartTime &&
+      new Date(t.scheduledStartTime).getTime() + t.durationMinutes * 60_000 >
+        deadlineMs
+    )
+      return "overdue";
+  }
   return "fluid";
 }
 
