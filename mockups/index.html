@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Zenflow Mobile — Mockups</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/geist@5.2.6/index.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/geist-mono@5.2.6/index.css" />
+<link rel="stylesheet" href="dist/output.css" />
+<link rel="stylesheet" href="gallery-chrome.css" />
+</head>
+<style>
+  .gallery {
+
+  max-width: 1100px;
+  margin: 44px auto 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 22px;
+  }
+</style>
+<body>
+  <div class="hero">
+    <div class="inline-flex items-center gap-[9px] font-bold tracking-[-0.02em] text-[22px] mb-[18px]"><img src="logo.svg" alt="Zenflow logo" class="size-[30px]" /> Zenflow</div>
+    <h1>Mobile app mockups<br /><span class="amber">Warm Sunrise</span>, rebuilt for touch.</h1>
+    <p class="lede">Static HTML mockups for the React Native migration (<code style="font-family:var(--font-mono);font-size:14px">docs/react-native-migration.md</code>). Every screen mirrors <code style="font-family:var(--font-mono);font-size:14px">frontend/src/pages/</code> but is redesigned to be far more intuitive on a phone — native bottom sheets, gesture-first calendar, thumb-reachable actions. Each file shows multiple states (populated · empty · loading · error) plus a dark variant.</p>
+    <div class="meta-row">
+      <span class="mtag"><span class="k"></span> iPhone 15 Pro · 393×852</span>
+      <span class="mtag"><span class="k"></span> Taupe + Amber tokens (verbatim)</span>
+      <span class="mtag"><span class="k"></span> Light + Dark</span>
+      <span class="mtag"><span class="k"></span> No build step — open any file</span>
+    </div>
+  </div>
+
+  <div class="gallery">
+
+    <a class="scard" href="login.html">
+      <div class="prev">
+        <div class="mini"><div class="nub"></div><div class="bar" style="top:40px;left:26px;right:26px;height:24px;border-radius:99px;background:linear-gradient(135deg,var(--brand-orange),var(--brand-yellow))"></div><div class="bar" style="top:82px"></div><div class="bar" style="top:104px"></div><div class="bar accent" style="top:130px;height:16px"></div></div>
+        <div class="mini dark"><div class="nub"></div><div class="bar" style="top:40px;left:26px;right:26px;height:24px;border-radius:99px;background:linear-gradient(135deg,var(--brand-orange),var(--brand-yellow))"></div><div class="bar" style="top:82px;left:14px;width:14px"></div><div class="bar" style="top:82px;left:34px;width:14px"></div><div class="bar" style="top:82px;left:54px;width:14px"></div></div>
+      </div>
+      <div class="body2">
+        <h3>Login</h3>
+        <p>2-stage passwordless OTP — email request, then 6-digit auto-submitting code.</p>
+        <div class="states"><span>Email: empty</span><span>filled</span><span>loading</span><span>error</span><span>OTP: partial</span><span>invalid</span><span>dark</span></div>
+      </div>
+    </a>
+
+    <a class="scard" href="onboarding.html">
+      <div class="prev">
+        <div class="mini"><div class="nub"></div><div class="bar accent" style="top:34px;left:14px;width:18px;height:4px"></div><div class="bar" style="top:34px;left:36px;right:14px;height:4px"></div><div class="bar" style="top:54px;height:14px"></div><div class="bar" style="top:80px;height:30px;border-radius:10px"></div><div class="bar" style="top:118px;height:30px;border-radius:10px"></div><div class="bar accent" style="bottom:14px;height:18px;border-radius:9px"></div></div>
+      </div>
+      <div class="body2">
+        <h3>Onboarding</h3>
+        <p>5-step setup wizard — work hours, days, duration mode, summary. Mobile progress bar replaces the desktop rail.</p>
+        <div class="states"><span>welcome</span><span>work hours</span><span>invalid</span><span>days</span><span>summary</span><span>loading</span></div>
+      </div>
+    </a>
+
+    <a class="scard" href="day-view.html">
+      <div class="prev">
+        <div class="mini"><div class="nub"></div><div class="bar" style="top:30px;left:10px;right:40px;height:10px"></div><div class="bar accent" style="top:58px;left:24px;right:10px;height:22px;border-radius:8px"></div><div class="bar" style="top:86px;left:24px;right:10px;height:16px;border-radius:8px"></div><div class="bar" style="top:108px;left:24px;right:40px;height:20px;border-radius:8px;background:var(--brand-yellow);opacity:.5"></div><div class="bar" style="bottom:14px;height:14px"></div></div>
+        <div class="mini dark"><div class="nub"></div><div class="bar accent" style="top:54px;left:24px;right:10px;height:22px;border-radius:8px"></div><div class="bar" style="top:84px;left:24px;right:10px;height:16px;border-radius:8px"></div><div class="bar" style="bottom:14px;height:14px"></div></div>
+      </div>
+      <div class="body2">
+        <h3>Day view</h3>
+        <p>Gesture-first timeline — long-press to create, drag with 15-min snap, cross-midnight split. The core screen.</p>
+        <div class="states"><span>populated</span><span>empty</span><span>loading</span><span>error</span><span>drag</span><span>conflict</span><span>crosses midnight</span><span>dark</span></div>
+      </div>
+    </a>
+
+    <a class="scard" href="week-view.html">
+      <div class="prev">
+        <div class="mini"><div class="nub"></div><div class="bar" style="top:30px;left:10px;right:10px;height:14px;border-radius:7px"></div><div class="bar accent" style="top:58px;left:10px;right:24px;height:18px;border-radius:8px"></div><div class="bar" style="top:84px;left:10px;right:30px;height:14px;border-radius:8px"></div><div class="bar" style="top:104px;left:10px;right:18px;height:20px;border-radius:8px;background:var(--brand-yellow);opacity:.5"></div></div>
+      </div>
+      <div class="body2">
+        <h3>Week view</h3>
+        <p>Swipeable single-day pages with a sticky 7-chip header and adjacent-day peek.</p>
+        <div class="states"><span>normal</span><span>swipe</span><span>cross-day drag</span><span>empty/loading</span><span>dark</span></div>
+      </div>
+    </a>
+
+    <a class="scard" href="month-view.html">
+      <div class="prev">
+        <div class="mini"><div class="nub"></div><div class="bar" style="top:30px;left:10px;right:10px;height:8px"></div><div class="bar" style="top:48px;left:10px;width:14px;height:34px;border-radius:4px"></div><div class="bar" style="top:48px;left:28px;width:14px;height:34px;border-radius:4px"></div><div class="bar accent" style="top:48px;left:46px;width:14px;height:34px;border-radius:4px"></div><div class="bar" style="top:48px;left:64px;width:14px;height:34px;border-radius:4px"></div><div class="bar" style="top:86px;left:10px;width:14px;height:34px;border-radius:4px"></div><div class="bar" style="top:86px;left:28px;width:14px;height:34px;border-radius:4px"></div></div>
+      </div>
+      <div class="body2">
+        <h3>Month view</h3>
+        <p>Paginated grid — tap a day to zoom, "+N more" opens a bottom sheet, drag tasks between cells.</p>
+        <div class="states"><span>normal</span><span>overflow sheet</span><span>drag</span><span>loading</span><span>dark</span></div>
+      </div>
+    </a>
+
+    <a class="scard" href="task-sheets.html">
+      <div class="prev">
+        <div class="mini"><div class="nub"></div><div class="bar" style="top:30px;left:10px;right:10px;height:8px;opacity:.4"></div><div class="bar" style="top:46px;left:10px;right:10px;height:8px;opacity:.4"></div><div class="bar" style="bottom:0;left:0;right:0;height:120px;border-radius:16px 16px 0 0;background:var(--card);border:1px solid oklch(0.9 0.01 75)"></div><div class="bar" style="bottom:96px;left:34px;width:18px;height:4px;border-radius:99px"></div><div class="bar accent" style="bottom:14px;left:10px;right:10px;height:18px;border-radius:9px"></div></div>
+      </div>
+      <div class="body2">
+        <h3>Task sheets</h3>
+        <p>Create / edit as native bottom sheets — duration stepper + slider replace tiny resize handles. Plus overflow resolution.</p>
+        <div class="states"><span>create empty</span><span>filled</span><span>edit</span><span>duration slider</span><span>overflow</span><span>dark</span></div>
+      </div>
+    </a>
+
+    <a class="scard" href="settings.html">
+      <div class="prev">
+        <div class="mini"><div class="nub"></div><div class="bar" style="top:30px;left:10px;width:40px;height:10px"></div><div class="bar" style="top:54px;left:10px;right:10px;height:18px;border-radius:8px"></div><div class="bar" style="top:80px;left:10px;right:10px;height:18px;border-radius:8px"></div><div class="bar accent" style="top:106px;left:10px;width:30px;height:14px;border-radius:99px"></div><div class="bar" style="top:106px;left:46px;width:14px;height:14px;border-radius:99px"></div><div class="bar" style="bottom:14px;height:14px"></div></div>
+      </div>
+      <div class="body2">
+        <h3>Settings</h3>
+        <p>A real scrollable tab (not a desktop dialog) — working hours, days, timezone, duration mode, appearance.</p>
+        <div class="states"><span>populated</span><span>loading</span><span>saved</span><span>dark</span></div>
+      </div>
+    </a>
+
+    <a class="scard" href="not-found.html">
+      <div class="prev">
+        <div class="mini"><div class="nub"></div><div class="bar" style="top:70px;left:30px;right:30px;height:30px;border-radius:99px;background:oklch(0.94 0.01 75)"></div><div class="bar" style="top:112px;left:22px;right:22px;height:8px"></div><div class="bar accent" style="top:132px;left:30px;right:30px;height:14px;border-radius:8px"></div></div>
+      </div>
+      <div class="body2">
+        <h3>Not found &amp; errors</h3>
+        <p>404, generic error, and a mobile-only offline state.</p>
+        <div class="states"><span>404</span><span>error</span><span>offline</span><span>dark</span></div>
+      </div>
+    </a>
+
+  </div>
+
+  <div class="foot">
+    Built with <b>Tailwind v4 installed as an npm package</b> (the <code>mobile-mockups</code> pnpm workspace member) and compiled with the Tailwind CLI — no browser CDN, no inline <code>@theme</code> block. The design tokens (ported verbatim from <code>frontend/src/index.css</code>) and a small set of reusable component classes live in <code>src/input.css</code>; screen content is plain Tailwind utility classes in the markup so it maps cleanly to future NativeWind class names. Run <code>pnpm --filter mobile-mockups build</code> once (or <code>pnpm --filter mobile-mockups watch</code> while iterating) to produce <code>dist/output.css</code>, then open any HTML file directly. Frame: iPhone 15 Pro (393×852pt), Dynamic Island, 64dp/hr calendar grid. See <code>docs/react-native-migration.md</code> §"Figma Design Scope" for the full screen + micro-state inventory these implement.
+  </div>
+</body>
+</html>
