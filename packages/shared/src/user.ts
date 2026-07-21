@@ -34,3 +34,9 @@ export interface UpdatePreferencesInput {
 }
 
 export type OnboardingInput = UpdatePreferencesInput;
+
+/** Partial update to a user's basic (non-scheduling) identity fields. */
+export interface UpdateUserInput {
+  name?: string;
+  timezone?: string;
+}
