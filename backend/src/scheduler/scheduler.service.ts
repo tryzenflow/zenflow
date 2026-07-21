@@ -139,12 +139,19 @@ export class SchedulerService {
     };
   }
 
-  /** This user's PENDING tasks, in the shape the pure core consumes. */
+  /**
+   * This user's PENDING tasks, in the shape the pure core consumes. No lower
+   * time bound: a task whose `scheduledStartTime` is already in the past
+   * (in-progress, or fully elapsed but never completed) must still be loaded
+   * so `scheduleAll`'s `isPast` freeze (edf.ts) can seed its real interval
+   * into `occupiedFinal` before any other task is placed — otherwise other
+   * tasks' candidate search treats that slot as free and silently overlaps
+   * it (see the fix for the missing-in-progress-freeze bug).
+   */
   private async loadPendingRows(
     userId: string,
     db: Db,
     ceiling: Date,
-    now = new Date(),
   ): Promise<EdfSourceTask[]> {
     return db.task.findMany({
       where: {
@@ -152,7 +159,7 @@ export class SchedulerService {
         status: { not: "DONE" },
         OR: [
           { scheduledStartTime: null },
-          { scheduledStartTime: { gte: now, lte: ceiling } },
+          { scheduledStartTime: { lte: ceiling } },
         ],
       },
       select: {
@@ -211,7 +218,7 @@ export class SchedulerService {
     const loadCeiling = new Date(
       now.getTime() + MAX_SCAN_DAYS * 24 * 60 * 60 * 1000,
     );
-    const rows = await this.loadPendingRows(userId, db, loadCeiling, now);
+    const rows = await this.loadPendingRows(userId, db, loadCeiling);
     const edfTasks = rows.map(toEdfTask);
     const user = await db.user.findUniqueOrThrow({
       where: { id: userId },

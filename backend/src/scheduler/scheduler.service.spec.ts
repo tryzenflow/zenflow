@@ -220,6 +220,33 @@ describe("SchedulerService.computeDurationCorrection", () => {
     expect(result.adjustedDuration).toBe(90); // 60*1.5=90, already grid-aligned
     expect(result.durationReason).toContain("backend");
   });
+
+  it("blends per-tag bias from a CREATE/RESIZE telemetry pair", async () => {
+    const events = [
+      {
+        taskId: "t1",
+        eventType: "CREATE",
+        newSnapshot: { durationMinutes: 60, tags: ["backend"] },
+      },
+      {
+        taskId: "t1",
+        eventType: "RESIZE",
+        newSnapshot: { durationMinutes: 90, tags: ["backend"] },
+      },
+    ];
+    const prisma = {
+      taskEvent: { findMany: jest.fn().mockResolvedValue(events) },
+    };
+    const service = new SchedulerService(prisma as never);
+    const result = await service.computeDurationCorrection(
+      "u1",
+      ["backend"],
+      60,
+    );
+    expect(result.biasApplied).toBeCloseTo(1.5);
+    expect(result.adjustedDuration).toBe(90);
+    expect(result.durationReason).toContain("backend");
+  });
 });
 
 describe("SchedulerService.reoptimize", () => {
@@ -418,6 +445,48 @@ describe("SchedulerService.reoptimize", () => {
 
     const { batchId } = await service.reoptimize("u1", prefs, now);
     expect(batchId).toEqual(expect.any(String));
+  });
+
+  it("loads an in-progress task (scheduledStartTime in the past, not yet finished) as frozen occupied space, so a competing pending task never gets placed on top of it", async () => {
+    // Regression test: `loadPendingRows` used to filter out any task whose
+    // `scheduledStartTime` was before `now` (a `gte: now` lower bound on the
+    // query), which silently dropped in-progress tasks before `scheduleAll`'s
+    // `isPast` freeze (edf.ts) ever got a chance to seed their interval into
+    // occupied space — so a second pending task's candidate search treated
+    // that slot as free and could land right on top of it with no conflict
+    // ever flagged.
+    const now = new Date("2026-06-08T10:00:00Z"); // Monday
+    const inProgress = fakeTask({
+      id: "in-progress",
+      scheduledStartTime: new Date("2026-06-08T09:30:00Z"), // started 30m ago
+      durationMinutes: 60, // ends 10:30 — still running
+      createdAt: new Date("2026-01-01T00:00:00Z"),
+    });
+    const pending = fakeTask({
+      id: "pending",
+      deadline: new Date("2026-06-08T17:00:00Z"),
+      durationMinutes: 60,
+      createdAt: new Date("2026-01-02T00:00:00Z"),
+    });
+    const { prisma, table } = makeFakePrisma([inProgress, pending]);
+    const service = new SchedulerService(prisma as never);
+
+    await service.reoptimize("u1", prefs, now);
+
+    // The in-progress task's own placement is echoed back unchanged (frozen).
+    expect(table.get("in-progress")!.scheduledStartTime?.toISOString()).toBe(
+      "2026-06-08T09:30:00.000Z",
+    );
+    expect(table.get("in-progress")!.conflict).toBe(false);
+
+    // The pending task must not overlap it: [09:30, 10:30) is occupied, so
+    // the earliest free slot is 10:30.
+    const pendingStart = table.get("pending")!.scheduledStartTime!;
+    expect(pendingStart.toISOString()).toBe("2026-06-08T10:30:00.000Z");
+    const inProgressEnd =
+      new Date("2026-06-08T09:30:00Z").getTime() + 60 * 60_000;
+    expect(pendingStart.getTime()).toBeGreaterThanOrEqual(inProgressEnd);
+    expect(table.get("pending")!.conflict).toBe(false);
   });
 });
 
