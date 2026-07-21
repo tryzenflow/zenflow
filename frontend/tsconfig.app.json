@@ -23,7 +23,17 @@
     "noUncheckedSideEffectImports": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      /* @hookform/resolvers' bundled zod-resolver .d.ts does a bare
+         `import * as z4 from "zod/v4/core"`. Under this repo's hoisted
+         node-linker, @hookform/resolvers is hoisted to the workspace root,
+         so that bare import resolves via node_modules walk-up to whatever
+         zod is hoisted there — which can be mobile's zod@3.x, not this
+         project's zod@4.x, breaking zodResolver's overload matching. Force
+         it to this project's own zod install instead. */
+      "zod/v4/core": ["./node_modules/zod/v4/core/index.d.cts"],
+      "zod/v3": ["./node_modules/zod/v3/index.d.ts"],
+      "zod": ["./node_modules/zod/index.d.ts"]
     }
   },
   "include": ["src"]
