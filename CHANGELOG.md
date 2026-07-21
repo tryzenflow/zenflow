@@ -5,6 +5,91 @@ All notable changes to Zenflow are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0/).
 
+## [2.1.0] — 2026-07-21
+
+The scheduler's hard reschedule-cascade prompts are gone, replaced by a soft
+cost-based model that just reoptimizes inline and lets you undo. Alongside
+that, the mobile app gained real screens and a `@zenflow/core` package was
+scaffolded to start sharing logic between `frontend/` and `mobile/`.
+
+### Changed
+
+- **The scheduler is now a blended cost function, not hard constraints.**
+  Every candidate slot is scored by `deviationCost` (distance from its
+  current placement, weighted so near-term placements stay effectively
+  pinned and 7+-day-out ones are 10x cheaper to nudge) + `latenessCost`
+  (minutes past deadline) + `offHoursCost` (minutes outside work hours) −
+  `preferenceBonus`. The only remaining hard rules are no double-booking and
+  never touching a task that's already started. Every mutation
+  (create/update/drag/resize/delete) reoptimizes the whole pending schedule
+  inline, in the same transaction, instead of asking first — undo-by-batch
+  (`TaskEvent.batchId`) is the safety net. This also fixes tightening a
+  deadline past a task's current placement silently leaving it scheduled
+  late instead of relocating it.
+
+- **Reschedule-cascade toasts consolidated into one undoable cascade toast.**
+  The old ask-first flow (`POST /tasks/reschedule-cascade`,
+  `prompt-reschedule-cascade`, `reschedule-choice-toast`,
+  `reschedule-confirm-toast`, `displaced-summary-toast`, `overflow-toast`) is
+  gone, replaced by `maybeShowCascadeToast` + `cascade-toast.tsx`: a single
+  "N other task(s) moved" toast with **Undo**, fired from
+  create/update/drag/resize/delete off each response's `displaced`/`batchId`.
+  Deleting a task now reoptimizes inline too and reports what moved, the same
+  as the other mutations.
+
+- **Deadline chip values ("Today"/"Tomorrow") now anchor to midnight
+  boundaries** instead of the current moment, fixing late-night chip
+  calculations and suggested deadlines on reused tasks.
+
+### Added
+
+- **Mobile app: NativeWind v4 + RN Reusables migration.** Replaces the
+  earlier uniwind-based scaffold with NativeWind v4 (Tailwind v3), a
+  hand-rolled shadcn/RN-Reusables component set, cookie session handling,
+  and built-out auth/onboarding/settings screens.
+- **`@zenflow/core` workspace package** (Phase 0 of the React Native
+  migration): portable, zero-DOM `tz`/`time` utilities extracted from
+  `frontend/src/utils/`, so `mobile/` and `frontend/` can eventually share
+  one copy. `frontend/`'s own imports aren't switched over yet.
+- `docs/react-native-migration.md`: the phased plan for the mobile app and
+  the `packages/core` extraction.
+- Mobile mockup gallery (static HTML/Tailwind) for the calendar redesign.
+
+### Fixed
+
+- **In-progress tasks are now correctly frozen against overlap.**
+  `loadPendingRows` excluded any task whose `scheduledStartTime` was already
+  in the past, which dropped every in-progress (started but not finished)
+  task from scheduling — other tasks could then be placed right on top of it
+  with no conflict ever flagged.
+- **Tasks are flagged overdue the moment their scheduled end passes their
+  deadline**, not only once the wall clock catches up — the cost-based
+  scheduler can legally place a task after a tight deadline (a lateness
+  cost, not a hard cutoff).
+- Calendar: task description no longer reverts on save; creating a task
+  jumps the calendar to the day it was actually scheduled on; the
+  edit dialog's Delete/Mark Done buttons disable while the request is in
+  flight.
+- Calendar: deadline-chip anchor, duplicate-suggestion of past deadlines on
+  reused tasks, and a drag/resize undo race that could show an
+  update-then-undo-then-update-again glitch.
+- Duration-bias evidence (`aggregateTagBias`) now also counts `RESIZE`
+  events, not just `COMPLETE`/`KEEP` — a resize is the user directly
+  correcting the estimate too.
+- `UpdateUserInput` (missing `@zenflow/shared` type) — `mobile/api/users.ts`
+  referenced it before it existed.
+- pnpm hoisting conflicts between `frontend` (zod@4, `@hookform/resolvers@5`)
+  and `mobile` (zod@3, `@hookform/resolvers@3`) that could resolve the wrong
+  major version and break `zodResolver`; switched to `node-linker=hoisted`
+  for mobile's Android native build, which needs real (non-symlinked)
+  `node_modules` directories for CMake/ninja and Gradle autolinking to work
+  on Windows.
+
+### Removed
+
+- Dead `simulate-task.dto.ts` / `rerank_k.ts`, orphaned by the 2.0.0
+  cost-based scheduler rewrite.
+
 ## [2.0.0] — 2026-07-12
 
 Scheduling is now **deadline-first**. Until now a task was scheduled inside the
