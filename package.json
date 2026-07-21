@@ -11,7 +11,9 @@
     "backend:prod": "pnpm --filter backend start:prod",
     "frontend:dev": "pnpm --filter frontend dev",
     "frontend:prod": "pnpm --filter frontend start",
-    "shared:build": "pnpm --filter @zenflow/shared build"
+    "mobile:dev": "pnpm --filter mobile dev",
+    "shared:build": "pnpm --filter @zenflow/shared build",
+    "core:build": "pnpm --filter @zenflow/core build"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
