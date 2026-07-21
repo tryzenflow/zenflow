@@ -51,11 +51,15 @@ export class SchedulerService {
 
   /**
    * Aggregate this user's per-tag duration-bias evidence `{n, b}` from
-   * COMPLETE/KEEP `TaskEvent` telemetry, pairing each outcome with its CREATE
-   * estimate by taskId. Keyed by tag name so callers can attribute evidence
-   * back to a specific tag. Single source of truth reused by both
-   * {@link computeDurationCorrection} and `UsersService.getUserTagBias` (which
-   * needs the tag names; `computeDurationCorrection` only needs the values).
+   * COMPLETE/KEEP/RESIZE `TaskEvent` telemetry, pairing each outcome with its
+   * CREATE estimate by taskId. RESIZE counts as an outcome too (docs/heuristic.md
+   * §"Signals tracked" — a resize IS the user directly correcting the estimate,
+   * same evidence-shape as a COMPLETE), and a task resized more than once before
+   * completion contributes one outcome per resize. Keyed by tag name so callers
+   * can attribute evidence back to a specific tag. Single source of truth reused
+   * by both {@link computeDurationCorrection} and `UsersService.getUserTagBias`
+   * (which needs the tag names; `computeDurationCorrection` only needs the
+   * values).
    */
   async aggregateTagBias(
     userId: string,
@@ -66,7 +70,10 @@ export class SchedulerService {
     const wanted = new Set(tags);
 
     const events = await db.taskEvent.findMany({
-      where: { userId, eventType: { in: ["CREATE", "COMPLETE", "KEEP"] } },
+      where: {
+        userId,
+        eventType: { in: ["CREATE", "COMPLETE", "KEEP", "RESIZE"] },
+      },
       select: { taskId: true, eventType: true, newSnapshot: true },
       orderBy: { occurredAt: "desc" },
       take: 2000,
