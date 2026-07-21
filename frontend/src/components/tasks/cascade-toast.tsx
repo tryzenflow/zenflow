@@ -1,11 +1,17 @@
 import { ArrowLeftRight, Undo2 } from "lucide-react";
 
 /**
- * Toast body shown when a create/update/drag/resize/delete mutation's inline
- * reoptimize moved OTHER tasks as a side effect (`response.displaced`). Uses a
- * distinct icon (`ArrowLeftRight`) from the rationale toast (`Sparkles`) and
- * the duration-adjustment toast (`Undo2`) so the three are visually
+ * Toast body shown when a create/update/delete mutation's inline reoptimize
+ * moved OTHER tasks as a side effect (`response.displaced`). Uses a distinct
+ * icon (`ArrowLeftRight`) from the rationale toast (`Sparkles`) and the
+ * duration-adjustment toast (`Undo2`) so the three are visually
  * distinguishable when sonner stacks them together.
+ *
+ * Deliberately NOT shown for drag-to-reschedule or edge-resize: those are
+ * direct, visible manual actions — the user just watched the block land
+ * there, so "N other tasks moved, Undo" would be noise rather than a useful
+ * surprise notification. See `onReschedule`/`onResize` in
+ * `components/calendar/layout.tsx`.
  */
 export function CascadeToast({
   count,

@@ -127,10 +127,15 @@ it shows `tasks/cascade-toast.tsx` ("N other task(s) moved" + **Undo**, distinct
 toasts) keyed by `cascade:${batchId}` so a literal duplicate fire of the same batch dedupes —
 distinct mutations always get a fresh `batchId`, so rapid sequential edits can legitimately
 stack several independently-undoable cascade toasts. Undo calls `api/tasks.ts`'s `undoBatch`
-(`POST /tasks/reschedule/undo/:batchId`) then the caller's own refetch. All four mutation
-sites wire it: `create-task-dialog.tsx`'s `finalizeCreate`, `edit-task-dialog.tsx`'s update
-and delete handlers, and `calendar/layout.tsx`'s `onReschedule`/`onResize` (which also now
-fire the previously-unused `maybeShowRationaleToast` on the edited task's own response).
+(`POST /tasks/reschedule/undo/:batchId`) then the caller's own refetch. Only two call sites wire
+it: `create-task-dialog.tsx`'s `finalizeCreate` and `edit-task-dialog.tsx`'s update and delete
+handlers — genuinely non-obvious side effects worth flagging. `calendar/layout.tsx`'s
+`onReschedule`/`onResize` (drag and edge-resize) deliberately do NOT call it: the user just
+directly dragged/resized the block and watched it land, so "N other tasks moved, Undo" would be
+noise for a displacement they caused themselves. Those two handlers still fire
+`maybeShowRationaleToast` on the edited task's own response, and — since there's no longer a
+cascade-toast undo callback to defer to — unconditionally `await refetch()` in their `finally`
+block so any tasks the reoptimize displaced don't render stale.
 
 **The wide ±3-workday/`[now, deadline]` cascade is gone.** The backend's cost-based scheduler
 rewrite dropped the window-scoped "narrow vs. wide" cascade distinction entirely — `reoptimize`
@@ -148,7 +153,8 @@ the create-time warning toast above, and the header's `conflictCount` badge — 
 gap-fill prompt either — any gap it leaves is only filled organically, by a later
 create/edit/drag landing on it, and the cascade toast above (`removeTask` now returns
 `RemoveTaskResponse { displaced, batchId }` same as the other mutations) tells the user if
-that happened immediately.
+that happened immediately (delete goes through `edit-task-dialog.tsx`, so it's one of the
+two wired call sites above, not drag/resize).
 
 **Settings** is a dialog, not a route: `components/settings/settings-dialog.tsx` is a
 Todoist-style **tabbed** dialog — **Work** (hours / days / timezone via
@@ -172,7 +178,8 @@ the chosen mode is wired into `OnboardingInput.durationAdjustmentMode`.
 into one mega-toast: `tasks/rationale-toast.tsx` (why *this* task was placed, from
 `RescheduleResponse.rationale` — `lib/scheduling-toasts.tsx`'s `maybeShowRationaleToast`, fired
 from `calendar/layout.tsx`'s `onReschedule`/`onResize`), `tasks/cascade-toast.tsx` (did this
-ripple to *other* tasks — `maybeShowCascadeToast`, see above), and the duration-adjustment
+ripple to *other* tasks — `maybeShowCascadeToast`, see above; not fired from drag/resize, only
+create/update/delete), and the duration-adjustment
 toasts in `lib/scheduling-toasts.tsx` (`auto` → apply + **Undo**; `ask` → blocking Accept/Keep;
 both revert via `PATCH /tasks/:id/resize`). The duration toast is shown from
 `create-task-dialog.tsx` off the create response's `schedulingMeta`. While a block is being

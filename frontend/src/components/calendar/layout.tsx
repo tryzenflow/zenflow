@@ -26,10 +26,7 @@ import { isAxiosError } from "axios";
 import { toast } from "sonner";
 import { errorToast } from "@/lib/toast";
 import { useUserStore } from "@/hooks/use-user-store";
-import {
-  maybeShowCascadeToast,
-  maybeShowRationaleToast,
-} from "@/lib/scheduling-toasts";
+import { maybeShowRationaleToast } from "@/lib/scheduling-toasts";
 import { zonedDate, zonedNow } from "@/utils/tz";
 import { format, isSameMonth, isValid } from "date-fns";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
@@ -159,18 +156,19 @@ export function CalendarLayout() {
         new CustomEvent("zenflow:task-updated", { detail: taskId }),
       );
       maybeShowRationaleToast(response);
-      maybeShowCascadeToast(response, refetch);
+      // No cascade toast here: the user just directly dragged this block and
+      // watched it land, so "N other tasks moved, Undo" would be noise for a
+      // displacement they caused themselves. (Cascade toast still fires for
+      // create/update/delete — see cascade-toast.tsx.)
     } catch (error) {
       if (isAxiosError(error))
         errorToast(error.response?.data?.message || "Failed to reschedule");
     } finally {
-      // Only refetch if there's no cascade undo to handle (which will refetch
-      // on undo). If there's a batchId, the cascade toast's undo callback
-      // will handle the refetch, avoiding a race condition where we overwrite
-      // optimistic state before the user sees and possibly undoes the cascade.
-      if (!response?.batchId) {
-        await refetch(); // reconcile with the server
-      }
+      // Always reconcile with the server. Nothing defers this refetch anymore
+      // (there's no cascade-toast undo callback for drag to hand it off to),
+      // so skipping it here would leave any displaced tasks rendering stale
+      // until an unrelated refetch.
+      await refetch();
     }
   }
 
@@ -210,18 +208,19 @@ export function CalendarLayout() {
         new CustomEvent("zenflow:task-updated", { detail: taskId }),
       );
       maybeShowRationaleToast(response);
-      maybeShowCascadeToast(response, refetch);
+      // No cascade toast here: the user just directly resized this block and
+      // watched it land, so "N other tasks moved, Undo" would be noise for a
+      // displacement they caused themselves. (Cascade toast still fires for
+      // create/update/delete — see cascade-toast.tsx.)
     } catch (error) {
       if (isAxiosError(error))
         errorToast(error.response?.data?.message || "Failed to resize");
     } finally {
-      // Only refetch if there's no cascade undo to handle (which will refetch
-      // on completion). If there's a batchId, the cascade toast's undo callback
-      // will handle the refetch, avoiding a race where we overwrite optimistic
-      // state before the user sees the cascade toast.
-      if (!response?.batchId) {
-        await refetch();
-      }
+      // Always reconcile with the server. Nothing defers this refetch anymore
+      // (there's no cascade-toast undo callback for resize to hand it off to),
+      // so skipping it here would leave any displaced tasks rendering stale
+      // until an unrelated refetch.
+      await refetch();
     }
   }
 

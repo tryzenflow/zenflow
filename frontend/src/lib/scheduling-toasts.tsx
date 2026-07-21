@@ -110,10 +110,15 @@ export function maybeShowRationaleToast(response: RescheduleResponse) {
 }
 
 /**
- * Show the cascade toast when a create/update/reschedule/resize/delete
- * response's inline reoptimize moved OTHER tasks (`displaced`). No-op when
- * nothing moved or the response carries no `batchId` (nothing to undo), so
- * callers can pass any response with this shape unconditionally.
+ * Show the cascade toast when a create/update/delete response's inline
+ * reoptimize moved OTHER tasks (`displaced`). No-op when nothing moved or the
+ * response carries no `batchId` (nothing to undo), so callers can pass any
+ * response with this shape unconditionally.
+ *
+ * Not called from drag-to-reschedule or edge-resize (`onReschedule`/
+ * `onResize` in `components/calendar/layout.tsx`): those are direct, visible
+ * manual actions, so surfacing the displacement as a toast would just be
+ * noise on top of what the user already watched happen.
  *
  * The toast id is keyed by `batchId` only to dedupe a literal duplicate fire
  * of the SAME batch (e.g. an accidental double-call) — it does not collapse
