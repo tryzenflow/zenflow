@@ -8,19 +8,21 @@ Earliest-Deadline-First (EDF) scheduling engine**. Part of the
 
 ## Tech stack
 
-| Concern | Choice |
-|---------|--------|
-| Framework | NestJS 11 (Express platform) |
-| Language | TypeScript 5.7 (ES2023, `nodenext`) |
-| ORM / DB | Prisma 6 + PostgreSQL |
-| Sessions & cache | Redis (`connect-redis` sessions, `@nestjs/cache-manager` + keyv) |
-| Auth | Passport `local` strategy used for **email OTP** (no passwords) |
-| Scheduling/time | `luxon`, `date-fns` / `date-fns-tz` |
-| Validation | `class-validator` + `class-transformer` (global `ValidationPipe`) |
-| Mail | `@nestjs-modules/mailer` + nodemailer + Handlebars templates |
-| API docs | `@nestjs/swagger` (served at `/api`) |
-| Tests | Jest (unit `*.spec.ts`, e2e via `test/jest-e2e.json`) |
-| Shared types | `@zenflow/shared` (`workspace:*`) — the FE/BE contract |
+
+| Concern              | Choice                                                            |
+| -------------------- | ----------------------------------------------------------------- |
+| Framework            | NestJS 11 (Express platform)                                      |
+| Language             | TypeScript 5.7 (ES2023, `nodenext`)                               |
+| ORM / DB             | Prisma 6 + PostgreSQL                                             |
+| Sessions &amp; cache | Redis (`connect-redis` sessions, `@nestjs/cache-manager` + keyv)  |
+| Auth                 | Passport `local` strategy used for **email OTP** (no passwords)   |
+| Scheduling/time      | `luxon`, `date-fns` / `date-fns-tz`                               |
+| Validation           | `class-validator` + `class-transformer` (global `ValidationPipe`) |
+| Mail                 | `@nestjs-modules/mailer` + nodemailer + Handlebars templates      |
+| API docs             | `@nestjs/swagger` (served at `/api`)                              |
+| Tests                | Jest (unit `*.spec.ts`, e2e via `test/jest-e2e.json`)             |
+| Shared types         | `@zenflow/shared` (`workspace:*`) — the FE/BE contract            |
+
 
 ## Folder structure
 
@@ -50,10 +52,10 @@ backend/
 │   ├── mail/                  # login email + Handlebars templates
 │   ├── prisma/                # PrismaService + Postgres error-code map
 │   └── common/                # constants, utils, validators, dto, types
-├── compose.{local,dev,prod,test}.yml
-├── Caddyfile.{local,prod}
+├── compose.{dev,staging,prod,test}.yml
+├── Caddyfile.{staging,prod}
 ├── Dockerfile
-└── .env.{dev,prod,test} + docker.env
+└── .env.{dev,staging,prod,test} + docker.{dev,staging,prod,test}.env
 ```
 
 **Key layering rule:** `scheduler/utils/` is **pure and deterministic** (no
@@ -66,54 +68,67 @@ what makes the engine unit-testable and what Phase 3 will plug into.
 Defined in [`prisma/schema.prisma`](prisma/schema.prisma). Five models.
 
 ### `User`
-| Field | Type | Notes |
-|-------|------|-------|
-| `id` | uuid | PK |
-| `name`, `email` | string | `email` unique |
-| `timezone` | string | IANA, default `"UTC"` |
-| `workStart` / `workEnd` | int | minutes from midnight (default 540 / 1020 = 09:00–17:00) |
-| `workDays` | int[] | ISO weekdays, default `[1,2,3,4,5]` (1=Mon … 7=Sun) |
-| `preferenceMatrix` | int[] | flat **672** ints (7 days × 96 fifteen-minute slots, slot-grid-aligned). **Signed** Phase-1 telemetry: a move-toward/keep increments a cell (+1), a move-away decrements it (−1), empty = 0 (neutral). **Not yet read** by the engine. Seeded lazily. |
-| `durationAdjustmentMode` | `DurationAdjustmentMode` | `auto` \| `ask` \| `never`; default `auto`. Gates whether the Phase-2 per-tag duration corrector is *applied* (it always *learns*). |
-| `preferenceMatrixDecayedAt` | DateTime? | When the daily decay cron last decayed `preferenceMatrix`; null until the first pass |
-| `onboardingComplete` | bool | gates the onboarding redirect |
+
+
+| Field                       | Type                     | Notes                                                                                                                                                                                                                                                 |
+| --------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                        | uuid                     | PK                                                                                                                                                                                                                                                    |
+| `name`, `email`             | string                   | `email` unique                                                                                                                                                                                                                                        |
+| `timezone`                  | string                   | IANA, default `"UTC"`                                                                                                                                                                                                                                 |
+| `workStart` / `workEnd`     | int                      | minutes from midnight (default 540 / 1020 = 09:00–17:00)                                                                                                                                                                                              |
+| `workDays`                  | int[]                    | ISO weekdays, default `[1,2,3,4,5]` (1=Mon … 7=Sun)                                                                                                                                                                                                   |
+| `preferenceMatrix`          | int[]                    | flat **672** ints (7 days × 96 fifteen-minute slots, slot-grid-aligned). **Signed** Phase-1 telemetry: a move-toward/keep increments a cell (+1), a move-away decrements it (−1), empty = 0 (neutral). **Not yet read** by the engine. Seeded lazily. |
+| `durationAdjustmentMode`    | `DurationAdjustmentMode` | `auto` | `ask` | `never`; default `auto`. Gates whether the Phase-2 per-tag duration corrector is *applied* (it always *learns*).                                                                                                                     |
+| `preferenceMatrixDecayedAt` | DateTime?                | When the daily decay cron last decayed `preferenceMatrix`; null until the first pass                                                                                                                                                                  |
+| `onboardingComplete`        | bool                     | gates the onboarding redirect                                                                                                                                                                                                                         |
+
 
 ### `Task`
-| Field | Type | Notes |
-|-------|------|-------|
-| `id` | uuid | PK |
-| `title`, `note` | string | `note` is rich text (TipTap) |
-| `durationMinutes` | int | **always a positive multiple of 15** |
-| `deadline` | DateTime? | EDF ordering key (nulls last) |
-| `tags` | `Tag[]` | implicit many-to-many with `Tag` (per-user labels) |
-| `manuallyMoved` | bool | true → the user dragged/resized this task. **Purely informational** (drives the "Manually placed" badge/telemetry) — the scheduler never reads it to decide what can move; see "The EDF engine" below for the continuous cost model that replaced the old hard freeze |
-| `startTime` | int | minutes from midnight of the last manual placement; informational only, not consulted by the scheduler |
-| `status` | `TaskStatus` | `PENDING` \| `DONE` \| `ABANDONED` |
-| `conflict` | bool | true when the task has no valid placement (no slot before its deadline) — i.e. `scheduledStartTime` is null |
-| `scheduledStartTime` | DateTime? | placement assigned by the EDF engine |
-| `userId` | uuid | FK → `User`, `onDelete: Cascade` |
+
+
+| Field                | Type         | Notes                                                                                                                                                                                                                                                                 |
+| -------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                 | uuid         | PK                                                                                                                                                                                                                                                                    |
+| `title`, `note`      | string       | `note` is rich text (TipTap)                                                                                                                                                                                                                                          |
+| `durationMinutes`    | int          | **always a positive multiple of 15**                                                                                                                                                                                                                                  |
+| `deadline`           | DateTime?    | EDF ordering key (nulls last)                                                                                                                                                                                                                                         |
+| `tags`               | `Tag[]`      | implicit many-to-many with `Tag` (per-user labels)                                                                                                                                                                                                                    |
+| `manuallyMoved`      | bool         | true → the user dragged/resized this task. **Purely informational** (drives the "Manually placed" badge/telemetry) — the scheduler never reads it to decide what can move; see "The EDF engine" below for the continuous cost model that replaced the old hard freeze |
+| `startTime`          | int          | minutes from midnight of the last manual placement; informational only, not consulted by the scheduler                                                                                                                                                                |
+| `status`             | `TaskStatus` | `PENDING` | `DONE` | `ABANDONED`                                                                                                                                                                                                                                      |
+| `conflict`           | bool         | true when the task has no valid placement (no slot before its deadline) — i.e. `scheduledStartTime` is null                                                                                                                                                           |
+| `scheduledStartTime` | DateTime?    | placement assigned by the EDF engine                                                                                                                                                                                                                                  |
+| `userId`             | uuid         | FK → `User`, `onDelete: Cascade`                                                                                                                                                                                                                                      |
+
 
 Indexes: `[userId, deadline]`, `[userId, status]`, `[userId, scheduledStartTime]`.
 
 ### `TaskEvent` (append-only audit trail — the ML fuel)
-| Field | Type | Notes |
-|-------|------|-------|
-| `id` | BigInt | autoincrement (serialized as decimal string over the wire) |
-| `eventType` | `TaskEventType` | `CREATE` \| `MOVE` \| `RESIZE` \| `KEEP` \| `COMPLETE` \| `ABANDON` \| `RESCHEDULED`. `KEEP` = completed in the suggested slot (positive signal); `RESCHEDULED` = auto-repositioned as collateral in someone else's cascade (not a user drag). |
-| `oldSnapshot` / `newSnapshot` | Json | `{ scheduledStartTime, durationMinutes, tags }` (tag names at event time); MOVE/RESIZE also carry `suggestedStartTime` (the overridden EDF slot); RESCHEDULED carries `propensity` when the softmax re-ranker actually chose the slot. `oldSnapshot` null on CREATE/KEEP. |
-| `rewardScore` | float | Phase-3 reward signal (default 1.0) |
-| `occurredAt` | DateTime | indexed desc per user |
-| `batchId` | string? | groups every RESCHEDULED event one `SchedulerService.reoptimize` auto-cascade wrote, so the whole batch can be undone atomically via `SchedulerService.undoBatch` / `POST /tasks/reschedule/undo/:batchId`. Null outside a reoptimize batch. Indexed `[userId, batchId]`. |
-| `taskId` / `userId` | uuid | FKs, cascade delete (`userId` denormalized for range queries) |
+
+
+| Field                         | Type            | Notes                                                                                                                                                                                                                                                                     |
+| ----------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                          | BigInt          | autoincrement (serialized as decimal string over the wire)                                                                                                                                                                                                                |
+| `eventType`                   | `TaskEventType` | `CREATE` | `MOVE` | `RESIZE` | `KEEP` | `COMPLETE` | `ABANDON` | `RESCHEDULED`. `KEEP` = completed in the suggested slot (positive signal); `RESCHEDULED` = auto-repositioned as collateral in someone else's cascade (not a user drag).                                  |
+| `oldSnapshot` / `newSnapshot` | Json            | `{ scheduledStartTime, durationMinutes, tags }` (tag names at event time); MOVE/RESIZE also carry `suggestedStartTime` (the overridden EDF slot); RESCHEDULED carries `propensity` when the softmax re-ranker actually chose the slot. `oldSnapshot` null on CREATE/KEEP. |
+| `rewardScore`                 | float           | Phase-3 reward signal (default 1.0)                                                                                                                                                                                                                                       |
+| `occurredAt`                  | DateTime        | indexed desc per user                                                                                                                                                                                                                                                     |
+| `batchId`                     | string?         | groups every RESCHEDULED event one `SchedulerService.reoptimize` auto-cascade wrote, so the whole batch can be undone atomically via `SchedulerService.undoBatch` / `POST /tasks/reschedule/undo/:batchId`. Null outside a reoptimize batch. Indexed `[userId, batchId]`. |
+| `taskId` / `userId`           | uuid            | FKs, cascade delete (`userId` denormalized for range queries)                                                                                                                                                                                                             |
+
 
 ### `Tag`
+
 Per-user label in an implicit many-to-many with `Task`.
-| Field | Type | Notes |
-|-------|------|-------|
-| `id` | uuid | PK |
-| `name` | string | unique per user (`@@unique([userId, name])`) |
-| `userId` | uuid | FK → `User`, `onDelete: Cascade` |
-| `createdAt` | DateTime | |
+
+
+| Field       | Type     | Notes                                        |
+| ----------- | -------- | -------------------------------------------- |
+| `id`        | uuid     | PK                                           |
+| `name`      | string   | unique per user (`@@unique([userId, name])`) |
+| `userId`    | uuid     | FK → `User`, `onDelete: Cascade`             |
+| `createdAt` | DateTime |                                              |
+
 
 On task create/update the backend resolves an incoming array of tag **names**:
 unknown names are upserted (per user) and all are connected to the occurrence(s),
@@ -121,6 +136,7 @@ atomically inside the task transaction. The wire format keeps `Task.tags` as a
 `string[]` of names — the `Tag` table is a backend detail.
 
 ### `File`
+
 `id`, `originalName`, `filename`, `path`, `mimetype`, `size`, `userId` (cascade).
 
 > **Tasks are one-off, and every task is flexible.** A `POST /tasks` always creates
@@ -132,81 +148,61 @@ atomically inside the task transaction. The wire format keeps `Task.tags` as a
 
 ## API endpoints
 
-Global prefix **`/api/v1`**. All routes except `POST /auth/otp/*` require
+Global prefix `**/api/v1**`. All routes except `POST /auth/otp/*` require
 `CookieAuthGuard` (a valid Redis session cookie). Success responses use the
 `@zenflow/shared` envelope `{ success: true, message?, data }`; errors use
 `{ success: false, message, statusCode?, field? }`.
 
 ### Auth (`/auth`)
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | `/auth/otp/request` | email a 6-digit OTP (no guard) |
-| POST | `/auth/otp/verify` | verify OTP, create user if new, start session. Reads `x-timezone` header. (`LocalAuthGuard`) |
-| GET | `/auth/me` | current user |
-| POST | `/auth/logout` | destroy session |
+
+
+| Method | Path                | Purpose                                                                                      |
+| ------ | ------------------- | -------------------------------------------------------------------------------------------- |
+| POST   | `/auth/otp/request` | email a 6-digit OTP (no guard)                                                               |
+| POST   | `/auth/otp/verify`  | verify OTP, create user if new, start session. Reads `x-timezone` header. (`LocalAuthGuard`) |
+| GET    | `/auth/me`          | current user                                                                                 |
+| POST   | `/auth/logout`      | destroy session                                                                              |
+
 
 ### Users (`/users`)
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/users/me` | profile |
-| PATCH | `/users/update/basic-info` | update name/email |
-| PUT | `/users/me/preferences` | update work hours/days/timezone (+ optional `durationAdjustmentMode`) — **triggers a full EDF reschedule of all PENDING tasks** |
-| POST | `/users/me/onboarding` | finish onboarding (sets schedule + optional `durationAdjustmentMode`) |
-| GET | `/users/me/preference-matrix` | the current user's flat 672-int signed preference matrix for the Insights heatmap (`PreferenceMatrixResponse`; cold-start → all-zero). Read-only |
+
+
+| Method | Path                          | Purpose                                                                                                                                          |
+| ------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| GET    | `/users/me`                   | profile                                                                                                                                          |
+| PATCH  | `/users/update/basic-info`    | update name/email                                                                                                                                |
+| PUT    | `/users/me/preferences`       | update work hours/days/timezone (+ optional `durationAdjustmentMode`) — **triggers a full EDF reschedule of all PENDING tasks**                  |
+| POST   | `/users/me/onboarding`        | finish onboarding (sets schedule + optional `durationAdjustmentMode`)                                                                            |
+| GET    | `/users/me/preference-matrix` | the current user's flat 672-int signed preference matrix for the Insights heatmap (`PreferenceMatrixResponse`; cold-start → all-zero). Read-only |
+
 
 ### Tasks (`/tasks`)
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | `/tasks` | create a single task — always flexible, always EDF-placed (`durationMinutes` is a plain required field; there is no more `fixed`/`startTime`/`endTime`). The new task enters the SAME unified `reoptimize` pass as every other pending task (see "The EDF engine" below); since it starts with no anchor, placing it well can legitimately nudge a far-out, cost-cheap-to-move task out of the way — a create is no longer guaranteed "solo". Only comes back unplaced (`conflict: true`) in the rare genuinely-saturated-calendar case |
-| GET | `/tasks?view=&date=&status=` | list within the view window (+ unplaced conflicts) |
-| GET | `/tasks/suggestions?q=&limit=` | title-autocomplete: the user's existing tasks, **newest first** and **deduped by title** (case-insensitive), optionally filtered by the `q` substring. `limit` 1–50, default 10. Returns `TaskSuggestionsResponse` (`{ suggestions: Task[] }`). Read-only; never reschedules. Declared **before** `/tasks/:id` so it isn't matched as an id |
-| GET | `/tasks/:id` | task detail + last events |
-| PATCH | `/tasks/:id` | metadata only (title/note/deadline/tags) saved immediately. A `deadline`/duration-correcting `tags` change that leaves the task's own slot no longer cost-optimal (past its new deadline, or overlapping a neighbor) is auto-resolved **inline, in the same request** via `SchedulerService.reoptimize` — `UpdateTaskResponse.displaced`/`batchId` surface what moved; `task` always reflects the FINAL slot, even when the edit itself cost-forced the edited task's own placement to move (the bug a tightened deadline used to silently violate). `deadlineChanged` is informational only |
-| PATCH | `/tasks/:id/reschedule` | manual drag → pin (`manuallyMoved: true`, informational only), records MOVE + signed preference telemetry, then **inline** `reoptimize` of anything the drop now overlaps. Returns `RescheduleResponse` with `displaced`/`batchId` |
-| PATCH | `/tasks/:id/resize` | edge-resize, snaps to 15-min grid, pins `manuallyMoved: true` (informational), then the same inline `reoptimize` `reschedule` uses |
-| POST | `/tasks/reschedule/undo/:batchId` | undo one `reoptimize` batch (from `create`/`update`/`reschedule`/`resize`'s `batchId`): reverts every task it displaced back to its prior slot/duration, restored from each tagged `RESCHEDULED` `TaskEvent`'s `oldSnapshot`. 404 when `batchId` matches no event for this user. Returns `UndoBatchResponse` (`{ displaced: DisplacedTask[] }`) |
-| PATCH | `/tasks/:id/complete` | mark DONE, records COMPLETE |
-| DELETE | `/tasks/:id` | delete the task, then **inline** `reoptimize` to close whatever gap it left behind — no separate confirm step. Returns `RemoveTaskResponse` (`{ displaced: DisplacedTask[], batchId? }`), the same cascade-transparency shape `update`/`reschedule`/`resize` return |
 
-> **`POST /tasks/reschedule-cascade` is gone.** It used to be the shared wide
-> confirm-before-reschedule fallback (±3 workdays, a manual "reschedule everyone /
-> reschedule only auto-scheduled tasks" choice) for whenever the narrow auto-resolve
-> couldn't find room, chiefly because a manually-moved neighbor was in the way and the old
-> model refused to touch it. That whole "ask before moving other tasks" step is gone: with
-> the continuous cost model below there's no more manual/auto distinction to ask about, and
-> every mutation already reoptimizes the user's FULL pending schedule inline (no more
-> window-scoped "narrow" cascade either) — a second, wider confirm call is redundant. Along
-> with it, `RescheduleCascadeInput`/`RescheduleCascadeDto` and `TasksService.
-> rescheduleCascade` were removed from `@zenflow/shared` and the backend.
->
-> **The continuous cost model (replaces the old hard `manuallyMoved` freeze + hard deadline
-> cutoff + 3-tier fallback + view-scoped cascade).** See "The EDF engine" below for the full
-> `placementCost` breakdown; the summary: EVERY non-past task's tolerance for being moved now
-> scales continuously with how far in the future its current `scheduledStartTime` (its
-> "anchor") sits — near-term anchors are expensive to move, far-future ones are cheap — and a
-> tightened deadline or an off-hours slot is a cost penalty rather than a hard wall. The ONLY
-> hard rules left: no two tasks may ever overlap, and a task already started/elapsed
-> (`isPast`) is completely frozen. `manuallyMoved` plays no role in any of this anymore — it's
-> purely informational (the "Manually placed" badge/telemetry).
->
-> **`SchedulerService.reoptimize(userId, prefs, now, db?, opts?)`** is the single cascade
-> primitive behind every mutation now (`create`/`update`/`reschedule`/`resize`/`remove`,
-> collapsing the old `cascadeReschedule` + `narrowResolve` into one method): it loads ALL of
-> this user's PENDING tasks (bounded only by the existing `MAX_SCAN_DAYS` query ceiling — no
-> more window scoping), runs the pure cost-aware `scheduleAll`, recomputes true pairwise
-> conflicts, diffs against the DB, and writes back every changed row in one statement. A
-> fresh `batchId` is generated every call and stamped on every RESCHEDULED event it writes,
-> so `undoBatch` can always revert a call's collateral moves — reported as `null` when
-> nothing actually moved. `opts.fixedTaskId` marks a task whose own placement event is the
-> CALLER's to log (e.g. `create`'s own CREATE event) so `reoptimize` doesn't double-log it as
-> a collateral RESCHEDULED.
+
+| Method | Path                              | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------ | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/tasks`                          | create a single task — always flexible, always EDF-placed (`durationMinutes` is a plain required field; there is no more `fixed`/`startTime`/`endTime`). The new task enters the SAME unified `reoptimize` pass as every other pending task (see "The EDF engine" below); since it starts with no anchor, placing it well can legitimately nudge a far-out, cost-cheap-to-move task out of the way — a create is no longer guaranteed "solo". Only comes back unplaced (`conflict: true`) in the rare genuinely-saturated-calendar case                                                      |
+| GET    | `/tasks?view=&date=&status=`      | list within the view window (+ unplaced conflicts)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| GET    | `/tasks/suggestions?q=&limit=`    | title-autocomplete: the user's existing tasks, **newest first** and **deduped by title** (case-insensitive), optionally filtered by the `q` substring. `limit` 1–50, default 10. Returns `TaskSuggestionsResponse` (`{ suggestions: Task[] }`). Read-only; never reschedules. Declared **before** `/tasks/:id` so it isn't matched as an id                                                                                                                                                                                                                                                  |
+| GET    | `/tasks/:id`                      | task detail + last events                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| PATCH  | `/tasks/:id`                      | metadata only (title/note/deadline/tags) saved immediately. A `deadline`/duration-correcting `tags` change that leaves the task's own slot no longer cost-optimal (past its new deadline, or overlapping a neighbor) is auto-resolved **inline, in the same request** via `SchedulerService.reoptimize` — `UpdateTaskResponse.displaced`/`batchId` surface what moved; `task` always reflects the FINAL slot, even when the edit itself cost-forced the edited task's own placement to move (the bug a tightened deadline used to silently violate). `deadlineChanged` is informational only |
+| PATCH  | `/tasks/:id/reschedule`           | manual drag → pin (`manuallyMoved: true`, informational only), records MOVE + signed preference telemetry, then **inline** `reoptimize` of anything the drop now overlaps. Returns `RescheduleResponse` with `displaced`/`batchId`                                                                                                                                                                                                                                                                                                                                                           |
+| PATCH  | `/tasks/:id/resize`               | edge-resize, snaps to 15-min grid, pins `manuallyMoved: true` (informational), then the same inline `reoptimize` `reschedule` uses                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| POST   | `/tasks/reschedule/undo/:batchId` | undo one `reoptimize` batch (from `create`/`update`/`reschedule`/`resize`'s `batchId`): reverts every task it displaced back to its prior slot/duration, restored from each tagged `RESCHEDULED` `TaskEvent`'s `oldSnapshot`. 404 when `batchId` matches no event for this user. Returns `UndoBatchResponse` (`{ displaced: DisplacedTask[] }`)                                                                                                                                                                                                                                              |
+| PATCH  | `/tasks/:id/complete`             | mark DONE, records COMPLETE                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| DELETE | `/tasks/:id`                      | delete the task, then **inline** `reoptimize` to close whatever gap it left behind — no separate confirm step. Returns `RemoveTaskResponse` (`{ displaced: DisplacedTask[], batchId? }`), the same cascade-transparency shape `update`/`reschedule`/`resize` return                                                                                                                                                                                                                                                                                                                          |
+
 
 ### Tags (`/tags`)
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/tags` | list the current user's tags (`{ tags: { id, name }[] }`, name-sorted) for the combobox |
+
+
+| Method | Path    | Purpose                                                                                 |
+| ------ | ------- | --------------------------------------------------------------------------------------- |
+| GET    | `/tags` | list the current user's tags (`{ tags: { id, name }[] }`, name-sorted) for the combobox |
+
 
 ### Files (`/files`)
+
 `POST /files/upload` (multipart, ≤100 MB × 5), `POST /files/remove`,
 `GET /files/metadata/:id`, `GET /files/:id` (download stream).
 
@@ -282,23 +278,23 @@ genuinely-tied ones).
 
 ### Other pure pieces
 
-- **`feasibleSlots(task, now, prefs, occupied, earliestStart?)`** — every 15-min-grid
-  in-work-hours start before the task's deadline (or `now + MAX_SCAN_DAYS` with no deadline)
-  that doesn't overlap `occupied`, ascending. Cross-midnight-aware via `workWindowFor`.
-- **`findSlotIgnoringWorkHours(task, now, occupied, prefs, ceiling?)`** — a candidate ignoring
-  the work-hours window (still respecting `occupied` and an optional deadline `ceiling`),
-  preferring the gap closest to that day's work window.
-- **`findNextAvailableSlot(task, searchFrom, occupied, prefs)`** — the earliest in-work-hours
-  slot at/after `searchFrom`, ignoring the deadline entirely (the "deadline actually missed"
-  case).
-- **`fallbackSlot(task, now, occupied, prefs)`** — chains the two above into a single
-  best-effort candidate for a not-yet-created draft task (no anchor to weigh against, so it
-  doesn't need `scheduleAll`'s full cost-scored candidate pool). No current caller —
-  previously wired to the now-removed `SchedulerService.simulate()` preview
-  (`POST /tasks/simulate` was deleted along with the preview-before-commit flow; see
-  [`docs/heuristic.md`](../docs/heuristic.md)'s overflow-recovery note).
-- **`isPast(task, now)`** — the one hard freeze (see above).
-- **`compareMovable(a, b)`** — deadline ascending (nulls last), then `createdAt` ascending.
+- `**feasibleSlots(task, now, prefs, occupied, earliestStart?)**` — every 15-min-grid
+in-work-hours start before the task's deadline (or `now + MAX_SCAN_DAYS` with no deadline)
+that doesn't overlap `occupied`, ascending. Cross-midnight-aware via `workWindowFor`.
+- `**findSlotIgnoringWorkHours(task, now, occupied, prefs, ceiling?)**` — a candidate ignoring
+the work-hours window (still respecting `occupied` and an optional deadline `ceiling`),
+preferring the gap closest to that day's work window.
+- `**findNextAvailableSlot(task, searchFrom, occupied, prefs)**` — the earliest in-work-hours
+slot at/after `searchFrom`, ignoring the deadline entirely (the "deadline actually missed"
+case).
+- `**fallbackSlot(task, now, occupied, prefs)**` — chains the two above into a single
+best-effort candidate for a not-yet-created draft task (no anchor to weigh against, so it
+doesn't need `scheduleAll`'s full cost-scored candidate pool). No current caller —
+previously wired to the now-removed `SchedulerService.simulate()` preview
+(`POST /tasks/simulate` was deleted along with the preview-before-commit flow; see
+[`docs/heuristic.md`](../docs/heuristic.md)'s overflow-recovery note).
+- `**isPast(task, now)**` — the one hard freeze (see above).
+- `**compareMovable(a, b)**` — deadline ascending (nulls last), then `createdAt` ascending.
 
 ### Conflict detection
 
@@ -321,31 +317,31 @@ The matrix/bias/decay are computed in the **service** and passed into the **pure
 inputs as params and do no I/O; the service is the only thing that reads Prisma.
 
 - **Placement re-ranker** (`reranker.ts` → `rankCandidates`/`cellScore`/`rankByScores`): the
-  shared softmax/Gumbel stochastic-logging mechanism. `scheduleAll`'s cost-scored candidate
-  ranking uses `rankByScores` directly (fed `-placementCost` instead of a raw preference score
-  — see "The EDF engine" above); `rankCandidates`/`pickBest`/`topN` are the preference-only
-  variant, currently unused now that `SchedulerService.simulate()` (their only caller) has been
-  removed — see `docs/heuristic.md`'s overflow-recovery note. `SchedulerService.reoptimize`
-  builds the matrix from `user.preferenceMatrix`. A cold-start / wrong-length matrix, or a
-  genuine tie, degenerates to deterministic earliest-first order with uniform propensity
-  rather than injecting noise.
+shared softmax/Gumbel stochastic-logging mechanism. `scheduleAll`'s cost-scored candidate
+ranking uses `rankByScores` directly (fed `-placementCost` instead of a raw preference score
+— see "The EDF engine" above); `rankCandidates`/`pickBest`/`topN` are the preference-only
+variant, currently unused now that `SchedulerService.simulate()` (their only caller) has been
+removed — see `docs/heuristic.md`'s overflow-recovery note. `SchedulerService.reoptimize`
+builds the matrix from `user.preferenceMatrix`. A cold-start / wrong-length matrix, or a
+genuine tie, degenerates to deterministic earliest-first order with uniform propensity
+rather than injecting noise.
 - **Duration corrector** (`duration-bias.ts` → `blendBias` / `correctDuration`):
-  `SchedulerService.computeDurationCorrection` aggregates per-tag `{ n, b }` from `TaskEvent`
-  telemetry (rolling `actual ÷ estimated`), blends it sample-weighted, and rounds the
-  corrected duration **up** to the 15-min grid. `TasksService.create` applies it as
-  preprocessing **before** EDF — gated by `user.durationAdjustmentMode`: `never` feeds the
-  uncorrected estimate to EDF but **still learns** the bias. The real `biasApplied`,
-  `estimatedDuration`, `durationAdjustmentMode`, and `durationReason` are surfaced on the
-  create response's `schedulingMeta`.
+`SchedulerService.computeDurationCorrection` aggregates per-tag `{ n, b }` from `TaskEvent`
+telemetry (rolling `actual ÷ estimated`), blends it sample-weighted, and rounds the
+corrected duration **up** to the 15-min grid. `TasksService.create` applies it as
+preprocessing **before** EDF — gated by `user.durationAdjustmentMode`: `never` feeds the
+uncorrected estimate to EDF but **still learns** the bias. The real `biasApplied`,
+`estimatedDuration`, `durationAdjustmentMode`, and `durationReason` are surfaced on the
+create response's `schedulingMeta`.
 - **Rationale** (`rationale.ts` → `buildRationale`): a human-readable summary
-  (`schedulingMeta.rationale` / `RescheduleResponse.rationale`) describing the preferred work
-  window + top cells that drove a placement (omitted when it wasn't preference-favoured). Its
-  only current wiring was `SchedulerService.simulate()`'s draft-task preview, now removed
-  along with `POST /tasks/simulate`; `displace()`/`resize()` still return the field
-  (hard-coded `null` today).
+(`schedulingMeta.rationale` / `RescheduleResponse.rationale`) describing the preferred work
+window + top cells that drove a placement (omitted when it wasn't preference-favoured). Its
+only current wiring was `SchedulerService.simulate()`'s draft-task preview, now removed
+along with `POST /tasks/simulate`; `displace()`/`resize()` still return the field
+(hard-coded `null` today).
 - **Matrix-decay cron** (`matrix-decay.service.ts`, `@Cron` daily): the I/O wrapper loads each
-  user's `preferenceMatrix` + `preferenceMatrixDecayedAt`, calls the pure `decayMatrix`
-  (`cell *= 2^(−Δdays / MATRIX_HALF_LIFE_DAYS)`, 21-day half-life), and writes back.
+user's `preferenceMatrix` + `preferenceMatrixDecayedAt`, calls the pure `decayMatrix`
+(`cell *= 2^(−Δdays / MATRIX_HALF_LIFE_DAYS)`, 21-day half-life), and writes back.
 
 > When you change any pure scheduler function, update its `*.spec.ts` in the same change
 > (`edf.spec.ts`, `horizon.spec.ts`) and run `pnpm --filter backend test`.
@@ -353,43 +349,59 @@ inputs as params and do no I/O; the service is the only thing that reads Prisma.
 ## Conventions
 
 - **Naming:** plural feature folders/classes (`TasksController`, `UsersService`,
-  `TasksModule`). DTOs end in `Dto`; guards in `Guard`; strategies in `Strategy`.
+`TasksModule`). DTOs end in `Dto`; guards in `Guard`; strategies in `Strategy`.
 - **DTOs + validation:** every request body/query is a `class-validator` DTO. The global
-  pipe runs `whitelist: true, forbidNonWhitelisted: true, transform: true` with implicit
-  conversion — so unknown fields are rejected and query params coerce to their typed shape.
-  Custom decorators: `@IsValidTimezone()`, plus `@CurrentUser()`.
+pipe runs `whitelist: true, forbidNonWhitelisted: true, transform: true` with implicit
+conversion — so unknown fields are rejected and query params coerce to their typed shape.
+Custom decorators: `@IsValidTimezone()`, plus `@CurrentUser()`.
 - **Response shape:** controllers return `{ success: true, message, data }`; let NestJS
-  `HttpException`s propagate (don't swallow). Prisma errors map via
-  [`src/prisma/error-codes.ts`](src/prisma/error-codes.ts).
+`HttpException`s propagate (don't swallow). Prisma errors map via
+[`src/prisma/error-codes.ts`](src/prisma/error-codes.ts).
 - **Shared types are the contract:** request/response shapes live in `@zenflow/shared`
-  (`CreateTaskInput`, `TasksListResponse`, `RescheduleResponse`, …). Change types there and
-  `pnpm shared:build` before relying on them.
+(`CreateTaskInput`, `TasksListResponse`, `RescheduleResponse`, …). Change types there and
+`pnpm shared:build` before relying on them.
 - **Module wiring:** a feature module imports `PrismaModule` when it needs the DB;
-  `SchedulerModule` is imported by `TasksModule` and `UsersModule`.
+`SchedulerModule` is imported by `TasksModule` and `UsersModule`.
 
 ## Local development
 
+**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) (with Compose) and
+Node 20+ with pnpm `10.32.1` (see the root [CLAUDE.md](../CLAUDE.md) toolchain section).
+
+Step by step, from a clean checkout:
+
 ```bash
-# From repo root, once:
+# 1. Install workspace deps + build @zenflow/shared (repo root, once)
 pnpm install && pnpm shared:build
 
-# Backend scripts (run inside backend/, or `pnpm --filter backend <script>`):
-pnpm start:dev            # watch-mode Nest server
+# 2. Bootstrap Postgres/Redis/MailHog in the background (from backend/)
+docker compose -f compose.dev.yml up -d
+
+# 3. Apply the Prisma schema to the dev DB
+pnpm prisma:dev:migrate
+
+# 4. Start the API in watch mode
+pnpm start:dev            # http://localhost:5000, Swagger at /api
+```
+
+Other backend scripts (run inside `backend/`, or `pnpm --filter backend <script>`):
+
+```bash
 pnpm typecheck           # tsc --noEmit
 pnpm lint                # eslint --fix
 pnpm test                # jest unit tests (*.spec.ts)
 pnpm test:e2e            # jest e2e (needs .env.test DB)
 
 # Prisma (dev DB via .env.dev):
-pnpm prisma:dev:migrate  # create/apply a migration
 pnpm prisma:dev:studio   # browse the DB
 pnpm prisma:gen:dev      # regenerate the Prisma client → ../generated/prisma
 ```
 
 ### Environment
 
-`.env.{dev,prod,test}` hold app config; `docker.env` holds Postgres credentials for
-Compose. Required app vars (validated at boot via `@hapi/joi`):
+`.env.{dev,staging,prod,test}` hold app config; the matching `docker.{dev,staging,prod,test}.env`
+holds Postgres credentials for that Compose file. Required app vars (validated at boot via
+`@hapi/joi`):
 
 ```env
 DATABASE_URL="postgres://admin:admin@zenflow-db:5432/zenflow?schema=public"
@@ -413,12 +425,11 @@ cookie's `Secure` and `SameSite` attributes and are decoupled from `NODE_ENV`:
 
 - **Dev / staging** (served over HTTP): `COOKIE_SECURE=false`, `COOKIE_SAMESITE=lax`.
 - **Production** (served over HTTPS): `COOKIE_SECURE=true`. The current deployment serves the
-  frontend at `https://zenflow.alphatrann.com` and the API at `https://zenflow-api.alphatrann.com`
-  — both subdomains of `alphatrann.com`, i.e. **same-site** — so `COOKIE_SAMESITE=lax` is
-  sufficient and preferred (Lax gives some CSRF protection that None gives up). These also match
-  the built-in defaults (`COOKIE_SECURE=true`, `COOKIE_SAMESITE=lax`), so `.env.prod` needs no
-  cookie overrides for this topology:
-
+frontend at `https://zenflow.alphatrann.com` and the API at `https://zenflow-api.alphatrann.com`
+— both subdomains of `alphatrann.com`, i.e. **same-site** — so `COOKIE_SAMESITE=lax` is
+sufficient and preferred (Lax gives some CSRF protection that None gives up). These also match
+the built-in defaults (`COOKIE_SECURE=true`, `COOKIE_SAMESITE=lax`), so `.env.prod` needs no
+cookie overrides for this topology:
   ```env
   COOKIE_SECURE=true
   COOKIE_SAMESITE=lax
@@ -442,25 +453,35 @@ cookie's `Secure` and `SameSite` attributes and are decoupled from `NODE_ENV`:
   subsequent request and a logout on reload. `main.ts` now sets `app.set("trust proxy", 1)` so
   Express trusts the forwarded proto and emits the cookie.
 
-### Docker
+## Running staging
 
-`compose.local.yml` brings up `api` (:5000), `postgres`, `redis`, `mail` (MailHog —
-catches OTP emails), the reserved `scheduler` service, and a `caddy` reverse proxy.
+**Prerequisites:** Docker (with Compose) and Node 20+ — `build_images.sh` shells out to
+`node` to read the image tag from `backend/package.json`; nothing else needs a local
+install, the API itself runs inside the container.
+
+`compose.staging.yml` is the fully containerized stack: `api` (built from the
+`Dockerfile`), `postgres`, `redis`, `mail` (MailHog — catches OTP emails), and a `caddy`
+reverse proxy on `:80`, configured via `.env.staging` + `docker.staging.env`.
 
 ```bash
+# From backend/ — build the zenflow-api image (build context is the repo root,
+# since the API depends on the @zenflow/shared workspace package)
 sh build_images.sh
-docker compose up -d        # API → :5000, Swagger → :5000/api
+
+# Bring the stack up in the background
+docker compose -f compose.staging.yml up -d   # API via Caddy → :80, Swagger → :80/api
 ```
 
 The Dockerfile is a multi-stage `node:20-alpine` build; `start:prod` runs
-`prisma migrate deploy` before launching `dist/main`.
+`prisma migrate deploy` before launching `dist/main` — so migrations are applied
+automatically on container start, no separate migrate step needed for staging.
 
 ## Contributing
 
 - **Formatter:** ESLint + Prettier (via `eslint-plugin-prettier`) — `pnpm --filter backend lint`
-  runs `eslint --fix`. **2-space** indentation, double quotes, semicolons
-  ([`.editorconfig`](../.editorconfig)).
+runs `eslint --fix`. **2-space** indentation, double quotes, semicolons
+([`.editorconfig`](../.editorconfig)).
 - **Commits:** [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/),
-  e.g. `feat(scheduler): …`, `fix(tasks): …`, `test(backend): …`.
+e.g. `feat(scheduler): …`, `fix(tasks): …`, `test(backend): …`.
 
-See the repo-wide **[CONTRIBUTING.md](../CONTRIBUTING.md)** for setup, branching, and testing.
+See the repo-wide [**CONTRIBUTING.md**](../CONTRIBUTING.md) for setup, branching, and testing.
