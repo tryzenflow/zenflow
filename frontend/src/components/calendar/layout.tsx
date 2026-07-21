@@ -342,6 +342,7 @@ export function CalendarLayout() {
             date={date}
             view={viewMode}
             onCreated={refetch}
+            setDate={setDate}
             trigger={
               <Button
                 size="icon-lg"

@@ -16,17 +16,23 @@ import { format } from "date-fns";
 import { isAxiosError } from "axios";
 import { zonedDate } from "@/utils/tz";
 import type { ViewMode } from "@zenflow/shared";
-import { handleDurationAdjustment } from "@/lib/scheduling-toasts";
+import {
+  handleDurationAdjustment,
+  maybeShowCascadeToast,
+} from "@/lib/scheduling-toasts";
 
 export function CreateTaskDialog({
   onCreated,
   trigger,
+  setDate,
 }: {
   date: Date;
   view: ViewMode;
   onCreated: () => void;
   /** Custom trigger element; falls back to the default "New task" button. */
   trigger?: React.ReactNode;
+  /** Navigate the calendar cursor date — used to jump to the created task's day. */
+  setDate: (d: Date) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -76,10 +82,22 @@ export function CreateTaskDialog({
       // there's nothing to highlight.
       if (!response.task.conflict) {
         setHighlight(response.task.id);
+        if (response.task.scheduledStartTime) {
+          setDate(zonedDate(response.task.scheduledStartTime, tz));
+        }
+      } else {
+        toast.warning(
+          `"${response.task.title}" couldn't be scheduled before its deadline`,
+        );
       }
       onCreated();
       form.reset();
       setOpen(false);
+
+      // Cascade toast — only when this create's inline reoptimize bumped
+      // OTHER tasks; independent of (and fires before) the duration-adjustment
+      // and rationale toasts below, since it keys off a different response field.
+      maybeShowCascadeToast(response, onCreated);
 
       // Phase-2: when the per-tag corrector adjusted the duration, the
       // auto/ask/never UX (ADR Sequence 1) replaces the plain success toast.

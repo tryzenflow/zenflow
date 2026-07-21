@@ -1,4 +1,5 @@
 import { useEditor } from "@tiptap/react";
+import { useEffect } from "react";
 import StarterKit from "@tiptap/starter-kit";
 import { sanitizeContent } from "@/utils/sanitizer";
 import Underline from "@tiptap/extension-underline";
@@ -43,7 +44,12 @@ export const useContentEditor = ({
         onChange(newContent);
       },
     },
-    [editable],
+    [],
   );
+
+  useEffect(() => {
+    editor?.setEditable(!!editable);
+  }, [editor, editable]);
+
   return editor;
 };

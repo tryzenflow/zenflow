@@ -17,6 +17,7 @@ import { TaskHistory } from "./task-history-timeline";
 import { useFilesTracker } from "@/hooks/use-files-tracker";
 import { completeTask, getTaskDetails, updateTask } from "@/api/tasks";
 import { Clock, Trash2 } from "lucide-react";
+import { maybeShowCascadeToast } from "@/lib/scheduling-toasts";
 
 interface EditTaskDialogProps {
   open: boolean;
@@ -87,13 +88,14 @@ export function EditTaskDialog({
     if (!user) return;
     setLoading(true);
     try {
-      await updateTask(taskId, {
+      const response = await updateTask(taskId, {
         title: values.title,
         note: values.note || null,
         deadline: values.deadline,
         tags: values.tags,
       });
       onSaved();
+      maybeShowCascadeToast(response, onSaved);
       toast.success("Task updated 🎉");
       setOpen(false);
     } catch (error) {
@@ -107,6 +109,7 @@ export function EditTaskDialog({
   }
 
   async function onComplete() {
+    setLoading(true);
     try {
       await completeTask(taskId);
       onSaved();
@@ -117,13 +120,17 @@ export function EditTaskDialog({
         (isAxiosError(error) && error.response?.data?.message) ||
           "Failed to complete task",
       );
+    } finally {
+      setLoading(false);
     }
   }
 
   async function onDelete() {
+    setLoading(true);
     try {
-      await deleteTask(taskId);
+      const response = await deleteTask(taskId);
       onSaved();
+      maybeShowCascadeToast(response, onSaved);
       toast.success("Task deleted");
       setOpen(false);
     } catch (error) {
@@ -131,6 +138,8 @@ export function EditTaskDialog({
         (isAxiosError(error) && error.response?.data?.message) ||
           "Failed to delete task",
       );
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -214,6 +223,7 @@ export function EditTaskDialog({
                 size="sm"
                 className="h-7 px-2.5 text-[10px] font-bold"
                 onClick={onComplete}
+                disabled={loading}
               >
                 Mark Done
               </Button>
@@ -237,6 +247,7 @@ export function EditTaskDialog({
               type="button"
               variant="outline"
               onClick={onDelete}
+              disabled={loading}
               className="h-8 w-full border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive"
             >
               <Trash2 className="size-3.5" /> Delete Task
