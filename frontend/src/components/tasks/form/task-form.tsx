@@ -19,29 +19,39 @@ import type { Task } from "@zenflow/shared";
 import { TagsField } from "./tag-field";
 import { TitleField } from "./title-field";
 import { DeadlineChipField } from "./deadline-chip-field";
+import { useUserStore } from "@/hooks/use-user-store";
+import { zonedDate, zonedNow, zonedWallClockToUtc } from "@/utils/tz";
 
-/** Shift a deadline forward by the same lead time it had at creation. If
- * the shifted deadline is in the future, use it; otherwise, round up to the
- * nearest 30-minute block from now. Returns "" when the source has no deadline
- * or has a negative offset. */
-function shiftedDeadline(task: Task): string {
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/** Shift a deadline forward by the same lead time (in whole days) it had at
+ * creation, keeping the exact time-of-day of the original deadline — so a
+ * midnight deadline stays midnight, never drifting to whatever time the
+ * suggestion happens to be applied at. The task also needs room to actually
+ * be scheduled, so if that candidate leaves less than `durationMinutes`
+ * between now and the deadline, bump forward a day at a time — still
+ * preserving the original time-of-day — until the full duration fits before
+ * it. Returns "" when the source has no deadline or had a negative lead time. */
+function shiftedDeadline(task: Task, tz: string, durationMinutes: number): string {
   if (!task.deadline || !task.createdAt) return "";
-  const offsetMs =
-    new Date(task.deadline).getTime() - new Date(task.createdAt).getTime();
-  if (offsetMs < 0) return "";
+  const deadlineZoned = zonedDate(task.deadline, tz);
+  const createdZoned = zonedDate(task.createdAt, tz);
+  const leadDays = Math.round(
+    (deadlineZoned.getTime() - createdZoned.getTime()) / MS_PER_DAY,
+  );
+  if (leadDays < 0) return "";
 
-  const shifted = new Date(Date.now() + offsetMs);
+  const candidate = zonedNow(tz);
+  candidate.setDate(candidate.getDate() + leadDays);
+  candidate.setHours(deadlineZoned.getHours(), deadlineZoned.getMinutes(), 0, 0);
 
-  // If the shifted deadline is already in the future, use it as-is
-  if (shifted.getTime() > Date.now()) {
-    return shifted.toISOString();
+  const earliestFit = zonedNow(tz);
+  earliestFit.setMinutes(earliestFit.getMinutes() + durationMinutes);
+  while (candidate.getTime() <= earliestFit.getTime()) {
+    candidate.setDate(candidate.getDate() + 1);
   }
 
-  // Otherwise, round up to the nearest 30-minute block from now
-  const now = Date.now();
-  const thirtyMinMs = 30 * 60 * 1000;
-  const roundedUp = new Date(Math.ceil(now / thirtyMinMs) * thirtyMinMs);
-  return roundedUp.toISOString();
+  return zonedWallClockToUtc(candidate, tz).toISOString();
 }
 
 const DURATION_PRESETS = [15, 30, 45, 60, 120];
@@ -85,6 +95,7 @@ export function TaskForm({
   editing = false,
 }: TaskFormProps) {
   const duration = form.watch("duration");
+  const tz = useUserStore((s) => s.user?.timezone) || "UTC";
 
   // `NoteEditor` only re-renders its content when `initialValue` changes, so a
   // bare `setValue("note", …)` updates the form but not the editor. Drive the
@@ -107,7 +118,7 @@ export function TaskForm({
     form.setValue("tags", s.tags ?? [], { shouldDirty: true });
     form.setValue("note", s.note ?? "", { shouldDirty: true });
     setNoteSeed(s.note ?? "");
-    form.setValue("deadline", shiftedDeadline(s), {
+    form.setValue("deadline", shiftedDeadline(s, tz, s.durationMinutes), {
       shouldValidate: true,
       shouldDirty: true,
     });
