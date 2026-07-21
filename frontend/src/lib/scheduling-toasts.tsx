@@ -1,11 +1,13 @@
 import { isAxiosError } from "axios";
 import { toast } from "sonner";
 import { Undo2 } from "lucide-react";
-import { resizeTask } from "@/api/tasks";
+import { resizeTask, undoBatch } from "@/api/tasks";
 import { errorToast } from "@/lib/toast";
 import { formatMinutes } from "@/utils/time";
 import { RationaleToast } from "@/components/tasks/rationale-toast";
+import { CascadeToast } from "@/components/tasks/cascade-toast";
 import { cn } from "@/lib/utils";
+import type { DisplacedTask } from "@zenflow/shared";
 import type { RescheduleResponse, SchedulingMeta, Task } from "@/types/phase2";
 
 /** Wrap a custom toast body in the same popover shell the scheduling toasts use. */
@@ -105,6 +107,48 @@ export function maybeShowRationaleToast(response: RescheduleResponse) {
     { duration: 8000 },
   );
   return id;
+}
+
+/**
+ * Show the cascade toast when a create/update/reschedule/resize/delete
+ * response's inline reoptimize moved OTHER tasks (`displaced`). No-op when
+ * nothing moved or the response carries no `batchId` (nothing to undo), so
+ * callers can pass any response with this shape unconditionally.
+ *
+ * The toast id is keyed by `batchId` only to dedupe a literal duplicate fire
+ * of the SAME batch (e.g. an accidental double-call) — it does not collapse
+ * across distinct mutations. Every real mutation gets its own fresh
+ * `batchId`, so rapid sequential edits legitimately stack multiple,
+ * independently-undoable cascade toasts; that's intended, not a bug to fix.
+ */
+export function maybeShowCascadeToast(
+  response: { displaced: DisplacedTask[]; batchId?: string | null },
+  onUndone: () => void,
+) {
+  if (!response.displaced.length || !response.batchId) return;
+  const batchId = response.batchId;
+  toast.custom(
+    (toastId) =>
+      shell(
+        <CascadeToast
+          count={response.displaced.length}
+          onUndo={async () => {
+            toast.dismiss(toastId);
+            try {
+              await undoBatch(batchId);
+              onUndone();
+            } catch (error) {
+              errorToast(
+                (isAxiosError(error) && error.response?.data?.message) ||
+                  "Couldn't undo — the schedule may have changed since.",
+              );
+            }
+          }}
+          onDismiss={() => toast.dismiss(toastId)}
+        />,
+      ),
+    { duration: 8000, id: `cascade:${batchId}` },
+  );
 }
 
 /**

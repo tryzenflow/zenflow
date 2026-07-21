@@ -5,6 +5,7 @@ import { getData, postData } from "@/api";
 import { Task } from "@/types/tasks";
 import { extractFileIdsFromNoteContent } from "./files";
 import { removeTask } from "@/api/tasks";
+import type { RemoveTaskResponse } from "@zenflow/shared";
 import { zonedDate } from "./tz";
 
 /**
@@ -77,7 +78,9 @@ export type TaskFormValues = z.infer<typeof taskSchema>;
 export type EditTaskFormValues = TaskFormValues;
 
 /** Delete a task, cleaning up any note attachments it referenced. */
-export async function deleteTask(taskId: string) {
+export async function deleteTask(
+  taskId: string,
+): Promise<RemoveTaskResponse> {
   const { data } = await getData<{ data: { task: Task } }>(`/tasks/${taskId}`);
   const previousIds = extractFileIdsFromNoteContent(data.task.note || "");
   if (previousIds.length > 0) {

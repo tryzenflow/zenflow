@@ -4,9 +4,8 @@ import type {
   CreateTaskInput,
   CreateTaskResponse,
   DeadlineOptionsResponse,
+  RemoveTaskResponse,
   RescheduleResponse,
-  SimulateTaskInput,
-  SimulateTaskResponse,
   Task,
   TaskDetailResponse,
   TasksListResponse,
@@ -41,14 +40,6 @@ export async function createTask(
   input: CreateTaskInput,
 ): Promise<CreateTaskResponse> {
   const { data } = await api.post("/tasks", input);
-  return data.data;
-}
-
-/** Read-only dry-run of the scheduler for a not-yet-created task. Never writes to the DB. */
-export async function simulateTask(
-  input: SimulateTaskInput,
-): Promise<SimulateTaskResponse> {
-  const { data } = await api.post("/tasks/simulate", input);
   return data.data;
 }
 
@@ -117,9 +108,11 @@ export async function completeTask(id: string): Promise<Task> {
 }
 
 /**
- * Deletes the task. Never cascades — any gap it leaves behind is only filled
- * organically, by a later create/edit/drag landing on it.
+ * Deletes the task. The backend already reoptimizes the pending schedule
+ * inline after a delete — this response surfaces what that repack did, if
+ * anything (`displaced`/`batchId`), same as create/update/reschedule/resize.
  */
-export async function removeTask(id: string): Promise<void> {
-  await api.delete(`/tasks/${id}`);
+export async function removeTask(id: string): Promise<RemoveTaskResponse> {
+  const { data } = await api.delete(`/tasks/${id}`);
+  return data.data;
 }
