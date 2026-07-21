@@ -1,0 +1,288 @@
+import * as React from "react";
+import {
+  type GestureResponderEvent,
+  Pressable,
+  FlatList as RNFlatList,
+  TextInput as RNTextInput,
+  StyleSheet,
+  View,
+  type ViewStyle,
+} from "react-native";
+import * as DialogPrimitive from "@/components/primitives/dialog";
+import * as Slot from "@/components/primitives/slot";
+import { X } from "@/components/Icons";
+import { cn } from "@/lib/utils";
+import { Button } from "./button";
+
+// !IMPORTANT: This file is only for web.
+//
+// There is no web-ready gesture-driven sheet in this repo (@gorhom/bottom-sheet
+// is native-only), so this reimplements the same BottomSheet* API on top of the
+// Dialog primitive (Radix under the hood) — a modal anchored to the bottom of
+// the viewport instead of centered — so callers share one API cross-platform.
+
+/** Minimal subset of the @gorhom/bottom-sheet imperative API this file mirrors. */
+interface WebSheetHandle {
+  present: () => void;
+  dismiss: () => void;
+}
+
+type BottomSheetRef = React.ElementRef<typeof View>;
+type BottomSheetProps = React.ComponentPropsWithoutRef<typeof View>;
+
+interface BottomSheetContext {
+  sheetRef: React.RefObject<WebSheetHandle | null>;
+}
+
+const BottomSheetContext = React.createContext({} as BottomSheetContext);
+
+const BottomSheet = React.forwardRef<BottomSheetRef, BottomSheetProps>(
+  ({ ...props }, ref) => {
+    const sheetRef = React.useRef<WebSheetHandle>(null);
+    return (
+      <BottomSheetContext.Provider value={{ sheetRef }}>
+        <View ref={ref} {...props} />
+      </BottomSheetContext.Provider>
+    );
+  },
+);
+
+function useBottomSheetContext() {
+  const context = React.useContext(BottomSheetContext);
+  if (!context) {
+    throw new Error(
+      "BottomSheet compound components cannot be rendered outside the BottomSheet component",
+    );
+  }
+  return context;
+}
+
+type BottomSheetContentRef = WebSheetHandle;
+type BottomSheetContentProps = Omit<
+  React.ComponentPropsWithoutRef<typeof View>,
+  "style"
+> & {
+  onDismiss?: () => void;
+  style?: ViewStyle;
+};
+
+const BottomSheetContent = React.forwardRef<
+  BottomSheetContentRef,
+  BottomSheetContentProps
+>(({ className, children, onDismiss, ...props }, ref) => {
+  const [open, setOpen] = React.useState(false);
+  const { sheetRef } = useBottomSheetContext();
+
+  const handle = React.useMemo<WebSheetHandle>(
+    () => ({
+      present: () => setOpen(true),
+      dismiss: () => setOpen(false),
+    }),
+    [],
+  );
+  React.useImperativeHandle(sheetRef, () => handle, [handle]);
+  React.useImperativeHandle(ref, () => handle, [handle]);
+
+  const wasOpen = React.useRef(open);
+  React.useEffect(() => {
+    if (wasOpen.current && !open) onDismiss?.();
+    wasOpen.current = open;
+  }, [open, onDismiss]);
+
+  return (
+    <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay
+          style={StyleSheet.absoluteFill}
+          className={cn(
+            "z-50 bg-black/50",
+            open
+              ? "web:animate-in web:fade-in-0"
+              : "web:animate-out web:fade-out-0",
+          )}
+        />
+        <DialogPrimitive.Content
+          style={
+            { position: "fixed", left: 0, right: 0, bottom: 0 } as ViewStyle
+          }
+          className={cn(
+            "z-50 mx-auto flex max-h-[85vh] w-full max-w-[480px] flex-col rounded-t-[26px] border border-b-0 border-border bg-background pb-6 pt-2.5 shadow-2xl",
+            open
+              ? "web:animate-in web:slide-in-from-bottom web:fade-in-0 web:duration-300"
+              : "web:animate-out web:slide-out-to-bottom web:fade-out-0 web:duration-200",
+            className,
+          )}
+          {...props}
+        >
+          <View className="mx-auto mb-3.5 h-[5px] w-[38px] shrink-0 rounded-full bg-border" />
+          {children}
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  );
+});
+
+const BottomSheetOpenTrigger = React.forwardRef<
+  React.ElementRef<typeof Pressable>,
+  React.ComponentPropsWithoutRef<typeof Pressable> & {
+    asChild?: boolean;
+  }
+>(({ onPress, asChild = false, ...props }, ref) => {
+  const { sheetRef } = useBottomSheetContext();
+  function handleOnPress(ev: GestureResponderEvent) {
+    sheetRef.current?.present();
+    onPress?.(ev);
+  }
+  const Trigger = asChild ? Slot.Pressable : Pressable;
+  return <Trigger ref={ref} onPress={handleOnPress} {...props} />;
+});
+
+const BottomSheetCloseTrigger = React.forwardRef<
+  React.ElementRef<typeof Pressable>,
+  React.ComponentPropsWithoutRef<typeof Pressable> & {
+    asChild?: boolean;
+  }
+>(({ onPress, asChild = false, ...props }, ref) => {
+  const { sheetRef } = useBottomSheetContext();
+  function handleOnPress(ev: GestureResponderEvent) {
+    sheetRef.current?.dismiss();
+    onPress?.(ev);
+  }
+  const Trigger = asChild ? Slot.Pressable : Pressable;
+  return <Trigger ref={ref} onPress={handleOnPress} {...props} />;
+});
+
+type BottomSheetViewProps = Omit<
+  React.ComponentPropsWithoutRef<typeof View>,
+  "style"
+> & {
+  hadHeader?: boolean;
+  style?: ViewStyle;
+};
+
+function BottomSheetView({
+  className,
+  children,
+  hadHeader: _hadHeader = true,
+  style,
+  ...props
+}: BottomSheetViewProps) {
+  return (
+    <View className={cn("px-4", className)} style={style} {...props}>
+      {children}
+    </View>
+  );
+}
+
+type BottomSheetTextInputRef = React.ElementRef<typeof RNTextInput>;
+type BottomSheetTextInputProps = React.ComponentPropsWithoutRef<
+  typeof RNTextInput
+>;
+const BottomSheetTextInput = React.forwardRef<
+  BottomSheetTextInputRef,
+  BottomSheetTextInputProps
+>(({ className, placeholderClassName, ...props }, ref) => {
+  return (
+    <RNTextInput
+      ref={ref}
+      className={cn(
+        "rounded-md border border-input bg-background px-3 text-xl h-14 leading-[1.25] text-foreground items-center  placeholder:text-muted-foreground disabled:opacity-50",
+        className,
+      )}
+      placeholderClassName={cn("text-muted-foreground", placeholderClassName)}
+      {...props}
+    />
+  );
+});
+
+type BottomSheetFlatListRef = React.ElementRef<typeof RNFlatList>;
+type BottomSheetFlatListProps = React.ComponentPropsWithoutRef<
+  typeof RNFlatList
+>;
+const BottomSheetFlatList = React.forwardRef<
+  BottomSheetFlatListRef,
+  BottomSheetFlatListProps
+>(({ className, style, ...props }, ref) => {
+  return (
+    <RNFlatList
+      ref={ref}
+      // A bare `max-h-*` class on a web FlatList doesn't reliably bound the
+      // scroll container (react-native-web renders it via a nested inner
+      // View whose height Tailwind's class targets the wrong element), so
+      // fall back to an explicit numeric height unless the caller overrides.
+      style={[{ maxHeight: 340 }, style]}
+      className={cn("py-4", className)}
+      keyboardShouldPersistTaps="handled"
+      {...props}
+    />
+  );
+});
+
+type BottomSheetHeaderRef = React.ElementRef<typeof View>;
+type BottomSheetHeaderProps = React.ComponentPropsWithoutRef<typeof View>;
+const BottomSheetHeader = React.forwardRef<
+  BottomSheetHeaderRef,
+  BottomSheetHeaderProps
+>(({ className, children, ...props }, ref) => {
+  const { sheetRef } = useBottomSheetContext();
+  function close() {
+    sheetRef.current?.dismiss();
+  }
+  return (
+    <View
+      ref={ref}
+      className={cn(
+        "border-b border-border flex-row items-center justify-between pl-4",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+      <Button onPress={close} variant="ghost" className="pr-4">
+        <X className="text-muted-foreground" size={24} />
+      </Button>
+    </View>
+  );
+});
+
+type BottomSheetFooterRef = React.ElementRef<typeof View>;
+type BottomSheetFooterProps = React.ComponentPropsWithoutRef<typeof View>;
+
+/** Kept for API parity with the native file; no callers currently use it. */
+const BottomSheetFooter = React.forwardRef<
+  BottomSheetFooterRef,
+  BottomSheetFooterProps
+>(({ className, children, ...props }, ref) => {
+  return (
+    <View ref={ref} className={cn("px-4 pt-1.5", className)} {...props}>
+      {children}
+    </View>
+  );
+});
+
+function useBottomSheet() {
+  const ref = React.useRef<BottomSheetContentRef>(null);
+
+  const open = React.useCallback(() => {
+    ref.current?.present();
+  }, []);
+
+  const close = React.useCallback(() => {
+    ref.current?.dismiss();
+  }, []);
+
+  return { ref, open, close };
+}
+
+export {
+  BottomSheet,
+  BottomSheetCloseTrigger,
+  BottomSheetContent,
+  BottomSheetFlatList,
+  BottomSheetFooter,
+  BottomSheetHeader,
+  BottomSheetOpenTrigger,
+  BottomSheetTextInput,
+  BottomSheetView,
+  useBottomSheet,
+};

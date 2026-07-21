@@ -1,11 +1,7 @@
 # Zenflow Mobile
 
-Expo + React Native app for iOS/Android — coexists with the web `frontend/`, not a
-replacement for it. Part of the [Zenflow monorepo](../README.md). See
-[docs/react-native-migration.md](docs/react-native-migration.md) for the full migration
-plan and phased roadmap; this README covers what's actually scaffolded so far
-(Phase 1, step 1: project setup + base login screen, to prove the toolchain works
-end to end).
+Expo + React Native app for iOS/Android/web — coexists with the web `frontend/`, not a
+replacement for it. Part of the [Zenflow monorepo](../README.md).
 
 ---
 
@@ -13,148 +9,177 @@ end to end).
 
 | Concern | Choice |
 |---------|--------|
-| Framework | Expo SDK 56, Expo Router (file-based, `app/`), React Native 0.85, React 19 |
-| Styling | Tailwind CSS v4 via **[uniwind](https://uniwind.dev)** — compiles `className` to native styles at build time (chosen over NativeWind; see [ADR note](#why-uniwind-not-nativewind) below) |
-| UI primitives | [React Native Reusables](https://reactnativereusables.com) (shadcn-style registry) on `@rn-primitives/*`, `lucide-react-native` icons |
-| Fonts | Geist / Geist Mono via `@expo-google-fonts/geist(-mono)`, loaded with `expo-font` |
+| Framework | Expo SDK 52, Expo Router (file-based, `app/`), React Native 0.76, React 18 |
+| Styling | Tailwind CSS **v3** via **[NativeWind](https://www.nativewind.dev) v4** — compiles `className` to native styles at build time. See [Known pitfalls](#known-pitfalls) — this is a different (and stricter) setup than the web app's Tailwind v4 |
+| UI primitives | Hand-rolled shadcn/RN-Reusables-style components in `components/ui/`, backed by our own headless primitives in `components/primitives/` (no `@rn-primitives/*` package dependency), `lucide-react-native` + `phosphor-react-native` icons |
+| Fonts | Geist (all weights) loaded locally from `assets/fonts/` via `expo-font` — see [Fonts](#fonts--font-weights) |
 | Language | TypeScript (strict, `@/*` → repo-relative alias) |
-
-Not wired up yet (tracked in the migration doc, Phase 1 onward): the cookie-aware API
-client, `@zenflow/core`/`@zenflow/shared` consumption, OTP stage 2, onboarding, and the
-gesture-first calendar views.
+| State | Zustand (`hooks/use-user-store.ts`, mirrors the web user store) |
+| Forms | React Hook Form + Zod (`@hookform/resolvers`) — note-worthy version pin, see [Known pitfalls](#known-pitfalls) |
+| HTTP | axios (`api/`), cookie-based session — see [Auth & session](#auth--session) |
+| Bottom sheets | `@gorhom/bottom-sheet` |
+| Formatter / linter | [Biome](https://biomejs.dev) (not ESLint/Prettier — those are the web app's tooling) |
 
 ## Project structure
 
 ```
 mobile/
-├── app/                    # Expo Router routes
-│   ├── _layout.tsx         # font loading, SafeAreaProvider, nav ThemeProvider, PortalHost
-│   ├── index.tsx           # redirects to (auth)/login — no session state exists yet
-│   └── (auth)/
-│       ├── _layout.tsx
-│       └── login.tsx       # email stage of the 2-stage OTP login (see below)
+├── app/                       # Expo Router routes
+│   ├── _layout.tsx            # fonts, ThemeProvider, session hydration, AuthGate
+│   ├── global.css             # NativeWind theme source (Warm Sunrise tokens, see below)
+│   ├── (auth)/login.tsx       # email + OTP code, 2-stage login
+│   ├── (onboarding)/index.tsx # work hours / days / timezone / duration-mode wizard
+│   └── (app)/                 # tab navigator: index (Day), week, month, settings
+│       ├── index.tsx, week.tsx, month.tsx   # placeholder stubs — calendar UI is future work
+│       └── settings.tsx       # fully built: profile, theme, timezone, duration mode, insights
+├── api/                       # axios endpoint functions (auth, tasks, tags, users) + base.ts
 ├── components/
-│   ├── ui/                 # RN Reusables primitives (button, input, label, text, icon)
-│   └── brand/logo.tsx      # react-native-svg port of mockups/logo.svg
+│   ├── ui/                    # shadcn-style components (button, dialog, select, toast, …)
+│   ├── primitives/            # headless behavior (portal, slot, useControllableState, …),
+│   │                          # each with a `.web.tsx` variant where native/web diverge
+│   ├── onboarding/, settings/ # screen-specific composite components
+│   └── tab-icons.tsx, Icons.tsx, logo.tsx, ThemeToggle.tsx
+├── hooks/                      # use-user-store (Zustand), use-local-storage
 ├── lib/
-│   ├── theme.ts            # hex mirror of global.css tokens, for React Navigation chrome
-│   └── utils.ts            # cn() (clsx + tailwind-merge)
-├── global.css              # uniwind theme source — see below
-├── metro.config.js         # uniwind + pnpm-monorepo config (symlinks, workspace root)
-├── components.json         # RN Reusables registry config (shadcn-compatible)
-└── docs/react-native-migration.md
+│   ├── api-client.ts           # cookie-aware axios instance — see Auth & session
+│   ├── session.ts               # SecureStore-backed cache (user + raw session cookie)
+│   ├── constants.ts             # NAV_THEME — hand-maintained hex mirror of global.css tokens
+│   ├── useColorScheme.tsx, android-navigation-bar.ts
+│   └── utils.ts                # cn() (clsx + tailwind-merge)
+├── plugins/withAndroidBuildFixes.js  # Expo config plugin: Gradle/Kotlin build fixes
+├── global.css / tailwind.config.ts / metro.config.js / babel.config.js  # NativeWind wiring
+├── components.json             # path aliases for the ui/primitives generator pattern
+└── biome.json
 ```
 
-## Getting started
+## Screens & routing
+
+Three route groups under `app/`, gated by `AuthGate` in the root layout (mirrors the web
+`with-auth.tsx` HOC, driven by the Zustand user store rather than a per-navigation `/auth/me`
+call):
+
+| Group | Screen(s) | State |
+|-------|-----------|-------|
+| `(auth)` | `login.tsx` | Built — email stage → OTP verification stage |
+| `(onboarding)` | `index.tsx` | Built — work hours / work days / timezone / duration-adjustment mode wizard |
+| `(app)` | `index.tsx` (Day), `week.tsx`, `month.tsx` | **Placeholder stubs** — the gesture-first calendar timeline is future work |
+| `(app)` | `settings.tsx` | Built — profile row, theme toggle, timezone picker, duration-mode picker, insights panel |
+
+`AuthGate` redirects: no user → `(auth)`; user but `!onboardingComplete` → `(onboarding)`;
+otherwise → `(app)`. Group-qualified redirects (not a bare `/`) are deliberate — see the
+comment in `app/_layout.tsx` for the "Done button sends me back to onboarding" bug it avoids.
+
+## Auth & session
+
+No JWT (CLAUDE.md §7 — OTP + Redis session cookie, same backend contract as `frontend/`), but
+native can't use a browser cookie jar:
+
+- **Web:** the browser's own cookie jar + `withCredentials` handles everything — identical to
+  `frontend/`.
+- **Native:** the session cookie is `httpOnly`, so it can never be read back via
+  `android.webkit.CookieManager` (or any native cookie-jar API) — same restriction as
+  `document.cookie` in a browser. Instead, `lib/api-client.ts` captures the raw `Set-Cookie`
+  value itself the one time it's visible (a response header, not script-facing), replays it as
+  an explicit `Cookie` request header on every call, and persists it via `expo-secure-store`
+  (`lib/session.ts`) so it survives app restarts. A 401/403 from any guarded endpoint clears
+  both the cached cookie and the Zustand user, which lets `AuthGate` react.
+- `lib/api-client.ts` also rewrites a loopback `EXPO_PUBLIC_API_URL` to the LAN host Metro
+  reports (`Constants.expoConfig.hostUri`) when running on a physical device/emulator, where
+  `localhost` would otherwise resolve to the device itself.
+
+## Styling — NativeWind & the "Warm Sunrise" theme
+
+`app/global.css` ports the same OKLch-derived tokens as `frontend/src/index.css`, translated to
+sRGB `"R G B"` channel triples (NativeWind/RN can't consume `oklch()` or resolve `/<alpha-value>`
+against a bare hex string — see the comment block at the top of `global.css`). `tailwind.config.ts`
+maps these to the standard shadcn color names (`background`, `foreground`, `primary`, `muted`,
+etc.) plus the brand ramp (`orange`/`yellow`/`lime`).
+
+**Fonts & font weights:** RN has no synthetic font-weight — every weight needs its own loaded
+font file. `components/ui/text.tsx`'s `resolveGeistFontFamily()` reads a `font-*` utility
+(`font-medium`, `font-semibold`, …) off the resolved `className` and maps it to the matching
+`Geist-*` family loaded in the root layout, then strips the utility so NativeWind doesn't also
+try to turn it into a (wrong, synthetic) `fontWeight` style. Text variants (`Muted`, `Small`,
+`Lead`, `H1`–`H4`, …) live in `components/ui/typography.tsx`.
+
+## Known pitfalls
+
+### NativeWind silently resolving the wrong Tailwind major version
+
+**Symptom:** every screen renders with default React Native styling — plain black text at one
+size, no `text-muted-foreground`/`text-secondary`/size-variant classes applied, and all margin
+/padding/gap utilities missing. No error is thrown; the bundle builds and runs "successfully."
+
+**Cause:** the repo root's `tailwindcss` is hoisted at **v4** for `frontend/`'s own Tailwind v4
+setup. NativeWind 4.1.6 (this app's version) is built against Tailwind **v3** and expects its
+own private copy. The root `.npmrc` (`node-linker=hoisted`) carries
+`public-hoist-pattern[]=!nativewind`, which tells pnpm to keep NativeWind un-hoisted so it nests
+its own compatible `tailwindcss@3.4.1` inside `node_modules/nativewind/node_modules/` instead of
+resolving the root's hoisted v4 copy. If that `.npmrc` line is ever missing, reverted, or edited
+without a following `pnpm install`, NativeWind ends up walking up to the root's `tailwindcss@4.x`
+— which has a very different config/PostCSS surface — and its class-to-style compilation breaks
+across the board, with no visible error.
+
+**Fix / verification:**
+
+1. Confirm `public-hoist-pattern[]=!nativewind` is present in the repo-root `.npmrc`.
+2. Run `pnpm install` from the repo root (not just `mobile/`) — this is a workspace-wide hoist
+   decision, so it has to run at root.
+3. Verify: `node_modules/nativewind/node_modules/tailwindcss/package.json` should report a
+   `3.x` version, distinct from the root `node_modules/tailwindcss` (`4.x`, for `frontend/`).
+4. **Restart the Metro bundler with its cache cleared.** This is the step that's easy to miss:
+   `pnpm dev` / `dev:web` / `dev:android` all pass Expo's `--clear` (`-c`) flag, but the plain
+   `android` / `ios` scripts (`expo run:android` / `expo run:ios`) do **not** — so a Metro
+   process already running from before the `.npmrc`/`pnpm install` fix will keep serving the
+   stale, broken bundle from its in-memory + on-disk transform cache indefinitely, even after
+   `node_modules` is corrected. Kill any process holding port 8081, then either run
+   `pnpm --filter mobile dev:android` (has `-c`, reuses an already-installed dev-client build —
+   no native rebuild needed unless native code changed) or manually clear the cache
+   (`%LOCALAPPDATA%/Temp/metro-cache` and `metro-file-map-*` on Windows) before the next
+   `expo run:android`/`run:ios`.
+
+### Other pnpm workspace version splits (same root cause pattern)
+
+The root `.npmrc` carries a few other `public-hoist-pattern[]=!<pkg>` exclusions for the same
+reason — `frontend/` and `mobile/` want genuinely different major versions of a shared
+dependency, and `node-linker=hoisted` needs to be told which packages must keep their own nested
+copy instead of resolving the other workspace's hoisted one:
+
+- `zod` / `@hookform/resolvers` — `frontend/` wants zod v4 + resolvers v5, `mobile/` wants zod
+  v3 + resolvers v3.
+- `react-hook-form` — pinned to an exact version in `mobile/package.json` (see the `.npmrc`
+  comment) to force pnpm to nest a separate copy from `frontend/`'s, avoiding two live React
+  copies in one bundle.
+
+If a "works on frontend, broken on mobile" (or vice versa) bug involves one of these packages,
+check whether `.npmrc` and `mobile/package.json`'s pin are both still in sync with a recent
+`pnpm install` before looking anywhere else.
+
+## Local development
 
 ```bash
-pnpm install               # from the repo root — installs the whole workspace
-pnpm --filter mobile dev   # or: pnpm mobile:dev
+# From repo root, once:
+pnpm install
+
+# Mobile scripts (inside mobile/, or `pnpm --filter mobile <script>`):
+pnpm dev            # expo start --dev-client --clear
+pnpm dev:web        # expo start -c --web       → http://localhost:8081
+pnpm dev:android    # expo start -c --android   (reuses an installed dev-client build)
+pnpm android        # expo run:android          (full native rebuild — no cache clear, see above)
+pnpm ios            # expo run:ios              (macOS only)
+pnpm export         # static web export → dist/
 ```
 
-Then press `i` (iOS simulator, Mac only), `a` (Android emulator), or `w` (web) — or scan
-the QR code with [Expo Go](https://expo.dev/go). `pnpm --filter mobile typecheck` runs
-`tsc --noEmit`.
+Set `EXPO_PUBLIC_API_URL` in `.env.development` (defaults to
+`http://localhost:5000/api/v1`) so the axios client targets the API; on a physical
+device/emulator a loopback host is auto-rewritten to the dev machine's LAN address (see
+[Auth & session](#auth--session)).
 
-Verifying without a simulator: `npx expo export --platform web` static-renders every
-route (catches Metro/uniwind config errors) into `dist/`, which you can serve with any
-static file server.
+## Contributing
 
-## The Warm Sunrise theme (`global.css`)
+- **Formatter / linter:** [Biome](https://biomejs.dev), not ESLint/Prettier —
+  `pnpm --filter mobile format`. 2-space indentation ([`.editorconfig`](../.editorconfig)).
+- **Commits:** [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/),
+  e.g. `fix(mobile): …`, `feat(mobile): …`.
 
-Ports every color token from `frontend/src/index.css` / `mobile/mockups/src/input.css`
-verbatim (light + dark, brand orange → yellow → lime, small radius). It's a straight
-port with one structural difference: uniwind registers themes as
-`@layer theme { :root { @variant light {...} @variant dark {...} } }` rather than
-Tailwind v4's web `:root` / `.dark` class-selector pattern, and every color is exposed
-directly as a `--color-*` key (not indirected through `@theme inline`) — so unlike the
-web source, tokens that reference the brand colors (`--color-primary`, `--color-ring`,
-chart colors, sidebar colors) are duplicated per theme rather than defined once and
-reused, per uniwind's requirement that every theme define the same variable set.
-
-**Ported:** all `--color-*` tokens (background/foreground/card/popover/primary/
-secondary/muted/accent/destructive/success/border/input/ring/chart-1..5/sidebar-*),
-brand colors, and the radius scale.
-
-**Not ported yet** (calendar-only helpers from the web mockup's component layer —
-zone tints, glass cards, hatch-conflict, the `breathe`/`block-highlight` keyframes):
-these land with the calendar screens, since uniwind's support for `color-mix()`,
-backdrop-blur, and CSS keyframe animations on native hasn't been exercised yet and the
-login screen doesn't need them.
-
-**Fonts:** `--font-sans` is pinned to `Geist_400Regular`. The Google Fonts package for
-Geist ships separate static files per weight (no single variable-font family RN can
-switch by `fontWeight`), so `font-bold`/`font-semibold` utilities currently apply RN's
-synthetic bold over the regular file rather than swapping to the true Bold/SemiBold
-family — visually close, not pixel-identical to the web app. A real fix (a `Text`
-wrapper that maps `font-*` weight classes to the matching loaded family) is future work.
-
-## The login screen
-
-`app/(auth)/login.tsx` ports the email stage of `mobile/mockups/login.html` (stage 1 of
-2 — OTP code entry is stage 2, not built yet) as a live, interactive screen rather than
-static mockup states: idle → onBlur email validation → loading (spinner on the submit
-button) → an inline confirmation once the fake 900 ms "send" resolves. There's no backend
-call — the cookie-aware API client is Phase 1 scope in the migration doc, not this step.
-This screen exists to prove the setup (Expo + uniwind + RN Reusables + the ported theme)
-renders and behaves correctly, which it does — verified via a static web export screenshot
-walked through all four states (empty, error, loading, sent).
-
-## Why uniwind, not NativeWind
-
-The original migration doc scoped NativeWind v4. This scaffold uses
-[uniwind](https://uniwind.dev) instead (per explicit request): it compiles Tailwind
-classes to native styles at build time rather than resolving them at runtime, and its
-`extraThemes`/`@variant` theme registration maps cleanly onto the existing OKLch design
-tokens (uniwind's dependency on `culori` handles the oklch → native color conversion, so
-tokens didn't need manual hex translation the way the original plan assumed). RN
-Reusables' CLI/registry supports both libraries; this project was scaffolded from their
-`minimal-uniwind` template (`react-native-reusables-templates` repo) rather than
-`create-expo-app` + manual uniwind wiring, since the template already had the
-Metro/babel/root-layout wiring done correctly. `mobile/docs/react-native-migration.md`
-has been updated to match (superseded-plan note at the top, NativeWind references fixed).
-
-## Environment variables
-
-`mobile/.env.development` mirrors `frontend/.env.development`'s pattern (`EXPO_PUBLIC_API_URL`
-instead of Vite's `VITE_API_URL` — Expo requires the `EXPO_PUBLIC_` prefix for a var to be
-inlined into the client bundle, same idea as Vite's `VITE_` prefix). Like frontend's
-`.env.*` files, it's checked into git (no secrets, just a local API base URL) and loaded
-automatically by `expo start`'s built-in dotenv support. Nothing reads
-`EXPO_PUBLIC_API_URL` yet — it's in place for when the API client lands (migration doc
-Phase 1, step 5). Add `.env.production`/`.env.staging` alongside it, matching frontend's,
-when there's an actual client to point at those environments.
-
-## App icon
-
-`assets/images/{icon,adaptive-icon,splash,favicon}.png` are rendered from
-`mobile/mockups/logo.svg` (via `sharp`, since Metro/Expo config doesn't rasterize SVG
-app-icon assets itself) rather than the RNR template's placeholder icons:
-
-- `icon.png` (1024×1024) — the logo circle flattened onto the light `--background` token
-  (`#FCFBFA`) so it's a fully opaque square; app stores reject icons with an alpha channel,
-  and the mark already reads as a circle without needing a transparent corner crop.
-- `adaptive-icon.png` (1024×1024, transparent) — same mark at ~66% scale, centered, for
-  Android's adaptive-icon safe zone (outer edges get cropped by whichever mask shape the
-  launcher uses); `app.json`'s `android.adaptiveIcon.backgroundColor` supplies the same
-  `#FCFBFA` behind it.
-- `splash.png` (1024×1024, transparent) — mark at a smaller centered scale, shown via
-  `expo-splash-screen`'s `resizeMode: "contain"` over the same background color.
-- `favicon.png` (48×48) — web tab icon.
-
-Regenerate after a logo change with `sharp`: rasterize `mockups/logo.svg` at the target
-pixel size (pass `density: 72 * (size / 260)` — the viewBox is 260×260 — so it renders
-crisp at that size instead of upscaling a low-DPI default), then `.flatten()` onto
-`#FCFBFA` for `icon.png`, or composite onto a transparent square at a smaller scale
-(~66%) for `adaptive-icon.png`/`splash.png`. No script is checked in since it's a one-off;
-this note is enough to redo it.
-
-## pnpm workspace notes
-
-`mobile` is its own top-level workspace entry (not just `mobile/*`) alongside
-`mobile/mockups`, since Expo Router's convention puts the routes at `<project-root>/app`
-and the RN Reusables template's `package.json` lives at the project root. `metro.config.js`
-adds monorepo-awareness Expo's docs recommend for pnpm: `watchFolders` includes the repo
-root, `nodeModulesPaths` covers both `mobile/node_modules` and the root, and
-`unstable_enableSymlinks`/`unstable_enablePackageExports` are turned on since pnpm's
-`node_modules` is symlink-based (Metro's resolver doesn't follow symlinks by default).
+See the repo-wide **[CONTRIBUTING.md](../CONTRIBUTING.md)** for setup, branching, and testing.

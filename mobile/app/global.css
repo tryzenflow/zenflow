@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * "Warm Sunrise" tokens, hand-translated from frontend/src/index.css OKLch values to sRGB.
+ * NativeWind v4's StyleSheet output can't consume OKLch directly (see docs/react-native-migration.md
+ * "Design tokens"). Re-derive these by running the OKLch->sRGB conversion again if the web palette
+ * changes — do not hand-tweak them independently of frontend/src/index.css.
+ *
+ * Stored as space-separated "R G B" channels (not hex) and consumed via rgb(var(--x) / <alpha-value>)
+ * in tailwind.config.ts — that's what lets Tailwind's /NN opacity modifiers (bg-primary/10, etc.)
+ * actually apply alpha under NativeWind on native. A bare hex string in the variable makes the
+ * modifier silently no-op (renders fully opaque) on RN.
+ */
+@layer base {
+  :root {
+    --background: 254 252 250;
+    --foreground: 15 13 10;
+    --card: 255 255 255;
+    --card-foreground: 15 13 10;
+    --popover: 255 255 255;
+    --popover-foreground: 15 13 10;
+    --primary: 255 142 62;
+    --primary-foreground: 43 20 6;
+    --secondary: 246 243 239;
+    --secondary-foreground: 28 26 24;
+    --muted: 246 243 239;
+    --muted-foreground: 121 112 101;
+    --accent: 246 243 239;
+    --accent-foreground: 28 26 24;
+    --destructive: 231 0 11;
+    --destructive-foreground: 255 255 255;
+    --border: 232 229 223;
+    --input: 232 229 223;
+    --ring: 255 142 62;
+    --brand-orange: 255 142 62;
+    --brand-yellow: 240 177 1;
+    --brand-lime: 216 249 152;
+  }
+
+  .dark:root {
+    --background: 15 13 10;
+    --foreground: 251 250 248;
+    --card: 29 26 23;
+    --card-foreground: 251 250 248;
+    --popover: 29 26 23;
+    --popover-foreground: 251 250 248;
+    --primary: 255 122 36;
+    --primary-foreground: 43 20 6;
+    --secondary: 44 40 35;
+    --secondary-foreground: 251 250 248;
+    --muted: 44 40 34;
+    --muted-foreground: 172 163 151;
+    --accent: 44 40 35;
+    --accent-foreground: 251 250 248;
+    --destructive: 255 100 103;
+    --destructive-foreground: 255 255 255;
+    --border: 54 50 45;
+    --input: 54 50 45;
+    --ring: 255 122 36;
+    --brand-orange: 255 122 36;
+    --brand-yellow: 246 185 21;
+    --brand-lime: 203 237 134;
+  }
+}

@@ -1,0 +1,247 @@
+import {
+  Activity,
+  Airplay,
+  AlarmClockIcon,
+  AlertCircle,
+  AlertTriangle,
+  AlignCenter,
+  AlignJustify,
+  AlignLeft,
+  AlignRight,
+  ArrowDown,
+  ArrowUp,
+  Baby,
+  BadgeAlert,
+  BarChart3,
+  Bold,
+  Calendar,
+  CalendarDays,
+  CalendarRange,
+  Check,
+  LayoutGrid,
+  Send,
+  Archive,
+  Bell,
+  BookOpen,
+  Shield,
+  Sliders,
+  Star,
+  Settings,
+  User,
+  Moon,
+  Palette,
+  Smartphone,
+  CheckCircle,
+  CheckSquare,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  CircleUserRound,
+  Clock,
+  Cloud,
+  Code,
+  Copy,
+  Database,
+  Home,
+  Ear,
+  Fan,
+  GalleryHorizontal,
+  Github,
+  Globe,
+  Info,
+  Italic,
+  Lamp,
+  LayoutPanelLeft,
+  LifeBuoy,
+  Lock,
+  LogOut,
+  type LucideIcon,
+  Mail,
+  MenuSquare,
+  MessageCircleQuestion,
+  MessageSquare,
+  MinusCircle,
+  MoonStar,
+  Plus,
+  PlusCircle,
+  Search,
+  Sparkles,
+  Sun,
+  Table,
+  Tag,
+  Terminal,
+  Underline,
+  UserPlus,
+  Users,
+  X,
+} from "lucide-react-native";
+import { cssInterop } from "nativewind";
+function interopIcon(icon: LucideIcon) {
+  cssInterop(icon, {
+    className: {
+      target: "style",
+      nativeStyleToProp: {
+        color: true,
+        opacity: true,
+      },
+    },
+  });
+}
+interopIcon(Settings);
+interopIcon(Sun);
+interopIcon(MoonStar);
+interopIcon(AlignJustify);
+interopIcon(Activity);
+interopIcon(Airplay);
+interopIcon(AlarmClockIcon);
+interopIcon(AlertCircle);
+interopIcon(AlignRight);
+interopIcon(Baby);
+interopIcon(BadgeAlert);
+interopIcon(Calendar);
+interopIcon(CircleUserRound);
+interopIcon(Database);
+interopIcon(Ear);
+interopIcon(Fan);
+interopIcon(GalleryHorizontal);
+interopIcon(Lamp);
+interopIcon(Table);
+interopIcon(ArrowDown);
+interopIcon(ArrowUp);
+interopIcon(ChevronDown);
+interopIcon(LayoutPanelLeft);
+interopIcon(MenuSquare);
+interopIcon(Check);
+interopIcon(CheckCircle);
+interopIcon(ChevronsDownUp);
+interopIcon(ChevronsUpDown);
+interopIcon(Copy);
+interopIcon(CalendarDays);
+interopIcon(Sparkles);
+interopIcon(Bold);
+interopIcon(Italic);
+interopIcon(Underline);
+interopIcon(AlignLeft);
+interopIcon(Info);
+interopIcon(X);
+interopIcon(Search);
+interopIcon(ChevronRight);
+interopIcon(ChevronLeft);
+interopIcon(ChevronUp);
+interopIcon(Cloud);
+interopIcon(LifeBuoy);
+interopIcon(LogOut);
+interopIcon(Mail);
+interopIcon(MessageSquare);
+interopIcon(Plus);
+interopIcon(PlusCircle);
+interopIcon(UserPlus);
+interopIcon(Users);
+interopIcon(AlignCenter);
+interopIcon(Terminal);
+interopIcon(AlertTriangle);
+interopIcon(Code);
+interopIcon(CheckSquare);
+interopIcon(Github);
+interopIcon(Home);
+interopIcon(Shield);
+interopIcon(Star);
+interopIcon(Bell);
+interopIcon(Archive);
+interopIcon(BookOpen);
+interopIcon(Moon);
+interopIcon(Palette);
+interopIcon(Smartphone);
+interopIcon(Clock);
+interopIcon(MessageCircleQuestion);
+interopIcon(MinusCircle);
+interopIcon(CalendarRange);
+interopIcon(LayoutGrid);
+interopIcon(BarChart3);
+interopIcon(Sliders);
+interopIcon(User);
+interopIcon(Globe);
+interopIcon(Lock);
+interopIcon(Tag);
+
+export {
+  Activity,
+  Airplay,
+  AlarmClockIcon,
+  AlertCircle,
+  AlertTriangle,
+  AlignCenter,
+  AlignJustify,
+  AlignLeft,
+  AlignRight,
+  ArrowDown,
+  ArrowUp,
+  Baby,
+  BadgeAlert,
+  BarChart3,
+  Bold,
+  Calendar,
+  CalendarDays,
+  CalendarRange,
+  Check,
+  CheckCircle,
+  LayoutGrid,
+  CheckSquare,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  CircleUserRound,
+  Clock,
+  Cloud,
+  Code,
+  Copy,
+  Database,
+  Ear,
+  Fan,
+  GalleryHorizontal,
+  Globe,
+  Info,
+  Italic,
+  Lamp,
+  LayoutPanelLeft,
+  LifeBuoy,
+  Lock,
+  LogOut,
+  Settings,
+  Mail,
+  MenuSquare,
+  MessageCircleQuestion,
+  MessageSquare,
+  MinusCircle,
+  MoonStar,
+  Plus,
+  PlusCircle,
+  Search,
+  Sparkles,
+  Sun,
+  Table,
+  Tag,
+  Terminal,
+  Underline,
+  UserPlus,
+  Home,
+  Users,
+  X,
+  Send,
+  Archive,
+  Bell,
+  BookOpen,
+  Shield,
+  Sliders,
+  Star,
+  User,
+  Moon,
+  Palette,
+  Smartphone,
+};

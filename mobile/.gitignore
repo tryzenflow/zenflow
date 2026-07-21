@@ -8,9 +8,7 @@ node_modules/
 dist/
 web-build/
 
-# Native — regenerated from app.json by `expo prebuild` (CNG), so not tracked.
-/android/
-/ios/
+# Native
 *.orig.*
 *.jks
 *.p8
@@ -25,6 +23,7 @@ web-build/
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+bun.lockb
 
 # macOS
 .DS_Store
@@ -41,3 +40,7 @@ yarn-error.*
 
 expo-env.d.ts
 # @end expo-cli
+
+android
+ios
+notes.txt
