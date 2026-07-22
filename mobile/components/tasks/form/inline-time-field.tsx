@@ -13,7 +13,13 @@ import type { ListRenderItemInfo } from "react-native";
 import { Pressable, View } from "react-native";
 
 const STEP = 15;
-const TIME_OPTIONS = Array.from({ length: 1440 / STEP }, (_, i) => i * STEP);
+// Flat 15-minute grid from 12:00 AM through 11:45 PM, plus a trailing 11:59 PM
+// entry — the "Today"/"Tomorrow" deadline chips default to 23:59 (end of day),
+// which doesn't fall on the 15-minute grid, so it needs its own selectable row.
+const TIME_OPTIONS = [
+  ...Array.from({ length: 1440 / STEP }, (_, i) => i * STEP),
+  1439,
+];
 
 /**
  * Compact "time pill" field for the deadline chip row's Today/Tomorrow/
