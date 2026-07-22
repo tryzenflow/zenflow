@@ -47,6 +47,8 @@ mobile/
 │   │   └── form/               # duration stepper/slider, deadline chip row, tag autocomplete,
 │   │                           # description field (WYSIWYG, @10play/tentap-editor) + floating
 │   │                           # toolbar — see task-sheet-fields.tsx
+│   ├── error-boundary.tsx     # local render-crash containment (class component) — see
+│   │                          # Known pitfalls' "Blast-radius containment" note
 │   └── tab-icons.tsx, Icons.tsx, logo.tsx, ThemeToggle.tsx
 ├── hooks/                      # use-user-store (Zustand), use-local-storage, use-task-form
 │                                # (taskSchema from @zenflow/core), use-controlled-bottom-sheet
@@ -192,6 +194,20 @@ typecheck` is clean and the JS-level API usage was checked against the installed
 `.d.ts` output, but the actual on-device WebView bridge round-trip is unverified. Rebuild and
 manually exercise the description field (all toolbar buttons, link insert, and that `note`
 round-trips as HTML through a create → edit cycle) before shipping.
+
+**Blast-radius containment:** if the dev client hasn't been rebuilt yet (or the native module is
+otherwise missing), mounting the WebView throws during render. `@gorhom/bottom-sheet` already
+defers mounting a `BottomSheetModal`'s content until `present()` is called, but that's still
+*during* the same open attempt — so an unhandled throw there previously unwound all the way to
+Expo Router's per-route `ErrorBoundary` (`app/_layout.tsx`), unmounting the entire Day screen
+(`app/(app)/index.tsx`) and making every sheet-opening gesture on it — FAB, long-press-empty-area,
+tap-to-edit, long-press-to-resize — look equally broken, since `CreateTaskSheet`, `EditTaskSheet`,
+and `ChangeDurationSheet` are siblings under that one tree. `components/error-boundary.tsx` is a
+local class-component boundary now wrapping just `DescriptionField` in
+`components/tasks/task-sheet-fields.tsx`, so a WebView-mount failure degrades to an inline
+fallback in that one field instead of taking the rest of the form, and every other sheet on the
+screen, down with it. It doesn't fix the underlying missing-native-module issue — only a real
+dev-client rebuild does that.
 
 ## Local development
 

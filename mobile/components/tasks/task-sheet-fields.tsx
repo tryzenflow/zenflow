@@ -1,3 +1,4 @@
+import { ErrorBoundary } from "@/components/error-boundary";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import type { TaskFormValues } from "@zenflow/core";
@@ -104,11 +105,17 @@ export function TaskSheetFields({
         name="note"
         render={({ field }) => (
           <Field label="Description">
-            <DescriptionField
-              value={field.value ?? ""}
-              onChange={field.onChange}
-              disabled={disabled}
-            />
+            {/* Contains a WebView-mount crash (missing native module — see
+                `ErrorBoundary`'s doc comment) to this field instead of
+                letting it take the whole sheet, and every sibling sheet on
+                this screen, down with it. */}
+            <ErrorBoundary fallbackMessage="The description editor couldn't load. Everything else on this form still works.">
+              <DescriptionField
+                value={field.value ?? ""}
+                onChange={field.onChange}
+                disabled={disabled}
+              />
+            </ErrorBoundary>
           </Field>
         )}
       />
