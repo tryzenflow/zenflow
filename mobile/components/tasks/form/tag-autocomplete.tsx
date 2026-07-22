@@ -1,5 +1,5 @@
 import { listTags } from "@/api/tags";
-import { Plus, Tag, X } from "@/components/Icons";
+import { Check, Plus, Tag, X } from "@/components/Icons";
 import {
   BottomSheet,
   BottomSheetContent,
@@ -17,7 +17,7 @@ import type { ListRenderItemInfo } from "react-native";
 import { Pressable, View } from "react-native";
 
 type Row =
-  | { kind: "tag"; name: string }
+  | { kind: "tag"; name: string; selected: boolean }
   | { kind: "create"; name: string }
   | { kind: "empty" };
 
@@ -64,12 +64,19 @@ export function TagAutocomplete({
   }, []);
 
   const trimmed = query.trim();
+  const selectedSet = useMemo(
+    () => new Set(value.map((v) => v.toLowerCase())),
+    [value],
+  );
 
-  const options = useMemo(() => {
-    const selected = new Set(value.map((v) => v.toLowerCase()));
-    const pool = existing.filter((name) => !selected.has(name.toLowerCase()));
-    return matchTags(trimmed, pool);
-  }, [existing, value, trimmed]);
+  // Selected tags now STAY in the visible pool (with a checkmark treatment,
+  // rendered below) instead of being filtered out the instant they're
+  // picked — filtering them out gave zero confirming feedback that the tap
+  // registered, reading as "the row just vanished."
+  const options = useMemo(
+    () => matchTags(trimmed, existing),
+    [existing, trimmed],
+  );
 
   const canCreate =
     !!trimmed &&
@@ -87,11 +94,25 @@ export function TagAutocomplete({
   }
 
   function remove(tag: string) {
-    onChange(value.filter((t) => t !== tag));
+    onChange(value.filter((t) => t.toLowerCase() !== tag.toLowerCase()));
+  }
+
+  /** Toggle a row's selection — the same tap adds when unselected, removes
+   * when already selected (mirrors the checkmark row already added to
+   * `InlineTimeField`/`InlineDateField`). */
+  function toggle(name: string, isSelected: boolean) {
+    if (isSelected) remove(name);
+    else add(name);
   }
 
   const rows: Row[] = [
-    ...options.map((name): Row => ({ kind: "tag", name })),
+    ...options.map(
+      (name): Row => ({
+        kind: "tag",
+        name,
+        selected: selectedSet.has(name.toLowerCase()),
+      }),
+    ),
     ...(canCreate ? [{ kind: "create", name: trimmed } as Row] : []),
   ];
   if (rows.length === 0) rows.push({ kind: "empty" });
@@ -156,11 +177,20 @@ export function TagAutocomplete({
         <BottomSheetContent
           ref={bottomSheet.ref}
           onDismiss={() => setQuery("")}
+          // Fixed height, not the default `enableDynamicSizing={true}` — that
+          // re-measures and re-snaps the sheet's height on every row-count
+          // change (`rows` reshapes on literally every keystroke as
+          // `matchTags`/`canCreate` re-run), which read as "the sheet
+          // suddenly collapsed" while typing. Same fix
+          // `change-duration-sheet.tsx` already applied for the identical
+          // symptom. A shorter, fixed snap point (vs. full height) also
+          // keeps the dark backdrop visible above the sheet for tap-to-
+          // dismiss, matching the "don't want a full-height sheet" ask.
+          enableDynamicSizing={false}
+          snapPoints={["70%"]}
         >
           <BottomSheetHeader>
-            <Text className="text-lg font-bold text-foreground">
-              Add tags
-            </Text>
+            <Text className="text-lg font-bold text-foreground">Add tags</Text>
           </BottomSheetHeader>
 
           <View className="px-4 pb-3 pt-3.5">
@@ -204,7 +234,10 @@ export function TagAutocomplete({
                     onPress={() => add(row.name)}
                     className="mb-2 flex-row items-center gap-2.5 rounded-xl border border-border bg-card px-4 py-3.5"
                   >
-                    <Plus size={16} className="shrink-0 text-muted-foreground" />
+                    <Plus
+                      size={16}
+                      className="shrink-0 text-muted-foreground"
+                    />
                     <Text className="flex-1 text-[15px] font-semibold text-brand-orange">
                       Create "{row.name}"
                     </Text>
@@ -213,13 +246,36 @@ export function TagAutocomplete({
               }
               return (
                 <Pressable
-                  onPress={() => add(row.name)}
-                  className="mb-2 flex-row items-center gap-2.5 rounded-xl border border-border bg-card px-4 py-3.5"
+                  onPress={() => toggle(row.name, row.selected)}
+                  className={cn(
+                    "mb-2 flex-row items-center gap-2.5 rounded-xl border px-4 py-3.5",
+                    row.selected
+                      ? "border-primary bg-primary/10"
+                      : "border-border bg-card",
+                  )}
                 >
-                  <Tag size={16} className="shrink-0 text-muted-foreground" />
-                  <Text className="flex-1 text-[15px] text-foreground">
+                  <Tag
+                    size={16}
+                    className={cn(
+                      "shrink-0",
+                      row.selected ? "text-primary" : "text-muted-foreground",
+                    )}
+                  />
+                  <Text
+                    className={cn(
+                      "flex-1 text-[15px]",
+                      row.selected
+                        ? "font-semibold text-foreground"
+                        : "text-foreground",
+                    )}
+                  >
                     #{row.name}
                   </Text>
+                  {row.selected && (
+                    <View className="h-5 w-5 items-center justify-center rounded-full bg-primary">
+                      <Check size={12} className="text-primary-foreground" />
+                    </View>
+                  )}
                 </Pressable>
               );
             }}

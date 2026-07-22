@@ -18,7 +18,6 @@ import {
   BottomSheetScrollView,
   BottomSheetTextInput as GBottomSheetTextInput,
   BottomSheetView as GBottomSheetView,
-  useBottomSheetModal,
 } from "@gorhom/bottom-sheet";
 import type { BottomSheetModalMethods } from "@gorhom/bottom-sheet/lib/typescript/types";
 import { useTheme } from "@react-navigation/native";
@@ -234,9 +233,12 @@ const BottomSheetCloseTrigger = React.forwardRef<
     asChild?: boolean;
   }
 >(({ onPress, asChild = false, ...props }, ref) => {
-  const { dismiss } = useBottomSheetModal();
+  // Local per-instance `sheetRef` from this `<BottomSheet>`'s own context —
+  // NOT `useBottomSheetModal()`'s ambient `dismiss()` (see `BottomSheetHeader`
+  // below for why that's the wrong tool here).
+  const { sheetRef } = useBottomSheetContext();
   function handleOnPress(ev: GestureResponderEvent) {
-    dismiss();
+    sheetRef.current?.dismiss();
     if (Keyboard.isVisible()) {
       Keyboard.dismiss();
     }
@@ -328,12 +330,33 @@ const BottomSheetHeader = React.forwardRef<
   BottomSheetHeaderRef,
   BottomSheetHeaderProps
 >(({ className, children, ...props }, ref) => {
-  const { dismiss } = useBottomSheetModal();
+  // Was `useBottomSheetModal().dismiss()` (no key) — `@gorhom/bottom-sheet`
+  // dismisses whichever sheet is *last in its shared, app-wide presented-
+  // sheets queue* when no key is given (see
+  // `BottomSheetModalProvider.tsx`'s `handleDismiss`), which is only ever
+  // "this sheet" by coincidence. On a screen with multiple independent
+  // nested sheets — the task form's `TagAutocomplete` sheet alongside
+  // `DeadlineChipRow`'s `InlineDateField`/`InlineTimeField` sheets, all
+  // siblings sharing one `BottomSheetModalProvider` — that queue can end up
+  // with a stale entry on top: `@gorhom/bottom-sheet`'s own
+  // `BottomSheetModalProvider`'s `handleWillUnmountSheet` (fired when a
+  // modal's `Portal` unmounts mid-dismiss, e.g. `InlineTimeField`'s sheet
+  // being torn down because `DeadlineChipRow`'s `chip` state changed away
+  // while that sheet's own close animation was still in flight) never
+  // splices that sheet's key out of the shared queue — only a *clean*
+  // dismiss-to-completion does, via `unmountSheet`. `useBottomSheetContext()`
+  // gives this exact `<BottomSheet>` instance's own `sheetRef` instead — the
+  // same one `BottomSheetOpenTrigger` already uses to *open* this sheet — so
+  // closing is deterministic regardless of what else is or isn't cleanly
+  // registered in that shared queue. (The web reimplementation in
+  // `bottom-sheet.tsx` already did it this way — this brings native in line
+  // with it.)
+  const { sheetRef } = useBottomSheetContext();
   function close() {
     if (Keyboard.isVisible()) {
       Keyboard.dismiss();
     }
-    dismiss();
+    sheetRef.current?.dismiss();
   }
   return (
     <View
