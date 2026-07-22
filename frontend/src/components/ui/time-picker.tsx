@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { DAILY_HORIZON, TIME_GRANULARITY } from "@/utils/constants";
 
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 1); // 1..12
-const MINUTES = Array.from(
+const MINUTE_STEPS = Array.from(
   { length: 60 / TIME_GRANULARITY },
   (_, i) => i * TIME_GRANULARITY,
 ); // 0, 15, 30, 45
@@ -129,8 +129,21 @@ export function TimePicker({
     scrollActive(minuteColRef.current);
   }, [open]);
 
+  // 11:59 PM is the backend's end-of-day deadline default; expose it as a
+  // selectable minute only while 11 PM is showing, otherwise stay on the
+  // plain 15-minute grid.
+  const minutes =
+    parts?.hour === 11 && parts?.meridiem === "PM"
+      ? [...MINUTE_STEPS, 59]
+      : MINUTE_STEPS;
+
   const commit = (hour: number, minute: number, meridiem: Meridiem) => {
-    onChange(fromParts(hour, minute, meridiem));
+    // If the resulting hour/meridiem isn't 11 PM, the minute column can't
+    // represent :59 as a selectable option — clamp back down to the grid so
+    // the value never drifts off what the UI can show as selected.
+    const isElevenPm = hour === 11 && meridiem === "PM";
+    const nextMinute = !isElevenPm && minute === 59 ? 45 : minute;
+    onChange(fromParts(hour, nextMinute, meridiem));
   };
 
   return (
@@ -164,7 +177,7 @@ export function TimePicker({
             ))}
           </Column>
           <Column columnRef={minuteColRef}>
-            {MINUTES.map((m) => (
+            {minutes.map((m) => (
               <ColumnButton
                 key={m}
                 active={parts?.minute === m}
