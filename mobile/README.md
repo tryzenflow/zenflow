@@ -312,6 +312,32 @@ web included, bypassing the web/native split this section describes. Neither was
 (out of scope for the task-sheet bug this section documents), but both are worth cleaning up in a
 follow-up.
 
+### The task create/edit form is a full screen, not a bottom sheet
+
+`CreateTaskSheet`/`EditTaskSheet` (referenced by name in several sections above, as the sheets
+they were when those bugs were investigated) no longer exist. The task form now lives on its own
+route — `app/task/new.tsx` and `app/task/[id]/edit.tsx`, registered in `app/_layout.tsx`'s root
+`<Stack>` with `presentation: "modal"` — sharing chrome via
+`components/tasks/task-form-screen.tsx`. `ChangeDurationSheet` is unaffected and still a real
+`@gorhom/bottom-sheet` sheet (a small single-purpose quick action, not a form), so the
+bottom-sheet-specific guidance above still matters for it.
+
+Two knock-on changes from dropping the sheet-ref pattern:
+
+- **No more `onCreated`/`onSaved`/`onDeleted` callbacks threaded through a `useRef<XSheetHandle>`**
+  — a screen reached via `router.push` has no ref back to its caller. `app/(app)/index.tsx`
+  instead refetches via `useFocusEffect` (from `@react-navigation/native`) whenever the Day screen
+  regains focus, which covers all three cases (create/edit/delete) without per-action wiring.
+  `week.tsx`/`month.tsx` (no task list yet) dropped their `onCreated` toast entirely — the
+  new-task screen shows its own placement toast (via `lib/task-toasts.ts`) before calling
+  `router.back()`, same copy as before.
+- **Typed routes friction:** `app/task/new.tsx` and `app/task/[id]/edit.tsx` didn't exist when
+  `.expo/types/router.d.ts` (gitignored, Metro-generated) was last regenerated, so `Href`s built
+  against them need an `as Href` cast for now (see `createTaskAtNowHref` in
+  `components/tasks/create-task-fab.tsx`, and the `_layout.tsx` `<Redirect>`s, which already used
+  this pattern before this change) — running `pnpm dev`/`pnpm dev:web` once regenerates the file
+  and the casts stop being load-bearing (harmless either way).
+
 ## Local development
 
 ```bash

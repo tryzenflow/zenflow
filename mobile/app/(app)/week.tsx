@@ -1,14 +1,12 @@
 import { CalendarDays } from "@/components/Icons";
 import { CreateTaskFab } from "@/components/tasks/create-task-fab";
 import { Text } from "@/components/ui/text";
-import { useToast } from "@/components/ui/toast";
 import { useUserStore } from "@/hooks/use-user-store";
 import { View } from "react-native";
 
 export default function WeekScreen() {
   const user = useUserStore((s) => s.user);
   const tz = user?.timezone || "UTC";
-  const { toast } = useToast();
 
   return (
     <View className="flex-1 bg-background">
@@ -21,12 +19,7 @@ export default function WeekScreen() {
         </Text>
       </View>
 
-      {/* No task list to refetch here yet (Phase 3) — confirm the create
-          with a toast instead. */}
-      <CreateTaskFab
-        tz={tz}
-        onCreated={() => toast("Task created", "success")}
-      />
+      <CreateTaskFab tz={tz} />
     </View>
   );
 }

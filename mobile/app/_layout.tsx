@@ -158,6 +158,14 @@ export default function RootLayout() {
                 <Stack.Screen name="(auth)" />
                 <Stack.Screen name="(onboarding)" />
                 <Stack.Screen name="(app)" />
+                {/* Task create/edit — full screens, not bottom sheets (see
+                    mobile/README.md); presented modally so they still read
+                    as "on top of" the tabs instead of replacing them. */}
+                <Stack.Screen name="task/new" options={{ presentation: "modal" }} />
+                <Stack.Screen
+                  name="task/[id]/edit"
+                  options={{ presentation: "modal" }}
+                />
               </Stack>
               <AuthGate />
               <StatusBar hidden={true} />

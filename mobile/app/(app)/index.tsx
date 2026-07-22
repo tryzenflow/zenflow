@@ -4,19 +4,14 @@ import {
   ChangeDurationSheet,
   type ChangeDurationSheetHandle,
 } from "@/components/tasks/change-duration-sheet";
-import {
-  CreateTaskFab,
-  type CreateTaskFabHandle,
-} from "@/components/tasks/create-task-fab";
-import {
-  EditTaskSheet,
-  type EditTaskSheetHandle,
-} from "@/components/tasks/edit-task-sheet";
+import { CreateTaskFab, createTaskAtNowHref } from "@/components/tasks/create-task-fab";
 import { Text } from "@/components/ui/text";
 import { useUserStore } from "@/hooks/use-user-store";
 import { cn } from "@/lib/utils";
 import { zonedDate, zonedNow } from "@zenflow/core";
 import type { Task } from "@zenflow/shared";
+import { useFocusEffect } from "@react-navigation/native";
+import { type Href, useRouter } from "expo-router";
 import { format } from "date-fns";
 import * as Haptics from "expo-haptics";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -34,10 +29,14 @@ import { Pressable, RefreshControl, ScrollView, View } from "react-native";
  * is reasonable, note what's blocked"): today's tasks as a plain list
  * (rather than a positioned grid — there's no grid to position against yet)
  * with the three real gestures wired against the real API:
- *   - tap a task card            → `EditTaskSheet`
+ *   - tap a task card            → `/task/[id]/edit`
  *   - long-press a task card     → `ChangeDurationSheet`
- *   - long-press the empty area  → `CreateTaskSheet`, pre-filled with "now"
+ *   - long-press the empty area  → `/task/new`, pre-filled with "now"
  *     snapped to the next 15-minute mark
+ *
+ * The create/edit forms are full screens, not bottom sheets — see
+ * mobile/README.md for why. `ChangeDurationSheet` is a much smaller,
+ * single-purpose quick action (not a form), so it stays a sheet.
  *
  * BLOCKED (tracked for Phase 2, not attempted here): true per-pixel
  * long-press-a-time-slot → snapped-start-time creation (needs the absolute
@@ -45,13 +44,12 @@ import { Pressable, RefreshControl, ScrollView, View } from "react-native";
  * pinch-zoom, and the now-indicator/work-zone overlays.
  */
 export default function DayScreen() {
+  const router = useRouter();
   const user = useUserStore((s) => s.user);
   const tz = user?.timezone || "UTC";
   const [tasks, setTasks] = useState<Task[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fabRef = useRef<CreateTaskFabHandle>(null);
-  const editSheetRef = useRef<EditTaskSheetHandle>(null);
   const durationSheetRef = useRef<ChangeDurationSheetHandle>(null);
 
   const refetch = useCallback(async () => {
@@ -62,6 +60,16 @@ export default function DayScreen() {
   useEffect(() => {
     if (user) refetch();
   }, [user, refetch]);
+
+  // Refetch whenever this screen regains focus — covers returning from
+  // `/task/new`/`/task/[id]/edit`, which (unlike the old sheets) have no
+  // ref to thread an onCreated/onSaved/onDeleted callback through.
+  useFocusEffect(
+    useCallback(() => {
+      if (user) refetch();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user, refetch]),
+  );
 
   async function onRefresh() {
     setRefreshing(true);
@@ -103,7 +111,7 @@ export default function DayScreen() {
             key={task.id}
             task={task}
             tz={tz}
-            onPress={() => editSheetRef.current?.open(task.id)}
+            onPress={() => router.push(`/task/${task.id}/edit` as Href)}
             onLongPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(
                 () => {},
@@ -125,7 +133,7 @@ export default function DayScreen() {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(
               () => {},
             );
-            fabRef.current?.openAtNow();
+            router.push(createTaskAtNowHref(tz));
           }}
           className="mt-2 min-h-[96px] items-center justify-center rounded-2xl border border-dashed border-border"
         >
@@ -135,8 +143,7 @@ export default function DayScreen() {
         </Pressable>
       </ScrollView>
 
-      <CreateTaskFab ref={fabRef} tz={tz} onCreated={refetch} />
-      <EditTaskSheet ref={editSheetRef} onSaved={refetch} onDeleted={refetch} />
+      <CreateTaskFab tz={tz} />
       <ChangeDurationSheet ref={durationSheetRef} onResized={refetch} />
     </View>
   );

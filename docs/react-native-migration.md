@@ -542,6 +542,12 @@ insights, dark mode, sign-out); see `mobile/README.md`'s screens table.
      `CreateTaskFab` (`components/tasks/create-task-fab.tsx`, factored out of `index.tsx`'s FAB +
      `CreateTaskSheet` pairing) so task creation isn't Day-only, even though neither has a real
      task list yet — `onCreated` is a plain success toast there instead of a list `refetch`.
+   - **Task form moved off bottom sheets onto its own screen (post-#20 follow-up):**
+     `CreateTaskSheet`/`EditTaskSheet` are gone — the form now lives at `app/task/new.tsx` /
+     `app/task/[id]/edit.tsx`, pushed as `presentation: "modal"` Stack screens instead of
+     presented via `@gorhom/bottom-sheet`. `ChangeDurationSheet` is untouched (still a sheet).
+     See `mobile/README.md`'s "The task create/edit form is a full screen, not a bottom sheet"
+     for the callback-threading and typed-routes fallout.
 
 ### Phase 6 — Polish + EAS (ongoing)
 
