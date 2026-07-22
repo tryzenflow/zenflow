@@ -338,6 +338,34 @@ Two knock-on changes from dropping the sheet-ref pattern:
   this pattern before this change) — running `pnpm dev`/`pnpm dev:web` once regenerates the file
   and the casts stop being load-bearing (harmless either way).
 
+### `BottomSheetHeader`'s close button must dismiss its own sheet by local ref, not the ambient `useBottomSheetModal()`
+
+**Symptom:** on a screen with more than one nested `@gorhom/bottom-sheet` sheet mounted at once
+(the task form: `TagAutocomplete`'s sheet alongside `DeadlineChipRow`'s `InlineDateField`/
+`InlineTimeField` sheets, all siblings under one `BottomSheetModalProvider`), the header "X" could
+fail to close the sheet the user was actually looking at.
+
+**Cause:** `components/ui/bottom-sheet.native.tsx`'s `BottomSheetHeader`/`BottomSheetCloseTrigger`
+called `useBottomSheetModal().dismiss()` with no key — `@gorhom/bottom-sheet` v5's own
+`BottomSheetModalProvider` dismisses whichever sheet is *last in its shared, app-wide
+presented-sheets queue* in that case (`BottomSheetModalProvider.tsx`'s `handleDismiss`), which is
+only "this sheet" by coincidence, not by construction. That queue can end up with a stale entry
+that was never cleanly popped: `handleWillUnmountSheet`/`handlePortalOnUnmount` (fired when a
+modal's `Portal` unmounts while its own dismiss animation is still in flight — e.g.
+`InlineTimeField`'s sheet getting torn down because `DeadlineChipRow`'s `chip` state changed away
+right as the user picked a time) never splices that sheet's key out of the queue; only a dismiss
+that runs all the way to completion does, via the modal's own `unmount()`. The web
+reimplementation (`components/ui/bottom-sheet.tsx`, Radix `Dialog`-based) never had this bug — it
+always closed via the local per-instance `sheetRef` from `useBottomSheetContext()` (the same ref
+`BottomSheetOpenTrigger` uses to *open* the sheet), never the ambient provider.
+
+**Fix:** native's `BottomSheetHeader`/`BottomSheetCloseTrigger` now do the same —
+`useBottomSheetContext().sheetRef.current?.dismiss()` instead of `useBottomSheetModal().dismiss()`
+— so closing a sheet is deterministic (always *this* sheet) regardless of what else is or isn't
+cleanly registered in the shared cross-sheet queue. If you add a new close affordance anywhere in
+`components/ui/bottom-sheet.native.tsx`, reach for the local `sheetRef` from
+`useBottomSheetContext()`, not `@gorhom/bottom-sheet`'s `useBottomSheetModal()`.
+
 ## Local development
 
 ```bash

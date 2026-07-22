@@ -460,14 +460,22 @@ insights, dark mode, sign-out); see `mobile/README.md`'s screens table.
    `@zenflow/shared` field), bridged through `useEditorBridge`'s async `getHTML()`/`setContent()`
    rather than a synchronous DOM. "Upload file" is still a stub (toasts "not available yet"; no
    `expo-image-picker`/`expo-document-picker` wiring — unchanged scope).
-   - **Tool-parity gap:** the toolbar is a fixed pill docked above the editor, shown while
-     focused — not a bubble anchored to the exact text selection like the old `TextInput` hack
-     (or web's Tiptap bubble-menu-style positioning). `tentap-editor`'s bridge doesn't expose
-     WebView-internal selection screen coordinates to native, so there's nothing to anchor a true
-     per-selection bubble to; a fixed contextual toolbar is the idiomatic pattern the package's
-     own docs use. Marks/lists can now be toggled with or without an active text selection
-     (typing continues in that style), which is arguably more correct WYSIWYG behavior than the
-     old selection-required hack.
+   - **Tool-parity gap:** the toolbar is a floating pill, absolutely positioned to straddle the
+     editor's own top edge and shown/hidden by the bridge's `isFocused` state (plus while the
+     link-entry row is open) — not a bubble anchored to the exact text-selection caret position
+     like web's Tiptap bubble menu. `tentap-editor`'s `CoreEditorState` bridge state exposes a
+     `selection: { from, to }` text *offset* pair but no WebView-internal screen *coordinates* for
+     it, so there's nothing to anchor a true per-caret bubble to from native; showing/hiding on
+     focus (not on "has a non-empty selection", which would incorrectly hide Upload whenever
+     nothing's selected) is the closest reasonable approximation given that constraint. Marks/lists
+     can be toggled with or without an active text selection (typing continues in that style),
+     which is arguably more correct WYSIWYG behavior than a selection-required toolbar anyway.
+     Embedded image/video nodes (matching web's `common/editor/video-block.tsx`/`audio-block.tsx`)
+     are an explicit non-goal for now: `tentap-editor`'s `bridgeExtensions` API ships only a bare
+     `ImageBridge.setImage(src)`, no video/audio bridge and no attrs for `controls`/sizing the way
+     the web nodes have, and there's no ergonomic extension point to register a *new* custom Tiptap
+     node from the native side without patching the package's bundled WebView JS — "Upload file"
+     stays a stub toast.
    - **Dependency resolution:** pinned to the Tiptap-v3-based `@10play/tentap-editor@^1.0.1` line
      rather than the older (still maintained) `0.7.x`/Tiptap-v2 line, specifically so its
      `@tiptap/*` transitive deps share a major version with `frontend/`'s own hoisted Tiptap v3
