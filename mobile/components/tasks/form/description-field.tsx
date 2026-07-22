@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
+import { loadGeistWebviewFontDataUri } from "@/lib/geist-webview-font";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
 import {
@@ -69,16 +70,35 @@ const EDITOR_EXTENSIONS = [
  * Numbered lists. "Upload file" stays a stub toast — real upload wiring is
  * out of scope here too.
  *
- * KNOWN GAP vs. web: the toolbar is a fixed pill bar docked above the
- * editor (shown while focused), not a bubble anchored to the exact text
- * selection like the old `TextInput` hack (or web's Tiptap bubble menu).
- * `tentap-editor`'s bridge doesn't expose WebView-internal selection screen
- * coordinates to native, so there's nothing to anchor a true per-selection
- * bubble to — a fixed contextual toolbar is the idiomatic pattern its own
- * docs use (see the package's Basic example). Marks/lists can be toggled
- * with or without a text selection (typing then continues in that style),
- * which is actually more correct WYSIWYG behavior than the old
- * selection-required hack.
+ * KNOWN GAP vs. web: the toolbar is a floating pill shown/hidden by
+ * `state.isFocused` (an absolutely-positioned overlay straddling the
+ * editor's top edge), not a bubble anchored to the exact text-selection
+ * caret position like web's Tiptap bubble menu. `tentap-editor`'s
+ * `CoreEditorState` bridge state exposes a `selection: { from, to }` text
+ * *offset* pair but no WebView-internal screen *coordinates* for that
+ * selection, so there's nothing to anchor a true per-caret bubble to from
+ * native — showing/hiding on focus is the closest reasonable approximation
+ * given that constraint (revisit if a future `tentap-editor` version adds
+ * coordinate reporting). Deliberately gated on *focus*, not "has a non-empty
+ * selection": Upload has no selection-dependent behavior and needs to stay
+ * reachable with nothing selected, so gating on selection emptiness would
+ * hide it exactly when it's needed. Marks/lists can be toggled with or
+ * without a text selection (typing then continues in that style), which is
+ * more correct WYSIWYG behavior than a selection-required toolbar anyway.
+ *
+ * KNOWN GAP vs. web (scoped down deliberately): the web editor
+ * (`frontend/src/components/common/editor/video-block.tsx`/`audio-block.tsx`)
+ * registers its own Tiptap `Node.create(...)` extensions for embedded video
+ * and audio. `@10play/tentap-editor`'s `bridgeExtensions` API
+ * (`node_modules/@10play/tentap-editor/.../bridges/*.d.ts`) only ships an
+ * `ImageBridge` (a bare `setImage(src)`, no matching video/audio bridge, and
+ * no attrs for `controls`/sizing the way the web nodes have) — there's no
+ * ergonomic extension point here to register a *new* custom Tiptap node from
+ * the native side; the WebView document's own bundled JS bundle would need
+ * to be patched to add one, which isn't a stable thing to take on in this
+ * pass. Scoped this batch down to polishing the existing link-insert row
+ * instead — Upload stays a stub toast, and image/video embedding remains an
+ * explicit follow-up.
  *
  * External contract unchanged: `value`/`onChange` stay a plain HTML string
  * (`create-task-sheet.tsx`/`edit-task-sheet.tsx` → `task-sheet-fields.tsx`
@@ -175,7 +195,27 @@ function DescriptionFieldEditor({
   const { toast } = useToast();
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkDraft, setLinkDraft] = useState("");
+  const [fontDataUri, setFontDataUri] = useState<string | null>(null);
   const lastEmitted = useRef(value);
+
+  // Base64-embed Geist as a `@font-face` inside the editor's WebView
+  // document once (see `lib/geist-webview-font.ts`'s doc comment for why a
+  // data URI is required instead of just naming the font). Best-effort: if
+  // the asset read fails for some reason, the stylesheet below just falls
+  // back to the system sans-serif, same as before this fix.
+  useEffect(() => {
+    let cancelled = false;
+    loadGeistWebviewFontDataUri()
+      .then((uri) => {
+        if (!cancelled) setFontDataUri(uri);
+      })
+      .catch(() => {
+        // no-op — font-family falls back to -apple-system/sans-serif below
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const editor = useEditorBridge({
     bridgeExtensions: EDITOR_EXTENSIONS,
@@ -212,6 +252,11 @@ function DescriptionFieldEditor({
   // descendant of `body` (not a replacement for it), that doubled the visual
   // inset on every edge. `body` only needs the matching background color so
   // there's no color seam around the (now singly-padded) content area.
+  // `8px 12px` was originally chosen to match web's `px-3 py-2` Tailwind
+  // classes exactly, but that reads as too much inset on a much narrower
+  // mobile viewport — tightened to `6px 10px` here (mobile-only; the web
+  // editor keeps its own `px-3 py-2`, they don't need to match pixel-for-
+  // pixel since they're different viewport classes).
   //
   // `max-height`/`overflow-y: auto` on `.ProseMirror` is a deliberate cap,
   // not part of the original design: the bundled editor HTML's base
@@ -234,8 +279,17 @@ function DescriptionFieldEditor({
   function injectContentStyles() {
     const bg = isDarkColorScheme ? "rgb(29 26 23)" : "rgb(255 255 255)";
     const fg = isDarkColorScheme ? "rgb(250 250 249)" : "rgb(28 25 23)";
+    // `@font-face` is only emitted once the base64 data URI has finished
+    // loading (see the effect above) — until then the WebView falls back to
+    // its default sans-serif rather than blocking on the asset read.
+    const fontFace = fontDataUri
+      ? `@font-face { font-family: 'Geist'; src: url(${fontDataUri}) format('truetype'); font-weight: 400; font-style: normal; }`
+      : "";
+    const fontFamily = fontDataUri
+      ? "'Geist', -apple-system, sans-serif"
+      : "-apple-system, sans-serif";
     editor.injectCSS(
-      `body { background-color: ${bg}; } .ProseMirror { background-color: ${bg}; color: ${fg}; font-size: 14px; padding: 8px 12px; line-height: 1.5; max-height: 320px; overflow-y: auto; }`,
+      `${fontFace} body { background-color: ${bg}; } .ProseMirror { background-color: ${bg}; color: ${fg}; font-family: ${fontFamily}; font-size: 14px; padding: 6px 10px; line-height: 1.5; max-height: 320px; overflow-y: auto; }`,
       "description-field-theme",
     );
   }
@@ -243,7 +297,7 @@ function DescriptionFieldEditor({
   useEffect(() => {
     injectContentStyles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDarkColorScheme]);
+  }, [isDarkColorScheme, fontDataUri]);
 
   // Resync from the outside (e.g. `EditTaskSheet`'s `form.reset()` once
   // `getTaskDetails()` resolves) without fighting the editor's own
@@ -281,78 +335,105 @@ function DescriptionFieldEditor({
     setLinkOpen(false);
   }
 
+  // Shown while the editor itself is focused, or while the link-entry row is
+  // open (that row is a plain native `Input`, not part of the WebView, so
+  // focusing it blurs the editor and would otherwise flip `isFocused` false
+  // mid-edit and yank the toolbar away from under the user).
+  const toolbarVisible = !!state.isFocused || linkOpen;
+
   return (
     <View className="gap-1.5">
-      <View className="flex-row flex-wrap items-center gap-0.5 self-start rounded-full bg-[#221d17] p-1 shadow-lg">
-        <ToolbarButton
-          icon={Bold}
-          label="Bold"
-          active={!!state.isBoldActive}
-          disabled={disabled}
-          onPress={() => editor.toggleBold()}
-        />
-        <ToolbarButton
-          icon={Italic}
-          label="Italic"
-          active={!!state.isItalicActive}
-          disabled={disabled}
-          onPress={() => editor.toggleItalic()}
-        />
-        <ToolbarButton
-          icon={UnderlineIcon}
-          label="Underline"
-          active={!!state.isUnderlineActive}
-          disabled={disabled}
-          onPress={() => editor.toggleUnderline()}
-        />
-        <ToolbarButton
-          icon={Highlighter}
-          label="Highlight"
-          active={!!state.activeHighlight}
-          disabled={disabled}
-          onPress={() => editor.toggleHighlight(HIGHLIGHT_COLOR)}
-        />
-        <ToolbarButton
-          icon={Quote}
-          label="Blockquote"
-          active={!!state.isBlockquoteActive}
-          disabled={disabled}
-          onPress={() => editor.toggleBlockquote()}
-        />
-        <View className="mx-1 h-4 w-px bg-white/20" />
-        <ToolbarButton
-          icon={Link2}
-          label="Link"
-          active={!!state.isLinkActive || linkOpen}
-          disabled={disabled}
-          onPress={openLink}
-        />
-        <ToolbarButton
-          icon={Upload}
-          label="Upload file"
-          disabled={disabled}
-          onPress={() =>
-            toast(
-              "File uploads aren't available in the mobile description editor yet",
-              "info",
-            )
-          }
-        />
-        <View className="mx-1 h-4 w-px bg-white/20" />
-        <ToolbarButton
-          icon={List}
-          label="Bulleted list"
-          active={!!state.isBulletListActive}
-          disabled={disabled}
-          onPress={() => editor.toggleBulletList()}
-        />
-        <ToolbarButton
-          icon={ListOrdered}
-          label="Numbered list"
-          active={!!state.isOrderedListActive}
-          disabled={disabled}
-          onPress={() => editor.toggleOrderedList()}
-        />
+      {/* `relative` positions the floating toolbar pill against this box
+          (not the whole field column), so it straddles the editor's own top
+          edge regardless of where the field sits in the surrounding form. */}
+      <View className="relative">
+        {toolbarVisible && (
+          <View
+            pointerEvents="box-none"
+            className="absolute -top-[19px] left-3 z-10"
+          >
+            <View className="flex-row flex-wrap items-center gap-0.5 rounded-full bg-[#221d17] p-1 shadow-lg">
+              <ToolbarButton
+                icon={Bold}
+                label="Bold"
+                active={!!state.isBoldActive}
+                disabled={disabled}
+                onPress={() => editor.toggleBold()}
+              />
+              <ToolbarButton
+                icon={Italic}
+                label="Italic"
+                active={!!state.isItalicActive}
+                disabled={disabled}
+                onPress={() => editor.toggleItalic()}
+              />
+              <ToolbarButton
+                icon={UnderlineIcon}
+                label="Underline"
+                active={!!state.isUnderlineActive}
+                disabled={disabled}
+                onPress={() => editor.toggleUnderline()}
+              />
+              <ToolbarButton
+                icon={Highlighter}
+                label="Highlight"
+                active={!!state.activeHighlight}
+                disabled={disabled}
+                onPress={() => editor.toggleHighlight(HIGHLIGHT_COLOR)}
+              />
+              <ToolbarButton
+                icon={Quote}
+                label="Blockquote"
+                active={!!state.isBlockquoteActive}
+                disabled={disabled}
+                onPress={() => editor.toggleBlockquote()}
+              />
+              <View className="mx-1 h-4 w-px bg-white/20" />
+              <ToolbarButton
+                icon={Link2}
+                label="Link"
+                active={!!state.isLinkActive || linkOpen}
+                disabled={disabled}
+                onPress={openLink}
+              />
+              <ToolbarButton
+                icon={Upload}
+                label="Upload file"
+                disabled={disabled}
+                onPress={() =>
+                  toast(
+                    "File uploads aren't available in the mobile description editor yet",
+                    "info",
+                  )
+                }
+              />
+              <View className="mx-1 h-4 w-px bg-white/20" />
+              <ToolbarButton
+                icon={List}
+                label="Bulleted list"
+                active={!!state.isBulletListActive}
+                disabled={disabled}
+                onPress={() => editor.toggleBulletList()}
+              />
+              <ToolbarButton
+                icon={ListOrdered}
+                label="Numbered list"
+                active={!!state.isOrderedListActive}
+                disabled={disabled}
+                onPress={() => editor.toggleOrderedList()}
+              />
+            </View>
+          </View>
+        )}
+
+        {/* `max-h` is a second, outer safety net alongside the injected
+            `.ProseMirror` cap above (`injectContentStyles`) — belt-and-suspenders
+            in case the WebView's native container ever reports a height past
+            that cap for some other reason; `overflow-hidden` here just clips
+            the render, it doesn't bound layout on its own. */}
+        <View className="max-h-[336px] min-h-[110px] w-full overflow-hidden rounded-[13px] border border-input bg-card">
+          <RichText editor={editor} onLoad={injectContentStyles} />
+        </View>
       </View>
 
       {linkOpen && (
@@ -362,10 +443,12 @@ function DescriptionFieldEditor({
             editable={!disabled}
             value={linkDraft}
             onChangeText={setLinkDraft}
-            placeholder="https://…"
+            placeholder="Enter link…"
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
+            returnKeyType="done"
+            onSubmitEditing={confirmLink}
             className="h-10 flex-1 rounded-full border border-input bg-card px-3.5 text-[13px] text-foreground"
           />
           <Pressable
@@ -385,18 +468,9 @@ function DescriptionFieldEditor({
         </View>
       )}
 
-      {/* `max-h` is a second, outer safety net alongside the injected
-          `.ProseMirror` cap above (`injectContentStyles`) — belt-and-suspenders
-          in case the WebView's native container ever reports a height past
-          that cap for some other reason; `overflow-hidden` here just clips
-          the render, it doesn't bound layout on its own. */}
-      <View className="max-h-[336px] min-h-[110px] w-full overflow-hidden rounded-[13px] border border-input bg-card">
-        <RichText editor={editor} onLoad={injectContentStyles} />
-      </View>
-
       <Text className="text-[12.5px] leading-snug text-muted-foreground">
-        Tap the toolbar to format — Bold, Italic, Underline, Highlight,
-        Blockquote, Link, Bulleted and Numbered lists.
+        Tap into the editor to reveal formatting — Bold, Italic, Underline,
+        Highlight, Blockquote, Link, Bulleted and Numbered lists.
       </Text>
     </View>
   );
