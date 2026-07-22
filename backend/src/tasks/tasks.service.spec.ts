@@ -623,10 +623,11 @@ describe("TasksService.update — metadata-only", () => {
 describe("deadlineOptions (pure) — used directly by TasksController", () => {
   it("returns six ISO chip values derived from horizon ceiling math", () => {
     const res = deadlineOptions("2026-06-08T10:00:00.000Z", user); // Monday
-    // "Today" and "Tomorrow" are midnight of the next two calendar days,
-    // avoiding 15-min grid boundary issues. Remaining chips use work-hours ceilings.
-    expect(res.today).toBe("2026-06-09T00:00:00.000Z");
-    expect(res.tomorrow).toBe("2026-06-10T00:00:00.000Z");
+    // "Today" and "Tomorrow" are end-of-day (23:59) on the current and next
+    // calendar day, avoiding 15-min grid boundary issues. Remaining chips use
+    // work-hours ceilings.
+    expect(res.today).toBe("2026-06-08T23:59:00.000Z");
+    expect(res.tomorrow).toBe("2026-06-09T23:59:00.000Z");
     // ISO week (Mon-Sun) ceiling → next Monday 00:00.
     expect(res.thisWeek).toBe("2026-06-15T00:00:00.000Z");
     expect(res.nextWeek).toBe("2026-06-22T00:00:00.000Z");

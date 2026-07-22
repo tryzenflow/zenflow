@@ -1,4 +1,5 @@
 import { DeadlineOptionsResponse } from "@zenflow/shared";
+import { DAILY_HORIZON } from "../../common/constants";
 import { minutesToUtc } from "../../common/utils";
 import {
   endOfPeriod,
@@ -14,8 +15,9 @@ import { User } from "../../../generated/prisma";
 
 /**
  * The six deadline quick-action chip values: "Today" and "Tomorrow" are
- * midnight of the next two calendar days (avoiding 15-min grid); the rest
- * use `endOfPeriod` ceiling math relative to `anchor`.
+ * end-of-day (23:59, `DAILY_HORIZON - 1`) on the current and next calendar
+ * day respectively (avoiding the ambiguous midnight-of-day-boundary case);
+ * the rest use `endOfPeriod` ceiling math relative to `anchor`.
  */
 export function deadlineOptions(
   anchor: string,
@@ -26,11 +28,11 @@ export function deadlineOptions(
   const anchorDate = new Date(anchor);
   const dateStr = localDateStr(anchorDate, tz);
 
-  // "Today" = tomorrow at 12:00 AM (midnight start of next day)
-  const today = minutesToUtc(addDaysStr(dateStr, 1), 0, tz);
+  // "Today" = today at 11:59 PM (end of the current calendar day)
+  const today = minutesToUtc(dateStr, DAILY_HORIZON - 1, tz);
 
-  // "Tomorrow" = day after tomorrow at 12:00 AM
-  const tomorrow = minutesToUtc(addDaysStr(dateStr, 2), 0, tz);
+  // "Tomorrow" = tomorrow at 11:59 PM (end of the next calendar day)
+  const tomorrow = minutesToUtc(addDaysStr(dateStr, 1), DAILY_HORIZON - 1, tz);
 
   const thisWeek = endOfPeriod(anchorDate, "week", tz, work);
 
