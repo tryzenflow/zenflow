@@ -35,7 +35,8 @@ mobile/
 │       │                      # against a plain task list (tap → edit, long-press → resize,
 │       │                      # long-press empty area / FAB → create); see Phase 5 in
 │       │                      # docs/react-native-migration.md
-│       ├── week.tsx, month.tsx  # placeholder stubs — calendar UI is future work
+│       ├── week.tsx, month.tsx  # placeholder stubs — calendar UI is future work, but each still
+│       │                        # renders <CreateTaskFab> so task creation isn't Day-only
 │       └── settings.tsx       # fully built: profile, theme, timezone, duration mode, insights
 ├── api/                       # axios endpoint functions (auth, tasks, tags, users) + base.ts
 ├── components/
@@ -43,7 +44,11 @@ mobile/
 │   ├── primitives/            # headless behavior (portal, slot, useControllableState, …),
 │   │                          # each with a `.web.tsx` variant where native/web diverge
 │   ├── onboarding/, settings/ # screen-specific composite components
-│   ├── tasks/                 # CreateTaskSheet / EditTaskSheet / ChangeDurationSheet
+│   ├── tasks/                 # CreateTaskSheet / EditTaskSheet / ChangeDurationSheet — each a
+│   │   │                      # forwardRef component with an imperative `.open(...)` handle (see
+│   │   │                      # Known pitfalls' "Bottom sheets must open synchronously" note),
+│   │   │                      # plus CreateTaskFab (the reusable "+" FAB + CreateTaskSheet
+│   │   │                      # pairing used by index.tsx/week.tsx/month.tsx)
 │   │   └── form/               # duration stepper/slider, deadline chip row, tag autocomplete,
 │   │                           # description field (WYSIWYG, @10play/tentap-editor) + floating
 │   │                           # toolbar — see task-sheet-fields.tsx
@@ -51,7 +56,7 @@ mobile/
 │   │                          # Known pitfalls' "Blast-radius containment" note
 │   └── tab-icons.tsx, Icons.tsx, logo.tsx, ThemeToggle.tsx
 ├── hooks/                      # use-user-store (Zustand), use-local-storage, use-task-form
-│                                # (taskSchema from @zenflow/core), use-controlled-bottom-sheet
+│                                # (taskSchema from @zenflow/core)
 ├── lib/
 │   ├── api-client.ts           # cookie-aware axios instance — see Auth & session
 │   ├── session.ts               # SecureStore-backed cache (user + raw session cookie)
@@ -208,6 +213,33 @@ local class-component boundary now wrapping just `DescriptionField` in
 fallback in that one field instead of taking the rest of the form, and every other sheet on the
 screen, down with it. It doesn't fix the underlying missing-native-module issue — only a real
 dev-client rebuild does that.
+
+### Bottom sheets must call `.present()`/`.dismiss()` synchronously from the press handler
+
+**Symptom:** a `@gorhom/bottom-sheet` `BottomSheetModal` never opens (or never closes) even
+though the trigger `Pressable` fires and no error is thrown.
+
+**Cause:** `CreateTaskSheet`/`EditTaskSheet`/`ChangeDurationSheet` used to be externally
+controlled by an `open: boolean` + `onOpenChange` prop pair, driven by `useState` in the calling
+screen and bridged through a `useControlledBottomSheet(open)` hook that called
+`ref.current?.present()`/`.dismiss()` inside a `useEffect` keyed on `open` — i.e. *after* a state
+update flowed through a re-render, never inside the actual `Pressable`'s `onPress`/`onLongPress`
+handler itself. Every other sheet in the app (`components/onboarding/time-picker-row.tsx`,
+`components/settings/duration-mode-picker-row.tsx`, `components/settings/timezone-picker-row.tsx`)
+instead calls `useBottomSheet()`'s `open`/`close` (or `BottomSheetOpenTrigger`'s internal
+`sheetRef.current?.present()`) **directly and synchronously inside the press handler**, and those
+always worked. The effect-driven indirection was the actual difference — not a WebView/native
+module issue (an earlier, unrelated hypothesis involving `@10play/tentap-editor` was ruled out:
+the sheets still didn't open with the rich-text editor removed entirely).
+
+**Fix:** the three task sheets are now `forwardRef` components exposing an imperative
+`open(...)`/handle via `useImperativeHandle`, each using `useBottomSheet()` internally and
+calling `bottomSheet.open()`/`.close()` synchronously wherever the old code called
+`onOpenChange(true)`/`(false)` — matching the working pattern exactly. Callers hold a
+`useRef<XSheetHandle>(null)` and call `xRef.current?.open(...)` directly inside the triggering
+`Pressable`'s `onPress`/`onLongPress` (see `app/(app)/index.tsx`). `hooks/use-controlled-bottom-sheet.ts`
+was deleted — don't reintroduce an effect-driven `open`-prop bridge for a new sheet; use
+`useBottomSheet()` + an imperative handle instead.
 
 ## Local development
 

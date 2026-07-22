@@ -520,6 +520,28 @@ insights, dark mode, sign-out); see `mobile/README.md`'s screens table.
      setTask)`, which is why tap-to-edit worked while the FAB/empty-area create path didn't).
      Fixed by assigning both refs in a single merged callback ref instead, which fires exactly
      when React attaches/detaches the real instance regardless of timing.
+   - **Bug fix #2 (post-#20 follow-up, sheets still didn't open after the merged-ref fix
+     above):** the actual remaining cause was `CreateTaskSheet`/`EditTaskSheet`/
+     `ChangeDurationSheet` being externally controlled by an `open: boolean` + `onOpenChange`
+     prop pair (state living in `app/(app)/index.tsx`), bridged through a
+     `useControlledBottomSheet(open)` hook that called `ref.current?.present()`/`.dismiss()`
+     inside a `useEffect` keyed on `open` — i.e. one render tick *after* the triggering press
+     handler, not synchronously inside it. Every other working sheet in the app
+     (`components/onboarding/time-picker-row.tsx`, `components/settings/duration-mode-picker-row.tsx`,
+     `components/settings/timezone-picker-row.tsx`) calls `useBottomSheet()`'s `open`/`close`
+     directly inside the press handler instead — that synchronous-call shape turned out to be
+     the real difference (an earlier hypothesis blaming `@10play/tentap-editor`'s WebView mount
+     was ruled out: the sheets still didn't open with the editor removed entirely). Fixed by
+     converting all three sheets to `forwardRef` components with an imperative `open(...)`
+     handle, using `useBottomSheet()` internally and calling `.open()`/`.close()` synchronously
+     everywhere the old code called `onOpenChange(true)`/`(false)`; callers hold a
+     `useRef<XSheetHandle>` and call `.open(...)` directly inside the triggering `Pressable`'s
+     handler. `hooks/use-controlled-bottom-sheet.ts` was deleted. See `mobile/README.md`'s
+     "Known pitfalls" section for the write-up future sheet authors should read.
+   - **`week.tsx`/`month.tsx` (post-#20 follow-up):** both stub screens now also render a
+     `CreateTaskFab` (`components/tasks/create-task-fab.tsx`, factored out of `index.tsx`'s FAB +
+     `CreateTaskSheet` pairing) so task creation isn't Day-only, even though neither has a real
+     task list yet — `onCreated` is a plain success toast there instead of a list `refetch`.
 
 ### Phase 6 — Polish + EAS (ongoing)
 

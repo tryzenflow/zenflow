@@ -3,11 +3,11 @@ import {
   BottomSheet,
   BottomSheetContent,
   BottomSheetFooter,
+  useBottomSheet,
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
-import { useControlledBottomSheet } from "@/hooks/use-controlled-bottom-sheet";
 import { useTaskForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
 import { placementToastMessage } from "@/lib/task-toasts";
@@ -16,66 +16,77 @@ import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import type { TaskFormValues } from "@zenflow/core";
 import { isAxiosError } from "axios";
 import { format } from "date-fns";
-import { useCallback, useEffect } from "react";
+import { forwardRef, useCallback, useImperativeHandle, useState } from "react";
 import { View } from "react-native";
 import { TaskSheetFields } from "./task-sheet-fields";
 
 const DEFAULT_DURATION = 60;
+
+const EMPTY_DEFAULTS: TaskFormValues = {
+  title: "",
+  duration: DEFAULT_DURATION,
+  tags: [],
+  note: "",
+  deadline: "",
+};
+
+export type CreateTaskSheetHandle = {
+  /**
+   * Pre-filled scheduled start (already snapped to the 15-min grid, in the
+   * user's tz wall clock) is optional — shown in the subtitle, informational
+   * only (the deadline chip row, not this, is what the schema actually
+   * validates).
+   */
+  open: (initialStart?: Date) => void;
+};
 
 /**
  * `CreateTaskSheet` — RN port of
  * `frontend/src/components/tasks/create-task-dialog.tsx` on
  * `@gorhom/bottom-sheet` v5 (RN migration Phase 5 / GitHub issue #20).
  *
- * Externally controlled (`open`/`onOpenChange`, no internal trigger) so the
- * calendar's long-press-empty-slot gesture (and, until Phase 2's real day
- * timeline lands, the minimal Day-screen wiring in `app/(app)/index.tsx`)
- * can open it pre-filled with a snapped start time.
+ * Imperative-handle controlled (`ref.current.open(initialStart?)`, no
+ * internal trigger UI) so the calendar's long-press-empty-slot gesture (and,
+ * until Phase 2's real day timeline lands, the minimal Day-screen wiring in
+ * `app/(app)/index.tsx`) can open it pre-filled with a snapped start time.
+ *
+ * This used to be driven by an external `open`/`onOpenChange` boolean prop
+ * pair bridged through `useControlledBottomSheet`, which called
+ * `sheetRef.current?.present()` inside a `useEffect` keyed on `open` — i.e.
+ * *after* a state update flowed through a re-render, not synchronously
+ * inside the triggering `Pressable`'s press handler. That's a categorically
+ * different call shape from every other working sheet in the app (see
+ * `components/onboarding/time-picker-row.tsx`,
+ * `components/settings/duration-mode-picker-row.tsx`): they call
+ * `useBottomSheet().open()` straight from a press handler. Matching that
+ * shape here (imperative `.open()` called directly inside the FAB's
+ * `onPress` etc. in `app/(app)/index.tsx`) is the fix.
  */
-export function CreateTaskSheet({
-  open,
-  onOpenChange,
-  initialStart,
-  onCreated,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  /** Pre-filled scheduled start (already snapped to the 15-min grid, in the
-   * user's tz wall clock) — shown in the subtitle, informational only (the
-   * deadline chip row, not this, is what the schema actually validates). */
-  initialStart?: Date;
-  onCreated: () => void;
-}) {
+export const CreateTaskSheet = forwardRef<
+  CreateTaskSheetHandle,
+  { onCreated: () => void }
+>(function CreateTaskSheet({ onCreated }, ref) {
   const user = useUserStore((s) => s.user);
   const tz = user?.timezone || "UTC";
   const { toast } = useToast();
-  const sheetRef = useControlledBottomSheet(open);
+  const bottomSheet = useBottomSheet();
+  const [initialStart, setInitialStart] = useState<Date | undefined>(undefined);
 
-  const form = useTaskForm({
-    defaultValues: {
-      title: "",
-      duration: DEFAULT_DURATION,
-      tags: [],
-      note: "",
-      deadline: "",
-    },
-  });
+  const form = useTaskForm({ defaultValues: EMPTY_DEFAULTS });
   const loading = form.formState.isSubmitting;
 
-  // Reset to a clean slate every time the sheet (re)opens — mirrors the web
-  // dialog's `form.reset()` after a successful create / on cancel.
-  useEffect(() => {
-    if (open) {
-      form.reset({
-        title: "",
-        duration: DEFAULT_DURATION,
-        tags: [],
-        note: "",
-        deadline: "",
-      });
-    }
+  useImperativeHandle(
+    ref,
+    () => ({
+      open: (start?: Date) => {
+        setInitialStart(start);
+        form.reset(EMPTY_DEFAULTS);
+        bottomSheet.open();
+      },
+    }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+    [],
+  );
 
   async function onSubmit(values: TaskFormValues) {
     if (!user) return;
@@ -90,7 +101,7 @@ export function CreateTaskSheet({
       onCreated();
       const { message, variant } = placementToastMessage(response.task, user);
       toast(message, variant === "success" ? "success" : "destructive");
-      onOpenChange(false);
+      bottomSheet.close();
     } catch (error) {
       const message =
         (isAxiosError(error) &&
@@ -134,8 +145,7 @@ export function CreateTaskSheet({
   return (
     <BottomSheet>
       <BottomSheetContent
-        ref={sheetRef}
-        onDismiss={() => onOpenChange(false)}
+        ref={bottomSheet.ref}
         enableDynamicSizing={false}
         snapPoints={["90%"]}
         footerComponent={renderFooter}
@@ -158,4 +168,4 @@ export function CreateTaskSheet({
       </BottomSheetContent>
     </BottomSheet>
   );
-}
+});

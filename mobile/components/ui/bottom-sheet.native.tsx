@@ -116,10 +116,11 @@ const BottomSheetContent = React.forwardRef<
     const { colors } = useTheme();
     const { sheetRef } = useBottomSheetContext();
 
-    // Merge the caller-supplied `ref` (e.g. `useControlledBottomSheet`'s ref,
-    // which drives `present()`/`dismiss()` off the `open` prop — see
-    // `CreateTaskSheet`/`EditTaskSheet`/`ChangeDurationSheet`) with the
-    // `<BottomSheet>` wrapper's own context `sheetRef` (what
+    // Merge the caller-supplied `ref` (e.g. `useBottomSheet()`'s ref, used by
+    // every sheet including `CreateTaskSheet`/`EditTaskSheet`/
+    // `ChangeDurationSheet` — see their doc comments for why the earlier
+    // `useControlledBottomSheet` external-`open`-prop bridge was retired)
+    // with the `<BottomSheet>` wrapper's own context `sheetRef` (what
     // `BottomSheetOpenTrigger`/`BottomSheetCloseTrigger`/`BottomSheetHeader`
     // read via context): both need to end up pointing at the same live
     // `BottomSheetModal` instance.

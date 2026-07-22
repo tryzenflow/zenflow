@@ -9,11 +9,11 @@ import {
   BottomSheet,
   BottomSheetContent,
   BottomSheetFooter,
+  useBottomSheet,
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
-import { useControlledBottomSheet } from "@/hooks/use-controlled-bottom-sheet";
 import { useTaskForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
 import type { BottomSheetFooterProps } from "@gorhom/bottom-sheet";
@@ -22,7 +22,7 @@ import type { EditTaskFormValues } from "@zenflow/core";
 import type { Task } from "@zenflow/shared";
 import { isAxiosError } from "axios";
 import { format } from "date-fns";
-import { useCallback, useEffect, useState } from "react";
+import { forwardRef, useCallback, useImperativeHandle, useState } from "react";
 import { Pressable, View } from "react-native";
 import { TaskSheetFields } from "./task-sheet-fields";
 
@@ -34,11 +34,23 @@ const EMPTY_DEFAULTS: EditTaskFormValues = {
   deadline: "",
 };
 
+export type EditTaskSheetHandle = {
+  open: (taskId: string) => void;
+};
+
 /**
  * `EditTaskSheet` — RN port of
  * `frontend/src/components/tasks/edit-task-dialog.tsx` (RN migration
  * Phase 5 / GitHub issue #20): pre-filled fields, "Edit task" header, a
  * delete affordance, "Save changes" submit.
+ *
+ * Imperative-handle controlled (`ref.current.open(taskId)`) — see
+ * `create-task-sheet.tsx`'s doc comment for why: `useControlledBottomSheet`
+ * drove `present()`/`dismiss()` from a `useEffect` keyed on an external
+ * `open` prop, i.e. one render tick *after* the triggering press handler,
+ * unlike every other working sheet in the app which calls
+ * `useBottomSheet().open()`/`.close()` synchronously inside the press
+ * handler itself.
  *
  * Delete confirmation: the web dialog's `onDelete` calls
  * `deleteTask`/`removeTask` directly on tap, no confirm step — this matches
@@ -55,46 +67,40 @@ const EMPTY_DEFAULTS: EditTaskFormValues = {
  * placement change — this is a duration-only resize, exactly what
  * `ChangeDurationSheet` also does for the long-press gesture).
  */
-export function EditTaskSheet({
-  open,
-  onOpenChange,
-  taskId,
-  onSaved,
-  onDeleted,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  taskId: string | null;
-  onSaved: () => void;
-  onDeleted: () => void;
-}) {
+export const EditTaskSheet = forwardRef<
+  EditTaskSheetHandle,
+  { onSaved: () => void; onDeleted: () => void }
+>(function EditTaskSheet({ onSaved, onDeleted }, ref) {
   const user = useUserStore((s) => s.user);
   const tz = user?.timezone || "UTC";
   const { toast } = useToast();
-  const sheetRef = useControlledBottomSheet(open);
+  const bottomSheet = useBottomSheet();
   const [task, setTask] = useState<Task | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   const form = useTaskForm({ defaultValues: EMPTY_DEFAULTS });
   const loading = form.formState.isSubmitting || deleting;
 
-  useEffect(() => {
-    if (!open || !taskId) {
-      setTask(null);
-      return;
-    }
-    getTaskDetails(taskId).then((res) => {
-      setTask(res.task);
-      form.reset({
-        title: res.task.title,
-        duration: res.task.durationMinutes,
-        tags: res.task.tags,
-        note: res.task.note ?? "",
-        deadline: res.task.deadline ?? "",
-      });
-    });
+  useImperativeHandle(
+    ref,
+    () => ({
+      open: (taskId: string) => {
+        getTaskDetails(taskId).then((res) => {
+          setTask(res.task);
+          form.reset({
+            title: res.task.title,
+            duration: res.task.durationMinutes,
+            tags: res.task.tags,
+            note: res.task.note ?? "",
+            deadline: res.task.deadline ?? "",
+          });
+        });
+        bottomSheet.open();
+      },
+    }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, taskId]);
+    [],
+  );
 
   async function onSubmit(values: EditTaskFormValues) {
     if (!user || !task) return;
@@ -110,7 +116,7 @@ export function EditTaskSheet({
       }
       onSaved();
       toast("Task updated", "success");
-      onOpenChange(false);
+      bottomSheet.close();
     } catch (error) {
       const message =
         (isAxiosError(error) &&
@@ -133,7 +139,7 @@ export function EditTaskSheet({
       await removeTask(task.id);
       onDeleted();
       toast("Task deleted", "success");
-      onOpenChange(false);
+      bottomSheet.close();
     } catch (error) {
       const message =
         (isAxiosError(error) &&
@@ -167,8 +173,8 @@ export function EditTaskSheet({
   return (
     <BottomSheet>
       <BottomSheetContent
-        ref={sheetRef}
-        onDismiss={() => onOpenChange(false)}
+        ref={bottomSheet.ref}
+        onDismiss={() => setTask(null)}
         enableDynamicSizing={false}
         snapPoints={["90%"]}
         footerComponent={renderFooter}
@@ -209,4 +215,4 @@ export function EditTaskSheet({
       </BottomSheetContent>
     </BottomSheet>
   );
-}
+});

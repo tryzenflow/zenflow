@@ -1,20 +1,25 @@
 import { listTasks } from "@/api/tasks";
-import { Calendar, Plus } from "@/components/Icons";
-import { ChangeDurationSheet } from "@/components/tasks/change-duration-sheet";
-import { CreateTaskSheet } from "@/components/tasks/create-task-sheet";
-import { EditTaskSheet } from "@/components/tasks/edit-task-sheet";
+import { Calendar } from "@/components/Icons";
+import {
+  ChangeDurationSheet,
+  type ChangeDurationSheetHandle,
+} from "@/components/tasks/change-duration-sheet";
+import {
+  CreateTaskFab,
+  type CreateTaskFabHandle,
+} from "@/components/tasks/create-task-fab";
+import {
+  EditTaskSheet,
+  type EditTaskSheetHandle,
+} from "@/components/tasks/edit-task-sheet";
 import { Text } from "@/components/ui/text";
 import { useUserStore } from "@/hooks/use-user-store";
 import { cn } from "@/lib/utils";
-import {
-  snapToNearestLaterQuarterHour,
-  zonedDate,
-  zonedNow,
-} from "@zenflow/core";
+import { zonedDate, zonedNow } from "@zenflow/core";
 import type { Task } from "@zenflow/shared";
 import { format } from "date-fns";
 import * as Haptics from "expo-haptics";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 
 /**
@@ -45,10 +50,9 @@ export default function DayScreen() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  const [createOpen, setCreateOpen] = useState(false);
-  const [createStart, setCreateStart] = useState<Date | undefined>(undefined);
-  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
-  const [resizingTask, setResizingTask] = useState<Task | null>(null);
+  const fabRef = useRef<CreateTaskFabHandle>(null);
+  const editSheetRef = useRef<EditTaskSheetHandle>(null);
+  const durationSheetRef = useRef<ChangeDurationSheetHandle>(null);
 
   const refetch = useCallback(async () => {
     const res = await listTasks("day", zonedNow(tz), "PENDING");
@@ -66,17 +70,6 @@ export default function DayScreen() {
     } finally {
       setRefreshing(false);
     }
-  }
-
-  function openCreateAtNow() {
-    const now = zonedNow(tz);
-    const snappedMinutes = snapToNearestLaterQuarterHour(
-      now.getHours() * 60 + now.getMinutes(),
-    );
-    const snapped = new Date(now);
-    snapped.setHours(0, Math.min(snappedMinutes, 23 * 60 + 45), 0, 0);
-    setCreateStart(snapped);
-    setCreateOpen(true);
   }
 
   const today = zonedNow(tz);
@@ -110,12 +103,17 @@ export default function DayScreen() {
             key={task.id}
             task={task}
             tz={tz}
-            onPress={() => setEditingTaskId(task.id)}
+            onPress={() => editSheetRef.current?.open(task.id)}
             onLongPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(
                 () => {},
               );
-              setResizingTask(task);
+              durationSheetRef.current?.open({
+                id: task.id,
+                title: task.title,
+                durationMinutes: task.durationMinutes,
+                scheduledStartTime: task.scheduledStartTime,
+              });
             }}
           />
         ))}
@@ -127,7 +125,7 @@ export default function DayScreen() {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(
               () => {},
             );
-            openCreateAtNow();
+            fabRef.current?.openAtNow();
           }}
           className="mt-2 min-h-[96px] items-center justify-center rounded-2xl border border-dashed border-border"
         >
@@ -137,33 +135,9 @@ export default function DayScreen() {
         </Pressable>
       </ScrollView>
 
-      <Pressable
-        onPress={openCreateAtNow}
-        accessibilityLabel="New task"
-        className="absolute bottom-6 right-5 h-14 w-14 items-center justify-center rounded-full bg-primary shadow-lg"
-      >
-        <Plus size={22} className="text-primary-foreground" />
-      </Pressable>
-
-      <CreateTaskSheet
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        initialStart={createStart}
-        onCreated={refetch}
-      />
-      <EditTaskSheet
-        open={!!editingTaskId}
-        onOpenChange={(open) => !open && setEditingTaskId(null)}
-        taskId={editingTaskId}
-        onSaved={refetch}
-        onDeleted={refetch}
-      />
-      <ChangeDurationSheet
-        open={!!resizingTask}
-        onOpenChange={(open) => !open && setResizingTask(null)}
-        task={resizingTask}
-        onResized={refetch}
-      />
+      <CreateTaskFab ref={fabRef} tz={tz} onCreated={refetch} />
+      <EditTaskSheet ref={editSheetRef} onSaved={refetch} onDeleted={refetch} />
+      <ChangeDurationSheet ref={durationSheetRef} onResized={refetch} />
     </View>
   );
 }
