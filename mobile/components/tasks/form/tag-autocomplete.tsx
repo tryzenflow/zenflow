@@ -1,26 +1,48 @@
 import { listTags } from "@/api/tags";
 import { Plus, Tag, X } from "@/components/Icons";
-import { Input } from "@/components/ui/input";
+import {
+  BottomSheet,
+  BottomSheetContent,
+  BottomSheetFlatList,
+  BottomSheetHeader,
+  BottomSheetOpenTrigger,
+  BottomSheetTextInput,
+  useBottomSheet,
+} from "@/components/ui/bottom-sheet";
 import { Text } from "@/components/ui/text";
 import { matchTags } from "@/lib/tag-match";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
+import type { ListRenderItemInfo } from "react-native";
 import { Pressable, View } from "react-native";
 
-const MAX_SUGGESTIONS = 6;
+type Row =
+  | { kind: "tag"; name: string }
+  | { kind: "create"; name: string }
+  | { kind: "empty" };
 
 /**
- * Tag combobox — RN port of
+ * Tag picker — RN port of
  * `frontend/src/components/tasks/form/tag-field.tsx` (dropdown of existing
  * tags + "Create '#x'"). Same `string[]` of tag NAMES as the form value,
  * same "pending" (dashed chip) treatment for a name that doesn't exist yet.
  *
  * Unlike the web version this doesn't route through cmdk — see
  * `lib/tag-match.ts` for why (fixes `mockups/feedback.md` item 5's fuzzy-
- * match bug rather than porting it). The dropdown itself is a plain absolute
- * `View` (mirrors the mockup's `absolute inset-x-0 top-full` popover)
- * instead of a nested bottom sheet, since it needs to stay anchored right
- * under the input as the user types — a full sheet would be overkill here.
+ * match bug rather than porting it).
+ *
+ * v2: was originally an absolute-positioned `View` popover anchored under
+ * the input (mirroring the web mockup's `absolute inset-x-0 top-full`
+ * dropdown), opening on focus. That's not a mobile-friendly pattern — no
+ * click-outside-to-dismiss, awkward with the on-screen keyboard, and it sat
+ * inside the same `BottomSheetScrollView` as every other field, focus-
+ * trapping and layout-thrashing against the surrounding sheet. Replaced with
+ * the nested-bottom-sheet picker every other field-with-a-list in this app
+ * already uses (`InlineTimeField`, `components/ui/combobox.tsx`) — a tap
+ * opens a second sheet stacked on the create/edit sheet (a supported
+ * `@gorhom/bottom-sheet` pattern under the one shared
+ * `BottomSheetModalProvider` in `app/_layout.tsx`), with its own search
+ * input and full-height list instead of a cramped 6-row popover.
  */
 export function TagAutocomplete({
   value,
@@ -33,7 +55,7 @@ export function TagAutocomplete({
 }) {
   const [existing, setExisting] = useState<string[]>([]);
   const [query, setQuery] = useState("");
-  const [focused, setFocused] = useState(false);
+  const bottomSheet = useBottomSheet();
 
   useEffect(() => {
     listTags()
@@ -46,7 +68,7 @@ export function TagAutocomplete({
   const options = useMemo(() => {
     const selected = new Set(value.map((v) => v.toLowerCase()));
     const pool = existing.filter((name) => !selected.has(name.toLowerCase()));
-    return matchTags(trimmed, pool).slice(0, MAX_SUGGESTIONS);
+    return matchTags(trimmed, pool);
   }, [existing, value, trimmed]);
 
   const canCreate =
@@ -54,23 +76,25 @@ export function TagAutocomplete({
     !value.some((t) => t.toLowerCase() === trimmed.toLowerCase()) &&
     !existing.some((t) => t.toLowerCase() === trimmed.toLowerCase());
 
-  const showDropdown =
-    focused &&
-    !disabled &&
-    trimmed.length > 0 &&
-    (options.length > 0 || canCreate);
-
   function add(name: string) {
     const clean = name.trim();
     if (!clean || value.some((t) => t.toLowerCase() === clean.toLowerCase()))
       return;
     onChange([...value, clean]);
+    // Left open so the user can add several tags in one visit — dismissed
+    // via the sheet header's close button, not on every pick.
     setQuery("");
   }
 
   function remove(tag: string) {
     onChange(value.filter((t) => t !== tag));
   }
+
+  const rows: Row[] = [
+    ...options.map((name): Row => ({ kind: "tag", name })),
+    ...(canCreate ? [{ kind: "create", name: trimmed } as Row] : []),
+  ];
+  if (rows.length === 0) rows.push({ kind: "empty" });
 
   return (
     <View className="gap-2">
@@ -113,60 +137,95 @@ export function TagAutocomplete({
         </View>
       )}
 
-      <View className="relative">
-        <View
-          className={cn(
-            "h-[46px] flex-row items-center gap-2 rounded-[13px] border border-input bg-card px-[13px]",
-            focused && "border-ring ring-[3px] ring-ring/20",
-          )}
-        >
-          <Tag size={16} className="shrink-0 text-muted-foreground" />
-          <Input
-            editable={!disabled}
-            value={query}
-            onChangeText={setQuery}
-            onFocus={() => setFocused(true)}
-            // Delay so a tap on a dropdown row still registers before it
-            // unmounts on blur.
-            onBlur={() => setTimeout(() => setFocused(false), 150)}
-            placeholder="Add a tag…"
-            className="h-auto native:h-auto flex-1 border-0 bg-transparent px-0"
-          />
-        </View>
-
-        {showDropdown && (
-          <View className="absolute inset-x-0 top-full z-20 mt-1.5 overflow-hidden rounded-[13px] border border-border bg-popover shadow-lg">
-            {options.map((name, i) => (
-              <Pressable
-                key={name}
-                onPress={() => add(name)}
-                className={cn(
-                  "flex-row items-center gap-[9px] px-[13px] py-[11px]",
-                  i > 0 && "border-t border-border",
-                  i === 0 && "bg-brand-orange/12",
-                )}
-              >
-                <Tag size={15} className="shrink-0 text-muted-foreground" />
-                <Text className="flex-1 text-sm text-foreground">#{name}</Text>
-              </Pressable>
-            ))}
-            {canCreate && (
-              <Pressable
-                onPress={() => add(trimmed)}
-                className={cn(
-                  "flex-row items-center gap-[9px] px-[13px] py-[11px]",
-                  options.length > 0 && "border-t border-border",
-                )}
-              >
-                <Plus size={15} className="shrink-0 text-muted-foreground" />
-                <Text className="text-sm font-semibold text-brand-orange">
-                  Create "{trimmed}"
-                </Text>
-              </Pressable>
+      <BottomSheet>
+        <BottomSheetOpenTrigger asChild disabled={disabled}>
+          <Pressable
+            className={cn(
+              "h-[46px] flex-row items-center gap-2 rounded-[13px] border border-input bg-card px-[13px]",
+              disabled && "opacity-50",
             )}
+          >
+            <Tag size={16} className="shrink-0 text-muted-foreground" />
+            <Text className="flex-1 text-base text-muted-foreground">
+              Add a tag…
+            </Text>
+            <Plus size={16} className="shrink-0 text-muted-foreground" />
+          </Pressable>
+        </BottomSheetOpenTrigger>
+
+        <BottomSheetContent
+          ref={bottomSheet.ref}
+          onDismiss={() => setQuery("")}
+        >
+          <BottomSheetHeader>
+            <Text className="text-lg font-bold text-foreground">
+              Add tags
+            </Text>
+          </BottomSheetHeader>
+
+          <View className="px-4 pb-3 pt-3.5">
+            <BottomSheetTextInput
+              autoFocus
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search or create a tag…"
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                if (canCreate) add(trimmed);
+              }}
+              className="h-12 text-base"
+            />
           </View>
-        )}
-      </View>
+
+          <BottomSheetFlatList
+            data={rows}
+            keyExtractor={(item, i) => {
+              const row = item as Row;
+              return row.kind === "empty" ? "empty" : `${row.kind}:${row.name}`;
+            }}
+            className="px-4"
+            keyboardShouldPersistTaps="handled"
+            renderItem={({ item }: ListRenderItemInfo<unknown>) => {
+              const row = item as Row;
+              if (row.kind === "empty") {
+                return (
+                  <View className="items-center px-3 py-6">
+                    <Text className="text-sm text-muted-foreground">
+                      {trimmed
+                        ? "No matching tags."
+                        : "No tags yet — type to create one."}
+                    </Text>
+                  </View>
+                );
+              }
+              if (row.kind === "create") {
+                return (
+                  <Pressable
+                    onPress={() => add(row.name)}
+                    className="mb-2 flex-row items-center gap-2.5 rounded-xl border border-border bg-card px-4 py-3.5"
+                  >
+                    <Plus size={16} className="shrink-0 text-muted-foreground" />
+                    <Text className="flex-1 text-[15px] font-semibold text-brand-orange">
+                      Create "{row.name}"
+                    </Text>
+                  </Pressable>
+                );
+              }
+              return (
+                <Pressable
+                  onPress={() => add(row.name)}
+                  className="mb-2 flex-row items-center gap-2.5 rounded-xl border border-border bg-card px-4 py-3.5"
+                >
+                  <Tag size={16} className="shrink-0 text-muted-foreground" />
+                  <Text className="flex-1 text-[15px] text-foreground">
+                    #{row.name}
+                  </Text>
+                </Pressable>
+              );
+            }}
+          />
+        </BottomSheetContent>
+      </BottomSheet>
 
       <Text className="text-xs text-muted-foreground">
         Tags help our system learn your preferences and personalize your

@@ -241,6 +241,77 @@ calling `bottomSheet.open()`/`.close()` synchronously wherever the old code call
 was deleted — don't reintroduce an effect-driven `open`-prop bridge for a new sheet; use
 `useBottomSheet()` + an imperative handle instead.
 
+### `react-native-webview` has no real web implementation — gate WebView-backed UI by `Platform.OS`
+
+**Symptom:** on the web dev target only, `DescriptionField`'s rich-text editor
+(`components/tasks/form/description-field.tsx`, `@10play/tentap-editor`) grew unboundedly tall
+with no content typed, and unrelated focus interactions elsewhere in the same sheet threw
+`Error: Couldn't find a navigation context`.
+
+**Cause:** `react-native-webview@13.12.5`'s own package ships a static "not supported" stub
+(`node_modules/react-native-webview/src/WebView.tsx`, its comment literally names "Expo SDK
+'web' platform") that Metro's platform-extension resolution falls back to for `platform=web`,
+since the package has `.ios`/`.android`/`.macos`/`.windows` variants but no `.web` — confirmed by
+grepping the actual served Metro web bundle for that stub's literal text. `@10play/tentap-editor`'s
+`RichText` (and its `dynamicHeight` ResizeObserver-based height-reporting) never runs on web as a
+result. `DescriptionField` is now a `Platform.OS` switch: native renders the full
+`DescriptionFieldEditor` (WYSIWYG, unaffected), web renders `DescriptionFieldWeb`, a plain
+`Textarea` bound to the same HTML-string `value`/`onChange` contract, capped with a NativeWind
+`max-h-*` so it can't grow unbounded either way. The native editor's injected stylesheet
+(`injectContentStyles`) also got two independent fixes while investigating: `padding` was
+previously applied to both `body` *and* `.ProseMirror` (a descendant of `body`), doubling the
+visual inset — now only `.ProseMirror` gets it; and `.ProseMirror` now gets a `max-height` +
+`overflow-y: auto` cap, since the bundled editor HTML's base stylesheet sets `.ProseMirror {
+min-height: 100%; overflow: visible }` unconditionally (including in `dynamicHeight` mode, where
+the containing block's own height is `unset`/auto) — a circular percentage-height relationship
+that a non-spec-compliant WebView engine could resolve into runaway growth on native, which the
+cap now bounds regardless of engine.
+
+**If you add another `react-native-webview`-backed feature:** don't assume it degrades gracefully
+on web on its own — either gate it by `Platform.OS !== "web"` with a real fallback (as above) or
+confirm the specific library you're wrapping ships its own `.web` implementation.
+
+### `@gorhom/bottom-sheet` components must come from `@/components/ui/bottom-sheet`, never straight from the package
+
+**Symptom:** on the web dev target only, opening/interacting with a task sheet
+(`CreateTaskSheet`/`EditTaskSheet`/`ChangeDurationSheet`) could destabilize the surrounding
+screen — up to and including an unrelated `Error: Couldn't find a navigation context` thrown from
+deep inside `@react-navigation/core` while focusing a plain `TextInput` (`TagAutocomplete`)
+elsewhere in the same sheet.
+
+**Cause:** `components/ui/bottom-sheet.tsx` (web) reimplements the `BottomSheet*` API on the
+`Dialog` primitive (Radix) — deliberately, since `BottomSheetContent` there is **not** a real
+`@gorhom/bottom-sheet` `<BottomSheetModal>` instance (see that file's header comment). The three
+task sheets nonetheless imported `BottomSheetScrollView` **directly from `@gorhom/bottom-sheet`**
+and rendered it as their scrollable body — but gorhom's own `BottomSheetScrollView` reads
+`useBottomSheetInternal()`, a context only a real gorhom `<BottomSheet>`/`<BottomSheetModal>`
+instance provides. On native this was always fine (`bottom-sheet.native.tsx`'s `BottomSheetContent`
+renders a real one), but on web it meant every task sheet's *entire body* — `TaskSheetFields`,
+`TagAutocomplete`, `DescriptionField`, all of it — mounted inside a component that unconditionally
+throws `"'useBottomSheetInternal' cannot be used out of the BottomSheet!"`, the kind of
+render-time failure that can leave the surrounding tree (including sibling navigator state) in an
+inconsistent state, plausibly surfacing as an unrelated-looking error on the next re-render.
+
+**Fix:** `@/components/ui/bottom-sheet` now exports `BottomSheetScrollView` on both platforms —
+native re-exports gorhom's real component unchanged (context is always satisfied there), web gets
+a plain `ScrollView` wrapper (mirroring the existing `BottomSheetFlatList` pattern in the same
+file, which already avoided this trap). `create-task-sheet.tsx`/`edit-task-sheet.tsx`/
+`change-duration-sheet.tsx` now import it from there instead of `@gorhom/bottom-sheet`. **Don't
+import anything from `@gorhom/bottom-sheet` directly for use inside a sheet's body** — go through
+`@/components/ui/bottom-sheet` (adding a wrapper there if one's missing) so both platforms resolve
+to something that actually works; a bare `@gorhom/bottom-sheet` import type-checks fine (native's
+`moduleSuffixes` resolution masks the mismatch — see the next paragraph) but silently breaks on
+web only.
+
+Separately, note `components/primitives/bottomSheet/bottom-sheet.native.tsx` is an orphaned
+duplicate of `components/ui/bottom-sheet.native.tsx` (predates the `setRefs`-callback-ref fix
+described above, and nothing imports it) and `components/settings/ThemeItem.tsx` imports from
+`@/components/primitives/bottomSheet/bottom-sheet.native` with the `.native` suffix spelled out
+explicitly in the specifier — which makes Metro resolve that exact file on *every* platform,
+web included, bypassing the web/native split this section describes. Neither was touched here
+(out of scope for the task-sheet bug this section documents), but both are worth cleaning up in a
+follow-up.
+
 ## Local development
 
 ```bash

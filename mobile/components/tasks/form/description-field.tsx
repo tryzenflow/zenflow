@@ -14,6 +14,7 @@ import {
 } from "@/components/Icons";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
@@ -33,7 +34,7 @@ import {
   useEditorBridge,
 } from "@10play/tentap-editor";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, View } from "react-native";
+import { Platform, Pressable, View } from "react-native";
 
 // Amber-200-ish — same "Warm Sunrise" family as the web editor's default
 // (unconfigured) Tiptap `Highlight` mark, which renders browser-default
@@ -91,8 +92,77 @@ const EDITOR_EXTENSIONS = [
  * `EditTaskSheet`'s `form.reset()` after `getTaskDetails()` resolves) are
  * detected against a "last emitted" ref and pushed into the editor via
  * `editor.setContent(...)`.
+ *
+ * WEB GAP (deliberate): `react-native-webview` ships **no real web
+ * implementation** — `node_modules/react-native-webview/src/WebView.tsx`
+ * (the file Metro's platform-extension resolution falls back to for
+ * `platform=web`, since the package has `.ios`/`.android`/`.macos`/
+ * `.windows` variants but no `.web`) is a static stub whose own comment
+ * says it's "to render something for unsupported platforms, like for
+ * example Expo SDK 'web' platform" — confirmed by grepping the actual
+ * Metro web bundle for its literal text. So on `pnpm --filter mobile
+ * dev:web` (this repo's only available dev target — see CLAUDE.md), the
+ * WYSIWYG `RichText`/`useEditorBridge` machinery below never mounts a real
+ * WebView, never loads `editorHtml`'s ProseMirror document, and never runs
+ * the ResizeObserver-driven `dynamicHeight` height-reporting this file
+ * depends on — any layout instability reported against the web target
+ * can't be that document's CSS misbehaving (there's no document to
+ * misbehave). `DescriptionField` below is a thin `Platform.OS` switch so
+ * web dev gets an honest, bounded plain-text fallback (`DescriptionFieldWeb`)
+ * instead of either the confusing dummy stub or an unbounded layout —
+ * native (the real target platform) still gets the full editor via
+ * `DescriptionFieldEditor`, unaffected by this gate.
  */
-export function DescriptionField({
+export function DescriptionField(props: {
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  if (Platform.OS === "web") {
+    return <DescriptionFieldWeb {...props} />;
+  }
+  return <DescriptionFieldEditor {...props} />;
+}
+
+/**
+ * Web-dev fallback — plain multiline text bound to the same HTML-string
+ * `value`/`onChange` contract as the real editor (round-trips as-is, tags
+ * and all; this is a dev-time convenience for exercising create/edit
+ * end-to-end on the only locally-runnable target, not a second implementation
+ * of the editor). No toolbar, no WebView, no unbounded growth risk — see the
+ * WEB GAP note above for why this exists instead of trying to run the real
+ * editor here.
+ */
+function DescriptionFieldWeb({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <View className="gap-1.5">
+      <Textarea
+        editable={!disabled}
+        value={value}
+        onChangeText={onChange}
+        placeholder="Add details, links, or context…"
+        numberOfLines={5}
+        className="max-h-[220px] min-h-[110px] text-sm"
+      />
+      <Text className="text-[12.5px] leading-snug text-muted-foreground">
+        Rich text formatting (bold, links, lists, …) isn&apos;t available in the
+        web dev preview — `react-native-webview` has no web implementation, so
+        this is a plain-text fallback. The full toolbar editor runs on
+        iOS/Android.
+      </Text>
+    </View>
+  );
+}
+
+function DescriptionFieldEditor({
   value,
   onChange,
   disabled,
@@ -136,11 +206,36 @@ export function DescriptionField({
   // `frontend/src/hooks/use-editor.ts`'s content-area classes
   // (`text-sm px-3 py-2`) and to force the text color to flip with the OS
   // color scheme, since nothing else does.
+  //
+  // `padding` is applied to `.ProseMirror` only, not `body` too — the two
+  // previously both got `padding: 8px 12px`, and since `.ProseMirror` is a
+  // descendant of `body` (not a replacement for it), that doubled the visual
+  // inset on every edge. `body` only needs the matching background color so
+  // there's no color seam around the (now singly-padded) content area.
+  //
+  // `max-height`/`overflow-y: auto` on `.ProseMirror` is a deliberate cap,
+  // not part of the original design: the bundled editor HTML's base
+  // stylesheet (`simpleWebEditor/index.html`) sets `.ProseMirror { min-height:
+  // 100%; overflow: visible }` unconditionally, including in `dynamicHeight`
+  // mode where the containing block's own height is `unset` (auto/content-
+  // sized) — a circular percentage-height relationship. Spec-compliant engines
+  // resolve `min-height: 100%` against an indefinite containing block as 0
+  // (CSS2.1 §10.5), but WebView engines vary by OS/OEM version, and this
+  // library's own `dynamicHeight` mechanism (a ResizeObserver reporting
+  // `.ProseMirror`'s measured height back to native, which then resizes the
+  // WebView's native container to match) would amplify any non-zero
+  // resolution every tick. Capping `.ProseMirror`'s own rendered height here
+  // makes the *measured* value bounded regardless of how a given engine
+  // resolves the percentage, so the reported `dynamicHeight` can never run
+  // away — content beyond the cap scrolls inside the editor's own document
+  // instead (the WebView's own outer scroll stays disabled, per `RichText`'s
+  // hardcoded `scrollEnabled={false}`, so `BottomSheetScrollView` remains the
+  // single scroll owner up to this cap).
   function injectContentStyles() {
     const bg = isDarkColorScheme ? "rgb(29 26 23)" : "rgb(255 255 255)";
     const fg = isDarkColorScheme ? "rgb(250 250 249)" : "rgb(28 25 23)";
     editor.injectCSS(
-      `body, .ProseMirror { background-color: ${bg}; color: ${fg}; font-size: 14px; padding: 8px 12px; line-height: 1.5; }`,
+      `body { background-color: ${bg}; } .ProseMirror { background-color: ${bg}; color: ${fg}; font-size: 14px; padding: 8px 12px; line-height: 1.5; max-height: 320px; overflow-y: auto; }`,
       "description-field-theme",
     );
   }
@@ -290,7 +385,12 @@ export function DescriptionField({
         </View>
       )}
 
-      <View className="min-h-[110px] w-full overflow-hidden rounded-[13px] border border-input bg-card">
+      {/* `max-h` is a second, outer safety net alongside the injected
+          `.ProseMirror` cap above (`injectContentStyles`) — belt-and-suspenders
+          in case the WebView's native container ever reports a height past
+          that cap for some other reason; `overflow-hidden` here just clips
+          the render, it doesn't bound layout on its own. */}
+      <View className="max-h-[336px] min-h-[110px] w-full overflow-hidden rounded-[13px] border border-input bg-card">
         <RichText editor={editor} onLoad={injectContentStyles} />
       </View>
 

@@ -7,6 +7,15 @@ import {
   BottomSheetFlatList as GBottomSheetFlatList,
   BottomSheetFooter as GBottomSheetFooter,
   BottomSheetModal,
+  // Re-exported as-is below (not wrapped) — on native, `BottomSheetContent`
+  // here always renders a real `@gorhom/bottom-sheet` `<BottomSheetModal>`,
+  // so `BottomSheetScrollView`'s own `useBottomSheetInternal()` context read
+  // is always satisfied. Re-exporting it from this file (instead of every
+  // caller importing it straight from `@gorhom/bottom-sheet`) just keeps one
+  // import path (`@/components/ui/bottom-sheet`) that resolves correctly on
+  // both platforms — see `bottom-sheet.tsx` (web)'s version of this export
+  // for why that matters there.
+  BottomSheetScrollView,
   BottomSheetTextInput as GBottomSheetTextInput,
   BottomSheetView as GBottomSheetView,
   useBottomSheetModal,
@@ -397,6 +406,7 @@ export {
   BottomSheetFooter,
   BottomSheetHeader,
   BottomSheetOpenTrigger,
+  BottomSheetScrollView,
   BottomSheetTextInput,
   BottomSheetView,
   useBottomSheet,

@@ -3,6 +3,7 @@ import {
   BottomSheet,
   BottomSheetContent,
   BottomSheetFooter,
+  BottomSheetScrollView,
   useBottomSheet,
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,6 @@ import { useToast } from "@/components/ui/toast";
 import { useUserStore } from "@/hooks/use-user-store";
 import { cn } from "@/lib/utils";
 import type { BottomSheetFooterProps } from "@gorhom/bottom-sheet";
-import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { formatMinutes, zonedDate } from "@zenflow/core";
 import { DAILY_HORIZON, SLOT_MINUTES } from "@zenflow/shared";
 import { isAxiosError } from "axios";

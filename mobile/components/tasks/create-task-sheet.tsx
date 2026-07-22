@@ -3,6 +3,7 @@ import {
   BottomSheet,
   BottomSheetContent,
   BottomSheetFooter,
+  BottomSheetScrollView,
   useBottomSheet,
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,6 @@ import { useTaskForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
 import { placementToastMessage } from "@/lib/task-toasts";
 import type { BottomSheetFooterProps } from "@gorhom/bottom-sheet";
-import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import type { TaskFormValues } from "@zenflow/core";
 import { isAxiosError } from "axios";
 import { format } from "date-fns";
