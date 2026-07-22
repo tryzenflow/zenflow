@@ -1,5 +1,5 @@
 import { listTags } from "@/api/tags";
-import { Check, Plus, Tag, X } from "@/components/Icons";
+import { Plus, Tag, X } from "@/components/Icons";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { matchTags } from "@/lib/tag-match";
@@ -55,7 +55,10 @@ export function TagAutocomplete({
     !existing.some((t) => t.toLowerCase() === trimmed.toLowerCase());
 
   const showDropdown =
-    focused && !disabled && (options.length > 0 || canCreate);
+    focused &&
+    !disabled &&
+    trimmed.length > 0 &&
+    (options.length > 0 || canCreate);
 
   function add(name: string) {
     const clean = name.trim();
@@ -111,7 +114,12 @@ export function TagAutocomplete({
       )}
 
       <View className="relative">
-        <View className="h-[46px] flex-row items-center gap-2 rounded-[13px] border border-input bg-card px-[13px]">
+        <View
+          className={cn(
+            "h-[46px] flex-row items-center gap-2 rounded-[13px] border border-input bg-card px-[13px]",
+            focused && "border-ring ring-[3px] ring-ring/20",
+          )}
+        >
           <Tag size={16} className="shrink-0 text-muted-foreground" />
           <Input
             editable={!disabled}
@@ -127,7 +135,7 @@ export function TagAutocomplete({
         </View>
 
         {showDropdown && (
-          <View className="absolute inset-x-0 top-[52px] z-20 overflow-hidden rounded-[13px] border border-border bg-popover shadow-lg">
+          <View className="absolute inset-x-0 top-full z-20 mt-1.5 overflow-hidden rounded-[13px] border border-border bg-popover shadow-lg">
             {options.map((name, i) => (
               <Pressable
                 key={name}
@@ -135,11 +143,11 @@ export function TagAutocomplete({
                 className={cn(
                   "flex-row items-center gap-[9px] px-[13px] py-[11px]",
                   i > 0 && "border-t border-border",
+                  i === 0 && "bg-brand-orange/12",
                 )}
               >
                 <Tag size={15} className="shrink-0 text-muted-foreground" />
                 <Text className="flex-1 text-sm text-foreground">#{name}</Text>
-                <Check size={14} className="text-transparent" />
               </Pressable>
             ))}
             {canCreate && (

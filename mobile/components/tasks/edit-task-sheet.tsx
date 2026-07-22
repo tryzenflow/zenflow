@@ -192,9 +192,6 @@ export const EditTaskSheet = forwardRef<
               {task && (
                 <Text className="mt-[3px] text-[13px] text-muted-foreground">
                   Created {format(new Date(task.createdAt), "MMM d")}
-                  {!task.manuallyMoved
-                    ? " · auto-scheduled"
-                    : " · manually placed"}
                 </Text>
               )}
             </View>

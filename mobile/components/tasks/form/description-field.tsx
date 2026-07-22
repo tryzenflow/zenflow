@@ -129,6 +129,27 @@ export function DescriptionField({
 
   const state = useBridgeState(editor);
 
+  // The bundled editor HTML ships no padding and no explicit font-size/color
+  // on `.ProseMirror` — `theme.webview.backgroundColor` above only colors the
+  // WebView's own background, not the document inside it. Inject a small
+  // stylesheet (replacing the same `tag` keeps this idempotent) to match
+  // `frontend/src/hooks/use-editor.ts`'s content-area classes
+  // (`text-sm px-3 py-2`) and to force the text color to flip with the OS
+  // color scheme, since nothing else does.
+  function injectContentStyles() {
+    const bg = isDarkColorScheme ? "rgb(29 26 23)" : "rgb(255 255 255)";
+    const fg = isDarkColorScheme ? "rgb(250 250 249)" : "rgb(28 25 23)";
+    editor.injectCSS(
+      `body, .ProseMirror { background-color: ${bg}; color: ${fg}; font-size: 14px; padding: 8px 12px; line-height: 1.5; }`,
+      "description-field-theme",
+    );
+  }
+
+  useEffect(() => {
+    injectContentStyles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDarkColorScheme]);
+
   // Resync from the outside (e.g. `EditTaskSheet`'s `form.reset()` once
   // `getTaskDetails()` resolves) without fighting the editor's own
   // in-progress edits — only push `setContent` when `value` changed for a
@@ -269,8 +290,8 @@ export function DescriptionField({
         </View>
       )}
 
-      <View className="min-h-[110px] overflow-hidden rounded-[13px] border border-input bg-card">
-        <RichText editor={editor} />
+      <View className="min-h-[110px] w-full overflow-hidden rounded-[13px] border border-input bg-card">
+        <RichText editor={editor} onLoad={injectContentStyles} />
       </View>
 
       <Text className="text-[12.5px] leading-snug text-muted-foreground">
