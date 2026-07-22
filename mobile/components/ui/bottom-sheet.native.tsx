@@ -49,14 +49,20 @@ type BottomSheetRef = React.ElementRef<typeof View>;
 type BottomSheetProps = React.ComponentPropsWithoutRef<typeof View>;
 
 interface BottomSheetContext {
-  sheetRef: React.RefObject<BottomSheetModal>;
+  // `BottomSheetModal` is a generic type alias in @gorhom/bottom-sheet v5
+  // (`type BottomSheetModal<T = never> = BottomSheetModalMethods<T>`), not a
+  // component class — `React.ElementRef<typeof BottomSheetModal>` no longer
+  // resolves cleanly against it, so the ref is typed against the imperative
+  // methods interface directly instead (same shape `BottomSheetModal<never>`
+  // aliases to).
+  sheetRef: React.RefObject<BottomSheetModalMethods | null>;
 }
 
 const BottomSheetContext = React.createContext({} as BottomSheetContext);
 
 const BottomSheet = React.forwardRef<BottomSheetRef, BottomSheetProps>(
   ({...props}, ref) => {
-    const sheetRef = React.useRef<BottomSheetModal>(null);
+    const sheetRef = React.useRef<BottomSheetModalMethods>(null);
 
     return (
       <BottomSheetContext.Provider value={{sheetRef: sheetRef}}>
@@ -78,7 +84,7 @@ function useBottomSheetContext() {
 
 const CLOSED_INDEX = -1;
 
-type BottomSheetContentRef = React.ElementRef<typeof BottomSheetModal>;
+type BottomSheetContentRef = BottomSheetModalMethods;
 
 type BottomSheetContentProps = Omit<
   React.ComponentPropsWithoutRef<typeof BottomSheetModal>,

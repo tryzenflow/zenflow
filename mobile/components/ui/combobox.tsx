@@ -35,6 +35,8 @@ const Combobox = React.forwardRef<
     defaultSelectedItem?: ComboboxOption | null;
     selectedItem?: ComboboxOption | null;
     onSelectedItemChange?: (option: ComboboxOption | null) => void;
+    /** Extra className applied to the trigger's label text. */
+    textClass?: string;
   }
 >(
   (

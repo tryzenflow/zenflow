@@ -1,9 +1,8 @@
 import { cva, type VariantProps } from "class-variance-authority";
-import { Link } from "expo-router";
+import { Link, type Href } from "expo-router";
 import type { LinkProps } from "expo-router/build/link/Link";
-import type { ExpoRouter } from "expo-router/types/expo-router";
 import type React from "react";
-import type { ElementType } from "react";
+import type { ElementType, ReactElement } from "react";
 import {
   Pressable,
   type PressableProps,
@@ -42,8 +41,8 @@ interface ItemProps {
 type ListItemProps = VariantProps<typeof listItemTextVariants> & {
   label: string;
   description?: string;
-  itemLeft?: (itemProps: ItemProps) => JSX.Element;
-  itemRight?: (itemProps: ItemProps) => JSX.Element;
+  itemLeft?: (itemProps: ItemProps) => ReactElement;
+  itemRight?: (itemProps: ItemProps) => ReactElement;
   onPress?: () => void;
   /**
    * If true, a detail arrow will appear on the item.
@@ -52,7 +51,7 @@ type ListItemProps = VariantProps<typeof listItemTextVariants> & {
   /**
    * Convert the default Pressable with a Link component.
    */
-  href?: ExpoRouter.Href;
+  href?: Href;
   className?: string;
 } & (ViewProps | PressableProps | LinkProps);
 
@@ -84,11 +83,21 @@ const ListItem: React.FC<ListItemProps> = ({
     return null;
   };
   const pressable = props?.onPress || href;
+  // `Component` only ever renders as `Pressable` or `View` here — the `href`
+  // case is handled separately below by wrapping `body` in a `<Link asChild>`
+  // — so the element type is narrowed to just those two (dropping `LinkProps`
+  // from the union) rather than requiring every render site to also supply
+  // `href`.
   const Component = (pressable ? Pressable : View) as ElementType<
-    ViewProps | PressableProps | LinkProps
+    ViewProps | PressableProps
   >;
 
   const body = (
+    // `props` is still typed against the `ViewProps | PressableProps | LinkProps`
+    // union from the outer `ListItemProps` intersection (`href` was destructured
+    // off above, but the rest of that union's members don't collapse cleanly
+    // onto the narrowed `Component` element type) — same escape hatch already
+    // used for the analogous `React.cloneElement<any>` pattern in `list.tsx`.
     <Component
       className={cn(
         "flex-row items-center justify-between w-full px-4 py-3 border-b border-border bg-card",
@@ -98,7 +107,7 @@ const ListItem: React.FC<ListItemProps> = ({
       )}
       accessibilityRole={pressable ? "button" : "none"}
       accessibilityLabel={`${label}${description ? `, ${description}` : ""}`}
-      {...props}
+      {...(props as any)}
     >
       {itemLeft && (
         <View className="mr-3">

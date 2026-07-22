@@ -470,7 +470,6 @@ const FormSelect = React.forwardRef<
     "open" | "onOpenChange" | "onValueChange"
   >
 >(({ label, description, onChange, value, ...props }, ref) => {
-  const [open, setOpen] = React.useState(false);
   const {
     error,
     formItemNativeID,
@@ -489,8 +488,6 @@ const FormSelect = React.forwardRef<
             : `${formDescriptionNativeID} ${formMessageNativeID}`
         }
         aria-invalid={!!error}
-        open={open}
-        onOpenChange={setOpen}
         value={
           value
             ? { label: value?.label ?? "", value: value?.value ?? "" }

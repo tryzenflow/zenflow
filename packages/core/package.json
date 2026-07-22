@@ -23,11 +23,13 @@
   },
   "peerDependencies": {
     "date-fns": "^4.1.0",
-    "date-fns-tz": "^3.2.0"
+    "date-fns-tz": "^3.2.0",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "date-fns": "^4.1.0",
     "date-fns-tz": "^3.2.0",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "zod": "^4.1.12"
   }
 }

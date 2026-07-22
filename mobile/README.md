@@ -15,10 +15,10 @@ replacement for it. Part of the [Zenflow monorepo](../README.md).
 | Fonts | Geist (all weights) loaded locally from `assets/fonts/` via `expo-font` — see [Fonts](#fonts--font-weights) |
 | Language | TypeScript (strict, `@/*` → repo-relative alias) |
 | State | Zustand (`hooks/use-user-store.ts`, mirrors the web user store) |
-| Forms | React Hook Form + Zod (`@hookform/resolvers`) — note-worthy version pin, see [Known pitfalls](#known-pitfalls) |
+| Forms | React Hook Form + Zod (`@hookform/resolvers`) — note-worthy version pin, see [Known pitfalls](#known-pitfalls). `taskSchema`/`TaskFormValues`/`placementQualifier` live in `@zenflow/core` (`packages/core/src/tasks.ts`), shared with `frontend/`'s equivalent (currently a parallel, hand-synced copy — see Phase 5 in `docs/react-native-migration.md`) |
 | HTTP | axios (`api/`), cookie-based session — see [Auth & session](#auth--session) |
-| Bottom sheets | `@gorhom/bottom-sheet` |
-| Formatter / linter | [Biome](https://biomejs.dev) (not ESLint/Prettier — those are the web app's tooling) |
+| Bottom sheets | `@gorhom/bottom-sheet` **v5** |
+| Formatter / linter | [Biome](https://biomejs.dev) (not ESLint/Prettier — those are the web app's tooling). **Not currently an installed dependency anywhere in the repo** — `pnpm --filter mobile format` fails with "'biome' is not recognized" until `@biomejs/biome` is added as a devDependency; `pnpm dlx @biomejs/biome@1.5.3 check --apply .` works as a one-off in the meantime (matches the `biome.json` `$schema` version) |
 
 ## Project structure
 
@@ -30,7 +30,11 @@ mobile/
 │   ├── (auth)/login.tsx       # email + OTP code, 2-stage login
 │   ├── (onboarding)/index.tsx # work hours / days / timezone / duration-mode wizard
 │   └── (app)/                 # tab navigator: index (Day), week, month, settings
-│       ├── index.tsx, week.tsx, month.tsx   # placeholder stubs — calendar UI is future work
+│       ├── index.tsx          # Day — still a Phase 2 grid stub, but with the task sheets wired
+│       │                      # against a plain task list (tap → edit, long-press → resize,
+│       │                      # long-press empty area / FAB → create); see Phase 5 in
+│       │                      # docs/react-native-migration.md
+│       ├── week.tsx, month.tsx  # placeholder stubs — calendar UI is future work
 │       └── settings.tsx       # fully built: profile, theme, timezone, duration mode, insights
 ├── api/                       # axios endpoint functions (auth, tasks, tags, users) + base.ts
 ├── components/
@@ -38,13 +42,19 @@ mobile/
 │   ├── primitives/            # headless behavior (portal, slot, useControllableState, …),
 │   │                          # each with a `.web.tsx` variant where native/web diverge
 │   ├── onboarding/, settings/ # screen-specific composite components
+│   ├── tasks/                 # CreateTaskSheet / EditTaskSheet / ChangeDurationSheet
+│   │   └── form/               # duration stepper/slider, deadline chip row, tag autocomplete,
+│   │                           # description field + floating toolbar — see task-sheet-fields.tsx
 │   └── tab-icons.tsx, Icons.tsx, logo.tsx, ThemeToggle.tsx
-├── hooks/                      # use-user-store (Zustand), use-local-storage
+├── hooks/                      # use-user-store (Zustand), use-local-storage, use-task-form
+│                                # (taskSchema from @zenflow/core), use-controlled-bottom-sheet
 ├── lib/
 │   ├── api-client.ts           # cookie-aware axios instance — see Auth & session
 │   ├── session.ts               # SecureStore-backed cache (user + raw session cookie)
 │   ├── constants.ts             # NAV_THEME — hand-maintained hex mirror of global.css tokens
 │   ├── useColorScheme.tsx, android-navigation-bar.ts
+│   ├── tag-match.ts             # tag-autocomplete matching (prefix/substring, not cmdk fuzzy)
+│   ├── task-toasts.ts           # create/edit placement toast copy (success/conflict)
 │   └── utils.ts                # cn() (clsx + tailwind-merge)
 ├── plugins/withAndroidBuildFixes.js  # Expo config plugin: Gradle/Kotlin build fixes
 ├── global.css / tailwind.config.ts / metro.config.js / babel.config.js  # NativeWind wiring
@@ -62,7 +72,8 @@ call):
 |-------|-----------|-------|
 | `(auth)` | `login.tsx` | Built — email stage → OTP verification stage |
 | `(onboarding)` | `index.tsx` | Built — work hours / work days / timezone / duration-adjustment mode wizard |
-| `(app)` | `index.tsx` (Day), `week.tsx`, `month.tsx` | **Placeholder stubs** — the gesture-first calendar timeline is future work |
+| `(app)` | `index.tsx` (Day) | **Grid still a Phase 2 stub**, but the task sheets (create/edit/change-duration — RN migration Phase 5, issue #20) are wired against a plain task list in the meantime: tap a task → edit, long-press a task → change duration, long-press the empty area or the FAB → create |
+| `(app)` | `week.tsx`, `month.tsx` | **Placeholder stubs** — calendar UI is future work |
 | `(app)` | `settings.tsx` | Built — profile row, theme toggle, timezone picker, duration-mode picker, insights panel |
 
 `AuthGate` redirects: no user → `(auth)`; user but `!onboardingComplete` → `(onboarding)`;
@@ -145,8 +156,14 @@ reason — `frontend/` and `mobile/` want genuinely different major versions of 
 dependency, and `node-linker=hoisted` needs to be told which packages must keep their own nested
 copy instead of resolving the other workspace's hoisted one:
 
-- `zod` / `@hookform/resolvers` — `frontend/` wants zod v4 + resolvers v5, `mobile/` wants zod
-  v3 + resolvers v3.
+- `zod` / `@hookform/resolvers` — the `.npmrc` comment above this exclusion still says `mobile/`
+  wants zod v3 + resolvers v3; that's stale. `mobile/package.json` declares `zod@^4.1.12` +
+  `@hookform/resolvers@^5.2.2` — the same majors as `frontend/` — confirmed by
+  `app/(auth)/login.tsx`'s `z.email()` call (a zod-v4-only top-level function) and by
+  `packages/core/src/tasks.ts`'s hoisted `taskSchema` (zod v4 `{ error: … }` issue syntax)
+  resolving and type-checking cleanly for `mobile/` (RN migration Phase 5, issue #20). Keeping
+  `zod`/`@hookform/resolvers` un-hoisted is still harmless now that both workspaces want the
+  same majors — just no longer load-bearing the way the comment describes.
 - `react-hook-form` — pinned to an exact version in `mobile/package.json` (see the `.npmrc`
   comment) to force pnpm to nest a separate copy from `frontend/`'s, avoiding two live React
   copies in one bundle.
@@ -168,7 +185,13 @@ pnpm dev:android    # expo start -c --android   (reuses an installed dev-client 
 pnpm android        # expo run:android          (full native rebuild — no cache clear, see above)
 pnpm ios            # expo run:ios              (macOS only)
 pnpm export         # static web export → dist/
+pnpm typecheck      # tsc --noEmit
 ```
+
+No test runner is configured in `mobile/` (no `test` script, no Jest/Vitest config) — logic
+that's easy to unit test in isolation (`@zenflow/core`'s `taskSchema`/`placementQualifier`,
+`mobile/lib/tag-match.ts`) doesn't have automated coverage yet for the same reason `packages/core`
+itself has no `test` script either.
 
 Set `EXPO_PUBLIC_API_URL` in `.env.development` (defaults to
 `http://localhost:5000/api/v1`) so the axios client targets the API; on a physical

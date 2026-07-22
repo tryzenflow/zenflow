@@ -51,11 +51,15 @@ import {
   GalleryHorizontal,
   Github,
   Globe,
+  Highlighter,
   Info,
   Italic,
   Lamp,
   LayoutPanelLeft,
   LifeBuoy,
+  Link2,
+  List,
+  ListOrdered,
   Lock,
   LogOut,
   type LucideIcon,
@@ -67,13 +71,16 @@ import {
   MoonStar,
   Plus,
   PlusCircle,
+  Quote,
   Search,
   Sparkles,
   Sun,
   Table,
   Tag,
   Terminal,
+  Trash2,
   Underline,
+  Upload,
   UserPlus,
   Users,
   X,
@@ -166,6 +173,13 @@ interopIcon(User);
 interopIcon(Globe);
 interopIcon(Lock);
 interopIcon(Tag);
+interopIcon(Highlighter);
+interopIcon(Link2);
+interopIcon(List);
+interopIcon(ListOrdered);
+interopIcon(Quote);
+interopIcon(Upload);
+interopIcon(Trash2);
 
 export {
   Activity,
@@ -206,11 +220,15 @@ export {
   Fan,
   GalleryHorizontal,
   Globe,
+  Highlighter,
   Info,
   Italic,
   Lamp,
   LayoutPanelLeft,
   LifeBuoy,
+  Link2,
+  List,
+  ListOrdered,
   Lock,
   LogOut,
   Settings,
@@ -222,18 +240,22 @@ export {
   MoonStar,
   Plus,
   PlusCircle,
+  Quote,
   Search,
   Sparkles,
   Sun,
   Table,
   Tag,
   Terminal,
+  Trash2,
   Underline,
+  Upload,
   UserPlus,
   Home,
   Users,
   X,
   Send,
+  type LucideIcon,
   Archive,
   Bell,
   BookOpen,

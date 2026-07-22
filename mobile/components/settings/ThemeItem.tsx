@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import { Pressable, View } from "react-native";
 
 import { H4 } from "@/components/ui/typography";
@@ -21,7 +22,7 @@ type ItemData = {
   title: string;
   subtitle: string;
   value: "light" | "dark" | "system";
-  icon: JSX.Element;
+  icon: ReactElement;
 };
 
 type ItemProps = {

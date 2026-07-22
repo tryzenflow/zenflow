@@ -405,11 +405,71 @@ showing typography scale (Geist), spacing scale, and border-radius.
 
 ### Phase 5 — Task Forms + Settings (1 week)
 
-1. `CreateTaskSheet` / `EditTaskSheet` via `@gorhom/bottom-sheet` v5.
-2. Port all `task-form.tsx` fields: title, duration input (15-min stepper), deadline picker, tag selector, note `TextInput`, fixed-time toggle.
-3. `OverflowSheet`: display `outsideHours` and `nextAvailable` options from `CreateTaskResponse.overflow`.
-4. Duration suggestion toast via `react-native-toast-message` (port of `rationale-toast.tsx`).
-5. `SettingsScreen`: work hours time pickers, work days toggle row, timezone picker, duration mode selector.
+**Settings half: done**, ahead of this doc catching up — `app/(app)/settings.tsx` already
+ships the full preferences form (profile, working hours, work days, timezone, duration mode,
+insights, dark mode, sign-out); see `mobile/README.md`'s screens table.
+
+**Task Forms half: done** (GitHub issue #20 — `CreateTaskSheet`/`EditTaskSheet`/
+`ChangeDurationSheet`). What actually shipped, differently from this section's original plan:
+
+1. `CreateTaskSheet` / `EditTaskSheet` / `ChangeDurationSheet`, all on `@gorhom/bottom-sheet`
+   **v5** (bumped from the `^4.6.4` the scaffold started on — no breaking changes hit beyond a
+   couple of TS-only fallout fixes: `BottomSheetModal` became a generic type alias in v5, so the
+   two `components/{ui,primitives/bottomSheet}/bottom-sheet.native.tsx` ref wrappers now type
+   against `BottomSheetModalMethods` instead of `React.ElementRef<typeof BottomSheetModal>`).
+2. `taskSchema` (+ `TaskFormValues`/`EditTaskFormValues`/`placementQualifier`) is **hoisted to
+   `@zenflow/core`** (`packages/core/src/tasks.ts`) rather than ported to a second `mobile/`
+   copy — resolves this doc's original "Portable" table entry for `frontend/src/utils/tasks.ts`
+   the other direction from what it said (port to `mobile/src/utils/tasks.ts` — identical) once
+   a second consumer actually needed it: cross-app-to-app imports outside a shared package would
+   be unusual for this monorepo, so it's shared instead of forked. `frontend/` was **not**
+   repointed at the hoisted copy in the same change (out of that issue's stated scope — its own
+   `frontend/src/utils/tasks.ts` still carries a parallel definition that must be kept in sync
+   by hand until a follow-up consolidates it), so this is a deliberate, temporary fork of one
+   file, not the intended end state.
+3. Fields, in mockup order (`mockups/task-sheets.html`): Title (plain input, no suggestion
+   dropdown — unlike the web `TitleField`, out of the mockup's scope) → Duration (a −/+ 15-min
+   stepper, `components/tasks/form/duration-stepper.tsx` — **shown in both the create and edit
+   sheets**, unlike the web dialog which hides duration entirely in edit mode; mobile has no
+   drag-resize handles, so the edit sheet's stepper submits via a second `PATCH
+   /tasks/:id/resize` call alongside the metadata `PATCH /tasks/:id`, since `UpdateTaskInput`
+   has no `durationMinutes` field) → Deadline (`DeadlineChipRow`, a straight port of
+   `deadline-chip-field.tsx`'s chip logic against `GET /tasks/deadline-options`) → Tags
+   (`TagAutocomplete`, custom dropdown — see below) → Description (`DescriptionField`, see
+   below). No fixed-time toggle and no `OverflowSheet`: both are obsolete against the current
+   `@zenflow/shared` contract — the `overflow` envelope was already removed from
+   `CreateTaskResponse` before this phase started (every create/update now always resolves to a
+   concrete placement; see `frontend/src/utils/tasks.ts`'s `placementQualifier` doc comment),
+   so there's nothing left for an overflow sheet to display.
+4. Tag autocomplete does **not** use `components/ui/combobox.tsx` (nested nav-style bottom
+   sheet — wrong shape for an inline, type-as-you-go dropdown) or cmdk (no RN port). It's a
+   from-scratch matcher (`mobile/lib/tag-match.ts`) — and along the way fixes
+   `mockups/feedback.md` item 5 ("tag autocomplete is strange when the prefix is far from the
+   remaining text"): the web version's bug is cmdk's default fuzzy scorer matching scattered
+   characters anywhere in a name; this port only ever matches contiguous prefix/substring
+   occurrences.
+5. Description editor is a plain multiline `TextInput` (this doc's own Phase 1 fallback, "Native
+   `TextInput` multiline") with a **floating selection-bubble toolbar** bolted on — full tool
+   set from `common/editor/toolbar.tsx` (Bold/Italic/Underline/Highlight/Blockquote/Link/Upload/
+   Bullets/Numbering), wrapping the selection in the same HTML tags Tiptap would emit so the
+   stored `note` stays renderable by the web `NoteEditor`. This is **not** WYSIWYG — the raw
+   tags are visible while editing, not a live-rendered preview — real parity needs this doc's
+   Phase 2 richtext plan (`@10play/tentap-editor`), not attempted here. "Upload file" is a stub
+   (toasts "not available yet"; no `expo-image-picker`/`expo-document-picker` wiring).
+6. Placement toast: **not** `react-native-toast-message` — the scaffold already had its own
+   `ToastProvider`/`useToast` (`components/ui/toast.tsx`), used app-wide (e.g.
+   `app/(app)/settings.tsx`), so the sheets use that instead of adding a second toast library.
+   Only the plain success/conflict copy is ported (`mobile/lib/task-toasts.ts`, mirrors
+   `create-task-dialog.tsx`'s one-line `toast.success`/`toast.warning`) — the richer Phase-2
+   rationale toast (preferred-window / top-cells breakdown) is out of scope; only the toast
+   *surface*, not the scheduling intelligence behind it, was asked for.
+7. Gesture wiring is **partial**, blocked on Phase 2/3/4 (the day/week/month screens are still
+   the placeholder stubs below — there's no positioned grid yet to long-press a *slot* against).
+   `app/(app)/index.tsx` got the minimal substitute the sheets needed to be exercisable end to
+   end: today's tasks as a plain list, tap → `EditTaskSheet`, long-press a row →
+   `ChangeDurationSheet`, long-press the empty area (or the FAB) → `CreateTaskSheet` pre-filled
+   with "now" snapped to the next 15-minute mark. True per-pixel slot targeting, drag-to-move,
+   pinch-zoom, and the now-indicator/work-zone overlays remain Phase 2 work.
 
 ### Phase 6 — Polish + EAS (ongoing)
 
