@@ -11,8 +11,9 @@ import {
   BottomSheetView as GBottomSheetView,
   useBottomSheetModal,
 } from "@gorhom/bottom-sheet";
-import type {BottomSheetModalMethods} from "@gorhom/bottom-sheet/lib/typescript/types";
-import {useTheme} from "@react-navigation/native";
+import type { BottomSheetModalMethods } from "@gorhom/bottom-sheet/lib/typescript/types";
+import { useTheme } from "@react-navigation/native";
+import { cssInterop } from "nativewind";
 import * as React from "react";
 import {
   type GestureResponderEvent,
@@ -21,13 +22,12 @@ import {
   View,
   type ViewStyle,
 } from "react-native";
-import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {cssInterop} from "nativewind";
-import {X} from "../../components/Icons";
-import {useColorScheme} from "../../lib/useColorScheme";
-import {cn} from "../../lib/utils";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { X } from "../../components/Icons";
+import { useColorScheme } from "../../lib/useColorScheme";
+import { cn } from "../../lib/utils";
 import * as Slot from "../primitives/slot";
-import {Button} from "./button";
+import { Button } from "./button";
 
 // `GBottomSheetTextInput` wraps a `TextInput` from `react-native-gesture-handler`,
 // not the plain `react-native` one NativeWind auto-interops — without this, its
@@ -61,11 +61,11 @@ interface BottomSheetContext {
 const BottomSheetContext = React.createContext({} as BottomSheetContext);
 
 const BottomSheet = React.forwardRef<BottomSheetRef, BottomSheetProps>(
-  ({...props}, ref) => {
+  ({ ...props }, ref) => {
     const sheetRef = React.useRef<BottomSheetModalMethods>(null);
 
     return (
-      <BottomSheetContext.Provider value={{sheetRef: sheetRef}}>
+      <BottomSheetContext.Provider value={{ sheetRef: sheetRef }}>
         <View ref={ref} {...props} />
       </BottomSheetContext.Provider>
     );
@@ -112,19 +112,44 @@ const BottomSheetContent = React.forwardRef<
     ref,
   ) => {
     const insets = useSafeAreaInsets();
-    const {isDarkColorScheme} = useColorScheme();
-    const {colors} = useTheme();
-    const {sheetRef} = useBottomSheetContext();
+    const { isDarkColorScheme } = useColorScheme();
+    const { colors } = useTheme();
+    const { sheetRef } = useBottomSheetContext();
 
-    React.useImperativeHandle(
-      ref,
-      () => {
-        if (!sheetRef.current) {
-          return {} as BottomSheetModalMethods;
-        }
-        return sheetRef.current;
+    // Merge the caller-supplied `ref` (e.g. `useControlledBottomSheet`'s ref,
+    // which drives `present()`/`dismiss()` off the `open` prop — see
+    // `CreateTaskSheet`/`EditTaskSheet`/`ChangeDurationSheet`) with the
+    // `<BottomSheet>` wrapper's own context `sheetRef` (what
+    // `BottomSheetOpenTrigger`/`BottomSheetCloseTrigger`/`BottomSheetHeader`
+    // read via context): both need to end up pointing at the same live
+    // `BottomSheetModal` instance.
+    //
+    // This used to be a `useImperativeHandle(ref, () => sheetRef.current ?? {}, [sheetRef.current])`
+    // — but `sheetRef.current` is a plain mutable ref, not reactive state, so
+    // that dependency array is only ever re-evaluated on a render this
+    // component happens to re-run for some *other* reason. On mount,
+    // `@gorhom/bottom-sheet` attaches the real `BottomSheetModal` instance to
+    // `sheetRef` slightly after this component's own first commit (it mounts
+    // its portalled content on a later tick), so the imperative handle's
+    // *first* run captured `sheetRef.current` while it was still `null`,
+    // returned the `{}` stub, and then had no reason to run again — leaving
+    // `ref.current` (the caller's ref) permanently stubbed out, so
+    // `ref.current?.present()` silently no-op'd forever. This only "worked"
+    // for sheets that happened to re-render again shortly after mount for an
+    // unrelated reason (e.g. `EditTaskSheet`'s `getTaskDetails().then(setTask)`),
+    // which is exactly why `CreateTaskSheet`'s FAB / empty-area long-press
+    // (no such follow-up render) never opened while tap-to-edit did.
+    //
+    // Assigning both refs directly in a merged callback ref instead avoids
+    // the staleness: it fires exactly when React attaches/detaches the real
+    // instance, no matter when that happens.
+    const setRefs = React.useCallback(
+      (instance: BottomSheetModalMethods | null) => {
+        sheetRef.current = instance;
+        if (typeof ref === "function") ref(instance);
+        else if (ref) ref.current = instance;
       },
-      [sheetRef.current],
+      [ref, sheetRef],
     );
 
     const renderBackdrop = React.useCallback(
@@ -145,7 +170,7 @@ const BottomSheetContent = React.forwardRef<
             opacity={opacity}
             disappearsOnIndex={disappearsOnIndex}
             pressBehavior={pressBehavior}
-            style={[{backgroundColor: "rgba(0,0,0,0.8)"}, style]}
+            style={[{ backgroundColor: "rgba(0,0,0,0.8)" }, style]}
             onPress={() => {
               if (Keyboard.isVisible()) {
                 Keyboard.dismiss();
@@ -161,12 +186,12 @@ const BottomSheetContent = React.forwardRef<
 
     return (
       <BottomSheetModal
-        ref={sheetRef}
+        ref={setRefs}
         index={0}
         enablePanDownToClose={enablePanDownToClose}
         backdropComponent={renderBackdrop}
         enableDynamicSizing={enableDynamicSizing}
-        backgroundStyle={[{backgroundColor: colors.card}, backgroundStyle]}
+        backgroundStyle={[{ backgroundColor: colors.card }, backgroundStyle]}
         handleIndicatorStyle={{
           backgroundColor: colors.text,
         }}
@@ -183,8 +208,8 @@ const BottomSheetOpenTrigger = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof Pressable> & {
     asChild?: boolean;
   }
->(({onPress, asChild = false, ...props}, ref) => {
-  const {sheetRef} = useBottomSheetContext();
+>(({ onPress, asChild = false, ...props }, ref) => {
+  const { sheetRef } = useBottomSheetContext();
   function handleOnPress(ev: GestureResponderEvent) {
     sheetRef.current?.present();
     onPress?.(ev);
@@ -198,8 +223,8 @@ const BottomSheetCloseTrigger = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof Pressable> & {
     asChild?: boolean;
   }
->(({onPress, asChild = false, ...props}, ref) => {
-  const {dismiss} = useBottomSheetModal();
+>(({ onPress, asChild = false, ...props }, ref) => {
+  const { dismiss } = useBottomSheetModal();
   function handleOnPress(ev: GestureResponderEvent) {
     dismiss();
     if (Keyboard.isVisible()) {
@@ -253,7 +278,7 @@ type BottomSheetTextInputProps = React.ComponentPropsWithoutRef<
 const BottomSheetTextInput = React.forwardRef<
   BottomSheetTextInputRef,
   BottomSheetTextInputProps
->(({className, placeholderClassName, ...props}, ref) => {
+>(({ className, placeholderClassName, ...props }, ref) => {
   return (
     <GBottomSheetTextInput
       ref={ref}
@@ -274,12 +299,12 @@ type BottomSheetFlatListProps = React.ComponentPropsWithoutRef<
 const BottomSheetFlatList = React.forwardRef<
   BottomSheetFlatListRef,
   BottomSheetFlatListProps
->(({className, ...props}, ref) => {
+>(({ className, ...props }, ref) => {
   const insets = useSafeAreaInsets();
   return (
     <GBottomSheetFlatList
       ref={ref}
-      contentContainerStyle={[{paddingBottom: insets.bottom}]}
+      contentContainerStyle={[{ paddingBottom: insets.bottom }]}
       className={cn("py-4", className)}
       keyboardShouldPersistTaps="handled"
       {...props}
@@ -292,8 +317,8 @@ type BottomSheetHeaderProps = React.ComponentPropsWithoutRef<typeof View>;
 const BottomSheetHeader = React.forwardRef<
   BottomSheetHeaderRef,
   BottomSheetHeaderProps
->(({className, children, ...props}, ref) => {
-  const {dismiss} = useBottomSheetModal();
+>(({ className, children, ...props }, ref) => {
+  const { dismiss } = useBottomSheetModal();
   function close() {
     if (Keyboard.isVisible()) {
       Keyboard.dismiss();
@@ -333,13 +358,13 @@ type BottomSheetFooterProps = Omit<
 const BottomSheetFooter = React.forwardRef<
   BottomSheetFooterRef,
   BottomSheetFooterProps
->(({bottomSheetFooterProps, children, className, style, ...props}, ref) => {
+>(({ bottomSheetFooterProps, children, className, style, ...props }, ref) => {
   const insets = useSafeAreaInsets();
   return (
     <GBottomSheetFooter {...bottomSheetFooterProps}>
       <View
         ref={ref}
-        style={[{paddingBottom: insets.bottom + 6}, style]}
+        style={[{ paddingBottom: insets.bottom + 6 }, style]}
         className={cn("px-4 pt-1.5", className)}
         {...props}
       >
@@ -360,7 +385,7 @@ function useBottomSheet() {
     ref.current?.dismiss();
   }, []);
 
-  return {ref, open, close};
+  return { ref, open, close };
 }
 
 export {

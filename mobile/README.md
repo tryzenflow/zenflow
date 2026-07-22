@@ -18,6 +18,7 @@ replacement for it. Part of the [Zenflow monorepo](../README.md).
 | Forms | React Hook Form + Zod (`@hookform/resolvers`) — note-worthy version pin, see [Known pitfalls](#known-pitfalls). `taskSchema`/`TaskFormValues`/`placementQualifier` live in `@zenflow/core` (`packages/core/src/tasks.ts`), shared with `frontend/`'s equivalent (currently a parallel, hand-synced copy — see Phase 5 in `docs/react-native-migration.md`) |
 | HTTP | axios (`api/`), cookie-based session — see [Auth & session](#auth--session) |
 | Bottom sheets | `@gorhom/bottom-sheet` **v5** |
+| Rich text editor | [`@10play/tentap-editor`](https://github.com/10play/10tap-editor) `^1.0.1` — Tiptap/ProseMirror running in a `react-native-webview` WebView with a native RN bridge (the only real way to run Tiptap on RN — it has no native port). Pinned to the Tiptap-**v3**-based `1.0.x` line specifically (not the older, still-maintained `0.7.x`/Tiptap-v2 line) so its `@tiptap/*` transitive deps share a major version with `frontend/`'s own hoisted Tiptap v3 copies — `frontend/src/components/common/editor/{video,audio}-block.tsx` bare-import `@tiptap/core` relying on root hoisting (see the root `.npmrc`'s top comment), and mixing Tiptap v2 (mobile) + v3 (frontend) under one hoisted `node_modules/@tiptap/core` broke that resolution during install (confirmed empirically: installing the `0.7.x` line produced hard `unmet peer @tiptap/core@^2.7.0: found 3.26.0` conflicts). `react-native-webview` is pinned to `13.12.5`, the exact version Expo SDK 52's `bundledNativeModules.json` lists as compatible. **Adding this native module requires a dev-client rebuild** (`expo run:android`/`expo run:ios`) before it works on-device/emulator — not verified in this environment (no device/emulator available here); see `components/tasks/form/description-field.tsx`'s doc comment. |
 | Formatter / linter | [Biome](https://biomejs.dev) (not ESLint/Prettier — those are the web app's tooling). **Not currently an installed dependency anywhere in the repo** — `pnpm --filter mobile format` fails with "'biome' is not recognized" until `@biomejs/biome` is added as a devDependency; `pnpm dlx @biomejs/biome@1.5.3 check --apply .` works as a one-off in the meantime (matches the `biome.json` `$schema` version) |
 
 ## Project structure
@@ -44,7 +45,8 @@ mobile/
 │   ├── onboarding/, settings/ # screen-specific composite components
 │   ├── tasks/                 # CreateTaskSheet / EditTaskSheet / ChangeDurationSheet
 │   │   └── form/               # duration stepper/slider, deadline chip row, tag autocomplete,
-│   │                           # description field + floating toolbar — see task-sheet-fields.tsx
+│   │                           # description field (WYSIWYG, @10play/tentap-editor) + floating
+│   │                           # toolbar — see task-sheet-fields.tsx
 │   └── tab-icons.tsx, Icons.tsx, logo.tsx, ThemeToggle.tsx
 ├── hooks/                      # use-user-store (Zustand), use-local-storage, use-task-form
 │                                # (taskSchema from @zenflow/core), use-controlled-bottom-sheet
@@ -171,6 +173,25 @@ copy instead of resolving the other workspace's hoisted one:
 If a "works on frontend, broken on mobile" (or vice versa) bug involves one of these packages,
 check whether `.npmrc` and `mobile/package.json`'s pin are both still in sync with a recent
 `pnpm install` before looking anywhere else.
+
+Note `@10play/tentap-editor` deliberately avoided needing a *new* entry here: it's pinned to the
+Tiptap-v3-based `1.0.x` line (not the also-current `0.7.x`/Tiptap-v2 line its own docs still lead
+with) specifically so its `@tiptap/*` transitive deps share a major version with `frontend/`'s
+already-hoisted Tiptap v3 copies instead of splitting — see the Tech stack table above.
+
+### `@10play/tentap-editor` / `react-native-webview` need a dev-client rebuild
+
+Both are native modules (the editor runs Tiptap inside a `react-native-webview` WebView with a
+native RN bridge). Installing them via `pnpm install` alone is not enough to use
+`components/tasks/form/description-field.tsx` on a device/emulator — Metro/JS-only reloads
+(`pnpm dev`/`dev:android`) won't pick up a brand-new native dependency; it needs a real native
+rebuild (`pnpm --filter mobile android` / `ios`) to link the new module into the dev client
+before the WebView will actually mount. This was **not** verified in the environment this was
+implemented in (no Android/iOS device or emulator available there) — `pnpm --filter mobile
+typecheck` is clean and the JS-level API usage was checked against the installed package's own
+`.d.ts` output, but the actual on-device WebView bridge round-trip is unverified. Rebuild and
+manually exercise the description field (all toolbar buttons, link insert, and that `note`
+round-trips as HTML through a create → edit cycle) before shipping.
 
 ## Local development
 

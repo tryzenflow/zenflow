@@ -78,7 +78,7 @@ This plan:
 | Drag & drop | `@dnd-kit/core` + pointer sensors | `react-native-gesture-handler` `PanGestureHandler` + `react-native-reanimated` | dnd-kit is DOM-only |
 | Resize handles | Pointer-driven 10px strips at block edges | Long-press task → bottom-sheet "Change duration" slider | 10px handles untouchable on phone |
 | All Radix UI primitives | `@radix-ui/*` (20+ packages) | `@gorhom/bottom-sheet` (sheet/dialog), React Native Reusables + `@rn-primitives/*` (dropdown), RN built-ins (tabs) | Radix is DOM-only |
-| Rich text note editor | Tiptap / ProseMirror | Native `TextInput` multiline (Phase 1); `@10play/tentap-editor` (Phase 2) | Tiptap has no RN port |
+| Rich text note editor | Tiptap / ProseMirror | Native `TextInput` multiline (Phase 1, superseded); `@10play/tentap-editor` **(wired, see Phase 5 update below)** | Tiptap has no RN port — tentap runs it in a `react-native-webview` WebView with a native bridge instead |
 | Navigation | React Router v7 | Expo Router (file-based, same mental model) | |
 | CSS layout + OKLch design tokens | Tailwind v4 Vite plugin | NativeWind v4 (Tailwind v3-config-driven, compiled to RN `StyleSheet`); OKLch tokens hand-translated to hex once in `tailwind.config.ts` / `global.css` | RN `StyleSheet` rejects OKLch directly — NativeWind has no built-in OKLch→native conversion, unlike uniwind |
 | `position: absolute` % values | `top/left/width/height` as `%` strings | Same math; output numeric dp values (`(min / 1440) × totalHeight`) | |
@@ -448,14 +448,50 @@ insights, dark mode, sign-out); see `mobile/README.md`'s screens table.
    remaining text"): the web version's bug is cmdk's default fuzzy scorer matching scattered
    characters anywhere in a name; this port only ever matches contiguous prefix/substring
    occurrences.
-5. Description editor is a plain multiline `TextInput` (this doc's own Phase 1 fallback, "Native
-   `TextInput` multiline") with a **floating selection-bubble toolbar** bolted on — full tool
-   set from `common/editor/toolbar.tsx` (Bold/Italic/Underline/Highlight/Blockquote/Link/Upload/
-   Bullets/Numbering), wrapping the selection in the same HTML tags Tiptap would emit so the
-   stored `note` stays renderable by the web `NoteEditor`. This is **not** WYSIWYG — the raw
+5. Description editor **update (post-#20 follow-up):** the Phase-1-style plain `TextInput` +
+   raw-HTML-tag toolbar described below has been replaced by a real WYSIWYG editor on
+   `@10play/tentap-editor` (this doc's own Phase 2 richtext plan, brought forward) —
+   `components/tasks/form/description-field.tsx` now renders `RichText`/`useEditorBridge` from
+   the package, with a floating toolbar (still visually a dark rounded pill, matching the old
+   selection-bubble style) driving the same tool set as the web toolbar
+   (`common/editor/toolbar.tsx`): Bold, Italic, Underline, Highlight, Blockquote marks; a Link
+   insert control; Bulleted / Numbered lists. The stored `note` stays a plain HTML string (same
+   shape the web `NoteEditor` produces/reads, since it round-trips through the same
+   `@zenflow/shared` field), bridged through `useEditorBridge`'s async `getHTML()`/`setContent()`
+   rather than a synchronous DOM. "Upload file" is still a stub (toasts "not available yet"; no
+   `expo-image-picker`/`expo-document-picker` wiring — unchanged scope).
+   - **Tool-parity gap:** the toolbar is a fixed pill docked above the editor, shown while
+     focused — not a bubble anchored to the exact text selection like the old `TextInput` hack
+     (or web's Tiptap bubble-menu-style positioning). `tentap-editor`'s bridge doesn't expose
+     WebView-internal selection screen coordinates to native, so there's nothing to anchor a true
+     per-selection bubble to; a fixed contextual toolbar is the idiomatic pattern the package's
+     own docs use. Marks/lists can now be toggled with or without an active text selection
+     (typing continues in that style), which is arguably more correct WYSIWYG behavior than the
+     old selection-required hack.
+   - **Dependency resolution:** pinned to the Tiptap-v3-based `@10play/tentap-editor@^1.0.1` line
+     rather than the older (still maintained) `0.7.x`/Tiptap-v2 line, specifically so its
+     `@tiptap/*` transitive deps share a major version with `frontend/`'s own hoisted Tiptap v3
+     copies under the root `.npmrc`'s broad hoist — installing `0.7.x` produced hard
+     `unmet peer @tiptap/core@^2.7.0: found 3.26.0` conflicts against `frontend/`'s Tiptap v3.
+     `react-native-webview` is pinned to `13.12.5`, the version Expo SDK 52's own
+     `bundledNativeModules.json` lists as compatible. See `mobile/README.md`'s tech-stack table
+     and "Known pitfalls" section.
+   - **Native rebuild caveat:** both packages are native modules (WebView + its RN bridge) —
+     using this on-device needs a dev-client rebuild (`expo run:android`/`ios`), not just a JS
+     reload. **Not verified in the environment this was implemented in** (no device/emulator
+     available there) — typecheck is clean and the API usage was checked against the installed
+     package's own compiled `.d.ts`, but the actual on-device WebView round-trip is unverified.
+   - The description below (this doc's original Phase 5 write-up) is kept for history but is no
+     longer accurate about the description editor's implementation:
+
+   ~~Description editor is a plain multiline `TextInput` (this doc's own Phase 1 fallback,
+   "Native `TextInput` multiline") with a **floating selection-bubble toolbar** bolted on — full
+   tool set from `common/editor/toolbar.tsx` (Bold/Italic/Underline/Highlight/Blockquote/Link/
+   Upload/Bullets/Numbering), wrapping the selection in the same HTML tags Tiptap would emit so
+   the stored `note` stays renderable by the web `NoteEditor`. This is **not** WYSIWYG — the raw
    tags are visible while editing, not a live-rendered preview — real parity needs this doc's
    Phase 2 richtext plan (`@10play/tentap-editor`), not attempted here. "Upload file" is a stub
-   (toasts "not available yet"; no `expo-image-picker`/`expo-document-picker` wiring).
+   (toasts "not available yet"; no `expo-image-picker`/`expo-document-picker` wiring).~~
 6. Placement toast: **not** `react-native-toast-message` — the scaffold already had its own
    `ToastProvider`/`useToast` (`components/ui/toast.tsx`), used app-wide (e.g.
    `app/(app)/settings.tsx`), so the sheets use that instead of adding a second toast library.
@@ -470,6 +506,20 @@ insights, dark mode, sign-out); see `mobile/README.md`'s screens table.
    `ChangeDurationSheet`, long-press the empty area (or the FAB) → `CreateTaskSheet` pre-filled
    with "now" snapped to the next 15-minute mark. True per-pixel slot targeting, drag-to-move,
    pinch-zoom, and the now-indicator/work-zone overlays remain Phase 2 work.
+   - **Bug fix (post-#20 follow-up):** the FAB (and, latently, the long-press-empty-area
+     gesture) didn't reliably open `CreateTaskSheet` — `components/ui/bottom-sheet.native.tsx`'s
+     `BottomSheetContent` exposed the caller's forwarded `ref` via
+     `useImperativeHandle(ref, () => sheetRef.current ?? {}, [sheetRef.current])`, but
+     `sheetRef.current` is a plain mutable ref, not reactive state, so that dependency array only
+     re-evaluates on a render this component happens to re-run for an unrelated reason.
+     `@gorhom/bottom-sheet` attaches the real `BottomSheetModal` instance to `sheetRef` slightly
+     after the component's first commit, so the imperative handle's first (and often only) run
+     captured it as still `null` and returned the `{}` stub, leaving the caller's
+     `ref.current?.present()` a silent no-op forever for any sheet that didn't happen to
+     re-render again shortly after mount (`EditTaskSheet` did, via its `getTaskDetails().then(
+     setTask)`, which is why tap-to-edit worked while the FAB/empty-area create path didn't).
+     Fixed by assigning both refs in a single merged callback ref instead, which fires exactly
+     when React attaches/detaches the real instance regardless of timing.
 
 ### Phase 6 — Polish + EAS (ongoing)
 
