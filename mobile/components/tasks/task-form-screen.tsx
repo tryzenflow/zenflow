@@ -38,7 +38,7 @@ export function TaskFormScreen({
 
   return (
     <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
-      <View className="flex-row items-start justify-between gap-3 border-b border-border px-5 pb-3.5 pt-2">
+      <View className="flex-row items-center justify-between gap-3 border-b border-border px-5 pb-3.5 pt-2">
         <View className="flex-1">
           <Text className="text-[19px] font-bold tracking-tight">{title}</Text>
           {!!subtitle && (
