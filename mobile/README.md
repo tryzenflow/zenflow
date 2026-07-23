@@ -48,7 +48,13 @@ mobile/
 │   │   │                      # forwardRef component with an imperative `.open(...)` handle (see
 │   │   │                      # Known pitfalls' "Bottom sheets must open synchronously" note),
 │   │   │                      # plus CreateTaskFab (the reusable "+" FAB + CreateTaskSheet
-│   │   │                      # pairing used by index.tsx/week.tsx/month.tsx)
+│   │   │                      # pairing used by index.tsx/week.tsx/month.tsx) and OptimizeFab
+│   │   │                      # (floating Sparkles FAB + self-contained bottom sheet — window
+│   │   │                      # start/end date pickers + Mode 3-default/secondary-disclosure
+│   │   │                      # mode selector → optimizePreview → large-batch guard step →
+│   │   │                      # optimizeApply → result-summary step with Undo, all in the same
+│   │   │                      # sheet since `components/ui/toast.tsx` can't host a rich body;
+│   │   │                      # also rendered on all three of index.tsx/week.tsx/month.tsx)
 │   │   └── form/               # duration stepper/slider, deadline chip row, tag autocomplete,
 │   │                           # description field (WYSIWYG, @10play/tentap-editor) + floating
 │   │                           # toolbar — see task-sheet-fields.tsx
@@ -84,6 +90,8 @@ call):
 | `(app)` | `index.tsx` (Day) | **Grid still a Phase 2 stub**, but the task sheets (create/edit/change-duration — RN migration Phase 5, issue #20) are wired against a plain task list in the meantime: tap a task → edit, long-press a task → change duration, long-press the empty area or the FAB → create |
 | `(app)` | `week.tsx`, `month.tsx` | **Placeholder stubs** — calendar UI is future work |
 | `(app)` | `settings.tsx` | Built — profile row, theme toggle, timezone picker, duration-mode picker, insights panel |
+
+All three of `index.tsx`/`week.tsx`/`month.tsx` also render `<OptimizeFab>` (`components/tasks/optimize-fab.tsx`) — the scheduler redesign's opt-in, previewable-by-count multi-task reflow action, mobile's equivalent of the web calendar toolbar's Sparkles popover (no calendar toolbar exists on mobile yet, hence a floating button instead of a toolbar entry). Its API surface (`resolveTaskPlacement`/`optimizePreview`/`optimizeApply` in `api/tasks.ts`, plus an extended `undoBatch(batchId, strategy?)`) types against `OptimizeWindowInput`/`OptimizePreviewResponse`/`OptimizeApplyResponse`/`OPTIMIZE_LARGE_BATCH_THRESHOLD`/`OPTIMIZE_UI_MAX_WINDOW_DAYS`, which land in `@zenflow/shared` as part of the same redesign (backend-engineer's side) — `pnpm --filter mobile typecheck` won't pass until those merge.
 
 `AuthGate` redirects: no user → `(auth)`; user but `!onboardingComplete` → `(onboarding)`;
 otherwise → `(app)`. Group-qualified redirects (not a bare `/`) are deliberate — see the
@@ -365,6 +373,36 @@ always closed via the local per-instance `sheetRef` from `useBottomSheetContext(
 cleanly registered in the shared cross-sheet queue. If you add a new close affordance anywhere in
 `components/ui/bottom-sheet.native.tsx`, reach for the local `sheetRef` from
 `useBottomSheetContext()`, not `@gorhom/bottom-sheet`'s `useBottomSheetModal()`.
+
+### The task form screen needs its own `KeyboardAvoidingView` — it isn't inside a bottom sheet anymore
+
+`components/tasks/task-form-screen.tsx` is a plain full screen (see the previous section), not a
+`@gorhom/bottom-sheet` sheet — it doesn't get `BottomSheetModal`'s built-in
+`android_keyboardInputMode="adjustResize"` keyboard handling for free. Without an explicit
+keyboard-avoiding wrapper, the keyboard could sit on top of whatever's focused near the bottom of
+the form (the description editor, the tag picker trigger) and the fixed footer (Save/Cancel)
+wouldn't ride above it.
+
+**Fix:** `TaskFormScreen` wraps its `ScrollView` + footer in a `KeyboardAvoidingView`
+(`behavior="padding"` on iOS; `undefined` on Android, since `app.config.ts` now sets
+`android.softwareKeyboardLayoutMode: "resize"` so the OS itself shrinks the window instead).
+`components/tasks/form/description-field.tsx`'s rich-text editor is still capped at `max-h-[336px]`
+so it never grows to fight the outer scroll. If you add a new inline (non-sheeted) field near the
+bottom of this form, verify it isn't obscured with the keyboard open on both platforms — the sheet
+-based pickers (tag autocomplete, deadline inline date/time) don't need this, they already get
+correct behavior from their own `BottomSheetModal`.
+
+### Title has a 60-word cap, enforced by the shared `taskSchema`
+
+`packages/core/src/tasks.ts`'s `taskSchema` (imported here from `@zenflow/core`, same as
+`frontend/src/utils/tasks.ts`'s hand-synced fork) rejects a title over `MAX_TITLE_WORDS` (60) via a
+`.refine()`; the message ("Title must be at most 60 words.") surfaces through
+`TaskSheetFields`'s existing `Field`/`fieldState.error` rendering, no separate error UI needed.
+`TaskSheetFields`'s Title field also renders a live `{wordCount}/{MAX_TITLE_WORDS} words` counter
+(via the shared `countTitleWords` helper) below the input, independent of the form's RHF validation
+mode, so the count updates as the user types rather than only after a submit/blur triggers
+validation. If you change the limit, change it once in `packages/core/src/tasks.ts` — don't
+hardcode `60` a second time here or in `frontend/`.
 
 ## Local development
 
