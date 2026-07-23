@@ -25,20 +25,14 @@ import { zonedDate } from "./tz";
  * export too. See the mobile RN migration doc / issue #20 for the full
  * rationale.
  */
-export const MAX_TITLE_WORDS = 60;
-
-/** Word count for the title field, matching the split logic `taskSchema`'s
- * refine uses — shared so a live UI counter never drifts from validation. */
-export function countTitleWords(title: string): number {
-  return title.trim().split(/\s+/).filter(Boolean).length;
-}
+export const MAX_TITLE_LENGTH = 60;
 
 export const taskSchema = z.object({
   title: z
     .string()
     .min(1, { error: "Task name is required" })
-    .refine((val) => countTitleWords(val) <= MAX_TITLE_WORDS, {
-      error: `Title must be at most ${MAX_TITLE_WORDS} words.`,
+    .max(MAX_TITLE_LENGTH, {
+      error: `Title must be at most ${MAX_TITLE_LENGTH} characters.`,
     }),
   duration: z
     .int()
