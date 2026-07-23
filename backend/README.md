@@ -349,8 +349,8 @@ user's `preferenceMatrix` + `preferenceMatrixDecayedAt`, calls the pure `decayMa
 - **DTOs + validation:** every request body/query is a `class-validator` DTO. The global
 pipe runs `whitelist: true, forbidNonWhitelisted: true, transform: true` with implicit
 conversion — so unknown fields are rejected and query params coerce to their typed shape.
-Custom decorators: `@IsValidTimezone()`, `@MaxWords(n)` (word-count, not character-count —
-used on `Task.title`, capped at 60 words), plus `@CurrentUser()`.
+Custom decorators: `@IsValidTimezone()`, plus `@CurrentUser()`. `Task.title` is capped at
+60 characters via `class-validator`'s built-in `@MaxLength(60)`.
 - **Response shape:** controllers return `{ success: true, message, data }`; let NestJS
 `HttpException`s propagate (don't swallow). Prisma errors map via
 [`src/prisma/error-codes.ts`](src/prisma/error-codes.ts).
