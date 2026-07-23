@@ -896,16 +896,25 @@ describe("TasksService.update — metadata-only, never auto-searches", () => {
 describe("deadlineOptions (pure) — used directly by TasksController", () => {
   it("returns six ISO chip values derived from horizon ceiling math", () => {
     const res = deadlineOptions("2026-06-08T10:00:00.000Z", user); // Monday
-    // "Today" and "Tomorrow" are end-of-day (23:59) on the current and next
-    // calendar day, avoiding 15-min grid boundary issues. Remaining chips use
-    // work-hours ceilings.
-    expect(res.today).toBe("2026-06-08T23:59:00.000Z");
-    expect(res.tomorrow).toBe("2026-06-09T23:59:00.000Z");
+    // "Today" is a few hours from now: anchor time-of-day (10:00) + 3h =
+    // 13:00, already on the 15-min grid. "Tomorrow" is 00:00 the next
+    // calendar day. Remaining chips use work-hours ceilings.
+    expect(res.today).toBe("2026-06-08T13:00:00.000Z");
+    expect(res.tomorrow).toBe("2026-06-09T00:00:00.000Z");
     // ISO week (Mon-Sun) ceiling → next Monday 00:00.
     expect(res.thisWeek).toBe("2026-06-15T00:00:00.000Z");
     expect(res.nextWeek).toBe("2026-06-22T00:00:00.000Z");
     expect(res.thisMonth).toBe("2026-07-01T00:00:00.000Z");
     expect(res.noRush).toBe("2026-08-01T00:00:00.000Z");
+  });
+
+  it("clamps 'today' to the last on-grid slot (23:45) when anchor + 3h would roll past midnight", () => {
+    // Anchor 22:10 UTC: +3h = 25:10 -> minutes-of-day 1510, rounded up to the
+    // grid is 1515, which exceeds the day; clamp to DAILY_HORIZON - 15 = 1425
+    // (23:45), staying on the anchor's own calendar day.
+    const res = deadlineOptions("2026-06-08T22:10:00.000Z", user);
+    expect(res.today).toBe("2026-06-08T23:45:00.000Z");
+    expect(res.tomorrow).toBe("2026-06-09T00:00:00.000Z");
   });
 });
 
