@@ -2,7 +2,13 @@ import { X } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
 import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /**
@@ -59,20 +65,36 @@ export function TaskFormScreen({
         </View>
       </View>
 
-      <ScrollView
-        className="flex-1 px-5 pt-4"
-        contentContainerStyle={{ paddingBottom: 32 }}
-        keyboardShouldPersistTaps="handled"
+      {/*
+        Keyboard-aware wrapper for everything below the fixed header: on iOS
+        there's no OS-level window resize on keyboard show (unlike Android's
+        `softwareKeyboardLayoutMode: "resize"`, set in `app.config.ts`), so
+        `KeyboardAvoidingView`'s `padding` behavior is what pushes the scroll
+        content + footer up above the keyboard. On Android the OS resize
+        already shrinks this View's available height, so `undefined`
+        behavior (no extra offset) avoids double-compensating — this View
+        just needs to remain `flex-1` so the ScrollView/footer below reflow
+        into whatever height Android leaves it.
+      */}
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {children}
-      </ScrollView>
+        <ScrollView
+          className="flex-1 px-5 pt-4"
+          contentContainerStyle={{ paddingBottom: 32 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {children}
+        </ScrollView>
 
-      <View
-        className="border-t border-border bg-background px-5 pt-3.5 shadow-lg shadow-primary/10"
-        style={{ paddingBottom: insets.bottom + 14 }}
-      >
-        {footer}
-      </View>
+        <View
+          className="border-t border-border bg-background px-5 pt-3.5 shadow-lg shadow-primary/10"
+          style={{ paddingBottom: insets.bottom + 14 }}
+        >
+          {footer}
+        </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
