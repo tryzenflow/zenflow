@@ -279,19 +279,24 @@ with no content typed, and unrelated focus interactions elsewhere in the same sh
 'web' platform") that Metro's platform-extension resolution falls back to for `platform=web`,
 since the package has `.ios`/`.android`/`.macos`/`.windows` variants but no `.web` — confirmed by
 grepping the actual served Metro web bundle for that stub's literal text. `@10play/tentap-editor`'s
-`RichText` (and its `dynamicHeight` ResizeObserver-based height-reporting) never runs on web as a
-result. `DescriptionField` is now a `Platform.OS` switch: native renders the full
-`DescriptionFieldEditor` (WYSIWYG, unaffected), web renders `DescriptionFieldWeb`, a plain
-`Textarea` bound to the same HTML-string `value`/`onChange` contract, capped with a NativeWind
-`max-h-*` so it can't grow unbounded either way. The native editor's injected stylesheet
-(`injectContentStyles`) also got two independent fixes while investigating: `padding` was
-previously applied to both `body` *and* `.ProseMirror` (a descendant of `body`), doubling the
-visual inset — now only `.ProseMirror` gets it; and `.ProseMirror` now gets a `max-height` +
-`overflow-y: auto` cap, since the bundled editor HTML's base stylesheet sets `.ProseMirror {
-min-height: 100%; overflow: visible }` unconditionally (including in `dynamicHeight` mode, where
-the containing block's own height is `unset`/auto) — a circular percentage-height relationship
-that a non-spec-compliant WebView engine could resolve into runaway growth on native, which the
-cap now bounds regardless of engine.
+`RichText` never runs on web as a result. `DescriptionField` is now a `Platform.OS` switch: native
+renders the full `DescriptionFieldEditor` (WYSIWYG, unaffected), web renders `DescriptionFieldWeb`,
+a plain `Textarea` bound to the same HTML-string `value`/`onChange` contract, capped with a
+NativeWind `max-h-*` so it can't grow unbounded either way. The native editor's injected
+stylesheet (`injectContentStyles`) also got fixes while investigating: `padding` was previously
+applied to both `body` *and* `.ProseMirror` (a descendant of `body`), doubling the visual inset —
+now only `.ProseMirror` gets it; and `.ProseMirror` gets a `max-height` + `overflow-y: auto` cap,
+since the bundled editor HTML's base stylesheet sets `.ProseMirror { min-height: 100%; overflow:
+visible }` unconditionally. That cap used to matter doubly on native, back when `useEditorBridge`
+ran with `dynamicHeight: true` — a ResizeObserver inside the WebView reported `.ProseMirror`'s
+measured height to native on every content change, which resized the WebView's native container
+to match, so an unbounded/runaway measured height would have meant an unbounded native resize
+too. `dynamicHeight` is now `false` (see that file's own doc comments) specifically because
+resizing a *focused* WebView's native container on every keystroke turned out to reliably dismiss
+Android's keyboard — the editor is a fixed-height WebView now (`RichText`'s `containerStyle`
+height, matching the `.ProseMirror` cap and the outer wrapper's `max-h`), scrolling internally
+past that height instead of ever resizing. The cap stays regardless, since it's also just the
+right visual bound for a fixed-height writing surface.
 
 **If you add another `react-native-webview`-backed feature:** don't assume it degrades gracefully
 on web on its own — either gate it by `Platform.OS !== "web"` with a real fallback (as above) or
@@ -454,8 +459,9 @@ wouldn't ride above it.
 **Fix:** `TaskFormScreen` wraps its `ScrollView` + footer in a `KeyboardAvoidingView`
 (`behavior="padding"` on iOS; `undefined` on Android, since `app.config.ts` now sets
 `android.softwareKeyboardLayoutMode: "resize"` so the OS itself shrinks the window instead).
-`components/tasks/form/description-field.tsx`'s rich-text editor is still capped at `max-h-[336px]`
-so it never grows to fight the outer scroll. If you add a new inline (non-sheeted) field near the
+`components/tasks/form/description-field.tsx`'s rich-text editor is still capped (`max-h-[556px]`
+outer wrapper / `540px` `.ProseMirror`/`RichText` inner height as of this writing — see that
+file's own doc comments for the exact numbers) so it never grows to fight the outer scroll. If you add a new inline (non-sheeted) field near the
 bottom of this form, verify it isn't obscured with the keyboard open on both platforms — the sheet
 -based pickers (tag autocomplete, deadline inline date/time) don't need this, they already get
 correct behavior from their own `BottomSheetModal`.
@@ -526,23 +532,52 @@ default rather than fixed `snapPoints` — and isn't imported by any live screen
 by grepping the app) — so it wasn't changed; if it's ever wired up with fixed `snapPoints`, give it
 the same override.
 
-### The description editor's toolbar is a static bar, not a floating pill
+### The description editor's toolbar is a static bar *below* the WebView, not a floating pill above it
 
 `components/tasks/form/description-field.tsx`'s `DescriptionFieldEditor` toolbar used to be an
 absolutely-positioned pill straddling the editor's top edge, shown only while
-`state.isFocused || linkOpen`. Two problems: it visually overlapped Android's own native
-text-selection toolbar (the copy/paste/select-all bar Android renders over a focused/selected
-WebView — an absolutely-positioned sibling can't avoid colliding with something the OS itself draws
-over the WebView's content), and it didn't reliably hide on blur. It's now a plain, always-rendered,
-in-flow block *above* the WebView container (a real block-level element that pushes the WebView
-down, so it can never spatially collide with whatever Android renders over the WebView) — white
-background, black icons (`text-neutral-900`), with a light amber (`bg-amber-100`) active-state fill
-instead of the old dark-pill/white-icon/`bg-white/25` scheme, which would be invisible against a
-white bar. `TaskSheetFields` (`components/tasks/task-sheet-fields.tsx`) also now renders
-`DescriptionField` immediately after Title (Title → Description → Duration → Deadline → Tags)
-instead of last — verified on-device that this meaningfully reduces how far the field needs to
-scroll to clear the keyboard when focused, and reads fine visually; kept as the new order rather
-than a temporary diagnostic swap.
+`state.isFocused || linkOpen` — that didn't reliably hide on blur, so it became a plain,
+always-rendered, in-flow block instead. That in-flow block still sat *above* the WebView, though,
+and that positioning had its own collision problem: Android's native text-selection toolbar (the
+copy/paste/select-all bar the OS renders over a focused/selected WebView) is a compositor-level
+overlay, not a view in RN's tree — it isn't clipped or z-ordered by sibling views, and it prefers
+to render *above* the current selection's anchor point whenever there's room. With our toolbar
+in-flow above the WebView, selecting text near the editor's first line left the OS toolbar nowhere
+to go but into the space ours already occupied. The toolbar now renders **below** the `RichText`
+WebView instead (rounded-bottom corners/border, editor gets the rounded-top ones) — out of that
+collision zone entirely, since the OS toolbar's preferred render position and our bar's position
+are now on opposite sides. `.ProseMirror`'s injected top padding was also bumped slightly, so the
+first line isn't flush with the WebView's very top edge either. White background, black icons
+(`text-neutral-900`), with a light amber (`bg-amber-100`) active-state fill instead of the old
+dark-pill/white-icon/`bg-white/25` scheme, which would be invisible against a white bar.
+`TaskSheetFields` (`components/tasks/task-sheet-fields.tsx`) also now renders `DescriptionField`
+immediately after Title (Title → Description → Duration → Deadline → Tags) instead of last —
+verified on-device that this meaningfully reduces how far the field needs to scroll to clear the
+keyboard when focused, and reads fine visually; kept as the new order rather than a temporary
+diagnostic swap.
+
+### The description editor runs `dynamicHeight: false` — a WebView resize on every keystroke was dismissing Android's keyboard
+
+**Symptom:** on Android, typing a single character into the description editor could dismiss the
+keyboard immediately.
+
+**Cause:** `useEditorBridge({ dynamicHeight: true })` wires up a ResizeObserver *inside* the
+WebView's document (`@10play/tentap-editor`'s `contentHeightListener`, gated by a `window.dynamicHeight`
+flag set at init) that watches `.ProseMirror`'s measured height and posts a `DocumentHeight`
+message back to native on every change; `RichText.tsx` then sets that height directly on the
+WebView's own `containerStyle`, resizing the *native* WebView container. Since `.ProseMirror`'s
+content height changes on effectively every keystroke (text wraps, lines are added), this resized
+a *focused* native WebView's layout dimensions continuously while typing — a known trigger on
+Android for the OS to tear down and recreate the WebView's input connection, which drops the
+keyboard. There's no debounce/threshold option on `dynamicHeight` to soften this.
+
+**Fix:** `dynamicHeight: false`, plus an explicit fixed `containerStyle` height on `RichText`
+matching the injected `.ProseMirror { max-height }` cap (see the previous "taller editor" note and
+that file's own doc comments) — the WebView never resizes after mount, content beyond the fixed
+height scrolls inside `.ProseMirror`'s own `overflow-y: auto` instead. This was already the
+direction the `max-height`/`overflow-y` CSS cap was pushing things (a fixed visual bound with
+internal scroll), so dropping `dynamicHeight` entirely turned out to be strictly simpler than
+trying to preserve it with debouncing the library doesn't expose.
 
 ## Local development
 

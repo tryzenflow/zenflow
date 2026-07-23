@@ -44,6 +44,21 @@ import { Platform, Pressable, View } from "react-native";
 // (unlike web's mark-with-no-args toggle), so this is that fixed color.
 const HIGHLIGHT_COLOR = "#fde68a";
 
+// Editor height cap, kept in lockstep across three spots that all need to
+// agree (see the doc comments where each is used): this constant drives the
+// injected `.ProseMirror { max-height }` CSS and the `RichText` WebView's own
+// explicit `containerStyle` height (now that `dynamicHeight` is off — see
+// that hook option's comment); the outer wrapping `View`'s `max-h-[556px]`
+// class is the third spot but can't reference this constant directly —
+// NativeWind's Tailwind-class extraction needs a statically-analyzable
+// string literal, not an interpolated variable, so that one's a hardcoded
+// literal that must be kept ~16px above this value by hand (the same
+// wrapper-above-content safety-margin relationship this field shipped with
+// at its old, shorter sizes: 320px inner / 336px outer). 540/556px reads as
+// a real writing surface in the task bottom sheet without dominating it on
+// small phones.
+const PROSEMIRROR_MAX_HEIGHT = 540;
+
 const EDITOR_EXTENSIONS = [
   CoreBridge,
   BoldBridge,
@@ -71,21 +86,21 @@ const EDITOR_EXTENSIONS = [
  * Numbered lists. "Upload file" stays a stub toast — real upload wiring is
  * out of scope here too.
  *
- * KNOWN GAP vs. web: the toolbar is a floating pill shown/hidden by
- * `state.isFocused` (an absolutely-positioned overlay straddling the
- * editor's top edge), not a bubble anchored to the exact text-selection
- * caret position like web's Tiptap bubble menu. `tentap-editor`'s
- * `CoreEditorState` bridge state exposes a `selection: { from, to }` text
- * *offset* pair but no WebView-internal screen *coordinates* for that
- * selection, so there's nothing to anchor a true per-caret bubble to from
- * native — showing/hiding on focus is the closest reasonable approximation
- * given that constraint (revisit if a future `tentap-editor` version adds
- * coordinate reporting). Deliberately gated on *focus*, not "has a non-empty
- * selection": Upload has no selection-dependent behavior and needs to stay
- * reachable with nothing selected, so gating on selection emptiness would
- * hide it exactly when it's needed. Marks/lists can be toggled with or
- * without a text selection (typing then continues in that style), which is
- * more correct WYSIWYG behavior than a selection-required toolbar anyway.
+ * KNOWN GAP vs. web: the toolbar is a static, always-rendered in-flow block
+ * (see the doc comment at its JSX below for exactly where and why), not a
+ * bubble anchored to the exact text-selection caret position like web's
+ * Tiptap bubble menu. `tentap-editor`'s `CoreEditorState` bridge state
+ * exposes a `selection: { from, to }` text *offset* pair but no
+ * WebView-internal screen *coordinates* for that selection, so there's
+ * nothing to anchor a true per-caret bubble to from native — an
+ * always-visible static bar is the closest reasonable approximation given
+ * that constraint (revisit if a future `tentap-editor` version adds
+ * coordinate reporting). Deliberately *not* gated on focus or selection
+ * state: Upload has no selection-dependent behavior and needs to stay
+ * reachable with nothing selected or focused, and marks/lists can be toggled
+ * with or without a text selection (typing then continues in that style),
+ * which is more correct WYSIWYG behavior than a selection/focus-gated
+ * toolbar anyway.
  *
  * KNOWN GAP vs. web (scoped down deliberately): the web editor
  * (`frontend/src/components/common/editor/video-block.tsx`/`audio-block.tsx`)
@@ -124,11 +139,10 @@ const EDITOR_EXTENSIONS = [
  * Metro web bundle for its literal text. So on `pnpm --filter mobile
  * dev:web` (this repo's only available dev target — see CLAUDE.md), the
  * WYSIWYG `RichText`/`useEditorBridge` machinery below never mounts a real
- * WebView, never loads `editorHtml`'s ProseMirror document, and never runs
- * the ResizeObserver-driven `dynamicHeight` height-reporting this file
- * depends on — any layout instability reported against the web target
- * can't be that document's CSS misbehaving (there's no document to
- * misbehave). `DescriptionField` below is a thin `Platform.OS` switch so
+ * WebView and never loads `editorHtml`'s ProseMirror document — any layout
+ * instability reported against the web target can't be that document's CSS
+ * misbehaving (there's no document to misbehave). `DescriptionField` below
+ * is a thin `Platform.OS` switch so
  * web dev gets an honest, bounded plain-text fallback (`DescriptionFieldWeb`)
  * instead of either the confusing dummy stub or an unbounded layout —
  * native (the real target platform) still gets the full editor via
@@ -224,7 +238,12 @@ function DescriptionFieldEditor({
     bridgeExtensions: EDITOR_EXTENSIONS,
     initialContent: value || "",
     editable: !disabled,
-    dynamicHeight: true,
+    // `dynamicHeight: false` — see the `RichText` usage below for why. Kept
+    // `false` (not omitted) to make explicit that this isn't the library's
+    // default (`dynamicHeight` is `undefined`/falsy by default, but this
+    // used to be `true` here and the flip is deliberate — see the fixed-
+    // height doc comment at the `RichText` call site).
+    dynamicHeight: false,
     theme: {
       webview: {
         backgroundColor: isDarkColorScheme
@@ -273,28 +292,35 @@ function DescriptionFieldEditor({
   // there's no color seam around the (now singly-padded) content area.
   // `8px 12px` was originally chosen to match web's `px-3 py-2` Tailwind
   // classes exactly, but that reads as too much inset on a much narrower
-  // mobile viewport — tightened to `6px 10px` here (mobile-only; the web
-  // editor keeps its own `px-3 py-2`, they don't need to match pixel-for-
-  // pixel since they're different viewport classes).
+  // mobile viewport — tightened to `6px 10px` (mobile-only; the web editor
+  // keeps its own `px-3 py-2`, they don't need to match pixel-for-pixel since
+  // they're different viewport classes), then further to an asymmetric
+  // `10px 10px 6px` (top/right/bottom, left inherits the last value = 10px)
+  // — see the padding comment further down at the actual injected string for
+  // why the top edge specifically got more room.
   //
   // `max-height`/`overflow-y: auto` on `.ProseMirror` is a deliberate cap,
   // not part of the original design: the bundled editor HTML's base
   // stylesheet (`simpleWebEditor/index.html`) sets `.ProseMirror { min-height:
-  // 100%; overflow: visible }` unconditionally, including in `dynamicHeight`
-  // mode where the containing block's own height is `unset` (auto/content-
-  // sized) — a circular percentage-height relationship. Spec-compliant engines
-  // resolve `min-height: 100%` against an indefinite containing block as 0
-  // (CSS2.1 §10.5), but WebView engines vary by OS/OEM version, and this
-  // library's own `dynamicHeight` mechanism (a ResizeObserver reporting
-  // `.ProseMirror`'s measured height back to native, which then resizes the
-  // WebView's native container to match) would amplify any non-zero
-  // resolution every tick. Capping `.ProseMirror`'s own rendered height here
-  // makes the *measured* value bounded regardless of how a given engine
-  // resolves the percentage, so the reported `dynamicHeight` can never run
-  // away — content beyond the cap scrolls inside the editor's own document
-  // instead (the WebView's own outer scroll stays disabled, per `RichText`'s
-  // hardcoded `scrollEnabled={false}`, so `BottomSheetScrollView` remains the
-  // single scroll owner up to this cap).
+  // 100%; overflow: visible }` unconditionally — with `dynamicHeight` now
+  // off (see the `dynamicHeight: false` note above and the `RichText` call
+  // site below), this cap's job is simpler than it used to be: it's just the
+  // visible/scrollable bound of a *fixed*-height WebView, matched 1:1 by the
+  // `RichText` call site's `containerStyle` height and the outer wrapping
+  // `View`'s `max-h` a few lines down (all three should move together — see
+  // the comment there for the exact numbers and the ~16px relationship
+  // between the outer wrapper and this inner value). Content beyond the cap
+  // scrolls inside the editor's own document instead (the WebView's own
+  // outer scroll stays disabled, per `RichText`'s hardcoded
+  // `scrollEnabled={false}`, so `BottomSheetScrollView` remains the single
+  // scroll owner up to this cap).
+  //
+  // (Historical note: before the `dynamicHeight: false` fix, this cap did
+  // double duty as a *ResizeObserver* runaway-growth guard too — capping
+  // `.ProseMirror`'s measured height bounded what `dynamicHeight`'s
+  // ResizeObserver-driven native resize could ever report. That mechanism is
+  // gone now, but the visual cap stays for the same reason a fixed-height
+  // scrollable text area is desirable regardless.)
   function injectContentStyles() {
     const bg = isDarkColorScheme ? "rgb(29 26 23)" : "rgb(255 255 255)";
     const fg = isDarkColorScheme ? "rgb(250 250 249)" : "rgb(28 25 23)";
@@ -308,7 +334,12 @@ function DescriptionFieldEditor({
       ? "'Geist', -apple-system, sans-serif"
       : "-apple-system, sans-serif";
     editor.injectCSS(
-      `${fontFace} body { background-color: ${bg}; } .ProseMirror { background-color: ${bg}; color: ${fg}; font-family: ${fontFamily}; font-size: 14px; padding: 6px 10px; line-height: 1.5; max-height: 320px; overflow-y: auto; }`,
+      // `padding` is `10px 10px 6px` (top bumped from the original uniform
+      // `6px 10px`), not just for visual breathing room — see the toolbar
+      // doc comment below (`ToolbarButton` bar's new position) for why a
+      // first-line-isn't-flush-with-the-top gap matters for Android's native
+      // text-selection toolbar.
+      `${fontFace} body { background-color: ${bg}; } .ProseMirror { background-color: ${bg}; color: ${fg}; font-family: ${fontFamily}; font-size: 14px; padding: 10px 10px 6px; line-height: 1.5; max-height: ${PROSEMIRROR_MAX_HEIGHT}px; overflow-y: auto; }`,
       "description-field-theme",
     );
   }
@@ -356,21 +387,51 @@ function DescriptionFieldEditor({
 
   return (
     <View ref={containerRef} className="gap-1.5">
-      {/* Static, always-rendered bar — was a floating, absolutely-positioned
-          pill straddling the editor's top edge, shown/hidden by
-          `state.isFocused`/`linkOpen`. Two real problems with that: it
-          overlapped Android's own text-selection toolbar (the native
-          copy/paste/select-all bar the OS renders over a focused/selected
-          WebView — an absolutely-positioned sibling can't avoid colliding
-          with something the OS itself draws over the WebView's content), and
-          it didn't reliably hide on blur. A plain in-flow block above the
-          WebView container can never spatially collide with anything the OS
-          renders over the WebView, and always rendering it removes the
-          hide/show state entirely — no more not-hiding-on-blur bug because
-          there's no hiding to get wrong. Deliberately white-background/
-          black-icons regardless of the app's light/dark scheme — this needs
-          to read as an editor toolbar, not another chrome surface. */}
-      <View className="flex-row flex-wrap items-center gap-0.5 rounded-t-[13px] border border-b-0 border-input bg-white p-1">
+      {/* `max-h` is a second, outer safety net alongside the injected
+          `.ProseMirror` cap above (`injectContentStyles`) and the explicit
+          `containerStyle` height passed to `RichText` below —
+          belt-and-suspenders in case the WebView's native container ever
+          reports a height past that cap for some other reason;
+          `overflow-hidden` here just clips the render, it doesn't bound
+          layout on its own. Rounded on the *top* corners only (`rounded-t`,
+          `border-b-0`) — the toolbar bar below supplies the bottom corners
+          and border, the two visually read as one bordered control. */}
+      <View className="max-h-[556px] min-h-[110px] w-full overflow-hidden rounded-t-[13px] border border-b-0 border-input bg-card">
+        <RichText
+          editor={editor}
+          onLoad={injectContentStyles}
+          containerStyle={{ height: PROSEMIRROR_MAX_HEIGHT }}
+        />
+      </View>
+
+      {/* Static, always-rendered bar, positioned *below* the editor (not
+          above it, as this used to be). History: this was first a floating,
+          absolutely-positioned pill straddling the editor's top edge,
+          shown/hidden by `state.isFocused`/`linkOpen` — replaced with a
+          static in-flow block (this comment's predecessor) to fix that
+          version not reliably hiding on blur. That static block still sat
+          *above* the WebView, though, and that positioning turned out to
+          have its own collision problem: Android's native text-selection
+          toolbar (the OS-drawn copy/paste/select-all bar that appears over a
+          text selection inside the WebView) is a compositor-level overlay,
+          not a view in RN's tree — it isn't clipped or z-ordered by sibling
+          views, and it always prefers to render *above* the selection's
+          anchor point when there's room. With our toolbar sitting in-flow
+          above the WebView, selecting text on/near the editor's first line
+          left the OS toolbar nowhere to go but into the space our toolbar
+          already occupied, overlapping it regardless of z-index. Moving our
+          toolbar below the editor takes it out of that collision zone
+          entirely, since the OS toolbar's preferred render position (above
+          the selection, inside the WebView's own bounds) is now on the
+          opposite side from where our bar lives. Paired with a small bump to
+          `.ProseMirror`'s top padding above (`injectContentStyles`) so the
+          first line itself isn't flush with the WebView's very top edge,
+          giving the OS toolbar a little native room to render inside the
+          WebView's own bounds instead of needing to overflow past it.
+          Deliberately white-background/black-icons regardless of the app's
+          light/dark scheme — this needs to read as an editor toolbar, not
+          another chrome surface. */}
+      <View className="flex-row flex-wrap items-center gap-0.5 rounded-b-[13px] border border-t-0 border-input bg-white p-1">
         <ToolbarButton
           icon={Bold}
           label="Bold"
@@ -440,15 +501,6 @@ function DescriptionFieldEditor({
           disabled={disabled}
           onPress={() => editor.toggleOrderedList()}
         />
-      </View>
-
-      {/* `max-h` is a second, outer safety net alongside the injected
-          `.ProseMirror` cap above (`injectContentStyles`) — belt-and-suspenders
-          in case the WebView's native container ever reports a height past
-          that cap for some other reason; `overflow-hidden` here just clips
-          the render, it doesn't bound layout on its own. */}
-      <View className="max-h-[336px] min-h-[110px] w-full overflow-hidden rounded-b-[13px] border border-input bg-card">
-        <RichText editor={editor} onLoad={injectContentStyles} />
       </View>
 
       {linkOpen && (
