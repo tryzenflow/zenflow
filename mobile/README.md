@@ -45,10 +45,10 @@ mobile/
 │   ├── primitives/            # headless behavior (portal, slot, useControllableState, …),
 │   │                          # each with a `.web.tsx` variant where native/web diverge
 │   ├── onboarding/, settings/ # screen-specific composite components
-│   ├── tasks/                 # CreateTaskSheet / EditTaskSheet / ChangeDurationSheet — each a
-│   │   │                      # forwardRef component with an imperative `.open(...)` handle (see
-│   │   │                      # Known pitfalls' "Bottom sheets must open synchronously" note),
-│   │   │                      # plus CreateTaskFab (the reusable "+" FAB + CreateTaskSheet
+│   ├── tasks/                 # task/new.tsx and task/[id]/edit.tsx full-screen forms (duration
+│   │   │                      # resize now lives entirely in the edit screen's stepper — see
+│   │   │                      # "The task create/edit form is a full screen" below), plus
+│   │   │                      # CreateTaskFab (the reusable "+" FAB + CreateTaskSheet
 │   │   │                      # pairing used by index.tsx/week.tsx/month.tsx) and OptimizeFab
 │   │   │                      # (floating Sparkles FAB + self-contained bottom sheet — window
 │   │   │                      # start/end date pickers + Mode 3-default/secondary-disclosure
@@ -444,9 +444,13 @@ platform widget break an instant into calendar fields using the device's own tim
 they were when those bugs were investigated) no longer exist. The task form now lives on its own
 route — `app/task/new.tsx` and `app/task/[id]/edit.tsx`, registered in `app/_layout.tsx`'s root
 `<Stack>` with `presentation: "modal"` — sharing chrome via
-`components/tasks/task-form-screen.tsx`. `ChangeDurationSheet` is unaffected and still a real
-`@gorhom/bottom-sheet` sheet (a small single-purpose quick action, not a form), so the
-bottom-sheet-specific guidance above still matters for it.
+`components/tasks/task-form-screen.tsx`. `ChangeDurationSheet` — a separate long-press quick
+action for resizing a task without opening the edit screen — was removed entirely as redundant;
+the edit screen's `DurationStepper` (`components/tasks/task-sheet-fields.tsx`) already covers
+resize, so long-pressing a task row no longer opens anything and tapping it is the only way in.
+The bottom-sheet-specific guidance above still matters for the sheets that remain
+(`components/ui/time-picker.tsx`, `components/settings/*-picker-row.tsx`,
+`components/tasks/optimize-fab.tsx`).
 
 Two knock-on changes from dropping the sheet-ref pattern:
 
@@ -547,9 +551,10 @@ non-absolute, flexbox-pinned-footer pattern already used by `app/(onboarding)/in
 flexbox naturally reserves the footer's own height and the scroll view takes the rest — no measured-
 height padding hack needed once the footer isn't an overlay). Verified live on an Android emulator
 at every step (`form`/`confirmLarge`/`result`) with the mode-options list expanded — the footer
-never overlaps a row. `change-duration-sheet.tsx` still uses `footerComponent` + fixed `snapPoints`
-deliberately (its content height never changes, so the overlay never has anything new to cover) —
-this fix only applies where scrollable content can grow past the footer's fixed position.
+never overlaps a row. `components/tasks/optimize-fab.tsx`'s sheet still uses `footerComponent` +
+fixed `snapPoints` deliberately (its content height never changes, so the overlay never has
+anything new to cover) — this fix only applies where scrollable content can grow past the
+footer's fixed position.
 
 ### A fixed-`snapPoints` sheet needs `keyboardBehavior="interactive"`, not the shared default
 

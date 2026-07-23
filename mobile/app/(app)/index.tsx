@@ -1,10 +1,6 @@
 import { listTasks } from "@/api/tasks";
 import { Calendar } from "@/components/Icons";
 import {
-  ChangeDurationSheet,
-  type ChangeDurationSheetHandle,
-} from "@/components/tasks/change-duration-sheet";
-import {
   CreateTaskFab,
   createTaskAtNowHref,
 } from "@/components/tasks/create-task-fab";
@@ -18,7 +14,7 @@ import type { Task } from "@zenflow/shared";
 import { format } from "date-fns";
 import * as Haptics from "expo-haptics";
 import { type Href, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 
 /**
@@ -32,15 +28,14 @@ import { Pressable, RefreshControl, ScrollView, View } from "react-native";
  * This screen is the minimal surface issue #20 asks for instead ("wire what
  * is reasonable, note what's blocked"): today's tasks as a plain list
  * (rather than a positioned grid — there's no grid to position against yet)
- * with the three real gestures wired against the real API:
- *   - tap a task card            → `/task/[id]/edit`
- *   - long-press a task card     → `ChangeDurationSheet`
+ * with the two real gestures wired against the real API:
+ *   - tap a task card            → `/task/[id]/edit` (also where duration
+ *     resize now lives, via `TaskSheetFields`'s stepper)
  *   - long-press the empty area  → `/task/new`, pre-filled with "now"
  *     snapped to the next 15-minute mark
  *
  * The create/edit forms are full screens, not bottom sheets — see
- * mobile/README.md for why. `ChangeDurationSheet` is a much smaller,
- * single-purpose quick action (not a form), so it stays a sheet.
+ * mobile/README.md for why.
  *
  * BLOCKED (tracked for Phase 2, not attempted here): true per-pixel
  * long-press-a-time-slot → snapped-start-time creation (needs the absolute
@@ -53,8 +48,6 @@ export default function DayScreen() {
   const tz = user?.timezone || "UTC";
   const [tasks, setTasks] = useState<Task[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-
-  const durationSheetRef = useRef<ChangeDurationSheetHandle>(null);
 
   const refetch = useCallback(async () => {
     const res = await listTasks("day", zonedNow(tz), "PENDING");
@@ -116,17 +109,6 @@ export default function DayScreen() {
             task={task}
             tz={tz}
             onPress={() => router.push(`/task/${task.id}/edit` as Href)}
-            onLongPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(
-                () => {},
-              );
-              durationSheetRef.current?.open({
-                id: task.id,
-                title: task.title,
-                durationMinutes: task.durationMinutes,
-                scheduledStartTime: task.scheduledStartTime,
-              });
-            }}
           />
         ))}
 
@@ -149,7 +131,6 @@ export default function DayScreen() {
 
       <CreateTaskFab tz={tz} />
       <OptimizeFab tz={tz} onApplied={refetch} />
-      <ChangeDurationSheet ref={durationSheetRef} onResized={refetch} />
     </View>
   );
 }
@@ -158,12 +139,10 @@ function TaskRow({
   task,
   tz,
   onPress,
-  onLongPress,
 }: {
   task: Task;
   tz: string;
   onPress: () => void;
-  onLongPress: () => void;
 }) {
   const timeLabel = task.scheduledStartTime
     ? formatRange(task.scheduledStartTime, task.durationMinutes, tz)
@@ -172,7 +151,6 @@ function TaskRow({
   return (
     <Pressable
       onPress={onPress}
-      onLongPress={onLongPress}
       className={cn(
         "flex-row items-center gap-3 rounded-xl border border-l-4 bg-card px-3.5 py-3",
         task.status === "DONE"

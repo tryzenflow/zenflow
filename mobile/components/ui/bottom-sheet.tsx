@@ -235,7 +235,7 @@ type BottomSheetScrollViewProps = React.ComponentPropsWithoutRef<
 >;
 /**
  * Plain `ScrollView` wrapper — added so `create-task-sheet.tsx` /
- * `edit-task-sheet.tsx` / `change-duration-sheet.tsx` can import
+ * `edit-task-sheet.tsx` can import
  * `BottomSheetScrollView` from here instead of straight from
  * `@gorhom/bottom-sheet`. That mattered: `@gorhom/bottom-sheet`'s own
  * `BottomSheetScrollView` reads `useBottomSheetInternal()`, a context only a

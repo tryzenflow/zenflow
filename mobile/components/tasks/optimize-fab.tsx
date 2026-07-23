@@ -66,7 +66,7 @@ function errorMessage(error: unknown, fallback: string): string {
  * self-contained floating trigger, so it doesn't need those screens' stub
  * toolbars to exist first) — but unlike `CreateTaskFab`, which just
  * navigates, this owns its own `@gorhom/bottom-sheet` sheet directly (same
- * infra `InlineDateField`/`ChangeDurationSheet` already use).
+ * infra `InlineDateField` already uses).
  *
  * No per-task diff/preview UI is ever rendered here — deliberately ruled out
  * by the plan. `optimizePreview` only returns a count, used to decide
@@ -83,8 +83,8 @@ export function OptimizeFab({
 }: {
   tz: string;
   /** Called after a successful apply (and after a successful undo) so the
-   * calling screen can refetch — same pattern as `ChangeDurationSheet`'s
-   * `onResized`. Optional since `week.tsx`/`month.tsx` have no task list yet. */
+   * calling screen can refetch. Optional since `week.tsx`/`month.tsx` have
+   * no task list yet. */
   onApplied?: () => void;
 }) {
   const bottomSheet = useBottomSheet();

@@ -20,13 +20,14 @@ import { TagAutocomplete } from "./form/tag-autocomplete";
  * which hides Duration entirely in edit mode (the web only changes duration
  * by dragging the block's resize handle on the calendar), the mobile mockup
  * (`mockups/task-sheets.html`'s "Edit · populated" frame) keeps the
- * duration stepper visible and editable in BOTH sheets — mobile has no
- * drag-resize handles (too small for touch), so the edit sheet's stepper is
- * one of the two ways to change duration, alongside the dedicated
- * long-press → `ChangeDurationSheet` gesture. `EditTaskSheet` is
- * responsible for turning a duration change here into a
- * `PATCH /tasks/:id/resize` call (see its `onSubmit`), since
- * `UpdateTaskInput` has no `durationMinutes` field.
+ * duration stepper visible and editable in the edit screen — mobile has no
+ * drag-resize handles (too small for touch), so the edit screen's stepper is
+ * the only way to change duration (a separate long-press
+ * `ChangeDurationSheet` quick action used to exist alongside it but was
+ * removed as redundant — see git history if reviving that gesture is ever
+ * reconsidered). `EditTaskSheet` is responsible for turning a duration
+ * change here into a `PATCH /tasks/:id/resize` call (see its `onSubmit`),
+ * since `UpdateTaskInput` has no `durationMinutes` field.
  */
 export function TaskSheetFields({
   form,

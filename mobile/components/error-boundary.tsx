@@ -33,12 +33,11 @@ interface ErrorBoundaryState {
  * pitfalls section — and wasn't verified on-device when they were wired up),
  * creating that native view throws during render. Unhandled, that crash
  * unwound the whole `(app)/index` Day-screen tree, which is why *every*
- * sheet-opening gesture (FAB, long-press-empty-area, tap-to-edit,
- * long-press-to-resize) appeared broken at once — `CreateTaskSheet`,
- * `EditTaskSheet`, and `ChangeDurationSheet` are siblings under that same
- * tree, so one field's crash took the others down with it, not just its own
- * sheet. Wrapping just the WebView-backed field keeps a failure there
- * contained to a small inline fallback instead.
+ * sheet-opening gesture (FAB, long-press-empty-area, tap-to-edit) appeared
+ * broken at once — `CreateTaskSheet` and `EditTaskSheet` are siblings under
+ * that same tree, so one field's crash took the other down with it, not
+ * just its own sheet. Wrapping just the WebView-backed field keeps a
+ * failure there contained to a small inline fallback instead.
  */
 export class ErrorBoundary extends React.Component<
   ErrorBoundaryProps,

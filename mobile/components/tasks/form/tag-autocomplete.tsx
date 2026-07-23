@@ -181,9 +181,8 @@ export function TagAutocomplete({
           // re-measures and re-snaps the sheet's height on every row-count
           // change (`rows` reshapes on literally every keystroke as
           // `matchTags`/`canCreate` re-run), which read as "the sheet
-          // suddenly collapsed" while typing. Same fix
-          // `change-duration-sheet.tsx` already applied for the identical
-          // symptom. A shorter, fixed snap point (vs. full height) also
+          // suddenly collapsed" while typing. A shorter, fixed snap point
+          // (vs. full height) also
           // keeps the dark backdrop visible above the sheet for tap-to-
           // dismiss, matching the "don't want a full-height sheet" ask.
           enableDynamicSizing={false}
