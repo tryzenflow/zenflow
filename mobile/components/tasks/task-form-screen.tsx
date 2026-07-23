@@ -1,15 +1,59 @@
 import { X } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
 import { useRouter } from "expo-router";
-import type { ReactNode } from "react";
+import { type ReactNode, createContext, useContext, useRef } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   View,
+  findNodeHandle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+/**
+ * The form screen's single scroll owner, exposed so a field far down the
+ * form (currently just `DescriptionFieldEditor`'s WebView editor — see
+ * `form/description-field.tsx`) can scroll itself into view above the
+ * keyboard on focus. This is needed because RN's `ScrollView` only
+ * auto-scrolls to the currently-focused element for a real native
+ * `TextInput` (`TextInputState`-driven) — a `react-native-webview` has no
+ * such integration, so a WebView-hosted input focusing deep inside the
+ * WebView never triggers the scroll RN gives every other field for free
+ * (Android's `softwareKeyboardLayoutMode: "resize"`, `app.config.ts`, only
+ * resizes the *window*; it doesn't scroll this ScrollView's content to
+ * reveal whatever's now supposed to be visible in the shrunk viewport).
+ */
+const TaskFormScrollContext =
+  createContext<React.RefObject<ScrollView | null> | null>(null);
+
+/**
+ * Scrolls a given node (by ref) into view above the keyboard, the same way
+ * RN's `ScrollView` already does automatically for a focused native
+ * `TextInput` — for callers (like the WebView note editor) that don't get
+ * that behavior for free. No-ops outside `TaskFormScreen` or if the
+ * scroll-responder API isn't available on this RN version/architecture.
+ */
+export function useScrollIntoViewOnFocus() {
+  const scrollViewRef = useContext(TaskFormScrollContext);
+  return (nodeRef: React.RefObject<View | null>) => {
+    const scrollView = scrollViewRef?.current;
+    const node = nodeRef.current;
+    if (!scrollView || !node) return;
+    const responder = scrollView.getScrollResponder?.();
+    const handle = findNodeHandle(node);
+    if (
+      !responder ||
+      typeof responder.scrollResponderScrollNativeHandleToKeyboard !==
+        "function" ||
+      !handle
+    ) {
+      return;
+    }
+    responder.scrollResponderScrollNativeHandleToKeyboard(handle, 80, true);
+  };
+}
 
 /**
  * Shared chrome for the task create/edit screens (`app/task/new.tsx`,
@@ -41,6 +85,7 @@ export function TaskFormScreen({
 }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const scrollViewRef = useRef<ScrollView | null>(null);
 
   return (
     <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
@@ -81,11 +126,14 @@ export function TaskFormScreen({
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
+          ref={scrollViewRef}
           className="flex-1 px-5 pt-4"
           contentContainerStyle={{ paddingBottom: 32 }}
           keyboardShouldPersistTaps="handled"
         >
-          {children}
+          <TaskFormScrollContext.Provider value={scrollViewRef}>
+            {children}
+          </TaskFormScrollContext.Provider>
         </ScrollView>
 
         <View

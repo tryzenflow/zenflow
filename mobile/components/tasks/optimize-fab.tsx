@@ -27,7 +27,26 @@ import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useState } from "react";
 import { Pressable, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { InlineDateField } from "./form/inline-date-field";
+
+/**
+ * Reserved bottom padding for the sheet's `BottomSheetScrollView`, so the
+ * last row of content (the mode-options list, when expanded) never ends up
+ * underneath the fixed `footerComponent`. `enableDynamicSizing={true}`
+ * (this sheet's default, unlike `change-duration-sheet.tsx`'s fixed
+ * `snapPoints`) sizes the sheet to its *scrollable content*, not the
+ * content + footer combined — `@gorhom/bottom-sheet` renders the footer as
+ * an absolutely-positioned overlay on top of that sized content, so without
+ * this the footer just overlaps whatever's scrolled to the bottom. Mirrors
+ * `BottomSheetView`'s own `BOTTOM_SHEET_HEADER_HEIGHT` reservation for the
+ * *header* case (`components/ui/bottom-sheet.native.tsx`) — there's no
+ * equivalent built-in for a footer, so it's computed here from this sheet's
+ * actual footer layout: one 52px button, `pt-1.5` (6px) above it, and
+ * `paddingBottom: insets.bottom + 6` below it (see `BottomSheetFooter`'s own
+ * `style` in the shared file) — plus a little extra breathing room.
+ */
+const OPTIMIZE_FOOTER_HEIGHT = 52 + 6 + 6 + 16;
 
 type OptimizeMode = OptimizeWindowInput["mode"];
 
@@ -118,6 +137,7 @@ export function OptimizeFab({
 }) {
   const bottomSheet = useBottomSheet();
   const { toast } = useToast();
+  const insets = useSafeAreaInsets();
 
   const [step, setStep] = useState<Step>("form");
   const [mode, setMode] = useState<OptimizeMode>(DEFAULT_MODE);
@@ -339,7 +359,12 @@ export function OptimizeFab({
               Optimize schedule
             </Text>
           </BottomSheetHeader>
-          <BottomSheetScrollView className="px-5 pt-3">
+          <BottomSheetScrollView
+            className="px-5 pt-3"
+            contentContainerStyle={{
+              paddingBottom: insets.bottom + OPTIMIZE_FOOTER_HEIGHT,
+            }}
+          >
             {step === "form" && (
               <View className="gap-4 pb-2">
                 <Text className="text-[13px] text-muted-foreground">

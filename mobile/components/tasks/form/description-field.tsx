@@ -12,6 +12,7 @@ import {
   Upload,
   X,
 } from "@/components/Icons";
+import { useScrollIntoViewOnFocus } from "@/components/tasks/task-form-screen";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { Textarea } from "@/components/ui/textarea";
@@ -197,6 +198,8 @@ function DescriptionFieldEditor({
   const [linkDraft, setLinkDraft] = useState("");
   const [fontDataUri, setFontDataUri] = useState<string | null>(null);
   const lastEmitted = useRef(value);
+  const containerRef = useRef<View>(null);
+  const scrollIntoView = useScrollIntoViewOnFocus();
 
   // Base64-embed Geist as a `@font-face` inside the editor's WebView
   // document once (see `lib/geist-webview-font.ts`'s doc comment for why a
@@ -238,6 +241,22 @@ function DescriptionFieldEditor({
   });
 
   const state = useBridgeState(editor);
+
+  // The WebView editor doesn't participate in RN's built-in "scroll the
+  // focused input above the keyboard" behavior (that's `TextInputState`-
+  // driven and only knows about real native `TextInput`s) — without this,
+  // focusing the editor when it sits below the fold just leaves it under the
+  // keyboard once Android's window-resize (`app.config.ts`) shrinks the
+  // available height. `useScrollIntoViewOnFocus` (from `TaskFormScreen`)
+  // reaches up to the form's single `ScrollView` and asks it to scroll this
+  // editor's wrapping `View` into view the same way it would for a focused
+  // `TextInput`.
+  useEffect(() => {
+    if (state.isFocused) {
+      scrollIntoView(containerRef);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.isFocused]);
 
   // The bundled editor HTML ships no padding and no explicit font-size/color
   // on `.ProseMirror` — `theme.webview.backgroundColor` above only colors the
@@ -342,7 +361,7 @@ function DescriptionFieldEditor({
   const toolbarVisible = !!state.isFocused || linkOpen;
 
   return (
-    <View className="gap-1.5">
+    <View ref={containerRef} className="gap-1.5">
       {/* `relative` positions the floating toolbar pill against this box
           (not the whole field column), so it straddles the editor's own top
           edge regardless of where the field sits in the surrounding form. */}

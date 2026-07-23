@@ -329,14 +329,22 @@ to something that actually works; a bare `@gorhom/bottom-sheet` import type-chec
 `moduleSuffixes` resolution masks the mismatch — see the next paragraph) but silently breaks on
 web only.
 
-Separately, note `components/primitives/bottomSheet/bottom-sheet.native.tsx` is an orphaned
-duplicate of `components/ui/bottom-sheet.native.tsx` (predates the `setRefs`-callback-ref fix
-described above, and nothing imports it) and `components/settings/ThemeItem.tsx` imports from
-`@/components/primitives/bottomSheet/bottom-sheet.native` with the `.native` suffix spelled out
-explicitly in the specifier — which makes Metro resolve that exact file on *every* platform,
-web included, bypassing the web/native split this section describes. Neither was touched here
-(out of scope for the task-sheet bug this section documents), but both are worth cleaning up in a
-follow-up.
+`components/primitives/bottomSheet/bottom-sheet.native.tsx` used to be an orphaned duplicate of
+`components/ui/bottom-sheet.native.tsx` that predated the `setRefs`-callback-ref fix described
+above — `components/settings/ThemeItem.tsx` imported from it with the `.native` suffix spelled out
+explicitly in the specifier (bypassing the web/native split this section describes) and used
+`useBottomSheetModal()`'s ambient, queue-based `dismiss()` for its header close button instead of
+this exact `<BottomSheet>` instance's own `sheetRef`. On a screen that mounts more than one
+sheet-bearing settings row, that ambient dismiss can resolve to whatever's currently on top of
+`@gorhom/bottom-sheet`'s shared app-wide presented-sheets queue rather than "this" sheet, and the
+still-stale `useImperativeHandle(ref, () => sheetRef.current ?? {}, [sheetRef.current])` pattern in
+that duplicate file left plenty of surface for a `.current` of an unset ref to be read during that
+interaction — the reported crash ("Cannot read property 'current' of undefined" on pressing the
+Theme sheet's X button) traced back to this combination. `ThemeItem.tsx` now imports from
+`@/components/ui/bottom-sheet` like every other sheet in the app and uses `useBottomSheet()`'s own
+`ref`/`close()` (the same `BottomSheetHeader` from that file already reads this `<BottomSheet>`
+instance's context `sheetRef` directly, not the ambient queue — see its own doc comment). The
+orphaned duplicate file has been deleted.
 
 ### The task create/edit form is a full screen, not a bottom sheet
 

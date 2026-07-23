@@ -115,6 +115,28 @@ const BottomSheetContent = React.forwardRef<
       backdropProps,
       backgroundStyle,
       android_keyboardInputMode = "adjustResize",
+      // `@gorhom/bottom-sheet`'s own default (`keyboardBehavior="interactive"`)
+      // offsets the sheet upward by the *measured keyboard height* — a
+      // calculation meant for windows that DON'T already resize themselves
+      // (i.e. `android_keyboardInputMode="adjustPan"`). Pairing "interactive"
+      // with `android_keyboardInputMode="adjustResize"` (the default just
+      // above, needed elsewhere for plain-`TextInput` sheets) double-
+      // compensates on Android: the OS already shrinks the window to exclude
+      // the keyboard, then the library shifts the sheet up by that same
+      // keyboard height *again*, pushing fixed-height sheets (`snapPoints`
+      // + `enableDynamicSizing={false}`, e.g. `TagAutocomplete`'s nested
+      // sheet) further than intended — the nested `BottomSheetTextInput` and
+      // the rows below it end up shifted out of the resized viewport instead
+      // of settling just above the keyboard. `"fillParent"` avoids the
+      // double-compensation entirely: instead of computing an offset from
+      // keyboard height, it just expands the sheet to fill all the vertical
+      // space the (already-resized) window has left, so content reflows
+      // within that space instead of being translated past it.
+      // `keyboardBlurBehavior="restore"` (library default is `"none"`)
+      // returns the sheet to its original snap point once the keyboard
+      // closes, instead of leaving it expanded.
+      keyboardBehavior = "fillParent",
+      keyboardBlurBehavior = "restore",
       ...props
     },
     ref,
@@ -206,6 +228,8 @@ const BottomSheetContent = React.forwardRef<
         }}
         topInset={insets.top}
         android_keyboardInputMode={android_keyboardInputMode}
+        keyboardBehavior={keyboardBehavior}
+        keyboardBlurBehavior={keyboardBlurBehavior}
         {...props}
       />
     );
