@@ -33,6 +33,9 @@ export default defineConfig({
       },
     }),
   ],
+  optimizeDeps: {
+    include: ["@zenflow/core", "@zenflow/shared"],
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
