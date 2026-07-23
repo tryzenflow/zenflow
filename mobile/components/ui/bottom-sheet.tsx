@@ -1,25 +1,36 @@
+import { X } from "@/components/Icons";
+import * as DialogPrimitive from "@/components/primitives/dialog";
+import * as Slot from "@/components/primitives/slot";
+import { cn } from "@/lib/utils";
 import * as React from "react";
 import {
+  FlatList as RNFlatList,
   type GestureResponderEvent,
   Pressable,
-  FlatList as RNFlatList,
-  TextInput as RNTextInput,
+  ScrollView as RNScrollView,
   StyleSheet,
+  TextInput as RNTextInput,
   View,
   type ViewStyle,
 } from "react-native";
-import * as DialogPrimitive from "@/components/primitives/dialog";
-import * as Slot from "@/components/primitives/slot";
-import { X } from "@/components/Icons";
-import { cn } from "@/lib/utils";
 import { Button } from "./button";
 
 // !IMPORTANT: This file is only for web.
 //
-// There is no web-ready gesture-driven sheet in this repo (@gorhom/bottom-sheet
-// is native-only), so this reimplements the same BottomSheet* API on top of the
-// Dialog primitive (Radix under the hood) — a modal anchored to the bottom of
-// the viewport instead of centered — so callers share one API cross-platform.
+// This reimplements the same BottomSheet* API on top of the Dialog primitive
+// (Radix under the hood) — a modal anchored to the bottom of the viewport
+// instead of centered — so callers share one API cross-platform, without
+// pulling in `@gorhom/bottom-sheet`'s own gesture-driven sheet chrome
+// (`<BottomSheetModal>`) on web.
+//
+// Because `BottomSheetContent` here is NOT a real `@gorhom/bottom-sheet`
+// instance, any `@gorhom/bottom-sheet` component that depends on that
+// package's own internal context (e.g. its `BottomSheetScrollView`, which
+// reads `useBottomSheetInternal()`) throws if used as a child on web — see
+// this file's own `BottomSheetScrollView` below for the cross-platform-safe
+// replacement. Callers should get every `BottomSheet*` piece they need from
+// `@/components/ui/bottom-sheet`, not mix in bare `@gorhom/bottom-sheet`
+// imports for anything that renders inside a sheet's body.
 
 /** Minimal subset of the @gorhom/bottom-sheet imperative API this file mirrors. */
 interface WebSheetHandle {
@@ -218,6 +229,44 @@ const BottomSheetFlatList = React.forwardRef<
   );
 });
 
+type BottomSheetScrollViewRef = React.ElementRef<typeof RNScrollView>;
+type BottomSheetScrollViewProps = React.ComponentPropsWithoutRef<
+  typeof RNScrollView
+>;
+/**
+ * Plain `ScrollView` wrapper — added so `create-task-sheet.tsx` /
+ * `edit-task-sheet.tsx` can import
+ * `BottomSheetScrollView` from here instead of straight from
+ * `@gorhom/bottom-sheet`. That mattered: `@gorhom/bottom-sheet`'s own
+ * `BottomSheetScrollView` reads `useBottomSheetInternal()`, a context only a
+ * *real* `@gorhom/bottom-sheet` `<BottomSheet>`/`<BottomSheetModal>` instance
+ * provides — fine on native (`bottom-sheet.native.tsx`'s `BottomSheetContent`
+ * renders a real one), but on web `BottomSheetContent` is this file's Radix
+ * `Dialog`-based reimplementation (see the file header), which never
+ * provides that context. Importing gorhom's own `BottomSheetScrollView`
+ * directly meant every task sheet's content — including
+ * `TaskSheetFields`/`TagAutocomplete`/`DescriptionField` — rendered inside a
+ * component that unconditionally throws `"'useBottomSheetInternal' cannot
+ * be used out of the BottomSheet!"` on web, the only target this repo can
+ * currently run locally (CLAUDE.md: "Mobile dev … web target only"). A
+ * plain `ScrollView` here (mirroring `BottomSheetFlatList` below, which
+ * already avoided this trap) needs no such context and behaves the same way
+ * a scrollable sheet body should on web.
+ */
+const BottomSheetScrollView = React.forwardRef<
+  BottomSheetScrollViewRef,
+  BottomSheetScrollViewProps
+>(({ className, ...props }, ref) => {
+  return (
+    <RNScrollView
+      ref={ref}
+      className={cn("flex-1", className)}
+      keyboardShouldPersistTaps="handled"
+      {...props}
+    />
+  );
+});
+
 type BottomSheetHeaderRef = React.ElementRef<typeof View>;
 type BottomSheetHeaderProps = React.ComponentPropsWithoutRef<typeof View>;
 const BottomSheetHeader = React.forwardRef<
@@ -232,14 +281,23 @@ const BottomSheetHeader = React.forwardRef<
     <View
       ref={ref}
       className={cn(
-        "border-b border-border flex-row items-center justify-between pl-4",
+        "border-b border-border flex-row items-center justify-between px-4",
         className,
       )}
       {...props}
     >
       {children}
-      <Button onPress={close} variant="ghost" className="pr-4">
-        <X className="text-muted-foreground" size={24} />
+      {/* Matches `task-form-screen.tsx`'s header close button (`h-8 w-8
+          rounded-full bg-muted`) instead of a plain ghost icon button, for a
+          consistent close-affordance look across the sheeted and full-screen
+          flows — same treatment as the native file's `BottomSheetHeader`. */}
+      <Button
+        onPress={close}
+        variant="ghost"
+        accessibilityLabel="Close"
+        className="h-8 w-8 self-start rounded-full bg-muted p-0"
+      >
+        <X className="text-muted-foreground" size={16} />
       </Button>
     </View>
   );
@@ -282,6 +340,7 @@ export {
   BottomSheetFooter,
   BottomSheetHeader,
   BottomSheetOpenTrigger,
+  BottomSheetScrollView,
   BottomSheetTextInput,
   BottomSheetView,
   useBottomSheet,

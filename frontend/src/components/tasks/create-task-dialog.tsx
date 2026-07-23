@@ -18,7 +18,7 @@ import { zonedDate } from "@/utils/tz";
 import type { ViewMode } from "@zenflow/shared";
 import {
   handleDurationAdjustment,
-  maybeShowCascadeToast,
+  maybeShowRationaleToast,
 } from "@/lib/scheduling-toasts";
 
 export function CreateTaskDialog({
@@ -94,10 +94,13 @@ export function CreateTaskDialog({
       form.reset();
       setOpen(false);
 
-      // Cascade toast — only when this create's inline reoptimize bumped
-      // OTHER tasks; independent of (and fires before) the duration-adjustment
-      // and rationale toasts below, since it keys off a different response field.
-      maybeShowCascadeToast(response, onCreated);
+      // The tiered placer always names why it put the task where it did —
+      // fires independently of (and before) the duration-adjustment toast
+      // below, since it keys off a different response field.
+      maybeShowRationaleToast({
+        task: response.task,
+        rationale: response.schedulingMeta.rationale,
+      });
 
       // Phase-2: when the per-tag corrector adjusted the duration, the
       // auto/ask/never UX (ADR Sequence 1) replaces the plain success toast.

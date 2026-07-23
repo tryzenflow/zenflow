@@ -5,6 +5,7 @@ import {
   IsISO8601,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
   ValidateIf,
 } from "class-validator";
@@ -12,7 +13,9 @@ import { TIME_GRANULARITY } from "../../common/constants";
 import type { CreateTaskInput } from "@zenflow/shared";
 
 export class CreateTaskDto implements CreateTaskInput {
-  @IsString() title: string;
+  @IsString()
+  @MaxLength(60, { message: "Title must be at most 60 characters." })
+  title: string;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null)

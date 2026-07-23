@@ -1,5 +1,6 @@
 import { DeadlineOptionsResponse } from "@zenflow/shared";
-import { minutesToUtc } from "../../common/utils";
+import { DAILY_HORIZON, TIME_GRANULARITY } from "../../common/constants";
+import { minutesToUtc, utcToMinutes } from "../../common/utils";
 import {
   endOfPeriod,
   weekStartStr,
@@ -13,9 +14,12 @@ import {
 import { User } from "../../../generated/prisma";
 
 /**
- * The six deadline quick-action chip values: "Today" and "Tomorrow" are
- * midnight of the next two calendar days (avoiding 15-min grid); the rest
- * use `endOfPeriod` ceiling math relative to `anchor`.
+ * The six deadline quick-action chip values: "Today" is a few hours from now
+ * (the anchor's time-of-day plus 3 hours, rounded up to the next 15-minute
+ * grid boundary, clamped to the last on-grid slot of the anchor's calendar
+ * day so it never rolls into tomorrow); "Tomorrow" is the start (00:00) of
+ * the next calendar day; the rest use `endOfPeriod` ceiling math relative to
+ * `anchor`. Every returned instant lands on the 15-minute grid.
  */
 export function deadlineOptions(
   anchor: string,
@@ -26,11 +30,19 @@ export function deadlineOptions(
   const anchorDate = new Date(anchor);
   const dateStr = localDateStr(anchorDate, tz);
 
-  // "Today" = tomorrow at 12:00 AM (midnight start of next day)
-  const today = minutesToUtc(addDaysStr(dateStr, 1), 0, tz);
+  // "Today" = a few hours from now (anchor time-of-day + 3h, rounded up to
+  // the 15-minute grid, clamped to stay on the anchor's calendar day)
+  const anchorMinutes = utcToMinutes(anchorDate, tz);
+  const todayMinutesRaw =
+    Math.ceil((anchorMinutes + 180) / TIME_GRANULARITY) * TIME_GRANULARITY;
+  const todayMinutes = Math.min(
+    todayMinutesRaw,
+    DAILY_HORIZON - TIME_GRANULARITY,
+  );
+  const today = minutesToUtc(dateStr, todayMinutes, tz);
 
-  // "Tomorrow" = day after tomorrow at 12:00 AM
-  const tomorrow = minutesToUtc(addDaysStr(dateStr, 2), 0, tz);
+  // "Tomorrow" = start (00:00) of the next calendar day
+  const tomorrow = minutesToUtc(addDaysStr(dateStr, 1), 0, tz);
 
   const thisWeek = endOfPeriod(anchorDate, "week", tz, work);
 

@@ -1,5 +1,10 @@
 import { PREFERENCE_MATRIX_LENGTH } from "@zenflow/shared";
-import { applyPreferenceDeltas, EVENT_REWARD } from "./telemetry";
+import {
+  applyPreferenceDeltas,
+  EVENT_REWARD,
+  overlapsAnyTask,
+  type ConflictNeighbor,
+} from "./telemetry";
 import { PREFERENCE_LEARNING_RATE } from "../constants";
 
 /**
@@ -121,5 +126,75 @@ describe("applyPreferenceDeltas — learning rate", () => {
     const out = applyPreferenceDeltas(input, [], TZ);
     expect(out).not.toBe(input);
     expect(out[0]).toBe(0.5);
+  });
+});
+
+/**
+ * `overlapsAnyTask` — the pure core of `SchedulerService.markConflicts`'s
+ * bounded conflict recheck (replaces the deleted `recomputeConflicts` global
+ * O(n²) scan). It only ever reasons over whatever `neighbors` the CALLER
+ * already fetched via a single indexed range query — never a global scan.
+ */
+describe("overlapsAnyTask", () => {
+  function neighbor(
+    overrides: Partial<ConflictNeighbor> & { id: string },
+  ): ConflictNeighbor {
+    return {
+      scheduledStartTime: null,
+      durationMinutes: 60,
+      conflict: false,
+      ...overrides,
+    };
+  }
+
+  it("is false for a null interval (unplaced/removed task never conflicts)", () => {
+    const n = neighbor({
+      id: "b",
+      scheduledStartTime: new Date("2026-06-08T09:00:00Z"),
+    });
+    expect(overlapsAnyTask(null, [n])).toBe(false);
+  });
+
+  it("is false when neighbors is empty", () => {
+    const interval = {
+      start: new Date("2026-06-08T09:00:00Z").getTime(),
+      end: new Date("2026-06-08T10:00:00Z").getTime(),
+    };
+    expect(overlapsAnyTask(interval, [])).toBe(false);
+  });
+
+  it("is false when no neighbor's own interval overlaps", () => {
+    const interval = {
+      start: new Date("2026-06-08T09:00:00Z").getTime(),
+      end: new Date("2026-06-08T10:00:00Z").getTime(),
+    };
+    const n = neighbor({
+      id: "b",
+      scheduledStartTime: new Date("2026-06-08T10:00:00Z"), // adjacent, not overlapping
+      durationMinutes: 60,
+    });
+    expect(overlapsAnyTask(interval, [n])).toBe(false);
+  });
+
+  it("is true when a neighbor's interval overlaps", () => {
+    const interval = {
+      start: new Date("2026-06-08T09:00:00Z").getTime(),
+      end: new Date("2026-06-08T10:00:00Z").getTime(),
+    };
+    const n = neighbor({
+      id: "b",
+      scheduledStartTime: new Date("2026-06-08T09:30:00Z"),
+      durationMinutes: 60,
+    });
+    expect(overlapsAnyTask(interval, [n])).toBe(true);
+  });
+
+  it("ignores a neighbor that is itself unplaced", () => {
+    const interval = {
+      start: new Date("2026-06-08T09:00:00Z").getTime(),
+      end: new Date("2026-06-08T10:00:00Z").getTime(),
+    };
+    const n = neighbor({ id: "b", scheduledStartTime: null });
+    expect(overlapsAnyTask(interval, [n])).toBe(false);
   });
 });

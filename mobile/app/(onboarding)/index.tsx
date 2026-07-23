@@ -1,12 +1,9 @@
-import { useMemo, useState } from "react";
-import { isAxiosError } from "axios";
-import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
 import type { DurationAdjustmentMode } from "@zenflow/shared";
+import { isAxiosError } from "axios";
+import { useMemo, useState } from "react";
+import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
 
-import { Button } from "@/components/ui/button";
-import { Text } from "@/components/ui/text";
-import { useToast } from "@/components/ui/toast";
-import { Logo } from "@/components/logo";
+import { completeOnboarding } from "@/api/users";
 import {
   AlertCircle,
   Calendar,
@@ -16,15 +13,18 @@ import {
   Info,
   Sparkles,
 } from "@/components/Icons";
-import { TimePickerRow } from "@/components/onboarding/time-picker-row";
+import { Logo } from "@/components/logo";
 import { WorkDaysGrid } from "@/components/onboarding/work-days-grid";
 import {
   DURATION_MODES,
   DurationModeField,
 } from "@/components/settings/duration-mode-field";
+import { Button } from "@/components/ui/button";
+import { Text } from "@/components/ui/text";
+import { TimePickerRow } from "@/components/ui/time-picker";
+import { useToast } from "@/components/ui/toast";
 import { useUserStore } from "@/hooks/use-user-store";
 import { cacheSessionUser } from "@/lib/session";
-import { completeOnboarding } from "@/api/users";
 import { cn } from "@/lib/utils";
 import {
   DAYS,

@@ -1,6 +1,7 @@
 import { AlertTriangle, ChevronLeft, ChevronRight, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ViewModeSelect } from "./view-mode-select";
+import { OptimizeButton } from "./optimize-button";
 import { endOfWeek, format, startOfMonth } from "date-fns";
 import { Dispatch, SetStateAction } from "react";
 import { ViewMode } from "@/types/schedule";
@@ -102,6 +103,7 @@ export function CalendarHeader({
             {conflictCount}
           </span>
         )}
+        <OptimizeButton onOptimized={onChanged} />
         <ViewModeSelect value={currentView} onChange={setCurrentView} />
         <CreateTaskDialog
           date={date}

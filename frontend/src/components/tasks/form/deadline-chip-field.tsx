@@ -4,7 +4,6 @@ import type { DeadlineOptionsResponse } from "@zenflow/shared";
 import { getDeadlineOptions } from "@/api/tasks";
 import { useUserStore } from "@/hooks/use-user-store";
 import { zonedDate, zonedNow, zonedWallClockToUtc } from "@/utils/tz";
-import { DAILY_HORIZON } from "@/utils/constants";
 import { DatePicker } from "@/components/ui/datepicker";
 import { TimePicker } from "@/components/ui/time-picker";
 import { cn } from "@/lib/utils";
@@ -28,21 +27,8 @@ const CHIPS: { id: ChipId; label: string }[] = [
   { id: "custom", label: "Custom" },
 ];
 
-/** A safe "end of day" fallback (23:59) when a ceiling instant rolls onto a
- * different calendar day than the chip's target day (e.g. a bare midnight or
- * a night-owl wrap) — keeps the picker's date on the chip's own day. */
-const END_OF_DAY_MINUTES = DAILY_HORIZON - 1;
-
 function minutesOfDay(d: Date): number {
   return d.getHours() * 60 + d.getMinutes();
-}
-
-/** Today's (or tomorrow's) wall-clock midnight, in user-tz local fields. */
-function dayAnchor(tz: string, offsetDays: 0 | 1): Date {
-  const day = zonedNow(tz);
-  day.setHours(0, 0, 0, 0);
-  if (offsetDays) day.setDate(day.getDate() + offsetDays);
-  return day;
 }
 
 /** Combine a wall-clock day anchor + minutes-of-day into a real UTC instant. */
@@ -79,8 +65,7 @@ export function DeadlineChipField({
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const [options, setOptions] = useState<DeadlineOptionsResponse | null>(null);
   const [chip, setChip] = useState<ChipId | null>(null);
-  const [todayTomorrowMinutes, setTodayTomorrowMinutes] =
-    useState(END_OF_DAY_MINUTES);
+  const [todayTomorrowMinutes, setTodayTomorrowMinutes] = useState(17 * 60);
   const [customDate, setCustomDate] = useState<Date | undefined>(undefined);
   const [customMinutes, setCustomMinutes] = useState(17 * 60);
   // The last ISO string WE emitted via onChange, so the inference effect below
@@ -89,10 +74,9 @@ export function DeadlineChipField({
   const lastEmitted = useRef<string | null>(null);
 
   useEffect(() => {
-    // Anchor the deadline options to midnight of the current day in the user's
-    // timezone, not the current time. This ensures "Today" means "end of today"
-    // and "Tomorrow" means "end of tomorrow", not "next minute" / "next second".
-    const anchor = zonedWallClockToUtc(dayAnchor(tz, 0), tz).toISOString();
+    // Anchor the deadline options to the current instant: "Today" now means
+    // a few hours from now (rounded to the grid), not end-of-day.
+    const anchor = zonedWallClockToUtc(zonedNow(tz), tz).toISOString();
     getDeadlineOptions(anchor)
       .then(setOptions)
       .catch(() => setOptions(null));

@@ -78,7 +78,7 @@ This plan:
 | Drag & drop | `@dnd-kit/core` + pointer sensors | `react-native-gesture-handler` `PanGestureHandler` + `react-native-reanimated` | dnd-kit is DOM-only |
 | Resize handles | Pointer-driven 10px strips at block edges | Long-press task → bottom-sheet "Change duration" slider | 10px handles untouchable on phone |
 | All Radix UI primitives | `@radix-ui/*` (20+ packages) | `@gorhom/bottom-sheet` (sheet/dialog), React Native Reusables + `@rn-primitives/*` (dropdown), RN built-ins (tabs) | Radix is DOM-only |
-| Rich text note editor | Tiptap / ProseMirror | Native `TextInput` multiline (Phase 1); `@10play/tentap-editor` (Phase 2) | Tiptap has no RN port |
+| Rich text note editor | Tiptap / ProseMirror | Native `TextInput` multiline (Phase 1, superseded); `@10play/tentap-editor` **(wired, see Phase 5 update below)** | Tiptap has no RN port — tentap runs it in a `react-native-webview` WebView with a native bridge instead |
 | Navigation | React Router v7 | Expo Router (file-based, same mental model) | |
 | CSS layout + OKLch design tokens | Tailwind v4 Vite plugin | NativeWind v4 (Tailwind v3-config-driven, compiled to RN `StyleSheet`); OKLch tokens hand-translated to hex once in `tailwind.config.ts` / `global.css` | RN `StyleSheet` rejects OKLch directly — NativeWind has no built-in OKLch→native conversion, unlike uniwind |
 | `position: absolute` % values | `top/left/width/height` as `%` strings | Same math; output numeric dp values (`(min / 1440) × totalHeight`) | |
@@ -405,11 +405,157 @@ showing typography scale (Geist), spacing scale, and border-radius.
 
 ### Phase 5 — Task Forms + Settings (1 week)
 
-1. `CreateTaskSheet` / `EditTaskSheet` via `@gorhom/bottom-sheet` v5.
-2. Port all `task-form.tsx` fields: title, duration input (15-min stepper), deadline picker, tag selector, note `TextInput`, fixed-time toggle.
-3. `OverflowSheet`: display `outsideHours` and `nextAvailable` options from `CreateTaskResponse.overflow`.
-4. Duration suggestion toast via `react-native-toast-message` (port of `rationale-toast.tsx`).
-5. `SettingsScreen`: work hours time pickers, work days toggle row, timezone picker, duration mode selector.
+**Settings half: done**, ahead of this doc catching up — `app/(app)/settings.tsx` already
+ships the full preferences form (profile, working hours, work days, timezone, duration mode,
+insights, dark mode, sign-out); see `mobile/README.md`'s screens table.
+
+**Task Forms half: done** (GitHub issue #20 — `CreateTaskSheet`/`EditTaskSheet`/
+`ChangeDurationSheet`). What actually shipped, differently from this section's original plan:
+
+1. `CreateTaskSheet` / `EditTaskSheet` / `ChangeDurationSheet`, all on `@gorhom/bottom-sheet`
+   **v5** (bumped from the `^4.6.4` the scaffold started on — no breaking changes hit beyond a
+   couple of TS-only fallout fixes: `BottomSheetModal` became a generic type alias in v5, so the
+   two `components/{ui,primitives/bottomSheet}/bottom-sheet.native.tsx` ref wrappers now type
+   against `BottomSheetModalMethods` instead of `React.ElementRef<typeof BottomSheetModal>`).
+2. `taskSchema` (+ `TaskFormValues`/`EditTaskFormValues`/`placementQualifier`) is **hoisted to
+   `@zenflow/core`** (`packages/core/src/tasks.ts`) rather than ported to a second `mobile/`
+   copy — resolves this doc's original "Portable" table entry for `frontend/src/utils/tasks.ts`
+   the other direction from what it said (port to `mobile/src/utils/tasks.ts` — identical) once
+   a second consumer actually needed it: cross-app-to-app imports outside a shared package would
+   be unusual for this monorepo, so it's shared instead of forked. `frontend/` was **not**
+   repointed at the hoisted copy in the same change (out of that issue's stated scope — its own
+   `frontend/src/utils/tasks.ts` still carries a parallel definition that must be kept in sync
+   by hand until a follow-up consolidates it), so this is a deliberate, temporary fork of one
+   file, not the intended end state.
+3. Fields, in mockup order (`mockups/task-sheets.html`): Title (plain input, no suggestion
+   dropdown — unlike the web `TitleField`, out of the mockup's scope) → Duration (a −/+ 15-min
+   stepper, `components/tasks/form/duration-stepper.tsx` — **shown in both the create and edit
+   sheets**, unlike the web dialog which hides duration entirely in edit mode; mobile has no
+   drag-resize handles, so the edit sheet's stepper submits via a second `PATCH
+   /tasks/:id/resize` call alongside the metadata `PATCH /tasks/:id`, since `UpdateTaskInput`
+   has no `durationMinutes` field) → Deadline (`DeadlineChipRow`, a straight port of
+   `deadline-chip-field.tsx`'s chip logic against `GET /tasks/deadline-options`) → Tags
+   (`TagAutocomplete`, custom dropdown — see below) → Description (`DescriptionField`, see
+   below). No fixed-time toggle and no `OverflowSheet`: both are obsolete against the current
+   `@zenflow/shared` contract — the `overflow` envelope was already removed from
+   `CreateTaskResponse` before this phase started (every create/update now always resolves to a
+   concrete placement; see `frontend/src/utils/tasks.ts`'s `placementQualifier` doc comment),
+   so there's nothing left for an overflow sheet to display.
+4. Tag autocomplete does **not** use `components/ui/combobox.tsx` (nested nav-style bottom
+   sheet — wrong shape for an inline, type-as-you-go dropdown) or cmdk (no RN port). It's a
+   from-scratch matcher (`mobile/lib/tag-match.ts`) — and along the way fixes
+   `mockups/feedback.md` item 5 ("tag autocomplete is strange when the prefix is far from the
+   remaining text"): the web version's bug is cmdk's default fuzzy scorer matching scattered
+   characters anywhere in a name; this port only ever matches contiguous prefix/substring
+   occurrences.
+5. Description editor **update (post-#20 follow-up):** the Phase-1-style plain `TextInput` +
+   raw-HTML-tag toolbar described below has been replaced by a real WYSIWYG editor on
+   `@10play/tentap-editor` (this doc's own Phase 2 richtext plan, brought forward) —
+   `components/tasks/form/description-field.tsx` now renders `RichText`/`useEditorBridge` from
+   the package, with a floating toolbar (still visually a dark rounded pill, matching the old
+   selection-bubble style) driving the same tool set as the web toolbar
+   (`common/editor/toolbar.tsx`): Bold, Italic, Underline, Highlight, Blockquote marks; a Link
+   insert control; Bulleted / Numbered lists. The stored `note` stays a plain HTML string (same
+   shape the web `NoteEditor` produces/reads, since it round-trips through the same
+   `@zenflow/shared` field), bridged through `useEditorBridge`'s async `getHTML()`/`setContent()`
+   rather than a synchronous DOM. "Upload file" is still a stub (toasts "not available yet"; no
+   `expo-image-picker`/`expo-document-picker` wiring — unchanged scope).
+   - **Tool-parity gap:** the toolbar is a floating pill, absolutely positioned to straddle the
+     editor's own top edge and shown/hidden by the bridge's `isFocused` state (plus while the
+     link-entry row is open) — not a bubble anchored to the exact text-selection caret position
+     like web's Tiptap bubble menu. `tentap-editor`'s `CoreEditorState` bridge state exposes a
+     `selection: { from, to }` text *offset* pair but no WebView-internal screen *coordinates* for
+     it, so there's nothing to anchor a true per-caret bubble to from native; showing/hiding on
+     focus (not on "has a non-empty selection", which would incorrectly hide Upload whenever
+     nothing's selected) is the closest reasonable approximation given that constraint. Marks/lists
+     can be toggled with or without an active text selection (typing continues in that style),
+     which is arguably more correct WYSIWYG behavior than a selection-required toolbar anyway.
+     Embedded image/video nodes (matching web's `common/editor/video-block.tsx`/`audio-block.tsx`)
+     are an explicit non-goal for now: `tentap-editor`'s `bridgeExtensions` API ships only a bare
+     `ImageBridge.setImage(src)`, no video/audio bridge and no attrs for `controls`/sizing the way
+     the web nodes have, and there's no ergonomic extension point to register a *new* custom Tiptap
+     node from the native side without patching the package's bundled WebView JS — "Upload file"
+     stays a stub toast.
+   - **Dependency resolution:** pinned to the Tiptap-v3-based `@10play/tentap-editor@^1.0.1` line
+     rather than the older (still maintained) `0.7.x`/Tiptap-v2 line, specifically so its
+     `@tiptap/*` transitive deps share a major version with `frontend/`'s own hoisted Tiptap v3
+     copies under the root `.npmrc`'s broad hoist — installing `0.7.x` produced hard
+     `unmet peer @tiptap/core@^2.7.0: found 3.26.0` conflicts against `frontend/`'s Tiptap v3.
+     `react-native-webview` is pinned to `13.12.5`, the version Expo SDK 52's own
+     `bundledNativeModules.json` lists as compatible. See `mobile/README.md`'s tech-stack table
+     and "Known pitfalls" section.
+   - **Native rebuild caveat:** both packages are native modules (WebView + its RN bridge) —
+     using this on-device needs a dev-client rebuild (`expo run:android`/`ios`), not just a JS
+     reload. **Not verified in the environment this was implemented in** (no device/emulator
+     available there) — typecheck is clean and the API usage was checked against the installed
+     package's own compiled `.d.ts`, but the actual on-device WebView round-trip is unverified.
+   - The description below (this doc's original Phase 5 write-up) is kept for history but is no
+     longer accurate about the description editor's implementation:
+
+   ~~Description editor is a plain multiline `TextInput` (this doc's own Phase 1 fallback,
+   "Native `TextInput` multiline") with a **floating selection-bubble toolbar** bolted on — full
+   tool set from `common/editor/toolbar.tsx` (Bold/Italic/Underline/Highlight/Blockquote/Link/
+   Upload/Bullets/Numbering), wrapping the selection in the same HTML tags Tiptap would emit so
+   the stored `note` stays renderable by the web `NoteEditor`. This is **not** WYSIWYG — the raw
+   tags are visible while editing, not a live-rendered preview — real parity needs this doc's
+   Phase 2 richtext plan (`@10play/tentap-editor`), not attempted here. "Upload file" is a stub
+   (toasts "not available yet"; no `expo-image-picker`/`expo-document-picker` wiring).~~
+6. Placement toast: **not** `react-native-toast-message` — the scaffold already had its own
+   `ToastProvider`/`useToast` (`components/ui/toast.tsx`), used app-wide (e.g.
+   `app/(app)/settings.tsx`), so the sheets use that instead of adding a second toast library.
+   Only the plain success/conflict copy is ported (`mobile/lib/task-toasts.ts`, mirrors
+   `create-task-dialog.tsx`'s one-line `toast.success`/`toast.warning`) — the richer Phase-2
+   rationale toast (preferred-window / top-cells breakdown) is out of scope; only the toast
+   *surface*, not the scheduling intelligence behind it, was asked for.
+7. Gesture wiring is **partial**, blocked on Phase 2/3/4 (the day/week/month screens are still
+   the placeholder stubs below — there's no positioned grid yet to long-press a *slot* against).
+   `app/(app)/index.tsx` got the minimal substitute the sheets needed to be exercisable end to
+   end: today's tasks as a plain list, tap → `EditTaskSheet`, long-press a row →
+   `ChangeDurationSheet`, long-press the empty area (or the FAB) → `CreateTaskSheet` pre-filled
+   with "now" snapped to the next 15-minute mark. True per-pixel slot targeting, drag-to-move,
+   pinch-zoom, and the now-indicator/work-zone overlays remain Phase 2 work.
+   - **Bug fix (post-#20 follow-up):** the FAB (and, latently, the long-press-empty-area
+     gesture) didn't reliably open `CreateTaskSheet` — `components/ui/bottom-sheet.native.tsx`'s
+     `BottomSheetContent` exposed the caller's forwarded `ref` via
+     `useImperativeHandle(ref, () => sheetRef.current ?? {}, [sheetRef.current])`, but
+     `sheetRef.current` is a plain mutable ref, not reactive state, so that dependency array only
+     re-evaluates on a render this component happens to re-run for an unrelated reason.
+     `@gorhom/bottom-sheet` attaches the real `BottomSheetModal` instance to `sheetRef` slightly
+     after the component's first commit, so the imperative handle's first (and often only) run
+     captured it as still `null` and returned the `{}` stub, leaving the caller's
+     `ref.current?.present()` a silent no-op forever for any sheet that didn't happen to
+     re-render again shortly after mount (`EditTaskSheet` did, via its `getTaskDetails().then(
+     setTask)`, which is why tap-to-edit worked while the FAB/empty-area create path didn't).
+     Fixed by assigning both refs in a single merged callback ref instead, which fires exactly
+     when React attaches/detaches the real instance regardless of timing.
+   - **Bug fix #2 (post-#20 follow-up, sheets still didn't open after the merged-ref fix
+     above):** the actual remaining cause was `CreateTaskSheet`/`EditTaskSheet`/
+     `ChangeDurationSheet` being externally controlled by an `open: boolean` + `onOpenChange`
+     prop pair (state living in `app/(app)/index.tsx`), bridged through a
+     `useControlledBottomSheet(open)` hook that called `ref.current?.present()`/`.dismiss()`
+     inside a `useEffect` keyed on `open` — i.e. one render tick *after* the triggering press
+     handler, not synchronously inside it. Every other working sheet in the app
+     (`components/ui/time-picker.tsx`, `components/settings/duration-mode-picker-row.tsx`,
+     `components/settings/timezone-picker-row.tsx`) calls `useBottomSheet()`'s `open`/`close`
+     directly inside the press handler instead — that synchronous-call shape turned out to be
+     the real difference (an earlier hypothesis blaming `@10play/tentap-editor`'s WebView mount
+     was ruled out: the sheets still didn't open with the editor removed entirely). Fixed by
+     converting all three sheets to `forwardRef` components with an imperative `open(...)`
+     handle, using `useBottomSheet()` internally and calling `.open()`/`.close()` synchronously
+     everywhere the old code called `onOpenChange(true)`/`(false)`; callers hold a
+     `useRef<XSheetHandle>` and call `.open(...)` directly inside the triggering `Pressable`'s
+     handler. `hooks/use-controlled-bottom-sheet.ts` was deleted. See `mobile/README.md`'s
+     "Known pitfalls" section for the write-up future sheet authors should read.
+   - **`week.tsx`/`month.tsx` (post-#20 follow-up):** both stub screens now also render a
+     `CreateTaskFab` (`components/tasks/create-task-fab.tsx`, factored out of `index.tsx`'s FAB +
+     `CreateTaskSheet` pairing) so task creation isn't Day-only, even though neither has a real
+     task list yet — `onCreated` is a plain success toast there instead of a list `refetch`.
+   - **Task form moved off bottom sheets onto its own screen (post-#20 follow-up):**
+     `CreateTaskSheet`/`EditTaskSheet` are gone — the form now lives at `app/task/new.tsx` /
+     `app/task/[id]/edit.tsx`, pushed as `presentation: "modal"` Stack screens instead of
+     presented via `@gorhom/bottom-sheet`. `ChangeDurationSheet` is untouched (still a sheet).
+     See `mobile/README.md`'s "The task create/edit form is a full screen, not a bottom sheet"
+     for the callback-threading and typed-routes fallout.
 
 ### Phase 6 — Polish + EAS (ongoing)
 

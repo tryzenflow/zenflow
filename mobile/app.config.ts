@@ -32,13 +32,24 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       backgroundColor: "#ffffff",
     },
     package: "com.zenflow.app",
+    // Resize the visible window when the keyboard opens instead of the
+    // default pan behavior — required for `KeyboardAvoidingView`
+    // (`TaskFormScreen`) to work; without this the fixed footer + focused
+    // input near the bottom of the task form scroll can end up hidden under
+    // the keyboard on Android (mirrors the `android_keyboardInputMode`
+    // already passed to `BottomSheetModal` for the tag picker's own sheet).
+    softwareKeyboardLayoutMode: "resize",
   },
   web: {
     bundler: "metro",
     output: "single",
     favicon: "./assets/images/favicon.png",
   },
-  plugins: [["expo-router"], withAndroidBuildFixes],
+  plugins: [
+    ["expo-router"],
+    "@react-native-community/datetimepicker",
+    withAndroidBuildFixes,
+  ],
   experiments: {
     typedRoutes: true,
   },

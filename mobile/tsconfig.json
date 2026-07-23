@@ -3,6 +3,14 @@
   "compilerOptions": {
     "strict": true,
     "baseUrl": ".",
+    // Match Metro's platform-extension resolution order for the app's
+    // primary targets (iOS/Android) — without this, a bare `tsc` (this is
+    // what `pnpm typecheck` runs) has no concept of RN's `.native.tsx`
+    // override convention and always resolves e.g. `bottom-sheet.tsx` (the
+    // web-only shim, see its own file-header comment) over
+    // `bottom-sheet.native.tsx` for every import, silently type-checking
+    // native screens against the wrong platform's (narrower) prop types.
+    "moduleSuffixes": [".native", ""],
     "paths": {
       "@/*": ["./*"],
       "@/assets/*": ["./assets/*"]

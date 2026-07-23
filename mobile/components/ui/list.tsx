@@ -39,8 +39,9 @@ const List: React.FC<ListProps> = ({children, className, ...props}) => {
 			injectClassName += "rounded-b-lg border-b-0";
 		}
 
+		const childProps = child.props as { className?: string };
 		return React.cloneElement<any>(child, {
-			className: cn(child.props.className, injectClassName),
+			className: cn(childProps.className, injectClassName),
 		});
 	});
 

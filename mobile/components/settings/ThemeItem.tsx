@@ -1,27 +1,28 @@
+import type { ReactElement } from "react";
 import { Pressable, View } from "react-native";
 
-import { H4 } from "@/components/ui/typography";
+import { Check, Moon, Palette, Smartphone, Sun } from "@/components/Icons";
+import { Text } from "@/components/ui//text";
 import {
   BottomSheet,
   BottomSheetContent,
   BottomSheetHeader,
   BottomSheetOpenTrigger,
   BottomSheetView,
-} from "@/components/primitives/bottomSheet/bottom-sheet.native";
-import { Text } from "@/components/ui//text";
-import { Moon, Palette, Smartphone, Check, Sun } from "@/components/Icons";
+  useBottomSheet,
+} from "@/components/ui/bottom-sheet";
+import { H4 } from "@/components/ui/typography";
 
 import ListItem from "@/components/ui/list-item";
 import { useCallback, useMemo, useState } from "react";
-import { useBottomSheetModal } from "@gorhom/bottom-sheet";
 
-import { useColorScheme } from "@/lib/useColorScheme";
 import { useLocalStorage } from "@/hooks";
+import { useColorScheme } from "@/lib/useColorScheme";
 type ItemData = {
   title: string;
   subtitle: string;
   value: "light" | "dark" | "system";
-  icon: JSX.Element;
+  icon: ReactElement;
 };
 
 type ItemProps = {
@@ -47,8 +48,10 @@ function ThemeItem({ item, onPress, selected }: ItemProps) {
 
 export const ThemeSettingItem = () => {
   const { colorScheme, setColorScheme } = useColorScheme();
-  const [selectedTheme, setSelectedTheme] = useState<"light" | "dark" | "system">(colorScheme);
-  const { dismiss } = useBottomSheetModal();
+  const [selectedTheme, setSelectedTheme] = useState<
+    "light" | "dark" | "system"
+  >(colorScheme);
+  const bottomSheet = useBottomSheet();
   const { setItem } = useLocalStorage();
 
   const themes: ItemData[] = useMemo(
@@ -72,7 +75,7 @@ export const ThemeSettingItem = () => {
         icon: <Sun className="text-foreground" />,
       },
     ],
-    []
+    [],
   );
 
   const onSelect = useCallback(
@@ -80,9 +83,9 @@ export const ThemeSettingItem = () => {
       setColorScheme(value);
       await setItem("theme", value);
       setSelectedTheme(value);
-      dismiss();
+      bottomSheet.close();
     },
-    [dismiss, setColorScheme, setItem]
+    [bottomSheet, setColorScheme, setItem],
   );
   return (
     <BottomSheet>
@@ -92,7 +95,7 @@ export const ThemeSettingItem = () => {
           label="Theme"
         />
       </BottomSheetOpenTrigger>
-      <BottomSheetContent>
+      <BottomSheetContent ref={bottomSheet.ref}>
         <BottomSheetHeader className="bg-background">
           <Text className="text-foreground text-xl font-bold  pb-1">
             Select Theme

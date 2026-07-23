@@ -1,8 +1,7 @@
 /**
- * Pure, deterministic Earliest-Deadline-First scheduling core (Phase 1).
- * No I/O, no randomness — same inputs always produce the same schedule, which
- * makes this directly unit-testable. The NestJS SchedulerService wraps these
- * with persistence, audit events, and penalty-matrix telemetry.
+ * Shared shapes between the pure scheduler core (`place.ts`, `optimize.ts`)
+ * and `SchedulerService`'s persistence layer. No I/O, no randomness here —
+ * just types.
  */
 
 export interface SchedulerPrefs {
@@ -17,47 +16,42 @@ export interface EdfTask {
   durationMinutes: number;
   deadline: Date | null;
   /**
-   * True when the task was manually dragged/resized (or pinned via an
-   * accepted overflow-recovery option). PURELY INFORMATIONAL now — the
-   * continuous cost model ({@link "./utils/edf".placementCost}) replaced the
-   * old hard freeze this flag used to drive. `scheduleAll` never reads it to
-   * decide what can move; every task's tolerance for being repositioned comes
-   * from how far in the future its current `scheduledStartTime` (its
-   * "anchor") sits, not from whether a human placed it there. The flag still
-   * gets SET on a real drag/resize (`TasksService.displace`/`resize`) and is
-   * surfaced to the frontend for the "Manually placed" badge/telemetry.
+   * True when the task was manually dragged/resized. PURELY INFORMATIONAL
+   * everywhere automatic — no automatic path (`place.ts`'s `placeTask`,
+   * `SchedulerService.placeNewTask`/`resolveInvalidPlacement`) reads it to
+   * decide what can move. The ONE place it gates real behavior is
+   * `optimize.ts`'s `selectCandidates` in `"retainManual"` mode (explicit
+   * user opt-in): a task with this flag set is locked at its current slot for
+   * that one repack. The flag still gets SET on a real drag/resize
+   * (`TasksService.displace`/`resize`) and is surfaced to the frontend for
+   * the "Manually placed" badge/telemetry.
    */
   manuallyMoved: boolean;
   scheduledStartTime: Date | null;
   createdAt: Date;
-  /**
-   * The task's stored conflict flag. Used to pass a frozen past task's
-   * verdict through {@link scheduleAll} untouched; defaults to false
-   * elsewhere.
-   */
+  /** The task's stored conflict flag. */
   conflict: boolean;
 }
 
+/** The write-back envelope `SchedulerService` diffs against the DB and persists. */
 export interface Placement {
   id: string;
   scheduledStartTime: Date | null;
   conflict: boolean;
   /**
-   * Whether this placement is still the user's manual pin. A frozen (past)
-   * task passes its existing flag through unchanged. For every other task:
-   * true when the algorithm left it exactly where it already was (whatever
-   * that flag's value was — an untouched auto-placement stays `false`, an
-   * untouched drag stays `true`); false once the algorithm actually
-   * relocated it to a different slot — it's no longer at the spot the user
-   * (or a prior auto-placement) chose.
+   * Whether this placement is still the user's manual pin. `false` once a
+   * task has been auto-placed/auto-relocated (`placeTask`, `optimizeWindow`)
+   * — it's no longer at the spot the user (or a prior auto-placement) chose.
+   * A direct drag/resize (`applyDirectPlacement`) always sets it `true`.
    */
   manuallyMoved: boolean;
   /**
    * The softmax first-choice probability {@link "./utils/reranker".rankByScores}
    * assigned to the chosen slot — the TRUE logging-policy propensity,
    * recorded for IPS/SNIPS off-policy replay (docs/heuristic.md §Phase 2).
-   * Present whenever the pure core actually ran the re-ranker over ≥1
-   * candidate for a placed (non-past) task; absent for frozen/unplaced tasks.
+   * Present whenever a Tier-1 candidate pool was actually re-ranked (`place.
+   * ts`'s `placeTask`, `optimize.ts`'s `repackWindow`); absent for a Tier-2/3/
+   * unplaced result or a direct manual placement.
    */
   propensity?: number;
 }
