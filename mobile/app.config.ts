@@ -45,7 +45,11 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     output: "single",
     favicon: "./assets/images/favicon.png",
   },
-  plugins: [["expo-router"], withAndroidBuildFixes],
+  plugins: [
+    ["expo-router"],
+    "@react-native-community/datetimepicker",
+    withAndroidBuildFixes,
+  ],
   experiments: {
     typedRoutes: true,
   },

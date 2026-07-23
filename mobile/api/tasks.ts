@@ -1,9 +1,10 @@
-import { format } from "date-fns";
-import { api } from "./base";
 import type {
   CreateTaskInput,
   CreateTaskResponse,
   DeadlineOptionsResponse,
+  OptimizeApplyResponse,
+  OptimizePreviewResponse,
+  OptimizeWindowInput,
   RemoveTaskResponse,
   RescheduleResponse,
   Task,
@@ -14,6 +15,8 @@ import type {
   UpdateTaskResponse,
   ViewMode,
 } from "@zenflow/shared";
+import { format } from "date-fns";
+import { api } from "./base";
 
 export async function listTasks(
   view: ViewMode,
@@ -26,12 +29,19 @@ export async function listTasks(
   return data.data;
 }
 
-export async function listTaskSuggestions(q: string, limit = 10): Promise<Task[]> {
-  const { data } = await api.get("/tasks/suggestions", { params: { q, limit } });
+export async function listTaskSuggestions(
+  q: string,
+  limit = 10,
+): Promise<Task[]> {
+  const { data } = await api.get("/tasks/suggestions", {
+    params: { q, limit },
+  });
   return data.data.suggestions;
 }
 
-export async function createTask(input: CreateTaskInput): Promise<CreateTaskResponse> {
+export async function createTask(
+  input: CreateTaskInput,
+): Promise<CreateTaskResponse> {
   const { data } = await api.post("/tasks", input);
   return data.data;
 }
@@ -44,11 +54,16 @@ export async function createTask(input: CreateTaskInput): Promise<CreateTaskResp
 export async function getDeadlineOptions(
   anchor: string = new Date().toISOString(),
 ): Promise<DeadlineOptionsResponse> {
-  const { data } = await api.get("/tasks/deadline-options", { params: { anchor } });
+  const { data } = await api.get("/tasks/deadline-options", {
+    params: { anchor },
+  });
   return data.data;
 }
 
-export async function updateTask(id: string, input: UpdateTaskInput): Promise<UpdateTaskResponse> {
+export async function updateTask(
+  id: string,
+  input: UpdateTaskInput,
+): Promise<UpdateTaskResponse> {
   const { data } = await api.patch(`/tasks/${id}`, input);
   return data.data;
 }
@@ -62,7 +77,9 @@ export async function rescheduleTask(
   id: string,
   requestedStartTime: string,
 ): Promise<RescheduleResponse> {
-  const { data } = await api.patch(`/tasks/${id}/reschedule`, { requestedStartTime });
+  const { data } = await api.patch(`/tasks/${id}/reschedule`, {
+    requestedStartTime,
+  });
   return data.data;
 }
 
@@ -80,11 +97,62 @@ export async function resizeTask(
 
 /**
  * Undo the inline narrow same-day auto-resolve a create/update/drag/resize
- * ran (see `UpdateTaskResponse.batchId` / `RescheduleResponse.batchId`) —
- * reverts every task that batch moved back to its prior slot/duration.
+ * ran (see `UpdateTaskResponse.batchId` / `RescheduleResponse.batchId`), or an
+ * Optimize-apply batch (`OptimizeApplyResponse.batchId`) — reverts every task
+ * that batch moved back to its prior slot/duration.
+ *
+ * If any row in the batch was touched by a later, differently-tagged event,
+ * the backend returns `{ requiresConfirmation: true, touchedTaskIds }`
+ * instead of writing anything; resubmit with an explicit `strategy` ("all" to
+ * revert everyone anyway, "excludeTouched" to only revert untouched rows).
  */
-export async function undoBatch(batchId: string): Promise<UndoBatchResponse> {
-  const { data } = await api.post(`/tasks/reschedule/undo/${batchId}`);
+export async function undoBatch(
+  batchId: string,
+  strategy?: "all" | "excludeTouched",
+): Promise<UndoBatchResponse> {
+  const { data } = await api.post(
+    `/tasks/reschedule/undo/${batchId}`,
+    strategy ? { strategy } : undefined,
+  );
+  return data.data;
+}
+
+/**
+ * Edit-accept flow: re-runs the same Tier1→2→3 single-task placement search
+ * `POST /tasks` uses, over `[now, task's current deadline]` — only meaningful
+ * when the task is currently flagged `conflict: true` by a prior metadata-only
+ * edit that invalidated its slot. No body: the backend reads the task's own
+ * current deadline/duration.
+ */
+export async function resolveTaskPlacement(
+  id: string,
+): Promise<RescheduleResponse> {
+  const { data } = await api.post(`/tasks/${id}/reschedule/resolve`);
+  return data.data;
+}
+
+/**
+ * Count-only dry run for the Optimize action — never returns a per-task diff
+ * (explicitly out of scope, see `mobile/README.md`/the scheduler redesign
+ * plan). Used to decide whether to show the large-batch guard
+ * (`OPTIMIZE_LARGE_BATCH_THRESHOLD`) before calling `optimizeApply`.
+ */
+export async function optimizePreview(
+  input: OptimizeWindowInput,
+): Promise<OptimizePreviewResponse> {
+  const { data } = await api.post("/tasks/optimize/preview", input);
+  return data.data;
+}
+
+/**
+ * Recomputes the window server-side (same tiering as `optimizePreview`, not
+ * trusting the earlier preview count) and writes the result, tagging one
+ * fresh `batchId` so the whole action is undoable via `undoBatch`.
+ */
+export async function optimizeApply(
+  input: OptimizeWindowInput,
+): Promise<OptimizeApplyResponse> {
+  const { data } = await api.post("/tasks/optimize/apply", input);
   return data.data;
 }
 

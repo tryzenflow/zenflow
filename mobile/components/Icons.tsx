@@ -72,6 +72,8 @@ import {
   Plus,
   PlusCircle,
   Quote,
+  RefreshCcw,
+  Scale,
   Search,
   Sparkles,
   Sun,
@@ -180,6 +182,8 @@ interopIcon(ListOrdered);
 interopIcon(Quote);
 interopIcon(Upload);
 interopIcon(Trash2);
+interopIcon(RefreshCcw);
+interopIcon(Scale);
 
 export {
   Activity,
@@ -241,6 +245,8 @@ export {
   Plus,
   PlusCircle,
   Quote,
+  RefreshCcw,
+  Scale,
   Search,
   Sparkles,
   Sun,

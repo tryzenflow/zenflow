@@ -11,7 +11,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
 import { zonedNow, zonedWallClockToUtc } from "@zenflow/core";
 import {
   OPTIMIZE_LARGE_BATCH_THRESHOLD,
@@ -27,36 +26,9 @@ import { useState } from "react";
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { InlineDateField } from "./form/inline-date-field";
+import { OPTIMIZE_MODES, OptimizeModeField } from "./optimize-mode-field";
 
 type OptimizeMode = OptimizeWindowInput["mode"];
-
-/**
- * Mode 3 ("balanced") is the one-click default; the other two only show up
- * behind the "More options" disclosure below — mirrors the web toolbar
- * popover's Mode 3-default/secondary-disclosure pattern
- * (`frontend/src/components/calendar/header.tsx`).
- */
-const MODE_OPTIONS: {
-  id: OptimizeMode;
-  label: string;
-  description: string;
-}[] = [
-  {
-    id: "balanced",
-    label: "Balanced (recommended)",
-    description: "Best overall fit; resists moving tasks that start soon.",
-  },
-  {
-    id: "full",
-    label: "Full reflow",
-    description: "Re-places everything in the window for the tightest fit.",
-  },
-  {
-    id: "retainManual",
-    label: "Retain manually moved",
-    description: "Keeps anything you've dragged or resized fixed in place.",
-  },
-];
 
 const DEFAULT_MODE: OptimizeMode = "balanced";
 const DEFAULT_WINDOW_DAYS = 7;
@@ -257,7 +229,7 @@ export function OptimizeFab({
     1,
     differenceInCalendarDays(windowEnd, windowStart) + 1,
   );
-  const selectedModeOption = MODE_OPTIONS.find((m) => m.id === mode);
+  const selectedModeOption = OPTIMIZE_MODES.find((m) => m.id === mode);
 
   /**
    * Plain function returning JSX (not threaded through gorhom's
@@ -334,29 +306,10 @@ export function OptimizeFab({
             </LinearGradient>
           </Pressable>
         </BottomSheetOpenTrigger>
-        {/*
-          Fixed height (`enableDynamicSizing={false}` + explicit
-          `snapPoints`), not this sheet's old `enableDynamicSizing={true}`
-          default — a dynamically-sized sheet has no notion of "the rest of
-          the space below the header," so there was nowhere flexbox could
-          put a footer that reserves its own height while the scroll content
-          takes the remainder; gorhom's only footer mechanism for that case
-          is `footerComponent`, which renders as an absolutely-positioned
-          overlay on top of the sized content — no amount of scroll-content
-          bottom padding can fully avoid that overlay covering the last row
-          (the mode-options list, when expanded). A fixed height turns this
-          into the same flex column every other footer-having screen in this
-          app already uses (`app/(onboarding)/index.tsx`,
-          `components/tasks/task-form-screen.tsx`): a `flex-1` scroll area
-          followed by a plain sibling `View` footer, sized to its own content
-          and never overlapping anything above it. "90%" was picked to
-          comfortably fit the form step's content + footer without deadband;
-          adjust if a taller step ever needs more.
-        */}
         <BottomSheetContent
           ref={bottomSheet.ref}
           enableDynamicSizing={false}
-          snapPoints={["90%"]}
+          snapPoints={["80%"]}
         >
           <BottomSheetHeader>
             <Text className="text-[17px] font-bold tracking-tight">
@@ -408,64 +361,7 @@ export function OptimizeFab({
                     {OPTIMIZE_UI_MAX_WINDOW_DAYS} days
                   </Text>
 
-                  <Pressable
-                    onPress={() => setShowModeOptions((v) => !v)}
-                    className="flex-row items-center justify-between rounded-xl border border-border bg-card px-3.5 py-3"
-                  >
-                    <View className="flex-1 pr-2">
-                      <Text className="text-[13px] font-semibold text-foreground">
-                        {selectedModeOption?.label}
-                      </Text>
-                      <Text className="mt-0.5 text-[11.5px] text-muted-foreground">
-                        {selectedModeOption?.description}
-                      </Text>
-                    </View>
-                    {showModeOptions ? (
-                      <ChevronUp
-                        size={18}
-                        className="shrink-0 text-muted-foreground"
-                      />
-                    ) : (
-                      <ChevronDown
-                        size={18}
-                        className="shrink-0 text-muted-foreground"
-                      />
-                    )}
-                  </Pressable>
-
-                  {showModeOptions && (
-                    <View className="gap-2">
-                      {MODE_OPTIONS.map((option) => (
-                        <Pressable
-                          key={option.id}
-                          onPress={() => {
-                            Haptics.selectionAsync().catch(() => {});
-                            setMode(option.id);
-                          }}
-                          className={cn(
-                            "rounded-xl border px-3.5 py-3",
-                            mode === option.id
-                              ? "border-primary bg-primary/10"
-                              : "border-border bg-card",
-                          )}
-                        >
-                          <Text
-                            className={cn(
-                              "text-[13px] font-semibold",
-                              mode === option.id
-                                ? "text-primary"
-                                : "text-foreground",
-                            )}
-                          >
-                            {option.label}
-                          </Text>
-                          <Text className="mt-0.5 text-[11.5px] text-muted-foreground">
-                            {option.description}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  )}
+                  <OptimizeModeField value={mode} onChange={setMode} />
                 </View>
               )}
 
@@ -475,7 +371,7 @@ export function OptimizeFab({
                     Reschedule ~{previewCount} tasks in this range?
                   </Text>
                   <Text className="text-[13px] text-muted-foreground">
-                    {rangeLabel} · {selectedModeOption?.label}
+                    {rangeLabel} · {selectedModeOption?.name}
                   </Text>
                 </View>
               )}

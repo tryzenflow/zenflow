@@ -4,16 +4,20 @@ import {
   ChangeDurationSheet,
   type ChangeDurationSheetHandle,
 } from "@/components/tasks/change-duration-sheet";
-import { CreateTaskFab, createTaskAtNowHref } from "@/components/tasks/create-task-fab";
+import {
+  CreateTaskFab,
+  createTaskAtNowHref,
+} from "@/components/tasks/create-task-fab";
+import { OptimizeFab } from "@/components/tasks/optimize-fab";
 import { Text } from "@/components/ui/text";
 import { useUserStore } from "@/hooks/use-user-store";
 import { cn } from "@/lib/utils";
+import { useFocusEffect } from "@react-navigation/native";
 import { zonedDate, zonedNow } from "@zenflow/core";
 import type { Task } from "@zenflow/shared";
-import { useFocusEffect } from "@react-navigation/native";
-import { type Href, useRouter } from "expo-router";
 import { format } from "date-fns";
 import * as Haptics from "expo-haptics";
+import { type Href, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 
@@ -144,6 +148,7 @@ export default function DayScreen() {
       </ScrollView>
 
       <CreateTaskFab tz={tz} />
+      <OptimizeFab tz={tz} onApplied={refetch} />
       <ChangeDurationSheet ref={durationSheetRef} onResized={refetch} />
     </View>
   );

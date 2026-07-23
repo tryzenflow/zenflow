@@ -1,5 +1,6 @@
 import { LayoutGrid } from "@/components/Icons";
 import { CreateTaskFab } from "@/components/tasks/create-task-fab";
+import { OptimizeFab } from "@/components/tasks/optimize-fab";
 import { Text } from "@/components/ui/text";
 import { useUserStore } from "@/hooks/use-user-store";
 import { View } from "react-native";
@@ -20,6 +21,7 @@ export default function MonthScreen() {
       </View>
 
       <CreateTaskFab tz={tz} />
+      <OptimizeFab tz={tz} />
     </View>
   );
 }

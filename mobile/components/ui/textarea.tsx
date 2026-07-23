@@ -1,12 +1,15 @@
 import * as React from "react";
-import {TextInput} from "react-native";
-import {cn} from "@/lib/utils";
+import { TextInput } from "react-native";
+import { cn } from "@/lib/utils";
 
 type TextareaProps = React.ComponentPropsWithoutRef<typeof TextInput> & {
   "aria-invalid"?: boolean;
 };
 
-const Textarea = React.forwardRef<React.ElementRef<typeof TextInput>, TextareaProps>(
+const Textarea = React.forwardRef<
+  React.ElementRef<typeof TextInput>,
+  TextareaProps
+>(
   (
     {
       className,
@@ -27,7 +30,7 @@ const Textarea = React.forwardRef<React.ElementRef<typeof TextInput>, TextareaPr
             "border-destructive web:ring-[3px] web:ring-destructive/20 web:dark:ring-destructive/40",
           className,
         )}
-        placeholderClassName={cn("text-muted-foreground", placeholderClassName)}
+        style={{ fontFamily: "Geist" }}
         multiline={multiline}
         numberOfLines={numberOfLines}
         textAlignVertical="top"
@@ -39,4 +42,4 @@ const Textarea = React.forwardRef<React.ElementRef<typeof TextInput>, TextareaPr
 
 Textarea.displayName = "Textarea";
 
-export {Textarea};
+export { Textarea };

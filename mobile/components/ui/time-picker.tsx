@@ -3,6 +3,7 @@ import {
   BottomSheet,
   BottomSheetContent,
   BottomSheetOpenTrigger,
+  BottomSheetScrollView,
   useBottomSheet,
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,7 @@ import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import { minutesToLabel } from "@/utils/preferences";
 import { useCallback, useRef } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { Pressable, type ScrollView, View } from "react-native";
 
 /** The 12 selectable hours on a 12-hour clock (1 … 12). */
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 1);
@@ -72,10 +73,18 @@ function Column<T extends number | string>({
   scrollRef?: React.RefObject<ScrollView | null>;
 }) {
   return (
-    <ScrollView
+    // Was a plain `ScrollView` from "react-native" — nested inside
+    // `BottomSheetContent` (a real `@gorhom/bottom-sheet` `BottomSheetModal`
+    // on native), a bare RN `ScrollView` fights the sheet's own pan gesture
+    // for vertical touch since it isn't registered with gorhom's internal
+    // gesture coordination, which is why only taps (not drags) worked on the
+    // hour/minute columns. `BottomSheetScrollView` (re-exported per-platform
+    // from `@/components/ui/bottom-sheet`) is gorhom's own scrollable that
+    // reads `useBottomSheetInternal()` so the sheet yields to it correctly.
+    <BottomSheetScrollView
       ref={scrollRef}
       style={{ maxHeight: COLUMN_HEIGHT }}
-      className="flex-1"
+      className="flex-1 h-full"
       contentContainerClassName="gap-1.5 pb-1"
       showsVerticalScrollIndicator={false}
     >
@@ -101,7 +110,7 @@ function Column<T extends number | string>({
           </Pressable>
         );
       })}
-    </ScrollView>
+    </BottomSheetScrollView>
   );
 }
 

@@ -18,6 +18,7 @@ replacement for it. Part of the [Zenflow monorepo](../README.md).
 | Forms | React Hook Form + Zod (`@hookform/resolvers`) — note-worthy version pin, see [Known pitfalls](#known-pitfalls). `taskSchema`/`TaskFormValues`/`placementQualifier` live in `@zenflow/core` (`packages/core/src/tasks.ts`), shared with `frontend/`'s equivalent (currently a parallel, hand-synced copy — see Phase 5 in `docs/react-native-migration.md`) |
 | HTTP | axios (`api/`), cookie-based session — see [Auth & session](#auth--session) |
 | Bottom sheets | `@gorhom/bottom-sheet` **v5** |
+| Date picker | [`@react-native-community/datetimepicker`](https://github.com/react-native-datetimepicker/datetimepicker) `8.2.0` — real native OS date picker (`components/tasks/form/inline-date-field.tsx`), Android dialog / iOS inline view behind the same pill + `BottomSheet` trigger pattern as `components/ui/time-picker.tsx`. Ships no `.web` variant (its platform-less fallback renders `null` + warns — same situation as the rich-text editor below); the web target isn't a shipping flow for this field today. **Requires a dev-client rebuild** (`expo run:android`/`expo run:ios`, or `expo prebuild` + `eas build --profile development`) — not verified on-device in this environment. |
 | Rich text editor | [`@10play/tentap-editor`](https://github.com/10play/10tap-editor) `^1.0.1` — Tiptap/ProseMirror running in a `react-native-webview` WebView with a native RN bridge (the only real way to run Tiptap on RN — it has no native port). Pinned to the Tiptap-**v3**-based `1.0.x` line specifically (not the older, still-maintained `0.7.x`/Tiptap-v2 line) so its `@tiptap/*` transitive deps share a major version with `frontend/`'s own hoisted Tiptap v3 copies — `frontend/src/components/common/editor/{video,audio}-block.tsx` bare-import `@tiptap/core` relying on root hoisting (see the root `.npmrc`'s top comment), and mixing Tiptap v2 (mobile) + v3 (frontend) under one hoisted `node_modules/@tiptap/core` broke that resolution during install (confirmed empirically: installing the `0.7.x` line produced hard `unmet peer @tiptap/core@^2.7.0: found 3.26.0` conflicts). `react-native-webview` is pinned to `13.12.5`, the exact version Expo SDK 52's `bundledNativeModules.json` lists as compatible. **Adding this native module requires a dev-client rebuild** (`expo run:android`/`expo run:ios`) before it works on-device/emulator — not verified in this environment (no device/emulator available here); see `components/tasks/form/description-field.tsx`'s doc comment. |
 | Formatter / linter | [Biome](https://biomejs.dev) (not ESLint/Prettier — those are the web app's tooling). **Not currently an installed dependency anywhere in the repo** — `pnpm --filter mobile format` fails with "'biome' is not recognized" until `@biomejs/biome` is added as a devDependency; `pnpm dlx @biomejs/biome@1.5.3 check --apply .` works as a one-off in the meantime (matches the `biome.json` `$schema` version) |
 
@@ -392,6 +393,50 @@ Also fixed while investigating: `BottomSheetHeader`'s close button (both platfor
 rounded-circle `Pressable`-style button (`h-8 w-8 rounded-full bg-muted`), matching
 `task-form-screen.tsx`'s header close button instead of a plain 24px ghost icon, for visual
 consistency between the sheeted and full-screen close affordances.
+
+### A nested scrollable inside a bottom sheet must be `BottomSheetScrollView`, never a plain `ScrollView` — even for taps-plus-drag columns
+
+**Symptom:** in `components/ui/time-picker.tsx`'s hour/minute/AM-PM sheet, tapping an hour or
+minute row worked, but dragging to scroll the hour/minute columns did nothing — only the AM/PM
+column (not scrollable, just two stacked `Pressable`s) behaved normally.
+
+**Cause:** `Column`'s scrollable list was a plain `ScrollView` imported straight from
+`"react-native"`. `TimePickerRow`/`TimePickerInline` always render `Column` inside
+`BottomSheetContent`, which on native is a real `@gorhom/bottom-sheet` `BottomSheetModal` — its own
+pan-gesture-handler-based drag gesture claims vertical touch by default. A bare RN `ScrollView`
+isn't registered with gorhom's internal gesture coordination (`useBottomSheetInternal()`), so it
+never gets a chance to claim the touch first; the sheet's own drag gesture wins every time,
+swallowing what should have been a scroll on the inner list. Taps still worked because taps aren't
+a drag gesture at all.
+
+**Fix:** `Column` now renders `BottomSheetScrollView` (re-exported per-platform from
+`@/components/ui/bottom-sheet`, already used correctly elsewhere in this app — see
+`change-duration-sheet.tsx`) instead of a plain `ScrollView`. It reads `useBottomSheetInternal()`
+internally, which is how the sheet knows to yield vertical touch to it. The `scrollRef`/`scrollTo`
+call sites (`useTimePickerScroll`'s `hourScrollRef`/`minuteScrollRef`, used to auto-scroll the
+active row into view on sheet open) didn't need any changes — `BottomSheetScrollView`'s ref is the
+same underlying `ScrollView` ref shape. **Same trap as the section above** (never import a gorhom
+scrollable straight from `@gorhom/bottom-sheet`, and never substitute a plain RN `ScrollView`/
+`FlatList` for one inside `BottomSheetContent`) — if you add another custom scrollable list inside
+any sheet body, reach for `BottomSheetScrollView`/`BottomSheetFlatList` from
+`@/components/ui/bottom-sheet` from the start.
+
+### The Custom-date deadline field uses the real native OS date picker, not a hand-rolled list
+
+`components/tasks/form/inline-date-field.tsx` used to render its own flat, scrollable day list
+inside a `BottomSheet` (no native date-picker dependency, to avoid a dev-client rebuild). It now
+uses `@react-native-community/datetimepicker` (`mode="date"`, `display="default"`) per explicit
+product direction — `expo-dev-client` was already a dependency, so this only needed a rebuild, not
+new infra. Android renders the OS dialog imperatively (mounted only while open, torn down via
+`onChange`'s `event.type`); iOS's `mode="date"` picker is an inline view, not itself a button, so it
+stays behind the same pill + `BottomSheet` trigger `TimePickerInline` already uses. The package
+ships no `.web` variant (its platform-less fallback renders `null` + warns, the same situation
+`react-native-webview` puts `DescriptionField` in — see the dedicated section further down); the web
+target isn't a shipping flow for this field today, so it falls through to the same iOS path rather
+than carrying a third UI. `value`/`onChange` keep this file's pre-existing "zoned" `Date`
+convention (local fields carry the `tz` wall clock, as `@zenflow/core`'s `zonedNow`/`zonedDate`
+produce) — this composes with the native picker for free, since both the JS runtime and the
+platform widget break an instant into calendar fields using the device's own timezone.
 
 ### The task create/edit form is a full screen, not a bottom sheet
 
