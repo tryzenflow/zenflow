@@ -306,7 +306,7 @@ feat(mobile): add Day View gestures (drag, long-press, pinch-zoom, haptics)
 | Step | Status | Commit | Notes |
 |------|--------|--------|-------|
 | 1. Add types to `@zenflow/shared` | DONE | `feat(shared): add Event and DaySegment calendar types` | Created `packages/shared/src/schedule.ts` with Event and DaySegment interfaces, re-exported from index. `pnpm shared:build` passes. |
-| 2. Extract utilities to `@zenflow/core` | TODO | — | — |
+| 2. Extract utilities to `@zenflow/core` | DONE | `feat(core): extract calendar utilities from frontend` | Created constants.ts, zones.ts, task-card.ts, blocks.ts, overlap.ts in packages/core/src/. Rewrote imports to use local paths and @zenflow/shared. `pnpm core:build` passes. |
 | 3. Update web frontend imports | TODO | — | — |
 | 4. Add mobile dependencies | TODO | — | — |
 | 5. Build Day View static + data | TODO | — | — |
