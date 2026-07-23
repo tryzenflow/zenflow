@@ -1,7 +1,8 @@
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
-import type { TaskFormValues } from "@zenflow/core";
+import { cn } from "@/lib/utils";
+import { countTitleWords, MAX_TITLE_WORDS, type TaskFormValues } from "@zenflow/core";
 import type { ReactNode } from "react";
 import { Controller, type UseFormReturn } from "react-hook-form";
 import { View } from "react-native";
@@ -43,17 +44,33 @@ export function TaskSheetFields({
       <Controller
         control={form.control}
         name="title"
-        render={({ field, fieldState }) => (
-          <Field label="Title" error={fieldState.error?.message}>
-            <Input
-              editable={!disabled}
-              value={field.value}
-              onChangeText={field.onChange}
-              placeholder="What needs doing?"
-              className="h-[50px] rounded-xl border border-input bg-card px-4 text-base text-foreground"
-            />
-          </Field>
-        )}
+        render={({ field, fieldState }) => {
+          const wordCount = countTitleWords(field.value ?? "");
+          const overLimit = wordCount > MAX_TITLE_WORDS;
+          return (
+            <Field label="Title" error={fieldState.error?.message}>
+              <Input
+                editable={!disabled}
+                value={field.value}
+                onChangeText={field.onChange}
+                placeholder="What needs doing?"
+                className="h-[50px] rounded-xl border border-input bg-card px-4 text-base text-foreground"
+              />
+              {/* Live word counter — validation itself only fires per the
+                  form's RHF mode (submit/blur), so this gives proactive
+                  feedback as the user types, matching the 60-word limit the
+                  shared `taskSchema` refine enforces. */}
+              <Text
+                className={cn(
+                  "mt-1.5 self-end text-[11px] font-medium text-muted-foreground",
+                  overLimit && "text-destructive",
+                )}
+              >
+                {wordCount}/{MAX_TITLE_WORDS} words
+              </Text>
+            </Field>
+          );
+        }}
       />
 
       <Controller
