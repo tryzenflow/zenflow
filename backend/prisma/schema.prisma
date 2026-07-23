@@ -91,7 +91,20 @@ model Task {
   deadline        DateTime?
   startTime       Int        @default(0) // minutes from midnight of the last manual placement (informational only)
   status          TaskStatus @default(PENDING)
-  conflict        Boolean    @default(false) // unplaced (no slot before deadline)
+  // True when this task overlaps another task's interval, OR has no valid
+  // placement at all (scheduledStartTime null). An overlap is now a normal,
+  // ACCEPTED state — not something a cost model tries to prevent: a direct
+  // drag/resize (TasksService.displace/resize) writes the user's requested
+  // interval unconditionally and simply flags both tasks conflicting rather
+  // than auto-relocating either one. Cleared by a follow-up drag/resize that
+  // resolves the overlap, or by Optimize (optimize.ts).
+  conflict        Boolean    @default(false)
+  // True when the user directly dragged/resized this task. Informational
+  // only everywhere automatic (badge/telemetry) — no automatic path (Create,
+  // Edit-accept's resolveInvalidPlacement) ever freezes/protects a task
+  // because of this flag. The ONE place it gates real behavior is Optimize's
+  // "retainManual" mode (explicit user opt-in): tasks with this flag set are
+  // locked at their current slot for that one repack, regardless of validity.
   manuallyMoved Boolean @default(false)
   scheduledStartTime DateTime? // assigned by the EDF engine
   userId String
@@ -127,9 +140,12 @@ model TaskEvent {
   newSnapshot Json
   rewardScore Float         @default(1.0) // Phase-3 signal
   occurredAt  DateTime      @default(now())
-  // Groups every RESCHEDULED TaskEvent one narrowResolve auto-cascade wrote,
-  // so the whole cascade can be undone atomically via SchedulerService.undoBatch.
-  // Null for events not written as part of an undoable batch.
+  // Groups every RESCHEDULED TaskEvent one multi-task batch wrote — today
+  // that's SchedulerService.optimizeWindow (the explicit Optimize action) or
+  // resolveInvalidPlacement (Edit-accept's single-task resolve) — so the
+  // whole batch can be undone atomically via SchedulerService.undoBatch /
+  // POST /tasks/reschedule/undo/:batchId. Null for events not written as
+  // part of an undoable batch (e.g. CREATE, MOVE, RESIZE, COMPLETE).
   batchId     String?
 
   taskId String

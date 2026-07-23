@@ -96,8 +96,7 @@ export function workWindowFor(
 
 /**
  * Total minutes of `candidate` that fall OUTSIDE every work-hours window it
- * touches (the `offHoursCost` term of the placement cost model — `edf.ts`).
- * Scans a small band of calendar days around the candidate (one day before
+ * touches. Scans a small band of calendar days around the candidate (one day before
  * through one day past its span) so a work window anchored the PRIOR day but
  * wrapping past midnight (`workEnd <= workStart`) is still accounted for,
  * unions every window's overlap with `candidate` (de-duplicating any overlap

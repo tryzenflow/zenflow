@@ -44,9 +44,9 @@ export function cellScore(
  * input order — so the draw is a deterministic function of
  * `(taskId, candidate list, scores)`. This is the shared stochastic-logging-
  * policy primitive both the preference-matrix re-ranker ({@link rankCandidates})
- * and the placement cost model (`edf.ts`'s `placementCost`, fed in as
- * `-cost`) route through, so IPS/SNIPS propensity logging works uniformly for
- * either.
+ * and `place.ts`'s single-task `placeTask` (Tier-1 candidate pick) and
+ * `optimize.ts`'s Mode-3 candidate scoring route through, so IPS/SNIPS
+ * propensity logging works uniformly across all of them.
  *
  * When every candidate scores identically (no signal to distinguish them —
  * cold start, or a genuine tie) the Gumbel draw is skipped entirely and

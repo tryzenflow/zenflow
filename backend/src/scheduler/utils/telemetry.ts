@@ -1,18 +1,20 @@
 import { PREFERENCE_MATRIX_LENGTH } from "@zenflow/shared";
 import { Prisma } from "../../../generated/prisma";
-import { intervalOf } from "./edf";
+import { intervalOf } from "./place";
 import type { EdfTask } from "../interfaces";
 import { preferenceIndex, type Interval } from "./slot";
 import { PREFERENCE_LEARNING_RATE } from "../constants";
 
 /**
  * Shared, PURE telemetry builders (no I/O). These encode the exact event-snapshot
- * shape, the signed `preferenceMatrix` math, and the pairwise conflict recompute
- * that the scheduler writes on every mutation. They live here — not buried in
- * `SchedulerService` — so BOTH the production services AND the batched simulator
- * produce byte-identical telemetry from a single source of truth (the simulator
- * computes a year of events in memory, then bulk-writes them, so it cannot call
- * the per-row service path). Keeping them pure also keeps them trivially testable.
+ * shape, the signed `preferenceMatrix` math, and the pairwise overlap check
+ * behind the scheduler's bounded conflict recheck (`SchedulerService.
+ * markConflicts`, which does the actual indexed range query). They live here
+ * — not buried in `SchedulerService` — so BOTH the production services AND
+ * the batched simulator produce byte-identical telemetry from a single
+ * source of truth (the simulator computes a year of events in memory, then
+ * bulk-writes them, so it cannot call the per-row service path). Keeping
+ * them pure also keeps them trivially testable.
  */
 
 /**
@@ -140,40 +142,38 @@ export function applyPreferenceDeltas(
   return out;
 }
 
-/** The minimal task shape the conflict recompute reasons over. */
-export interface ConflictTask {
+/** The minimal task shape a bounded conflict recheck reasons over. */
+export interface ConflictNeighbor {
   id: string;
   scheduledStartTime: Date | null;
   durationMinutes: number;
   conflict: boolean;
 }
 
+/** True when two intervals share any overlap (half-open, `[start, end)`). */
+function overlaps(a: Interval, b: Interval): boolean {
+  return a.start < b.end && b.start < a.end;
+}
+
 /**
- * Recompute each task's conflict flag from pure pairwise time-overlap across the
- * `projected` set: a placed task clashes if it overlaps any other placed task,
- * anywhere in the window. Now-INDEPENDENT — elapsed/in-progress/past tasks all
- * participate. Unplaced tasks keep their incoming verdict.
+ * Pure pairwise overlap check: does `interval` clash with any of `neighbors`'
+ * OWN intervals? `null` (unplaced) never overlaps anything. This is the pure
+ * core of `SchedulerService.markConflicts` — a BOUNDED conflict recheck
+ * scoped to a single task's just-written/just-vacated interval, replacing the
+ * old `recomputeConflicts` global O(n²) pairwise scan over the whole pending
+ * backlog (confirmed unoptimized — see the redesign's Reality Check). The
+ * service is the one that fetches `neighbors` via a single indexed range
+ * query (`@@index([userId, scheduledStartTime])`) around the interval(s) in
+ * question — this function never scans the whole backlog itself, and does no
+ * I/O of its own.
  */
-export function recomputeConflicts(
-  projected: ConflictTask[],
-): Map<string, boolean> {
-  const overlaps = (a: Interval, b: Interval) =>
-    a.start < b.end && b.start < a.end;
-  const conflictOf = new Map<string, boolean>();
-  for (const t of projected) {
-    const iv = intervalOf(t);
-    if (!iv) {
-      conflictOf.set(t.id, t.conflict); // unplaced — keep verdict
-      continue;
-    }
-    conflictOf.set(
-      t.id,
-      projected.some((o) => {
-        if (o.id === t.id) return false;
-        const oiv = intervalOf(o);
-        return oiv ? overlaps(iv, oiv) : false;
-      }),
-    );
-  }
-  return conflictOf;
+export function overlapsAnyTask(
+  interval: Interval | null,
+  neighbors: ConflictNeighbor[],
+): boolean {
+  if (!interval) return false;
+  return neighbors.some((n) => {
+    const iv = intervalOf(n);
+    return iv ? overlaps(interval, iv) : false;
+  });
 }
