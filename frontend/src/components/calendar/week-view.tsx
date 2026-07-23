@@ -5,13 +5,13 @@ import {
   startOfWeek,
 } from "date-fns";
 import { WeekGrid } from "./week-grid";
-import { Event } from "@/types/schedule";
+import { Event } from "@zenflow/shared";
 import { DndContext, DragEndEvent } from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useDragSensors } from "@/hooks/use-drag-sensors";
-import { DEFAULT_WORK_PREFS, getDayZones } from "@/utils/zones";
-import { DAILY_HORIZON, TIME_GRANULARITY, WEEK_STARTS_ON } from "@/utils/constants";
+import { DEFAULT_WORK_PREFS, getDayZones } from "@zenflow/core";
+import { DAILY_HORIZON, TIME_GRANULARITY, WEEK_STARTS_ON } from "@zenflow/core";
 import {
   isZonedToday,
   tzAbbrev,

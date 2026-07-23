@@ -4,6 +4,7 @@ import type { DeadlineOptionsResponse } from "@zenflow/shared";
 import { getDeadlineOptions } from "@/api/tasks";
 import { useUserStore } from "@/hooks/use-user-store";
 import { zonedDate, zonedNow, zonedWallClockToUtc } from "@/utils/tz";
+import { DAILY_HORIZON } from "@zenflow/core";
 import { DatePicker } from "@/components/ui/datepicker";
 import { TimePicker } from "@/components/ui/time-picker";
 import { cn } from "@/lib/utils";

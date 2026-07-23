@@ -1,4 +1,4 @@
-import { DAILY_HORIZON, TIME_GRANULARITY } from "./constants";
+import { DAILY_HORIZON, TIME_GRANULARITY } from "@zenflow/core";
 
 export const minutesToTime = (minutes: number): string => {
   if (minutes === DAILY_HORIZON) return "11:59 PM";

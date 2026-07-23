@@ -4,11 +4,11 @@ import { ViewModeSelect } from "./view-mode-select";
 import { OptimizeButton } from "./optimize-button";
 import { endOfWeek, format, startOfMonth } from "date-fns";
 import { Dispatch, SetStateAction } from "react";
-import { ViewMode } from "@/types/schedule";
+import { ViewMode } from "@zenflow/shared";
 import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
 import { useUserStore } from "@/hooks/use-user-store";
 import { zonedNow } from "@/utils/tz";
-import { WEEK_STARTS_ON } from "@/utils/constants";
+import { WEEK_STARTS_ON } from "@zenflow/core";
 import { shiftDateByView, type NavDirection } from "@/utils/navigation";
 
 interface CalendarHeaderProps {

@@ -4,7 +4,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { ViewMode } from "@/types/schedule";
+import { ViewMode } from "@zenflow/shared";
 
 export function ViewModeSelect({
   value,

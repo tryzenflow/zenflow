@@ -1,6 +1,6 @@
 import { useUserStore } from "@/hooks/use-user-store";
 import { cn } from "@/lib/utils";
-import type { Event } from "@/types/schedule";
+import type { Event } from "@zenflow/shared";
 import type { TaskCardState, TasksMeta, ViewMode } from "@zenflow/shared";
 import { toZonedTime } from "date-fns-tz";
 import { Lightbulb, LogOut, Settings } from "lucide-react";

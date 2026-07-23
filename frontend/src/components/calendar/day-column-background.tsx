@@ -1,5 +1,5 @@
 import { useUserStore } from "@/hooks/use-user-store";
-import { DAY_PX, DEFAULT_WORK_PREFS, getDayZones } from "@/utils/zones";
+import { DAY_PX, DEFAULT_WORK_PREFS, getDayZones } from "@zenflow/core";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 

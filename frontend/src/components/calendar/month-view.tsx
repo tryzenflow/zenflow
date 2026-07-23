@@ -1,8 +1,8 @@
 import { eachDayOfInterval, endOfWeek, format, startOfWeek } from "date-fns";
 import { MonthGrid } from "./month-grid";
-import { Event } from "@/types/schedule";
+import { Event } from "@zenflow/shared";
 import { DndContext, DragEndEvent } from "@dnd-kit/core";
-import { WEEK_STARTS_ON } from "@/utils/constants";
+import { WEEK_STARTS_ON } from "@zenflow/core";
 import { cn } from "@/lib/utils";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useDragSensors } from "@/hooks/use-drag-sensors";

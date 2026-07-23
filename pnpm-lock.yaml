@@ -317,6 +317,9 @@ importers:
       '@tiptap/starter-kit':
         specifier: ^3.11.0
         version: 3.26.0
+      '@zenflow/core':
+        specifier: workspace:*
+        version: link:../packages/core
       '@zenflow/shared':
         specifier: workspace:*
         version: link:../packages/shared

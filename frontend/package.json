@@ -45,6 +45,7 @@
     "@tiptap/react": "^3.11.0",
     "@tiptap/starter-kit": "^3.11.0",
     "@zenflow/shared": "workspace:*",
+    "@zenflow/core": "workspace:*",
     "axios": "^1.13.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

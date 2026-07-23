@@ -1,4 +1,4 @@
-import { Event } from "@/types/schedule";
+import { Event } from "@zenflow/shared";
 import {
   eachDayOfInterval,
   endOfMonth,
@@ -8,7 +8,7 @@ import {
   startOfWeek,
 } from "date-fns";
 import { MonthCell } from "./month-cell";
-import { WEEK_STARTS_ON } from "@/utils/constants";
+import { WEEK_STARTS_ON } from "@zenflow/core";
 import { useUserStore } from "@/hooks/use-user-store";
 import { zonedDate } from "@/utils/tz";
 

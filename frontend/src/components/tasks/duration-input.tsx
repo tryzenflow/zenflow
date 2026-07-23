@@ -6,7 +6,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { DAILY_HORIZON, TIME_GRANULARITY } from "@/utils/constants";
+import { DAILY_HORIZON, TIME_GRANULARITY } from "@zenflow/core";
 
 const MAX_HOURS = Math.floor(DAILY_HORIZON / 60); // 24
 const HOURS = Array.from({ length: MAX_HOURS + 1 }, (_, i) => i); // 0..24
