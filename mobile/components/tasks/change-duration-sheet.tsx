@@ -174,8 +174,7 @@ export const ChangeDurationSheet = forwardRef<
           </Text>
           <Text className="mt-[3px] text-[13px] text-muted-foreground">
             {displayTask.title} · was{" "}
-            {formatMinutes(displayTask.durationMinutes)} · drag the slider ·
-            15-min steps
+            {formatMinutes(displayTask.durationMinutes)}
           </Text>
 
           <View className="my-2 mb-[18px] flex-row items-center justify-center gap-2">

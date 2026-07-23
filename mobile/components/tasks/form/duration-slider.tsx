@@ -66,6 +66,8 @@ export function DurationSlider({
   );
 
   const pan = Gesture.Pan()
+    .activeOffsetX([-4, 4])
+    .failOffsetY([-8, 8])
     .onBegin(() => {
       startValueRef.current = valueRef.current;
     })
@@ -122,7 +124,7 @@ export function DurationSlider({
             key={t}
             className="text-[11px] tabular-nums text-muted-foreground"
           >
-            {t}
+            {formatTick(t)}
           </Animated.Text>
         ))}
       </View>
@@ -143,4 +145,15 @@ function tickLabels(min: number, max: number, step: number): number[] {
   }
   if (labels[labels.length - 1] !== max) labels.push(max);
   return labels;
+}
+
+/** Compact tick caption — `15m`, `1h`, `1h15m` — distinct from `formatMinutes`'s
+ * spelled-out "1 h 15 min" used elsewhere, since these labels sit tightly
+ * packed under the track. */
+function formatTick(totalMinutes: number): string {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `${minutes}m`;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h${minutes}m`;
 }
