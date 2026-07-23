@@ -2,7 +2,7 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
-import { countTitleWords, MAX_TITLE_WORDS, type TaskFormValues } from "@zenflow/core";
+import { MAX_TITLE_LENGTH, type TaskFormValues } from "@zenflow/core";
 import type { ReactNode } from "react";
 import { Controller, type UseFormReturn } from "react-hook-form";
 import { View } from "react-native";
@@ -45,8 +45,8 @@ export function TaskSheetFields({
         control={form.control}
         name="title"
         render={({ field, fieldState }) => {
-          const wordCount = countTitleWords(field.value ?? "");
-          const overLimit = wordCount > MAX_TITLE_WORDS;
+          const charCount = (field.value ?? "").length;
+          const overLimit = charCount > MAX_TITLE_LENGTH;
           return (
             <Field label="Title" error={fieldState.error?.message}>
               <Input
@@ -56,17 +56,17 @@ export function TaskSheetFields({
                 placeholder="What needs doing?"
                 className="h-[50px] rounded-xl border border-input bg-card px-4 text-base text-foreground"
               />
-              {/* Live word counter — validation itself only fires per the
-                  form's RHF mode (submit/blur), so this gives proactive
-                  feedback as the user types, matching the 60-word limit the
-                  shared `taskSchema` refine enforces. */}
+              {/* Live character counter — validation itself only fires per
+                  the form's RHF mode (submit/blur), so this gives proactive
+                  feedback as the user types, matching the 60-character limit
+                  the shared `taskSchema` `.max()` enforces. */}
               <Text
                 className={cn(
                   "mt-1.5 self-end text-[11px] font-medium text-muted-foreground",
                   overLimit && "text-destructive",
                 )}
               >
-                {wordCount}/{MAX_TITLE_WORDS} words
+                {charCount}/{MAX_TITLE_LENGTH} characters
               </Text>
             </Field>
           );

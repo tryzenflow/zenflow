@@ -249,6 +249,24 @@ calling `bottomSheet.open()`/`.close()` synchronously wherever the old code call
 was deleted — don't reintroduce an effect-driven `open`-prop bridge for a new sheet; use
 `useBottomSheet()` + an imperative handle instead.
 
+### `BottomSheetOpenTrigger asChild` needs a real touchable as its direct child
+
+**Symptom:** tapping a trigger visually responds (e.g. it's rendered fine, maybe even has
+pressed-state styling from its own component) but the sheet never opens, with no error thrown.
+
+**Cause:** `asChild` clones the passed `onPress` onto its single child via
+`components/primitives/slot.tsx`'s `Slot.Pressable`, which only works if that child is a real
+touchable implementing RN's responder system (`Pressable`/`Touchable*`). `OptimizeFab`
+(`components/tasks/optimize-fab.tsx`) originally passed a bare `LinearGradient` (from
+`expo-linear-gradient`) as the `asChild` target — a purely visual view with no touch handling — so
+the cloned `onPress` was silently dropped and `sheetRef.current?.present()` never ran.
+
+**Fix:** always wrap non-touchable visual children (gradients, SVGs, plain `View`s) in a
+`Pressable` and make that `Pressable` the direct `asChild` child, with the visual content nested
+inside it — see `components/settings/profile-row.tsx`, `components/settings/timezone-picker-row.tsx`,
+`components/onboarding/time-picker-row.tsx` for the working pattern, and `OptimizeFab`'s FAB
+trigger for the fixed version.
+
 ### `react-native-webview` has no real web implementation — gate WebView-backed UI by `Platform.OS`
 
 **Symptom:** on the web dev target only, `DescriptionField`'s rich-text editor
@@ -392,17 +410,17 @@ bottom of this form, verify it isn't obscured with the keyboard open on both pla
 -based pickers (tag autocomplete, deadline inline date/time) don't need this, they already get
 correct behavior from their own `BottomSheetModal`.
 
-### Title has a 60-word cap, enforced by the shared `taskSchema`
+### Title has a 60-character cap, enforced by the shared `taskSchema`
 
 `packages/core/src/tasks.ts`'s `taskSchema` (imported here from `@zenflow/core`, same as
-`frontend/src/utils/tasks.ts`'s hand-synced fork) rejects a title over `MAX_TITLE_WORDS` (60) via a
-`.refine()`; the message ("Title must be at most 60 words.") surfaces through
+`frontend/src/utils/tasks.ts`'s hand-synced fork) rejects a title over `MAX_TITLE_LENGTH` (60) via
+a `.max()`; the message ("Title must be at most 60 characters.") surfaces through
 `TaskSheetFields`'s existing `Field`/`fieldState.error` rendering, no separate error UI needed.
-`TaskSheetFields`'s Title field also renders a live `{wordCount}/{MAX_TITLE_WORDS} words` counter
-(via the shared `countTitleWords` helper) below the input, independent of the form's RHF validation
-mode, so the count updates as the user types rather than only after a submit/blur triggers
-validation. If you change the limit, change it once in `packages/core/src/tasks.ts` — don't
-hardcode `60` a second time here or in `frontend/`.
+`TaskSheetFields`'s Title field also renders a live `{charCount}/{MAX_TITLE_LENGTH} characters`
+counter below the input, independent of the form's RHF validation mode, so the count updates as
+the user types rather than only after a submit/blur triggers validation. If you change the limit,
+change it once in `packages/core/src/tasks.ts` — don't hardcode `60` a second time here or in
+`frontend/`.
 
 ## Local development
 

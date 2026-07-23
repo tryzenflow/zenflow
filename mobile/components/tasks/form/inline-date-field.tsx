@@ -9,12 +9,18 @@ import {
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import { zonedNow } from "@zenflow/core";
-import { addDays, format, isSameDay } from "date-fns";
+import { addDays, differenceInCalendarDays, format, isSameDay } from "date-fns";
 import { useMemo } from "react";
 import type { ListRenderItemInfo } from "react-native";
 import { Pressable, View } from "react-native";
 
 const DAYS_AHEAD = 90;
+
+function dayStart(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
 
 /**
  * Compact "date pill" field for the deadline chip row's Custom date picker
@@ -23,24 +29,42 @@ const DAYS_AHEAD = 90;
  * would need a dev-client rebuild) — a scrollable day list matches the
  * thumb-friendly, build-from-existing-primitives spirit already used by
  * `components/onboarding/time-picker-row.tsx` for time-of-day.
+ *
+ * The list is always a flat, chronological scroll — deliberately no
+ * month/year jump navigation — so callers that need a bounded range (e.g.
+ * `OptimizeFab`'s 60-day-max window) just pass `minDate`/`maxDate` rather
+ * than this field growing a second navigation mode.
  */
 export function InlineDateField({
   value,
   onChange,
   tz,
   disabled,
+  minDate,
+  maxDate,
 }: {
   value: Date | undefined;
   onChange: (date: Date) => void;
   tz: string;
   disabled?: boolean;
+  /** Earliest selectable date, inclusive. Defaults to today in `tz` — dates
+   * before today (in `tz`) are never selectable even if a caller passes an
+   * earlier `minDate`. */
+  minDate?: Date;
+  /** Latest selectable date, inclusive. Defaults to `minDate + DAYS_AHEAD - 1`. */
+  maxDate?: Date;
 }) {
   const bottomSheet = useBottomSheet();
   const days = useMemo(() => {
-    const today = zonedNow(tz);
-    today.setHours(0, 0, 0, 0);
-    return Array.from({ length: DAYS_AHEAD }, (_, i) => addDays(today, i));
-  }, [tz]);
+    const today = dayStart(zonedNow(tz));
+    const floor =
+      minDate && dayStart(minDate) > today ? dayStart(minDate) : today;
+    const ceiling = maxDate
+      ? dayStart(maxDate)
+      : addDays(floor, DAYS_AHEAD - 1);
+    const span = Math.max(1, differenceInCalendarDays(ceiling, floor) + 1);
+    return Array.from({ length: span }, (_, i) => addDays(floor, i));
+  }, [tz, minDate, maxDate]);
 
   return (
     <BottomSheet>
