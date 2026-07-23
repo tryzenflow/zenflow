@@ -9,10 +9,13 @@ import {
   ValidateIf,
 } from "class-validator";
 import { TIME_GRANULARITY } from "../../common/constants";
+import { MaxWords } from "../../common/validators/max-words.decorator";
 import type { CreateTaskInput } from "@zenflow/shared";
 
 export class CreateTaskDto implements CreateTaskInput {
-  @IsString() title: string;
+  @IsString()
+  @MaxWords(60, { message: "Title must be at most 60 words." })
+  title: string;
 
   @IsOptional()
   @ValidateIf((_, v) => v !== null)
