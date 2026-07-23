@@ -1,13 +1,13 @@
 import { getDeadlineOptions } from "@/api/tasks";
 import { Text } from "@/components/ui/text";
+import { TimePickerInline } from "@/components/ui/time-picker";
 import { cn } from "@/lib/utils";
 import { zonedDate, zonedNow, zonedWallClockToUtc } from "@zenflow/core";
-import { DAILY_HORIZON, type DeadlineOptionsResponse } from "@zenflow/shared";
+import type { DeadlineOptionsResponse } from "@zenflow/shared";
 import { format, isSameDay } from "date-fns";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import { InlineDateField } from "./inline-date-field";
-import { InlineTimeField } from "./inline-time-field";
 
 type ChipId =
   | "today"
@@ -28,21 +28,8 @@ const CHIPS: { id: ChipId; label: string }[] = [
   { id: "custom", label: "Custom" },
 ];
 
-/** A safe "end of day" fallback (23:59) when a ceiling instant rolls onto a
- * different calendar day than the chip's target day — keeps the picker's
- * date on the chip's own day. */
-const END_OF_DAY_MINUTES = DAILY_HORIZON - 1;
-
 function minutesOfDay(d: Date): number {
   return d.getHours() * 60 + d.getMinutes();
-}
-
-/** Today's (or tomorrow's) wall-clock midnight, in user-tz local fields. */
-function dayAnchor(tz: string, offsetDays: 0 | 1): Date {
-  const day = zonedNow(tz);
-  day.setHours(0, 0, 0, 0);
-  if (offsetDays) day.setDate(day.getDate() + offsetDays);
-  return day;
 }
 
 /** Combine a wall-clock day anchor + minutes-of-day into a real UTC instant. */
@@ -58,7 +45,7 @@ function combine(day: Date, minutes: number, tz: string): string {
  * unchanged: same six prefetched options from `GET /tasks/deadline-options`
  * plus Custom, same Today/Tomorrow/Custom time-of-day reveal, same "default
  * to No rush on create" behaviour). Only the picker widgets underneath
- * (`InlineTimeField`/`InlineDateField`) are RN-specific replacements for the
+ * (`TimePickerInline`/`InlineDateField`) are RN-specific replacements for the
  * web's `<TimePicker>`/`<DatePicker>`.
  */
 export function DeadlineChipRow({
@@ -79,8 +66,7 @@ export function DeadlineChipRow({
 }) {
   const [options, setOptions] = useState<DeadlineOptionsResponse | null>(null);
   const [chip, setChip] = useState<ChipId | null>(null);
-  const [todayTomorrowMinutes, setTodayTomorrowMinutes] =
-    useState(END_OF_DAY_MINUTES);
+  const [todayTomorrowMinutes, setTodayTomorrowMinutes] = useState(17 * 60);
   const [customDate, setCustomDate] = useState<Date | undefined>(undefined);
   const [customMinutes, setCustomMinutes] = useState(17 * 60);
   // The last ISO string WE emitted via onChange, so the inference effect
@@ -88,7 +74,10 @@ export function DeadlineChipRow({
   const lastEmitted = useRef<string | null>(null);
 
   useEffect(() => {
-    const anchor = zonedWallClockToUtc(dayAnchor(tz, 0), tz).toISOString();
+    // The current instant, not midnight-of-today — the backend's "today"
+    // option is now a few hours from now (rounded to the 15-minute grid),
+    // so it needs the actual moment, mirroring the frontend's anchor.
+    const anchor = zonedWallClockToUtc(zonedNow(tz), tz).toISOString();
     getDeadlineOptions(anchor)
       .then(setOptions)
       .catch(() => setOptions(null));
@@ -221,7 +210,7 @@ export function DeadlineChipRow({
       </View>
 
       {(chip === "today" || chip === "tomorrow") && (
-        <InlineTimeField
+        <TimePickerInline
           value={todayTomorrowMinutes}
           onChange={handleTodayTomorrowTime}
           disabled={disabled}
@@ -240,7 +229,7 @@ export function DeadlineChipRow({
             />
           </View>
           <View className="flex-1">
-            <InlineTimeField
+            <TimePickerInline
               value={customMinutes}
               onChange={handleCustomTime}
               disabled={disabled}

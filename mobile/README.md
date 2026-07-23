@@ -232,7 +232,7 @@ controlled by an `open: boolean` + `onOpenChange` prop pair, driven by `useState
 screen and bridged through a `useControlledBottomSheet(open)` hook that called
 `ref.current?.present()`/`.dismiss()` inside a `useEffect` keyed on `open` — i.e. *after* a state
 update flowed through a re-render, never inside the actual `Pressable`'s `onPress`/`onLongPress`
-handler itself. Every other sheet in the app (`components/onboarding/time-picker-row.tsx`,
+handler itself. Every other sheet in the app (`components/ui/time-picker.tsx`,
 `components/settings/duration-mode-picker-row.tsx`, `components/settings/timezone-picker-row.tsx`)
 instead calls `useBottomSheet()`'s `open`/`close` (or `BottomSheetOpenTrigger`'s internal
 `sheetRef.current?.present()`) **directly and synchronously inside the press handler**, and those
@@ -264,7 +264,7 @@ the cloned `onPress` was silently dropped and `sheetRef.current?.present()` neve
 **Fix:** always wrap non-touchable visual children (gradients, SVGs, plain `View`s) in a
 `Pressable` and make that `Pressable` the direct `asChild` child, with the visual content nested
 inside it — see `components/settings/profile-row.tsx`, `components/settings/timezone-picker-row.tsx`,
-`components/onboarding/time-picker-row.tsx` for the working pattern, and `OptimizeFab`'s FAB
+`components/ui/time-picker.tsx` for the working pattern, and `OptimizeFab`'s FAB
 trigger for the fixed version.
 
 ### `react-native-webview` has no real web implementation — gate WebView-backed UI by `Platform.OS`
@@ -423,7 +423,7 @@ Two knock-on changes from dropping the sheet-ref pattern:
 
 **Symptom:** on a screen with more than one nested `@gorhom/bottom-sheet` sheet mounted at once
 (the task form: `TagAutocomplete`'s sheet alongside `DeadlineChipRow`'s `InlineDateField`/
-`InlineTimeField` sheets, all siblings under one `BottomSheetModalProvider`), the header "X" could
+`TimePickerInline` sheets, all siblings under one `BottomSheetModalProvider`), the header "X" could
 fail to close the sheet the user was actually looking at.
 
 **Cause:** `components/ui/bottom-sheet.native.tsx`'s `BottomSheetHeader`/`BottomSheetCloseTrigger`
@@ -433,7 +433,7 @@ presented-sheets queue* in that case (`BottomSheetModalProvider.tsx`'s `handleDi
 only "this sheet" by coincidence, not by construction. That queue can end up with a stale entry
 that was never cleanly popped: `handleWillUnmountSheet`/`handlePortalOnUnmount` (fired when a
 modal's `Portal` unmounts while its own dismiss animation is still in flight — e.g.
-`InlineTimeField`'s sheet getting torn down because `DeadlineChipRow`'s `chip` state changed away
+`TimePickerInline`'s sheet getting torn down because `DeadlineChipRow`'s `chip` state changed away
 right as the user picked a time) never splices that sheet's key out of the queue; only a dismiss
 that runs all the way to completion does, via the modal's own `unmount()`. The web
 reimplementation (`components/ui/bottom-sheet.tsx`, Radix `Dialog`-based) never had this bug — it

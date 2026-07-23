@@ -535,7 +535,7 @@ insights, dark mode, sign-out); see `mobile/README.md`'s screens table.
      `useControlledBottomSheet(open)` hook that called `ref.current?.present()`/`.dismiss()`
      inside a `useEffect` keyed on `open` — i.e. one render tick *after* the triggering press
      handler, not synchronously inside it. Every other working sheet in the app
-     (`components/onboarding/time-picker-row.tsx`, `components/settings/duration-mode-picker-row.tsx`,
+     (`components/ui/time-picker.tsx`, `components/settings/duration-mode-picker-row.tsx`,
      `components/settings/timezone-picker-row.tsx`) calls `useBottomSheet()`'s `open`/`close`
      directly inside the press handler instead — that synchronous-call shape turned out to be
      the real difference (an earlier hypothesis blaming `@10play/tentap-editor`'s WebView mount

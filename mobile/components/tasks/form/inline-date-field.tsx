@@ -28,7 +28,7 @@ function dayStart(date: Date): Date {
  * picker dependency is added here (`@react-native-community/datetimepicker`
  * would need a dev-client rebuild) — a scrollable day list matches the
  * thumb-friendly, build-from-existing-primitives spirit already used by
- * `components/onboarding/time-picker-row.tsx` for time-of-day.
+ * `components/ui/time-picker.tsx` for time-of-day.
  *
  * The list is always a flat, chronological scroll — deliberately no
  * month/year jump navigation — so callers that need a bounded range (e.g.

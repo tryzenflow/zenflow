@@ -38,7 +38,7 @@ type Row =
  * inside the same `BottomSheetScrollView` as every other field, focus-
  * trapping and layout-thrashing against the surrounding sheet. Replaced with
  * the nested-bottom-sheet picker every other field-with-a-list in this app
- * already uses (`InlineTimeField`, `components/ui/combobox.tsx`) — a tap
+ * already uses (`TimePickerInline`, `components/ui/combobox.tsx`) — a tap
  * opens a second sheet stacked on the create/edit sheet (a supported
  * `@gorhom/bottom-sheet` pattern under the one shared
  * `BottomSheetModalProvider` in `app/_layout.tsx`), with its own search
@@ -99,7 +99,7 @@ export function TagAutocomplete({
 
   /** Toggle a row's selection — the same tap adds when unselected, removes
    * when already selected (mirrors the checkmark row already added to
-   * `InlineTimeField`/`InlineDateField`). */
+   * `TimePickerInline`/`InlineDateField`). */
   function toggle(name: string, isSelected: boolean) {
     if (isSelected) remove(name);
     else add(name);
@@ -284,8 +284,8 @@ export function TagAutocomplete({
                     #{row.name}
                   </Text>
                   {row.selected && (
-                    <View className="h-5 w-5 items-center justify-center rounded-full bg-primary">
-                      <Check size={12} className="text-primary-foreground" />
+                    <View className="h-6 w-6 items-center justify-center rounded-full bg-primary">
+                      <Check size={16} className="text-primary-foreground" />
                     </View>
                   )}
                 </Pressable>

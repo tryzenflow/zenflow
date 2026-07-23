@@ -405,11 +405,11 @@ const BottomSheetHeader = React.forwardRef<
   // `BottomSheetModalProvider.tsx`'s `handleDismiss`), which is only ever
   // "this sheet" by coincidence. On a screen with multiple independent
   // nested sheets — the task form's `TagAutocomplete` sheet alongside
-  // `DeadlineChipRow`'s `InlineDateField`/`InlineTimeField` sheets, all
+  // `DeadlineChipRow`'s `InlineDateField`/`TimePickerInline` sheets, all
   // siblings sharing one `BottomSheetModalProvider` — that queue can end up
   // with a stale entry on top: `@gorhom/bottom-sheet`'s own
   // `BottomSheetModalProvider`'s `handleWillUnmountSheet` (fired when a
-  // modal's `Portal` unmounts mid-dismiss, e.g. `InlineTimeField`'s sheet
+  // modal's `Portal` unmounts mid-dismiss, e.g. `TimePickerInline`'s sheet
   // being torn down because `DeadlineChipRow`'s `chip` state changed away
   // while that sheet's own close animation was still in flight) never
   // splices that sheet's key out of the shared queue — only a *clean*
