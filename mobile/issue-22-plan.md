@@ -308,7 +308,7 @@ feat(mobile): add Day View gestures (drag, long-press, pinch-zoom, haptics)
 | 1. Add types to `@zenflow/shared` | DONE | `feat(shared): add Event and DaySegment calendar types` | Created `packages/shared/src/schedule.ts` with Event and DaySegment interfaces, re-exported from index. `pnpm shared:build` passes. |
 | 2. Extract utilities to `@zenflow/core` | DONE | `feat(core): extract calendar utilities from frontend` | Created constants.ts, zones.ts, task-card.ts, blocks.ts, overlap.ts in packages/core/src/. Rewrote imports to use local paths and @zenflow/shared. `pnpm core:build` passes. |
 | 3. Update web frontend imports | DONE | `refactor(frontend): import calendar utils from @zenflow/core` | Updated 21+ import sites across frontend. Added `@zenflow/core` as a dependency. Deleted 6 extracted files (constants.ts, zones.ts, blocks.ts, overlap.ts, task-card.ts, types/schedule.ts). Also fixed 3 additional files (snap.ts, tasks.ts, time.ts) that imported from the deleted constants. `pnpm --filter frontend typecheck` passes. |
-| 4. Add mobile dependencies | TODO | — | — |
-| 5. Build Day View static + data | TODO | — | — |
+| 4. Add mobile dependencies | DONE | `feat(mobile): add expo-haptics dependency` | Installed expo-haptics@57.0.1. @zenflow/core already a dep. |
+| 5. Build Day View static + data | DONE | `feat(mobile): build Day View screen (static rendering + data)` | Created 5 re-export files in mobile/lib/ (constants, zones, blocks, overlap, task-card). Built 5 calendar components (TimeGutter, WorkZoneOverlay, NowIndicator, TaskBlock, DayTimeline). Replaced stub in app/(app)/index.tsx. Data fetching with 4 screen states (loading/error/empty/populated). `pnpm shared:build && pnpm core:build && pnpm --filter frontend typecheck` all pass. Mobile tsc shows only pre-existing errors. |
 | 6. Build Day View gestures | TODO | — | — |
 | 7. Verify + commit | TODO | — | — |

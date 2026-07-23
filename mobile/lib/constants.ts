@@ -1,3 +1,10 @@
+// Re-export calendar constants from the shared core package.
+export {
+  DAILY_HORIZON,
+  TIME_GRANULARITY,
+  WEEK_STARTS_ON,
+} from "@zenflow/core";
+
 // React Navigation's native header/tab-bar chrome takes plain color strings, not `className` —
 // this is the one hand-maintained hex mirror of the Warm Sunrise tokens for that purpose only.
 // Keep in sync with app/global.css.
