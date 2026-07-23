@@ -4,24 +4,39 @@ import { Text } from "@/components/ui/text";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   DAILY_HORIZON,
+  TIME_GRANULARITY,
   DEFAULT_WORK_PREFS,
   eventsForDay,
   tasksToBlocks,
   getOverlapLayout,
   zonedNow,
+  zonedWallClockToUtc,
+  zonedDate,
 } from "@zenflow/core";
 import type { Task } from "@zenflow/shared";
 import { useUserStore } from "@/hooks/use-user-store";
-import { listTasks } from "@/api/tasks";
+import { listTasks, rescheduleTask } from "@/api/tasks";
 import { TimeGutter } from "./time-gutter";
 import { WorkZoneOverlay } from "./work-zone-overlay";
 import { NowIndicator } from "./now-indicator";
 import { TaskBlock } from "./task-block";
 import { format } from "date-fns";
+import {
+  Gesture,
+  GestureDetector,
+} from "react-native-gesture-handler";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  clamp,
+  withSpring,
+} from "react-native-reanimated";
+import * as Haptics from "expo-haptics";
 
 const GUTTER_WIDTH = 64;
 const HOUR_HEIGHT_DEFAULT = 64;
-const PX_PER_MIN = HOUR_HEIGHT_DEFAULT / 60;
+const HOUR_HEIGHT_MIN = 48;
+const HOUR_HEIGHT_MAX = 96;
 
 function scrollToNowOffset(totalHeight: number): number {
   const now = new Date();
@@ -40,12 +55,15 @@ export function DayTimeline({ date: propDate }: DayTimelineProps) {
   const { width: screenWidth } = useWindowDimensions();
 
   const date = propDate ?? zonedNow(tz);
-  const totalHeight = HOUR_HEIGHT_DEFAULT * 24;
+  const [hourHeight, setHourHeight] = useState(HOUR_HEIGHT_DEFAULT);
+  const totalHeight = hourHeight * 24;
   const contentWidth = screenWidth - GUTTER_WIDTH;
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+
+  const baseHourHeight = useSharedValue(HOUR_HEIGHT_DEFAULT);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,6 +108,66 @@ export function DayTimeline({ date: propDate }: DayTimelineProps) {
       now.getDate() === date.getDate()
     );
   }, [date, tz]);
+
+  const handleReschedule = useCallback(
+    async (taskId: string, startISO: string) => {
+      try {
+        await rescheduleTask(taskId, startISO);
+        setTasks((prev) =>
+          prev.map((t) =>
+            t.id === taskId ? { ...t, scheduledStartTime: startISO } : t,
+          ),
+        );
+      } catch {
+        // Revert optimistic update on failure
+        listTasks("day", date, "PENDING").then((res) => setTasks(res.tasks));
+      }
+    },
+    [date],
+  );
+
+  const handleLongPress = useCallback(
+    (y: number) => {
+      const pxPerMin = totalHeight / DAILY_HORIZON;
+      const minutes = Math.round(y / pxPerMin / TIME_GRANULARITY) * TIME_GRANULARITY;
+      const clampedMin = Math.max(0, Math.min(DAILY_HORIZON - TIME_GRANULARITY, minutes));
+
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+      const wall = zonedDate(date, tz);
+      wall.setHours(Math.floor(clampedMin / 60), clampedMin % 60, 0, 0);
+      const wallISO = zonedWallClockToUtc(wall, tz).toISOString();
+
+      // TODO: Open create-task bottom sheet with default time = wallISO
+      console.log("Long press at:", wallISO);
+    },
+    [date, tz, totalHeight],
+  );
+
+  const zoomGesture = Gesture.Pinch()
+    .onUpdate((e) => {
+      const newHeight = clamp(
+        baseHourHeight.value * e.scale,
+        HOUR_HEIGHT_MIN,
+        HOUR_HEIGHT_MAX,
+      );
+      baseHourHeight.value = newHeight;
+    })
+    .onEnd(() => {
+      setHourHeight(baseHourHeight.value);
+    });
+
+  const longPressGesture = Gesture.LongPress()
+    .minDuration(500)
+    .onEnd((e) => {
+      handleLongPress(e.absoluteY);
+    });
+
+  const contentGesture = Gesture.Simultaneous(zoomGesture, longPressGesture);
+
+  const animatedContentStyle = useAnimatedStyle(() => ({
+    height: baseHourHeight.value * 24,
+  }));
 
   if (loading) {
     return (
@@ -146,42 +224,45 @@ export function DayTimeline({ date: propDate }: DayTimelineProps) {
         showsVerticalScrollIndicator={false}
         onLayout={scrollToNow}
       >
-        <View style={{ height: totalHeight }} className="relative">
-          <TimeGutter hourHeight={HOUR_HEIGHT_DEFAULT} />
+        <GestureDetector gesture={contentGesture}>
+          <Animated.View style={animatedContentStyle} className="relative">
+            <TimeGutter hourHeight={hourHeight} />
 
-          <View
-            className="absolute top-0 bottom-0 bg-card"
-            style={{ left: GUTTER_WIDTH, right: 0 }}
-          >
-            <WorkZoneOverlay date={date} prefs={prefs} />
+            <View
+              className="absolute top-0 bottom-0 bg-card"
+              style={{ left: GUTTER_WIDTH, right: 0 }}
+            >
+              <WorkZoneOverlay date={date} prefs={prefs} />
 
-            {isToday && (
-              <NowIndicator tz={tz} totalHeight={totalHeight} />
-            )}
+              {isToday && (
+                <NowIndicator tz={tz} totalHeight={totalHeight} />
+              )}
 
-            {segments.map((segment) => {
-              const blockLayout = layout.get(segment.segmentId) ?? {
-                column: 0,
-                columns: 1,
-                conflict: false,
-              };
-              const blockWidthPx = contentWidth / blockLayout.columns;
-              const leftOffsetPx = blockLayout.column * blockWidthPx;
+              {segments.map((segment) => {
+                const blockLayout = layout.get(segment.segmentId) ?? {
+                  column: 0,
+                  columns: 1,
+                  conflict: false,
+                };
+                const blockWidthPx = contentWidth / blockLayout.columns;
+                const leftOffsetPx = blockLayout.column * blockWidthPx;
 
-              return (
-                <TaskBlock
-                  key={segment.segmentId}
-                  segment={segment}
-                  layout={blockLayout}
-                  tz={tz}
-                  totalHeight={totalHeight}
-                  leftOffset={leftOffsetPx}
-                  blockWidth={blockWidthPx}
-                />
-              );
-            })}
-          </View>
-        </View>
+                return (
+                  <TaskBlock
+                    key={segment.segmentId}
+                    segment={segment}
+                    layout={blockLayout}
+                    tz={tz}
+                    totalHeight={totalHeight}
+                    leftOffset={leftOffsetPx}
+                    blockWidth={blockWidthPx}
+                    onReschedule={handleReschedule}
+                  />
+                );
+              })}
+            </View>
+          </Animated.View>
+        </GestureDetector>
       </ScrollView>
     </View>
   );

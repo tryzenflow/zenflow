@@ -1,11 +1,22 @@
+import { useCallback, useState } from "react";
 import { View } from "react-native";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
-import { DAILY_HORIZON } from "@zenflow/core";
+import { DAILY_HORIZON, TIME_GRANULARITY, zonedWallClockToUtc, zonedDate } from "@zenflow/core";
 import { withOverlap } from "@zenflow/core";
 import type { BlockLayout } from "@zenflow/core";
 import type { DaySegment } from "@zenflow/shared";
 import { toZonedTime } from "date-fns-tz";
+import {
+  Gesture,
+  GestureDetector,
+} from "react-native-gesture-handler";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
+import * as Haptics from "expo-haptics";
 
 const TAGS_MIN_DURATION = 45;
 
@@ -40,6 +51,7 @@ interface TaskBlockProps {
   totalHeight: number;
   leftOffset: number;
   blockWidth: number;
+  onReschedule?: (taskId: string, startISO: string) => void;
 }
 
 export function TaskBlock({
@@ -49,6 +61,7 @@ export function TaskBlock({
   totalHeight,
   leftOffset,
   blockWidth,
+  onReschedule,
 }: TaskBlockProps) {
   const startMin = minutesOfDayLocal(segment.start, tz);
   const rawEndMin = minutesOfDayLocal(segment.end, tz);
@@ -60,9 +73,56 @@ export function TaskBlock({
   const state = withOverlap(segment.state, layout.conflict);
   const isCompleted = segment.status === "DONE";
   const isSplit = Boolean(segment.continued);
+  const isInteractive = !isCompleted && !isSplit;
 
-  const top = (startMin / DAILY_HORIZON) * totalHeight;
+  const baseTop = (startMin / DAILY_HORIZON) * totalHeight;
   const height = Math.max((duration / DAILY_HORIZON) * totalHeight, 20);
+  const pxPerMin = totalHeight / DAILY_HORIZON;
+
+  const translateY = useSharedValue(0);
+  const [dragOffset, setDragOffset] = useState(0);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
+
+  const handleDragEnd = useCallback(
+    (translationY: number) => {
+      if (!isInteractive || !onReschedule) return;
+
+      const deltaMinutes = translationY / pxPerMin;
+      const snappedMinutes =
+        Math.round(deltaMinutes / TIME_GRANULARITY) * TIME_GRANULARITY;
+
+      if (snappedMinutes === 0) return;
+
+      const newStartMin = Math.max(
+        0,
+        Math.min(DAILY_HORIZON - TIME_GRANULARITY, startMin + snappedMinutes),
+      );
+
+      const wall = zonedDate(segment.taskStart, tz);
+      wall.setHours(Math.floor(newStartMin / 60), newStartMin % 60, 0, 0);
+      const newStart = zonedWallClockToUtc(wall, tz);
+
+      if (newStart.toISOString() === segment.taskStart) return;
+
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      onReschedule(segment.taskId, newStart.toISOString());
+    },
+    [isInteractive, onReschedule, pxPerMin, startMin, segment.taskStart, segment.taskId, tz],
+  );
+
+  const panGesture = Gesture.Pan()
+    .enabled(isInteractive)
+    .activeOffsetY([-10, 10])
+    .onUpdate((e) => {
+      translateY.value = e.translationY;
+    })
+    .onEnd((e) => {
+      handleDragEnd(e.translationY);
+      translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
+    });
 
   const borderColor =
     state === "overdue"
@@ -86,86 +146,99 @@ export function TaskBlock({
     <View
       className="absolute z-10 px-0.5"
       style={{
-        top,
+        top: baseTop,
         left: leftOffset,
         width: blockWidth,
         height,
       }}
     >
-      <View
-        className={cn(
-          "flex overflow-hidden rounded border shadow-sm",
-          isCompact ? "flex-row items-center gap-1.5 px-2" : "flex-col py-1 px-2",
-          segment.continues && "rounded-b-none",
-          segment.continued && "rounded-t-none border-t-0 border-dashed",
-        )}
-        style={{
-          borderLeftWidth: 4,
-          borderLeftColor: borderColor,
-          backgroundColor: bgColor,
-        }}
-      >
-        {isCompact ? (
-          <>
-            <View className="min-w-0 flex-1 flex-row items-center gap-1">
-              {segment.continued && (
-                <Text className="text-[10px] text-muted-foreground">↳</Text>
-              )}
-              <Text
-                className={cn(
-                  "flex-1 truncate text-[10px] font-semibold",
-                  isCompleted && "line-through",
-                )}
-              >
-                {segment.title}
-              </Text>
-            </View>
-            <Text className="shrink-0 font-mono text-[9px] text-muted-foreground">
-              {segment.continued
-                ? `ends ${fmt(segment.taskEnd, tz)}`
-                : fmt(segment.taskStart, tz)}
-            </Text>
-          </>
-        ) : (
-          <>
-            <View className="flex-row items-center gap-1">
-              {segment.continued && (
-                <Text className="text-[10px] text-muted-foreground">↳</Text>
-              )}
-              <Text
-                className={cn(
-                  "flex-1 truncate text-xs font-semibold",
-                  isCompleted && "line-through",
-                )}
-              >
-                {segment.title}
-              </Text>
-            </View>
-            <Text className="font-mono text-[10px] text-muted-foreground">
-              {segment.continued
-                ? `cont. → ${fmt(segment.taskEnd, tz)}`
-                : segment.continues
-                  ? `${fmt(segment.taskStart, tz)} → next day`
-                  : `${fmt(segment.taskStart, tz)} – ${fmt(segment.taskEnd, tz)}`}
-            </Text>
-            {showTags && (
-              <View className="mt-0.5 flex-row flex-wrap gap-1 overflow-hidden">
-                {segment.tags.slice(0, 3).map((t) => (
-                  <View
-                    key={t}
+      <GestureDetector gesture={panGesture}>
+        <Animated.View
+          style={animatedStyle}
+          className={cn(
+            "flex overflow-hidden rounded border shadow-sm",
+            isCompact ? "flex-row items-center gap-1.5 px-2" : "flex-col py-1 px-2",
+            segment.continues && "rounded-b-none",
+            segment.continued && "rounded-t-none border-t-0 border-dashed",
+            isInteractive && "cursor-grab",
+          )}
+          accessible
+          accessibilityRole="button"
+          accessibilityLabel={`${segment.title}, ${fmt(segment.taskStart, tz)} to ${fmt(segment.taskEnd, tz)}`}
+        >
+          <View
+            style={{
+              borderLeftWidth: 4,
+              borderLeftColor: borderColor,
+              backgroundColor: bgColor,
+              flex: 1,
+              overflow: "hidden",
+              borderRadius: 4,
+            }}
+          >
+            {isCompact ? (
+              <View className="flex-row items-center gap-1.5 px-2">
+                <View className="min-w-0 flex-1 flex-row items-center gap-1">
+                  {segment.continued && (
+                    <Text className="text-[10px] text-muted-foreground">↳</Text>
+                  )}
+                  <Text
                     className={cn(
-                      "rounded border px-1.5 py-0.5",
-                      tagTint(t),
+                      "flex-1 truncate text-[10px] font-semibold",
+                      isCompleted && "line-through",
                     )}
                   >
-                    <Text className="text-[9px] font-medium">{t}</Text>
+                    {segment.title}
+                  </Text>
+                </View>
+                <Text className="shrink-0 font-mono text-[9px] text-muted-foreground">
+                  {segment.continued
+                    ? `ends ${fmt(segment.taskEnd, tz)}`
+                    : fmt(segment.taskStart, tz)}
+                </Text>
+              </View>
+            ) : (
+              <View className="flex-col py-1 px-2">
+                <View className="flex-row items-center gap-1">
+                  {segment.continued && (
+                    <Text className="text-[10px] text-muted-foreground">↳</Text>
+                  )}
+                  <Text
+                    className={cn(
+                      "flex-1 truncate text-xs font-semibold",
+                      isCompleted && "line-through",
+                    )}
+                  >
+                    {segment.title}
+                  </Text>
+                </View>
+                <Text className="font-mono text-[10px] text-muted-foreground">
+                  {segment.continued
+                    ? `cont. → ${fmt(segment.taskEnd, tz)}`
+                    : segment.continues
+                      ? `${fmt(segment.taskStart, tz)} → next day`
+                      : `${fmt(segment.taskStart, tz)} – ${fmt(segment.taskEnd, tz)}`}
+                </Text>
+                {showTags && (
+                  <View className="mt-0.5 flex-row flex-wrap gap-1 overflow-hidden">
+                    {segment.tags.slice(0, 3).map((t) => (
+                      <View
+                        key={t}
+                        className={cn(
+                          "rounded border px-1.5 py-0.5",
+                          tagTint(t),
+                        )}
+                      >
+                        <Text className="text-[9px] font-medium">{t}</Text>
+                      </View>
+                    ))}
                   </View>
-                ))}
+                )}
               </View>
             )}
-          </>
-        )}
-      </View>
+          </View>
+        </Animated.View>
+      </GestureDetector>
     </View>
   );
 }
