@@ -82,7 +82,7 @@ const ListItem: React.FC<ListItemProps> = ({
     }
     return null;
   };
-  const pressable = props?.onPress || href;
+  const pressable = (props as { onPress?: unknown })?.onPress || href;
   // `Component` only ever renders as `Pressable` or `View` here — the `href`
   // case is handled separately below by wrapping `body` in a `<Link asChild>`
   // — so the element type is narrowed to just those two (dropping `LinkProps`
