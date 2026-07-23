@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { Clock } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { DAILY_HORIZON, TIME_GRANULARITY } from "@/utils/constants";
 
@@ -21,8 +25,7 @@ function toParts(value: number): {
   minute: number;
   meridiem: Meridiem;
 } {
-  // Preserve the DAILY_HORIZON -> 11:59 PM edge case (matches utils/time.ts).
-  const clock = value >= DAILY_HORIZON ? DAILY_HORIZON - 1 : Math.max(value, 0);
+  const clock = Math.min(Math.max(value, 0), DAILY_HORIZON);
   const totalHours = Math.floor(clock / 60);
   const minute = clock % 60;
   const meridiem: Meridiem = totalHours >= 12 ? "PM" : "AM";
@@ -129,21 +132,8 @@ export function TimePicker({
     scrollActive(minuteColRef.current);
   }, [open]);
 
-  // 11:59 PM is the backend's end-of-day deadline default; expose it as a
-  // selectable minute only while 11 PM is showing, otherwise stay on the
-  // plain 15-minute grid.
-  const minutes =
-    parts?.hour === 11 && parts?.meridiem === "PM"
-      ? [...MINUTE_STEPS, 59]
-      : MINUTE_STEPS;
-
   const commit = (hour: number, minute: number, meridiem: Meridiem) => {
-    // If the resulting hour/meridiem isn't 11 PM, the minute column can't
-    // represent :59 as a selectable option — clamp back down to the grid so
-    // the value never drifts off what the UI can show as selected.
-    const isElevenPm = hour === 11 && meridiem === "PM";
-    const nextMinute = !isElevenPm && minute === 59 ? 45 : minute;
-    onChange(fromParts(hour, nextMinute, meridiem));
+    onChange(fromParts(hour, minute, meridiem));
   };
 
   return (
@@ -170,18 +160,22 @@ export function TimePicker({
               <ColumnButton
                 key={h}
                 active={parts?.hour === h}
-                onClick={() => commit(h, parts?.minute ?? 0, parts?.meridiem ?? "AM")}
+                onClick={() =>
+                  commit(h, parts?.minute ?? 0, parts?.meridiem ?? "AM")
+                }
               >
                 {h}
               </ColumnButton>
             ))}
           </Column>
           <Column columnRef={minuteColRef}>
-            {minutes.map((m) => (
+            {MINUTE_STEPS.map((m) => (
               <ColumnButton
                 key={m}
                 active={parts?.minute === m}
-                onClick={() => commit(parts?.hour ?? 12, m, parts?.meridiem ?? "AM")}
+                onClick={() =>
+                  commit(parts?.hour ?? 12, m, parts?.meridiem ?? "AM")
+                }
               >
                 {m.toString().padStart(2, "0")}
               </ColumnButton>
@@ -192,7 +186,9 @@ export function TimePicker({
               <ColumnButton
                 key={mer}
                 active={parts?.meridiem === mer}
-                onClick={() => commit(parts?.hour ?? 12, parts?.minute ?? 0, mer)}
+                onClick={() =>
+                  commit(parts?.hour ?? 12, parts?.minute ?? 0, mer)
+                }
               >
                 {mer}
               </ColumnButton>

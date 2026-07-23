@@ -1,24 +1,35 @@
 import { ArrowLeftRight, Undo2 } from "lucide-react";
 
 /**
- * Toast body shown when a create/update/delete mutation's inline reoptimize
- * moved OTHER tasks as a side effect (`response.displaced`). Uses a distinct
- * icon (`ArrowLeftRight`) from the rationale toast (`Sparkles`) and the
- * duration-adjustment toast (`Undo2`) so the three are visually
+ * Toast body shown after an Optimize **apply** run (`POST /tasks/optimize/
+ * apply`) — the only multi-task mutation left in the redesigned scheduler
+ * (Create/Edit/Drag/Resize/Delete/Complete never cascade to other tasks
+ * anymore, so this is no longer shown for them). Uses a distinct icon
+ * (`ArrowLeftRight`) from the rationale toast (`Sparkles`) and the
+ * duration-adjustment toast (`Undo2`) so the three stay visually
  * distinguishable when sonner stacks them together.
  *
- * Deliberately NOT shown for drag-to-reschedule or edge-resize: those are
- * direct, visible manual actions — the user just watched the block land
- * there, so "N other tasks moved, Undo" would be noise rather than a useful
- * surprise notification. See `onReschedule`/`onResize` in
- * `components/calendar/layout.tsx`.
+ * Mode 2 ("retain manual") locks `manuallyMoved` tasks in place instead of
+ * repacking them, so `fixedCount`/`unchangedCount` are present to render the
+ * "Fixed N · M left unchanged (manually placed)" line; other modes omit them
+ * and only the plain count + range shows.
  */
 export function CascadeToast({
   count,
+  rangeLabel,
+  fixedCount,
+  unchangedCount,
   onUndo,
   onDismiss,
 }: {
+  /** Tasks actually moved by this Optimize apply. */
   count: number;
+  /** Preformatted window label, e.g. "Jul 22 – Jul 29". */
+  rangeLabel: string;
+  /** Mode 2 only: tasks locked at their current slot (manually placed). */
+  fixedCount?: number;
+  /** Mode 2 only: movable tasks reconsidered but left in their same slot. */
+  unchangedCount?: number;
   onUndo: () => void;
   /** Close the toast. */
   onDismiss: () => void;
@@ -31,11 +42,17 @@ export function CascadeToast({
         </span>
         <div className="flex min-w-0 flex-col gap-0.5">
           <p className="text-sm font-semibold text-foreground">
-            {count} other task{count === 1 ? "" : "s"} moved
+            {count} task{count === 1 ? "" : "s"} rescheduled
           </p>
           <p className="text-xs text-muted-foreground">
-            Rescheduled to make room.
+            Optimized {rangeLabel}.
           </p>
+          {fixedCount != null && (
+            <p className="text-xs text-muted-foreground">
+              Fixed {fixedCount} (manually placed) · {unchangedCount ?? 0} left
+              unchanged
+            </p>
+          )}
         </div>
       </div>
 

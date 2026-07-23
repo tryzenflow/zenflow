@@ -4,6 +4,9 @@ import type {
   CreateTaskInput,
   CreateTaskResponse,
   DeadlineOptionsResponse,
+  OptimizeApplyResponse,
+  OptimizePreviewResponse,
+  OptimizeWindowInput,
   RemoveTaskResponse,
   RescheduleResponse,
   Task,
@@ -93,12 +96,59 @@ export async function resizeTask(
 }
 
 /**
- * Undo the inline narrow same-day auto-resolve a create/update/drag/resize
- * ran (see `UpdateTaskResponse.batchId` / `RescheduleResponse.batchId`) —
- * reverts every task that batch moved back to its prior slot/duration.
+ * Undo a batch of RESCHEDULED events tagged with `batchId` — currently only
+ * produced by Optimize apply (see `optimizeApply`). Reverts every touched
+ * task back to its prior slot/duration.
+ *
+ * If any touched row was mutated again since the batch ran, the backend
+ * returns `{ requiresConfirmation: true, touchedTaskIds }` instead of
+ * writing anything; resubmit with an explicit `strategy` ("all" to revert
+ * everything anyway, "excludeTouched" to skip the rows touched since) to
+ * proceed.
  */
-export async function undoBatch(batchId: string): Promise<UndoBatchResponse> {
-  const { data } = await api.post(`/tasks/reschedule/undo/${batchId}`);
+export async function undoBatch(
+  batchId: string,
+  strategy?: "all" | "excludeTouched",
+): Promise<UndoBatchResponse> {
+  const { data } = await api.post(
+    `/tasks/reschedule/undo/${batchId}`,
+    strategy ? { strategy } : undefined,
+  );
+  return data.data;
+}
+
+/**
+ * Edit-accept flow: after `PATCH /tasks/:id` flags a task `conflict: true`
+ * because the new deadline/duration broke its current slot, calling this
+ * (no body — the backend reads the task's current deadline/duration itself)
+ * runs the same Tier1→2→3 search `createTask` uses and clears the flag on
+ * success.
+ */
+export async function resolveTaskPlacement(
+  id: string,
+): Promise<RescheduleResponse> {
+  const { data } = await api.post(`/tasks/${id}/reschedule/resolve`);
+  return data.data;
+}
+
+/**
+ * Count-only preview for the Optimize action — never returns a diff (no
+ * per-task preview UI is ever built for Optimize), just how many tasks in
+ * the window would move under the given mode. Used solely to decide whether
+ * to show the large-batch guard confirm before calling `optimizeApply`.
+ */
+export async function optimizePreview(
+  input: OptimizeWindowInput,
+): Promise<OptimizePreviewResponse> {
+  const { data } = await api.post("/tasks/optimize/preview", input);
+  return data.data;
+}
+
+/** Runs the Optimize repack for real, writing placements under one fresh `batchId`. */
+export async function optimizeApply(
+  input: OptimizeWindowInput,
+): Promise<OptimizeApplyResponse> {
+  const { data } = await api.post("/tasks/optimize/apply", input);
   return data.data;
 }
 

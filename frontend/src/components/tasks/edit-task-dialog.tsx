@@ -17,7 +17,7 @@ import { TaskHistory } from "./task-history-timeline";
 import { useFilesTracker } from "@/hooks/use-files-tracker";
 import { completeTask, getTaskDetails, updateTask } from "@/api/tasks";
 import { Clock, Trash2 } from "lucide-react";
-import { maybeShowCascadeToast } from "@/lib/scheduling-toasts";
+import { showOfferToRescheduleToast } from "@/lib/scheduling-toasts";
 
 interface EditTaskDialogProps {
   open: boolean;
@@ -95,8 +95,22 @@ export function EditTaskDialog({
         tags: values.tags,
       });
       onSaved();
-      maybeShowCascadeToast(response, onSaved);
-      toast.success("Task updated 🎉");
+      // A deadline/tags change that breaks the task's own (unchanged) slot no
+      // longer auto-searches for a new one — the same write flags
+      // `conflict: true` and returns `rationale` explaining why, and this
+      // shows the offer-to-reschedule Accept/Decline toast (Accept calls
+      // `resolveTaskPlacement`). No cascade toast here: update() never moves
+      // other tasks anymore, only ever leaves its own slot as-is or flagged.
+      if (response.rationale) {
+        showOfferToRescheduleToast(
+          taskId,
+          response.task.title,
+          response.rationale,
+          onSaved,
+        );
+      } else {
+        toast.success("Task updated 🎉");
+      }
       setOpen(false);
     } catch (error) {
       errorToast(
@@ -128,9 +142,11 @@ export function EditTaskDialog({
   async function onDelete() {
     setLoading(true);
     try {
-      const response = await deleteTask(taskId);
+      // Delete only frees this task's own slot and clears whatever was
+      // ONLY conflicting with it — it never cascades to reposition other
+      // tasks anymore, so there's nothing left for a cascade toast to show.
+      await deleteTask(taskId);
       onSaved();
-      maybeShowCascadeToast(response, onSaved);
       toast.success("Task deleted");
       setOpen(false);
     } catch (error) {

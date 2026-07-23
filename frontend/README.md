@@ -72,7 +72,8 @@ The **auth gate** (`components/hoc/with-auth.tsx`) calls `me()` on mount, redire
 `user.onboardingComplete === false`.
 
 The **calendar** (`components/calendar/`): `layout.tsx` orchestrates state, data fetching,
-and dialogs; `header.tsx` has date navigation + the day/week/month view picker (keyboard
+and dialogs; `header.tsx` has date navigation + the day/week/month view picker + the Optimize
+entry point (`optimize-button.tsx`, see below) (keyboard
 shortcuts via `use-view-shortcuts`: D/W/M switch view, ←/→ step to the previous/next period
 at the active view's granularity — all suppressed while typing in a field, see
 `utils/editing.ts`; the prev/next step logic is shared with the header buttons in
@@ -114,47 +115,49 @@ priority), appending " — outside your usual work hours" / " — past its deadl
 copy when relevant (the backend no longer returns *why* a placement is unusual, only where it
 landed).
 
-**Auto-resolve, not ask-first — and always visible, always undoable.** A create, a
-deadline/tags edit, a drag, or a resize that would leave a task's own slot conflicting with a
-neighbour is auto-resolved INLINE by the backend (a same-day repack, same
-request/transaction — no confirm toast, no second round-trip). Every one of these calls —
-`createTask`, `updateTask`, `removeTask` (delete), `rescheduleTask` (drag), `resizeTask`
-(resize) — returns a `displaced: DisplacedTask[]` array of whatever the repack moved, plus an
-optional `batchId` grouping the RESCHEDULED events it wrote. `lib/scheduling-toasts.tsx`'s
-`maybeShowCascadeToast(response, onUndone)` is a no-op unless both are present; when they are,
-it shows `tasks/cascade-toast.tsx` ("N other task(s) moved" + **Undo**, distinct
-`ArrowLeftRight` icon so it stacks legibly alongside the rationale and duration-adjustment
-toasts) keyed by `cascade:${batchId}` so a literal duplicate fire of the same batch dedupes —
-distinct mutations always get a fresh `batchId`, so rapid sequential edits can legitimately
-stack several independently-undoable cascade toasts. Undo calls `api/tasks.ts`'s `undoBatch`
-(`POST /tasks/reschedule/undo/:batchId`) then the caller's own refetch. Only two call sites wire
-it: `create-task-dialog.tsx`'s `finalizeCreate` and `edit-task-dialog.tsx`'s update and delete
-handlers — genuinely non-obvious side effects worth flagging. `calendar/layout.tsx`'s
-`onReschedule`/`onResize` (drag and edge-resize) deliberately do NOT call it: the user just
-directly dragged/resized the block and watched it land, so "N other tasks moved, Undo" would be
-noise for a displacement they caused themselves. Those two handlers still fire
-`maybeShowRationaleToast` on the edited task's own response, and — since there's no longer a
-cascade-toast undo callback to defer to — unconditionally `await refetch()` in their `finally`
-block so any tasks the reoptimize displaced don't render stale.
+**No more whole-backlog cascades — every mutation touches only its own task.** The scheduler
+redesign replaced the old cost-based `reoptimize()` (which could silently evict/relocate any
+pending task on every mutation) with a narrow, single-task tiered placer. Create places the new
+task only; a metadata-only edit (title/note/tags) patches fields directly and leaves the task's
+own placement untouched. A deadline/tags-driven duration change that invalidates that unchanged
+slot flags `task.conflict: true` in the same write instead of auto-searching, and
+`UpdateTaskResponse.rationale` explains why — `edit-task-dialog.tsx`'s `onSubmit` calls
+`lib/scheduling-toasts.tsx`'s `showOfferToRescheduleToast(taskId, title, rationale, onResolved)`,
+a blocking Accept/Decline toast (reusing `ConfirmToastShell`): **Find it a new slot** calls
+`api/tasks.ts`'s `resolveTaskPlacement` (`POST /tasks/:id/reschedule/resolve`, no body — the
+backend re-reads the task's current deadline/duration and re-runs the same Tier1→2→3 search
+`createTask` uses), whose response then drives the normal `maybeShowRationaleToast`; **Leave it**
+just dismisses — the task stays flagged, resolvable later by a manual drag or Optimize. Drag and
+resize (`rescheduleTask`/`resizeTask`) write the requested interval unconditionally — landing on
+an occupied slot flags **both** tasks `conflict: true` rather than relocating either one. Delete
+and Complete free only their own slot and bounded-clear whatever was conflicting solely because of
+them. **None of these can move a task the user didn't touch**, so `maybeShowCascadeToast` no
+longer fires for create/update/delete — see Optimize below for the one action that still can.
 
-**The wide ±3-workday/`[now, deadline]` cascade is gone.** The backend's cost-based scheduler
-rewrite dropped the window-scoped "narrow vs. wide" cascade distinction entirely — `reoptimize`
-is the one mechanism now, already run inline on every create/update/drag/resize/delete, with
-no follow-up action left to offer. `POST /tasks/reschedule-cascade` no longer exists
-server-side, so the frontend's `tasks/prompt-reschedule-cascade.ts` (`promptRescheduleCascade`),
-`tasks/reschedule-confirm-toast.tsx`, and `tasks/reschedule-choice-toast.tsx` were deleted along
-with it, and `utils/tasks.ts`'s `cascadeWindow`/`needsRescheduleWindow`/`hasManualTaskInWindow`
-helpers that only fed them. A `task.conflict` that survives the inline reoptimize means a
-genuinely saturated calendar (no slot found anywhere in the scan horizon) — there's no
-follow-up prompt for it; the task stays flagged `conflict` (surfaced via the amber status dot,
-the create-time warning toast above, and the header's `conflictCount` badge — see
-`components/calendar/header.tsx`, an amber pill with an `AlertTriangle` icon shown only when
-`conflictCount > 0`) until something frees up room. Deleting a task no longer offers a
-gap-fill prompt either — any gap it leaves is only filled organically, by a later
-create/edit/drag landing on it, and the cascade toast above (`removeTask` now returns
-`RemoveTaskResponse { displaced, batchId }` same as the other mutations) tells the user if
-that happened immediately (delete goes through `edit-task-dialog.tsx`, so it's one of the
-two wired call sites above, not drag/resize).
+**Optimize — the one explicit, opt-in, multi-task action.** `components/calendar/
+optimize-button.tsx` renders the header's `Sparkles`-icon button (`components/calendar/
+header.tsx`), opening a popover: a `DateRangeSelect` window (default the next 7 days,
+future-oriented presets only, client-capped at the shared `OPTIMIZE_UI_MAX_WINDOW_DAYS` — distinct
+from and tighter than the backend's own hard per-request ceiling) and an `OptimizeModeField`
+radio-card list (`balanced` / `full` / `retainManual`) defaulting to Mode 3 ("balanced"), shown
+inline alongside the window rather than behind a disclosure. Confirming calls `api/tasks.ts`'s
+`optimizePreview` for a **count only** — no per-task diff is ever rendered, by design — and, only
+above the shared `OPTIMIZE_LARGE_BATCH_THRESHOLD`, shows a one-line confirm toast (reusing
+`lib/scheduling-toasts.tsx`'s `ConfirmToastShell`) before calling `optimizeApply`. A successful
+apply shows `tasks/cascade-toast.tsx` via `maybeShowCascadeToast(response, tz, onUndone)` ("N
+task(s) rescheduled" + the window range + **Undo**, plus a "Fixed N · M left unchanged (manually
+placed)" line when the response carries `fixedCount`/`unchangedCount`, i.e. Mode 2), keyed by
+`cascade:${batchId}` so a literal duplicate fire of the same batch dedupes. Undo calls
+`api/tasks.ts`'s `undoBatch(batchId, strategy?)` (`POST /tasks/reschedule/undo/:batchId`); if the
+backend reports `requiresConfirmation` (a touched-since row), the caller re-submits with an
+explicit `strategy: "all" | "excludeTouched"`.
+
+A `task.conflict` that survives a create/edit/drag/resize means either a genuinely saturated
+calendar (no slot anywhere in the scan horizon) or an accepted overlap the user hasn't resolved
+yet — surfaced via the amber status dot, the header's `conflictCount` badge
+(`components/calendar/header.tsx`, an amber pill with an `AlertTriangle` icon shown only when
+`conflictCount > 0`), and the rationale toast's conflict-notice framing (below) until something
+frees up room or a follow-up drag/Optimize resolves it.
 
 **Settings** is a dialog, not a route: `components/settings/settings-dialog.tsx` is a
 Todoist-style **tabbed** dialog — **Work** (hours / days / timezone via
@@ -175,11 +178,15 @@ the chosen mode is wired into `OnboardingInput.durationAdjustmentMode`.
 
 **Phase-2 transparency UI (issue #13).** Scheduling decisions are surfaced as sonner
 `toast.custom` bodies, each a distinct "kind" that stacks independently rather than merging
-into one mega-toast: `tasks/rationale-toast.tsx` (why *this* task was placed, from
-`RescheduleResponse.rationale` — `lib/scheduling-toasts.tsx`'s `maybeShowRationaleToast`, fired
-from `calendar/layout.tsx`'s `onReschedule`/`onResize`), `tasks/cascade-toast.tsx` (did this
-ripple to *other* tasks — `maybeShowCascadeToast`, see above; not fired from drag/resize, only
-create/update/delete), and the duration-adjustment
+into one mega-toast: `tasks/rationale-toast.tsx` (why *this* task was placed — every tiered
+placement now returns a rationale, so `lib/scheduling-toasts.tsx`'s `maybeShowRationaleToast`
+fires on every placement-affecting response: create, an accepted edit-reschedule offer, drag,
+and resize; it switches to a conflict-notice framing — amber `AlertTriangle`, "Landed on an
+overlap" — instead of the default `Sparkles` "Scheduled to your rhythm" when the placement's own
+`task.conflict` is true, since the summary text is then naming an overlap rather than a
+preference match), `tasks/cascade-toast.tsx` (did this ripple to *other* tasks — exclusively an
+Optimize-apply concern now, see above; create/update/delete/drag/resize can no longer produce
+collateral moves), and the duration-adjustment
 toasts in `lib/scheduling-toasts.tsx` (`auto` → apply + **Undo**; `ask` → blocking Accept/Keep;
 both revert via `PATCH /tasks/:id/resize`). The duration toast is shown from
 `create-task-dialog.tsx` off the create response's `schedulingMeta`. While a block is being

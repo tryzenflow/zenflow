@@ -1,14 +1,16 @@
 import { isAxiosError } from "axios";
 import { toast } from "sonner";
+import { format } from "date-fns";
 import { Undo2 } from "lucide-react";
-import { resizeTask, undoBatch } from "@/api/tasks";
+import { resizeTask, resolveTaskPlacement, undoBatch } from "@/api/tasks";
 import { errorToast } from "@/lib/toast";
 import { formatMinutes } from "@/utils/time";
+import { zonedDate } from "@/utils/tz";
 import { RationaleToast } from "@/components/tasks/rationale-toast";
 import { CascadeToast } from "@/components/tasks/cascade-toast";
 import { cn } from "@/lib/utils";
-import type { DisplacedTask } from "@zenflow/shared";
-import type { RescheduleResponse, SchedulingMeta, Task } from "@/types/phase2";
+import type { OptimizeApplyResponse } from "@zenflow/shared";
+import type { SchedulingMeta, SchedulingRationale, Task } from "@/types/phase2";
 
 /** Wrap a custom toast body in the same popover shell the scheduling toasts use. */
 export function shell(node: React.ReactNode) {
@@ -88,19 +90,31 @@ export function ConfirmToastShell({
 }
 
 /**
- * Show the Phase-2 scheduling-rationale toast when a reschedule/resize/resolve
- * response carries one. No-op when `rationale` is null/absent, so callers can
- * pass any {@link RescheduleResponse} unconditionally.
+ * Show the scheduling-rationale toast for any placement-affecting response —
+ * create, an accepted edit-reschedule offer (`resolveTaskPlacement`), drag,
+ * or resize. Every tiered placement now returns a rationale (no more
+ * cold-start `null`), so this fires unconditionally whenever the caller has
+ * one; still guarded on `rationale` being present so callers that pass a
+ * possibly-undefined value (e.g. `schedulingMeta.rationale` before the
+ * backend change lands) stay safe.
+ *
+ * `task` only needs `title`/`conflict` — passing a full `Task` (or the
+ * `task` field of a {@link RescheduleResponse}-shaped response) works
+ * unconditionally.
  */
-export function maybeShowRationaleToast(response: RescheduleResponse) {
-  const rationale = response.rationale;
+export function maybeShowRationaleToast(input: {
+  task: Pick<Task, "title" | "conflict">;
+  rationale?: SchedulingRationale | string | null;
+}) {
+  const { task, rationale } = input;
   if (!rationale) return;
   const id = toast.custom(
     (toastId) =>
       shell(
         <RationaleToast
-          title={response.task.title}
+          title={task.title}
           rationale={rationale}
+          conflict={task.conflict}
           onDismiss={() => toast.dismiss(toastId)}
         />,
       ),
@@ -110,33 +124,94 @@ export function maybeShowRationaleToast(response: RescheduleResponse) {
 }
 
 /**
- * Show the cascade toast when a create/update/delete response's inline
- * reoptimize moved OTHER tasks (`displaced`). No-op when nothing moved or the
- * response carries no `batchId` (nothing to undo), so callers can pass any
- * response with this shape unconditionally.
+ * Show the Edit "offer to reschedule" toast: a deadline/tags change left the
+ * task's own (unchanged) slot invalid, so `PATCH /tasks/:id` flagged
+ * `task.conflict: true` in the same write and returned a `rationale`
+ * explaining why (`UpdateTaskResponse.rationale`) instead of auto-searching.
+ * Decline (dismiss) leaves the task flagged — resolvable later by a manual
+ * drag or Optimize. Accept calls `resolveTaskPlacement` (`POST
+ * /tasks/:id/reschedule/resolve`), which re-runs the same Tier1→2→3 search
+ * `createTask` uses and clears the flag on success; its response then drives
+ * the normal {@link maybeShowRationaleToast}.
+ */
+export function showOfferToRescheduleToast(
+  taskId: string,
+  title: string,
+  rationale: SchedulingRationale,
+  onResolved: () => void,
+) {
+  toast.custom(
+    (toastId) =>
+      shell(
+        <ConfirmToastShell
+          title={`"${title}"'s new deadline broke its schedule`}
+          description={rationale.summary}
+          actions={[
+            {
+              label: "Find it a new slot",
+              onClick: async () => {
+                toast.dismiss(toastId);
+                try {
+                  const response = await resolveTaskPlacement(taskId);
+                  onResolved();
+                  maybeShowRationaleToast(response);
+                } catch (error) {
+                  errorToast(
+                    (isAxiosError(error) && error.response?.data?.message) ||
+                      "Couldn't reschedule it — try dragging it to a new slot.",
+                  );
+                }
+              },
+            },
+            {
+              label: "Leave it",
+              variant: "outline",
+              onClick: () => toast.dismiss(toastId),
+            },
+          ]}
+        />,
+      ),
+    { duration: Infinity },
+  );
+}
+
+/**
+ * Show the cascade toast after an Optimize **apply** run
+ * (`OptimizeApplyResponse`) — the only multi-task action left in the
+ * redesigned scheduler. No-op when nothing moved or the response carries no
+ * `batchId` (nothing to undo), so callers can pass any apply response
+ * unconditionally.
  *
- * Not called from drag-to-reschedule or edge-resize (`onReschedule`/
- * `onResize` in `components/calendar/layout.tsx`): those are direct, visible
- * manual actions, so surfacing the displacement as a toast would just be
- * noise on top of what the user already watched happen.
+ * No longer called from create/update/delete or drag/resize: those mutations
+ * can't produce collateral moves anymore (each is a narrow single-task
+ * placement or a direct, unconditional write) — Optimize is the one explicit,
+ * opt-in action that can touch more than one task.
  *
  * The toast id is keyed by `batchId` only to dedupe a literal duplicate fire
  * of the SAME batch (e.g. an accidental double-call) — it does not collapse
- * across distinct mutations. Every real mutation gets its own fresh
- * `batchId`, so rapid sequential edits legitimately stack multiple,
- * independently-undoable cascade toasts; that's intended, not a bug to fix.
+ * across distinct Optimize runs. Every apply gets its own fresh `batchId`, so
+ * running Optimize again shortly after legitimately stacks another,
+ * independently-undoable cascade toast; that's intended, not a bug to fix.
  */
 export function maybeShowCascadeToast(
-  response: { displaced: DisplacedTask[]; batchId?: string | null },
+  response: OptimizeApplyResponse,
+  tz: string,
   onUndone: () => void,
 ) {
-  if (!response.displaced.length || !response.batchId) return;
+  if (!response.count || !response.batchId) return;
   const batchId = response.batchId;
+  const rangeLabel = `${format(zonedDate(response.windowStart, tz), "MMM d")} – ${format(
+    zonedDate(response.windowEnd, tz),
+    "MMM d",
+  )}`;
   toast.custom(
     (toastId) =>
       shell(
         <CascadeToast
-          count={response.displaced.length}
+          count={response.count}
+          rangeLabel={rangeLabel}
+          fixedCount={response.fixedCount}
+          unchangedCount={response.unchangedCount}
           onUndo={async () => {
             toast.dismiss(toastId);
             try {
