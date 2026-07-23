@@ -56,8 +56,7 @@ export function CalendarLayout() {
   const [date, setDate] = useState<Date>(() => {
     const resolved = useUserStore.getState().user?.timezone || "UTC";
     return (
-      parseDateParam(searchParams.get("date"), resolved) ??
-      zonedNow(resolved)
+      parseDateParam(searchParams.get("date"), resolved) ?? zonedNow(resolved)
     );
   });
 
@@ -146,20 +145,14 @@ export function CalendarLayout() {
       // dropped the stale block from the grid.
       if (!fresh.some((b) => b.taskId === taskId)) return;
     }
-    let response: RescheduleResponse | undefined;
     try {
       // The backend pins this task `manuallyMoved` at the dropped slot, and
       // now also auto-resolves a same-day overlap with another task inline
       // (narrow same-day repack) instead of just leaving `conflict: true`.
-      response = await rescheduleTask(taskId, startISO);
+      await rescheduleTask(taskId, startISO);
       window.dispatchEvent(
         new CustomEvent("zenflow:task-updated", { detail: taskId }),
       );
-      maybeShowRationaleToast(response);
-      // No cascade toast here: the user just directly dragged this block and
-      // watched it land, so "N other tasks moved, Undo" would be noise for a
-      // displacement they caused themselves. (Cascade toast still fires for
-      // create/update/delete — see cascade-toast.tsx.)
     } catch (error) {
       if (isAxiosError(error))
         errorToast(error.response?.data?.message || "Failed to reschedule");
@@ -198,20 +191,14 @@ export function CalendarLayout() {
       const fresh = await inFlight.current;
       if (!fresh.some((b) => b.taskId === taskId)) return;
     }
-    let response: RescheduleResponse | undefined;
     try {
       // Same as onReschedule: pins this task, and now also auto-resolves a
       // same-day overlap the resize creates inline instead of just flagging
       // `conflict: true`.
-      response = await resizeTask(taskId, startISO, durationMinutes);
+      await resizeTask(taskId, startISO, durationMinutes);
       window.dispatchEvent(
         new CustomEvent("zenflow:task-updated", { detail: taskId }),
       );
-      maybeShowRationaleToast(response);
-      // No cascade toast here: the user just directly resized this block and
-      // watched it land, so "N other tasks moved, Undo" would be noise for a
-      // displacement they caused themselves. (Cascade toast still fires for
-      // create/update/delete — see cascade-toast.tsx.)
     } catch (error) {
       if (isAxiosError(error))
         errorToast(error.response?.data?.message || "Failed to resize");
