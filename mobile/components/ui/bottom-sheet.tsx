@@ -281,14 +281,23 @@ const BottomSheetHeader = React.forwardRef<
     <View
       ref={ref}
       className={cn(
-        "border-b border-border flex-row items-center justify-between pl-4",
+        "border-b border-border flex-row items-center justify-between px-4",
         className,
       )}
       {...props}
     >
       {children}
-      <Button onPress={close} variant="ghost" className="pr-4">
-        <X className="text-muted-foreground" size={24} />
+      {/* Matches `task-form-screen.tsx`'s header close button (`h-8 w-8
+          rounded-full bg-muted`) instead of a plain ghost icon button, for a
+          consistent close-affordance look across the sheeted and full-screen
+          flows — same treatment as the native file's `BottomSheetHeader`. */}
+      <Button
+        onPress={close}
+        variant="ghost"
+        accessibilityLabel="Close"
+        className="h-8 w-8 self-start rounded-full bg-muted p-0"
+      >
+        <X className="text-muted-foreground" size={16} />
       </Button>
     </View>
   );

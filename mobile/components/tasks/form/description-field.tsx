@@ -354,105 +354,101 @@ function DescriptionFieldEditor({
     setLinkOpen(false);
   }
 
-  // Shown while the editor itself is focused, or while the link-entry row is
-  // open (that row is a plain native `Input`, not part of the WebView, so
-  // focusing it blurs the editor and would otherwise flip `isFocused` false
-  // mid-edit and yank the toolbar away from under the user).
-  const toolbarVisible = !!state.isFocused || linkOpen;
-
   return (
     <View ref={containerRef} className="gap-1.5">
-      {/* `relative` positions the floating toolbar pill against this box
-          (not the whole field column), so it straddles the editor's own top
-          edge regardless of where the field sits in the surrounding form. */}
-      <View className="relative">
-        {toolbarVisible && (
-          <View
-            pointerEvents="box-none"
-            className="absolute -top-[19px] left-3 z-10"
-          >
-            <View className="flex-row flex-wrap items-center gap-0.5 rounded-full bg-[#221d17] p-1 shadow-lg">
-              <ToolbarButton
-                icon={Bold}
-                label="Bold"
-                active={!!state.isBoldActive}
-                disabled={disabled}
-                onPress={() => editor.toggleBold()}
-              />
-              <ToolbarButton
-                icon={Italic}
-                label="Italic"
-                active={!!state.isItalicActive}
-                disabled={disabled}
-                onPress={() => editor.toggleItalic()}
-              />
-              <ToolbarButton
-                icon={UnderlineIcon}
-                label="Underline"
-                active={!!state.isUnderlineActive}
-                disabled={disabled}
-                onPress={() => editor.toggleUnderline()}
-              />
-              <ToolbarButton
-                icon={Highlighter}
-                label="Highlight"
-                active={!!state.activeHighlight}
-                disabled={disabled}
-                onPress={() => editor.toggleHighlight(HIGHLIGHT_COLOR)}
-              />
-              <ToolbarButton
-                icon={Quote}
-                label="Blockquote"
-                active={!!state.isBlockquoteActive}
-                disabled={disabled}
-                onPress={() => editor.toggleBlockquote()}
-              />
-              <View className="mx-1 h-4 w-px bg-white/20" />
-              <ToolbarButton
-                icon={Link2}
-                label="Link"
-                active={!!state.isLinkActive || linkOpen}
-                disabled={disabled}
-                onPress={openLink}
-              />
-              <ToolbarButton
-                icon={Upload}
-                label="Upload file"
-                disabled={disabled}
-                onPress={() =>
-                  toast(
-                    "File uploads aren't available in the mobile description editor yet",
-                    "info",
-                  )
-                }
-              />
-              <View className="mx-1 h-4 w-px bg-white/20" />
-              <ToolbarButton
-                icon={List}
-                label="Bulleted list"
-                active={!!state.isBulletListActive}
-                disabled={disabled}
-                onPress={() => editor.toggleBulletList()}
-              />
-              <ToolbarButton
-                icon={ListOrdered}
-                label="Numbered list"
-                active={!!state.isOrderedListActive}
-                disabled={disabled}
-                onPress={() => editor.toggleOrderedList()}
-              />
-            </View>
-          </View>
-        )}
+      {/* Static, always-rendered bar — was a floating, absolutely-positioned
+          pill straddling the editor's top edge, shown/hidden by
+          `state.isFocused`/`linkOpen`. Two real problems with that: it
+          overlapped Android's own text-selection toolbar (the native
+          copy/paste/select-all bar the OS renders over a focused/selected
+          WebView — an absolutely-positioned sibling can't avoid colliding
+          with something the OS itself draws over the WebView's content), and
+          it didn't reliably hide on blur. A plain in-flow block above the
+          WebView container can never spatially collide with anything the OS
+          renders over the WebView, and always rendering it removes the
+          hide/show state entirely — no more not-hiding-on-blur bug because
+          there's no hiding to get wrong. Deliberately white-background/
+          black-icons regardless of the app's light/dark scheme — this needs
+          to read as an editor toolbar, not another chrome surface. */}
+      <View className="flex-row flex-wrap items-center gap-0.5 rounded-t-[13px] border border-b-0 border-input bg-white p-1">
+        <ToolbarButton
+          icon={Bold}
+          label="Bold"
+          active={!!state.isBoldActive}
+          disabled={disabled}
+          onPress={() => editor.toggleBold()}
+        />
+        <ToolbarButton
+          icon={Italic}
+          label="Italic"
+          active={!!state.isItalicActive}
+          disabled={disabled}
+          onPress={() => editor.toggleItalic()}
+        />
+        <ToolbarButton
+          icon={UnderlineIcon}
+          label="Underline"
+          active={!!state.isUnderlineActive}
+          disabled={disabled}
+          onPress={() => editor.toggleUnderline()}
+        />
+        <ToolbarButton
+          icon={Highlighter}
+          label="Highlight"
+          active={!!state.activeHighlight}
+          disabled={disabled}
+          onPress={() => editor.toggleHighlight(HIGHLIGHT_COLOR)}
+        />
+        <ToolbarButton
+          icon={Quote}
+          label="Blockquote"
+          active={!!state.isBlockquoteActive}
+          disabled={disabled}
+          onPress={() => editor.toggleBlockquote()}
+        />
+        <View className="mx-1 h-4 w-px bg-black/10" />
+        <ToolbarButton
+          icon={Link2}
+          label="Link"
+          active={!!state.isLinkActive || linkOpen}
+          disabled={disabled}
+          onPress={openLink}
+        />
+        <ToolbarButton
+          icon={Upload}
+          label="Upload file"
+          disabled={disabled}
+          onPress={() =>
+            toast(
+              "File uploads aren't available in the mobile description editor yet",
+              "info",
+            )
+          }
+        />
+        <View className="mx-1 h-4 w-px bg-black/10" />
+        <ToolbarButton
+          icon={List}
+          label="Bulleted list"
+          active={!!state.isBulletListActive}
+          disabled={disabled}
+          onPress={() => editor.toggleBulletList()}
+        />
+        <ToolbarButton
+          icon={ListOrdered}
+          label="Numbered list"
+          active={!!state.isOrderedListActive}
+          disabled={disabled}
+          onPress={() => editor.toggleOrderedList()}
+        />
+      </View>
 
-        {/* `max-h` is a second, outer safety net alongside the injected
-            `.ProseMirror` cap above (`injectContentStyles`) — belt-and-suspenders
-            in case the WebView's native container ever reports a height past
-            that cap for some other reason; `overflow-hidden` here just clips
-            the render, it doesn't bound layout on its own. */}
-        <View className="max-h-[336px] min-h-[110px] w-full overflow-hidden rounded-[13px] border border-input bg-card">
-          <RichText editor={editor} onLoad={injectContentStyles} />
-        </View>
+      {/* `max-h` is a second, outer safety net alongside the injected
+          `.ProseMirror` cap above (`injectContentStyles`) — belt-and-suspenders
+          in case the WebView's native container ever reports a height past
+          that cap for some other reason; `overflow-hidden` here just clips
+          the render, it doesn't bound layout on its own. */}
+      <View className="max-h-[336px] min-h-[110px] w-full overflow-hidden rounded-b-[13px] border border-input bg-card">
+        <RichText editor={editor} onLoad={injectContentStyles} />
       </View>
 
       {linkOpen && (
@@ -515,12 +511,16 @@ function ToolbarButton({
       accessibilityLabel={label}
       accessibilityState={{ selected: !!active, disabled: !!disabled }}
       className={cn(
-        "h-[30px] w-[30px] items-center justify-center rounded-full active:bg-white/20",
-        active && "bg-white/25",
+        "h-[30px] w-[30px] items-center justify-center rounded-full active:bg-black/10",
+        // Light amber active-state fill (this bar's own accent, distinct
+        // from the app's `bg-primary`) reads clearly against a white bar —
+        // the old `bg-white/25`-on-dark-pill treatment would be invisible
+        // here since the bar itself is now white.
+        active && "bg-amber-100",
         disabled && "opacity-40",
       )}
     >
-      <Icon size={14} className="text-white" />
+      <Icon size={14} className="text-neutral-900" />
     </Pressable>
   );
 }

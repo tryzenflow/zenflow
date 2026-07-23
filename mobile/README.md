@@ -346,6 +346,48 @@ Theme sheet's X button) traced back to this combination. `ThemeItem.tsx` now imp
 instance's context `sheetRef` directly, not the ambient queue — see its own doc comment). The
 orphaned duplicate file has been deleted.
 
+**Correction (confirmed on-device, Android emulator):** the `ThemeItem.tsx` duplicate-file fix
+above was real but was NOT the whole story — the same "Cannot read property 'current' of
+undefined" crash on a sheet's header X reproduced on every sheet using `BottomSheetHeader`'s close
+button (`TagAutocomplete`'s "Add tags" sheet, `OptimizeFab`'s "Optimize schedule" sheet, confirmed
+via `adb logcat`'s Hermes stack trace pointing at `close` in
+`components/ui/bottom-sheet.native.tsx`), not just the (actually-unreachable — `ThemeSettingItem`
+isn't rendered by any live screen) Theme sheet. The real, architectural cause: `@gorhom/bottom-sheet`
+renders a `BottomSheetModal`'s `children` through `@gorhom/portal`'s `Portal` — which is **not** a
+real `ReactDOM.createPortal`-style portal that preserves the ambient React context stack. It's a
+fake portal (`@gorhom/portal/src/components/portal/Portal.tsx`): `Portal` stores the element
+reference in a reducer-backed store, and a separate `<PortalHost>` (mounted once near the app root,
+alongside this app's single `BottomSheetModalProvider`) renders it from an entirely different
+branch of the tree. That means anything passed as `<BottomSheetContent>`'s `children` —
+`BottomSheetHeader`, `BottomSheetScrollView`, etc. — actually renders *outside* the `<BottomSheet>`
+wrapper's own `BottomSheetContext.Provider` (`bottom-sheet.native.tsx`), which only wraps
+`<BottomSheetContent>` and its sibling `<BottomSheetOpenTrigger>` in the *calling* tree, not
+wherever `<PortalHost>` happens to sit. `useBottomSheetContext()` calls made from inside that
+portaled content (`BottomSheetHeader`'s close button, `BottomSheetCloseTrigger`) therefore always
+resolved the *default* context value (`{}`), so `sheetRef` came back `undefined` and
+`sheetRef.current?.dismiss()` threw. `BottomSheetOpenTrigger` never hit this because it isn't part
+of a `BottomSheetModal`'s portaled `children` — it's a sibling of `<BottomSheetContent>` under the
+same non-portaled `<BottomSheet>` wrapper — which is exactly why opening a sheet always worked
+while closing it via the header X crashed on every sheet using that button.
+
+**Fix:** `BottomSheetContent` (native) now re-establishes a `BottomSheetContext.Provider` directly
+around its own `children`, so the Provider travels through the portal together with every Consumer
+inside it (`BottomSheetHeader`, `BottomSheetCloseTrigger`) as one connected element tree — the
+Consumer sees a real Provider regardless of where `<PortalHost>` physically renders it. Verified
+live on an Android emulator (`adb`/`adb logcat`): opening + closing via the header X on both
+`TagAutocomplete`'s and `OptimizeFab`'s sheets no longer crashes, with no new `ReactNativeJS`
+errors in logcat across several open/close cycles. Web's `bottom-sheet.tsx` never had this bug —
+Radix's `DialogPrimitive.Portal` is a real portal and preserves context correctly, so only the
+native file needed the fix. If you add a new `useBottomSheetContext()` consumer anywhere that ends
+up inside a sheet's `children` (not its trigger), make sure it's still nested under this
+re-established Provider — don't reach for `@gorhom/bottom-sheet`'s own `useBottomSheetModal()` as a
+workaround (that's the ambient-queue bug from the section above).
+
+Also fixed while investigating: `BottomSheetHeader`'s close button (both platforms) is now a
+rounded-circle `Pressable`-style button (`h-8 w-8 rounded-full bg-muted`), matching
+`task-form-screen.tsx`'s header close button instead of a plain 24px ghost icon, for visual
+consistency between the sheeted and full-screen close affordances.
+
 ### The task create/edit form is a full screen, not a bottom sheet
 
 `CreateTaskSheet`/`EditTaskSheet` (referenced by name in several sections above, as the sheets
@@ -429,6 +471,78 @@ counter below the input, independent of the form's RHF validation mode, so the c
 the user types rather than only after a submit/blur triggers validation. If you change the limit,
 change it once in `packages/core/src/tasks.ts` — don't hardcode `60` a second time here or in
 `frontend/`.
+
+### A `@gorhom/bottom-sheet` footer must be a flexbox sibling, not `footerComponent`, if the sheet has scrollable content that can grow
+
+**Symptom:** `OptimizeFab`'s sheet (`components/tasks/optimize-fab.tsx`) — expanding the
+"More options" mode-options list pushed the last row underneath the fixed Optimize/Reschedule/Done
+button, even after padding the scroll content's bottom inset to account for the footer's height.
+
+**Cause:** `footerComponent` (`@gorhom/bottom-sheet`'s own footer render-prop, wrapped here as
+`BottomSheetFooter`) renders as an **absolutely-positioned overlay** on top of the sheet's sized
+content — that's fine for a sheet whose content height never changes, but this sheet defaulted to
+`enableDynamicSizing={true}`, which sizes the sheet to its *scrollable content alone* (not
+content + footer combined). No amount of scroll-content bottom padding fully avoids an overlay
+covering whatever's scrolled to the very bottom, since the overlay's z-order is fixed regardless of
+scroll position.
+
+**Fix:** switched this sheet to a fixed height (`enableDynamicSizing={false}` + explicit
+`snapPoints={["90%"]}`) and stopped using `footerComponent` entirely — `renderFooter` is now a
+plain function returning JSX, rendered as a normal flexbox sibling: `<BottomSheetHeader>`, then a
+`flex-1` wrapper containing `<BottomSheetScrollView className="flex-1" .../>`, followed by a plain
+sibling `<View>` footer with its own border-top/shadow/safe-area padding — the exact same
+non-absolute, flexbox-pinned-footer pattern already used by `app/(onboarding)/index.tsx` and
+`components/tasks/task-form-screen.tsx` (a `flex-1` `ScrollView` + a plain sibling footer `View`;
+flexbox naturally reserves the footer's own height and the scroll view takes the rest — no measured-
+height padding hack needed once the footer isn't an overlay). Verified live on an Android emulator
+at every step (`form`/`confirmLarge`/`result`) with the mode-options list expanded — the footer
+never overlaps a row. `change-duration-sheet.tsx` still uses `footerComponent` + fixed `snapPoints`
+deliberately (its content height never changes, so the overlay never has anything new to cover) —
+this fix only applies where scrollable content can grow past the footer's fixed position.
+
+### A fixed-`snapPoints` sheet needs `keyboardBehavior="interactive"`, not the shared default
+
+**Symptom:** `TagAutocomplete`'s "Add tags" sheet (`snapPoints={["70%"]}`,
+`enableDynamicSizing={false}`) expanded to full screen height the instant its search input was
+focused, leaving no dark backdrop visible at the top — instead of just nudging the existing 70%
+sheet up above the keyboard.
+
+**Cause:** `components/ui/bottom-sheet.native.tsx`'s shared `<BottomSheetContent>` defaults
+`keyboardBehavior` to `"fillParent"` (see that file's own doc comment for why — it's the right
+default for `enableDynamicSizing={true}` sheets paired with `android_keyboardInputMode="adjustResize"`).
+But `"fillParent"` expands **any** sheet to fill all available height above the keyboard — for a
+fixed-`snapPoints` sheet, that means growing past its intended size instead of preserving it.
+
+**Fix:** a caller with fixed `snapPoints` (like `TagAutocomplete`, and `components/ui/combobox.tsx`
+if it's ever wired into a live screen — currently unreachable, see below) should override
+`keyboardBehavior="interactive"` explicitly on its own `<BottomSheetContent>` (the prop is already
+individually destructured with a default in the shared file, so any caller can override it the same
+way `enableDynamicSizing`/`snapPoints` already do) — `"interactive"` (gorhom's own upstream default)
+translates the sheet upward by the keyboard height while preserving its existing snap point/size,
+instead of expanding it. Verified live: `TagAutocomplete`'s sheet now shifts up just enough to clear
+the keyboard while leaving a visible strip of dark backdrop at the top. `components/ui/combobox.tsx`
+has the identical shape (search input + list) but keeps the shared `enableDynamicSizing={true}`
+default rather than fixed `snapPoints` — and isn't imported by any live screen currently (confirmed
+by grepping the app) — so it wasn't changed; if it's ever wired up with fixed `snapPoints`, give it
+the same override.
+
+### The description editor's toolbar is a static bar, not a floating pill
+
+`components/tasks/form/description-field.tsx`'s `DescriptionFieldEditor` toolbar used to be an
+absolutely-positioned pill straddling the editor's top edge, shown only while
+`state.isFocused || linkOpen`. Two problems: it visually overlapped Android's own native
+text-selection toolbar (the copy/paste/select-all bar Android renders over a focused/selected
+WebView — an absolutely-positioned sibling can't avoid colliding with something the OS itself draws
+over the WebView's content), and it didn't reliably hide on blur. It's now a plain, always-rendered,
+in-flow block *above* the WebView container (a real block-level element that pushes the WebView
+down, so it can never spatially collide with whatever Android renders over the WebView) — white
+background, black icons (`text-neutral-900`), with a light amber (`bg-amber-100`) active-state fill
+instead of the old dark-pill/white-icon/`bg-white/25` scheme, which would be invisible against a
+white bar. `TaskSheetFields` (`components/tasks/task-sheet-fields.tsx`) also now renders
+`DescriptionField` immediately after Title (Title → Description → Duration → Deadline → Tags)
+instead of last — verified on-device that this meaningfully reduces how far the field needs to
+scroll to clear the keyboard when focused, and reads fine visually; kept as the new order rather
+than a temporary diagnostic swap.
 
 ## Local development
 

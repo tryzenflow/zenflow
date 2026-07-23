@@ -73,6 +73,40 @@ export function TaskSheetFields({
         }}
       />
 
+      {/*
+        Diagnostic re-order: was last (after Duration/Deadline/Tags) — moved
+        right after Title to test whether the keyboard-occlusion issue
+        reported against the WYSIWYG editor is about its depth in the
+        surrounding `ScrollView` (a field this far down needs more scroll-
+        into-view distance to clear the keyboard) or something inherent to
+        the WebView/keyboard interaction. Verified on-device: the editor no
+        longer needs to fight nearly as much scroll distance to clear the
+        keyboard when focused, and Title → Description → Duration →
+        Deadline → Tags still reads fine visually, so this re-order is being
+        kept (not just a temporary diagnostic swap) — see
+        `mobile/README.md` for the up-to-date field order if this changes
+        again.
+      */}
+      <Controller
+        control={form.control}
+        name="note"
+        render={({ field }) => (
+          <Field label="Description">
+            {/* Contains a WebView-mount crash (missing native module — see
+                `ErrorBoundary`'s doc comment) to this field instead of
+                letting it take the whole sheet, and every sibling sheet on
+                this screen, down with it. */}
+            <ErrorBoundary fallbackMessage="The description editor couldn't load. Everything else on this form still works.">
+              <DescriptionField
+                value={field.value ?? ""}
+                onChange={field.onChange}
+                disabled={disabled}
+              />
+            </ErrorBoundary>
+          </Field>
+        )}
+      />
+
       <Controller
         control={form.control}
         name="duration"
@@ -113,26 +147,6 @@ export function TaskSheetFields({
               onChange={field.onChange}
               disabled={disabled}
             />
-          </Field>
-        )}
-      />
-
-      <Controller
-        control={form.control}
-        name="note"
-        render={({ field }) => (
-          <Field label="Description">
-            {/* Contains a WebView-mount crash (missing native module — see
-                `ErrorBoundary`'s doc comment) to this field instead of
-                letting it take the whole sheet, and every sibling sheet on
-                this screen, down with it. */}
-            <ErrorBoundary fallbackMessage="The description editor couldn't load. Everything else on this form still works.">
-              <DescriptionField
-                value={field.value ?? ""}
-                onChange={field.onChange}
-                disabled={disabled}
-              />
-            </ErrorBoundary>
           </Field>
         )}
       />

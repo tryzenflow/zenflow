@@ -188,6 +188,18 @@ export function TagAutocomplete({
           // dismiss, matching the "don't want a full-height sheet" ask.
           enableDynamicSizing={false}
           snapPoints={["70%"]}
+          // Overrides the shared `<BottomSheetContent>` default of
+          // `keyboardBehavior="fillParent"` (see that file's own doc comment
+          // for why that's the default) — `"fillParent"` expands ANY sheet
+          // to fill all available height above the keyboard, which is wrong
+          // for a fixed-`snapPoints` sheet like this one: it grew to full
+          // height with no dark backdrop visible at the top, instead of just
+          // nudging this sheet's existing 70% snap point up above the
+          // keyboard. `"interactive"` (gorhom's own upstream default) is the
+          // mode that translates a sheet upward by the keyboard height while
+          // preserving its snap point/size — the correct behavior for a
+          // fixed-height sheet with a search input.
+          keyboardBehavior="interactive"
         >
           <BottomSheetHeader>
             <Text className="text-lg font-bold text-foreground">Add tags</Text>

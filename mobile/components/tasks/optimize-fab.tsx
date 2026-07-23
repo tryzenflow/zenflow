@@ -3,7 +3,6 @@ import { ChevronDown, ChevronUp, Sparkles } from "@/components/Icons";
 import {
   BottomSheet,
   BottomSheetContent,
-  BottomSheetFooter,
   BottomSheetHeader,
   BottomSheetOpenTrigger,
   BottomSheetScrollView,
@@ -13,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
-import type { BottomSheetFooterProps } from "@gorhom/bottom-sheet";
 import { zonedNow, zonedWallClockToUtc } from "@zenflow/core";
 import {
   OPTIMIZE_LARGE_BATCH_THRESHOLD,
@@ -25,28 +23,10 @@ import { isAxiosError } from "axios";
 import { addDays, differenceInCalendarDays, format } from "date-fns";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { InlineDateField } from "./form/inline-date-field";
-
-/**
- * Reserved bottom padding for the sheet's `BottomSheetScrollView`, so the
- * last row of content (the mode-options list, when expanded) never ends up
- * underneath the fixed `footerComponent`. `enableDynamicSizing={true}`
- * (this sheet's default, unlike `change-duration-sheet.tsx`'s fixed
- * `snapPoints`) sizes the sheet to its *scrollable content*, not the
- * content + footer combined — `@gorhom/bottom-sheet` renders the footer as
- * an absolutely-positioned overlay on top of that sized content, so without
- * this the footer just overlaps whatever's scrolled to the bottom. Mirrors
- * `BottomSheetView`'s own `BOTTOM_SHEET_HEADER_HEIGHT` reservation for the
- * *header* case (`components/ui/bottom-sheet.native.tsx`) — there's no
- * equivalent built-in for a footer, so it's computed here from this sheet's
- * actual footer layout: one 52px button, `pt-1.5` (6px) above it, and
- * `paddingBottom: insets.bottom + 6` below it (see `BottomSheetFooter`'s own
- * `style` in the shared file) — plus a little extra breathing room.
- */
-const OPTIMIZE_FOOTER_HEIGHT = 52 + 6 + 6 + 16;
 
 type OptimizeMode = OptimizeWindowInput["mode"];
 
@@ -279,55 +259,59 @@ export function OptimizeFab({
   );
   const selectedModeOption = MODE_OPTIONS.find((m) => m.id === mode);
 
-  const renderFooter = useCallback(
-    (footerProps: BottomSheetFooterProps) => (
-      <BottomSheetFooter bottomSheetFooterProps={footerProps}>
-        {step === "form" && (
+  /**
+   * Plain function returning JSX (not threaded through gorhom's
+   * `footerComponent` render-prop) — see this file's own note above
+   * `<BottomSheetContent>` below for why. Rendered as a normal flexbox
+   * sibling of the scroll view instead.
+   */
+  function renderFooter() {
+    if (step === "form") {
+      return (
+        <Button
+          className="h-[52px] w-full"
+          disabled={submitting}
+          onPress={handleOptimizePress}
+        >
+          <Text className="text-base font-semibold text-primary-foreground">
+            {submitting ? "Checking…" : "Optimize"}
+          </Text>
+        </Button>
+      );
+    }
+    if (step === "confirmLarge") {
+      return (
+        <View className="w-full flex-row gap-2">
           <Button
-            className="h-[52px] w-full"
+            variant="outline"
+            className="h-[52px] flex-1"
             disabled={submitting}
-            onPress={handleOptimizePress}
+            onPress={() => setStep("form")}
+          >
+            <Text className="text-base font-semibold">Cancel</Text>
+          </Button>
+          <Button
+            className="h-[52px] flex-1"
+            disabled={submitting}
+            onPress={handleConfirmLarge}
           >
             <Text className="text-base font-semibold text-primary-foreground">
-              {submitting ? "Checking…" : "Optimize"}
+              {submitting ? "Optimizing…" : "Reschedule"}
             </Text>
           </Button>
-        )}
-        {step === "confirmLarge" && (
-          <View className="w-full flex-row gap-2">
-            <Button
-              variant="outline"
-              className="h-[52px] flex-1"
-              disabled={submitting}
-              onPress={() => setStep("form")}
-            >
-              <Text className="text-base font-semibold">Cancel</Text>
-            </Button>
-            <Button
-              className="h-[52px] flex-1"
-              disabled={submitting}
-              onPress={handleConfirmLarge}
-            >
-              <Text className="text-base font-semibold text-primary-foreground">
-                {submitting ? "Optimizing…" : "Reschedule"}
-              </Text>
-            </Button>
-          </View>
-        )}
-        {step === "result" && (
-          <Button
-            className="h-[52px] w-full"
-            variant="outline"
-            onPress={() => bottomSheet.close()}
-          >
-            <Text className="text-base font-semibold">Done</Text>
-          </Button>
-        )}
-      </BottomSheetFooter>
-    ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [step, submitting, windowStart, windowEnd, mode, previewCount],
-  );
+        </View>
+      );
+    }
+    return (
+      <Button
+        className="h-[52px] w-full"
+        variant="outline"
+        onPress={() => bottomSheet.close()}
+      >
+        <Text className="text-base font-semibold">Done</Text>
+      </Button>
+    );
+  }
 
   return (
     <View className="absolute bottom-24 right-5">
@@ -350,173 +334,199 @@ export function OptimizeFab({
             </LinearGradient>
           </Pressable>
         </BottomSheetOpenTrigger>
+        {/*
+          Fixed height (`enableDynamicSizing={false}` + explicit
+          `snapPoints`), not this sheet's old `enableDynamicSizing={true}`
+          default — a dynamically-sized sheet has no notion of "the rest of
+          the space below the header," so there was nowhere flexbox could
+          put a footer that reserves its own height while the scroll content
+          takes the remainder; gorhom's only footer mechanism for that case
+          is `footerComponent`, which renders as an absolutely-positioned
+          overlay on top of the sized content — no amount of scroll-content
+          bottom padding can fully avoid that overlay covering the last row
+          (the mode-options list, when expanded). A fixed height turns this
+          into the same flex column every other footer-having screen in this
+          app already uses (`app/(onboarding)/index.tsx`,
+          `components/tasks/task-form-screen.tsx`): a `flex-1` scroll area
+          followed by a plain sibling `View` footer, sized to its own content
+          and never overlapping anything above it. "90%" was picked to
+          comfortably fit the form step's content + footer without deadband;
+          adjust if a taller step ever needs more.
+        */}
         <BottomSheetContent
           ref={bottomSheet.ref}
-          footerComponent={renderFooter}
+          enableDynamicSizing={false}
+          snapPoints={["90%"]}
         >
-          <BottomSheetHeader className="px-5">
+          <BottomSheetHeader>
             <Text className="text-[17px] font-bold tracking-tight">
               Optimize schedule
             </Text>
           </BottomSheetHeader>
-          <BottomSheetScrollView
-            className="px-5 pt-3"
-            contentContainerStyle={{
-              paddingBottom: insets.bottom + OPTIMIZE_FOOTER_HEIGHT,
-            }}
-          >
-            {step === "form" && (
-              <View className="gap-4 pb-2">
-                <Text className="text-[13px] text-muted-foreground">
-                  Reflow pending tasks in a date range. Nothing outside it
-                  moves.
-                </Text>
+          <View className="flex-1">
+            <BottomSheetScrollView
+              className="flex-1 px-5 pt-3"
+              contentContainerStyle={{ paddingBottom: 16 }}
+            >
+              {step === "form" && (
+                <View className="gap-4 pb-2">
+                  <Text className="text-[13px] text-muted-foreground">
+                    Reflow pending tasks in a date range. Nothing outside it
+                    moves.
+                  </Text>
 
-                <View className="flex-row gap-2">
-                  <View className="flex-1 gap-1">
-                    <Text className="text-[12px] font-medium text-muted-foreground">
-                      From
-                    </Text>
-                    <InlineDateField
-                      value={windowStart}
-                      onChange={handleStartChange}
-                      tz={tz}
-                      disabled={submitting}
-                      minDate={todayStart}
-                      maxDate={maxWindowStart}
-                    />
+                  <View className="flex-row gap-2">
+                    <View className="flex-1 gap-1">
+                      <Text className="text-[12px] font-medium text-muted-foreground">
+                        From
+                      </Text>
+                      <InlineDateField
+                        value={windowStart}
+                        onChange={handleStartChange}
+                        tz={tz}
+                        disabled={submitting}
+                        minDate={todayStart}
+                        maxDate={maxWindowStart}
+                      />
+                    </View>
+                    <View className="flex-1 gap-1">
+                      <Text className="text-[12px] font-medium text-muted-foreground">
+                        To
+                      </Text>
+                      <InlineDateField
+                        value={windowEnd}
+                        onChange={handleEndChange}
+                        tz={tz}
+                        disabled={submitting}
+                        minDate={windowStart}
+                        maxDate={maxWindowEnd}
+                      />
+                    </View>
                   </View>
-                  <View className="flex-1 gap-1">
-                    <Text className="text-[12px] font-medium text-muted-foreground">
-                      To
-                    </Text>
-                    <InlineDateField
-                      value={windowEnd}
-                      onChange={handleEndChange}
-                      tz={tz}
-                      disabled={submitting}
-                      minDate={windowStart}
-                      maxDate={maxWindowEnd}
-                    />
-                  </View>
-                </View>
-                <Text className="text-[11px] text-muted-foreground">
-                  {rangeDays} day{rangeDays === 1 ? "" : "s"} · up to{" "}
-                  {OPTIMIZE_UI_MAX_WINDOW_DAYS} days
-                </Text>
+                  <Text className="text-[11px] text-muted-foreground">
+                    {rangeDays} day{rangeDays === 1 ? "" : "s"} · up to{" "}
+                    {OPTIMIZE_UI_MAX_WINDOW_DAYS} days
+                  </Text>
 
-                <Pressable
-                  onPress={() => setShowModeOptions((v) => !v)}
-                  className="flex-row items-center justify-between rounded-xl border border-border bg-card px-3.5 py-3"
-                >
-                  <View className="flex-1 pr-2">
-                    <Text className="text-[13px] font-semibold text-foreground">
-                      {selectedModeOption?.label}
-                    </Text>
-                    <Text className="mt-0.5 text-[11.5px] text-muted-foreground">
-                      {selectedModeOption?.description}
-                    </Text>
-                  </View>
-                  {showModeOptions ? (
-                    <ChevronUp
-                      size={18}
-                      className="shrink-0 text-muted-foreground"
-                    />
-                  ) : (
-                    <ChevronDown
-                      size={18}
-                      className="shrink-0 text-muted-foreground"
-                    />
-                  )}
-                </Pressable>
+                  <Pressable
+                    onPress={() => setShowModeOptions((v) => !v)}
+                    className="flex-row items-center justify-between rounded-xl border border-border bg-card px-3.5 py-3"
+                  >
+                    <View className="flex-1 pr-2">
+                      <Text className="text-[13px] font-semibold text-foreground">
+                        {selectedModeOption?.label}
+                      </Text>
+                      <Text className="mt-0.5 text-[11.5px] text-muted-foreground">
+                        {selectedModeOption?.description}
+                      </Text>
+                    </View>
+                    {showModeOptions ? (
+                      <ChevronUp
+                        size={18}
+                        className="shrink-0 text-muted-foreground"
+                      />
+                    ) : (
+                      <ChevronDown
+                        size={18}
+                        className="shrink-0 text-muted-foreground"
+                      />
+                    )}
+                  </Pressable>
 
-                {showModeOptions && (
-                  <View className="gap-2">
-                    {MODE_OPTIONS.map((option) => (
-                      <Pressable
-                        key={option.id}
-                        onPress={() => {
-                          Haptics.selectionAsync().catch(() => {});
-                          setMode(option.id);
-                        }}
-                        className={cn(
-                          "rounded-xl border px-3.5 py-3",
-                          mode === option.id
-                            ? "border-primary bg-primary/10"
-                            : "border-border bg-card",
-                        )}
-                      >
-                        <Text
+                  {showModeOptions && (
+                    <View className="gap-2">
+                      {MODE_OPTIONS.map((option) => (
+                        <Pressable
+                          key={option.id}
+                          onPress={() => {
+                            Haptics.selectionAsync().catch(() => {});
+                            setMode(option.id);
+                          }}
                           className={cn(
-                            "text-[13px] font-semibold",
+                            "rounded-xl border px-3.5 py-3",
                             mode === option.id
-                              ? "text-primary"
-                              : "text-foreground",
+                              ? "border-primary bg-primary/10"
+                              : "border-border bg-card",
                           )}
                         >
-                          {option.label}
-                        </Text>
-                        <Text className="mt-0.5 text-[11.5px] text-muted-foreground">
-                          {option.description}
+                          <Text
+                            className={cn(
+                              "text-[13px] font-semibold",
+                              mode === option.id
+                                ? "text-primary"
+                                : "text-foreground",
+                            )}
+                          >
+                            {option.label}
+                          </Text>
+                          <Text className="mt-0.5 text-[11.5px] text-muted-foreground">
+                            {option.description}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {step === "confirmLarge" && (
+                <View className="gap-2 pb-2">
+                  <Text className="text-[15px] font-semibold text-foreground">
+                    Reschedule ~{previewCount} tasks in this range?
+                  </Text>
+                  <Text className="text-[13px] text-muted-foreground">
+                    {rangeLabel} · {selectedModeOption?.label}
+                  </Text>
+                </View>
+              )}
+
+              {step === "result" && applyResult && (
+                <View className="gap-2 pb-2">
+                  <Text className="text-[15px] font-semibold text-foreground">
+                    {applyResult.count === 0
+                      ? "Nothing needed rescheduling"
+                      : `Rescheduled ${applyResult.count} task${
+                          applyResult.count === 1 ? "" : "s"
+                        }`}
+                  </Text>
+                  <Text className="text-[13px] text-muted-foreground">
+                    {rangeLabel}
+                  </Text>
+                  {(applyResult.fixedCount != null ||
+                    applyResult.unchangedCount != null) && (
+                    <Text className="text-[12px] text-muted-foreground">
+                      Fixed {applyResult.fixedCount ?? 0} ·{" "}
+                      {applyResult.unchangedCount ?? 0} left unchanged (manually
+                      placed)
+                    </Text>
+                  )}
+                  {undone ? (
+                    <Text className="text-[12.5px] font-medium text-emerald-600">
+                      Undone
+                    </Text>
+                  ) : (
+                    applyResult.batchId && (
+                      <Pressable
+                        onPress={handleUndo}
+                        disabled={undoing}
+                        className="mt-1 self-start rounded-full border border-border px-3 py-1.5"
+                      >
+                        <Text className="text-[12.5px] font-semibold text-foreground">
+                          {undoing ? "Undoing…" : "Undo"}
                         </Text>
                       </Pressable>
-                    ))}
-                  </View>
-                )}
-              </View>
-            )}
-
-            {step === "confirmLarge" && (
-              <View className="gap-2 pb-2">
-                <Text className="text-[15px] font-semibold text-foreground">
-                  Reschedule ~{previewCount} tasks in this range?
-                </Text>
-                <Text className="text-[13px] text-muted-foreground">
-                  {rangeLabel} · {selectedModeOption?.label}
-                </Text>
-              </View>
-            )}
-
-            {step === "result" && applyResult && (
-              <View className="gap-2 pb-2">
-                <Text className="text-[15px] font-semibold text-foreground">
-                  {applyResult.count === 0
-                    ? "Nothing needed rescheduling"
-                    : `Rescheduled ${applyResult.count} task${
-                        applyResult.count === 1 ? "" : "s"
-                      }`}
-                </Text>
-                <Text className="text-[13px] text-muted-foreground">
-                  {rangeLabel}
-                </Text>
-                {(applyResult.fixedCount != null ||
-                  applyResult.unchangedCount != null) && (
-                  <Text className="text-[12px] text-muted-foreground">
-                    Fixed {applyResult.fixedCount ?? 0} ·{" "}
-                    {applyResult.unchangedCount ?? 0} left unchanged (manually
-                    placed)
-                  </Text>
-                )}
-                {undone ? (
-                  <Text className="text-[12.5px] font-medium text-emerald-600">
-                    Undone
-                  </Text>
-                ) : (
-                  applyResult.batchId && (
-                    <Pressable
-                      onPress={handleUndo}
-                      disabled={undoing}
-                      className="mt-1 self-start rounded-full border border-border px-3 py-1.5"
-                    >
-                      <Text className="text-[12.5px] font-semibold text-foreground">
-                        {undoing ? "Undoing…" : "Undo"}
-                      </Text>
-                    </Pressable>
-                  )
-                )}
-              </View>
-            )}
-          </BottomSheetScrollView>
+                    )
+                  )}
+                </View>
+              )}
+            </BottomSheetScrollView>
+          </View>
+          <View
+            className="flex-row border-t border-border bg-background px-4 pt-1.5 shadow-lg shadow-primary/10"
+            style={{ paddingBottom: insets.bottom + 6 }}
+          >
+            {renderFooter()}
+          </View>
         </BottomSheetContent>
       </BottomSheet>
     </View>

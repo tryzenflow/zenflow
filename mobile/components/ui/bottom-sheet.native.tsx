@@ -115,6 +115,7 @@ const BottomSheetContent = React.forwardRef<
       backdropProps,
       backgroundStyle,
       android_keyboardInputMode = "adjustResize",
+      children,
       // `@gorhom/bottom-sheet`'s own default (`keyboardBehavior="interactive"`)
       // offsets the sheet upward by the *measured keyboard height* — a
       // calculation meant for windows that DON'T already resize themselves
@@ -231,7 +232,51 @@ const BottomSheetContent = React.forwardRef<
         keyboardBehavior={keyboardBehavior}
         keyboardBlurBehavior={keyboardBlurBehavior}
         {...props}
-      />
+      >
+        {/* `@gorhom/bottom-sheet` renders a `BottomSheetModal`'s `children`
+            through `@gorhom/portal`'s `Portal` — which is NOT a real
+            `ReactDOM.createPortal`-style portal that preserves the ambient
+            React context stack. It's a fake portal: `Portal` stores the
+            element reference in a reducer-backed store
+            (`@gorhom/portal/src/state`), and a separate `<PortalHost>`
+            (mounted once, near the app root, alongside this app's single
+            `BottomSheetModalProvider` in `app/_layout.tsx`) renders it from
+            an entirely different branch of the tree. That means anything
+            passed as this component's `children` — `BottomSheetHeader`,
+            `BottomSheetScrollView`, etc. — actually renders *outside* the
+            `<BottomSheet>` wrapper's own `BottomSheetContext.Provider`
+            (defined further up this file), which only wraps this
+            `<BottomSheetContent>` and its sibling `<BottomSheetOpenTrigger>`
+            in THIS tree, not wherever `<PortalHost>` happens to sit.
+            `useBottomSheetContext()` calls made from inside that portaled
+            content (e.g. `BottomSheetHeader`'s close button,
+            `BottomSheetCloseTrigger`) therefore always resolved the
+            *default* context value (`{}`, since nothing provides one at the
+            portal's actual render location) — `sheetRef` came back
+            `undefined`, and `sheetRef.current?.dismiss()` threw "Cannot read
+            property 'current' of undefined" the instant anyone tapped a
+            sheet's header close X. `BottomSheetOpenTrigger` never hit this
+            because it isn't part of a `BottomSheetModal`'s portaled
+            `children` — it's a sibling of `<BottomSheetContent>` under the
+            same non-portaled `<BottomSheet>` wrapper, so its own
+            `useBottomSheetContext()` call resolves normally, which is why
+            opening a sheet always worked while closing it via the header X
+            crashed on every sheet using that button.
+            Re-establishing a `BottomSheetContext.Provider` right here, as
+            part of the same `children` subtree that actually travels through
+            the portal, fixes it: the Provider and every Consumer inside it
+            (`BottomSheetHeader`, `BottomSheetCloseTrigger`) now travel
+            together through the portal as one connected element tree, so the
+            Consumer sees a real Provider regardless of where `<PortalHost>`
+            physically renders it. */}
+        <BottomSheetContext.Provider value={{ sheetRef }}>
+          {/* `BottomSheetModal`'s `children` prop type also allows a
+              `(data) => ReactNode` render-prop form (for the generic
+              `present(data)` payload feature) — none of this app's sheets
+              use that form, only plain JSX, so this is a safe narrowing. */}
+          {children as React.ReactNode}
+        </BottomSheetContext.Provider>
+      </BottomSheetModal>
     );
   },
 );
@@ -386,14 +431,23 @@ const BottomSheetHeader = React.forwardRef<
     <View
       ref={ref}
       className={cn(
-        "border-b border-border flex-row items-center justify-between pl-4",
+        "border-b border-border flex-row items-center justify-between px-4 pb-3",
         className,
       )}
       {...props}
     >
       {children}
-      <Button onPress={close} variant="ghost" className="pr-4">
-        <X className="text-muted-foreground" size={24} />
+      {/* Matches `task-form-screen.tsx`'s header close button (`h-8 w-8
+          rounded-full bg-muted`) instead of a plain ghost icon button, for a
+          consistent close-affordance look across the sheeted and full-screen
+          flows. */}
+      <Button
+        onPress={close}
+        variant="ghost"
+        accessibilityLabel="Close"
+        className="h-8 w-8 aspect-square self-start rounded-full bg-muted p-0 flex items-center justify-center"
+      >
+        <X className="text-muted-foreground" size={16} />
       </Button>
     </View>
   );
