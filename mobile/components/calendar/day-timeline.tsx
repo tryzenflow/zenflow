@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, useEffect, useCallback } from "react";
-import { View, ScrollView, useWindowDimensions } from "react-native";
+import { View, ScrollView, RefreshControl, useWindowDimensions } from "react-native";
 import { Text } from "@/components/ui/text";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -67,6 +67,7 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, refreshK
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const baseHourHeight = useSharedValue(HOUR_HEIGHT_DEFAULT);
   const ghostY = useSharedValue(0);
@@ -90,6 +91,25 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, refreshK
       cancelled = true;
     };
   }, [date.toISOString().slice(0, 10), refreshKey]);
+
+  const refetch = useCallback(async () => {
+    try {
+      const res = await listTasks("day", date, "PENDING");
+      setTasks(res.tasks);
+      setError(false);
+    } catch {
+      setError(true);
+    }
+  }, [date]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refetch]);
 
   const segments = useMemo(() => {
     const blocks = tasksToBlocks(tasks);
@@ -246,6 +266,9 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, refreshK
         className="flex-1"
         showsVerticalScrollIndicator={false}
         onLayout={scrollToNow}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
       >
         <GestureDetector gesture={contentGesture}>
           <Animated.View style={animatedContentStyle} className="relative">
