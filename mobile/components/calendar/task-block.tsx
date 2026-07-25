@@ -52,6 +52,7 @@ interface TaskBlockProps {
   leftOffset: number;
   blockWidth: number;
   onReschedule?: (taskId: string, startISO: string) => void;
+  onPress?: (taskId: string) => void;
 }
 
 export function TaskBlock({
@@ -62,6 +63,7 @@ export function TaskBlock({
   leftOffset,
   blockWidth,
   onReschedule,
+  onPress,
 }: TaskBlockProps) {
   const startMin = minutesOfDayLocal(segment.start, tz);
   const rawEndMin = minutesOfDayLocal(segment.end, tz);
@@ -124,6 +126,14 @@ export function TaskBlock({
       translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
     });
 
+  const tapGesture = Gesture.Tap()
+    .enabled(isInteractive && !!onPress)
+    .onEnd(() => {
+      onPress?.(segment.taskId);
+    });
+
+  const composedGesture = Gesture.Simultaneous(panGesture, tapGesture);
+
   const borderColor =
     state === "overdue"
       ? "#f43f5e"
@@ -152,7 +162,7 @@ export function TaskBlock({
         height,
       }}
     >
-      <GestureDetector gesture={panGesture}>
+      <GestureDetector gesture={composedGesture}>
         <Animated.View
           style={animatedStyle}
           className={cn(

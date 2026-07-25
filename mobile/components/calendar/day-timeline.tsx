@@ -46,9 +46,12 @@ function scrollToNowOffset(totalHeight: number): number {
 
 interface DayTimelineProps {
   date?: Date;
+  onTaskPress?: (taskId: string) => void;
+  onLongPress?: (timeISO: string) => void;
+  refreshKey?: number;
 }
 
-export function DayTimeline({ date: propDate }: DayTimelineProps) {
+export function DayTimeline({ date: propDate, onTaskPress, onLongPress, refreshKey }: DayTimelineProps) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const prefs = useUserStore((s) => s.user) ?? DEFAULT_WORK_PREFS;
   const scrollRef = useRef<ScrollView>(null);
@@ -82,7 +85,7 @@ export function DayTimeline({ date: propDate }: DayTimelineProps) {
     return () => {
       cancelled = true;
     };
-  }, [date.toISOString().slice(0, 10)]);
+  }, [date.toISOString().slice(0, 10), refreshKey]);
 
   const segments = useMemo(() => {
     const blocks = tasksToBlocks(tasks);
@@ -138,8 +141,8 @@ export function DayTimeline({ date: propDate }: DayTimelineProps) {
       wall.setHours(Math.floor(clampedMin / 60), clampedMin % 60, 0, 0);
       const wallISO = zonedWallClockToUtc(wall, tz).toISOString();
 
-      // TODO: Open create-task bottom sheet with default time = wallISO
-      console.log("Long press at:", wallISO);
+      // Open create-task at the pressed time
+      onLongPress?.(wallISO);
     },
     [date, tz, totalHeight],
   );
@@ -257,6 +260,7 @@ export function DayTimeline({ date: propDate }: DayTimelineProps) {
                     leftOffset={leftOffsetPx}
                     blockWidth={blockWidthPx}
                     onReschedule={handleReschedule}
+                    onPress={onTaskPress}
                   />
                 );
               })}
