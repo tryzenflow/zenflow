@@ -29,7 +29,9 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   clamp,
+  withTiming,
   withSpring,
+  interpolate,
 } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 
@@ -67,6 +69,8 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, refreshK
   const [error, setError] = useState(false);
 
   const baseHourHeight = useSharedValue(HOUR_HEIGHT_DEFAULT);
+  const ghostY = useSharedValue(0);
+  const ghostVisible = useSharedValue(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -162,14 +166,30 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, refreshK
 
   const longPressGesture = Gesture.LongPress()
     .minDuration(500)
+    .onBegin((e) => {
+      const pxPerMin = totalHeight / DAILY_HORIZON;
+      const minutes = Math.round(e.absoluteY / pxPerMin / TIME_GRANULARITY) * TIME_GRANULARITY;
+      const clampedMin = Math.max(0, Math.min(DAILY_HORIZON - TIME_GRANULARITY, minutes));
+      ghostY.value = (clampedMin / DAILY_HORIZON) * totalHeight;
+      ghostVisible.value = withTiming(1, { duration: 200 });
+    })
     .onEnd((e) => {
+      ghostVisible.value = withTiming(0, { duration: 150 });
       handleLongPress(e.absoluteY);
+    })
+    .onFinalize(() => {
+      ghostVisible.value = withTiming(0, { duration: 150 });
     });
 
   const contentGesture = Gesture.Simultaneous(zoomGesture, longPressGesture);
 
   const animatedContentStyle = useAnimatedStyle(() => ({
     height: baseHourHeight.value * 24,
+  }));
+
+  const ghostStyle = useAnimatedStyle(() => ({
+    top: ghostY.value,
+    opacity: ghostVisible.value,
   }));
 
   if (loading) {
@@ -264,6 +284,18 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, refreshK
                   />
                 );
               })}
+
+              <Animated.View
+                pointerEvents="none"
+                style={ghostStyle}
+                className="absolute left-0 right-0 z-30 mx-1"
+              >
+                <View className="h-[52px] items-center justify-center rounded-lg border border-dashed border-primary/50 bg-primary/5">
+                  <Text className="text-xs font-medium text-primary/60">
+                    + Add task
+                  </Text>
+                </View>
+              </Animated.View>
             </View>
           </Animated.View>
         </GestureDetector>
