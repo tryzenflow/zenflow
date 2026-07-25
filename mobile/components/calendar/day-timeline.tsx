@@ -15,7 +15,7 @@ import {
 } from "@zenflow/core";
 import type { Task } from "@zenflow/shared";
 import { useUserStore } from "@/hooks/use-user-store";
-import { listTasks, rescheduleTask } from "@/api/tasks";
+import { listTasks, rescheduleTask, completeTask } from "@/api/tasks";
 import { TimeGutter } from "./time-gutter";
 import { WorkZoneOverlay } from "./work-zone-overlay";
 import { NowIndicator } from "./now-indicator";
@@ -50,10 +50,11 @@ interface DayTimelineProps {
   date?: Date;
   onTaskPress?: (taskId: string) => void;
   onLongPress?: (timeISO: string) => void;
+  onComplete?: (taskId: string) => void;
   refreshKey?: number;
 }
 
-export function DayTimeline({ date: propDate, onTaskPress, onLongPress, refreshKey }: DayTimelineProps) {
+export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComplete, refreshKey }: DayTimelineProps) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const prefs = useUserStore((s) => s.user) ?? DEFAULT_WORK_PREFS;
   const scrollRef = useRef<ScrollView>(null);
@@ -110,6 +111,23 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, refreshK
       setRefreshing(false);
     }
   }, [refetch]);
+
+  const handleComplete = useCallback(
+    async (taskId: string) => {
+      try {
+        await completeTask(taskId);
+        setTasks((prev) =>
+          prev.map((t) =>
+            t.id === taskId ? { ...t, status: "DONE" as const } : t,
+          ),
+        );
+        onComplete?.(taskId);
+      } catch {
+        refetch();
+      }
+    },
+    [refetch, onComplete],
+  );
 
   const segments = useMemo(() => {
     const blocks = tasksToBlocks(tasks);
@@ -304,6 +322,7 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, refreshK
                     blockWidth={blockWidthPx}
                     onReschedule={handleReschedule}
                     onPress={onTaskPress}
+                    onComplete={handleComplete}
                   />
                 );
               })}

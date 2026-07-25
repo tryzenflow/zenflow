@@ -15,6 +15,9 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
+  interpolate,
+  runOnJS,
 } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 
@@ -53,6 +56,7 @@ interface TaskBlockProps {
   blockWidth: number;
   onReschedule?: (taskId: string, startISO: string) => void;
   onPress?: (taskId: string) => void;
+  onComplete?: (taskId: string) => void;
 }
 
 export function TaskBlock({
@@ -64,6 +68,7 @@ export function TaskBlock({
   blockWidth,
   onReschedule,
   onPress,
+  onComplete,
 }: TaskBlockProps) {
   const startMin = minutesOfDayLocal(segment.start, tz);
   const rawEndMin = minutesOfDayLocal(segment.end, tz);
@@ -82,11 +87,26 @@ export function TaskBlock({
   const pxPerMin = totalHeight / DAILY_HORIZON;
 
   const translateY = useSharedValue(0);
-  const [dragOffset, setDragOffset] = useState(0);
+  const translateX = useSharedValue(0);
+  const checkOpacity = useSharedValue(0);
+
+  const COMPLETE_THRESHOLD = 80;
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
+    transform: [{ translateY: translateY.value }, { translateX: translateX.value }],
   }));
+
+  const checkStyle = useAnimatedStyle(() => ({
+    opacity: checkOpacity.value,
+  }));
+
+  const triggerCompleteHaptic = useCallback(() => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, []);
+
+  const triggerComplete = useCallback(() => {
+    onComplete?.(segment.taskId);
+  }, [onComplete, segment.taskId]);
 
   const handleDragEnd = useCallback(
     (translationY: number) => {
@@ -117,13 +137,40 @@ export function TaskBlock({
 
   const panGesture = Gesture.Pan()
     .enabled(isInteractive)
+    .activeOffsetX([-20, 20])
     .activeOffsetY([-10, 10])
     .onUpdate((e) => {
-      translateY.value = e.translationY;
+      const absX = Math.abs(e.translationX);
+      const absY = Math.abs(e.translationY);
+
+      if (absX > absY && e.translationX > 0) {
+        translateX.value = e.translationX;
+        checkOpacity.value = interpolate(
+          e.translationX,
+          [0, COMPLETE_THRESHOLD],
+          [0, 1],
+          { extrapolateRight: "clamp" },
+        );
+      } else {
+        translateY.value = e.translationY;
+      }
     })
     .onEnd((e) => {
-      handleDragEnd(e.translationY);
+      const absX = Math.abs(e.translationX);
+      const absY = Math.abs(e.translationY);
+
+      if (absX > absY && e.translationX > COMPLETE_THRESHOLD) {
+        translateX.value = withTiming(blockWidth, { duration: 200 });
+        checkOpacity.value = withTiming(0, { duration: 200 });
+        runOnJS(triggerCompleteHaptic)();
+        runOnJS(triggerComplete)();
+      } else if (absY > absX) {
+        handleDragEnd(e.translationY);
+      }
+
       translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
+      translateX.value = withSpring(0, { damping: 20, stiffness: 300 });
+      checkOpacity.value = withTiming(0, { duration: 150 });
     });
 
   const tapGesture = Gesture.Tap()
@@ -176,6 +223,13 @@ export function TaskBlock({
           accessibilityRole="button"
           accessibilityLabel={`${segment.title}, ${fmt(segment.taskStart, tz)} to ${fmt(segment.taskEnd, tz)}`}
         >
+          <Animated.View
+            pointerEvents="none"
+            style={checkStyle}
+            className="absolute right-2 top-0 bottom-0 z-10 items-center justify-center"
+          >
+            <Text className="text-lg text-emerald-500">✓</Text>
+          </Animated.View>
           <View
             style={{
               borderLeftWidth: 4,
