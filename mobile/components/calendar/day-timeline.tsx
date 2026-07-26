@@ -32,6 +32,7 @@ import Animated, {
   withTiming,
   withSpring,
   interpolate,
+  runOnJS,
 } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 
@@ -39,6 +40,7 @@ const GUTTER_WIDTH = 64;
 const HOUR_HEIGHT_DEFAULT = 64;
 const HOUR_HEIGHT_MIN = 48;
 const HOUR_HEIGHT_MAX = 96;
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 function scrollToNowOffset(totalHeight: number): number {
   const now = new Date();
@@ -198,9 +200,9 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
       );
       baseHourHeight.value = newHeight;
     })
-    .onEnd(() => {
-      setHourHeight(baseHourHeight.value);
-    });
+  .onEnd(() => {
+    runOnJS(setHourHeight)(baseHourHeight.value);
+  });
 
   const longPressGesture = Gesture.LongPress()
     .minDuration(500)
@@ -213,7 +215,7 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
     })
     .onEnd((e) => {
       ghostVisible.value = withTiming(0, { duration: 150 });
-      handleLongPress(e.absoluteY);
+      runOnJS(handleLongPress)(e.absoluteY);
     })
     .onFinalize(() => {
       ghostVisible.value = withTiming(0, { duration: 150 });
@@ -296,9 +298,21 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
               className="absolute top-0 bottom-0 bg-card"
               style={{ left: GUTTER_WIDTH, right: 0 }}
             >
-              <WorkZoneOverlay date={date} prefs={prefs} />
+               <WorkZoneOverlay date={date} prefs={prefs} hourHeight={hourHeight} />
 
-              {isToday && (
+              {/* Hour separator lines */}
+              {HOURS.map((hour) => (
+                <View
+                  key={hour}
+                  className="absolute left-0 right-0 bg-border/50"
+                  style={{
+                    top: hour * hourHeight,
+                    height: 1,
+                  }}
+                />
+              ))}
+
+               {isToday && (
                 <NowIndicator tz={tz} totalHeight={totalHeight} />
               )}
 

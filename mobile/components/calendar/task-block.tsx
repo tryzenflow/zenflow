@@ -83,7 +83,7 @@ export function TaskBlock({
   const isInteractive = !isCompleted && !isSplit;
 
   const baseTop = (startMin / DAILY_HORIZON) * totalHeight;
-  const height = Math.max((duration / DAILY_HORIZON) * totalHeight, 20);
+  const height = Math.max((duration / DAILY_HORIZON) * totalHeight, 28);
   const pxPerMin = totalHeight / DAILY_HORIZON;
 
   const translateY = useSharedValue(0);
@@ -165,7 +165,7 @@ export function TaskBlock({
         runOnJS(triggerCompleteHaptic)();
         runOnJS(triggerComplete)();
       } else if (absY > absX) {
-        handleDragEnd(e.translationY);
+        runOnJS(handleDragEnd)(e.translationY);
       }
 
       translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
@@ -173,31 +173,26 @@ export function TaskBlock({
       checkOpacity.value = withTiming(0, { duration: 150 });
     });
 
+  const triggerPress = useCallback(() => {
+    onPress?.(segment.taskId);
+  }, [onPress, segment.taskId]);
+
   const tapGesture = Gesture.Tap()
     .enabled(isInteractive && !!onPress)
     .onEnd(() => {
-      onPress?.(segment.taskId);
+      runOnJS(triggerPress)();
     });
 
   const composedGesture = Gesture.Simultaneous(panGesture, tapGesture);
 
-  const borderColor =
+  const stateClasses =
     state === "overdue"
-      ? "#f43f5e"
+      ? "border-l-4 border-l-rose-500 bg-rose-50/40 dark:bg-rose-950/10"
       : state === "conflict"
-        ? "#f59e0b"
+        ? "border-l-4 border-l-amber-500 bg-amber-50/40 dark:bg-amber-950/10"
         : state === "completed"
-          ? "#10b981"
-          : "rgb(var(--primary))";
-
-  const bgColor =
-    state === "overdue"
-      ? "rgba(244,63,94,0.08)"
-      : state === "conflict"
-        ? "rgba(245,158,11,0.08)"
-        : state === "completed"
-          ? "rgba(var(--muted) / 0.6)"
-          : "rgba(var(--card) / 0.9)";
+          ? "border-l-4 border-l-emerald-500 bg-muted opacity-60"
+          : "border-l-4 border-l-primary bg-card";
 
   return (
     <View
@@ -211,9 +206,9 @@ export function TaskBlock({
     >
       <GestureDetector gesture={composedGesture}>
         <Animated.View
-          style={animatedStyle}
+          style={[animatedStyle, { height }]}
           className={cn(
-            "flex overflow-hidden rounded border shadow-sm",
+            "flex overflow-hidden rounded border border-border shadow-sm",
             isCompact ? "flex-row items-center gap-1.5 px-2" : "flex-col py-1 px-2",
             segment.continues && "rounded-b-none",
             segment.continued && "rounded-t-none border-t-0 border-dashed",
@@ -231,14 +226,8 @@ export function TaskBlock({
             <Text className="text-lg text-emerald-500">✓</Text>
           </Animated.View>
           <View
-            style={{
-              borderLeftWidth: 4,
-              borderLeftColor: borderColor,
-              backgroundColor: bgColor,
-              flex: 1,
-              overflow: "hidden",
-              borderRadius: 4,
-            }}
+            style={{ flex: 1 }}
+            className={cn("overflow-hidden rounded", stateClasses)}
           >
             {isCompact ? (
               <View className="flex-row items-center gap-1.5 px-2">
