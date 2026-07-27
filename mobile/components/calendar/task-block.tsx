@@ -41,10 +41,12 @@ function minutesOfDayLocal(iso: string, tz: string) {
 }
 
 function fmt(iso: string, tz: string) {
-  return toZonedTime(new Date(iso), tz).toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const d = toZonedTime(new Date(iso), tz);
+  const h = d.getHours();
+  const m = d.getMinutes();
+  const ampm = h >= 12 ? "PM" : "AM";
+  const hour = h % 12 === 0 ? 12 : h % 12;
+  return m === 0 ? `${hour} ${ampm}` : `${hour}:${m.toString().padStart(2, "0")} ${ampm}`;
 }
 
 interface TaskBlockProps {

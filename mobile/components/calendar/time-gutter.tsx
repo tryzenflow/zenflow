@@ -1,6 +1,6 @@
 import { View } from "react-native";
 import { Text } from "@/components/ui/text";
-import { minutesToTime } from "@zenflow/core";
+import { minutesToHour } from "@zenflow/core";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
@@ -22,7 +22,7 @@ export function TimeGutter({ hourHeight }: TimeGutterProps) {
         >
           {hour !== 0 && (
             <Text className="text-[10px] font-bold text-muted-foreground">
-              {minutesToTime(hour * 60)}
+              {minutesToHour(hour * 60)}
             </Text>
           )}
         </View>

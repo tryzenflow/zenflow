@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, useEffect, useCallback } from "react";
-import { View, ScrollView, RefreshControl, useWindowDimensions } from "react-native";
+import { View, ScrollView, RefreshControl, TouchableOpacity, useWindowDimensions } from "react-native";
 import { Text } from "@/components/ui/text";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -80,7 +80,7 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
     let cancelled = false;
     setLoading(true);
     setError(false);
-    listTasks("day", date, "PENDING")
+    listTasks("day", date, "all")
       .then((res) => {
         if (!cancelled) setTasks(res.tasks);
       })
@@ -97,7 +97,7 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
 
   const refetch = useCallback(async () => {
     try {
-      const res = await listTasks("day", date, "PENDING");
+      const res = await listTasks("day", date, "all");
       setTasks(res.tasks);
       setError(false);
     } catch {
@@ -167,7 +167,7 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
         );
       } catch {
         // Revert optimistic update on failure
-        listTasks("day", date, "PENDING").then((res) => setTasks(res.tasks));
+        listTasks("day", date, "all").then((res) => setTasks(res.tasks));
       }
     },
     [date],
@@ -250,12 +250,19 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
 
   if (error) {
     return (
-      <View className="flex-1 items-center justify-center bg-background px-8">
+      <ScrollView
+        className="flex-1 bg-background"
+        contentContainerClassName="flex-1 items-center justify-center px-8"
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         <Text className="text-center text-lg font-semibold">Failed to load</Text>
         <Text className="mt-2 text-center text-sm text-muted-foreground">
-          Could not fetch your tasks. Pull down to retry.
+          Could not fetch your tasks. Pull down or tap retry.
         </Text>
-      </View>
+
+      </ScrollView>
     );
   }
 
