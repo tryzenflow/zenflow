@@ -5,6 +5,7 @@ import type { UserPreferences } from "@zenflow/shared";
 interface WorkZoneOverlayProps {
   date: Date;
   prefs?: Pick<UserPreferences, "workStart" | "workEnd" | "workDays">;
+  hourHeight?: number;
 }
 
 function nonWorkGaps(segments: { topPx: number; bottomPx: number }[]) {
@@ -19,19 +20,23 @@ function nonWorkGaps(segments: { topPx: number; bottomPx: number }[]) {
   return gaps;
 }
 
-export function WorkZoneOverlay({ date, prefs = DEFAULT_WORK_PREFS }: WorkZoneOverlayProps) {
+export function WorkZoneOverlay({ date, prefs = DEFAULT_WORK_PREFS, hourHeight = 64 }: WorkZoneOverlayProps) {
   const { segments } = getDayZones(date, prefs);
+  const scale = hourHeight / 64;
 
   return (
     <View className="absolute inset-0">
       {segments.length === 0 ? (
-        <View className="absolute inset-0 bg-muted/20" />
+        <View className="absolute inset-0 bg-muted/75" />
       ) : (
         nonWorkGaps(segments).map((gap) => (
           <View
             key={gap.topPx}
-            className="absolute inset-x-0 bg-muted/30"
-            style={{ top: gap.topPx, height: gap.bottomPx - gap.topPx }}
+            className="absolute inset-x-0 bg-muted/55"
+            style={{
+              top: gap.topPx * scale,
+              height: (gap.bottomPx - gap.topPx) * scale,
+            }}
           />
         ))
       )}
