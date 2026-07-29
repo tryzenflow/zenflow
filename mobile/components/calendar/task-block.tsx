@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { View } from "react-native";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
@@ -83,7 +83,7 @@ export function TaskBlock({
   const isInteractive = !isCompleted && !isSplit;
 
   const baseTop = (startMin / DAILY_HORIZON) * totalHeight;
-  const height = Math.max((duration / DAILY_HORIZON) * totalHeight, 28);
+  const height = Math.max((duration / DAILY_HORIZON) * totalHeight, 16);
   const pxPerMin = totalHeight / DAILY_HORIZON;
 
   const translateY = useSharedValue(0);
@@ -187,32 +187,34 @@ export function TaskBlock({
 
   const stateClasses =
     state === "overdue"
-      ? "border-l-4 border-l-rose-500 bg-rose-50/40 dark:bg-rose-950/10"
+      ? "border-border border-l-rose-500 bg-rose-50/40 dark:bg-rose-950/10"
       : state === "conflict"
-        ? "border-l-4 border-l-amber-500 bg-amber-50/40 dark:bg-amber-950/10"
+        ? "border-border border-l-amber-500 bg-amber-50/40 dark:bg-amber-950/10"
         : state === "completed"
-          ? "border-l-4 border-l-emerald-500 bg-muted opacity-60"
-          : "border-l-4 border-l-primary bg-card";
+          ? "border-border border-l-success/60 bg-muted/60"
+          : "border-border border-l-primary glass-task";
+
+  const isMultiColumn = layout.columns > 1;
 
   return (
     <View
-      className="absolute z-10 px-0.5"
-      style={{
-        top: baseTop,
-        left: leftOffset,
-        width: blockWidth,
-        height,
-      }}
+      className={cn("absolute z-10", !isMultiColumn && "left-1.5 right-1.5")}
+      style={
+        isMultiColumn
+          ? { top: baseTop, left: leftOffset, width: blockWidth, height }
+          : { top: baseTop, height }
+      }
     >
       <GestureDetector gesture={composedGesture}>
         <Animated.View
           style={[animatedStyle, { height }]}
           className={cn(
-            "flex overflow-hidden rounded border border-border shadow-sm",
-            isCompact ? "flex-row items-center gap-1.5 px-2" : "flex-col py-1 px-2",
+            "flex overflow-hidden rounded-[10px] border border-l-4 shadow-sm",
+            isCompact ? "items-center justify-between gap-1.5 px-2.5" : "flex-col gap-0.5 px-2.5 py-1.5",
             segment.continues && "rounded-b-none",
-            segment.continued && "rounded-t-none border-t-0 border-dashed",
+            segment.continued && "rounded-t-none [border-top-style:dashed]",
             isInteractive && "cursor-grab",
+            stateClasses,
           )}
           accessible
           accessibilityRole="button"
@@ -225,71 +227,66 @@ export function TaskBlock({
           >
             <Text className="text-lg text-emerald-500">✓</Text>
           </Animated.View>
-          <View
-            style={{ flex: 1 }}
-            className={cn("overflow-hidden rounded", stateClasses)}
-          >
-            {isCompact ? (
-              <View className="flex-row items-center gap-1.5 px-2">
-                <View className="min-w-0 flex-1 flex-row items-center gap-1">
-                  {segment.continued && (
-                    <Text className="text-[10px] text-muted-foreground">↳</Text>
-                  )}
-                  <Text
-                    className={cn(
-                      "flex-1 truncate text-[10px] font-semibold",
-                      isCompleted && "line-through",
-                    )}
-                  >
-                    {segment.title}
-                  </Text>
-                </View>
-                <Text className="shrink-0 font-mono text-[9px] text-muted-foreground">
-                  {segment.continued
-                    ? `ends ${fmt(segment.taskEnd, tz)}`
-                    : fmt(segment.taskStart, tz)}
-                </Text>
-              </View>
-            ) : (
-              <View className="flex-col py-1 px-2">
-                <View className="flex-row items-center gap-1">
-                  {segment.continued && (
-                    <Text className="text-[10px] text-muted-foreground">↳</Text>
-                  )}
-                  <Text
-                    className={cn(
-                      "flex-1 truncate text-xs font-semibold",
-                      isCompleted && "line-through",
-                    )}
-                  >
-                    {segment.title}
-                  </Text>
-                </View>
-                <Text className="font-mono text-[10px] text-muted-foreground">
-                  {segment.continued
-                    ? `cont. → ${fmt(segment.taskEnd, tz)}`
-                    : segment.continues
-                      ? `${fmt(segment.taskStart, tz)} → next day`
-                      : `${fmt(segment.taskStart, tz)} – ${fmt(segment.taskEnd, tz)}`}
-                </Text>
-                {showTags && (
-                  <View className="mt-0.5 flex-row flex-wrap gap-1 overflow-hidden">
-                    {segment.tags.slice(0, 3).map((t) => (
-                      <View
-                        key={t}
-                        className={cn(
-                          "rounded border px-1.5 py-0.5",
-                          tagTint(t),
-                        )}
-                      >
-                        <Text className="text-[9px] font-medium">{t}</Text>
-                      </View>
-                    ))}
-                  </View>
+          {isCompact ? (
+            <>
+              <View className="min-w-0 flex-1 flex-row items-center gap-1">
+                {segment.continued && (
+                  <Text className="text-[10px] text-muted-foreground">↳</Text>
                 )}
+                <Text
+                  className={cn(
+                    "flex-1 truncate text-[10px] font-semibold leading-none",
+                    isCompleted && "line-through",
+                  )}
+                >
+                  {segment.title}
+                </Text>
               </View>
-            )}
-          </View>
+              <Text className="shrink-0 font-mono text-[9px] text-muted-foreground leading-none">
+                {segment.continued
+                  ? `ends ${fmt(segment.taskEnd, tz)}`
+                  : fmt(segment.taskStart, tz)}
+              </Text>
+            </>
+          ) : (
+            <>
+              <View className="flex-row items-center gap-1">
+                {segment.continued && (
+                  <Text className="text-[10px] text-muted-foreground">↳</Text>
+                )}
+                <Text
+                  className={cn(
+                    "flex-1 truncate text-xs font-semibold leading-none",
+                    isCompleted && "line-through",
+                  )}
+                >
+                  {segment.title}
+                </Text>
+              </View>
+              <Text className="font-mono text-[10px] text-muted-foreground leading-none">
+                {segment.continued
+                  ? `cont. → ${fmt(segment.taskEnd, tz)}`
+                  : segment.continues
+                    ? `${fmt(segment.taskStart, tz)} → next day`
+                    : `${fmt(segment.taskStart, tz)} – ${fmt(segment.taskEnd, tz)}`}
+              </Text>
+              {showTags && (
+                <View className="mt-0.5 flex-row flex-wrap gap-1 overflow-hidden">
+                  {segment.tags.slice(0, 3).map((t) => (
+                    <View
+                      key={t}
+                      className={cn(
+                        "rounded border px-1.5 py-0.5",
+                        tagTint(t),
+                      )}
+                    >
+                      <Text className="text-[9px] font-medium">{t}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </>
+          )}
         </Animated.View>
       </GestureDetector>
     </View>
