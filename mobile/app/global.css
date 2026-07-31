@@ -69,7 +69,6 @@
 
 @layer components {
   .glass-task {
-    backdrop-filter: blur(40px);
     background-color: rgb(var(--background) / 0.8);
   }
 }
