@@ -187,12 +187,12 @@ export function TaskBlock({
 
   const stateClasses =
     state === "overdue"
-      ? "border-border border-l-rose-500 bg-rose-50/40 dark:bg-rose-950/10"
+      ? "border-t-border border-r-border border-b-border border-l-rose-500 bg-rose-50/40 dark:bg-rose-950/10"
       : state === "conflict"
-        ? "border-border border-l-amber-500 bg-amber-50/40 dark:bg-amber-950/10"
+        ? "border-t-border border-r-border border-b-border border-l-amber-500 bg-amber-50/40 dark:bg-amber-950/10"
         : state === "completed"
-          ? "border-border border-l-success/60 bg-muted/60"
-          : "border-border border-l-primary glass-task";
+          ? "border-t-border border-r-border border-b-border border-l-success/60 bg-muted/60"
+          : "border-t-border border-r-border border-b-border border-l-primary glass-task";
 
   const isMultiColumn = layout.columns > 1;
 
@@ -209,7 +209,7 @@ export function TaskBlock({
         <Animated.View
           style={[animatedStyle, { height }]}
           className={cn(
-            "flex overflow-hidden rounded-[10px] border border-l-4 shadow-sm",
+            "flex overflow-hidden rounded-[10px] border border-l-4 shadow-sm shadow-foreground/10",
             isCompact ? "items-center justify-between gap-1.5 px-2.5" : "flex-col gap-0.5 px-2.5 py-1.5",
             segment.continues && "rounded-b-none",
             segment.continued && "rounded-t-none [border-top-style:dashed]",
