@@ -21,6 +21,8 @@ import { WorkZoneOverlay } from "./work-zone-overlay";
 import { NowIndicator } from "./now-indicator";
 import { TaskBlock } from "./task-block";
 import { format } from "date-fns";
+import { AlertTriangle, RefreshCcw } from "@/components/Icons";
+import { Button } from "@/components/ui/button";
 import {
   Gesture,
   GestureDetector,
@@ -37,6 +39,7 @@ import Animated, {
 import * as Haptics from "expo-haptics";
 
 const GUTTER_WIDTH = 64;
+const EMPTY_GHOST_MINUTES = 45;
 const HOUR_HEIGHT_DEFAULT = 64;
 const HOUR_HEIGHT_MIN = 48;
 const HOUR_HEIGHT_MAX = 96;
@@ -232,6 +235,14 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
     opacity: ghostVisible.value,
   }));
 
+  const nowClock = zonedNow(tz);
+  const nowMinutes = nowClock.getHours() * 60 + nowClock.getMinutes();
+  const emptyGhostTop =
+    (Math.min(nowMinutes, DAILY_HORIZON - EMPTY_GHOST_MINUTES) /
+      DAILY_HORIZON) *
+    totalHeight;
+  const emptyGhostHeight = (EMPTY_GHOST_MINUTES / DAILY_HORIZON) * totalHeight;
+
   if (loading) {
     return (
       <View className="flex-1 bg-background px-4 pt-4">
@@ -257,23 +268,24 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        <Text className="text-center text-lg font-semibold">Failed to load</Text>
-        <Text className="mt-2 text-center text-sm text-muted-foreground">
-          Could not fetch your tasks. Pull down or tap retry.
+        <View className="mb-3.5 size-[76px] items-center justify-center rounded-[22px] border border-destructive/35 bg-destructive/15">
+          <AlertTriangle size={34} className="text-destructive" />
+        </View>
+        <Text className="text-center text-lg font-bold">
+          Couldn't load your day
         </Text>
-
+        <Text className="mt-1.5 max-w-[280px] text-center text-[13.5px] leading-normal text-muted-foreground">
+          We couldn't reach the scheduler. Check your connection and try again.
+        </Text>
+        <Button
+          variant="outline"
+          className="mt-5 rounded-xl px-8"
+          onPress={() => void refetch()}
+        >
+          <RefreshCcw size={16} className="text-foreground" />
+          <Text className="text-base font-semibold">Try again</Text>
+        </Button>
       </ScrollView>
-    );
-  }
-
-  if (segments.length === 0) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background px-8">
-        <Text className="text-center text-lg font-semibold">Nothing scheduled</Text>
-        <Text className="mt-2 text-center text-sm text-muted-foreground">
-          No tasks for {format(date, "EEEE, MMM d")}.
-        </Text>
-      </View>
     );
   }
 
@@ -321,6 +333,18 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
 
                {isToday && (
                 <NowIndicator tz={tz} totalHeight={totalHeight} />
+              )}
+
+              {segments.length === 0 && isToday && (
+                <View
+                  pointerEvents="none"
+                  className="absolute left-1.5 right-1.5 z-20 items-center justify-center rounded-xl border-[1.5px] border-dashed border-amber-500/55 bg-amber-500/[0.07]"
+                  style={{ top: emptyGhostTop, height: emptyGhostHeight }}
+                >
+                  <Text className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+                    Long press to add
+                  </Text>
+                </View>
               )}
 
               {segments.map((segment) => {

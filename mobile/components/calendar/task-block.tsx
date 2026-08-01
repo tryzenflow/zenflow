@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { View } from "react-native";
 import { Text } from "@/components/ui/text";
+import { AlertTriangle } from "@/components/Icons";
 import { cn } from "@/lib/utils";
 import { DAILY_HORIZON, TIME_GRANULARITY, zonedWallClockToUtc, zonedDate } from "@zenflow/core";
 import { withOverlap } from "@zenflow/core";
@@ -78,6 +79,7 @@ export function TaskBlock({
   const showTags = duration > TAGS_MIN_DURATION && segment.tags.length > 0;
 
   const state = withOverlap(segment.state, layout.conflict);
+  const isConflict = state === "conflict";
   const isCompleted = segment.status === "DONE";
   const isSplit = Boolean(segment.continued);
   const isInteractive = !isCompleted && !isSplit;
@@ -189,7 +191,7 @@ export function TaskBlock({
     state === "overdue"
       ? "border-t-border border-r-border border-b-border border-l-rose-500 bg-rose-50/40 dark:bg-rose-950/10"
       : state === "conflict"
-        ? "border-t-border border-r-border border-b-border border-l-amber-500 bg-amber-50/40 dark:bg-amber-950/10"
+        ? "border-t-border border-r-border border-b-border border-l-amber-500 bg-amber-50/40 ring-1 ring-amber-500/40 dark:bg-amber-950/10"
         : state === "completed"
           ? "border-t-border border-r-border border-b-border border-l-success/60 bg-muted/60"
           : "border-t-border border-r-border border-b-border border-l-primary glass-task";
@@ -237,12 +239,18 @@ export function TaskBlock({
                   className={cn(
                     "flex-1 truncate text-[10px] font-semibold leading-none",
                     isCompleted && "line-through",
+                    isConflict && "text-amber-700 dark:text-amber-300",
                   )}
                 >
                   {segment.title}
                 </Text>
               </View>
-              <Text className="shrink-0 font-mono text-[9px] text-muted-foreground leading-none">
+              <Text
+                className={cn(
+                  "shrink-0 font-mono text-[9px] text-muted-foreground leading-none",
+                  isConflict && "text-amber-700/90 dark:text-amber-300/90",
+                )}
+              >
                 {segment.continued
                   ? `ends ${fmt(segment.taskEnd, tz)}`
                   : fmt(segment.taskStart, tz)}
@@ -250,6 +258,14 @@ export function TaskBlock({
             </>
           ) : (
             <>
+              {isConflict && (
+                <View className="w-fit flex-row items-center gap-1 rounded-md border border-transparent bg-amber-500/15 px-2 py-0.5">
+                  <AlertTriangle size={11} className="text-amber-700 dark:text-amber-300" />
+                  <Text className="text-[10px] font-semibold leading-none text-amber-700 dark:text-amber-300">
+                    Overlap
+                  </Text>
+                </View>
+              )}
               <View className="flex-row items-center gap-1">
                 {segment.continued && (
                   <Text className="text-[10px] text-muted-foreground">↳</Text>
@@ -258,12 +274,18 @@ export function TaskBlock({
                   className={cn(
                     "flex-1 truncate text-xs font-semibold leading-none",
                     isCompleted && "line-through",
+                    isConflict && "text-amber-700 dark:text-amber-300",
                   )}
                 >
                   {segment.title}
                 </Text>
               </View>
-              <Text className="font-mono text-[10px] text-muted-foreground leading-none">
+              <Text
+                className={cn(
+                  "font-mono text-[10px] text-muted-foreground leading-none",
+                  isConflict && "text-amber-700/90 dark:text-amber-300/90",
+                )}
+              >
                 {segment.continued
                   ? `cont. → ${fmt(segment.taskEnd, tz)}`
                   : segment.continues
