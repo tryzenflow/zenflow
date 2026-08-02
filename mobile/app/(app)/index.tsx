@@ -1,6 +1,6 @@
 import { CreateTaskFab } from "@/components/tasks/create-task-fab";
 import { OptimizeFab } from "@/components/tasks/optimize-fab";
-import { DayTimeline } from "@/components/calendar/day-timeline";
+import { DayTimeline, type TimelineState } from "@/components/calendar/day-timeline";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useScheduleRefresh } from "@/hooks/use-schedule-refresh";
 import { zonedDate, zonedNow } from "@zenflow/core";
@@ -15,6 +15,7 @@ export default function DayScreen() {
   const user = useUserStore((s) => s.user);
   const tz = user?.timezone || "UTC";
   const [refreshKey, setRefreshKey] = useState(0);
+  const [timelineState, setTimelineState] = useState<TimelineState>("loading");
   const { date: dateParam } = useLocalSearchParams<{ date?: string }>();
 
   // Accepts an optional `date` query param (ISO instant) so other screens can
@@ -71,9 +72,12 @@ export default function DayScreen() {
         onTaskPress={handleTaskPress}
         onLongPress={handleLongPress}
         refreshKey={refreshKey}
+        onStateChange={setTimelineState}
       />
-      <CreateTaskFab tz={tz} />
-      <OptimizeFab tz={tz} onApplied={onOptimizeApplied} />
+{timelineState === "ready" && <CreateTaskFab tz={tz} />}
+      {timelineState === "ready" && (
+        <OptimizeFab tz={tz} onApplied={onOptimizeApplied} />
+      )}
     </View>
   );
 }

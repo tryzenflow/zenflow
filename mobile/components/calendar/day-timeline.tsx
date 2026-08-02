@@ -47,6 +47,13 @@ const HOUR_HEIGHT_MIN = 48;
 const HOUR_HEIGHT_MAX = 96;
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
+const LOADING_PLACEHOLDERS = [
+  { startMin: 8 * 60 + 15, duration: 60 },
+  { startMin: 10 * 60, duration: 110 },
+  { startMin: 12 * 60 + 30, duration: 90 },
+  { startMin: 15 * 60, duration: 45 },
+];
+
 function fmtTime(iso: string, tz: string) {
   return toZonedTime(new Date(iso), tz).toLocaleTimeString([], {
     hour: "numeric",
@@ -60,15 +67,18 @@ function scrollToNowOffset(totalHeight: number): number {
   return Math.max(0, (mins / DAILY_HORIZON) * totalHeight - 120);
 }
 
+export type TimelineState = "loading" | "error" | "ready";
+
 interface DayTimelineProps {
   date?: Date;
   onTaskPress?: (taskId: string) => void;
   onLongPress?: (timeISO: string) => void;
   onComplete?: (taskId: string) => void;
   refreshKey?: number;
+  onStateChange?: (state: TimelineState) => void;
 }
 
-export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComplete, refreshKey }: DayTimelineProps) {
+export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComplete, refreshKey, onStateChange }: DayTimelineProps) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const prefs = useUserStore((s) => s.user) ?? DEFAULT_WORK_PREFS;
   const { toast } = useToast();
@@ -108,6 +118,10 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
       cancelled = true;
     };
   }, [date.toISOString().slice(0, 10), refreshKey]);
+
+  useEffect(() => {
+    onStateChange?.(loading ? "loading" : error ? "error" : "ready");
+  }, [loading, error, onStateChange]);
 
   const refetch = useCallback(async () => {
     try {
@@ -216,6 +230,20 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
       });
     }
   }, [totalHeight]);
+
+  const handleTimelineLayout = useCallback(() => {
+    if (loading) {
+      const loadingOffset =
+        ((8 * 60) / DAILY_HORIZON) * totalHeight - 120;
+      scrollRef.current?.scrollTo({
+        y: Math.max(0, loadingOffset),
+        animated: false,
+      });
+      return;
+    }
+    if (error) return;
+    scrollToNow();
+  }, [loading, error, totalHeight, scrollToNow]);
 
   const isToday = useMemo(() => {
     const now = zonedNow(tz);
@@ -328,52 +356,6 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
     totalHeight;
   const emptyGhostHeight = (EMPTY_GHOST_MINUTES / DAILY_HORIZON) * totalHeight;
 
-  if (loading) {
-    return (
-      <View className="flex-1 bg-background px-4 pt-4">
-        <View className="mb-4 gap-2">
-          <Skeleton className="h-6 w-32" />
-          <Skeleton className="h-4 w-48" />
-        </View>
-        <View className="flex-1 gap-2">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-16 w-full" />
-          ))}
-        </View>
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <ScrollView
-        className="flex-1 bg-background"
-        contentContainerClassName="flex-1 items-center justify-center px-8"
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
-        <View className="mb-3.5 size-[76px] items-center justify-center rounded-[22px] border border-destructive/35 bg-destructive/15">
-          <AlertTriangle size={34} className="text-destructive" />
-        </View>
-        <Text className="text-center text-lg font-bold">
-          Couldn't load your day
-        </Text>
-        <Text className="mt-1.5 max-w-[280px] text-center text-[13.5px] leading-normal text-muted-foreground">
-          We couldn't reach the scheduler. Check your connection and try again.
-        </Text>
-        <Button
-          variant="outline"
-          className="mt-5 rounded-xl px-8"
-          onPress={() => void refetch()}
-        >
-          <RefreshCcw size={16} className="text-foreground" />
-          <Text className="text-base font-semibold">Try again</Text>
-        </Button>
-      </ScrollView>
-    );
-  }
-
   return (
     <View className="flex-1 bg-background">
       <View className="flex-row items-center justify-between px-4 pt-3 pb-2">
@@ -382,17 +364,21 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
             {format(date, "EEE, MMM d")}
           </Text>
           <Text className="mt-px text-xs font-medium text-muted-foreground">
-            {dragSnap
-              ? "Moving · release to reschedule"
-              : overlapCount > 0
-                ? `${overlapCount} overlap${overlapCount > 1 ? "s" : ""} · ${tasks.length} tasks`
-                : tasks.length === 0
-                  ? `${nowLabel} · nothing scheduled`
-                  : `${nowLabel} · ${tasks.length} task${tasks.length === 1 ? "" : "s"} today`}
+            {loading
+              ? "Loading your day…"
+              : error
+                ? "Couldn't sync"
+                : dragSnap
+                  ? "Moving · release to reschedule"
+                  : overlapCount > 0
+                    ? `${overlapCount} overlap${overlapCount > 1 ? "s" : ""} · ${tasks.length} tasks`
+                    : tasks.length === 0
+                      ? `${nowLabel} · nothing scheduled`
+                      : `${nowLabel} · ${tasks.length} task${tasks.length === 1 ? "" : "s"} today`}
           </Text>
         </View>
         <View className="flex-row items-center gap-2">
-          {overdueCount > 0 && (
+          {!loading && !error && overdueCount > 0 && (
             <View className="flex-row items-center gap-1 rounded-full border border-rose-400/50 bg-rose-100 px-2 py-0.5 dark:bg-rose-950">
               <AlertCircle size={12} className="text-rose-800 dark:text-rose-400" />
               <Text className="text-[11px] font-semibold leading-none text-rose-800 dark:text-rose-400">
@@ -407,12 +393,69 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
         ref={scrollRef}
         className="flex-1"
         showsVerticalScrollIndicator={false}
-        onLayout={scrollToNow}
+        onLayout={handleTimelineLayout}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
+        contentContainerClassName={
+          error ? "flex-1 items-center justify-center px-8" : undefined
+        }
       >
-        <GestureDetector gesture={contentGesture}>
+        {error ? (
+          <>
+            <View className="mb-3.5 size-[76px] items-center justify-center rounded-[22px] border border-destructive/35 bg-destructive/15">
+              <AlertTriangle size={34} className="text-destructive" />
+            </View>
+            <Text className="text-center text-lg font-bold">
+              Couldn't load your day
+            </Text>
+            <Text className="mt-1.5 max-w-[280px] text-center text-[13.5px] leading-normal text-muted-foreground">
+              We couldn't reach the scheduler. Check your connection and try again.
+            </Text>
+            <Button
+              variant="outline"
+              className="mt-5 rounded-xl px-8"
+              onPress={() => void refetch()}
+            >
+              <RefreshCcw size={16} className="text-foreground" />
+              <Text className="text-base font-semibold">Try again</Text>
+            </Button>
+          </>
+        ) : loading ? (
+          <Animated.View style={animatedContentStyle} className="relative">
+            <TimeGutter hourHeight={hourHeight} />
+
+            <View
+              className="absolute top-0 bottom-0 bg-card"
+              style={{ left: GUTTER_WIDTH, right: 0 }}
+            >
+              {HOURS.map((hour) => (
+                <View
+                  key={hour}
+                  className="absolute left-0 right-0 bg-border/50"
+                  style={{
+                    top: hour * hourHeight,
+                    height: 1,
+                  }}
+                />
+              ))}
+
+              {LOADING_PLACEHOLDERS.map((p) => (
+                <View
+                  key={p.startMin}
+                  className="absolute left-1.5 right-1.5"
+                  style={{
+                    top: (p.startMin / DAILY_HORIZON) * totalHeight,
+                    height: (p.duration / DAILY_HORIZON) * totalHeight,
+                  }}
+                >
+                  <Skeleton className="h-full w-full rounded-xl" />
+                </View>
+              ))}
+            </View>
+          </Animated.View>
+        ) : (
+          <GestureDetector gesture={contentGesture}>
           <Animated.View style={animatedContentStyle} className="relative">
             <TimeGutter hourHeight={hourHeight} />
 
@@ -515,6 +558,7 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
             </View>
           </Animated.View>
         </GestureDetector>
+        )}
       </ScrollView>
 
       {dragSnap && (
