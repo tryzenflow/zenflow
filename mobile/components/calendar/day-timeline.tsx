@@ -21,8 +21,10 @@ import { WorkZoneOverlay } from "./work-zone-overlay";
 import { NowIndicator } from "./now-indicator";
 import { TaskBlock } from "./task-block";
 import { format } from "date-fns";
-import { AlertTriangle, RefreshCcw } from "@/components/Icons";
+import { toZonedTime } from "date-fns-tz";
+import { AlertCircle, AlertTriangle, RefreshCcw } from "@/components/Icons";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
 import {
   Gesture,
   GestureDetector,
@@ -45,6 +47,13 @@ const HOUR_HEIGHT_MIN = 48;
 const HOUR_HEIGHT_MAX = 96;
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
+function fmtTime(iso: string, tz: string) {
+  return toZonedTime(new Date(iso), tz).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function scrollToNowOffset(totalHeight: number): number {
   const now = new Date();
   const mins = now.getHours() * 60 + now.getMinutes();
@@ -62,6 +71,7 @@ interface DayTimelineProps {
 export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComplete, refreshKey }: DayTimelineProps) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const prefs = useUserStore((s) => s.user) ?? DEFAULT_WORK_PREFS;
+  const { toast } = useToast();
   const scrollRef = useRef<ScrollView>(null);
   const { width: screenWidth } = useWindowDimensions();
 
@@ -140,6 +150,62 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
   }, [tasks, date, tz]);
 
   const layout = useMemo(() => getOverlapLayout(segments), [segments]);
+
+  const deadlineByTask = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const t of tasks) {
+      if (t.deadline) map.set(t.id, t.deadline);
+    }
+    return map;
+  }, [tasks]);
+
+  const overdueCount = useMemo(() => {
+    const seen = new Set<string>();
+    for (const s of segments) {
+      if (s.state === "overdue" && !seen.has(s.taskId)) seen.add(s.taskId);
+    }
+    return seen.size;
+  }, [segments]);
+
+  const overlapCount = useMemo(() => {
+    const live = segments.filter((s) => s.status !== "DONE");
+    let pairs = 0;
+    for (let i = 0; i < live.length; i++) {
+      for (let j = i + 1; j < live.length; j++) {
+        const aStart = new Date(live[i].start).getTime();
+        const aEnd = new Date(live[i].end).getTime();
+        const bStart = new Date(live[j].start).getTime();
+        const bEnd = new Date(live[j].end).getTime();
+        if (aStart < bEnd && bStart < aEnd) pairs++;
+      }
+    }
+    return pairs;
+  }, [segments]);
+
+  const shownOverdueTask = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (loading || error) return;
+    const overdue = segments.find((s) => s.state === "overdue");
+    if (!overdue) return;
+    if (shownOverdueTask.current === overdue.taskId) return;
+    shownOverdueTask.current = overdue.taskId;
+
+    const deadline = deadlineByTask.get(overdue.taskId);
+    const due =
+      deadline != null ? ` before its ${fmtTime(deadline, tz)} deadline` : "";
+    const range = `${fmtTime(overdue.taskStart, tz)}–${fmtTime(
+      overdue.taskEnd,
+      tz,
+    )}`;
+    toast(
+      `Scheduled past deadline\n"${overdue.title}" couldn't fit${due} — scheduled ${range} instead.`,
+      "destructive",
+      8000,
+      "bottom",
+      false,
+    );
+  }, [loading, error, segments, deadlineByTask, tz, toast]);
 
   const scrollToNow = useCallback(() => {
     if (scrollRef.current) {
@@ -237,6 +303,10 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
 
   const nowClock = zonedNow(tz);
   const nowMinutes = nowClock.getHours() * 60 + nowClock.getMinutes();
+  const nowLabel = `Now ${nowClock.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  })}`;
   const emptyGhostTop =
     (Math.min(nowMinutes, DAILY_HORIZON - EMPTY_GHOST_MINUTES) /
       DAILY_HORIZON) *
@@ -291,13 +361,29 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
 
   return (
     <View className="flex-1 bg-background">
-      <View className="flex-row items-baseline justify-between px-4 pt-3 pb-2">
-        <Text className="text-lg font-bold">
-          {format(date, "EEEE")}
-        </Text>
-        <Text className="text-sm text-muted-foreground">
-          {format(date, "MMM d")}
-        </Text>
+      <View className="flex-row items-center justify-between px-4 pt-3 pb-2">
+        <View className="min-w-0 flex-1">
+          <Text className="text-xl font-bold tracking-tight">
+            {format(date, "EEE, MMM d")}
+          </Text>
+          <Text className="mt-px text-xs font-medium text-muted-foreground">
+            {overlapCount > 0
+              ? `${overlapCount} overlap${overlapCount > 1 ? "s" : ""} · ${tasks.length} tasks`
+              : tasks.length === 0
+                ? `${nowLabel} · nothing scheduled`
+                : `${nowLabel} · ${tasks.length} task${tasks.length === 1 ? "" : "s"} today`}
+          </Text>
+        </View>
+        <View className="flex-row items-center gap-2">
+          {overdueCount > 0 && (
+            <View className="flex-row items-center gap-1 rounded-full border border-rose-400/50 bg-rose-100 px-2 py-0.5 dark:bg-rose-950">
+              <AlertCircle size={12} className="text-rose-800 dark:text-rose-400" />
+              <Text className="text-[11px] font-semibold leading-none text-rose-800 dark:text-rose-400">
+                {overdueCount} overdue
+              </Text>
+            </View>
+          )}
+        </View>
       </View>
 
       <ScrollView
@@ -365,6 +451,7 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
                     totalHeight={totalHeight}
                     leftOffset={leftOffsetPx}
                     blockWidth={blockWidthPx}
+                    deadline={deadlineByTask.get(segment.taskId) ?? null}
                     onReschedule={handleReschedule}
                     onPress={onTaskPress}
                     onComplete={handleComplete}

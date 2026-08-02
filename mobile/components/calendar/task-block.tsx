@@ -55,6 +55,7 @@ interface TaskBlockProps {
   totalHeight: number;
   leftOffset: number;
   blockWidth: number;
+  deadline?: string | null;
   onReschedule?: (taskId: string, startISO: string) => void;
   onPress?: (taskId: string) => void;
   onComplete?: (taskId: string) => void;
@@ -67,6 +68,7 @@ export function TaskBlock({
   totalHeight,
   leftOffset,
   blockWidth,
+  deadline,
   onReschedule,
   onPress,
   onComplete,
@@ -80,9 +82,11 @@ export function TaskBlock({
 
   const state = withOverlap(segment.state, layout.conflict);
   const isConflict = state === "conflict";
+  const isOverdue = state === "overdue";
   const isCompleted = segment.status === "DONE";
   const isSplit = Boolean(segment.continued);
   const isInteractive = !isCompleted && !isSplit;
+  const dueSuffix = isOverdue && deadline ? ` · due ${fmt(deadline, tz)}` : "";
 
   const baseTop = (startMin / DAILY_HORIZON) * totalHeight;
   const height = Math.max((duration / DAILY_HORIZON) * totalHeight, 16);
@@ -240,6 +244,7 @@ export function TaskBlock({
                     "flex-1 truncate text-[10px] font-semibold leading-none",
                     isCompleted && "line-through",
                     isConflict && "text-amber-700 dark:text-amber-300",
+                    isOverdue && "text-rose-950 dark:text-rose-100",
                   )}
                 >
                   {segment.title}
@@ -254,6 +259,7 @@ export function TaskBlock({
                 {segment.continued
                   ? `ends ${fmt(segment.taskEnd, tz)}`
                   : fmt(segment.taskStart, tz)}
+                {dueSuffix}
               </Text>
             </>
           ) : (
@@ -275,6 +281,7 @@ export function TaskBlock({
                     "flex-1 truncate text-xs font-semibold leading-none",
                     isCompleted && "line-through",
                     isConflict && "text-amber-700 dark:text-amber-300",
+                    isOverdue && "text-rose-950 dark:text-rose-100",
                   )}
                 >
                   {segment.title}
@@ -284,6 +291,7 @@ export function TaskBlock({
                 className={cn(
                   "font-mono text-[10px] text-muted-foreground leading-none",
                   isConflict && "text-amber-700/90 dark:text-amber-300/90",
+                  isOverdue && "text-rose-700/80 dark:text-rose-300/70",
                 )}
               >
                 {segment.continued
@@ -291,6 +299,7 @@ export function TaskBlock({
                   : segment.continues
                     ? `${fmt(segment.taskStart, tz)} → next day`
                     : `${fmt(segment.taskStart, tz)} – ${fmt(segment.taskEnd, tz)}`}
+                {dueSuffix}
               </Text>
               {showTags && (
                 <View className="mt-0.5 flex-row flex-wrap gap-1 overflow-hidden">
