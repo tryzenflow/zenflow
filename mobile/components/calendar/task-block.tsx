@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { View } from "react-native";
 import { Text } from "@/components/ui/text";
 import { AlertTriangle } from "@/components/Icons";
@@ -15,6 +15,7 @@ import {
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
+  clamp,
   withSpring,
   withTiming,
   interpolate,
@@ -48,6 +49,16 @@ function fmt(iso: string, tz: string) {
   });
 }
 
+function fmtMin(min: number, tz: string, refISO: string) {
+  const d = toZonedTime(new Date(refISO), tz);
+  d.setHours(Math.floor(min / 60), min % 60, 0, 0);
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+interface DragSnap {
+  startMin: number;
+}
+
 interface TaskBlockProps {
   segment: DaySegment;
   layout: BlockLayout;
@@ -57,6 +68,7 @@ interface TaskBlockProps {
   blockWidth: number;
   deadline?: string | null;
   onReschedule?: (taskId: string, startISO: string) => void;
+  onDragStateChange?: (snap: DragSnap | null) => void;
   onPress?: (taskId: string) => void;
   onComplete?: (taskId: string) => void;
 }
@@ -70,6 +82,7 @@ export function TaskBlock({
   blockWidth,
   deadline,
   onReschedule,
+  onDragStateChange,
   onPress,
   onComplete,
 }: TaskBlockProps) {
@@ -86,7 +99,7 @@ export function TaskBlock({
   const isCompleted = segment.status === "DONE";
   const isSplit = Boolean(segment.continued);
   const isInteractive = !isCompleted && !isSplit;
-  const dueSuffix = isOverdue && deadline ? ` · due ${fmt(deadline, tz)}` : "";
+  const dueSuffix = deadline ? ` · due ${fmt(deadline, tz)}` : "";
 
   const baseTop = (startMin / DAILY_HORIZON) * totalHeight;
   const height = Math.max((duration / DAILY_HORIZON) * totalHeight, 16);
@@ -95,16 +108,57 @@ export function TaskBlock({
   const translateY = useSharedValue(0);
   const translateX = useSharedValue(0);
   const checkOpacity = useSharedValue(0);
+  const isDragging = useSharedValue(0);
+  const lastSnap = useSharedValue<number | null>(null);
+  const [liveStartMin, setLiveStartMin] = useState<number | null>(null);
 
   const COMPLETE_THRESHOLD = 80;
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }, { translateX: translateX.value }],
-  }));
 
   const checkStyle = useAnimatedStyle(() => ({
     opacity: checkOpacity.value,
   }));
+
+  const liftStyle = useAnimatedStyle(() => {
+    const d = isDragging.value;
+    return {
+      transform: [
+        { translateY: translateY.value },
+        { translateX: translateX.value },
+        { scale: withTiming(interpolate(d, [0, 1], [1, 1.02]), { duration: 150 }) },
+      ],
+      shadowColor: "#000",
+      shadowOpacity: withTiming(interpolate(d, [0, 1], [0, 0.3]), { duration: 150 }),
+      shadowRadius: withTiming(interpolate(d, [0, 1], [4, 14]), { duration: 150 }),
+      shadowOffset: {
+        width: 0,
+        height: withTiming(interpolate(d, [0, 1], [1, 10]), { duration: 150 }),
+      },
+      elevation: withTiming(interpolate(d, [0, 1], [1, 10]), { duration: 150 }),
+    };
+  });
+
+  const footprintStyle = useAnimatedStyle(() => ({
+    opacity: withTiming(interpolate(isDragging.value, [0, 1], [0, 1]), {
+      duration: 150,
+    }),
+  }));
+
+  const wrapperStyle = useAnimatedStyle(() => ({
+    zIndex: isDragging.value ? 30 : 10,
+  }));
+
+  const reportSnap = useCallback(
+    (min: number) => {
+      setLiveStartMin(min);
+      onDragStateChange?.({ startMin: min });
+    },
+    [onDragStateChange],
+  );
+
+  const reportDragEnd = useCallback(() => {
+    setLiveStartMin(null);
+    onDragStateChange?.(null);
+  }, [onDragStateChange]);
 
   const triggerCompleteHaptic = useCallback(() => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -159,6 +213,24 @@ export function TaskBlock({
         );
       } else {
         translateY.value = e.translationY;
+
+        if (absY > absX) {
+          isDragging.value = 1;
+
+          const deltaMinutes = e.translationY / pxPerMin;
+          const snappedMinutes =
+            Math.round(deltaMinutes / TIME_GRANULARITY) * TIME_GRANULARITY;
+          const newStartMin = clamp(
+            startMin + snappedMinutes,
+            0,
+            DAILY_HORIZON - TIME_GRANULARITY,
+          );
+
+          if (lastSnap.value !== newStartMin) {
+            lastSnap.value = newStartMin;
+            runOnJS(reportSnap)(newStartMin);
+          }
+        }
       }
     })
     .onEnd((e) => {
@@ -177,6 +249,11 @@ export function TaskBlock({
       translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
       translateX.value = withSpring(0, { damping: 20, stiffness: 300 });
       checkOpacity.value = withTiming(0, { duration: 150 });
+    })
+    .onFinalize(() => {
+      isDragging.value = 0;
+      lastSnap.value = null;
+      runOnJS(reportDragEnd)();
     });
 
   const triggerPress = useCallback(() => {
@@ -203,17 +280,23 @@ export function TaskBlock({
   const isMultiColumn = layout.columns > 1;
 
   return (
-    <View
-      className={cn("absolute z-10", !isMultiColumn && "left-1.5 right-1.5")}
-      style={
+    <Animated.View
+      className={cn("absolute", !isMultiColumn && "left-1.5 right-1.5")}
+      style={[
+        wrapperStyle,
         isMultiColumn
           ? { top: baseTop, left: leftOffset, width: blockWidth, height }
-          : { top: baseTop, height }
-      }
+          : { top: baseTop, height },
+      ]}
     >
+      <Animated.View
+        pointerEvents="none"
+        style={footprintStyle}
+        className="absolute inset-0 rounded-[10px] border-[1.5px] border-dashed border-muted-foreground/40 bg-muted/40"
+      />
       <GestureDetector gesture={composedGesture}>
         <Animated.View
-          style={[animatedStyle, { height }]}
+          style={[liftStyle, { height }]}
           className={cn(
             "flex overflow-hidden rounded-[10px] border border-l-4 shadow-sm shadow-foreground/10",
             isCompact ? "items-center justify-between gap-1.5 px-2.5" : "flex-col gap-0.5 px-2.5 py-1.5",
@@ -258,7 +341,9 @@ export function TaskBlock({
               >
                 {segment.continued
                   ? `ends ${fmt(segment.taskEnd, tz)}`
-                  : fmt(segment.taskStart, tz)}
+                  : liveStartMin != null
+                    ? fmtMin(liveStartMin, tz, segment.taskStart)
+                    : fmt(segment.taskStart, tz)}
                 {dueSuffix}
               </Text>
             </>
@@ -298,7 +383,13 @@ export function TaskBlock({
                   ? `cont. → ${fmt(segment.taskEnd, tz)}`
                   : segment.continues
                     ? `${fmt(segment.taskStart, tz)} → next day`
-                    : `${fmt(segment.taskStart, tz)} – ${fmt(segment.taskEnd, tz)}`}
+                    : liveStartMin != null
+                      ? `${fmtMin(liveStartMin, tz, segment.taskStart)} – ${fmtMin(
+                          Math.min(liveStartMin + duration, DAILY_HORIZON),
+                          tz,
+                          segment.taskStart,
+                        )}`
+                      : `${fmt(segment.taskStart, tz)} – ${fmt(segment.taskEnd, tz)}`}
                 {dueSuffix}
               </Text>
               {showTags && (
@@ -320,6 +411,6 @@ export function TaskBlock({
           )}
         </Animated.View>
       </GestureDetector>
-    </View>
+    </Animated.View>
   );
 }

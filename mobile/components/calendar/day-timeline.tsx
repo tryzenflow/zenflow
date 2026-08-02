@@ -22,7 +22,7 @@ import { NowIndicator } from "./now-indicator";
 import { TaskBlock } from "./task-block";
 import { format } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
-import { AlertCircle, AlertTriangle, RefreshCcw } from "@/components/Icons";
+import { AlertCircle, AlertTriangle, RefreshCcw, Sparkles } from "@/components/Icons";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import {
@@ -84,6 +84,7 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [dragSnap, setDragSnap] = useState<{ startMin: number } | null>(null);
 
   const baseHourHeight = useSharedValue(HOUR_HEIGHT_DEFAULT);
   const ghostY = useSharedValue(0);
@@ -242,6 +243,20 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
     [date],
   );
 
+  const handleDragStateChange = useCallback(
+    (snap: { startMin: number } | null) => {
+      setDragSnap(snap);
+    },
+    [],
+  );
+
+  const dragChipLabel = useMemo(() => {
+    if (!dragSnap) return "";
+    const wall = zonedDate(date, tz);
+    wall.setHours(Math.floor(dragSnap.startMin / 60), dragSnap.startMin % 60, 0, 0);
+    return wall.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }, [dragSnap, date, tz]);
+
   const handleLongPress = useCallback(
     (y: number) => {
       const pxPerMin = totalHeight / DAILY_HORIZON;
@@ -367,11 +382,13 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
             {format(date, "EEE, MMM d")}
           </Text>
           <Text className="mt-px text-xs font-medium text-muted-foreground">
-            {overlapCount > 0
-              ? `${overlapCount} overlap${overlapCount > 1 ? "s" : ""} · ${tasks.length} tasks`
-              : tasks.length === 0
-                ? `${nowLabel} · nothing scheduled`
-                : `${nowLabel} · ${tasks.length} task${tasks.length === 1 ? "" : "s"} today`}
+            {dragSnap
+              ? "Moving · release to reschedule"
+              : overlapCount > 0
+                ? `${overlapCount} overlap${overlapCount > 1 ? "s" : ""} · ${tasks.length} tasks`
+                : tasks.length === 0
+                  ? `${nowLabel} · nothing scheduled`
+                  : `${nowLabel} · ${tasks.length} task${tasks.length === 1 ? "" : "s"} today`}
           </Text>
         </View>
         <View className="flex-row items-center gap-2">
@@ -453,11 +470,36 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
                     blockWidth={blockWidthPx}
                     deadline={deadlineByTask.get(segment.taskId) ?? null}
                     onReschedule={handleReschedule}
+                    onDragStateChange={handleDragStateChange}
                     onPress={onTaskPress}
                     onComplete={handleComplete}
                   />
                 );
               })}
+
+              {dragSnap && (
+                <View pointerEvents="none" className="absolute left-0 right-0 z-20">
+                  {[-16, 0, 16, 32].map((offset) => {
+                    const top =
+                      (dragSnap.startMin / DAILY_HORIZON) * totalHeight + offset;
+                    return (
+                      <View
+                        key={offset}
+                        className="absolute left-0 right-0 border-t border-dashed border-amber-500/60"
+                        style={{ top }}
+                      >
+                        {offset === 0 && (
+                          <View className="absolute right-2 -translate-y-1/2 rounded-md bg-background px-[5px] py-px">
+                            <Text className="text-[10px] font-bold text-amber-600">
+                              {dragChipLabel}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
 
               <Animated.View
                 pointerEvents="none"
@@ -474,6 +516,23 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
           </Animated.View>
         </GestureDetector>
       </ScrollView>
+
+      {dragSnap && (
+        <View
+          pointerEvents="none"
+          className="absolute inset-x-4 bottom-3 z-50 flex-row items-start gap-2.5 rounded-2xl border border-border bg-popover p-3.5 shadow-lg shadow-foreground/10"
+        >
+          <View className="h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-amber-500/15">
+            <Sparkles size={17} className="text-amber-600" />
+          </View>
+          <View className="flex-1">
+            <Text className="text-sm font-semibold">Snapped to {dragChipLabel}</Text>
+            <Text className="mt-0.5 text-[12.5px] text-muted-foreground">
+              Release to reschedule · 15-min grid
+            </Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
