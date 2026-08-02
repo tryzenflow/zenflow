@@ -24,7 +24,6 @@ import { format } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 import { AlertCircle, AlertTriangle, RefreshCcw, Sparkles } from "@/components/Icons";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/ui/toast";
 import {
   Gesture,
   GestureDetector,
@@ -81,7 +80,6 @@ interface DayTimelineProps {
 export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComplete, refreshKey, onStateChange }: DayTimelineProps) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const prefs = useUserStore((s) => s.user) ?? DEFAULT_WORK_PREFS;
-  const { toast } = useToast();
   const scrollRef = useRef<ScrollView>(null);
   const { width: screenWidth } = useWindowDimensions();
 
@@ -198,11 +196,18 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
   }, [segments]);
 
   const shownOverdueTask = useRef<string | null>(null);
+  const [overdueToast, setOverdueToast] = useState<{
+    title: string;
+    subtitle: string;
+  } | null>(null);
 
   useEffect(() => {
     if (loading || error) return;
     const overdue = segments.find((s) => s.state === "overdue");
-    if (!overdue) return;
+    if (!overdue) {
+      shownOverdueTask.current = null;
+      return;
+    }
     if (shownOverdueTask.current === overdue.taskId) return;
     shownOverdueTask.current = overdue.taskId;
 
@@ -213,14 +218,17 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
       overdue.taskEnd,
       tz,
     )}`;
-    toast(
-      `Scheduled past deadline\n"${overdue.title}" couldn't fit${due} — scheduled ${range} instead.`,
-      "destructive",
-      8000,
-      "bottom",
-      false,
-    );
-  }, [loading, error, segments, deadlineByTask, tz, toast]);
+    setOverdueToast({
+      title: "Scheduled past deadline",
+      subtitle: `"${overdue.title}" couldn't fit${due} — scheduled ${range} instead.`,
+    });
+  }, [loading, error, segments, deadlineByTask, tz]);
+
+  useEffect(() => {
+    if (!overdueToast) return;
+    const timer = setTimeout(() => setOverdueToast(null), 8000);
+    return () => clearTimeout(timer);
+  }, [overdueToast]);
 
   const scrollToNow = useCallback(() => {
     if (scrollRef.current) {
@@ -561,22 +569,37 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
         )}
       </ScrollView>
 
-      {dragSnap && (
-        <View
-          pointerEvents="none"
-          className="absolute inset-x-4 bottom-3 z-50 flex-row items-start gap-2.5 rounded-2xl border border-border bg-popover p-3.5 shadow-lg shadow-foreground/10"
-        >
-          <View className="h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-amber-500/15">
-            <Sparkles size={17} className="text-amber-600" />
+      <View
+        pointerEvents="none"
+        className="absolute inset-x-4 bottom-3 z-50 gap-2"
+      >
+        {dragSnap && (
+          <View className="flex-row items-start gap-2.5 rounded-2xl border border-border bg-popover p-3.5 shadow-lg shadow-foreground/10">
+            <View className="h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-amber-500/15">
+              <Sparkles size={17} className="text-amber-600" />
+            </View>
+            <View className="flex-1">
+              <Text className="text-sm font-semibold">Snapped to {dragChipLabel}</Text>
+              <Text className="mt-0.5 text-[12.5px] text-muted-foreground">
+                Release to reschedule · 15-min grid
+              </Text>
+            </View>
           </View>
-          <View className="flex-1">
-            <Text className="text-sm font-semibold">Snapped to {dragChipLabel}</Text>
-            <Text className="mt-0.5 text-[12.5px] text-muted-foreground">
-              Release to reschedule · 15-min grid
-            </Text>
+        )}
+        {overdueToast && (
+          <View className="flex-row items-start gap-2.5 rounded-2xl border border-border bg-popover p-3.5 shadow-lg shadow-foreground/10">
+            <View className="h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-rose-500/15">
+              <AlertCircle size={17} className="text-rose-600 dark:text-rose-400" />
+            </View>
+            <View className="min-w-0 flex-1">
+              <Text className="text-sm font-semibold">{overdueToast.title}</Text>
+              <Text className="mt-0.5 text-[12.5px] text-muted-foreground">
+                {overdueToast.subtitle}
+              </Text>
+            </View>
           </View>
-        </View>
-      )}
+        )}
+      </View>
     </View>
   );
 }
