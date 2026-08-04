@@ -270,12 +270,12 @@ export function TaskBlock({
 
   const stateClasses =
     state === "overdue"
-      ? "border-t-card border-r-card border-b-card border-l-rose-500 bg-rose-50/40 dark:bg-rose-950/10"
+      ? "border-t-black border-r-black border-b-black border-l-rose-500 bg-rose-50/40 dark:bg-rose-950/10"
       : state === "conflict"
-        ? "border-t-card border-r-card border-b-card border-l-amber-500 bg-amber-50/40 ring-1 ring-amber-500/40 dark:bg-amber-950/10"
+        ? "border-t-black border-r-black border-b-black border-l-amber-500 bg-amber-50/40 ring-1 ring-amber-500/40 dark:bg-amber-950/10"
         : state === "completed"
-          ? "border-t-card border-r-card border-b-card border-l-success/60 bg-muted/60"
-          : "border-t-primary/35 border-r-primary/35 border-b-primary/35 border-l-primary bg-background";
+          ? "border-t-black border-r-black border-b-black border-l-success/60 bg-muted/60"
+          : "border-t-black border-r-black border-b-black border-l-primary bg-background";
 
   const isMultiColumn = layout.columns > 1;
 
