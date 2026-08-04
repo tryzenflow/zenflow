@@ -9,12 +9,12 @@ import {
   eventsForDay,
   tasksToBlocks,
   getOverlapLayout,
-  zonedNow,
   zonedWallClockToUtc,
   zonedDate,
 } from "@zenflow/core";
 import type { Task } from "@zenflow/shared";
 import { useUserStore } from "@/hooks/use-user-store";
+import { useNow } from "@/hooks/use-now";
 import { listTasks, rescheduleTask, completeTask } from "@/api/tasks";
 import { TimeGutter } from "./time-gutter";
 import { WorkZoneOverlay } from "./work-zone-overlay";
@@ -82,8 +82,19 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
   const prefs = useUserStore((s) => s.user) ?? DEFAULT_WORK_PREFS;
   const scrollRef = useRef<ScrollView>(null);
   const { width: screenWidth } = useWindowDimensions();
+  const now = useNow();
 
-  const date = propDate ?? zonedNow(tz);
+  // When it's today, the displayed day follows the live clock so the header
+  // date auto-advances across midnight instead of freezing on yesterday.
+  const date = useMemo(() => {
+    if (!propDate) return toZonedTime(now, tz);
+    const live = toZonedTime(now, tz);
+    const sameDay =
+      live.getFullYear() === propDate.getFullYear() &&
+      live.getMonth() === propDate.getMonth() &&
+      live.getDate() === propDate.getDate();
+    return sameDay ? live : propDate;
+  }, [propDate, now, tz]);
   const [hourHeight, setHourHeight] = useState(HOUR_HEIGHT_DEFAULT);
   const totalHeight = hourHeight * 24;
   const contentWidth = screenWidth - GUTTER_WIDTH;
@@ -254,13 +265,13 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
   }, [loading, error, totalHeight, scrollToNow]);
 
   const isToday = useMemo(() => {
-    const now = zonedNow(tz);
+    const live = toZonedTime(now, tz);
     return (
-      now.getFullYear() === date.getFullYear() &&
-      now.getMonth() === date.getMonth() &&
-      now.getDate() === date.getDate()
+      live.getFullYear() === date.getFullYear() &&
+      live.getMonth() === date.getMonth() &&
+      live.getDate() === date.getDate()
     );
-  }, [date, tz]);
+  }, [date, now, tz]);
 
   const handleReschedule = useCallback(
     async (taskId: string, startISO: string) => {
@@ -352,7 +363,7 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
     opacity: ghostVisible.value,
   }));
 
-  const nowClock = zonedNow(tz);
+  const nowClock = toZonedTime(now, tz);
   const nowMinutes = nowClock.getHours() * 60 + nowClock.getMinutes();
   const nowLabel = `Now ${nowClock.toLocaleTimeString([], {
     hour: "numeric",
@@ -486,7 +497,7 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
               ))}
 
                {isToday && (
-                <NowIndicator tz={tz} totalHeight={totalHeight} />
+                <NowIndicator now={now} tz={tz} totalHeight={totalHeight} />
               )}
 
               {segments.length === 0 && isToday && (

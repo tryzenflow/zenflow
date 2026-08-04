@@ -1,23 +1,15 @@
-import { useEffect, useState } from "react";
 import { View } from "react-native";
-import { zonedNow, DAILY_HORIZON } from "@zenflow/core";
-
-const TICK_MS = 60_000;
+import { toZonedTime } from "date-fns-tz";
+import { DAILY_HORIZON } from "@zenflow/core";
 
 interface NowIndicatorProps {
+  now: Date;
   tz: string;
   totalHeight: number;
 }
 
-export function NowIndicator({ tz, totalHeight }: NowIndicatorProps) {
-  const [now, setNow] = useState(() => new Date());
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), TICK_MS);
-    return () => clearInterval(id);
-  }, []);
-
-  const zoned = zonedNow(tz);
+export function NowIndicator({ now, tz, totalHeight }: NowIndicatorProps) {
+  const zoned = toZonedTime(now, tz);
   const mins = zoned.getHours() * 60 + zoned.getMinutes();
   const top = (mins / DAILY_HORIZON) * totalHeight;
 
