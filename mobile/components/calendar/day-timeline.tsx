@@ -509,10 +509,10 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
               {segments.length === 0 && isToday && (
                 <View
                   pointerEvents="none"
-                  className="absolute left-1.5 right-1.5 z-20 items-center justify-center rounded-xl border-[1.5px] border-dashed border-amber-500/55 bg-amber-500/[0.07]"
+                  className="absolute left-1.5 right-1.5 z-20 items-center justify-center rounded-xl border-[1.5px] border-dashed border-brand-orange/55 bg-brand-orange/[0.07]"
                   style={{ top: emptyGhostTop, height: emptyGhostHeight }}
                 >
-                  <Text className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+                  <Text className="text-xs font-semibold text-brand-orange">
                     Long press to add
                   </Text>
                 </View>
@@ -553,12 +553,12 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
                     return (
                       <View
                         key={offset}
-                        className="absolute left-0 right-0 border-t border-dashed border-amber-500/60"
+                        className="absolute left-0 right-0 border-t border-dashed border-brand-orange/60"
                         style={{ top }}
                       >
                         {offset === 0 && (
                           <View className="absolute right-2 -translate-y-1/2 rounded-md bg-background px-[5px] py-px">
-                            <Text className="text-[10px] font-bold text-amber-600">
+                            <Text className="text-[10px] font-bold text-brand-orange">
                               {dragChipLabel}
                             </Text>
                           </View>
@@ -592,8 +592,8 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
       >
         {dragSnap && (
           <View className="flex-row items-start gap-2.5 rounded-2xl border border-border bg-popover p-3.5 shadow-lg shadow-foreground/10">
-            <View className="h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-amber-500/15">
-              <Sparkles size={17} className="text-amber-600" />
+            <View className="h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-brand-orange/15">
+              <Sparkles size={17} className="text-brand-orange" />
             </View>
             <View className="flex-1">
               <Text className="text-sm font-semibold">Snapped to {dragChipLabel}</Text>

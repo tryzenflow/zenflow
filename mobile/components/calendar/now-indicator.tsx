@@ -19,9 +19,9 @@ export function NowIndicator({ now, tz, totalHeight }: NowIndicatorProps) {
       style={{ top }}
     >
       <View className="relative flex-row items-center">
-        <View className="absolute -left-1 h-2 w-2 rounded-full bg-amber-500 shadow-sm" />
-        <View className="absolute -left-1 h-2 w-2 rounded-full bg-amber-500 shadow-sm opacity-50" />
-        <View className="h-[2px] flex-1 bg-amber-500 opacity-60" />
+        <View className="absolute -left-1 h-2 w-2 rounded-full bg-brand-orange shadow-sm" />
+        <View className="absolute -left-1 h-2 w-2 rounded-full bg-brand-orange shadow-sm opacity-50" />
+        <View className="h-[2px] flex-1 bg-brand-orange opacity-60" />
       </View>
     </View>
   );
