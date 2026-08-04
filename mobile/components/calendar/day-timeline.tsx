@@ -154,15 +154,17 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
   const handleComplete = useCallback(
     async (taskId: string) => {
       try {
-        await completeTask(taskId);
+        const updated = await completeTask(taskId);
         setTasks((prev) =>
-          prev.map((t) =>
-            t.id === taskId ? { ...t, status: "DONE" as const } : t,
-          ),
+          prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)),
         );
         onComplete?.(taskId);
       } catch {
-        refetch();
+        // Swallow the error — the finally below reconciles from the server.
+      } finally {
+        // Completing frees the slot — reconcile so a neighbor whose conflict
+        // flag the backend cleared turns back to normal.
+        await refetch();
       }
     },
     [refetch, onComplete],
@@ -276,18 +278,22 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
   const handleReschedule = useCallback(
     async (taskId: string, startISO: string) => {
       try {
-        await rescheduleTask(taskId, startISO);
+        const res = await rescheduleTask(taskId, startISO);
+        // The backend rechecked conflict flags around the new slot — patch the
+        // dragged task from its authoritative response so a resolved overlap
+        // clears immediately instead of waiting for a refetch.
         setTasks((prev) =>
-          prev.map((t) =>
-            t.id === taskId ? { ...t, scheduledStartTime: startISO } : t,
-          ),
+          prev.map((t) => (t.id === taskId ? { ...t, ...res.task } : t)),
         );
       } catch {
-        // Revert optimistic update on failure
-        listTasks("day", date, "all").then((res) => setTasks(res.tasks));
+        // Swallow the error — the finally below reconciles from the server.
+      } finally {
+        // Reconcile the whole day so a neighbor whose conflict flag the
+        // backend cleared also turns back to normal.
+        await refetch();
       }
     },
-    [date],
+    [date, refetch],
   );
 
   const handleDragStateChange = useCallback(
