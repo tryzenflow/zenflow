@@ -13,8 +13,8 @@ import { zonedDate, zonedNow } from "@zenflow/core";
 import type { Task } from "@zenflow/shared";
 import { format } from "date-fns";
 import * as Haptics from "expo-haptics";
-import { type Href, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { type Href, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 
 /**
@@ -37,6 +37,11 @@ import { Pressable, RefreshControl, ScrollView, View } from "react-native";
  * The create/edit forms are full screens, not bottom sheets — see
  * mobile/README.md for why.
  *
+ * Accepts an optional `date` query param (ISO instant) so other screens can
+ * deep-link into a specific day — currently only Month View's "tap a day
+ * cell" gesture (`app/(app)/month.tsx`, GitHub issue #21's acceptance
+ * criteria: "navigates to Day View pre-loaded to that date").
+ *
  * BLOCKED (tracked for Phase 2, not attempted here): true per-pixel
  * long-press-a-time-slot → snapped-start-time creation (needs the absolute
  * positioned grid to know what time a press landed on), drag-to-move,
@@ -46,13 +51,23 @@ export default function DayScreen() {
   const router = useRouter();
   const user = useUserStore((s) => s.user);
   const tz = user?.timezone || "UTC";
+  const { date: dateParam } = useLocalSearchParams<{ date?: string }>();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
+  // `zonedDate`/`zonedNow` both return a Date whose local fields already
+  // carry the user-tz wall clock — `dateParam` (from Month View) is an ISO
+  // instant, so it goes through `zonedDate` the same way a task's
+  // `scheduledStartTime` does, not a bare `new Date()`.
+  const today = useMemo(
+    () => (dateParam ? zonedDate(dateParam, tz) : zonedNow(tz)),
+    [dateParam, tz],
+  );
+
   const refetch = useCallback(async () => {
-    const res = await listTasks("day", zonedNow(tz), "PENDING");
+    const res = await listTasks("day", today, "PENDING");
     setTasks(res.tasks);
-  }, [tz]);
+  }, [today]);
 
   useEffect(() => {
     if (user) refetch();
@@ -76,8 +91,6 @@ export default function DayScreen() {
       setRefreshing(false);
     }
   }
-
-  const today = zonedNow(tz);
 
   return (
     <View className="flex-1 bg-background">

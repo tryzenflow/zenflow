@@ -394,14 +394,49 @@ showing typography scale (Geist), spacing scale, and border-radius.
 4. Vertical scroll sync: extract scroll offset to a Reanimated `SharedValue`; broadcast to all mounted pages.
 5. Cross-day drag: when `PanGestureHandler` `translationX` exceeds threshold → advance `FlatList` page.
 
-### Phase 4 — Month View (3–4 days)
+### Phase 4 — Month View — done (GitHub issue #21)
 
-1. `MonthGrid`: renders 7-column rows via `FlatList`; `numColumns={7}`.
-2. Month pagination: outer horizontal `FlatList`, `snapToInterval = screenWidth`.
-3. `MonthCell`: task pills (max 2), "+N more" `TouchableOpacity`.
-4. Day tap → `router.push('/(app)/?date=YYYY-MM-DD')`.
-5. "+N more" → `@gorhom/bottom-sheet` `TaskListSheet` for that day.
-6. Task drag: `LongPressGestureHandler` → `PanGestureHandler` → compute target cell → PATCH `/tasks/:id/reschedule`.
+What shipped, differently from this section's original plan:
+
+1. `MonthGrid` (`components/calendar/month-grid.tsx`): 7-column Monday-first `FlatList`
+   (`numColumns={7}`, `scrollEnabled={false}` — a page is always sized to its own row count, no
+   internal scroll), weekday header row, weekend columns tinted. `MonthGridSkeleton` in the same
+   file matches its row/cell geometry exactly (fixed `CELL_HEIGHT`) so the loading→loaded swap
+   never shifts layout.
+2. Month pagination: `components/calendar/month-pager.tsx` — an outer horizontal `FlatList`
+   holding a sliding 3-month window (prev/current/next, recentered on every page change) rather
+   than `snapToInterval`/an unbounded list. **Confirmed live on an Android emulator:**
+   `initialScrollIndex` alone was not reliable enough to trust — the FlatList could still visually
+   sit on the "prev" page for a beat after mount while the header (driven by React state, not
+   scroll position) already read the center page; if that late self-correction fired through
+   `onMomentumScrollEnd` it read as a user swipe and silently changed the header with no input.
+   Fixed with an explicit forced re-center on the FlatList's own first `onLayout` plus a
+   `didDragRef` gate that ignores any `onMomentumScrollEnd` not preceded by a real
+   `onScrollBeginDrag` — see that file's doc comments.
+3. `MonthCell` (`components/calendar/month-cell.tsx`): today gets an accent top border + filled
+   date chip; up to 2 pills (`splitCellTasks` in `lib/month-date-math.ts`, unit-tested), "+N more"
+   overflow pill; outside-month days dimmed, no pills, not tappable/a drag target.
+4. Day tap → `router.push({ pathname: "/(app)", params: { date: <ISO> } })` — `app/(app)/index.tsx`
+   (Day View) now reads an optional `date` query param via `useLocalSearchParams` instead of
+   always defaulting to `zonedNow(tz)`, added specifically for this deep link.
+5. "+N more" → `components/calendar/task-list-sheet.tsx`'s `TaskListSheet`, built on the existing
+   `@/components/ui/bottom-sheet` host (Phase 5's task sheets already established it — no new
+   sheet infra needed, per this phase's original "coordinate rather than build your own" note).
+6. Task drag: a single `Gesture.Pan().activateAfterLongPress(350)` per pill (RNGH v2's built-in
+   long-press-then-pan primitive, not a separate `LongPressGestureHandler`+`PanGestureHandler`
+   pair) → `components/calendar/month-page.tsx` computes the drop-target cell from the grid's
+   measured on-screen rect (`measureInWindow`) + the gesture's `absoluteX`/`absoluteY` → optimistic
+   move + `PATCH /tasks/:id/reschedule` (`rescheduleTask`, same endpoint Day View's reschedule
+   would use) with rollback + a destructive toast on failure. No `scope: "one" | "following"`
+   parameter exists on that endpoint — each recurring occurrence is already its own materialized
+   `Task` row (CLAUDE.md §4), so the phase's original open question about drag scope doesn't apply.
+
+**Verified live (Android emulator only — no iOS device available):** the screen mounts, chevron
+pagination, weekend tinting, outside-month dimming, the loading skeleton, and the header/pager
+sync fix above, all against a real (empty, since no backend was running in that environment)
+`GET /tasks?view=month` response. **Not verified live:** an end-to-end drag-to-reschedule against
+real task data, the overflow sheet's actual content, and tap-to-Day-View's full round trip — flag
+these for a follow-up on-device pass with the backend stack up.
 
 ### Phase 5 — Task Forms + Settings (1 week)
 
