@@ -1,5 +1,8 @@
 import { ChevronLeft, ChevronRight } from "@/components/Icons";
-import { MonthPage } from "@/components/calendar/month-page";
+import {
+  type MonthDragHandle,
+  MonthPage,
+} from "@/components/calendar/month-page";
 import { MonthPager } from "@/components/calendar/month-pager";
 import { OverdueBadge } from "@/components/calendar/overdue-badge";
 import {
@@ -74,8 +77,11 @@ export default function MonthScreen() {
   // listing that day's tasks in place — it no longer navigates away to Day
   // View, so the month stays on screen and the sheet is dismissible with no
   // side effect.
-  function openDay(day: Date, tasks: Task[]) {
-    taskListSheetRef.current?.open(day, tasks);
+  // `drag` comes from the `MonthPage` that opened the sheet — i.e. the month
+  // actually on screen — so long-press-dragging a row out of the sheet routes
+  // straight back into that page's drag machinery.
+  function openDay(day: Date, tasks: Task[], drag: MonthDragHandle) {
+    taskListSheetRef.current?.open(day, tasks, drag);
   }
 
   function openTaskFromSheet(task: Task) {
@@ -84,7 +90,7 @@ export default function MonthScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <View className="flex-row items-center gap-3 border-b border-border bg-background px-4 pb-5 pt-4">
+      <View className="flex-row justify-between items-center gap-3 border-b border-border bg-background px-4 py-4">
         <View className="min-w-0 shrink gap-1">
           <View className="flex-row items-center gap-2">
             <Pressable
@@ -108,8 +114,8 @@ export default function MonthScreen() {
               <ChevronRight size={18} className="text-muted-foreground" />
             </Pressable>
           </View>
-          <OverdueBadge count={overdueCount} />
         </View>
+        <OverdueBadge count={overdueCount} />
       </View>
 
       {/* The grid's rows are a fixed `CELL_HEIGHT`, so anything the tab bar

@@ -28,6 +28,28 @@ interface DragState {
   fromKey: string;
 }
 
+/**
+ * The drag callbacks a `MonthPage` hands to whoever opens its day sheet, so a
+ * long-press-drag started on a `TaskListSheet` row lands in the *same* page's
+ * drag machinery (geometry, ghost, drop-target highlight, reschedule) that an
+ * in-grid pill drag uses.
+ *
+ * Passing it out through `onOpenDay`/`onOpenOverflow` rather than reaching for
+ * the active page through a ref in `month.tsx` keeps the routing correct by
+ * construction: only the page the user can actually see opens a sheet, so the
+ * handle the sheet holds is always the page whose grid is on screen.
+ *
+ * The object identity is stable for the page's whole lifetime (see
+ * `dragHandle` below) — the sheet captures it once at open time and may fire
+ * `end` many seconds later, so the methods must not close over a stale render.
+ */
+export interface MonthDragHandle {
+  start: (task: Task, day: Date, absoluteX: number, absoluteY: number) => void;
+  update: (absoluteX: number, absoluteY: number) => void;
+  end: (absoluteX: number, absoluteY: number) => void;
+  cancel: () => void;
+}
+
 interface GhostPosition {
   x: number;
   y: number;
@@ -60,8 +82,8 @@ interface MonthPageProps {
    * deadline, for the header's "N overdue" badge. Only the active page
    * reports, so the badge always describes the month on screen. */
   onOverdueCountChange: (count: number) => void;
-  onOpenDay: (day: Date, tasks: Task[]) => void;
-  onOpenOverflow: (day: Date, tasks: Task[]) => void;
+  onOpenDay: (day: Date, tasks: Task[], drag: MonthDragHandle) => void;
+  onOpenOverflow: (day: Date, tasks: Task[], drag: MonthDragHandle) => void;
 }
 
 /**
@@ -296,6 +318,46 @@ export function MonthPage({
     }
   }
 
+  // Same "read the callbacks out of a ref at fire time" pattern `MonthPill`
+  // uses, for the same reason in a longer-lived form: `TaskListSheet` captures
+  // this handle once, when the sheet opens, and only calls `end` after the
+  // drop — by which point `handlePillDragEnd`'s closure over `dragging` and
+  // `tasks` must be the *current* one, not the render the sheet opened on. A
+  // handle built fresh each render would have been captured pre-drag, so its
+  // `end` would still see `dragging === null` and silently skip the
+  // reschedule.
+  const latestDrag = useRef({
+    start: handlePillDragStart,
+    update: handlePillDragUpdate,
+    end: handlePillDragEnd,
+    cancel: resetDragState,
+  });
+  latestDrag.current = {
+    start: handlePillDragStart,
+    update: handlePillDragUpdate,
+    end: handlePillDragEnd,
+    cancel: resetDragState,
+  };
+
+  const dragHandle = useMemo<MonthDragHandle>(
+    () => ({
+      start: (task, day, x, y) => latestDrag.current.start(task, day, x, y),
+      update: (x, y) => latestDrag.current.update(x, y),
+      end: (x, y) => latestDrag.current.end(x, y),
+      cancel: () => latestDrag.current.cancel(),
+    }),
+    [],
+  );
+
+  const handleOpenDay = useCallback(
+    (day: Date, dayTasks: Task[]) => onOpenDay(day, dayTasks, dragHandle),
+    [onOpenDay, dragHandle],
+  );
+  const handleOpenOverflow = useCallback(
+    (day: Date, dayTasks: Task[]) => onOpenOverflow(day, dayTasks, dragHandle),
+    [onOpenOverflow, dragHandle],
+  );
+
   const ghostTask = dragging?.task ?? null;
   const ghostState = ghostTask ? deriveState(ghostTask) : null;
 
@@ -312,8 +374,8 @@ export function MonthPage({
           tasksByDate={tasksByDate}
           highlightedKey={highlightedKey}
           draggingTaskId={dragging?.task.id ?? null}
-          onPressDay={onOpenDay}
-          onPressOverflow={onOpenOverflow}
+          onPressDay={handleOpenDay}
+          onPressOverflow={handleOpenOverflow}
           onPillDragStart={handlePillDragStart}
           onPillDragUpdate={handlePillDragUpdate}
           onPillDragEnd={handlePillDragEnd}

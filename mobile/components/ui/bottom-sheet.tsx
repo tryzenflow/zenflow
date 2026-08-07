@@ -36,6 +36,12 @@ import { Button } from "./button";
 interface WebSheetHandle {
   present: () => void;
   dismiss: () => void;
+  /** Native's `close()` animates the sheet away but — with
+   * `enableDismissOnClose={false}` — keeps its children mounted, which is what
+   * lets a gesture that started on a sheet row survive the sheet closing (see
+   * `TaskListSheet`). There's nothing to keep alive in this Radix-based
+   * reimplementation, so it's just `dismiss()`. */
+  close: () => void;
 }
 
 type BottomSheetRef = React.ElementRef<typeof View>;
@@ -75,22 +81,42 @@ type BottomSheetContentProps = Omit<
 > & {
   onDismiss?: () => void;
   style?: ViewStyle;
+  /** Accepted for API parity with `bottom-sheet.native.tsx`, and ignored: the
+   * overlay here is the Radix `Dialog.Overlay` below, which has no snap-point-
+   * driven opacity to tune. Declared (and destructured out) so callers can
+   * pass it unconditionally without it leaking onto the DOM node. */
+  backdropProps?: Record<string, unknown>;
+  /** Accepted for API parity with `bottom-sheet.native.tsx`, and ignored —
+   * this reimplementation has no mounted-but-closed state to preserve. */
+  enableDismissOnClose?: boolean;
 };
 
 const BottomSheetContent = React.forwardRef<
   BottomSheetContentRef,
   BottomSheetContentProps
->(({ className, children, onDismiss, ...props }, ref) => {
-  const [open, setOpen] = React.useState(false);
-  const { sheetRef } = useBottomSheetContext();
+>(
+  (
+    {
+      className,
+      children,
+      onDismiss,
+      backdropProps: _backdropProps,
+      enableDismissOnClose: _enableDismissOnClose,
+      ...props
+    },
+    ref,
+  ) => {
+    const [open, setOpen] = React.useState(false);
+    const { sheetRef } = useBottomSheetContext();
 
-  const handle = React.useMemo<WebSheetHandle>(
-    () => ({
-      present: () => setOpen(true),
-      dismiss: () => setOpen(false),
-    }),
-    [],
-  );
+    const handle = React.useMemo<WebSheetHandle>(
+      () => ({
+        present: () => setOpen(true),
+        dismiss: () => setOpen(false),
+        close: () => setOpen(false),
+      }),
+      [],
+    );
   React.useImperativeHandle(sheetRef, () => handle, [handle]);
   React.useImperativeHandle(ref, () => handle, [handle]);
 
@@ -130,8 +156,9 @@ const BottomSheetContent = React.forwardRef<
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
-  );
-});
+    );
+  },
+);
 
 const BottomSheetOpenTrigger = React.forwardRef<
   React.ElementRef<typeof Pressable>,
