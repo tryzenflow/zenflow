@@ -91,7 +91,7 @@ export function MonthCell({
       </Text>
 
       {!outside && (
-        <View className="gap-[3px]">
+        <View className="mt-1 gap-[3px]">
           {visible.map((task) => (
             <MonthPill
               key={task.id}
@@ -213,17 +213,6 @@ function MonthPill({
   return (
     <GestureDetector gesture={pan}>
       <View
-        // `hidden` must NOT swap this subtree for a plain spacer `View`: the
-        // pill is hidden by `onDragStart` — a callback of the very gesture
-        // that is still running — so unmounting the `GestureDetector` here
-        // tore down the live pan handler on its own first frame. No further
-        // `onUpdate` ever arrived (the ghost froze at the pick-up point and
-        // the finger could drag no further), and since the handler was gone
-        // neither `onEnd` nor `onFinalize` fired, so `resetDragState` never
-        // ran and the pager stayed frozen too. Staying mounted and merely
-        // going transparent keeps the handler alive for the whole drag — and
-        // preserves the cell's exact layout, which the old fixed-height
-        // spacer only approximated.
         style={hidden ? { opacity: 0 } : undefined}
         className={cn(
           "rounded-[5px] border-l-2 px-1.5 py-0.5",

@@ -144,7 +144,7 @@ export default function EditTaskScreen() {
           disabled={loading}
           onPress={form.handleSubmit(onSubmit, onInvalid)}
         >
-          <Text className="text-base font-semibold text-primary-foreground">
+          <Text className="text-base font-semibold text-foreground">
             {loading ? "Saving…" : "Save changes"}
           </Text>
         </Button>
