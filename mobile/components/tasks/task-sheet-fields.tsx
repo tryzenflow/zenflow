@@ -30,11 +30,13 @@ import { TagAutocomplete } from "./form/tag-autocomplete";
  * since `UpdateTaskInput` has no `durationMinutes` field.
  */
 export function TaskSheetFields({
+  initialValue = "",
   form,
   disabled,
   tz,
   editing,
 }: {
+  initialValue?: string;
   form: UseFormReturn<TaskFormValues>;
   disabled?: boolean;
   tz: string;
@@ -99,7 +101,7 @@ export function TaskSheetFields({
                 this screen, down with it. */}
             <ErrorBoundary fallbackMessage="The description editor couldn't load. Everything else on this form still works.">
               <DescriptionField
-                value={field.value ?? ""}
+                initialValue={initialValue}
                 onChange={field.onChange}
                 disabled={disabled}
               />

@@ -14,6 +14,14 @@ interface MonthPagerProps {
    * external change (chevron tap) re-centers the pager. */
   monthDate: Date;
   onMonthChange: (monthDate: Date) => void;
+  /** Fired the instant a swipe carries a new month past the halfway point —
+   * *during* the drag, not when momentum settles. Drives the header label
+   * only, so the title tracks the finger instead of waiting for the scroll to
+   * end (and, before this, for that page's fetch to resolve). */
+  onVisibleMonthChange: (monthDate: Date) => void;
+  /** Frozen while a task pill is being dragged, so the horizontal
+   * swipe-to-next-month scroll can't steal the gesture mid-drag. */
+  scrollEnabled?: boolean;
   renderPage: (pageMonthDate: Date) => React.ReactNode;
 }
 
@@ -30,6 +38,8 @@ interface MonthPagerProps {
 export function MonthPager({
   monthDate,
   onMonthChange,
+  onVisibleMonthChange,
+  scrollEnabled = true,
   renderPage,
 }: MonthPagerProps) {
   const { width } = useWindowDimensions();
@@ -60,6 +70,7 @@ export function MonthPager({
     const label = monthLabel(monthDate);
     if (label === centeredLabelRef.current) return;
     centeredLabelRef.current = label;
+    visibleLabelRef.current = label;
     setPages([addMonths(monthDate, -1), monthDate, addMonths(monthDate, 1)]);
     requestAnimationFrame(() => {
       listRef.current?.scrollToOffset({ offset: width, animated: false });
@@ -76,6 +87,21 @@ export function MonthPager({
     });
   }
 
+  // Label of the month the *viewport* is currently over, so `handleScroll`
+  // only reports a change once per crossing rather than on every frame.
+  const visibleLabelRef = useRef(monthLabel(monthDate));
+
+  function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    if (!didDragRef.current) return; // ignore programmatic recentering
+    const index = Math.round(event.nativeEvent.contentOffset.x / width);
+    const page = pages[index];
+    if (!page) return;
+    const label = monthLabel(page);
+    if (label === visibleLabelRef.current) return;
+    visibleLabelRef.current = label;
+    onVisibleMonthChange(page);
+  }
+
   function handleMomentumScrollEnd(
     event: NativeSyntheticEvent<NativeScrollEvent>,
   ) {
@@ -88,6 +114,7 @@ export function MonthPager({
     if (index === 1 || !pages[index]) return; // stayed on the center page
     const nextMonth = pages[index];
     centeredLabelRef.current = monthLabel(nextMonth);
+    visibleLabelRef.current = monthLabel(nextMonth);
     onMonthChange(nextMonth);
     setPages([addMonths(nextMonth, -1), nextMonth, addMonths(nextMonth, 1)]);
     requestAnimationFrame(() => {
@@ -109,15 +136,29 @@ export function MonthPager({
         index,
       })}
       keyExtractor={(page) => monthLabel(page)}
+      // Android's `VirtualizedList` defaults this to `true`, and it is the
+      // remaining cause of "addViewAt: failed to insert view […] the
+      // specified child already has a parent" when leaving Month View (the
+      // segmented control or the bottom tab bar, either one): clipping works
+      // by detaching/re-attaching child views from their `ViewGroup` behind
+      // React's back, and when `react-native-screens` detaches this screen on
+      // a tab switch that bookkeeping desyncs — RN then re-inserts a view
+      // that still has a parent and throws. `data` is only ever the 3-month
+      // sliding window, so clipping bought nothing here anyway. Same failure
+      // family as the nested-VirtualizedList note in `month-grid.tsx`.
+      removeClippedSubviews={false}
       renderItem={({ item }) => (
         <View style={{ width }} className="flex-1">
           {renderPage(item)}
         </View>
       )}
       onLayout={handleFirstLayout}
+      scrollEnabled={scrollEnabled}
       onScrollBeginDrag={() => {
         didDragRef.current = true;
       }}
+      onScroll={handleScroll}
+      scrollEventThrottle={16}
       onMomentumScrollEnd={handleMomentumScrollEnd}
       className="flex-1"
     />

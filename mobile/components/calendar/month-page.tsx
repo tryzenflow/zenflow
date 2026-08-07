@@ -16,9 +16,10 @@ import { cn } from "@/lib/utils";
 import { zonedDate, zonedNow, zonedWallClockToUtc } from "@zenflow/core";
 import type { Task } from "@zenflow/shared";
 import { isAxiosError } from "axios";
+import { format } from "date-fns";
 import * as Haptics from "expo-haptics";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type LayoutChangeEvent, View } from "react-native";
+import { View } from "react-native";
 import { CELL_HEIGHT } from "./month-cell";
 import { MonthGrid, MonthGridSkeleton } from "./month-grid";
 
@@ -51,7 +52,15 @@ interface MonthPageProps {
    * prev/next pages (pre-fetched by `MonthPager` for swipe) still fetch, but
    * suppress their own error toast — see the call site's comment for why. */
   isActive: boolean;
-  onOpenDay: (day: Date) => void;
+  /** Fired when a pill drag starts/ends, so the screen can freeze the outer
+   * `MonthPager` — otherwise the horizontal swipe-to-next-month scroll
+   * competes with the drag and usually wins. */
+  onDragActiveChange: (active: boolean) => void;
+  /** Reports how many of this month's tasks the scheduler placed past their
+   * deadline, for the header's "N overdue" badge. Only the active page
+   * reports, so the badge always describes the month on screen. */
+  onOverdueCountChange: (count: number) => void;
+  onOpenDay: (day: Date, tasks: Task[]) => void;
   onOpenOverflow: (day: Date, tasks: Task[]) => void;
 }
 
@@ -69,6 +78,8 @@ export function MonthPage({
   tz,
   reloadToken,
   isActive,
+  onDragActiveChange,
+  onOverdueCountChange,
   onOpenDay,
   onOpenOverflow,
 }: MonthPageProps) {
@@ -83,6 +94,10 @@ export function MonthPage({
   const pageOffsetRef = useRef({ x: 0, y: 0 });
   const gridRectRef = useRef({ x: 0, y: 0, width: 0, rows: 0 });
   const lastHighlightRef = useRef<string | null>(null);
+  // The dragged pill's origin day key, read inside the pan callbacks — a ref
+  // rather than `dragging.fromKey` so `onUpdate` can't observe a stale
+  // pre-`setDragging` render.
+  const dragFromKeyRef = useRef<string | null>(null);
 
   const days = useMemo(() => getMonthGridDays(monthDate), [monthDate]);
   const today = zonedNow(tz);
@@ -125,17 +140,47 @@ export function MonthPage({
     [tasks, tz],
   );
 
-  function handlePageLayout() {
+  useEffect(() => {
+    if (!isActive) return;
+    // While this month is still loading, report 0 rather than leaving the
+    // previous month's count on screen next to the new title.
+    onOverdueCountChange(
+      tasks ? tasks.filter((t) => deriveState(t) === "overdue").length : 0,
+    );
+  }, [isActive, tasks, onOverdueCountChange]);
+
+  /**
+   * Re-reads this page's and its grid's position in *window* coordinates.
+   *
+   * This can't be done once at layout time. A page lays out while it still
+   * sits at its slot inside the outer `MonthPager`'s horizontally-scrolled
+   * `FlatList` content — the center page's `onLayout` fires when it is one
+   * screen-width to the right, before the pager's forced
+   * `scrollToOffset({ offset: width })` recenters it — and `onLayout` does
+   * NOT fire again when a scroll moves it. So the cached offsets described a
+   * position the page no longer occupies: the drag ghost (`absoluteX -
+   * pageOffset.x`) was drawn a full screen-width off to the left, which is
+   * why a picked-up task vanished instead of following the finger, and
+   * `targetDayForPoint` hit-tested against the wrong columns.
+   *
+   * Called on layout, whenever this page becomes the active one (i.e. after
+   * a swipe settles), and again at drag start.
+   */
+  const measureGeometry = useCallback(() => {
     pageRef.current?.measureInWindow((x, y) => {
       pageOffsetRef.current = { x, y };
     });
-  }
-
-  function handleGridLayout(_event: LayoutChangeEvent) {
     gridRef.current?.measureInWindow((x, y, width) => {
       gridRectRef.current = { x, y, width, rows: Math.ceil(days.length / 7) };
     });
-  }
+  }, [days.length]);
+
+  useEffect(() => {
+    if (!isActive) return;
+    // A frame late, so the pager's recentering scroll has settled first.
+    const id = requestAnimationFrame(measureGeometry);
+    return () => cancelAnimationFrame(id);
+  }, [isActive, measureGeometry]);
 
   function targetDayForPoint(
     absoluteX: number,
@@ -150,18 +195,40 @@ export function MonthPage({
     return days[row * 7 + col] ?? null;
   }
 
-  function handlePillDragStart(task: Task, day: Date) {
+  function handlePillDragStart(
+    task: Task,
+    day: Date,
+    absoluteX: number,
+    absoluteY: number,
+  ) {
     const key = dateKey(day);
+    // The page may have been scrolled since its last measurement.
+    measureGeometry();
     setDragging({ task, fromKey: key });
-    lastHighlightRef.current = key;
-    setHighlightedKey(key);
+    dragFromKeyRef.current = key;
+    onDragActiveChange(true);
+    // Seed the ghost at the finger straight away. The origin pill hides the
+    // moment the long-press activates (`draggingTaskId` → `MonthPill`'s
+    // spacer), so without an initial position the task is simply *gone* from
+    // the grid until the first `onUpdate` frame fires.
+    setGhostPos({ x: absoluteX, y: absoluteY });
+    // The day the drag started on is NOT a drop target — dropping back on it
+    // is a no-op (`handlePillDragEnd` returns early on `targetKey ===
+    // fromKey`), so highlighting it just reads as "this cell is armed".
+    lastHighlightRef.current = null;
+    setHighlightedKey(null);
   }
 
   function handlePillDragUpdate(absoluteX: number, absoluteY: number) {
     setGhostPos({ x: absoluteX, y: absoluteY });
     const target = targetDayForPoint(absoluteX, absoluteY);
+    const targetKey = target ? dateKey(target) : null;
     const key =
-      target && !isOutsideMonth(target, monthDate) ? dateKey(target) : null;
+      target &&
+      !isOutsideMonth(target, monthDate) &&
+      targetKey !== dragFromKeyRef.current
+        ? targetKey
+        : null;
     if (key !== lastHighlightRef.current) {
       lastHighlightRef.current = key;
       setHighlightedKey(key);
@@ -169,13 +236,24 @@ export function MonthPage({
     }
   }
 
-  async function handlePillDragEnd(absoluteX: number, absoluteY: number) {
-    const drag = dragging;
-    const target = targetDayForPoint(absoluteX, absoluteY);
+  /** Clears every bit of drag state. Called from both `onEnd` (a completed
+   * drop) and `onFinalize` (which also covers a *cancelled* pan) — without
+   * the latter, a gesture the pager stole mid-drag left `dragging` set
+   * forever, so the picked-up pill stayed hidden and the task looked like it
+   * had disappeared from the grid. */
+  function resetDragState() {
     setDragging(null);
     setHighlightedKey(null);
     setGhostPos(null);
     lastHighlightRef.current = null;
+    dragFromKeyRef.current = null;
+    onDragActiveChange(false);
+  }
+
+  async function handlePillDragEnd(absoluteX: number, absoluteY: number) {
+    const drag = dragging;
+    const target = targetDayForPoint(absoluteX, absoluteY);
+    resetDragState();
 
     if (!drag || !target) return;
     if (isOutsideMonth(target, monthDate)) return; // outside days aren't a valid drop target
@@ -222,7 +300,7 @@ export function MonthPage({
   const ghostState = ghostTask ? deriveState(ghostTask) : null;
 
   return (
-    <View ref={pageRef} onLayout={handlePageLayout} className="flex-1">
+    <View ref={pageRef} onLayout={measureGeometry} className="flex-1">
       {tasks === null ? (
         <MonthGridSkeleton />
       ) : (
@@ -230,7 +308,6 @@ export function MonthPage({
           ref={gridRef}
           monthDate={monthDate}
           days={days}
-          tz={tz}
           today={today}
           tasksByDate={tasksByDate}
           highlightedKey={highlightedKey}
@@ -240,7 +317,8 @@ export function MonthPage({
           onPillDragStart={handlePillDragStart}
           onPillDragUpdate={handlePillDragUpdate}
           onPillDragEnd={handlePillDragEnd}
-          onGridLayout={handleGridLayout}
+          onPillDragCancel={resetDragState}
+          onGridLayout={measureGeometry}
         />
       )}
 
@@ -251,14 +329,21 @@ export function MonthPage({
           pointerEvents="none"
           style={{
             position: "absolute",
-            left: ghostPos.x - pageOffsetRef.current.x - 55,
+            left: ghostPos.x - pageOffsetRef.current.x - 48,
             top: ghostPos.y - pageOffsetRef.current.y - 34,
-            width: 110,
+            width: 96,
+            // The mockup's `scale-[1.06] -rotate-[2.5deg]` "picked up" tilt.
+            transform: [{ scale: 1.06 }, { rotate: "-2.5deg" }],
           }}
         >
           <View
             className={cn(
-              "rounded-[6px] border-l-2 px-1.5 py-1 shadow-lg",
+              // Keeps the pills' `border-l-2` accent rather than the mockup's
+              // all-round `border border-brand-orange/45`: RN has no
+              // per-state border color in `MONTH_PILL_CLASSES` for the other
+              // three sides, and an uncolored `border` there falls back to
+              // black instead of inheriting.
+              "rounded-md border-l-2 px-1.5 py-1 shadow-lg",
               MONTH_PILL_CLASSES[ghostState],
             )}
           >
@@ -269,6 +354,11 @@ export function MonthPage({
                 MONTH_PILL_TEXT_CLASSES[ghostState],
               )}
             >
+              {ghostTask.scheduledStartTime && (
+                <Text className="font-mono text-[10px] font-normal text-muted-foreground">
+                  {format(zonedDate(ghostTask.scheduledStartTime, tz), "H:mm")}{" "}
+                </Text>
+              )}
               {ghostTask.title}
             </Text>
           </View>

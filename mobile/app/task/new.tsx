@@ -87,7 +87,7 @@ export default function NewTaskScreen() {
       subtitle={subtitle}
       footer={
         <Button
-          className="h-[52px] w-full"
+          className="h-[52px] w-full text-primary-foreground"
           disabled={loading}
           onPress={form.handleSubmit(onSubmit, onInvalid)}
         >

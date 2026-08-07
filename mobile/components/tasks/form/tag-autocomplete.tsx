@@ -21,29 +21,6 @@ type Row =
   | { kind: "create"; name: string }
   | { kind: "empty" };
 
-/**
- * Tag picker — RN port of
- * `frontend/src/components/tasks/form/tag-field.tsx` (dropdown of existing
- * tags + "Create '#x'"). Same `string[]` of tag NAMES as the form value,
- * same "pending" (dashed chip) treatment for a name that doesn't exist yet.
- *
- * Unlike the web version this doesn't route through cmdk — see
- * `lib/tag-match.ts` for why (fixes `mockups/feedback.md` item 5's fuzzy-
- * match bug rather than porting it).
- *
- * v2: was originally an absolute-positioned `View` popover anchored under
- * the input (mirroring the web mockup's `absolute inset-x-0 top-full`
- * dropdown), opening on focus. That's not a mobile-friendly pattern — no
- * click-outside-to-dismiss, awkward with the on-screen keyboard, and it sat
- * inside the same `BottomSheetScrollView` as every other field, focus-
- * trapping and layout-thrashing against the surrounding sheet. Replaced with
- * the nested-bottom-sheet picker every other field-with-a-list in this app
- * already uses (`TimePickerInline`, `components/ui/combobox.tsx`) — a tap
- * opens a second sheet stacked on the create/edit sheet (a supported
- * `@gorhom/bottom-sheet` pattern under the one shared
- * `BottomSheetModalProvider` in `app/_layout.tsx`), with its own search
- * input and full-height list instead of a cramped 6-row popover.
- */
 export function TagAutocomplete({
   value,
   onChange,
@@ -177,27 +154,8 @@ export function TagAutocomplete({
         <BottomSheetContent
           ref={bottomSheet.ref}
           onDismiss={() => setQuery("")}
-          // Fixed height, not the default `enableDynamicSizing={true}` — that
-          // re-measures and re-snaps the sheet's height on every row-count
-          // change (`rows` reshapes on literally every keystroke as
-          // `matchTags`/`canCreate` re-run), which read as "the sheet
-          // suddenly collapsed" while typing. A shorter, fixed snap point
-          // (vs. full height) also
-          // keeps the dark backdrop visible above the sheet for tap-to-
-          // dismiss, matching the "don't want a full-height sheet" ask.
           enableDynamicSizing={false}
           snapPoints={["70%"]}
-          // Overrides the shared `<BottomSheetContent>` default of
-          // `keyboardBehavior="fillParent"` (see that file's own doc comment
-          // for why that's the default) — `"fillParent"` expands ANY sheet
-          // to fill all available height above the keyboard, which is wrong
-          // for a fixed-`snapPoints` sheet like this one: it grew to full
-          // height with no dark backdrop visible at the top, instead of just
-          // nudging this sheet's existing 70% snap point up above the
-          // keyboard. `"interactive"` (gorhom's own upstream default) is the
-          // mode that translates a sheet upward by the keyboard height while
-          // preserving its snap point/size — the correct behavior for a
-          // fixed-height sheet with a search input.
           keyboardBehavior="interactive"
         >
           <BottomSheetHeader>

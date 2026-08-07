@@ -15,6 +15,7 @@ import { useUserStore } from "@/hooks/use-user-store";
 import { setAndroidNavigationBar } from "@/lib/android-navigation-bar";
 import { clearSession } from "@/lib/api-client";
 import { clearCachedSessionUser } from "@/lib/session";
+import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
 import { minutesToLabel } from "@/utils/preferences";
@@ -96,14 +97,19 @@ export default function SettingsScreen() {
     router.replace("/(auth)/login" as Href);
   }
 
+  const tabBarOverlay = useTabBarOverlayHeight();
+
   if (!user) return null;
 
   return (
     <View className="flex-1 bg-background">
-      <View className="border-b border-border bg-background px-4 pb-3.5 pt-1.5">
+      <View className="border-b border-border bg-background px-6 py-4">
         <Text className="text-xl font-bold tracking-tight">Settings</Text>
       </View>
-      <ScrollView className="flex-1 px-5" contentContainerClassName="pb-8">
+      <ScrollView
+        className="flex-1 px-5"
+        contentContainerStyle={{ paddingBottom: tabBarOverlay + 32 }}
+      >
         <SettingsSectionLabel>Profile</SettingsSectionLabel>
         <View className="overflow-hidden rounded-2xl border border-border bg-card">
           <ProfileRow user={user} onUpdated={setUser} />

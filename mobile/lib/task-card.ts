@@ -41,7 +41,9 @@ export const MONTH_PILL_CLASSES: Record<TaskCardState, string> = {
   fluid: "bg-brand-orange/[0.18] border-l-primary",
   overdue: "bg-rose-500/15 border-l-rose-500",
   conflict: "bg-amber-500/15 border-l-amber-500",
-  completed: "bg-muted border-l-emerald-500 opacity-60",
+  // No extra `opacity-60` — the mockup dims completed pills purely via
+  // `bg-muted` + muted-foreground text + line-through.
+  completed: "bg-muted border-l-emerald-500",
 };
 
 /** Pill label text color per state, paired with {@link MONTH_PILL_CLASSES}. */

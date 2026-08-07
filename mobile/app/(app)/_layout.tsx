@@ -1,35 +1,21 @@
 import { Tabs } from "expo-router";
 import { Settings } from "@/components/Icons";
+import { AppTabBar } from "@/components/tab-bar";
 import { DayTabIcon, MonthTabIcon, WeekTabIcon } from "@/components/tab-icons";
-import { NAV_THEME } from "@/lib/constants";
-import { useColorScheme } from "@/lib/useColorScheme";
 
 export const unstable_settings = {
   initialRouteName: "index",
 };
 
 export default function AppTabsLayout() {
-  const { isDarkColorScheme } = useColorScheme();
-  const theme = isDarkColorScheme ? NAV_THEME.dark : NAV_THEME.light;
-
   return (
+    // Fully custom bar (`components/tab-bar.tsx`): the default one can't draw
+    // the convex hump the Optimize button sits on, and its rectangular
+    // `shadow*`/`elevation` read as almost nothing against the near-white
+    // background.
     <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: theme.primary,
-        tabBarInactiveTintColor: theme.mutedForeground,
-        tabBarStyle: {
-          backgroundColor: theme.background,
-          borderTopWidth: 0,
-          borderTopLeftRadius: 24,
-          borderTopRightRadius: 24,
-          shadowColor: theme.primary,
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.25,
-          shadowRadius: 12,
-          elevation: 12,
-        },
-      }}
+      tabBar={(props) => <AppTabBar {...props} />}
+      screenOptions={{ headerShown: false }}
     >
       <Tabs.Screen
         name="index"

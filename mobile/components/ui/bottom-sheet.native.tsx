@@ -368,6 +368,7 @@ const BottomSheetTextInput = React.forwardRef<
         className,
       )}
       placeholderClassName={cn("text-muted-foreground", placeholderClassName)}
+      style={{ fontFamily: "Geist" }}
       {...props}
     />
   );

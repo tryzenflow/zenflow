@@ -6,19 +6,17 @@ import {
   deriveState,
 } from "@/lib/task-card";
 import { cn } from "@/lib/utils";
-import { zonedDate } from "@zenflow/core";
 import type { Task } from "@zenflow/shared";
-import { format } from "date-fns";
 import * as Haptics from "expo-haptics";
+import { useMemo, useRef } from "react";
 import { Pressable, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 
-export const CELL_HEIGHT = 78;
+export const CELL_HEIGHT = 88;
 
 interface MonthCellProps {
   day: Date;
   monthDate: Date;
-  tz: string;
   tasks: Task[];
   isToday: boolean;
   isWeekend: boolean;
@@ -27,11 +25,20 @@ interface MonthCellProps {
   /** The task id currently being dragged (any cell), so its origin pill can
    * hide in place while the ghost overlay stands in for it. */
   draggingTaskId: string | null;
-  onPressDay: (day: Date) => void;
+  /** Receives the day's tasks too — tapping a cell opens the detail sheet in
+   * place rather than navigating to Day View. */
+  onPressDay: (day: Date, tasks: Task[]) => void;
   onPressOverflow: (day: Date, tasks: Task[]) => void;
-  onPillDragStart: (task: Task, day: Date) => void;
+  onPillDragStart: (
+    task: Task,
+    day: Date,
+    absoluteX: number,
+    absoluteY: number,
+  ) => void;
   onPillDragUpdate: (absoluteX: number, absoluteY: number) => void;
   onPillDragEnd: (absoluteX: number, absoluteY: number) => void;
+  /** Fired when a drag is cancelled rather than completed. */
+  onPillDragCancel: () => void;
 }
 
 /**
@@ -43,7 +50,6 @@ interface MonthCellProps {
 export function MonthCell({
   day,
   monthDate,
-  tz,
   tasks,
   isToday,
   isWeekend,
@@ -54,6 +60,7 @@ export function MonthCell({
   onPillDragStart,
   onPillDragUpdate,
   onPillDragEnd,
+  onPillDragCancel,
 }: MonthCellProps) {
   const outside = isOutsideMonth(day, monthDate);
   const { visible, overflowCount } = splitCellTasks(tasks);
@@ -61,20 +68,20 @@ export function MonthCell({
   return (
     <Pressable
       disabled={outside}
-      onPress={() => onPressDay(day)}
+      onPress={() => onPressDay(day, tasks)}
       style={{ width: `${100 / 7}%`, height: CELL_HEIGHT }}
       className={cn(
-        "border-b border-r border-border p-[5px] pb-[3px]",
-        outside ? "bg-muted/40" : isWeekend ? "bg-muted/45" : "bg-card",
+        "border-b border-r border-border p-[5px] pb-[6px]",
+        outside ? "bg-muted/40" : isWeekend ? "bg-muted/30" : "bg-transparent",
         isToday && "border-t-2 border-t-primary",
-        isDropTarget && "bg-primary/10",
+        isDropTarget && "bg-primary/[0.14]",
       )}
     >
       <Text
         className={cn(
-          "h-[22px] w-[22px] rounded-full text-center text-[12.5px] font-semibold leading-[22px]",
+          "h-[23px] w-[23px] rounded-full text-center text-[12.5px] font-semibold leading-[23px]",
           outside
-            ? "text-muted-foreground/50"
+            ? "text-muted-foreground opacity-60"
             : isToday
               ? "bg-primary text-primary-foreground"
               : "text-foreground",
@@ -84,24 +91,24 @@ export function MonthCell({
       </Text>
 
       {!outside && (
-        <View className="mt-0.5 gap-0.5">
+        <View className="gap-[3px]">
           {visible.map((task) => (
             <MonthPill
               key={task.id}
               task={task}
               day={day}
-              tz={tz}
               hidden={draggingTaskId === task.id}
               onDragStart={onPillDragStart}
               onDragUpdate={onPillDragUpdate}
               onDragEnd={onPillDragEnd}
+              onDragCancel={onPillDragCancel}
             />
           ))}
           {overflowCount > 0 && (
             <Pressable
               onPress={() => onPressOverflow(day, tasks)}
               hitSlop={6}
-              className="px-0.5"
+              className="rounded-[5px] px-1 py-0.5"
             >
               <Text className="text-[9.5px] font-bold leading-tight text-muted-foreground">
                 +{overflowCount} more
@@ -117,11 +124,16 @@ export function MonthCell({
 interface MonthPillProps {
   task: Task;
   day: Date;
-  tz: string;
   hidden: boolean;
-  onDragStart: (task: Task, day: Date) => void;
+  onDragStart: (
+    task: Task,
+    day: Date,
+    absoluteX: number,
+    absoluteY: number,
+  ) => void;
   onDragUpdate: (absoluteX: number, absoluteY: number) => void;
   onDragEnd: (absoluteX: number, absoluteY: number) => void;
+  onDragCancel: () => void;
 }
 
 /**
@@ -138,40 +150,81 @@ interface MonthPillProps {
 function MonthPill({
   task,
   day,
-  tz,
   hidden,
   onDragStart,
   onDragUpdate,
   onDragEnd,
+  onDragCancel,
 }: MonthPillProps) {
   const state = deriveState(task);
-  const label = task.scheduledStartTime
-    ? `${format(zonedDate(task.scheduledStartTime, tz), "H:mm")} ${task.title}`
-    : task.title;
 
-  const pan = Gesture.Pan()
-    .activateAfterLongPress(350)
-    .runOnJS(true)
-    .onStart(() => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-      onDragStart(task, day);
-    })
-    .onUpdate((e) => {
-      onDragUpdate(e.absoluteX, e.absoluteY);
-    })
-    .onEnd((e) => {
-      onDragEnd(e.absoluteX, e.absoluteY);
-    });
+  // Every callback below is read out of a ref at fire time rather than
+  // captured by the gesture's closure, so the `Gesture.Pan()` object itself
+  // can be built exactly once (`useMemo`, no deps). It has to be: dragging
+  // re-renders `MonthPage` on every finger frame (`ghostPos`), which
+  // re-renders all ≤42 cells and every pill in them — rebuilding a gesture
+  // config mid-gesture on each of those frames is exactly the case
+  // react-native-gesture-handler warns about.
+  const latest = useRef({
+    task,
+    day,
+    onDragStart,
+    onDragUpdate,
+    onDragEnd,
+    onDragCancel,
+  });
+  latest.current = {
+    task,
+    day,
+    onDragStart,
+    onDragUpdate,
+    onDragEnd,
+    onDragCancel,
+  };
 
-  if (hidden) {
-    // Keep the cell's layout stable while the dragged pill is "picked up" —
-    // the ghost overlay (`month-page.tsx`) stands in for it during the drag.
-    return <View style={{ height: 15 }} />;
-  }
+  const pan = useMemo(
+    () =>
+      Gesture.Pan()
+        .activateAfterLongPress(350)
+        .runOnJS(true)
+        .onStart((e) => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(
+            () => {},
+          );
+          const c = latest.current;
+          c.onDragStart(c.task, c.day, e.absoluteX, e.absoluteY);
+        })
+        .onUpdate((e) => {
+          latest.current.onDragUpdate(e.absoluteX, e.absoluteY);
+        })
+        .onEnd((e) => {
+          latest.current.onDragEnd(e.absoluteX, e.absoluteY);
+        })
+        // `onEnd` fires only on a *successful* end. If the gesture is
+        // cancelled — the outer pager claiming the touch, the pill unmounting
+        // mid-drag — only `onFinalize` runs, so the parent's drag state must
+        // be cleared here too or the pill stays hidden forever.
+        .onFinalize((_e, success) => {
+          if (!success) latest.current.onDragCancel();
+        }),
+    [],
+  );
 
   return (
     <GestureDetector gesture={pan}>
       <View
+        // `hidden` must NOT swap this subtree for a plain spacer `View`: the
+        // pill is hidden by `onDragStart` — a callback of the very gesture
+        // that is still running — so unmounting the `GestureDetector` here
+        // tore down the live pan handler on its own first frame. No further
+        // `onUpdate` ever arrived (the ghost froze at the pick-up point and
+        // the finger could drag no further), and since the handler was gone
+        // neither `onEnd` nor `onFinalize` fired, so `resetDragState` never
+        // ran and the pager stayed frozen too. Staying mounted and merely
+        // going transparent keeps the handler alive for the whole drag — and
+        // preserves the cell's exact layout, which the old fixed-height
+        // spacer only approximated.
+        style={hidden ? { opacity: 0 } : undefined}
         className={cn(
           "rounded-[5px] border-l-2 px-1.5 py-0.5",
           MONTH_PILL_CLASSES[state],
@@ -184,7 +237,7 @@ function MonthPill({
             MONTH_PILL_TEXT_CLASSES[state],
           )}
         >
-          {label}
+          {task.title}
         </Text>
       </View>
     </GestureDetector>
