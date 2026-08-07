@@ -11,6 +11,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
+import { useScheduleRefresh } from "@/hooks/use-schedule-refresh";
+import { FAB_GLOW_INNER, FAB_GLOW_OUTER } from "@/lib/fab-glow";
 import { zonedNow, zonedWallClockToUtc } from "@zenflow/core";
 import {
   OPTIMIZE_LARGE_BATCH_THRESHOLD,
@@ -59,14 +61,19 @@ function errorMessage(error: unknown, fallback: string): string {
 }
 
 /**
- * Floating "Optimize" button + bottom sheet — the mobile entry point for the
+ * "Optimize" button + bottom sheet — the mobile entry point for the
  * scheduler redesign's one explicit, opt-in, previewable-by-count multi-task
  * action (see the scheduler redesign plan's "Mobile" file-level changes).
- * Rendered on Day/Week/Month the same way `CreateTaskFab` is (a
- * self-contained floating trigger, so it doesn't need those screens' stub
- * toolbars to exist first) — but unlike `CreateTaskFab`, which just
- * navigates, this owns its own `@gorhom/bottom-sheet` sheet directly (same
- * infra `InlineDateField` already uses).
+ * Unlike `CreateTaskFab`, which just navigates, this owns its own
+ * `@gorhom/bottom-sheet` sheet directly (same infra `InlineDateField`
+ * already uses).
+ *
+ * This renders only the button itself — no positioning. It used to be a
+ * floating FAB rendered by Day/Week/Month individually; it now lives in the
+ * centre of the tab bar (`components/tab-bar.tsx`), which owns its placement
+ * on the convex hump. Because the tab bar is mounted once outside every
+ * screen, the apply/undo result reaches the focused screen through
+ * `useScheduleRefresh` rather than an `onApplied` prop.
  *
  * No per-task diff/preview UI is ever rendered here — deliberately ruled out
  * by the plan. `optimizePreview` only returns a count, used to decide
@@ -79,17 +86,16 @@ function errorMessage(error: unknown, fallback: string): string {
  */
 export function OptimizeFab({
   tz,
-  onApplied,
+  size = 56,
 }: {
   tz: string;
-  /** Called after a successful apply (and after a successful undo) so the
-   * calling screen can refetch. Optional since `week.tsx`/`month.tsx` have
-   * no task list yet. */
-  onApplied?: () => void;
+  /** Diameter of the circular trigger. */
+  size?: number;
 }) {
   const bottomSheet = useBottomSheet();
   const { toast } = useToast();
   const insets = useSafeAreaInsets();
+  const onApplied = useScheduleRefresh((s) => s.bump);
 
   const [step, setStep] = useState<Step>("form");
   const [mode, setMode] = useState<OptimizeMode>(DEFAULT_MODE);
@@ -286,23 +292,29 @@ export function OptimizeFab({
   }
 
   return (
-    <View className="absolute bottom-24 right-5">
+    <View style={[FAB_GLOW_OUTER, { borderRadius: 999 }]}>
       <BottomSheet>
         <BottomSheetOpenTrigger asChild onPress={handleOpen}>
-          <Pressable style={{ width: 44, height: 44, borderRadius: 999 }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Optimize schedule"
+            style={[
+              FAB_GLOW_INNER,
+              { width: size, height: size, borderRadius: 999 },
+            ]}
+          >
             <LinearGradient
               colors={["rgb(255,142,62)", "rgb(240,177,1)", "rgb(216,249,152)"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={{
-                width: 44,
-                height: 44,
+                flex: 1,
                 borderRadius: 999,
                 alignItems: "center",
                 justifyContent: "center",
               }}
             >
-              <Sparkles size={22} color="white" />
+              <Sparkles size={Math.round(size * 0.45)} color="white" />
             </LinearGradient>
           </Pressable>
         </BottomSheetOpenTrigger>

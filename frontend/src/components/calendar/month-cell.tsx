@@ -1,7 +1,11 @@
 import { cn } from "@/lib/utils";
 import { Event } from "@/types/schedule";
 import { TASK_CARD_CLASSES } from "@/lib/task-card";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
 import { format, isSameDay, isSameMonth } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
@@ -71,7 +75,7 @@ export function MonthCell({
         )}
       >
         {events.slice(0, 3).map((ev) => (
-          <MonthEventItem key={ev.id} ev={ev} tz={tz} />
+          <MonthEventItem key={ev.id} ev={ev} />
         ))}
 
         {events.length > 3 && (
@@ -86,12 +90,14 @@ export function MonthCell({
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-[250px]">
-              <h5 className="mb-2 text-sm font-medium">{format(date, "EEE d")}</h5>
+              <h5 className="mb-2 text-sm font-medium">
+                {format(date, "EEE d")}
+              </h5>
               <div className="space-y-0.5">
                 {events
                   .filter((ev) => isSameDay(zonedDate(ev.start, tz), date))
                   .map((ev) => (
-                    <MonthEventItem key={ev.id} ev={ev} tz={tz} />
+                    <MonthEventItem key={ev.id} ev={ev} />
                   ))}
               </div>
             </PopoverContent>
@@ -102,7 +108,7 @@ export function MonthCell({
   );
 }
 
-function MonthEventItem({ ev, tz }: { ev: Event; tz: string }) {
+function MonthEventItem({ ev }: { ev: Event }) {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: ev.id,
   });
@@ -131,12 +137,7 @@ function MonthEventItem({ ev, tz }: { ev: Event; tz: string }) {
         TASK_CARD_CLASSES[ev.state],
       )}
     >
-      <span className="truncate">
-        <span className="text-muted-foreground font-mono font-normal">
-          {format(zonedDate(ev.start, tz), "HH:mm")}
-        </span>{" "}
-        {ev.title}
-      </span>
+      <span className="truncate">{ev.title}</span>
     </Button>
   );
 }

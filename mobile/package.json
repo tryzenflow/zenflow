@@ -14,7 +14,8 @@
     "export": "expo export -p web",
     "format": "biome check --no-errors-on-unmatched --apply .",
     "expo-check": "expo install --check",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@10play/tentap-editor": "^1.0.1",
@@ -89,6 +90,7 @@
     "@babel/runtime": "^7.26.0",
     "@types/react": "~18.3.18",
     "tailwindcss": "3.4.1",
-    "typescript": "~5.3.3"
+    "typescript": "~5.3.3",
+    "vitest": "^2.1.9"
   }
 }

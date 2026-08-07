@@ -50,7 +50,7 @@ export function CalendarHeader({
   };
 
   return (
-    <div className="flex h-14 items-center justify-between gap-2 border-b border-border bg-card px-2 sm:px-4">
+    <div className="flex h-16 items-center justify-between gap-2 border-b border-border py-4 bg-card px-2 sm:px-4">
       <div className="flex min-w-0 items-center gap-1 sm:gap-4">
         <Button
           variant="ghost"

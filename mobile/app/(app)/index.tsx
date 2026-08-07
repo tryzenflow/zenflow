@@ -4,17 +4,18 @@ import {
   CreateTaskFab,
   createTaskAtNowHref,
 } from "@/components/tasks/create-task-fab";
-import { OptimizeFab } from "@/components/tasks/optimize-fab";
 import { Text } from "@/components/ui/text";
+import { useScheduleRefresh } from "@/hooks/use-schedule-refresh";
 import { useUserStore } from "@/hooks/use-user-store";
+import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { cn } from "@/lib/utils";
 import { useFocusEffect } from "@react-navigation/native";
 import { zonedDate, zonedNow } from "@zenflow/core";
 import type { Task } from "@zenflow/shared";
 import { format } from "date-fns";
 import * as Haptics from "expo-haptics";
-import { type Href, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { type Href, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 
 /**
@@ -37,6 +38,11 @@ import { Pressable, RefreshControl, ScrollView, View } from "react-native";
  * The create/edit forms are full screens, not bottom sheets — see
  * mobile/README.md for why.
  *
+ * Accepts an optional `date` query param (ISO instant) so other screens can
+ * deep-link into a specific day — currently only Month View's "tap a day
+ * cell" gesture (`app/(app)/month.tsx`, GitHub issue #21's acceptance
+ * criteria: "navigates to Day View pre-loaded to that date").
+ *
  * BLOCKED (tracked for Phase 2, not attempted here): true per-pixel
  * long-press-a-time-slot → snapped-start-time creation (needs the absolute
  * positioned grid to know what time a press landed on), drag-to-move,
@@ -46,17 +52,36 @@ export default function DayScreen() {
   const router = useRouter();
   const user = useUserStore((s) => s.user);
   const tz = user?.timezone || "UTC";
+  const { date: dateParam } = useLocalSearchParams<{ date?: string }>();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const tabBarOverlay = useTabBarOverlayHeight();
+
+  // `zonedDate`/`zonedNow` both return a Date whose local fields already
+  // carry the user-tz wall clock — `dateParam` (from Month View) is an ISO
+  // instant, so it goes through `zonedDate` the same way a task's
+  // `scheduledStartTime` does, not a bare `new Date()`.
+  const today = useMemo(
+    () => (dateParam ? zonedDate(dateParam, tz) : zonedNow(tz)),
+    [dateParam, tz],
+  );
 
   const refetch = useCallback(async () => {
-    const res = await listTasks("day", zonedNow(tz), "PENDING");
+    const res = await listTasks("day", today, "PENDING");
     setTasks(res.tasks);
-  }, [tz]);
+  }, [today]);
 
   useEffect(() => {
     if (user) refetch();
   }, [user, refetch]);
+
+  // The Optimize action lives in the tab bar now, outside this screen, so an
+  // apply/undo announces itself through the store instead of a callback.
+  const scheduleRefreshToken = useScheduleRefresh((s) => s.token);
+  useEffect(() => {
+    if (user && scheduleRefreshToken > 0) refetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scheduleRefreshToken]);
 
   // Refetch whenever this screen regains focus — covers returning from
   // `/task/new`/`/task/[id]/edit`, which (unlike the old sheets) have no
@@ -77,8 +102,6 @@ export default function DayScreen() {
     }
   }
 
-  const today = zonedNow(tz);
-
   return (
     <View className="flex-1 bg-background">
       <View className="border-b border-border bg-background px-4 pb-3.5 pt-1.5">
@@ -89,7 +112,16 @@ export default function DayScreen() {
 
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-2.5 p-4 pb-24"
+        // All in one style object rather than half in `contentContainerClassName`:
+        // NativeWind compiles that prop *into* `contentContainerStyle`, so the
+        // two together are a race over which one wins.
+        contentContainerStyle={{
+          gap: 10,
+          padding: 16,
+          // Clears the bar plus the FAB floating above it, so the last task
+          // card is never stuck underneath either.
+          paddingBottom: tabBarOverlay + 80,
+        }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
@@ -130,7 +162,6 @@ export default function DayScreen() {
       </ScrollView>
 
       <CreateTaskFab tz={tz} />
-      <OptimizeFab tz={tz} onApplied={refetch} />
     </View>
   );
 }

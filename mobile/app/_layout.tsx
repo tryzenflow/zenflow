@@ -91,6 +91,11 @@ export default function RootLayout() {
     "Geist-Medium": require("../assets/fonts/Geist-Medium.ttf"),
     "Geist-SemiBold": require("../assets/fonts/Geist-SemiBold.ttf"),
     "Geist-ExtraBold": require("../assets/fonts/Geist-ExtraBold.ttf"),
+    // Geist Mono backs the `font-mono` utility (see `components/ui/text.tsx`'s
+    // `resolveGeistFontFamily`) — task times, durations and other tabular
+    // figures. Only the two weights those call sites use are loaded.
+    GeistMono: require("../assets/fonts/GeistMono-Regular.ttf"),
+    "GeistMono-Medium": require("../assets/fonts/GeistMono-Medium.ttf"),
   });
   const { colorScheme, isDarkColorScheme } = useColorScheme();
   const setUser = useUserStore((s) => s.setUser);

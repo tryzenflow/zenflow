@@ -4,7 +4,16 @@ import { hairlineWidth } from "nativewind/theme";
 
 export default {
   darkMode: "class",
-  content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
+  // `./lib` matters: `lib/task-card.ts` holds the Month View's per-state pill
+  // class maps (`MONTH_PILL_CLASSES`/`MONTH_PILL_TEXT_CLASSES`). Class strings
+  // that live outside these globs are never seen by the scanner, so the
+  // utilities are never generated and the classes silently no-op at runtime —
+  // which left overdue pills with RN's default black border and no background.
+  content: [
+    "./app/**/*.{ts,tsx}",
+    "./components/**/*.{ts,tsx}",
+    "./lib/**/*.{ts,tsx}",
+  ],
   presets: [require("nativewind/preset")],
   theme: {
     extend: {

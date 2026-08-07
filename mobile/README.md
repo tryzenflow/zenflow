@@ -35,9 +35,13 @@ mobile/
 │       ├── index.tsx          # Day — still a Phase 2 grid stub, but with the task sheets wired
 │       │                      # against a plain task list (tap → edit, long-press → resize,
 │       │                      # long-press empty area / FAB → create); see Phase 5 in
-│       │                      # docs/react-native-migration.md
-│       ├── week.tsx, month.tsx  # placeholder stubs — calendar UI is future work, but each still
-│       │                        # renders <CreateTaskFab> so task creation isn't Day-only
+│       │                      # docs/react-native-migration.md. Also reads an optional `date`
+│       │                      # query param (added for Month View's day-tap deep link).
+│       ├── week.tsx           # placeholder stub — calendar UI is future work, but still renders
+│       │                      # <CreateTaskFab> so task creation isn't Day-only
+│       ├── month.tsx          # Month — built (RN migration Phase 4, issue #21): paginated
+│       │                      # Monday-first grid + overflow bottom sheet + long-press-drag
+│       │                      # reschedule; see components/calendar/ below
 │       └── settings.tsx       # fully built: profile, theme, timezone, duration mode, insights
 ├── api/                       # axios endpoint functions (auth, tasks, tags, users) + base.ts
 ├── components/
@@ -45,6 +49,11 @@ mobile/
 │   ├── primitives/            # headless behavior (portal, slot, useControllableState, …),
 │   │                          # each with a `.web.tsx` variant where native/web diverge
 │   ├── onboarding/, settings/ # screen-specific composite components
+│   ├── calendar/               # Month View: month-pager.tsx (outer horizontal FlatList pager),
+│   │                            # month-page.tsx (per-month fetch + drag orchestration),
+│   │                            # month-grid.tsx (7-col FlatList + loading skeleton),
+│   │                            # month-cell.tsx (cell + pill + long-press-drag gesture),
+│   │                            # task-list-sheet.tsx (the "+N more" overflow bottom sheet)
 │   ├── tasks/                 # task/new.tsx and task/[id]/edit.tsx full-screen forms (duration
 │   │   │                      # resize now lives entirely in the edit screen's stepper — see
 │   │   │                      # "The task create/edit form is a full screen" below), plus
@@ -71,6 +80,11 @@ mobile/
 │   ├── useColorScheme.tsx, android-navigation-bar.ts
 │   ├── tag-match.ts             # tag-autocomplete matching (prefix/substring, not cmdk fuzzy)
 │   ├── task-toasts.ts           # create/edit placement toast copy (success/conflict)
+│   ├── task-card.ts             # deriveState + month-pill classes — hand-synced RN port of
+│   │                            # frontend/src/lib/task-card.ts, unit-tested
+│   ├── month-date-math.ts       # Month View's pure date-math/overflow-counting helpers
+│   │                            # (getMonthGridDays, splitCellTasks, groupTasksByDate, …),
+│   │                            # unit-tested via Vitest (lib/__tests__/, `pnpm test`)
 │   └── utils.ts                # cn() (clsx + tailwind-merge)
 ├── plugins/withAndroidBuildFixes.js  # Expo config plugin: Gradle/Kotlin build fixes
 ├── global.css / tailwind.config.ts / metro.config.js / babel.config.js  # NativeWind wiring
@@ -89,7 +103,8 @@ call):
 | `(auth)` | `login.tsx` | Built — email stage → OTP verification stage |
 | `(onboarding)` | `index.tsx` | Built — work hours / work days / timezone / duration-adjustment mode wizard |
 | `(app)` | `index.tsx` (Day) | **Grid still a Phase 2 stub**, but the task sheets (create/edit/change-duration — RN migration Phase 5, issue #20) are wired against a plain task list in the meantime: tap a task → edit, long-press a task → change duration, long-press the empty area or the FAB → create |
-| `(app)` | `week.tsx`, `month.tsx` | **Placeholder stubs** — calendar UI is future work |
+| `(app)` | `week.tsx` | **Placeholder stub** — calendar UI is future work |
+| `(app)` | `month.tsx` (Month) | **Built** (RN migration Phase 4, issue #21) — paginated Monday-first grid (`components/calendar/`), "+N more" overflow bottom sheet, tap-a-day → Day View, long-press-drag a pill to reschedule |
 | `(app)` | `settings.tsx` | Built — profile row, theme toggle, timezone picker, duration-mode picker, insights panel |
 
 All three of `index.tsx`/`week.tsx`/`month.tsx` also render `<OptimizeFab>` (`components/tasks/optimize-fab.tsx`) — the scheduler redesign's opt-in, previewable-by-count multi-task reflow action, mobile's equivalent of the web calendar toolbar's Sparkles popover (no calendar toolbar exists on mobile yet, hence a floating button instead of a toolbar entry). Its API surface (`resolveTaskPlacement`/`optimizePreview`/`optimizeApply` in `api/tasks.ts`, plus an extended `undoBatch(batchId, strategy?)`) types against `OptimizeWindowInput`/`OptimizePreviewResponse`/`OptimizeApplyResponse`/`OPTIMIZE_LARGE_BATCH_THRESHOLD`/`OPTIMIZE_UI_MAX_WINDOW_DAYS`, which land in `@zenflow/shared` as part of the same redesign (backend-engineer's side) — `pnpm --filter mobile typecheck` won't pass until those merge.
@@ -643,12 +658,17 @@ pnpm android        # expo run:android          (full native rebuild — no cach
 pnpm ios            # expo run:ios              (macOS only)
 pnpm export         # static web export → dist/
 pnpm typecheck      # tsc --noEmit
+pnpm test           # vitest run — lib/**/*.test.ts only, see below
 ```
 
-No test runner is configured in `mobile/` (no `test` script, no Jest/Vitest config) — logic
-that's easy to unit test in isolation (`@zenflow/core`'s `taskSchema`/`placementQualifier`,
-`mobile/lib/tag-match.ts`) doesn't have automated coverage yet for the same reason `packages/core`
-itself has no `test` script either.
+**Testing:** `mobile/` now has a minimal Vitest setup (`vitest.config.ts`, scoped to
+`lib/**/*.test.ts`) for pure, RN-free logic modules — `lib/month-date-math.ts` and
+`lib/task-card.ts`'s tests (`lib/__tests__/`) are the first coverage in this workspace. This is
+narrower than a real component/screen test runner: anything importing React Native or
+`@gorhom/bottom-sheet` still has no automated coverage (no RN test renderer is configured), and
+neither does `@zenflow/core`'s `taskSchema`/`placementQualifier` or `mobile/lib/tag-match.ts` yet
+— flagged as a gap, not silently worked around. If a real component-testing setup gets added
+later, it should probably subsume this file-scoped config rather than run alongside it.
 
 Set `EXPO_PUBLIC_API_URL` in `.env.development` (defaults to
 `http://localhost:5000/api/v1`) so the axios client targets the API; on a physical

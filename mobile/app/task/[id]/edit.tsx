@@ -78,10 +78,7 @@ export default function EditTaskScreen() {
         deadline: values.deadline,
         tags: values.tags,
       });
-      if (
-        values.duration !== task.durationMinutes &&
-        task.scheduledStartTime
-      ) {
+      if (values.duration !== task.durationMinutes && task.scheduledStartTime) {
         await resizeTask(task.id, task.scheduledStartTime, values.duration);
       }
       toast("Task updated", "success");
@@ -147,13 +144,19 @@ export default function EditTaskScreen() {
           disabled={loading}
           onPress={form.handleSubmit(onSubmit, onInvalid)}
         >
-          <Text className="text-base font-semibold text-primary-foreground">
+          <Text className="text-base font-semibold text-foreground">
             {loading ? "Saving…" : "Save changes"}
           </Text>
         </Button>
       }
     >
-      <TaskSheetFields form={form} tz={tz} disabled={loading} editing />
+      <TaskSheetFields
+        initialValue={task?.note || ""}
+        form={form}
+        tz={tz}
+        disabled={loading}
+        editing
+      />
     </TaskFormScreen>
   );
 }
