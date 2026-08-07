@@ -21,12 +21,11 @@ import {
   resizeTask,
 } from "@/api/tasks";
 import { tasksToBlocks } from "@/utils/blocks";
-import type { TasksMeta, RescheduleResponse } from "@zenflow/shared";
+import type { TasksMeta } from "@zenflow/shared";
 import { isAxiosError } from "axios";
 import { toast } from "sonner";
 import { errorToast } from "@/lib/toast";
 import { useUserStore } from "@/hooks/use-user-store";
-import { maybeShowRationaleToast } from "@/lib/scheduling-toasts";
 import { zonedDate, zonedNow } from "@/utils/tz";
 import { format, isSameMonth, isValid } from "date-fns";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
