@@ -2,25 +2,34 @@ import { View } from "react-native";
 import { Text } from "@/components/ui/text";
 import { minutesToTime } from "@zenflow/core";
 
-const HOURS = Array.from({ length: 24 }, (_, i) => i);
-
 interface TimeGutterProps {
   hourHeight: number;
+  fromHour?: number;
+  toHour?: number;
+  showZeroLabel?: boolean;
 }
 
-export function TimeGutter({ hourHeight }: TimeGutterProps) {
+export function TimeGutter({
+  hourHeight,
+  fromHour = 0,
+  toHour = 24,
+  showZeroLabel = false,
+}: TimeGutterProps) {
+  const hours: number[] = [];
+  for (let h = fromHour; h < toHour; h++) hours.push(h);
+
   return (
     <View
       className="absolute left-0 top-0 bottom-0"
       style={{ width: 64 }}
     >
-      {HOURS.map((hour) => (
+      {hours.map((hour) => (
         <View
           key={hour}
           style={{ height: hourHeight }}
           className="items-end justify-start pr-2 pt-0"
         >
-          {hour !== 0 && (
+          {(hour !== 0 || showZeroLabel) && (
             <Text className="text-[10px] font-bold text-muted-foreground">
               {minutesToTime(hour * 60)}
             </Text>

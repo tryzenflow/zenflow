@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, useEffect, useCallback } from "react";
-import { View, ScrollView, RefreshControl, TouchableOpacity, useWindowDimensions } from "react-native";
+import { View, ScrollView, RefreshControl, TouchableOpacity, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { Text } from "@/components/ui/text";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -20,7 +20,7 @@ import { TimeGutter } from "./time-gutter";
 import { WorkZoneOverlay } from "./work-zone-overlay";
 import { NowIndicator } from "./now-indicator";
 import { TaskBlock } from "./task-block";
-import { format } from "date-fns";
+import { format, startOfDay } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 import { AlertCircle, AlertTriangle, RefreshCcw, Sparkles } from "@/components/Icons";
 import { Button } from "@/components/ui/button";
@@ -75,13 +75,15 @@ interface DayTimelineProps {
   onComplete?: (taskId: string) => void;
   refreshKey?: number;
   onStateChange?: (state: TimelineState) => void;
+  onReachBottom?: () => void;
+  onOvernightTailsChange?: (tails: Task[]) => void;
 }
 
-export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComplete, refreshKey, onStateChange }: DayTimelineProps) {
+export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComplete, refreshKey, onStateChange, onReachBottom, onOvernightTailsChange }: DayTimelineProps) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const prefs = useUserStore((s) => s.user) ?? DEFAULT_WORK_PREFS;
   const scrollRef = useRef<ScrollView>(null);
-  const { width: screenWidth } = useWindowDimensions();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const now = useNow();
 
   // When it's today, the displayed day follows the live clock so the header
@@ -97,6 +99,7 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
   }, [propDate, now, tz]);
   const [hourHeight, setHourHeight] = useState(HOUR_HEIGHT_DEFAULT);
   const totalHeight = hourHeight * 24;
+  const peekHeight = Math.round((screenHeight * 4) / 6);
   const contentWidth = screenWidth - GUTTER_WIDTH;
 
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -141,6 +144,26 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
       setError(true);
     }
   }, [date]);
+
+  const dayKey = format(date, "yyyy-MM-dd");
+
+  const overnightTails = useMemo(() => {
+    const nextDay = startOfDay(date);
+    nextDay.setDate(nextDay.getDate() + 1);
+    const nextMidnightMs = zonedWallClockToUtc(nextDay, tz).getTime();
+    return tasks.filter((t) => {
+      if (!t.scheduledStartTime) return false;
+      const endMs =
+        new Date(t.scheduledStartTime).getTime() + t.durationMinutes * 60_000;
+      return endMs > nextMidnightMs;
+    });
+  }, [tasks, dayKey, tz]);
+
+  const hasOvernightTails = overnightTails.length > 0;
+
+  useEffect(() => {
+    onOvernightTailsChange?.(overnightTails);
+  }, [overnightTails, onOvernightTailsChange]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -266,6 +289,25 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
     scrollToNow();
   }, [loading, error, totalHeight, scrollToNow]);
 
+  // Fires when the user scrolls into the invisible "past midnight" strip.
+  // Position-based so it works regardless of platform velocity reporting.
+  // Re-arms only after scrolling back up, so collapsing the slice doesn't
+  // immediately flip back to it.
+  const crossedBottomRef = useRef(false);
+  const handleScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+      const maxY = Math.max(0, contentSize.height - layoutMeasurement.height);
+      if (contentOffset.y >= maxY - 8 && !crossedBottomRef.current) {
+        crossedBottomRef.current = true;
+        onReachBottom?.();
+      } else if (contentOffset.y < maxY - 60) {
+        crossedBottomRef.current = false;
+      }
+    },
+    [onReachBottom],
+  );
+
   const isToday = useMemo(() => {
     const live = toZonedTime(now, tz);
     return (
@@ -361,7 +403,7 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
   const contentGesture = Gesture.Simultaneous(zoomGesture, longPressGesture);
 
   const animatedContentStyle = useAnimatedStyle(() => ({
-    height: baseHourHeight.value * 24,
+    height: baseHourHeight.value * 24 + (hasOvernightTails ? peekHeight : 0),
   }));
 
   const ghostStyle = useAnimatedStyle(() => ({
@@ -419,6 +461,8 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
         className="flex-1"
         showsVerticalScrollIndicator={false}
         onLayout={handleTimelineLayout}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
@@ -501,6 +545,23 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
                   }}
                 />
               ))}
+
+              {/* Dashed midnight boundary — the day ends here and the empty
+                  "past midnight" region begins below (only on days with a
+                  crossing task). Mirrors mockups/day-view.html's 12:00 AM. */}
+              {hasOvernightTails && (
+                <View
+                  pointerEvents="none"
+                  className="absolute left-0 right-0 border-t border-dashed border-muted-foreground/55"
+                  style={{ top: totalHeight }}
+                >
+                  <View className="absolute right-2 -translate-y-1/2 rounded-md bg-background px-[5px] py-px">
+                    <Text className="text-[10px] font-bold text-muted-foreground">
+                      12:00 AM
+                    </Text>
+                  </View>
+                </View>
+              )}
 
                {isToday && (
                 <NowIndicator now={now} tz={tz} totalHeight={totalHeight} />
