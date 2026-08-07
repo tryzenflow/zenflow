@@ -98,6 +98,14 @@ interface ScheduledLike {
  * omitted — mirrors `frontend/src/components/calendar/month-grid.tsx`'s
  * `isSameDay(d, zonedDate(e.start, tz))` filter, which only ever runs over
  * already-placed events.
+ *
+ * Each day's tasks come back sorted ascending by `scheduledStartTime`. Sorting
+ * here rather than at each render site is deliberate: this one map feeds both
+ * the grid cells (via `splitCellTasks`) and the day/overflow sheet (the same
+ * array is handed straight to `TaskListSheet`), so one sort keeps the two in
+ * agreement. It also gives "+N more" its intended meaning — the cell shows the
+ * `MONTH_PILL_CAP` *earliest* tasks and the overflow rolls up the rest, rather
+ * than whatever order the API happened to return.
  */
 export function groupTasksByDate<T extends ScheduledLike>(
   tasks: T[],
@@ -111,5 +119,17 @@ export function groupTasksByDate<T extends ScheduledLike>(
     if (existing) existing.push(task);
     else map.set(key, [task]);
   }
+  // `Array.prototype.sort` is stable (ES2019+), so tasks sharing a start time
+  // keep the order the API returned them in.
+  for (const group of map.values()) {
+    group.sort((a, b) => startMs(a) - startMs(b));
+  }
   return map;
+}
+
+/** Epoch ms of a task's scheduled start; 0 for the unscheduled tasks
+ * `groupTasksByDate` has already filtered out (keeps the comparator total
+ * without a non-null assertion). */
+function startMs(task: ScheduledLike): number {
+  return task.scheduledStartTime ? Date.parse(task.scheduledStartTime) : 0;
 }

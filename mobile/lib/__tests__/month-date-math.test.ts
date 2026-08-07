@@ -152,4 +152,65 @@ describe("groupTasksByDate", () => {
     expect(grouped.has("2026-06-16")).toBe(true);
     expect(grouped.has("2026-06-15")).toBe(false);
   });
+
+  it("sorts each day ascending by start time, whatever order the API returned", () => {
+    const tasks = [
+      task("noon", "2026-06-15T12:00:00.000Z"),
+      task("evening", "2026-06-15T19:45:00.000Z"),
+      task("dawn", "2026-06-15T06:15:00.000Z"),
+    ];
+    const grouped = groupTasksByDate(tasks, tz);
+    expect(grouped.get("2026-06-15")?.map((t) => t.id)).toEqual([
+      "dawn",
+      "noon",
+      "evening",
+    ]);
+  });
+
+  it("sorts every day independently", () => {
+    const tasks = [
+      task("d16-late", "2026-06-16T18:00:00.000Z"),
+      task("d15-late", "2026-06-15T18:00:00.000Z"),
+      task("d16-early", "2026-06-16T08:00:00.000Z"),
+      task("d15-early", "2026-06-15T08:00:00.000Z"),
+    ];
+    const grouped = groupTasksByDate(tasks, tz);
+    expect(grouped.get("2026-06-15")?.map((t) => t.id)).toEqual([
+      "d15-early",
+      "d15-late",
+    ]);
+    expect(grouped.get("2026-06-16")?.map((t) => t.id)).toEqual([
+      "d16-early",
+      "d16-late",
+    ]);
+  });
+
+  it("keeps API order for tasks sharing a start time (stable sort)", () => {
+    const tasks = [
+      task("first", "2026-06-15T09:00:00.000Z"),
+      task("second", "2026-06-15T09:00:00.000Z"),
+      task("third", "2026-06-15T09:00:00.000Z"),
+    ];
+    const grouped = groupTasksByDate(tasks, tz);
+    expect(grouped.get("2026-06-15")?.map((t) => t.id)).toEqual([
+      "first",
+      "second",
+      "third",
+    ]);
+  });
+
+  it("sorts in user-tz order across a UTC day boundary", () => {
+    // Both land on 2026-06-16 in UTC+2; the 23:30Z one is 01:30 local and so
+    // must sort *before* the 08:00Z (10:00 local) task, even though its raw
+    // UTC timestamp is later in the string sense only by date.
+    const tasks = [
+      task("morning", "2026-06-16T08:00:00.000Z"),
+      task("just-after-midnight", "2026-06-15T23:30:00.000Z"),
+    ];
+    const grouped = groupTasksByDate(tasks, "Europe/Berlin");
+    expect(grouped.get("2026-06-16")?.map((t) => t.id)).toEqual([
+      "just-after-midnight",
+      "morning",
+    ]);
+  });
 });
