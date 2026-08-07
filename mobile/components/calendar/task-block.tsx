@@ -270,12 +270,12 @@ export function TaskBlock({
 
   const stateClasses =
     state === "overdue"
-      ? "border-t-black border-r-black border-b-black dark:border-t-border dark:border-r-border dark:border-b-border border-l-rose-500 bg-rose-50/40 ring-1 ring-amber-500/40 dark:bg-rose-950/10"
+      ? "border-t-black border-r-black border-b-black dark:border-t-white/50 dark:border-r-white/50 dark:border-b-white/50 border-l-rose-500 bg-rose-50/40 ring-1 ring-amber-500/40 dark:bg-rose-950/10"
       : state === "conflict"
-        ? "border-t-black border-r-black border-b-black dark:border-t-border dark:border-r-border dark:border-b-border border-l-amber-500 bg-amber-50/40 ring-1 ring-amber-500/40 dark:bg-amber-950/10"
+        ? "border-t-black border-r-black border-b-black dark:border-t-white/50 dark:border-r-white/50 dark:border-b-white/50 border-l-amber-500 bg-amber-50/40 ring-1 ring-amber-500/40 dark:bg-amber-950/10"
         : state === "completed"
-          ? "border-t-black border-r-black border-b-black dark:border-t-border dark:border-r-border dark:border-b-border border-l-success/60 ring-1 ring-amber-500/40 bg-muted/60"
-          : "border-t-black border-r-black border-b-black dark:border-t-border dark:border-r-border dark:border-b-border border-l-primary ring-1 ring-amber-500/40 glass-task";
+          ? "border-t-black border-r-black border-b-black dark:border-t-white/50 dark:border-r-white/50 dark:border-b-white/50 border-l-success/60 ring-1 ring-amber-500/40 bg-muted/60"
+          : "border-t-black border-r-black border-b-black dark:border-t-white/50 dark:border-r-white/50 dark:border-b-white/50 border-l-primary ring-1 ring-amber-500/40 glass-task";
 
   const isMultiColumn = layout.columns > 1;
 
