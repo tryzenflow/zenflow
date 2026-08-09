@@ -670,10 +670,10 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
 
       <View
         pointerEvents="none"
-        className="absolute inset-x-4 bottom-3 z-50 gap-2"
+        className="absolute inset-x-4 bottom-20 z-50 gap-2"
       >
         {dragSnap && (
-          <View className="flex-row items-start gap-2.5 rounded-2xl border border-border bg-popover p-3.5 shadow-lg shadow-foreground/10">
+          <View className="flex-row items-start gap-2.5 rounded-2xl border border-border bg-popover p-3.5 shadow-lg shadow-black/10 dark:shadow-white/5">
             <View className="h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-brand-orange/15">
               <Sparkles size={17} className="text-brand-orange" />
             </View>
@@ -686,7 +686,7 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
           </View>
         )}
         {overdueToast && (
-          <View className="flex-row items-start gap-2.5 rounded-2xl border border-border bg-popover p-3.5 shadow-lg shadow-foreground/10">
+          <View className="flex-row items-start gap-2.5 rounded-2xl border border-border bg-popover p-3.5 shadow-lg shadow-black/10 dark:shadow-white/5">
             <View className="h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-rose-500/15">
               <AlertCircle size={17} className="text-rose-600 dark:text-rose-400" />
             </View>

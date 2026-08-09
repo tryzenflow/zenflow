@@ -1,9 +1,9 @@
 import { CreateTaskFab } from "@/components/tasks/create-task-fab";
-import { OptimizeFab } from "@/components/tasks/optimize-fab";
 import { DayTimeline, type TimelineState } from "@/components/calendar/day-timeline";
 import { DaySlice } from "@/components/calendar/day-slice";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useScheduleRefresh } from "@/hooks/use-schedule-refresh";
+import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { zonedDate, zonedNow } from "@zenflow/core";
 import type { Task } from "@zenflow/shared";
 import * as Haptics from "expo-haptics";
@@ -23,6 +23,8 @@ export default function DayScreen() {
   const [overnightTails, setOvernightTails] = useState<Task[]>([]);
   const [sliceDate, setSliceDate] = useState<Date>(() => zonedNow(tz));
   const { date: dateParam } = useLocalSearchParams<{ date?: string }>();
+
+  const tabBarOverlay = useTabBarOverlayHeight();
 
   // Accepts an optional `date` query param (ISO instant) so other screens can
   // deep-link into a specific day — currently only Month View's "tap a day
@@ -86,7 +88,7 @@ export default function DayScreen() {
   }, []);
 
   return (
-    <View className="flex-1 bg-background">
+    <View className="flex-1 bg-background" style={{ paddingBottom: tabBarOverlay }}>
       <DayTimeline
         date={date}
         onTaskPress={handleTaskPress}
@@ -97,7 +99,6 @@ export default function DayScreen() {
         onOvernightTailsChange={setOvernightTails}
       />
       {timelineState === "ready" && !sliceActive && <CreateTaskFab tz={tz} />}
-      {timelineState === "ready" && !sliceActive && <OptimizeFab tz={tz} />}
       {sliceActive && (
         <Animated.View
           entering={SlideInUp.duration(300)}
