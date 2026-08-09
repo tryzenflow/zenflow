@@ -97,9 +97,7 @@ export default function DayScreen() {
         onOvernightTailsChange={setOvernightTails}
       />
       {timelineState === "ready" && !sliceActive && <CreateTaskFab tz={tz} />}
-      {timelineState === "ready" && !sliceActive && (
-        <OptimizeFab tz={tz} onApplied={onOptimizeApplied} />
-      )}
+      {timelineState === "ready" && !sliceActive && <OptimizeFab tz={tz} />}
       {sliceActive && (
         <Animated.View
           entering={SlideInUp.duration(300)}

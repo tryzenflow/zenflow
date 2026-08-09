@@ -21,7 +21,7 @@ import {
   resizeTask,
 } from "@/api/tasks";
 import { tasksToBlocks } from "@zenflow/core";
-import type { TasksMeta, RescheduleResponse } from "@zenflow/shared";
+import type { TasksMeta } from "@zenflow/shared";
 import { isAxiosError } from "axios";
 import { toast } from "sonner";
 import { errorToast } from "@/lib/toast";
