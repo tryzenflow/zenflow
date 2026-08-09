@@ -114,7 +114,13 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    // Only show the full-screen loading skeleton when we have nothing to show.
+    // Subsequent refetches (screen focus, Optimize apply, etc.) update
+    // `tasks` in place — the timeline stays mounted so the past-night strip
+    // and other derived rendering don't flicker off. The pull-to-refresh
+    // `RefreshControl` gives a separate visual signal for user-initiated
+    // refreshes.
+    if (tasks.length === 0) setLoading(true);
     setError(false);
     listTasks("day", date, "all")
       .then((res) => {
@@ -129,7 +135,7 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
     return () => {
       cancelled = true;
     };
-  }, [date.toISOString().slice(0, 10), refreshKey]);
+  }, [dayKey, refreshKey]);
 
   useEffect(() => {
     onStateChange?.(loading ? "loading" : error ? "error" : "ready");
