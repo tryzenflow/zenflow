@@ -350,9 +350,9 @@ export function TaskBlock({
           ) : (
             <>
               {isConflict && (
-                <View className="w-fit flex-row items-center gap-1 rounded-md border border-transparent bg-amber-500/15 px-2 py-0.5">
-                  <AlertTriangle size={11} className="text-amber-700 dark:text-amber-300" />
-                  <Text className="text-[10px] font-semibold leading-none text-amber-700 dark:text-amber-300">
+                <View className="self-start flex-row items-center justify-center gap-1 rounded-md border border-transparent bg-amber-500/15 px-2 py-0.5">
+                  <AlertTriangle size={11} className="translate-y-[-0.5px] text-amber-700 dark:text-amber-300" />
+                  <Text className="text-[10px] font-semibold leading-[11px] text-amber-700 dark:text-amber-300">
                     Overlap
                   </Text>
                 </View>
