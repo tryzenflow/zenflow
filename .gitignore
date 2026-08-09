@@ -3,10 +3,10 @@ node_modules/
 .env.prod
 docker.prod.env
 
-# Local dev junk
-mobile/.idea/
-mobile/tw-test-out.css
+# IDE / local tooling
+.idea/
+*.iml
+tw-test-out.css
 start-dev.bat
 start-dev.ps1
-startdev-ver2.bat
-startdev-ver3.bat
+startdev-*.bat
