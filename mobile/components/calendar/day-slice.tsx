@@ -100,9 +100,6 @@ export function DaySlice({ date, tz, tails, onCollapse }: DaySliceProps) {
           </View>
 
           <View className="flex-1 items-center justify-center px-8">
-            <Text className="text-center text-[12.5px] font-medium text-muted-foreground">
-              ↑ Swipe to return to today
-            </Text>
           </View>
         </View>
       </GestureDetector>
