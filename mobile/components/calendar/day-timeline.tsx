@@ -528,7 +528,7 @@ export function DayTimeline({
               onPress={() => void refetch()}
             >
               <RotateCw size={16} className="text-foreground" />
-              <Text className="text-base font-semibold">   Try again</Text>
+              <Text className="text-base font-semibold"> Try again</Text>
             </Button>
           </>
         ) : loading ? (
@@ -719,7 +719,7 @@ export function DayTimeline({
 
       <View
         pointerEvents="none"
-        className="absolute left-4 right-4 z-[55] gap-2"
+        className="absolute left-4 right-4 z-[100] gap-2"
         style={{ bottom: 24 }}
       >
         {dragSnap && (
