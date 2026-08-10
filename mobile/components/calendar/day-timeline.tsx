@@ -21,8 +21,10 @@ import {
   zonedDate,
 } from "@zenflow/core";
 import type { Task } from "@zenflow/shared";
+import { Portal } from "@/components/primitives/portal";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useNow } from "@/hooks/use-now";
+import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { listTasks, rescheduleTask, completeTask } from "@/api/tasks";
 import { TimeGutter } from "./time-gutter";
 import { WorkZoneOverlay } from "./work-zone-overlay";
@@ -105,6 +107,7 @@ export function DayTimeline({
   const scrollRef = useRef<ScrollView>(null);
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const now = useNow();
+  const tabBarOverlay = useTabBarOverlayHeight();
 
   // When it's today, the displayed day follows the live clock so the header
   // date auto-advances across midnight instead of freezing on yesterday.
@@ -699,45 +702,47 @@ export function DayTimeline({
         )}
       </ScrollView>
 
-      <View
-        pointerEvents="none"
-        className="absolute left-4 right-4 z-[100] gap-2"
-        style={{ bottom: 24 }}
-      >
-        {dragSnap && (
-          <View className="flex-row items-start gap-2.5 rounded-2xl border border-black/15 dark:border-white/30 bg-popover p-3.5 shadow-lg">
-            <View className="h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-brand-orange/15">
-              <MousePointer2 size={17} className="text-brand-orange" />
+      <Portal name="day-timeline-bottom-toast">
+        <View
+          pointerEvents="none"
+          className="absolute left-4 right-4 z-[100] gap-2"
+          style={{ bottom: tabBarOverlay - 8 }}
+        >
+          {dragSnap && (
+            <View className="flex-row items-start gap-2.5 rounded-2xl border border-black/15 dark:border-white/30 bg-popover p-3.5 shadow-lg">
+              <View className="h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-brand-orange/15">
+                <MousePointer2 size={17} className="text-brand-orange" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-sm font-semibold">
+                  Snapped to {dragChipLabel}
+                </Text>
+                <Text className="mt-0.5 text-[12.5px] text-muted-foreground">
+                  Release to reschedule · 15-min grid
+                </Text>
+              </View>
             </View>
-            <View className="flex-1">
-              <Text className="text-sm font-semibold">
-                Snapped to {dragChipLabel}
-              </Text>
-              <Text className="mt-0.5 text-[12.5px] text-muted-foreground">
-                Release to reschedule · 15-min grid
-              </Text>
+          )}
+          {overdueToast && (
+            <View className="flex-row items-start gap-2.5 rounded-2xl border border-black/15 dark:border-white/15 bg-popover p-3.5 shadow-lg">
+              <View className="h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-rose-500/15">
+                <AlertCircle
+                  size={17}
+                  className="text-rose-600 dark:text-rose-400"
+                />
+              </View>
+              <View className="min-w-0 flex-1">
+                <Text className="text-sm font-semibold">
+                  {overdueToast.title}
+                </Text>
+                <Text className="mt-0.5 text-[12.5px] text-muted-foreground">
+                  {overdueToast.subtitle}
+                </Text>
+              </View>
             </View>
-          </View>
-        )}
-        {overdueToast && (
-          <View className="flex-row items-start gap-2.5 rounded-2xl border border-black/15 dark:border-white/15 bg-popover p-3.5 shadow-lg">
-            <View className="h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-rose-500/15">
-              <AlertCircle
-                size={17}
-                className="text-rose-600 dark:text-rose-400"
-              />
-            </View>
-            <View className="min-w-0 flex-1">
-              <Text className="text-sm font-semibold">
-                {overdueToast.title}
-              </Text>
-              <Text className="mt-0.5 text-[12.5px] text-muted-foreground">
-                {overdueToast.subtitle}
-              </Text>
-            </View>
-          </View>
-        )}
-      </View>
+          )}
+        </View>
+      </Portal>
     </View>
   );
 }
