@@ -4,7 +4,7 @@
   "version": "2.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "pnpm --filter @zenflow/core build && vite",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint .",
@@ -45,6 +45,7 @@
     "@tiptap/react": "^3.11.0",
     "@tiptap/starter-kit": "^3.11.0",
     "@zenflow/shared": "workspace:*",
+    "@zenflow/core": "workspace:*",
     "axios": "^1.13.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

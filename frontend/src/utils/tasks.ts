@@ -1,6 +1,6 @@
 // types.ts or schema.ts
 import * as z from "zod";
-import { DAILY_HORIZON, TIME_GRANULARITY } from "./constants";
+import { DAILY_HORIZON, TIME_GRANULARITY } from "@zenflow/core";
 import { getData, postData } from "@/api";
 import { Task } from "@/types/tasks";
 import { extractFileIdsFromNoteContent } from "./files";

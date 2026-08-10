@@ -1,5 +1,5 @@
 import { Dispatch, SetStateAction, useEffect } from "react";
-import { ViewMode } from "@/types/schedule";
+import { ViewMode } from "@zenflow/shared";
 import { isTypingTarget } from "@/utils/editing";
 import { shiftDateByView } from "@/utils/navigation";
 

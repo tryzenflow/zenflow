@@ -56,6 +56,7 @@ export default {
           yellow: "rgb(var(--brand-yellow) / <alpha-value>)",
           lime: "rgb(var(--brand-lime) / <alpha-value>)",
         },
+        success: "rgb(var(--success) / <alpha-value>)",
       },
       borderWidth: {
         hairline: hairlineWidth(),

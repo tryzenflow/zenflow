@@ -11,6 +11,7 @@ import {
   findNodeHandle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 
 /**
  * The form screen's single scroll owner, exposed so a field far down the
@@ -85,10 +86,11 @@ export function TaskFormScreen({
 }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const tabBarOverlay = useTabBarOverlayHeight();
   const scrollViewRef = useRef<ScrollView | null>(null);
 
   return (
-    <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
+    <View className="flex-1 bg-background" style={{ paddingTop: insets.top, paddingBottom: tabBarOverlay }}>
       <View className="flex-row items-center justify-between gap-3 border-b border-border px-5 pb-3.5 pt-2">
         <View className="flex-1">
           <Text className="text-[19px] font-bold tracking-tight">{title}</Text>

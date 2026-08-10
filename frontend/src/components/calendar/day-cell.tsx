@@ -1,4 +1,4 @@
-import { TIME_GRANULARITY } from "@/utils/constants";
+import { TIME_GRANULARITY } from "@zenflow/core";
 import { cn } from "@/lib/utils";
 import { useDroppable } from "@dnd-kit/core";
 

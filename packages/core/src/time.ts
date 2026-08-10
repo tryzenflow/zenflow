@@ -9,6 +9,14 @@ export const minutesToTime = (minutes: number): string => {
   return `${hours}:${m.toString().padStart(2, "0")} ${ampm}`;
 };
 
+export const minutesToHour = (minutes: number): string => {
+  if (minutes === DAILY_HORIZON) return "11:59 PM";
+  const totalHours = Math.floor(minutes / 60);
+  const hours = totalHours % 12 === 0 ? 12 : totalHours % 12;
+  const ampm = totalHours >= 12 ? "PM" : "AM";
+  return `${hours} ${ampm}`;
+};
+
 export const minutesToMilitaryTime = (minutes: number): string => {
   if (minutes === DAILY_HORIZON) return "23:59:59";
   const totalHours = Math.floor(minutes / 60);

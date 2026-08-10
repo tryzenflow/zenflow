@@ -8,7 +8,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { DAILY_HORIZON, TIME_GRANULARITY } from "@/utils/constants";
+import { DAILY_HORIZON, TIME_GRANULARITY } from "@zenflow/core";
 
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 1); // 1..12
 const MINUTE_STEPS = Array.from(

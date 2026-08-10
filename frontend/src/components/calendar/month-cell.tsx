@@ -1,17 +1,13 @@
 import { cn } from "@/lib/utils";
-import { Event } from "@/types/schedule";
-import { TASK_CARD_CLASSES } from "@/lib/task-card";
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-} from "@/components/ui/popover";
+import { Event } from "@zenflow/shared";
+import { TASK_CARD_CLASSES } from "@zenflow/core";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { format, isSameDay, isSameMonth } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useUserStore } from "@/hooks/use-user-store";
-import { DEFAULT_WORK_PREFS, getDayZones } from "@/utils/zones";
+import { DEFAULT_WORK_PREFS, getDayZones } from "@zenflow/core";
 import { isZonedToday, zonedDate } from "@/utils/tz";
 
 export function MonthCell({

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Event, ViewMode } from "@/types/schedule";
+import { Event, ViewMode } from "@zenflow/shared";
 import { CalendarHeader } from "./header";
 import { useViewShortcuts } from "@/hooks/use-view-shortcuts";
 import { DayView } from "./day-view";
@@ -20,7 +20,7 @@ import {
   rescheduleTask,
   resizeTask,
 } from "@/api/tasks";
-import { tasksToBlocks } from "@/utils/blocks";
+import { tasksToBlocks } from "@zenflow/core";
 import type { TasksMeta } from "@zenflow/shared";
 import { isAxiosError } from "axios";
 import { toast } from "sonner";

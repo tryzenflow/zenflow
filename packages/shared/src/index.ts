@@ -3,3 +3,4 @@ export * from "./tag";
 export * from "./user";
 export * from "./view";
 export * from "./api";
+export * from "./schedule";

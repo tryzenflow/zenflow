@@ -4,6 +4,10 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Scan class literals held in the @zenflow/core package (e.g. the task-card
+   state classes) so Tailwind emits those utilities for the frontend. */
+@source "../../packages/core/src";
+
 body {
   font-family: "Geist", sans-serif;
   scroll-behavior: smooth;

@@ -1,8 +1,8 @@
 import type { Task } from "@zenflow/shared";
-import type { DaySegment, Event } from "@/types/schedule";
-import { deriveState } from "@/lib/task-card";
+import type { DaySegment, Event } from "@zenflow/shared";
+import { deriveState } from "./task-card";
 import { isSameDay, startOfDay } from "date-fns";
-import { zonedDate, zonedWallClockToUtc } from "@/utils/tz";
+import { zonedDate, zonedWallClockToUtc } from "./tz";
 
 /** Convert a scheduled task into a positioned calendar block (null if unplaced). */
 export function taskToBlock(task: Task): Event | null {

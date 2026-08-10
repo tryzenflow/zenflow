@@ -1,15 +1,15 @@
 import { useUserStore } from "@/hooks/use-user-store";
 import { useHighlightStore } from "@/hooks/use-highlight-store";
 import { cn } from "@/lib/utils";
-import { TASK_CARD_CLASSES, withOverlap } from "@/lib/task-card";
+import { TASK_CARD_CLASSES, withOverlap } from "@zenflow/core";
 import {
   Popover,
   PopoverAnchor,
   PopoverContent,
 } from "@/components/ui/popover";
-import { DaySegment } from "@/types/schedule";
-import { DAILY_HORIZON, TIME_GRANULARITY } from "@/utils/constants";
-import type { BlockLayout } from "@/utils/overlap";
+import { DaySegment } from "@zenflow/shared";
+import { DAILY_HORIZON, TIME_GRANULARITY } from "@zenflow/core";
+import type { BlockLayout } from "@zenflow/core";
 import { zonedDate, zonedWallClockToUtc } from "@/utils/tz";
 import { CSS } from "@dnd-kit/utilities";
 import { useDndMonitor, useDraggable, type DragEndEvent } from "@dnd-kit/core";

@@ -1,41 +1,11 @@
 import type { TaskCardState } from "@zenflow/shared";
 
-interface StateInput {
-  status: string;
-  conflict: boolean;
-  deadline: string | null;
-  scheduledStartTime: string | null;
-  durationMinutes: number;
-}
-
-/**
- * Hand-synced RN port of `frontend/src/lib/task-card.ts`'s `deriveState` —
- * pure date-in/state-out logic with no DOM dependency, so it's the identical
- * function, just kept in `mobile/` rather than `@zenflow/core` for now (the
- * same situation `taskSchema` was in before RN migration Phase 5 hoisted it).
- * If this drifts from the frontend copy, that's tech debt to flag/hoist to
- * `@zenflow/core` — don't further fork the logic in a third place.
- */
-export function deriveState(t: StateInput, now = new Date()): TaskCardState {
-  if (t.status === "DONE") return "completed";
-  if (t.conflict) return "conflict";
-  if (t.deadline) {
-    const deadlineMs = new Date(t.deadline).getTime();
-    if (deadlineMs < now.getTime()) return "overdue";
-    if (
-      t.scheduledStartTime &&
-      new Date(t.scheduledStartTime).getTime() + t.durationMinutes * 60_000 >
-        deadlineMs
-    )
-      return "overdue";
-  }
-  return "fluid";
-}
+export { deriveState, withOverlap, TASK_CARD_CLASSES } from "@zenflow/core";
 
 /**
  * Month-grid pill background/left-accent classes per state — RN/NativeWind
- * sizing of `frontend/src/lib/task-card.ts`'s `TASK_CARD_CLASSES`, adapted
- * for the Month View's compact pill instead of a full day-timeline card.
+ * sizing of `@zenflow/core`'s `TASK_CARD_CLASSES`, adapted for the Month
+ * View's compact pill instead of a full day-timeline card.
  */
 export const MONTH_PILL_CLASSES: Record<TaskCardState, string> = {
   fluid: "bg-brand-orange/[0.18] border-l-primary",

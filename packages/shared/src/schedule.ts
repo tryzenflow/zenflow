@@ -1,11 +1,8 @@
-import type { TaskCardState, TaskStatus } from "@zenflow/shared";
-
-export type { ViewMode } from "@zenflow/shared";
+import type { TaskCardState, TaskStatus } from "./task";
 
 /**
  * A positioned calendar block — one concrete, scheduled task.
- * `id` and `taskId` both address that real, mutable task. Built via
- * {@link taskToBlock}.
+ * `id` and `taskId` both address that real, mutable task.
  */
 export interface Event {
   id: string;

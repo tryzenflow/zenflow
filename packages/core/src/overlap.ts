@@ -1,4 +1,4 @@
-import { DaySegment, Event } from "@/types/schedule";
+import type { DaySegment, Event } from "@zenflow/shared";
 
 /** The layout key for a block — a per-segment id when split, else the task id. */
 const keyOf = (ev: Event | DaySegment): string =>

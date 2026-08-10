@@ -102,7 +102,7 @@ call):
 |-------|-----------|-------|
 | `(auth)` | `login.tsx` | Built — email stage → OTP verification stage |
 | `(onboarding)` | `index.tsx` | Built — work hours / work days / timezone / duration-adjustment mode wizard |
-| `(app)` | `index.tsx` (Day) | **Grid still a Phase 2 stub**, but the task sheets (create/edit/change-duration — RN migration Phase 5, issue #20) are wired against a plain task list in the meantime: tap a task → edit, long-press a task → change duration, long-press the empty area or the FAB → create |
+| `(app)` | `index.tsx` (Day) | Built — EDF grid with pinch-zoom, long-press create, drag reschedule, pull-to-refresh. When a task runs past midnight, the day ends at a dashed `12:00 AM` boundary followed by a tall empty region; scrolling through it to the end flips to a next-day slice (`components/calendar/day-slice.tsx`) showing only the 12 AM–4 AM tail; swipe up returns. The empty region and flip only exist on days that actually have a past-midnight task. Task sheets (create/edit/change-duration) are wired against the grid: tap a task → edit, long-press a task → change duration, long-press the empty area or the FAB → create |
 | `(app)` | `week.tsx` | **Placeholder stub** — calendar UI is future work |
 | `(app)` | `month.tsx` (Month) | **Built** (RN migration Phase 4, issue #21) — paginated Monday-first grid (`components/calendar/`), "+N more" overflow bottom sheet, tap-a-day → Day View, long-press-drag a pill to reschedule |
 | `(app)` | `settings.tsx` | Built — profile row, theme toggle, timezone picker, duration-mode picker, insights panel |

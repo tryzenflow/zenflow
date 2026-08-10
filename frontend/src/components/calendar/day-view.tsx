@@ -1,11 +1,11 @@
-import { Event } from "@/types/schedule";
+import { Event } from "@zenflow/shared";
 import { DndContext, DragEndEvent } from "@dnd-kit/core";
 import { DayGrid } from "./day-grid";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useDragSensors } from "@/hooks/use-drag-sensors";
 import { zonedDate, zonedWallClockToUtc } from "@/utils/tz";
-import { DAILY_HORIZON, TIME_GRANULARITY } from "@/utils/constants";
+import { DAILY_HORIZON, TIME_GRANULARITY } from "@zenflow/core";
 import { addDays } from "date-fns";
 
 /** px height of one hour row — mirrors the --week-cells-height CSS variable. */

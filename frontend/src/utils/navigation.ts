@@ -1,6 +1,6 @@
 import { addDays, addMonths, addWeeks, startOfMonth, startOfWeek } from "date-fns";
-import type { ViewMode } from "@/types/schedule";
-import { WEEK_STARTS_ON } from "./constants";
+import type { ViewMode } from "@zenflow/shared";
+import { WEEK_STARTS_ON } from "@zenflow/core";
 
 export type NavDirection = "left" | "right";
 

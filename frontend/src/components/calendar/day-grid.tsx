@@ -1,12 +1,12 @@
-import { Event } from "@/types/schedule";
-import { DAILY_HORIZON, TIME_GRANULARITY } from "@/utils/constants";
+import { Event } from "@zenflow/shared";
+import { DAILY_HORIZON, TIME_GRANULARITY } from "@zenflow/core";
 import { useMemo } from "react";
 import { ScheduledBlockItem } from "./scheduled-block-item";
 import { format } from "date-fns";
 import { Cell } from "./day-cell";
 import { DayColumnBackground } from "./day-column-background";
-import { getOverlapLayout } from "@/utils/overlap";
-import { eventsForDay } from "@/utils/blocks";
+import { getOverlapLayout } from "@zenflow/core";
+import { eventsForDay } from "@zenflow/core";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useNow } from "@/hooks/use-now";
 import { isZonedToday, zonedDate } from "@/utils/tz";
