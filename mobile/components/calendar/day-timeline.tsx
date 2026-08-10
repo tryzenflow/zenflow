@@ -119,7 +119,7 @@ export function DayTimeline({
   }, [propDate, now, tz]);
   const [hourHeight, setHourHeight] = useState(HOUR_HEIGHT_DEFAULT);
   const totalHeight = hourHeight * 24;
-  const peekHeight = Math.round((screenHeight * 4) / 8);
+  const peekHeight = Math.round((screenHeight * 1) / 8);
   const contentWidth = screenWidth - GUTTER_WIDTH;
 
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -569,24 +569,6 @@ export function DayTimeline({
             <Animated.View style={animatedContentStyle} className="relative">
               <TimeGutter hourHeight={hourHeight} />
 
-              {/* Single empty "12 AM" slot below the midnight boundary — a hint
-                that the timeline continues past midnight (only on days with a
-                crossing task). One hour only, matching mockups/day-view.html's
-                "Crosses midnight" frame; the rest of the strip stays empty
-                until the user scrolls into it (opens the next-day slice). */}
-              {hasOvernightTails && (
-                <View
-                  className="absolute left-0"
-                  style={{ top: totalHeight, height: hourHeight }}
-                >
-                  <TimeGutter
-                    hourHeight={hourHeight}
-                    fromHour={0}
-                    toHour={1}
-                    showZeroLabel
-                  />
-                </View>
-              )}
 
               <View
                 className="absolute top-0 bottom-0 bg-card"
@@ -723,7 +705,7 @@ export function DayTimeline({
         style={{ bottom: 24 }}
       >
         {dragSnap && (
-          <View className="flex-row items-start gap-2.5 rounded-2xl border bg-popover p-3.5 shadow-lg">
+          <View className="flex-row items-start gap-2.5 rounded-2xl border border-black/15 dark:border-white/30 bg-popover p-3.5 shadow-lg">
             <View className="h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-brand-orange/15">
               <MousePointer2 size={17} className="text-brand-orange" />
             </View>
@@ -738,7 +720,7 @@ export function DayTimeline({
           </View>
         )}
         {overdueToast && (
-          <View className="flex-row items-start gap-2.5 rounded-2xl border bg-popover p-3.5 shadow-lg">
+          <View className="flex-row items-start gap-2.5 rounded-2xl border border-black/15 dark:border-white/15 bg-popover p-3.5 shadow-lg">
             <View className="h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-rose-500/15">
               <AlertCircle
                 size={17}
