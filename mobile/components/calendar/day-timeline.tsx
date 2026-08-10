@@ -614,24 +614,24 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
                 );
               })}
 
-              {/* Dashed midnight boundary — the day ends here and the empty
+{/* Dashed midnight boundary — the day ends here and the empty
                   "past midnight" region begins below (only on days with a
                   crossing task). Rendered after the task blocks so the line
                   draws over the head block's flat bottom edge, mirroring
                   mockups/day-view.html's 12:00 AM. */}
-              {hasOvernightTails && (
-                <View
-                  pointerEvents="none"
-                  className="absolute left-0 right-0 z-20 bg-border/50"
-                  style={{ top: totalHeight, height: 1, elevation: 2 }}
-                >
-                  <View className="absolute right-2 -translate-y-1/2 rounded-md bg-background px-1.5 py-px">
-                    <Text className="text-[10px] font-bold text-muted-foreground">
-                      12:00 AM
-                    </Text>
+                {hasOvernightTails && (
+                  <View
+                    pointerEvents="none"
+                    className="absolute left-0 right-0 z-20 h-0 border-t border-dashed border-muted-foreground/55"
+                    style={{ top: totalHeight }}
+                  >
+                    <View className="absolute right-2 -translate-y-1/2 rounded-md bg-background px-1.5 py-px">
+                      <Text className="text-[10px] font-bold text-muted-foreground">
+                        12:00 AM
+                      </Text>
+                    </View>
                   </View>
-                </View>
-              )}
+                )}
 
               {dragSnap && (
                 <View pointerEvents="none" className="absolute left-0 right-0 z-20">
