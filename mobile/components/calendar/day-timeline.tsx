@@ -1,5 +1,13 @@
 import { useMemo, useRef, useState, useEffect, useCallback } from "react";
-import { View, ScrollView, RefreshControl, TouchableOpacity, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import {
+  View,
+  ScrollView,
+  RefreshControl,
+  TouchableOpacity,
+  useWindowDimensions,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from "react-native";
 import { Text } from "@/components/ui/text";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -22,12 +30,15 @@ import { NowIndicator } from "./now-indicator";
 import { TaskBlock } from "./task-block";
 import { format, startOfDay } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
-import { AlertCircle, AlertTriangle, MousePointer2, RefreshCcw, RotateCw } from "@/components/Icons";
-import { Button } from "@/components/ui/button";
 import {
-  Gesture,
-  GestureDetector,
-} from "react-native-gesture-handler";
+  AlertCircle,
+  AlertTriangle,
+  MousePointer2,
+  RefreshCcw,
+  RotateCw,
+} from "@/components/Icons";
+import { Button } from "@/components/ui/button";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -79,7 +90,16 @@ interface DayTimelineProps {
   onOvernightTailsChange?: (tails: Task[]) => void;
 }
 
-export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComplete, refreshKey, onStateChange, onReachBottom, onOvernightTailsChange }: DayTimelineProps) {
+export function DayTimeline({
+  date: propDate,
+  onTaskPress,
+  onLongPress,
+  onComplete,
+  refreshKey,
+  onStateChange,
+  onReachBottom,
+  onOvernightTailsChange,
+}: DayTimelineProps) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const prefs = useUserStore((s) => s.user) ?? DEFAULT_WORK_PREFS;
   const scrollRef = useRef<ScrollView>(null);
@@ -111,7 +131,7 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
   const baseHourHeight = useSharedValue(HOUR_HEIGHT_DEFAULT);
   const ghostY = useSharedValue(0);
   const ghostVisible = useSharedValue(0);
-
+  const dayKey = format(date, "yyyy-MM-dd");
   useEffect(() => {
     let cancelled = false;
     // Only show the full-screen loading skeleton when we have nothing to show.
@@ -150,8 +170,6 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
       setError(true);
     }
   }, [date]);
-
-  const dayKey = format(date, "yyyy-MM-dd");
 
   const overnightTails = useMemo(() => {
     const nextDay = startOfDay(date);
@@ -283,8 +301,7 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
 
   const handleTimelineLayout = useCallback(() => {
     if (loading) {
-      const loadingOffset =
-        ((8 * 60) / DAILY_HORIZON) * totalHeight - 120;
+      const loadingOffset = ((8 * 60) / DAILY_HORIZON) * totalHeight - 120;
       scrollRef.current?.scrollTo({
         y: Math.max(0, loadingOffset),
         animated: false,
@@ -354,15 +371,24 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
   const dragChipLabel = useMemo(() => {
     if (!dragSnap) return "";
     const wall = zonedDate(date, tz);
-    wall.setHours(Math.floor(dragSnap.startMin / 60), dragSnap.startMin % 60, 0, 0);
+    wall.setHours(
+      Math.floor(dragSnap.startMin / 60),
+      dragSnap.startMin % 60,
+      0,
+      0,
+    );
     return wall.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   }, [dragSnap, date, tz]);
 
   const handleLongPress = useCallback(
     (y: number) => {
       const pxPerMin = totalHeight / DAILY_HORIZON;
-      const minutes = Math.round(y / pxPerMin / TIME_GRANULARITY) * TIME_GRANULARITY;
-      const clampedMin = Math.max(0, Math.min(DAILY_HORIZON - TIME_GRANULARITY, minutes));
+      const minutes =
+        Math.round(y / pxPerMin / TIME_GRANULARITY) * TIME_GRANULARITY;
+      const clampedMin = Math.max(
+        0,
+        Math.min(DAILY_HORIZON - TIME_GRANULARITY, minutes),
+      );
 
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
@@ -385,16 +411,21 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
       );
       baseHourHeight.value = newHeight;
     })
-  .onEnd(() => {
-    runOnJS(setHourHeight)(baseHourHeight.value);
-  });
+    .onEnd(() => {
+      runOnJS(setHourHeight)(baseHourHeight.value);
+    });
 
   const longPressGesture = Gesture.LongPress()
     .minDuration(500)
     .onBegin((e) => {
       const pxPerMin = totalHeight / DAILY_HORIZON;
-      const minutes = Math.round(e.absoluteY / pxPerMin / TIME_GRANULARITY) * TIME_GRANULARITY;
-      const clampedMin = Math.max(0, Math.min(DAILY_HORIZON - TIME_GRANULARITY, minutes));
+      const minutes =
+        Math.round(e.absoluteY / pxPerMin / TIME_GRANULARITY) *
+        TIME_GRANULARITY;
+      const clampedMin = Math.max(
+        0,
+        Math.min(DAILY_HORIZON - TIME_GRANULARITY, minutes),
+      );
       ghostY.value = (clampedMin / DAILY_HORIZON) * totalHeight;
       ghostVisible.value = withTiming(1, { duration: 200 });
     })
@@ -431,7 +462,7 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
 
   return (
     <View className="flex-1 bg-background">
-      <View className="flex-row items-center justify-between px-4 pt-3 pb-2">
+      <View className="flex-row items-center justify-between px-4 pt-4 pb-4 border-b border-black/15 dark:border-white/15">
         <View className="min-w-0 flex-1">
           <Text className="text-xl font-bold tracking-tight">
             {format(date, "EEE, MMM d")}
@@ -453,7 +484,10 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
         <View className="flex-row items-center gap-2">
           {!loading && !error && overdueCount > 0 && (
             <View className="flex-row items-center gap-1 rounded-full border border-rose-400/50 bg-rose-100 px-2 py-0.5 dark:bg-rose-950">
-              <AlertCircle size={12} className="text-rose-800 dark:text-rose-400" />
+              <AlertCircle
+                size={12}
+                className="text-rose-800 dark:text-rose-400"
+              />
               <Text className="text-[11px] font-semibold leading-none text-rose-800 dark:text-rose-400">
                 {overdueCount} overdue
               </Text>
@@ -485,15 +519,16 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
               Couldn't load your day
             </Text>
             <Text className="mt-1.5 max-w-[280px] text-center text-[13.5px] leading-normal text-muted-foreground">
-              We couldn't reach the scheduler. Check your connection and try again.
+              We couldn't reach the scheduler. Check your connection and try
+              again.
             </Text>
             <Button
               variant="outline"
-              className="mt-5 rounded-xl px-8"
+              className="mt-5 rounded-xl px-8 gap-2"
               onPress={() => void refetch()}
             >
               <RotateCw size={16} className="text-foreground" />
-              <Text className="text-base font-semibold">Try again</Text>
+              <Text className="text-base font-semibold">   Try again</Text>
             </Button>
           </>
         ) : loading ? (
@@ -531,90 +566,94 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
           </Animated.View>
         ) : (
           <GestureDetector gesture={contentGesture}>
-          <Animated.View style={animatedContentStyle} className="relative">
-            <TimeGutter hourHeight={hourHeight} />
+            <Animated.View style={animatedContentStyle} className="relative">
+              <TimeGutter hourHeight={hourHeight} />
 
-            {/* Single empty "12 AM" slot below the midnight boundary — a hint
+              {/* Single empty "12 AM" slot below the midnight boundary — a hint
                 that the timeline continues past midnight (only on days with a
                 crossing task). One hour only, matching mockups/day-view.html's
                 "Crosses midnight" frame; the rest of the strip stays empty
                 until the user scrolls into it (opens the next-day slice). */}
-            {hasOvernightTails && (
-              <View
-                className="absolute left-0"
-                style={{ top: totalHeight, height: hourHeight }}
-              >
-                <TimeGutter
-                  hourHeight={hourHeight}
-                  fromHour={0}
-                  toHour={1}
-                  showZeroLabel
-                />
-              </View>
-            )}
-
-            <View
-              className="absolute top-0 bottom-0 bg-card"
-              style={{ left: GUTTER_WIDTH, right: 0 }}
-            >
-               <WorkZoneOverlay date={date} prefs={prefs} hourHeight={hourHeight} />
-
-              {/* Hour separator lines */}
-              {HOURS.map((hour) => (
+              {hasOvernightTails && (
                 <View
-                  key={hour}
-                  className="absolute left-0 right-0 bg-border/50"
-                  style={{
-                    top: hour * hourHeight,
-                    height: 1,
-                  }}
-                />
-              ))}
-
-               {isToday && (
-                <NowIndicator now={now} tz={tz} totalHeight={totalHeight} />
-              )}
-
-              {segments.length === 0 && isToday && (
-                <View
-                  pointerEvents="none"
-                  className="absolute left-1.5 right-1.5 z-20 items-center justify-center rounded-xl border-[1.5px] border-dashed border-brand-orange/55 bg-brand-orange/[0.07]"
-                  style={{ top: emptyGhostTop, height: emptyGhostHeight }}
+                  className="absolute left-0"
+                  style={{ top: totalHeight, height: hourHeight }}
                 >
-                  <Text className="text-xs font-semibold text-brand-orange">
-                    Long press to add
-                  </Text>
+                  <TimeGutter
+                    hourHeight={hourHeight}
+                    fromHour={0}
+                    toHour={1}
+                    showZeroLabel
+                  />
                 </View>
               )}
 
-              {segments.map((segment) => {
-                const blockLayout = layout.get(segment.segmentId) ?? {
-                  column: 0,
-                  columns: 1,
-                  conflict: false,
-                };
-                const blockWidthPx = contentWidth / blockLayout.columns;
-                const leftOffsetPx = blockLayout.column * blockWidthPx;
+              <View
+                className="absolute top-0 bottom-0 bg-card"
+                style={{ left: GUTTER_WIDTH, right: 0 }}
+              >
+                <WorkZoneOverlay
+                  date={date}
+                  prefs={prefs}
+                  hourHeight={hourHeight}
+                />
 
-                return (
-                  <TaskBlock
-                    key={segment.segmentId}
-                    segment={segment}
-                    layout={blockLayout}
-                    tz={tz}
-                    totalHeight={totalHeight}
-                    leftOffset={leftOffsetPx}
-                    blockWidth={blockWidthPx}
-                    deadline={deadlineByTask.get(segment.taskId) ?? null}
-                    onReschedule={handleReschedule}
-                    onDragStateChange={handleDragStateChange}
-                    onPress={onTaskPress}
-                    onComplete={handleComplete}
+                {/* Hour separator lines */}
+                {HOURS.map((hour) => (
+                  <View
+                    key={hour}
+                    className="absolute left-0 right-0 bg-border/50"
+                    style={{
+                      top: hour * hourHeight,
+                      height: 1,
+                    }}
                   />
-                );
-              })}
+                ))}
 
-{/* Dashed midnight boundary — the day ends here and the empty
+                {isToday && (
+                  <NowIndicator now={now} tz={tz} totalHeight={totalHeight} />
+                )}
+
+                {segments.length === 0 && isToday && (
+                  <View
+                    pointerEvents="none"
+                    className="absolute left-1.5 right-1.5 z-20 items-center justify-center rounded-xl border-[1.5px] border-dashed border-brand-orange/55 bg-brand-orange/[0.07]"
+                    style={{ top: emptyGhostTop, height: emptyGhostHeight }}
+                  >
+                    <Text className="text-xs font-semibold text-brand-orange">
+                      Long press to add
+                    </Text>
+                  </View>
+                )}
+
+                {segments.map((segment) => {
+                  const blockLayout = layout.get(segment.segmentId) ?? {
+                    column: 0,
+                    columns: 1,
+                    conflict: false,
+                  };
+                  const blockWidthPx = contentWidth / blockLayout.columns;
+                  const leftOffsetPx = blockLayout.column * blockWidthPx;
+
+                  return (
+                    <TaskBlock
+                      key={segment.segmentId}
+                      segment={segment}
+                      layout={blockLayout}
+                      tz={tz}
+                      totalHeight={totalHeight}
+                      leftOffset={leftOffsetPx}
+                      blockWidth={blockWidthPx}
+                      deadline={deadlineByTask.get(segment.taskId) ?? null}
+                      onReschedule={handleReschedule}
+                      onDragStateChange={handleDragStateChange}
+                      onPress={onTaskPress}
+                      onComplete={handleComplete}
+                    />
+                  );
+                })}
+
+                {/* Dashed midnight boundary — the day ends here and the empty
                   "past midnight" region begins below (only on days with a
                   crossing task). Rendered after the task blocks so the line
                   draws over the head block's flat bottom edge, mirroring
@@ -633,58 +672,65 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
                   </View>
                 )}
 
-              {dragSnap && (
-                <View pointerEvents="none" className="absolute left-0 right-0 z-20">
-                  {[-16, 0, 16, 32].map((offset) => {
-                    const top =
-                      (dragSnap.startMin / DAILY_HORIZON) * totalHeight + offset;
-                    return (
-                      <View
-                        key={offset}
-                        className="absolute left-0 right-0 border-t border-dashed border-brand-orange/60"
-                        style={{ top }}
-                      >
-                        {offset === 0 && (
-                          <View className="absolute right-2 -translate-y-1/2 rounded-md bg-background px-[5px] py-px">
-                            <Text className="text-[10px] font-bold text-brand-orange">
-                              {dragChipLabel}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
+                {dragSnap && (
+                  <View
+                    pointerEvents="none"
+                    className="absolute left-0 right-0 z-20"
+                  >
+                    {[-16, 0, 16, 32].map((offset) => {
+                      const top =
+                        (dragSnap.startMin / DAILY_HORIZON) * totalHeight +
+                        offset;
+                      return (
+                        <View
+                          key={offset}
+                          className="absolute left-0 right-0 border-t border-dashed border-brand-orange/60"
+                          style={{ top }}
+                        >
+                          {offset === 0 && (
+                            <View className="absolute right-2 -translate-y-1/2 rounded-md bg-background px-[5px] py-px">
+                              <Text className="text-[10px] font-bold text-brand-orange">
+                                {dragChipLabel}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
 
-              <Animated.View
-                pointerEvents="none"
-                style={ghostStyle}
-                className="absolute left-0 right-0 z-30 mx-1"
-              >
-                <View className="h-[52px] items-center justify-center rounded-lg border border-dashed border-primary/50 bg-primary/5">
-                  <Text className="text-xs font-medium text-primary/60">
-                    + Add task
-                  </Text>
-                </View>
-              </Animated.View>
-            </View>
-          </Animated.View>
-        </GestureDetector>
+                <Animated.View
+                  pointerEvents="none"
+                  style={ghostStyle}
+                  className="absolute left-0 right-0 z-30 mx-1"
+                >
+                  <View className="h-[52px] items-center justify-center rounded-lg border border-dashed border-primary/50 bg-primary/5">
+                    <Text className="text-xs font-medium text-primary/60">
+                      + Add task
+                    </Text>
+                  </View>
+                </Animated.View>
+              </View>
+            </Animated.View>
+          </GestureDetector>
         )}
       </ScrollView>
 
       <View
         pointerEvents="none"
-        className="absolute inset-x-4 bottom-20 z-50 gap-2"
+        className="absolute left-4 right-4 z-[55] gap-2"
+        style={{ bottom: 24 }}
       >
         {dragSnap && (
-          <View className="flex-row items-start gap-2.5 rounded-2xl border border-border bg-popover p-3.5 shadow-lg shadow-black/10 dark:shadow-white/5">
+          <View className="flex-row items-start gap-2.5 rounded-2xl border bg-popover p-3.5 shadow-lg">
             <View className="h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-brand-orange/15">
               <MousePointer2 size={17} className="text-brand-orange" />
             </View>
             <View className="flex-1">
-              <Text className="text-sm font-semibold">Snapped to {dragChipLabel}</Text>
+              <Text className="text-sm font-semibold">
+                Snapped to {dragChipLabel}
+              </Text>
               <Text className="mt-0.5 text-[12.5px] text-muted-foreground">
                 Release to reschedule · 15-min grid
               </Text>
@@ -692,12 +738,17 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
           </View>
         )}
         {overdueToast && (
-          <View className="flex-row items-start gap-2.5 rounded-2xl border border-border bg-popover p-3.5 shadow-lg shadow-black/10 dark:shadow-white/5">
+          <View className="flex-row items-start gap-2.5 rounded-2xl border bg-popover p-3.5 shadow-lg">
             <View className="h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-rose-500/15">
-              <AlertCircle size={17} className="text-rose-600 dark:text-rose-400" />
+              <AlertCircle
+                size={17}
+                className="text-rose-600 dark:text-rose-400"
+              />
             </View>
             <View className="min-w-0 flex-1">
-              <Text className="text-sm font-semibold">{overdueToast.title}</Text>
+              <Text className="text-sm font-semibold">
+                {overdueToast.title}
+              </Text>
               <Text className="mt-0.5 text-[12.5px] text-muted-foreground">
                 {overdueToast.subtitle}
               </Text>
