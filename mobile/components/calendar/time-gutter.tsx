@@ -20,7 +20,7 @@ export function TimeGutter({
 
   return (
     <View
-      className="absolute left-0 top-0 bottom-0"
+      className="absolute left-0 top-0 bottom-0 border-r border-black/15 dark:border-white/15"
       style={{ width: 64 }}
     >
       {hours.map((hour) => (
