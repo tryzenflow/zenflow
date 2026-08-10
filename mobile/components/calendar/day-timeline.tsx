@@ -22,7 +22,7 @@ import { NowIndicator } from "./now-indicator";
 import { TaskBlock } from "./task-block";
 import { format, startOfDay } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
-import { AlertCircle, AlertTriangle, RefreshCcw, Sparkles } from "@/components/Icons";
+import { AlertCircle, AlertTriangle, MousePointer2, RefreshCcw, RotateCw } from "@/components/Icons";
 import { Button } from "@/components/ui/button";
 import {
   Gesture,
@@ -492,7 +492,7 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
               className="mt-5 rounded-xl px-8"
               onPress={() => void refetch()}
             >
-              <RefreshCcw size={16} className="text-foreground" />
+              <RotateCw size={16} className="text-foreground" />
               <Text className="text-base font-semibold">Try again</Text>
             </Button>
           </>
@@ -681,7 +681,7 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
         {dragSnap && (
           <View className="flex-row items-start gap-2.5 rounded-2xl border border-border bg-popover p-3.5 shadow-lg shadow-black/10 dark:shadow-white/5">
             <View className="h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-brand-orange/15">
-              <Sparkles size={17} className="text-brand-orange" />
+              <MousePointer2 size={17} className="text-brand-orange" />
             </View>
             <View className="flex-1">
               <Text className="text-sm font-semibold">Snapped to {dragChipLabel}</Text>

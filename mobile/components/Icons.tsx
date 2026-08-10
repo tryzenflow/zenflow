@@ -69,10 +69,13 @@ import {
   MessageSquare,
   MinusCircle,
   MoonStar,
+  MousePointer2,
   Plus,
   PlusCircle,
   Quote,
   RefreshCcw,
+  RefreshCw,
+  RotateCw,
   Scale,
   Search,
   Sparkles,
@@ -167,7 +170,8 @@ interopIcon(Smartphone);
 interopIcon(Clock);
 interopIcon(MessageCircleQuestion);
 interopIcon(MinusCircle);
-interopIcon(CalendarRange);
+  interopIcon(MousePointer2);
+  interopIcon(CalendarRange);
 interopIcon(LayoutGrid);
 interopIcon(BarChart3);
 interopIcon(Sliders);
@@ -180,7 +184,10 @@ interopIcon(Link2);
 interopIcon(List);
 interopIcon(ListOrdered);
 interopIcon(Quote);
-interopIcon(Upload);
+  interopIcon(RefreshCcw);
+  interopIcon(RefreshCw);
+  interopIcon(RotateCw);
+  interopIcon(Upload);
 interopIcon(Trash2);
 interopIcon(RefreshCcw);
 interopIcon(Scale);
@@ -242,10 +249,13 @@ export {
   MessageSquare,
   MinusCircle,
   MoonStar,
+  MousePointer2,
   Plus,
   PlusCircle,
   Quote,
   RefreshCcw,
+  RefreshCw,
+  RotateCw,
   Scale,
   Search,
   Sparkles,
