@@ -99,7 +99,7 @@ export function DayTimeline({ date: propDate, onTaskPress, onLongPress, onComple
   }, [propDate, now, tz]);
   const [hourHeight, setHourHeight] = useState(HOUR_HEIGHT_DEFAULT);
   const totalHeight = hourHeight * 24;
-  const peekHeight = Math.round((screenHeight * 4) / 7);
+  const peekHeight = Math.round((screenHeight * 4) / 8);
   const contentWidth = screenWidth - GUTTER_WIDTH;
 
   const [tasks, setTasks] = useState<Task[]>([]);
