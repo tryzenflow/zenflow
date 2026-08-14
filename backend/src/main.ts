@@ -37,6 +37,12 @@ async function bootstrap() {
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
     allowedHeaders: "Content-Type, Accept, Authorization, x-timezone", // Include necessary headers
     credentials: true,
+    // Rate-limit headers set by LimitKit's LimitGuard on 429 responses
+    // (see common/rate-limit/) — browsers hide non-simple response headers
+    // from JS by default, so the FE/mobile countdown UI needs these
+    // explicitly exposed via Access-Control-Expose-Headers.
+    exposedHeaders:
+      "Retry-After, RateLimit-Limit, RateLimit-Remaining, Reset-After",
   });
   app.useGlobalPipes(
     new ValidationPipe({
