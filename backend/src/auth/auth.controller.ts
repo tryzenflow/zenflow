@@ -8,11 +8,16 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common";
+import { RateLimit } from "@limitkit/nest";
 import { AuthService } from "./auth.service";
 import { RequestOTPDto } from "./dto";
 import { hideEmail } from "./utils/hide-email";
 import { CookieAuthGuard, LocalAuthGuard } from "./guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
+import {
+  otpRequestRateLimitRules,
+  otpVerifyRateLimitRules,
+} from "../common/rate-limit";
 import type { User } from "../../generated/prisma";
 import type { Request } from "express";
 
@@ -20,6 +25,7 @@ import type { Request } from "express";
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @RateLimit({ rules: otpRequestRateLimitRules })
   @Post("otp/request")
   @HttpCode(HttpStatus.OK)
   async requestOTP(@Body() { email }: RequestOTPDto) {
@@ -30,6 +36,7 @@ export class AuthController {
     };
   }
 
+  @RateLimit({ rules: otpVerifyRateLimitRules })
   @UseGuards(LocalAuthGuard)
   @Post("otp/verify")
   @HttpCode(HttpStatus.OK)

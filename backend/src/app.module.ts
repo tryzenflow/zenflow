@@ -16,6 +16,8 @@ import { TasksModule } from "./tasks/tasks.module";
 import { TagsModule } from "./tags/tags.module";
 import { FilesModule } from "./files/files.module";
 import { ScheduleModule } from "@nestjs/schedule";
+import { RedisModule } from "./common/redis/redis.module";
+import { RateLimitModule } from "./common/rate-limit";
 
 @Module({
   imports: [
@@ -28,6 +30,10 @@ import { ScheduleModule } from "@nestjs/schedule";
         SESSION_SECRET: Joi.string().required(),
         CORS_ORIGIN: Joi.string().required(),
         CACHE_URL: Joi.string().uri().required(),
+        // Separate Redis instance dedicated to LimitKit's rate-limit
+        // counters (see common/rate-limit/) — kept off the session/OTP
+        // Redis (CACHE_URL) so counter churn can't evict that data.
+        RATE_LIMIT_CACHE_URL: Joi.string().uri().required(),
         MAIL_TRANSPORT: Joi.string().uri().required(),
         MAIL_FROM: Joi.string().email().required(),
         // Idle session lifetime in ms; with rolling sessions, active use keeps
@@ -45,6 +51,25 @@ import { ScheduleModule } from "@nestjs/schedule";
         COOKIE_SAMESITE: Joi.string()
           .valid("lax", "none", "strict")
           .default("lax"),
+        // LimitKit rate limits on the OTP-sending auth endpoints (see
+        // common/rate-limit/). Sliding windows, in seconds + max requests.
+        OTP_REQUEST_IP_WINDOW_SEC: Joi.number()
+          .integer()
+          .positive()
+          .default(60),
+        OTP_REQUEST_IP_LIMIT: Joi.number().integer().positive().default(5),
+        OTP_REQUEST_EMAIL_WINDOW_SEC: Joi.number()
+          .integer()
+          .positive()
+          .default(900), // 15 min
+        OTP_REQUEST_EMAIL_LIMIT: Joi.number().integer().positive().default(3),
+        OTP_VERIFY_IP_WINDOW_SEC: Joi.number().integer().positive().default(60),
+        OTP_VERIFY_IP_LIMIT: Joi.number().integer().positive().default(20),
+        OTP_VERIFY_EMAIL_WINDOW_SEC: Joi.number()
+          .integer()
+          .positive()
+          .default(600), // 10 min
+        OTP_VERIFY_EMAIL_LIMIT: Joi.number().integer().positive().default(10),
       }),
     }),
     ScheduleModule.forRoot(),
@@ -63,6 +88,8 @@ import { ScheduleModule } from "@nestjs/schedule";
         };
       },
     }),
+    RedisModule,
+    RateLimitModule,
     UsersModule,
     PrismaModule,
     AuthModule,

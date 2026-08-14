@@ -19,6 +19,7 @@ Earliest-Deadline-First (EDF) scheduling engine**. Part of the
 | Scheduling/time      | `luxon`, `date-fns` / `date-fns-tz`                               |
 | Validation           | `class-validator` + `class-transformer` (global `ValidationPipe`) |
 | Mail                 | `@nestjs-modules/mailer` + nodemailer + Handlebars templates      |
+| Rate limiting        | [LimitKit](https://github.com/alphatrann/limitkit) (`@limitkit/core` + `nest` + `redis` + `memory`), own dedicated Redis instance |
 | API docs             | `@nestjs/swagger` (served at `/api`)                              |
 | Tests                | Jest (unit `*.spec.ts`, e2e via `test/jest-e2e.json`)             |
 | Shared types         | `@zenflow/shared` (`workspace:*`) — the FE/BE contract            |
@@ -53,6 +54,9 @@ backend/
 │   ├── mail/                  # login email + Handlebars templates
 │   ├── prisma/                # PrismaService + Postgres error-code map
 │   └── common/                # constants, utils, validators, dto, types
+│       ├── redis/             # two connected `redis` clients: REDIS_CLIENT (session/OTP)
+│       │                      #   and RATE_LIMIT_REDIS_CLIENT (LimitKit counters)
+│       └── rate-limit/        # LimitKit wiring — see "Rate limiting" below
 ├── compose.{dev,staging,prod,test}.yml
 ├── Caddyfile.{staging,prod}
 ├── Dockerfile
@@ -158,8 +162,8 @@ Global prefix `**/api/v1**`. All routes except `POST /auth/otp/*` require
 
 | Method | Path                | Purpose                                                                                      |
 | ------ | ------------------- | -------------------------------------------------------------------------------------------- |
-| POST   | `/auth/otp/request` | email a 6-digit OTP (no guard)                                                               |
-| POST   | `/auth/otp/verify`  | verify OTP, create user if new, start session. Reads `x-timezone` header. (`LocalAuthGuard`) |
+| POST   | `/auth/otp/request` | email a 6-digit OTP (no auth guard; rate-limited, see below)                                |
+| POST   | `/auth/otp/verify`  | verify OTP, create user if new, start session. Reads `x-timezone` header. (`LocalAuthGuard`; rate-limited, see below) |
 | GET    | `/auth/me`          | current user                                                                                 |
 | POST   | `/auth/logout`      | destroy session                                                                              |
 
@@ -210,6 +214,63 @@ Global prefix `**/api/v1**`. All routes except `POST /auth/otp/*` require
 `GET /files/metadata/:id`, `GET /files/:id` (download stream).
 
 Full live schema: **Swagger UI at `<API_URL>/api`**.
+
+## Rate limiting
+
+The OTP-sending auth endpoints — `POST /auth/otp/request` (emails a code on every call)
+and `POST /auth/otp/verify` (guesses against a 6-digit code) — are rate-limited with
+[LimitKit](https://github.com/alphatrann/limitkit) (`@limitkit/core` + `@limitkit/nest` +
+`@limitkit/redis` + `@limitkit/memory`, all published on the public npm registry) to stop
+email-bombing, account enumeration, and OTP brute-forcing.
+
+- **Where it's wired:** [`src/common/rate-limit/`](src/common/rate-limit).
+  `RateLimitModule` registers `@limitkit/nest`'s `LimitModule` with a **global** rule set
+  that's a no-op in practice (a single, extremely generous placeholder rule — `LimitKit`'s
+  `RateLimiter` throws if given zero rules, and `LimitGuard` runs as `APP_GUARD` on every
+  request regardless). Real limiting is opt-in per route via the `@RateLimit()` decorator —
+  applied only to `AuthController`'s `otp/request` and `otp/verify` handlers
+  (`rate-limit.rules.ts`) — so the rest of the API is unaffected.
+- **Rules:** each guarded route layers a **per-IP** sliding window (the documented LimitKit
+  login example, `slidingWindow({ window, limit })`) with a **per-email** sliding window
+  (lower-cased, keyed off the request body), so an attacker spraying one victim's inbox from
+  many IPs is still capped. `otp/verify`'s limits are intentionally looser than
+  `otp/request`'s so a user retyping a mistyped code isn't blocked.
+- **Store:** `@limitkit/redis`'s `RedisStore`, backed by its own dedicated, already-connected
+  Redis client (`src/common/redis/` — `RATE_LIMIT_REDIS_CLIENT`, connected to
+  `RATE_LIMIT_CACHE_URL`) outside tests; `@limitkit/memory`'s `InMemoryStore` when
+  `NODE_ENV === "test"`, so tests never depend on a running Redis for rate-limit state.
+  This is a **separate physical Redis instance** from the one backing sessions/OTP codes
+  (`REDIS_CLIENT` / `CACHE_URL`) — rate-limit counters are high-churn, short-TTL keys, and
+  isolating them means that traffic can't evict or contend with session/OTP data (and vice
+  versa). See `compose.{dev,staging,prod}.yml`'s `redis-ratelimit` service.
+- **Rejection contract:** `LimitGuard` throws `TooManyRequestsException` (HTTP 429) with a
+  plain-string body; `TooManyRequestsFilter` (registered as a global `APP_FILTER` inside
+  `RateLimitModule`) re-shapes that into this app's `{ success: false, message }` envelope.
+  The guard's `RateLimit-Limit` / `RateLimit-Remaining` / `Reset-After` / `Retry-After`
+  headers (RFC 9331) pass through untouched.
+- **Env vars** (validated in the `@hapi/joi` boot schema in `app.module.ts`, all optional
+  with sensible defaults — see `.env.dev` / `.env.staging` / `.env.prod` / `.env.test` for
+  example values):
+
+  ```env
+  OTP_REQUEST_IP_WINDOW_SEC=60      # default 60
+  OTP_REQUEST_IP_LIMIT=5            # default 5   (the documented LimitKit login example)
+  OTP_REQUEST_EMAIL_WINDOW_SEC=900  # default 900 (15 min)
+  OTP_REQUEST_EMAIL_LIMIT=3         # default 3
+  OTP_VERIFY_IP_WINDOW_SEC=60       # default 60
+  OTP_VERIFY_IP_LIMIT=20            # default 20
+  OTP_VERIFY_EMAIL_WINDOW_SEC=600   # default 600 (10 min)
+  OTP_VERIFY_EMAIL_LIMIT=10         # default 10
+  ```
+
+- **Tests:** `test/rate-limit.e2e-spec.ts` proves N rapid requests to `POST /auth/otp/request`
+  and `POST /auth/otp/verify` 429 once the per-IP limit is hit (in the `{ success: false,
+  message }` envelope) and that the endpoint is usable again once the sliding window rolls
+  over — against `@limitkit/memory`, never real Redis, and without needing Postgres/SMTP (it
+  boots a minimal `TestingModule` around the real `AuthController`/`AuthModule`/
+  `RateLimitModule` wiring, with `PrismaService`/`UsersService`/`MailService` swapped for bare
+  mocks, so it has no external dependencies). `src/common/rate-limit/*.spec.ts` unit-tests the
+  rule key/policy resolution and the 429→envelope exception filter.
 
 ## The EDF engine
 
@@ -371,7 +432,8 @@ Step by step, from a clean checkout:
 # 1. Install workspace deps + build @zenflow/shared (repo root, once)
 pnpm install && pnpm shared:build
 
-# 2. Bootstrap Postgres/Redis/MailHog in the background (from backend/)
+# 2. Bootstrap Postgres/Redis (x2 — session/OTP + rate-limit)/MailHog in the
+#    background (from backend/)
 docker compose -f compose.dev.yml up -d
 
 # 3. Apply the Prisma schema to the dev DB
@@ -403,6 +465,7 @@ holds Postgres credentials for that Compose file. Required app vars (validated a
 ```env
 DATABASE_URL="postgres://admin:admin@zenflow-db:5432/zenflow?schema=public"
 CACHE_URL="redis://zenflow-cache:6379"
+RATE_LIMIT_CACHE_URL="redis://zenflow-cache-ratelimit:6379"  # dedicated Redis for LimitKit — see "Rate limiting"
 CORS_ORIGIN="http://localhost:5173"
 MAIL_TRANSPORT="smtp://zenflow-mail:25"
 SESSION_SECRET="change-me"
@@ -410,6 +473,16 @@ SESSION_TTL_MS=604800000                       # optional; idle session lifetime
 COOKIE_SECURE=true                             # optional; Secure cookie flag, defaults to true
 COOKIE_SAMESITE=lax                            # optional; lax | none | strict, defaults to lax
 GRPC_SCHEDULER_URL="zenflow-scheduler:50051"   # reserved for the future ML service
+# LimitKit rate limits on the OTP-sending auth endpoints — see "Rate limiting" above.
+# All optional; shown here at their defaults.
+OTP_REQUEST_IP_WINDOW_SEC=60
+OTP_REQUEST_IP_LIMIT=5
+OTP_REQUEST_EMAIL_WINDOW_SEC=900
+OTP_REQUEST_EMAIL_LIMIT=3
+OTP_VERIFY_IP_WINDOW_SEC=60
+OTP_VERIFY_IP_LIMIT=20
+OTP_VERIFY_EMAIL_WINDOW_SEC=600
+OTP_VERIFY_EMAIL_LIMIT=10
 ```
 
 Sessions are **rolling**: every authenticated request resets the session cookie and the
@@ -457,8 +530,10 @@ cookie overrides for this topology:
 install, the API itself runs inside the container.
 
 `compose.staging.yml` is the fully containerized stack: `api` (built from the
-`Dockerfile`), `postgres`, `redis`, `mail` (MailHog — catches OTP emails), and a `caddy`
-reverse proxy on `:80`, configured via `.env.staging` + `docker.staging.env`.
+`Dockerfile`), `postgres`, `redis` (sessions/OTP), `redis-ratelimit` (dedicated to
+LimitKit's rate-limit counters — see "Rate limiting"), `mail` (MailHog — catches OTP
+emails), and a `caddy` reverse proxy on `:80`, configured via `.env.staging` +
+`docker.staging.env`. `compose.prod.yml` follows the same shape minus `mail`.
 
 ```bash
 # From backend/ — build the zenflow-api image (build context is the repo root,

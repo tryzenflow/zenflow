@@ -14,6 +14,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      redis-ratelimit:
+        condition: service_started
       mail:
         condition: service_started
     env_file:
@@ -38,6 +40,14 @@ services:
 
   redis:
     container_name: zenflow-cache-staging
+    image: redis:8.8.0-alpine
+    expose:
+      - "6379"
+    networks:
+      - api
+
+  redis-ratelimit:
+    container_name: zenflow-cache-ratelimit-staging
     image: redis:8.8.0-alpine
     expose:
       - "6379"

@@ -25,6 +25,18 @@ importers:
       '@keyv/redis':
         specifier: ^5.1.0
         version: 5.1.6(keyv@5.6.0)
+      '@limitkit/core':
+        specifier: ^1.2.0
+        version: 1.2.0
+      '@limitkit/memory':
+        specifier: ^1.1.1
+        version: 1.1.1
+      '@limitkit/nest':
+        specifier: ^1.1.0
+        version: 1.1.0(@nestjs/platform-express@11.1.24)(class-transformer@0.5.1)(class-validator@0.14.4)
+      '@limitkit/redis':
+        specifier: ^1.2.0
+        version: 1.2.0(redis@5.12.1)
       '@nestjs-modules/mailer':
         specifier: ^2.0.2
         version: 2.3.6(@nestjs/common@11.1.24(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.1.24)(chokidar@4.0.3)(nodemailer@7.0.13)(svgo@4.0.1)(terser@5.48.0)(typescript@5.7.3)
@@ -2589,6 +2601,26 @@ packages:
 
   '@keyv/serialize@1.1.1':
     resolution: {integrity: sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA==}
+
+  '@limitkit/core@1.2.0':
+    resolution: {integrity: sha512-VvRSgSCfVEcfEYBoL2n8MpKU0ACc2v9tMUce2esDXk94p4GXtsMO+YAMvr2vnRWuyTUKkofTvJRqhPMBDPlN/w==}
+
+  '@limitkit/memory@1.1.1':
+    resolution: {integrity: sha512-81t4IZk5eIqJuZunXqKtdw5ar/nbEpXY0f59weqAY0gdxH7fXChLHh7+Yp53nFSYcKIxu1VQSa0LawybwQ2avQ==}
+
+  '@limitkit/nest@1.1.0':
+    resolution: {integrity: sha512-n1g5JFTfvEijw5vuSpjToNYgv8p7G2OEJqe/QChHt5hZe30/8mevCgLc7eprfOd2KEozMdSHBTQ8d3ljkPksrg==}
+
+  '@limitkit/redis@1.2.0':
+    resolution: {integrity: sha512-L/bB11XdtE6DC+yNxiagAc3oBX5bLoCGvGud/r+v1qTUbwFZJBA6cW0eoppJgsyvaeH0lMoeN/Vjbt5MG03TNw==}
+    peerDependencies:
+      ioredis: ^5.0.0
+      redis: ^5.0.0
+    peerDependenciesMeta:
+      ioredis:
+        optional: true
+      redis:
+        optional: true
 
   '@lukeed/csprng@1.1.0':
     resolution: {integrity: sha512-Z7C/xXCiGWsg0KuKsHTKJxbWhpI3Vs5GwLfOean7MGyVFGqdRgBbAjOCh6u4bbjPc/8MJ2pZmK/0DLdCbivLDA==}
@@ -13136,6 +13168,33 @@ snapshots:
       - '@opentelemetry/api'
 
   '@keyv/serialize@1.1.1': {}
+
+  '@limitkit/core@1.2.0': {}
+
+  '@limitkit/memory@1.1.1':
+    dependencies:
+      '@limitkit/core': 1.2.0
+
+  '@limitkit/nest@1.1.0(@nestjs/platform-express@11.1.24)(class-transformer@0.5.1)(class-validator@0.14.4)':
+    dependencies:
+      '@limitkit/core': 1.2.0
+      '@nestjs/common': 11.1.24(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/core': 11.1.24(@nestjs/common@11.1.24(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-express@11.1.24)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      reflect-metadata: 0.2.2
+      rxjs: 7.8.2
+    transitivePeerDependencies:
+      - '@nestjs/microservices'
+      - '@nestjs/platform-express'
+      - '@nestjs/websockets'
+      - class-transformer
+      - class-validator
+      - supports-color
+
+  '@limitkit/redis@1.2.0(redis@5.12.1)':
+    dependencies:
+      '@limitkit/core': 1.2.0
+    optionalDependencies:
+      redis: 5.12.1
 
   '@lukeed/csprng@1.1.0': {}
 

@@ -20,6 +20,14 @@ services:
     networks:
       - cache
 
+  redis-ratelimit:
+    container_name: zenflow-cache-ratelimit
+    image: redis:8.8.0-alpine
+    ports:
+      - 6380:6379
+    networks:
+      - cache
+
   mail:
     container_name: zenflow-mail
     image: mailhog/mailhog:v1.0.1
