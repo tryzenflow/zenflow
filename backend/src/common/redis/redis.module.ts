@@ -1,21 +1,41 @@
 import { Global, Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
-import { createClient } from "redis";
-import { REDIS_CLIENT } from "./redis.constants";
+import { createClient, type RedisClientType } from "redis";
+import { RATE_LIMIT_REDIS_CLIENT, REDIS_CLIENT } from "./redis.constants";
 
 /**
- * Provides the single, shared `redis` (node-redis) client connected to
- * `CACHE_URL`. Every consumer that needs a raw Redis connection (the
- * session store in `main.ts`, the LimitKit rate limiter in
- * `common/rate-limit/`) injects `REDIS_CLIENT` instead of opening its own
- * connection.
+ * Builds a `redis` (node-redis) client for the given connection URL. In
+ * tests (`NODE_ENV === "test"`) the client is constructed but never
+ * connected — nothing in a test run should be exercising a real store (the
+ * rate limiter falls back to `@limitkit/memory`, and tests don't run
+ * `main.ts`'s `bootstrap()`, so no session middleware ever touches
+ * `REDIS_CLIENT` either), so skipping the network round trip keeps
+ * unit/e2e tests Docker-free.
+ */
+async function createRedisClient(
+  configService: ConfigService,
+  urlKey: string,
+): Promise<RedisClientType> {
+  const client = createClient({
+    url: configService.get<string>(urlKey),
+  });
+  if (configService.get<string>("NODE_ENV") !== "test") {
+    await client.connect();
+  }
+  return client as RedisClientType;
+}
+
+/**
+ * Provides two independent `redis` (node-redis) clients, kept on separate
+ * physical Redis instances so rate-limit counter churn can't evict or
+ * contend with session/OTP data:
  *
- * In tests (`NODE_ENV === "test"`) the client is constructed but never
- * connected — nothing in a test run should be exercising the real store
- * (the rate limiter falls back to `@limitkit/memory`, and tests don't run
- * `main.ts`'s `bootstrap()`, so no session middleware ever touches it
- * either), so skipping the network round trip keeps unit/e2e tests
- * Docker-free.
+ * - `REDIS_CLIENT`, connected to `CACHE_URL` — backs the session store in
+ *   `main.ts` (OTP codes live on the same physical Redis too, via
+ *   `@nestjs/cache-manager`/keyv in `app.module.ts`, just through a
+ *   different client library).
+ * - `RATE_LIMIT_REDIS_CLIENT`, connected to `RATE_LIMIT_CACHE_URL` — backs
+ *   the LimitKit rate limiter in `common/rate-limit/`.
  */
 @Global()
 @Module({
@@ -24,17 +44,16 @@ import { REDIS_CLIENT } from "./redis.constants";
     {
       provide: REDIS_CLIENT,
       inject: [ConfigService],
-      useFactory: async (configService: ConfigService) => {
-        const client = createClient({
-          url: configService.get<string>("CACHE_URL"),
-        });
-        if (configService.get<string>("NODE_ENV") !== "test") {
-          await client.connect();
-        }
-        return client;
-      },
+      useFactory: (configService: ConfigService) =>
+        createRedisClient(configService, "CACHE_URL"),
+    },
+    {
+      provide: RATE_LIMIT_REDIS_CLIENT,
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) =>
+        createRedisClient(configService, "RATE_LIMIT_CACHE_URL"),
     },
   ],
-  exports: [REDIS_CLIENT],
+  exports: [REDIS_CLIENT, RATE_LIMIT_REDIS_CLIENT],
 })
 export class RedisModule {}

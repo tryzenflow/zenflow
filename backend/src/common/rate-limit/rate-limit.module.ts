@@ -9,7 +9,7 @@ import {
 } from "@limitkit/memory";
 import type { RedisClientType } from "redis";
 import { RedisModule } from "../redis/redis.module";
-import { REDIS_CLIENT } from "../redis/redis.constants";
+import { RATE_LIMIT_REDIS_CLIENT } from "../redis/redis.constants";
 import { setRateLimitRuntimeConfig } from "./rate-limit.constants";
 import { TooManyRequestsFilter } from "./too-many-requests.filter";
 
@@ -28,8 +28,10 @@ const GLOBAL_NOOP_LIMIT = 1_000_000;
  * this stays scoped to the OTP endpoints instead of throttling the whole
  * API.
  *
- * Store: `@limitkit/redis`'s `RedisStore`, reusing the app's single shared
- * `REDIS_CLIENT` (see `common/redis/`) outside tests; `@limitkit/memory`'s
+ * Store: `@limitkit/redis`'s `RedisStore`, backed by its own dedicated
+ * `RATE_LIMIT_REDIS_CLIENT` (see `common/redis/`) — a separate Redis
+ * instance from the session/OTP one, so rate-limit counter churn can't
+ * evict or contend with that data — outside tests; `@limitkit/memory`'s
  * `InMemoryStore` when `NODE_ENV === "test"`, so tests never depend on a
  * running Redis for rate-limit state (they may still need Redis for
  * whatever else they exercise — this only concerns the limiter).
@@ -39,10 +41,10 @@ const GLOBAL_NOOP_LIMIT = 1_000_000;
     RedisModule,
     LimitModule.forRootAsync({
       imports: [ConfigModule, RedisModule],
-      inject: [ConfigService, REDIS_CLIENT],
+      inject: [ConfigService, RATE_LIMIT_REDIS_CLIENT],
       useFactory: (
         configService: ConfigService,
-        redisClient: RedisClientType,
+        rateLimitRedisClient: RedisClientType,
       ) => {
         const isTest = configService.get<string>("NODE_ENV") === "test";
 
@@ -67,7 +69,9 @@ const GLOBAL_NOOP_LIMIT = 1_000_000;
         });
 
         return {
-          store: isTest ? new InMemoryStore() : new RedisStore(redisClient),
+          store: isTest
+            ? new InMemoryStore()
+            : new RedisStore(rateLimitRedisClient),
           rules: [
             {
               name: "global-noop",

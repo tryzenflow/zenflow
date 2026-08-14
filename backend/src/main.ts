@@ -53,10 +53,10 @@ async function bootstrap() {
     }),
   );
 
-  // Reuse the single shared, already-connected Redis client (see
-  // common/redis/redis.module.ts) — the LimitKit rate limiter (common/
-  // rate-limit/) uses the same client rather than opening a second
-  // connection.
+  // The already-connected Redis client backing sessions/OTP codes (see
+  // common/redis/redis.module.ts). The LimitKit rate limiter (common/
+  // rate-limit/) uses its own separate `RATE_LIMIT_REDIS_CLIENT` /
+  // `RATE_LIMIT_CACHE_URL` instance instead of this one.
   const redisClient = app.get<RedisClientType>(REDIS_CLIENT);
 
   const redisStore = new RedisStore({

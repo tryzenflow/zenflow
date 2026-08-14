@@ -19,7 +19,7 @@ Earliest-Deadline-First (EDF) scheduling engine**. Part of the
 | Scheduling/time      | `luxon`, `date-fns` / `date-fns-tz`                               |
 | Validation           | `class-validator` + `class-transformer` (global `ValidationPipe`) |
 | Mail                 | `@nestjs-modules/mailer` + nodemailer + Handlebars templates      |
-| Rate limiting        | [LimitKit](https://github.com/alphatrann/limitkit) (`@limitkit/core` + `nest` + `redis` + `memory`) |
+| Rate limiting        | [LimitKit](https://github.com/alphatrann/limitkit) (`@limitkit/core` + `nest` + `redis` + `memory`), own dedicated Redis instance |
 | API docs             | `@nestjs/swagger` (served at `/api`)                              |
 | Tests                | Jest (unit `*.spec.ts`, e2e via `test/jest-e2e.json`)             |
 | Shared types         | `@zenflow/shared` (`workspace:*`) — the FE/BE contract            |
@@ -54,7 +54,8 @@ backend/
 │   ├── mail/                  # login email + Handlebars templates
 │   ├── prisma/                # PrismaService + Postgres error-code map
 │   └── common/                # constants, utils, validators, dto, types
-│       ├── redis/             # the single shared, connected `redis` client (REDIS_CLIENT)
+│       ├── redis/             # two connected `redis` clients: REDIS_CLIENT (session/OTP)
+│       │                      #   and RATE_LIMIT_REDIS_CLIENT (LimitKit counters)
 │       └── rate-limit/        # LimitKit wiring — see "Rate limiting" below
 ├── compose.{dev,staging,prod,test}.yml
 ├── Caddyfile.{staging,prod}
@@ -234,11 +235,14 @@ email-bombing, account enumeration, and OTP brute-forcing.
   (lower-cased, keyed off the request body), so an attacker spraying one victim's inbox from
   many IPs is still capped. `otp/verify`'s limits are intentionally looser than
   `otp/request`'s so a user retyping a mistyped code isn't blocked.
-- **Store:** `@limitkit/redis`'s `RedisStore`, reusing the app's single shared, already-
-  connected Redis client (`src/common/redis/` — `REDIS_CLIENT`, also used by the session
-  store in `main.ts`, so the limiter never opens a second Redis connection) outside tests;
-  `@limitkit/memory`'s `InMemoryStore` when `NODE_ENV === "test"`, so tests never depend on a
-  running Redis for rate-limit state.
+- **Store:** `@limitkit/redis`'s `RedisStore`, backed by its own dedicated, already-connected
+  Redis client (`src/common/redis/` — `RATE_LIMIT_REDIS_CLIENT`, connected to
+  `RATE_LIMIT_CACHE_URL`) outside tests; `@limitkit/memory`'s `InMemoryStore` when
+  `NODE_ENV === "test"`, so tests never depend on a running Redis for rate-limit state.
+  This is a **separate physical Redis instance** from the one backing sessions/OTP codes
+  (`REDIS_CLIENT` / `CACHE_URL`) — rate-limit counters are high-churn, short-TTL keys, and
+  isolating them means that traffic can't evict or contend with session/OTP data (and vice
+  versa). See `compose.{dev,staging,prod}.yml`'s `redis-ratelimit` service.
 - **Rejection contract:** `LimitGuard` throws `TooManyRequestsException` (HTTP 429) with a
   plain-string body; `TooManyRequestsFilter` (registered as a global `APP_FILTER` inside
   `RateLimitModule`) re-shapes that into this app's `{ success: false, message }` envelope.
@@ -428,7 +432,8 @@ Step by step, from a clean checkout:
 # 1. Install workspace deps + build @zenflow/shared (repo root, once)
 pnpm install && pnpm shared:build
 
-# 2. Bootstrap Postgres/Redis/MailHog in the background (from backend/)
+# 2. Bootstrap Postgres/Redis (x2 — session/OTP + rate-limit)/MailHog in the
+#    background (from backend/)
 docker compose -f compose.dev.yml up -d
 
 # 3. Apply the Prisma schema to the dev DB
@@ -460,6 +465,7 @@ holds Postgres credentials for that Compose file. Required app vars (validated a
 ```env
 DATABASE_URL="postgres://admin:admin@zenflow-db:5432/zenflow?schema=public"
 CACHE_URL="redis://zenflow-cache:6379"
+RATE_LIMIT_CACHE_URL="redis://zenflow-cache-ratelimit:6379"  # dedicated Redis for LimitKit — see "Rate limiting"
 CORS_ORIGIN="http://localhost:5173"
 MAIL_TRANSPORT="smtp://zenflow-mail:25"
 SESSION_SECRET="change-me"
@@ -524,8 +530,10 @@ cookie overrides for this topology:
 install, the API itself runs inside the container.
 
 `compose.staging.yml` is the fully containerized stack: `api` (built from the
-`Dockerfile`), `postgres`, `redis`, `mail` (MailHog — catches OTP emails), and a `caddy`
-reverse proxy on `:80`, configured via `.env.staging` + `docker.staging.env`.
+`Dockerfile`), `postgres`, `redis` (sessions/OTP), `redis-ratelimit` (dedicated to
+LimitKit's rate-limit counters — see "Rate limiting"), `mail` (MailHog — catches OTP
+emails), and a `caddy` reverse proxy on `:80`, configured via `.env.staging` +
+`docker.staging.env`. `compose.prod.yml` follows the same shape minus `mail`.
 
 ```bash
 # From backend/ — build the zenflow-api image (build context is the repo root,

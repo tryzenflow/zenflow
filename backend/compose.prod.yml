@@ -14,6 +14,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      redis-ratelimit:
+        condition: service_started
     env_file:
       - .env.prod
 
@@ -36,6 +38,14 @@ services:
 
   redis:
     container_name: zenflow-cache-prod
+    image: redis:8.8.0-alpine
+    expose:
+      - "6379"
+    networks:
+      - api
+
+  redis-ratelimit:
+    container_name: zenflow-cache-ratelimit-prod
     image: redis:8.8.0-alpine
     expose:
       - "6379"

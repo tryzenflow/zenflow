@@ -30,6 +30,10 @@ import { RateLimitModule } from "./common/rate-limit";
         SESSION_SECRET: Joi.string().required(),
         CORS_ORIGIN: Joi.string().required(),
         CACHE_URL: Joi.string().uri().required(),
+        // Separate Redis instance dedicated to LimitKit's rate-limit
+        // counters (see common/rate-limit/) — kept off the session/OTP
+        // Redis (CACHE_URL) so counter churn can't evict that data.
+        RATE_LIMIT_CACHE_URL: Joi.string().uri().required(),
         MAIL_TRANSPORT: Joi.string().uri().required(),
         MAIL_FROM: Joi.string().email().required(),
         // Idle session lifetime in ms; with rolling sessions, active use keeps
