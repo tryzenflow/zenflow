@@ -5,10 +5,11 @@ import session from "express-session";
 import { ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
-import { createClient } from "redis";
+import type { RedisClientType } from "redis";
 import { RedisStore } from "connect-redis";
 import passport from "passport";
 import { buildSessionOptions } from "./auth/session.config";
+import { REDIS_CLIENT } from "./common/redis/redis.constants";
 
 // 7 days. Default lifetime of an idle session; with rolling sessions an
 // actively-used session keeps getting extended on every request.
@@ -46,10 +47,11 @@ async function bootstrap() {
     }),
   );
 
-  const redisClient = createClient({
-    url: configService.get("CACHE_URL"),
-  });
-  await redisClient.connect();
+  // Reuse the single shared, already-connected Redis client (see
+  // common/redis/redis.module.ts) — the LimitKit rate limiter (common/
+  // rate-limit/) uses the same client rather than opening a second
+  // connection.
+  const redisClient = app.get<RedisClientType>(REDIS_CLIENT);
 
   const redisStore = new RedisStore({
     client: redisClient,
