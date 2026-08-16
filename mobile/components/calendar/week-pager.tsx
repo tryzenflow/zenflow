@@ -23,7 +23,7 @@ import { DAY_MINUTES, type PeekBlock } from "@/lib/peek";
 
 /** Min ms between consecutive cross-day advances while a finger holds at the
  * screen edge (auto-advance cadence). */
-const DRAG_ADVANCE_MS = 500;
+const DRAG_ADVANCE_MS = 350;
 
 /** Cross-day drags append/prepend days to the window so the page holding the
  * lifted block stays mounted; capped at two weeks so a drop always lands

@@ -27,7 +27,7 @@ const TAGS_MIN_DURATION = 45;
 
 /** Screen-edge zone (px) that a dragged block must enter to cross to the
  * adjacent day. */
-const EDGE = 48;
+const EDGE = 64;
 
 const TAG_TINTS = [
   "border-orange-400/40 bg-orange-100/15 dark:border-orange-500/40 dark:bg-orange-500/10",
@@ -193,7 +193,11 @@ export function TaskBlock({
       const snappedMinutes =
         Math.round(deltaMinutes / TIME_GRANULARITY) * TIME_GRANULARITY;
 
-      if (snappedMinutes === 0) return;
+      // A cross-day drag (Week pager) shifts the wall clock by whole days so
+      // the drop lands on the adjacent day while keeping the time-of-day.
+      const dayOffset = dayOffsetRef?.current ?? 0;
+
+      if (snappedMinutes === 0 && dayOffset === 0) return;
 
       const newStartMin = Math.max(
         0,
@@ -203,9 +207,6 @@ export function TaskBlock({
       const wall = zonedDate(segment.taskStart, tz);
       wall.setHours(Math.floor(newStartMin / 60), newStartMin % 60, 0, 0);
 
-      // A cross-day drag (Week pager) shifts the wall clock by whole days so
-      // the drop lands on the adjacent day while keeping the time-of-day.
-      const dayOffset = dayOffsetRef?.current ?? 0;
       if (dayOffset !== 0) wall.setDate(wall.getDate() + dayOffset);
 
       const newStart = zonedWallClockToUtc(wall, tz);
@@ -239,7 +240,10 @@ export function TaskBlock({
       const absX = Math.abs(e.translationX);
       const absY = Math.abs(e.translationY);
 
-      if (absX > absY && e.translationX > 0) {
+      // Only a pure rightward swipe (never lifted vertically) is the "complete"
+      // gesture — once the block is lifted, rightward movement is a cross-day
+      // advance instead, so a diagonal drag toward the edge keeps working.
+      if (absX > absY && e.translationX > 0 && isDragging.value === 0) {
         translateX.value = e.translationX;
         checkOpacity.value = interpolate(
           e.translationX,
@@ -266,14 +270,15 @@ export function TaskBlock({
             lastSnap.value = newStartMin;
             runOnJS(reportSnap)(newStartMin);
           }
+        }
 
-          // Cross-day affordance: while the finger is near the screen's
-          // left/right edge, nudge the Week pager toward the adjacent day.
-          if (onDragEdge) {
-            const x = e.absoluteX;
-            if (x <= EDGE) runOnJS(onDragEdge)("left");
-            else if (x >= screenWidth - EDGE) runOnJS(onDragEdge)("right");
-          }
+        // Cross-day affordance: while the block is lifted and the finger is
+        // near the screen's left/right edge, nudge the Week pager toward the
+        // adjacent day (runs regardless of X/Y dominance once lifted).
+        if (isDragging.value === 1 && onDragEdge) {
+          const x = e.absoluteX;
+          if (x <= EDGE) runOnJS(onDragEdge)("left");
+          else if (x >= screenWidth - EDGE) runOnJS(onDragEdge)("right");
         }
       }
     })
@@ -281,12 +286,16 @@ export function TaskBlock({
       const absX = Math.abs(e.translationX);
       const absY = Math.abs(e.translationY);
 
-      if (absX > absY && e.translationX > COMPLETE_THRESHOLD) {
+      if (
+        absX > absY &&
+        e.translationX > COMPLETE_THRESHOLD &&
+        isDragging.value === 0
+      ) {
         translateX.value = withTiming(blockWidth, { duration: 200 });
         checkOpacity.value = withTiming(0, { duration: 200 });
         runOnJS(triggerCompleteHaptic)();
         runOnJS(triggerComplete)();
-      } else if (absY > absX) {
+      } else if (absY > absX || isDragging.value === 1) {
         runOnJS(handleDragEnd)(e.translationY);
       }
 
