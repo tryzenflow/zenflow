@@ -103,6 +103,10 @@ export function WeekPager({
   // recentering scrolls.
   const didDragRef = useRef(false);
   const hasLaidOutRef = useRef(false);
+  // Page the swipe started on — lets the settle cap a flick to one day instead
+  // of landing wherever momentum died (`disableIntervalMomentum` covers iOS;
+  // this covers Android, which ignores that prop).
+  const dragStartIndexRef = useRef(0);
 
   const scrollToIndex = useCallback((index: number, animated: boolean) => {
     requestAnimationFrame(() => {
@@ -152,28 +156,39 @@ export function WeekPager({
       if (!didDragRef.current) return;
       didDragRef.current = false;
       if (dragActive) return;
-      const index = Math.round(event.nativeEvent.contentOffset.x / width);
-      if (index < 0 || index >= days.length) return;
-      if (index === focusedIndex) return;
 
-      setFocusedIndex(index);
-      if (index === days.length - 1) {
+      const settled = Math.round(event.nativeEvent.contentOffset.x / width);
+      if (settled < 0 || settled >= days.length) return;
+
+      // Cap every swipe to one day: use only the direction of travel, never
+      // the raw resting offset (a big flick can die 4-5 pages away).
+      const start = dragStartIndexRef.current;
+      const dir = settled > start ? 1 : settled < start ? -1 : 0;
+      const target = Math.min(Math.max(start + dir, 0), days.length - 1);
+      if (target === focusedIndex) return;
+
+      // The list physically stopped farther than one page — animate it back so
+      // the UI ends where the focus does.
+      if (target !== settled) scrollToIndex(target, true);
+
+      setFocusedIndex(target);
+      if (target === days.length - 1) {
         // Settled on the trailing edge — slide the whole window one week
         // forward and focus the new week's Monday.
-        const nextDays = weekDays(shiftWeek(days[index], 1));
+        const nextDays = weekDays(shiftWeek(days[target], 1));
         setDays(nextDays);
         setFocusedIndex(0);
         onFocusedDateChange(nextDays[0]);
         scrollToIndex(0, false);
-      } else if (index === 0) {
+      } else if (target === 0) {
         // Leading edge — slide one week back, focus the previous Sunday.
-        const prevDays = weekDays(shiftWeek(days[index], -1));
+        const prevDays = weekDays(shiftWeek(days[target], -1));
         setDays(prevDays);
         setFocusedIndex(6);
         onFocusedDateChange(prevDays[6]);
         scrollToIndex(6, false);
       } else {
-        onFocusedDateChange(days[index]);
+        onFocusedDateChange(days[target]);
       }
     },
     [days, focusedIndex, dragActive, width, onFocusedDateChange, scrollToIndex],
@@ -244,6 +259,11 @@ export function WeekPager({
         pagingEnabled={false}
         snapToInterval={width}
         snapToAlignment="start"
+        // iOS: a hard flick stops on the next page rather than flying several
+        // days away. Android ignores this — the ±1 settle cap in
+        // `handleMomentumScrollEnd` (via `dragStartIndexRef`) is the
+        // cross-platform guarantee.
+        disableIntervalMomentum
         decelerationRate="fast"
         showsHorizontalScrollIndicator={false}
         initialScrollIndex={dayIndexInWeek(focusedDate)}
@@ -260,6 +280,7 @@ export function WeekPager({
         onLayout={handleFirstLayout}
         onScrollBeginDrag={() => {
           didDragRef.current = true;
+          dragStartIndexRef.current = focusedIndex;
         }}
         onMomentumScrollEnd={handleMomentumScrollEnd}
         renderItem={({ item, index }) => (
