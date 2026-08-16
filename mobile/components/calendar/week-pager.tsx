@@ -19,6 +19,7 @@ import {
   weekDays,
 } from "@/lib/week-date-math";
 import { DayTimeline } from "./day-timeline";
+import { DAY_MINUTES, type PeekBlock } from "@/lib/peek";
 
 /** Min ms between consecutive cross-day advances while a finger holds at the
  * screen edge (auto-advance cadence). */
@@ -35,6 +36,51 @@ const PEEK_STRIP_W = 14;
 
 const BRAND_ORANGE_LIGHT = "255, 142, 62";
 const BRAND_ORANGE_DARK = "255, 122, 36";
+
+/** Block fill per task state, matching the day grid's state treatment. */
+const PEEK_BLOCK_COLORS: Record<PeekBlock["state"], string> = {
+  fluid: `rgba(${BRAND_ORANGE_LIGHT}, 0.55)`,
+  overdue: "rgba(244, 63, 94, 0.6)",
+  conflict: "rgba(245, 158, 11, 0.6)",
+  completed: "rgba(16, 185, 129, 0.45)",
+};
+
+/** Right-edge sliver showing the next day's tasks as mini blocks, positioned
+ * by wall-clock time and colored by task state. */
+function PeekStrip({ blocks }: { blocks: PeekBlock[] }) {
+  const [height, setHeight] = useState(0);
+  return (
+    <View
+      pointerEvents="none"
+      onLayout={(e) => setHeight(e.nativeEvent.layout.height)}
+      className="absolute top-0 bottom-0 z-[6] overflow-hidden border-l border-border bg-card"
+      style={{
+        width: PEEK_STRIP_W,
+        right: 0,
+        shadowColor: "#000",
+        shadowOpacity: 0.08,
+        shadowRadius: 10,
+        shadowOffset: { width: -2, height: 0 },
+        elevation: 2,
+      }}
+    >
+      {height > 0 &&
+        blocks.map((block) => (
+          <View
+            key={block.key}
+            className="absolute rounded"
+            style={{
+              left: 3,
+              width: 8,
+              top: (block.startMin / DAY_MINUTES) * height,
+              height: Math.max(2, (block.durationMin / DAY_MINUTES) * height),
+              backgroundColor: PEEK_BLOCK_COLORS[block.state],
+            }}
+          />
+        ))}
+    </View>
+  );
+}
 
 /** Edges the WeekHeader peeks at, mapped to the adjacent-day advance. */
 type DragEdge = "left" | "right";
@@ -84,6 +130,17 @@ export function WeekPager({
   );
   const [dragActive, setDragActive] = useState(false);
   const [pill, setPill] = useState<{ edge: DragEdge; day: Date } | null>(null);
+  // Each mounted day's mini-day blocks (from its DayTimeline's `onPeekChange`),
+  // keyed by `dateKey`, so every page's strip renders the next day's real tasks.
+  const [peekByDay, setPeekByDay] = useState<Record<string, PeekBlock[]>>({});
+
+  // Stable identity so DayTimeline's peek-report effect doesn't re-fire on
+  // every pager render.
+  const handlePeekChange = useCallback((blocks: PeekBlock[], dayKey: string) => {
+    setPeekByDay((prev) =>
+      prev[dayKey] === blocks ? prev : { ...prev, [dayKey]: blocks },
+    );
+  }, []);
 
   // Cross-day offset accumulated during a drag; TaskBlock adds it to the
   // rescheduled wall clock on drop, then it resets on the next drag start.
@@ -287,34 +344,12 @@ export function WeekPager({
               onDragEdge={handleDragEdge}
               onDragChange={handleDragChange}
               onCrossDayReschedule={() => onCrossDayReschedule()}
+              onPeekChange={handlePeekChange}
             />
             {index < days.length - 1 && (
-              <View
-                pointerEvents="none"
-                className="absolute top-0 bottom-0 z-[6] border-l border-border bg-card"
-                style={{
-                  width: PEEK_STRIP_W,
-                  right: 0,
-                  shadowColor: "#000",
-                  shadowOpacity: 0.08,
-                  shadowRadius: 10,
-                  shadowOffset: { width: -2, height: 0 },
-                  elevation: 2,
-                }}
-              >
-                <View
-                  className="absolute rounded bg-brand-orange/30"
-                  style={{ left: 3, top: 72, width: 8, height: 30 }}
-                />
-                <View
-                  className="absolute rounded bg-brand-orange/25"
-                  style={{ left: 3, top: 118, width: 8, height: 48 }}
-                />
-                <View
-                  className="absolute rounded bg-muted"
-                  style={{ left: 3, top: 176, width: 8, height: 26 }}
-                />
-              </View>
+              <PeekStrip
+                blocks={peekByDay[dateKey(days[index + 1])] ?? []}
+              />
             )}
           </View>
         )}

@@ -26,6 +26,7 @@ import { useUserStore } from "@/hooks/use-user-store";
 import { useNow } from "@/hooks/use-now";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { listTasks, rescheduleTask, completeTask } from "@/api/tasks";
+import { peekBlocksFromSegments, type PeekBlock } from "@/lib/peek";
 import { TimeGutter } from "./time-gutter";
 import { WorkZoneOverlay } from "./work-zone-overlay";
 import { NowIndicator } from "./now-indicator";
@@ -105,6 +106,9 @@ interface DayTimelineProps {
   onDragChange?: (dragging: boolean) => void;
   /** Fired after a task that was dragged onto another day is rescheduled. */
   onCrossDayReschedule?: (taskId: string, startISO: string) => void;
+  /** Reports this day's tasks as mini-day blocks so a parent week pager can
+   * render its next-day peek strip from real data. */
+  onPeekChange?: (blocks: PeekBlock[], dayKey: string) => void;
 }
 
 export function DayTimeline({
@@ -122,6 +126,7 @@ export function DayTimeline({
   onDragEdge,
   onDragChange,
   onCrossDayReschedule,
+  onPeekChange,
 }: DayTimelineProps) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const prefs = useUserStore((s) => s.user) ?? DEFAULT_WORK_PREFS;
@@ -247,6 +252,15 @@ export function DayTimeline({
   }, [tasks, date, tz]);
 
   const layout = useMemo(() => getOverlapLayout(segments), [segments]);
+
+  const peekBlocks = useMemo(
+    () => peekBlocksFromSegments(segments, date, tz),
+    [segments, date, tz],
+  );
+
+  useEffect(() => {
+    onPeekChange?.(peekBlocks, dayKey);
+  }, [peekBlocks, dayKey, onPeekChange]);
 
   const deadlineByTask = useMemo(() => {
     const map = new Map<string, string>();
