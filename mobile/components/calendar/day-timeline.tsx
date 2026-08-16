@@ -90,6 +90,29 @@ interface DayTimelineProps {
   onStateChange?: (state: TimelineState) => void;
   onReachBottom?: () => void;
   onOvernightTailsChange?: (tails: Task[]) => void;
+  /** Hide the per-day header — the Week screen renders its own sticky
+   * `WeekHeader` strip above the pager. Default `true` preserves the Day
+   * screen. */
+  showHeader?: boolean;
+  /** Show the "Long press to add" ghost on empty non-today days too — the
+   * Week mockup surfaces it on any empty day. Default `false`. */
+  showEmptyGhostAlways?: boolean;
+  /** Reports the vertical scroll offset when the user stops scrolling, so a
+   * parent week pager can keep every day's timeline at the same scroll Y. */
+  onScrollSettled?: (y: number) => void;
+  /** Shared vertical scroll offset to jump to when `scrollSyncTick` bumps. */
+  scrollToY?: number;
+  /** Bump to re-apply `scrollToY` (skips the initial mount so a parent can't
+   * clobber the first layout). */
+  scrollSyncTick?: number;
+  /** Mutable cross-day offset (days) applied to a dragged task on drop. */
+  dayOffsetRef?: { current: number };
+  /** Fired while a task is dragged near the screen's left/right edge. */
+  onDragEdge?: (edge: "left" | "right") => void;
+  /** Fired when a task drag starts/stops (used to lock the pager). */
+  onDragChange?: (dragging: boolean) => void;
+  /** Fired after a task that was dragged onto another day is rescheduled. */
+  onCrossDayReschedule?: (taskId: string, startISO: string) => void;
 }
 
 export function DayTimeline({
@@ -101,6 +124,15 @@ export function DayTimeline({
   onStateChange,
   onReachBottom,
   onOvernightTailsChange,
+  showHeader = true,
+  showEmptyGhostAlways = false,
+  onScrollSettled,
+  scrollToY,
+  scrollSyncTick,
+  dayOffsetRef,
+  onDragEdge,
+  onDragChange,
+  onCrossDayReschedule,
 }: DayTimelineProps) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const prefs = useUserStore((s) => s.user) ?? DEFAULT_WORK_PREFS;
@@ -334,6 +366,28 @@ export function DayTimeline({
     [onReachBottom],
   );
 
+  // Fires when the user stops scrolling (release or momentum end) so a parent
+  // week pager can keep every day's timeline at the same vertical offset.
+  const handleScrollSettled = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      onScrollSettled?.(e.nativeEvent.contentOffset.y);
+    },
+    [onScrollSettled],
+  );
+
+  // Applies the shared vertical offset from a parent week pager. Guarded by
+  // `scrollSyncTick > 0` so the initial mount (and any parent that never
+  // bumps the tick) never clobbers the timeline's own layout scroll.
+  useEffect(() => {
+    if (
+      scrollSyncTick !== undefined &&
+      scrollSyncTick > 0 &&
+      scrollRef.current
+    ) {
+      scrollRef.current.scrollTo({ y: scrollToY ?? 0, animated: false });
+    }
+  }, [scrollSyncTick, scrollToY]);
+
   const isToday = useMemo(() => {
     const live = toZonedTime(now, tz);
     return (
@@ -367,8 +421,9 @@ export function DayTimeline({
   const handleDragStateChange = useCallback(
     (snap: { startMin: number } | null) => {
       setDragSnap(snap);
+      onDragChange?.(snap !== null);
     },
-    [],
+    [onDragChange],
   );
 
   const dragChipLabel = useMemo(() => {
@@ -465,7 +520,8 @@ export function DayTimeline({
 
   return (
     <View className="flex-1 bg-background">
-      <View className="flex-row items-center justify-between px-4 pt-4 pb-4 border-b border-black/15 dark:border-white/15">
+      {showHeader && (
+        <View className="flex-row items-center justify-between px-4 pt-4 pb-4 border-b border-black/15 dark:border-white/15">
         <View className="min-w-0 flex-1">
           <Text className="text-xl font-bold tracking-tight">
             {format(date, "EEE, MMM d")}
@@ -498,6 +554,7 @@ export function DayTimeline({
           )}
         </View>
       </View>
+      )}
 
       <ScrollView
         ref={scrollRef}
@@ -505,6 +562,8 @@ export function DayTimeline({
         showsVerticalScrollIndicator={false}
         onLayout={handleTimelineLayout}
         onScroll={handleScroll}
+        onScrollEndDrag={handleScrollSettled}
+        onMomentumScrollEnd={handleScrollSettled}
         scrollEventThrottle={16}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -599,7 +658,7 @@ export function DayTimeline({
                   <NowIndicator now={now} tz={tz} totalHeight={totalHeight} />
                 )}
 
-                {segments.length === 0 && isToday && (
+                {segments.length === 0 && (isToday || showEmptyGhostAlways) && (
                   <View
                     pointerEvents="none"
                     className="absolute left-1.5 right-1.5 z-20 items-center justify-center rounded-xl border-[1.5px] border-dashed border-brand-orange/55 bg-brand-orange/[0.07]"
@@ -634,6 +693,9 @@ export function DayTimeline({
                       onDragStateChange={handleDragStateChange}
                       onPress={onTaskPress}
                       onComplete={handleComplete}
+                      dayOffsetRef={dayOffsetRef}
+                      onDragEdge={onDragEdge}
+                      onCrossDayReschedule={onCrossDayReschedule}
                     />
                   );
                 })}

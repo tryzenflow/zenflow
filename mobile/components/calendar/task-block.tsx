@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { View } from "react-native";
+import { View, useWindowDimensions } from "react-native";
 import { Text } from "@/components/ui/text";
 import { AlertTriangle } from "@/components/Icons";
 import { cn } from "@/lib/utils";
@@ -24,6 +24,10 @@ import Animated, {
 import * as Haptics from "expo-haptics";
 
 const TAGS_MIN_DURATION = 45;
+
+/** Screen-edge zone (px) that a dragged block must enter to cross to the
+ * adjacent day. */
+const EDGE = 48;
 
 const TAG_TINTS = [
   "border-orange-400/40 bg-orange-100/15 dark:border-orange-500/40 dark:bg-orange-500/10",
@@ -71,6 +75,15 @@ interface TaskBlockProps {
   onDragStateChange?: (snap: DragSnap | null) => void;
   onPress?: (taskId: string) => void;
   onComplete?: (taskId: string) => void;
+  /** Mutable cross-day offset (days) applied to the reschedule wall clock on
+   * drop — owned by the Week pager so a block can be dragged onto another day. */
+  dayOffsetRef?: { current: number };
+  /** Fired while the finger is within `EDGE` px of the screen's left/right
+   * edge during a vertical drag, letting the Week pager advance to the
+   * adjacent day. */
+  onDragEdge?: (edge: "left" | "right") => void;
+  /** Fired after a reschedule that landed on a different day than the source. */
+  onCrossDayReschedule?: (taskId: string, startISO: string) => void;
 }
 
 export function TaskBlock({
@@ -85,7 +98,11 @@ export function TaskBlock({
   onDragStateChange,
   onPress,
   onComplete,
+  dayOffsetRef,
+  onDragEdge,
+  onCrossDayReschedule,
 }: TaskBlockProps) {
+  const { width: screenWidth } = useWindowDimensions();
   const startMin = minutesOfDayLocal(segment.start, tz);
   const rawEndMin = minutesOfDayLocal(segment.end, tz);
   const endMin = segment.continues || rawEndMin === 0 ? DAILY_HORIZON : rawEndMin;
@@ -185,14 +202,33 @@ export function TaskBlock({
 
       const wall = zonedDate(segment.taskStart, tz);
       wall.setHours(Math.floor(newStartMin / 60), newStartMin % 60, 0, 0);
+
+      // A cross-day drag (Week pager) shifts the wall clock by whole days so
+      // the drop lands on the adjacent day while keeping the time-of-day.
+      const dayOffset = dayOffsetRef?.current ?? 0;
+      if (dayOffset !== 0) wall.setDate(wall.getDate() + dayOffset);
+
       const newStart = zonedWallClockToUtc(wall, tz);
 
       if (newStart.toISOString() === segment.taskStart) return;
 
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       onReschedule(segment.taskId, newStart.toISOString());
+      if (dayOffset !== 0) {
+        onCrossDayReschedule?.(segment.taskId, newStart.toISOString());
+      }
     },
-    [isInteractive, onReschedule, pxPerMin, startMin, segment.taskStart, segment.taskId, tz],
+    [
+      isInteractive,
+      onReschedule,
+      onCrossDayReschedule,
+      dayOffsetRef,
+      pxPerMin,
+      startMin,
+      segment.taskStart,
+      segment.taskId,
+      tz,
+    ],
   );
 
   const panGesture = Gesture.Pan()
@@ -229,6 +265,14 @@ export function TaskBlock({
           if (lastSnap.value !== newStartMin) {
             lastSnap.value = newStartMin;
             runOnJS(reportSnap)(newStartMin);
+          }
+
+          // Cross-day affordance: while the finger is near the screen's
+          // left/right edge, nudge the Week pager toward the adjacent day.
+          if (onDragEdge) {
+            const x = e.absoluteX;
+            if (x <= EDGE) runOnJS(onDragEdge)("left");
+            else if (x >= screenWidth - EDGE) runOnJS(onDragEdge)("right");
           }
         }
       }
