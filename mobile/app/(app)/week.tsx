@@ -8,7 +8,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { zonedNow } from "@zenflow/core";
 import * as Haptics from "expo-haptics";
 import { type Href, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
 
 export default function WeekScreen() {
@@ -25,11 +25,6 @@ export default function WeekScreen() {
   // focus (returning from an edit), an Optimize apply, or a cross-day
   // reschedule (the source day refetches itself; the others need the bump).
   const [reloadKey, setReloadKey] = useState(0);
-  // Shared vertical scroll position across all seven timelines, keeping them
-  // in lockstep: a settle on any page stores the offset, and the tick bump
-  // re-applies it to every page via each page's `scrollSyncTick` effect.
-  const scrollYRef = useRef(0);
-  const [scrollSyncTick, setScrollSyncTick] = useState(0);
 
   const tabBarOverlay = useTabBarOverlayHeight();
 
@@ -46,11 +41,6 @@ export default function WeekScreen() {
   useEffect(() => {
     if (scheduleRefreshToken > 0) setReloadKey((k) => k + 1);
   }, [scheduleRefreshToken]);
-
-  const handleScrollSettled = useCallback((y: number) => {
-    scrollYRef.current = y;
-    setScrollSyncTick((t) => t + 1);
-  }, []);
 
   const handleTaskPress = useCallback(
     (taskId: string) => {
@@ -87,9 +77,6 @@ export default function WeekScreen() {
           focusedDate={focusedDate}
           onFocusedDateChange={setFocusedDate}
           reloadKey={reloadKey}
-          scrollYRef={scrollYRef}
-          scrollSyncTick={scrollSyncTick}
-          onScrollSettled={handleScrollSettled}
           onTaskPress={handleTaskPress}
           onLongPress={handleLongPress}
           onCrossDayReschedule={handleCrossDayReschedule}

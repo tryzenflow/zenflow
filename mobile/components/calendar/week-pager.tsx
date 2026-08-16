@@ -47,12 +47,6 @@ interface WeekPagerProps {
   onFocusedDateChange: (day: Date) => void;
   /** Shared refetch token passed to every page's `DayTimeline`. */
   reloadKey: number;
-  /** Shared vertical scroll offset for scroll sync across pages. */
-  scrollYRef: { current: number };
-  /** Bumped whenever a page's scroll settles, re-applying `scrollToY` to every
-   * page so all seven days share one vertical offset. */
-  scrollSyncTick: number;
-  onScrollSettled: (y: number) => void;
   onTaskPress?: (taskId: string) => void;
   onLongPress?: (timeISO: string) => void;
   /** Fired after a cross-day reschedule so the screen can refetch the target
@@ -77,9 +71,6 @@ export function WeekPager({
   focusedDate,
   onFocusedDateChange,
   reloadKey,
-  scrollYRef,
-  scrollSyncTick,
-  onScrollSettled,
   onTaskPress,
   onLongPress,
   onCrossDayReschedule,
@@ -296,9 +287,6 @@ export function WeekPager({
               onDragEdge={handleDragEdge}
               onDragChange={handleDragChange}
               onCrossDayReschedule={() => onCrossDayReschedule()}
-              onScrollSettled={onScrollSettled}
-              scrollToY={scrollYRef.current}
-              scrollSyncTick={scrollSyncTick}
             />
             {index < days.length - 1 && (
               <View

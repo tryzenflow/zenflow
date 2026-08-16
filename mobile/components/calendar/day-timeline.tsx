@@ -97,14 +97,6 @@ interface DayTimelineProps {
   /** Show the "Long press to add" ghost on empty non-today days too — the
    * Week mockup surfaces it on any empty day. Default `false`. */
   showEmptyGhostAlways?: boolean;
-  /** Reports the vertical scroll offset when the user stops scrolling, so a
-   * parent week pager can keep every day's timeline at the same scroll Y. */
-  onScrollSettled?: (y: number) => void;
-  /** Shared vertical scroll offset to jump to when `scrollSyncTick` bumps. */
-  scrollToY?: number;
-  /** Bump to re-apply `scrollToY` (skips the initial mount so a parent can't
-   * clobber the first layout). */
-  scrollSyncTick?: number;
   /** Mutable cross-day offset (days) applied to a dragged task on drop. */
   dayOffsetRef?: { current: number };
   /** Fired while a task is dragged near the screen's left/right edge. */
@@ -126,9 +118,6 @@ export function DayTimeline({
   onOvernightTailsChange,
   showHeader = true,
   showEmptyGhostAlways = false,
-  onScrollSettled,
-  scrollToY,
-  scrollSyncTick,
   dayOffsetRef,
   onDragEdge,
   onDragChange,
@@ -366,28 +355,6 @@ export function DayTimeline({
     [onReachBottom],
   );
 
-  // Fires when the user stops scrolling (release or momentum end) so a parent
-  // week pager can keep every day's timeline at the same vertical offset.
-  const handleScrollSettled = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      onScrollSettled?.(e.nativeEvent.contentOffset.y);
-    },
-    [onScrollSettled],
-  );
-
-  // Applies the shared vertical offset from a parent week pager. Guarded by
-  // `scrollSyncTick > 0` so the initial mount (and any parent that never
-  // bumps the tick) never clobbers the timeline's own layout scroll.
-  useEffect(() => {
-    if (
-      scrollSyncTick !== undefined &&
-      scrollSyncTick > 0 &&
-      scrollRef.current
-    ) {
-      scrollRef.current.scrollTo({ y: scrollToY ?? 0, animated: false });
-    }
-  }, [scrollSyncTick, scrollToY]);
-
   const isToday = useMemo(() => {
     const live = toZonedTime(now, tz);
     return (
@@ -562,8 +529,6 @@ export function DayTimeline({
         showsVerticalScrollIndicator={false}
         onLayout={handleTimelineLayout}
         onScroll={handleScroll}
-        onScrollEndDrag={handleScrollSettled}
-        onMomentumScrollEnd={handleScrollSettled}
         scrollEventThrottle={16}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
