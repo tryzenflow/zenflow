@@ -1,0 +1,7 @@
+# Python — the repo root .gitignore is JS/TS-oriented, so cover this service here.
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
