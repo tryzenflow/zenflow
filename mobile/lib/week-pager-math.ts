@@ -13,6 +13,22 @@
  * position past half a page decides, otherwise snap back.
  */
 
+// ── Pager-page position constants (shared with PagerPage animatedStyle) ──────
+
+/** The outgoing page moves at this fraction of the finger's speed while the
+ * finger is dragging (mockup's swipe frame: at 28% finger drag the outgoing
+ * day sits at −9%, i.e. ≈ 0.32× parallax). It eases back up to 1× during the
+ * settle so every page lands exactly on its slot at rest. */
+export const PARALLAX_FACTOR = 0.32;
+
+/** Opacity the outgoing page fades to mid-swipe (mockup's `opacity-50`). */
+export const OUTGOING_DIM_OPACITY = 0.5;
+
+/** Px of strip movement before the incoming page's stack chrome (seam +
+ * shadow) fades in, so a resting neighbor never leaks a line at the screen
+ * edge. */
+export const CHROME_IN_PX = 2;
+
 /** Drag must exceed this fraction of a page width to settle onto the next
  * page (when the release is slow). */
 export const SETTLE_DRAG_RATIO = 0.5;
@@ -72,4 +88,121 @@ export function decideSettleTarget({
     dir = 0;
   }
   return startIndex + dir;
+}
+
+// ── PagerPage position computation ───────────────────────────────────────────
+
+/** Clamped linear interpolation (Reanimated's `interpolate` with CLAMP). */
+function lerpClamp(
+  value: number,
+  inMin: number,
+  inMax: number,
+  outMin: number,
+  outMax: number,
+): number {
+  "worklet";
+  const t = Math.max(0, Math.min(1, (value - inMin) / (inMax - inMin)));
+  return outMin + t * (outMax - outMin);
+}
+
+export interface PagePositionInput {
+  /** Page index in the mounted array. */
+  index: number;
+  /** Single-page width, px. */
+  width: number;
+  /** `progress.value` — strip offset from rest (rest = `-focusedIndex * w`). */
+  progress: number;
+  /** `fromSV.value` — index of the outgoing (parallaxing) page. */
+  outIndex: number;
+  /** `toSV.value` — index of the incoming (stacking) page. */
+  toIndex: number;
+  /** `draggingSV.value` — 1 while the finger is down, 0 during settle. */
+  dragging: 0 | 1;
+  /** Index of the page holding the lifted task block, or −1 if none. */
+  carrierIndex: number;
+  /** `index * width + progress` at the moment the task was lifted. */
+  carrierOrigin: number;
+}
+
+export interface PagePositionOutput {
+  /** Final translateX for the page. */
+  translateX: number;
+  /** Page opacity (outgoing dims; non-active pages are 0). */
+  opacity: number;
+  /** Z-index (incoming 9, outgoing 8, rest 0). */
+  zIndex: number;
+  /** True if this page is the outgoing (parallaxing) page. */
+  isOutgoing: boolean;
+  /** True if this page is the incoming (stacking) page. */
+  isIncoming: boolean;
+  /** Stack-seam side for the incoming page, or null. */
+  seam: "left" | "right" | null;
+}
+
+/**
+ * Pure, testable counterpart of the `PagerPage` `useAnimatedStyle` body in
+ * `week-pager.tsx`. Returns the same translateX / opacity / zIndex the
+ * worklet computes, driven by plain numbers instead of shared values.
+ *
+ * **Carrier pin**: when `carrierIndex ≥ 0`, the carrier page is pinned at
+ * `carrierOrigin` — the parallax offset is excluded so the strip snap
+ * (progress jump) doesn't move the page. This keeps the lifted task block
+ * glued to the user's finger.
+ */
+export function computePagePosition({
+  index,
+  width,
+  progress,
+  outIndex,
+  toIndex,
+  dragging,
+  carrierIndex,
+  carrierOrigin,
+}: PagePositionInput): PagePositionOutput {
+  "worklet";
+  const slot = index * width;
+  const m = progress + outIndex * width;
+  const absM = Math.abs(m);
+
+  const inIndex =
+    toIndex === outIndex ? outIndex + (m < 0 ? 1 : -1) : toIndex;
+
+  const isOutgoing = index === outIndex;
+  const isIncoming = index === inIndex;
+  const isCarrier = index === carrierIndex;
+
+  // Parallax factor: held at PARALLAX_FACTOR while the finger drags, then
+  // eased to 1× over the settle so the outgoing page lands on its slot.
+  const factor = isOutgoing
+    ? dragging
+      ? PARALLAX_FACTOR
+      : lerpClamp(absM, 0, width, PARALLAX_FACTOR, 1)
+    : 1;
+
+  // Carrier fix: pin the carrier page at its touch-down screen position so
+  // the block inside stays glued to the finger. The fix cancels both the
+  // strip's own slot+progress term AND the outgoing parallax (the carrier
+  // page is typically the outgoing page during a rightward drag).
+  const carrierFix = isCarrier
+    ? carrierOrigin -
+      (slot + progress + (isOutgoing ? (factor - 1) * m : 0))
+    : 0;
+
+  const translateX =
+    slot + progress + carrierFix + (isOutgoing ? (factor - 1) * m : 0);
+
+  const opacity = isOutgoing
+    ? lerpClamp(absM, 0, width * 0.3, 1, OUTGOING_DIM_OPACITY)
+    : isIncoming
+      ? 1
+      : 0;
+
+  const zIndex = isIncoming ? 9 : isOutgoing ? 8 : 0;
+
+  const sliding = absM > CHROME_IN_PX;
+  const fromRight = index === outIndex + 1;
+  const seam: "left" | "right" | null =
+    isIncoming && sliding ? (fromRight ? "left" : "right") : null;
+
+  return { translateX, opacity, zIndex, isOutgoing, isIncoming, seam };
 }

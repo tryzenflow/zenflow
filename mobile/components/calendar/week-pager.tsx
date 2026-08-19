@@ -13,7 +13,13 @@ import {
   shiftWeek,
   weekDays,
 } from "@/lib/week-date-math";
-import { decideSettleTarget } from "@/lib/week-pager-math";
+import {
+  decideSettleTarget,
+  computePagePosition,
+  PARALLAX_FACTOR,
+  OUTGOING_DIM_OPACITY,
+  CHROME_IN_PX,
+} from "@/lib/week-pager-math";
 import { DayTimeline } from "./day-timeline";
 import { DAY_MINUTES, type PeekBlock } from "@/lib/peek";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -29,14 +35,14 @@ import Animated, {
   type SharedValue,
 } from "react-native-reanimated";
 
-/** Min ms between consecutive cross-day advances while a finger holds at the
- * screen edge (auto-advance cadence). */
-const DRAG_ADVANCE_MS = 350;
-
-/** Cross-day drags append/prepend days to the window so the page holding the
- * lifted block stays mounted; capped at two weeks so a drop always lands
- * within the mounted pages. */
+/** Cross-day drags append/prepend one day to the window so the page holding
+ * the lifted block stays mounted; capped at two weeks so a drop always lands
+ * within the mounted pages. A drag advances exactly one day, never more. */
 const MAX_DAYS = 14;
+
+/** Hold time (ms) a lifted block must sit in the screen-edge zone before the
+ * cross-day advance fires (mockup's "lifted block at the edge → jumps"). */
+const CROSS_DAY_HOLD_MS = 400;
 
 /** Width of the decorative "next day" peek strip on each page's right edge
  * (mirrors mockups/week-view.html's `w-3.5` affordance). */
@@ -44,20 +50,6 @@ const PEEK_STRIP_W = 14;
 
 /** Duration of the settle snap (and snap-back) after a swipe ends. */
 const SETTLE_MS = 200;
-
-/** The outgoing page moves at this fraction of the finger's speed while the
- * finger is dragging (mockup's swipe frame: at 28% finger drag the outgoing
- * day sits at −9%, i.e. ≈ 0.32× parallax). It eases back up to 1× during the
- * settle so every page lands exactly on its slot at rest. */
-const PARALLAX_FACTOR = 0.32;
-
-/** Opacity the outgoing page fades to mid-swipe (mockup's `opacity-50`). */
-const OUTGOING_DIM_OPACITY = 0.5;
-
-/** Px of strip movement before the incoming page's stack chrome (seam +
- * shadow) fades in, so a resting neighbor never leaks a line at the screen
- * edge. */
-const CHROME_IN_PX = 2;
 
 const BRAND_ORANGE_LIGHT = "255, 142, 62";
 const BRAND_ORANGE_DARK = "255, 122, 36";
@@ -126,6 +118,13 @@ interface PagerPageProps {
    * 0 during settle animations (parallax eases back to 1× so pages land
    * exactly on their slots). */
   draggingSV: SharedValue<number>;
+  /** Index of the page that holds the currently-lifted task block, or −1 if
+   * no task drag is active. The carried page's slot is overridden so the
+   * strip snap keeps it pinned to the finger. */
+  carrierIndexSV: SharedValue<number>;
+  /** The carried page's `index * width + progress` at drag start — the page
+   * is held at this screen position for the entire drag gesture. */
+  carrierOriginSV: SharedValue<number>;
   borderColor: string;
   children: React.ReactNode;
 }
@@ -151,64 +150,36 @@ function PagerPage({
   fromSV,
   toSV,
   draggingSV,
+  carrierIndexSV,
+  carrierOriginSV,
   borderColor,
   children,
 }: PagerPageProps) {
   const animatedStyle = useAnimatedStyle(() => {
-    const outIndex = fromSV.value;
-    const m = progress.value + outIndex * width;
-    const absM = Math.abs(m);
-    const inIndex =
-      toSV.value === outIndex
-        ? outIndex + (m < 0 ? 1 : -1)
-        : toSV.value;
+    const pos = computePagePosition({
+      index,
+      width,
+      progress: progress.value,
+      outIndex: fromSV.value,
+      toIndex: toSV.value,
+      dragging: draggingSV.value ? 1 : 0,
+      carrierIndex: carrierIndexSV.value,
+      carrierOrigin: carrierOriginSV.value,
+    });
 
-    const isOutgoing = index === outIndex;
-    const isIncoming = index === inIndex;
-
-    // Parallax factor: held at PARALLAX_FACTOR while the finger drags (the
-    // mockup's frozen frame), then eased to 1× over the settle so the
-    // outgoing page glides out to exactly its slot (no pop at rest).
-    const factor = isOutgoing
-      ? draggingSV.value
-        ? PARALLAX_FACTOR
-        : interpolate(
-            absM,
-            [0, width],
-            [PARALLAX_FACTOR, 1],
-            Extrapolation.CLAMP,
-          )
-      : 1;
-
-    const translateX = index * width + progress.value + (isOutgoing ? (factor - 1) * m : 0);
-
-    const opacity = isOutgoing
-      ? interpolate(
-          absM,
-          [0, width * 0.3],
-          [1, OUTGOING_DIM_OPACITY],
-          Extrapolation.CLAMP,
-        )
-      : isIncoming
-        ? 1
-        : 0;
-
-    const zIndex = isIncoming ? 9 : isOutgoing ? 8 : 0;
-
-    // Stack seam only while the neighbor is actually sliding — at rest it
-    // sits exactly off-viewport and must not paint. (The stack shadow lives
-    // in the static overlays below — `shadowOffset` can't be nested inside
-    // an animated style on web.)
-    const sliding = absM > CHROME_IN_PX;
-    const fromRight = index === outIndex + 1;
     const seamStyle =
-      isIncoming && sliding
-        ? fromRight
-          ? { borderLeftWidth: 1, borderLeftColor: borderColor }
-          : { borderRightWidth: 1, borderRightColor: borderColor }
-        : {};
+      pos.seam === "left"
+        ? { borderLeftWidth: 1, borderLeftColor: borderColor }
+        : pos.seam === "right"
+          ? { borderRightWidth: 1, borderRightColor: borderColor }
+          : {};
 
-    return { transform: [{ translateX }], opacity, zIndex, ...seamStyle };
+    return {
+      transform: [{ translateX: pos.translateX }],
+      opacity: pos.opacity,
+      zIndex: pos.zIndex,
+      ...seamStyle,
+    };
   });
 
   // The stack shadow is cast by two static-styled overlays — one per swipe
@@ -328,11 +299,10 @@ interface WeekPagerProps {
  * both platforms.
  *
  * The data window is *live*: a normal swipe that settles on the edge day
- * slides the whole window ±1 week; a cross-day task drag appends/prepends
- * days (up to `MAX_DAYS`) while the finger holds at the screen edge, then
- * collapses back to the 7-day window on drop — so the page owning the lifted
- * block stays mounted for the whole gesture (GitHub issue #19's
- * "cross-day drag" frame).
+ * slides the whole window ±1 week; a cross-day task drag appends/prepends a
+ * single day (up to `MAX_DAYS`), then collapses back to the 7-day window on
+ * drop — so the page owning the lifted block stays mounted for the whole
+ * gesture (GitHub issue #19's "cross-day drag" frame).
  */
 export function WeekPager({
   focusedDate,
@@ -354,6 +324,9 @@ export function WeekPager({
   );
   const [dragActive, setDragActive] = useState(false);
   const [pill, setPill] = useState<{ edge: DragEdge; day: Date } | null>(null);
+  // Edge whose cross-day advance is armed (orange glow lit, hold timer
+  // running) — null when no zone is active or the advance already fired.
+  const [armed, setArmed] = useState<DragEdge | null>(null);
   // 1 while a settle (or snap-back) animation is running: the pan is disabled
   // so a new gesture can't touch down mid-flight and clobber the settle's
   // roles/position — which used to flip the incoming/outgoing z-order mid-
@@ -376,6 +349,13 @@ export function WeekPager({
   // 1 once a pan's `onEnd` has scheduled a settle, so `onFinalize` knows not
   // to snap back when the settle is already on its way.
   const didSettleSV = useSharedValue(0);
+  // Index of the page holding the lifted task block (−1 = none). When set,
+  // the carried page is pinned to its touch-down position so the block
+  // inside stays in the hand across strip snaps.
+  const carrierIndexSV = useSharedValue(-1);
+  // The carried page's `index * width + progress` at drag start — held
+  // constant for the entire gesture via `carrierFix` in the page style.
+  const carrierOriginSV = useSharedValue(0);
 
   // Stable identity so DayTimeline's peek-report effect doesn't re-fire on
   // every pager render.
@@ -388,8 +368,23 @@ export function WeekPager({
   // Cross-day offset accumulated during a drag; TaskBlock adds it to the
   // rescheduled wall clock on drop, then it resets on the next drag start.
   const dayOffsetRef = useRef(0);
-  const lastAdvanceRef = useRef(0);
+  // Gates the cross-day advance to exactly once per drag gesture (the strip
+  // must not chain days while a finger holds past the carry threshold).
+  const advancedRef = useRef(false);
+  // Pending arm-timer for the cross-day hold, cleared on exit/drop/unmount.
+  const armTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Mirror of `armed` state kept in a ref so handleDragEdge can check
+  // idempotency without re-rendering the pager (re-render recreates the
+  // TaskBlock gesture handler and cancels the hold timer on web).
+  const armedRef = useRef<DragEdge | null>(null);
   const hasLaidOutRef = useRef(false);
+
+  useEffect(
+    () => () => {
+      if (armTimerRef.current) clearTimeout(armTimerRef.current);
+    },
+    [],
+  );
 
   const commitRoles = useCallback(
     (index: number) => {
@@ -624,11 +619,12 @@ export function WeekPager({
       }
     });
 
-  const handleDragEdge = useCallback(
+  // Fires after a lifted block has held in the edge zone for the hold time.
+  // Exactly one advance per drag gesture — holding longer never chains days.
+  const advanceCrossDay = useCallback(
     (edge: DragEdge) => {
-      const now = Date.now();
-      if (now - lastAdvanceRef.current < DRAG_ADVANCE_MS) return;
-      lastAdvanceRef.current = now;
+      if (advancedRef.current) return;
+      advancedRef.current = true;
 
       const dir = edge === "right" ? 1 : -1;
       const targetIndex = focusedIndex + dir;
@@ -654,9 +650,46 @@ export function WeekPager({
       setSettling(false);
       commitRoles(nextIndex);
       progress.value = -nextIndex * width;
+      // Pin the carrier page at its touch-down position so the block stays
+      // in the hand. On a prepend the carried page reindexes (focusedIndex →
+      // focusedIndex + 1); otherwise it stays put.
+      carrierIndexSV.value = targetIndex < 0 ? nextIndex : focusedIndex;
     },
-    [commitRoles, days, focusedIndex, progress, width],
+    [commitRoles, days, focusedIndex, progress, width, carrierIndexSV],
   );
+
+  // Arms the cross-day advance: lights the orange glow at the edge and starts
+  // the hold timer. Called every frame the lifted block is in the zone — the
+  // `armed` state (and `advancedRef`) make it idempotent.
+  const handleDragEdge = useCallback(
+    (edge: DragEdge) => {
+      if (advancedRef.current) return;
+      if (armedRef.current === edge) return;
+      // Edge flip mid-hold: re-arm on the new edge.
+      if (armedRef.current !== null && armTimerRef.current) {
+        clearTimeout(armTimerRef.current);
+        armTimerRef.current = null;
+      }
+      armedRef.current = edge;
+      setArmed(edge);
+      armTimerRef.current = setTimeout(() => {
+        armTimerRef.current = null;
+        advanceCrossDay(edge);
+      }, CROSS_DAY_HOLD_MS);
+    },
+    [advanceCrossDay],
+  );
+
+  // Leaving the zone (or a fresh hold with no snap yet) disarms a pending
+  // advance. Called every frame the lifted block is outside the zone.
+  const handleDragEdgeExit = useCallback(() => {
+    if (armTimerRef.current) {
+      clearTimeout(armTimerRef.current);
+      armTimerRef.current = null;
+    }
+    armedRef.current = null;
+    setArmed(null);
+  }, []);
 
   const handleDragChange = useCallback(
     (active: boolean) => {
@@ -665,10 +698,28 @@ export function WeekPager({
       setSettling(false);
       if (active) {
         dayOffsetRef.current = 0;
-        lastAdvanceRef.current = 0;
         setPill(null);
+        // Capture the page holding the lifted block so the pager can pin
+        // it across strip snaps (carrierFix in PagerPage animatedStyle).
+        carrierIndexSV.value = focusedIndex;
+        carrierOriginSV.value = focusedIndex * width + progress.value;
         return;
       }
+      // Gesture truly ended (`reportDragEnd` fires once at finalize — unlike
+      // the `active === true` branch, which re-fires on every snap report).
+      // Only here do we unlock the next gesture, clear a pending arm, and
+      // unblock a fresh advance — anything mid-gesture must NOT reset these,
+      // or holding the edge zone would never arm/advance reliably and the
+      // once-per-gesture lock would leak a second advance (day 2 → day 3).
+      advancedRef.current = false;
+      if (armTimerRef.current) {
+        clearTimeout(armTimerRef.current);
+        armTimerRef.current = null;
+      }
+      armedRef.current = null;
+      setArmed(null);
+      carrierIndexSV.value = -1;
+      carrierOriginSV.value = 0;
       // Drop: collapse back to the 7-day window around the day the drag
       // landed on, and commit it as the focused day.
       const landed = days[focusedIndex];
@@ -681,12 +732,15 @@ export function WeekPager({
       commitRoles(dayIndexInWeek(landed));
       progress.value = -dayIndexInWeek(landed) * width;
     },
-    [commitRoles, days, focusedIndex, onFocusedDateChange, progress, width],
+    [commitRoles, days, focusedIndex, onFocusedDateChange, progress, width, carrierIndexSV, carrierOriginSV],
   );
 
   const orangeRgb = isDarkColorScheme
     ? BRAND_ORANGE_DARK
     : BRAND_ORANGE_LIGHT;
+  // Edge lit by either the armed glow or the post-advance pill (they agree:
+  // the pill is set on advance while the same edge stays armed until exit).
+  const edge = armed ?? pill?.edge ?? null;
 
   return (
     <View className="flex-1">
@@ -704,6 +758,8 @@ export function WeekPager({
               fromSV={fromSV}
               toSV={toSV}
               draggingSV={draggingSV}
+              carrierIndexSV={carrierIndexSV}
+              carrierOriginSV={carrierOriginSV}
               borderColor={borderColor}
             >
               <DayTimeline
@@ -715,6 +771,7 @@ export function WeekPager({
                 onLongPress={onLongPress}
                 dayOffsetRef={dayOffsetRef}
                 onDragEdge={handleDragEdge}
+                onDragEdgeExit={handleDragEdgeExit}
                 onDragChange={handleDragChange}
                 onCrossDayReschedule={() => onCrossDayReschedule()}
                 onPeekChange={handlePeekChange}
@@ -729,47 +786,47 @@ export function WeekPager({
         </View>
       </GestureDetector>
 
-      {pill && (
+      {(armed || pill) && (
         <View pointerEvents="none" className="absolute inset-0 z-30">
           <LinearGradient
             colors={
-              pill.edge === "right"
+              edge === "right"
                 ? [`rgba(${orangeRgb}, 0)`, `rgba(${orangeRgb}, 0.34)`]
                 : [`rgba(${orangeRgb}, 0.34)`, `rgba(${orangeRgb}, 0)`]
             }
             start={{
-              x: pill.edge === "right" ? 0 : 1,
+              x: edge === "right" ? 0 : 1,
               y: 0.5,
             }}
-            end={{ x: pill.edge === "right" ? 1 : 0, y: 0.5 }}
+            end={{ x: edge === "right" ? 1 : 0, y: 0.5 }}
             style={{
               position: "absolute",
               top: 0,
               bottom: 0,
               width: 56,
-              ...(pill.edge === "right"
-                ? { right: 0 }
-                : { left: 0 }),
+              ...(edge === "right" ? { right: 0 } : { left: 0 }),
             }}
           />
-          <View
-            style={{
-              position: "absolute",
-              top: 130,
-              ...(pill.edge === "right" ? { right: 10 } : { left: 10 }),
-            }}
-          >
-            <View className="flex-row items-center gap-1.5 rounded-full bg-brand-orange px-2.5 py-1 shadow-lg">
-              {pill.edge === "right" ? (
-                <ChevronRight size={13} color="black" />
-              ) : (
-                <ChevronLeft size={13} color="black" />
-              )}
-              <Text className="text-[11px] font-bold text-primary-foreground">
-                {format(pill.day, "EEE, MMM d")}
-              </Text>
+          {pill && (
+            <View
+              style={{
+                position: "absolute",
+                top: 130,
+                ...(pill.edge === "right" ? { right: 10 } : { left: 10 }),
+              }}
+            >
+              <View className="flex-row items-center gap-1.5 rounded-full bg-brand-orange px-2.5 py-1 shadow-lg">
+                {pill.edge === "right" ? (
+                  <ChevronRight size={13} color="black" />
+                ) : (
+                  <ChevronLeft size={13} color="black" />
+                )}
+                <Text className="text-[11px] font-bold text-primary-foreground">
+                  {format(pill.day, "EEE, MMM d")}
+                </Text>
             </View>
-          </View>
+            </View>
+          )}
         </View>
       )}
     </View>

@@ -102,6 +102,9 @@ interface DayTimelineProps {
   dayOffsetRef?: { current: number };
   /** Fired while a task is dragged near the screen's left/right edge. */
   onDragEdge?: (edge: "left" | "right") => void;
+  /** Fired while a task is dragged outside the edge zone (disarms a pending
+   * cross-day advance). */
+  onDragEdgeExit?: () => void;
   /** Fired when a task drag starts/stops (used to lock the pager). */
   onDragChange?: (dragging: boolean) => void;
   /** Fired after a task that was dragged onto another day is rescheduled. */
@@ -124,6 +127,7 @@ export function DayTimeline({
   showEmptyGhostAlways = false,
   dayOffsetRef,
   onDragEdge,
+  onDragEdgeExit,
   onDragChange,
   onCrossDayReschedule,
   onPeekChange,
@@ -674,6 +678,7 @@ export function DayTimeline({
                       onComplete={handleComplete}
                       dayOffsetRef={dayOffsetRef}
                       onDragEdge={onDragEdge}
+                      onDragEdgeExit={onDragEdgeExit}
                       onCrossDayReschedule={onCrossDayReschedule}
                     />
                   );

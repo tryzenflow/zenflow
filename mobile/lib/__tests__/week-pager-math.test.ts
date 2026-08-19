@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   SETTLE_DRAG_RATIO,
   SETTLE_VELOCITY,
+  PARALLAX_FACTOR,
   decideSettleTarget,
+  computePagePosition,
+  type PagePositionInput,
 } from "../week-pager-math";
 
 const WIDTH = 390;
@@ -82,5 +85,123 @@ describe("decideSettleTarget", () => {
     const half = SETTLE_DRAG_RATIO * WIDTH;
     expect(settle({ dragPx: -half - 1, velocityX: -0.01 })).toBe(4);
     expect(settle({ dragPx: half + 1, velocityX: 0.01 })).toBe(2);
+  });
+});
+
+// ── computePagePosition ──────────────────────────────────────────────────────
+
+function pos(input: Partial<PagePositionInput> & { index: number }) {
+  return computePagePosition({
+    width: WIDTH,
+    progress: 0,
+    outIndex: 0,
+    toIndex: 0,
+    dragging: 0,
+    carrierIndex: -1,
+    carrierOrigin: 0,
+    ...input,
+  });
+}
+
+describe("computePagePosition", () => {
+  it("places a non-carrier page at rest in its own slot", () => {
+    // index=2, progress=0, no outgoing/incoming → translateX = 2*390 = 780
+    const p = pos({ index: 2 });
+    expect(p.translateX).toBe(2 * WIDTH);
+    expect(p.opacity).toBe(0);
+    expect(p.zIndex).toBe(0);
+  });
+
+  it("outgoing page with drag gets parallax offset and dims", () => {
+    // outIndex=2, dragging right by 100px → m = progress + outIndex*width = 100 + 780 = 880
+    // factor=PARALLAX_FACTOR, parallax = (0.32-1)*880 = -585.6
+    const p = pos({ index: 2, outIndex: 2, toIndex: 2, progress: 100, dragging: 1 });
+    expect(p.isOutgoing).toBe(true);
+    expect(p.translateX).toBeCloseTo(2 * WIDTH + 100 + (PARALLAX_FACTOR - 1) * (100 + 2 * WIDTH));
+    expect(p.opacity).toBeLessThan(1);
+    expect(p.opacity).toBeGreaterThan(0);
+  });
+
+  it("incoming page during drag sits at slot+progress with high zIndex", () => {
+    // Leftward drag: progress=-100, outIndex=3, toIndex=2, index=2
+    const p = pos({ index: 2, outIndex: 3, toIndex: 2, progress: -100 });
+    expect(p.isIncoming).toBe(true);
+    expect(p.translateX).toBeCloseTo(2 * WIDTH - 100);
+    expect(p.zIndex).toBe(9);
+    expect(p.opacity).toBe(1);
+  });
+
+  it("carrier page at rest (no drag) stays at carrierOrigin", () => {
+    const p = pos({
+      index: 2,
+      progress: -2 * WIDTH, // at rest for index 2
+      carrierIndex: 2,
+      carrierOrigin: 0,
+    });
+    expect(p.translateX).toBe(0);
+  });
+
+  it("carrier IS outgoing during drag — stays at carrierOrigin, parallax excluded", () => {
+    // This is THE BUG CASE: rightward drag, carrier=outgoing page.
+    // carrierOrigin captured at touch-down (progress starts at -outIndex*width,
+    // so carrierOrigin = index*w + progress = 0).
+    // After dragging 100px: progress = -2*390 + 100
+    const dx = 100;
+    const p = pos({
+      index: 2,
+      outIndex: 2,
+      toIndex: 2,
+      progress: -2 * WIDTH + dx,
+      dragging: 1,
+      carrierIndex: 2,
+      carrierOrigin: 0,
+    });
+    // Without the fix: translateX = 0 + (PARALLAX_FACTOR-1)*dx ≈ -68 (drifts!)
+    // With the fix: translateX = 0 (pinned)
+    expect(p.translateX).toBe(0);
+    expect(p.isOutgoing).toBe(true);
+  });
+
+  it("carrier after advance (no longer outgoing) stays at carrierOrigin", () => {
+    // Rightward advance fired: progress jumped to -3*390, outIndex=3.
+    // Carrier page (index=2) is no longer outgoing. carrierOrigin still 0.
+    const p = pos({
+      index: 2,
+      outIndex: 3,
+      toIndex: 3,
+      progress: -3 * WIDTH,
+      carrierIndex: 2,
+      carrierOrigin: 0,
+    });
+    expect(p.translateX).toBe(0);
+    expect(p.isOutgoing).toBe(false);
+  });
+
+  it("non-carrier pages are unaffected by the carrier", () => {
+    // Carrier is index=2, we check index=3 (an incoming page)
+    const p = pos({
+      index: 3,
+      outIndex: 2,
+      toIndex: 3,
+      progress: -100,
+      carrierIndex: 2,
+      carrierOrigin: 0,
+    });
+    expect(p.translateX).toBeCloseTo(3 * WIDTH - 100);
+    expect(p.isIncoming).toBe(true);
+  });
+
+  it("carrierIndex=-1 (no carrier) means no carrier fix for any page", () => {
+    // m = progress + outIndex*width = 100 + 780 = 880
+    const p = pos({
+      index: 2,
+      outIndex: 2,
+      toIndex: 2,
+      progress: 100,
+      dragging: 1,
+      carrierIndex: -1,
+    });
+    // Normal outgoing behavior — parallax applied
+    expect(p.translateX).toBeCloseTo(2 * WIDTH + 100 + (PARALLAX_FACTOR - 1) * (100 + 2 * WIDTH));
   });
 });

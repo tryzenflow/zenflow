@@ -25,9 +25,9 @@ import * as Haptics from "expo-haptics";
 
 const TAGS_MIN_DURATION = 45;
 
-/** Screen-edge zone (px) that a dragged block must enter to cross to the
- * adjacent day. */
-const EDGE = 64;
+/** Screen-edge zone (px) a *lifted* block must be dragged into before the
+ * cross-day advance arms (orange glow) and then fires on a short hold. */
+const EDGE_ZONE = 150;
 
 const TAG_TINTS = [
   "border-orange-400/40 bg-orange-100/15 dark:border-orange-500/40 dark:bg-orange-500/10",
@@ -78,10 +78,12 @@ interface TaskBlockProps {
   /** Mutable cross-day offset (days) applied to the reschedule wall clock on
    * drop — owned by the Week pager so a block can be dragged onto another day. */
   dayOffsetRef?: { current: number };
-  /** Fired while the finger is within `EDGE` px of the screen's left/right
-   * edge during a vertical drag, letting the Week pager advance to the
-   * adjacent day. */
+  /** Fired while a *lifted* block is dragged into the screen-edge zone,
+   * arming the Week pager's cross-day advance (glow + hold). */
   onDragEdge?: (edge: "left" | "right") => void;
+  /** Fired while a *lifted* block is outside the edge zone — disarms any
+   * pending cross-day advance. */
+  onDragEdgeExit?: () => void;
   /** Fired after a reschedule that landed on a different day than the source. */
   onCrossDayReschedule?: (taskId: string, startISO: string) => void;
 }
@@ -100,6 +102,7 @@ export function TaskBlock({
   onComplete,
   dayOffsetRef,
   onDragEdge,
+  onDragEdgeExit,
   onCrossDayReschedule,
 }: TaskBlockProps) {
   const { width: screenWidth } = useWindowDimensions();
@@ -142,6 +145,7 @@ export function TaskBlock({
         { translateY: translateY.value },
         { translateX: translateX.value },
         { scale: withTiming(interpolate(d, [0, 1], [1, 1.02]), { duration: 150 }) },
+        { rotate: withTiming(d ? "1deg" : "0deg", { duration: 150 }) },
       ],
       shadowColor: "#000",
       shadowOpacity: withTiming(interpolate(d, [0, 1], [0, 0.3]), { duration: 150 }),
@@ -277,13 +281,20 @@ export function TaskBlock({
           }
         }
 
-        // Cross-day affordance: while the block is lifted and the finger is
-        // near the screen's left/right edge, nudge the Week pager toward the
-        // adjacent day (runs regardless of X/Y dominance once lifted).
-        if (isDragging.value === 1 && onDragEdge) {
-          const x = e.absoluteX;
-          if (x <= EDGE) runOnJS(onDragEdge)("left");
-          else if (x >= screenWidth - EDGE) runOnJS(onDragEdge)("right");
+        // Cross-day affordance: while the block is lifted it is "carried" —
+          // it slides sideways with the finger, and once dragged into the
+          // screen-edge zone the Week pager arms its cross-day advance (orange
+          // glow, then a short hold swaps to the adjacent day). Reported every
+          // frame; the pager's handlers are idempotent. Leaving the zone
+          // disarms via `onDragEdgeExit`.
+          if (isDragging.value === 1) {
+            translateX.value = e.translationX;
+          if (onDragEdge) {
+            const x = e.absoluteX;
+            if (x <= EDGE_ZONE) runOnJS(onDragEdge)("left");
+            else if (x >= screenWidth - EDGE_ZONE) runOnJS(onDragEdge)("right");
+            else if (onDragEdgeExit) runOnJS(onDragEdgeExit)();
+          }
         }
       }
     })
