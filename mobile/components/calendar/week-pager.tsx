@@ -582,8 +582,12 @@ export function WeekPager({
   // Recreated every render (captures the current `focusedIndex`/`width`).
   // `activeOffsetX` keeps it a pure horizontal pager: vertical drags fail it
   // (`failOffsetY`) and fall through to the day pages' own ScrollViews, the
-  // same split the FlatList gave us. Disabled while a task drag is active
-  // (`dragActive`) or a settle is running (`settling`) — both own the strip.
+  // same split the FlatList gave us. The 12px activation threshold is
+  // deliberately ABOVE TaskBlock's 10px `activeOffsetX` (task-block.tsx), so
+  // a gesture starting on a task block activates the block's pan first and
+  // fails this one — the pager is effectively locked while a block is touched.
+  // Disabled while a task drag is active (`dragActive`) or a settle is running
+  // (`settling`) — both own the strip.
   const panGesture = Gesture.Pan()
     .enabled(!dragActive && !settling)
     .activeOffsetX([-12, 12])

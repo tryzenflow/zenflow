@@ -232,9 +232,14 @@ export function TaskBlock({
     ],
   );
 
+  // Horizontal activation threshold (10px) must stay BELOW the Week pager's
+  // 12px `activeOffsetX` (week-pager.tsx): a touch that starts on a block
+  // then activates this pan first, and RNGH's exclusive parent/child
+  // arbitration fails the pager the moment we activate — so the day can never
+  // steal a block drag. The block owns any gesture that starts on it.
   const panGesture = Gesture.Pan()
     .enabled(isInteractive)
-    .activeOffsetX([-20, 20])
+    .activeOffsetX([-10, 10])
     .activeOffsetY([-10, 10])
     .onUpdate((e) => {
       const absX = Math.abs(e.translationX);
