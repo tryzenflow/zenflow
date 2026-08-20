@@ -31,8 +31,8 @@ export function WeekHeader({ focusedDate, tz, onSelectDay }: WeekHeaderProps) {
   const todayKey = dateKey(now);
 
   return (
-    <View className="border-b border-border bg-background px-3 pt-2.5 pb-2">
-      <View className="px-1 pb-2">
+    <View className="border-b border-border bg-background pt-2.5 pb-2">
+        <View className="px-4 pb-2">
         <Text className="text-xl font-bold tracking-tight">
           {format(focusedDate, "MMMM yyyy")}
         </Text>
@@ -41,7 +41,7 @@ export function WeekHeader({ focusedDate, tz, onSelectDay }: WeekHeaderProps) {
         </Text>
       </View>
 
-      <View className="flex-row gap-1.5 pt-1 pb-0.5">
+      <View className="flex-row gap-1.5 pt-1 pb-0.5 border-t border-border">
         {days.map((day) => {
           const key = dateKey(day);
           const isFocused = key === focusedKey;
