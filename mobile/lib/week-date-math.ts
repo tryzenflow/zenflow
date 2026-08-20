@@ -29,6 +29,12 @@ export function weekDays(day: Date): Date[] {
   return Array.from({ length: 7 }, (_, i) => addDays(start, i));
 }
 
+/** The 3 consecutive dates centered on `day`: `[day−1, day, day+1]` — the
+ * Week pager's live window, always focused in the middle. */
+export function centeredDays(day: Date): Date[] {
+  return [shiftDays(day, -1), day, shiftDays(day, 1)];
+}
+
 /** Monday-first column index of a day within its week (0 = Mon … 6 = Sun). */
 export function dayIndexInWeek(day: Date): number {
   return (day.getDay() + 6) % 7;

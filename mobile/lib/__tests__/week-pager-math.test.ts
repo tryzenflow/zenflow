@@ -9,18 +9,21 @@ import {
   decideSettleTarget,
   computePagePosition,
   computeShadowStrip,
+  shouldSlideWeek,
   type PagePositionInput,
   type ShadowStripInput,
 } from "../week-pager-math";
 
 const WIDTH = 390;
 
+// The pager's live window is a centered 3-day strip: the focused page is
+// always the middle index (1).
 function settle(input: Partial<Parameters<typeof decideSettleTarget>[0]>) {
   return decideSettleTarget({
     dragPx: 0,
     velocityX: 0,
-    startIndex: 3,
-    dayCount: 7,
+    startIndex: 1,
+    dayCount: 3,
     width: WIDTH,
     ...input,
   });
@@ -28,57 +31,50 @@ function settle(input: Partial<Parameters<typeof decideSettleTarget>[0]>) {
 
 describe("decideSettleTarget", () => {
   it("stays put when the drag is short and the release is slow", () => {
-    expect(settle({ dragPx: -0.3 * WIDTH, velocityX: -0.1 })).toBe(3);
-    expect(settle({ dragPx: 0.3 * WIDTH, velocityX: 0.1 })).toBe(3);
+    expect(settle({ dragPx: -0.3 * WIDTH, velocityX: -0.1 })).toBe(1);
+    expect(settle({ dragPx: 0.3 * WIDTH, velocityX: 0.1 })).toBe(1);
   });
 
   it("advances to the next day past half a page dragged left", () => {
-    expect(settle({ dragPx: -0.6 * WIDTH, velocityX: -0.1 })).toBe(4);
-    expect(settle({ dragPx: -WIDTH, velocityX: 0 })).toBe(4);
+    expect(settle({ dragPx: -0.6 * WIDTH, velocityX: -0.1 })).toBe(2);
+    expect(settle({ dragPx: -WIDTH, velocityX: 0 })).toBe(2);
   });
 
   it("goes back to the previous day past half a page dragged right", () => {
-    expect(settle({ dragPx: 0.6 * WIDTH, velocityX: 0.1 })).toBe(2);
-    expect(settle({ dragPx: WIDTH, velocityX: 0 })).toBe(2);
+    expect(settle({ dragPx: 0.6 * WIDTH, velocityX: 0.1 })).toBe(0);
+    expect(settle({ dragPx: WIDTH, velocityX: 0 })).toBe(0);
   });
 
   it("a fast left flick advances even with a short drag", () => {
-    expect(settle({ dragPx: -0.2 * WIDTH, velocityX: -SETTLE_VELOCITY - 0.4 })).toBe(4);
+    expect(settle({ dragPx: -0.2 * WIDTH, velocityX: -SETTLE_VELOCITY - 0.4 })).toBe(2);
   });
 
   it("a fast right flick goes back even with a short drag", () => {
-    expect(settle({ dragPx: 0.2 * WIDTH, velocityX: SETTLE_VELOCITY + 0.4 })).toBe(2);
+    expect(settle({ dragPx: 0.2 * WIDTH, velocityX: SETTLE_VELOCITY + 0.4 })).toBe(0);
   });
 
   it("a flick against the drag direction wins over the position", () => {
     // Dragged 60% of a page left but flung back right — the fling decides.
-    expect(settle({ dragPx: -0.6 * WIDTH, velocityX: SETTLE_VELOCITY + 0.5 })).toBe(2);
-    expect(settle({ dragPx: 0.6 * WIDTH, velocityX: -SETTLE_VELOCITY - 0.5 })).toBe(4);
+    expect(settle({ dragPx: -0.6 * WIDTH, velocityX: SETTLE_VELOCITY + 0.5 })).toBe(0);
+    expect(settle({ dragPx: 0.6 * WIDTH, velocityX: -SETTLE_VELOCITY - 0.5 })).toBe(2);
   });
 
   it("release-velocity jitter on a long drag does not flip the direction", () => {
     // Dragged 60% of a page left but the release sampled a weak opposite
     // velocity (common at the end of a lazy web/mouse drag): the position —
     // clearly past half a page — decides, not the jitter.
-    expect(settle({ dragPx: -0.6 * WIDTH, velocityX: 0.4 })).toBe(4);
-    expect(settle({ dragPx: 0.6 * WIDTH, velocityX: -0.4 })).toBe(2);
+    expect(settle({ dragPx: -0.6 * WIDTH, velocityX: 0.4 })).toBe(2);
+    expect(settle({ dragPx: 0.6 * WIDTH, velocityX: -0.4 })).toBe(0);
   });
 
-  it("lets an edge swipe escape the window to signal the week slide", () => {
-    // A rightward fling at the leading edge returns -1: there is no previous
-    // day in the window, so the pager slides the whole window one week back.
-    expect(
-      settle({ dragPx: WIDTH, velocityX: SETTLE_VELOCITY + 0.5, startIndex: 0 }),
-    ).toBe(-1);
-    // A leftward fling at the trailing edge returns dayCount (7): the pager
-    // slides the window one week forward.
-    expect(
-      settle({ dragPx: -WIDTH, velocityX: -SETTLE_VELOCITY - 0.5, startIndex: 6 }),
-    ).toBe(7);
-    // A slow drag past the edge at the leading edge also escapes.
-    expect(settle({ dragPx: WIDTH, velocityX: 0, startIndex: 0 })).toBe(-1);
-    // Within the window the target stays clamped to the settle itself.
-    expect(settle({ dragPx: -0.6 * WIDTH, velocityX: 0, startIndex: 0 })).toBe(1);
+  it("never escapes the centered 3-window — week jumps are gated separately", () => {
+    // The focused page is always the middle index (1), so a settle can only
+    // land on 0, 1, or 2; week jumps are decided by `shouldSlideWeek`.
+    expect(settle({ dragPx: WIDTH, velocityX: SETTLE_VELOCITY + 0.5 })).toBe(0);
+    expect(settle({ dragPx: -WIDTH, velocityX: -SETTLE_VELOCITY - 0.5 })).toBe(2);
+    // Even a hard flick from the middle stays one page away.
+    expect(settle({ dragPx: -2 * WIDTH, velocityX: -3 })).toBe(2);
+    expect(settle({ dragPx: 2 * WIDTH, velocityX: 3 })).toBe(0);
   });
 
   it("handles a one-day window (either edge is the same page)", () => {
@@ -88,8 +84,40 @@ describe("decideSettleTarget", () => {
 
   it("is symmetric around the exact half-page threshold", () => {
     const half = SETTLE_DRAG_RATIO * WIDTH;
-    expect(settle({ dragPx: -half - 1, velocityX: -0.01 })).toBe(4);
-    expect(settle({ dragPx: half + 1, velocityX: 0.01 })).toBe(2);
+    expect(settle({ dragPx: -half - 1, velocityX: -0.01 })).toBe(2);
+    expect(settle({ dragPx: half + 1, velocityX: 0.01 })).toBe(0);
+  });
+});
+
+describe("shouldSlideWeek", () => {
+  it("Monday swiped backward with a decisive flick slides the week", () => {
+    expect(shouldSlideWeek(0, -1, true)).toBe(true);
+  });
+
+  it("Sunday swiped forward with a decisive flick slides the week", () => {
+    expect(shouldSlideWeek(6, 1, true)).toBe(true);
+  });
+
+  it("a slow deliberate drag from a week edge advances one day instead", () => {
+    expect(shouldSlideWeek(0, -1, false)).toBe(false);
+    expect(shouldSlideWeek(6, 1, false)).toBe(false);
+  });
+
+  it("a week's interior never slides, regardless of direction", () => {
+    for (const dayIndex of [1, 2, 3, 4, 5]) {
+      expect(shouldSlideWeek(dayIndex, -1, true)).toBe(false);
+      expect(shouldSlideWeek(dayIndex, 1, true)).toBe(false);
+    }
+  });
+
+  it("Monday swiped forward and Sunday swiped backward advance one day", () => {
+    expect(shouldSlideWeek(0, 1, true)).toBe(false);
+    expect(shouldSlideWeek(6, -1, true)).toBe(false);
+  });
+
+  it("no direction never slides", () => {
+    expect(shouldSlideWeek(0, 0, true)).toBe(false);
+    expect(shouldSlideWeek(6, 0, false)).toBe(false);
   });
 });
 

@@ -73,8 +73,11 @@ export interface SettleInput {
 /**
  * The page the pager should settle on after a swipe: `startIndex + 1`,
  * `startIndex - 1`, or `startIndex` itself. An out-of-range result (`-1` or
- * `dayCount`) means the swipe went past the window edge — the pager responds
- * by sliding the whole window ±1 week (the settle itself stays clamped).
+ * `dayCount`) means the swipe went past the window edge. The pager's live
+ * window is a centered 3-day strip (`focusedIndex` is always its middle), so
+ * the settle can never escape it — week jumps are gated separately by
+ * `shouldSlideWeek`, and the out-of-range contract survives only as a
+ * defensive property of the pure function.
  *
  * Sign convention mirrors the pager's `progress` shared value: a leftward
  * flick (negative `dragPx`/`velocityX`) advances to the next day.
@@ -104,6 +107,26 @@ export function decideSettleTarget({
     dir = 0;
   }
   return startIndex + dir;
+}
+
+/**
+ * Whether a settle from a day at `dayIndexInWeek` in direction `dir` should
+ * slide the focused day a full week (±7 days) instead of advancing one day.
+ * Preserves the legacy 7-day window's edge escape, translated off the window
+ * and gated on a decisive flick: only the week's first/last day escapes, only
+ * outward (Monday swiped backward, Sunday swiped forward), and only when the
+ * release is a real fling (`flicked`) — a slow deliberate drag still settles
+ * on the neighbor day. Everything else advances one day. (A centered 3-day
+ * window always contains the settle target, so the index-based escape it
+ * replaced can never fire.)
+ */
+export function shouldSlideWeek(
+  dayIndexInWeek: number,
+  dir: -1 | 0 | 1,
+  flicked: boolean,
+): boolean {
+  if (dir === 0 || !flicked) return false;
+  return dayIndexInWeek === 0 ? dir === -1 : dayIndexInWeek === 6 && dir === 1;
 }
 
 // ── PagerPage position computation ───────────────────────────────────────────

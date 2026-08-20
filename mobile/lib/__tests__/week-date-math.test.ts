@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   WEEK_STARTS_ON,
+  centeredDays,
   dateKey,
   dayIndexInWeek,
   shiftDays,
@@ -43,6 +44,35 @@ describe("weekDays", () => {
       expect(day.getSeconds()).toBe(0);
       expect(day.getMilliseconds()).toBe(0);
     }
+  });
+});
+
+describe("centeredDays", () => {
+  it("returns the day with its two neighbors, focused in the middle", () => {
+    const wed = new Date(2026, 7, 12);
+    const days = centeredDays(wed);
+    expect(days).toHaveLength(3);
+    expect(days[0]).toEqual(new Date(2026, 7, 11));
+    expect(days[1]).toEqual(wed);
+    expect(days[2]).toEqual(new Date(2026, 7, 13));
+    for (let i = 1; i < days.length; i++) {
+      expect(days[i].getTime() - days[i - 1].getTime()).toBe(
+        24 * 60 * 60 * 1000,
+      );
+    }
+  });
+
+  it("wraps across month boundaries", () => {
+    // Mon Aug 31 2026 → Aug 30 … Sep 1.
+    const days = centeredDays(new Date(2026, 7, 31));
+    expect(days[0]).toEqual(new Date(2026, 7, 30));
+    expect(days[2]).toEqual(new Date(2026, 8, 1));
+  });
+
+  it("wraps across year boundaries", () => {
+    const days = centeredDays(new Date(2026, 0, 1));
+    expect(days[0]).toEqual(new Date(2025, 11, 31));
+    expect(days[2]).toEqual(new Date(2026, 0, 2));
   });
 });
 

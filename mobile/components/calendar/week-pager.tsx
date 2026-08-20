@@ -7,11 +7,10 @@ import { ChevronLeft, ChevronRight } from "@/components/Icons";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { NAV_THEME } from "@/lib/constants";
 import {
+  centeredDays,
   dateKey,
   dayIndexInWeek,
   shiftDays,
-  shiftWeek,
-  weekDays,
 } from "@/lib/week-date-math";
 import {
   decideSettleTarget,
@@ -20,6 +19,8 @@ import {
   PARALLAX_FACTOR,
   OUTGOING_DIM_OPACITY,
   SHADOW_STRIP_PX,
+  SETTLE_VELOCITY,
+  shouldSlideWeek,
 } from "@/lib/week-pager-math";
 import { DayTimeline } from "./day-timeline";
 import { DAY_MINUTES, type PeekBlock } from "@/lib/peek";
@@ -33,11 +34,6 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from "react-native-reanimated";
-
-/** Cross-day drags append/prepend one day to the window so the page holding
- * the lifted block stays mounted; capped at two weeks so a drop always lands
- * within the mounted pages. A drag advances exactly one day, never more. */
-const MAX_DAYS = 14;
 
 /** Hold time (ms) a lifted block must sit in the screen-edge zone before the
  * cross-day advance fires (mockup's "lifted block at the edge → jumps"). */
@@ -104,7 +100,8 @@ type DragEdge = "left" | "right";
 interface PagerPageProps {
   index: number;
   width: number;
-  /** Strip offset in px (rest: `-focusedIndex * width`). */
+  /** Strip offset in px (rest: `-width` — the focused page is always the
+   * middle of the 3-page window). */
   progress: SharedValue<number>;
   /** Page the strip is being dragged/settled away FROM (the outgoing,
    * parallaxing, dimming one). */
@@ -230,11 +227,16 @@ interface WeekPagerProps {
  * `initialScrollIndex`) are all gone — one-page snapping is deterministic on
  * both platforms.
  *
- * The data window is *live*: a normal swipe that settles on the edge day
- * slides the whole window ±1 week; a cross-day task drag appends/prepends a
- * single day (up to `MAX_DAYS`), then collapses back to the 7-day window on
- * drop — so the page owning the lifted block stays mounted for the whole
- * gesture (GitHub issue #19's "cross-day drag" frame).
+ * The data window is a live centered 3-page strip — always the focused day
+ * with its two neighbors (`centeredDays`), focused index constant at 1 — so
+ * a swipe settles onto a page that is already mounted, and React recycles
+ * the surviving pages by their `dateKey` (no remount/refetch for the pages
+ * that stay; exactly one new page mounts and fetches per settle). A swipe
+ * that escapes a week edge (Monday swiped backward, Sunday swiped forward)
+ * slides the whole window one week (`slideWeek`); a cross-day task drag
+ * re-centers the window on the advanced day, keeping the page holding the
+ * lifted block mounted for the whole gesture (GitHub issue #19's "cross-day
+ * drag" frame).
  */
 export function WeekPager({
   focusedDate,
@@ -250,10 +252,12 @@ export function WeekPager({
     ? NAV_THEME.dark.border
     : NAV_THEME.light.border;
 
-  const [days, setDays] = useState<Date[]>(() => weekDays(focusedDate));
-  const [focusedIndex, setFocusedIndex] = useState(() =>
-    dayIndexInWeek(focusedDate),
-  );
+  // The live window: always the focused day centered between its two
+  // neighbors. The focused page is therefore ALWAYS index 1 — rest is
+  // `progress = -width` and the settle can never escape the window (a
+  // week jump is gated separately by `shouldSlideWeek`).
+  const [days, setDays] = useState<Date[]>(() => centeredDays(focusedDate));
+  const [focusedIndex, setFocusedIndex] = useState(1);
   const [dragActive, setDragActive] = useState(false);
   const [pill, setPill] = useState<{ edge: DragEdge; day: Date } | null>(null);
   // 1 while a settle (or snap-back) animation is running: the pan is disabled
@@ -266,14 +270,15 @@ export function WeekPager({
   // keyed by `dateKey`, so every page's strip renders the next day's real tasks.
   const [peekByDay, setPeekByDay] = useState<Record<string, PeekBlock[]>>({});
 
-  // Strip offset in px. Rest value: `-focusedIndex * width`. Initialized from
-  // the first render's focus so the window mounts showing the right day even
-  // before the first layout (the FlatList's unreliable `initialScrollIndex`
-  // workaround is gone; `handleFirstLayout` re-snaps as a safety net).
-  const progress = useSharedValue(-dayIndexInWeek(focusedDate) * width);
+  // Strip offset in px. Rest value: `-width` — the focused page is always
+  // the middle of the 3-page window. Initialized from the first render's
+  // focus so the window mounts showing the right day even before the first
+  // layout (the FlatList's unreliable `initialScrollIndex` workaround is
+  // gone; `handleFirstLayout` re-snaps as a safety net).
+  const progress = useSharedValue(-width);
   // Roles the pages' animated styles derive from (see PagerPage).
-  const fromSV = useSharedValue(dayIndexInWeek(focusedDate));
-  const toSV = useSharedValue(dayIndexInWeek(focusedDate));
+  const fromSV = useSharedValue(1);
+  const toSV = useSharedValue(1);
   const draggingSV = useSharedValue(0);
   // 1 once a pan's `onEnd` has scheduled a settle, so `onFinalize` knows not
   // to snap back when the settle is already on its way.
@@ -326,14 +331,27 @@ export function WeekPager({
     [fromSV, toSV],
   );
 
-  // Commit roles at rest and unlock the pan — the default end of a settle
-  // that has no state beyond the role reset (chip-tap slides).
-  const finishRoles = useCallback(
-    (index: number) => {
-      commitRoles(index);
+  // Re-centers the 3-page window on the settled day and unlocks the pan —
+  // the default end of a settle that lands on a neighbor (swipe settle or
+  // chip-tap slide). Called from the settle animation's completion callback
+  // (via `runOnJS`) — never mid-animation — so the pages' animated styles
+  // keep the swipe's outgoing/incoming roles for the whole slide. The
+  // incoming page sits at screen x=0 when the animation ends
+  // (progress = `-target * width`); re-centering it to the middle slot
+  // (`focusedIndex 1`, `progress = -width`) leaves it exactly where the
+  // animation put it, and the other two pages are off-screen either way.
+  const settleRoles = useCallback(
+    (target: number) => {
+      const landed = days[target];
+      if (!landed) return;
       setSettling(false);
+      commitRoles(1);
+      setDays(centeredDays(landed));
+      setFocusedIndex(1);
+      onFocusedDateChange(landed);
+      progress.value = -width;
     },
-    [commitRoles],
+    [centeredDays, commitRoles, days, onFocusedDateChange, progress, width],
   );
 
   // Drives the initial center position (and a chip tap to a day in a week
@@ -342,11 +360,10 @@ export function WeekPager({
     if (hasLaidOutRef.current) return;
     hasLaidOutRef.current = true;
     requestAnimationFrame(() => {
-      const index = dayIndexInWeek(focusedDate);
-      commitRoles(index);
-      progress.value = -index * width;
+      commitRoles(1);
+      progress.value = -width;
     });
-  }, [commitRoles, focusedDate, progress, width]);
+  }, [commitRoles, progress, width]);
 
   const snapTo = useCallback(
     (index: number, animated: boolean) => {
@@ -367,10 +384,11 @@ export function WeekPager({
   );
 
   // Animates the strip from the current focus onto `target` with the
-  // outgoing/incoming roles set for the whole slide, then resets the roles
-  // at rest (via `onDone`, or just the role reset by default). The roles
-  // must land exactly on `target` or the resting page would keep its stack
-  // chrome (see PagerPage's `sliding` gate, which keys off `m`).
+  // outgoing/incoming roles set for the whole slide, then re-centers the
+  // window on the target (via `onDone`, or the default `settleRoles`). The
+  // roles must land exactly on the centered index or the resting page would
+  // keep its stack chrome (see PagerPage's `sliding` gate, which keys off
+  // `m`).
   const animateRolesTo = useCallback(
     (target: number, onDone?: (index: number) => void) => {
       fromSV.value = focusedIndex;
@@ -380,11 +398,11 @@ export function WeekPager({
         { duration: SETTLE_MS, easing: Easing.out(Easing.cubic) },
         (finished) => {
           if (!finished) return;
-          runOnJS(onDone ?? finishRoles)(target);
+          runOnJS(onDone ?? settleRoles)(target);
         },
       );
     },
-    [finishRoles, focusedIndex, fromSV, toSV, progress, width],
+    [focusedIndex, fromSV, toSV, progress, settleRoles, width],
   );
 
   // External focus change (WeekHeader chip tap): scroll to the day if it's in
@@ -397,99 +415,95 @@ export function WeekPager({
     const idx = days.findIndex((d) => dateKey(d) === key);
     if (idx >= 0) {
       if (idx === focusedIndex) return;
-      setFocusedIndex(idx);
       // Only an adjacent-day tap animates the stack slide (outgoing
-      // parallaxes out, tapped day stacks in). Multi-slot jumps would sweep
-      // through an empty viewport — the pager paints only the outgoing/
-      // incoming pair — so those snap straight to the target day.
-      if (Math.abs(idx - focusedIndex) === 1) {
-        // Lock the pan for the duration of the slide (same serialization as
-        // a swipe settle — an interrupt must not flip the cover mid-animation).
-        setSettling(true);
-        animateRolesTo(idx);
-      } else {
-        setSettling(false);
-        commitRoles(idx);
-        snapTo(idx, false);
-      }
+      // parallaxes out, tapped day stacks in). The 3-page window always
+      // contains the focused day's two neighbors, so a match is always
+      // exactly one page away.
+      // Lock the pan for the duration of the slide (same serialization as
+      // a swipe settle — an interrupt must not flip the cover mid-animation).
+      setSettling(true);
+      animateRolesTo(idx);
       return;
     }
-    const fresh = weekDays(focusedDate);
+    // Day outside the window (a header week jump): rebuild the centered
+    // window around it and snap straight to rest. Multi-slot jumps would
+    // sweep through an empty viewport — the pager paints only the outgoing/
+    // incoming pair — so those snap straight to the target day.
+    const fresh = centeredDays(focusedDate);
     setDays(fresh);
-    setFocusedIndex(dayIndexInWeek(focusedDate));
+    setFocusedIndex(1);
     setSettling(false);
-    commitRoles(dayIndexInWeek(focusedDate));
-    snapTo(dayIndexInWeek(focusedDate), false);
+    commitRoles(1);
+    snapTo(1, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reads the
     // current window; only the focused day drives this.
   }, [focusedDate]);
 
-  // Slides the whole mounted window ±1 week (the response to a swipe that
-  // settled past the window edge). The new window is swapped in with its own
-  // roles committed so the freshly mounted pages render at full opacity on
-  // their slots — otherwise none of them matches the old window's
-  // outgoing/incoming indexes and the grid renders invisible (opacity 0).
+  // Slides the focused day a full week (the response to a swipe that escapes
+  // a week edge: Monday swiped backward, Sunday swiped forward — a fast
+  // fling past the edge, so the pager jumps the whole week rather than
+  // advancing one day). Instant, matching the old FlatList's
+  // `scrollToIndex(animated: false)`, landing on the same weekday in the
+  // adjacent week. The neighbor that was sliding in survives the swap by
+  // key (it stays in the re-centered window), so only the two new far
+  // neighbors mount; the fresh window gets its roles committed so the pages
+  // render at full opacity on their slots — otherwise none of them matches
+  // the old window's outgoing/incoming indexes and the grid renders
+  // invisible (opacity 0).
   const slideWeek = useCallback(
     (dir: 1 | -1) => {
-      if (dir === 1) {
-        // Trailing edge — slide forward, focus the new week's Monday.
-        const nextDays = weekDays(shiftWeek(days[days.length - 1], 1));
-        setDays(nextDays);
-        setFocusedIndex(0);
-        onFocusedDateChange(nextDays[0]);
-        progress.value = 0;
-        commitRoles(0);
-      } else {
-        // Leading edge — slide back, focus the previous Sunday.
-        const prevDays = weekDays(shiftWeek(days[0], -1));
-        setDays(prevDays);
-        setFocusedIndex(6);
-        onFocusedDateChange(prevDays[6]);
-        progress.value = -6 * width;
-        commitRoles(6);
-      }
+      const nextFocused = shiftDays(days[focusedIndex], dir * 7);
+      const fresh = centeredDays(nextFocused);
+      setDays(fresh);
+      setFocusedIndex(1);
+      onFocusedDateChange(nextFocused);
+      commitRoles(1);
+      progress.value = -width;
       setSettling(false);
     },
-    [commitRoles, days, onFocusedDateChange, progress, width],
-  );
-
-  // Commits a settled swipe. Called from the settle animation's completion
-  // callback (via `runOnJS`) — never mid-animation — so the pages' animated
-  // styles keep the swipe's outgoing/incoming roles for the whole slide and
-  // the focus switch lands exactly at rest (no parallax-pop). Landing on an
-  // edge day (0/6) just focuses that day; swiping *past* the edge is what
-  // slides the week (handled by `settleOn` before the animation starts).
-  const commitSettle = useCallback(
-    (target: number) => {
-      setSettling(false);
-      commitRoles(target);
-      setFocusedIndex(target);
-      onFocusedDateChange(days[target]);
-    },
-    [commitRoles, days, onFocusedDateChange],
+    [
+      centeredDays,
+      commitRoles,
+      days,
+      focusedIndex,
+      onFocusedDateChange,
+      progress,
+      shiftDays,
+      width,
+    ],
   );
 
   const settleOn = useCallback(
-    (target: number) => {
+    (target: number, flicked: boolean) => {
       // Lock the pan for the duration of the settle so an interrupt can't
       // flip the incoming/outgoing cover mid-animation.
       setSettling(true);
-      if (target < 0 || target >= days.length) {
-        // Swiped past the window edge — slide the whole window one week in
-        // the swipe's direction. Instant, matching the old FlatList's
-        // `scrollToIndex(animated: false)`.
-        slideWeek(target < 0 ? -1 : 1);
-        return;
-      }
       if (target === focusedIndex) {
         // Stayed on the page — spring back to rest.
         snapTo(focusedIndex, true);
         return;
       }
-      // `commitSettle` handles the focus switch at animation end.
-      animateRolesTo(target, commitSettle);
+      const dir = target < focusedIndex ? -1 : 1;
+      // A week edge only jumps on a decisive flick — a slow deliberate drag
+      // from Monday/Sunday still settles on the neighbor day.
+      if (shouldSlideWeek(dayIndexInWeek(days[focusedIndex]), dir, flicked)) {
+        slideWeek(dir);
+        return;
+      }
+      // `settleRoles` handles the window re-center + focus switch at
+      // animation end.
+      animateRolesTo(target, settleRoles);
     },
-    [animateRolesTo, commitSettle, focusedIndex, snapTo, slideWeek, days.length],
+    [
+      animateRolesTo,
+      dayIndexInWeek,
+      days,
+      focusedIndex,
+      settleRoles,
+      shouldSlideWeek,
+      slideWeek,
+      snapTo,
+    ],
   );
 
   const handlePanEnd = useCallback(
@@ -501,7 +515,7 @@ export function WeekPager({
         dayCount: days.length,
         width,
       });
-      settleOn(target);
+      settleOn(target, Math.abs(velocityX) >= SETTLE_VELOCITY);
     },
     [days.length, focusedIndex, settleOn, width],
   );
@@ -553,41 +567,43 @@ export function WeekPager({
 
   // Fires after a lifted block has held in the edge zone for the hold time.
   // Exactly one advance per drag gesture — holding longer never chains days.
+  // The target day (focused ± 1) is always inside the centered 3-page window,
+  // so the advance just re-centers the window on it: the carried page (the
+  // old focused page) reindexes to 0 (right advance) or 2 (left advance) and
+  // stays pinned via `carrierIndexSV`; only the new far neighbor mounts.
   const advanceCrossDay = useCallback(
     (edge: DragEdge) => {
       if (advancedRef.current) return;
       advancedRef.current = true;
 
       const dir = edge === "right" ? 1 : -1;
-      const targetIndex = focusedIndex + dir;
-      let nextIndex = targetIndex;
-
-      if (targetIndex < 0 || targetIndex >= days.length) {
-        if (days.length >= MAX_DAYS) return;
-        if (dir === 1) {
-          setDays([...days, shiftDays(days[days.length - 1], 1)]);
-          nextIndex = days.length;
-        } else {
-          setDays([shiftDays(days[0], -1), ...days]);
-          nextIndex = focusedIndex + 1;
-        }
-      }
-
-      setFocusedIndex(nextIndex);
+      const targetDay = shiftDays(days[focusedIndex], dir);
+      const fresh = centeredDays(targetDay);
+      setDays(fresh);
+      setFocusedIndex(1);
       dayOffsetRef.current += dir;
-      setPill({ edge, day: shiftDays(days[focusedIndex], dir) });
+      setPill({ edge, day: targetDay });
       // Instant snap — the strip follows the finger while the pill labels
       // the target day (matches the FlatList's `scrollToIndex(animated:false)`).
       // A task drag owns the strip now — any in-flight settle is over.
       setSettling(false);
-      commitRoles(nextIndex);
-      progress.value = -nextIndex * width;
-      // Pin the carrier page at its touch-down position so the block stays
-      // in the hand. On a prepend the carried page reindexes (focusedIndex →
-      // focusedIndex + 1); otherwise it stays put.
-      carrierIndexSV.value = targetIndex < 0 ? nextIndex : focusedIndex;
+      commitRoles(1);
+      progress.value = -width;
+      // Pin the carried page at its touch-down position so the block stays
+      // in the hand — the carried page (old focused) reindexes to 0/2 in the
+      // re-centered window.
+      carrierIndexSV.value = dir === 1 ? 0 : 2;
     },
-    [commitRoles, days, focusedIndex, progress, width, carrierIndexSV],
+    [
+      centeredDays,
+      commitRoles,
+      days,
+      focusedIndex,
+      progress,
+      width,
+      carrierIndexSV,
+      shiftDays,
+    ],
   );
 
   // Arms the cross-day advance: lights the orange glow at the edge and starts
@@ -650,19 +666,29 @@ export function WeekPager({
       armedEdgeSV.value = null;
       carrierIndexSV.value = -1;
       carrierOriginSV.value = 0;
-      // Drop: collapse back to the 7-day window around the day the drag
-      // landed on, and commit it as the focused day.
+      // Drop: re-center the 3-page window on the day the drag landed on,
+      // and commit it as the focused day.
       const landed = days[focusedIndex];
       if (!landed) return;
-      const fresh = weekDays(landed);
+      const fresh = centeredDays(landed);
       setDays(fresh);
-      setFocusedIndex(dayIndexInWeek(landed));
+      setFocusedIndex(1);
       onFocusedDateChange(landed);
       setPill(null);
-      commitRoles(dayIndexInWeek(landed));
-      progress.value = -dayIndexInWeek(landed) * width;
+      commitRoles(1);
+      progress.value = -width;
     },
-    [commitRoles, days, focusedIndex, onFocusedDateChange, progress, width, carrierIndexSV, carrierOriginSV],
+    [
+      centeredDays,
+      commitRoles,
+      days,
+      focusedIndex,
+      onFocusedDateChange,
+      progress,
+      width,
+      carrierIndexSV,
+      carrierOriginSV,
+    ],
   );
 
   const orangeRgb = isDarkColorScheme
