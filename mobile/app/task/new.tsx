@@ -87,11 +87,11 @@ export default function NewTaskScreen() {
       subtitle={subtitle}
       footer={
         <Button
-          className="h-[52px] w-full text-primary-foreground"
+          className="h-[52px] w-full"
           disabled={loading}
           onPress={form.handleSubmit(onSubmit, onInvalid)}
         >
-          <Text className="text-base font-semibold text-primary-foreground">
+          <Text className="text-base font-semibold text-foreground">
             {loading ? "Adding…" : "Add task"}
           </Text>
         </Button>

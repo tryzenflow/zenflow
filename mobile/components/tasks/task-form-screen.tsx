@@ -90,7 +90,10 @@ export function TaskFormScreen({
   const scrollViewRef = useRef<ScrollView | null>(null);
 
   return (
-    <View className="flex-1 bg-background" style={{ paddingTop: insets.top, paddingBottom: tabBarOverlay }}>
+    <View
+      className="flex-1 bg-background"
+      style={{ paddingTop: insets.top, paddingBottom: tabBarOverlay }}
+    >
       <View className="flex-row items-center justify-between gap-3 border-b border-border px-5 pb-3.5 pt-2">
         <View className="flex-1">
           <Text className="text-[19px] font-bold tracking-tight">{title}</Text>
@@ -138,10 +141,7 @@ export function TaskFormScreen({
           </TaskFormScrollContext.Provider>
         </ScrollView>
 
-        <View
-          className="border-t border-border bg-background px-5 pt-3.5 shadow-lg shadow-primary/10"
-          style={{ paddingBottom: insets.bottom + 14 }}
-        >
+        <View className="border-t border-border bg-background h-0 shadow-lg shadow-primary/10">
           {footer}
         </View>
       </KeyboardAvoidingView>
