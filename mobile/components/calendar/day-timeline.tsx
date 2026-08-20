@@ -26,6 +26,7 @@ import { useUserStore } from "@/hooks/use-user-store";
 import { useNow } from "@/hooks/use-now";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { listTasks, rescheduleTask, completeTask } from "@/api/tasks";
+import { debugLog } from "@/lib/debug-log";
 import { peekBlocksFromSegments, type PeekBlock } from "@/lib/peek";
 import { TimeGutter } from "./time-gutter";
 import { WorkZoneOverlay } from "./work-zone-overlay";
@@ -98,8 +99,6 @@ interface DayTimelineProps {
   /** Show the "Long press to add" ghost on empty non-today days too — the
    * Week mockup surfaces it on any empty day. Default `false`. */
   showEmptyGhostAlways?: boolean;
-  /** Mutable cross-day offset (days) applied to a dragged task on drop. */
-  dayOffsetRef?: { current: number };
   /** Fired while a task is dragged near the screen's left/right edge. */
   onDragEdge?: (edge: "left" | "right") => void;
   /** Fired while a task is dragged outside the edge zone (disarms a pending
@@ -125,7 +124,6 @@ export function DayTimeline({
   onOvernightTailsChange,
   showHeader = true,
   showEmptyGhostAlways = false,
-  dayOffsetRef,
   onDragEdge,
   onDragEdgeExit,
   onDragChange,
@@ -175,6 +173,8 @@ export function DayTimeline({
     // refreshes.
     if (tasks.length === 0) setLoading(true);
     setError(false);
+    const startedAt = Date.now();
+    debugLog("day.fetch.start", { day: dayKey, refreshKey });
     listTasks("day", date, "all")
       .then((res) => {
         if (!cancelled) setTasks(res.tasks);
@@ -183,7 +183,10 @@ export function DayTimeline({
         if (!cancelled) setError(true);
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          debugLog("day.fetch.end", { day: dayKey, ms: Date.now() - startedAt });
+        }
       });
     return () => {
       cancelled = true;
@@ -195,12 +198,16 @@ export function DayTimeline({
   }, [loading, error, onStateChange]);
 
   const refetch = useCallback(async () => {
+    const startedAt = Date.now();
+    debugLog("day.refetch.start", { day: dayKey });
     try {
       const res = await listTasks("day", date, "all");
       setTasks(res.tasks);
       setError(false);
     } catch {
       setError(true);
+    } finally {
+      debugLog("day.refetch.end", { day: dayKey, ms: Date.now() - startedAt });
     }
   }, [date]);
 
@@ -384,6 +391,7 @@ export function DayTimeline({
 
   const handleReschedule = useCallback(
     async (taskId: string, startISO: string) => {
+      debugLog("day.reschedule.start", { task: taskId, startISO, day: dayKey });
       try {
         const res = await rescheduleTask(taskId, startISO);
         // The backend rechecked conflict flags around the new slot — patch the
@@ -395,6 +403,7 @@ export function DayTimeline({
       } catch {
         // Swallow the error — the finally below reconciles from the server.
       } finally {
+        debugLog("day.reschedule.end", { task: taskId });
         // Reconcile the whole day so a neighbor whose conflict flag the
         // backend cleared also turns back to normal.
         await refetch();
@@ -676,7 +685,6 @@ export function DayTimeline({
                       onDragStateChange={handleDragStateChange}
                       onPress={onTaskPress}
                       onComplete={handleComplete}
-                      dayOffsetRef={dayOffsetRef}
                       onDragEdge={onDragEdge}
                       onDragEdgeExit={onDragEdgeExit}
                       onCrossDayReschedule={onCrossDayReschedule}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { View, StyleSheet, useWindowDimensions } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { format } from "date-fns";
@@ -24,6 +24,12 @@ import {
 } from "@/lib/week-pager-math";
 import { DayTimeline } from "./day-timeline";
 import { DAY_MINUTES, type PeekBlock } from "@/lib/peek";
+import { debugLog } from "@/lib/debug-log";
+import {
+  getCrossDayOffset,
+  setCrossDayOffset,
+  resetCrossDayOffset,
+} from "@/lib/cross-day-offset";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   Easing,
@@ -306,15 +312,35 @@ export function WeekPager({
     );
   }, []);
 
-  // Cross-day offset accumulated during a drag; TaskBlock adds it to the
-  // rescheduled wall clock on drop, then it resets on the next drag start.
-  const dayOffsetRef = useRef(0);
+  // Cross-day offset accumulated during a drag; TaskBlock reads it via the
+  // module-level `getCrossDayOffset()` (not a useRef prop — Reanimated would
+  // freeze a ref captured by a worklet closure).
+  // Replaced by cross-day-offset module — see import above.
   // Gates the cross-day advance to exactly once per drag gesture (the strip
   // must not chain days while a finger holds past the carry threshold).
   const advancedRef = useRef(false);
   // Pending arm-timer for the cross-day hold, cleared on exit/drop/unmount.
   const armTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasLaidOutRef = useRef(false);
+  // True while a task-drag gesture is live. Unlike `dragActive` (async React
+  // state), this ref is written synchronously inside `handleDragChange`, so
+  // the false→true transition — the only place the carrier pin and the day
+  // offset may be (re)captured — is detected race-free.
+  const dragActiveRef = useRef(false);
+
+  // Set true by `settleRoles` when it queues a re-center (days + focusedIndex
+  // updated, progress snap deferred). The `useLayoutEffect` on `[days]`
+  // snaps progress to `-width` after React commits the new days array,
+  // avoiding a one-frame flash where the old `days` renders with
+  // `progress = -width` and the old focused day lands at center
+  // (index 1 * w + (-w) = 0).
+  const pendingSettleRef = useRef(false);
+
+  useLayoutEffect(() => {
+    if (!pendingSettleRef.current) return;
+    pendingSettleRef.current = false;
+    progress.value = -width;
+  }, [days, progress, width]);
 
   useEffect(
     () => () => {
@@ -345,13 +371,18 @@ export function WeekPager({
       const landed = days[target];
       if (!landed) return;
       setSettling(false);
-      commitRoles(1);
+      // onFocusedDateChange is called in settleOn *before* the settle
+      // animation starts, so the header chip updates immediately.
+      // Defer the progress snap to the useLayoutEffect on `[days]` so it
+      // fires after React commits the new days array — avoids the
+      // one-frame flash where the old days render with progress=-w
+      // (old focused day lands at center: index 1 * w + (-w) = 0).
+      pendingSettleRef.current = true;
       setDays(centeredDays(landed));
       setFocusedIndex(1);
-      onFocusedDateChange(landed);
-      progress.value = -width;
+      debugLog("pager.settle.land", { day: dateKey(landed), target });
     },
-    [centeredDays, commitRoles, days, onFocusedDateChange, progress, width],
+    [centeredDays, days],
   );
 
   // Drives the initial center position (and a chip tap to a day in a week
@@ -460,6 +491,7 @@ export function WeekPager({
       commitRoles(1);
       progress.value = -width;
       setSettling(false);
+      debugLog("pager.week.slide", { dir, day: dateKey(nextFocused) });
     },
     [
       centeredDays,
@@ -490,8 +522,12 @@ export function WeekPager({
         slideWeek(dir);
         return;
       }
-      // `settleRoles` handles the window re-center + focus switch at
-      // animation end.
+      // Commit the focus *before* the settle animation starts so the
+      // header chip/title updates immediately — previously it only
+      // updated at animation end (inside `settleRoles`), causing the
+      // header to flash back to the previous day for 200 ms.
+      const landed = days[target];
+      if (landed) onFocusedDateChange(landed);
       animateRolesTo(target, settleRoles);
     },
     [
@@ -581,8 +617,13 @@ export function WeekPager({
       const fresh = centeredDays(targetDay);
       setDays(fresh);
       setFocusedIndex(1);
-      dayOffsetRef.current += dir;
+      setCrossDayOffset(getCrossDayOffset() + dir);
       setPill({ edge, day: targetDay });
+      // Commit the focus the moment the advance fires, so the WeekHeader
+      // chip/title move in sync with the strip snap (previously the header
+      // stayed on the source day until the block was released — the visible
+      // "header lags the pager" behavior).
+      onFocusedDateChange(targetDay);
       // Instant snap — the strip follows the finger while the pill labels
       // the target day (matches the FlatList's `scrollToIndex(animated:false)`).
       // A task drag owns the strip now — any in-flight settle is over.
@@ -593,12 +634,19 @@ export function WeekPager({
       // in the hand — the carried page (old focused) reindexes to 0/2 in the
       // re-centered window.
       carrierIndexSV.value = dir === 1 ? 0 : 2;
+      debugLog("pager.advance", {
+        edge,
+        target: dateKey(targetDay),
+        dayOffset: getCrossDayOffset(),
+        carrierIndex: dir === 1 ? 0 : 2,
+      });
     },
     [
       centeredDays,
       commitRoles,
       days,
       focusedIndex,
+      onFocusedDateChange,
       progress,
       width,
       carrierIndexSV,
@@ -612,13 +660,15 @@ export function WeekPager({
   const handleDragEdge = useCallback(
     (edge: DragEdge) => {
       if (advancedRef.current) return;
-      if (armedEdgeSV.value === edge) return;
-      // Edge flip mid-hold: re-arm on the new edge.
-      if (armedEdgeSV.value !== null && armTimerRef.current) {
+      // Already armed for this exact edge with a pending timer — no-op.
+      if (armedEdgeSV.value === edge && armTimerRef.current) return;
+      // Edge flip mid-hold: clear the old timer and re-arm on the new edge.
+      if (armTimerRef.current) {
         clearTimeout(armTimerRef.current);
         armTimerRef.current = null;
       }
       armedEdgeSV.value = edge;
+      debugLog("pager.edge.arm", { edge });
       armTimerRef.current = setTimeout(() => {
         armTimerRef.current = null;
         advanceCrossDay(edge);
@@ -630,28 +680,48 @@ export function WeekPager({
   // Leaving the zone (or a fresh hold with no snap yet) disarms a pending
   // advance. Called every frame the lifted block is outside the zone.
   const handleDragEdgeExit = useCallback(() => {
+    if (armTimerRef.current === null && armedEdgeSV.value === null) return;
     if (armTimerRef.current) {
       clearTimeout(armTimerRef.current);
       armTimerRef.current = null;
     }
     armedEdgeSV.value = null;
+    debugLog("pager.edge.disarm", {});
     setPill(null);
   }, [armedEdgeSV]);
 
   const handleDragChange = useCallback(
     (active: boolean) => {
-      setDragActive(active);
-      // A task drag takes over the strip — release any settle lock.
-      setSettling(false);
       if (active) {
-        dayOffsetRef.current = 0;
+        // Only the FIRST report of a drag starts it. `onDragChange(true)`
+        // re-fires on every vertical snap change while the block is lifted
+        // (day-timeline reports each snap), and re-running the capture below
+        // would wipe the cross-day offset (the accumulated day offset a fired advance
+        // accumulated) and re-pin the carrier to the NEW focused page —
+        // unpinning the page that actually holds the lifted block mid
+        // cross-day drag (the block flies off-screen and the drop lands on
+        // the source day). Once started, a drag keeps its pin and offset.
+        if (dragActiveRef.current) return;
+        dragActiveRef.current = true;
+        setDragActive(true);
+        // A task drag takes over the strip — release any settle lock.
+        setSettling(false);
+        resetCrossDayOffset();
         setPill(null);
         // Capture the page holding the lifted block so the pager can pin
         // it across strip snaps (carrierFix in PagerPage animatedStyle).
         carrierIndexSV.value = focusedIndex;
         carrierOriginSV.value = focusedIndex * width + progress.value;
+        debugLog("pager.drag.start", {
+          day: dateKey(days[focusedIndex]),
+          days: days.map(dateKey),
+          carrierIndex: focusedIndex,
+          dayOffset: getCrossDayOffset(),
+        });
         return;
       }
+      dragActiveRef.current = false;
+      setDragActive(false);
       // Gesture truly ended (`reportDragEnd` fires once at finalize — unlike
       // the `active === true` branch, which re-fires on every snap report).
       // Only here do we unlock the next gesture, clear a pending arm, and
@@ -670,6 +740,10 @@ export function WeekPager({
       // and commit it as the focused day.
       const landed = days[focusedIndex];
       if (!landed) return;
+      debugLog("pager.drag.end", {
+        landed: dateKey(landed),
+        dayOffset: getCrossDayOffset(),
+      });
       const fresh = centeredDays(landed);
       setDays(fresh);
       setFocusedIndex(1);
@@ -766,7 +840,6 @@ export function WeekPager({
                 refreshKey={reloadKey}
                 onTaskPress={onTaskPress}
                 onLongPress={onLongPress}
-                dayOffsetRef={dayOffsetRef}
                 onDragEdge={handleDragEdge}
                 onDragEdgeExit={handleDragEdgeExit}
                 onDragChange={handleDragChange}
