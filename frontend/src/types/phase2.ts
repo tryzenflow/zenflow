@@ -7,11 +7,7 @@
  * redefining them. Nothing here duplicates an API shape.
  */
 
-export type {
-  DurationAdjustmentMode,
-  User,
-  UserPreferences,
-} from "@zenflow/shared";
+export type { User, UserPreferences } from "@zenflow/shared";
 
 export type {
   CreateTaskResponse,

@@ -1,19 +1,14 @@
 import {
   ArrayNotEmpty,
   IsArray,
-  IsIn,
   IsInt,
-  IsOptional,
   IsString,
   Max,
   Min,
 } from "class-validator";
 import { IsValidTimezone } from "../../common/validators/valid-timezone.decorator";
 import { DAILY_HORIZON } from "../../common/constants";
-import type {
-  DurationAdjustmentMode,
-  UpdatePreferencesInput,
-} from "@zenflow/shared";
+import type { UpdatePreferencesInput } from "@zenflow/shared";
 
 export class UpdatePreferencesDto implements UpdatePreferencesInput {
   @IsInt() @Min(0) @Max(DAILY_HORIZON) workStart: number;
@@ -30,9 +25,4 @@ export class UpdatePreferencesDto implements UpdatePreferencesInput {
   @IsString()
   @IsValidTimezone()
   timezone: string;
-
-  /** Duration-corrector UX mode; optional (partial update). */
-  @IsOptional()
-  @IsIn(["auto", "ask", "never"])
-  durationAdjustmentMode?: DurationAdjustmentMode;
 }

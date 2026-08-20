@@ -30,7 +30,7 @@ mobile/
 │   ├── _layout.tsx            # fonts, ThemeProvider, session hydration, AuthGate
 │   ├── global.css             # NativeWind theme source (Warm Sunrise tokens, see below)
 │   ├── (auth)/login.tsx       # email + OTP code, 2-stage login
-│   ├── (onboarding)/index.tsx # work hours / days / timezone / duration-mode wizard
+│   ├── (onboarding)/index.tsx # work hours / days / timezone wizard
 │   └── (app)/                 # tab navigator: index (Day), week, month, settings
 │       ├── index.tsx          # Day — still a Phase 2 grid stub, but with the task sheets wired
 │       │                      # against a plain task list (tap → edit, long-press → resize,
@@ -42,7 +42,7 @@ mobile/
 │       ├── month.tsx          # Month — built (RN migration Phase 4, issue #21): paginated
 │       │                      # Monday-first grid + overflow bottom sheet + long-press-drag
 │       │                      # reschedule; see components/calendar/ below
-│       └── settings.tsx       # fully built: profile, theme, timezone, duration mode, insights
+│       └── settings.tsx       # fully built: profile, theme, timezone, insights
 ├── api/                       # axios endpoint functions (auth, tasks, tags, users) + base.ts
 ├── components/
 │   ├── ui/                    # shadcn-style components (button, dialog, select, toast, …)
@@ -101,11 +101,11 @@ call):
 | Group | Screen(s) | State |
 |-------|-----------|-------|
 | `(auth)` | `login.tsx` | Built — email stage → OTP verification stage |
-| `(onboarding)` | `index.tsx` | Built — work hours / work days / timezone / duration-adjustment mode wizard |
+| `(onboarding)` | `index.tsx` | Built — work hours / work days / timezone wizard |
 | `(app)` | `index.tsx` (Day) | Built — EDF grid with pinch-zoom, long-press create, drag reschedule, pull-to-refresh. When a task runs past midnight, the day ends at a dashed `12:00 AM` boundary followed by a tall empty region; scrolling through it to the end flips to a next-day slice (`components/calendar/day-slice.tsx`) showing only the 12 AM–4 AM tail; swipe up returns. The empty region and flip only exist on days that actually have a past-midnight task. Task sheets (create/edit/change-duration) are wired against the grid: tap a task → edit, long-press a task → change duration, long-press the empty area or the FAB → create |
 | `(app)` | `week.tsx` | **Placeholder stub** — calendar UI is future work |
 | `(app)` | `month.tsx` (Month) | **Built** (RN migration Phase 4, issue #21) — paginated Monday-first grid (`components/calendar/`), "+N more" overflow bottom sheet, tap-a-day → Day View, long-press-drag a pill to reschedule |
-| `(app)` | `settings.tsx` | Built — profile row, theme toggle, timezone picker, duration-mode picker, insights panel |
+| `(app)` | `settings.tsx` | Built — profile row, theme toggle, timezone picker, insights panel |
 
 All three of `index.tsx`/`week.tsx`/`month.tsx` also render `<OptimizeFab>` (`components/tasks/optimize-fab.tsx`) — the scheduler redesign's opt-in, previewable-by-count multi-task reflow action, mobile's equivalent of the web calendar toolbar's Sparkles popover (no calendar toolbar exists on mobile yet, hence a floating button instead of a toolbar entry). Its API surface (`resolveTaskPlacement`/`optimizePreview`/`optimizeApply` in `api/tasks.ts`, plus an extended `undoBatch(batchId, strategy?)`) types against `OptimizeWindowInput`/`OptimizePreviewResponse`/`OptimizeApplyResponse`/`OPTIMIZE_LARGE_BATCH_THRESHOLD`/`OPTIMIZE_UI_MAX_WINDOW_DAYS`, which land in `@zenflow/shared` as part of the same redesign (backend-engineer's side) — `pnpm --filter mobile typecheck` won't pass until those merge.
 
@@ -249,7 +249,7 @@ screen and bridged through a `useControlledBottomSheet(open)` hook that called
 `ref.current?.present()`/`.dismiss()` inside a `useEffect` keyed on `open` — i.e. *after* a state
 update flowed through a re-render, never inside the actual `Pressable`'s `onPress`/`onLongPress`
 handler itself. Every other sheet in the app (`components/ui/time-picker.tsx`,
-`components/settings/duration-mode-picker-row.tsx`, `components/settings/timezone-picker-row.tsx`)
+`components/settings/timezone-picker-row.tsx`)
 instead calls `useBottomSheet()`'s `open`/`close` (or `BottomSheetOpenTrigger`'s internal
 `sheetRef.current?.present()`) **directly and synchronously inside the press handler**, and those
 always worked. The effect-driven indirection was the actual difference — not a WebView/native

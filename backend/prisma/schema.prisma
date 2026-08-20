@@ -35,10 +35,6 @@ model User {
   // pass; the cron treats null as "no elapsed days" and only stamps the time.
   preferenceMatrixDecayedAt DateTime?
 
-  // Duration-corrector UX mode (auto | ask | never), surfaced on the user
-  // profile and editable via preferences/onboarding. `never` still LEARNS bias.
-  durationAdjustmentMode DurationAdjustmentMode @default(auto)
-
   onboardingComplete Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -69,18 +65,6 @@ enum TaskStatus {
   PENDING
   DONE // completed
   ABANDONED // deadline passed while still PENDING (set by the overdue sweep)
-}
-
-// How the per-tag duration corrector surfaces its adjustment to the user:
-//   auto  → apply the corrected duration + show an undoable toast
-//   ask   → prompt before applying (accept corrected / keep estimate)
-//   never → never apply (still LEARNS bias for the heatmap/analytics)
-// Mirrors @zenflow/shared DurationAdjustmentMode. Lowercase string enum, like
-// the ViewMode precedent.
-enum DurationAdjustmentMode {
-  auto
-  ask
-  never
 }
 
 model Task {
@@ -155,10 +139,6 @@ model TaskEvent {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, occurredAt(sort: Desc)])
-  // Serves `aggregateTagBias`, the hottest read on this table: the newest
-  // CREATE/COMPLETE/KEEP events for one user. The (userId, occurredAt) index
-  // above can't satisfy the eventType filter, so it had to scan and discard.
-  @@index([userId, eventType, occurredAt(sort: Desc)])
   @@index([taskId])
   // Serves `undoBatch`: every TaskEvent written by one narrowResolve cascade.
   @@index([userId, batchId])

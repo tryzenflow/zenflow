@@ -1,6 +1,3 @@
-/** How the per-tag duration corrector surfaces its adjustment to the user. */
-export type DurationAdjustmentMode = "auto" | "ask" | "never";
-
 /** A user's working-window configuration, in their own timezone. */
 export interface UserPreferences {
   /** Minutes from midnight; default 540 (09:00). */
@@ -11,8 +8,6 @@ export interface UserPreferences {
   workDays: number[];
   /** IANA timezone, e.g. "Asia/Ho_Chi_Minh". */
   timezone: string;
-  /** Duration-corrector UX mode; default "auto". */
-  durationAdjustmentMode: DurationAdjustmentMode;
 }
 
 export interface User extends UserPreferences {
@@ -29,8 +24,6 @@ export interface UpdatePreferencesInput {
   workEnd: number;
   workDays: number[];
   timezone: string;
-  /** Duration-corrector UX mode; optional (partial update). */
-  durationAdjustmentMode?: DurationAdjustmentMode;
 }
 
 export type OnboardingInput = UpdatePreferencesInput;

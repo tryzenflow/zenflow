@@ -11,15 +11,24 @@ The authoritative roadmap lives in [`docs/heuristic.md`](../../docs/heuristic.md
 > ([`backend/src/scheduler`](../../backend/src/scheduler)) remains the live scheduler.
 
 > **Scope note (Phase 2 ≠ here).** The Phase-2 heuristics (signed-matrix re-ranker,
-> per-tag duration corrector, matrix decay) and the simulation/evaluation harness live
-> in the **NestJS backend**, not this service — they are pure TypeScript that re-ranks
-> EDF's feasible set, so they belong next to the scheduler core
+> matrix decay) and the simulation/evaluation harness live in the **NestJS backend**,
+> not this service — they are pure TypeScript that re-ranks EDF's feasible set, so they
+> belong next to the scheduler core
 > ([`backend/src/scheduler/reranker.ts`](../../backend/src/scheduler/reranker.ts),
-> `duration-bias.ts`, `matrix-decay.ts`) and the harness in
+> `matrix-decay.ts`) and the harness in
 > [`backend/src/simulation`](../../backend/src/simulation) (`pnpm sim:run | sim:eval |
 sim:recovery | sim:significance`). This Python service is reserved for **Phase 3+**
 > (LinUCB) where a linear model genuinely needs a non-TS runtime. See
 > [`docs/phase-2-evaluation-steps.md`](../../docs/phase-2-evaluation-steps.md).
+>
+> **Note (2026-08-20):** Phase 2's per-tag duration-bias corrector (`duration-bias.ts`,
+> the `DurationAdjustmentMode` preference, `GET /users/me/tag-bias`) has been removed
+> entirely — it is not a Phase-2-lives-elsewhere omission from this README, it no longer
+> exists anywhere. See
+> [`docs/heuristic.md`](../../docs/heuristic.md#removed-per-tag-duration-bias-correction)
+> and [ADR-0001](../../docs/adr/0001-phase-2-scheduling-heuristic-and-transparency-ui.md)
+> for why. Tags remain a live signal for Phase 3+ via multi-hot encoding in the bandit's
+> context vector (see below) — this removal does not touch that.
 
 ---
 

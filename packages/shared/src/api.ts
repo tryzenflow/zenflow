@@ -1,5 +1,4 @@
 import type { Task, TaskEvent } from "./task";
-import type { DurationAdjustmentMode } from "./user";
 
 /** Standard success envelope used by the Zenflow API. */
 export interface ApiSuccess<T> {
@@ -39,7 +38,7 @@ export interface SchedulingRationale {
 }
 
 export interface SchedulingMeta {
-  /** Corrected duration actually fed to EDF (rounded up to 15-min). */
+  /** Duration actually fed to EDF (always a positive multiple of 15). */
   adjustedDuration: number;
   placedAt: string | null;
   engine: "edf";
@@ -49,14 +48,6 @@ export interface SchedulingMeta {
    * `buildTierRationale`), always populated whenever a placement happened.
    */
   rationale?: string;
-  /** Per-tag blended bias multiplier; 1.0 when no bias applied. */
-  biasApplied?: number;
-  /** User's typed estimate before correction (minutes). */
-  estimatedDuration?: number;
-  /** Active mode at create time (drives the FE toast behaviour). */
-  durationAdjustmentMode?: DurationAdjustmentMode;
-  /** Short reason naming the driving tag(s), e.g. "#backend ~30% longer". */
-  durationReason?: string | null;
 }
 
 export interface CreateTaskResponse {
@@ -85,13 +76,6 @@ export interface CreateTaskResponse {
  */
 export interface UpdateTaskResponse {
   task: Task;
-  /**
-   * Present when `tags` changed on this update: the same duration-correction
-   * data `POST /tasks` returns. The corrected duration is already applied to
-   * `task` (unless the user's `durationAdjustmentMode` is `"never"`) — this
-   * is informational, so the frontend can show what changed.
-   */
-  schedulingMeta?: SchedulingMeta;
   /**
    * True when `deadline` actually changed on this update. Purely
    * informational.
@@ -254,19 +238,4 @@ export interface PreferenceMatrixResponse {
 export interface TaskDetailResponse {
   task: Task;
   events: TaskEvent[];
-}
-
-/** One tag's learned duration multiplier. */
-export interface TagBiasEntry {
-  tag: string;
-  /** Sample count (COMPLETE/KEEP events with this tag). Higher = more evidence. */
-  n: number;
-  /** Duration multiplier: actual ÷ estimated. 1.0 = no correction. */
-  b: number;
-}
-
-/** Per-tag duration-multiplier summary for the Insights panel. */
-export interface TagBiasResponse {
-  /** All tags with ≥1 sample, sorted by n descending. */
-  tags: TagBiasEntry[];
 }

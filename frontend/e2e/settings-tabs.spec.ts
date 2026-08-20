@@ -2,8 +2,7 @@ import { test, expect } from "@playwright/test";
 import { login, uniqueEmail } from "./helpers/auth";
 
 /**
- * Settings is now a tabbed dialog: Work · Scheduling · Insights · Account.
- * - Scheduling hosts the auto/ask/never control.
+ * Settings is now a tabbed dialog: Work · Insights · Account.
  * - Insights fetches GET /users/me/preference-matrix on open and renders the
  *   7×96 heatmap (or a cold-start empty state for a fresh user).
  * - Account hosts Log out.
@@ -31,28 +30,14 @@ test.describe("tabbed settings", () => {
     }
   });
 
-  test("switches across all four tabs", async ({ page }) => {
+  test("switches across all three tabs", async ({ page }) => {
     await openSettings(page);
-    for (const name of ["Work", "Scheduling", "Insights", "Account"]) {
+    for (const name of ["Work", "Insights", "Account"]) {
       await page.getByRole("tab", { name: new RegExp(name, "i") }).click();
       await expect(
         page.getByRole("tab", { name: new RegExp(name, "i") }),
       ).toHaveAttribute("data-state", "active");
     }
-  });
-
-  test("scheduling tab changes the duration-adjustment mode and saves", async ({
-    page,
-  }) => {
-    await openSettings(page);
-    await page.getByRole("tab", { name: /scheduling/i }).click();
-    await page.getByTestId("duration-mode-never").click();
-    await expect(page.getByTestId("duration-mode-never")).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
-    await page.getByRole("button", { name: /save changes/i }).click();
-    await expect(page.getByText(/settings saved/i)).toBeVisible();
   });
 
   test("insights tab renders the preference map (heatmap or cold-start)", async ({

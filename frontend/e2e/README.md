@@ -34,17 +34,10 @@ pnpm --filter frontend test:e2e:ui     # Playwright UI mode
 
 ## Specs (Phase-2 transparency UI, issue #13)
 
-- `onboarding-mode.spec.ts` — the new "Duration adjustments" onboarding step
-  (auto/ask/never) persists into Settings → Scheduling.
-- `settings-tabs.spec.ts` — the tabbed Settings dialog (Work · Scheduling ·
-  Insights · Account); the Scheduling mode control; the Insights heatmap
-  fetch-on-open / cold-start.
-- `duration-adjustment.spec.ts` — the create-task duration-adjustment toast
-  (Undo on `auto`). Needs a seed/account with a non-trivial per-tag duration
-  bias for the corrected duration to differ from the estimate; otherwise no
-  toast fires by design and the spec annotates that it skipped.
+- `settings-tabs.spec.ts` — the tabbed Settings dialog (Work · Insights ·
+  Account); the Insights heatmap fetch-on-open / cold-start.
 
 > These were authored alongside the Phase-2 frontend slice. They require the
 > backend Phase-2 endpoints/metadata to be wired live (the new
-> `GET /users/me/preference-matrix`, the extended `schedulingMeta`, and the
-> reschedule `rationale`). Run them once the Docker test stack + MailHog are up.
+> `GET /users/me/preference-matrix` and the reschedule `rationale`). Run them
+> once the Docker test stack + MailHog are up.
