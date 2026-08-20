@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Zenflow Mobile — Detected items</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/geist@5.2.6/index.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/geist-mono@5.2.6/index.css" />
+<link rel="stylesheet" href="dist/output.css" />
+<link rel="stylesheet" href="gallery-chrome.css" />
+</head>
+<body>
+  <div class="page-head">
+    <h1><span class="dot"></span> Detected-item inbox &amp; push</h1>
+    <p>Mobile-only (<code>docs/thesis-scope.md</code> §4, issue #34) — closes the automatic path: watcher notices something new on a DLU student's LMS/portal → push notification → pre-filled confirm screen → real scheduled task, matching manual creation. A small bell affordance on Day/Week/Month's app bar (not pictured per-screen here — same top-bar chrome as <a href="day-view.html">day-view.html</a>, just with a badge) opens the <b>Inbox</b>; tapping a push when the app is foregrounded instead shows a tap-to-act toast over whatever screen is open. Both paths land on the same <b>Confirm</b> screen — styled like <code>app/task/new.tsx</code>'s form chrome (not a bottom sheet, since it's reached by a push/deep-link rather than a long-press-on-the-grid). Description renders through <code>description-field.tsx</code> (tentap), same as the create sheet — <b>fully editable</b>, not a read-only preview, so links/formatting carry over instead of showing raw text but the student can still fix them up.</p>
+    <div class="crumbs"><a href="index.html">← All mobile mockups</a></div>
+  </div>
+
+  <div class="state-section"><h2>Foreground push</h2><p>App already open when the watcher finds something — a tap-to-act toast (new variant on <code>components/ui/toast.tsx</code>) surfaces over the current screen instead of a system notification.</p></div>
+  <div class="gallery">
+
+    <!-- Tap-to-act toast -->
+    <div class="frame">
+      <div class="caption"><span class="tag">Tap-to-act toast</span><div class="sub">Over Day view · tapping opens the Confirm screen directly</div></div>
+      <div class="device">
+        <div class="island"></div>
+        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
+          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
+          </span></div>
+          <div class="relative z-30 flex items-center justify-between gap-3 px-4 pt-1.5 pb-3.5 bg-background/80 backdrop-blur-[18px] backdrop-saturate-[1.4] border-b border-border/70">
+            <div class="text-xl font-bold tracking-[-0.02em]">Tue, Jul 1</div>
+            <span class="relative inline-flex size-9 items-center justify-center rounded-xl bg-muted text-foreground [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span class="absolute -top-1 -right-1 inline-flex size-4 items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-white">1</span></span>
+          </div>
+          <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden">
+            <div class="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0 px-5 saturate-90">
+              <div class="relative">
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-[7px] right-2.5 text-[11px] text-muted-foreground tabular-nums">9 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-[7px] right-2.5 text-[11px] text-muted-foreground tabular-nums">10 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-[7px] right-2.5 text-[11px] text-muted-foreground tabular-nums">11 AM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+                <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-[7px] right-2.5 text-[11px] text-muted-foreground tabular-nums">12 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
+              </div>
+            </div>
+            <button class="absolute inset-x-0 bottom-[64px] z-[60] mx-5 flex items-center gap-3 rounded-2xl border border-border bg-popover px-4 py-3.5 text-left shadow-[0_14px_30px_-10px_rgba(0,0,0,0.35)]">
+              <span class="inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg></span>
+              <div class="min-w-0 flex-1"><div class="text-[13.5px] font-semibold text-foreground">New from your LMS</div><div class="text-[12px] text-muted-foreground mt-0.5 truncate">"Assignment 3: Sorting Algorithms"</div><div class="text-[12px] text-muted-foreground mt-0.5">Due Jul 8</div></div>
+              <span class="text-muted-foreground [&_svg]:size-4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
+            </button>
+          </div>
+          <div class="relative shrink-0" style="height:86px">
+            <svg width="393" height="86" viewBox="0 0 393 86" style="position:absolute;top:0;left:0" preserveAspectRatio="none">
+              <path d="M 0 86 L 0 26 Q 0 0 26 0 L 144.5 0 C 170.5 0 164.26 26 196.5 26 C 228.74 26 222.5 0 248.5 0 L 367 0 Q 393 0 393 26 L 393 86 Z" fill="none" stroke="var(--primary)" stroke-opacity="0.05" stroke-width="18"/>
+              <path d="M 0 86 L 0 26 Q 0 0 26 0 L 144.5 0 C 170.5 0 164.26 26 196.5 26 C 228.74 26 222.5 0 248.5 0 L 367 0 Q 393 0 393 26 L 393 86 Z" fill="none" stroke="var(--primary)" stroke-opacity="0.08" stroke-width="12"/>
+              <path d="M 0 86 L 0 26 Q 0 0 26 0 L 144.5 0 C 170.5 0 164.26 26 196.5 26 C 228.74 26 222.5 0 248.5 0 L 367 0 Q 393 0 393 26 L 393 86 Z" fill="none" stroke="var(--primary)" stroke-opacity="0.13" stroke-width="7"/>
+              <path d="M 0 86 L 0 26 Q 0 0 26 0 L 144.5 0 C 170.5 0 164.26 26 196.5 26 C 228.74 26 222.5 0 248.5 0 L 367 0 Q 393 0 393 26 L 393 86 Z" fill="none" stroke="var(--primary)" stroke-opacity="0.2" stroke-width="4"/>
+              <path d="M 0 86 L 0 26 Q 0 0 26 0 L 144.5 0 C 170.5 0 164.26 26 196.5 26 C 228.74 26 222.5 0 248.5 0 L 367 0 Q 393 0 393 26 L 393 86 Z" fill="var(--card)" stroke="var(--primary)" stroke-opacity="0.42" stroke-width="1.25"/>
+            </svg>
+            <div class="relative flex items-stretch" style="height:56px">
+              <a href="#" class="flex-1 flex flex-col items-center justify-center gap-1 no-underline text-primary text-[11px] font-medium leading-[13px] [&_svg]:size-[22px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><rect x="7" y="13" width="6" height="4" rx="1" fill="currentColor" stroke="none"/></svg> Day</a>
+              <a href="#" class="flex-1 flex flex-col items-center justify-center gap-1 no-underline text-muted-foreground text-[11px] font-medium leading-[13px] [&_svg]:size-[22px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="9" x2="9" y2="21"/><line x1="15" y1="9" x2="15" y2="21"/></svg> Week</a>
+              <div style="width:104px" class="shrink-0"></div>
+              <a href="#" class="flex-1 flex flex-col items-center justify-center gap-1 no-underline text-muted-foreground text-[11px] font-medium leading-[13px] [&_svg]:size-[22px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="9" y1="9" x2="9" y2="21"/><line x1="15" y1="9" x2="15" y2="21"/></svg> Month</a>
+              <a href="#" class="flex-1 flex flex-col items-center justify-center gap-1 no-underline text-muted-foreground text-[11px] font-medium leading-[13px] [&_svg]:size-[22px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Settings</a>
+            </div>
+            <div class="absolute left-1/2" style="top:-34px;transform:translateX(-50%);width:56px;height:56px;border-radius:9999px;background:linear-gradient(135deg,rgb(255,142,62),rgb(240,177,1),rgb(216,249,152));box-shadow:0 2px 6px -1px rgba(0,0,0,0.28), 0 0 0 3px color-mix(in oklch, var(--brand-orange) 12%, transparent), 0 0 10px 1px color-mix(in oklch, var(--brand-yellow) 20%, transparent);display:flex;align-items:center;justify-content:center">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"/></svg>
+            </div>
+          </div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="state-section"><h2>Inbox</h2><p>Reached from the bell affordance — everything pending you haven't confirmed or dismissed, oldest first. Populated and empty states.</p></div>
+  <div class="gallery">
+
+    <!-- Inbox populated -->
+    <div class="frame">
+      <div class="caption"><span class="tag">Populated</span><div class="sub">4 pending · LMS + Portal sources, incl. a timetable change</div></div>
+      <div class="device">
+        <div class="island"></div>
+        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
+          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
+          </span></div>
+          <div class="relative z-30 flex items-center gap-3 px-3 pt-1.5 pb-3.5 bg-background/80 backdrop-blur-[18px] backdrop-saturate-[1.4] border-b border-border/70">
+            <button class="inline-flex size-[38px] items-center justify-center rounded-xl border-transparent bg-transparent text-foreground shrink-0 [&_svg]:size-[19px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>
+            <div class="text-xl font-bold tracking-[-0.02em]">Inbox</div>
+          </div>
+          <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden"><div class="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0 px-5">
+
+            <div class="mt-[18px] overflow-hidden rounded-2xl border bg-card divide-y divide-border">
+              <div class="flex items-center gap-[13px] px-4 py-3.5">
+                <span class="inline-flex size-[38px] items-center justify-center rounded-xl bg-primary/15 text-primary shrink-0 [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg></span>
+                <div class="min-w-0 flex-1"><div class="text-[15px] font-semibold truncate">Assignment 3: Sorting Algorithms</div><div class="text-[12.5px] text-muted-foreground mt-0.5">LMS · detected 12m ago · due Jul 8</div></div>
+                <span class="text-muted-foreground [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
+              </div>
+              <div class="flex items-center gap-[13px] px-4 py-3.5">
+                <span class="inline-flex size-[38px] items-center justify-center rounded-xl bg-sky-500/15 text-sky-600 shrink-0 [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg></span>
+                <div class="min-w-0 flex-1"><div class="text-[15px] font-semibold truncate">Fall timetable updated</div><div class="text-[12.5px] text-muted-foreground mt-0.5">Portal · detected 1h ago · 3 classes rescheduled</div></div>
+                <span class="text-muted-foreground [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
+              </div>
+              <div class="flex items-center gap-[13px] px-4 py-3.5">
+                <span class="inline-flex size-[38px] items-center justify-center rounded-xl bg-primary/15 text-primary shrink-0 [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="13" x2="14" y2="13"/></svg></span>
+                <div class="min-w-0 flex-1"><div class="text-[15px] font-semibold truncate">Midterm exam — Room A305</div><div class="text-[12.5px] text-muted-foreground mt-0.5">Portal · detected 2h ago · Jul 5, 9:00 AM</div></div>
+                <span class="text-muted-foreground [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
+              </div>
+              <div class="flex items-center gap-[13px] px-4 py-3.5">
+                <span class="inline-flex size-[38px] items-center justify-center rounded-xl bg-primary/15 text-primary shrink-0 [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg></span>
+                <div class="min-w-0 flex-1"><div class="text-[15px] font-semibold truncate">Lab report: Binary trees</div><div class="text-[12.5px] text-muted-foreground mt-0.5">LMS · detected yesterday · due Jul 6</div></div>
+                <span class="text-muted-foreground [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
+              </div>
+            </div>
+            <div class="text-[12.5px] text-muted-foreground text-center mt-[14px]">Swipe an item to dismiss, or open it to confirm as a task.</div>
+
+          </div></div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inbox empty -->
+    <div class="frame">
+      <div class="caption"><span class="tag">Empty</span><div class="sub">Nothing pending</div></div>
+      <div class="device">
+        <div class="island"></div>
+        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
+          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
+          </span></div>
+          <div class="relative z-30 flex items-center gap-3 px-3 pt-1.5 pb-3.5 bg-background/80 backdrop-blur-[18px] backdrop-saturate-[1.4] border-b border-border/70">
+            <button class="inline-flex size-[38px] items-center justify-center rounded-xl border-transparent bg-transparent text-foreground shrink-0 [&_svg]:size-[19px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>
+            <div class="text-xl font-bold tracking-[-0.02em]">Inbox</div>
+          </div>
+          <div class="relative flex-1 min-h-0 flex flex-col items-center justify-center overflow-hidden px-8">
+            <div class="flex size-14 items-center justify-center rounded-full border border-primary/30 bg-primary/10 mb-4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-6 text-primary"><polyline points="20 6 9 17 4 12"/></svg></div>
+            <div class="text-[16px] font-semibold text-center">You're all caught up</div>
+            <div class="text-[13px] text-muted-foreground text-center mt-1.5 leading-snug">Nothing new from your LMS or portal right now — Zenflow will push you the moment something shows up.</div>
+          </div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="state-section"><h2>Confirm</h2><p>Reuses the exact same fields as <a href="task-sheets.html">the task-creation sheet</a> — Title → Description → Duration → <b>Sessions</b> → Deadline → Tags — all pre-filled but freely editable, not a read-only preview. Duration defaults to 90 min and Sessions defaults to 1 when the LMS post doesn't imply otherwise (important: a confirmed item is a normal task afterward, so it needs a real duration and session count, not just a title + deadline). Pushing the deadline later than the scraped due date surfaces a non-blocking warning instead of silently accepting it.</p></div>
+  <div class="gallery">
+
+    <!-- Confirm -->
+    <div class="frame">
+      <div class="caption"><span class="tag">Confirm</span><div class="sub">Deadline kept at the scraped due date</div></div>
+      <div class="device">
+        <div class="island"></div>
+        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
+          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
+          </span></div>
+          <div class="relative z-30 flex items-center gap-3 px-3 pt-1.5 pb-3.5 bg-background/80 backdrop-blur-[18px] backdrop-saturate-[1.4] border-b border-border/70">
+            <button class="inline-flex size-[38px] items-center justify-center rounded-xl border-transparent bg-transparent text-foreground shrink-0 [&_svg]:size-[19px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>
+            <div class="text-xl font-bold tracking-[-0.02em]">Confirm task</div>
+          </div>
+          <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden"><div class="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0 px-5">
+
+            <div class="mt-[18px] mb-[18px] flex items-center gap-2 rounded-xl border border-primary/25 bg-primary/10 px-3.5 py-2.5">
+              <span class="inline-flex size-5 items-center justify-center rounded-full bg-primary/20 text-primary [&_svg]:size-3"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg></span>
+              <div class="text-[12px] font-medium text-primary">Detected from your LMS · 12 minutes ago</div>
+            </div>
+
+            <div class="mb-[18px]">
+              <label class="block text-[13.5px] font-semibold mb-2 text-foreground">Title</label>
+              <input class="h-[50px] w-full rounded-xl border border-input bg-card px-4 text-base text-foreground outline-none" value="Assignment 3: Sorting Algorithms" />
+            </div>
+            <div class="mb-[18px]">
+              <label class="block text-[13.5px] font-semibold mb-2 text-foreground">Description</label>
+              <div class="border border-input rounded-[13px] bg-card px-3.5 py-3 text-[15px] leading-[1.55] min-h-[90px] text-foreground">Implement <b>merge sort</b> and <b>quick sort</b>, compare runtimes on the provided datasets. Submit via the course <span class="text-primary underline decoration-primary/40">submission portal</span>. Late work loses 10%/day.</div>
+              <div class="text-[12.5px] text-muted-foreground mt-[7px] leading-snug">Carried over from the LMS post — edit freely, same as a manual task.</div>
+            </div>
+            <div class="mb-[18px]">
+              <label class="block text-[13.5px] font-semibold mb-2 text-foreground">Duration</label>
+              <div class="flex items-center gap-3">
+                <button class="inline-flex size-11 items-center justify-center rounded-xl border bg-card text-2xl text-foreground">−</button>
+                <div class="flex-1 text-center text-[17px] font-semibold tabular-nums">1h 30m</div>
+                <button class="inline-flex size-11 items-center justify-center rounded-xl border bg-card text-2xl text-foreground">+</button>
+              </div>
+              <div class="text-[12.5px] text-muted-foreground mt-[7px] leading-snug">Default 90 min — the LMS post has no duration of its own.</div>
+            </div>
+            <div class="mb-[18px]">
+              <label class="block text-[13.5px] font-semibold mb-2 text-foreground">Sessions</label>
+              <div class="flex items-center gap-3">
+                <button disabled class="inline-flex size-11 items-center justify-center rounded-xl border bg-card text-2xl text-foreground opacity-40">−</button>
+                <div class="flex-1 text-center text-[17px] font-semibold tabular-nums">1 session</div>
+                <button class="inline-flex size-11 items-center justify-center rounded-xl border bg-card text-2xl text-foreground">+</button>
+              </div>
+              <div class="text-[12.5px] text-muted-foreground mt-[7px] leading-snug">This is the total across the whole task — Zenflow partitions it across the days until your deadline, doubling up (e.g. 2 sessions / day) only if there isn't a day for each.</div>
+            </div>
+            <div class="mb-[18px]">
+              <label class="block text-[13.5px] font-semibold mb-2 text-foreground">Deadline</label>
+              <div class="flex flex-wrap gap-1.5">
+                <button type="button" class="rounded-full border px-2.5 py-1 text-[11px] font-semibold border-border bg-muted text-muted-foreground">Today</button>
+                <button type="button" class="rounded-full border px-2.5 py-1 text-[11px] font-semibold border-border bg-muted text-muted-foreground">Tomorrow</button>
+                <button type="button" class="rounded-full border px-2.5 py-1 text-[11px] font-semibold border-border bg-muted text-muted-foreground">This week</button>
+                <button type="button" class="rounded-full border px-2.5 py-1 text-[11px] font-semibold border-primary bg-primary/15 text-primary">Next week</button>
+                <button type="button" class="rounded-full border px-2.5 py-1 text-[11px] font-semibold border-border bg-muted text-muted-foreground">This month</button>
+                <button type="button" class="rounded-full border px-2.5 py-1 text-[11px] font-semibold border-border bg-muted text-muted-foreground">No rush</button>
+                <button type="button" class="rounded-full border px-2.5 py-1 text-[11px] font-semibold border-border bg-muted text-muted-foreground">Custom</button>
+              </div>
+              <div class="text-[12.5px] text-muted-foreground mt-[7px] leading-snug">Due Mon, Jul 8 — matches the LMS due date.</div>
+            </div>
+            <div class="mb-[18px] relative">
+              <label class="block text-[13.5px] font-semibold mb-2 text-foreground">Tags</label>
+              <div class="flex items-center gap-2 h-[46px] px-[13px] bg-card border border-input rounded-[13px] [&>svg]:size-4 [&>svg]:text-muted-foreground [&>svg]:shrink-0 [&_input]:flex-1 [&_input]:min-w-0 [&_input]:border-0 [&_input]:bg-transparent [&_input]:outline-none [&_input]:text-[15px] [&_input]:text-foreground">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></svg>
+                <input placeholder="Add a tag…" />
+              </div>
+            </div>
+          </div></div>
+          <div class="relative z-30 px-5 pt-3.5 pb-[30px] border-t border-border/70 bg-background flex gap-2.5">
+            <button class="inline-flex items-center justify-center gap-2 rounded-xl h-[52px] px-5 text-[15px] font-semibold border border-input bg-card text-muted-foreground">Dismiss</button>
+            <button class="inline-flex flex-1 items-center justify-center gap-2 rounded-xl h-[52px] px-5 text-base font-semibold bg-primary text-primary-foreground">Confirm task</button>
+          </div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Confirm — deadline pushed later -->
+    <div class="frame">
+      <div class="caption"><span class="tag">Confirm · later deadline</span><div class="sub">Deadline moved past the scraped due date · non-blocking warning</div></div>
+      <div class="device">
+        <div class="island"></div>
+        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
+          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
+          </span></div>
+          <div class="relative z-30 flex items-center gap-3 px-3 pt-1.5 pb-3.5 bg-background/80 backdrop-blur-[18px] backdrop-saturate-[1.4] border-b border-border/70">
+            <button class="inline-flex size-[38px] items-center justify-center rounded-xl border-transparent bg-transparent text-foreground shrink-0 [&_svg]:size-[19px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>
+            <div class="text-xl font-bold tracking-[-0.02em]">Confirm task</div>
+          </div>
+          <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden"><div class="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0 px-5">
+
+            <div class="mt-[18px] mb-[18px] flex items-center gap-2 rounded-xl border border-primary/25 bg-primary/10 px-3.5 py-2.5">
+              <span class="inline-flex size-5 items-center justify-center rounded-full bg-primary/20 text-primary [&_svg]:size-3"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg></span>
+              <div class="text-[12px] font-medium text-primary">Detected from your LMS · 12 minutes ago</div>
+            </div>
+
+            <div class="mb-[18px]">
+              <label class="block text-[13.5px] font-semibold mb-2 text-foreground">Title</label>
+              <input class="h-[50px] w-full rounded-xl border border-input bg-card px-4 text-base text-foreground outline-none" value="Assignment 3: Sorting Algorithms" />
+            </div>
+            <div class="mb-[18px]">
+              <label class="block text-[13.5px] font-semibold mb-2 text-foreground">Description</label>
+              <div class="border border-input rounded-[13px] bg-card px-3.5 py-3 text-[15px] leading-[1.55] min-h-[90px] text-foreground">Implement <b>merge sort</b> and <b>quick sort</b>, compare runtimes on the provided datasets. Submit via the course <span class="text-primary underline decoration-primary/40">submission portal</span>. Late work loses 10%/day.</div>
+            </div>
+            <div class="mb-[18px]">
+              <label class="block text-[13.5px] font-semibold mb-2 text-foreground">Duration</label>
+              <div class="flex items-center gap-3">
+                <button class="inline-flex size-11 items-center justify-center rounded-xl border bg-card text-2xl text-foreground">−</button>
+                <div class="flex-1 text-center text-[17px] font-semibold tabular-nums">1h 30m</div>
+                <button class="inline-flex size-11 items-center justify-center rounded-xl border bg-card text-2xl text-foreground">+</button>
+              </div>
+            </div>
+            <div class="mb-[18px]">
+              <label class="block text-[13.5px] font-semibold mb-2 text-foreground">Sessions</label>
+              <div class="flex items-center gap-3">
+                <button class="inline-flex size-11 items-center justify-center rounded-xl border bg-card text-2xl text-foreground">−</button>
+                <div class="flex-1 text-center text-[17px] font-semibold tabular-nums">2 sessions</div>
+                <button class="inline-flex size-11 items-center justify-center rounded-xl border bg-card text-2xl text-foreground">+</button>
+              </div>
+              <div class="text-[12.5px] text-muted-foreground mt-[7px] leading-snug">This is the total across the whole task — Zenflow partitions it across the days until your deadline, doubling up (e.g. 2 sessions / day) only if there isn't a day for each.</div>
+            </div>
+            <div class="mb-[10px]">
+              <label class="block text-[13.5px] font-semibold mb-2 text-foreground">Deadline</label>
+              <div class="flex flex-wrap gap-1.5">
+                <button type="button" class="rounded-full border px-2.5 py-1 text-[11px] font-semibold border-border bg-muted text-muted-foreground">Today</button>
+                <button type="button" class="rounded-full border px-2.5 py-1 text-[11px] font-semibold border-border bg-muted text-muted-foreground">Tomorrow</button>
+                <button type="button" class="rounded-full border px-2.5 py-1 text-[11px] font-semibold border-border bg-muted text-muted-foreground">This week</button>
+                <button type="button" class="rounded-full border px-2.5 py-1 text-[11px] font-semibold border-border bg-muted text-muted-foreground">Next week</button>
+                <button type="button" class="rounded-full border px-2.5 py-1 text-[11px] font-semibold border-amber-500 bg-amber-500/15 text-amber-700">This month</button>
+                <button type="button" class="rounded-full border px-2.5 py-1 text-[11px] font-semibold border-border bg-muted text-muted-foreground">No rush</button>
+                <button type="button" class="rounded-full border px-2.5 py-1 text-[11px] font-semibold border-border bg-muted text-muted-foreground">Custom</button>
+              </div>
+            </div>
+            <div class="mb-[18px] flex items-start gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3.5 py-3">
+              <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-700 [&_svg]:size-3"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+              <div class="text-[12.5px] leading-snug text-amber-800">Later than the LMS's Jul 8 due date — double-check the syllabus before pushing it back.</div>
+            </div>
+          </div></div>
+          <div class="relative z-30 px-5 pt-3.5 pb-[30px] border-t border-border/70 bg-background flex gap-2.5">
+            <button class="inline-flex items-center justify-center gap-2 rounded-xl h-[52px] px-5 text-[15px] font-semibold border border-input bg-card text-muted-foreground">Dismiss</button>
+            <button class="inline-flex flex-1 items-center justify-center gap-2 rounded-xl h-[52px] px-5 text-base font-semibold bg-primary text-primary-foreground">Confirm task</button>
+          </div>
+          <div class="home-indicator"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>
