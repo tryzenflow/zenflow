@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
-import { useToast } from "@/components/ui/toast";
+import { useToast, type ToastAction } from "@/components/ui/toast";
 import { useScheduleRefresh } from "@/hooks/use-schedule-refresh";
 import { FAB_GLOW_INNER, FAB_GLOW_OUTER } from "@/lib/fab-glow";
 import { zonedNow, zonedWallClockToUtc } from "@zenflow/core";
@@ -35,7 +35,7 @@ type OptimizeMode = OptimizeWindowInput["mode"];
 const DEFAULT_MODE: OptimizeMode = "balanced";
 const DEFAULT_WINDOW_DAYS = 7;
 
-type Step = "form" | "confirmLarge" | "result";
+type Step = "form" | "confirmLarge";
 
 /** Zero out the time-of-day fields on an already-zoned (user-tz wall-clock)
  * `Date` — mirrors `deadline-chip-row.tsx`'s `dayAnchor` helper. */
@@ -60,6 +60,16 @@ function errorMessage(error: unknown, fallback: string): string {
   );
 }
 
+/** The toast body for a completed apply — collapses count/fixed/unchanged
+ * into one line since the toast, unlike the old in-sheet step, has no room
+ * for a second line of detail. */
+function applyResultMessage(result: OptimizeApplyResponse): string {
+  if (result.count === 0) return "Nothing needed rescheduling";
+  const base = `Rescheduled ${result.count} task${result.count === 1 ? "" : "s"}`;
+  if (result.unchangedCount == null) return base;
+  return `${base} · ${result.unchangedCount} left unchanged`;
+}
+
 /**
  * "Optimize" button + bottom sheet — the mobile entry point for the
  * scheduler redesign's one explicit, opt-in, previewable-by-count multi-task
@@ -78,11 +88,11 @@ function errorMessage(error: unknown, fallback: string): string {
  * No per-task diff/preview UI is ever rendered here — deliberately ruled out
  * by the plan. `optimizePreview` only returns a count, used to decide
  * whether to show the large-batch guard (`OPTIMIZE_LARGE_BATCH_THRESHOLD`)
- * before calling `optimizeApply`. The apply result (count + range + Undo)
- * renders in this same sheet as a second/third step, rather than via
- * `components/ui/toast.tsx` — that toast system is string+variant only and
- * can't host an Undo button; building a rich-body toast variant was ruled
- * out of scope for this change.
+ * before calling `optimizeApply`. On a successful apply the sheet closes
+ * immediately and the result (count + range + an Undo action) surfaces via
+ * `components/ui/toast.tsx`'s `action` slot instead of a third in-sheet
+ * step — keeps the "opt-in action, then get out of the way" shape instead
+ * of holding the sheet open after the user already asked it to act.
  */
 export function OptimizeFab({
   tz,
@@ -108,11 +118,6 @@ export function OptimizeFab({
   );
   const [submitting, setSubmitting] = useState(false);
   const [previewCount, setPreviewCount] = useState<number | null>(null);
-  const [applyResult, setApplyResult] = useState<OptimizeApplyResponse | null>(
-    null,
-  );
-  const [undoing, setUndoing] = useState(false);
-  const [undone, setUndone] = useState(false);
 
   function reset() {
     const today = dayStart(zonedNow(tz));
@@ -123,9 +128,6 @@ export function OptimizeFab({
     setWindowEnd(addDays(today, DEFAULT_WINDOW_DAYS));
     setSubmitting(false);
     setPreviewCount(null);
-    setApplyResult(null);
-    setUndoing(false);
-    setUndone(false);
   }
 
   function handleOpen() {
@@ -158,9 +160,19 @@ export function OptimizeFab({
 
   async function applyNow(input: OptimizeWindowInput) {
     const result = await optimizeApply(input);
-    setApplyResult(result);
-    setStep("result");
     onApplied?.();
+    bottomSheet.close();
+    reset();
+    toast(
+      applyResultMessage(result),
+      "success",
+      5000,
+      "top",
+      true,
+      result.batchId
+        ? { label: "Undo", onPress: () => handleUndoBatch(result.batchId!) }
+        : undefined,
+    );
   }
 
   async function handleOptimizePress() {
@@ -198,24 +210,20 @@ export function OptimizeFab({
     }
   }
 
-  async function handleUndo() {
-    if (!applyResult?.batchId) return;
-    setUndoing(true);
+  async function handleUndoBatch(batchId: string) {
     try {
-      const res = await undoBatch(applyResult.batchId);
+      const res = await undoBatch(batchId);
       if (res.requiresConfirmation) {
-        // This batch is from the same sheet session, so a "touched since"
-        // row can only mean the user acted elsewhere while this sheet was
-        // open — revert everything else and leave those rows alone rather
-        // than silently overwriting whatever they just did.
-        await undoBatch(applyResult.batchId, "excludeTouched");
+        // The sheet is already closed by the time Undo can be tapped, so a
+        // "touched since" row can only mean the user acted elsewhere in
+        // that gap — revert everything else and leave those rows alone
+        // rather than silently overwriting whatever they just did.
+        await undoBatch(batchId, "excludeTouched");
       }
       onApplied?.();
-      setUndone(true);
+      toast("Undone", "success");
     } catch (error) {
       toast(errorMessage(error, "Couldn't undo"), "destructive");
-    } finally {
-      setUndoing(false);
     }
   }
 
@@ -251,43 +259,32 @@ export function OptimizeFab({
           disabled={submitting}
           onPress={handleOptimizePress}
         >
-          <Text className="text-base font-semibold text-primary-foreground">
+          <Text className="text-base font-semibold text-foreground">
             {submitting ? "Checking…" : "Optimize"}
           </Text>
         </Button>
       );
     }
-    if (step === "confirmLarge") {
-      return (
-        <View className="w-full flex-row gap-2">
-          <Button
-            variant="outline"
-            className="h-[52px] flex-1"
-            disabled={submitting}
-            onPress={() => setStep("form")}
-          >
-            <Text className="text-base font-semibold">Cancel</Text>
-          </Button>
-          <Button
-            className="h-[52px] flex-1"
-            disabled={submitting}
-            onPress={handleConfirmLarge}
-          >
-            <Text className="text-base font-semibold text-primary-foreground">
-              {submitting ? "Optimizing…" : "Reschedule"}
-            </Text>
-          </Button>
-        </View>
-      );
-    }
     return (
-      <Button
-        className="h-[52px] w-full"
-        variant="outline"
-        onPress={() => bottomSheet.close()}
-      >
-        <Text className="text-base font-semibold">Done</Text>
-      </Button>
+      <View className="w-full flex-row gap-2">
+        <Button
+          variant="outline"
+          className="h-[52px] flex-1"
+          disabled={submitting}
+          onPress={() => setStep("form")}
+        >
+          <Text className="text-base font-semibold">Cancel</Text>
+        </Button>
+        <Button
+          className="h-[52px] flex-1"
+          disabled={submitting}
+          onPress={handleConfirmLarge}
+        >
+          <Text className="text-base font-semibold text-primary-foreground">
+            {submitting ? "Optimizing…" : "Reschedule"}
+          </Text>
+        </Button>
+      </View>
     );
   }
 
@@ -388,45 +385,6 @@ export function OptimizeFab({
                 </View>
               )}
 
-              {step === "result" && applyResult && (
-                <View className="gap-2 pb-2">
-                  <Text className="text-[15px] font-semibold text-foreground">
-                    {applyResult.count === 0
-                      ? "Nothing needed rescheduling"
-                      : `Rescheduled ${applyResult.count} task${
-                          applyResult.count === 1 ? "" : "s"
-                        }`}
-                  </Text>
-                  <Text className="text-[13px] text-muted-foreground">
-                    {rangeLabel}
-                  </Text>
-                  {(applyResult.fixedCount != null ||
-                    applyResult.unchangedCount != null) && (
-                    <Text className="text-[12px] text-muted-foreground">
-                      Fixed {applyResult.fixedCount ?? 0} ·{" "}
-                      {applyResult.unchangedCount ?? 0} left unchanged (manually
-                      placed)
-                    </Text>
-                  )}
-                  {undone ? (
-                    <Text className="text-[12.5px] font-medium text-emerald-600">
-                      Undone
-                    </Text>
-                  ) : (
-                    applyResult.batchId && (
-                      <Pressable
-                        onPress={handleUndo}
-                        disabled={undoing}
-                        className="mt-1 self-start rounded-full border border-border px-3 py-1.5"
-                      >
-                        <Text className="text-[12.5px] font-semibold text-foreground">
-                          {undoing ? "Undoing…" : "Undo"}
-                        </Text>
-                      </Pressable>
-                    )
-                  )}
-                </View>
-              )}
             </BottomSheetScrollView>
           </View>
           <View

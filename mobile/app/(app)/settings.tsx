@@ -2,8 +2,6 @@ import { logout as logoutRequest } from "@/api/auth";
 import { updatePreferences } from "@/api/users";
 import { LogOut, Moon } from "@/components/Icons";
 import { WorkDaysGrid } from "@/components/onboarding/work-days-grid";
-import { DurationModePickerRow } from "@/components/settings/duration-mode-picker-row";
-import { InsightsPanel } from "@/components/settings/insights-panel";
 import { ProfileRow } from "@/components/settings/profile-row";
 import { SettingsSectionLabel } from "@/components/settings/settings-header";
 import { TimezonePickerRow } from "@/components/settings/timezone-picker-row";
@@ -20,7 +18,6 @@ import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
 import { minutesToLabel } from "@/utils/preferences";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { DurationAdjustmentMode } from "@zenflow/shared";
 import { isAxiosError } from "axios";
 import { Href, useRouter } from "expo-router";
 import { useState } from "react";
@@ -31,7 +28,6 @@ type PreferencesPatch = Partial<{
   workEnd: number;
   workDays: number[];
   timezone: string;
-  durationAdjustmentMode: DurationAdjustmentMode;
 }>;
 
 /** Single flat Settings screen — mirrors mockups/settings.html exactly. */
@@ -54,8 +50,6 @@ export default function SettingsScreen() {
         workEnd: patch.workEnd ?? user.workEnd,
         workDays: patch.workDays ?? user.workDays,
         timezone: patch.timezone ?? user.timezone,
-        durationAdjustmentMode:
-          patch.durationAdjustmentMode ?? user.durationAdjustmentMode,
       });
       setUser(updated);
       toast(successMessage, "success");
@@ -158,24 +152,6 @@ export default function SettingsScreen() {
               savePreferences({ timezone: tz }, `Timezone set to ${tz}`)
             }
           />
-        </View>
-
-        <SettingsSectionLabel>Scheduling</SettingsSectionLabel>
-        <View className="overflow-hidden rounded-2xl border border-border bg-card">
-          <DurationModePickerRow
-            value={user.durationAdjustmentMode}
-            onChange={(mode) =>
-              savePreferences(
-                { durationAdjustmentMode: mode },
-                "Scheduling preferences saved",
-              )
-            }
-          />
-        </View>
-
-        <SettingsSectionLabel>Insights</SettingsSectionLabel>
-        <View className="rounded-2xl border border-border bg-card p-4">
-          <InsightsPanel />
         </View>
 
         <SettingsSectionLabel>Appearance</SettingsSectionLabel>

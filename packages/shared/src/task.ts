@@ -21,7 +21,7 @@ export interface TaskSnapshot {
   /**
    * The task's tag NAMES at event time. Captured per-event because a task's tags
    * can change afterward, so the current Task.tags join would reconstruct "tags
-   * now," not "tags then" — Phase 2's per-tag duration bias needs the latter.
+   * now," not "tags then" — telemetry/replay needs the latter.
    */
   tags?: string[];
   /**
@@ -96,13 +96,10 @@ export interface CreateTaskInput {
 
 /**
  * Metadata-only update: title/note/deadline/tags are saved immediately. A
- * `tags` change also applies the Phase-2 per-tag duration correction
- * immediately (unless the user's `durationAdjustmentMode` is `"never"`) and
- * returns it as `schedulingMeta` (see `UpdateTaskResponse`) so the frontend
- * can surface what changed. A `deadline`/duration change that leaves the
- * task's own slot no longer cost-optimal (past the new deadline, or
- * overlapping a neighbour) is auto-resolved INLINE, in the same request —
- * see `UpdateTaskResponse.displaced`/`batchId`. No separate confirm step.
+ * `deadline` change that leaves the task's own slot no longer cost-optimal
+ * (past the new deadline, or overlapping a neighbour) is auto-resolved
+ * INLINE, in the same request — see `UpdateTaskResponse.displaced`/`batchId`.
+ * No separate confirm step.
  */
 export interface UpdateTaskInput {
   title?: string;

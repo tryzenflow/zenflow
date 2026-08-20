@@ -122,23 +122,6 @@ export class TasksService {
     const deadline = new Date(dto.deadline);
     const cleanTags = (dto.tags ?? []).map((t) => t.trim()).filter(Boolean);
 
-    // Phase-2 per-tag duration corrector. ALWAYS computed (so it always LEARNS,
-    // even in `never` mode) but only APPLIED when the user's mode is not
-    // `never`. Deliberately OUTSIDE the transaction below: it is a read-only
-    // scan of up to 2000 historical TaskEvent rows (each carrying two JSON
-    // snapshots), it takes no part in the write's atomicity, and leaving it
-    // inside spent a large slice of the 5s interactive-transaction budget
-    // before the first write even ran.
-    const correction = await this.scheduler.computeDurationCorrection(
-      user.id,
-      cleanTags,
-      dto.durationMinutes,
-    );
-    const applyCorrection = user.durationAdjustmentMode !== "never";
-    const effectiveDuration = applyCorrection
-      ? correction.adjustedDuration
-      : dto.durationMinutes;
-
     try {
       const { finalTask, rationale } = await this.prisma.$transaction(
         async (tx) => {
@@ -148,7 +131,7 @@ export class TasksService {
             data: {
               title: dto.title,
               note: dto.note ?? null,
-              durationMinutes: effectiveDuration,
+              durationMinutes: dto.durationMinutes,
               deadline,
               tags: { connect: tagIds.map((id) => ({ id })) },
               userId: user.id,
@@ -207,10 +190,6 @@ export class TasksService {
           : null,
         engine: "edf",
         rationale: rationale.summary,
-        biasApplied: correction.biasApplied,
-        estimatedDuration: correction.estimatedDuration,
-        durationAdjustmentMode: user.durationAdjustmentMode,
-        durationReason: correction.durationReason,
       };
 
       return {
@@ -369,14 +348,10 @@ export class TasksService {
   /**
    * Metadata-only update: title/note/deadline/tags are saved immediately.
    * NEVER auto-searches for a new slot — the task's own placement is left
-   * exactly where it is.
-   *  - A `deadline` change is saved as-is; `deadlineChanged` is informational
-   *    for the frontend.
-   *  - A `tags` change runs the duration-corrector and, unless the user's
-   *    `durationAdjustmentMode` is `"never"`, applies the corrected duration
-   *    in the SAME write (no separate accept step).
+   * exactly where it is. A `deadline` change is saved as-is; `deadlineChanged`
+   * is informational for the frontend.
    *
-   * If the (unchanged) slot no longer fits the new deadline/duration, the
+   * If the (unchanged) slot no longer fits the new deadline, the
    * response's `rationale` explains it's now broken and the frontend/mobile
    * show an Accept/Decline toast — this is an "overdue" state (the task's
    * own slot vs. its own new deadline), NOT a double-booking, so it does
@@ -415,8 +390,7 @@ export class TasksService {
         // `dto.tags` is the full current form value from both clients — it's
         // present on every save, even a title-only edit. Only treat tags as
         // "touched" if the requested set actually differs (order-insensitive)
-        // from the task's current tag set; otherwise the duration corrector
-        // must not run.
+        // from the task's current tag set, to avoid an unnecessary write.
         const currentTagNames = new Set(target.tags.map((t) => t.name));
         const requestedTagNames = new Set(
           (dto.tags ?? []).map((t) => t.trim()).filter(Boolean),
@@ -437,51 +411,27 @@ export class TasksService {
           ? await this.resolveTagIds(tx, user.id, dto.tags ?? [])
           : [];
 
-        // Computed BEFORE the write so an applied correction lands in the
-        // same `tx.task.update` as the tag change itself, instead of a
-        // separate deferred write.
-        const correction = touchTags
-          ? await this.scheduler.computeDurationCorrection(
-              user.id,
-              (dto.tags ?? []).map((t) => t.trim()).filter(Boolean),
-              target.durationMinutes,
-              tx,
-            )
-          : undefined;
-        const applyCorrection =
-          touchTags && user.durationAdjustmentMode !== "never";
-        const durationChanged =
-          applyCorrection &&
-          correction !== undefined &&
-          correction.adjustedDuration !== target.durationMinutes;
-
         // Would the edit leave the task's OWN (unchanged) slot no longer
         // valid? Only relevant for a task that's still in the future.
         const newDeadline =
           scalarData.deadline !== undefined
             ? scalarData.deadline
             : target.deadline;
-        const newDuration =
-          applyCorrection && correction
-            ? correction.adjustedDuration
-            : target.durationMinutes;
         const stillFuture =
           target.scheduledStartTime !== null &&
           target.scheduledStartTime.getTime() > now.getTime();
         const invalidated =
           stillFuture &&
-          (deadlineChanged || durationChanged) &&
+          deadlineChanged &&
           newDeadline !== null &&
-          target.scheduledStartTime!.getTime() + newDuration * 60_000 >
+          target.scheduledStartTime!.getTime() +
+            target.durationMinutes * 60_000 >
             newDeadline.getTime();
 
         const updated = await tx.task.update({
           where: { id },
           data: {
             ...scalarData,
-            ...(applyCorrection && correction
-              ? { durationMinutes: correction.adjustedDuration }
-              : {}),
             ...(touchTags
               ? { tags: { set: tagIds.map((id) => ({ id })) } }
               : {}),
@@ -489,33 +439,16 @@ export class TasksService {
           include: { tags: true },
         });
 
-        let schedulingMeta: SchedulingMeta | undefined;
-        if (correction) {
-          schedulingMeta = {
-            adjustedDuration: updated.durationMinutes,
-            placedAt: updated.scheduledStartTime
-              ? updated.scheduledStartTime.toISOString()
-              : null,
-            engine: "edf",
-            biasApplied: correction.biasApplied,
-            estimatedDuration: correction.estimatedDuration,
-            durationAdjustmentMode: user.durationAdjustmentMode,
-            durationReason: correction.durationReason,
-          };
-        }
-
         const rationale: SchedulingRationale | undefined = invalidated
           ? {
-              summary: deadlineChanged
-                ? "This task's slot no longer fits its new deadline — want to reschedule it?"
-                : "This task's slot no longer fits its updated duration — want to reschedule it?",
+              summary:
+                "This task's slot no longer fits its new deadline — want to reschedule it?",
             }
           : undefined;
 
         return {
           task: this.toDto(updated),
           ...(deadlineChanged ? { deadlineChanged: true } : {}),
-          ...(schedulingMeta ? { schedulingMeta } : {}),
           displaced: [],
           ...(rationale ? { rationale } : {}),
         };
@@ -839,8 +772,9 @@ export class TasksService {
         });
         await this.scheduler.freeSlot(user.id, updated, tx);
 
-        // Tag NAMES at completion time (sorted) — recorded on the snapshot so the
-        // Phase-2 per-tag duration bias has "tags then", not "tags now".
+        // Tag NAMES at completion time (sorted) — recorded on the snapshot so
+        // telemetry/replay has "tags then", not "tags now" (a task's current
+        // tags can change after this event is written).
         const tagNames = updated.tags
           .map((t) => t.name)
           .sort((a, b) => a.localeCompare(b));

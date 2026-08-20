@@ -34,8 +34,7 @@ export const OPTIMIZE_MODES: {
 
 /**
  * Radio-style selector for the Optimize `balanced | full | retainManual`
- * mode, styled after `duration-mode-field.tsx` (Settings "Scheduling" tab):
- * one button per option with an icon + name + blurb.
+ * mode: one button per option with an icon + name + blurb.
  */
 export function OptimizeModeField({
   value,

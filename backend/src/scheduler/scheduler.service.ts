@@ -18,12 +18,6 @@ import {
 import { buildTierRationale } from "./utils/rationale";
 import { MAX_SCAN_DAYS } from "./constants";
 import {
-  NEUTRAL_BIAS,
-  blendBias,
-  correctDuration,
-  type TagBias,
-} from "./utils/duration-bias";
-import {
   EVENT_REWARD,
   applyPreferenceDeltas,
   buildSnapshot,
@@ -63,9 +57,9 @@ export interface OptimizeWindowResult {
  * The ONLY layer that touches Prisma or writes telemetry (CLAUDE.md invariant
  * #2). Every pure scheduling decision is delegated to `utils/place.ts`
  * (single-task tiered placement), `utils/optimize.ts` (the one multi-task,
- * explicit-opt-in action), `utils/reranker.ts`, `utils/rationale.ts`, and
- * `utils/duration-bias.ts`; this service loads rows, calls the pure core,
- * diffs the result against the DB, and persists.
+ * explicit-opt-in action), `utils/reranker.ts`, and `utils/rationale.ts`;
+ * this service loads rows, calls the pure core, diffs the result against
+ * the DB, and persists.
  */
 @Injectable()
 export class SchedulerService {
@@ -90,103 +84,6 @@ export class SchedulerService {
       workEnd: user.workEnd,
       workDays: user.workDays,
       timezone: user.timezone,
-    };
-  }
-
-  /**
-   * Aggregate this user's per-tag duration-bias evidence `{n, b}` from
-   * COMPLETE/KEEP/RESIZE `TaskEvent` telemetry, pairing each outcome with its
-   * CREATE estimate by taskId. RESIZE counts as an outcome too (docs/heuristic.md
-   * §"Signals tracked" — a resize IS the user directly correcting the estimate,
-   * same evidence-shape as a COMPLETE), and a task resized more than once before
-   * completion contributes one outcome per resize. Keyed by tag name so callers
-   * can attribute evidence back to a specific tag. Single source of truth reused
-   * by both {@link computeDurationCorrection} and `UsersService.getUserTagBias`
-   * (which needs the tag names; `computeDurationCorrection` only needs the
-   * values).
-   */
-  async aggregateTagBias(
-    userId: string,
-    tags: string[],
-    db: Db = this.prisma,
-  ): Promise<Map<string, TagBias>> {
-    if (tags.length === 0) return new Map();
-    const wanted = new Set(tags);
-
-    const events = await db.taskEvent.findMany({
-      where: {
-        userId,
-        eventType: { in: ["CREATE", "COMPLETE", "KEEP", "RESIZE"] },
-      },
-      select: { taskId: true, eventType: true, newSnapshot: true },
-      orderBy: { occurredAt: "desc" },
-      take: 2000,
-    });
-
-    type Snap = { durationMinutes?: number; tags?: string[] };
-    const estimateByTask = new Map<string, number>();
-    const outcomes: { taskId: string; duration: number; tags: string[] }[] = [];
-    for (const e of events) {
-      const snap = (e.newSnapshot ?? {}) as Snap;
-      const dur =
-        typeof snap.durationMinutes === "number" ? snap.durationMinutes : null;
-      const tgs = Array.isArray(snap.tags) ? snap.tags : [];
-      if (dur === null) continue;
-      if (e.eventType === "CREATE") {
-        if (!estimateByTask.has(e.taskId)) estimateByTask.set(e.taskId, dur);
-      } else {
-        outcomes.push({ taskId: e.taskId, duration: dur, tags: tgs });
-      }
-    }
-
-    const acc = new Map<string, { sum: number; n: number }>();
-    for (const o of outcomes) {
-      const estimated = estimateByTask.get(o.taskId);
-      if (!estimated || estimated <= 0) continue;
-      const ratio = o.duration / estimated;
-      for (const tag of o.tags) {
-        if (!wanted.has(tag)) continue;
-        const cur = acc.get(tag) ?? { sum: 0, n: 0 };
-        cur.sum += ratio;
-        cur.n += 1;
-        acc.set(tag, cur);
-      }
-    }
-    return new Map(
-      [...acc.entries()].map(([tag, { sum, n }]) => [tag, { n, b: sum / n }]),
-    );
-  }
-
-  /**
-   * ALWAYS computed (so the bias table keeps learning even in `never` mode) —
-   * the CALLER decides whether to apply `adjustedDuration` based on the user's
-   * `durationAdjustmentMode`.
-   */
-  async computeDurationCorrection(
-    userId: string,
-    tags: string[],
-    estimatedMin: number,
-    db: Db = this.prisma,
-  ): Promise<{
-    estimatedDuration: number;
-    adjustedDuration: number;
-    biasApplied: number;
-    durationReason: string | null;
-  }> {
-    const perTag = await this.aggregateTagBias(userId, tags, db);
-    const bias = blendBias([...perTag.values()]);
-    const adjustedDuration = correctDuration(estimatedMin, bias);
-    const durationReason =
-      bias !== NEUTRAL_BIAS && tags.length > 0
-        ? `#${tags[0]} ~${Math.round(Math.abs(bias - 1) * 100)}% ${
-            bias > 1 ? "longer" : "shorter"
-          }`
-        : null;
-    return {
-      estimatedDuration: estimatedMin,
-      adjustedDuration,
-      biasApplied: bias,
-      durationReason,
     };
   }
 

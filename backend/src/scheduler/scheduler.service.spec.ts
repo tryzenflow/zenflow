@@ -6,7 +6,7 @@ import type { SchedulerPrefs } from "./interfaces";
  * tests drive it against an in-memory Prisma-shaped fake so the persistence
  * wiring (load → pure-core call → diff → write-back) is exercised without a
  * real DB. The pure math itself is covered by `place`/`optimize`/`reranker`/
- * `rationale`/`duration-bias` specs.
+ * `rationale` specs.
  */
 
 const prefs: SchedulerPrefs = {
@@ -335,75 +335,6 @@ function makeFakePrisma(
     getCommittedUser: () => committedUser,
   };
 }
-
-describe("SchedulerService.computeDurationCorrection", () => {
-  it("returns neutral bias (adjustedDuration === estimate) with no telemetry history", async () => {
-    const { prisma } = makeFakePrisma([]);
-    const service = new SchedulerService(prisma as never);
-    const result = await service.computeDurationCorrection(
-      "u1",
-      ["backend"],
-      60,
-    );
-    expect(result.adjustedDuration).toBe(60);
-    expect(result.biasApplied).toBe(1.0);
-    expect(result.durationReason).toBeNull();
-  });
-
-  it("blends per-tag bias from CREATE/COMPLETE telemetry pairs", async () => {
-    const events = [
-      {
-        taskId: "t1",
-        eventType: "CREATE",
-        newSnapshot: { durationMinutes: 60, tags: ["backend"] },
-      },
-      {
-        taskId: "t1",
-        eventType: "COMPLETE",
-        newSnapshot: { durationMinutes: 90, tags: ["backend"] },
-      },
-    ];
-    const prisma = {
-      taskEvent: { findMany: jest.fn().mockResolvedValue(events) },
-    };
-    const service = new SchedulerService(prisma as never);
-    const result = await service.computeDurationCorrection(
-      "u1",
-      ["backend"],
-      60,
-    );
-    expect(result.biasApplied).toBeCloseTo(1.5);
-    expect(result.adjustedDuration).toBe(90); // 60*1.5=90, already grid-aligned
-    expect(result.durationReason).toContain("backend");
-  });
-
-  it("blends per-tag bias from a CREATE/RESIZE telemetry pair", async () => {
-    const events = [
-      {
-        taskId: "t1",
-        eventType: "CREATE",
-        newSnapshot: { durationMinutes: 60, tags: ["backend"] },
-      },
-      {
-        taskId: "t1",
-        eventType: "RESIZE",
-        newSnapshot: { durationMinutes: 90, tags: ["backend"] },
-      },
-    ];
-    const prisma = {
-      taskEvent: { findMany: jest.fn().mockResolvedValue(events) },
-    };
-    const service = new SchedulerService(prisma as never);
-    const result = await service.computeDurationCorrection(
-      "u1",
-      ["backend"],
-      60,
-    );
-    expect(result.biasApplied).toBeCloseTo(1.5);
-    expect(result.adjustedDuration).toBe(90);
-    expect(result.durationReason).toContain("backend");
-  });
-});
 
 describe("SchedulerService.placeNewTask", () => {
   it("places a brand-new task at the earliest feasible slot on an empty calendar", async () => {

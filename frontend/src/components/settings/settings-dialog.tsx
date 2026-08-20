@@ -11,7 +11,6 @@ import {
   Globe,
   Info,
   LogOut,
-  SlidersHorizontal,
   UserRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -35,9 +34,7 @@ import {
   windowWraps,
   workWindowMinutes,
 } from "@/components/settings/preferences-fields";
-import { DurationModeField } from "@/components/settings/duration-mode-field";
 import { UserPreferencesPanel } from "@/components/settings/preferences";
-import type { DurationAdjustmentMode } from "@/types/phase2";
 
 /** Detected IANA timezone, falling back to UTC. */
 function detectedTimezone() {
@@ -106,21 +103,19 @@ interface SettingsDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-type TabId = "work" | "scheduling" | "insights" | "account";
+type TabId = "work" | "insights" | "account";
 
 const TABS: { id: TabId; label: string; icon: typeof Clock }[] = [
   { id: "work", label: "Work", icon: CalendarDays },
-  { id: "scheduling", label: "Scheduling", icon: SlidersHorizontal },
   { id: "insights", label: "Insights", icon: BarChart3 },
   { id: "account", label: "Account", icon: UserRound },
 ];
 
 /**
- * Tabbed preferences dialog (Todoist-style): Work hours/days · Scheduling ·
- * Insights · Account. The Scheduling tab hosts the Phase-2
- * `auto|ask|never` duration-adjustment control; Insights hosts the 7×96
- * preference heatmap (mounted only when its tab is active → fetch-on-open).
- * Local state resets from the current user every time the dialog opens.
+ * Tabbed preferences dialog (Todoist-style): Work hours/days · Insights ·
+ * Account. Insights hosts the 7×96 preference heatmap (mounted only when its
+ * tab is active → fetch-on-open). Local state resets from the current user
+ * every time the dialog opens.
  */
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const navigate = useNavigate();
@@ -135,8 +130,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const [timezone, setTimezone] = useState(
     user?.timezone ?? detectedTimezone(),
   );
-  const [durationMode, setDurationMode] =
-    useState<DurationAdjustmentMode>("auto");
   const [loading, setLoading] = useState(false);
 
   // Re-seed local state from the latest user whenever the dialog opens, so a
@@ -148,7 +141,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     setWorkEnd(user?.workEnd ?? 1020);
     setWorkDays(user?.workDays ?? [1, 2, 3, 4, 5]);
     setTimezone(user?.timezone ?? detectedTimezone());
-    setDurationMode(user?.durationAdjustmentMode ?? "auto");
   }, [open, user]);
 
   const zones = useMemo(() => timezoneOptions(timezone), [timezone]);
@@ -175,7 +167,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         workEnd,
         workDays,
         timezone,
-        durationAdjustmentMode: durationMode,
       });
       setUser(updated);
       toast.success("Settings saved");
@@ -335,19 +326,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               </Section>
             </TabsContent>
 
-            {/* Scheduling — duration-adjustment mode */}
-            <TabsContent value="scheduling" className="mt-0 space-y-6">
-              <Section
-                title="Duration adjustments"
-                description="Zenflow learns how long your tasks really take and can correct your estimates. Choose how it surfaces that."
-              >
-                <DurationModeField
-                  value={durationMode}
-                  onChange={setDurationMode}
-                />
-              </Section>
-            </TabsContent>
-
             {/* Insights — preference heatmap (fetch-on-open) */}
             <TabsContent value="insights" className="mt-0 space-y-6">
               <Section
@@ -385,7 +363,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         </Tabs>
 
         <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-4">
-          {tab === "work" || tab === "scheduling" ? (
+          {tab === "work" ? (
             <>
               <Button
                 variant="ghost"

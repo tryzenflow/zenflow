@@ -161,20 +161,16 @@ frees up room or a follow-up drag/Optimize resolves it.
 
 **Settings** is a dialog, not a route: `components/settings/settings-dialog.tsx` is a
 Todoist-style **tabbed** dialog — **Work** (hours / days / timezone via
-`updatePreferences`), **Scheduling** (the Phase-2 `auto | ask | never` duration-adjustment
-mode via `components/settings/duration-mode-field.tsx`), **Insights** (`UserPreferencesPanel` in
-`components/settings/preferences.tsx`, two sections: the 7×24 signed preference heatmap
-fetched from `GET /users/me/preference-matrix` and per-tag learned duration multipliers
-fetched from `GET /users/me/tag-bias`, both with cold-start empty states), and **Account**
-(the Log out action). It's mounted once in `layout.tsx`; the sidebar footer (`sidebar.tsx`) shows the
+`updatePreferences`), **Insights** (`UserPreferencesPanel` in
+`components/settings/preferences.tsx`: the 7×24 signed preference heatmap fetched from
+`GET /users/me/preference-matrix`, with a cold-start empty state), and **Account** (the Log
+out action). It's mounted once in `layout.tsx`; the sidebar footer (`sidebar.tsx`) shows the
 signed-in user and opens it via a `zenflow:open-settings` window event (same pattern as
 `zenflow:open-task`). The work-field inputs and constants are shared with onboarding through
-`components/settings/preferences-fields.tsx`; the duration-mode control is shared via
-`duration-mode-field.tsx`.
+`components/settings/preferences-fields.tsx`.
 
 **Onboarding** (`pages/onboarding.tsx`) is a wizard whose steps are Welcome · Work Hours ·
-Work Days · **Adjustments** (the same `auto | ask | never` control) · All Set;
-the chosen mode is wired into `OnboardingInput.durationAdjustmentMode`.
+Work Days · All Set.
 
 **Phase-2 transparency UI (issue #13).** Scheduling decisions are surfaced as sonner
 `toast.custom` bodies, each a distinct "kind" that stacks independently rather than merging
@@ -184,12 +180,9 @@ fires on every placement-affecting response: create, an accepted edit-reschedule
 and resize; it switches to a conflict-notice framing — amber `AlertTriangle`, "Landed on an
 overlap" — instead of the default `Sparkles` "Scheduled to your rhythm" when the placement's own
 `task.conflict` is true, since the summary text is then naming an overlap rather than a
-preference match), `tasks/cascade-toast.tsx` (did this ripple to *other* tasks — exclusively an
+preference match) and `tasks/cascade-toast.tsx` (did this ripple to *other* tasks — exclusively an
 Optimize-apply concern now, see above; create/update/delete/drag/resize can no longer produce
-collateral moves), and the duration-adjustment
-toasts in `lib/scheduling-toasts.tsx` (`auto` → apply + **Undo**; `ask` → blocking Accept/Keep;
-both revert via `PATCH /tasks/:id/resize`). The duration toast is shown from
-`create-task-dialog.tsx` off the create response's `schedulingMeta`. While a block is being
+collateral moves). While a block is being
 edge-resized, `scheduled-block-item.tsx` renders the added/removed minutes as a distinct
 delta band/label (purely visual, driven off the existing resize-preview state so it doesn't
 touch the drag/resize gesture path). The Phase-2 `@zenflow/shared` type deltas are consumed

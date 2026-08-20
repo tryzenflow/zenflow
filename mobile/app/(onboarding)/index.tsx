@@ -1,4 +1,3 @@
-import type { DurationAdjustmentMode } from "@zenflow/shared";
 import { isAxiosError } from "axios";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
@@ -15,10 +14,6 @@ import {
 } from "@/components/Icons";
 import { Logo } from "@/components/logo";
 import { WorkDaysGrid } from "@/components/onboarding/work-days-grid";
-import {
-  DURATION_MODES,
-  DurationModeField,
-} from "@/components/settings/duration-mode-field";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { TimePickerRow } from "@/components/ui/time-picker";
@@ -34,7 +29,7 @@ import {
   workWindowMinutes,
 } from "@/utils/preferences";
 
-const STEPS = ["Welcome", "Work Hours", "Work Days", "Adjustments", "All Set"];
+const STEPS = ["Welcome", "Work Hours", "Work Days", "All Set"];
 
 const WELCOME_ROWS = [
   {
@@ -63,8 +58,6 @@ export default function OnboardingScreen() {
   const [workStart, setWorkStart] = useState(540);
   const [workEnd, setWorkEnd] = useState(1020);
   const [workDays, setWorkDays] = useState<number[]>([1, 2, 3, 4, 5]);
-  const [durationMode, setDurationMode] =
-    useState<DurationAdjustmentMode>("auto");
 
   const timezone = useMemo(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
@@ -85,8 +78,7 @@ export default function OnboardingScreen() {
     (step === 1 && validHours) ||
     (step === 2 && workDays.length > 0) ||
     step === 0 ||
-    step === 3 ||
-    step === 4;
+    step === 3;
 
   async function finish() {
     setLoading(true);
@@ -96,7 +88,6 @@ export default function OnboardingScreen() {
         workEnd,
         workDays,
         timezone,
-        durationAdjustmentMode: durationMode,
       });
       setUser(updated);
       await cacheSessionUser(updated);
@@ -307,24 +298,6 @@ export default function OnboardingScreen() {
           <View className="gap-3.5 pt-1">
             <View>
               <Text className="text-[23px] font-bold tracking-tight">
-                Duration adjustments
-              </Text>
-              <Text className="mt-2 text-sm text-muted-foreground">
-                Zenflow learns how long your tasks really take. Pick how it
-                applies what it learns — you can change this anytime.
-              </Text>
-            </View>
-            <DurationModeField
-              value={durationMode}
-              onChange={setDurationMode}
-            />
-          </View>
-        )}
-
-        {step === 4 && (
-          <View className="gap-3.5 pt-1">
-            <View>
-              <Text className="text-[23px] font-bold tracking-tight">
                 You're all set
               </Text>
               <Text className="mt-2 text-sm text-muted-foreground">
@@ -342,14 +315,6 @@ export default function OnboardingScreen() {
                 value={DAYS.filter((d) => workDays.includes(d.iso))
                   .map((d) => d.label)
                   .join(", ")}
-                className="border-t border-border"
-              />
-              <SummaryRow
-                label="Adjustments"
-                value={
-                  DURATION_MODES.find((m) => m.id === durationMode)?.name ??
-                  "Automatic"
-                }
                 className="border-t border-border"
               />
               <SummaryRow

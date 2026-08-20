@@ -17,13 +17,8 @@ import {
   windowWraps,
   workWindowMinutes,
 } from "@/components/settings/preferences-fields";
-import {
-  DURATION_MODES,
-  DurationModeField,
-} from "@/components/settings/duration-mode-field";
-import type { DurationAdjustmentMode } from "@/types/phase2";
 
-const STEPS = ["Welcome", "Work Hours", "Work Days", "Adjustments", "All Set"];
+const STEPS = ["Welcome", "Work Hours", "Work Days", "All Set"];
 
 function StepRail({ current }: { current: number }) {
   return (
@@ -91,8 +86,6 @@ function OnboardingWizard() {
   const [workStart, setWorkStart] = useState(540);
   const [workEnd, setWorkEnd] = useState(1020);
   const [workDays, setWorkDays] = useState<number[]>([1, 2, 3, 4, 5]);
-  const [durationMode, setDurationMode] =
-    useState<DurationAdjustmentMode>("auto");
 
   const timezone = useMemo(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
@@ -117,9 +110,7 @@ function OnboardingWizard() {
   const canNext =
     (step === 1 && validHours) ||
     (step === 2 && workDays.length > 0) ||
-    step === 0 ||
-    step === 3 ||
-    step === 4;
+    step === 0;
 
   async function finish() {
     setLoading(true);
@@ -129,7 +120,6 @@ function OnboardingWizard() {
         workEnd,
         workDays,
         timezone,
-        durationAdjustmentMode: durationMode,
       });
       setUser(updated);
       toast.success("You're all set 🎉");
@@ -186,17 +176,6 @@ function OnboardingWizard() {
               </>
             )}
             {step === 3 && (
-              <>
-                <h1 className="mb-2 text-2xl font-bold tracking-tight">
-                  Duration adjustments
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  Zenflow learns how long your tasks really take. Pick how it
-                  applies what it learns — you can change this anytime.
-                </p>
-              </>
-            )}
-            {step === 4 && (
               <>
                 <h1 className="mb-2 text-2xl font-bold tracking-tight">
                   You're all set
@@ -278,13 +257,6 @@ function OnboardingWizard() {
             )}
 
             {step === 3 && (
-              <DurationModeField
-                value={durationMode}
-                onChange={setDurationMode}
-              />
-            )}
-
-            {step === 4 && (
               <div className="space-y-2 rounded-md border border-border bg-muted p-4 text-sm">
                 <Row
                   label="Hours"
@@ -297,13 +269,6 @@ function OnboardingWizard() {
                   value={DAYS.filter((d) => workDays.includes(d.iso))
                     .map((d) => d.label)
                     .join(", ")}
-                />
-                <Row
-                  label="Adjustments"
-                  value={
-                    DURATION_MODES.find((m) => m.id === durationMode)?.name ??
-                    "Automatic"
-                  }
                 />
                 <Row label="Timezone" value={timezone} />
               </div>

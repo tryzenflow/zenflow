@@ -20,8 +20,8 @@ Read this once; the rest of the doc assumes it. Terms are defined before their f
 | **Feasible set** | Originally "the slots that legally respect the deadline/work hours/grid"; now a bounded pool of *candidate* slots — pooled from `feasibleSlots` (in-hours-before-deadline), `findSlotIgnoringWorkHours`, and `findNextAvailableSlot` — each scored by the continuous `placementCost`, with deadline and work-hours no longer hard gates on membership. The only slots ever excluded outright are ones that would overlap another task, one that falls on a task already in progress/past (`isPast`), or — for the one task a single `reoptimize` call is told to freeze — the transient per-call `pinnedTaskId`. | The intelligence layer re-ranks *within* this cost-ranked candidate pool, not a strict deadline/work-hours-filtered set. |
 | **Re-ranker** | A function that re-ranks a pool of cost-ranked candidates (pooled from the three sources above, not a strict tiered fallback) so a more-preferred slot is favoured, via the same seeded-softmax mechanism used for cost tie-breaking. | This is where every learned model plugs in — Phase 2's preference bonus is itself one term inside `placementCost`; later phases (the bandit) replace/extend the scoring function the pool is ranked by. |
 | **Telemetry / `task_events`** | An audit log: one row per user action (created, moved, resized, completed…), recording what was suggested vs. what the user chose. | This log is the *only* data the learners ever see; it makes offline evaluation possible. |
-| **Tag** | A user-defined label on a task (`#backend`, `#writing`). A task can have several. | Used both for duration correction and, later, as a model feature. |
-| **Duration bias** | A per-tag multiplier = (actual time taken) ÷ (estimated time). >1 means the user underestimates. | We use it to correct the user's estimate *before* scheduling, so blocks are the right size. |
+| **Tag** | A user-defined label on a task (`#backend`, `#writing`). A task can have several. | Used as a model feature (multi-hot encoding, Phase 3+). |
+| **Duration bias** *(removed)* | A per-tag multiplier = (actual time taken) ÷ (estimated time). >1 means the user underestimates. Was used to correct the user's estimate *before* scheduling. | Historical only — see [Removed: per-tag duration-bias correction](#removed-per-tag-duration-bias-correction). Kept here because the term still appears in old telemetry/discussion. |
 | **Preference matrix** | A per-user 7×96 grid (7 weekdays × 96 fifteen-min blocks) of signed scores: + for liked time blocks, − for disliked. | Phase 2's memory of *when* a user likes to work. |
 | **Contextual bandit** | An online learner that, given a *context* (features), picks one *arm* (action) to maximize *reward*, while balancing trying new arms vs. repeating known-good ones. | Phase 3's model. "Contextual" = the best arm depends on the situation. |
 | **Arm** | One choosable action for the bandit. Here, a time-of-day block, not a raw 15-min slot. | Fewer arms → less data needed before the bandit learns. |
@@ -118,17 +118,16 @@ them, cost alone decides), ranks the pool by `-placementCost`, and near-ties are
 same seeded-softmax stochastic mechanism the Phase 2 preference re-ranker uses (`rankByScores`),
 so propensity logging for IPS/SNIPS keeps working either way.
 
-## Persistent layers (on from day one, never removed)
+## Persistent layers (on from day one)
 
-Two threads run through all phases and must not be dropped when a later phase lands:
+One thread runs through all phases and must not be dropped when a later phase lands:
 
-1. **Duration correction (preprocessing).** From Phase 2 on, the estimated duration is
-   bias-corrected *before* it reaches EDF. This is orthogonal to slot selection (it fixes
-   *how long*, not *where*) and stays a permanent preprocessing step feeding **every** later
-   scheduler. Corrected durations are always rounded **up to the next 15-minute multiple** to
-   preserve the grid invariant.
-2. **Telemetry (the `task_events` audit log).** Recorded from Phase 1. This is what makes
+1. **Telemetry (the `task_events` audit log).** Recorded from Phase 1. This is what makes
    personalization *and its evaluation* possible — see [Evaluation](#evaluation).
+
+(A second persistent layer — preprocessing the estimated duration with a per-tag bias
+correction — existed from Phase 2 until it was removed; see
+[Removed: per-tag duration-bias correction](#removed-per-tag-duration-bias-correction).)
 
 ## Signals tracked (from day one)
 
@@ -138,7 +137,7 @@ If we only logged edits, the system could learn what to avoid but never what to 
 
 | Signal | Event | Interpretation |
 |--------|-------|----------------|
-| Resize | duration differs from suggestion | estimation bias for the task's tags |
+| Resize | duration differs from suggestion | raw telemetry for bandit reward (Phase 3); no longer feeds a duration corrector (removed, see below) |
 | Move-away | dragged out of the suggested slot | dislikes interval X–Y |
 | Move-toward / keep | dragged into a slot, or accepted unchanged | **prefers** that interval (positive reward) |
 | Outcome | task marked `completed` / `rescheduled` / `abandoned` in its slot | did the placement actually *work* — the real reward proxy |
@@ -217,24 +216,32 @@ of this re-ranks within EDF's feasible set; none of it overrides a deadline.
 
 ### Technical Focus
 
-- **Multi-Tag Duration Correction (Bias Blending).**
-  *Problem it solves:* users systematically mis-estimate how long tasks take, and a task can
-  carry several tags with different biases. *Intuition:* learn a per-tag multiplier from
-  history, then blend the multipliers, trusting the better-evidenced tag more.
+### Removed: per-tag duration-bias correction
 
-  A daily background cron job in NestJS computes each user's historical "estimation bias"
-  *per tag* (actual ÷ estimated, a rolling average). Because a task can carry multiple tags,
-  the engine resolves conflicting multipliers with a **sample-weighted blend**, not a raw max:
-
-    $\text{bias} = \dfrac{\sum_{t \in \text{tags}} n_t \cdot b_t}{\sum_{t \in \text{tags}} n_t}$
-
-    where $b_t$ is tag $t$'s bias and $n_t$ its sample count — so a well-evidenced `#admin`
-    bias outweighs a one-sample `#finance` bias instead of either blindly winning. The
-    corrected duration is rounded **up to the next 15-minute multiple** before feeding EDF.
-    (A "protective" Max-Bias mode — always take the largest multiplier — is available as an
-    opt-in for users who would rather over-reserve than run over; it is **not** the default,
-    because applied to every multi-tagged task it systematically inflates the schedule and
-    wastes reserved time.)
+> **Status: removed** (2026-08-20). This was Phase 2's duration-correction layer — a per-tag
+> multiplier applied to the estimated duration before it reached EDF. It has been deleted
+> end-to-end (backend `duration-bias.ts` and its `scheduler.service.ts` wiring, the
+> `DurationAdjustmentMode` user preference and its onboarding/settings UI on web and mobile,
+> and the `GET /users/me/tag-bias` endpoint / `TagBiasResponse` shared type). This is a
+> deliberate simplification, not an oversight: it clears the way for the Phase 3 LinUCB bandit
+> (`services/bandit/`), which supersedes per-tag correction with a strictly more expressive
+> mechanism — tags enter the bandit's context vector directly (multi-hot encoded, see Phase 3
+> below), so the model learns *where and for which tags* jointly, rather than needing a
+> separate hand-rolled per-tag statistic pre-computed by a cron job. Removing it now, before
+> the bandit lands, avoids maintaining two overlapping personalization layers and two places
+> a tag's history is aggregated.
+>
+> The design in brief, for context on old telemetry/discussion that references it: a daily
+> cron computed each user's historical "estimation bias" per tag (actual ÷ estimated duration,
+> rolling average), and a multi-tagged task's conflicting per-tag multipliers were resolved
+> with a **sample-weighted blend** ($\text{bias} = \Sigma(n_t b_t) / \Sigma(n_t)$, so a
+> well-evidenced tag outweighed a one-sample tag) rather than a raw max — a "Max-Bias" mode
+> (always take the largest multiplier) existed as a non-default opt-in, since applied
+> universally it over-reserved time on multi-tagged tasks. Corrected durations were rounded up
+> to the next 15-minute multiple before feeding EDF. **None of this is current or actionable**
+> — the `RESIZE` telemetry signal itself is still logged (see the signals table above), but it
+> is no longer aggregated into a bias table; it is now just one more raw signal available to
+> the Phase 3 bandit's reward computation.
 
 - **Signed Preference Matrix.**
   *Problem it solves:* we want to route tasks toward the time blocks a user actually likes.
@@ -328,8 +335,11 @@ interactions; it also keeps exploring instead of locking onto a possibly-stale h
     2. The bandit scores each feasible arm and returns the highest-UCB one.
     3. The user accepts (positive reward), overrides by dragging (negative), and ultimately
        completes/abandons (the strongest signal) — all of which update the weights.
-- **Duration correction from Phase 2 remains** as preprocessing; the bandit only chooses
-  *where*, never *how long*.
+- **The bandit only chooses *where*, never *how long*.** (Phase 2's duration-bias correction,
+  which used to own "how long," has been removed — see
+  [Removed: per-tag duration-bias correction](#removed-per-tag-duration-bias-correction). Tag
+  effects on duration are not reintroduced here; tags enter Phase 3 purely as placement
+  context.)
 
 ---
 
@@ -396,7 +406,7 @@ edit-weighted variant offline if needed.
 |--------|------------|------------------|
 | Slot acceptance rate | suggestions kept unchanged ÷ suggestions | ↑ |
 | Move distance | median minutes between suggested and the **final** chosen slot (intermediate drags ignored) | ↓ |
-| Duration error | median \|actual − suggested duration\| | ↓ (Phase 2 owns this) |
+| Duration error *(unowned since duration-bias removal)* | median \|actual − suggested duration\| | ↓ (no phase corrects duration anymore; retained as a passive metric only) |
 | Completion-in-slot | tasks completed in their suggested slot ÷ scheduled | ↑ (the real outcome) |
 | Time-to-stable | **count of edits per task** before the user stops touching it (this is where repeated moves/resizes are captured) | ↓ |
 
@@ -418,9 +428,6 @@ and the outcome**, a new model can be scored on historical data with no user exp
   importance weight is `w = π_candidate(chosen | x) / π_logging(chosen | x)`; both propensities
   are each policy's closed-form softmax first-choice marginal (uniform `1/n` for the identity
   baseline), with a small floor on the denominator to keep the estimator well-defined.
-- **Duration backtest (Phase 2).** Recompute the bias-corrected duration for every historical
-  task and measure the reduction in \|actual − corrected\| versus \|actual − original
-  estimate\|. Ship the correction only if the error drops.
 - **Cold-start backtest (Phase 4).** Hold out each user's first *N* days, seed them from their
   archetype, and check the archetype-seeded MAR over those days beats the cold (zero-prior)
   MAR. This proves the seeding helps before exposing real new users to it.
@@ -439,6 +446,6 @@ and the outcome**, a new model can be scored on historical data with no user exp
 | **Phase** | **Core Scheduling Mechanism** | **Complexity** | **Data Required** | **Ships only if…** |
 | --- | --- | --- | --- | --- |
 | **Phase 1** | Pure Heuristic (EDF Sorting) | Low | None (Baseline) | establishes MAR baseline |
-| **Phase 2** | EDF + sample-weighted bias + signed preference matrix | Medium-Low | ~1–2 weeks single-user history | beats P1 MAR on replay + duration backtest |
+| **Phase 2** | EDF + signed preference matrix (duration-bias correction removed 2026-08-20) | Medium-Low | ~1–2 weeks single-user history | beats P1 MAR on replay |
 | **Phase 3** | EDF-feasible hybrid LinUCB bandit | Medium-High | ~1 month single-user history | beats P2 reward on IPS replay, then A/B |
 | **Phase 4** | Bandit + collaborative cold-start seeding | High | Multi-user aggregate data | archetype-seeded cold-start MAR < cold MAR |

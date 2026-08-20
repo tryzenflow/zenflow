@@ -83,7 +83,6 @@ Defined in [`prisma/schema.prisma`](prisma/schema.prisma). Five models.
 | `workStart` / `workEnd`     | int                      | minutes from midnight (default 540 / 1020 = 09:00–17:00)                                                                                                                                                                                              |
 | `workDays`                  | int[]                    | ISO weekdays, default `[1,2,3,4,5]` (1=Mon … 7=Sun)                                                                                                                                                                                                   |
 | `preferenceMatrix`          | int[]                    | flat **672** ints (7 days × 96 fifteen-minute slots, slot-grid-aligned). **Signed** Phase-1 telemetry: a move-toward/keep increments a cell (+1), a move-away decrements it (−1), empty = 0 (neutral). **Not yet read** by the engine. Seeded lazily. |
-| `durationAdjustmentMode`    | `DurationAdjustmentMode` | `auto` | `ask` | `never`; default `auto`. Gates whether the Phase-2 per-tag duration corrector is *applied* (it always *learns*).                                                                                                                     |
 | `preferenceMatrixDecayedAt` | DateTime?                | When the daily decay cron last decayed `preferenceMatrix`; null until the first pass                                                                                                                                                                  |
 | `onboardingComplete`        | bool                     | gates the onboarding redirect                                                                                                                                                                                                                         |
 
@@ -175,8 +174,8 @@ Global prefix `**/api/v1**`. All routes except `POST /auth/otp/*` require
 | ------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | GET    | `/users/me`                   | profile                                                                                                                                          |
 | PATCH  | `/users/update/basic-info`    | update name/email                                                                                                                                |
-| PUT    | `/users/me/preferences`       | update work hours/days/timezone (+ optional `durationAdjustmentMode`) — metadata only, does **not** reschedule any existing task                  |
-| POST   | `/users/me/onboarding`        | finish onboarding (sets schedule + optional `durationAdjustmentMode`)                                                                            |
+| PUT    | `/users/me/preferences`       | update work hours/days/timezone — metadata only, does **not** reschedule any existing task                  |
+| POST   | `/users/me/onboarding`        | finish onboarding (sets schedule)                                                                            |
 | GET    | `/users/me/preference-matrix` | the current user's flat 672-int signed preference matrix for the Insights heatmap (`PreferenceMatrixResponse`; cold-start → all-zero). Read-only |
 
 
@@ -189,7 +188,7 @@ Global prefix `**/api/v1**`. All routes except `POST /auth/otp/*` require
 | GET    | `/tasks?view=&date=&status=`        | list within the view window (+ unplaced conflicts). DB-level filter: `scheduledStartTime IS NULL OR BETWEEN displayStart AND displayEnd` — never fetches the user's whole task history                                                                                                                                                                                                                                                                                        |
 | GET    | `/tasks/suggestions?q=&limit=`      | title-autocomplete: the user's existing tasks, **newest first** and **deduped by title** (case-insensitive), optionally filtered by the `q` substring. `limit` 1–50, default 10. Returns `TaskSuggestionsResponse` (`{ suggestions: Task[] }`). Read-only; never reschedules. Declared **before** `/tasks/:id` so it isn't matched as an id                                                                                                                                    |
 | GET    | `/tasks/:id`                        | task detail + last events                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| PATCH  | `/tasks/:id`                        | metadata only (title/note/deadline/tags) saved immediately. **Never auto-searches.** `tags` is only treated as "touched" (running the duration corrector) when the requested set actually differs (order-insensitive) from the task's current tags — not merely present in the body, since both clients resend the full form on every save. If the new deadline (or an applied tags-driven duration correction) leaves the task's own UNCHANGED slot no longer valid, `UpdateTaskResponse.rationale` explains it's now broken and the frontend/mobile show an Accept/Decline toast — this does **not** set `conflict: true` (that's an "overdue own-slot-vs-own-deadline" case, not a double-booking; `conflict` is reserved for genuine pairwise overlap, see `markConflicts` below). `displaced`/`batchId` are always empty/null; Accept calls the separate resolve endpoint below                    |
+| PATCH  | `/tasks/:id`                        | metadata only (title/note/deadline/tags) saved immediately. **Never auto-searches.** `tags` is only actually rewritten when the requested set differs (order-insensitive) from the task's current tags — not merely present in the body, since both clients resend the full form on every save. If the new deadline leaves the task's own UNCHANGED slot no longer valid, `UpdateTaskResponse.rationale` explains it's now broken and the frontend/mobile show an Accept/Decline toast — this does **not** set `conflict: true` (that's an "overdue own-slot-vs-own-deadline" case, not a double-booking; `conflict` is reserved for genuine pairwise overlap, see `markConflicts` below). `displaced`/`batchId` are always empty/null; Accept calls the separate resolve endpoint below                    |
 | POST   | `/tasks/:id/reschedule/resolve`     | Edit-accept: re-places a task `update()` just reported as broken, via the same Tier1→2→3 search `placeNewTask` uses (`SchedulerService.resolveInvalidPlacement`) — excludes the task's own stale slot from occupied space. No body. A no-op (task returned as-is) when the task isn't currently flagged conflicting AND its own slot still fits its own deadline (recomputed server-side, since `update()` doesn't persist a flag for this case). Writes a `RESCHEDULED` event + fresh `batchId` (undoable) when it does move something. Returns `RescheduleResponse`                                          |
 | PATCH  | `/tasks/:id/reschedule`             | manual drag: writes the requested interval **unconditionally** (`SchedulerService.applyDirectPlacement`) — no search, no eviction — and pins `manuallyMoved: true` (informational). If the dropped slot now overlaps another task, BOTH are flagged `conflict: true` (one bounded, indexed-range recheck — `markConflicts`) and `rationale` names the overlap; neither is auto-relocated. `displaced` is always `[]`. Returns `RescheduleResponse`                            |
 | PATCH  | `/tasks/:id/resize`                 | edge-resize, snaps to 15-min grid — same direct-write + bounded conflict recheck `reschedule` uses, over the task's own new span                                                                                                                                                                                                                                                                                                                                                |
@@ -373,8 +372,8 @@ reserved here for the **Phase 3 bandit** to plug into (see
 
 ### Phase 2 — personalized scheduling (live)
 
-The matrix/bias/decay are computed in the **service** and passed into the **pure** core
-(invariant #2). The pure pieces (`reranker.ts`, `duration-bias.ts`, `matrix-decay.ts`) take
+The matrix/decay are computed in the **service** and passed into the **pure** core
+(invariant #2). The pure pieces (`reranker.ts`, `matrix-decay.ts`) take
 inputs as params and do no I/O; the service is the only thing that reads Prisma.
 
 - **Placement re-ranker** (`reranker.ts` → `rankCandidates`/`cellScore`/`rankByScores`): the
@@ -383,14 +382,6 @@ directly over Tier 1's feasible pool; `optimize.ts`'s Mode-3 (`"balanced"`) repa
 `rankByScores` directly with its own proximity-biased score. A cold-start / wrong-length
 matrix, or a genuine tie, degenerates to deterministic earliest-first order with uniform
 propensity rather than injecting noise.
-- **Duration corrector** (`duration-bias.ts` → `blendBias` / `correctDuration`):
-`SchedulerService.computeDurationCorrection` aggregates per-tag `{ n, b }` from `TaskEvent`
-telemetry (rolling `actual ÷ estimated`), blends it sample-weighted, and rounds the
-corrected duration **up** to the 15-min grid. `TasksService.create` applies it as
-preprocessing **before** placement — gated by `user.durationAdjustmentMode`: `never` feeds the
-uncorrected estimate to the placer but **still learns** the bias. The real `biasApplied`,
-`estimatedDuration`, `durationAdjustmentMode`, and `durationReason` are surfaced on the
-create response's `schedulingMeta`.
 - **Rationale** (`rationale.ts` → `buildTierRationale`): ALWAYS returns a non-null one-line
 "why this slot" summary, tier-aware (`tier1-preference` / `tier1-earliest` / `tier2` / `tier3`
 / `unplaced`) for the automatic paths, plus a conflict-notice variant (`opts.conflictWithTitle`)
@@ -419,7 +410,7 @@ Custom decorators: `@IsValidTimezone()`, plus `@CurrentUser()`. `Task.title` is 
 (`CreateTaskInput`, `TasksListResponse`, `RescheduleResponse`, …). Change types there and
 `pnpm shared:build` before relying on them.
 - **Module wiring:** a feature module imports `PrismaModule` when it needs the DB;
-`SchedulerModule` is imported by `TasksModule` and `UsersModule`.
+`SchedulerModule` is imported by `TasksModule`.
 
 ## Local development
 

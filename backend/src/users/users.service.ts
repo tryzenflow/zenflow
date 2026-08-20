@@ -7,7 +7,6 @@ import {
 import { Prisma, type User } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { PrismaService } from "../prisma/prisma.service";
-import { SchedulerService } from "../scheduler/scheduler.service";
 import { workWindowMinutes } from "../scheduler/utils/slot";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
@@ -17,7 +16,6 @@ import {
   PREFERENCE_MATRIX_LENGTH,
   PREFERENCE_SLOTS_PER_DAY,
   type PreferenceMatrixResponse,
-  type TagBiasResponse,
 } from "@zenflow/shared";
 
 /** Minimum length of the working window, in minutes (docs invariant). */
@@ -29,10 +27,7 @@ const PREFERENCE_MATRIX_DAYS =
 
 @Injectable()
 export class UsersService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly scheduler: SchedulerService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async create(createUserDto: CreateUserDto) {
     try {
@@ -89,11 +84,6 @@ export class UsersService {
         workEnd: dto.workEnd,
         workDays: dto.workDays,
         timezone: dto.timezone,
-        // The duration-adjustment mode is a partial update: only write it when
-        // explicitly sent so omitting it preserves the existing value.
-        ...(dto.durationAdjustmentMode !== undefined
-          ? { durationAdjustmentMode: dto.durationAdjustmentMode }
-          : {}),
       },
     });
     return updated;
@@ -109,11 +99,6 @@ export class UsersService {
         workEnd: dto.workEnd,
         workDays: dto.workDays,
         timezone: dto.timezone,
-        // Onboarding may set the mode; default 'auto' (the schema default) when
-        // the client doesn't send it.
-        ...(dto.durationAdjustmentMode !== undefined
-          ? { durationAdjustmentMode: dto.durationAdjustmentMode }
-          : {}),
         onboardingComplete: true,
       },
     });
@@ -136,34 +121,6 @@ export class UsersService {
       days: PREFERENCE_MATRIX_DAYS,
       blocks: PREFERENCE_SLOTS_PER_DAY,
     };
-  }
-
-  /**
-   * Return per-tag duration multipliers for the user, sorted by sample count
-   * descending (most-used tag first). Delegates the aggregation to
-   * `SchedulerService.aggregateTagBias` — the single source of truth for this
-   * COMPLETE/KEEP `TaskEvent` query, also used by
-   * `SchedulerService.computeDurationCorrection` — scoped here to ALL of the
-   * user's tags rather than a specific task's tags. Tags with zero samples are
-   * omitted.
-   */
-  async getUserTagBias(user: User): Promise<TagBiasResponse> {
-    const tagRows = await this.prisma.tag.findMany({
-      where: { userId: user.id },
-      select: { name: true },
-    });
-    if (tagRows.length === 0) return { tags: [] };
-
-    const perTag = await this.scheduler.aggregateTagBias(
-      user.id,
-      tagRows.map((r) => r.name),
-    );
-
-    const result = [...perTag.entries()]
-      .map(([tag, { n, b }]) => ({ tag, n, b }))
-      .sort((a, b) => b.n - a.n);
-
-    return { tags: result };
   }
 
   async findByEmail(email: string) {

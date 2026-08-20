@@ -30,7 +30,6 @@ const user: User = {
   workDays: [1, 2, 3, 4, 5],
   preferenceMatrix: [],
   preferenceMatrixDecayedAt: null,
-  durationAdjustmentMode: "auto",
   onboardingComplete: true,
   createdAt: new Date("2026-01-01T00:00:00.000Z"),
   updatedAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -186,23 +185,6 @@ function makeService(rows: TaskWithTags[]): TasksService {
   return new TasksService(prisma as never, {} as never);
 }
 
-/** A fresh no-op duration-correction stub per service instance (bias 1.0). */
-function makeCorrectionStub(): jest.Mock {
-  return jest.fn(
-    (
-      _userId: string,
-      _tags: string[],
-      estimatedDuration: number,
-    ): Promise<unknown> =>
-      Promise.resolve({
-        estimatedDuration,
-        adjustedDuration: estimatedDuration,
-        biasApplied: 1.0,
-        durationReason: null,
-      }),
-  );
-}
-
 /**
  * Build a TasksService over an in-memory task table for create(), with a
  * STUBBED `SchedulerService.placeNewTask` (unit-level: asserts TasksService's
@@ -216,7 +198,6 @@ function makeCreateService(): {
   scheduler: {
     prefsOf: jest.Mock;
     placeNewTask: jest.Mock;
-    computeDurationCorrection: jest.Mock;
     recordEvent: jest.Mock;
   };
 } {
@@ -276,7 +257,6 @@ function makeCreateService(): {
         summary: "Placed at the earliest available slot in your work hours.",
       },
     }),
-    computeDurationCorrection: makeCorrectionStub(),
     recordEvent: jest.fn().mockResolvedValue(undefined),
   };
 
@@ -421,47 +401,6 @@ describe("TasksService.create — single row (no recurrence)", () => {
       user,
     );
     expect(result.schedulingMeta.rationale).toContain("work hours were full");
-  });
-
-  it("applies the Phase-2 duration correction only when durationAdjustmentMode !== 'never'", async () => {
-    const { service, creates, scheduler } = makeCreateService();
-    scheduler.computeDurationCorrection.mockResolvedValueOnce({
-      estimatedDuration: 60,
-      adjustedDuration: 90,
-      biasApplied: 1.5,
-      durationReason: "#backend ~50% longer",
-    });
-    await service.create(
-      {
-        title: "Corrected",
-        durationMinutes: 60,
-        deadline: "2026-06-10T17:00:00.000Z",
-        tags: ["backend"],
-      },
-      { ...user, durationAdjustmentMode: "auto" },
-    );
-    expect(creates[0].data.durationMinutes).toBe(90);
-  });
-
-  it("never mode: keeps the typed estimate even though correction is still computed", async () => {
-    const { service, creates, scheduler } = makeCreateService();
-    scheduler.computeDurationCorrection.mockResolvedValueOnce({
-      estimatedDuration: 60,
-      adjustedDuration: 90,
-      biasApplied: 1.5,
-      durationReason: "#backend ~50% longer",
-    });
-    await service.create(
-      {
-        title: "Uncorrected",
-        durationMinutes: 60,
-        deadline: "2026-06-10T17:00:00.000Z",
-        tags: ["backend"],
-      },
-      { ...user, durationAdjustmentMode: "never" },
-    );
-    expect(scheduler.computeDurationCorrection).toHaveBeenCalled();
-    expect(creates[0].data.durationMinutes).toBe(60);
   });
 });
 
@@ -623,7 +562,6 @@ function makeUpdateService(rows: TaskWithTags[]): {
   table: Map<string, TaskWithTags>;
   scheduler: {
     prefsOf: jest.Mock;
-    computeDurationCorrection: jest.Mock;
   };
 } {
   const table = new Map<string, TaskWithTags>(rows.map((r) => [r.id, r]));
@@ -674,7 +612,6 @@ function makeUpdateService(rows: TaskWithTags[]): {
       workDays: user.workDays,
       timezone: user.timezone,
     })),
-    computeDurationCorrection: makeCorrectionStub(),
   };
 
   return {
@@ -795,31 +732,29 @@ describe("TasksService.update — metadata-only, never auto-searches", () => {
     expect(same.deadlineChanged).toBeUndefined();
   });
 
-  it("does not compute schedulingMeta when tags are untouched", async () => {
-    const existing = task({ id: "t1" });
-    const { service, scheduler } = makeUpdateService([existing]);
+  it("title-only edit does not touch the tag set", async () => {
+    const existing = task({ id: "t1", tags: [tag("backend")] });
+    const { service, table } = makeUpdateService([existing]);
 
-    const res = await service.update("t1", { title: "Renamed" }, user);
+    await service.update("t1", { title: "Renamed" }, user);
 
-    expect(scheduler.computeDurationCorrection).not.toHaveBeenCalled();
-    expect(res.schedulingMeta).toBeUndefined();
+    expect(table.get("t1")!.title).toBe("Renamed");
+    expect(table.get("t1")!.tags.map((t) => t.name)).toEqual(["backend"]);
   });
 
-  it("title-only edit does NOT trigger duration correction even though the client resends the full (unchanged) tags array", async () => {
+  it("does not rewrite tags when the client resends the same (unchanged) set in a different order", async () => {
     const existing = task({
       id: "t1",
       tags: [tag("backend"), tag("urgent")],
     });
-    const { service, table, scheduler } = makeUpdateService([existing]);
+    const { service, table } = makeUpdateService([existing]);
 
-    const res = await service.update(
+    await service.update(
       "t1",
       { title: "Renamed", tags: ["backend", "urgent"] }, // same set, different order
       user,
     );
 
-    expect(scheduler.computeDurationCorrection).not.toHaveBeenCalled();
-    expect(res.schedulingMeta).toBeUndefined();
     expect(table.get("t1")!.title).toBe("Renamed");
     expect(
       table
@@ -829,67 +764,22 @@ describe("TasksService.update — metadata-only, never auto-searches", () => {
     ).toEqual(["backend", "urgent"]);
   });
 
-  it("an actual tag-set change (add/remove) DOES trigger the duration corrector", async () => {
+  it("an actual tag-set change (add/remove) is saved", async () => {
     const existing = task({ id: "t1", tags: [tag("backend")] });
-    const { service, scheduler } = makeUpdateService([existing]);
-    scheduler.computeDurationCorrection.mockResolvedValueOnce({
-      estimatedDuration: 60,
-      adjustedDuration: 90,
-      biasApplied: 1.5,
-      durationReason: "#frontend ~50% longer",
-    });
+    const { service, table } = makeUpdateService([existing]);
 
-    const res = await service.update(
+    await service.update(
       "t1",
       { tags: ["backend", "frontend"] }, // added a tag
       user,
     );
 
-    expect(scheduler.computeDurationCorrection).toHaveBeenCalled();
-    expect(res.schedulingMeta).toEqual(
-      expect.objectContaining({ adjustedDuration: 90 }),
-    );
-  });
-
-  it("applies the tag-driven duration correction immediately (mode != 'never')", async () => {
-    const existing = task({ id: "t1", durationMinutes: 60 });
-    const { service, table, scheduler } = makeUpdateService([existing]);
-    scheduler.computeDurationCorrection.mockResolvedValueOnce({
-      estimatedDuration: 60,
-      adjustedDuration: 90,
-      biasApplied: 1.5,
-      durationReason: "#backend ~50% longer",
-    });
-
-    const res = await service.update("t1", { tags: ["backend"] }, user);
-
-    expect(res.schedulingMeta).toEqual(
-      expect.objectContaining({ adjustedDuration: 90, biasApplied: 1.5 }),
-    );
-    expect(table.get("t1")!.durationMinutes).toBe(90);
-  });
-
-  it("leaves the stored duration untouched when durationAdjustmentMode is 'never'", async () => {
-    const existing = task({ id: "t1", durationMinutes: 60 });
-    const { service, table, scheduler } = makeUpdateService([existing]);
-    scheduler.computeDurationCorrection.mockResolvedValueOnce({
-      estimatedDuration: 60,
-      adjustedDuration: 90,
-      biasApplied: 1.5,
-      durationReason: "#backend ~50% longer",
-    });
-
-    const res = await service.update(
-      "t1",
-      { tags: ["backend"] },
-      { ...user, durationAdjustmentMode: "never" },
-    );
-
-    // Still surfaced informationally, but reflects the UNCHANGED duration.
-    expect(res.schedulingMeta).toEqual(
-      expect.objectContaining({ adjustedDuration: 60 }),
-    );
-    expect(table.get("t1")!.durationMinutes).toBe(60);
+    expect(
+      table
+        .get("t1")!
+        .tags.map((t) => t.name)
+        .sort(),
+    ).toEqual(["backend", "frontend"]);
   });
 });
 

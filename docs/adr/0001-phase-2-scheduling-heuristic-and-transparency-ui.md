@@ -1,10 +1,29 @@
 # 0001 — Phase 2 scheduling heuristic: preference-matrix re-ranker + duration corrector (with transparency UI)
 
-- **Status:** Accepted
+- **Status:** Superseded (partially) — 2026-08-20
 - **Date:** 2026-06-20
 - **Issue:** [alphatrann/zenflow#13](https://github.com/alphatrann/zenflow/issues/13)
 - **Owners:** `ml-engineer` (learners + eval), `backend-engineer` (service wiring + API + shared types), `frontend-engineer` (transparency UI)
 - **Supersedes / relates to:** [docs/heuristic.md](../heuristic.md) (Phase 2), [docs/phase-2-evaluation-steps.md](../phase-2-evaluation-steps.md)
+
+> **Superseded note (2026-08-20).** This repo has no prior ADR-supersession convention (ADR-0001
+> is currently the only ADR), so this header is the convention going forward: a `Status` line
+> updated to `Superseded (partially|fully) — <date>` plus a note like this one, left in place
+> rather than rewriting history below. **What's superseded:** everything in this ADR about the
+> **per-tag duration-bias corrector** — the `blendBias`/`maxBias` design (§"Decision → 2"), the
+> `DurationAdjustmentMode` preference and its `auto|ask|never` UX (§"Decision → 4, 7", the data
+> model change in §"Data model changes"), and the `durationReason`/`biasApplied`/
+> `estimatedDuration` fields on `SchedulingMeta` — has been **removed end-to-end** (backend,
+> shared types, web, and mobile). Reason: it's a deliberate simplification ahead of the Phase 3
+> LinUCB bandit (`services/bandit/`), which supersedes per-tag duration correction with tags as
+> a bandit context feature instead of a separately-maintained per-tag statistic. See
+> [`docs/heuristic.md`](../heuristic.md#removed-per-tag-duration-bias-correction) for the current
+> explanation. **What still stands:** the **signed preference-matrix re-ranker** (§"Decision →
+> 1"), the softmax/Gumbel exploration + propensity logging, the matrix-decay cron (§"Decision →
+> 3"), and the `GET /users/me/preference-matrix` endpoint / rationale-toast transparency UI are
+> all still live and unaffected — hence "partially" superseded, not fully. Everything below this
+> note is left as originally written and should be read as a historical record of the original
+> decision, not current design.
 
 ---
 

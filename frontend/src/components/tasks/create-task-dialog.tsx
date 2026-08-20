@@ -16,10 +16,7 @@ import { format } from "date-fns";
 import { isAxiosError } from "axios";
 import { zonedDate } from "@/utils/tz";
 import type { ViewMode } from "@zenflow/shared";
-import {
-  handleDurationAdjustment,
-  maybeShowRationaleToast,
-} from "@/lib/scheduling-toasts";
+import { maybeShowRationaleToast } from "@/lib/scheduling-toasts";
 
 export function CreateTaskDialog({
   onCreated,
@@ -94,37 +91,25 @@ export function CreateTaskDialog({
       form.reset();
       setOpen(false);
 
-      // The tiered placer always names why it put the task where it did —
-      // fires independently of (and before) the duration-adjustment toast
-      // below, since it keys off a different response field.
+      // The tiered placer always names why it put the task where it did.
       maybeShowRationaleToast({
         task: response.task,
         rationale: response.schedulingMeta.rationale,
       });
 
-      // Phase-2: when the per-tag corrector adjusted the duration, the
-      // auto/ask/never UX (ADR Sequence 1) replaces the plain success toast.
-      // `never`/no-adjustment falls through to the timed confirmation below.
-      const handled = handleDurationAdjustment(
-        response.task,
-        response.schedulingMeta,
-        onCreated,
+      const scheduledAt = response.task.scheduledStartTime;
+      const qualifier = placementQualifier(response.task, user);
+      const qualifierSuffix =
+        qualifier === "pastDeadline"
+          ? " — past its deadline"
+          : qualifier === "outsideHours"
+            ? " — outside your usual work hours"
+            : "";
+      toast.success(
+        scheduledAt
+          ? `Scheduled for ${fmt(scheduledAt)}${qualifierSuffix}`
+          : "Task created successfully",
       );
-      if (!handled) {
-        const scheduledAt = response.task.scheduledStartTime;
-        const qualifier = placementQualifier(response.task, user);
-        const qualifierSuffix =
-          qualifier === "pastDeadline"
-            ? " — past its deadline"
-            : qualifier === "outsideHours"
-              ? " — outside your usual work hours"
-              : "";
-        toast.success(
-          scheduledAt
-            ? `Scheduled for ${fmt(scheduledAt)}${qualifierSuffix}`
-            : "Task created successfully",
-        );
-      }
     } catch (error) {
       errorToast(
         (isAxiosError(error) && error.response?.data?.message) ||
