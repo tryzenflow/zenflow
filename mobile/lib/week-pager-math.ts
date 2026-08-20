@@ -29,6 +29,22 @@ export const OUTGOING_DIM_OPACITY = 0.5;
  * edge. */
 export const CHROME_IN_PX = 2;
 
+/** Width (px) of the seam shadow strip cast by the incoming page over the
+ * outgoing one — the app's stand-in for the mockup's
+ * `shadow-[-16px_0_36px_-12px_rgba(0,0,0,0.32)]` (RN Web supports no `spread`,
+ * so a native box-shadow can't reproduce that hard-edged band; an explicit
+ * gradient strip can, on web and native alike). */
+export const SHADOW_STRIP_PX = 20;
+
+/** Peak opacity of the seam shadow strip — the mockup's `rgba(0,0,0,0.32)`
+ * alpha at the darkest pixel (element opacity on top of an opaque-black
+ * gradient). */
+export const SHADOW_STRIP_PEAK_OPACITY = 0.32;
+
+/** Strip movement over which the seam shadow fades from its floor to peak
+ * (matches the legacy overlay's `[CHROME_IN_PX, 60]` ramp). */
+export const SHADOW_STRIP_FADE_PX = 60;
+
 /** Drag must exceed this fraction of a page width to settle onto the next
  * page (when the release is slow). */
 export const SETTLE_DRAG_RATIO = 0.5;
@@ -205,4 +221,69 @@ export function computePagePosition({
     isIncoming && sliding ? (fromRight ? "left" : "right") : null;
 
   return { translateX, opacity, zIndex, isOutgoing, isIncoming, seam };
+}
+
+// ── Incoming-page seam shadow strip ──────────────────────────────────────────
+
+export interface ShadowStripInput {
+  /** `progress.value` — strip offset from rest (rest = `-focusedIndex * w`). */
+  progress: number;
+  /** `fromSV.value` — index of the outgoing (parallaxing) page. */
+  outIndex: number;
+  /** `toSV.value` — index of the incoming (stacking) page. */
+  toIndex: number;
+  /** Single-page width, px. */
+  width: number;
+}
+
+export interface ShadowStripOutput {
+  /** The incoming page's leading edge on screen (px from container left). */
+  seamX: number;
+  /** Opacity for the strip cast left of the seam (next-day swipe). */
+  nextDayOpacity: number;
+  /** Opacity for the strip cast right of the seam (previous-day swipe). */
+  prevDayOpacity: number;
+}
+
+/**
+ * Pure, testable counterpart of the seam-shadow strip in `week-pager.tsx`.
+ * The strip sits at the incoming page's leading edge — on the side of the
+ * outgoing page — and fades in as the strip moves (`CHROME_IN_PX`), ramping
+ * to `SHADOW_STRIP_PEAK_OPACITY` over `SHADOW_STRIP_FADE_PX`.
+ *
+ * Sign convention mirrors `computePagePosition`: `m < 0` (finger left) means
+ * the next day slides in from the right, so its shadow must fall over the
+ * current day (left of the seam); `m > 0` mirrors it for the previous day.
+ */
+export function computeShadowStrip({
+  progress,
+  outIndex,
+  toIndex,
+  width,
+}: ShadowStripInput): ShadowStripOutput {
+  "worklet";
+  const m = progress + outIndex * width;
+  const absM = Math.abs(m);
+  const inIndex =
+    toIndex === outIndex ? outIndex + (m < 0 ? 1 : -1) : toIndex;
+
+  const sliding = absM > CHROME_IN_PX;
+  const opacity = sliding
+    ? lerpClamp(
+        absM,
+        CHROME_IN_PX,
+        SHADOW_STRIP_FADE_PX,
+        0.08,
+        SHADOW_STRIP_PEAK_OPACITY,
+      )
+    : 0;
+
+  const seamX = inIndex * width + progress;
+  const fromRight = inIndex === outIndex + 1;
+
+  return {
+    seamX,
+    nextDayOpacity: fromRight ? opacity : 0,
+    prevDayOpacity: fromRight ? 0 : opacity,
+  };
 }

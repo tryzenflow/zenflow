@@ -16,18 +16,17 @@ import {
 import {
   decideSettleTarget,
   computePagePosition,
+  computeShadowStrip,
   PARALLAX_FACTOR,
   OUTGOING_DIM_OPACITY,
-  CHROME_IN_PX,
+  SHADOW_STRIP_PX,
 } from "@/lib/week-pager-math";
 import { DayTimeline } from "./day-timeline";
 import { DAY_MINUTES, type PeekBlock } from "@/lib/peek";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   Easing,
-  Extrapolation,
   clamp,
-  interpolate,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
@@ -182,53 +181,12 @@ function PagerPage({
     };
   });
 
-  // The stack shadow is cast by two static-styled overlays — one per swipe
-  // direction (the incoming page's shadow must fall over the outgoing page,
-  // i.e. toward the side it's sliding away from). Only `opacity` is animated;
-  // `shadowOffset` and friends stay in the static style, which works on web
-  // and native alike.
-  const rightIncomingShadow = useAnimatedStyle(() => {
-    const outIndex = fromSV.value;
-    const m = progress.value + outIndex * width;
-    const absM = Math.abs(m);
-    const inIndex =
-      toSV.value === outIndex ? outIndex + (m < 0 ? 1 : -1) : toSV.value;
-    const sliding = absM > CHROME_IN_PX;
-    const isIncomingFromRight = inIndex === outIndex + 1;
-    return {
-      opacity:
-        isIncomingFromRight && sliding
-          ? interpolate(
-              absM,
-              [CHROME_IN_PX, 60],
-              [0.08, 0.28],
-              Extrapolation.CLAMP,
-            )
-          : 0,
-    };
-  });
-
-  const leftIncomingShadow = useAnimatedStyle(() => {
-    const outIndex = fromSV.value;
-    const m = progress.value + outIndex * width;
-    const absM = Math.abs(m);
-    const inIndex =
-      toSV.value === outIndex ? outIndex + (m < 0 ? 1 : -1) : toSV.value;
-    const sliding = absM > CHROME_IN_PX;
-    const isIncomingFromLeft = inIndex === outIndex - 1;
-    return {
-      opacity:
-        isIncomingFromLeft && sliding
-          ? interpolate(
-              absM,
-              [CHROME_IN_PX, 60],
-              [0.08, 0.28],
-              Extrapolation.CLAMP,
-            )
-          : 0,
-    };
-  });
-
+  // The stack shadow is drawn as an explicit gradient strip at the incoming
+  // page's leading edge (over the outgoing page) — see `computeShadowStrip`.
+  // A native box-shadow can't reproduce the mockup's hard-edged band on web
+  // (RN Web supports no `spread`), so the strip lives in the WeekPager's
+  // top overlay, outside the `overflow-hidden` strip container, and animates
+  // its opacity + position from the same shared values.
   return (
     <Animated.View
       style={[
@@ -238,32 +196,6 @@ function PagerPage({
       collapsable={false}
     >
       {children}
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          StyleSheet.absoluteFill,
-          {
-            shadowColor: "#000",
-            shadowRadius: 18,
-            elevation: 8,
-            shadowOffset: { width: -12, height: 0 },
-          },
-          rightIncomingShadow,
-        ]}
-      />
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          StyleSheet.absoluteFill,
-          {
-            shadowColor: "#000",
-            shadowRadius: 18,
-            elevation: 8,
-            shadowOffset: { width: 12, height: 0 },
-          },
-          leftIncomingShadow,
-        ]}
-      />
     </Animated.View>
   );
 }
@@ -324,9 +256,6 @@ export function WeekPager({
   );
   const [dragActive, setDragActive] = useState(false);
   const [pill, setPill] = useState<{ edge: DragEdge; day: Date } | null>(null);
-  // Edge whose cross-day advance is armed (orange glow lit, hold timer
-  // running) — null when no zone is active or the advance already fired.
-  const [armed, setArmed] = useState<DragEdge | null>(null);
   // 1 while a settle (or snap-back) animation is running: the pan is disabled
   // so a new gesture can't touch down mid-flight and clobber the settle's
   // roles/position — which used to flip the incoming/outgoing z-order mid-
@@ -356,6 +285,13 @@ export function WeekPager({
   // The carried page's `index * width + progress` at drag start — held
   // constant for the entire gesture via `carrierFix` in the page style.
   const carrierOriginSV = useSharedValue(0);
+  // Edge whose cross-day advance is armed (orange glow lit, hold timer
+  // running) — null when no zone is active or the advance already fired.
+  // Kept as a shared value (not React state) so arming/disarming never
+  // re-renders the pager — a re-render would recreate the TaskBlock gesture
+  // handler and reset its `isDragging`, silently killing the edge-exit
+  // detection (the "glow won't clear when dragging back to center" bug).
+  const armedEdgeSV = useSharedValue<DragEdge | null>(null);
 
   // Stable identity so DayTimeline's peek-report effect doesn't re-fire on
   // every pager render.
@@ -373,10 +309,6 @@ export function WeekPager({
   const advancedRef = useRef(false);
   // Pending arm-timer for the cross-day hold, cleared on exit/drop/unmount.
   const armTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Mirror of `armed` state kept in a ref so handleDragEdge can check
-  // idempotency without re-rendering the pager (re-render recreates the
-  // TaskBlock gesture handler and cancels the hold timer on web).
-  const armedRef = useRef<DragEdge | null>(null);
   const hasLaidOutRef = useRef(false);
 
   useEffect(
@@ -660,24 +592,23 @@ export function WeekPager({
 
   // Arms the cross-day advance: lights the orange glow at the edge and starts
   // the hold timer. Called every frame the lifted block is in the zone — the
-  // `armed` state (and `advancedRef`) make it idempotent.
+  // shared value (and `advancedRef`) make it idempotent.
   const handleDragEdge = useCallback(
     (edge: DragEdge) => {
       if (advancedRef.current) return;
-      if (armedRef.current === edge) return;
+      if (armedEdgeSV.value === edge) return;
       // Edge flip mid-hold: re-arm on the new edge.
-      if (armedRef.current !== null && armTimerRef.current) {
+      if (armedEdgeSV.value !== null && armTimerRef.current) {
         clearTimeout(armTimerRef.current);
         armTimerRef.current = null;
       }
-      armedRef.current = edge;
-      setArmed(edge);
+      armedEdgeSV.value = edge;
       armTimerRef.current = setTimeout(() => {
         armTimerRef.current = null;
         advanceCrossDay(edge);
       }, CROSS_DAY_HOLD_MS);
     },
-    [advanceCrossDay],
+    [advanceCrossDay, armedEdgeSV],
   );
 
   // Leaving the zone (or a fresh hold with no snap yet) disarms a pending
@@ -687,9 +618,9 @@ export function WeekPager({
       clearTimeout(armTimerRef.current);
       armTimerRef.current = null;
     }
-    armedRef.current = null;
-    setArmed(null);
-  }, []);
+    armedEdgeSV.value = null;
+    setPill(null);
+  }, [armedEdgeSV]);
 
   const handleDragChange = useCallback(
     (active: boolean) => {
@@ -716,8 +647,7 @@ export function WeekPager({
         clearTimeout(armTimerRef.current);
         armTimerRef.current = null;
       }
-      armedRef.current = null;
-      setArmed(null);
+      armedEdgeSV.value = null;
       carrierIndexSV.value = -1;
       carrierOriginSV.value = 0;
       // Drop: collapse back to the 7-day window around the day the drag
@@ -738,9 +668,50 @@ export function WeekPager({
   const orangeRgb = isDarkColorScheme
     ? BRAND_ORANGE_DARK
     : BRAND_ORANGE_LIGHT;
-  // Edge lit by either the armed glow or the post-advance pill (they agree:
-  // the pill is set on advance while the same edge stays armed until exit).
-  const edge = armed ?? pill?.edge ?? null;
+  // Glow overlays are always mounted; each gradient's opacity is driven by
+  // `armedEdgeSV` (a shared value) so arming/disarming never re-renders
+  // React — a re-render would recreate the TaskBlock gesture handler and
+  // reset its `isDragging`, silently killing the edge-exit detection.
+  const rightGlowStyle = useAnimatedStyle(() => ({
+    opacity: armedEdgeSV.value === "right" ? 1 : 0,
+  }));
+  const leftGlowStyle = useAnimatedStyle(() => ({
+    opacity: armedEdgeSV.value === "left" ? 1 : 0,
+  }));
+
+  // Seam shadow strip: an explicit gradient drawn at the incoming page's
+  // leading edge, over the outgoing page. Lives in this overlay (outside the
+  // `overflow-hidden` strip container, above every page) so it can never be
+  // clipped and matches the mockup's hard-edged card shadow on web + native.
+  // One strip per swipe direction — each only lights when its day slides in.
+  const nextDayShadowStyle = useAnimatedStyle(() => {
+    const strip = computeShadowStrip({
+      progress: progress.value,
+      outIndex: fromSV.value,
+      toIndex: toSV.value,
+      width,
+    });
+    return {
+      // Strip spans SHADOW_STRIP_PX left of the seam, darkest at the seam
+      // (incoming-from-right covers the outgoing day to its left).
+      left: strip.seamX - SHADOW_STRIP_PX,
+      opacity: strip.nextDayOpacity,
+    };
+  });
+  const prevDayShadowStyle = useAnimatedStyle(() => {
+    const strip = computeShadowStrip({
+      progress: progress.value,
+      outIndex: fromSV.value,
+      toIndex: toSV.value,
+      width,
+    });
+    return {
+      // Strip starts at the incoming page's right edge and extends right,
+      // darkest at the seam (incoming-from-left covers the outgoing day).
+      left: strip.seamX + width,
+      opacity: strip.prevDayOpacity,
+    };
+  });
 
   return (
     <View className="flex-1">
@@ -786,28 +757,72 @@ export function WeekPager({
         </View>
       </GestureDetector>
 
-      {(armed || pill) && (
-        <View pointerEvents="none" className="absolute inset-0 z-30">
+      <View pointerEvents="none" className="absolute inset-0 z-30">
+        <Animated.View
+          style={[
+            {
+              position: "absolute",
+              top: 0,
+              bottom: 0,
+              width: SHADOW_STRIP_PX,
+            },
+            nextDayShadowStyle,
+          ]}
+        >
           <LinearGradient
-            colors={
-              edge === "right"
-                ? [`rgba(${orangeRgb}, 0)`, `rgba(${orangeRgb}, 0.34)`]
-                : [`rgba(${orangeRgb}, 0.34)`, `rgba(${orangeRgb}, 0)`]
-            }
-            start={{
-              x: edge === "right" ? 0 : 1,
-              y: 0.5,
-            }}
-            end={{ x: edge === "right" ? 1 : 0, y: 0.5 }}
+            colors={["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 1)"]}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={StyleSheet.absoluteFill}
+          />
+        </Animated.View>
+        <Animated.View
+          style={[
+            {
+              position: "absolute",
+              top: 0,
+              bottom: 0,
+              width: SHADOW_STRIP_PX,
+            },
+            prevDayShadowStyle,
+          ]}
+        >
+          <LinearGradient
+            colors={["rgba(0, 0, 0, 1)", "rgba(0, 0, 0, 0)"]}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={StyleSheet.absoluteFill}
+          />
+        </Animated.View>
+        <Animated.View style={[StyleSheet.absoluteFill, rightGlowStyle]}>
+          <LinearGradient
+            colors={[`rgba(${orangeRgb}, 0)`, `rgba(${orangeRgb}, 0.34)`]}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
             style={{
               position: "absolute",
               top: 0,
               bottom: 0,
               width: 56,
-              ...(edge === "right" ? { right: 0 } : { left: 0 }),
+              right: 0,
             }}
           />
-          {pill && (
+        </Animated.View>
+        <Animated.View style={[StyleSheet.absoluteFill, leftGlowStyle]}>
+          <LinearGradient
+            colors={[`rgba(${orangeRgb}, 0.34)`, `rgba(${orangeRgb}, 0)`]}
+            start={{ x: 1, y: 0.5 }}
+            end={{ x: 0, y: 0.5 }}
+            style={{
+              position: "absolute",
+              top: 0,
+              bottom: 0,
+              width: 56,
+              left: 0,
+            }}
+          />
+        </Animated.View>
+        {pill && (
             <View
               style={{
                 position: "absolute",
@@ -828,7 +843,6 @@ export function WeekPager({
             </View>
           )}
         </View>
-      )}
     </View>
   );
 }

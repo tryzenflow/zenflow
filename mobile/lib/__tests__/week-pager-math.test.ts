@@ -3,9 +3,14 @@ import {
   SETTLE_DRAG_RATIO,
   SETTLE_VELOCITY,
   PARALLAX_FACTOR,
+  CHROME_IN_PX,
+  SHADOW_STRIP_PEAK_OPACITY,
+  SHADOW_STRIP_FADE_PX,
   decideSettleTarget,
   computePagePosition,
+  computeShadowStrip,
   type PagePositionInput,
+  type ShadowStripInput,
 } from "../week-pager-math";
 
 const WIDTH = 390;
@@ -203,5 +208,65 @@ describe("computePagePosition", () => {
     });
     // Normal outgoing behavior — parallax applied
     expect(p.translateX).toBeCloseTo(2 * WIDTH + 100 + (PARALLAX_FACTOR - 1) * (100 + 2 * WIDTH));
+  });
+});
+
+// ── computeShadowStrip ───────────────────────────────────────────────────────
+
+function strip(input: Partial<ShadowStripInput>) {
+  return computeShadowStrip({
+    progress: 0,
+    outIndex: 3,
+    toIndex: 3,
+    width: WIDTH,
+    ...input,
+  });
+}
+
+describe("computeShadowStrip", () => {
+  it("no shadow at rest", () => {
+    // At rest progress = -outIndex*width, so m = 0
+    const s = strip({ progress: -3 * WIDTH });
+    expect(s.nextDayOpacity).toBe(0);
+    expect(s.prevDayOpacity).toBe(0);
+  });
+
+  it("no shadow within the CHROME_IN_PX deadzone", () => {
+    const s = strip({ progress: -3 * WIDTH + CHROME_IN_PX });
+    expect(s.nextDayOpacity).toBe(0);
+  });
+
+  it("next-day swipe casts the shadow left of the incoming seam", () => {
+    // Finger left → m = -100, incoming page 4 slides in from the right
+    const s = strip({ progress: -3 * WIDTH - 100 });
+    expect(s.nextDayOpacity).toBeGreaterThan(0);
+    expect(s.prevDayOpacity).toBe(0);
+    // Incoming page's leading edge sits at 4*width + progress = 1460
+    expect(s.seamX).toBe(4 * WIDTH - 3 * WIDTH - 100);
+  });
+
+  it("previous-day swipe casts the shadow right of the incoming seam", () => {
+    const s = strip({ progress: -3 * WIDTH + 100 });
+    expect(s.prevDayOpacity).toBeGreaterThan(0);
+    expect(s.nextDayOpacity).toBe(0);
+    expect(s.seamX).toBe(2 * WIDTH - 3 * WIDTH + 100);
+  });
+
+  it("ramps opacity from the floor to the mockup peak over the fade window", () => {
+    const mid = strip({
+      progress: -3 * WIDTH - (CHROME_IN_PX + SHADOW_STRIP_FADE_PX) / 2,
+    });
+    // Linear halfway between 0.08 and 0.32
+    expect(mid.nextDayOpacity).toBeCloseTo(0.2, 5);
+
+    const deep = strip({ progress: -3 * WIDTH - SHADOW_STRIP_FADE_PX * 2 });
+    expect(deep.nextDayOpacity).toBeCloseTo(SHADOW_STRIP_PEAK_OPACITY, 5);
+  });
+
+  it("during a settle the seam follows the target page", () => {
+    // toIndex = 4 is fixed mid-settle; seamX tracks page 4's leading edge
+    const s = strip({ progress: -4 * WIDTH, toIndex: 4 });
+    expect(s.nextDayOpacity).toBeCloseTo(SHADOW_STRIP_PEAK_OPACITY, 5);
+    expect(s.seamX).toBe(4 * WIDTH - 4 * WIDTH);
   });
 });
