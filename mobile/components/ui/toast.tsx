@@ -6,10 +6,15 @@ import {
   useRef,
   useState,
 } from "react";
-import { Animated, View } from "react-native";
+import { Animated, Pressable, View } from "react-native";
 import { Text } from "./text";
 import { cn } from "@/lib/utils";
 import { AlertCircle, AlertTriangle, CheckCircle, Info } from "../Icons";
+
+export interface ToastAction {
+  label: string;
+  onPress: () => void;
+}
 
 const toastVariants = {
   default: "bg-foreground",
@@ -25,6 +30,7 @@ interface ToastProps {
   variant?: keyof typeof toastVariants;
   duration?: number;
   showProgress?: boolean;
+  action?: ToastAction;
 }
 function Toast({
   id,
@@ -33,6 +39,7 @@ function Toast({
   variant = "default",
   duration = 3000,
   showProgress = true,
+  action,
 }: ToastProps) {
   const opacity = useRef(new Animated.Value(0)).current;
   const progress = useRef(new Animated.Value(0)).current;
@@ -73,7 +80,7 @@ function Toast({
     <Animated.View
       className={`
         ${toastVariants[variant]}
-        m-2 mb-1 p-4 flex flex-row rounded-lg shadow-md transform transition-all
+        m-2 mb-1 p-4 flex flex-row items-center rounded-lg shadow-md transform transition-all
       `}
       style={{
         opacity,
@@ -88,9 +95,23 @@ function Toast({
       }}
     >
       {icon}
-      <Text className="font-semibold ml-3 text-left text-background">
+      <Text className="flex-1 font-semibold ml-3 text-left text-background">
         {message}
       </Text>
+      {action && (
+        <Pressable
+          onPress={() => {
+            action.onPress();
+            onHide(id);
+          }}
+          hitSlop={8}
+          className="ml-3 shrink-0 rounded-full border border-background/40 px-3 py-1"
+        >
+          <Text className="text-[13px] font-bold text-background">
+            {action.label}
+          </Text>
+        </Pressable>
+      )}
       {showProgress && (
         <View className="mt-2 rounded">
           <Animated.View
@@ -117,6 +138,7 @@ interface ToastMessage {
   duration?: number;
   position?: string;
   showProgress?: boolean;
+  action?: ToastAction;
 }
 interface ToastContextProps {
   toast: (
@@ -124,7 +146,8 @@ interface ToastContextProps {
     variant?: keyof typeof toastVariants,
     duration?: number,
     position?: "top" | "bottom",
-    showProgress?: boolean
+    showProgress?: boolean,
+    action?: ToastAction
   ) => void;
   removeToast: (id: number) => void;
 }
@@ -145,7 +168,8 @@ function ToastProvider({
     variant: ToastVariant = "default",
     duration: number = 3000,
     position: "top" | "bottom" = "top",
-    showProgress: boolean = true
+    showProgress: boolean = true,
+    action?: ToastAction
   ) => {
     setMessages((prev) => [
       ...prev,
@@ -156,6 +180,7 @@ function ToastProvider({
         duration,
         position,
         showProgress,
+        action,
       },
     ]);
   };
@@ -181,6 +206,7 @@ function ToastProvider({
             variant={message.variant}
             duration={message.duration}
             showProgress={message.showProgress}
+            action={message.action}
             onHide={removeToast}
           />
         ))}

@@ -62,8 +62,8 @@ mobile/
 │   │   │                      # (floating Sparkles FAB + self-contained bottom sheet — window
 │   │   │                      # start/end date pickers + Mode 3-default/secondary-disclosure
 │   │   │                      # mode selector → optimizePreview → large-batch guard step →
-│   │   │                      # optimizeApply → result-summary step with Undo, all in the same
-│   │   │                      # sheet since `components/ui/toast.tsx` can't host a rich body;
+│   │   │                      # optimizeApply closes the sheet and hands the result (count +
+│   │   │                      # an Undo action) to `components/ui/toast.tsx`'s `action` slot;
 │   │   │                      # also rendered on all three of index.tsx/week.tsx/month.tsx)
 │   │   └── form/               # duration stepper/slider, deadline chip row, tag autocomplete,
 │   │                           # description field (WYSIWYG, @10play/tentap-editor) + floating
