@@ -604,10 +604,17 @@ export function WeekPager({
 
   // Fires after a lifted block has held in the edge zone for the hold time.
   // Exactly one advance per drag gesture — holding longer never chains days.
-  // The target day (focused ± 1) is always inside the centered 3-page window,
-  // so the advance just re-centers the window on it: the carried page (the
-  // old focused page) reindexes to 0 (right advance) or 2 (left advance) and
-  // stays pinned via `carrierIndexSV`; only the new far neighbor mounts.
+  // The window change is DEFERRED until drop: re-centering now would remount
+  // `TaskBlock`s and recreate their `Gesture.Pan()` handlers, cancelling the
+  // active drag mid-gesture (RNGH cancels the old handler when a new one is
+  // mounted over it — `onFinalize` fires, `isDragging` resets to 0, and
+  // `handleDragChange(false)` releases the carrier pin, sending the lifted
+  // block off-screen). So during the cross-day drag the window stays put:
+  // the carrier page (source day, still at focusedIndex=1) keeps the lifted
+  // block mounted and the gesture alive. Only the day-offset (read by
+  // `TaskBlock.handleDragEnd` on drop), the header chip, and the pill label
+  // update now. The window re-centers on the target day inside
+  // `handleDragChange(false)`, after the gesture fully releases.
   const advanceCrossDay = useCallback(
     (edge: DragEdge) => {
       if (advancedRef.current) return;
@@ -615,44 +622,20 @@ export function WeekPager({
 
       const dir = edge === "right" ? 1 : -1;
       const targetDay = shiftDays(days[focusedIndex], dir);
-      const fresh = centeredDays(targetDay);
-      setDays(fresh);
-      setFocusedIndex(1);
       setCrossDayOffset(getCrossDayOffset() + dir);
       setPill({ edge, day: targetDay });
       // Commit the focus the moment the advance fires, so the WeekHeader
-      // chip/title move in sync with the strip snap (previously the header
-      // stayed on the source day until the block was released — the visible
-      // "header lags the pager" behavior).
+      // chip/title move in sync with the strip snap. The pager window
+      // follows on drop (see comment above).
       onFocusedDateChange(targetDay);
-      // Instant snap — the strip follows the finger while the pill labels
-      // the target day (matches the FlatList's `scrollToIndex(animated:false)`).
-      // A task drag owns the strip now — any in-flight settle is over.
-      setSettling(false);
-      commitRoles(1);
-      progress.value = -width;
-      // Pin the carried page at its touch-down position so the block stays
-      // in the hand — the carried page (old focused) reindexes to 0/2 in the
-      // re-centered window.
-      carrierIndexSV.value = dir === 1 ? 0 : 2;
       debugLog("pager.advance", {
         edge,
         target: dateKey(targetDay),
         dayOffset: getCrossDayOffset(),
-        carrierIndex: dir === 1 ? 0 : 2,
+        carrierIndex: focusedIndex,
       });
     },
-    [
-      centeredDays,
-      commitRoles,
-      days,
-      focusedIndex,
-      onFocusedDateChange,
-      progress,
-      width,
-      carrierIndexSV,
-      shiftDays,
-    ],
+    [days, focusedIndex, onFocusedDateChange, shiftDays],
   );
 
   // Arms the cross-day advance: lights the orange glow at the edge and starts
@@ -737,13 +720,16 @@ export function WeekPager({
       armedEdgeSV.value = null;
       carrierIndexSV.value = -1;
       carrierOriginSV.value = 0;
-      // Drop: re-center the 3-page window on the day the drag landed on,
-      // and commit it as the focused day.
-      const landed = days[focusedIndex];
+      // Drop: re-center the 3-page window on the day the drag landed on.
+      // A cross-day advance deferred the window change to here — apply it
+      // now via the accumulated day offset so the source day's page moves
+      // off-screen and the target day's page mounts at the focused slot.
+      const dayOffset = getCrossDayOffset();
+      const landed = shiftDays(days[focusedIndex], dayOffset);
       if (!landed) return;
       debugLog("pager.drag.end", {
         landed: dateKey(landed),
-        dayOffset: getCrossDayOffset(),
+        dayOffset,
       });
       const fresh = centeredDays(landed);
       setDays(fresh);
@@ -763,6 +749,7 @@ export function WeekPager({
       width,
       carrierIndexSV,
       carrierOriginSV,
+      shiftDays,
     ],
   );
 
