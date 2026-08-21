@@ -368,6 +368,12 @@ export function WeekPager({
   // (progress = `-target * width`); re-centering it to the middle slot
   // (`focusedIndex 1`, `progress = -width`) leaves it exactly where the
   // animation put it, and the other two pages are off-screen either way.
+  // Also clears the outgoing/incoming roles to `focusedIndex` so the next
+  // `onBegin` starts from a clean slate (otherwise the stale roles from
+  // the just-completed animation leave the new "incoming" page at zIndex 9
+  // in its off-screen slot, and the next `onBegin` is the only thing that
+  // resets them — if `onBegin` doesn't fire for any reason, the visual is
+  // stuck).
   const settleRoles = useCallback(
     (target: number) => {
       const landed = days[target];
@@ -382,9 +388,10 @@ export function WeekPager({
       pendingSettleRef.current = true;
       setDays(centeredDays(landed));
       setFocusedIndex(1);
+      commitRoles(1);
       debugLog("pager.settle.land", { day: dateKey(landed), target });
     },
-    [centeredDays, days],
+    [centeredDays, commitRoles, days],
   );
 
   // Drives the initial center position (and a chip tap to a day in a week
@@ -442,8 +449,16 @@ export function WeekPager({
   // the window, otherwise rebuild the window around it. Internal changes
   // (swipe settle, drag advance/drop) already keep `days`/`focusedIndex` in
   // sync, so their re-entry here is a no-op (matching index, or the day is in
-  // the freshly rebuilt window).
+  // the freshly rebuilt window). Guarded by `settling` so a swipe settle's
+  // `onFocusedDateChange(landed)` (which fires *before* the settle animation)
+  // doesn't re-enter here and call `animateRolesTo` again — that replaces the
+  // in-flight animation with one driven by a stale `days`/`focusedIndex`
+  // closure, the old callback fires `finished: false` and skips
+  // `settleRoles`, and the chain breaks after a few swipes (the pager stops
+  // responding). The settle itself updates `focusedDate` via the parent's
+  // `setFocusedDate`, but the effect must not interfere.
   useEffect(() => {
+    if (settling) return;
     const key = dateKey(focusedDate);
     const idx = days.findIndex((d) => dateKey(d) === key);
     if (idx >= 0) {
