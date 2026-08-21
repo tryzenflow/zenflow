@@ -36,6 +36,7 @@ import Animated, {
   clamp,
   runOnJS,
   useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
   withTiming,
   type SharedValue,
@@ -772,30 +773,27 @@ export function WeekPager({
   // `overflow-hidden` strip container, above every page) so it can never be
   // clipped and matches the mockup's hard-edged card shadow on web + native.
   // One strip per swipe direction — each only lights when its day slides in.
-  const nextDayShadowStyle = useAnimatedStyle(() => {
-    const strip = computeShadowStrip({
+  // Both strips read the same `computeShadowStrip` output via a single
+  // derived shared value — halves the per-frame worklet executions (was
+  // running the pure function twice, once per `useAnimatedStyle`).
+  const shadowStrip = useDerivedValue(() =>
+    computeShadowStrip({
       progress: progress.value,
       outIndex: fromSV.value,
       toIndex: toSV.value,
       width,
-    });
+    }),
+  );
+  const nextDayShadowStyle = useAnimatedStyle(() => {
+    const strip = shadowStrip.value;
     return {
-      // Strip spans SHADOW_STRIP_PX left of the seam, darkest at the seam
-      // (incoming-from-right covers the outgoing day to its left).
       left: strip.seamX - SHADOW_STRIP_PX,
       opacity: strip.nextDayOpacity,
     };
   });
   const prevDayShadowStyle = useAnimatedStyle(() => {
-    const strip = computeShadowStrip({
-      progress: progress.value,
-      outIndex: fromSV.value,
-      toIndex: toSV.value,
-      width,
-    });
+    const strip = shadowStrip.value;
     return {
-      // Strip starts at the incoming page's right edge and extends right,
-      // darkest at the seam (incoming-from-left covers the outgoing day).
       left: strip.seamX + width,
       opacity: strip.prevDayOpacity,
     };

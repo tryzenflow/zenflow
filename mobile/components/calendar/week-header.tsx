@@ -1,7 +1,9 @@
 import { Text } from "@/components/ui/text";
 import { dateKey, weekDays } from "@/lib/week-date-math";
-import { zonedNow } from "@zenflow/core";
+import { useNow } from "@/hooks/use-now";
 import { format } from "date-fns";
+import { toZonedTime } from "date-fns-tz";
+import { useMemo } from "react";
 import { Pressable, View } from "react-native";
 
 interface WeekHeaderProps {
@@ -25,10 +27,13 @@ interface WeekHeaderProps {
  * aligned via `onFocusedDateChange`.
  */
 export function WeekHeader({ focusedDate, tz, onSelectDay }: WeekHeaderProps) {
-  const now = zonedNow(tz);
-  const days = weekDays(focusedDate);
-  const focusedKey = dateKey(focusedDate);
-  const todayKey = dateKey(now);
+  const now = useNow();
+  const days = useMemo(() => weekDays(focusedDate), [focusedDate]);
+  const focusedKey = useMemo(() => dateKey(focusedDate), [focusedDate]);
+  const todayKey = useMemo(
+    () => dateKey(toZonedTime(now, tz)),
+    [now, tz],
+  );
 
   return (
     <View className="border-b border-border bg-background pt-2.5 pb-2">
