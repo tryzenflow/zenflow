@@ -166,14 +166,17 @@ export interface PagePositionInput {
 export interface PagePositionOutput {
   /** Final translateX for the page. */
   translateX: number;
-  /** Page opacity (outgoing dims; non-active pages are 0). */
+  /** Page opacity (outgoing dims; carrier stays at 1 so the lifted block
+   * remains visible; non-active pages are 0). */
   opacity: number;
-  /** Z-index (incoming 9, outgoing 8, rest 0). */
+  /** Z-index (carrier 10, incoming 9, outgoing 8, rest 0). */
   zIndex: number;
   /** True if this page is the outgoing (parallaxing) page. */
   isOutgoing: boolean;
   /** True if this page is the incoming (stacking) page. */
   isIncoming: boolean;
+  /** True if this page is the carrier (holding a pinned lifted block). */
+  isCarrier: boolean;
   /** Stack-seam side for the incoming page, or null. */
   seam: "left" | "right" | null;
 }
@@ -230,20 +233,22 @@ export function computePagePosition({
   const translateX =
     slot + progress + carrierFix + (isOutgoing ? (factor - 1) * m : 0);
 
-  const opacity = isOutgoing
-    ? lerpClamp(absM, 0, width * 0.3, 1, OUTGOING_DIM_OPACITY)
-    : isIncoming
-      ? 1
-      : 0;
+  const opacity = isCarrier
+    ? 1
+    : isOutgoing
+      ? lerpClamp(absM, 0, width * 0.3, 1, OUTGOING_DIM_OPACITY)
+      : isIncoming
+        ? 1
+        : 0;
 
-  const zIndex = isIncoming ? 9 : isOutgoing ? 8 : 0;
+  const zIndex = isCarrier ? 10 : isIncoming ? 9 : isOutgoing ? 8 : 0;
 
   const sliding = absM > CHROME_IN_PX;
   const fromRight = index === outIndex + 1;
   const seam: "left" | "right" | null =
     isIncoming && sliding ? (fromRight ? "left" : "right") : null;
 
-  return { translateX, opacity, zIndex, isOutgoing, isIncoming, seam };
+  return { translateX, opacity, zIndex, isOutgoing, isIncoming, isCarrier, seam };
 }
 
 // ── Incoming-page seam shadow strip ──────────────────────────────────────────

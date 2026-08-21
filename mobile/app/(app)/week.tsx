@@ -1,13 +1,15 @@
 import { WeekHeader } from "@/components/calendar/week-header";
 import { WeekPager } from "@/components/calendar/week-pager";
+import { DebugOverlay } from "@/components/dev/debug-overlay";
 import { CreateTaskFab } from "@/components/tasks/create-task-fab";
 import { useScheduleRefresh } from "@/hooks/use-schedule-refresh";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { useFocusEffect } from "@react-navigation/native";
-import { zonedNow } from "@zenflow/core";
+import { zonedDate, zonedNow } from "@zenflow/core";
 import * as Haptics from "expo-haptics";
 import { type Href, useRouter } from "expo-router";
+import { format } from "date-fns";
 import { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
 
@@ -21,16 +23,23 @@ export default function WeekScreen() {
   // an edge day slide the whole week, and chip taps re-center the pager; both
   // flow back through this one state.
   const [focusedDate, setFocusedDate] = useState(() => zonedNow(tz));
-  // Bumped whenever every mounted day's timeline should refetch — screen
-  // focus (returning from an edit), an Optimize apply, or a cross-day
-  // reschedule (the source day refetches itself; the others need the bump).
-  const [reloadKey, setReloadKey] = useState(0);
+  // Per-day reload tokens (keyed by `dateKey`) — a bump only refetches that
+  // page's `DayTimeline`. Screen focus and an Optimize apply bump every
+  // mounted day; a cross-day reschedule bumps only the target day (the source
+  // day refetches itself via its own `handleReschedule`).
+  const [reloadKeyByDay, setReloadKeyByDay] = useState<Record<string, number>>(
+    {},
+  );
 
   const tabBarOverlay = useTabBarOverlayHeight();
 
   useFocusEffect(
     useCallback(() => {
-      setReloadKey((k) => k + 1);
+      setReloadKeyByDay((prev) => {
+        const next: Record<string, number> = {};
+        for (const k of Object.keys(prev)) next[k] = prev[k] + 1;
+        return next;
+      });
     }, []),
   );
 
@@ -39,7 +48,13 @@ export default function WeekScreen() {
   // Month View).
   const scheduleRefreshToken = useScheduleRefresh((s) => s.token);
   useEffect(() => {
-    if (scheduleRefreshToken > 0) setReloadKey((k) => k + 1);
+    if (scheduleRefreshToken > 0) {
+      setReloadKeyByDay((prev) => {
+        const next: Record<string, number> = {};
+        for (const k of Object.keys(prev)) next[k] = prev[k] + 1;
+        return next;
+      });
+    }
   }, [scheduleRefreshToken]);
 
   const handleTaskPress = useCallback(
@@ -60,9 +75,16 @@ export default function WeekScreen() {
     [router],
   );
 
-  const handleCrossDayReschedule = useCallback(() => {
-    setReloadKey((k) => k + 1);
-  }, []);
+  const handleCrossDayReschedule = useCallback(
+    (_taskId: string, startISO: string) => {
+      const targetKey = format(zonedDate(new Date(startISO), tz), "yyyy-MM-dd");
+      setReloadKeyByDay((prev) => ({
+        ...prev,
+        [targetKey]: (prev[targetKey] ?? 0) + 1,
+      }));
+    },
+    [tz],
+  );
 
   return (
     <View className="flex-1 bg-background">
@@ -76,7 +98,7 @@ export default function WeekScreen() {
         <WeekPager
           focusedDate={focusedDate}
           onFocusedDateChange={setFocusedDate}
-          reloadKey={reloadKey}
+          reloadKeyByDay={reloadKeyByDay}
           onTaskPress={handleTaskPress}
           onLongPress={handleLongPress}
           onCrossDayReschedule={handleCrossDayReschedule}
@@ -84,6 +106,7 @@ export default function WeekScreen() {
       </View>
 
       <CreateTaskFab tz={tz} />
+      {__DEV__ && <DebugOverlay />}
     </View>
   );
 }

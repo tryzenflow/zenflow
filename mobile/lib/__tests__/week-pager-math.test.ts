@@ -237,6 +237,41 @@ describe("computePagePosition", () => {
     // Normal outgoing behavior — parallax applied
     expect(p.translateX).toBeCloseTo(2 * WIDTH + 100 + (PARALLAX_FACTOR - 1) * (100 + 2 * WIDTH));
   });
+
+  it("carrier page stays visible (opacity 1) even when not outgoing/incoming", () => {
+    // Left advance: carrier at index=2, outIndex=1, focused at index=1.
+    // Index 2 is neither outgoing nor incoming → would be opacity 0 without
+    // the carrier guard, hiding the lifted block during a left cross-day drag.
+    const p = pos({
+      index: 2,
+      outIndex: 1,
+      toIndex: 1,
+      progress: -WIDTH, // rest for focusedIndex=1
+      carrierIndex: 2,
+      carrierOrigin: 0,
+    });
+    expect(p.isOutgoing).toBe(false);
+    expect(p.isIncoming).toBe(false);
+    expect(p.opacity).toBe(1);
+    expect(p.zIndex).toBe(10);
+  });
+
+  it("carrier takes zIndex precedence over outgoing/incoming", () => {
+    // Carrier IS outgoing during drag — should still get carrier zIndex (10),
+    // drawing over the incoming page so the lifted block stays on top.
+    const p = pos({
+      index: 2,
+      outIndex: 2,
+      toIndex: 2,
+      progress: -2 * WIDTH + 100,
+      dragging: 1,
+      carrierIndex: 2,
+      carrierOrigin: 0,
+    });
+    expect(p.isCarrier).toBe(true);
+    expect(p.isOutgoing).toBe(true);
+    expect(p.zIndex).toBe(10);
+  });
 });
 
 // ── computeShadowStrip ───────────────────────────────────────────────────────

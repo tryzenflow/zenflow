@@ -209,13 +209,14 @@ interface WeekPagerProps {
    * re-centers the pager on it). */
   focusedDate: Date;
   onFocusedDateChange: (day: Date) => void;
-  /** Shared refetch token passed to every page's `DayTimeline`. */
-  reloadKey: number;
+  /** Per-day refetch tokens (keyed by `dateKey`) forwarded to each page's
+   * `DayTimeline` — a bump for a single day only refetches that page. */
+  reloadKeyByDay: Record<string, number>;
   onTaskPress?: (taskId: string) => void;
   onLongPress?: (timeISO: string) => void;
-  /** Fired after a cross-day reschedule so the screen can refetch the target
-   * day (the source day refetches itself). */
-  onCrossDayReschedule: () => void;
+  /** Fired after a cross-day reschedule so the screen can bump the target
+   * day's reload token (the source day refetches itself). */
+  onCrossDayReschedule: (taskId: string, startISO: string) => void;
 }
 
 /**
@@ -247,7 +248,7 @@ interface WeekPagerProps {
 export function WeekPager({
   focusedDate,
   onFocusedDateChange,
-  reloadKey,
+  reloadKeyByDay,
   onTaskPress,
   onLongPress,
   onCrossDayReschedule,
@@ -837,13 +838,13 @@ export function WeekPager({
                 date={day}
                 showHeader={false}
                 showEmptyGhostAlways
-                refreshKey={reloadKey}
+                refreshKey={reloadKeyByDay[dateKey(day)] ?? 0}
                 onTaskPress={onTaskPress}
                 onLongPress={onLongPress}
                 onDragEdge={handleDragEdge}
                 onDragEdgeExit={handleDragEdgeExit}
                 onDragChange={handleDragChange}
-                onCrossDayReschedule={() => onCrossDayReschedule()}
+                onCrossDayReschedule={onCrossDayReschedule}
                 onPeekChange={handlePeekChange}
               />
               {index < days.length - 1 && (
