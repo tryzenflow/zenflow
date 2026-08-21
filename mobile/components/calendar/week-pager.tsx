@@ -16,6 +16,7 @@ import {
   decideSettleTarget,
   computePagePosition,
   computeShadowStrip,
+  computeWeekSlideTarget,
   PARALLAX_FACTOR,
   OUTGOING_DIM_OPACITY,
   SHADOW_STRIP_PX,
@@ -491,16 +492,19 @@ export function WeekPager({
   // a week edge: Monday swiped backward, Sunday swiped forward — a fast
   // fling past the edge, so the pager jumps the whole week rather than
   // advancing one day). Instant, matching the old FlatList's
-  // `scrollToIndex(animated: false)`, landing on the same weekday in the
-  // adjacent week. The neighbor that was sliding in survives the swap by
-  // key (it stays in the re-centered window), so only the two new far
-  // neighbors mount; the fresh window gets its roles committed so the pages
-  // render at full opacity on their slots — otherwise none of them matches
-  // the old window's outgoing/incoming indexes and the grid renders
+  // `scrollToIndex(animated: false)`. The destination is the natural
+  // "next/previous day" past the boundary, not the same weekday: forward past
+  // Sunday lands on Monday of next week; backward past Monday lands on
+  // Sunday of previous week — the same place a slow drag would have ended up
+  // after fully crossing the edge. The neighbor that was sliding in survives
+  // the swap by key (it stays in the re-centered window), so only the two
+  // new far neighbors mount; the fresh window gets its roles committed so
+  // the pages render at full opacity on their slots — otherwise none of them
+  // matches the old window's outgoing/incoming indexes and the grid renders
   // invisible (opacity 0).
   const slideWeek = useCallback(
     (dir: 1 | -1) => {
-      const nextFocused = shiftDays(days[focusedIndex], dir * 7);
+      const nextFocused = computeWeekSlideTarget(days[focusedIndex], dir);
       const fresh = centeredDays(nextFocused);
       setDays(fresh);
       setFocusedIndex(1);
@@ -517,7 +521,6 @@ export function WeekPager({
       focusedIndex,
       onFocusedDateChange,
       progress,
-      shiftDays,
       width,
     ],
   );

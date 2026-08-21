@@ -9,6 +9,7 @@ import {
   decideSettleTarget,
   computePagePosition,
   computeShadowStrip,
+  computeWeekSlideTarget,
   shouldSlideWeek,
   type PagePositionInput,
   type ShadowStripInput,
@@ -118,6 +119,64 @@ describe("shouldSlideWeek", () => {
   it("no direction never slides", () => {
     expect(shouldSlideWeek(0, 0, true)).toBe(false);
     expect(shouldSlideWeek(6, 0, false)).toBe(false);
+  });
+});
+
+describe("computeWeekSlideTarget", () => {
+  it("Sunday swiped forward lands on Monday of next week", () => {
+    // Sun Aug 16 2026 → Mon Aug 17 2026.
+    expect(computeWeekSlideTarget(new Date(2026, 7, 16), 1)).toEqual(
+      new Date(2026, 7, 17),
+    );
+  });
+
+  it("Monday swiped backward lands on Sunday of previous week", () => {
+    // Mon Aug 10 2026 → Sun Aug 9 2026.
+    expect(computeWeekSlideTarget(new Date(2026, 7, 10), -1)).toEqual(
+      new Date(2026, 7, 9),
+    );
+  });
+
+  it("mid-week days still produce a sensible (non-boundary) answer", () => {
+    // Pure fn isn't gated by shouldSlideWeek — caller decides whether to use
+    // it. Verify the math is consistent regardless of source weekday.
+    // Wed Aug 12 2026 → weekStart=Mon Aug 10 → adjacent weekStart=Mon Aug 17.
+    expect(computeWeekSlideTarget(new Date(2026, 7, 12), 1)).toEqual(
+      new Date(2026, 7, 17),
+    );
+    // Backward: adjacent weekStart=Mon Aug 3 + 6 = Sun Aug 9.
+    expect(computeWeekSlideTarget(new Date(2026, 7, 12), -1)).toEqual(
+      new Date(2026, 7, 9),
+    );
+  });
+
+  it("crosses month boundaries forward", () => {
+    // Sun Aug 30 2026 → Mon Aug 31 2026 (crosses into the new month).
+    expect(computeWeekSlideTarget(new Date(2026, 7, 30), 1)).toEqual(
+      new Date(2026, 7, 31),
+    );
+    // Mon Aug 24 2026 → previous Sunday Aug 30 2026.
+    expect(computeWeekSlideTarget(new Date(2026, 7, 24), -1)).toEqual(
+      new Date(2026, 7, 23),
+    );
+  });
+
+  it("crosses year boundaries forward", () => {
+    // Sun Dec 29 2024 → Mon Dec 30 2024.
+    expect(computeWeekSlideTarget(new Date(2024, 11, 29), 1)).toEqual(
+      new Date(2024, 11, 30),
+    );
+    // Sun Dec 31 2023 → Mon Jan 1 2024.
+    expect(computeWeekSlideTarget(new Date(2023, 11, 31), 1)).toEqual(
+      new Date(2024, 0, 1),
+    );
+  });
+
+  it("crosses year boundaries backward", () => {
+    // Mon Jan 1 2024 → Sun Dec 31 2023.
+    expect(computeWeekSlideTarget(new Date(2024, 0, 1), -1)).toEqual(
+      new Date(2023, 11, 31),
+    );
   });
 });
 

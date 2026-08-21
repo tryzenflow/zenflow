@@ -13,6 +13,9 @@
  * position past half a page decides, otherwise snap back.
  */
 
+import { addDays } from "date-fns";
+import { weekStart } from "./week-date-math";
+
 // ── Pager-page position constants (shared with PagerPage animatedStyle) ──────
 
 /** The outgoing page moves at this fraction of the finger's speed while the
@@ -127,6 +130,26 @@ export function shouldSlideWeek(
 ): boolean {
   if (dir === 0 || !flicked) return false;
   return dayIndexInWeek === 0 ? dir === -1 : dayIndexInWeek === 6 && dir === 1;
+}
+
+/**
+ * Where a week-slide settle should land — the natural "next/previous day"
+ * past the week boundary, not the same weekday:
+ * - forward past Sunday → Monday of next week (`weekStart(current) + 7d`),
+ *   the day right after Sunday;
+ * - backward past Monday → Sunday of previous week
+ *   (`weekStart(current) - 7d + 6d`), the day right before Monday.
+ *
+ * Mirrors the one-day settle the pager does on a slow drag across the same
+ * edge — a flick just skips the intermediate days and lands where the slow
+ * drag would have ended up after fully crossing the boundary.
+ */
+export function computeWeekSlideTarget(
+  current: Date,
+  dir: 1 | -1,
+): Date {
+  const adjacentWeekStart = addDays(weekStart(current), dir * 7);
+  return dir === 1 ? adjacentWeekStart : addDays(adjacentWeekStart, 6);
 }
 
 // ── PagerPage position computation ───────────────────────────────────────────
