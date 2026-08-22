@@ -10,11 +10,17 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Language {
+  VI_VN @map("vi-VN")
+  EN_US @map("en-US")
+}
+
 model User {
-  id       String @id @default(uuid())
-  name     String @db.VarChar(60)
-  email    String @unique @db.VarChar(255)
-  timezone String @default("UTC") @db.VarChar(50)
+  id       String   @id @default(uuid())
+  name     String   @db.VarChar(60)
+  email    String   @unique @db.VarChar(255)
+  timezone String   @default("UTC") @db.VarChar(50)
+  lang     Language @default(EN_US)
 
   // Working window (see docs/objects.md). Minutes from midnight + ISO weekdays.
   workStart Int   @default(540) // 09:00
@@ -35,15 +41,73 @@ model User {
   // pass; the cron treats null as "no elapsed days" and only stamps the time.
   preferenceMatrixDecayedAt DateTime?
 
-  onboardingComplete Boolean @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  onboardingComplete Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   // Relations
   tasks      Task[]
   files      File[]
   taskEvents TaskEvent[]
   tags       Tag[]
+
+  encryptionKeys UserEncryptionKey[]
+  devices        UserDevice[]
+  taskSeries     TaskSeries[]
+  integrations   Integration[]
+  notifications  Notification[]
+  slotProposals  SlotProposal[]
+}
+
+// Per-user data-encryption key, itself protected by a server-held master key
+// kept outside the DB.
+model UserEncryptionKey {
+  id        String   @id @default(uuid())
+  version   Int
+  key       String
+  iv        String
+  algorithm String
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum DevicePlatform {
+  IOS
+  ANDROID
+}
+
+// Expo push registration; one row per device so a user can have multiple.
+model UserDevice {
+  id         String         @id @default(uuid())
+  platform   DevicePlatform
+  pushToken  String
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  lastSeenAt DateTime?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Links N session-instance Tasks of one "study sessions" goal. Deleting a
+// TaskSeries cascades to all its Task rows — that's how "delete whole series"
+// is implemented at the app layer.
+model TaskSeries {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tasks Task[]
+
+  @@index([userId])
 }
 
 model Tag {
@@ -67,14 +131,29 @@ enum TaskStatus {
   ABANDONED // deadline passed while still PENDING (set by the overdue sweep)
 }
 
+enum TaskType {
+  MANUAL
+  ASSIGNMENT
+  EXAM
+  LECTURE
+}
+
+enum TaskSource {
+  USER
+  LMS
+  PORTAL
+}
+
 model Task {
-  id              String     @id @default(uuid())
-  title           String
-  note            String?
-  durationMinutes Int // positive multiple of 15
-  deadline        DateTime?
-  startTime       Int        @default(0) // minutes from midnight of the last manual placement (informational only)
-  status          TaskStatus @default(PENDING)
+  id                 String     @id @default(uuid())
+  title              String
+  note               String?
+  durationMinutes    Int // positive multiple of 15
+  deadline           DateTime?
+  startTime          Int        @default(0) // minutes from midnight of the last manual placement (informational only)
+  status             TaskStatus @default(PENDING)
+  type               TaskType   @default(MANUAL)
+  source             TaskSource @default(USER)
   // True when this task overlaps another task's interval, OR has no valid
   // placement at all (scheduledStartTime null). An overlap is now a normal,
   // ACCEPTED state — not something a cost model tries to prevent: a direct
@@ -82,22 +161,33 @@ model Task {
   // interval unconditionally and simply flags both tasks conflicting rather
   // than auto-relocating either one. Cleared by a follow-up drag/resize that
   // resolves the overlap, or by Optimize (optimize.ts).
-  conflict        Boolean    @default(false)
+  conflict           Boolean    @default(false)
   // True when the user directly dragged/resized this task. Informational
   // only everywhere automatic (badge/telemetry) — no automatic path (Create,
   // Edit-accept's resolveInvalidPlacement) ever freezes/protects a task
   // because of this flag. The ONE place it gates real behavior is Optimize's
   // "retainManual" mode (explicit user opt-in): tasks with this flag set are
   // locked at their current slot for that one repack, regardless of validity.
-  manuallyMoved Boolean @default(false)
+  manuallyMoved      Boolean    @default(false)
   scheduledStartTime DateTime? // assigned by the EDF engine
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Per-user labels (implicit many-to-many).
   tags Tag[]
 
   events TaskEvent[]
+
+  // Links N session-instance Task rows of one "study sessions" goal.
+  // Deleting the TaskSeries cascades to every session it owns.
+  seriesId     String?
+  series       TaskSeries? @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  // Denormalized convenience fields for cheap per-row rendering alongside seriesId.
+  sessionIndex Int?
+  sessionTotal Int?
+
+  notifications Notification[]
+  slotProposals SlotProposal[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -105,6 +195,7 @@ model Task {
   @@index([userId, deadline])
   @@index([userId, status])
   @@index([userId, scheduledStartTime])
+  @@index([userId, seriesId, createdAt(sort: Asc)])
 }
 
 enum TaskEventType {
@@ -157,4 +248,153 @@ model File {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+enum SlotProposalEvent {
+  CREATE
+  RESCHEDULE
+}
+
+enum SchedulingModel {
+  HEURISTIC
+  LINUCB
+}
+
+// One row per create/reschedule event holding both models' proposed
+// placement plus which one actually won.
+model SlotProposal {
+  id                String            @id @default(uuid())
+  event             SlotProposalEvent
+  pickedModel       SchedulingModel
+  heuristicProposal Json
+  linucbProposal    Json
+  batchId           String?
+  timestamp         DateTime          @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+}
+
+enum IntegrationProvider {
+  LMS
+  PORTAL
+}
+
+// Encrypted LMS/portal credentials, one row per (userId, provider).
+model Integration {
+  id                   String              @id @default(uuid())
+  provider             IntegrationProvider
+  encryptedCredentials String
+  encryptionVersion    Int
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  crawlJobs     CrawlJob[]
+  portalApiJobs PortalAPIJob[]
+
+  @@unique([userId, provider])
+  @@index([provider, userId])
+  @@index([encryptionVersion(sort: Desc)])
+}
+
+enum NotificationTopic {
+  ASSIGNMENT
+  EXAM
+  TIMETABLE
+}
+
+// Inbox row a student sees before optionally turning it into a Task
+// (assignment/exam detected on LMS, or a timetable change detected on the
+// portal). `actionTakenAt` non-null prevents double-creating a task from the
+// same notification — no separate status enum.
+model Notification {
+  id            String            @id @default(uuid())
+  sentAt        DateTime          @default(now())
+  readAt        DateTime?
+  actionTakenAt DateTime?
+  topic         NotificationTopic
+  title         String
+  content       String
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  taskId String?
+  task   Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([userId, sentAt(sort: Desc)])
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// Per-run job tracking for the LMS watcher.
+model CrawlJob {
+  id        String    @id @default(uuid())
+  status    JobStatus @default(PENDING)
+  createdAt DateTime  @default(now())
+
+  integrationId String
+  integration   Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  items CrawlJobItem[]
+}
+
+model CrawlJobItem {
+  id        String    @id @default(uuid())
+  url       String
+  status    JobStatus @default(PENDING)
+  attempt   Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  crawlJobId String
+  crawlJob   CrawlJob @relation(fields: [crawlJobId], references: [id], onDelete: Cascade)
+
+  @@index([crawlJobId])
+}
+
+// Global (cross-user) dedupe table so two students' crawls of the same
+// course activity don't double-detect.
+model CrawledUrl {
+  id        String   @id @default(uuid())
+  url       String   @unique
+  createdAt DateTime @default(now())
+}
+
+// Same job-tracking shape as CrawlJob/CrawlJobItem, for the portal API poller.
+model PortalAPIJob {
+  id        String    @id @default(uuid())
+  status    JobStatus @default(PENDING)
+  createdAt DateTime  @default(now())
+
+  integrationId String
+  integration   Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  items PortalAPIJobItem[]
+}
+
+model PortalAPIJobItem {
+  id           String    @id @default(uuid())
+  url          String
+  status       JobStatus @default(PENDING)
+  attempt      Int       @default(0)
+  statusCode   Int?
+  responseBody String?
+  createdAt    DateTime  @default(now())
+
+  portalApiJobId String
+  portalApiJob   PortalAPIJob @relation(fields: [portalApiJobId], references: [id], onDelete: Cascade)
+
+  @@index([portalApiJobId])
 }

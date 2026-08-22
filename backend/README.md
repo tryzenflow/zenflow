@@ -70,7 +70,32 @@ what makes the engine unit-testable and what Phase 3 will plug into.
 
 ## Database schema
 
-Defined in [`prisma/schema.prisma`](prisma/schema.prisma). Five models.
+Defined in [`prisma/schema.prisma`](prisma/schema.prisma). Five core models below
+(`User`, `Task`, `TaskEvent`, `Tag`, `File`), plus schema scaffolding for the DLU-pivot
+work — `UserEncryptionKey`, `UserDevice`, `TaskSeries`, `SlotProposal`, `Integration`,
+`Notification`, `CrawlJob`/`CrawlJobItem`, `CrawledUrl`, `PortalAPIJob`/`PortalAPIJobItem`
+— added ahead of their per-issue implementation and **not yet wired to any endpoint,
+DTO, or service**. Briefly:
+
+- `UserEncryptionKey` — per-user data-encryption key (versioned), itself protected by a
+  server-held master key kept outside the DB.
+- `UserDevice` — one row per Expo push registration (`platform`, `pushToken`), so a user
+  can have multiple devices.
+- `TaskSeries` — links N session-instance `Task` rows of one "study sessions" goal;
+  deleting the series cascades to its sessions. `Task` gained `type`
+  (`MANUAL`/`ASSIGNMENT`/`EXAM`/`LECTURE`), `source` (`USER`/`LMS`/`PORTAL`), and
+  `seriesId`/`sessionIndex`/`sessionTotal` to support this.
+- `SlotProposal` — one row per create/reschedule event, holding both the heuristic's and
+  LinUCB's proposed placement plus which one (`pickedModel`) actually won.
+- `Integration` — encrypted LMS/portal credentials, one row per `(userId, provider)`.
+- `Notification` — inbox row (assignment/exam detected on LMS, or a timetable change on
+  the portal) a student can turn into a `Task`; `actionTakenAt` guards against double
+  creation.
+- `CrawlJob`/`CrawlJobItem` and `PortalAPIJob`/`PortalAPIJobItem` — per-run job tracking
+  (shared `JobStatus` enum) for the LMS crawler and the portal API poller, each scoped to
+  an `Integration`.
+- `CrawledUrl` — global (cross-user) URL dedupe table so two students' crawls of the same
+  course activity don't double-detect.
 
 ### `User`
 
@@ -80,6 +105,7 @@ Defined in [`prisma/schema.prisma`](prisma/schema.prisma). Five models.
 | `id`                        | uuid                     | PK                                                                                                                                                                                                                                                    |
 | `name`, `email`             | string                   | `email` unique                                                                                                                                                                                                                                        |
 | `timezone`                  | string                   | IANA, default `"UTC"`                                                                                                                                                                                                                                 |
+| `lang`                      | `Language`               | `VI_VN` \| `EN_US`, default `EN_US`. Not yet read by any endpoint.                                                                                                                                                                                     |
 | `workStart` / `workEnd`     | int                      | minutes from midnight (default 540 / 1020 = 09:00–17:00)                                                                                                                                                                                              |
 | `workDays`                  | int[]                    | ISO weekdays, default `[1,2,3,4,5]` (1=Mon … 7=Sun)                                                                                                                                                                                                   |
 | `preferenceMatrix`          | int[]                    | flat **672** ints (7 days × 96 fifteen-minute slots, slot-grid-aligned). **Signed** Phase-1 telemetry: a move-toward/keep increments a cell (+1), a move-away decrements it (−1), empty = 0 (neutral). **Not yet read** by the engine. Seeded lazily. |
@@ -100,12 +126,17 @@ Defined in [`prisma/schema.prisma`](prisma/schema.prisma). Five models.
 | `manuallyMoved`      | bool         | true → the user dragged/resized this task. **Purely informational** everywhere automatic (drives the "Manually placed" badge/telemetry) — no automatic path ever freezes/protects a task because of it. The ONE place it gates real behavior is Optimize's `"retainManual"` mode (explicit user opt-in); see "The EDF engine" below |
 | `startTime`          | int          | minutes from midnight of the last manual placement; informational only, not consulted by the scheduler                                                                                                                                                                |
 | `status`             | `TaskStatus` | `PENDING` | `DONE` | `ABANDONED`                                                                                                                                                                                                                                      |
+| `type`               | `TaskType`   | `MANUAL` \| `ASSIGNMENT` \| `EXAM` \| `LECTURE`, default `MANUAL`. Not yet read by any endpoint.                                                                                                                                                                      |
+| `source`             | `TaskSource` | `USER` \| `LMS` \| `PORTAL`, default `USER`. Not yet read by any endpoint.                                                                                                                                                                                            |
 | `conflict`           | bool         | true when the task overlaps another task's interval, OR has no valid placement at all (`scheduledStartTime` null). An overlap is now a normal, accepted state — a direct drag/resize can knowingly create one rather than auto-relocating either task; see "The EDF engine" below |
 | `scheduledStartTime` | DateTime?    | placement assigned by the EDF engine                                                                                                                                                                                                                                  |
 | `userId`             | uuid         | FK → `User`, `onDelete: Cascade`                                                                                                                                                                                                                                      |
+| `seriesId`           | uuid?        | FK → `TaskSeries`, `onDelete: Cascade` — links session instances of a "study sessions" goal. Not yet written by any endpoint.                                                                                                                                        |
+| `sessionIndex` / `sessionTotal` | int?  | denormalized convenience fields alongside `seriesId` for cheap per-row rendering. Not yet written by any endpoint.                                                                                                                                                    |
 
 
-Indexes: `[userId, deadline]`, `[userId, status]`, `[userId, scheduledStartTime]`.
+Indexes: `[userId, deadline]`, `[userId, status]`, `[userId, scheduledStartTime]`,
+`[userId, seriesId, createdAt asc]`.
 
 ### `TaskEvent` (append-only audit trail — the ML fuel)
 
