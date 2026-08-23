@@ -924,8 +924,8 @@ export function WeekPager({
         <Animated.View style={[StyleSheet.absoluteFill, leftGlowStyle]}>
           <LinearGradient
             colors={[`rgba(${orangeRgb}, 0.34)`, `rgba(${orangeRgb}, 0)`]}
-            start={{ x: 1, y: 0.5 }}
-            end={{ x: 0, y: 0.5 }}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
             style={{
               position: "absolute",
               top: 0,

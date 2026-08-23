@@ -1,6 +1,5 @@
 import { WeekHeader } from "@/components/calendar/week-header";
 import { WeekPager } from "@/components/calendar/week-pager";
-import { DebugOverlay } from "@/components/dev/debug-overlay";
 import { CreateTaskFab } from "@/components/tasks/create-task-fab";
 import { useScheduleRefresh } from "@/hooks/use-schedule-refresh";
 import { useUserStore } from "@/hooks/use-user-store";
@@ -106,7 +105,6 @@ export default function WeekScreen() {
       </View>
 
       <CreateTaskFab tz={tz} />
-      {__DEV__ && <DebugOverlay />}
     </View>
   );
 }
