@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { View, StyleSheet, useWindowDimensions } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { format } from "date-fns";
@@ -413,7 +413,10 @@ export function WeekPager({
           -index * width,
           { duration: SETTLE_MS, easing: Easing.out(Easing.cubic) },
           (finished) => {
-            if (!finished) return;
+            if (!finished) {
+              runOnJS(releaseSettle)();
+              return;
+            }
             runOnJS(releaseSettle)();
           },
         );
@@ -438,12 +441,15 @@ export function WeekPager({
         -target * width,
         { duration: SETTLE_MS, easing: Easing.out(Easing.cubic) },
         (finished) => {
-          if (!finished) return;
+          if (!finished) {
+            runOnJS(releaseSettle)();
+            return;
+          }
           runOnJS(onDone ?? settleRoles)(target);
         },
       );
     },
-    [focusedIndex, fromSV, toSV, progress, settleRoles, width],
+    [focusedIndex, fromSV, toSV, progress, settleRoles, width, releaseSettle],
   );
 
   // External focus change (WeekHeader chip tap): scroll to the day if it's in
@@ -576,7 +582,7 @@ export function WeekPager({
     [days.length, focusedIndex, settleOn, width],
   );
 
-  // Recreated every render (captures the current `focusedIndex`/`width`).
+  // Memoized to prevent handler re-attachment on unrelated renders.
   // `activeOffsetX` keeps it a pure horizontal pager: vertical drags fail it
   // (`failOffsetY`) and fall through to the day pages' own ScrollViews, the
   // same split the FlatList gave us. The 12px activation threshold is
@@ -585,41 +591,45 @@ export function WeekPager({
   // fails this one — the pager is effectively locked while a block is touched.
   // Disabled while a task drag is active (`dragActive`) or a settle is running
   // (`settling`) — both own the strip.
-  const panGesture = Gesture.Pan()
-    .enabled(!dragActive && !settling)
-    .activeOffsetX([-12, 12])
-    .failOffsetY([-12, 12])
-    .onBegin(() => {
-      draggingSV.value = 1;
-      fromSV.value = focusedIndex;
-      toSV.value = focusedIndex;
-      didSettleSV.value = 0;
-    })
-    .onUpdate((e) => {
-      // Clamp the live drag to one page so a hard flick can't pull the
-      // second neighbor into view — the settle only ever moves one page.
-      progress.value =
-        -focusedIndex * width + clamp(e.translationX, -width, width);
-    })
-    .onEnd((e) => {
-      draggingSV.value = 0;
-      didSettleSV.value = 1;
-      runOnJS(handlePanEnd)(e.translationX, e.velocityX);
-    })
-    .onFinalize(() => {
-      // Cancelled mid-gesture (never released): snap back to rest. No settle
-      // lock release here — `onEnd` already scheduled the settle (which owns
-      // the lock until its animation completes); releasing it in the same
-      // tick would re-enable the pan mid-animation and bring the cover-flip
-      // glitch back.
-      if (didSettleSV.value === 0) {
-        draggingSV.value = 0;
-        progress.value = withTiming(-focusedIndex * width, {
-          duration: SETTLE_MS,
-          easing: Easing.out(Easing.cubic),
-        });
-      }
-    });
+  const panGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .enabled(!dragActive && !settling)
+        .activeOffsetX([-12, 12])
+        .failOffsetY([-12, 12])
+        .onBegin(() => {
+          draggingSV.value = 1;
+          fromSV.value = focusedIndex;
+          toSV.value = focusedIndex;
+          didSettleSV.value = 0;
+        })
+        .onUpdate((e) => {
+          // Clamp the live drag to one page so a hard flick can't pull the
+          // second neighbor into view — the settle only ever moves one page.
+          progress.value =
+            -focusedIndex * width + clamp(e.translationX, -width, width);
+        })
+        .onEnd((e) => {
+          draggingSV.value = 0;
+          didSettleSV.value = 1;
+          runOnJS(handlePanEnd)(e.translationX, e.velocityX);
+        })
+        .onFinalize(() => {
+          // Cancelled mid-gesture (never released): snap back to rest. No settle
+          // lock release here — `onEnd` already scheduled the settle (which owns
+          // the lock until its animation completes); releasing it in the same
+          // tick would re-enable the pan mid-animation and bring the cover-flip
+          // glitch back.
+          if (didSettleSV.value === 0) {
+            draggingSV.value = 0;
+            progress.value = withTiming(-focusedIndex * width, {
+              duration: SETTLE_MS,
+              easing: Easing.out(Easing.cubic),
+            });
+          }
+        }),
+    [dragActive, settling, focusedIndex, width, handlePanEnd],
+  );
 
   // Fires after a lifted block has held in the edge zone for the hold time.
   // Exactly one advance per drag gesture — holding longer never chains days.
