@@ -325,6 +325,9 @@ export function WeekPager({
   // Pending arm-timer for the cross-day hold, cleared on exit/drop/unmount.
   const armTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasLaidOutRef = useRef(false);
+  // The day the drag started on — captured once at drag start so cross-day
+  // offset is applied relative to the original day, not the re-centered window.
+  const dragStartDayRef = useRef<Date | null>(null);
   // True while a task-drag gesture is live. Unlike `dragActive` (async React
   // state), this ref is written synchronously inside `handleDragChange`, so
   // the false→true transition — the only place the carrier pin and the day
@@ -716,6 +719,8 @@ export function WeekPager({
         // the source day). Once started, a drag keeps its pin and offset.
         if (dragActiveRef.current) return;
         dragActiveRef.current = true;
+        // Capture the drag start day BEFORE resetting cross-day offset
+        dragStartDayRef.current = days[focusedIndex];
         setDragActive(true);
         // A task drag takes over the strip — release any settle lock.
         setSettling(false);
@@ -751,10 +756,13 @@ export function WeekPager({
       carrierOriginSV.value = 0;
       // Drop: re-center the 3-page window on the day the drag landed on.
       // A cross-day advance deferred the window change to here — apply it
-      // now via the accumulated day offset so the source day's page moves
-      // off-screen and the target day's page mounts at the focused slot.
+      // now via the accumulated day offset relative to the ORIGINAL drag day,
+      // not the re-centered window's focused day.
       const dayOffset = getCrossDayOffset();
-      const landed = shiftDays(days[focusedIndex], dayOffset);
+      const startDay = dragStartDayRef.current;
+      dragStartDayRef.current = null;
+      if (!startDay) return;
+      const landed = shiftDays(startDay, dayOffset);
       if (!landed) return;
       debugLog("pager.drag.end", {
         landed: dateKey(landed),
