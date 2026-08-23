@@ -1,3 +1,11 @@
+/*
+  Warnings:
+
+  - You are about to drop the column `workDays` on the `User` table. All the data in the column will be lost.
+  - You are about to drop the column `workEnd` on the `User` table. All the data in the column will be lost.
+  - You are about to drop the column `workStart` on the `User` table. All the data in the column will be lost.
+
+*/
 -- CreateEnum
 CREATE TYPE "Language" AS ENUM ('vi-VN', 'en-US');
 
@@ -20,20 +28,26 @@ CREATE TYPE "SchedulingModel" AS ENUM ('HEURISTIC', 'LINUCB');
 CREATE TYPE "IntegrationProvider" AS ENUM ('LMS', 'PORTAL');
 
 -- CreateEnum
-CREATE TYPE "NotificationTopic" AS ENUM ('ASSIGNMENT', 'EXAM', 'TIMETABLE');
+CREATE TYPE "NotificationTopic" AS ENUM ('ASSIGNMENT', 'EXAM', 'TIMETABLE', 'REMINDER', 'OVERDUE');
 
 -- CreateEnum
 CREATE TYPE "JobStatus" AS ENUM ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED');
 
 -- AlterTable
-ALTER TABLE "Task" ADD COLUMN     "seriesId" TEXT,
+ALTER TABLE "Task" ADD COLUMN     "anchorEndTime" TIMESTAMP(3),
+ADD COLUMN     "anchorStartTime" TIMESTAMP(3),
+ADD COLUMN     "seriesId" TEXT,
 ADD COLUMN     "sessionIndex" INTEGER,
 ADD COLUMN     "sessionTotal" INTEGER,
 ADD COLUMN     "source" "TaskSource" NOT NULL DEFAULT 'USER',
 ADD COLUMN     "type" "TaskType" NOT NULL DEFAULT 'MANUAL';
 
 -- AlterTable
-ALTER TABLE "User" ADD COLUMN     "lang" "Language" NOT NULL DEFAULT 'en-US';
+ALTER TABLE "User" DROP COLUMN "workDays",
+DROP COLUMN "workEnd",
+DROP COLUMN "workStart",
+ADD COLUMN     "lang" "Language" NOT NULL DEFAULT 'vi-VN',
+ALTER COLUMN "timezone" SET DEFAULT 'Asia/Saigon';
 
 -- CreateTable
 CREATE TABLE "UserEncryptionKey" (
@@ -71,6 +85,13 @@ CREATE TABLE "TaskSeries" (
 );
 
 -- CreateTable
+CREATE TABLE "TaskReminder" (
+    "id" TEXT NOT NULL,
+    "remindBeforeMinutes" INTEGER NOT NULL DEFAULT 15,
+    "taskId" TEXT NOT NULL
+);
+
+-- CreateTable
 CREATE TABLE "SlotProposal" (
     "id" TEXT NOT NULL,
     "event" "SlotProposalEvent" NOT NULL,
@@ -91,6 +112,7 @@ CREATE TABLE "Integration" (
     "provider" "IntegrationProvider" NOT NULL,
     "encryptedCredentials" TEXT NOT NULL,
     "encryptionVersion" INTEGER NOT NULL,
+    "lastVerifiedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "userId" TEXT NOT NULL,
@@ -178,10 +200,7 @@ CREATE INDEX "UserDevice_userId_idx" ON "UserDevice"("userId");
 CREATE INDEX "TaskSeries_userId_idx" ON "TaskSeries"("userId");
 
 -- CreateIndex
-CREATE INDEX "SlotProposal_userId_timestamp_idx" ON "SlotProposal"("userId", "timestamp" DESC);
-
--- CreateIndex
-CREATE INDEX "SlotProposal_taskId_idx" ON "SlotProposal"("taskId");
+CREATE UNIQUE INDEX "TaskReminder_remindBeforeMinutes_taskId_key" ON "TaskReminder"("remindBeforeMinutes", "taskId");
 
 -- CreateIndex
 CREATE INDEX "Integration_provider_userId_idx" ON "Integration"("provider", "userId");
@@ -218,6 +237,9 @@ ALTER TABLE "TaskSeries" ADD CONSTRAINT "TaskSeries_userId_fkey" FOREIGN KEY ("u
 
 -- AddForeignKey
 ALTER TABLE "Task" ADD CONSTRAINT "Task_seriesId_fkey" FOREIGN KEY ("seriesId") REFERENCES "TaskSeries"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "TaskReminder" ADD CONSTRAINT "TaskReminder_taskId_fkey" FOREIGN KEY ("taskId") REFERENCES "Task"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "SlotProposal" ADD CONSTRAINT "SlotProposal_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;

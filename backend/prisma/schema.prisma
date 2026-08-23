@@ -19,26 +19,10 @@ model User {
   id       String   @id @default(uuid())
   name     String   @db.VarChar(60)
   email    String   @unique @db.VarChar(255)
-  timezone String   @default("UTC") @db.VarChar(50)
-  lang     Language @default(EN_US)
+  timezone String   @default("Asia/Saigon") @db.VarChar(50)
+  lang     Language @default(VI_VN)
 
-  // Working window (see docs/objects.md). Minutes from midnight + ISO weekdays.
-  workStart Int   @default(540) // 09:00
-  workEnd   Int   @default(1020) // 17:00
-  workDays  Int[] @default([1, 2, 3, 4, 5]) // 1=Mon … 7=Sun
-
-  // Flat 168-float SIGNED preference matrix (7 days × 24 one-hour buckets).
-  // Written as Phase-2 telemetry: keeps/moves-toward increment a cell (+1),
-  // moves-away decrement it (-1); an empty cell is 0 (neutral). Seeded lazily.
-  // Float (not Int) so the daily exponential decay (cell *= 2^(−Δdays/21))
-  // accumulates sub-integer precision without truncation — integer storage
-  // caused the pg driver to truncate 0.9677 → 0 on the first nightly decay,
-  // zeroing all cells that were only incremented once.
   preferenceMatrix Float[] @default([])
-
-  // When the daily decay cron last applied exponential time-decay to
-  // `preferenceMatrix` (see MatrixDecayService). Null until the first decay
-  // pass; the cron treats null as "no elapsed days" and only stamps the time.
   preferenceMatrixDecayedAt DateTime?
 
   onboardingComplete Boolean  @default(false)
@@ -154,22 +138,14 @@ model Task {
   status             TaskStatus @default(PENDING)
   type               TaskType   @default(MANUAL)
   source             TaskSource @default(USER)
-  // True when this task overlaps another task's interval, OR has no valid
-  // placement at all (scheduledStartTime null). An overlap is now a normal,
-  // ACCEPTED state — not something a cost model tries to prevent: a direct
-  // drag/resize (TasksService.displace/resize) writes the user's requested
-  // interval unconditionally and simply flags both tasks conflicting rather
-  // than auto-relocating either one. Cleared by a follow-up drag/resize that
-  // resolves the overlap, or by Optimize (optimize.ts).
+
   conflict           Boolean    @default(false)
-  // True when the user directly dragged/resized this task. Informational
-  // only everywhere automatic (badge/telemetry) — no automatic path (Create,
-  // Edit-accept's resolveInvalidPlacement) ever freezes/protects a task
-  // because of this flag. The ONE place it gates real behavior is Optimize's
-  // "retainManual" mode (explicit user opt-in): tasks with this flag set are
-  // locked at their current slot for that one repack, regardless of validity.
   manuallyMoved      Boolean    @default(false)
-  scheduledStartTime DateTime? // assigned by the EDF engine
+
+  // limit the mobility of tasks when scheduling in a series so they don't fly around when optimizing
+  anchorStartTime    DateTime?
+  anchorEndTime      DateTime?
+  scheduledStartTime DateTime?
   userId             String
   user               User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -182,10 +158,12 @@ model Task {
   // Deleting the TaskSeries cascades to every session it owns.
   seriesId     String?
   series       TaskSeries? @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+
   // Denormalized convenience fields for cheap per-row rendering alongside seriesId.
   sessionIndex Int?
   sessionTotal Int?
 
+  reminders     TaskReminder[]
   notifications Notification[]
   slotProposals SlotProposal[]
 
@@ -196,6 +174,16 @@ model Task {
   @@index([userId, status])
   @@index([userId, scheduledStartTime])
   @@index([userId, seriesId, createdAt(sort: Asc)])
+}
+
+model TaskReminder {
+  id                  String
+  remindBeforeMinutes Int @default(15)
+
+  taskId  String
+  task    Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([remindBeforeMinutes, taskId])
 }
 
 enum TaskEventType {
@@ -215,12 +203,7 @@ model TaskEvent {
   newSnapshot Json
   rewardScore Float         @default(1.0) // Phase-3 signal
   occurredAt  DateTime      @default(now())
-  // Groups every RESCHEDULED TaskEvent one multi-task batch wrote — today
-  // that's SchedulerService.optimizeWindow (the explicit Optimize action) or
-  // resolveInvalidPlacement (Edit-accept's single-task resolve) — so the
-  // whole batch can be undone atomically via SchedulerService.undoBatch /
-  // POST /tasks/reschedule/undo/:batchId. Null for events not written as
-  // part of an undoable batch (e.g. CREATE, MOVE, RESIZE, COMPLETE).
+
   batchId     String?
 
   taskId String
@@ -260,8 +243,6 @@ enum SchedulingModel {
   LINUCB
 }
 
-// One row per create/reschedule event holding both models' proposed
-// placement plus which one actually won.
 model SlotProposal {
   id                String            @id @default(uuid())
   event             SlotProposalEvent
@@ -290,6 +271,7 @@ model Integration {
   provider             IntegrationProvider
   encryptedCredentials String
   encryptionVersion    Int
+  lastVerifiedAt       DateTime?
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 
@@ -308,12 +290,11 @@ enum NotificationTopic {
   ASSIGNMENT
   EXAM
   TIMETABLE
+  REMINDER
+  OVERDUE
 }
 
-// Inbox row a student sees before optionally turning it into a Task
-// (assignment/exam detected on LMS, or a timetable change detected on the
-// portal). `actionTakenAt` non-null prevents double-creating a task from the
-// same notification — no separate status enum.
+
 model Notification {
   id            String            @id @default(uuid())
   sentAt        DateTime          @default(now())
