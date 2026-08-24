@@ -506,7 +506,7 @@ export function WeekPager({
     snapTo(1, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reads the
     // current window; only the focused day drives this.
-  }, [focusedDate]);
+  }, [focusedDate, settling]);
 
   // Slides the focused day a full week (the response to a swipe that escapes
   // a week edge: Monday swiped backward, Sunday swiped forward — a fast
