@@ -278,6 +278,10 @@ export function WeekPager({
   // swipe (the "next day stops covering the current day" glitch).
   const [settling, setSettling] = useState(false);
   const releaseSettle = useCallback(() => setSettling(false), []);
+  // Synchronous guard for cross-day drag — prevents focusedDate effect
+  // from rebuilding the window mid-drag (refs are immediately readable,
+  // unlike state which requires a render cycle).
+  const crossDayDragRef = useRef(false);
   // Each mounted day's mini-day blocks (from its DayTimeline's `onPeekChange`),
   // keyed by `dateKey`, so every page's strip renders the next day's real tasks.
   const [peekByDay, setPeekByDay] = useState<Record<string, PeekBlock[]>>({});
@@ -478,6 +482,8 @@ export function WeekPager({
   // responding). The settle itself updates `focusedDate` via the parent's
   // `setFocusedDate`, but the effect must not interfere.
   useEffect(() => {
+    // Guard against cross-day drag window rebuild (synchronous ref check)
+    if (crossDayDragRef.current) return;
     debugLog("pager.focus.change", { focusedDate: dateKey(focusedDate), settling, days: days.map(dateKey), focusedIndex });
     if (settling) return;
     const key = dateKey(focusedDate);
@@ -673,9 +679,9 @@ export function WeekPager({
       // chip/title move in sync with the strip snap. The pager window
       // follows on drop (see comment above).
       // Guard the focusedDate effect to prevent window rebuild mid-drag.
-      setSettling(true);
+      crossDayDragRef.current = true;
       onFocusedDateChange(targetDay);
-      Promise.resolve().then(() => setSettling(false));
+      Promise.resolve().then(() => { crossDayDragRef.current = false; });
       debugLog("pager.advance", {
         edge,
         target: dateKey(targetDay),
