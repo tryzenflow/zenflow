@@ -681,7 +681,6 @@ export function WeekPager({
       // Guard the focusedDate effect to prevent window rebuild mid-drag.
       crossDayDragRef.current = true;
       onFocusedDateChange(targetDay);
-      Promise.resolve().then(() => { crossDayDragRef.current = false; });
       debugLog("pager.advance", {
         edge,
         target: dateKey(targetDay),
@@ -797,6 +796,8 @@ export function WeekPager({
       setPill(null);
       commitRoles(1);
       progress.value = -width;
+      // Release cross-day drag guard — window re-centered, safe to rebuild now.
+      crossDayDragRef.current = false;
     },
     [
       centeredDays,
