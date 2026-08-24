@@ -43,7 +43,7 @@ import Animated, {
   type SharedValue,
 } from "react-native-reanimated";
 import { PeekStrip, PEEK_STRIP_W } from "./week-peek-strip";
-import { PagerPage } from "./week-pager-page";
+import { PagerPage, type DragEdge } from "./week-pager-page";
 
 /** Hold time (ms) a lifted block must sit in the screen-edge zone before the
  * cross-day advance fires (mockup's "lifted block at the edge → jumps"). */
