@@ -1,4 +1,5 @@
-import { Animated, useAnimatedStyle, type SharedValue } from "react-native-reanimated";
+import Animated from "react-native-reanimated";
+import { useAnimatedStyle, type SharedValue } from "react-native-reanimated";
 import { computePagePosition } from "@/lib/week-pager-math";
 
 /** Edges the WeekHeader peeks at, mapped to the adjacent-day advance. */
