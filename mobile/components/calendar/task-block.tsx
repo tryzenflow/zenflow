@@ -56,9 +56,10 @@ function fmt(iso: string, tz: string) {
 }
 
 function fmtMin(min: number, tz: string, refISO: string) {
-  const d = toZonedTime(new Date(refISO), tz);
-  d.setHours(Math.floor(min / 60), min % 60, 0, 0);
-  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const baseWall = zonedDate(refISO, tz);
+  const newWall = new Date(baseWall);
+  newWall.setHours(Math.floor(min / 60), min % 60, 0, 0);
+  return newWall.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
 interface DragSnap {
@@ -209,12 +210,15 @@ export function TaskBlock({
         Math.min(DAILY_HORIZON - TIME_GRANULARITY, startMin + snappedMinutes),
       );
 
-      const wall = zonedDate(segment.taskStart, tz);
-      wall.setHours(Math.floor(newStartMin / 60), newStartMin % 60, 0, 0);
+      const baseWall = zonedDate(segment.start, tz);
+      const newWall = new Date(baseWall);
+      newWall.setHours(Math.floor(newStartMin / 60), newStartMin % 60, 0, 0);
 
-      if (dayOffset !== 0) wall.setDate(wall.getDate() + dayOffset);
+      if (dayOffset !== 0) {
+        newWall.setDate(newWall.getDate() + dayOffset);
+      }
 
-      const newStart = zonedWallClockToUtc(wall, tz);
+      const newStart = zonedWallClockToUtc(newWall, tz);
 
       debugLog("task.drop", {
         task: segment.taskId,
