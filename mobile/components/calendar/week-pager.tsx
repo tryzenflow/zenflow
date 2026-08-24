@@ -24,7 +24,7 @@ import {
   shouldSlideWeek,
 } from "@/lib/week-pager-math";
 import { DayTimeline } from "./day-timeline";
-import { DAY_MINUTES, type PeekBlock } from "@/lib/peek";
+import { type PeekBlock } from "@/lib/peek";
 import { debugLog } from "@/lib/debug-log";
 import {
   getCrossDayOffset,
@@ -42,170 +42,18 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from "react-native-reanimated";
+import { PeekStrip, PEEK_STRIP_W } from "./week-peek-strip";
+import { PagerPage } from "./week-pager-page";
 
 /** Hold time (ms) a lifted block must sit in the screen-edge zone before the
  * cross-day advance fires (mockup's "lifted block at the edge → jumps"). */
 const CROSS_DAY_HOLD_MS = 400;
-
-/** Width of the decorative "next day" peek strip on each page's right edge
- * (mirrors mockups/week-view.html's `w-3.5` affordance). */
-const PEEK_STRIP_W = 14;
 
 /** Duration of the settle snap (and snap-back) after a swipe ends. */
 const SETTLE_MS = 200;
 
 const BRAND_ORANGE_LIGHT = "255, 142, 62";
 const BRAND_ORANGE_DARK = "255, 122, 36";
-
-/** Block fill per task state, matching the day grid's state treatment. */
-const PEEK_BLOCK_COLORS: Record<PeekBlock["state"], string> = {
-  fluid: `rgba(${BRAND_ORANGE_LIGHT}, 0.55)`,
-  overdue: "rgba(244, 63, 94, 0.6)",
-  conflict: "rgba(245, 158, 11, 0.6)",
-  completed: "rgba(16, 185, 129, 0.45)",
-};
-
-/** Right-edge sliver showing the next day's tasks as mini blocks, positioned
- * by wall-clock time and colored by task state. */
-function PeekStrip({ blocks }: { blocks: PeekBlock[] }) {
-  const [height, setHeight] = useState(0);
-  debugLog("pager.peekstrip.mount", { blocksCount: blocks.length });
-  return (
-    <View
-      pointerEvents="none"
-      onLayout={(e) => setHeight(e.nativeEvent.layout.height)}
-      className="absolute top-0 bottom-0 z-[6] overflow-hidden border-l border-border bg-card"
-      style={{
-        width: PEEK_STRIP_W,
-        right: 0,
-        shadowColor: "#000",
-        shadowOpacity: 0.08,
-        shadowRadius: 10,
-        shadowOffset: { width: -2, height: 0 },
-        elevation: 2,
-      }}
-    >
-      {height > 0 &&
-        blocks.map((block) => (
-          <View
-            key={block.key}
-            className="absolute rounded"
-            style={{
-              left: 3,
-              width: 8,
-              top: (block.startMin / DAY_MINUTES) * height,
-              height: Math.max(2, (block.durationMin / DAY_MINUTES) * height),
-              backgroundColor: PEEK_BLOCK_COLORS[block.state],
-            }}
-          />
-        ))}
-    </View>
-  );
-}
-
-/** Edges the WeekHeader peeks at, mapped to the adjacent-day advance. */
-type DragEdge = "left" | "right";
-
-interface PagerPageProps {
-  index: number;
-  width: number;
-  /** Strip offset in px (rest: `-width` — the focused page is always the
-   * middle of the 3-page window). */
-  progress: SharedValue<number>;
-  /** Page the strip is being dragged/settled away FROM (the outgoing,
-   * parallaxing, dimming one). */
-  fromSV: SharedValue<number>;
-  /** Page the strip is settling ON (the incoming, stacking one). During a
-   * live drag this equals `fromSV` and the incoming is derived from the
-   * drag direction instead. */
-  toSV: SharedValue<number>;
-  /** 1 while the finger is dragging (parallax held at `PARALLAX_FACTOR`),
-   * 0 during settle animations (parallax eases back to 1× so pages land
-   * exactly on their slots). */
-  draggingSV: SharedValue<number>;
-  /** Index of the page that holds the currently-lifted task block, or −1 if
-   * no task drag is active. The carried page's slot is overridden so the
-   * strip snap keeps it pinned to the finger. */
-  carrierIndexSV: SharedValue<number>;
-  /** The carried page's `index * width + progress` at drag start — the page
-   * is held at this screen position for the entire drag gesture. */
-  carrierOriginSV: SharedValue<number>;
-  borderColor: string;
-  children: React.ReactNode;
-}
-
-/**
- * One absolutely-positioned day page in the stack. Its true position is
- * always `slot + progress`; the outgoing page additionally gets a parallax
- * offset (and the incoming one stack chrome), per
- * mockups/week-view.html's swipe-transition frame:
- * - the outgoing page moves at `PARALLAX_FACTOR`× finger speed and dims to
- *   `OUTGOING_DIM_OPACITY` as the neighbor stacks over it;
- * - the incoming page slides 1:1 at a higher z-index with a
- *   `border-l`/`border-r` seam and a soft shadow, popping over the outgoing
- *   page like a card;
- * - everything beyond the outgoing/incoming pair fades out (still mounted —
- *   the page holding a lifted task block must never unmount mid cross-day
- *   drag).
- */
-function PagerPage({
-  index,
-  width,
-  progress,
-  fromSV,
-  toSV,
-  draggingSV,
-  carrierIndexSV,
-  carrierOriginSV,
-  borderColor,
-  children,
-}: PagerPageProps) {
-  debugLog("pager.page.mount", { index, width });
-  const animatedStyle = useAnimatedStyle(() => {
-    const pos = computePagePosition({
-      index,
-      width,
-      progress: progress.value,
-      outIndex: fromSV.value,
-      toIndex: toSV.value,
-      dragging: draggingSV.value ? 1 : 0,
-      carrierIndex: carrierIndexSV.value,
-      carrierOrigin: carrierOriginSV.value,
-    });
-
-    const seamStyle =
-      pos.seam === "left"
-        ? { borderLeftWidth: 1, borderLeftColor: borderColor }
-        : pos.seam === "right"
-          ? { borderRightWidth: 1, borderRightColor: borderColor }
-          : {};
-
-    return {
-      transform: [{ translateX: pos.translateX }],
-      opacity: pos.opacity,
-      zIndex: pos.zIndex,
-      ...seamStyle,
-    };
-  });
-
-  // The stack shadow is drawn as an explicit gradient strip at the incoming
-  // page's leading edge (over the outgoing page) — see `computeShadowStrip`.
-  // A native box-shadow can't reproduce the mockup's hard-edged band on web
-  // (RN Web supports no `spread`), so the strip lives in the WeekPager's
-  // top overlay, outside the `overflow-hidden` strip container, and animates
-  // its opacity + position from the same shared values.
-  return (
-    <Animated.View
-      style={[
-        { position: "absolute", left: 0, top: 0, bottom: 0, width },
-        animatedStyle,
-      ]}
-      collapsable={false}
-    >
-      {children}
-    </Animated.View>
-  );
-}
 
 interface WeekPagerProps {
   /** The day the screen/header currently shows; the pager keeps the focused
@@ -573,7 +421,7 @@ export function WeekPager({
       // header chip/title updates immediately — previously it only
       // updated at animation end (inside `settleRoles`), causing the
       // header to flash back to the previous day for 200 ms.
-      const landed = days[target];
+      const landed = days[target];  
       if (landed) onFocusedDateChange(landed);
       animateRolesTo(target, settleRoles);
     },
