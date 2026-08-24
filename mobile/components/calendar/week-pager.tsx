@@ -69,6 +69,7 @@ const PEEK_BLOCK_COLORS: Record<PeekBlock["state"], string> = {
  * by wall-clock time and colored by task state. */
 function PeekStrip({ blocks }: { blocks: PeekBlock[] }) {
   const [height, setHeight] = useState(0);
+  debugLog("pager.peekstrip.mount", { blocksCount: blocks.length });
   return (
     <View
       pointerEvents="none"
@@ -159,6 +160,7 @@ function PagerPage({
   borderColor,
   children,
 }: PagerPageProps) {
+  debugLog("pager.page.mount", { index, width });
   const animatedStyle = useAnimatedStyle(() => {
     const pos = computePagePosition({
       index,
@@ -255,6 +257,7 @@ export function WeekPager({
   onLongPress,
   onCrossDayReschedule,
 }: WeekPagerProps) {
+  debugLog("pager.mount", { focusedDate: dateKey(focusedDate) });
   const { width } = useWindowDimensions();
   const { isDarkColorScheme } = useColorScheme();
   const borderColor = isDarkColorScheme
@@ -310,6 +313,7 @@ export function WeekPager({
   // Stable identity so DayTimeline's peek-report effect doesn't re-fire on
   // every pager render.
   const handlePeekChange = useCallback((blocks: PeekBlock[], dayKey: string) => {
+    debugLog("pager.peek.change", { dayKey, blocksCount: blocks.length });
     setPeekByDay((prev) =>
       prev[dayKey] === blocks ? prev : { ...prev, [dayKey]: blocks },
     );
@@ -343,6 +347,7 @@ export function WeekPager({
   const pendingSettleRef = useRef(false);
 
   useLayoutEffect(() => {
+    debugLog("pager.progress.snap", { pending: pendingSettleRef.current, days: days.map(dateKey), width });
     if (!pendingSettleRef.current) return;
     pendingSettleRef.current = false;
     progress.value = -width;
@@ -350,6 +355,7 @@ export function WeekPager({
 
   useEffect(
     () => () => {
+      debugLog("pager.cleanup", { armTimer: !!armTimerRef.current });
       if (armTimerRef.current) clearTimeout(armTimerRef.current);
     },
     [],
@@ -357,6 +363,7 @@ export function WeekPager({
 
   const commitRoles = useCallback(
     (index: number) => {
+      debugLog("pager.roles.commit", { index });
       fromSV.value = index;
       toSV.value = index;
     },
@@ -403,6 +410,7 @@ export function WeekPager({
   const handleFirstLayout = useCallback(() => {
     if (hasLaidOutRef.current) return;
     hasLaidOutRef.current = true;
+    debugLog("pager.layout.first", { width });
     requestAnimationFrame(() => {
       commitRoles(1);
       progress.value = -width;
@@ -411,6 +419,7 @@ export function WeekPager({
 
   const snapTo = useCallback(
     (index: number, animated: boolean) => {
+      debugLog("pager.snap.to", { index, animated, targetProgress: -index * width });
       if (animated) {
         progress.value = withTiming(
           -index * width,
@@ -438,6 +447,7 @@ export function WeekPager({
   // `m`).
   const animateRolesTo = useCallback(
     (target: number, onDone?: (index: number) => void) => {
+      debugLog("pager.animate.roles", { from: focusedIndex, to: target, width });
       fromSV.value = focusedIndex;
       toSV.value = target;
       progress.value = withTiming(
@@ -468,6 +478,7 @@ export function WeekPager({
   // responding). The settle itself updates `focusedDate` via the parent's
   // `setFocusedDate`, but the effect must not interfere.
   useEffect(() => {
+    debugLog("pager.focus.change", { focusedDate: dateKey(focusedDate), settling, days: days.map(dateKey), focusedIndex });
     if (settling) return;
     const key = dateKey(focusedDate);
     const idx = days.findIndex((d) => dateKey(d) === key);
@@ -536,6 +547,7 @@ export function WeekPager({
 
   const settleOn = useCallback(
     (target: number, flicked: boolean) => {
+      debugLog("pager.settle.on", { target, flicked, focusedIndex, days: days.map(dateKey) });
       // Lock the pan for the duration of the settle so an interrupt can't
       // flip the incoming/outgoing cover mid-animation.
       setSettling(true);
@@ -573,6 +585,7 @@ export function WeekPager({
 
   const handlePanEnd = useCallback(
     (dragPx: number, velocityX: number) => {
+      debugLog("pager.pan.end", { dragPx, velocityX, focusedIndex, width });
       const target = decideSettleTarget({
         dragPx,
         velocityX,
@@ -659,7 +672,10 @@ export function WeekPager({
       // Commit the focus the moment the advance fires, so the WeekHeader
       // chip/title move in sync with the strip snap. The pager window
       // follows on drop (see comment above).
+      // Guard the focusedDate effect to prevent window rebuild mid-drag.
+      setSettling(true);
       onFocusedDateChange(targetDay);
+      Promise.resolve().then(() => setSettling(false));
       debugLog("pager.advance", {
         edge,
         target: dateKey(targetDay),
