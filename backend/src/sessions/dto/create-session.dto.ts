@@ -10,9 +10,9 @@ import {
   ValidateIf,
 } from "class-validator";
 import { TIME_GRANULARITY } from "../../common/constants";
-import type { CreateTaskInput } from "@zenflow/shared";
+import type { CreateSessionInput } from "@zenflow/shared";
 
-export class CreateTaskDto implements CreateTaskInput {
+export class CreateSessionDto implements CreateSessionInput {
   @IsString()
   @MaxLength(60, { message: "Title must be at most 60 characters." })
   title: string;
@@ -22,16 +22,15 @@ export class CreateTaskDto implements CreateTaskInput {
   @IsString()
   note?: string | null;
 
-  /** Task duration in minutes (always a positive multiple of 15, required). */
+  /** Session duration in minutes (always a positive multiple of 15, required). */
   @IsInt()
   @Min(TIME_GRANULARITY)
   @IsDivisibleBy(TIME_GRANULARITY)
   durationMinutes: number;
 
-  @IsOptional()
-  @ValidateIf((_, v) => v !== null)
+  /** ISO-8601 deadline — required (the DB column is NOT NULL). */
   @IsISO8601()
-  deadline?: string | null;
+  deadline: string;
 
   @IsOptional()
   @IsArray()

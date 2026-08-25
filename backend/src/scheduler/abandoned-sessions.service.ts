@@ -1,7 +1,11 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { PrismaService } from "../prisma/prisma.service";
-import { Prisma, TaskEventType, TaskStatus } from "../../generated/prisma";
+import {
+  Prisma,
+  SessionEventType,
+  SessionStatus,
+} from "../../generated/prisma";
 import { ABANDON_BATCH_SIZE, ABANDON_GRACE_MS } from "../common/constants";
 
 // The rest of `telemetry.ts` (Phase-3 reward telemetry) was removed pending
@@ -9,7 +13,7 @@ import { ABANDON_BATCH_SIZE, ABANDON_GRACE_MS } from "../common/constants";
 // needs, so it's kept local rather than reviving the whole module.
 const ABANDON_REWARD = -1.0;
 
-type AbandonCandidate = Prisma.TaskGetPayload<{
+type AbandonCandidate = Prisma.SessionGetPayload<{
   select: {
     id: true;
     userId: true;
@@ -20,19 +24,19 @@ type AbandonCandidate = Prisma.TaskGetPayload<{
 }>;
 
 @Injectable()
-export class AbandonedTasksService {
-  private readonly logger = new Logger(AbandonedTasksService.name);
+export class AbandonedSessionsService {
+  private readonly logger = new Logger(AbandonedSessionsService.name);
 
   constructor(private readonly prisma: PrismaService) {}
 
-  private snapshot(task: AbandonCandidate): Prisma.InputJsonValue {
+  private snapshot(session: AbandonCandidate): Prisma.InputJsonValue {
     return {
-      scheduledStartTime: task.scheduledStartTime
-        ? task.scheduledStartTime.toISOString()
+      scheduledStartTime: session.scheduledStartTime
+        ? session.scheduledStartTime.toISOString()
         : null,
-      durationMinutes: task.durationMinutes,
+      durationMinutes: session.durationMinutes,
       // Tag NAMES at abandonment (sorted) — "tags then" for Phase-2 telemetry.
-      tags: task.tags.map((t) => t.name).sort((a, b) => a.localeCompare(b)),
+      tags: session.tags.map((t) => t.name).sort((a, b) => a.localeCompare(b)),
     };
   }
 
@@ -44,7 +48,7 @@ export class AbandonedTasksService {
   async handleCron(): Promise<void> {
     const count = await this.sweep();
     if (count > 0) {
-      this.logger.log(`Swept ${count} overdue task(s) into ABANDONED`);
+      this.logger.log(`Swept ${count} overdue session(s) into ABANDONED`);
     }
   }
 
@@ -52,14 +56,14 @@ export class AbandonedTasksService {
     const cutoff = new Date(now.getTime() - ABANDON_GRACE_MS);
     let total = 0;
 
-    const where: Prisma.TaskWhereInput = {
-      status: TaskStatus.PENDING,
+    const where: Prisma.SessionWhereInput = {
+      status: SessionStatus.PENDING,
       deadline: { lt: cutoff },
       ...(userId ? { userId } : {}),
     };
 
     for (;;) {
-      const candidates = await this.prisma.task.findMany({
+      const candidates = await this.prisma.session.findMany({
         where,
         select: {
           id: true,
@@ -73,19 +77,19 @@ export class AbandonedTasksService {
       if (candidates.length === 0) break;
 
       await this.prisma.$transaction(async (tx) => {
-        for (const task of candidates) {
-          await tx.task.update({
-            where: { id: task.id },
-            data: { status: TaskStatus.ABANDONED },
+        for (const session of candidates) {
+          await tx.session.update({
+            where: { id: session.id },
+            data: { status: SessionStatus.ABANDONED },
           });
-          await tx.taskEvent.create({
+          await tx.sessionEvent.create({
             data: {
-              taskId: task.id,
-              userId: task.userId,
-              eventType: TaskEventType.ABANDON,
+              sessionId: session.id,
+              userId: session.userId,
+              eventType: SessionEventType.ABANDON,
               // The slot it died in — mirrors how COMPLETE captures its slot.
               oldSnapshot: Prisma.JsonNull,
-              newSnapshot: this.snapshot(task),
+              newSnapshot: this.snapshot(session),
               // Strongest negative outcome signal (COMPLETE = +1.0, MOVE = 0.0).
               rewardScore: ABANDON_REWARD,
             },

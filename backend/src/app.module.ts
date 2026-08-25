@@ -12,7 +12,7 @@ import { CacheableMemory } from "cacheable";
 import { MailService } from "./mail/mail.service";
 import { MailModule } from "./mail/mail.module";
 import { UsersModule } from "./users/users.module";
-import { TasksModule } from "./tasks/tasks.module";
+import { SessionsModule } from "./sessions/sessions.module";
 import { TagsModule } from "./tags/tags.module";
 import { FilesModule } from "./files/files.module";
 import { SchedulerModule } from "./scheduler/scheduler.module";
@@ -95,11 +95,13 @@ import { RateLimitModule } from "./common/rate-limit";
     PrismaModule,
     AuthModule,
     MailModule,
-    TasksModule,
+    SessionsModule,
     TagsModule,
     FilesModule,
-    // Background cron providers only (MatrixDecayService, AbandonedTasksService)
-    // — the EDF placement engine was removed; see scheduler.module.ts.
+    // Background cron providers (MatrixDecayService, AbandonedSessionsService)
+    // plus DayRescheduleService, the implicit single-day repack triggered by
+    // SessionsService on create/deadline-edit. The old manual Optimize
+    // controller (+ undo) was removed; see scheduler.module.ts.
     SchedulerModule,
   ],
   providers: [AppService, MailService],

@@ -10,7 +10,7 @@ import {
   Min,
   ValidateIf,
 } from "class-validator";
-import type { TaskStatus, UpdateTaskInput } from "@zenflow/shared";
+import type { SessionStatus, UpdateSessionInput } from "@zenflow/shared";
 import { TIME_GRANULARITY } from "../../common/constants";
 
 /**
@@ -18,7 +18,7 @@ import { TIME_GRANULARITY } from "../../common/constants";
  * covers all of it. Every field is a plain diff applied directly; there is no
  * cascade, conflict recompute, or displaced-tasks side effect.
  */
-export class UpdateTaskDto implements UpdateTaskInput {
+export class UpdateSessionDto implements UpdateSessionInput {
   @IsOptional()
   @IsString()
   @MaxLength(60, { message: "Title must be at most 60 characters." })
@@ -35,10 +35,10 @@ export class UpdateTaskDto implements UpdateTaskInput {
   @IsDivisibleBy(TIME_GRANULARITY)
   durationMinutes?: number;
 
+  /** ISO-8601 deadline. Omit to leave unchanged — the field itself is never nullable. */
   @IsOptional()
-  @ValidateIf((_, v) => v !== null)
   @IsISO8601()
-  deadline?: string | null;
+  deadline?: string;
 
   @IsOptional()
   @IsArray()
@@ -53,5 +53,5 @@ export class UpdateTaskDto implements UpdateTaskInput {
 
   @IsOptional()
   @IsIn(["PENDING", "DONE", "ABANDONED"])
-  status?: TaskStatus;
+  status?: SessionStatus;
 }

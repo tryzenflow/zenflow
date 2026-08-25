@@ -13,31 +13,31 @@
 
 Read this once; the rest of the doc assumes it. Terms are defined before their first use.
 
-| Term | Plain definition | Why it matters here |
-|------|------------------|---------------------|
-| **EDF (Earliest-Deadline First)** | Originally a hard rule ("sort by deadline, drop into the first free slot"); today deadline pressure is one continuous cost term (`latenessCost`, see the cost model below) in a single blended score, not a separate gating pass. | Historically our Phase-1 engine name, and `scheduleAll` still *processes* tasks in EDF order (deadline ascending, `compareMovable`) — but meeting a deadline is now a weighted cost, never a hard constraint (a task can be placed past its deadline if every other option costs more). |
-| **Slot** | A 15-minute block of calendar time. The day is a grid of these. | All scheduling happens on this grid; durations are always multiples of 15 min. |
-| **Feasible set** | Originally "the slots that legally respect the deadline/work hours/grid"; now a bounded pool of *candidate* slots — pooled from `feasibleSlots` (in-hours-before-deadline), `findSlotIgnoringWorkHours`, and `findNextAvailableSlot` — each scored by the continuous `placementCost`, with deadline and work-hours no longer hard gates on membership. The only slots ever excluded outright are ones that would overlap another task, one that falls on a task already in progress/past (`isPast`), or — for the one task a single `reoptimize` call is told to freeze — the transient per-call `pinnedTaskId`. | The intelligence layer re-ranks *within* this cost-ranked candidate pool, not a strict deadline/work-hours-filtered set. |
-| **Re-ranker** | A function that re-ranks a pool of cost-ranked candidates (pooled from the three sources above, not a strict tiered fallback) so a more-preferred slot is favoured, via the same seeded-softmax mechanism used for cost tie-breaking. | This is where every learned model plugs in — Phase 2's preference bonus is itself one term inside `placementCost`; later phases (the bandit) replace/extend the scoring function the pool is ranked by. |
-| **Telemetry / `task_events`** | An audit log: one row per user action (created, moved, resized, completed…), recording what was suggested vs. what the user chose. | This log is the *only* data the learners ever see; it makes offline evaluation possible. |
-| **Tag** | A user-defined label on a task (`#backend`, `#writing`). A task can have several. | Used as a model feature (multi-hot encoding, Phase 3+). |
-| **Duration bias** *(removed)* | A per-tag multiplier = (actual time taken) ÷ (estimated time). >1 means the user underestimates. Was used to correct the user's estimate *before* scheduling. | Historical only — see [Removed: per-tag duration-bias correction](#removed-per-tag-duration-bias-correction). Kept here because the term still appears in old telemetry/discussion. |
-| **Preference matrix** | A per-user 7×96 grid (7 weekdays × 96 fifteen-min blocks) of signed scores: + for liked time blocks, − for disliked. | Phase 2's memory of *when* a user likes to work. |
-| **Contextual bandit** | An online learner that, given a *context* (features), picks one *arm* (action) to maximize *reward*, while balancing trying new arms vs. repeating known-good ones. | Phase 3's model. "Contextual" = the best arm depends on the situation. |
-| **Arm** | One choosable action for the bandit. Here, a time-of-day block, not a raw 15-min slot. | Fewer arms → less data needed before the bandit learns. |
-| **LinUCB** | A specific contextual-bandit algorithm that assumes reward is *linear* in the features and adds an *uncertainty bonus* (UCB) to under-tried arms. | Phase 3's chosen algorithm. "Hybrid" = it mixes shared weights with per-arm weights. |
-| **UCB (Upper Confidence Bound)** | Pick the arm with the highest (estimated reward + uncertainty bonus). The bonus shrinks as an arm is tried more. | This is *how* the bandit explores: rarely-seen arms get a benefit-of-the-doubt boost. |
-| **Multi-hot vector** | A fixed-width 0/1 vector marking which tags are present, e.g. 6 tags → `[1,0,1,0,0,0]`. | Linear models can't read text lists, so tags are encoded this way. |
-| **Softmax / Boltzmann sampling** | Turn scores into probabilities (`p_i ∝ exp(score_i / T)`) and draw randomly. Temperature `T` controls randomness. | Phase 2 uses this so logging is *stochastic*, which off-policy evaluation requires. |
-| **Gumbel-top trick** | A trick to draw one softmax sample by adding random "Gumbel" noise to each score and taking the max. | Lets us sample a slot while still returning a clean ordering of the feasible set. |
-| **Propensity** | The probability the logging policy assigned to the action it actually took. | Recorded per decision so later off-policy estimators can reweight by it. |
-| **Off-policy / counterfactual evaluation** | Estimating how a *new* policy would have performed, using logs collected under the *old* policy. | Lets us score a model on history with zero user exposure. |
-| **IPS (Inverse-Propensity-Scoring)** | An off-policy estimator that reweights each logged outcome by 1 / (its logged propensity). | Our core replay estimator. It *requires* a stochastic logging policy with known propensities. |
-| **SNIPS** | Self-Normalized IPS: IPS divided by the sum of the weights. Lower variance than raw IPS. | A more stable variant used in the replay gate. |
-| **Matrix factorization** | Approximate a big (users × items) matrix as the product of two small ones, revealing latent factors. | Phase 4 uses it to discover user *archetypes* from the preference matrices. |
-| **Archetype** | A cluster of users with a similar behavioral signature (e.g. "Night Owl"). | Phase 4 seeds a brand-new user from the nearest archetype to beat the cold-start. |
-| **Cold start** | The problem of giving good suggestions to a user with no history yet. | Phase 4's whole job: borrow from the population instead of starting from zero. |
-| **MAR (Manual Adjustment Rate)** | Our north-star metric: fraction of suggested placements the user changes. Lower = better. | Every phase must beat the previous one's MAR. Defined precisely in [Evaluation](#evaluation). |
+| Term                                       | Plain definition                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Why it matters here                                                                                                                                                                                                                                                                     |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **EDF (Earliest-Deadline First)**          | The original Phase-1 hard rule ("sort by deadline, drop into the first free slot"); a mid-2026 rewrite briefly turned deadline pressure into one continuous cost term, but that whole engine was deleted (commit `6d3f42b`). Today's `heuristic.ts` is EDF-flavored again: `sortEDF()`'s sole sort key is ascending minutes-to-deadline, tie-broken by `id` (no preference-score tie-break) — preference only shapes the slot `bestFreeSlot` picks, not the placement order.                                                                                                                                                                                                                                                                                                                                                                                   | See [Current architecture](#current-architecture-deterministic-rank--best-fit-by-preference-heuristicts) below for what actually runs today. |
+| **Slot**                                   | A 15-minute block of calendar time. The day is a grid of these.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | All scheduling happens on this grid; durations are always multiples of 15 min.                                                                                                                                                                                                          |
+| **Feasible set**                           | Originally "the slots that legally respect the deadline/work hours/grid"; now a bounded pool of _candidate_ slots — pooled from `feasibleSlots` (in-hours-before-deadline), `findSlotIgnoringWorkHours`, and `findNextAvailableSlot` — each scored by the continuous `placementCost`, with deadline and work-hours no longer hard gates on membership. The only slots ever excluded outright are ones that would overlap another task, one that falls on a task already in progress/past (`isPast`), or — for the one task a single `reoptimize` call is told to freeze — the transient per-call `pinnedSessionId`. | The intelligence layer re-ranks _within_ this cost-ranked candidate pool, not a strict deadline/work-hours-filtered set.                                                                                                                                                                |
+| **Re-ranker**                              | A function that re-ranks a pool of cost-ranked candidates (pooled from the three sources above, not a strict tiered fallback) so a more-preferred slot is favoured, via the same seeded-softmax mechanism used for cost tie-breaking.                                                                                                                                                                                                                                                                                                                                                                               | This is where every learned model plugs in — Phase 2's preference bonus is itself one term inside `placementCost`; later phases (the bandit) replace/extend the scoring function the pool is ranked by.                                                                                 |
+| **Telemetry / `task_events`**              | An audit log: one row per user action (created, moved, resized, completed…), recording what was suggested vs. what the user chose.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | This log is the _only_ data the learners ever see; it makes offline evaluation possible.                                                                                                                                                                                                |
+| **Tag**                                    | A user-defined label on a task (`#backend`, `#writing`). A task can have several.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Used as a model feature (multi-hot encoding, Phase 3+).                                                                                                                                                                                                                                 |
+| **Duration bias** _(removed)_              | A per-tag multiplier = (actual time taken) ÷ (estimated time). >1 means the user underestimates. Was used to correct the user's estimate _before_ scheduling.                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Historical only — see [Removed: per-tag duration-bias correction](#removed-per-tag-duration-bias-correction). Kept here because the term still appears in old telemetry/discussion.                                                                                                     |
+| **Preference matrix**                      | A per-user 7×96 grid (7 weekdays × 96 fifteen-min blocks) of signed scores: + for liked time blocks, − for disliked.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Phase 2's memory of _when_ a user likes to work.                                                                                                                                                                                                                                        |
+| **Contextual bandit**                      | An online learner that, given a _context_ (features), picks one _arm_ (action) to maximize _reward_, while balancing trying new arms vs. repeating known-good ones.                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Phase 3's model. "Contextual" = the best arm depends on the situation.                                                                                                                                                                                                                  |
+| **Arm**                                    | One choosable action for the bandit. Here, a time-of-day block, not a raw 15-min slot.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Fewer arms → less data needed before the bandit learns.                                                                                                                                                                                                                                 |
+| **LinUCB**                                 | A specific contextual-bandit algorithm that assumes reward is _linear_ in the features and adds an _uncertainty bonus_ (UCB) to under-tried arms.                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Phase 3's chosen algorithm. "Hybrid" = it mixes shared weights with per-arm weights.                                                                                                                                                                                                    |
+| **UCB (Upper Confidence Bound)**           | Pick the arm with the highest (estimated reward + uncertainty bonus). The bonus shrinks as an arm is tried more.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | This is _how_ the bandit explores: rarely-seen arms get a benefit-of-the-doubt boost.                                                                                                                                                                                                   |
+| **Multi-hot vector**                       | A fixed-width 0/1 vector marking which tags are present, e.g. 6 tags → `[1,0,1,0,0,0]`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Linear models can't read text lists, so tags are encoded this way.                                                                                                                                                                                                                      |
+| **Softmax / Boltzmann sampling**           | Turn scores into probabilities (`p_i ∝ exp(score_i / T)`) and draw randomly. Temperature `T` controls randomness.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Phase 2 uses this so logging is _stochastic_, which off-policy evaluation requires.                                                                                                                                                                                                     |
+| **Gumbel-top trick**                       | A trick to draw one softmax sample by adding random "Gumbel" noise to each score and taking the max.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Lets us sample a slot while still returning a clean ordering of the feasible set.                                                                                                                                                                                                       |
+| **Propensity**                             | The probability the logging policy assigned to the action it actually took.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Recorded per decision so later off-policy estimators can reweight by it.                                                                                                                                                                                                                |
+| **Off-policy / counterfactual evaluation** | Estimating how a _new_ policy would have performed, using logs collected under the _old_ policy.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Lets us score a model on history with zero user exposure.                                                                                                                                                                                                                               |
+| **IPS (Inverse-Propensity-Scoring)**       | An off-policy estimator that reweights each logged outcome by 1 / (its logged propensity).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Our core replay estimator. It _requires_ a stochastic logging policy with known propensities.                                                                                                                                                                                           |
+| **SNIPS**                                  | Self-Normalized IPS: IPS divided by the sum of the weights. Lower variance than raw IPS.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | A more stable variant used in the replay gate.                                                                                                                                                                                                                                          |
+| **Matrix factorization**                   | Approximate a big (users × items) matrix as the product of two small ones, revealing latent factors.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Phase 4 uses it to discover user _archetypes_ from the preference matrices.                                                                                                                                                                                                             |
+| **Archetype**                              | A cluster of users with a similar behavioral signature (e.g. "Night Owl").                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Phase 4 seeds a brand-new user from the nearest archetype to beat the cold-start.                                                                                                                                                                                                       |
+| **Cold start**                             | The problem of giving good suggestions to a user with no history yet.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Phase 4's whole job: borrow from the population instead of starting from zero.                                                                                                                                                                                                          |
+| **MAR (Manual Adjustment Rate)**           | Our north-star metric: fraction of suggested placements the user changes. Lower = better.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Every phase must beat the previous one's MAR. Defined precisely in [Evaluation](#evaluation).                                                                                                                                                                                           |
 
 ---
 
@@ -48,7 +48,7 @@ whose deadlines are soonest.
 
 The user provides:
 
-- Task name
+- Session name
 - Estimated duration (must be a multiple of 15 minutes)
 - Earliest date to perform the task
 - Deadline (latest date by which the task needs to be completed)
@@ -63,7 +63,7 @@ The view determines which slots are available. For example, in the week view:
 
 - The options are 15-minute slots.
 - The start `s` is 9am Monday, end `e` is 5pm Friday.
-- Task earliest start is `ts = max(s, ts)`; end is `te = min(deadline, e)`.
+- Session earliest start is `ts = max(s, ts)`; end is `te = min(deadline, e)`.
 - The task deadline must satisfy `s <= deadline <= e`.
 
 EDF then:
@@ -77,53 +77,92 @@ The schedule EDF produces is basic and not personalized. Today the user manually
 and we log every manual edit. Those edits are the raw material for personalizing future
 schedules.
 
-## Architecture invariant: a single continuous cost model
+## Current architecture: deterministic rank + best-fit-by-preference (`heuristic.ts`)
 
-The July 12 rewrite replaced the old hard-constraint / feasible-set-then-rerank split with one
-continuous, cost-based soft-constraint model (`backend/src/scheduler/utils/edf.ts`'s module doc
-comment + `constants.ts`). Placement no longer walks a deadline → work-hours → grid gate
-before preference ever gets a vote; instead every candidate slot `c` for a task `t` currently
-anchored at `anchor(t)` (its stored `scheduledStartTime`, wherever it sits right now — a
-brand-new/unplaced task has no anchor) gets one blended score:
+> The single-continuous-cost-model engine described in earlier drafts of this section
+> (`deviationCost`/`latenessCost`/`offHoursCost`, softmax/Gumbel re-ranking, per-decision
+> propensity logging) was deleted along with the rest of the old EDF engine in commit
+> `6d3f42b` ("rebuild tasks as minimal CRUD, drop EDF scheduler engine"). None of it runs
+> today. Everything below Phase 1 in this doc (Phases 2–4, the cost model, the bandit) is
+> **roadmap/history**, not the current implementation — kept for context on where
+> personalization is headed, not a description of what ships now.
 
-```
-placementCost(t, c) = deviationCost(t, c) + latenessCost(t, c) + offHoursCost(c) − preferenceBonus(c)
-```
+What actually runs today lives in `backend/src/scheduler/heuristic.ts` (pure, no I/O/clock/
+randomness — `now` is always injected, per CLAUDE.md invariant #2) plus the thin Prisma-owning
+wrapper `backend/src/scheduler/day-reschedule.service.ts`. There is no automatic placement on
+a *manual* drag/resize — a session's `scheduledStartTime` set via `PATCH /sessions/:id` without
+touching `deadline` is still a plain field write. But creating a session, or editing one's
+`deadline`, now DOES trigger automatic placement — **implicitly and transparently**, with no
+preview and no undo:
 
-- **`deviationCost`** scales by how far `c` sits from `anchor(t)`, weighted by how far in the
-  *future* that anchor is: `DEVIATION_WEIGHT_NEAR = 1.0` for an anchor at/near `now`, lerping
-  down to `DEVIATION_WEIGHT_FAR = 0.1` once the anchor is `DEVIATION_HORIZON_DAYS = 7` days out
-  or beyond — a near-term placement is expensive to disturb, a far-future one is cheap to
-  renegotiate. A task with no anchor has zero deviation cost.
-- **`latenessCost`** and **`offHoursCost`** replace what used to be hard tiers (the deadline
-  cutoff, the work-hours window) with per-minute penalties (`LATENESS_RATE = 4`,
-  `HOURS_RATE = 2`). `LATENESS_RATE > HOURS_RATE` is deliberate: it preserves the *old tier
-  priority* (missing the deadline was always worse than landing outside work hours) as a cost
-  ordering rather than a structural gate.
-- **`preferenceBonus`** is the Phase 2 signed-preference-matrix cell score — see below.
+> **The old manual, on-demand `POST /scheduler/optimize` (+ `POST /scheduler/optimize/
+> undo/:batchId`) endpoint has been removed entirely.** It used to run over an arbitrary
+> client-supplied `[start, end]` window on request. It's been replaced by an implicit trigger,
+> scoped to a single calendar day: `SessionsService.create()` and `SessionsService.update()`
+> (only when the PATCH actually changes `deadline`) call `DayRescheduleService.rescheduleDay()`
+> right after the write, repacking just the ONE local-timezone calendar day the (new) deadline
+> falls on. The frontend's Optimize button still calls the now-deleted endpoint — a known,
+> accepted, temporarily-broken follow-up, intentionally out of scope for the change that
+> removed it.
 
-**What's still actually hard** (no blend, no exceptions): no two tasks may ever overlap; a
-task already in progress/past (`isPast`) or whose own deadline has already elapsed
-(`isOverdue`) is completely frozen; and, for the one call that just placed it, the task named
-by that call's transient `pinnedTaskId` (a drag/resize's just-dropped slot, hard-pinned for
-that single `reoptimize` invocation only). Everything else — deadlines, work hours, the old
-`manuallyMoved` freeze — is a cost term now: `manuallyMoved` is purely cosmetic telemetry (the
-"Manually placed" badge), the scheduler never reads it to decide what can move.
+1. **`sortEDF(sessions, now)`** sorts the day's movable sessions by urgency: ascending
+   minutes-from-now-to-deadline, final tie-break by `id` only — no preference-matrix tie-break
+   (that was simplified away; every session in scope has a real, non-null deadline, so there's
+   no "no-deadline sorts last" case to handle either). This is a direct, deterministic read of
+   notes.md's `Score(S) = -α·deadline_days_from_now + β·Σ P[h]` (α≫β, so deadline is
+   effectively the sole primary sort key and preference only shapes the slot pick below).
+2. **`bestFreeSlot(durationMinutes, occupied, windowStart, windowEnd, prefMatrix, timezone)`**
+   (not exported — exercised through `optimize()`) scans every 15-minute-aligned candidate in
+   the window, skips anything that collides with `occupied` or overruns `windowEnd`, and
+   returns the free candidate whose start-hour scores highest in the (7×24) signed preference
+   matrix — earliest start wins ties. `null` if nothing fits.
+3. **`optimize(...)`** ranks, then places each session in turn via `bestFreeSlot`, folding
+   each new placement into `occupied` before placing the next (so later, less-urgent sessions
+   never collide with earlier ones) — sessions that can't be placed are skipped, not errored.
 
-The re-ranker framing still holds for the Phase 2/3 preference layer below, just not as
-"EDF's feasible set, then re-rank": `scheduleAll` pools candidates from three sources
-(`feasibleSlots` in-hours-before-deadline, `findSlotIgnoringWorkHours` outside-hours-before-
-deadline, `findNextAvailableSlot` in-hours-past-deadline — no more priority tiering between
-them, cost alone decides), ranks the pool by `-placementCost`, and near-ties are broken by the
-same seeded-softmax stochastic mechanism the Phase 2 preference re-ranker uses (`rankByScores`),
-so propensity logging for IPS/SNIPS keeps working either way.
+No seeded PRNG, no softmax sampling, no cost-blend, no propensity logging — fully deterministic
+given `(sessions, occupied, now, window, prefMatrix, timezone)`, which trivially satisfies the
+purity/no-randomness invariant. When a user's stored `preferenceMatrix` is empty/malformed
+(`length !== PREFERENCE_MATRIX_LENGTH`), `heuristic.ts` falls back to a hardcoded cold-start
+default (morning 8–11AM = 1, afternoon 2–5PM = 0.5, evening 7–10PM = 0.2, else 0) rather than
+treating every slot as equally preferred.
+
+**Two correctness fixes landed alongside the single-day-window rework (same change that added
+`DayRescheduleService`):**
+
+- **Hour-bucket double-scoring in `bestFreeSlot`.** The scoring loop sampled preference at every
+  hour in `[start, end]` **inclusive**, so an hour-aligned session whose duration is a multiple
+  of 60 minutes (e.g. 9:00–10:00) also picked up the *following* hour's score (10:00's bucket)
+  even though the session never occupies that instant — `[start, end)` is half-open. Fixed by
+  scoring `[start, end)` (`hour < end`, not `hour <= end`).
+- **Deadline overshoot via `ceilToSlot` on the window end.** `bestFreeSlot`'s upper bound used
+  to round the (deadline-derived) window end **up** to the next 15-minute boundary
+  (`ceilToSlot`). Deadlines are arbitrary user-entered instants, not guaranteed slot-aligned (only
+  `durationMinutes` carries that guarantee) — rounding the end up could let a session be placed
+  to finish up to 14 minutes **past** its actual deadline, defeating the entire point of EDF.
+  Fixed by rounding the end **down** instead (`floorToSlot`, added to `scheduler/utils/slot.ts`
+  mirroring `ceilToSlot`); the window *start* still rounds up, which is the conservative
+  direction there.
+
+`DayRescheduleService.rescheduleDay(userId, dayLocalDateStr, timezone, preferenceMatrix, now)`
+is the only I/O layer: it computes the day's UTC bounds (`minutesToUtc(dayLocalDateStr, 0,
+timezone)` … `minutesToUtc(dayLocalDateStr, 1439, timezone)`), clamps the placement window's
+start to `max(now, dayStart)` so nothing lands in the past, loads the user's `PENDING`,
+`source: USER` sessions touching that day (excludes `LMS`/`PORTAL` rows — fixed lecture/exam
+times the student can't move), builds `occupied` from every other placed session in the day,
+calls the pure `optimize()`, and — inside one `$transaction` — writes the moved sessions' new
+`scheduledStartTime` plus one `SessionEvent` (`eventType: RESCHEDULED`, no `batchId` — that
+field doesn't exist on the model) per move. The result (`{ date, diffs }`) rides back on
+`CreateSessionResponse`/`UpdateSessionResponse` as an optional `dayReschedule` field; nothing is
+a silent, unobservable side effect, but there is no separate confirmation step — it's already
+applied by the time the response comes back.
 
 ## Persistent layers (on from day one)
 
 One thread runs through all phases and must not be dropped when a later phase lands:
 
 1. **Telemetry (the `task_events` audit log).** Recorded from Phase 1. This is what makes
-   personalization *and its evaluation* possible — see [Evaluation](#evaluation).
+   personalization _and its evaluation_ possible — see [Evaluation](#evaluation).
 
 (A second persistent layer — preprocessing the estimated duration with a per-tag bias
 correction — existed from Phase 2 until it was removed; see
@@ -132,15 +171,15 @@ correction — existed from Phase 2 until it was removed; see
 ## Signals tracked (from day one)
 
 We log both **negative and positive** placement signals plus **outcome** — not just edits.
-The intuition: an *untouched* slot and a *deliberately-kept* slot must be distinguishable.
+The intuition: an _untouched_ slot and a _deliberately-kept_ slot must be distinguishable.
 If we only logged edits, the system could learn what to avoid but never what to prefer.
 
-| Signal | Event | Interpretation |
-|--------|-------|----------------|
-| Resize | duration differs from suggestion | raw telemetry for bandit reward (Phase 3); no longer feeds a duration corrector (removed, see below) |
-| Move-away | dragged out of the suggested slot | dislikes interval X–Y |
-| Move-toward / keep | dragged into a slot, or accepted unchanged | **prefers** that interval (positive reward) |
-| Outcome | task marked `completed` / `rescheduled` / `abandoned` in its slot | did the placement actually *work* — the real reward proxy |
+| Signal             | Event                                                             | Interpretation                                                                                       |
+| ------------------ | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Resize             | duration differs from suggestion                                  | raw telemetry for bandit reward (Phase 3); no longer feeds a duration corrector (removed, see below) |
+| Move-away          | dragged out of the suggested slot                                 | dislikes interval X–Y                                                                                |
+| Move-toward / keep | dragged into a slot, or accepted unchanged                        | **prefers** that interval (positive reward)                                                          |
+| Outcome            | task marked `completed` / `rescheduled` / `abandoned` in its slot | did the placement actually _work_ — the real reward proxy                                            |
 
 Placement (move/keep) is a noisy proxy for preference; **completion-in-slot is the ground
 truth** a productivity scheduler ultimately optimizes (a user can keep a slot and then fail to
@@ -148,7 +187,7 @@ do the task there). Both are logged so later phases can weight them.
 
 # Evolution
 
-The roadmap has four phases. Each adds intelligence *on top of* EDF without ever weakening the
+The roadmap has four phases. Each adds intelligence _on top of_ EDF without ever weakening the
 hard-constraint / soft-re-ranker split above. Phase 1 is shipped; Phases 2–4 are planned.
 
 ---
@@ -188,12 +227,12 @@ and complete telemetry.
   stays unplaced across every later cascade rather than being re-placed by an unrelated edit.
 - **Overflow recovery:** When the cost-based scheduler genuinely can't place a task anywhere in
   the scan horizon (`MAX_SCAN_DAYS`) — a saturated calendar, not a deadline/work-hours gate
-  failure, since those are now cost terms it will place *past* rather than give up on — it
+  failure, since those are now cost terms it will place _past_ rather than give up on — it
   comes back unplaced (`scheduledStartTime: null`, `conflict: true`). There is no interactive
   escape-hatch endpoint for this anymore (the old two-option `PATCH /tasks/:id/resolve-overflow`
-  is gone); instead the count of such tasks is surfaced via `TasksMeta.conflictCount` (a
+  is gone); instead the count of such tasks is surfaced via `SessionsMeta.conflictCount` (a
   calendar-header badge, computed server-side on every list call) plus a toast on create, so the
-  user is told *that* something needs attention without a blocking dialog forcing a choice
+  user is told _that_ something needs attention without a blocking dialog forcing a choice
   before the task even exists.
 - **Data Foundation:** Implement the `task_events` audit table in PostgreSQL. Multi-tag
   flexibility is modelled as a per-user `Tag` relation (implicit many-to-many, with
@@ -201,9 +240,9 @@ and complete telemetry.
   names per user and is the better long-term shape for Phase 2's per-tag aggregation, at the
   cost of one join. Each event snapshot still records the task's tag **names at event time**
   (captured per-event, since a task's tags can change later). **Telemetry is complete from
-  day one**: every event records the slot the engine *suggested*, the slot the user *chose*,
+  day one**: every event records the slot the engine _suggested_, the slot the user _chose_,
   the task's tags and estimated duration, and the eventual outcome
-  (`completed`/`rescheduled`/`abandoned`). This counterfactual pair — *suggested* vs. *chosen*
+  (`completed`/`rescheduled`/`abandoned`). This counterfactual pair — _suggested_ vs. _chosen_
   — is what makes offline evaluation possible later.
 
 ---
@@ -226,7 +265,7 @@ of this re-ranks within EDF's feasible set; none of it overrides a deadline.
 > deliberate simplification, not an oversight: it clears the way for the Phase 3 LinUCB bandit
 > (`services/bandit/`), which supersedes per-tag correction with a strictly more expressive
 > mechanism — tags enter the bandit's context vector directly (multi-hot encoded, see Phase 3
-> below), so the model learns *where and for which tags* jointly, rather than needing a
+> below), so the model learns _where and for which tags_ jointly, rather than needing a
 > separate hand-rolled per-tag statistic pre-computed by a cron job. Removing it now, before
 > the bandit lands, avoids maintaining two overlapping personalization layers and two places
 > a tag's history is aggregated.
@@ -244,27 +283,27 @@ of this re-ranks within EDF's feasible set; none of it overrides a deadline.
 > the Phase 3 bandit's reward computation.
 
 - **Signed Preference Matrix.**
-  *Problem it solves:* we want to route tasks toward the time blocks a user actually likes.
-  *Intuition:* keep a running tally per (weekday, time-block) — reward blocks the user keeps
+  _Problem it solves:_ we want to route tasks toward the time blocks a user actually likes.
+  _Intuition:_ keep a running tally per (weekday, time-block) — reward blocks the user keeps
   tasks in, penalize ones they drag tasks out of.
 
   Build one **7×96 matrix per user** (7 days × ninety-six 15-minute blocks — aligned to the
-  slot grid, *not* downsampled to 30 minutes). Each cell accumulates a **signed** score:
-  dragging a task *out* of a block decrements it; keeping or dragging *into* a block increments
+  slot grid, _not_ downsampled to 30 minutes). Each cell accumulates a **signed** score:
+  dragging a task _out_ of a block decrements it; keeping or dragging _into_ a block increments
   it. EDF's feasible slots are then re-ranked by cell score, routing tasks toward liked blocks
   and away from disliked ones. Empty cells sit at 0 (neutral) — distinct from a disliked cell
   (negative).
 
 - **Softmax exploration + propensity logging (the logging policy).**
-  *Problem it solves:* if we always picked the single top-scored slot, we'd only ever collect
+  _Problem it solves:_ if we always picked the single top-scored slot, we'd only ever collect
   outcome data for that one slot, biasing what later phases can learn and breaking off-policy
-  evaluation. *Intuition:* introduce a small, *known* amount of randomness into which slot we
+  evaluation. _Intuition:_ introduce a small, _known_ amount of randomness into which slot we
   suggest, and record the probability of each choice.
 
   So the re-ranker does **not** pick the single highest-scored feasible slot by a deterministic
   argmax. A pure argmax (a) **biases the telemetry** later phases learn from — only one slot per
   context ever gets outcome data — and (b) makes **off-policy Inverse-Propensity-Scoring (IPS)**
-  degenerate, because IPS needs a *stochastic* logging policy whose action probabilities are
+  degenerate, because IPS needs a _stochastic_ logging policy whose action probabilities are
   known. Instead the re-ranker is a **softmax / Boltzmann** sampler over the feasible cell
   scores at a tunable temperature `T`: `p_i ∝ exp(cellScore_i / T)`. It is implemented with the
   **Gumbel-top trick** — `logit_i = cellScore_i / T + gumbel`, take the argmax — so the chosen
@@ -272,7 +311,7 @@ of this re-ranks within EDF's feasible set; none of it overrides a deadline.
   feasible set (deadline feasibility is never traded away). `T → 0` recovers the greedy argmax;
   larger `T` explores more. For each auto-placement we **persist the chosen slot's propensity**
   `π(chosen | feasible set) = exp(score_chosen/T) / Σ_j exp(score_j/T)` into the event snapshot,
-  so the offline IPS/SNIPS replay (see [Evaluation](#evaluation)) can divide by the *true* logged
+  so the offline IPS/SNIPS replay (see [Evaluation](#evaluation)) can divide by the _true_ logged
   probability rather than a hand-rolled floor. This is the prerequisite the roadmap requires
   before Phase 3's bandit can be evaluated honestly on historical logs.
 
@@ -281,26 +320,26 @@ of this re-ranks within EDF's feasible set; none of it overrides a deadline.
   re-ranker returns EDF's earliest-fit order **unchanged** rather than randomly shuffling a
   fresh user's tasks; its propensity is uniform `1/n`. The Gumbel seed is derived from the
   **task id only** (never from `now`), so re-packing the same task on an unrelated cascade
-  yields the same draw — no slot churn (this protects the *Time-to-stable* metric). Randomness
+  yields the same draw — no slot churn (this protects the _Time-to-stable_ metric). Randomness
   enters the otherwise-pure core **only via an injected seed**, so the re-ranker stays a
   reproducible function of `(inputs + seed)` (see CLAUDE.md invariant #2).
 
 - **Why no per-tag matrices yet:** Tag-conditioned placement multiplies the data requirement
   far past the "~1–2 weeks of single-user history" this phase targets, so the matrix stays
-  **global per user** here (one matrix capturing *when* the user works, ignoring *what*).
+  **global per user** here (one matrix capturing _when_ the user works, ignoring _what_).
   Tag-conditioned placement preferences are deferred to Phase 3, where they enter naturally as
-  bandit *features* rather than as a sparse stack of matrices.
+  bandit _features_ rather than as a sparse stack of matrices.
 
 ---
 
 ## Phase 3: Contextual Bandits
 
 **Goal:** Transition from rigid heuristic rules to an algorithmic framework that balances
-*exploring* new schedule distributions with *exploiting* known user habits in real time — still
+_exploring_ new schedule distributions with _exploiting_ known user habits in real time — still
 choosing only among EDF-feasible slots.
 
-*Why a bandit, and why now:* Phase 2's single global matrix can't say "this user likes
-`#backend` in the morning but `#review` in the afternoon" — it knows *when*, not *when-for-what*.
+_Why a bandit, and why now:_ Phase 2's single global matrix can't say "this user likes
+`#backend` in the morning but `#review` in the afternoon" — it knows _when_, not _when-for-what_.
 A contextual bandit reads tags **and** time together as features, so it can learn those
 interactions; it also keeps exploring instead of locking onto a possibly-stale habit.
 
@@ -313,16 +352,16 @@ interactions; it also keeps exploring instead of locking onto a possibly-stale h
 
 - **Arm space:** Arms are **not** raw 15-minute slots (hundreds of arms → hopeless sparsity).
   They are the **96 time-of-day blocks** reused from the Phase 2 matrix grid (or a coarser
-  time-of-day binning if data is thin). The bandit ranks the *feasible* arms EDF returned.
+  time-of-day binning if data is thin). The bandit ranks the _feasible_ arms EDF returned.
 
 - **Context = task features ⊕ arm features.** A LinUCB arm must be identifiable in the
   feature vector, so the candidate slot's own features are included — the Phase 2 vector
   described only the task and could not tell two slots apart. The assembled vector:
 
-    $x_{t,a} = [\underbrace{\text{day\_of\_week}, \text{hours\_to\_deadline}, t_1 \dots t_n, \text{current\_day\_load}}_{\text{task context}}, \; \underbrace{\text{block\_of\_day}(a), \text{slot\_load}(a), \text{is\_after\_break}(a)}_{\text{arm features}}]$
+  $x_{t,a} = [\underbrace{\text{day\_of\_week}, \text{hours\_to\_deadline}, t_1 \dots t_n, \text{current\_day\_load}}_{\text{task context}}, \; \underbrace{\text{block\_of\_day}(a), \text{slot\_load}(a), \text{is\_after\_break}(a)}_{\text{arm features}}]$
 
-    Tags $t_1 \dots t_n$ are a fixed-width **multi-hot vector** (e.g. 6 global tags →
-    `[1,0,1,0,0,0]`), since linear models can't read text arrays.
+  Tags $t_1 \dots t_n$ are a fixed-width **multi-hot vector** (e.g. 6 global tags →
+  `[1,0,1,0,0,0]`), since linear models can't read text arrays.
 
 - **Reward:** A blend of the day-one signals, not a single bit —
   $r = w_1 \cdot \text{accepted} + w_2 \cdot \text{completed in slot} - w_3 \cdot \text{moved away}$.
@@ -330,12 +369,12 @@ interactions; it also keeps exploring instead of locking onto a possibly-stale h
   dense signal that arrives immediately. Updates are applied online as events arrive.
 
 - **The Loop:**
-    1. EDF returns the feasible arms; NestJS flattens the multi-tag + arm context per arm and
-       passes the vectors to the bandit service.
-    2. The bandit scores each feasible arm and returns the highest-UCB one.
-    3. The user accepts (positive reward), overrides by dragging (negative), and ultimately
-       completes/abandons (the strongest signal) — all of which update the weights.
-- **The bandit only chooses *where*, never *how long*.** (Phase 2's duration-bias correction,
+  1. EDF returns the feasible arms; NestJS flattens the multi-tag + arm context per arm and
+     passes the vectors to the bandit service.
+  2. The bandit scores each feasible arm and returns the highest-UCB one.
+  3. The user accepts (positive reward), overrides by dragging (negative), and ultimately
+     completes/abandons (the strongest signal) — all of which update the weights.
+- **The bandit only chooses _where_, never _how long_.** (Phase 2's duration-bias correction,
   which used to own "how long," has been removed — see
   [Removed: per-tag duration-bias correction](#removed-per-tag-duration-bias-correction). Tag
   effects on duration are not reintroduced here; tags enter Phase 3 purely as placement
@@ -348,19 +387,19 @@ interactions; it also keeps exploring instead of locking onto a possibly-stale h
 **Goal:** Eliminate the initial data-void for new users by leveraging aggregate behavioral
 signatures across the entire user base.
 
-*The problem:* a brand-new user has no history, so Phases 2–3 have nothing to personalize from.
-*Intuition:* people cluster into recognizable types ("Night Owl"); find those clusters across
+_The problem:_ a brand-new user has no history, so Phases 2–3 have nothing to personalize from.
+_Intuition:_ people cluster into recognizable types ("Night Owl"); find those clusters across
 all users, then seed a newcomer from the cluster their onboarding role points to.
 
 ### Technical Focus
 
-- **Factorize the right matrix.** Archetypes here are *temporal* ("Night Owl"), so the
+- **Factorize the right matrix.** Archetypes here are _temporal_ ("Night Owl"), so the
   factorization is over the **(user × time-block-preference) matrix** — the aggregated Phase 2
   preference matrices across all users — **optionally conditioned on tags**, not over a raw
-  tag co-occurrence matrix. Tag co-occurrence tells you *what work clusters*; it does not tell
-  you *when* people do it, so it cannot by itself yield a temporal archetype. Tag context
+  tag co-occurrence matrix. Tag co-occurrence tells you _what work clusters_; it does not tell
+  you _when_ people do it, so it cannot by itself yield a temporal archetype. Tag context
   enters as a side feature (e.g. via LightFM's feature support) so "the `#dev`+`#ops` person
-  who also works late" is expressible — but the *when* comes from the temporal matrix.
+  who also works late" is expressible — but the _when_ comes from the temporal matrix.
 
 - **User Archetypes:** Identify behavioral profiles from the temporal factors (e.g. a
   late-shifted preference vector → "The Night Owl Developer"). Tag signatures label and refine
@@ -377,8 +416,8 @@ all users, then seed a newcomer from the cluster their onboarding role points to
 ## Evaluation
 
 Personalization is only worth shipping if it **measurably reduces the work the user has to do
-to fix the schedule**. Every phase is gated on the same north-star and validated *offline
-before it goes online*, which the Phase 1 audit log makes possible.
+to fix the schedule**. Every phase is gated on the same north-star and validated _offline
+before it goes online_, which the Phase 1 audit log makes possible.
 
 ### North-star metric
 
@@ -390,36 +429,36 @@ Lower is better. Phase 1's pure-EDF MAR is the **baseline**; each later phase mu
 phase before it.
 
 **Repeated edits to one task.** MAR is **per-task and binary**: a task counts in the numerator
-if it was touched *at all* after the suggestion, whether the user moved it once or fifteen
+if it was touched _at all_ after the suggestion, whether the user moved it once or fifteen
 times. Re-fiddling does not inflate MAR — that would conflate "the suggestion was wrong" with
-"the user kept tuning," and MAR only answers the former. The *intensity* of re-editing is
+"the user kept tuning," and MAR only answers the former. The _intensity_ of re-editing is
 owned by **Time-to-stable** below (it counts every edit per task), and the magnitude of the
 final correction is owned by **Move distance**. So the three metrics partition the question
-cleanly: MAR = *did we miss?*, Time-to-stable = *how much fiddling did the miss cost?*,
-Move distance = *how far off were we?*. The raw per-event signals (every individual move/resize)
+cleanly: MAR = _did we miss?_, Time-to-stable = _how much fiddling did the miss cost?_,
+Move distance = _how far off were we?_. The raw per-event signals (every individual move/resize)
 are always retained in the `task_events` log, so any phase can recompute a stricter
 edit-weighted variant offline if needed.
 
 ### Supporting metrics
 
-| Metric | Definition | Target direction |
-|--------|------------|------------------|
-| Slot acceptance rate | suggestions kept unchanged ÷ suggestions | ↑ |
-| Move distance | median minutes between suggested and the **final** chosen slot (intermediate drags ignored) | ↓ |
-| Duration error *(unowned since duration-bias removal)* | median \|actual − suggested duration\| | ↓ (no phase corrects duration anymore; retained as a passive metric only) |
-| Completion-in-slot | tasks completed in their suggested slot ÷ scheduled | ↑ (the real outcome) |
-| Time-to-stable | **count of edits per task** before the user stops touching it (this is where repeated moves/resizes are captured) | ↓ |
+| Metric                                                 | Definition                                                                                                        | Target direction                                                          |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Slot acceptance rate                                   | suggestions kept unchanged ÷ suggestions                                                                          | ↑                                                                         |
+| Move distance                                          | median minutes between suggested and the **final** chosen slot (intermediate drags ignored)                       | ↓                                                                         |
+| Duration error _(unowned since duration-bias removal)_ | median \|actual − suggested duration\|                                                                            | ↓ (no phase corrects duration anymore; retained as a passive metric only) |
+| Completion-in-slot                                     | tasks completed in their suggested slot ÷ scheduled                                                               | ↑ (the real outcome)                                                      |
+| Time-to-stable                                         | **count of edits per task** before the user stops touching it (this is where repeated moves/resizes are captured) | ↓                                                                         |
 
-### Offline evaluation (do this *before* any model goes live)
+### Offline evaluation (do this _before_ any model goes live)
 
-*Why offline first:* it lets us reject a bad model using only history, with zero risk to real
+_Why offline first:_ it lets us reject a bad model using only history, with zero risk to real
 users. Because every event logs the **suggested slot, the chosen slot, the tags, the duration,
 and the outcome**, a new model can be scored on historical data with no user exposure:
 
 - **Replay / counterfactual estimation.** For each logged decision, run the candidate model
   on the same context and compare its choice to what the user actually did. Use
   **Inverse-Propensity-Scoring (IPS)** off-policy evaluation: a model that would have suggested
-  the slot the user *kept* scores higher; one that suggests slots the user *moved away from*
+  the slot the user _kept_ scores higher; one that suggests slots the user _moved away from_
   scores lower. This estimates the new policy's expected reward from old logs. Phase 3's
   bandit must clear the Phase 2 heuristic on replay before it's allowed online. **IPS requires
   the logging policy to be stochastic with known action probabilities** — which is exactly why
@@ -428,7 +467,7 @@ and the outcome**, a new model can be scored on historical data with no user exp
   importance weight is `w = π_candidate(chosen | x) / π_logging(chosen | x)`; both propensities
   are each policy's closed-form softmax first-choice marginal (uniform `1/n` for the identity
   baseline), with a small floor on the denominator to keep the estimator well-defined.
-- **Cold-start backtest (Phase 4).** Hold out each user's first *N* days, seed them from their
+- **Cold-start backtest (Phase 4).** Hold out each user's first _N_ days, seed them from their
   archetype, and check the archetype-seeded MAR over those days beats the cold (zero-prior)
   MAR. This proves the seeding helps before exposing real new users to it.
 
@@ -437,15 +476,15 @@ and the outcome**, a new model can be scored on historical data with no user exp
 - **A/B test** each phase against the previous one (randomized by user). The new phase ships
   only if it **lowers MAR with statistical significance** and does not regress
   completion-in-slot.
-- **Guardrail:** because the bandit *explores*, cap exploration so MAR never rises above the
+- **Guardrail:** because the bandit _explores_, cap exploration so MAR never rises above the
   prior phase's baseline for any cohort. If a cohort's MAR regresses, fall back to the
   previous phase's re-ranker.
 
 ## Roadmap Summary
 
-| **Phase** | **Core Scheduling Mechanism** | **Complexity** | **Data Required** | **Ships only if…** |
-| --- | --- | --- | --- | --- |
-| **Phase 1** | Pure Heuristic (EDF Sorting) | Low | None (Baseline) | establishes MAR baseline |
-| **Phase 2** | EDF + signed preference matrix (duration-bias correction removed 2026-08-20) | Medium-Low | ~1–2 weeks single-user history | beats P1 MAR on replay |
-| **Phase 3** | EDF-feasible hybrid LinUCB bandit | Medium-High | ~1 month single-user history | beats P2 reward on IPS replay, then A/B |
-| **Phase 4** | Bandit + collaborative cold-start seeding | High | Multi-user aggregate data | archetype-seeded cold-start MAR < cold MAR |
+| **Phase**   | **Core Scheduling Mechanism**                                                | **Complexity** | **Data Required**              | **Ships only if…**                         |
+| ----------- | ---------------------------------------------------------------------------- | -------------- | ------------------------------ | ------------------------------------------ |
+| **Phase 1** | Pure Heuristic (EDF Sorting)                                                 | Low            | None (Baseline)                | establishes MAR baseline                   |
+| **Phase 2** | EDF + signed preference matrix (duration-bias correction removed 2026-08-20) | Medium-Low     | ~1–2 weeks single-user history | beats P1 MAR on replay                     |
+| **Phase 3** | EDF-feasible hybrid LinUCB bandit                                            | Medium-High    | ~1 month single-user history   | beats P2 reward on IPS replay, then A/B    |
+| **Phase 4** | Bandit + collaborative cold-start seeding                                    | High           | Multi-user aggregate data      | archetype-seeded cold-start MAR < cold MAR |

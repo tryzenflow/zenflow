@@ -4,3 +4,5 @@ export * from "./user";
 export * from "./view";
 export * from "./api";
 export * from "./schedule";
+export * from "./optimize";
+export * from "./day-reschedule";

@@ -1,4 +1,3 @@
-import { minutesToUtc } from "../../common/utils";
 import { TIME_GRANULARITY } from "../../common/constants";
 
 export const MS_PER_MINUTE = 60_000;
@@ -39,6 +38,11 @@ export function isoWeekday(dateStr: string): number {
 /** Round an instant up to the next 15-minute slot boundary. */
 export function ceilToSlot(ms: number): number {
   return Math.ceil(ms / SLOT_MS) * SLOT_MS;
+}
+
+/** Round an instant down to the previous 15-minute slot boundary. */
+export function floorToSlot(ms: number): number {
+  return Math.floor(ms / SLOT_MS) * SLOT_MS;
 }
 
 /** True when [aStart,aEnd) overlaps any interval in `occupied`. */

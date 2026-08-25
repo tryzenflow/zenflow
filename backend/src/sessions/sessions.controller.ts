@@ -9,34 +9,34 @@ import {
   Query,
   UseGuards,
 } from "@nestjs/common";
-import { TasksService } from "./tasks.service";
-import { CreateTaskDto } from "./dto/create-task.dto";
-import { UpdateTaskDto } from "./dto/update-task.dto";
-import { ListTasksDto } from "./dto/list-tasks.dto";
-import { ListTaskSuggestionsDto } from "./dto/list-task-suggestions.dto";
+import { SessionsService } from "./sessions.service";
+import { CreateSessionDto } from "./dto/create-session.dto";
+import { UpdateSessionDto } from "./dto/update-session.dto";
+import { ListSessionsDto } from "./dto/list-sessions.dto";
+import { ListSessionSuggestionsDto } from "./dto/list-session-suggestions.dto";
 import { DeadlineOptionsDto } from "./dto/deadline-options.dto";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
 import { type User } from "../../generated/prisma";
 import { deadlineOptions } from "./utils/deadline-options";
 
-@Controller("tasks")
+@Controller("sessions")
 @UseGuards(CookieAuthGuard)
-export class TasksController {
-  constructor(private readonly tasksService: TasksService) {}
+export class SessionsController {
+  constructor(private readonly sessionsService: SessionsService) {}
 
   @Post()
-  async create(@Body() dto: CreateTaskDto, @CurrentUser() user: User) {
-    const data = await this.tasksService.create(dto, user);
-    return { success: true, message: "Task created", data };
+  async create(@Body() dto: CreateSessionDto, @CurrentUser() user: User) {
+    const data = await this.sessionsService.create(dto, user);
+    return { success: true, message: "Session created", data };
   }
 
   @Get()
-  async list(@Query() dto: ListTasksDto, @CurrentUser() user: User) {
-    const data = await this.tasksService.list(dto, user);
+  async list(@Query() dto: ListSessionsDto, @CurrentUser() user: User) {
+    const data = await this.sessionsService.list(dto, user);
     return {
       success: true,
-      message: `Found ${data.tasks.length} tasks`,
+      message: `Found ${data.sessions.length} sessions`,
       data,
     };
   }
@@ -44,10 +44,10 @@ export class TasksController {
   // NOTE: must precede @Get(":id") so "suggestions" isn't matched as an :id.
   @Get("suggestions")
   async suggestions(
-    @Query() dto: ListTaskSuggestionsDto,
+    @Query() dto: ListSessionSuggestionsDto,
     @CurrentUser() user: User,
   ) {
-    const data = await this.tasksService.suggestions(dto, user);
+    const data = await this.sessionsService.suggestions(dto, user);
     return {
       success: true,
       message: `Found ${data.suggestions.length} suggestions`,
@@ -64,23 +64,23 @@ export class TasksController {
 
   @Get(":id")
   async findOne(@Param("id") id: string, @CurrentUser() user: User) {
-    const data = await this.tasksService.findById(id, user);
-    return { success: true, message: "Found task", data };
+    const data = await this.sessionsService.findById(id, user);
+    return { success: true, message: "Found session", data };
   }
 
   @Patch(":id")
   async update(
     @Param("id") id: string,
-    @Body() dto: UpdateTaskDto,
+    @Body() dto: UpdateSessionDto,
     @CurrentUser() user: User,
   ) {
-    const data = await this.tasksService.update(id, dto, user);
-    return { success: true, message: "Task updated", data };
+    const data = await this.sessionsService.update(id, dto, user);
+    return { success: true, message: "Session updated", data };
   }
 
   @Delete(":id")
   async remove(@Param("id") id: string, @CurrentUser() user: User) {
-    const data = await this.tasksService.remove(id, user);
-    return { success: true, message: "Task deleted", data };
+    const data = await this.sessionsService.remove(id, user);
+    return { success: true, message: "Session deleted", data };
   }
 }

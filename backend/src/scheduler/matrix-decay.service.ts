@@ -6,7 +6,7 @@ import { decayMatrix, MATRIX_HALF_LIFE_DAYS } from "./utils/matrix-decay";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-/** Tasks processed per transaction so one run never opens an unbounded tx. */
+/** Sessions processed per transaction so one run never opens an unbounded tx. */
 const DECAY_BATCH_SIZE = 200;
 
 /**

@@ -9,7 +9,7 @@ import {
 } from "class-validator";
 
 /** Query params for GET /tasks/suggestions (title autocomplete). */
-export class ListTaskSuggestionsDto {
+export class ListSessionSuggestionsDto {
   /** The text typed so far; matched case-insensitively against the title. */
   @IsOptional()
   @IsString()
