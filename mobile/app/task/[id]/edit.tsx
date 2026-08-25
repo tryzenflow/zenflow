@@ -1,26 +1,22 @@
-import {
-  getTaskDetails,
-  removeTask,
-  resizeTask,
-  updateTask,
-} from "@/api/tasks";
+import { getSessionDetails, removeSession, updateSession } from "@/api/tasks";
 import { Trash2 } from "@/components/Icons";
-import { TaskFormScreen } from "@/components/tasks/task-form-screen";
-import { TaskSheetFields } from "@/components/tasks/task-sheet-fields";
+import { SessionFormScreen } from "@/components/tasks/task-form-screen";
+import { SessionSheetFields } from "@/components/tasks/task-sheet-fields";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
-import { useTaskForm } from "@/hooks/use-task-form";
+import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
-import type { EditTaskFormValues } from "@zenflow/core";
-import type { Task } from "@zenflow/shared";
+import { dayRescheduleToastMessage } from "@/lib/task-toasts";
+import type { EditSessionFormValues } from "@zenflow/core";
+import type { Session } from "@zenflow/shared";
 import { isAxiosError } from "axios";
 import { format } from "date-fns";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable } from "react-native";
 
-const EMPTY_DEFAULTS: EditTaskFormValues = {
+const EMPTY_DEFAULTS: EditSessionFormValues = {
   title: "",
   duration: 60,
   tags: [],
@@ -29,59 +25,59 @@ const EMPTY_DEFAULTS: EditTaskFormValues = {
 };
 
 /**
- * "Edit task" — full screen (was `EditTaskSheet`; see mobile/README.md /
+ * "Edit task" — full screen (was `EditSessionSheet`; see mobile/README.md /
  * `app/task/new.tsx`'s doc comment for why). `id` comes from the route
  * param; fetches once on mount, same as the sheet's `open(taskId)` used to.
  *
  * Delete confirmation: matches the web dialog's `onDelete` — no confirm
  * step, tap deletes immediately (unchanged from the sheet version).
  *
- * Duration: `UpdateTaskInput` (the `PATCH /tasks/:id` body) has no
- * `durationMinutes` field — only `PATCH /tasks/:id/resize` can change it.
- * `TaskSheetFields` keeps the duration stepper editable in edit mode
- * (mobile has no drag-resize handles), so `onSubmit` issues a second
- * `resizeTask` call when the stepper's value differs from the task's
- * current duration, unchanged from the sheet version.
+ * Duration: `UpdateSessionInput` (the `PATCH /tasks/:id` body) accepts
+ * `durationMinutes` directly alongside the rest of the metadata, so
+ * `onSubmit` writes everything — including the stepper's value — in one
+ * `updateSession` call.
  */
-export default function EditTaskScreen() {
+export default function EditSessionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const user = useUserStore((s) => s.user);
   const tz = user?.timezone || "UTC";
   const { toast } = useToast();
-  const [task, setTask] = useState<Task | null>(null);
+  const [task, setSession] = useState<Session | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const form = useTaskForm({ defaultValues: EMPTY_DEFAULTS });
+  const form = useSessionForm({ defaultValues: EMPTY_DEFAULTS });
   const loading = form.formState.isSubmitting || deleting;
 
   useEffect(() => {
-    getTaskDetails(id).then((res) => {
-      setTask(res.task);
+    getSessionDetails(id).then((res) => {
+      setSession(res);
       form.reset({
-        title: res.task.title,
-        duration: res.task.durationMinutes,
-        tags: res.task.tags,
-        note: res.task.note ?? "",
-        deadline: res.task.deadline ?? "",
+        title: res.title,
+        duration: res.durationMinutes,
+        tags: res.tags,
+        note: res.note ?? "",
+        deadline: res.deadline ?? "",
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  async function onSubmit(values: EditTaskFormValues) {
+  async function onSubmit(values: EditSessionFormValues) {
     if (!user || !task) return;
     try {
-      await updateTask(task.id, {
+      const updated = await updateSession(task.id, {
         title: values.title,
         note: values.note || null,
         deadline: values.deadline,
         tags: values.tags,
+        durationMinutes: values.duration,
       });
-      if (values.duration !== task.durationMinutes && task.scheduledStartTime) {
-        await resizeTask(task.id, task.scheduledStartTime, values.duration);
-      }
-      toast("Task updated", "success");
+      toast("Session updated", "success");
+      const rescheduleMessage = dayRescheduleToastMessage(
+        updated.dayReschedule?.diffs ?? [],
+      );
+      if (rescheduleMessage) toast(rescheduleMessage, "info");
       router.back();
     } catch (error) {
       const message =
@@ -102,8 +98,8 @@ export default function EditTaskScreen() {
     if (!task) return;
     setDeleting(true);
     try {
-      await removeTask(task.id);
-      toast("Task deleted", "success");
+      await removeSession(task.id);
+      toast("Session deleted", "success");
       router.back();
     } catch (error) {
       const message =
@@ -118,7 +114,7 @@ export default function EditTaskScreen() {
   }
 
   return (
-    <TaskFormScreen
+    <SessionFormScreen
       title="Edit task"
       subtitle={
         task
@@ -150,13 +146,13 @@ export default function EditTaskScreen() {
         </Button>
       }
     >
-      <TaskSheetFields
+      <SessionSheetFields
         initialValue={task?.note || ""}
         form={form}
         tz={tz}
         disabled={loading}
         editing
       />
-    </TaskFormScreen>
+    </SessionFormScreen>
   );
 }

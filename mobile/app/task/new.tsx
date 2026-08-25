@@ -1,13 +1,16 @@
-import { createTask } from "@/api/tasks";
-import { TaskFormScreen } from "@/components/tasks/task-form-screen";
-import { TaskSheetFields } from "@/components/tasks/task-sheet-fields";
+import { createSession } from "@/api/tasks";
+import { SessionFormScreen } from "@/components/tasks/task-form-screen";
+import { SessionSheetFields } from "@/components/tasks/task-sheet-fields";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
-import { useTaskForm } from "@/hooks/use-task-form";
+import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
-import { placementToastMessage } from "@/lib/task-toasts";
-import type { TaskFormValues } from "@zenflow/core";
+import {
+  dayRescheduleToastMessage,
+  placementToastMessage,
+} from "@/lib/task-toasts";
+import type { SessionFormValues } from "@zenflow/core";
 import { isAxiosError } from "axios";
 import { format } from "date-fns";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -15,7 +18,7 @@ import { useMemo } from "react";
 
 const DEFAULT_DURATION = 60;
 
-const EMPTY_DEFAULTS: TaskFormValues = {
+const EMPTY_DEFAULTS: SessionFormValues = {
   title: "",
   duration: DEFAULT_DURATION,
   tags: [],
@@ -24,15 +27,15 @@ const EMPTY_DEFAULTS: TaskFormValues = {
 };
 
 /**
- * "New task" — full screen (was `CreateTaskSheet`, a `@gorhom/bottom-sheet`
+ * "New task" — full screen (was `CreateSessionSheet`, a `@gorhom/bottom-sheet`
  * modal; see mobile/README.md for why the task form moved off bottom
- * sheets). Reached via `router.push` from `CreateTaskFab`/the Day screen's
+ * sheets). Reached via `router.push` from `CreateSessionFab`/the Day screen's
  * long-press-empty-area gesture, optionally with a `start` query param (ISO
  * instant, already snapped to the 15-min grid) — informational only, shown
- * in the subtitle; the deadline chip row inside `TaskSheetFields` is what
+ * in the subtitle; the deadline chip row inside `SessionSheetFields` is what
  * the schema actually validates, unchanged from the sheet version.
  */
-export default function NewTaskScreen() {
+export default function NewSessionScreen() {
   const { start } = useLocalSearchParams<{ start?: string }>();
   const router = useRouter();
   const user = useUserStore((s) => s.user);
@@ -43,21 +46,25 @@ export default function NewTaskScreen() {
     () => (start ? new Date(start) : undefined),
     [start],
   );
-  const form = useTaskForm({ defaultValues: EMPTY_DEFAULTS });
+  const form = useSessionForm({ defaultValues: EMPTY_DEFAULTS });
   const loading = form.formState.isSubmitting;
 
-  async function onSubmit(values: TaskFormValues) {
+  async function onSubmit(values: SessionFormValues) {
     if (!user) return;
     try {
-      const response = await createTask({
+      const response = await createSession({
         title: values.title,
         note: values.note || null,
         durationMinutes: values.duration,
         tags: values.tags,
         deadline: values.deadline,
       });
-      const { message, variant } = placementToastMessage(response.task, user);
+      const { message, variant } = placementToastMessage(response, user);
       toast(message, variant === "success" ? "success" : "destructive");
+      const rescheduleMessage = dayRescheduleToastMessage(
+        response.dayReschedule?.diffs ?? [],
+      );
+      if (rescheduleMessage) toast(rescheduleMessage, "info");
       router.back();
     } catch (error) {
       const message =
@@ -82,7 +89,7 @@ export default function NewTaskScreen() {
     : "New task";
 
   return (
-    <TaskFormScreen
+    <SessionFormScreen
       title="New task"
       subtitle={subtitle}
       footer={
@@ -97,7 +104,7 @@ export default function NewTaskScreen() {
         </Button>
       }
     >
-      <TaskSheetFields form={form} tz={tz} disabled={loading} />
-    </TaskFormScreen>
+      <SessionSheetFields form={form} tz={tz} disabled={loading} />
+    </SessionFormScreen>
   );
 }

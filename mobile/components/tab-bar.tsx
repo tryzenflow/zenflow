@@ -1,17 +1,6 @@
-import { OptimizeFab } from "@/components/tasks/optimize-fab";
 import { Text } from "@/components/ui/text";
-import { useUserStore } from "@/hooks/use-user-store";
 import { NAV_THEME } from "@/lib/constants";
-import {
-  BAR_HEIGHT,
-  CORNER,
-  DIP_DEPTH,
-  DIP_HALF_WIDTH,
-  FAB_SIZE,
-  GLOW_HEADROOM,
-  TOP_PAD,
-  useTabBarHeight,
-} from "@/lib/tab-bar-metrics";
+import { CORNER, GLOW_HEADROOM, useTabBarHeight } from "@/lib/tab-bar-metrics";
 import { useColorScheme } from "@/lib/useColorScheme";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { Pressable, View, useWindowDimensions } from "react-native";
@@ -19,29 +8,18 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
 /**
- * Builds the tab bar silhouette: rounded top corners, flat top edge, and a
- * U-shaped cradle scooped down into the centre that the Optimize FAB rests
- * in.
+ * Builds the tab bar silhouette: rounded top corners, flat top edge.
  *
  * `y = 0` is the very top of the SVG (glow headroom); the bar's top line is
- * at `TOP_PAD` and the bottom of the cradle at `TOP_PAD + DIP_DEPTH`.
+ * at `GLOW_HEADROOM`.
  */
 function barPath(width: number, height: number): string {
-  const top = TOP_PAD;
-  const floor = TOP_PAD + DIP_DEPTH;
-  const cx = width / 2;
-  const hw = DIP_HALF_WIDTH;
+  const top = GLOW_HEADROOM;
 
   return [
     `M 0 ${height}`,
     `L 0 ${top + CORNER}`,
     `Q 0 ${top} ${CORNER} ${top}`,
-    `L ${cx - hw} ${top}`,
-    // Two mirrored cubics form the dip. The control points are pulled well
-    // past the low point horizontally (0.62·hw) so the curve leaves and
-    // rejoins the flat top tangentially instead of kinking at the seam.
-    `C ${cx - hw * 0.5} ${top} ${cx - hw * 0.62} ${floor} ${cx} ${floor}`,
-    `C ${cx + hw * 0.62} ${floor} ${cx + hw * 0.5} ${top} ${cx + hw} ${top}`,
     `L ${width - CORNER} ${top}`,
     `Q ${width} ${top} ${width} ${top + CORNER}`,
     `L ${width} ${height}`,
@@ -53,9 +31,9 @@ function barPath(width: number, height: number): string {
  * Stacked strokes of the same path, widest/faintest first, standing in for a
  * blur. React Native's `shadow*`/`elevation` props follow the *view's*
  * rectangle, not an SVG path — so a real drop shadow here would trace a
- * straight line across the hump and give the whole thing away. Drawing the
- * glow as strokes keeps it locked to the silhouette and renders identically
- * on iOS, Android and web.
+ * straight line across the rounded top corners and give the whole thing
+ * away. Drawing the glow as strokes keeps it locked to the silhouette and
+ * renders identically on iOS, Android and web.
  */
 const GLOW_LAYERS = [
   { width: 18, opacity: 0.05 },
@@ -65,21 +43,26 @@ const GLOW_LAYERS = [
 ];
 
 /**
- * Custom bottom tab bar — replaces React Navigation's default one so the
- * Optimize action can live *in* the bar (centred, cradled in a curve scooped
- * out of the top edge) instead of floating over each calendar screen.
+ * Custom bottom tab bar — a hand-drawn silhouette (rounded top corners, amber
+ * glow) instead of React Navigation's default rectangular one, which read as
+ * almost nothing against the near-white background.
  *
- * Because this is mounted once by `app/(app)/_layout.tsx` rather than per
- * screen, `OptimizeFab` no longer gets an `onApplied` callback wired to the
- * calling screen's refetch — it publishes to `useScheduleRefresh` and the
- * screens subscribe. See `hooks/use-schedule-refresh.ts`.
+ * This used to have a U-shaped cradle scooped into its top edge to hold an
+ * "Optimize schedule" FAB; that action's backend (the EDF auto-placement
+ * scheduler) was removed, so the cradle went with it — task creation already
+ * has its own entry point (`components/tasks/create-task-fab.tsx`, rendered
+ * per screen on Day/Week/Month) that didn't need to move here. A later,
+ * minimal explicit Optimize (`POST /scheduler/optimize`, a small header pill
+ * on Day View) has since been removed too — session create/edit now
+ * implicitly and transparently repacks that one day server-side instead (see
+ * `mobile/README.md`'s Screens & routing section and `lib/task-toasts.ts`'s
+ * `dayRescheduleToastMessage`). There's no manual trigger anywhere now, and
+ * the cradle is not coming back.
  *
  * Positioned absolutely so it overlays the screens instead of taking a slice
  * of the column `BottomTabView` lays out (screens are a `flex: 1` sibling, so
- * any height taken here comes straight off them — with the curve's headroom
- * on top of the bar proper that was enough to clip the month grid's last
- * row). Screens that shouldn't be painted over pad by
- * `useTabBarOverlayHeight()`.
+ * any height taken here comes straight off them). Screens that shouldn't be
+ * painted over pad by `useTabBarOverlayHeight()`.
  */
 export function AppTabBar({
   state,
@@ -90,17 +73,9 @@ export function AppTabBar({
   const theme = isDarkColorScheme ? NAV_THEME.dark : NAV_THEME.light;
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const user = useUserStore((s) => s.user);
-  const tz = user?.timezone || "UTC";
 
   const height = useTabBarHeight();
   const d = barPath(width, height);
-
-  // The centre gap the cradle (and the FAB in it) occupies — the two tabs on
-  // each side are laid out around it rather than through it.
-  const half = Math.ceil(state.routes.length / 2);
-  const leftRoutes = state.routes.slice(0, half);
-  const rightRoutes = state.routes.slice(half);
 
   function renderTab(route: (typeof state.routes)[number], index: number) {
     const { options } = descriptors[route.key];
@@ -180,29 +155,10 @@ export function AppTabBar({
       </Svg>
 
       <View
-        style={{ paddingTop: TOP_PAD, paddingBottom: insets.bottom }}
+        style={{ paddingTop: GLOW_HEADROOM, paddingBottom: insets.bottom }}
         className="flex-1 flex-row items-stretch"
       >
-        <View className="flex-1 flex-row">{leftRoutes.map(renderTab)}</View>
-        <View style={{ width: DIP_HALF_WIDTH * 2 }} />
-        <View className="flex-1 flex-row">
-          {rightRoutes.map((route, i) => renderTab(route, i + half))}
-        </View>
-      </View>
-
-      {/* Floating clear above the cradle — see `TOP_PAD`, which is derived so
-          this lands at exactly `GLOW_HEADROOM`. */}
-      <View
-        pointerEvents="box-none"
-        style={{
-          position: "absolute",
-          left: 0,
-          right: 0,
-          top: GLOW_HEADROOM,
-          alignItems: "center",
-        }}
-      >
-        <OptimizeFab tz={tz} size={FAB_SIZE} />
+        {state.routes.map(renderTab)}
       </View>
     </View>
   );

@@ -1,11 +1,8 @@
 import { placementQualifier, zonedDate } from "@zenflow/core";
-import type { Task } from "@zenflow/shared";
+import type { DayRescheduleDiff, Session } from "@zenflow/shared";
 import { format } from "date-fns";
 
 export interface PlacementToastUser {
-  workStart: number;
-  workEnd: number;
-  workDays: number[];
   timezone: string;
 }
 
@@ -21,27 +18,43 @@ export interface PlacementToastUser {
  * `@zenflow/core` alongside `taskSchema`).
  */
 export function placementToastMessage(
-  task: Task,
+  task: Session,
   user: PlacementToastUser,
 ): { message: string; variant: "success" | "destructive" } {
-  if (task.conflict || !task.scheduledStartTime) {
+  if (!task.scheduledStartTime) {
     return {
       message: `"${task.title}" couldn't be scheduled before its deadline`,
       variant: "destructive",
     };
   }
 
-  const qualifier = placementQualifier(task, user);
-  const suffix =
-    qualifier === "pastDeadline"
-      ? " — past its deadline"
-      : qualifier === "outsideHours"
-        ? " — outside your usual work hours"
-        : "";
+  const qualifier = placementQualifier(task, { timezone: user.timezone });
+  const suffix = qualifier === "pastDeadline" ? " — past its deadline" : "";
 
   const when = format(
     zonedDate(task.scheduledStartTime, user.timezone),
     "EEE MMM d, HH:mm",
   );
   return { message: `Scheduled for ${when}${suffix}`, variant: "success" };
+}
+
+/**
+ * Compose the implicit same-day-reschedule toast copy. Creating a session, or
+ * editing an existing session's `deadline`, now transparently repacks that
+ * one calendar day's other pending sessions server-side (EDF + preference-
+ * matrix placement, single-day window, no preview, no undo — see
+ * `CreateSessionResponse`/`UpdateSessionResponse`'s optional `dayReschedule`
+ * field in `@zenflow/shared`). This replaced the old explicit
+ * `POST /scheduler/optimize` action entirely (see `mobile/README.md`). Same
+ * one-line, count-and-go messaging pattern as `placementToastMessage` above —
+ * returns `null` when nothing else moved, so the caller can skip showing a
+ * second toast.
+ */
+export function dayRescheduleToastMessage(
+  diffs: DayRescheduleDiff[],
+): string | null {
+  if (diffs.length === 0) return null;
+  return `${diffs.length} other session${
+    diffs.length === 1 ? "" : "s"
+  } moved today`;
 }
