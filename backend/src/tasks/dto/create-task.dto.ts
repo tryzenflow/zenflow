@@ -28,9 +28,10 @@ export class CreateTaskDto implements CreateTaskInput {
   @IsDivisibleBy(TIME_GRANULARITY)
   durationMinutes: number;
 
-  /** Required — the view-scoped scheduling model is gone. */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
   @IsISO8601()
-  deadline: string;
+  deadline?: string | null;
 
   @IsOptional()
   @IsArray()

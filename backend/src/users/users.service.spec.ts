@@ -1,16 +1,10 @@
-import { BadRequestException } from "@nestjs/common";
+import { NotFoundException } from "@nestjs/common";
+import { Prisma } from "../../generated/prisma";
+import { PostgresErrorCode } from "../prisma/error-codes";
 import { UsersService } from "./users.service";
-import type { UpdatePreferencesDto } from "./dto/update-preferences.dto";
 import type { User } from "../../generated/prisma";
 
 const user = { id: "user-1" } as User;
-
-const basePrefs: UpdatePreferencesDto = {
-  workStart: 540,
-  workEnd: 1020,
-  workDays: [1, 2, 3, 4, 5],
-  timezone: "Asia/Ho_Chi_Minh",
-};
 
 type UpdateArgs = { where: { id: string }; data: Record<string, unknown> };
 
@@ -26,73 +20,30 @@ function makeService() {
   return { service, update };
 }
 
-describe("UsersService.updatePreferences", () => {
-  it("persists the schedule (metadata-only — no auto-cascade)", async () => {
+describe("UsersService.update", () => {
+  it("persists a name change (timezone is no longer editable here)", async () => {
     const { service, update } = makeService();
 
-    await service.updatePreferences(user, { ...basePrefs });
+    await service.update(user.id, { name: "New Name" });
 
     expect(update).toHaveBeenCalledWith({
       where: { id: user.id },
-      data: {
-        workStart: 540,
-        workEnd: 1020,
-        workDays: [1, 2, 3, 4, 5],
-        timezone: "Asia/Ho_Chi_Minh",
-      },
+      data: { name: "New Name" },
     });
   });
 
-  it("rejects an empty window where workStart equals workEnd", async () => {
-    const { service, update } = makeService();
-
-    await expect(
-      service.updatePreferences(user, {
-        ...basePrefs,
-        workStart: 540,
-        workEnd: 540,
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
-    expect(update).not.toHaveBeenCalled();
-  });
-
-  it("rejects a window shorter than one hour", async () => {
-    const { service, update } = makeService();
-
-    await expect(
-      service.updatePreferences(user, {
-        ...basePrefs,
-        workStart: 540,
-        workEnd: 570,
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
-    expect(update).not.toHaveBeenCalled();
-  });
-
-  it("accepts a valid overnight (cross-midnight) window", async () => {
-    const { service, update } = makeService();
-
-    // 22:00 → 04:00 = 360 effective minutes (a night-owl shift).
-    await service.updatePreferences(user, {
-      ...basePrefs,
-      workStart: 1320,
-      workEnd: 240,
+  it("throws NotFoundException when the user doesn't exist", async () => {
+    const update = jest.fn(() => {
+      throw new Prisma.PrismaClientKnownRequestError("Record not found", {
+        code: PostgresErrorCode.RecordNotFound,
+        clientVersion: "test",
+      });
     });
+    const prisma = { user: { update } };
+    const service = new UsersService(prisma as never);
 
-    expect(update).toHaveBeenCalled();
-  });
-
-  it("rejects a wrap window shorter than one hour", async () => {
-    const { service, update } = makeService();
-
-    // 23:45 → 00:15 = 30 effective minutes (wraps, but under MIN_WORKDAY).
     await expect(
-      service.updatePreferences(user, {
-        ...basePrefs,
-        workStart: 1425,
-        workEnd: 15,
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
-    expect(update).not.toHaveBeenCalled();
+      service.update("missing", { name: "New Name" }),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

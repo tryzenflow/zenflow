@@ -1,19 +1,22 @@
 import {
   IsArray,
+  IsDivisibleBy,
+  IsIn,
+  IsInt,
   IsISO8601,
   IsOptional,
   IsString,
   MaxLength,
+  Min,
   ValidateIf,
 } from "class-validator";
-import type { UpdateTaskInput } from "@zenflow/shared";
+import type { TaskStatus, UpdateTaskInput } from "@zenflow/shared";
+import { TIME_GRANULARITY } from "../../common/constants";
 
 /**
- * Metadata-only update: title/note/deadline/tags are saved immediately. A
- * `deadline`/duration change that leaves the task's own slot no longer
- * cost-optimal auto-resolves INLINE (same request) — see
- * `UpdateTaskResponse.displaced`/`batchId`. A `tags` change may surface a
- * duration correction via `UpdateTaskResponse.schedulingMeta`.
+ * Generic metadata/reschedule/resize/complete update — one `PATCH /tasks/:id`
+ * covers all of it. Every field is a plain diff applied directly; there is no
+ * cascade, conflict recompute, or displaced-tasks side effect.
  */
 export class UpdateTaskDto implements UpdateTaskInput {
   @IsOptional()
@@ -27,6 +30,12 @@ export class UpdateTaskDto implements UpdateTaskInput {
   note?: string | null;
 
   @IsOptional()
+  @IsInt()
+  @Min(TIME_GRANULARITY)
+  @IsDivisibleBy(TIME_GRANULARITY)
+  durationMinutes?: number;
+
+  @IsOptional()
   @ValidateIf((_, v) => v !== null)
   @IsISO8601()
   deadline?: string | null;
@@ -35,4 +44,14 @@ export class UpdateTaskDto implements UpdateTaskInput {
   @IsArray()
   @IsString({ each: true })
   tags?: string[];
+
+  /** ISO-8601 instant — drag reschedule / resize both just move this. */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsISO8601()
+  scheduledStartTime?: string | null;
+
+  @IsOptional()
+  @IsIn(["PENDING", "DONE", "ABANDONED"])
+  status?: TaskStatus;
 }

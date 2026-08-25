@@ -30,6 +30,8 @@ function task(overrides: Partial<Task> & { id: string }): Task {
     source: "USER",
     conflict: false,
     scheduledStartTime: null,
+    anchorStartTime: null,
+    anchorEndTime: null,
     userId: "user-1",
     seriesId: null,
     sessionIndex: null,

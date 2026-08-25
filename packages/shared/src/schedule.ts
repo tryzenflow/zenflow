@@ -1,4 +1,12 @@
-import type { TaskCardState, TaskStatus } from "./task";
+import type { TaskStatus } from "./task";
+
+/**
+ * Visual states a task card can render in (see design-system.md). "conflict"
+ * is derived purely client-side from time-overlap detection
+ * (`packages/core/src/task-card.ts`'s `withOverlap`) — there is no backend
+ * conflict flag anymore.
+ */
+export type TaskCardState = "fluid" | "overdue" | "conflict" | "completed";
 
 /**
  * A positioned calendar block — one concrete, scheduled task.
@@ -12,9 +20,6 @@ export interface Event {
   start: string; // ISO
   end: string; // ISO
   status: TaskStatus;
-  /** True when the task is pinned (manually dragged/resized). */
-  manuallyMoved: boolean;
-  conflict: boolean;
   tags: string[];
   state: TaskCardState;
 }

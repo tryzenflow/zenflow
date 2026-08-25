@@ -14,11 +14,7 @@ import { CreateTaskDto } from "./dto/create-task.dto";
 import { UpdateTaskDto } from "./dto/update-task.dto";
 import { ListTasksDto } from "./dto/list-tasks.dto";
 import { ListTaskSuggestionsDto } from "./dto/list-task-suggestions.dto";
-import { RescheduleTaskDto } from "./dto/reschedule-task.dto";
-import { ResizeTaskDto } from "./dto/resize-task.dto";
 import { DeadlineOptionsDto } from "./dto/deadline-options.dto";
-import { UndoBatchDto } from "./dto/undo-batch.dto";
-import { OptimizeWindowDto } from "./dto/optimize-window.dto";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
 import { type User } from "../../generated/prisma";
@@ -70,89 +66,6 @@ export class TasksController {
   async findOne(@Param("id") id: string, @CurrentUser() user: User) {
     const data = await this.tasksService.findById(id, user);
     return { success: true, message: "Found task", data };
-  }
-
-  @Patch(":id/reschedule")
-  async reschedule(
-    @Param("id") id: string,
-    @Body() dto: RescheduleTaskDto,
-    @CurrentUser() user: User,
-  ) {
-    const data = await this.tasksService.displace(
-      id,
-      dto.requestedStartTime,
-      user,
-    );
-    return { success: true, message: "Task rescheduled", data };
-  }
-
-  @Patch(":id/resize")
-  async resize(
-    @Param("id") id: string,
-    @Body() dto: ResizeTaskDto,
-    @CurrentUser() user: User,
-  ) {
-    const data = await this.tasksService.resize(
-      id,
-      dto.requestedStartTime,
-      dto.durationMinutes,
-      user,
-    );
-    return { success: true, message: "Task resized", data };
-  }
-
-  // Edit-accept: re-place a task update() just flagged broken — explicit,
-  // opt-in, never automatic. No body: reads the task's current
-  // deadline/duration itself.
-  @Post(":id/reschedule/resolve")
-  async resolvePlacement(@Param("id") id: string, @CurrentUser() user: User) {
-    const data = await this.tasksService.resolvePlacement(id, user);
-    return { success: true, message: "Placement resolved", data };
-  }
-
-  // NOTE: a static "reschedule" prefix, distinct from the ":id/reschedule"
-  // drag endpoint above — no route-matching ambiguity (different HTTP method
-  // and path shape).
-  @Post("reschedule/undo/:batchId")
-  async undoBatch(
-    @Param("batchId") batchId: string,
-    @Body() dto: UndoBatchDto,
-    @CurrentUser() user: User,
-  ) {
-    const data = await this.tasksService.undoBatch(batchId, user, dto.strategy);
-    return {
-      success: true,
-      message: data.requiresConfirmation
-        ? "Confirmation required — some tasks were touched since"
-        : "Reschedule undone",
-      data,
-    };
-  }
-
-  // The one explicit, opt-in, multi-task action — count-only preview, no
-  // per-task diff.
-  @Post("optimize/preview")
-  async optimizePreview(
-    @Body() dto: OptimizeWindowDto,
-    @CurrentUser() user: User,
-  ) {
-    const data = await this.tasksService.optimizePreview(dto, user);
-    return { success: true, message: `${data.count} tasks would move`, data };
-  }
-
-  @Post("optimize/apply")
-  async optimizeApply(
-    @Body() dto: OptimizeWindowDto,
-    @CurrentUser() user: User,
-  ) {
-    const data = await this.tasksService.optimizeApply(dto, user);
-    return { success: true, message: `${data.count} tasks rescheduled`, data };
-  }
-
-  @Patch(":id/complete")
-  async complete(@Param("id") id: string, @CurrentUser() user: User) {
-    const data = await this.tasksService.complete(id, user, new Date());
-    return { success: true, message: "Task completed", data };
   }
 
   @Patch(":id")

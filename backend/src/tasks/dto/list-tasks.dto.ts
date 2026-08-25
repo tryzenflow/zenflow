@@ -10,6 +10,6 @@ export class ListTasksDto {
   date: string;
 
   @IsOptional()
-  @IsIn(["PENDING", "DONE", "all"])
-  status?: "PENDING" | "DONE" | "all";
+  @IsIn(["PENDING", "DONE", "ABANDONED", "all"])
+  status?: "PENDING" | "DONE" | "ABANDONED" | "all";
 }

@@ -19,27 +19,3 @@ export const PREFERENCE_SLOTS_PER_DAY = 24;
  * disliked cell.
  */
 export const PREFERENCE_MATRIX_LENGTH = 7 * PREFERENCE_SLOTS_PER_DAY;
-
-/** Time window within which the EDF engine may place a task. */
-export interface SchedulingHorizon {
-  /** ISO-8601 inclusive lower bound. */
-  start: string;
-  /** ISO-8601 exclusive upper bound. */
-  end: string;
-}
-
-/**
- * UI-facing cap on how wide an Optimize window a user can pick (the date-range
- * picker in the Optimize popover/sheet clamps to this). Distinct from — and
- * tighter than — the backend's own hard `MAX_SCAN_DAYS` (90) ceiling, which
- * `TasksService.optimizePreview`/`optimizeApply` still enforce server-side
- * regardless of what the picker allows.
- */
-export const OPTIMIZE_UI_MAX_WINDOW_DAYS = 60;
-
-/**
- * Above this many tasks in an Optimize preview, the UI shows a one-line count
- * confirm ("Reschedule ~84 tasks in this range?") before applying — Optimize
- * never renders a per-task diff, just a count-gated confirm.
- */
-export const OPTIMIZE_LARGE_BATCH_THRESHOLD = 30;

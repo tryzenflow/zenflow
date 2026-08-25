@@ -4,7 +4,6 @@ import {
   monthRange,
   periodBoundsStr,
   periodRange,
-  sumWorkMinutes,
   viewDayRange,
   weekStartStr,
 } from "./horizon";
@@ -186,22 +185,5 @@ describe("periodRange — non-UTC timezone localizes the anchor", () => {
     const { start, end } = periodRange(anchor, "day", "America/New_York");
     expect(iso(start)).toBe("2026-06-08T04:00:00.000Z");
     expect(iso(end)).toBe("2026-06-09T04:00:00.000Z");
-  });
-});
-
-describe("sumWorkMinutes", () => {
-  it("counts only work days in the range", () => {
-    // Mon–Sun, 8h workday (480 min), Mon–Fri → 5 × 480 = 2400.
-    expect(
-      sumWorkMinutes("2026-06-08", "2026-06-14", 540, 1020, [1, 2, 3, 4, 5]),
-    ).toBe(2400);
-  });
-
-  it("counts each effective minute once for a wrap window (start-day anchored)", () => {
-    // 22:00 → 04:00 = 360 min/day. Mon–Fri over the week → 5 × 360 = 1800.
-    // The post-midnight tail is NOT double-counted on the following day.
-    expect(
-      sumWorkMinutes("2026-06-08", "2026-06-14", 1320, 240, [1, 2, 3, 4, 5]),
-    ).toBe(1800);
   });
 });

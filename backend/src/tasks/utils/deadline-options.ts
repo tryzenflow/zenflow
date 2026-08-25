@@ -6,11 +6,7 @@ import {
   weekStartStr,
   monthRange,
 } from "../../scheduler/utils/horizon";
-import {
-  localDateStr,
-  workWindowFor,
-  addDaysStr,
-} from "../../scheduler/utils/slot";
+import { localDateStr, addDaysStr } from "../../scheduler/utils/slot";
 import { User } from "../../../generated/prisma";
 
 /**
@@ -26,7 +22,6 @@ export function deadlineOptions(
   user: User,
 ): DeadlineOptionsResponse {
   const tz = user.timezone;
-  const work = { workStart: user.workStart, workEnd: user.workEnd };
   const anchorDate = new Date(anchor);
   const dateStr = localDateStr(anchorDate, tz);
 
@@ -44,23 +39,23 @@ export function deadlineOptions(
   // "Tomorrow" = start (00:00) of the next calendar day
   const tomorrow = minutesToUtc(addDaysStr(dateStr, 1), 0, tz);
 
-  const thisWeek = endOfPeriod(anchorDate, "week", tz, work);
+  const thisWeek = endOfPeriod(anchorDate, "week", tz);
 
   const nextWeekAnchor = minutesToUtc(
     addDaysStr(weekStartStr(dateStr), 7),
     0,
     tz,
   );
-  const nextWeek = endOfPeriod(nextWeekAnchor, "week", tz, work);
+  const nextWeek = endOfPeriod(nextWeekAnchor, "week", tz);
 
-  const thisMonth = endOfPeriod(anchorDate, "month", tz, work);
+  const thisMonth = endOfPeriod(anchorDate, "month", tz);
 
   const { startStr: monthStart } = monthRange(dateStr);
   const [y, m] = monthStart.split("-").map(Number);
   const nextMonthStr =
     m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
   const nextMonthAnchor = minutesToUtc(nextMonthStr, 0, tz);
-  const noRush = endOfPeriod(nextMonthAnchor, "month", tz, work);
+  const noRush = endOfPeriod(nextMonthAnchor, "month", tz);
 
   return {
     today: today.toISOString(),

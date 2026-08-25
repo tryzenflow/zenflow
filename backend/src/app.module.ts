@@ -15,6 +15,7 @@ import { UsersModule } from "./users/users.module";
 import { TasksModule } from "./tasks/tasks.module";
 import { TagsModule } from "./tags/tags.module";
 import { FilesModule } from "./files/files.module";
+import { SchedulerModule } from "./scheduler/scheduler.module";
 import { ScheduleModule } from "@nestjs/schedule";
 import { RedisModule } from "./common/redis/redis.module";
 import { RateLimitModule } from "./common/rate-limit";
@@ -97,6 +98,9 @@ import { RateLimitModule } from "./common/rate-limit";
     TasksModule,
     TagsModule,
     FilesModule,
+    // Background cron providers only (MatrixDecayService, AbandonedTasksService)
+    // — the EDF placement engine was removed; see scheduler.module.ts.
+    SchedulerModule,
   ],
   providers: [AppService, MailService],
   controllers: [AppController],

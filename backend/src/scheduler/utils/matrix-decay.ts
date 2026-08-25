@@ -1,18 +1,17 @@
 /**
- * Pure exponential time-decay for the signed preference matrix (docs/heuristic.md
- * §Phase 2, ADR-0001 §3). A daily NestJS `@Cron` job fades stale placement
+ * Pure exponential time-decay for the signed preference matrix.
+ * A daily NestJS `@Cron` job fades stale placement
  * preferences without hard cutoffs, so a habit a user has abandoned decays toward
  * neutral instead of lingering forever.
  *
- * Pure: this file only does the decay math (invariant #2). The cron WRAPPER (the
+ * Pure: this file only does the decay math. The cron WRAPPER (the
  * only I/O layer) loads each user's matrix + `lastDecayedAt`, calls
  * {@link decayMatrix}, and writes the result back.
  */
 
 /**
  * Matrix decay half-life in DAYS — after this many days, an untouched cell's
- * magnitude halves. A configurable constant (ADR-0001 §3 / phase-2-eval §8
- * drift-sensitivity sweep): 21 days ≈ a three-week half-life, slow enough that a
+ * magnitude halves. A configurable constant: 21 days ≈ a three-week half-life, slow enough that a
  * genuine weekly habit survives but stale one-offs fade.
  */
 export const MATRIX_HALF_LIFE_DAYS = 21;

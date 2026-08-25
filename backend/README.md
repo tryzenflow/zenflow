@@ -1,8 +1,15 @@
 # Zenflow API (backend)
 
-NestJS service that owns persistence, auth, file storage, and the **Phase 1
-Earliest-Deadline-First (EDF) scheduling engine**. Part of the
+NestJS service that owns persistence, auth, file storage, and task CRUD. Part of the
 [Zenflow monorepo](../README.md) — start there for the big picture and quick start.
+
+> **Scheduler status.** The Phase-1 EDF auto-placement engine (`scheduler.service.ts` +
+> its narrow single-task/multi-task placers) has been **removed**. `scheduledStartTime`
+> is now a plain field the client sets directly — no auto-placement, no conflict
+> cascade, no undo batches. The pure algorithm scaffolding under `scheduler/utils/`
+> (`place.ts`, `optimize.ts`, `slot.ts`, `horizon.ts`, `rationale.ts`, `reranker.ts`,
+> `telemetry.ts`) is kept as-is, unwired, pending a future reimplementation — see "The
+> EDF engine" below.
 
 ---
 
@@ -40,15 +47,15 @@ backend/
 │   │   ├── strategies/        # local.strategy.ts (email + otp)
 │   │   ├── serializers/       # session (de)serialization
 │   │   └── utils/             # generate-otp, hide-email (+ *.spec.ts)
-│   ├── users/                 # profile, preferences, onboarding
+│   ├── users/                 # profile (no onboarding/preferences endpoints — see below)
 │   │   └── decorators/        # @CurrentUser()
 │   ├── tasks/                 # task CRUD, reschedule, resize, complete
 │   ├── scheduler/             # the engine (see below)
 │   │   ├── utils/             # PURE algorithm — no I/O, fully unit-tested
-│   │   │   ├── place.ts       # single-task tiered placer (Tier1→2→3)
+│   │   │   ├── place.ts       # single-task tiered placer (Tier1→2), full-day
 │   │   │   ├── optimize.ts    # the one multi-task action (Optimize preview/apply)
-│   │   │   ├── slot.ts        # work-window math, 15-min slots, preference index
-│   │   │   └── horizon.ts     # calendar math (period ceilings, work minutes)
+│   │   │   ├── slot.ts        # 15-min slot grid math, preference index
+│   │   │   └── horizon.ts     # calendar math (period ceilings, calendar minutes)
 │   │   └── scheduler.service.ts  # persistence wrapper around utils/ (+ telemetry)
 │   ├── files/                 # multipart upload/download to local disk
 │   ├── mail/                  # login email + Handlebars templates
@@ -106,11 +113,13 @@ DTO, or service**. Briefly:
 | `name`, `email`             | string                   | `email` unique                                                                                                                                                                                                                                        |
 | `timezone`                  | string                   | IANA, default `"UTC"`                                                                                                                                                                                                                                 |
 | `lang`                      | `Language`               | `VI_VN` \| `EN_US`, default `EN_US`. Not yet read by any endpoint.                                                                                                                                                                                     |
-| `workStart` / `workEnd`     | int                      | minutes from midnight (default 540 / 1020 = 09:00–17:00)                                                                                                                                                                                              |
-| `workDays`                  | int[]                    | ISO weekdays, default `[1,2,3,4,5]` (1=Mon … 7=Sun)                                                                                                                                                                                                   |
 | `preferenceMatrix`          | int[]                    | flat **672** ints (7 days × 96 fifteen-minute slots, slot-grid-aligned). **Signed** Phase-1 telemetry: a move-toward/keep increments a cell (+1), a move-away decrements it (−1), empty = 0 (neutral). **Not yet read** by the engine. Seeded lazily. |
 | `preferenceMatrixDecayedAt` | DateTime?                | When the daily decay cron last decayed `preferenceMatrix`; null until the first pass                                                                                                                                                                  |
-| `onboardingComplete`        | bool                     | gates the onboarding redirect                                                                                                                                                                                                                         |
+| `onboardingComplete`        | bool                     | schema default `false`, but `UsersService.create()` always writes `true` — there's no onboarding flow left to gate on (see "Users" below). The column itself is unused dead weight pending a follow-up migration to drop it.                        |
+
+`workStart`/`workEnd`/`workDays` (a per-user working-hours window/working-days set) were
+**dropped with no replacement**. The scheduler now places tasks across the full
+24h/`DAILY_HORIZON` (1440 min) grid, every calendar day — see "The EDF engine" below.
 
 
 ### `Task`
@@ -205,9 +214,13 @@ Global prefix `**/api/v1**`. All routes except `POST /auth/otp/*` require
 | ------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | GET    | `/users/me`                   | profile                                                                                                                                          |
 | PATCH  | `/users/update/basic-info`    | update name/email                                                                                                                                |
-| PUT    | `/users/me/preferences`       | update work hours/days/timezone — metadata only, does **not** reschedule any existing task                  |
-| POST   | `/users/me/onboarding`        | finish onboarding (sets schedule)                                                                            |
 | GET    | `/users/me/preference-matrix` | the current user's flat 672-int signed preference matrix for the Insights heatmap (`PreferenceMatrixResponse`; cold-start → all-zero). Read-only |
+
+There is no onboarding endpoint and no preferences-update endpoint. Onboarding was removed
+entirely (no flow, no `onboardingComplete` gate — every new user is created with
+`onboardingComplete: true`). `timezone` is captured once at OTP signup (`x-timezone` header
+on `POST /auth/otp/verify` → `AuthService.createUserIfNotExists` → `UsersService.create()`)
+and is otherwise fixed — there is no later edit path.
 
 
 ### Tasks (`/tasks`)
@@ -318,21 +331,22 @@ been replaced with two narrow, single-purpose primitives:
 - **`place.ts`'s `placeTask(task, now, prefs, occupied, matrix)`** — single-task placement,
   used by every AUTOMATIC path: Create (`SchedulerService.placeNewTask`) and Edit's explicit
   accept step (`SchedulerService.resolveInvalidPlacement`, wired to `POST /tasks/:id/
-  reschedule/resolve`). Tries three candidate sources in **strict priority order** — hard
-  tiers, never blended, never compared by cost:
-  1. **Tier 1** — `feasibleSlots` (in-hours, before the deadline). When non-empty, the
+  reschedule/resolve`). Placement is **full-day**: every 15-minute slot of every calendar day
+  is schedulable — there is no per-user working-hours window or working-day restriction
+  (`User.workStart`/`workEnd`/`workDays` were dropped from the schema with no replacement).
+  Tries two candidate sources in **strict priority order** — hard tiers, never blended, never
+  compared by cost:
+  1. **Tier 1** — `feasibleSlots` (any free slot before the deadline). When non-empty, the
      softmax/Gumbel re-ranker (`reranker.ts`'s `pickBest`) picks among them by the user's
      signed preference matrix, degenerating to earliest-first with uniform propensity on cold
      start.
-  2. **Tier 2** — `findSlotIgnoringWorkHours` (outside work hours, still before the deadline).
-     Deterministic earliest.
-  3. **Tier 3** — `findNextAvailableSlot` (in-hours, deadline dropped — the "deadline actually
-     missed" case). Deterministic earliest.
+  2. **Tier 2** — `findNextAvailableSlot` (deadline dropped entirely — the "deadline actually
+     missed" case, Tier 1 found no room before it). Deterministic earliest free slot.
 
-  A task placeable by none of the three comes back `{ interval: null, tier: "unplaced" }` — a
-  rare, genuinely-saturated-calendar case. `placeTask` never compares its task against, evicts,
-  or moves any OTHER task — the caller's `occupied` set is its only interaction with the rest
-  of the backlog.
+  A task placeable by neither comes back `{ interval: null, tier: "unplaced" }` — a rare,
+  genuinely-saturated-calendar case (every slot in the `MAX_SCAN_DAYS` horizon already
+  occupied). `placeTask` never compares its task against, evicts, or moves any OTHER task —
+  the caller's `occupied` set is its only interaction with the rest of the backlog.
 
 - **Drag/resize/delete/complete don't call `placeTask` at all.** `SchedulerService.
   applyDirectPlacement` (drag/resize) writes the user's requested interval UNCONDITIONALLY,
@@ -369,15 +383,13 @@ place it gates real behavior is Optimize's `"retainManual"` mode, itself explici
 
 ### Other pure pieces (`place.ts`)
 
-- `**feasibleSlots(task, now, prefs, occupied, earliestStart?)**` — every 15-min-grid
-in-work-hours start before the task's deadline (or `now + MAX_SCAN_DAYS` with no deadline)
-that doesn't overlap `occupied`, ascending. Cross-midnight-aware via `workWindowFor`.
-- `**findSlotIgnoringWorkHours(task, now, occupied, prefs, ceiling?)**` — a candidate ignoring
-the work-hours window (still respecting `occupied` and an optional deadline `ceiling`),
-preferring the gap closest to that day's work window.
-- `**findNextAvailableSlot(task, searchFrom, occupied, prefs)**` — the earliest in-work-hours
-slot at/after `searchFrom`, ignoring the deadline entirely (the "deadline actually missed"
-case).
+- `**feasibleSlots(task, now, occupied, earliestStart?)**` — every 15-min-grid start before
+the task's deadline (or `now + MAX_SCAN_DAYS` with no deadline) that doesn't overlap
+`occupied`, ascending — full-day, every calendar day, no working-hours/working-day
+restriction.
+- `**findNextAvailableSlot(task, searchFrom, occupied)**` — the earliest free slot at/after
+`searchFrom`, ignoring the deadline entirely (the "deadline actually missed" case) — also
+full-day.
 - `**isPast(task, now)**` / `**isOverdue(task, now)**` — pure predicates callers use to decide
 whether a task should be offered to `placeTask` at all.
 - `**intervalOf(task)**` — maps a placed task to its occupied `{ start, end }`; `null` when
@@ -414,8 +426,8 @@ directly over Tier 1's feasible pool; `optimize.ts`'s Mode-3 (`"balanced"`) repa
 matrix, or a genuine tie, degenerates to deterministic earliest-first order with uniform
 propensity rather than injecting noise.
 - **Rationale** (`rationale.ts` → `buildTierRationale`): ALWAYS returns a non-null one-line
-"why this slot" summary, tier-aware (`tier1-preference` / `tier1-earliest` / `tier2` / `tier3`
-/ `unplaced`) for the automatic paths, plus a conflict-notice variant (`opts.conflictWithTitle`)
+"why this slot" summary, tier-aware (`tier1-preference` / `tier1-earliest` / `tier2` /
+`unplaced`) for the automatic paths, plus a conflict-notice variant (`opts.conflictWithTitle`)
 for a direct drag/resize that lands on an occupied slot. Surfaced on `SchedulingMeta.rationale`
 (create) and `RescheduleResponse`/`UpdateTaskResponse.rationale` (drag/resize/edit-invalidation).
 - **Matrix-decay cron** (`matrix-decay.service.ts`, `@Cron` daily): the I/O wrapper loads each
