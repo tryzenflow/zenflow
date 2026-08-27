@@ -3,9 +3,22 @@ import Link from "@tiptap/extension-link";
 export const CustomLink = Link.extend({
   addOptions() {
     // Cast shims a version drift in @tiptap/extension-link's option types.
+    const parentOptions = this.parent?.() ?? {};
     return {
-      ...this.parent?.(),
+      ...parentOptions,
       fileBaseUrl: import.meta.env.VITE_API_URL,
+      // Merge (not replace) the parent's `HTMLAttributes` so we keep its
+      // `target`/`rel` defaults (open-in-new-tab + `noopener noreferrer`)
+      // and only add our brand color class. `renderHTML` calls
+      // `mergeAttributes(this.options.HTMLAttributes, HTMLAttributes)`,
+      // which dedupes class tokens, so this class survives even though the
+      // per-mark `class` attribute's default also mirrors it (see
+      // `@tiptap/extension-link`'s `addAttributes`).
+      HTMLAttributes: {
+        ...(parentOptions as { HTMLAttributes?: Record<string, unknown> })
+          .HTMLAttributes,
+        class: "text-primary underline underline-offset-4 font-medium",
+      },
     } as any;
   },
 
