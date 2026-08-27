@@ -91,7 +91,7 @@ export const ThemeSettingItem = () => {
     <BottomSheet>
       <BottomSheetOpenTrigger asChild>
         <ListItem
-          itemLeft={(props) => <Palette {...props} />} // props adds size and color attributes
+          itemLeft={({ className }) => <Palette className={className} />}
           label="Theme"
         />
       </BottomSheetOpenTrigger>

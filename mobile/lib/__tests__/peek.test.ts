@@ -19,8 +19,6 @@ function seg(
     start: startISO,
     end: endISO,
     status: "PENDING",
-    manuallyMoved: false,
-    conflict: false,
     tags: [],
     state,
     segmentId: taskId,
