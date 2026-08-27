@@ -1,6 +1,6 @@
 /**
- * Tag-name matching for the tag autocomplete dropdown (`CreateTaskSheet` /
- * `EditTaskSheet` tags field, RN migration Phase 5 / GitHub issue #20).
+ * Tag-name matching for the tag autocomplete dropdown (`CreateSessionSheet` /
+ * `EditSessionSheet` tags field, RN migration Phase 5 / GitHub issue #20).
  *
  * `mockups/feedback.md` item 5 flags: "The tag autocomplete is strange when
  * the prefix is far from the remaining text." Investigating the web

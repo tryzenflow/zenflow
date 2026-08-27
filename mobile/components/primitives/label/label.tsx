@@ -1,6 +1,3 @@
-import * as React from "react";
-import { Pressable } from "react-native";
-import { Text as RNText } from "@/components/ui";
 import * as Slot from "@/components/primitives/slot";
 import type {
   PressableRef,
@@ -8,6 +5,9 @@ import type {
   SlottableTextProps,
   TextRef,
 } from "@/components/primitives/types";
+import { Text as RNText } from "@/components/ui";
+import * as React from "react";
+import { Pressable } from "react-native";
 import type { LabelRootProps, LabelTextProps } from "./types";
 
 const Root = React.forwardRef<
@@ -25,7 +25,7 @@ const Text = React.forwardRef<TextRef, SlottableTextProps & LabelTextProps>(
   ({ asChild, ...props }, ref) => {
     const Component = asChild ? Slot.Text : RNText;
     return <Component ref={ref} {...props} />;
-  }
+  },
 );
 
 Text.displayName = "TextNativeLabel";

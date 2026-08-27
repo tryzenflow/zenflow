@@ -11,7 +11,6 @@ import {
   findNodeHandle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 
 /**
  * The form screen's single scroll owner, exposed so a field far down the
@@ -26,18 +25,18 @@ import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
  * resizes the *window*; it doesn't scroll this ScrollView's content to
  * reveal whatever's now supposed to be visible in the shrunk viewport).
  */
-const TaskFormScrollContext =
+const SessionFormScrollContext =
   createContext<React.RefObject<ScrollView | null> | null>(null);
 
 /**
  * Scrolls a given node (by ref) into view above the keyboard, the same way
  * RN's `ScrollView` already does automatically for a focused native
  * `TextInput` — for callers (like the WebView note editor) that don't get
- * that behavior for free. No-ops outside `TaskFormScreen` or if the
+ * that behavior for free. No-ops outside `SessionFormScreen` or if the
  * scroll-responder API isn't available on this RN version/architecture.
  */
 export function useScrollIntoViewOnFocus() {
-  const scrollViewRef = useContext(TaskFormScrollContext);
+  const scrollViewRef = useContext(SessionFormScrollContext);
   return (nodeRef: React.RefObject<View | null>) => {
     const scrollView = scrollViewRef?.current;
     const node = nodeRef.current;
@@ -71,7 +70,7 @@ export function useScrollIntoViewOnFocus() {
  * gesture still work too, since this is a normal pushed Stack screen under
  * `presentation: "modal"`).
  */
-export function TaskFormScreen({
+export function SessionFormScreen({
   title,
   subtitle,
   headerRight,
@@ -86,13 +85,12 @@ export function TaskFormScreen({
 }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const tabBarOverlay = useTabBarOverlayHeight();
   const scrollViewRef = useRef<ScrollView | null>(null);
 
   return (
     <View
       className="flex-1 bg-background"
-      style={{ paddingTop: insets.top, paddingBottom: tabBarOverlay }}
+      style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
       <View className="flex-row items-center justify-between gap-3 border-b border-border px-5 pb-3.5 pt-2">
         <View className="flex-1">
@@ -116,15 +114,13 @@ export function TaskFormScreen({
       </View>
 
       {/*
-        Keyboard-aware wrapper for everything below the fixed header: on iOS
-        there's no OS-level window resize on keyboard show (unlike Android's
-        `softwareKeyboardLayoutMode: "resize"`, set in `app.config.ts`), so
-        `KeyboardAvoidingView`'s `padding` behavior is what pushes the scroll
-        content + footer up above the keyboard. On Android the OS resize
-        already shrinks this View's available height, so `undefined`
-        behavior (no extra offset) avoids double-compensating — this View
-        just needs to remain `flex-1` so the ScrollView/footer below reflow
-        into whatever height Android leaves it.
+        `flex-1` so this scroll region takes exactly the space between the
+        fixed header and the pinned footer (and scrolls internally rather
+        than growing to fit its content and shoving the footer around). On
+        Android `softwareKeyboardLayoutMode: "resize"` (`app.config.ts`)
+        shrinks the screen on keyboard show and RN auto-scrolls the focused
+        native TextInput into view; the WebView note editor scrolls itself
+        via `useScrollIntoViewOnFocus` above.
       */}
       <KeyboardAvoidingView
         className="flex-1"
@@ -136,12 +132,12 @@ export function TaskFormScreen({
           contentContainerStyle={{ paddingBottom: 32 }}
           keyboardShouldPersistTaps="handled"
         >
-          <TaskFormScrollContext.Provider value={scrollViewRef}>
+          <SessionFormScrollContext.Provider value={scrollViewRef}>
             {children}
-          </TaskFormScrollContext.Provider>
+          </SessionFormScrollContext.Provider>
         </ScrollView>
 
-        <View className="border-t border-border bg-background h-0 shadow-lg shadow-primary/10">
+        <View className="border-t border-border bg-background px-5 py-3 shadow-lg shadow-primary/10">
           {footer}
         </View>
       </KeyboardAvoidingView>

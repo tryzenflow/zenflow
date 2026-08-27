@@ -1,6 +1,3 @@
-import * as RadioGroup from "@radix-ui/react-radio-group";
-import * as React from "react";
-import {type GestureResponderEvent, Pressable, View} from "react-native";
 import * as Slot from "@/components/primitives/slot";
 import type {
   ForceMountable,
@@ -9,12 +6,15 @@ import type {
   SlottableViewProps,
   ViewRef,
 } from "@/components/primitives/types";
-import type {RadioGroupItemProps, RadioGroupRootProps} from "./types";
+import * as RadioGroup from "@radix-ui/react-radio-group";
+import * as React from "react";
+import { type GestureResponderEvent, Pressable, View } from "react-native";
+import type { RadioGroupItemProps, RadioGroupRootProps } from "./types";
 const RadioGroupContext = React.createContext<RadioGroupRootProps | null>(null);
 const Root = React.forwardRef<
   ViewRef,
   SlottableViewProps & RadioGroupRootProps
->(({asChild, value, onValueChange, disabled = false, ...viewProps}, ref) => {
+>(({ asChild, value, onValueChange, disabled = false, ...viewProps }, ref) => {
   const Component = asChild ? Slot.View : View;
   return (
     <RadioGroupContext.Provider
@@ -49,8 +49,8 @@ function useRadioGroupContext() {
 const Item = React.forwardRef<
   PressableRef,
   SlottablePressableProps & RadioGroupItemProps
->(({asChild, value, onPress: onPressProps, ...props}, ref) => {
-  const {onValueChange} = useRadioGroupContext();
+>(({ asChild, value, onPress: onPressProps, ...props }, ref) => {
+  const { onValueChange } = useRadioGroupContext();
 
   function onPress(ev: GestureResponderEvent) {
     if (onPressProps) {
@@ -72,7 +72,7 @@ Item.displayName = "ItemRadioGroup";
 const Indicator = React.forwardRef<
   ViewRef,
   SlottableViewProps & ForceMountable
->(({asChild, forceMount, ...props}, ref) => {
+>(({ asChild, forceMount, ...props }, ref) => {
   const Component = asChild ? Slot.View : View;
   return (
     <RadioGroup.Indicator asChild>
@@ -83,4 +83,4 @@ const Indicator = React.forwardRef<
 
 Indicator.displayName = "IndicatorRadioGroup";
 
-export {Indicator, Item, Root};
+export { Indicator, Item, Root };

@@ -1,5 +1,5 @@
-import { cva, type VariantProps } from "class-variance-authority";
-import { Link, type Href } from "expo-router";
+import { type VariantProps, cva } from "class-variance-authority";
+import { type Href, Link } from "expo-router";
 import type { LinkProps } from "expo-router/build/link/Link";
 import type React from "react";
 import type { ElementType, ReactElement } from "react";
@@ -30,7 +30,7 @@ const listItemTextVariants = cva(
     defaultVariants: {
       variant: "default",
     },
-  }
+  },
 );
 
 interface ItemProps {
@@ -103,7 +103,7 @@ const ListItem: React.FC<ListItemProps> = ({
         "flex-row items-center justify-between w-full px-4 py-3 border-b border-border bg-card",
         pressable ? "web:hover:opacity-90 active:opacity-90" : "",
         listItemTextVariants({ variant }),
-        className
+        className,
       )}
       accessibilityRole={pressable ? "button" : "none"}
       accessibilityLabel={`${label}${description ? `, ${description}` : ""}`}

@@ -36,7 +36,7 @@ Radix UI, Zustand, React Router 7, dnd-kit, TipTap).
 2. **Shared types are the contract.** Consume `@zenflow/shared` types; don't redefine API
    shapes. If a shape must change, that's a backend/shared change first.
 3. **Durations/slots** are 15-minute aligned (`DAILY_HORIZON` = 1440); snap with `utils/snap.ts`.
-4. **Recurrence**: render the flat `Task[]` per view window; mutations pass `scope`.
+4. **Recurrence**: render the flat `Session[]` per view window; mutations pass `scope`.
 
 ## Conventions
 
@@ -53,7 +53,7 @@ Radix UI, Zustand, React Router 7, dnd-kit, TipTap).
 1. Find the analogous existing component and match its structure.
 2. Calendar render/interaction work: blocks via `utils/blocks.ts`, overlaps via
    `utils/overlap.ts`, zones via `utils/zones.ts`; drag/resize go through the dnd-kit
-   context + `rescheduleTask`/`resizeTask` API fns.
+   context + `rescheduleSession`/`resizeSession` API fns.
 3. New data calls go in `src/api/` returning `@zenflow/shared` types.
 4. Before finishing: `pnpm --filter frontend typecheck` and `lint`; add/adjust Playwright
    Playwright specs in `e2e/` when behavior changes and run them; update `frontend/README.md`

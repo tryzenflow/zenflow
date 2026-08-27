@@ -1,8 +1,8 @@
 import {
+  type LayoutPosition,
   useAugmentedRef,
   useControllableState,
   useRelativePosition,
-  type LayoutPosition,
 } from "@/components/primitives/hooks";
 import { Portal as RNPPortal } from "@/components/primitives/portal";
 import * as Slot from "@/components/primitives/slot";
@@ -16,16 +16,16 @@ import type {
   TextRef,
   ViewRef,
 } from "@/components/primitives/types";
+import { Text } from "@/components/ui";
 import * as React from "react";
 import {
   BackHandler,
-  Pressable,
-  View,
   type GestureResponderEvent,
   type LayoutChangeEvent,
   type LayoutRectangle,
+  Pressable,
+  View,
 } from "react-native";
-import { Text } from "@/components/ui";
 import type {
   RootContext,
   SelectContentProps,
@@ -61,7 +61,7 @@ const Root = React.forwardRef<ViewRef, SlottableViewProps & SelectRootProps>(
       disabled,
       ...viewProps
     },
-    ref
+    ref,
   ) => {
     const nativeID = React.useId();
     const [value, onValueChange] = useControllableState({
@@ -99,7 +99,7 @@ const Root = React.forwardRef<ViewRef, SlottableViewProps & SelectRootProps>(
         <Component ref={ref} {...viewProps} />
       </RootContext.Provider>
     );
-  }
+  },
 );
 
 Root.displayName = "RootNativeSelect";
@@ -108,7 +108,7 @@ function useRootContext() {
   const context = React.useContext(RootContext);
   if (!context) {
     throw new Error(
-      "Select compound components cannot be rendered outside the Select component"
+      "Select compound components cannot be rendered outside the Select component",
     );
   }
   return context;
@@ -131,7 +131,7 @@ const Trigger = React.forwardRef<SelectTriggerRef, SlottablePressableProps>(
           augmentedRef.current?.measure(
             (_x, _y, width, height, pageX, pageY) => {
               setTriggerPosition({ width, pageX, pageY: pageY, height });
-            }
+            },
           );
         },
         close: () => {
@@ -162,7 +162,7 @@ const Trigger = React.forwardRef<SelectTriggerRef, SlottablePressableProps>(
         {...props}
       />
     );
-  }
+  },
 );
 
 Trigger.displayName = "TriggerNativeSelect";
@@ -176,7 +176,7 @@ const Value = React.forwardRef<TextRef, SlottableTextProps & SelectValueProps>(
         {value?.label ?? placeholder}
       </Component>
     );
-  }
+  },
 );
 
 Value.displayName = "ValueNativeSelect";
@@ -216,7 +216,7 @@ const Overlay = React.forwardRef<
       closeOnPress = true,
       ...props
     },
-    ref
+    ref,
   ) => {
     const { open, onOpenChange, setTriggerPosition, setContentLayout } =
       useRootContext();
@@ -238,7 +238,7 @@ const Overlay = React.forwardRef<
 
     const Component = asChild ? Slot.Pressable : Pressable;
     return <Component ref={ref} onPress={onPress} {...props} />;
-  }
+  },
 );
 
 Overlay.displayName = "OverlayNativeSelect";
@@ -266,7 +266,7 @@ const Content = React.forwardRef<
       position: _position,
       ...props
     },
-    ref
+    ref,
   ) => {
     const {
       open,
@@ -286,7 +286,7 @@ const Content = React.forwardRef<
           setContentLayout(null);
           onOpenChange(false);
           return true;
-        }
+        },
       );
 
       return () => {
@@ -331,7 +331,7 @@ const Content = React.forwardRef<
         {...props}
       />
     );
-  }
+  },
 );
 
 Content.displayName = "ContentNativeSelect";
@@ -355,7 +355,7 @@ const Item = React.forwardRef<
       closeOnPress = true,
       ...props
     },
-    ref
+    ref,
   ) => {
     const {
       onOpenChange,
@@ -394,7 +394,7 @@ const Item = React.forwardRef<
         />
       </ItemContext.Provider>
     );
-  }
+  },
 );
 
 Item.displayName = "ItemNativeSelect";
@@ -403,7 +403,7 @@ function useItemContext() {
   const context = React.useContext(ItemContext);
   if (!context) {
     throw new Error(
-      "Item compound components cannot be rendered outside of an Item component"
+      "Item compound components cannot be rendered outside of an Item component",
     );
   }
   return context;
@@ -447,7 +447,7 @@ const Group = React.forwardRef<ViewRef, SlottableViewProps>(
   ({ asChild, ...props }, ref) => {
     const Component = asChild ? Slot.View : View;
     return <Component ref={ref} role="group" {...props} />;
-  }
+  },
 );
 
 Group.displayName = "GroupNativeSelect";
@@ -456,7 +456,7 @@ const Label = React.forwardRef<TextRef, SlottableTextProps>(
   ({ asChild, ...props }, ref) => {
     const Component = asChild ? Slot.Text : Text;
     return <Component ref={ref} {...props} />;
-  }
+  },
 );
 
 Label.displayName = "LabelNativeSelect";

@@ -1,28 +1,29 @@
 # Zenflow Web (frontend)
 
-React 19 + Vite PWA — the calendar UI where users create tasks and the EDF engine's
-placements are rendered, dragged, and resized. Part of the
+React 19 + Vite PWA — the calendar UI where users create sessions and place them by hand
+(drag/resize/Optimize). There is no auto-placement engine — the old EDF scheduler was
+dropped; see "No auto-placement engine" below. Part of the
 [Zenflow monorepo](../README.md).
 
 ---
 
 ## Tech stack
 
-| Concern | Choice |
-|---------|--------|
-| Framework / build | React 19, Vite 6, `vite-plugin-pwa` (auto-update service worker) |
-| Language | TypeScript 5.7 (strict, `@/*` → `src/*`) |
-| Styling | Tailwind CSS v4 (`@tailwindcss/vite`), OKLch design tokens, glassmorphism |
-| UI primitives | Radix UI + `class-variance-authority`, `lucide-react` icons, Geist font |
-| State | Zustand (global user store) + component state |
-| Routing | React Router 7 |
-| Forms | React Hook Form + Zod (`@hookform/resolvers`) |
-| Drag & resize | `@dnd-kit/core` + `@dnd-kit/modifiers` |
-| Rich text | TipTap (`note` editor with file uploads) |
-| Dates | `date-fns` + `date-fns-tz`, `rrule` |
-| HTTP | axios (with credentials), shared envelope types from `@zenflow/shared` |
-| Notifications | Sonner toasts |
-| Tests | Playwright (e2e, Chromium) |
+| Concern           | Choice                                                                    |
+| ----------------- | ------------------------------------------------------------------------- |
+| Framework / build | React 19, Vite 6, `vite-plugin-pwa` (auto-update service worker)          |
+| Language          | TypeScript 5.7 (strict, `@/*` → `src/*`)                                  |
+| Styling           | Tailwind CSS v4 (`@tailwindcss/vite`), OKLch design tokens, glassmorphism |
+| UI primitives     | Radix UI + `class-variance-authority`, `lucide-react` icons, Geist font   |
+| State             | Zustand (global user store) + component state                             |
+| Routing           | React Router 7                                                            |
+| Forms             | React Hook Form + Zod (`@hookform/resolvers`)                             |
+| Drag & resize     | `@dnd-kit/core` + `@dnd-kit/modifiers`                                    |
+| Rich text         | TipTap (`note` editor with file uploads)                                  |
+| Dates             | `date-fns` + `date-fns-tz`, `rrule`                                       |
+| HTTP              | axios (with credentials), shared envelope types from `@zenflow/shared`    |
+| Notifications     | Sonner toasts                                                             |
+| Tests             | Playwright (e2e, Chromium)                                                |
 
 ## Folder structure
 
@@ -32,21 +33,21 @@ frontend/
 │   ├── api/                   # axios client + typed endpoint fns
 │   │   ├── base.ts            # axios instance (VITE_API_URL, withCredentials)
 │   │   ├── index.ts           # get/post/patch/put/delete helpers
-│   │   ├── auth.ts  tasks.ts  users.ts
+│   │   ├── auth.ts  tasks.ts  users.ts  scheduler.ts
 │   ├── components/
 │   │   ├── auth/              # login-form
 │   │   ├── calendar/          # day/week/month views + grid + blocks (see below)
-│   │   ├── tasks/             # create/edit dialogs, task-form, rrule-form, note-editor
-│   │   ├── settings/          # settings-dialog + preferences-fields (shared with onboarding)
+│   │   ├── tasks/             # create/edit dialogs, task-form, note-editor, duration-input
+│   │   ├── settings/          # settings-dialog (Insights · Account) + preferences (heatmap)
 │   │   ├── common/            # date-range-select, TipTap editor + toolbar
 │   │   ├── ui/                # Radix + Tailwind primitives (button, dialog, select, …)
-│   │   ├── hoc/with-auth.tsx  # auth gate + onboarding redirect
+│   │   ├── hoc/with-auth.tsx  # auth gate (no onboarding step, see below)
 │   │   └── logo.tsx
 │   ├── hooks/                 # use-user-store, use-view-shortcuts, use-drag-sensors, …
-│   ├── lib/                   # utils.ts (cn()), task-card.ts (TASK_CARD_CLASSES)
-│   ├── pages/                 # home, login, onboarding, not-found
-│   ├── types/                 # schedule.ts (Event), tasks.ts, user.ts, date.ts, files.ts
-│   ├── utils/                 # tz.ts, time.ts, blocks.ts, overlap.ts, zones.ts, snap.ts, …
+│   ├── lib/                   # utils.ts (cn()), toast.ts (errorToast)
+│   ├── pages/                 # home, login, not-found
+│   ├── types/                 # tasks.ts, user.ts, date.ts, files.ts
+│   ├── utils/                 # tz.ts, time.ts, snap.ts, tasks.ts (re-exports @zenflow/core), …
 │   ├── App.tsx                # router
 │   ├── index.css / App.css    # Tailwind import + OKLch tokens + glass/grid styles
 │   └── main.tsx
@@ -56,20 +57,31 @@ frontend/
 └── playwright.config.ts
 ```
 
+`@zenflow/core` (`packages/core/src/`) is the FE/mobile-shared logic layer: `blocks.ts`
+(`taskToBlock`/`tasksToBlocks`/`eventsForDay`), `overlap.ts` (`getOverlapLayout`), `task-card.ts`
+(`deriveState`/`withOverlap`/`TASK_CARD_CLASSES`), `tasks.ts` (`sessionSchema`/`SessionFormValues`/
+`placementQualifier`), `tz.ts`/`time.ts`/`constants.ts`. The frontend used to keep local forks of
+several of these under `src/utils/` — they're gone now in favor of the shared package; only the
+genuinely web-specific timezone/snap/editing helpers remain in `src/utils/`.
+
 ## Screens & routing
 
 Routes (`src/App.tsx`):
 
-| Route | Page | Notes |
-|-------|------|-------|
-| `/` | `pages/home.tsx` | the calendar; gated by `with-auth.tsx` |
-| `/login` | `pages/login.tsx` | email → OTP verification |
-| `/onboarding` | `pages/onboarding.tsx` | multi-step wizard (work hours / days / role) |
-| `*` | `pages/not-found.tsx` | 404 |
+| Route    | Page                  | Notes                                   |
+| -------- | --------------------- | ---------------------------------------- |
+| `/`      | `pages/home.tsx`      | the calendar; gated by `with-auth.tsx`   |
+| `/login` | `pages/login.tsx`     | email → OTP verification                 |
+| `*`      | `pages/not-found.tsx` | 404                                      |
 
-The **auth gate** (`components/hoc/with-auth.tsx`) calls `me()` on mount, redirects to
-`/login?callback=…` when unauthenticated, and to `/onboarding` when
-`user.onboardingComplete === false`.
+**There is no onboarding step.** A fresh signup lands in the app directly — timezone is
+captured once at OTP signup via the `x-timezone` header (`api/auth.ts`) and isn't
+user-editable after that; `workStart`/`workEnd`/`workDays`/`onboardingComplete` were dropped
+from `User` with no replacement (education-pivot migration; see `@zenflow/shared`'s
+`user.ts`), so there's nothing left for an onboarding wizard to collect. `pages/onboarding.tsx`
+and its route were deleted; mirrors `mobile/app/_layout.tsx`'s `AuthGate`. The **auth gate**
+(`components/hoc/with-auth.tsx`) just calls `me()` on mount and redirects to
+`/login?callback=…` when unauthenticated.
 
 The **calendar** (`components/calendar/`): `layout.tsx` orchestrates state, data fetching,
 and dialogs; `header.tsx` has date navigation + the day/week/month view picker + the Optimize
@@ -79,145 +91,97 @@ at the active view's granularity — all suppressed while typing in a field, see
 `utils/editing.ts`; the prev/next step logic is shared with the header buttons in
 `utils/navigation.ts`); `sidebar.tsx` is the agenda list; `day-view`,
 `week-view`, `month-view` (+ their `*-grid` / `*-cell` children) render the time grids;
-`scheduled-block-item.tsx` is a single draggable/resizable task block with a click popover.
-Task create/edit lives in `components/tasks/` (`create-task-dialog`, `edit-task-dialog`,
-`form/task-form`, `rrule-form`, `note-editor`). In **create** mode the "Task name" field is
-a combobox (`TitleField` in `form/task-form.tsx`): typing fetches the user's existing tasks
-(`GET /tasks/suggestions`, debounced ~250ms, server-ordered by recency) and picking one
-autocompletes the rest of the form — duration, tags, note, and a forward-shifted deadline
-(the source task's create→deadline lead time re-applied from now). Edit mode keeps the plain
-input. There is no "fixed vs flexible" scheduling-type toggle anymore — every task is
-flexible; a task only stays put once it's `manuallyMoved` (dragged or resized), rendered as a
-lock icon on the block, not a distinct card state.
+`scheduled-block-item.tsx` is a single draggable/resizable session block with a click popover.
+Session create/edit lives in `components/tasks/` (`create-task-dialog`, `edit-task-dialog`,
+`form/task-form`, `note-editor`, `duration-input`). In **create** mode the "Session name" field
+is a combobox (`TitleField` in `form/title-field.tsx`): typing fetches the user's existing
+sessions (`GET /sessions/suggestions`, debounced ~250ms, server-ordered by recency) and picking
+one autocompletes the rest of the form — duration, tags, note, and a forward-shifted deadline
+(the source session's create→deadline lead time re-applied from now). Edit mode keeps the plain
+input and hides the duration field (duration changes happen by resizing the block on the
+calendar, not in the form).
 
 **Deadline is required** and is set entirely through quick-action chips
 (`components/tasks/form/deadline-chip-field.tsx`) — Today / Tomorrow / This week / Next week
-/ This month / No rush / Custom (the old date+time inputs and the view-scoped "no deadline"
-mode are gone). The six non-custom values are prefetched once per form-open from
-`GET /tasks/deadline-options` (`getDeadlineOptions` in `api/tasks.ts`) so every click is
+/ This month / No rush / Custom. The six non-custom values are prefetched once per form-open
+from `GET /sessions/deadline-options` (`getDeadlineOptions` in `api/tasks.ts`) so every click is
 instant; Today/Tomorrow pin the calendar day and let the user fine-tune only the time,
-Custom exposes both the existing `DatePicker` and the new `components/ui/time-picker.tsx` (a
-Popover-based hour/minute/AM-PM picker — todo.md explicitly rejects the native
-`<input type="time">`).
+Custom exposes both the existing `DatePicker` and `components/ui/time-picker.tsx` (a
+Popover-based hour/minute/AM-PM picker, not the native `<input type="time">`).
 
-**Create is direct, and always lands somewhere concrete.** Submitting the form calls
-`POST /tasks` immediately — no simulate-then-confirm step (the old preview-before-commit
-`simulateTask`/`POST /tasks/simulate` is gone; act now, undo if wrong). The pure scheduler
-tries in-hours-before-deadline, then outside-hours-before-deadline, then
-in-hours-past-deadline before ever giving up, so a create response's `task` always carries a
-real placement except the rare last-resort case where `task.conflict` is still true
-(genuinely no room anywhere in the scan horizon) — that case shows a `toast.warning` naming
-the task instead of a silent no-op. `create-task-dialog.tsx` derives a client-side "why is
-this unusual?" signal for the success toast — `utils/tasks.ts`'s
-`placementQualifier(task, user)` compares the placement against the deadline and the user's
-work window and returns `"onTime"`, `"outsideHours"`, or `"pastDeadline"` (checked in that
-priority), appending " — outside your usual work hours" / " — past its deadline" to the toast
-copy when relevant (the backend no longer returns *why* a placement is unusual, only where it
-landed).
+**No auto-placement engine — every write is a direct, single-session field diff.** The old EDF
+scheduler (tiered placement search, cascades, per-session `rationale`/`conflict`/`manuallyMoved`
+flags, session history/event timeline) was deleted outright, not replaced with something
+narrower — see `@zenflow/shared`'s `task.ts` doc comment on `UpdateSessionInput`: "one endpoint
+(`PATCH /sessions/:id`) covers all of it... each field is a plain diff applied directly." There
+is no cascade or displaced-session side effect on any write. Concretely:
 
-**No more whole-backlog cascades — every mutation touches only its own task.** The scheduler
-redesign replaced the old cost-based `reoptimize()` (which could silently evict/relocate any
-pending task on every mutation) with a narrow, single-task tiered placer. Create places the new
-task only; a metadata-only edit (title/note/tags) patches fields directly and leaves the task's
-own placement untouched. A deadline/tags-driven duration change that invalidates that unchanged
-slot flags `task.conflict: true` in the same write instead of auto-searching, and
-`UpdateTaskResponse.rationale` explains why — `edit-task-dialog.tsx`'s `onSubmit` calls
-`lib/scheduling-toasts.tsx`'s `showOfferToRescheduleToast(taskId, title, rationale, onResolved)`,
-a blocking Accept/Decline toast (reusing `ConfirmToastShell`): **Find it a new slot** calls
-`api/tasks.ts`'s `resolveTaskPlacement` (`POST /tasks/:id/reschedule/resolve`, no body — the
-backend re-reads the task's current deadline/duration and re-runs the same Tier1→2→3 search
-`createTask` uses), whose response then drives the normal `maybeShowRationaleToast`; **Leave it**
-just dismisses — the task stays flagged, resolvable later by a manual drag or Optimize. Drag and
-resize (`rescheduleTask`/`resizeTask`) write the requested interval unconditionally — landing on
-an occupied slot flags **both** tasks `conflict: true` rather than relocating either one. Delete
-and Complete free only their own slot and bounded-clear whatever was conflicting solely because of
-them. **None of these can move a task the user didn't touch**, so `maybeShowCascadeToast` no
-longer fires for create/update/delete — see Optimize below for the one action that still can.
+- **Create** (`create-task-dialog.tsx`) calls `POST /sessions` with title/duration/deadline/tags/
+  note only — the DTO doesn't even accept a `scheduledStartTime`, so a freshly created session is
+  always unscheduled. It won't render as a calendar block until it's placed (drag, or Optimize).
+- **Edit** (`edit-task-dialog.tsx`) calls `PATCH /sessions/:id` with whatever metadata changed.
+  No confirm-before-reschedule prompt, no rationale toast — notes.md's triggers 1–3 (reschedule
+  prompts on create/edit-deadline/delete) are explicitly deferred, not built.
+- **Drag / resize / complete** (`layout.tsx`'s `onReschedule`/`onResize`/`onComplete`) all call
+  `updateSession(id, { scheduledStartTime, durationMinutes, status })` directly — no dedicated
+  reschedule/resize/complete endpoints.
+- **Delete** frees only that session's own slot.
 
-**Optimize — the one explicit, opt-in, multi-task action.** `components/calendar/
-optimize-button.tsx` renders the header's `Sparkles`-icon button (`components/calendar/
-header.tsx`), opening a popover: a `DateRangeSelect` window (default the next 7 days,
-future-oriented presets only, client-capped at the shared `OPTIMIZE_UI_MAX_WINDOW_DAYS` — distinct
-from and tighter than the backend's own hard per-request ceiling) and an `OptimizeModeField`
-radio-card list (`balanced` / `full` / `retainManual`) defaulting to Mode 3 ("balanced"), shown
-inline alongside the window rather than behind a disclosure. Confirming calls `api/tasks.ts`'s
-`optimizePreview` for a **count only** — no per-task diff is ever rendered, by design — and, only
-above the shared `OPTIMIZE_LARGE_BATCH_THRESHOLD`, shows a one-line confirm toast (reusing
-`lib/scheduling-toasts.tsx`'s `ConfirmToastShell`) before calling `optimizeApply`. A successful
-apply shows `tasks/cascade-toast.tsx` via `maybeShowCascadeToast(response, tz, onUndone)` ("N
-task(s) rescheduled" + the window range + **Undo**, plus a "Fixed N · M left unchanged (manually
-placed)" line when the response carries `fixedCount`/`unchangedCount`, i.e. Mode 2), keyed by
-`cascade:${batchId}` so a literal duplicate fire of the same batch dedupes. Undo calls
-`api/tasks.ts`'s `undoBatch(batchId, strategy?)` (`POST /tasks/reschedule/undo/:batchId`); if the
-backend reports `requiresConfirmation` (a touched-since row), the caller re-submits with an
-explicit `strategy: "all" | "excludeTouched"`.
+The only client-derived visual state left is **conflict**: `@zenflow/core`'s `withOverlap` folds
+a genuine same-time overlap between two live blocks (computed purely client-side from the
+rendered layout, `getOverlapLayout`) into the card's state — there is no backend `conflict` flag
+anymore.
 
-A `task.conflict` that survives a create/edit/drag/resize means either a genuinely saturated
-calendar (no slot anywhere in the scan horizon) or an accepted overlap the user hasn't resolved
-yet — surfaced via the amber status dot, the header's `conflictCount` badge
-(`components/calendar/header.tsx`, an amber pill with an `AlertTriangle` icon shown only when
-`conflictCount > 0`), and the rationale toast's conflict-notice framing (below) until something
-frees up room or a follow-up drag/Optimize resolves it.
+**Optimize — the one explicit, opt-in, multi-session action.** `components/calendar/
+optimize-button.tsx` is a single `Sparkles`-icon header button (`components/calendar/header.tsx`)
+— no popover, no mode picker, no preview step (the old 3-mode full/balanced/fixed picker and its
+large-batch confirm guard were dropped along with the EDF engine). Clicking it calls
+`api/scheduler.ts`'s `optimizeSchedule(now, now + 14 days)` (`POST /scheduler/optimize`), which
+applies immediately and returns `{ batchId, diffs }` (`@zenflow/shared`'s `OptimizeResponse`). A
+successful run shows a one-line sonner toast — "Optimized N sessions" — with an **Undo** action
+wired to `undoOptimize(batchId)` (`POST /scheduler/optimize/undo/:batchId`, unconditional
+revert). An empty `diffs` shows "Nothing to optimize" with no Undo action. Mirrors
+`mobile/components/calendar/day-timeline.tsx`'s Optimize trigger.
 
-**Settings** is a dialog, not a route: `components/settings/settings-dialog.tsx` is a
-Todoist-style **tabbed** dialog — **Work** (hours / days / timezone via
-`updatePreferences`), **Insights** (`UserPreferencesPanel` in
-`components/settings/preferences.tsx`: the 7×24 signed preference heatmap fetched from
-`GET /users/me/preference-matrix`, with a cold-start empty state), and **Account** (the Log
-out action). It's mounted once in `layout.tsx`; the sidebar footer (`sidebar.tsx`) shows the
-signed-in user and opens it via a `zenflow:open-settings` window event (same pattern as
-`zenflow:open-task`). The work-field inputs and constants are shared with onboarding through
-`components/settings/preferences-fields.tsx`.
-
-**Onboarding** (`pages/onboarding.tsx`) is a wizard whose steps are Welcome · Work Hours ·
-Work Days · All Set.
-
-**Phase-2 transparency UI (issue #13).** Scheduling decisions are surfaced as sonner
-`toast.custom` bodies, each a distinct "kind" that stacks independently rather than merging
-into one mega-toast: `tasks/rationale-toast.tsx` (why *this* task was placed — every tiered
-placement now returns a rationale, so `lib/scheduling-toasts.tsx`'s `maybeShowRationaleToast`
-fires on every placement-affecting response: create, an accepted edit-reschedule offer, drag,
-and resize; it switches to a conflict-notice framing — amber `AlertTriangle`, "Landed on an
-overlap" — instead of the default `Sparkles` "Scheduled to your rhythm" when the placement's own
-`task.conflict` is true, since the summary text is then naming an overlap rather than a
-preference match) and `tasks/cascade-toast.tsx` (did this ripple to *other* tasks — exclusively an
-Optimize-apply concern now, see above; create/update/delete/drag/resize can no longer produce
-collateral moves). While a block is being
-edge-resized, `scheduled-block-item.tsx` renders the added/removed minutes as a distinct
-delta band/label (purely visual, driven off the existing resize-preview state so it doesn't
-touch the drag/resize gesture path). The Phase-2 `@zenflow/shared` type deltas are consumed
-through `src/types/phase2.ts` — a thin re-export aggregator, not a shim (every type it
-re-exports now ships directly from `@zenflow/shared`).
+**Settings** is a dialog, not a route: `components/settings/settings-dialog.tsx` is a tabbed
+dialog — **Insights** (`UserPreferencesPanel` in `components/settings/preferences.tsx`: the 7×24
+signed preference heatmap fetched from `GET /users/me/preference-matrix`, with a cold-start empty
+state) and **Account** (signed-in identity, read-only timezone, Log out). There is no "Work" tab
+anymore — `workStart`/`workEnd`/`workDays` were dropped from `User` with no replacement, and
+timezone is fixed at OTP signup with no update endpoint, so neither is user-editable. It's
+mounted once in `layout.tsx`; the sidebar footer (`sidebar.tsx`) shows the signed-in user and
+opens it via a `zenflow:open-settings` window event (same pattern as `zenflow:open-task`).
 
 ## Calendar internals
 
-- **Positioning:** a task block's top/height come from its minutes-of-day mapped onto the
-  grid (`HOUR_PX`/`DAY_PX` in `utils/zones.ts`, `DAILY_HORIZON` = 1440). See
-  `utils/blocks.ts` (`taskToBlock`) and `types/schedule.ts`.
+- **Positioning:** a session block's top/height come from its minutes-of-day mapped onto the
+  grid (`--week-cells-height` CSS var, `DAILY_HORIZON` = 1440). See `@zenflow/core`'s
+  `blocks.ts` (`taskToBlock`/`tasksToBlocks`/`eventsForDay`) and `@zenflow/shared`'s
+  `schedule.ts` (`Event`/`DaySegment`).
 - **Drag → reschedule:** dnd-kit (`useDraggable` + `DndContext`, sensors from
-  `use-drag-sensors`). Dropping a block calls `rescheduleTask` → `PATCH /tasks/:id/reschedule`.
-  Day view restricts dragging to the vertical axis (re-time only); week view drags freely in
-  2D (cell ids encode `hour:minute:dayIndex`, so a horizontal drop also re-days the task);
-  month view drags freely across day cells (re-day only, time-of-day preserved).
+  `use-drag-sensors`). Dropping a block calls `updateSession(id, { scheduledStartTime })` — a
+  plain field write, no cascade. Day view restricts dragging to the vertical axis (re-time
+  only); week view drags freely in 2D (cell ids encode `hour:minute:dayIndex`, so a horizontal
+  drop also re-days the session); month view drags freely across day cells (re-day only,
+  time-of-day preserved).
 - **Edge resize:** top/bottom handles capture the pointer, preview locally, then call
-  `resizeTask` → `PATCH /tasks/:id/resize`. Both snap to the 15-min grid (`utils/snap.ts`).
-- **Overlaps:** `utils/overlap.ts` (`getOverlapLayout`) greedily lays overlapping blocks
-  side-by-side (column/columns). Conflicts get the amber `conflict` card state.
-- **Work zones:** `utils/zones.ts` (`getDayZones`) returns the work-hour `segments` (px) for
-  a column and tints their complement as non-work / weekend; day & week views draw a "now"
-  indicator. Overnight (cross-midnight) windows — `workEnd <= workStart` — anchor to the start
-  day and render two bands: an evening segment on the workday plus a morning spill-over on the
-  next column. Time pickers + wrap-aware validation live in
-  `components/settings/preferences-fields.tsx` (`isValidWindow` / `workWindowMinutes` /
-  `windowWraps`).
-- **Recurrence:** the backend materializes a series into individual rows (shared `seriesId`);
-  the frontend just renders the flat `Task[]` for the current view window. Mutations pass a
-  `scope` of `"one"` or `"following"`.
+  `updateSession(id, { scheduledStartTime, durationMinutes })`. Both snap to the 15-min grid
+  (`utils/snap.ts`).
+- **Overlaps:** `@zenflow/core`'s `getOverlapLayout` greedily lays overlapping blocks
+  side-by-side (column/columns) and flags a genuine same-time overlap between two live blocks;
+  `withOverlap` folds that into the card's `conflict` state.
+- **No work-hours shading.** `day-column-background.tsx`/`month-cell.tsx`/`week-view.tsx` used to
+  tint "outside working hours" / weekend zones (`@zenflow/core`'s old `getDayZones`/
+  `DEFAULT_WORK_PREFS`) — removed along with the `workStart`/`workEnd`/`workDays` fields on
+  `User`. There is no working-hours concept left to shade; day/week views still draw a "now"
+  indicator, and month cells still dim adjacent-month days.
+- **Recurrence / session series is not implemented yet.** `Session` has no `seriesId` — that's
+  future work (see the repo-root `notes.md`), explicitly out of scope for this pass.
 
 ## Timezone model (important)
 
 `src/utils/tz.ts` — **the calendar reasons entirely in the user's IANA timezone, never the
-browser's.** Every calendar `Date` carries the user-tz *wall clock* in its local fields, so
+browser's.** Every calendar `Date` carries the user-tz _wall clock_ in its local fields, so
 `date-fns` operations (`isSameDay`, `addDays`, `format`, …) work in user-tz space.
 
 - `zonedNow(tz)` — now, as user-tz wall clock.
@@ -234,9 +198,10 @@ browser's.** Every calendar `Date` carries the user-tz *wall clock* in its local
   (`:root` and `.dark`) and `src/App.css`. Brand ramp orange → yellow → lime.
 - **Glassmorphism:** `.glass-task`, `.glass-header`, `.glass-panel` (backdrop blur).
 - **Dark mode:** full token inversion (`next-themes`); dark mode uses visible borders.
-- **Composition:** `cn()` (`lib/utils.ts`, clsx + tailwind-merge) and CVA variants. Task
-  card visual states (`fluid`, `fixed`, `overdue`, `conflict`, `completed`) come from
-  `lib/task-card.ts` (`TASK_CARD_CLASSES`).
+- **Composition:** `cn()` (`lib/utils.ts`, clsx + tailwind-merge) and CVA variants. Session
+  card visual states (`fluid`, `overdue`, `conflict`, `completed` — `@zenflow/shared`'s
+  `SessionCardState`) come from `@zenflow/core`'s `task-card.ts` (`deriveState`/`withOverlap`/
+  `TASK_CARD_CLASSES`).
 - **No mobile-responsive target** — this is a desktop calendar; don't add breakpoints
   unless asked.
 

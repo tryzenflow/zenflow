@@ -8,29 +8,19 @@ import {
   AlignJustify,
   AlignLeft,
   AlignRight,
+  Archive,
   ArrowDown,
   ArrowUp,
   Baby,
   BadgeAlert,
   BarChart3,
+  Bell,
   Bold,
+  BookOpen,
   Calendar,
   CalendarDays,
   CalendarRange,
   Check,
-  LayoutGrid,
-  Send,
-  Archive,
-  Bell,
-  BookOpen,
-  Shield,
-  Sliders,
-  Star,
-  Settings,
-  User,
-  Moon,
-  Palette,
-  Smartphone,
   CheckCircle,
   CheckSquare,
   ChevronDown,
@@ -45,21 +35,23 @@ import {
   Code,
   Copy,
   Database,
-  Home,
   Ear,
   Fan,
   GalleryHorizontal,
   Github,
   Globe,
   Highlighter,
+  Home,
   Info,
   Italic,
   Lamp,
+  LayoutGrid,
   LayoutPanelLeft,
   LifeBuoy,
   Link2,
   List,
   ListOrdered,
+  Loader,
   Lock,
   LogOut,
   type LucideIcon,
@@ -68,8 +60,10 @@ import {
   MessageCircleQuestion,
   MessageSquare,
   MinusCircle,
+  Moon,
   MoonStar,
   MousePointer2,
+  Palette,
   Plus,
   PlusCircle,
   Quote,
@@ -78,7 +72,13 @@ import {
   RotateCw,
   Scale,
   Search,
+  Send,
+  Settings,
+  Shield,
+  Sliders,
+  Smartphone,
   Sparkles,
+  Star,
   Sun,
   Table,
   Tag,
@@ -86,6 +86,7 @@ import {
   Trash2,
   Underline,
   Upload,
+  User,
   UserPlus,
   Users,
   X,
@@ -112,6 +113,7 @@ interopIcon(AlarmClockIcon);
 interopIcon(AlertCircle);
 interopIcon(AlignRight);
 interopIcon(Baby);
+interopIcon(Loader);
 interopIcon(BadgeAlert);
 interopIcon(Calendar);
 interopIcon(CircleUserRound);
@@ -170,8 +172,8 @@ interopIcon(Smartphone);
 interopIcon(Clock);
 interopIcon(MessageCircleQuestion);
 interopIcon(MinusCircle);
-  interopIcon(MousePointer2);
-  interopIcon(CalendarRange);
+interopIcon(MousePointer2);
+interopIcon(CalendarRange);
 interopIcon(LayoutGrid);
 interopIcon(BarChart3);
 interopIcon(Sliders);
@@ -184,10 +186,10 @@ interopIcon(Link2);
 interopIcon(List);
 interopIcon(ListOrdered);
 interopIcon(Quote);
-  interopIcon(RefreshCcw);
-  interopIcon(RefreshCw);
-  interopIcon(RotateCw);
-  interopIcon(Upload);
+interopIcon(RefreshCcw);
+interopIcon(RefreshCw);
+interopIcon(RotateCw);
+interopIcon(Upload);
 interopIcon(Trash2);
 interopIcon(RefreshCcw);
 interopIcon(Scale);
@@ -241,6 +243,7 @@ export {
   List,
   ListOrdered,
   Lock,
+  Loader,
   LogOut,
   Settings,
   Mail,

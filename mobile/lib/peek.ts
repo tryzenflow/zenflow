@@ -1,12 +1,12 @@
 import { addDays, startOfDay } from "date-fns";
 import { zonedWallClockToUtc } from "@zenflow/core";
-import type { DaySegment, TaskCardState } from "@zenflow/shared";
+import type { DaySegment, SessionCardState } from "@zenflow/shared";
 
-/** One task's slice of a day shown in a week pager's next-day peek strip. */
+/** One session's slice of a day shown in a week pager's next-day peek strip. */
 export interface PeekBlock {
   /** Segment key — unique within the day (task id, tail gets a suffix). */
   key: string;
-  state: TaskCardState;
+  state: SessionCardState;
   /** Minutes into the day (0-1440) the block starts. */
   startMin: number;
   /** Length in minutes, clamped to the day (min 15 so slivers stay visible). */

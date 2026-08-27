@@ -4,8 +4,9 @@ import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 /**
- * Gate authenticated routes. Redirects to /login when unauthenticated, and to
- * /onboarding until the user has completed onboarding.
+ * Gate authenticated routes. Redirects to /login when unauthenticated. There
+ * is no onboarding step — a fresh signup lands in the app directly (see
+ * `App.tsx`).
  */
 export function WithAuth({ children }: { children: React.ReactNode }) {
   const location = useLocation();
@@ -31,20 +32,10 @@ export function WithAuth({ children }: { children: React.ReactNode }) {
     }
   }, [user, loading, location.pathname]);
 
-  useEffect(() => {
-    if (
-      user &&
-      !user.onboardingComplete &&
-      location.pathname !== "/onboarding"
-    ) {
-      navigate("/onboarding");
-    }
-  }, [user, location.pathname]);
-
   // Render the protected children only once we have an authenticated user.
   // Until `me()` resolves (or while it's in flight) we render nothing — this is
   // what keeps an unauthenticated visit to `/` from mounting the calendar and
-  // firing protected requests (`/tasks`, …) that 403 and spray "Forbidden
+  // firing protected requests (`/sessions`, …) that 403 and spray "Forbidden
   // resource" toasts before the redirect to /login lands. The effect above
   // either sets the user or navigates away.
   if (loading || !user) return null;

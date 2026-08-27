@@ -1,6 +1,6 @@
+import type { User } from "@zenflow/shared";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
-import type { User } from "@zenflow/shared";
 
 const SESSION_USER_KEY = "zenflow.session.user";
 const SESSION_COOKIE_KEY = "zenflow.session.cookie";

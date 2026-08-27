@@ -67,7 +67,7 @@ export function addMonths(monthDate: Date, delta: number): Date {
   return dateFnsAddMonths(monthDate, delta);
 }
 
-export interface CellTaskSplit<T> {
+export interface CellSessionSplit<T> {
   visible: T[];
   overflowCount: number;
 }
@@ -78,10 +78,10 @@ export interface CellTaskSplit<T> {
  * issue checklist's cap; deliberately NOT responsive to cell height, see
  * GitHub issue #21's "open questions").
  */
-export function splitCellTasks<T>(
+export function splitCellSessions<T>(
   tasks: T[],
   cap: number = MONTH_PILL_CAP,
-): CellTaskSplit<T> {
+): CellSessionSplit<T> {
   if (tasks.length <= cap) {
     return { visible: tasks, overflowCount: 0 };
   }
@@ -94,20 +94,20 @@ interface ScheduledLike {
 
 /**
  * Group a flat task list by the user-tz calendar day its
- * `scheduledStartTime` falls on. Tasks with no `scheduledStartTime` are
+ * `scheduledStartTime` falls on. Sessions with no `scheduledStartTime` are
  * omitted — mirrors `frontend/src/components/calendar/month-grid.tsx`'s
  * `isSameDay(d, zonedDate(e.start, tz))` filter, which only ever runs over
  * already-placed events.
  *
  * Each day's tasks come back sorted ascending by `scheduledStartTime`. Sorting
  * here rather than at each render site is deliberate: this one map feeds both
- * the grid cells (via `splitCellTasks`) and the day/overflow sheet (the same
- * array is handed straight to `TaskListSheet`), so one sort keeps the two in
+ * the grid cells (via `splitCellSessions`) and the day/overflow sheet (the same
+ * array is handed straight to `SessionListSheet`), so one sort keeps the two in
  * agreement. It also gives "+N more" its intended meaning — the cell shows the
  * `MONTH_PILL_CAP` *earliest* tasks and the overflow rolls up the rest, rather
  * than whatever order the API happened to return.
  */
-export function groupTasksByDate<T extends ScheduledLike>(
+export function groupSessionsByDate<T extends ScheduledLike>(
   tasks: T[],
   tz: string,
 ): Map<string, T[]> {
@@ -128,7 +128,7 @@ export function groupTasksByDate<T extends ScheduledLike>(
 }
 
 /** Epoch ms of a task's scheduled start; 0 for the unscheduled tasks
- * `groupTasksByDate` has already filtered out (keeps the comparator total
+ * `groupSessionsByDate` has already filtered out (keeps the comparator total
  * without a non-null assertion). */
 function startMs(task: ScheduledLike): number {
   return task.scheduledStartTime ? Date.parse(task.scheduledStartTime) : 0;

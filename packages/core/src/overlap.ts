@@ -93,7 +93,7 @@ export function getOverlapLayout(
     // A new cluster starts whenever the next event begins at or after the
     // running cluster end — i.e. both a gap and a touching boundary (start ===
     // clusterEnd) close the current cluster. Touching events do NOT share a
-    // column group: Task C starting exactly when Task B ends should render at
+    // column group: Session C starting exactly when Session B ends should render at
     // full width, not inherit the multi-column layout of the A-B overlap group.
     if (cluster.length > 0 && start >= clusterEnd) flush();
     cluster.push(ev);

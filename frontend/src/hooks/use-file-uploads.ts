@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { getData } from "@/api";
+import { fetchFileDataUri } from "@/api/files";
 import { FileMetadata } from "@/types/files";
 
 export function useFileUploads({
@@ -38,30 +39,22 @@ export function useFileUploads({
 
       for (const uploadedFile of data) {
         const metadataUrl = `/files/metadata/${uploadedFile.id}`;
-        const fileUrl = `/files/${uploadedFile.id}`;
         const { data: fileMetadata } = await getData<{ data: FileMetadata }>(
           metadataUrl,
         );
+        // Inline the bytes as a `data:` URI instead of a bare backend URL —
+        // see `fetchFileDataUri`'s doc comment for why (cross-site cookie
+        // auth doesn't ride along on `<img>`/`<video>`/`<audio>` subresource
+        // requests in production).
+        const dataUri = await fetchFileDataUri(uploadedFile.id);
         if (fileMetadata.mimetype.startsWith("image/")) {
-          valueWithFile += `<p><img src="${
-            import.meta.env.VITE_API_URL
-          }${fileUrl}" alt="${
-            fileMetadata.originalName
-          }" style="max-width: 100%;"/></p>`;
+          valueWithFile += `<p><img src="${dataUri}" alt="${fileMetadata.originalName}" style="max-width: 100%;"/></p>`;
         } else if (fileMetadata.mimetype.startsWith("audio/")) {
-          valueWithFile += `<p><audio controls src="${
-            import.meta.env.VITE_API_URL
-          }${fileUrl}" style="max-width: 100%;"></audio></p>`;
+          valueWithFile += `<p><audio controls src="${dataUri}" style="max-width: 100%;"></audio></p>`;
         } else if (fileMetadata.mimetype.startsWith("video/")) {
-          valueWithFile += `<p><video controls src="${
-            import.meta.env.VITE_API_URL
-          }${fileUrl}" style="max-width: 100%;"></video></p>`;
+          valueWithFile += `<p><video controls src="${dataUri}" style="max-width: 100%;"></video></p>`;
         } else {
-          valueWithFile += `<p><a href="${
-            import.meta.env.VITE_API_URL
-          }${fileUrl}" target="_blank" rel="noopener noreferrer">${
-            fileMetadata.originalName
-          }</a></p>`;
+          valueWithFile += `<p><a href="${dataUri}" target="_blank" rel="noopener noreferrer">${fileMetadata.originalName}</a></p>`;
         }
       }
       onChange(valueWithFile);

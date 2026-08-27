@@ -1,6 +1,6 @@
+import { cn } from "@/lib/utils";
 import * as React from "react";
 import { TextInput } from "react-native";
-import { cn } from "@/lib/utils";
 
 type TextareaProps = React.ComponentPropsWithoutRef<typeof TextInput> & {
   "aria-invalid"?: boolean;

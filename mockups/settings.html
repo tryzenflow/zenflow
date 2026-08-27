@@ -12,16 +12,16 @@
 <body>
   <div class="page-head">
     <h1><span class="dot"></span> Settings — one flat scroll</h1>
-    <p>Mirrors <code>mobile/app/(app)/settings.tsx</code> exactly: a single scrollable screen, section-labelled like iOS Settings, not a home list + per-section detail screens (that two-level nav was a dead end — a phone has plenty of room to scroll six short cards, and splitting them cost an extra tap + back-chevron for no benefit). Section order: <b>Profile · Working hours · Work days · Timezone · Appearance · Account</b>. There's no "Insights" section (the preference heatmap was removed along with <code>components/settings/insights-panel.tsx</code> — not worth the surface area right now) and no separate "Scheduling" section either (it only ever existed to host the now-deleted duration-adjustment-mode picker). Account gains a "Connect your DLU account" row ahead of Sign out, for the DLU LMS/portal credential hand-off — see <a href="dlu-connect.html">dlu-connect.html</a> for that flow's own states.</p>
+    <p>Mirrors <code>mobile/app/(app)/settings.tsx</code> exactly: a single scrollable screen, section-labelled like iOS Settings, not a home list + per-section detail screens (that two-level nav was a dead end — a phone has plenty of room to scroll three short cards, and splitting them cost an extra tap + back-chevron for no benefit). Section order: <b>Profile · Appearance · Account</b>. Working hours and Work days were dropped along with <code>User.workStart</code>/<code>workEnd</code>/<code>workDays</code> in the education-pivot migration (<code>20260823155537_add_education_pivot</code>) — the scheduler no longer constrains placement to a configured working window. Timezone is gone from this screen too: it's captured once, automatically, at OTP signup (an <code>x-timezone</code> request header) and is no longer user-editable, so there's nothing left here to show or change — the onboarding wizard that used to confirm it is gone as well (see <a href="index.html">index.html</a>). There's no "Insights" section (the preference heatmap was removed along with <code>components/settings/insights-panel.tsx</code> — not worth the surface area right now) and no separate "Scheduling" section either (it only ever existed to host the now-deleted duration-adjustment-mode picker). Account gains a "Connect your DLU account" row ahead of Sign out, for the DLU LMS/portal credential hand-off — see <a href="dlu-connect.html">dlu-connect.html</a> for that flow's own states.</p>
     <div class="crumbs"><a href="index.html">← All mobile mockups</a></div>
   </div>
 
-  <div class="state-section"><h2>Populated</h2><p>Every section with real values. Bottom tab bar matches the calendar screens (<code>components/tab-bar.tsx</code>'s cradle + Optimize FAB) — Settings sits highlighted at the right.</p></div>
+  <div class="state-section"><h2>Populated</h2><p>Every section with real values. Bottom tab bar matches the calendar screens (<code>components/tab-bar.tsx</code>) — Settings sits highlighted at the right.</p></div>
   <div class="gallery">
 
     <!-- Populated (light) -->
     <div class="frame">
-      <div class="caption"><span class="tag">Populated</span><div class="sub">All 6 sections · light theme</div></div>
+      <div class="caption"><span class="tag">Populated</span><div class="sub">All 3 sections · light theme</div></div>
       <div class="device">
         <div class="island"></div>
         <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
@@ -38,41 +38,6 @@
               <div class="flex items-center gap-[13px] px-4 py-3.5">
                 <div class="flex-none flex size-[46px] items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--brand-orange),var(--brand-yellow)_60%,var(--brand-lime))] font-bold text-base text-primary-foreground tracking-[-0.01em]">NU</div>
                 <div class="min-w-0 flex-1"><div class="text-[15px] font-semibold">New User</div><div class="text-[12.5px] text-muted-foreground mt-0.5">u••r@zenflow.com</div></div>
-                <span class="text-muted-foreground [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
-              </div>
-            </div>
-
-            <div class="mx-1 mt-[22px] mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Working hours</div>
-            <div class="overflow-hidden rounded-2xl border bg-card divide-y divide-border">
-              <div class="flex items-center gap-[13px] px-4 py-3.5">
-                <span class="inline-flex size-[38px] items-center justify-center rounded-xl bg-muted text-foreground shrink-0 [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
-                <div class="min-w-0 flex-1"><div class="text-[15px] font-semibold">Start</div></div>
-                <span class="text-sm font-medium text-muted-foreground">9:00 AM</span>
-                <span class="text-muted-foreground [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
-              </div>
-              <div class="flex items-center gap-[13px] px-4 py-3.5">
-                <span class="inline-flex size-[38px] items-center justify-center rounded-xl bg-muted text-foreground shrink-0 [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
-                <div class="min-w-0 flex-1"><div class="text-[15px] font-semibold">End</div></div>
-                <span class="text-sm font-medium text-muted-foreground">5:00 PM</span>
-                <span class="text-muted-foreground [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
-              </div>
-            </div>
-
-            <div class="mx-1 mt-[22px] mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Work days</div>
-            <div class="rounded-2xl border bg-card text-card-foreground p-4">
-              <div class="flex flex-wrap gap-2.5">
-                <span class="inline-flex h-11 basis-[calc(25%-10px)] grow min-w-0 items-center justify-center rounded-xl border border-primary bg-primary px-3.5 text-[13.5px] font-semibold text-primary-foreground">Mon</span><span class="inline-flex h-11 basis-[calc(25%-10px)] grow min-w-0 items-center justify-center rounded-xl border border-primary bg-primary px-3.5 text-[13.5px] font-semibold text-primary-foreground">Tue</span><span class="inline-flex h-11 basis-[calc(25%-10px)] grow min-w-0 items-center justify-center rounded-xl border border-primary bg-primary px-3.5 text-[13.5px] font-semibold text-primary-foreground">Wed</span>
-                <span class="inline-flex h-11 basis-[calc(25%-10px)] grow min-w-0 items-center justify-center rounded-xl border border-primary bg-primary px-3.5 text-[13.5px] font-semibold text-primary-foreground">Thu</span><span class="inline-flex h-11 basis-[calc(25%-10px)] grow min-w-0 items-center justify-center rounded-xl border border-primary bg-primary px-3.5 text-[13.5px] font-semibold text-primary-foreground">Fri</span><span class="inline-flex h-11 basis-[calc(25%-10px)] grow min-w-0 items-center justify-center rounded-xl border bg-card px-3.5 text-[13.5px] font-semibold text-muted-foreground">Sat</span><span class="inline-flex h-11 basis-[calc(25%-10px)] grow min-w-0 items-center justify-center rounded-xl border bg-card px-3.5 text-[13.5px] font-semibold text-muted-foreground">Sun</span>
-              </div>
-              <div class="text-[12.5px] text-muted-foreground mt-[7px] leading-snug">Tasks only auto-schedule on selected days.</div>
-            </div>
-
-            <div class="mx-1 mt-[22px] mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Timezone</div>
-            <div class="overflow-hidden rounded-2xl border bg-card divide-y divide-border">
-              <div class="flex items-center gap-[13px] px-4 py-3.5">
-                <span class="inline-flex size-[38px] items-center justify-center rounded-xl bg-muted text-foreground shrink-0 [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span>
-                <div class="min-w-0 flex-1"><div class="text-[15px] font-semibold">Timezone</div><div class="text-[12.5px] text-muted-foreground mt-0.5">Detected automatically</div></div>
-                <span class="text-sm font-medium text-muted-foreground">Europe/Berlin</span>
                 <span class="text-muted-foreground [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
               </div>
             </div>
@@ -146,41 +111,6 @@
               </div>
             </div>
 
-            <div class="mx-1 mt-[22px] mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Working hours</div>
-            <div class="overflow-hidden rounded-2xl border bg-card divide-y divide-border">
-              <div class="flex items-center gap-[13px] px-4 py-3.5">
-                <span class="inline-flex size-[38px] items-center justify-center rounded-xl bg-muted text-foreground shrink-0 [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
-                <div class="min-w-0 flex-1"><div class="text-[15px] font-semibold">Start</div></div>
-                <span class="text-sm font-medium text-muted-foreground">9:00 AM</span>
-                <span class="text-muted-foreground [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
-              </div>
-              <div class="flex items-center gap-[13px] px-4 py-3.5">
-                <span class="inline-flex size-[38px] items-center justify-center rounded-xl bg-muted text-foreground shrink-0 [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
-                <div class="min-w-0 flex-1"><div class="text-[15px] font-semibold">End</div></div>
-                <span class="text-sm font-medium text-muted-foreground">5:00 PM</span>
-                <span class="text-muted-foreground [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
-              </div>
-            </div>
-
-            <div class="mx-1 mt-[22px] mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Work days</div>
-            <div class="rounded-2xl border bg-card text-card-foreground p-4">
-              <div class="flex flex-wrap gap-2.5">
-                <span class="inline-flex h-11 basis-[calc(25%-10px)] grow min-w-0 items-center justify-center rounded-xl border border-primary bg-primary px-3.5 text-[13.5px] font-semibold text-primary-foreground">Mon</span><span class="inline-flex h-11 basis-[calc(25%-10px)] grow min-w-0 items-center justify-center rounded-xl border border-primary bg-primary px-3.5 text-[13.5px] font-semibold text-primary-foreground">Tue</span><span class="inline-flex h-11 basis-[calc(25%-10px)] grow min-w-0 items-center justify-center rounded-xl border border-primary bg-primary px-3.5 text-[13.5px] font-semibold text-primary-foreground">Wed</span>
-                <span class="inline-flex h-11 basis-[calc(25%-10px)] grow min-w-0 items-center justify-center rounded-xl border border-primary bg-primary px-3.5 text-[13.5px] font-semibold text-primary-foreground">Thu</span><span class="inline-flex h-11 basis-[calc(25%-10px)] grow min-w-0 items-center justify-center rounded-xl border border-primary bg-primary px-3.5 text-[13.5px] font-semibold text-primary-foreground">Fri</span><span class="inline-flex h-11 basis-[calc(25%-10px)] grow min-w-0 items-center justify-center rounded-xl border bg-card px-3.5 text-[13.5px] font-semibold text-muted-foreground">Sat</span><span class="inline-flex h-11 basis-[calc(25%-10px)] grow min-w-0 items-center justify-center rounded-xl border bg-card px-3.5 text-[13.5px] font-semibold text-muted-foreground">Sun</span>
-              </div>
-              <div class="text-[12.5px] text-muted-foreground mt-[7px] leading-snug">Tasks only auto-schedule on selected days.</div>
-            </div>
-
-            <div class="mx-1 mt-[22px] mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Timezone</div>
-            <div class="overflow-hidden rounded-2xl border bg-card divide-y divide-border">
-              <div class="flex items-center gap-[13px] px-4 py-3.5">
-                <span class="inline-flex size-[38px] items-center justify-center rounded-xl bg-muted text-foreground shrink-0 [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span>
-                <div class="min-w-0 flex-1"><div class="text-[15px] font-semibold">Timezone</div><div class="text-[12.5px] text-muted-foreground mt-0.5">Detected automatically</div></div>
-                <span class="text-sm font-medium text-muted-foreground">Europe/Berlin</span>
-                <span class="text-muted-foreground [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>
-              </div>
-            </div>
-
             <div class="mx-1 mt-[22px] mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Appearance</div>
             <div class="overflow-hidden rounded-2xl border bg-card divide-y divide-border">
               <div class="flex items-center gap-[13px] bg-card px-4 py-3.5">
@@ -249,24 +179,6 @@
             <div class="mx-1 mt-[18px] mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Profile</div>
             <div class="overflow-hidden rounded-2xl border bg-card divide-y divide-border" style="margin-bottom:18px">
               <div class="flex items-center gap-[13px] px-4 py-4"><span class="bg-muted animate-pulse rounded-full size-[46px] flex-none"></span><div class="min-w-0 flex-1 flex flex-col gap-2"><span class="bg-muted animate-pulse rounded-md h-3" style="width:48%"></span><span class="bg-muted animate-pulse rounded-md h-3" style="width:66%"></span></div></div>
-            </div>
-
-            <div class="mx-1 mt-[22px] mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Working hours</div>
-            <div class="overflow-hidden rounded-2xl border bg-card divide-y divide-border">
-              <div class="flex items-center gap-[13px] px-4 py-4"><span class="bg-muted animate-pulse rounded-[11px] size-[38px] flex-none"></span><span class="bg-muted animate-pulse rounded-md h-3" style="flex:1;max-width:120px"></span></div>
-              <div class="flex items-center gap-[13px] px-4 py-4"><span class="bg-muted animate-pulse rounded-[11px] size-[38px] flex-none"></span><span class="bg-muted animate-pulse rounded-md h-3" style="flex:1;max-width:120px"></span></div>
-            </div>
-
-            <div class="mx-1 mt-[22px] mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Work days</div>
-            <div class="rounded-2xl border bg-card p-4">
-              <div class="flex flex-wrap gap-2.5">
-                <span class="bg-muted animate-pulse rounded-xl h-11 basis-[calc(25%-10px)] grow"></span><span class="bg-muted animate-pulse rounded-xl h-11 basis-[calc(25%-10px)] grow"></span><span class="bg-muted animate-pulse rounded-xl h-11 basis-[calc(25%-10px)] grow"></span><span class="bg-muted animate-pulse rounded-xl h-11 basis-[calc(25%-10px)] grow"></span>
-              </div>
-            </div>
-
-            <div class="mx-1 mt-[22px] mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Timezone</div>
-            <div class="overflow-hidden rounded-2xl border bg-card divide-y divide-border">
-              <div class="flex items-center gap-[13px] px-4 py-4"><span class="bg-muted animate-pulse rounded-[11px] size-[38px] flex-none"></span><span class="bg-muted animate-pulse rounded-md h-3" style="flex:1;max-width:140px"></span></div>
             </div>
 
           </div></div>

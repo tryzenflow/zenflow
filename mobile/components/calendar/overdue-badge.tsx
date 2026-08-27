@@ -15,7 +15,9 @@ export function OverdueBadge({ count }: { count: number }) {
 
   return (
     <View
-      accessibilityLabel={`${count} ${count === 1 ? "task" : "tasks"} scheduled past its deadline`}
+      accessibilityLabel={`${count} ${
+        count === 1 ? "task" : "tasks"
+      } scheduled past its deadline`}
       className="flex-row items-center gap-1 self-start rounded-full border border-rose-400/50 bg-rose-100 px-2 py-0.5 dark:bg-rose-950"
     >
       <AlertCircle size={12} className="text-rose-800 dark:text-rose-400" />

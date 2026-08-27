@@ -1,6 +1,6 @@
+import { Text } from "@/components/ui";
 import { Link, Stack, usePathname } from "expo-router";
 import { View } from "react-native";
-import { Text } from "@/components/ui";
 
 export default function NotFoundScreen() {
   const pathname = usePathname();

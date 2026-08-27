@@ -8,14 +8,14 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { TaskFormValues } from "@/utils/tasks";
+import type { SessionFormValues } from "@zenflow/core";
 import { UseFormReturn } from "react-hook-form";
 import { useEffect, useState, type ReactNode } from "react";
 import { DurationInput } from "@/components/tasks/duration-input";
 import { NoteEditor } from "@/components/tasks/note-editor";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import type { Task } from "@zenflow/shared";
+import type { Session } from "@zenflow/shared";
 import { TagsField } from "./tag-field";
 import { TitleField } from "./title-field";
 import { DeadlineChipField } from "./deadline-chip-field";
@@ -27,15 +27,19 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 /** Shift a deadline forward by the same lead time (in whole days) it had at
  * creation, keeping the exact time-of-day of the original deadline — so a
  * midnight deadline stays midnight, never drifting to whatever time the
- * suggestion happens to be applied at. The task also needs room to actually
+ * suggestion happens to be applied at. The session also needs room to actually
  * be scheduled, so if that candidate leaves less than `durationMinutes`
  * between now and the deadline, bump forward a day at a time — still
  * preserving the original time-of-day — until the full duration fits before
  * it. Returns "" when the source has no deadline or had a negative lead time. */
-function shiftedDeadline(task: Task, tz: string, durationMinutes: number): string {
-  if (!task.deadline || !task.createdAt) return "";
-  const deadlineZoned = zonedDate(task.deadline, tz);
-  const createdZoned = zonedDate(task.createdAt, tz);
+function shiftedDeadline(
+  session: Session,
+  tz: string,
+  durationMinutes: number,
+): string {
+  if (!session.deadline || !session.createdAt) return "";
+  const deadlineZoned = zonedDate(session.deadline, tz);
+  const createdZoned = zonedDate(session.createdAt, tz);
   const leadDays = Math.round(
     (deadlineZoned.getTime() - createdZoned.getTime()) / MS_PER_DAY,
   );
@@ -43,7 +47,12 @@ function shiftedDeadline(task: Task, tz: string, durationMinutes: number): strin
 
   const candidate = zonedNow(tz);
   candidate.setDate(candidate.getDate() + leadDays);
-  candidate.setHours(deadlineZoned.getHours(), deadlineZoned.getMinutes(), 0, 0);
+  candidate.setHours(
+    deadlineZoned.getHours(),
+    deadlineZoned.getMinutes(),
+    0,
+    0,
+  );
 
   const earliestFit = zonedNow(tz);
   earliestFit.setMinutes(earliestFit.getMinutes() + durationMinutes);
@@ -63,10 +72,10 @@ const presetLabel = (m: number) =>
       ? `${Math.floor(m / 60)}h ${m % 60}m`
       : `${m}m`;
 
-interface TaskFormProps {
-  form: UseFormReturn<TaskFormValues>;
+interface SessionFormProps {
+  form: UseFormReturn<SessionFormValues>;
   newUploadsRef?: React.RefObject<string[]>;
-  onSubmit: (values: TaskFormValues) => void;
+  onSubmit: (values: SessionFormValues) => void;
   onCancel: () => void;
   loading: boolean;
   initialNote?: string;
@@ -82,7 +91,7 @@ interface TaskFormProps {
   editing?: boolean;
 }
 
-export function TaskForm({
+export function SessionForm({
   form,
   onSubmit,
   onCancel,
@@ -93,7 +102,7 @@ export function TaskForm({
   bodyExtra,
   footerExtra,
   editing = false,
-}: TaskFormProps) {
+}: SessionFormProps) {
   const duration = form.watch("duration");
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
 
@@ -104,9 +113,9 @@ export function TaskForm({
   const [noteSeed, setNoteSeed] = useState(initialNote);
   useEffect(() => setNoteSeed(initialNote), [initialNote]);
 
-  // Populate the create form from a picked existing task. Mirrors the field
-  // layout of the form (see create-task-dialog's onSubmit for the inverse map).
-  const applySuggestion = (s: Task) => {
+  // Populate the create form from a picked existing session. Mirrors the field
+  // layout of the form (see create-session-dialog's onSubmit for the inverse map).
+  const applySuggestion = (s: Session) => {
     form.setValue("title", s.title, {
       shouldValidate: true,
       shouldDirty: true,
@@ -144,7 +153,7 @@ export function TaskForm({
             render={({ field }) => (
               <FormItem className="space-y-1.5">
                 <FormLabel className="text-xs font-semibold">
-                  Task name
+                  Session name
                 </FormLabel>
                 {editing ? (
                   <FormControl>
@@ -224,7 +233,9 @@ export function TaskForm({
             name="deadline"
             render={({ field }) => (
               <FormItem className="space-y-1.5">
-                <FormLabel className="text-xs font-semibold">Deadline</FormLabel>
+                <FormLabel className="text-xs font-semibold">
+                  Deadline
+                </FormLabel>
                 <DeadlineChipField
                   value={field.value}
                   onChange={field.onChange}

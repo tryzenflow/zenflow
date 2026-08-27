@@ -2,6 +2,7 @@
 // The code is licensed under the MIT License.
 // https://github.com/shadcn-ui/ui
 
+import { AlertCircle } from "lucide-react-native";
 import * as React from "react";
 import {
   Controller,
@@ -22,9 +23,8 @@ import { Label } from "./label";
 import { RadioGroup } from "./radio-group";
 import { type Option, Select } from "./select";
 import { Switch } from "./switch";
-import { resolveGeistFontFamily, stripFontWeightClass, Text } from "./text";
+import { Text, resolveGeistFontFamily, stripFontWeightClass } from "./text";
 import { Textarea } from "./textarea";
-import { AlertCircle } from "lucide-react-native";
 
 const Form = FormProvider;
 
@@ -157,7 +157,7 @@ const FormMessage = React.forwardRef<
   // resolve it the same way <Text> does and apply it explicitly.
   const mergedClassName = cn(
     "text-sm font-sans font-medium text-destructive ml-2",
-    className
+    className,
   );
 
   return (
@@ -169,10 +169,7 @@ const FormMessage = React.forwardRef<
         ref={ref}
         nativeID={formMessageNativeID}
         className={stripFontWeightClass(mergedClassName)}
-        style={[
-          { fontFamily: resolveGeistFontFamily(mergedClassName) },
-          style,
-        ]}
+        style={[{ fontFamily: resolveGeistFontFamily(mergedClassName) }, style]}
         {...props}
       >
         {body}
@@ -212,12 +209,16 @@ const FormInput = React.forwardRef<
     formMessageNativeID,
   } = useFormField();
 
-  React.useImperativeHandle(ref, () => {
-    if (!inputRef.current) {
-      return {} as React.ComponentRef<typeof Input>;
-    }
-    return inputRef.current;
-  }, [inputRef.current]);
+  React.useImperativeHandle(
+    ref,
+    () => {
+      if (!inputRef.current) {
+        return {} as React.ComponentRef<typeof Input>;
+      }
+      return inputRef.current;
+    },
+    [inputRef.current],
+  );
 
   function handleOnLabelPress() {
     if (!inputRef.current) {
@@ -274,12 +275,16 @@ const FormTextarea = React.forwardRef<
     formMessageNativeID,
   } = useFormField();
 
-  React.useImperativeHandle(ref, () => {
-    if (!textareaRef.current) {
-      return {} as React.ComponentRef<typeof Textarea>;
-    }
-    return textareaRef.current;
-  }, [textareaRef.current]);
+  React.useImperativeHandle(
+    ref,
+    () => {
+      if (!textareaRef.current) {
+        return {} as React.ComponentRef<typeof Textarea>;
+      }
+      return textareaRef.current;
+    },
+    [textareaRef.current],
+  );
 
   function handleOnLabelPress() {
     if (!textareaRef.current) {
@@ -516,12 +521,16 @@ const FormSwitch = React.forwardRef<
     formMessageNativeID,
   } = useFormField();
 
-  React.useImperativeHandle(ref, () => {
-    if (!switchRef.current) {
-      return {} as React.ComponentRef<typeof Switch>;
-    }
-    return switchRef.current;
-  }, [switchRef.current]);
+  React.useImperativeHandle(
+    ref,
+    () => {
+      if (!switchRef.current) {
+        return {} as React.ComponentRef<typeof Switch>;
+      }
+      return switchRef.current;
+    },
+    [switchRef.current],
+  );
 
   function handleOnLabelPress() {
     onChange?.(!value);

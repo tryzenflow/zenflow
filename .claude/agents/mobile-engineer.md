@@ -38,7 +38,7 @@ before with no visible error.
 ## Invariants (do not violate)
 
 1. **`@zenflow/core` is the cross-app logic contract**, not `frontend/`. Shared
-   framework-agnostic logic (currently `taskSchema`/`TaskFormValues`/`placementQualifier`) lives
+   framework-agnostic logic (currently `taskSchema`/`SessionFormValues`/`placementQualifier`) lives
    in `packages/core/src`. Consume it from there; don't import across from `frontend/` into
    `mobile/` directly, and don't fork validation logic — if `frontend/` and `packages/core` have
    diverged, that's tech debt to flag, not a reason to duplicate further.

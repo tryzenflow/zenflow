@@ -207,13 +207,13 @@ body {
 }
 
 /* Calendar grid surfaces + glass cards — mirrors frontend/src/index.css's own
-   @layer components (the documented non-work-zone rule). Legitimate reusable
-   design tokens, not mockup chrome, so they stay here rather than inline. */
+   @layer components. Legitimate reusable design tokens, not mockup chrome, so
+   they stay here rather than inline. */
 @layer components {
-  /* Off-hours and weekend tints layered over the card base. */
-  .zone-nonwork {
-    background-color: color-mix(in oklch, var(--muted) 55%, transparent);
-  }
+  /* Weekend tint layered over the card base. The matching non-work-hours
+     tint (.zone-nonwork) was removed with User.workStart/workEnd/workDays in
+     the education-pivot migration (20260823155537_add_education_pivot) — the
+     scheduler no longer has a per-user working window to shade. */
   .zone-weekend {
     background-color: color-mix(in oklch, var(--muted) 75%, transparent);
   }

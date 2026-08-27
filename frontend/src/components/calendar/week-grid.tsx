@@ -58,7 +58,7 @@ export const WeekGrid = ({
           key={date.toISOString()}
           className="bg-card border-border relative border-r last:border-r-0"
         >
-          <DayColumnBackground date={date} />
+          <DayColumnBackground />
 
           {isZonedToday(date, tz) && (
             <div

@@ -5,12 +5,12 @@ product overview; this file is the conventions + "how to not break things" refer
 
 ## Repository map & ownership
 
-| Area | Path | Owner subagent | Reference |
-|------|------|----------------|-----------|
-| Frontend (React PWA) | `frontend/` | `frontend-engineer` | [frontend/README.md](frontend/README.md) |
-| Backend (NestJS API + EDF) | `backend/` | `backend-engineer` | [backend/README.md](backend/README.md) |
-| Shared types (FE/BE contract) | `packages/shared/` | `backend-engineer` | — |
-| ML / scheduling future | `services/bandit/`, telemetry | `ml-engineer` | [services/bandit/README.md](services/bandit/README.md), [docs/heuristic.md](docs/heuristic.md) |
+| Area                          | Path                          | Owner subagent      | Reference                                                                                      |
+| ----------------------------- | ----------------------------- | ------------------- | ---------------------------------------------------------------------------------------------- |
+| Frontend (React PWA)          | `frontend/`                   | `frontend-engineer` | [frontend/README.md](frontend/README.md)                                                       |
+| Backend (NestJS API + EDF)    | `backend/`                    | `backend-engineer`  | [backend/README.md](backend/README.md)                                                         |
+| Shared types (FE/BE contract) | `packages/shared/`            | `backend-engineer`  | —                                                                                              |
+| ML / scheduling future        | `services/bandit/`, telemetry | `ml-engineer`       | [services/bandit/README.md](services/bandit/README.md), [docs/heuristic.md](docs/heuristic.md) |
 
 Delegate area work to the matching subagent in `.claude/agents/`.
 
@@ -32,13 +32,13 @@ frontend `dev | build | typecheck | lint | test:e2e`.
 
 ## Critical invariants
 
-1. **`@zenflow/shared` is the API contract.** Request/response types (`CreateTaskInput`,
-   `TasksListResponse`, `RescheduleResponse`, `ApiSuccess`/`ApiError`, …) live in
+1. **`@zenflow/shared` is the API contract.** Request/response types (`CreateSessionInput`,
+   `SessionsListResponse`, `RescheduleResponse`, `ApiSuccess`/`ApiError`, …) live in
    `packages/shared/src`. Change them there, then `pnpm shared:build` so both FE and BE see
    the new types. Don't duplicate these shapes in either app.
 
 2. **The scheduler core is pure.** `backend/src/scheduler/edf.ts` (and `slot.ts`,
-   `horizon.ts`, `reranker.ts`) take `now` as a parameter and do no I/O. **No *uncontrolled*
+   `horizon.ts`, `reranker.ts`) take `now` as a parameter and do no I/O. **No _uncontrolled_
    randomness** — the core may use randomness only via an **injected seed**, so it stays a
    pure, reproducible function of `(inputs + seed)` (never `Math.random()` or the clock; the
    softmax re-ranker's Gumbel noise comes from a seeded PRNG, seeded per-task by the service).
@@ -49,7 +49,7 @@ frontend `dev | build | typecheck | lint | test:e2e`.
    `DAILY_HORIZON` = 1440. Don't introduce off-grid times.
 
 4. **Recurrence is materialized, not virtual.** A recurring task is expanded into one real
-   `Task` row per occurrence, all sharing a `seriesId`. Each row schedules independently and
+   `Session` row per occurrence, all sharing a `seriesId`. Each row schedules independently and
    is safe to mutate alone; bulk edits use `scope: "one" | "following"`.
 
 5. **Timezone wall-clock rule (frontend).** All calendar `Date`s carry the user-tz wall
@@ -106,14 +106,14 @@ roadmap, update the matching README (and `docs/heuristic.md` for scheduling/ML).
 This repo ships a phased feature pipeline under `.claude/`. Run the whole thing with
 **`/feature "<request>"`**, or any single phase on its own:
 
-| Phase | Skill | Spawns | Output |
-|-------|-------|--------|--------|
-| Requirements | `/req-analysis` | `product-manager` (GitHub MCP) | a GitHub issue |
-| Design | `/ui-ux` | `ui-ux-designer` (Figma MCP) | Figma frames + component spec |
-| Architecture | `/arch` | `solution-architect` | committed ADR + diagrams in `docs/adr/` |
-| Implementation | `/implement` | `backend-engineer` + `frontend-engineer` (+ `ml-engineer` if needed), parallel | code + tests + commits |
-| Review | `/verify-changes` | `code-reviewer` (opus, Playwright MCP) | live-verified Markdown report |
-| QA | `/qa` | `backend-qa-engineer` + `frontend-qa-engineer`, parallel | HTTP/e2e tests in a Docker test env |
+| Phase          | Skill             | Spawns                                                                         | Output                                  |
+| -------------- | ----------------- | ------------------------------------------------------------------------------ | --------------------------------------- |
+| Requirements   | `/req-analysis`   | `product-manager` (GitHub MCP)                                                 | a GitHub issue                          |
+| Design         | `/ui-ux`          | `ui-ux-designer` (Figma MCP)                                                   | Figma frames + component spec           |
+| Architecture   | `/arch`           | `solution-architect`                                                           | committed ADR + diagrams in `docs/adr/` |
+| Implementation | `/implement`      | `backend-engineer` + `frontend-engineer` (+ `ml-engineer` if needed), parallel | code + tests + commits                  |
+| Review         | `/verify-changes` | `code-reviewer` (opus, Playwright MCP)                                         | live-verified Markdown report           |
+| QA             | `/qa`             | `backend-qa-engineer` + `frontend-qa-engineer`, parallel                       | HTTP/e2e tests in a Docker test env     |
 
 MCP servers (`github`, `figma`, `playwright`) are declared in `.mcp.json` and need their
 tokens (`GITHUB_PERSONAL_ACCESS_TOKEN`, `FIGMA_API_KEY`) set. Hooks (`.claude/settings.json`

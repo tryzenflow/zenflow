@@ -14,14 +14,8 @@ import { zonedDate, zonedWallClockToUtc } from "@/utils/tz";
 import { CSS } from "@dnd-kit/utilities";
 import { useDndMonitor, useDraggable, type DragEndEvent } from "@dnd-kit/core";
 import { toZonedTime } from "date-fns-tz";
-import { CornerDownRight, Lock } from "lucide-react";
-import {
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { CornerDownRight } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 function minutesOfDay(iso: string, tz: string) {
   const d = toZonedTime(new Date(iso), tz);
@@ -64,7 +58,7 @@ function tagTint(tag: string) {
 }
 
 /** Notify the layout to open the task detail panel for this block's task. */
-function openTask(taskId: string) {
+function openSession(taskId: string) {
   window.dispatchEvent(
     new CustomEvent("zenflow:open-task", { detail: taskId }),
   );
@@ -104,9 +98,9 @@ export function ScheduledBlockItem({
   layout: BlockLayout;
 }) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
-  const highlightTaskId = useHighlightStore((s) => s.highlightTaskId);
+  const highlightSessionId = useHighlightStore((s) => s.highlightSessionId);
   const clearHighlight = useHighlightStore((s) => s.clearHighlight);
-  const isHighlighted = highlightTaskId === block.taskId;
+  const isHighlighted = highlightSessionId === block.taskId;
 
   const startMin = minutesOfDay(block.start, tz);
   // A segment ending exactly at the next midnight has minutesOfDay() === 0;
@@ -160,7 +154,8 @@ export function ScheduledBlockItem({
         onDragEnd: ({ active }: DragEndEvent) => {
           if (active.id !== block.segmentId) return;
           dropped.current = true;
-          if (nodeRef.current) nodeRef.current.style.transitionProperty = "none";
+          if (nodeRef.current)
+            nodeRef.current.style.transitionProperty = "none";
         },
       }),
       [block.segmentId],
@@ -457,7 +452,8 @@ export function ScheduledBlockItem({
               // the head loses its bottom rounding, the tail its top, so the two
               // halves read as one continued block split by midnight.
               block.continues && "rounded-b-none",
-              block.continued && "rounded-t-none border-t-0 border-l-4 border-dashed",
+              block.continued &&
+                "rounded-t-none border-t-0 border-l-4 border-dashed",
               TASK_CARD_CLASSES[state],
               // Ring-glow pulse that fires once after the task is created so the
               // user's eye is drawn to where it landed on the grid.
@@ -468,9 +464,6 @@ export function ScheduledBlockItem({
             {isCompact ? (
               <>
                 <div className="flex min-w-0 flex-1 items-center gap-1">
-                  {block.manuallyMoved && (
-                    <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />
-                  )}
                   {block.continued && (
                     <CornerDownRight className="h-3 w-3 shrink-0 text-muted-foreground" />
                   )}
@@ -484,15 +477,14 @@ export function ScheduledBlockItem({
                   </span>
                 </div>
                 <span className="shrink-0 font-mono text-[9px] leading-none">
-                  {block.continued ? `ends ${fmt(block.taskEnd, tz)}` : fmt(block.taskStart, tz)}
+                  {block.continued
+                    ? `ends ${fmt(block.taskEnd, tz)}`
+                    : fmt(block.taskStart, tz)}
                 </span>
               </>
             ) : (
               <>
                 <div className="flex items-center gap-1">
-                  {block.manuallyMoved && (
-                    <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />
-                  )}
                   {block.continued && (
                     <CornerDownRight className="h-3 w-3 shrink-0 text-muted-foreground" />
                   )}
@@ -584,18 +576,11 @@ export function ScheduledBlockItem({
             </div>
           </dl>
 
-          {(block.manuallyMoved || block.conflict) && (
+          {state === "conflict" && (
             <div className="flex flex-wrap gap-2 text-xs">
-              {block.manuallyMoved && (
-                <span className="inline-flex items-center gap-1 text-muted-foreground">
-                  <Lock className="h-3 w-3" /> Pinned
-                </span>
-              )}
-              {block.conflict && (
-                <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
-                  Overlap
-                </span>
-              )}
+              <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                Overlap
+              </span>
             </div>
           )}
 
@@ -619,7 +604,7 @@ export function ScheduledBlockItem({
             type="button"
             onClick={() => {
               setPopoverOpen(false);
-              openTask(block.id);
+              openSession(block.id);
             }}
             className="mt-1 rounded-md border border-border bg-muted/50 px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted"
           >

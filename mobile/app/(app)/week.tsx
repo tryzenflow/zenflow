@@ -1,7 +1,6 @@
 import { WeekHeader } from "@/components/calendar/week-header";
 import { WeekPager } from "@/components/calendar/week-pager";
-import { CreateTaskFab } from "@/components/tasks/create-task-fab";
-import { useScheduleRefresh } from "@/hooks/use-schedule-refresh";
+import { CreateSessionFab } from "@/components/tasks/create-task-fab";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { useFocusEffect } from "@react-navigation/native";
@@ -9,7 +8,7 @@ import { zonedDate, zonedNow } from "@zenflow/core";
 import * as Haptics from "expo-haptics";
 import { type Href, useRouter } from "expo-router";
 import { format } from "date-fns";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { View } from "react-native";
 
 export default function WeekScreen() {
@@ -23,9 +22,9 @@ export default function WeekScreen() {
   // flow back through this one state.
   const [focusedDate, setFocusedDate] = useState(() => zonedNow(tz));
   // Per-day reload tokens (keyed by `dateKey`) — a bump only refetches that
-  // page's `DayTimeline`. Screen focus and an Optimize apply bump every
-  // mounted day; a cross-day reschedule bumps only the target day (the source
-  // day refetches itself via its own `handleReschedule`).
+  // page's `DayTimeline`. Screen focus bumps every mounted day; a cross-day
+  // reschedule bumps only the target day (the source day refetches itself via
+  // its own `handleReschedule`).
   const [reloadKeyByDay, setReloadKeyByDay] = useState<Record<string, number>>(
     {},
   );
@@ -42,21 +41,7 @@ export default function WeekScreen() {
     }, []),
   );
 
-  // The Optimize action lives in the tab bar, outside this screen — an
-  // apply/undo announces itself through the store (same pattern as Day and
-  // Month View).
-  const scheduleRefreshToken = useScheduleRefresh((s) => s.token);
-  useEffect(() => {
-    if (scheduleRefreshToken > 0) {
-      setReloadKeyByDay((prev) => {
-        const next: Record<string, number> = {};
-        for (const k of Object.keys(prev)) next[k] = prev[k] + 1;
-        return next;
-      });
-    }
-  }, [scheduleRefreshToken]);
-
-  const handleTaskPress = useCallback(
+  const handleSessionPress = useCallback(
     (taskId: string) => {
       router.push(`/task/${taskId}/edit` as Href);
     },
@@ -98,13 +83,13 @@ export default function WeekScreen() {
           focusedDate={focusedDate}
           onFocusedDateChange={setFocusedDate}
           reloadKeyByDay={reloadKeyByDay}
-          onTaskPress={handleTaskPress}
+          onSessionPress={handleSessionPress}
           onLongPress={handleLongPress}
           onCrossDayReschedule={handleCrossDayReschedule}
         />
       </View>
 
-      <CreateTaskFab tz={tz} />
+      <CreateSessionFab tz={tz} />
     </View>
   );
 }

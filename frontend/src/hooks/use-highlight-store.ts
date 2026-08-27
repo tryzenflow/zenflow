@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 type State = {
   /** The task id of the block to scroll to and animate after creation. */
-  highlightTaskId: string | null;
+  highlightSessionId: string | null;
 };
 
 type Action = {
@@ -13,7 +13,7 @@ type Action = {
 };
 
 export const useHighlightStore = create<State & Action>((set) => ({
-  highlightTaskId: null,
-  setHighlight: (id) => set({ highlightTaskId: id }),
-  clearHighlight: () => set({ highlightTaskId: null }),
+  highlightSessionId: null,
+  setHighlight: (id) => set({ highlightSessionId: id }),
+  clearHighlight: () => set({ highlightSessionId: null }),
 }));

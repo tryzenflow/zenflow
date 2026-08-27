@@ -1,10 +1,5 @@
 import type { ViewMode } from "@zenflow/shared";
-import {
-  addDaysStr,
-  isoWeekday,
-  localDateStr,
-  workWindowMinutes,
-} from "./slot";
+import { addDaysStr, isoWeekday, localDateStr } from "./slot";
 import { minutesToUtc } from "../../common/utils";
 
 /**
@@ -190,24 +185,4 @@ export function lastWorkdayOnOrBefore(
     cur = addDaysStr(cur, -1);
   }
   return dateStr; // fallback: caller still bounds by deadline / capacity
-}
-
-/** Total schedulable work minutes across [startStr,endStr] inclusive. */
-export function sumWorkMinutes(
-  startStr: string,
-  endStr: string,
-  workStart: number,
-  workEnd: number,
-  workDays: number[],
-): number {
-  // Each workday contributes its effective minutes once (start-day anchored);
-  // an overnight window's morning tail is not double-counted on day D+1.
-  const perDay = workWindowMinutes(workStart, workEnd);
-  let total = 0;
-  let cur = startStr;
-  for (let i = 0; i < 366 && cur <= endStr; i++) {
-    if (workDays.includes(isoWeekday(cur))) total += perDay;
-    cur = addDaysStr(cur, 1);
-  }
-  return total;
 }

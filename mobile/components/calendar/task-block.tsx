@@ -1,19 +1,21 @@
-import { useCallback, useState } from "react";
-import { View, useWindowDimensions } from "react-native";
-import { Text } from "@/components/ui/text";
 import { AlertTriangle } from "@/components/Icons";
+import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
-import { debugLog } from "@/lib/debug-log";
 import { getCrossDayOffset } from "@/lib/cross-day-offset";
-import { DAILY_HORIZON, TIME_GRANULARITY, zonedWallClockToUtc, zonedDate } from "@zenflow/core";
+import {
+  DAILY_HORIZON,
+  TIME_GRANULARITY,
+  zonedDate,
+  zonedWallClockToUtc,
+} from "@zenflow/core";
 import { withOverlap } from "@zenflow/core";
 import type { BlockLayout } from "@zenflow/core";
 import type { DaySegment } from "@zenflow/shared";
 import { toZonedTime } from "date-fns-tz";
-import {
-  Gesture,
-  GestureDetector,
-} from "react-native-gesture-handler";
+import * as Haptics from "expo-haptics";
+import { useCallback, useEffect, useState } from "react";
+import { View, useWindowDimensions } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -23,7 +25,6 @@ import Animated, {
   interpolate,
   runOnJS,
 } from "react-native-reanimated";
-import * as Haptics from "expo-haptics";
 
 const TAGS_MIN_DURATION = 45;
 
@@ -56,17 +57,16 @@ function fmt(iso: string, tz: string) {
 }
 
 function fmtMin(min: number, tz: string, refISO: string) {
-  const baseWall = zonedDate(refISO, tz);
-  const newWall = new Date(baseWall);
-  newWall.setHours(Math.floor(min / 60), min % 60, 0, 0);
-  return newWall.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const d = toZonedTime(new Date(refISO), tz);
+  d.setHours(Math.floor(min / 60), min % 60, 0, 0);
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
 interface DragSnap {
   startMin: number;
 }
 
-interface TaskBlockProps {
+interface SessionBlockProps {
   segment: DaySegment;
   layout: BlockLayout;
   tz: string;
@@ -76,6 +76,7 @@ interface TaskBlockProps {
   deadline?: string | null;
   onReschedule?: (taskId: string, startISO: string) => void;
   onDragStateChange?: (snap: DragSnap | null) => void;
+  onDragEnd?: (snap: DragSnap | null) => void;
   onPress?: (taskId: string) => void;
   onComplete?: (taskId: string) => void;
   /** Fired while a *lifted* block is dragged into the screen-edge zone,
@@ -88,7 +89,7 @@ interface TaskBlockProps {
   onCrossDayReschedule?: (taskId: string, startISO: string) => void;
 }
 
-export function TaskBlock({
+export function SessionBlock({
   segment,
   layout,
   tz,
@@ -98,16 +99,18 @@ export function TaskBlock({
   deadline,
   onReschedule,
   onDragStateChange,
+  onDragEnd,
   onPress,
   onComplete,
   onDragEdge,
   onDragEdgeExit,
   onCrossDayReschedule,
-}: TaskBlockProps) {
+}: SessionBlockProps) {
   const { width: screenWidth } = useWindowDimensions();
   const startMin = minutesOfDayLocal(segment.start, tz);
   const rawEndMin = minutesOfDayLocal(segment.end, tz);
-  const endMin = segment.continues || rawEndMin === 0 ? DAILY_HORIZON : rawEndMin;
+  const endMin =
+    segment.continues || rawEndMin === 0 ? DAILY_HORIZON : rawEndMin;
   const duration = endMin - startMin;
   const isCompact = duration < 30;
   const showTags = duration > TAGS_MIN_DURATION && segment.tags.length > 0;
@@ -120,7 +123,6 @@ export function TaskBlock({
   const isInteractive = !isCompleted && !isSplit;
   const dueSuffix = deadline ? ` · due ${fmt(deadline, tz)}` : "";
 
-  const baseTop = (startMin / DAILY_HORIZON) * totalHeight;
   const height = Math.max((duration / DAILY_HORIZON) * totalHeight, 16);
   const pxPerMin = totalHeight / DAILY_HORIZON;
 
@@ -134,6 +136,24 @@ export function TaskBlock({
   // only — `onDragEdge`/`onDragEdgeExit` are the real, idempotent consumers).
   const edgeZoneSV = useSharedValue<"left" | "right" | null>(null);
 
+  // The card's vertical slot (minutes of day). Normally it just tracks
+  // `startMin` from props. On drop we set this to the target slot on the UI
+  // thread in the *same* frame the drag offset is zeroed, so the card is
+  // positioned entirely from the new slot with no intermediate frame where a
+  // freshly re-rendered `top` and the stale drag offset both apply — that
+  // one bad frame is the post-drop "shift". Once the reschedule round-trips
+  // and the prop catches up, the effect below drops the pin.
+  const pinnedStartMin = useSharedValue<number | null>(null);
+
+  useEffect(() => {
+    // Prop-driven slot change (our drop confirmed, or an external
+    // reschedule): release the pin and any leftover offset so the card
+    // follows the prop again.
+    pinnedStartMin.value = null;
+    translateY.value = 0;
+    translateX.value = 0;
+  }, [segment.taskStart, pinnedStartMin, translateX, translateY]);
+
   const COMPLETE_THRESHOLD = 80;
 
   const checkStyle = useAnimatedStyle(() => ({
@@ -146,12 +166,20 @@ export function TaskBlock({
       transform: [
         { translateY: translateY.value },
         { translateX: translateX.value },
-        { scale: withTiming(interpolate(d, [0, 1], [1, 1.02]), { duration: 150 }) },
+        {
+          scale: withTiming(interpolate(d, [0, 1], [1, 1.02]), {
+            duration: 150,
+          }),
+        },
         { rotate: withTiming(d ? "1deg" : "0deg", { duration: 150 }) },
       ],
       shadowColor: "#000",
-      shadowOpacity: withTiming(interpolate(d, [0, 1], [0, 0.3]), { duration: 150 }),
-      shadowRadius: withTiming(interpolate(d, [0, 1], [4, 14]), { duration: 150 }),
+      shadowOpacity: withTiming(interpolate(d, [0, 1], [0, 0.3]), {
+        duration: 150,
+      }),
+      shadowRadius: withTiming(interpolate(d, [0, 1], [4, 14]), {
+        duration: 150,
+      }),
       shadowOffset: {
         width: 0,
         height: withTiming(interpolate(d, [0, 1], [1, 10]), { duration: 150 }),
@@ -166,9 +194,14 @@ export function TaskBlock({
     }),
   }));
 
-  const wrapperStyle = useAnimatedStyle(() => ({
-    zIndex: isDragging.value ? 30 : 10,
-  }));
+  const wrapperStyle = useAnimatedStyle(() => {
+    const effectiveStart =
+      pinnedStartMin.value != null ? pinnedStartMin.value : startMin;
+    return {
+      top: (effectiveStart / DAILY_HORIZON) * totalHeight,
+      zIndex: isDragging.value ? 30 : 10,
+    };
+  });
 
   const reportSnap = useCallback(
     (min: number) => {
@@ -182,6 +215,13 @@ export function TaskBlock({
     setLiveStartMin(null);
     onDragStateChange?.(null);
   }, [onDragStateChange]);
+
+  const reportDragSnapEnd = useCallback(
+    (min: number) => {
+      onDragEnd?.({ startMin: min });
+    },
+    [onDragEnd],
+  );
 
   const triggerCompleteHaptic = useCallback(() => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -210,24 +250,13 @@ export function TaskBlock({
         Math.min(DAILY_HORIZON - TIME_GRANULARITY, startMin + snappedMinutes),
       );
 
-      const baseWall = zonedDate(segment.start, tz);
-      const newWall = new Date(baseWall);
+      const newWall = zonedDate(segment.taskStart, tz);
       newWall.setHours(Math.floor(newStartMin / 60), newStartMin % 60, 0, 0);
-
       if (dayOffset !== 0) {
         newWall.setDate(newWall.getDate() + dayOffset);
       }
 
       const newStart = zonedWallClockToUtc(newWall, tz);
-
-      debugLog("task.drop", {
-        task: segment.taskId,
-        dayOffset,
-        snappedMinutes,
-        newStartMin,
-        newStart: newStart.toISOString(),
-        sameAsSource: newStart.toISOString() === segment.taskStart,
-      });
 
       if (newStart.toISOString() === segment.taskStart) return;
 
@@ -258,11 +287,6 @@ export function TaskBlock({
     .enabled(isInteractive)
     .activeOffsetX([-10, 10])
     .activeOffsetY([-10, 10])
-    .onBegin(() => {
-      runOnJS(debugLog)("task.gesture.begin", {
-        task: segment.taskId,
-      });
-    })
     .onUpdate((e) => {
       const absX = Math.abs(e.translationX);
       const absY = Math.abs(e.translationY);
@@ -300,25 +324,25 @@ export function TaskBlock({
         }
 
         // Cross-day affordance: while the block is lifted it is "carried" —
-          // it slides sideways with the finger, and once dragged into the
-          // screen-edge zone the Week pager arms its cross-day advance (orange
-          // glow, then a short hold swaps to the adjacent day). Only fire
-          // arm/disarm on zone transitions (not every frame) to prevent
-          // arm→disarm oscillation when the pointer sits near the boundary.
-if (isDragging.value === 1) {
-            translateX.value = e.translationX;
+        // it slides sideways with the finger, and once dragged into the
+        // screen-edge zone the Week pager arms its cross-day advance (orange
+        // glow, then a short hold swaps to the adjacent day). Only fire
+        // arm/disarm on zone transitions (not every frame) to prevent
+        // arm→disarm oscillation when the pointer sits near the boundary.
+        if (isDragging.value === 1) {
+          translateX.value = e.translationX;
           if (onDragEdge) {
             const x = e.absoluteX;
             const zone: "left" | "right" | null =
-              x <= EDGE_ZONE ? "left" : x >= screenWidth - EDGE_ZONE ? "right" : null;
+              x <= EDGE_ZONE
+                ? "left"
+                : x >= screenWidth - EDGE_ZONE
+                  ? "right"
+                  : null;
             if (zone !== edgeZoneSV.value) {
               edgeZoneSV.value = zone;
               if (zone) runOnJS(onDragEdge)(zone);
               else if (onDragEdgeExit) runOnJS(onDragEdgeExit)();
-              runOnJS(debugLog)(
-                zone ? "task.zone.enter" : "task.zone.exit",
-                { task: segment.taskId, zone, x },
-              );
             }
           }
         }
@@ -337,25 +361,47 @@ if (isDragging.value === 1) {
         checkOpacity.value = withTiming(0, { duration: 200 });
         runOnJS(triggerCompleteHaptic)();
         runOnJS(triggerComplete)();
+        translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
+        translateX.value = withSpring(0, { damping: 20, stiffness: 300 });
       } else if (absY > absX || isDragging.value === 1) {
-        runOnJS(debugLog)("task.gesture.end", {
-          task: segment.taskId,
-          translationX: e.translationX,
-          translationY: e.translationY,
-        });
-        runOnJS(handleDragEnd)(e.translationY);
+        const deltaMinutes = e.translationY / pxPerMin;
+        const snappedMinutes =
+          Math.round(deltaMinutes / TIME_GRANULARITY) * TIME_GRANULARITY;
+        const newStartMin = clamp(
+          startMin + snappedMinutes,
+          0,
+          DAILY_HORIZON - TIME_GRANULARITY,
+        );
+        const movedVertically = snappedMinutes !== 0 && newStartMin !== startMin;
+
+        // A lifted block is always re-anchored (a cross-day drop keeps the
+        // time-of-day, so its slot is `newStartMin` too); `handleDragEnd`
+        // re-checks on the JS thread whether the drop is a real move — incl.
+        // the module-level cross-day offset — and no-ops otherwise.
+        if (movedVertically || isDragging.value === 1) {
+          // Re-anchor the card to the target slot and drop the drag offset in
+          // the same UI-thread frame — no spring-back, no overshoot — then
+          // fire the reschedule. `pinnedStartMin` holds this slot until the
+          // prop catches up.
+          pinnedStartMin.value = newStartMin;
+          translateY.value = 0;
+          translateX.value = 0;
+          runOnJS(handleDragEnd)(e.translationY);
+          runOnJS(reportDragSnapEnd)(newStartMin);
+        } else {
+          translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
+          translateX.value = withSpring(0, { damping: 20, stiffness: 300 });
+        }
+      } else {
+        translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
+        translateX.value = withSpring(0, { damping: 20, stiffness: 300 });
       }
 
-      translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
-      translateX.value = withSpring(0, { damping: 20, stiffness: 300 });
       checkOpacity.value = withTiming(0, { duration: 150 });
     })
     .onFinalize(() => {
       isDragging.value = 0;
       lastSnap.value = null;
-      runOnJS(debugLog)("task.gesture.finalize", {
-        task: segment.taskId,
-      });
       runOnJS(reportDragEnd)();
     });
 
@@ -388,8 +434,8 @@ if (isDragging.value === 1) {
       style={[
         wrapperStyle,
         isMultiColumn
-          ? { top: baseTop, left: leftOffset, width: blockWidth, height }
-          : { top: baseTop, height },
+          ? { left: leftOffset, width: blockWidth, height }
+          : { height },
       ]}
     >
       <Animated.View
@@ -402,7 +448,9 @@ if (isDragging.value === 1) {
           style={[liftStyle, { height }]}
           className={cn(
             "flex overflow-hidden rounded-[10px] border border-l-4",
-            isCompact ? "items-center justify-between gap-1.5 px-2.5" : "flex-col gap-0.5 px-2.5 py-1.5",
+            isCompact
+              ? "items-center justify-between gap-1.5 px-2.5"
+              : "flex-col gap-0.5 px-2.5 py-1.5",
             segment.continues && "rounded-b-none",
             segment.continued && "rounded-t-none [border-top-style:dashed]",
             isInteractive && "cursor-grab",
@@ -410,7 +458,10 @@ if (isDragging.value === 1) {
           )}
           accessible
           accessibilityRole="button"
-          accessibilityLabel={`${segment.title}, ${fmt(segment.taskStart, tz)} to ${fmt(segment.taskEnd, tz)}`}
+          accessibilityLabel={`${segment.title}, ${fmt(
+            segment.taskStart,
+            tz,
+          )} to ${fmt(segment.taskEnd, tz)}`}
         >
           <Animated.View
             pointerEvents="none"
@@ -454,7 +505,10 @@ if (isDragging.value === 1) {
             <>
               {isConflict && (
                 <View className="self-start flex-row items-center justify-center gap-1 rounded-md border border-transparent bg-amber-500/15 px-2 py-0.5">
-                  <AlertTriangle size={11} className="translate-y-[-0.5px] text-amber-700 dark:text-amber-300" />
+                  <AlertTriangle
+                    size={11}
+                    className="translate-y-[-0.5px] text-amber-700 dark:text-amber-300"
+                  />
                   <Text className="text-[10px] font-semibold leading-[11px] text-amber-700 dark:text-amber-300">
                     Overlap
                   </Text>
@@ -487,12 +541,19 @@ if (isDragging.value === 1) {
                   : segment.continues
                     ? `${fmt(segment.taskStart, tz)} → next day`
                     : liveStartMin != null
-                      ? `${fmtMin(liveStartMin, tz, segment.taskStart)} – ${fmtMin(
+                      ? `${fmtMin(
+                          liveStartMin,
+                          tz,
+                          segment.taskStart,
+                        )} – ${fmtMin(
                           Math.min(liveStartMin + duration, DAILY_HORIZON),
                           tz,
                           segment.taskStart,
                         )}`
-                      : `${fmt(segment.taskStart, tz)} – ${fmt(segment.taskEnd, tz)}`}
+                      : `${fmt(segment.taskStart, tz)} – ${fmt(
+                          segment.taskEnd,
+                          tz,
+                        )}`}
                 {dueSuffix}
               </Text>
               {showTags && (
@@ -500,10 +561,7 @@ if (isDragging.value === 1) {
                   {segment.tags.slice(0, 3).map((t) => (
                     <View
                       key={t}
-                      className={cn(
-                        "rounded border px-1.5 py-0.5",
-                        tagTint(t),
-                      )}
+                      className={cn("rounded border px-1.5 py-0.5", tagTint(t))}
                     >
                       <Text className="text-[9px] font-medium">{t}</Text>
                     </View>

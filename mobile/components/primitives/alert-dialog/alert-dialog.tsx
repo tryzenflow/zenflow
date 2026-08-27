@@ -9,14 +9,14 @@ import type {
   TextRef,
   ViewRef,
 } from "@/components/primitives/types";
+import { Text } from "@/components/ui";
 import * as React from "react";
 import {
   BackHandler,
+  type GestureResponderEvent,
   Pressable,
   View,
-  type GestureResponderEvent,
 } from "react-native";
-import { Text } from "@/components/ui";
 import type {
   AlertDialogContentProps,
   AlertDialogOverlayProps,
@@ -41,7 +41,7 @@ const Root = React.forwardRef<
       onOpenChange: onOpenChangeProp,
       ...viewProps
     },
-    ref
+    ref,
   ) => {
     const nativeID = React.useId();
     const [open = false, onOpenChange] = useControllableState({
@@ -61,7 +61,7 @@ const Root = React.forwardRef<
         <Component ref={ref} {...viewProps} />
       </AlertDialogContext.Provider>
     );
-  }
+  },
 );
 
 Root.displayName = "RootNativeAlertDialog";
@@ -70,7 +70,7 @@ function useRootContext() {
   const context = React.useContext(AlertDialogContext);
   if (!context) {
     throw new Error(
-      "AlertDialog compound components cannot be rendered outside the AlertDialog component"
+      "AlertDialog compound components cannot be rendered outside the AlertDialog component",
     );
   }
   return context;
@@ -96,7 +96,7 @@ const Trigger = React.forwardRef<PressableRef, SlottablePressableProps>(
         {...props}
       />
     );
-  }
+  },
 );
 
 Trigger.displayName = "TriggerNativeAlertDialog";
@@ -152,7 +152,7 @@ const Content = React.forwardRef<
       () => {
         onOpenChange(false);
         return true;
-      }
+      },
     );
 
     return () => {
@@ -203,7 +203,7 @@ const Cancel = React.forwardRef<PressableRef, SlottablePressableProps>(
         {...props}
       />
     );
-  }
+  },
 );
 
 Cancel.displayName = "CloseNativeAlertDialog";
@@ -229,7 +229,7 @@ const Action = React.forwardRef<PressableRef, SlottablePressableProps>(
         {...props}
       />
     );
-  }
+  },
 );
 
 Action.displayName = "ActionNativeAlertDialog";
@@ -246,7 +246,7 @@ const Title = React.forwardRef<TextRef, SlottableTextProps>(
         {...props}
       />
     );
-  }
+  },
 );
 
 Title.displayName = "TitleNativeAlertDialog";
@@ -256,7 +256,7 @@ const Description = React.forwardRef<TextRef, SlottableTextProps>(
     const { nativeID } = useRootContext();
     const Component = asChild ? Slot.Text : Text;
     return <Component ref={ref} nativeID={`${nativeID}_desc`} {...props} />;
-  }
+  },
 );
 
 Description.displayName = "DescriptionNativeAlertDialog";

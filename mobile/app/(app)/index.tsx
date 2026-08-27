@@ -1,17 +1,18 @@
-import { CreateTaskFab } from "@/components/tasks/create-task-fab";
-import { DayTimeline, type TimelineState } from "@/components/calendar/day-timeline";
 import { DaySlice } from "@/components/calendar/day-slice";
+import {
+  DayTimeline,
+  type TimelineState,
+} from "@/components/calendar/day-timeline";
+import { CreateSessionFab } from "@/components/tasks/create-task-fab";
 import { useUserStore } from "@/hooks/use-user-store";
-import { useScheduleRefresh } from "@/hooks/use-schedule-refresh";
-import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
+import { useFocusEffect } from "@react-navigation/native";
 import { zonedDate, zonedNow } from "@zenflow/core";
-import type { Task } from "@zenflow/shared";
+import type { Session } from "@zenflow/shared";
 import * as Haptics from "expo-haptics";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { View } from "react-native";
 import Animated, { SlideInUp, SlideOutDown } from "react-native-reanimated";
-import { useFocusEffect } from "@react-navigation/native";
 
 export default function DayScreen() {
   const router = useRouter();
@@ -20,11 +21,9 @@ export default function DayScreen() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [timelineState, setTimelineState] = useState<TimelineState>("loading");
   const [sliceActive, setSliceActive] = useState(false);
-  const [overnightTails, setOvernightTails] = useState<Task[]>([]);
+  const [overnightTails, setOvernightTails] = useState<Session[]>([]);
   const [sliceDate, setSliceDate] = useState<Date>(() => zonedNow(tz));
   const { date: dateParam } = useLocalSearchParams<{ date?: string }>();
-
-  const tabBarOverlay = useTabBarOverlayHeight();
 
   // Accepts an optional `date` query param (ISO instant) so other screens can
   // deep-link into a specific day — currently only Month View's "tap a day
@@ -41,21 +40,7 @@ export default function DayScreen() {
     }, []),
   );
 
-  // The Optimize action lives in the tab bar (and the FAB), outside this
-  // screen. The tab-bar action announces itself through the store; the FAB
-  // calls onApplied. Both bump refreshKey so DayTimeline refetches exactly
-  // once per event.
-  const scheduleRefreshToken = useScheduleRefresh((s) => s.token);
-  const onOptimizeApplied = useCallback(
-    () => setRefreshKey((k) => k + 1),
-    [],
-  );
-  useEffect(() => {
-    if (scheduleRefreshToken > 0) onOptimizeApplied();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scheduleRefreshToken]);
-
-  const handleTaskPress = useCallback(
+  const handleSessionPress = useCallback(
     (taskId: string) => {
       router.push(`/task/${taskId}/edit` as Href);
     },
@@ -88,17 +73,24 @@ export default function DayScreen() {
   }, []);
 
   return (
-    <View className="flex-1 bg-background" style={{ paddingBottom: tabBarOverlay }}>
+    // No bottom padding here: the tab bar is a floating pill that overlays the
+    // screen, so the timeline runs full-bleed and the grid shows through the
+    // pill's side gutters and the gap beneath it. The ScrollView inside
+    // `DayTimeline` pads its own content so the last hour still scrolls clear
+    // of the pill.
+    <View className="flex-1 bg-background">
       <DayTimeline
         date={date}
-        onTaskPress={handleTaskPress}
+        onSessionPress={handleSessionPress}
         onLongPress={handleLongPress}
         refreshKey={refreshKey}
         onStateChange={setTimelineState}
         onReachBottom={handleReachBottom}
         onOvernightTailsChange={setOvernightTails}
       />
-      {timelineState === "ready" && !sliceActive && <CreateTaskFab tz={tz} />}
+      {timelineState === "ready" && !sliceActive && (
+        <CreateSessionFab tz={tz} />
+      )}
       {sliceActive && (
         <Animated.View
           entering={SlideInUp.duration(300)}

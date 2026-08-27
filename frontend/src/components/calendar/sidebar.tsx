@@ -1,7 +1,6 @@
 import { useUserStore } from "@/hooks/use-user-store";
 import { cn } from "@/lib/utils";
-import type { Event } from "@zenflow/shared";
-import type { TaskCardState, TasksMeta, ViewMode } from "@zenflow/shared";
+import type { Event, SessionCardState, ViewMode } from "@zenflow/shared";
 import { toZonedTime } from "date-fns-tz";
 import { Lightbulb, LogOut, Settings } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -17,7 +16,6 @@ function Label({ children }: { children: React.ReactNode }) {
 }
 
 interface SidebarProps {
-  meta: TasksMeta | null;
   agenda: Event[];
   /** Active view — drives whether the agenda is grouped by day. */
   view: ViewMode;
@@ -51,7 +49,7 @@ function groupByDay(
 }
 
 /** Row treatment per state — mirrors the calendar card colours (mockup 02). */
-const AGENDA_ROW: Record<TaskCardState, string> = {
+const AGENDA_ROW: Record<SessionCardState, string> = {
   fluid: "border-border bg-card hover:bg-sidebar-accent",
   overdue:
     "border-rose-400/60 bg-rose-50/60 dark:border-rose-900/30 dark:bg-rose-950/20",
@@ -60,19 +58,19 @@ const AGENDA_ROW: Record<TaskCardState, string> = {
   completed: "border-border bg-card opacity-60",
 };
 
-const AGENDA_TIME: Record<TaskCardState, string> = {
+const AGENDA_TIME: Record<SessionCardState, string> = {
   fluid: "text-muted-foreground",
   overdue: "text-rose-600 dark:text-rose-400",
   conflict: "text-amber-600 dark:text-amber-400",
   completed: "text-muted-foreground",
 };
 
-const AGENDA_TAG: Partial<Record<TaskCardState, string>> = {
+const AGENDA_TAG: Partial<Record<SessionCardState, string>> = {
   overdue: "Overdue",
   conflict: "Conflict",
 };
 
-const AGENDA_TAG_BADGE: Partial<Record<TaskCardState, string>> = {
+const AGENDA_TAG_BADGE: Partial<Record<SessionCardState, string>> = {
   overdue: "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-400",
   conflict: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-400",
 };
@@ -194,12 +192,8 @@ function SidebarFooter() {
 }
 
 /** The sidebar's inner content — reused by the desktop rail and mobile drawer. */
-export function SidebarBody({ meta, agenda, view }: SidebarProps) {
+export function SidebarBody({ agenda, view }: SidebarProps) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
-  const allocated = meta?.totalAllocatedMinutes ?? 0;
-  const total = meta?.totalWorkMinutes ?? 0;
-  const pct =
-    total > 0 ? Math.min(100, Math.round((allocated / total) * 100)) : 0;
   // Day view is a single day — keep it flat; week/month group under day headers.
   const grouped = view !== "day";
   const groups = grouped ? groupByDay(agenda, tz) : [];
@@ -209,19 +203,6 @@ export function SidebarBody({ meta, agenda, view }: SidebarProps) {
       <div className="flex items-center gap-2">
         <Logo className="h-9 w-9 shrink-0" />
         <span className="text-xl font-semibold tracking-tight">Zenflow</span>
-      </div>
-
-      <div className="space-y-2">
-        <Label>Day Load</Label>
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-brand-orange via-brand-yellow to-brand-lime transition-all"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-        <p className="font-mono text-[10px] text-muted-foreground">
-          {Math.round(allocated / 60)}h / {Math.round(total / 60)}h allocated
-        </p>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-2">
@@ -269,9 +250,10 @@ export function SidebarBody({ meta, agenda, view }: SidebarProps) {
             to mark a task as completed.
           </li>
           <li>
-            The engine auto-places your tasks; ones you{" "}
-            <span className="font-semibold text-foreground">drag or resize</span>{" "}
-            stay pinned where you put them.
+            New tasks start unscheduled — drag them onto the calendar to give
+            them a slot, or use{" "}
+            <span className="font-semibold text-foreground">Optimize</span> to
+            place them for you.
           </li>
           <li>
             Overlapping tasks are flagged as{" "}

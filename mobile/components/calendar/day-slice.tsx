@@ -1,13 +1,13 @@
-import { useMemo } from "react";
-import { View, useWindowDimensions } from "react-native";
 import { Text } from "@/components/ui/text";
 import { eventsForDay, getOverlapLayout, tasksToBlocks } from "@zenflow/core";
-import type { Task } from "@zenflow/shared";
+import type { Session } from "@zenflow/shared";
 import { format } from "date-fns";
+import { useMemo } from "react";
+import { View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-reanimated";
+import { SessionBlock } from "./task-block";
 import { TimeGutter } from "./time-gutter";
-import { TaskBlock } from "./task-block";
 
 const GUTTER_WIDTH = 64;
 const HOUR_HEIGHT = 64;
@@ -17,7 +17,7 @@ const SCOPE_TO_MIN = 240;
 interface DaySliceProps {
   date: Date;
   tz: string;
-  tails: Task[];
+  tails: Session[];
   onCollapse: () => void;
 }
 
@@ -85,7 +85,7 @@ export function DaySlice({ date, tz, tails, onCollapse }: DaySliceProps) {
                 const blockWidth = contentWidth / blockLayout.columns;
                 const leftOffset = blockLayout.column * blockWidth;
                 return (
-                  <TaskBlock
+                  <SessionBlock
                     key={segment.segmentId}
                     segment={segment}
                     layout={blockLayout}
@@ -99,8 +99,7 @@ export function DaySlice({ date, tz, tails, onCollapse }: DaySliceProps) {
             </View>
           </View>
 
-          <View className="flex-1 items-center justify-center px-8">
-          </View>
+          <View className="flex-1 items-center justify-center px-8"></View>
         </View>
       </GestureDetector>
     </View>

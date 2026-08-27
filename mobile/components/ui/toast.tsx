@@ -1,15 +1,25 @@
+import { cn } from "@/lib/utils";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import { Animated, Pressable, View } from "react-native";
-import { Text } from "./text";
-import { cn } from "@/lib/utils";
+import { Pressable, View } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  Extrapolation,
+  interpolate,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { AlertCircle, AlertTriangle, CheckCircle, Info } from "../Icons";
+import { Text } from "./text";
 
 export interface ToastAction {
   label: string;
@@ -22,6 +32,15 @@ const toastVariants = {
   success: "bg-green-500",
   info: "bg-blue-500",
 };
+
+// Cap simultaneous full-size toasts so a burst of calls (e.g. dragging a
+// task a few times in a row) can't pile the whole screen with cards — extra
+// toasts queue and appear one at a time as visible ones dismiss, with a
+// "+N more" pill hinting at what's waiting.
+const MAX_VISIBLE_TOASTS = 2;
+const SWIPE_DISMISS_THRESHOLD = 72;
+const ENTRANCE_DURATION = 220;
+const EXIT_DURATION = 180;
 
 interface ToastProps {
   id: number;
@@ -41,8 +60,11 @@ function Toast({
   showProgress = true,
   action,
 }: ToastProps) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const progress = useRef(new Animated.Value(0)).current;
+  const opacity = useSharedValue(0);
+  const translateX = useSharedValue(0);
+  const progress = useSharedValue(0);
+  const dismissedRef = useRef(false);
+
   const icon = useMemo(() => {
     switch (variant) {
       case "destructive":
@@ -56,76 +78,109 @@ function Toast({
     }
   }, [variant]);
 
+  const hide = useCallback(() => {
+    onHide(id);
+  }, [onHide, id]);
+
+  // Shared exit path for both the auto-dismiss timer and a manual swipe —
+  // `dismissedRef` guards against both firing (e.g. a swipe landing right as
+  // the timer expires) so `onHide` never double-fires for the same toast.
+  const dismiss = useCallback(
+    (direction: 0 | 1 | -1 = 0) => {
+      if (dismissedRef.current) return;
+      dismissedRef.current = true;
+      if (direction !== 0) {
+        translateX.value = withTiming(direction * 400, {
+          duration: EXIT_DURATION,
+        });
+      }
+      opacity.value = withTiming(0, { duration: EXIT_DURATION }, (finished) => {
+        if (finished) runOnJS(hide)();
+      });
+    },
+    [hide, opacity, translateX],
+  );
+
   useEffect(() => {
-    Animated.sequence([
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-      Animated.timing(progress, {
-        toValue: 1,
-        duration: duration - 1000,
-        useNativeDriver: false,
-      }),
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-    ]).start(() => onHide(id));
+    opacity.value = withTiming(1, { duration: ENTRANCE_DURATION });
+    progress.value = withTiming(1, {
+      duration: Math.max(duration - ENTRANCE_DURATION, 100),
+    });
+    const timer = setTimeout(() => dismiss(0), duration);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [duration]);
 
+  const panGesture = Gesture.Pan()
+    .activeOffsetX([-10, 10])
+    .failOffsetY([-16, 16])
+    .onUpdate((e) => {
+      translateX.value = e.translationX;
+    })
+    .onEnd((e) => {
+      if (Math.abs(e.translationX) > SWIPE_DISMISS_THRESHOLD) {
+        runOnJS(dismiss)(e.translationX > 0 ? 1 : -1);
+      } else {
+        translateX.value = withTiming(0, { duration: 150 });
+      }
+    });
+
+  const containerStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [
+      { translateX: translateX.value },
+      {
+        translateY: interpolate(
+          opacity.value,
+          [0, 1],
+          [-20, 0],
+          Extrapolation.CLAMP,
+        ),
+      },
+    ],
+  }));
+
+  const progressStyle = useAnimatedStyle(() => ({
+    width: `${progress.value * 100}%`,
+  }));
+
   return (
-    <Animated.View
-      className={`
-        ${toastVariants[variant]}
-        m-2 mb-1 p-4 flex flex-row items-center rounded-lg shadow-md transform transition-all
-      `}
-      style={{
-        opacity,
-        transform: [
-          {
-            translateY: opacity.interpolate({
-              inputRange: [0, 1],
-              outputRange: [-20, 0],
-            }),
-          },
-        ],
-      }}
-    >
-      {icon}
-      <Text className="flex-1 font-semibold ml-3 text-left text-background">
-        {message}
-      </Text>
-      {action && (
-        <Pressable
-          onPress={() => {
-            action.onPress();
-            onHide(id);
-          }}
-          hitSlop={8}
-          className="ml-3 shrink-0 rounded-full border border-background/40 px-3 py-1"
-        >
-          <Text className="text-[13px] font-bold text-background">
-            {action.label}
-          </Text>
-        </Pressable>
-      )}
-      {showProgress && (
-        <View className="mt-2 rounded">
-          <Animated.View
-            className="bg-white dark:bg-black h-2 opacity-30 rounded"
-            style={{
-              width: progress.interpolate({
-                inputRange: [0, 1],
-                outputRange: ["0%", "100%"],
-              }),
+    <GestureDetector gesture={panGesture}>
+      <Animated.View
+        className={`
+          ${toastVariants[variant]}
+          m-2 mb-1 p-4 flex flex-row items-center rounded-lg shadow-md
+        `}
+        style={containerStyle}
+      >
+        {icon}
+        <Text className="flex-1 font-semibold ml-3 text-left text-background">
+          {message}
+        </Text>
+        {action && (
+          <Pressable
+            onPress={() => {
+              action.onPress();
+              dismiss(0);
             }}
-          />
-        </View>
-      )}
-    </Animated.View>
+            hitSlop={8}
+            className="ml-3 shrink-0 rounded-full border border-background/40 px-3 py-1"
+          >
+            <Text className="text-[13px] font-bold text-background">
+              {action.label}
+            </Text>
+          </Pressable>
+        )}
+        {showProgress && (
+          <View className="mt-2 rounded">
+            <Animated.View
+              className="bg-white dark:bg-black h-2 opacity-30 rounded"
+              style={progressStyle}
+            />
+          </View>
+        )}
+      </Animated.View>
+    </GestureDetector>
   );
 }
 
@@ -147,11 +202,17 @@ interface ToastContextProps {
     duration?: number,
     position?: "top" | "bottom",
     showProgress?: boolean,
-    action?: ToastAction
+    action?: ToastAction,
   ) => void;
   removeToast: (id: number) => void;
 }
 const ToastContext = createContext<ToastContextProps | undefined>(undefined);
+
+// Monotonic counter rather than `Date.now()` — two `toast()` calls in the
+// same millisecond (confirmed live: two off-screen month-pager pages failing
+// their fetch in the same tick, see `components/calendar/month-page.tsx`)
+// used to collide on one id and make React throw a duplicate-key warning.
+let toastIdCounter = 0;
 
 // TODO: refactor to pass position to Toast instead of ToastProvider
 function ToastProvider({
@@ -166,15 +227,15 @@ function ToastProvider({
   const toast: ToastContextProps["toast"] = (
     message: string,
     variant: ToastVariant = "default",
-    duration: number = 3000,
+    duration = 3000,
     position: "top" | "bottom" = "top",
-    showProgress: boolean = true,
-    action?: ToastAction
+    showProgress = true,
+    action?: ToastAction,
   ) => {
     setMessages((prev) => [
       ...prev,
       {
-        id: Date.now(),
+        id: ++toastIdCounter,
         text: message,
         variant,
         duration,
@@ -189,16 +250,20 @@ function ToastProvider({
     setMessages((prev) => prev.filter((message) => message.id !== id));
   };
 
+  const visibleMessages = messages.slice(0, MAX_VISIBLE_TOASTS);
+  const queuedCount = messages.length - visibleMessages.length;
+
   return (
     <ToastContext.Provider value={{ toast, removeToast }}>
       {children}
       <View
+        pointerEvents="box-none"
         className={cn("absolute left-0 right-0", {
           "top-[45px]": position === "top",
           "bottom-0": position === "bottom",
         })}
       >
-        {messages.map((message) => (
+        {visibleMessages.map((message) => (
           <Toast
             key={message.id}
             id={message.id}
@@ -210,6 +275,15 @@ function ToastProvider({
             onHide={removeToast}
           />
         ))}
+        {queuedCount > 0 && (
+          <View pointerEvents="none" className="items-center">
+            <View className="rounded-full bg-foreground/80 px-2.5 py-1">
+              <Text className="text-[11px] font-semibold text-background">
+                +{queuedCount} more
+              </Text>
+            </View>
+          </View>
+        )}
       </View>
     </ToastContext.Provider>
   );

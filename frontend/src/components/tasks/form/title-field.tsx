@@ -3,7 +3,7 @@ import {
   PopoverAnchor,
   PopoverContent,
 } from "@/components/ui/popover";
-import { Task } from "@zenflow/shared";
+import { Session } from "@zenflow/shared";
 import {
   Command,
   CommandList,
@@ -12,7 +12,7 @@ import {
   CommandItem,
 } from "@/components/ui/command";
 import { useState, useRef, useEffect } from "react";
-import { listTaskSuggestions } from "@/api/tasks";
+import { listSessionSuggestions } from "@/api/tasks";
 import { FormControl } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 
@@ -38,11 +38,11 @@ export function TitleField({
 }: {
   value: string;
   onChange: (value: string) => void;
-  onSelect: (task: Task) => void;
+  onSelect: (task: Session) => void;
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [suggestions, setSuggestions] = useState<Task[]>([]);
+  const [suggestions, setSuggestions] = useState<Session[]>([]);
   // Monotonic request id: only the newest in-flight fetch may commit results,
   // so a slow earlier response can never clobber a newer query's suggestions.
   const requestSeq = useRef(0);
@@ -56,7 +56,7 @@ export function TitleField({
     }
     const seq = ++requestSeq.current;
     const handle = setTimeout(() => {
-      listTaskSuggestions(q)
+      listSessionSuggestions(q)
         .then((tasks) => {
           if (seq === requestSeq.current) setSuggestions(tasks);
         })
@@ -67,7 +67,7 @@ export function TitleField({
     return () => clearTimeout(handle);
   }, [value]);
 
-  const pick = (task: Task) => {
+  const pick = (task: Session) => {
     onSelect(task);
     setOpen(false);
   };
@@ -119,7 +119,6 @@ export function TitleField({
                   <span className="text-[10px] text-muted-foreground">
                     {[
                       durationLabel(task.durationMinutes),
-                      task.manuallyMoved ? "Pinned" : null,
                       ...task.tags.slice(0, 2).map((t) => `#${t}`),
                     ]
                       .filter(Boolean)

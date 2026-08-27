@@ -1,6 +1,6 @@
-import { View } from "react-native";
 import { Text } from "@/components/ui/text";
 import { minutesToTime } from "@zenflow/core";
+import { View } from "react-native";
 
 interface TimeGutterProps {
   hourHeight: number;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveState } from "../task-card";
+import { deriveState, withOverlap } from "../task-card";
 
 const NOW = new Date("2026-06-15T12:00:00.000Z");
 
@@ -9,7 +9,6 @@ describe("deriveState", () => {
       deriveState(
         {
           status: "DONE",
-          conflict: true,
           deadline: "2026-06-01T00:00:00.000Z",
           scheduledStartTime: null,
           durationMinutes: 30,
@@ -19,27 +18,11 @@ describe("deriveState", () => {
     ).toBe("completed");
   });
 
-  it("returns conflict for unresolved conflicts", () => {
-    expect(
-      deriveState(
-        {
-          status: "PENDING",
-          conflict: true,
-          deadline: null,
-          scheduledStartTime: null,
-          durationMinutes: 30,
-        },
-        NOW,
-      ),
-    ).toBe("conflict");
-  });
-
   it("returns overdue once the deadline has passed", () => {
     expect(
       deriveState(
         {
           status: "PENDING",
-          conflict: false,
           deadline: "2026-06-14T00:00:00.000Z",
           scheduledStartTime: "2026-06-13T09:00:00.000Z",
           durationMinutes: 30,
@@ -54,7 +37,6 @@ describe("deriveState", () => {
       deriveState(
         {
           status: "PENDING",
-          conflict: false,
           deadline: "2026-06-20T09:00:00.000Z",
           scheduledStartTime: "2026-06-20T08:45:00.000Z",
           durationMinutes: 30,
@@ -69,7 +51,6 @@ describe("deriveState", () => {
       deriveState(
         {
           status: "PENDING",
-          conflict: false,
           deadline: "2026-06-20T09:00:00.000Z",
           scheduledStartTime: "2026-06-16T08:00:00.000Z",
           durationMinutes: 30,
@@ -84,7 +65,6 @@ describe("deriveState", () => {
       deriveState(
         {
           status: "PENDING",
-          conflict: false,
           deadline: null,
           scheduledStartTime: "2026-06-16T08:00:00.000Z",
           durationMinutes: 30,
@@ -92,5 +72,23 @@ describe("deriveState", () => {
         NOW,
       ),
     ).toBe("fluid");
+  });
+});
+
+describe("withOverlap", () => {
+  it("folds an overlap into conflict for a fluid card", () => {
+    expect(withOverlap("fluid", true)).toBe("conflict");
+  });
+
+  it("folds an overlap into conflict for an overdue card", () => {
+    expect(withOverlap("overdue", true)).toBe("conflict");
+  });
+
+  it("leaves a non-overlapping card's state alone", () => {
+    expect(withOverlap("fluid", false)).toBe("fluid");
+  });
+
+  it("never flags a completed card as conflicting, even if it overlaps", () => {
+    expect(withOverlap("completed", true)).toBe("completed");
   });
 });

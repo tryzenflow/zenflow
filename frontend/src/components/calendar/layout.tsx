@@ -8,20 +8,14 @@ import { WeekView } from "./week-view";
 import { MonthView } from "./month-view";
 import { CalendarSidebar, SidebarBody } from "./sidebar";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { EditTaskDialog } from "@/components/tasks/edit-task-dialog";
-import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
+import { EditSessionDialog } from "@/components/tasks/edit-task-dialog";
+import { CreateSessionDialog } from "@/components/tasks/create-task-dialog";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { CalendarCheck, Plus } from "lucide-react";
-import {
-  completeTask,
-  listTasks,
-  rescheduleTask,
-  resizeTask,
-} from "@/api/tasks";
+import { listSessions, updateSession } from "@/api/tasks";
 import { tasksToBlocks } from "@zenflow/core";
-import type { TasksMeta } from "@zenflow/shared";
 import { isAxiosError } from "axios";
 import { toast } from "sonner";
 import { errorToast } from "@/lib/toast";
@@ -76,7 +70,6 @@ export function CalendarLayout() {
   useViewShortcuts(viewMode, setViewMode, setDate);
 
   const [blocks, setBlocks] = useState<Event[]>([]);
-  const [meta, setMeta] = useState<TasksMeta | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [navOpen, setNavOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -88,10 +81,9 @@ export function CalendarLayout() {
 
   async function refetch(): Promise<Event[]> {
     const load = (async () => {
-      const data = await listTasks(viewMode, date);
-      const next = tasksToBlocks(data.tasks);
+      const data = await listSessions(viewMode, date);
+      const next = tasksToBlocks(data.sessions);
       setBlocks(next);
-      setMeta(data.meta);
       return next;
     })();
     inFlight.current = load;
@@ -99,7 +91,9 @@ export function CalendarLayout() {
       return await load;
     } catch (error) {
       if (isAxiosError(error))
-        errorToast(error.response?.data?.message || "Failed to load tasks");
+        errorToast(
+          error.response?.data?.message || "Failed to load sessions",
+        );
       return [];
     } finally {
       if (inFlight.current === load) inFlight.current = null;
@@ -145,10 +139,9 @@ export function CalendarLayout() {
       if (!fresh.some((b) => b.taskId === taskId)) return;
     }
     try {
-      // The backend pins this task `manuallyMoved` at the dropped slot, and
-      // now also auto-resolves a same-day overlap with another task inline
-      // (narrow same-day repack) instead of just leaving `conflict: true`.
-      await rescheduleTask(taskId, startISO);
+      // Plain field write — no auto-placement engine, so this never cascades
+      // to any other session.
+      await updateSession(taskId, { scheduledStartTime: startISO });
       window.dispatchEvent(
         new CustomEvent("zenflow:task-updated", { detail: taskId }),
       );
@@ -156,10 +149,8 @@ export function CalendarLayout() {
       if (isAxiosError(error))
         errorToast(error.response?.data?.message || "Failed to reschedule");
     } finally {
-      // Always reconcile with the server. Nothing defers this refetch anymore
-      // (there's no cascade-toast undo callback for drag to hand it off to),
-      // so skipping it here would leave any displaced tasks rendering stale
-      // until an unrelated refetch.
+      // Always reconcile with the server so the block reflects the real
+      // persisted slot.
       await refetch();
     }
   }
@@ -191,10 +182,11 @@ export function CalendarLayout() {
       if (!fresh.some((b) => b.taskId === taskId)) return;
     }
     try {
-      // Same as onReschedule: pins this task, and now also auto-resolves a
-      // same-day overlap the resize creates inline instead of just flagging
-      // `conflict: true`.
-      await resizeTask(taskId, startISO, durationMinutes);
+      // Same as onReschedule: a plain field write, no cascade.
+      await updateSession(taskId, {
+        scheduledStartTime: startISO,
+        durationMinutes,
+      });
       window.dispatchEvent(
         new CustomEvent("zenflow:task-updated", { detail: taskId }),
       );
@@ -202,10 +194,8 @@ export function CalendarLayout() {
       if (isAxiosError(error))
         errorToast(error.response?.data?.message || "Failed to resize");
     } finally {
-      // Always reconcile with the server. Nothing defers this refetch anymore
-      // (there's no cascade-toast undo callback for resize to hand it off to),
-      // so skipping it here would leave any displaced tasks rendering stale
-      // until an unrelated refetch.
+      // Always reconcile with the server so the block reflects the real
+      // persisted slot.
       await refetch();
     }
   }
@@ -235,11 +225,13 @@ export function CalendarLayout() {
       bs.map((b) => (b.taskId === taskId ? { ...b, status: "DONE" } : b)),
     );
     try {
-      await completeTask(taskId);
-      toast.success("Task completed");
+      await updateSession(taskId, { status: "DONE" });
+      toast.success("Session completed");
     } catch (error) {
       if (isAxiosError(error))
-        errorToast(error.response?.data?.message || "Failed to complete task");
+        errorToast(
+          error.response?.data?.message || "Failed to complete session",
+        );
     } finally {
       await refetch();
     }
@@ -280,7 +272,7 @@ export function CalendarLayout() {
 
   return (
     <div className="flex h-screen">
-      <CalendarSidebar meta={meta} agenda={agenda} view={viewMode} />
+      <CalendarSidebar agenda={agenda} view={viewMode} />
 
       {/* Mobile/tablet nav drawer — same content as the desktop rail. */}
       <Sheet open={navOpen} onOpenChange={setNavOpen}>
@@ -289,7 +281,7 @@ export function CalendarLayout() {
           className="w-full sm:w-72 bg-sidebar p-0 lg:hidden"
         >
           <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <SidebarBody meta={meta} agenda={agenda} view={viewMode} />
+          <SidebarBody agenda={agenda} view={viewMode} />
         </SheetContent>
       </Sheet>
 
@@ -299,7 +291,6 @@ export function CalendarLayout() {
           setDate={setDate}
           currentView={viewMode}
           setCurrentView={setViewMode}
-          conflictCount={meta?.conflictCount ?? 0}
           onChanged={refetch}
           onOpenNav={() => setNavOpen(true)}
         />
@@ -321,9 +312,9 @@ export function CalendarLayout() {
             Today
           </Button>
 
-          {/* Floating add-task action — opens the same CreateTaskDialog the
+          {/* Floating add-task action — opens the same CreateSessionDialog the
               header used to host. Glassmorphism, mirrors the today control. */}
-          <CreateTaskDialog
+          <CreateSessionDialog
             date={date}
             view={viewMode}
             onCreated={refetch}
@@ -375,7 +366,7 @@ export function CalendarLayout() {
         </div>
       </div>
       {editId && (
-        <EditTaskDialog
+        <EditSessionDialog
           open={!!editId}
           setOpen={(o) => !o && setEditId(null)}
           taskId={editId}

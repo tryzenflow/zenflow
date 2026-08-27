@@ -1,10 +1,10 @@
 import type { ViewStyle } from "react-native";
 
 /**
- * Warm amber cast shared by the two floating actions — `CreateTaskFab` and
- * the tab bar's `OptimizeFab`. Hard-coded rather than read from `NAV_THEME`
- * because both buttons are amber in light *and* dark mode (the gradient and
- * the primary fill don't flip), so the glow shouldn't flip either.
+ * Warm amber cast for the floating "new task" action (`CreateSessionFab`).
+ * Hard-coded rather than read from `NAV_THEME` because the button is amber
+ * in light *and* dark mode (the primary fill doesn't flip), so the glow
+ * shouldn't flip either.
  */
 export const FAB_GLOW_COLOR = "rgb(255,142,62)";
 

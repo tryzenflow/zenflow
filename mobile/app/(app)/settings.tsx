@@ -1,74 +1,27 @@
 import { logout as logoutRequest } from "@/api/auth";
-import { updatePreferences } from "@/api/users";
 import { LogOut, Moon } from "@/components/Icons";
-import { WorkDaysGrid } from "@/components/onboarding/work-days-grid";
 import { ProfileRow } from "@/components/settings/profile-row";
 import { SettingsSectionLabel } from "@/components/settings/settings-header";
-import { TimezonePickerRow } from "@/components/settings/timezone-picker-row";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
-import { TimePickerRow } from "@/components/ui/time-picker";
-import { useToast } from "@/components/ui/toast";
 import { useUserStore } from "@/hooks/use-user-store";
 import { setAndroidNavigationBar } from "@/lib/android-navigation-bar";
 import { clearSession } from "@/lib/api-client";
 import { clearCachedSessionUser } from "@/lib/session";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { useColorScheme } from "@/lib/useColorScheme";
-import { cn } from "@/lib/utils";
-import { minutesToLabel } from "@/utils/preferences";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { isAxiosError } from "axios";
 import { Href, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
-type PreferencesPatch = Partial<{
-  workStart: number;
-  workEnd: number;
-  workDays: number[];
-  timezone: string;
-}>;
-
 /** Single flat Settings screen — mirrors mockups/settings.html exactly. */
 export default function SettingsScreen() {
-  const { toast } = useToast();
   const router = useRouter();
   const user = useUserStore((s) => s.user);
   const setUser = useUserStore((s) => s.setUser);
   const { isDarkColorScheme, setColorScheme } = useColorScheme();
   const [loggingOut, setLoggingOut] = useState(false);
-
-  async function savePreferences(
-    patch: PreferencesPatch,
-    successMessage: string,
-  ) {
-    if (!user) return;
-    try {
-      const updated = await updatePreferences({
-        workStart: patch.workStart ?? user.workStart,
-        workEnd: patch.workEnd ?? user.workEnd,
-        workDays: patch.workDays ?? user.workDays,
-        timezone: patch.timezone ?? user.timezone,
-      });
-      setUser(updated);
-      toast(successMessage, "success");
-    } catch (error) {
-      const message =
-        (isAxiosError(error) && error.response?.data?.message) ||
-        "Failed to save preferences";
-      toast(message, "destructive");
-    }
-  }
-
-  function toggleDay(iso: number) {
-    if (!user) return;
-    const next = user.workDays.includes(iso)
-      ? user.workDays.filter((x) => x !== iso)
-      : [...user.workDays, iso].sort();
-    if (next.length === 0) return;
-    savePreferences({ workDays: next }, "Work days updated");
-  }
 
   function toggleDarkMode() {
     const next = isDarkColorScheme ? "light" : "dark";
@@ -107,51 +60,6 @@ export default function SettingsScreen() {
         <SettingsSectionLabel>Profile</SettingsSectionLabel>
         <View className="overflow-hidden rounded-2xl border border-border bg-card">
           <ProfileRow user={user} onUpdated={setUser} />
-        </View>
-
-        <SettingsSectionLabel>Working hours</SettingsSectionLabel>
-        <View className="overflow-hidden rounded-2xl border border-border bg-card">
-          <TimePickerRow
-            label="Start"
-            sheetTitle="Work starts at"
-            value={user.workStart}
-            onChange={(v) =>
-              savePreferences(
-                { workStart: v },
-                `Work hours updated — starts at ${minutesToLabel(v)}`,
-              )
-            }
-          />
-          <TimePickerRow
-            label="End"
-            sheetTitle="Work ends at"
-            value={user.workEnd}
-            onChange={(v) =>
-              savePreferences(
-                { workEnd: v },
-                `Work hours updated — ends at ${minutesToLabel(v)}`,
-              )
-            }
-            className="border-t border-border"
-          />
-        </View>
-
-        <SettingsSectionLabel>Work days</SettingsSectionLabel>
-        <View className="rounded-2xl border border-border bg-card p-4">
-          <WorkDaysGrid value={user.workDays} onToggle={toggleDay} />
-          <Text className="mt-[7px] text-[13px] leading-snug text-muted-foreground">
-            Tasks only auto-schedule on selected days.
-          </Text>
-        </View>
-
-        <SettingsSectionLabel>Timezone</SettingsSectionLabel>
-        <View className="overflow-hidden rounded-2xl border border-border bg-card">
-          <TimezonePickerRow
-            value={user.timezone}
-            onChange={(tz) =>
-              savePreferences({ timezone: tz }, `Timezone set to ${tz}`)
-            }
-          />
         </View>
 
         <SettingsSectionLabel>Appearance</SettingsSectionLabel>

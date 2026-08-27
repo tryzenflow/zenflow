@@ -112,7 +112,8 @@ export function LoginForm({
 
       toast.success("Login successfully");
       setUser(result.data);
-      navigate(result.data?.onboardingComplete ? "/" : "/onboarding");
+      // No onboarding step — every login lands straight in the app.
+      navigate("/");
     } catch (error) {
       if (isAxiosError(error) && error.status === 400) {
         const errorMessage =

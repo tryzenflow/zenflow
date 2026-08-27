@@ -1,47 +1,48 @@
-import { useMemo, useRef, useState, useEffect, useCallback } from "react";
-import {
-  View,
-  ScrollView,
-  RefreshControl,
-  TouchableOpacity,
-  useWindowDimensions,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-} from "react-native";
-import { Text } from "@/components/ui/text";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  DAILY_HORIZON,
-  TIME_GRANULARITY,
-  DEFAULT_WORK_PREFS,
-  eventsForDay,
-  tasksToBlocks,
-  getOverlapLayout,
-  zonedWallClockToUtc,
-  zonedDate,
-} from "@zenflow/core";
-import type { Task } from "@zenflow/shared";
-import { Portal } from "@/components/primitives/portal";
-import { useUserStore } from "@/hooks/use-user-store";
-import { useNow } from "@/hooks/use-now";
-import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
-import { listTasks, rescheduleTask, completeTask } from "@/api/tasks";
-import { debugLog } from "@/lib/debug-log";
-import { peekBlocksFromSegments, type PeekBlock } from "@/lib/peek";
-import { TimeGutter } from "./time-gutter";
-import { WorkZoneOverlay } from "./work-zone-overlay";
-import { NowIndicator } from "./now-indicator";
-import { TaskBlock } from "./task-block";
-import { format, startOfDay } from "date-fns";
-import { toZonedTime } from "date-fns-tz";
+import { listSessions, updateSession } from "@/api/tasks";
 import {
   AlertCircle,
   AlertTriangle,
-  MousePointer2,
   RefreshCcw,
   RotateCw,
 } from "@/components/Icons";
+import { Portal } from "@/components/primitives/portal";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Text } from "@/components/ui/text";
+import { useNow } from "@/hooks/use-now";
+import { useUserStore } from "@/hooks/use-user-store";
+import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
+import { cn } from "@/lib/utils";
+import { peekBlocksFromSegments, type PeekBlock } from "@/lib/peek";
+import {
+  DAILY_HORIZON,
+  TIME_GRANULARITY,
+  eventsForDay,
+  getOverlapLayout,
+  tasksToBlocks,
+  zonedDate,
+  zonedWallClockToUtc,
+} from "@zenflow/core";
+import type { Session } from "@zenflow/shared";
+import { format, startOfDay } from "date-fns";
+import { toZonedTime } from "date-fns-tz";
+import * as Haptics from "expo-haptics";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  RefreshControl,
+  ScrollView,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
@@ -52,7 +53,9 @@ import Animated, {
   interpolate,
   runOnJS,
 } from "react-native-reanimated";
-import * as Haptics from "expo-haptics";
+import { NowIndicator } from "./now-indicator";
+import { SessionBlock } from "./task-block";
+import { TimeGutter } from "./time-gutter";
 
 const GUTTER_WIDTH = 64;
 const EMPTY_GHOST_MINUTES = 45;
@@ -68,54 +71,86 @@ const LOADING_PLACEHOLDERS = [
   { startMin: 15 * 60, duration: 45 },
 ];
 
-function fmtTime(iso: string, tz: string) {
-  return toZonedTime(new Date(iso), tz).toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
 function scrollToNowOffset(totalHeight: number): number {
   const now = new Date();
   const mins = now.getHours() * 60 + now.getMinutes();
   return Math.max(0, (mins / DAILY_HORIZON) * totalHeight - 120);
 }
 
+/**
+ * One shared card shape for the bottom-of-screen notifications this screen
+ * shows (currently just the overdue warning) — a single visual language
+ * instead of hand-rolling an icon-chip-plus-text layout per caller.
+ * `subtitle` is optional.
+ */
+function BottomToastCard({
+  icon,
+  iconTint,
+  title,
+  subtitle,
+}: {
+  icon: ReactNode;
+  iconTint: string;
+  title: string;
+  subtitle?: string;
+}) {
+  return (
+    <View className="flex-row items-start gap-2.5 rounded-2xl border border-black/15 dark:border-white/15 bg-popover p-3.5 shadow-lg">
+      <View
+        className={cn(
+          "h-[30px] w-[30px] items-center justify-center rounded-[9px]",
+          iconTint,
+        )}
+      >
+        {icon}
+      </View>
+      <View className="min-w-0 flex-1">
+        <Text className="text-sm font-semibold">{title}</Text>
+        {!!subtitle && (
+          <Text className="mt-0.5 text-[12.5px] text-muted-foreground">
+            {subtitle}
+          </Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
 export type TimelineState = "loading" | "error" | "ready";
 
 interface DayTimelineProps {
   date?: Date;
-  onTaskPress?: (taskId: string) => void;
+  onSessionPress?: (taskId: string) => void;
   onLongPress?: (timeISO: string) => void;
   onComplete?: (taskId: string) => void;
   refreshKey?: number;
   onStateChange?: (state: TimelineState) => void;
   onReachBottom?: () => void;
-  onOvernightTailsChange?: (tails: Task[]) => void;
+  onOvernightTailsChange?: (tails: Session[]) => void;
   /** Hide the per-day header — the Week screen renders its own sticky
    * `WeekHeader` strip above the pager. Default `true` preserves the Day
    * screen. */
   showHeader?: boolean;
   /** Show the "Long press to add" ghost on empty non-today days too — the
-   * Week mockup surfaces it on any empty day. Default `false`. */
+   * Week pager surfaces it on any empty day. Default `false`. */
   showEmptyGhostAlways?: boolean;
-  /** Fired while a task is dragged near the screen's left/right edge. */
+  /** Fired while a session is dragged near the screen's left/right edge. */
   onDragEdge?: (edge: "left" | "right") => void;
-  /** Fired while a task is dragged outside the edge zone (disarms a pending
-   * cross-day advance). */
+  /** Fired while a session is dragged outside the edge zone (disarms a
+   * pending cross-day advance). */
   onDragEdgeExit?: () => void;
-  /** Fired when a task drag starts/stops (used to lock the pager). */
+  /** Fired when a session drag starts/stops (used to lock the pager). */
   onDragChange?: (dragging: boolean) => void;
-  /** Fired after a task that was dragged onto another day is rescheduled. */
+  /** Fired after a session that was dragged onto another day is rescheduled. */
   onCrossDayReschedule?: (taskId: string, startISO: string) => void;
-  /** Reports this day's tasks as mini-day blocks so a parent week pager can
-   * render its next-day peek strip from real data. */
+  /** Reports this day's sessions as mini-day blocks so a parent week pager
+   * can render its next-day peek strip from real data. */
   onPeekChange?: (blocks: PeekBlock[], dayKey: string) => void;
 }
 
 export function DayTimeline({
   date: propDate,
-  onTaskPress,
+  onSessionPress,
   onLongPress,
   onComplete,
   refreshKey,
@@ -131,7 +166,6 @@ export function DayTimeline({
   onPeekChange,
 }: DayTimelineProps) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
-  const prefs = useUserStore((s) => s.user) ?? DEFAULT_WORK_PREFS;
   const scrollRef = useRef<ScrollView>(null);
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const now = useNow();
@@ -153,7 +187,7 @@ export function DayTimeline({
   const peekHeight = Math.round((screenHeight * 1) / 8);
   const contentWidth = screenWidth - GUTTER_WIDTH;
 
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasks, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -166,27 +200,22 @@ export function DayTimeline({
   useEffect(() => {
     let cancelled = false;
     // Only show the full-screen loading skeleton when we have nothing to show.
-    // Subsequent refetches (screen focus, Optimize apply, etc.) update
-    // `tasks` in place — the timeline stays mounted so the past-night strip
-    // and other derived rendering don't flicker off. The pull-to-refresh
-    // `RefreshControl` gives a separate visual signal for user-initiated
-    // refreshes.
+    // Subsequent refetches (screen focus, implicit day-reschedule after a
+    // create/edit, etc.) update `tasks` in place — the timeline stays
+    // mounted so the past-night strip and other derived rendering don't
+    // flicker off. The pull-to-refresh `RefreshControl` gives a separate
+    // visual signal for user-initiated refreshes.
     if (tasks.length === 0) setLoading(true);
     setError(false);
-    const startedAt = Date.now();
-    debugLog("day.fetch.start", { day: dayKey, refreshKey });
-    listTasks("day", date, "all")
+    listSessions("day", date)
       .then((res) => {
-        if (!cancelled) setTasks(res.tasks);
+        if (!cancelled) setSessions(res.sessions);
       })
       .catch(() => {
         if (!cancelled) setError(true);
       })
       .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-          debugLog("day.fetch.end", { day: dayKey, ms: Date.now() - startedAt });
-        }
+        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
@@ -198,16 +227,12 @@ export function DayTimeline({
   }, [loading, error, onStateChange]);
 
   const refetch = useCallback(async () => {
-    const startedAt = Date.now();
-    debugLog("day.refetch.start", { day: dayKey });
     try {
-      const res = await listTasks("day", date, "all");
-      setTasks(res.tasks);
+      const res = await listSessions("day", date);
+      setSessions(res.sessions);
       setError(false);
     } catch {
       setError(true);
-    } finally {
-      debugLog("day.refetch.end", { day: dayKey, ms: Date.now() - startedAt });
     }
   }, [date]);
 
@@ -241,16 +266,17 @@ export function DayTimeline({
   const handleComplete = useCallback(
     async (taskId: string) => {
       try {
-        const updated = await completeTask(taskId);
-        setTasks((prev) =>
+        const updated = await updateSession(taskId, { status: "DONE" });
+        setSessions((prev) =>
           prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)),
         );
         onComplete?.(taskId);
       } catch {
         // Swallow the error — the finally below reconciles from the server.
       } finally {
-        // Completing frees the slot — reconcile so a neighbor whose conflict
-        // flag the backend cleared turns back to normal.
+        // Completing frees the slot — reconcile so a neighbor's overlap-
+        // derived conflict state (computed client-side, see `withOverlap`)
+        // updates too.
         await refetch();
       }
     },
@@ -264,6 +290,8 @@ export function DayTimeline({
 
   const layout = useMemo(() => getOverlapLayout(segments), [segments]);
 
+  // Report this day's blocks so a parent Week pager can draw its next-day
+  // peek strip from real data.
   const peekBlocks = useMemo(
     () => peekBlocksFromSegments(segments, date, tz),
     [segments, date, tz],
@@ -273,7 +301,7 @@ export function DayTimeline({
     onPeekChange?.(peekBlocks, dayKey);
   }, [peekBlocks, dayKey, onPeekChange]);
 
-  const deadlineByTask = useMemo(() => {
+  const deadlineBySession = useMemo(() => {
     const map = new Map<string, string>();
     for (const t of tasks) {
       if (t.deadline) map.set(t.id, t.deadline);
@@ -304,34 +332,43 @@ export function DayTimeline({
     return pairs;
   }, [segments]);
 
-  const shownOverdueTask = useRef<string | null>(null);
+  const shownOverdueSession = useRef<string | null>(null);
+  // Sessions already past their deadline on the first successful load are
+  // ambient state — the header's "N overdue" badge is their surface. This
+  // toast is only for a session that *becomes* overdue while the screen is
+  // open (e.g. a save that lands past its deadline), so it doesn't nag on
+  // every cold start.
+  const overdueBaselined = useRef(false);
   const [overdueToast, setOverdueToast] = useState<{
     title: string;
-    subtitle: string;
+    subtitle?: string;
   } | null>(null);
 
   useEffect(() => {
     if (loading || error) return;
     const overdue = segments.find((s) => s.state === "overdue");
-    if (!overdue) {
-      shownOverdueTask.current = null;
+
+    if (!overdueBaselined.current) {
+      overdueBaselined.current = true;
+      shownOverdueSession.current = overdue?.taskId ?? null;
       return;
     }
-    if (shownOverdueTask.current === overdue.taskId) return;
-    shownOverdueTask.current = overdue.taskId;
 
-    const deadline = deadlineByTask.get(overdue.taskId);
-    const due =
-      deadline != null ? ` before its ${fmtTime(deadline, tz)} deadline` : "";
-    const range = `${fmtTime(overdue.taskStart, tz)}–${fmtTime(
-      overdue.taskEnd,
-      tz,
-    )}`;
+    if (!overdue) {
+      shownOverdueSession.current = null;
+      return;
+    }
+    if (shownOverdueSession.current === overdue.taskId) return;
+    shownOverdueSession.current = overdue.taskId;
+
+    // Kept deliberately short: a headline plus the task name. The earlier
+    // version spelled out the deadline time, the fitted range and why it
+    // didn't fit — too much to read for a transient toast.
     setOverdueToast({
       title: "Scheduled past deadline",
-      subtitle: `"${overdue.title}" couldn't fit${due} — scheduled ${range} instead.`,
+      subtitle: overdue.title,
     });
-  }, [loading, error, segments, deadlineByTask, tz]);
+  }, [loading, error, segments]);
 
   useEffect(() => {
     if (!overdueToast) return;
@@ -391,21 +428,20 @@ export function DayTimeline({
 
   const handleReschedule = useCallback(
     async (taskId: string, startISO: string) => {
-      debugLog("day.reschedule.start", { task: taskId, startISO, day: dayKey });
       try {
-        const res = await rescheduleTask(taskId, startISO);
-        // The backend rechecked conflict flags around the new slot — patch the
-        // dragged task from its authoritative response so a resolved overlap
-        // clears immediately instead of waiting for a refetch.
-        setTasks((prev) =>
-          prev.map((t) => (t.id === taskId ? { ...t, ...res.task } : t)),
+        const updated = await updateSession(taskId, {
+          scheduledStartTime: startISO,
+        });
+        // Patch the dragged task from the authoritative response so its new
+        // time shows immediately; the refetch below re-derives every card's
+        // overlap-based conflict state (client-side only, see `withOverlap`),
+        // since neighbors' state can shift too.
+        setSessions((prev) =>
+          prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)),
         );
       } catch {
         // Swallow the error — the finally below reconciles from the server.
       } finally {
-        debugLog("day.reschedule.end", { task: taskId });
-        // Reconcile the whole day so a neighbor whose conflict flag the
-        // backend cleared also turns back to normal.
         await refetch();
       }
     },
@@ -420,17 +456,23 @@ export function DayTimeline({
     [onDragChange],
   );
 
-  const dragChipLabel = useMemo(() => {
-    if (!dragSnap) return "";
-    const wall = zonedDate(date, tz);
-    wall.setHours(
-      Math.floor(dragSnap.startMin / 60),
-      dragSnap.startMin % 60,
-      0,
-      0,
-    );
-    return wall.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  }, [dragSnap, date, tz]);
+  const formatSnapLabel = useCallback(
+    (snap: { startMin: number } | null) => {
+      if (!snap) return "";
+      const wall = zonedDate(date, tz);
+      wall.setHours(Math.floor(snap.startMin / 60), snap.startMin % 60, 0, 0);
+      return wall.toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    },
+    [date, tz],
+  );
+
+  const dragChipLabel = useMemo(
+    () => formatSnapLabel(dragSnap),
+    [formatSnapLabel, dragSnap],
+  );
 
   const handleLongPress = useCallback(
     (y: number) => {
@@ -516,38 +558,42 @@ export function DayTimeline({
     <View className="flex-1 bg-background">
       {showHeader && (
         <View className="flex-row items-center justify-between px-4 pt-4 pb-4 border-b border-black/15 dark:border-white/15">
-        <View className="min-w-0 flex-1">
-          <Text className="text-xl font-bold tracking-tight">
-            {format(date, "EEE, MMM d")}
-          </Text>
-          <Text className="mt-px text-xs font-medium text-muted-foreground">
-            {loading
-              ? "Loading your day…"
-              : error
-                ? "Couldn't sync"
-                : dragSnap
-                  ? "Moving · release to reschedule"
-                  : overlapCount > 0
-                    ? `${overlapCount} overlap${overlapCount > 1 ? "s" : ""} · ${tasks.length} tasks`
-                    : tasks.length === 0
-                      ? `${nowLabel} · nothing scheduled`
-                      : `${nowLabel} · ${tasks.length} task${tasks.length === 1 ? "" : "s"} today`}
-          </Text>
+          <View className="min-w-0 flex-1">
+            <Text className="text-xl font-bold tracking-tight">
+              {format(date, "EEE, MMM d")}
+            </Text>
+            <Text className="mt-px text-xs font-medium text-muted-foreground">
+              {loading
+                ? "Loading your day…"
+                : error
+                  ? "Couldn't sync"
+                  : dragSnap
+                    ? "Moving · release to reschedule"
+                    : overlapCount > 0
+                      ? `${overlapCount} overlap${
+                          overlapCount > 1 ? "s" : ""
+                        } · ${tasks.length} tasks`
+                      : tasks.length === 0
+                        ? `${nowLabel} · nothing scheduled`
+                        : `${nowLabel} · ${tasks.length} task${
+                            tasks.length === 1 ? "" : "s"
+                          } today`}
+            </Text>
+          </View>
+          <View className="flex-row items-center gap-2">
+            {!loading && !error && overdueCount > 0 && (
+              <View className="flex-row items-center gap-1 rounded-full border border-rose-400/50 bg-rose-100 px-2 py-0.5 dark:bg-rose-950">
+                <AlertCircle
+                  size={12}
+                  className="text-rose-800 dark:text-rose-400"
+                />
+                <Text className="text-[11px] font-semibold leading-none text-rose-800 dark:text-rose-400">
+                  {overdueCount} overdue
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
-        <View className="flex-row items-center gap-2">
-          {!loading && !error && overdueCount > 0 && (
-            <View className="flex-row items-center gap-1 rounded-full border border-rose-400/50 bg-rose-100 px-2 py-0.5 dark:bg-rose-950">
-              <AlertCircle
-                size={12}
-                className="text-rose-800 dark:text-rose-400"
-              />
-              <Text className="text-[11px] font-semibold leading-none text-rose-800 dark:text-rose-400">
-                {overdueCount} overdue
-              </Text>
-            </View>
-          )}
-        </View>
-      </View>
       )}
 
       <ScrollView
@@ -562,6 +608,13 @@ export function DayTimeline({
         }
         contentContainerClassName={
           error ? "flex-1 items-center justify-center px-8" : undefined
+        }
+        contentContainerStyle={
+          error
+            ? undefined
+            : // The Week pager (header hidden) applies its own bottom inset
+              // around the pager; only pad here for the standalone Day screen.
+              { paddingBottom: showHeader ? tabBarOverlay : 0 }
         }
       >
         {error ? (
@@ -623,17 +676,10 @@ export function DayTimeline({
             <Animated.View style={animatedContentStyle} className="relative">
               <TimeGutter hourHeight={hourHeight} />
 
-
               <View
                 className="absolute top-0 bottom-0 bg-card"
                 style={{ left: GUTTER_WIDTH, right: 0 }}
               >
-                <WorkZoneOverlay
-                  date={date}
-                  prefs={prefs}
-                  hourHeight={hourHeight}
-                />
-
                 {/* Hour separator lines */}
                 {HOURS.map((hour) => (
                   <View
@@ -672,7 +718,7 @@ export function DayTimeline({
                   const leftOffsetPx = blockLayout.column * blockWidthPx;
 
                   return (
-                    <TaskBlock
+                    <SessionBlock
                       key={segment.segmentId}
                       segment={segment}
                       layout={blockLayout}
@@ -680,10 +726,10 @@ export function DayTimeline({
                       totalHeight={totalHeight}
                       leftOffset={leftOffsetPx}
                       blockWidth={blockWidthPx}
-                      deadline={deadlineByTask.get(segment.taskId) ?? null}
+                      deadline={deadlineBySession.get(segment.taskId) ?? null}
                       onReschedule={handleReschedule}
                       onDragStateChange={handleDragStateChange}
-                      onPress={onTaskPress}
+                      onPress={onSessionPress}
                       onComplete={handleComplete}
                       onDragEdge={onDragEdge}
                       onDragEdgeExit={onDragEdgeExit}
@@ -760,40 +806,20 @@ export function DayTimeline({
         <View
           pointerEvents="none"
           className="absolute left-4 right-4 z-[100] gap-2"
-          style={{ bottom: tabBarOverlay - 8 }}
+          style={{ bottom: tabBarOverlay + 8 }}
         >
-          {dragSnap && (
-            <View className="flex-row items-start gap-2.5 rounded-2xl border border-black/15 dark:border-white/30 bg-popover p-3.5 shadow-lg">
-              <View className="h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-brand-orange/15">
-                <MousePointer2 size={17} className="text-brand-orange" />
-              </View>
-              <View className="flex-1">
-                <Text className="text-sm font-semibold">
-                  Snapped to {dragChipLabel}
-                </Text>
-                <Text className="mt-0.5 text-[12.5px] text-muted-foreground">
-                  Release to reschedule · 15-min grid
-                </Text>
-              </View>
-            </View>
-          )}
           {overdueToast && (
-            <View className="flex-row items-start gap-2.5 rounded-2xl border border-black/15 dark:border-white/15 bg-popover p-3.5 shadow-lg">
-              <View className="h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-rose-500/15">
+            <BottomToastCard
+              icon={
                 <AlertCircle
                   size={17}
                   className="text-rose-600 dark:text-rose-400"
                 />
-              </View>
-              <View className="min-w-0 flex-1">
-                <Text className="text-sm font-semibold">
-                  {overdueToast.title}
-                </Text>
-                <Text className="mt-0.5 text-[12.5px] text-muted-foreground">
-                  {overdueToast.subtitle}
-                </Text>
-              </View>
-            </View>
+              }
+              iconTint="bg-rose-500/15"
+              title={overdueToast.title}
+              subtitle={overdueToast.subtitle}
+            />
           )}
         </View>
       </Portal>

@@ -1,11 +1,8 @@
 import { placementQualifier, zonedDate } from "@zenflow/core";
-import type { Task } from "@zenflow/shared";
+import type { Session } from "@zenflow/shared";
 import { format } from "date-fns";
 
 export interface PlacementToastUser {
-  workStart: number;
-  workEnd: number;
-  workDays: number[];
   timezone: string;
 }
 
@@ -21,23 +18,26 @@ export interface PlacementToastUser {
  * `@zenflow/core` alongside `taskSchema`).
  */
 export function placementToastMessage(
-  task: Task,
+  task: Session,
   user: PlacementToastUser,
 ): { message: string; variant: "success" | "destructive" } {
-  if (task.conflict || !task.scheduledStartTime) {
+  if (!task.scheduledStartTime) {
+    // There is no auto-placement engine anymore (see CLAUDE.md / the
+    // backend's EDF-scheduler removal) — `POST /sessions` never sets
+    // `scheduledStartTime`, so a freshly created task always comes back
+    // unscheduled. That's the normal, expected state, not a scheduling
+    // failure — this used to read as a destructive "couldn't be scheduled
+    // before its deadline" error and fired on *every* creation regardless
+    // of whether a deadline was even set. Mirrors the identical fix already
+    // made in `frontend/src/components/tasks/create-task-dialog.tsx`.
     return {
-      message: `"${task.title}" couldn't be scheduled before its deadline`,
-      variant: "destructive",
+      message: `"${task.title}" created`,
+      variant: "success",
     };
   }
 
-  const qualifier = placementQualifier(task, user);
-  const suffix =
-    qualifier === "pastDeadline"
-      ? " — past its deadline"
-      : qualifier === "outsideHours"
-        ? " — outside your usual work hours"
-        : "";
+  const qualifier = placementQualifier(task, { timezone: user.timezone });
+  const suffix = qualifier === "pastDeadline" ? " — past its deadline" : "";
 
   const when = format(
     zonedDate(task.scheduledStartTime, user.timezone),

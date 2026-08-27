@@ -32,12 +32,23 @@ pnpm --filter frontend test:e2e        # headless
 pnpm --filter frontend test:e2e:ui     # Playwright UI mode
 ```
 
-## Specs (Phase-2 transparency UI, issue #13)
+## Specs
 
-- `settings-tabs.spec.ts` — the tabbed Settings dialog (Work · Insights ·
-  Account); the Insights heatmap fetch-on-open / cold-start.
+- `settings-tabs.spec.ts` — the tabbed Settings dialog (Insights · Account;
+  there is no "Work" tab anymore — `workStart`/`workEnd`/`workDays` were
+  dropped from `User` with no replacement); the Insights heatmap
+  fetch-on-open / cold-start.
+- `deadline-chips-and-create.spec.ts` — the deadline quick-action chip row and
+  the direct (no confirm-toast) create flow. A freshly created session is
+  always unscheduled — there's no auto-placement engine anymore.
+- `edit-and-delete-confirm-toasts.spec.ts` — a deadline edit or a delete is a
+  plain write with no cascade/confirm prompt (notes.md triggers 1–3 are
+  explicitly deferred, not built).
+- `optimize.spec.ts` — the minimal Optimize header button
+  (`POST /scheduler/optimize` over a fixed "now → +14 days" window, applied
+  immediately with an Undo toast) — no mode picker, no preview step.
 
-> These were authored alongside the Phase-2 frontend slice. They require the
-> backend Phase-2 endpoints/metadata to be wired live (the new
-> `GET /users/me/preference-matrix` and the reschedule `rationale`). Run them
-> once the Docker test stack + MailHog are up.
+> These require the backend stack (Postgres/Redis/MailHog) up, and — for
+> `settings-tabs.spec.ts` / `optimize.spec.ts` — the
+> `GET /users/me/preference-matrix` and `POST /scheduler/optimize*` endpoints
+> wired live.

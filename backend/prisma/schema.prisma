@@ -10,40 +10,86 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Language {
+  VI_VN @map("vi-VN")
+  EN_US @map("en-US")
+}
+
 model User {
-  id       String @id @default(uuid())
-  name     String @db.VarChar(60)
-  email    String @unique @db.VarChar(255)
-  timezone String @default("UTC") @db.VarChar(50)
+  id       String   @id @default(uuid())
+  name     String   @db.VarChar(60)
+  email    String   @unique @db.VarChar(255)
+  timezone String   @default("Asia/Saigon") @db.VarChar(50)
+  lang     Language @default(VI_VN)
 
-  // Working window (see docs/objects.md). Minutes from midnight + ISO weekdays.
-  workStart Int   @default(540) // 09:00
-  workEnd   Int   @default(1020) // 17:00
-  workDays  Int[] @default([1, 2, 3, 4, 5]) // 1=Mon … 7=Sun
-
-  // Flat 168-float SIGNED preference matrix (7 days × 24 one-hour buckets).
-  // Written as Phase-2 telemetry: keeps/moves-toward increment a cell (+1),
-  // moves-away decrement it (-1); an empty cell is 0 (neutral). Seeded lazily.
-  // Float (not Int) so the daily exponential decay (cell *= 2^(−Δdays/21))
-  // accumulates sub-integer precision without truncation — integer storage
-  // caused the pg driver to truncate 0.9677 → 0 on the first nightly decay,
-  // zeroing all cells that were only incremented once.
   preferenceMatrix Float[] @default([])
-
-  // When the daily decay cron last applied exponential time-decay to
-  // `preferenceMatrix` (see MatrixDecayService). Null until the first decay
-  // pass; the cron treats null as "no elapsed days" and only stamps the time.
   preferenceMatrixDecayedAt DateTime?
 
-  onboardingComplete Boolean @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  onboardingComplete Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   // Relations
-  tasks      Task[]
+  sessions      Session[]
   files      File[]
-  taskEvents TaskEvent[]
+  sessionEvents SessionEvent[]
   tags       Tag[]
+
+  encryptionKeys UserEncryptionKey[]
+  devices        UserDevice[]
+  sessionSeries     SessionSeries[]
+  integrations   Integration[]
+  notifications  Notification[]
+  slotProposals  SlotProposal[]
+}
+
+// Per-user data-encryption key, itself protected by a server-held master key
+// kept outside the DB.
+model UserEncryptionKey {
+  id        String   @id @default(uuid())
+  version   Int
+  key       String
+  iv        String
+  algorithm String
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum DevicePlatform {
+  IOS
+  ANDROID
+}
+
+// Expo push registration; one row per device so a user can have multiple.
+model UserDevice {
+  id         String         @id @default(uuid())
+  platform   DevicePlatform
+  pushToken  String
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  lastSeenAt DateTime?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model SessionSeries {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  deadline  DateTime
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  sessions Session[]
+
+  @@index([userId])
 }
 
 model Tag {
@@ -54,50 +100,64 @@ model Tag {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Implicit many-to-many with Task.
-  tasks Task[]
+  // Implicit many-to-many with Session.
+  sessions Session[]
 
   @@unique([userId, name])
   @@index([userId])
 }
 
-enum TaskStatus {
+enum SessionStatus {
   PENDING
   DONE // completed
   ABANDONED // deadline passed while still PENDING (set by the overdue sweep)
 }
 
-model Task {
-  id              String     @id @default(uuid())
-  title           String
-  note            String?
-  durationMinutes Int // positive multiple of 15
-  deadline        DateTime?
-  startTime       Int        @default(0) // minutes from midnight of the last manual placement (informational only)
-  status          TaskStatus @default(PENDING)
-  // True when this task overlaps another task's interval, OR has no valid
-  // placement at all (scheduledStartTime null). An overlap is now a normal,
-  // ACCEPTED state — not something a cost model tries to prevent: a direct
-  // drag/resize (TasksService.displace/resize) writes the user's requested
-  // interval unconditionally and simply flags both tasks conflicting rather
-  // than auto-relocating either one. Cleared by a follow-up drag/resize that
-  // resolves the overlap, or by Optimize (optimize.ts).
-  conflict        Boolean    @default(false)
-  // True when the user directly dragged/resized this task. Informational
-  // only everywhere automatic (badge/telemetry) — no automatic path (Create,
-  // Edit-accept's resolveInvalidPlacement) ever freezes/protects a task
-  // because of this flag. The ONE place it gates real behavior is Optimize's
-  // "retainManual" mode (explicit user opt-in): tasks with this flag set are
-  // locked at their current slot for that one repack, regardless of validity.
-  manuallyMoved Boolean @default(false)
-  scheduledStartTime DateTime? // assigned by the EDF engine
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+enum SessionType {
+  MANUAL
+  ASSIGNMENT
+  EXAM
+  LECTURE
+}
+
+enum SessionSource {
+  USER
+  LMS
+  PORTAL
+}
+
+model Session {
+  id                 String     @id @default(uuid())
+  title              String
+  note               String?
+  durationMinutes    Int // positive multiple of 15
+  deadline           DateTime
+  startTime          Int        @default(0) // minutes from midnight of the last manual placement (informational only)
+  status             SessionStatus @default(PENDING)
+  type               SessionType   @default(MANUAL)
+  source             SessionSource @default(USER)
+
+  conflict           Boolean    @default(false)
+
+  scheduledStartTime DateTime?
+  userId             String
+  user               User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Per-user labels (implicit many-to-many).
   tags Tag[]
 
-  events TaskEvent[]
+  events SessionEvent[]
+
+  seriesId     String?
+  series       SessionSeries? @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+
+  // Denormalized convenience fields for cheap per-row rendering alongside seriesId.
+  sessionIndex Int?
+  sessionTotal Int?
+
+  reminders     SessionReminder[]
+  notifications Notification[]
+  slotProposals SlotProposal[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -105,43 +165,45 @@ model Task {
   @@index([userId, deadline])
   @@index([userId, status])
   @@index([userId, scheduledStartTime])
+  @@index([userId, seriesId, createdAt(sort: Asc)])
 }
 
-enum TaskEventType {
+model SessionReminder {
+  id                  String   @id @default(uuid())
+  remindBeforeMinutes Int      @default(15)
+
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+enum SessionEventType {
   CREATE
-  MOVE // user dragged to another slot/day
+  MOVE
   RESIZE
-  KEEP // user left an EDF suggestion in place (completed in its suggested slot) — positive signal
-  COMPLETE // outcome: completed in its slot
-  ABANDON // outcome: deadline expired unresolved (emitted by the overdue sweep)
-  RESCHEDULED // task auto-repositioned as collateral in someone else's cascadeReschedule (not a user drag)
+  KEEP
+  COMPLETE
+  ABANDON
+  RESCHEDULED
 }
 
-model TaskEvent {
+model SessionEvent {
   id          BigInt        @id @default(autoincrement())
-  eventType   TaskEventType
+  eventType   SessionEventType
   oldSnapshot Json? // { scheduledStartTime, durationMinutes }; null on CREATE
   newSnapshot Json
   rewardScore Float         @default(1.0) // Phase-3 signal
   occurredAt  DateTime      @default(now())
-  // Groups every RESCHEDULED TaskEvent one multi-task batch wrote — today
-  // that's SchedulerService.optimizeWindow (the explicit Optimize action) or
-  // resolveInvalidPlacement (Edit-accept's single-task resolve) — so the
-  // whole batch can be undone atomically via SchedulerService.undoBatch /
-  // POST /tasks/reschedule/undo/:batchId. Null for events not written as
-  // part of an undoable batch (e.g. CREATE, MOVE, RESIZE, COMPLETE).
-  batchId     String?
 
-  taskId String
-  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  sessionId String
+  session   Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   userId String // denormalized for partition/range queries
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, occurredAt(sort: Desc)])
-  @@index([taskId])
-  // Serves `undoBatch`: every TaskEvent written by one narrowResolve cascade.
-  @@index([userId, batchId])
+  @@index([sessionId])
 }
 
 model File {
@@ -157,4 +219,149 @@ model File {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+enum SlotProposalEvent {
+  CREATE
+  RESCHEDULE
+}
+
+enum SchedulingModel {
+  HEURISTIC
+  LINUCB
+}
+
+model SlotProposal {
+  id                String            @id @default(uuid())
+  event             SlotProposalEvent
+  pickedModel       SchedulingModel
+  heuristicProposal Json
+  linucbProposal    Json
+  timestamp         DateTime          @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  sessionId String
+  session   Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+enum IntegrationProvider {
+  LMS
+  PORTAL
+}
+
+// Encrypted LMS/portal credentials, one row per (userId, provider).
+model Integration {
+  id                   String              @id @default(uuid())
+  provider             IntegrationProvider
+  encryptedCredentials String
+  encryptionVersion    Int
+  lastVerifiedAt       DateTime?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  crawlJobs     CrawlJob[]
+  portalApiJobs PortalAPIJob[]
+
+  @@unique([userId, provider])
+  @@index([provider, userId])
+  @@index([encryptionVersion(sort: Desc)])
+}
+
+enum NotificationTopic {
+  ASSIGNMENT
+  EXAM
+  TIMETABLE
+  REMINDER
+  OVERDUE
+}
+
+
+model Notification {
+  id            String            @id @default(uuid())
+  sentAt        DateTime          @default(now())
+  readAt        DateTime?
+  actionTakenAt DateTime?
+  topic         NotificationTopic
+  title         String
+  content       String
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  sessionId String?
+  session   Session?   @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, sentAt(sort: Desc)])
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// Per-run job tracking for the LMS watcher.
+model CrawlJob {
+  id        String    @id @default(uuid())
+  status    JobStatus @default(PENDING)
+  createdAt DateTime  @default(now())
+
+  integrationId String
+  integration   Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  items CrawlJobItem[]
+}
+
+model CrawlJobItem {
+  id        String    @id @default(uuid())
+  url       String
+  status    JobStatus @default(PENDING)
+  attempt   Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  crawlJobId String
+  crawlJob   CrawlJob @relation(fields: [crawlJobId], references: [id], onDelete: Cascade)
+
+  @@index([crawlJobId])
+}
+
+// Global (cross-user) dedupe table so two students' crawls of the same
+// course activity don't double-detect.
+model CrawledUrl {
+  id        String   @id @default(uuid())
+  url       String   @unique
+  createdAt DateTime @default(now())
+}
+
+// Same job-tracking shape as CrawlJob/CrawlJobItem, for the portal API poller.
+model PortalAPIJob {
+  id        String    @id @default(uuid())
+  status    JobStatus @default(PENDING)
+  createdAt DateTime  @default(now())
+
+  integrationId String
+  integration   Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  items PortalAPIJobItem[]
+}
+
+model PortalAPIJobItem {
+  id           String    @id @default(uuid())
+  url          String
+  status       JobStatus @default(PENDING)
+  attempt      Int       @default(0)
+  statusCode   Int?
+  responseBody String?
+  createdAt    DateTime  @default(now())
+
+  portalApiJobId String
+  portalApiJob   PortalAPIJob @relation(fields: [portalApiJobId], references: [id], onDelete: Cascade)
+
+  @@index([portalApiJobId])
 }

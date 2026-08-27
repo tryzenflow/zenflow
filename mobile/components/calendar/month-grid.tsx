@@ -2,7 +2,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { dateKey, isWeekendColumn } from "@/lib/month-date-math";
 import { cn } from "@/lib/utils";
-import type { Task } from "@zenflow/shared";
+import type { Session } from "@zenflow/shared";
 import { isSameDay } from "date-fns";
 import { forwardRef } from "react";
 import { View } from "react-native";
@@ -23,13 +23,13 @@ interface MonthGridProps {
   monthDate: Date;
   days: Date[];
   today: Date;
-  tasksByDate: Map<string, Task[]>;
+  tasksByDate: Map<string, Session[]>;
   highlightedKey: string | null;
-  draggingTaskId: string | null;
-  onPressDay: (day: Date, tasks: Task[]) => void;
-  onPressOverflow: (day: Date, tasks: Task[]) => void;
+  draggingSessionId: string | null;
+  onPressDay: (day: Date, tasks: Session[]) => void;
+  onPressOverflow: (day: Date, tasks: Session[]) => void;
   onPillDragStart: (
-    task: Task,
+    task: Session,
     day: Date,
     absoluteX: number,
     absoluteY: number,
@@ -55,7 +55,7 @@ export const MonthGrid = forwardRef<View, MonthGridProps>(function MonthGrid(
     today,
     tasksByDate,
     highlightedKey,
-    draggingTaskId,
+    draggingSessionId,
     onPressDay,
     onPressOverflow,
     onPillDragStart,
@@ -106,7 +106,7 @@ export const MonthGrid = forwardRef<View, MonthGridProps>(function MonthGrid(
                   isToday={isSameDay(day, today)}
                   isWeekend={isWeekendColumn(col)}
                   isDropTarget={highlightedKey === key}
-                  draggingTaskId={draggingTaskId}
+                  draggingSessionId={draggingSessionId}
                   onPressDay={onPressDay}
                   onPressOverflow={onPressOverflow}
                   onPillDragStart={onPillDragStart}

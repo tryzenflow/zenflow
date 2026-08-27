@@ -1,11 +1,11 @@
-import type { Task } from "@zenflow/shared";
+import type { Session } from "@zenflow/shared";
 import type { DaySegment, Event } from "@zenflow/shared";
 import { deriveState } from "./task-card";
 import { isSameDay, startOfDay } from "date-fns";
 import { zonedDate, zonedWallClockToUtc } from "./tz";
 
 /** Convert a scheduled task into a positioned calendar block (null if unplaced). */
-export function taskToBlock(task: Task): Event | null {
+export function taskToBlock(task: Session): Event | null {
   if (!task.scheduledStartTime) return null;
   const start = new Date(task.scheduledStartTime);
   const end = new Date(start.getTime() + task.durationMinutes * 60_000);
@@ -16,14 +16,12 @@ export function taskToBlock(task: Task): Event | null {
     start: start.toISOString(),
     end: end.toISOString(),
     status: task.status,
-    manuallyMoved: task.manuallyMoved,
-    conflict: task.conflict,
     tags: task.tags,
     state: deriveState(task),
   };
 }
 
-export function tasksToBlocks(tasks: Task[]): Event[] {
+export function tasksToBlocks(tasks: Session[]): Event[] {
   return tasks
     .map((t) => taskToBlock(t))
     .filter((b): b is Event => b !== null);

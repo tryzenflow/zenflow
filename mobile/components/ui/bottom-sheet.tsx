@@ -39,7 +39,7 @@ interface WebSheetHandle {
   /** Native's `close()` animates the sheet away but — with
    * `enableDismissOnClose={false}` — keeps its children mounted, which is what
    * lets a gesture that started on a sheet row survive the sheet closing (see
-   * `TaskListSheet`). There's nothing to keep alive in this Radix-based
+   * `SessionListSheet`). There's nothing to keep alive in this Radix-based
    * reimplementation, so it's just `dismiss()`. */
   close: () => void;
 }
@@ -117,45 +117,45 @@ const BottomSheetContent = React.forwardRef<
       }),
       [],
     );
-  React.useImperativeHandle(sheetRef, () => handle, [handle]);
-  React.useImperativeHandle(ref, () => handle, [handle]);
+    React.useImperativeHandle(sheetRef, () => handle, [handle]);
+    React.useImperativeHandle(ref, () => handle, [handle]);
 
-  const wasOpen = React.useRef(open);
-  React.useEffect(() => {
-    if (wasOpen.current && !open) onDismiss?.();
-    wasOpen.current = open;
-  }, [open, onDismiss]);
+    const wasOpen = React.useRef(open);
+    React.useEffect(() => {
+      if (wasOpen.current && !open) onDismiss?.();
+      wasOpen.current = open;
+    }, [open, onDismiss]);
 
-  return (
-    <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
-      <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay
-          style={StyleSheet.absoluteFill}
-          className={cn(
-            "z-50 bg-black/50",
-            open
-              ? "web:animate-in web:fade-in-0"
-              : "web:animate-out web:fade-out-0",
-          )}
-        />
-        <DialogPrimitive.Content
-          style={
-            { position: "fixed", left: 0, right: 0, bottom: 0 } as ViewStyle
-          }
-          className={cn(
-            "z-50 mx-auto flex max-h-[85vh] w-full max-w-[480px] flex-col rounded-t-[26px] border border-b-0 border-border bg-background pb-6 pt-2.5 shadow-2xl",
-            open
-              ? "web:animate-in web:slide-in-from-bottom web:fade-in-0 web:duration-300"
-              : "web:animate-out web:slide-out-to-bottom web:fade-out-0 web:duration-200",
-            className,
-          )}
-          {...props}
-        >
-          <View className="mx-auto mb-3.5 h-[5px] w-[38px] shrink-0 rounded-full bg-border" />
-          {children}
-        </DialogPrimitive.Content>
-      </DialogPrimitive.Portal>
-    </DialogPrimitive.Root>
+    return (
+      <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
+        <DialogPrimitive.Portal>
+          <DialogPrimitive.Overlay
+            style={StyleSheet.absoluteFill}
+            className={cn(
+              "z-50 bg-black/50",
+              open
+                ? "web:animate-in web:fade-in-0"
+                : "web:animate-out web:fade-out-0",
+            )}
+          />
+          <DialogPrimitive.Content
+            style={
+              { position: "fixed", left: 0, right: 0, bottom: 0 } as ViewStyle
+            }
+            className={cn(
+              "z-50 mx-auto flex max-h-[85vh] w-full max-w-[480px] flex-col rounded-t-[26px] border border-b-0 border-border bg-background pb-6 pt-2.5 shadow-2xl",
+              open
+                ? "web:animate-in web:slide-in-from-bottom web:fade-in-0 web:duration-300"
+                : "web:animate-out web:slide-out-to-bottom web:fade-out-0 web:duration-200",
+              className,
+            )}
+            {...props}
+          >
+            <View className="mx-auto mb-3.5 h-[5px] w-[38px] shrink-0 rounded-full bg-border" />
+            {children}
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Portal>
+      </DialogPrimitive.Root>
     );
   },
 );
@@ -274,7 +274,7 @@ type BottomSheetScrollViewProps = React.ComponentPropsWithoutRef<
  * `Dialog`-based reimplementation (see the file header), which never
  * provides that context. Importing gorhom's own `BottomSheetScrollView`
  * directly meant every task sheet's content — including
- * `TaskSheetFields`/`TagAutocomplete`/`DescriptionField` — rendered inside a
+ * `SessionSheetFields`/`TagAutocomplete`/`DescriptionField` — rendered inside a
  * component that unconditionally throws `"'useBottomSheetInternal' cannot
  * be used out of the BottomSheet!"` on web, the only target this repo can
  * currently run locally (CLAUDE.md: "Mobile dev … web target only"). A

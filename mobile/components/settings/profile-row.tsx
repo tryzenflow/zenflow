@@ -1,8 +1,5 @@
-import { useState } from "react";
-import { isAxiosError } from "axios";
-import { Pressable, View } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import type { User } from "@zenflow/shared";
+import { updateBasicInfo } from "@/api/users";
+import { ChevronRight, Lock } from "@/components/Icons";
 import {
   BottomSheet,
   BottomSheetContent,
@@ -14,14 +11,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
-import { ChevronRight, Lock } from "@/components/Icons";
-import { updateBasicInfo } from "@/api/users";
 import { useColorScheme } from "@/lib/useColorScheme";
+import type { User } from "@zenflow/shared";
+import { isAxiosError } from "axios";
+import { LinearGradient } from "expo-linear-gradient";
+import { useState } from "react";
+import { Pressable, View } from "react-native";
 
 /** e.g. "New User" -> "NU" */
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
-  const chars = parts.length > 1 ? [parts[0][0], parts[parts.length - 1][0]] : [parts[0]?.[0]];
+  const chars =
+    parts.length > 1
+      ? [parts[0][0], parts[parts.length - 1][0]]
+      : [parts[0]?.[0]];
   return chars.join("").toUpperCase() || "?";
 }
 
@@ -86,11 +89,9 @@ export function ProfileRow({
         >
           <LinearGradient
             colors={
-              (isDarkColorScheme ? AVATAR_GRADIENT.dark : AVATAR_GRADIENT.light) as [
-                string,
-                string,
-                string,
-              ]
+              (isDarkColorScheme
+                ? AVATAR_GRADIENT.dark
+                : AVATAR_GRADIENT.light) as [string, string, string]
             }
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
@@ -118,7 +119,9 @@ export function ProfileRow({
       <BottomSheetContent ref={bottomSheet.ref}>
         <BottomSheetView className="px-0" hadHeader={false}>
           <View className="px-5">
-            <Text className="text-[19px] font-bold tracking-tight">Edit profile</Text>
+            <Text className="text-[19px] font-bold tracking-tight">
+              Edit profile
+            </Text>
             <Text className="mt-[3px] text-[13px] text-muted-foreground">
               Update how your name appears in Zenflow.
             </Text>
@@ -126,12 +129,18 @@ export function ProfileRow({
           <View className="mt-4 gap-[18px] px-5">
             <View>
               <Text className="mb-2 text-[14px] font-semibold">Name</Text>
-              <Input value={name} onChangeText={setName} autoCapitalize="words" />
+              <Input
+                value={name}
+                onChangeText={setName}
+                autoCapitalize="words"
+              />
             </View>
             <View>
               <Text className="mb-2 text-[14px] font-semibold">Email</Text>
               <View className="h-[50px] w-full flex-row items-center justify-between rounded-xl border border-input bg-muted/50 px-4">
-                <Text className="text-base text-muted-foreground">{user.email}</Text>
+                <Text className="text-base text-muted-foreground">
+                  {user.email}
+                </Text>
                 <Lock size={16} className="shrink-0 text-muted-foreground" />
               </View>
               <Text className="mt-[7px] text-[13px] leading-snug text-muted-foreground">

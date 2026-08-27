@@ -31,6 +31,15 @@ export function TagAutocomplete({
   disabled?: boolean;
 }) {
   const [existing, setExisting] = useState<string[]>([]);
+  // Tags created in this sheet session that aren't in `existing` yet — the
+  // backend only persists a tag when the task itself is saved, so a
+  // just-created tag has nowhere else to live until then. Kept separate
+  // from `existing` (rather than merged in) so `isPending` below still
+  // correctly flags it as not-yet-in-DB for the pill styling, while still
+  // being listed here — previously it only ever showed as the selected
+  // pill above the sheet, vanishing from the row list itself the moment the
+  // search query that created it was cleared.
+  const [createdThisSession, setCreatedThisSession] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const bottomSheet = useBottomSheet();
 
@@ -46,25 +55,39 @@ export function TagAutocomplete({
     [value],
   );
 
+  const knownTags = useMemo(() => {
+    const extra = createdThisSession.filter(
+      (t) => !existing.some((e) => e.toLowerCase() === t.toLowerCase()),
+    );
+    return [...existing, ...extra];
+  }, [existing, createdThisSession]);
+
   // Selected tags now STAY in the visible pool (with a checkmark treatment,
   // rendered below) instead of being filtered out the instant they're
   // picked — filtering them out gave zero confirming feedback that the tap
   // registered, reading as "the row just vanished."
   const options = useMemo(
-    () => matchTags(trimmed, existing),
-    [existing, trimmed],
+    () => matchTags(trimmed, knownTags),
+    [knownTags, trimmed],
   );
 
   const canCreate =
     !!trimmed &&
     !value.some((t) => t.toLowerCase() === trimmed.toLowerCase()) &&
-    !existing.some((t) => t.toLowerCase() === trimmed.toLowerCase());
+    !knownTags.some((t) => t.toLowerCase() === trimmed.toLowerCase());
 
   function add(name: string) {
     const clean = name.trim();
     if (!clean || value.some((t) => t.toLowerCase() === clean.toLowerCase()))
       return;
     onChange([...value, clean]);
+    if (!existing.some((t) => t.toLowerCase() === clean.toLowerCase())) {
+      setCreatedThisSession((prev) =>
+        prev.some((t) => t.toLowerCase() === clean.toLowerCase())
+          ? prev
+          : [...prev, clean],
+      );
+    }
     // Left open so the user can add several tags in one visit — dismissed
     // via the sheet header's close button, not on every pick.
     setQuery("");

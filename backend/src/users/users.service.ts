@@ -7,19 +7,13 @@ import {
 import { Prisma, type User } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { PrismaService } from "../prisma/prisma.service";
-import { workWindowMinutes } from "../scheduler/utils/slot";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
-import { UpdatePreferencesDto } from "./dto/update-preferences.dto";
-import { OnboardingDto } from "./dto/onboarding.dto";
 import {
   PREFERENCE_MATRIX_LENGTH,
   PREFERENCE_SLOTS_PER_DAY,
   type PreferenceMatrixResponse,
 } from "@zenflow/shared";
-
-/** Minimum length of the working window, in minutes (docs invariant). */
-const MIN_WORKDAY_MINUTES = 60;
 
 /** Day rows in the signed preference matrix (7 ISO weekdays). */
 const PREFERENCE_MATRIX_DAYS =
@@ -31,9 +25,14 @@ export class UsersService {
 
   async create(createUserDto: CreateUserDto) {
     try {
-      // Working-window and penalty-matrix defaults come from the Prisma schema.
+      // Penalty-matrix defaults come from the Prisma schema. There's no
+      // onboarding flow left to gate on, so every new user starts
+      // `onboardingComplete: true` at the application layer — the schema's
+      // own `@default(false)` is intentionally overridden here rather than
+      // dropped in a migration (out of scope for this change; the column
+      // itself is left alone pending explicit sign-off on a real migration).
       return await this.prisma.user.create({
-        data: { ...createUserDto, name: "New User" },
+        data: { ...createUserDto, name: "New User", onboardingComplete: true },
       });
     } catch (error) {
       if (
@@ -59,49 +58,6 @@ export class UsersService {
         throw new NotFoundException("Cannot find user with the given id");
       throw new InternalServerErrorException();
     }
-  }
-
-  private assertValidWindow(workStart: number, workEnd: number) {
-    // A window wraps past midnight iff workEnd <= workStart; an equal start/end
-    // is a zero-length / ambiguous-24h window and is always rejected.
-    if (workStart === workEnd)
-      throw new BadRequestException("Working window cannot be empty");
-    if (workWindowMinutes(workStart, workEnd) < MIN_WORKDAY_MINUTES)
-      throw new BadRequestException("Working window must be at least 1 hour");
-  }
-
-  /**
-   * Update the user's work schedule + scheduling preferences. Metadata-only —
-   * it does NOT cascade-reschedule existing tasks (not requested by
-   * todo.md); the frontend's own confirm-before-reschedule flows own that.
-   */
-  async updatePreferences(user: User, dto: UpdatePreferencesDto) {
-    this.assertValidWindow(dto.workStart, dto.workEnd);
-    const updated = await this.prisma.user.update({
-      where: { id: user.id },
-      data: {
-        workStart: dto.workStart,
-        workEnd: dto.workEnd,
-        workDays: dto.workDays,
-        timezone: dto.timezone,
-      },
-    });
-    return updated;
-  }
-
-  /** Complete onboarding: set the schedule and the completion flag. */
-  async completeOnboarding(user: User, dto: OnboardingDto) {
-    this.assertValidWindow(dto.workStart, dto.workEnd);
-    return this.prisma.user.update({
-      where: { id: user.id },
-      data: {
-        workStart: dto.workStart,
-        workEnd: dto.workEnd,
-        workDays: dto.workDays,
-        timezone: dto.timezone,
-        onboardingComplete: true,
-      },
-    });
   }
 
   /**
