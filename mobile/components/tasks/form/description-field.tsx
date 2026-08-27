@@ -87,6 +87,22 @@ function DescriptionFieldEditor({
 }) {
   const { isDarkColorScheme } = useColorScheme();
   const { toast } = useToast();
+  // The content the editor currently owns: `initialValue` at first mount,
+  // then whatever the user has typed since (kept current in `onChange`), or
+  // whatever the parent later hands down as a new `initialValue`.
+  //
+  // The tentap WebView only reads `initialContent` once, when it first
+  // loads. Anything that makes it reload afterwards — an Android window
+  // resize when the keyboard dismisses, a WebView process recycle, a config
+  // change — re-runs that bootstrap and silently snaps the visible document
+  // back to the text it booted with. On the Edit screen that looked like a
+  // just-saved note reverting to the old text the moment you hit Save (the
+  // keyboard dismissing as the screen pops). `onLoad` below re-applies
+  // `valueRef` whenever it has drifted from `bootContentRef` (the exact
+  // string tentap booted with); the effect re-applies a genuinely new
+  // `initialValue` handed down by the parent.
+  const valueRef = useRef(initialValue);
+  const bootContentRef = useRef(initialValue);
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkTitle, setLinkTitle] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
@@ -127,12 +143,23 @@ function DescriptionFieldEditor({
     },
     onChange: () => {
       editor.getHTML().then((html) => {
+        valueRef.current = html;
         onChange(html);
       });
     },
   });
 
   const state = useBridgeState(editor);
+
+  // Re-sync when the parent hands down a genuinely different `initialValue`
+  // (e.g. its own fetch resolves after this mounted). No-op for the common
+  // case where the new prop just echoes what we last emitted.
+  useEffect(() => {
+    if (initialValue === valueRef.current) return;
+    valueRef.current = initialValue;
+    editor.setContent(initialValue);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialValue]);
 
   useEffect(() => {
     if (state.isFocused) {
@@ -263,6 +290,7 @@ function DescriptionFieldEditor({
     const title = linkTitle.trim() || url;
     const html = await editor.getHTML();
     const fullHtml = `${html} <a href="${url}">${title}</a>`;
+    valueRef.current = fullHtml;
     editor.setContent(fullHtml);
     onChange(fullHtml);
     setLinkOpen(false);
@@ -313,6 +341,7 @@ function DescriptionFieldEditor({
         const fileMetadata = await getFileMetadata(file.id);
         html += await fileEmbedMarkup(fileMetadata);
       }
+      valueRef.current = html;
       editor.setContent(html);
       onChange(html);
     } catch {
@@ -328,6 +357,13 @@ function DescriptionFieldEditor({
           onLoad={() => {
             injectContentStyles();
             injectLinkTapHandler();
+            // Fires on every WebView (re)load. If the current content has
+            // drifted from what tentap booted with, this is a *reload* that
+            // just snapped the document back — restore the real content.
+            // On the very first load the two are equal, so this is a no-op.
+            if (valueRef.current !== bootContentRef.current) {
+              editor.setContent(valueRef.current);
+            }
           }}
           onMessage={handleWebviewMessage}
           exclusivelyUseCustomOnMessage={false}
