@@ -18,7 +18,7 @@ import { PostgresErrorCode } from "../prisma/error-codes";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateSessionDto } from "./dto/create-session.dto";
 import { displayDayRange } from "../scheduler/utils/horizon";
-import { localDateStr } from "../scheduler/utils/slot";
+import { deadlineDayStr } from "../scheduler/utils/slot";
 import { DayRescheduleService } from "../scheduler/day-reschedule.service";
 import { ListSessionSuggestionsDto } from "./dto/list-session-suggestions.dto";
 import { ListSessionsDto } from "./dto/list-sessions.dto";
@@ -82,9 +82,13 @@ export class SessionsService {
 
     // Creating a session implicitly repacks the calendar day its deadline
     // falls on — no preview, no undo (replaces the old manual "Optimize").
+    // `deadlineDayStr`, not bare `localDateStr`: most deadline quick-actions
+    // are an exclusive midnight ceiling one day past the intended last day —
+    // see its doc comment for why using the raw instant here silently drops
+    // the session with no placement, ever (found via QA repro: "No rush").
     const dayReschedule = await this.dayRescheduleService.rescheduleDay(
       user.id,
-      localDateStr(created.deadline, user.timezone),
+      deadlineDayStr(created.deadline, user.timezone),
       user.timezone,
       user.preferenceMatrix,
       new Date(),
@@ -202,7 +206,7 @@ export class SessionsService {
       const dayReschedule = newDeadline
         ? await this.dayRescheduleService.rescheduleDay(
             user.id,
-            localDateStr(newDeadline, user.timezone),
+            deadlineDayStr(newDeadline, user.timezone),
             user.timezone,
             user.preferenceMatrix,
             new Date(),

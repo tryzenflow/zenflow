@@ -211,6 +211,38 @@ describe("DayRescheduleService.rescheduleDay", () => {
     expect(placedAt.getTime()).toBeGreaterThanOrEqual(now.getTime());
   });
 
+  it("places a session whose deadline is the exclusive midnight ceiling of the NEXT day — not skipped as a zero-width window", async () => {
+    // Mirrors `deadlineOptions`' "Tomorrow"/"No rush"/etc. shape: a deadline
+    // that is itself exactly the start of the day AFTER the one being
+    // repacked. Before the `dayEnd`/`deadlineDayStr` fix, this candidate was
+    // silently skipped forever (`bestFreeSlot` saw a `[dayStart, dayStart)`
+    // window and returned null) with no error surfaced anywhere.
+    const nextDayMidnight = new Date(`2026-06-16T00:00:00.000Z`);
+    const candidate = session({
+      id: "boundary-deadline",
+      durationMinutes: 60,
+      deadline: nextDayMidnight,
+      scheduledStartTime: null,
+    });
+    const now = new Date(`${MONDAY}T05:00:00.000Z`);
+    const { service, updates } = makeService([candidate]);
+
+    const result = await service.rescheduleDay(
+      "user-1",
+      MONDAY,
+      TZ,
+      EMPTY_MATRIX,
+      now,
+    );
+
+    expect(result.diffs).toHaveLength(1);
+    expect(updates).toHaveLength(1);
+    // Placed within Monday, at the preference-matrix peak (8AM).
+    expect(updates[0].data.scheduledStartTime.toISOString()).toBe(
+      `${MONDAY}T08:00:00.000Z`,
+    );
+  });
+
   it("treats non-candidate sessions with a scheduledStartTime in the window as fixed/occupied", async () => {
     // A fixed LMS lecture sits on the peak 8AM slot; the movable candidate
     // (also preferring 8AM) must be placed elsewhere.

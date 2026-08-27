@@ -20,6 +20,33 @@ export function localDateStr(date: Date, timezone: string): string {
   }).format(date);
 }
 
+/**
+ * Local calendar day a session should be scheduled *within* to meet
+ * `deadline` — the day `SessionsService.create`/`.update` should ask
+ * `DayRescheduleService.rescheduleDay` to repack.
+ *
+ * `deadlineOptions` (`sessions/utils/deadline-options.ts`) computes every
+ * quick-action deadline except "Today" as an EXCLUSIVE period ceiling:
+ * midnight (00:00) of the day AFTER the intended last day — "Tomorrow" =
+ * 00:00 tomorrow, "No rush"/"This month" = 00:00 on the 1st of a future
+ * month, "This week"/"Next week" = 00:00 the following Monday. Calling
+ * {@link localDateStr} directly on that instant resolves to the day
+ * STARTING at that midnight — one day too late: repacking that day gives
+ * the session a scheduling window of `[dayStart, deadline)` where
+ * `dayStart === deadline`, a zero-width window `bestFreeSlot`
+ * (`../heuristic.ts`) can never fill, so `optimize` silently skips the
+ * session (by design — "skipped, not errored") and it stays unscheduled
+ * forever, with no error surfaced anywhere.
+ *
+ * Stepping back 1ms lands on the correct, intended last day for any
+ * deadline that falls exactly on a day boundary, and is a no-op for any
+ * deadline at a real time-of-day within a day (e.g. "Today"'s
+ * `anchor + 3h`, or a "Custom" pick).
+ */
+export function deadlineDayStr(deadline: Date, timezone: string): string {
+  return localDateStr(new Date(deadline.getTime() - 1), timezone);
+}
+
 /** Advance a 'YYYY-MM-DD' string by `n` days (DST-safe, pure UTC math). */
 export function addDaysStr(dateStr: string, n: number): string {
   const [y, m, d] = dateStr.split("-").map(Number);

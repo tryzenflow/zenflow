@@ -9,7 +9,7 @@ import {
 } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
 import { HeuristicSession, optimize } from "./heuristic";
-import type { Interval } from "./utils/slot";
+import { addDaysStr, type Interval } from "./utils/slot";
 import { minutesToUtc } from "../common/utils";
 
 /** Shape stored in `SessionEvent.oldSnapshot`/`newSnapshot` for a RESCHEDULED event. */
@@ -47,7 +47,17 @@ export class DayRescheduleService {
     now: Date,
   ): Promise<DayRescheduleResult> {
     const dayStart = minutesToUtc(dayLocalDateStr, 0, timezone);
-    const dayEnd = minutesToUtc(dayLocalDateStr, 1439, timezone);
+    // Exclusive ceiling (start of the NEXT day), not `1439` (23:59) —
+    // `deadlineOptions` (`sessions/utils/deadline-options.ts`) hands out
+    // deadlines that are themselves exclusive period ceilings landing
+    // exactly at midnight (e.g. "Tomorrow"/"No rush"). A `dayEnd` of 23:59
+    // can never `gte`/`lte`-match such a deadline against THIS day (it's
+    // one instant past 23:59:00.000), so the candidate is silently dropped
+    // from the query before `optimize` ever sees it — combined with
+    // `SessionsService`'s `deadlineDayStr` (which steps back to the correct
+    // day for exactly this reason), this makes the two agree on where that
+    // midnight instant belongs.
+    const dayEnd = minutesToUtc(addDaysStr(dayLocalDateStr, 1), 0, timezone);
     const windowStart = now > dayStart ? now : dayStart;
 
     const candidates = await this.prisma.session.findMany({
