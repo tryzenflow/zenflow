@@ -13,6 +13,7 @@ import { useNow } from "@/hooks/use-now";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { cn } from "@/lib/utils";
+import { peekBlocksFromSegments, type PeekBlock } from "@/lib/peek";
 import {
   DAILY_HORIZON,
   TIME_GRANULARITY,
@@ -126,6 +127,25 @@ interface DayTimelineProps {
   onStateChange?: (state: TimelineState) => void;
   onReachBottom?: () => void;
   onOvernightTailsChange?: (tails: Session[]) => void;
+  /** Hide the per-day header — the Week screen renders its own sticky
+   * `WeekHeader` strip above the pager. Default `true` preserves the Day
+   * screen. */
+  showHeader?: boolean;
+  /** Show the "Long press to add" ghost on empty non-today days too — the
+   * Week pager surfaces it on any empty day. Default `false`. */
+  showEmptyGhostAlways?: boolean;
+  /** Fired while a session is dragged near the screen's left/right edge. */
+  onDragEdge?: (edge: "left" | "right") => void;
+  /** Fired while a session is dragged outside the edge zone (disarms a
+   * pending cross-day advance). */
+  onDragEdgeExit?: () => void;
+  /** Fired when a session drag starts/stops (used to lock the pager). */
+  onDragChange?: (dragging: boolean) => void;
+  /** Fired after a session that was dragged onto another day is rescheduled. */
+  onCrossDayReschedule?: (taskId: string, startISO: string) => void;
+  /** Reports this day's sessions as mini-day blocks so a parent week pager
+   * can render its next-day peek strip from real data. */
+  onPeekChange?: (blocks: PeekBlock[], dayKey: string) => void;
 }
 
 export function DayTimeline({
@@ -137,6 +157,13 @@ export function DayTimeline({
   onStateChange,
   onReachBottom,
   onOvernightTailsChange,
+  showHeader = true,
+  showEmptyGhostAlways = false,
+  onDragEdge,
+  onDragEdgeExit,
+  onDragChange,
+  onCrossDayReschedule,
+  onPeekChange,
 }: DayTimelineProps) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const scrollRef = useRef<ScrollView>(null);
@@ -262,6 +289,17 @@ export function DayTimeline({
   }, [tasks, date, tz]);
 
   const layout = useMemo(() => getOverlapLayout(segments), [segments]);
+
+  // Report this day's blocks so a parent Week pager can draw its next-day
+  // peek strip from real data.
+  const peekBlocks = useMemo(
+    () => peekBlocksFromSegments(segments, date, tz),
+    [segments, date, tz],
+  );
+
+  useEffect(() => {
+    onPeekChange?.(peekBlocks, dayKey);
+  }, [peekBlocks, dayKey, onPeekChange]);
 
   const deadlineBySession = useMemo(() => {
     const map = new Map<string, string>();
@@ -413,8 +451,9 @@ export function DayTimeline({
   const handleDragStateChange = useCallback(
     (snap: { startMin: number } | null) => {
       setDragSnap(snap);
+      onDragChange?.(snap !== null);
     },
-    [],
+    [onDragChange],
   );
 
   const formatSnapLabel = useCallback(
@@ -517,43 +556,45 @@ export function DayTimeline({
 
   return (
     <View className="flex-1 bg-background">
-      <View className="flex-row items-center justify-between px-4 pt-4 pb-4 border-b border-black/15 dark:border-white/15">
-        <View className="min-w-0 flex-1">
-          <Text className="text-xl font-bold tracking-tight">
-            {format(date, "EEE, MMM d")}
-          </Text>
-          <Text className="mt-px text-xs font-medium text-muted-foreground">
-            {loading
-              ? "Loading your day…"
-              : error
-                ? "Couldn't sync"
-                : dragSnap
-                  ? "Moving · release to reschedule"
-                  : overlapCount > 0
-                    ? `${overlapCount} overlap${
-                        overlapCount > 1 ? "s" : ""
-                      } · ${tasks.length} tasks`
-                    : tasks.length === 0
-                      ? `${nowLabel} · nothing scheduled`
-                      : `${nowLabel} · ${tasks.length} task${
-                          tasks.length === 1 ? "" : "s"
-                        } today`}
-          </Text>
+      {showHeader && (
+        <View className="flex-row items-center justify-between px-4 pt-4 pb-4 border-b border-black/15 dark:border-white/15">
+          <View className="min-w-0 flex-1">
+            <Text className="text-xl font-bold tracking-tight">
+              {format(date, "EEE, MMM d")}
+            </Text>
+            <Text className="mt-px text-xs font-medium text-muted-foreground">
+              {loading
+                ? "Loading your day…"
+                : error
+                  ? "Couldn't sync"
+                  : dragSnap
+                    ? "Moving · release to reschedule"
+                    : overlapCount > 0
+                      ? `${overlapCount} overlap${
+                          overlapCount > 1 ? "s" : ""
+                        } · ${tasks.length} tasks`
+                      : tasks.length === 0
+                        ? `${nowLabel} · nothing scheduled`
+                        : `${nowLabel} · ${tasks.length} task${
+                            tasks.length === 1 ? "" : "s"
+                          } today`}
+            </Text>
+          </View>
+          <View className="flex-row items-center gap-2">
+            {!loading && !error && overdueCount > 0 && (
+              <View className="flex-row items-center gap-1 rounded-full border border-rose-400/50 bg-rose-100 px-2 py-0.5 dark:bg-rose-950">
+                <AlertCircle
+                  size={12}
+                  className="text-rose-800 dark:text-rose-400"
+                />
+                <Text className="text-[11px] font-semibold leading-none text-rose-800 dark:text-rose-400">
+                  {overdueCount} overdue
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
-        <View className="flex-row items-center gap-2">
-          {!loading && !error && overdueCount > 0 && (
-            <View className="flex-row items-center gap-1 rounded-full border border-rose-400/50 bg-rose-100 px-2 py-0.5 dark:bg-rose-950">
-              <AlertCircle
-                size={12}
-                className="text-rose-800 dark:text-rose-400"
-              />
-              <Text className="text-[11px] font-semibold leading-none text-rose-800 dark:text-rose-400">
-                {overdueCount} overdue
-              </Text>
-            </View>
-          )}
-        </View>
-      </View>
+      )}
 
       <ScrollView
         ref={scrollRef}
@@ -569,7 +610,11 @@ export function DayTimeline({
           error ? "flex-1 items-center justify-center px-8" : undefined
         }
         contentContainerStyle={
-          error ? undefined : { paddingBottom: tabBarOverlay }
+          error
+            ? undefined
+            : // The Week pager (header hidden) applies its own bottom inset
+              // around the pager; only pad here for the standalone Day screen.
+              { paddingBottom: showHeader ? tabBarOverlay : 0 }
         }
       >
         {error ? (
@@ -651,7 +696,7 @@ export function DayTimeline({
                   <NowIndicator now={now} tz={tz} totalHeight={totalHeight} />
                 )}
 
-                {segments.length === 0 && isToday && (
+                {segments.length === 0 && (isToday || showEmptyGhostAlways) && (
                   <View
                     pointerEvents="none"
                     className="absolute left-1.5 right-1.5 z-20 items-center justify-center rounded-xl border-[1.5px] border-dashed border-brand-orange/55 bg-brand-orange/[0.07]"
@@ -686,6 +731,9 @@ export function DayTimeline({
                       onDragStateChange={handleDragStateChange}
                       onPress={onSessionPress}
                       onComplete={handleComplete}
+                      onDragEdge={onDragEdge}
+                      onDragEdgeExit={onDragEdgeExit}
+                      onCrossDayReschedule={onCrossDayReschedule}
                     />
                   );
                 })}

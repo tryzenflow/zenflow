@@ -1,6 +1,8 @@
 import { AlertTriangle } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
+import { debugLog } from "@/lib/debug-log";
+import { getCrossDayOffset } from "@/lib/cross-day-offset";
 import {
   DAILY_HORIZON,
   TIME_GRANULARITY,
@@ -13,7 +15,7 @@ import type { DaySegment } from "@zenflow/shared";
 import { toZonedTime } from "date-fns-tz";
 import * as Haptics from "expo-haptics";
 import { useCallback, useEffect, useState } from "react";
-import { View } from "react-native";
+import { View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
@@ -26,6 +28,10 @@ import Animated, {
 } from "react-native-reanimated";
 
 const TAGS_MIN_DURATION = 45;
+
+/** Screen-edge zone (px) a *lifted* block must be dragged into before the
+ * cross-day advance arms (orange glow) and then fires on a short hold. */
+const EDGE_ZONE = 150;
 
 const TAG_TINTS = [
   "border-orange-400/40 bg-orange-100/15 dark:border-orange-500/40 dark:bg-orange-500/10",
@@ -74,6 +80,14 @@ interface SessionBlockProps {
   onDragEnd?: (snap: DragSnap | null) => void;
   onPress?: (taskId: string) => void;
   onComplete?: (taskId: string) => void;
+  /** Fired while a *lifted* block is dragged into the screen-edge zone,
+   * arming the Week pager's cross-day advance (glow + hold). */
+  onDragEdge?: (edge: "left" | "right") => void;
+  /** Fired while a *lifted* block is outside the edge zone — disarms any
+   * pending cross-day advance. */
+  onDragEdgeExit?: () => void;
+  /** Fired after a reschedule that landed on a different day than the source. */
+  onCrossDayReschedule?: (taskId: string, startISO: string) => void;
 }
 
 export function SessionBlock({
@@ -89,7 +103,11 @@ export function SessionBlock({
   onDragEnd,
   onPress,
   onComplete,
+  onDragEdge,
+  onDragEdgeExit,
+  onCrossDayReschedule,
 }: SessionBlockProps) {
+  const { width: screenWidth } = useWindowDimensions();
   const startMin = minutesOfDayLocal(segment.start, tz);
   const rawEndMin = minutesOfDayLocal(segment.end, tz);
   const endMin =
@@ -115,6 +133,9 @@ export function SessionBlock({
   const isDragging = useSharedValue(0);
   const lastSnap = useSharedValue<number | null>(null);
   const [liveStartMin, setLiveStartMin] = useState<number | null>(null);
+  // Screen-edge zone the lifted block currently sits in (debug transitions
+  // only — `onDragEdge`/`onDragEdgeExit` are the real, idempotent consumers).
+  const edgeZoneSV = useSharedValue<"left" | "right" | null>(null);
 
   // The card's vertical slot (minutes of day). Normally it just tracks
   // `startMin` from props. On drop we set this to the target slot on the UI
@@ -151,6 +172,7 @@ export function SessionBlock({
             duration: 150,
           }),
         },
+        { rotate: withTiming(d ? "1deg" : "0deg", { duration: 150 }) },
       ],
       shadowColor: "#000",
       shadowOpacity: withTiming(interpolate(d, [0, 1], [0, 0.3]), {
@@ -218,25 +240,46 @@ export function SessionBlock({
       const snappedMinutes =
         Math.round(deltaMinutes / TIME_GRANULARITY) * TIME_GRANULARITY;
 
-      if (snappedMinutes === 0) return;
+      // A cross-day drag (Week pager) shifts the wall clock by whole days so
+      // the drop lands on the adjacent day while keeping the time-of-day.
+      const dayOffset = getCrossDayOffset();
+
+      if (snappedMinutes === 0 && dayOffset === 0) return;
 
       const newStartMin = Math.max(
         0,
         Math.min(DAILY_HORIZON - TIME_GRANULARITY, startMin + snappedMinutes),
       );
 
-      const wall = zonedDate(segment.taskStart, tz);
-      wall.setHours(Math.floor(newStartMin / 60), newStartMin % 60, 0, 0);
-      const newStart = zonedWallClockToUtc(wall, tz);
+      const newWall = zonedDate(segment.taskStart, tz);
+      newWall.setHours(Math.floor(newStartMin / 60), newStartMin % 60, 0, 0);
+      if (dayOffset !== 0) {
+        newWall.setDate(newWall.getDate() + dayOffset);
+      }
+
+      const newStart = zonedWallClockToUtc(newWall, tz);
+
+      debugLog("task.drop", {
+        task: segment.taskId,
+        dayOffset,
+        snappedMinutes,
+        newStartMin,
+        newStart: newStart.toISOString(),
+        sameAsSource: newStart.toISOString() === segment.taskStart,
+      });
 
       if (newStart.toISOString() === segment.taskStart) return;
 
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       onReschedule(segment.taskId, newStart.toISOString());
+      if (dayOffset !== 0) {
+        onCrossDayReschedule?.(segment.taskId, newStart.toISOString());
+      }
     },
     [
       isInteractive,
       onReschedule,
+      onCrossDayReschedule,
       pxPerMin,
       startMin,
       segment.taskStart,
@@ -245,15 +288,28 @@ export function SessionBlock({
     ],
   );
 
+  // Horizontal activation threshold (10px) must stay BELOW the Week pager's
+  // 12px `activeOffsetX` (week-pager.tsx): a touch that starts on a block
+  // then activates this pan first, and RNGH's exclusive parent/child
+  // arbitration fails the pager the moment we activate — so the day can never
+  // steal a block drag. The block owns any gesture that starts on it.
   const panGesture = Gesture.Pan()
     .enabled(isInteractive)
-    .activeOffsetX([-20, 20])
+    .activeOffsetX([-10, 10])
     .activeOffsetY([-10, 10])
+    .onBegin(() => {
+      runOnJS(debugLog)("task.gesture.begin", {
+        task: segment.taskId,
+      });
+    })
     .onUpdate((e) => {
       const absX = Math.abs(e.translationX);
       const absY = Math.abs(e.translationY);
 
-      if (absX > absY && e.translationX > 0) {
+      // Only a pure rightward swipe (never lifted vertically) is the "complete"
+      // gesture — once the block is lifted, rightward movement is a cross-day
+      // advance instead, so a diagonal drag toward the edge keeps working.
+      if (absX > absY && e.translationX > 0 && isDragging.value === 0) {
         translateX.value = e.translationX;
         checkOpacity.value = interpolate(
           e.translationX,
@@ -281,41 +337,86 @@ export function SessionBlock({
             runOnJS(reportSnap)(newStartMin);
           }
         }
+
+        // Cross-day affordance: while the block is lifted it is "carried" —
+        // it slides sideways with the finger, and once dragged into the
+        // screen-edge zone the Week pager arms its cross-day advance (orange
+        // glow, then a short hold swaps to the adjacent day). Only fire
+        // arm/disarm on zone transitions (not every frame) to prevent
+        // arm→disarm oscillation when the pointer sits near the boundary.
+        if (isDragging.value === 1) {
+          translateX.value = e.translationX;
+          if (onDragEdge) {
+            const x = e.absoluteX;
+            const zone: "left" | "right" | null =
+              x <= EDGE_ZONE
+                ? "left"
+                : x >= screenWidth - EDGE_ZONE
+                  ? "right"
+                  : null;
+            if (zone !== edgeZoneSV.value) {
+              edgeZoneSV.value = zone;
+              if (zone) runOnJS(onDragEdge)(zone);
+              else if (onDragEdgeExit) runOnJS(onDragEdgeExit)();
+              runOnJS(debugLog)(zone ? "task.zone.enter" : "task.zone.exit", {
+                task: segment.taskId,
+                zone,
+                x,
+              });
+            }
+          }
+        }
       }
     })
     .onEnd((e) => {
       const absX = Math.abs(e.translationX);
       const absY = Math.abs(e.translationY);
 
-      if (absX > absY && e.translationX > COMPLETE_THRESHOLD) {
+      if (
+        absX > absY &&
+        e.translationX > COMPLETE_THRESHOLD &&
+        isDragging.value === 0
+      ) {
         translateX.value = withTiming(blockWidth, { duration: 200 });
         checkOpacity.value = withTiming(0, { duration: 200 });
         runOnJS(triggerCompleteHaptic)();
         runOnJS(triggerComplete)();
         translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
         translateX.value = withSpring(0, { damping: 20, stiffness: 300 });
-      } else if (absY > absX) {
+      } else if (absY > absX || isDragging.value === 1) {
         const deltaMinutes = e.translationY / pxPerMin;
         const snappedMinutes =
           Math.round(deltaMinutes / TIME_GRANULARITY) * TIME_GRANULARITY;
-        const newStartMin = Math.max(
+        const newStartMin = clamp(
+          startMin + snappedMinutes,
           0,
-          Math.min(DAILY_HORIZON - TIME_GRANULARITY, startMin + snappedMinutes),
+          DAILY_HORIZON - TIME_GRANULARITY,
         );
+        const movedVertically = snappedMinutes !== 0 && newStartMin !== startMin;
 
-        if (snappedMinutes !== 0 && newStartMin !== startMin) {
+        // A lifted block is always re-anchored (a cross-day drop keeps the
+        // time-of-day, so its slot is `newStartMin` too); `handleDragEnd`
+        // re-checks on the JS thread whether the drop is a real move — incl.
+        // the module-level cross-day offset — and no-ops otherwise.
+        if (movedVertically || isDragging.value === 1) {
           // Re-anchor the card to the target slot and drop the drag offset in
           // the same UI-thread frame — no spring-back, no overshoot — then
           // fire the reschedule. `pinnedStartMin` holds this slot until the
           // prop catches up.
           pinnedStartMin.value = newStartMin;
           translateY.value = 0;
+          translateX.value = 0;
+          runOnJS(debugLog)("task.gesture.end", {
+            task: segment.taskId,
+            translationX: e.translationX,
+            translationY: e.translationY,
+          });
           runOnJS(handleDragEnd)(e.translationY);
           runOnJS(reportDragSnapEnd)(newStartMin);
         } else {
-          translateY.value = 0;
+          translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
+          translateX.value = withSpring(0, { damping: 20, stiffness: 300 });
         }
-        translateX.value = 0;
       } else {
         translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
         translateX.value = withSpring(0, { damping: 20, stiffness: 300 });
@@ -326,6 +427,9 @@ export function SessionBlock({
     .onFinalize(() => {
       isDragging.value = 0;
       lastSnap.value = null;
+      runOnJS(debugLog)("task.gesture.finalize", {
+        task: segment.taskId,
+      });
       runOnJS(reportDragEnd)();
     });
 
