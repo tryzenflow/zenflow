@@ -13,6 +13,7 @@ import { Text } from "@/components/ui/text";
 import { useNow } from "@/hooks/use-now";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
+import { cn } from "@/lib/utils";
 import {
   DAILY_HORIZON,
   TIME_GRANULARITY,
@@ -26,7 +27,14 @@ import type { Session } from "@zenflow/shared";
 import { format, startOfDay } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 import * as Haptics from "expo-haptics";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -74,6 +82,47 @@ function scrollToNowOffset(totalHeight: number): number {
   const now = new Date();
   const mins = now.getHours() * 60 + now.getMinutes();
   return Math.max(0, (mins / DAILY_HORIZON) * totalHeight - 120);
+}
+
+/**
+ * One shared card shape for every bottom-of-screen notification this screen
+ * shows (drag-snap confirmation, overdue warning, …) — a single visual
+ * language instead of each caller hand-rolling its own icon-chip-plus-text
+ * layout. `subtitle` is optional: the drag-snap toast has none (it needs to
+ * be readable well inside its ~2s lifetime), the overdue warning keeps one
+ * since it's conveying more than a title can carry alone.
+ */
+function BottomToastCard({
+  icon,
+  iconTint,
+  title,
+  subtitle,
+}: {
+  icon: ReactNode;
+  iconTint: string;
+  title: string;
+  subtitle?: string;
+}) {
+  return (
+    <View className="flex-row items-start gap-2.5 rounded-2xl border border-black/15 dark:border-white/15 bg-popover p-3.5 shadow-lg">
+      <View
+        className={cn(
+          "h-[30px] w-[30px] items-center justify-center rounded-[9px]",
+          iconTint,
+        )}
+      >
+        {icon}
+      </View>
+      <View className="min-w-0 flex-1">
+        <Text className="text-sm font-semibold">{title}</Text>
+        {!!subtitle && (
+          <Text className="mt-0.5 text-[12.5px] text-muted-foreground">
+            {subtitle}
+          </Text>
+        )}
+      </View>
+    </View>
+  );
 }
 
 export type TimelineState = "loading" | "error" | "ready";
@@ -126,6 +175,9 @@ export function DayTimeline({
   const [error, setError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [dragSnap, setDragSnap] = useState<{ startMin: number } | null>(null);
+  const [dragEndSnap, setDragEndSnap] = useState<{
+    startMin: number;
+  } | null>(null);
 
   const baseHourHeight = useSharedValue(HOUR_HEIGHT_DEFAULT);
   const ghostY = useSharedValue(0);
@@ -290,6 +342,12 @@ export function DayTimeline({
     return () => clearTimeout(timer);
   }, [overdueToast]);
 
+  useEffect(() => {
+    if (!dragEndSnap) return;
+    const timer = setTimeout(() => setDragEndSnap(null), 2500);
+    return () => clearTimeout(timer);
+  }, [dragEndSnap]);
+
   const scrollToNow = useCallback(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({
@@ -369,17 +427,28 @@ export function DayTimeline({
     [],
   );
 
-  const dragChipLabel = useMemo(() => {
-    if (!dragSnap) return "";
-    const wall = zonedDate(date, tz);
-    wall.setHours(
-      Math.floor(dragSnap.startMin / 60),
-      dragSnap.startMin % 60,
-      0,
-      0,
-    );
-    return wall.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  }, [dragSnap, date, tz]);
+  const formatSnapLabel = useCallback(
+    (snap: { startMin: number } | null) => {
+      if (!snap) return "";
+      const wall = zonedDate(date, tz);
+      wall.setHours(Math.floor(snap.startMin / 60), snap.startMin % 60, 0, 0);
+      return wall.toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    },
+    [date, tz],
+  );
+
+  const dragChipLabel = useMemo(
+    () => formatSnapLabel(dragSnap),
+    [formatSnapLabel, dragSnap],
+  );
+
+  const dragEndChipLabel = useMemo(
+    () => formatSnapLabel(dragEndSnap),
+    [formatSnapLabel, dragEndSnap],
+  );
 
   const handleLongPress = useCallback(
     (y: number) => {
@@ -627,6 +696,7 @@ export function DayTimeline({
                       deadline={deadlineBySession.get(segment.taskId) ?? null}
                       onReschedule={handleReschedule}
                       onDragStateChange={handleDragStateChange}
+                      onDragEnd={(snap) => setDragEndSnap(snap)}
                       onPress={onSessionPress}
                       onComplete={handleComplete}
                     />
@@ -701,40 +771,27 @@ export function DayTimeline({
         <View
           pointerEvents="none"
           className="absolute left-4 right-4 z-[100] gap-2"
-          style={{ bottom: tabBarOverlay - 8 }}
+          style={{ bottom: tabBarOverlay + 8 }}
         >
-          {dragSnap && (
-            <View className="flex-row items-start gap-2.5 rounded-2xl border border-black/15 dark:border-white/30 bg-popover p-3.5 shadow-lg">
-              <View className="h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-brand-orange/15">
-                <MousePointer2 size={17} className="text-brand-orange" />
-              </View>
-              <View className="flex-1">
-                <Text className="text-sm font-semibold">
-                  Snapped to {dragChipLabel}
-                </Text>
-                <Text className="mt-0.5 text-[12.5px] text-muted-foreground">
-                  Release to reschedule · 15-min grid
-                </Text>
-              </View>
-            </View>
+          {dragEndSnap && (
+            <BottomToastCard
+              icon={<MousePointer2 size={17} className="text-brand-orange" />}
+              iconTint="bg-brand-orange/15"
+              title={`Snapped to ${dragEndChipLabel}`}
+            />
           )}
           {overdueToast && (
-            <View className="flex-row items-start gap-2.5 rounded-2xl border border-black/15 dark:border-white/15 bg-popover p-3.5 shadow-lg">
-              <View className="h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-rose-500/15">
+            <BottomToastCard
+              icon={
                 <AlertCircle
                   size={17}
                   className="text-rose-600 dark:text-rose-400"
                 />
-              </View>
-              <View className="min-w-0 flex-1">
-                <Text className="text-sm font-semibold">
-                  {overdueToast.title}
-                </Text>
-                <Text className="mt-0.5 text-[12.5px] text-muted-foreground">
-                  {overdueToast.subtitle}
-                </Text>
-              </View>
-            </View>
+              }
+              iconTint="bg-rose-500/15"
+              title={overdueToast.title}
+              subtitle={overdueToast.subtitle}
+            />
           )}
         </View>
       </Portal>

@@ -6,10 +6,7 @@ import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
-import {
-  dayRescheduleToastMessage,
-  placementToastMessage,
-} from "@/lib/task-toasts";
+import { placementToastMessage } from "@/lib/task-toasts";
 import type { SessionFormValues } from "@zenflow/core";
 import { isAxiosError } from "axios";
 import { format } from "date-fns";
@@ -61,10 +58,6 @@ export default function NewSessionScreen() {
       });
       const { message, variant } = placementToastMessage(response, user);
       toast(message, variant === "success" ? "success" : "destructive");
-      const rescheduleMessage = dayRescheduleToastMessage(
-        response.dayReschedule?.diffs ?? [],
-      );
-      if (rescheduleMessage) toast(rescheduleMessage, "info");
       router.back();
     } catch (error) {
       const message =

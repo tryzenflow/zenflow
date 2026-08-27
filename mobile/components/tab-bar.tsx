@@ -54,10 +54,9 @@ const GLOW_LAYERS = [
  * per screen on Day/Week/Month) that didn't need to move here. A later,
  * minimal explicit Optimize (`POST /scheduler/optimize`, a small header pill
  * on Day View) has since been removed too — session create/edit now
- * implicitly and transparently repacks that one day server-side instead (see
- * `mobile/README.md`'s Screens & routing section and `lib/task-toasts.ts`'s
- * `dayRescheduleToastMessage`). There's no manual trigger anywhere now, and
- * the cradle is not coming back.
+ * implicitly and silently repacks that one day server-side instead (see
+ * `mobile/README.md`'s Screens & routing section). There's no manual trigger
+ * anywhere now, and the cradle is not coming back.
  *
  * Positioned absolutely so it overlays the screens instead of taking a slice
  * of the column `BottomTabView` lays out (screens are a `flex: 1` sibling, so

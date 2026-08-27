@@ -7,14 +7,13 @@ import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
-import { dayRescheduleToastMessage } from "@/lib/task-toasts";
 import type { EditSessionFormValues } from "@zenflow/core";
 import type { Session } from "@zenflow/shared";
 import { isAxiosError } from "axios";
 import { format } from "date-fns";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable } from "react-native";
+import { ActivityIndicator, Pressable, View } from "react-native";
 
 const EMPTY_DEFAULTS: EditSessionFormValues = {
   title: "",
@@ -47,7 +46,10 @@ export default function EditSessionScreen() {
   const [deleting, setDeleting] = useState(false);
 
   const form = useSessionForm({ defaultValues: EMPTY_DEFAULTS });
-  const loading = form.formState.isSubmitting || deleting;
+  // `!task` (still fetching) counts as loading too — Save/Delete would
+  // otherwise be tappable against `EMPTY_DEFAULTS` for a moment, and the
+  // note field below is gated on `task` specifically (see its comment).
+  const loading = !task || form.formState.isSubmitting || deleting;
 
   useEffect(() => {
     getSessionDetails(id).then((res) => {
@@ -66,7 +68,7 @@ export default function EditSessionScreen() {
   async function onSubmit(values: EditSessionFormValues) {
     if (!user || !task) return;
     try {
-      const updated = await updateSession(task.id, {
+      await updateSession(task.id, {
         title: values.title,
         note: values.note || null,
         deadline: values.deadline,
@@ -74,10 +76,6 @@ export default function EditSessionScreen() {
         durationMinutes: values.duration,
       });
       toast("Session updated", "success");
-      const rescheduleMessage = dayRescheduleToastMessage(
-        updated.dayReschedule?.diffs ?? [],
-      );
-      if (rescheduleMessage) toast(rescheduleMessage, "info");
       router.back();
     } catch (error) {
       const message =
@@ -146,13 +144,31 @@ export default function EditSessionScreen() {
         </Button>
       }
     >
-      <SessionSheetFields
-        initialValue={task?.note || ""}
-        form={form}
-        tz={tz}
-        disabled={loading}
-        editing
-      />
+      {task ? (
+        <SessionSheetFields
+          initialValue={task.note || ""}
+          form={form}
+          tz={tz}
+          disabled={loading}
+          editing
+        />
+      ) : (
+        // Mounting the form before `task` resolves is the likely source of
+        // the "note briefly shows stale content" report: `DescriptionField`'s
+        // WebView editor only reads its `initialValue` prop once, at mount —
+        // unlike the other fields (title/duration/deadline/tags), which
+        // reactively re-sync via `form.reset` once `task` loads, nothing
+        // re-syncs the WebView's own document if it already mounted against
+        // a stale/empty `task?.note`. Gating the whole form on `task` means
+        // the editor's very first mount already has the correct note, no
+        // race, no re-sync needed.
+        <View className="items-center py-16">
+          <ActivityIndicator />
+          <Text className="mt-3 text-sm text-muted-foreground">
+            Loading task…
+          </Text>
+        </View>
+      )}
     </SessionFormScreen>
   );
 }

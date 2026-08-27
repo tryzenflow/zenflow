@@ -1,17 +1,20 @@
-import { useCallback, useState } from "react";
-import { View } from "react-native";
-import { Text } from "@/components/ui/text";
 import { AlertTriangle } from "@/components/Icons";
+import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
-import { DAILY_HORIZON, TIME_GRANULARITY, zonedWallClockToUtc, zonedDate } from "@zenflow/core";
+import {
+  DAILY_HORIZON,
+  TIME_GRANULARITY,
+  zonedDate,
+  zonedWallClockToUtc,
+} from "@zenflow/core";
 import { withOverlap } from "@zenflow/core";
 import type { BlockLayout } from "@zenflow/core";
 import type { DaySegment } from "@zenflow/shared";
 import { toZonedTime } from "date-fns-tz";
-import {
-  Gesture,
-  GestureDetector,
-} from "react-native-gesture-handler";
+import * as Haptics from "expo-haptics";
+import { useCallback, useState } from "react";
+import { View } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -21,7 +24,6 @@ import Animated, {
   interpolate,
   runOnJS,
 } from "react-native-reanimated";
-import * as Haptics from "expo-haptics";
 
 const TAGS_MIN_DURATION = 45;
 
@@ -59,7 +61,7 @@ interface DragSnap {
   startMin: number;
 }
 
-interface TaskBlockProps {
+interface SessionBlockProps {
   segment: DaySegment;
   layout: BlockLayout;
   tz: string;
@@ -69,11 +71,12 @@ interface TaskBlockProps {
   deadline?: string | null;
   onReschedule?: (taskId: string, startISO: string) => void;
   onDragStateChange?: (snap: DragSnap | null) => void;
+  onDragEnd?: (snap: DragSnap | null) => void;
   onPress?: (taskId: string) => void;
   onComplete?: (taskId: string) => void;
 }
 
-export function TaskBlock({
+export function SessionBlock({
   segment,
   layout,
   tz,
@@ -83,12 +86,14 @@ export function TaskBlock({
   deadline,
   onReschedule,
   onDragStateChange,
+  onDragEnd,
   onPress,
   onComplete,
-}: TaskBlockProps) {
+}: SessionBlockProps) {
   const startMin = minutesOfDayLocal(segment.start, tz);
   const rawEndMin = minutesOfDayLocal(segment.end, tz);
-  const endMin = segment.continues || rawEndMin === 0 ? DAILY_HORIZON : rawEndMin;
+  const endMin =
+    segment.continues || rawEndMin === 0 ? DAILY_HORIZON : rawEndMin;
   const duration = endMin - startMin;
   const isCompact = duration < 30;
   const showTags = duration > TAGS_MIN_DURATION && segment.tags.length > 0;
@@ -124,11 +129,19 @@ export function TaskBlock({
       transform: [
         { translateY: translateY.value },
         { translateX: translateX.value },
-        { scale: withTiming(interpolate(d, [0, 1], [1, 1.02]), { duration: 150 }) },
+        {
+          scale: withTiming(interpolate(d, [0, 1], [1, 1.02]), {
+            duration: 150,
+          }),
+        },
       ],
       shadowColor: "#000",
-      shadowOpacity: withTiming(interpolate(d, [0, 1], [0, 0.3]), { duration: 150 }),
-      shadowRadius: withTiming(interpolate(d, [0, 1], [4, 14]), { duration: 150 }),
+      shadowOpacity: withTiming(interpolate(d, [0, 1], [0, 0.3]), {
+        duration: 150,
+      }),
+      shadowRadius: withTiming(interpolate(d, [0, 1], [4, 14]), {
+        duration: 150,
+      }),
       shadowOffset: {
         width: 0,
         height: withTiming(interpolate(d, [0, 1], [1, 10]), { duration: 150 }),
@@ -159,6 +172,13 @@ export function TaskBlock({
     setLiveStartMin(null);
     onDragStateChange?.(null);
   }, [onDragStateChange]);
+
+  const reportDragSnapEnd = useCallback(
+    (min: number) => {
+      onDragEnd?.({ startMin: min });
+    },
+    [onDragEnd],
+  );
 
   const triggerCompleteHaptic = useCallback(() => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -192,7 +212,15 @@ export function TaskBlock({
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       onReschedule(segment.taskId, newStart.toISOString());
     },
-    [isInteractive, onReschedule, pxPerMin, startMin, segment.taskStart, segment.taskId, tz],
+    [
+      isInteractive,
+      onReschedule,
+      pxPerMin,
+      startMin,
+      segment.taskStart,
+      segment.taskId,
+      tz,
+    ],
   );
 
   const panGesture = Gesture.Pan()
@@ -244,6 +272,21 @@ export function TaskBlock({
         runOnJS(triggerComplete)();
       } else if (absY > absX) {
         runOnJS(handleDragEnd)(e.translationY);
+
+        const deltaMinutes = e.translationY / pxPerMin;
+        const snappedMinutes =
+          Math.round(deltaMinutes / TIME_GRANULARITY) * TIME_GRANULARITY;
+
+        if (snappedMinutes !== 0) {
+          const newStartMin = Math.max(
+            0,
+            Math.min(
+              DAILY_HORIZON - TIME_GRANULARITY,
+              startMin + snappedMinutes,
+            ),
+          );
+          runOnJS(reportDragSnapEnd)(newStartMin);
+        }
       }
 
       translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
@@ -299,7 +342,9 @@ export function TaskBlock({
           style={[liftStyle, { height }]}
           className={cn(
             "flex overflow-hidden rounded-[10px] border border-l-4",
-            isCompact ? "items-center justify-between gap-1.5 px-2.5" : "flex-col gap-0.5 px-2.5 py-1.5",
+            isCompact
+              ? "items-center justify-between gap-1.5 px-2.5"
+              : "flex-col gap-0.5 px-2.5 py-1.5",
             segment.continues && "rounded-b-none",
             segment.continued && "rounded-t-none [border-top-style:dashed]",
             isInteractive && "cursor-grab",
@@ -307,7 +352,10 @@ export function TaskBlock({
           )}
           accessible
           accessibilityRole="button"
-          accessibilityLabel={`${segment.title}, ${fmt(segment.taskStart, tz)} to ${fmt(segment.taskEnd, tz)}`}
+          accessibilityLabel={`${segment.title}, ${fmt(
+            segment.taskStart,
+            tz,
+          )} to ${fmt(segment.taskEnd, tz)}`}
         >
           <Animated.View
             pointerEvents="none"
@@ -351,7 +399,10 @@ export function TaskBlock({
             <>
               {isConflict && (
                 <View className="self-start flex-row items-center justify-center gap-1 rounded-md border border-transparent bg-amber-500/15 px-2 py-0.5">
-                  <AlertTriangle size={11} className="translate-y-[-0.5px] text-amber-700 dark:text-amber-300" />
+                  <AlertTriangle
+                    size={11}
+                    className="translate-y-[-0.5px] text-amber-700 dark:text-amber-300"
+                  />
                   <Text className="text-[10px] font-semibold leading-[11px] text-amber-700 dark:text-amber-300">
                     Overlap
                   </Text>
@@ -384,12 +435,19 @@ export function TaskBlock({
                   : segment.continues
                     ? `${fmt(segment.taskStart, tz)} → next day`
                     : liveStartMin != null
-                      ? `${fmtMin(liveStartMin, tz, segment.taskStart)} – ${fmtMin(
+                      ? `${fmtMin(
+                          liveStartMin,
+                          tz,
+                          segment.taskStart,
+                        )} – ${fmtMin(
                           Math.min(liveStartMin + duration, DAILY_HORIZON),
                           tz,
                           segment.taskStart,
                         )}`
-                      : `${fmt(segment.taskStart, tz)} – ${fmt(segment.taskEnd, tz)}`}
+                      : `${fmt(segment.taskStart, tz)} – ${fmt(
+                          segment.taskEnd,
+                          tz,
+                        )}`}
                 {dueSuffix}
               </Text>
               {showTags && (
@@ -397,10 +455,7 @@ export function TaskBlock({
                   {segment.tags.slice(0, 3).map((t) => (
                     <View
                       key={t}
-                      className={cn(
-                        "rounded border px-1.5 py-0.5",
-                        tagTint(t),
-                      )}
+                      className={cn("rounded border px-1.5 py-0.5", tagTint(t))}
                     >
                       <Text className="text-[9px] font-medium">{t}</Text>
                     </View>
