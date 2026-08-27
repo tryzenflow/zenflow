@@ -148,7 +148,7 @@ const BottomSheetContent = React.forwardRef<
     const { sheetRef } = useBottomSheetContext();
 
     // Merge the caller-supplied `ref` (e.g. `useBottomSheet()`'s ref, used by
-    // every sheet including `CreateTaskSheet`/`EditTaskSheet` — see their
+    // every sheet including `CreateSessionSheet`/`EditSessionSheet` — see their
     // doc comments for why the earlier `useControlledBottomSheet`
     // external-`open`-prop bridge was retired)
     // with the `<BottomSheet>` wrapper's own context `sheetRef` (what
@@ -168,8 +168,8 @@ const BottomSheetContent = React.forwardRef<
     // `ref.current` (the caller's ref) permanently stubbed out, so
     // `ref.current?.present()` silently no-op'd forever. This only "worked"
     // for sheets that happened to re-render again shortly after mount for an
-    // unrelated reason (e.g. `EditTaskSheet`'s `getTaskDetails().then(setTask)`),
-    // which is exactly why `CreateTaskSheet`'s FAB / empty-area long-press
+    // unrelated reason (e.g. `EditSessionSheet`'s `getSessionDetails().then(setSession)`),
+    // which is exactly why `CreateSessionSheet`'s FAB / empty-area long-press
     // (no such follow-up render) never opened while tap-to-edit did.
     //
     // Assigning both refs directly in a merged callback ref instead avoids

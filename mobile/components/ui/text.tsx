@@ -1,11 +1,11 @@
-import * as React from "react";
-import { Text as RNText } from "react-native";
 import * as Slot from "@/components/primitives/slot";
 import type {
   SlottableTextProps,
   TextRef,
 } from "@/components/primitives/types";
 import { cn } from "@/lib/utils";
+import * as React from "react";
+import { Text as RNText } from "react-native";
 
 const FONT_WEIGHT_REGEX = /font-(regular|medium|semibold|bold|extrabold)/;
 
@@ -15,7 +15,7 @@ const FONT_WEIGHT_REGEX = /font-(regular|medium|semibold|bold|extrabold)/;
 // weight utilities are below. Without this it was a silent no-op app-wide:
 // the `style={{ fontFamily }}` below always won over whatever NativeWind
 // derived from the class, so every `font-mono` call site (Day View's task
-// times, onboarding, the Month sheet) rendered in Geist Sans.
+// times, the Month sheet) rendered in Geist Sans.
 // Registered in `app/_layout.tsx`'s `useFonts`.
 const MONO_FONT_FAMILY = "GeistMono";
 const MONO_MEDIUM_FONT_FAMILY = "GeistMono-Medium";
@@ -67,12 +67,12 @@ const Text = React.forwardRef<TextRef, SlottableTextProps>(
 
     const classNameFont = React.useMemo(
       () => resolveGeistFontFamily(className),
-      [className]
+      [className],
     );
 
     const classNameWithoutFontWeight = React.useMemo(
       () => stripFontWeightClass(className),
-      [className]
+      [className],
     );
 
     return (
@@ -80,20 +80,15 @@ const Text = React.forwardRef<TextRef, SlottableTextProps>(
         className={cn(
           "text-base text-foreground web:select-text",
           textClass,
-          classNameWithoutFontWeight
+          classNameWithoutFontWeight,
         )}
         style={[{ fontFamily: classNameFont }, style]}
         ref={ref}
         {...props}
       />
     );
-  }
+  },
 );
 Text.displayName = "Text";
 
-export {
-  resolveGeistFontFamily,
-  stripFontWeightClass,
-  Text,
-  TextClassContext,
-};
+export { resolveGeistFontFamily, stripFontWeightClass, Text, TextClassContext };

@@ -42,7 +42,7 @@ workload in from the systems that hold it.
 
 ## 2. What stays the same
 
-- **The deadline-driven scheduler itself.** Tasks are still placed automatically onto a
+- **The deadline-driven scheduler itself.** Sessions are still placed automatically onto a
   15-minute time grid, respecting work hours and deadlines as soft costs rather than
   hard walls, with manual drag/resize always available as an override.
 - **The core interaction loop.** A student still creates or receives a task, the
@@ -129,7 +129,7 @@ study for this exam three times before Friday" than authoring a repeat rule.
   - **Deadline pressure** (how urgent the task is) — already central to the scheduler,
     now doubling as a bandit feature.
   - **Document content** — where an assignment or exam-prep task has an attached
-    document, its text content becomes a feature describing *what kind of work* this
+    document, its text content becomes a feature describing _what kind of work_ this
     is, without requiring the student to hand-tag everything themselves.
   - **Course** — which class a task belongs to, a DLU-specific signal that's more
     reliable and lower-effort than free-text tags for this population, since it's known
@@ -142,8 +142,8 @@ study for this exam three times before Friday" than authoring a repeat rule.
 
 - **The population-scale evaluation approach (large synthetic-persona simulation)** is
   no longer the primary way results get validated. It was built to compensate for a
-  real pilot being too small to learn from — but the thesis doesn't need to *prove* the
-  approach works at product scale, only to *demonstrate* it improving over the plain
+  real pilot being too small to learn from — but the thesis doesn't need to _prove_ the
+  approach works at product scale, only to _demonstrate_ it improving over the plain
   deadline-only baseline for its own small, self-verified group. Evaluation is done
   directly on real telemetry from that group, with the same behavioral metrics as
   section 2. A lightweight synthetic warm-start may still be useful early on purely to
@@ -183,8 +183,8 @@ work.
   raises questions about acceptable use that are worth clearing with the university
   ahead of time, and needs the student's own credentials handled carefully.
 - **No grade-based outcome claim.** Because grades are dropped entirely, the thesis
-  can only claim the scheduler changes *behavior* (fewer manual corrections, better
-  completion-in-slot), not academic *outcomes*. Worth stating explicitly up front so
+  can only claim the scheduler changes _behavior_ (fewer manual corrections, better
+  completion-in-slot), not academic _outcomes_. Worth stating explicitly up front so
   it isn't read as an oversight later.
 - **Cold start with a small cohort.** Even a handful of students produces limited
   telemetry per person, and population-level seeding (the usual fix) is out of scope.

@@ -1,4 +1,4 @@
-import type { TaskStatus } from "./task";
+import type { SessionStatus } from "./task";
 
 /**
  * Visual states a task card can render in (see design-system.md). "conflict"
@@ -6,7 +6,7 @@ import type { TaskStatus } from "./task";
  * (`packages/core/src/task-card.ts`'s `withOverlap`) — there is no backend
  * conflict flag anymore.
  */
-export type TaskCardState = "fluid" | "overdue" | "conflict" | "completed";
+export type SessionCardState = "fluid" | "overdue" | "conflict" | "completed";
 
 /**
  * A positioned calendar block — one concrete, scheduled task.
@@ -19,9 +19,9 @@ export interface Event {
   title: string;
   start: string; // ISO
   end: string; // ISO
-  status: TaskStatus;
+  status: SessionStatus;
   tags: string[];
-  state: TaskCardState;
+  state: SessionCardState;
 }
 
 /**

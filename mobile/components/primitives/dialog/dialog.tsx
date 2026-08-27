@@ -1,11 +1,3 @@
-import * as React from "react";
-import {
-  BackHandler,
-  type GestureResponderEvent,
-  Pressable,
-  View,
-} from "react-native";
-import { Text } from "@/components/ui";
 import { useControllableState } from "@/components/primitives/hooks";
 import { Portal as RNPPortal } from "@/components/primitives/portal";
 import * as Slot from "@/components/primitives/slot";
@@ -17,6 +9,14 @@ import type {
   TextRef,
   ViewRef,
 } from "@/components/primitives/types";
+import { Text } from "@/components/ui";
+import * as React from "react";
+import {
+  BackHandler,
+  type GestureResponderEvent,
+  Pressable,
+  View,
+} from "react-native";
 import type {
   DialogContentProps,
   DialogOverlayProps,
@@ -38,7 +38,7 @@ const Root = React.forwardRef<ViewRef, SlottableViewProps & DialogRootProps>(
       onOpenChange: onOpenChangeProp,
       ...viewProps
     },
-    ref
+    ref,
   ) => {
     const nativeID = React.useId();
     const [open = false, onOpenChange] = useControllableState({
@@ -59,7 +59,7 @@ const Root = React.forwardRef<ViewRef, SlottableViewProps & DialogRootProps>(
         <Component ref={ref} {...viewProps} />
       </DialogContext.Provider>
     );
-  }
+  },
 );
 
 Root.displayName = "RootNativeDialog";
@@ -68,7 +68,7 @@ function useRootContext() {
   const context = React.useContext(DialogContext);
   if (!context) {
     throw new Error(
-      "Dialog compound components cannot be rendered outside the Dialog component"
+      "Dialog compound components cannot be rendered outside the Dialog component",
     );
   }
   return context;
@@ -96,7 +96,7 @@ const Trigger = React.forwardRef<PressableRef, SlottablePressableProps>(
         {...props}
       />
     );
-  }
+  },
 );
 
 Trigger.displayName = "TriggerNativeDialog";
@@ -132,7 +132,7 @@ const Overlay = React.forwardRef<
       onPress: OnPressProp,
       ...props
     },
-    ref
+    ref,
   ) => {
     const { open, onOpenChange } = useRootContext();
 
@@ -151,7 +151,7 @@ const Overlay = React.forwardRef<
 
     const Component = asChild ? Slot.Pressable : Pressable;
     return <Component ref={ref} onPress={onPress} {...props} />;
-  }
+  },
 );
 
 Overlay.displayName = "OverlayNativeDialog";
@@ -168,7 +168,7 @@ const Content = React.forwardRef<
       () => {
         onOpenChange(false);
         return true;
-      }
+      },
     );
 
     return () => {
@@ -220,7 +220,7 @@ const Close = React.forwardRef<PressableRef, SlottablePressableProps>(
         {...props}
       />
     );
-  }
+  },
 );
 
 Close.displayName = "CloseNativeDialog";
@@ -238,7 +238,7 @@ const Description = React.forwardRef<TextRef, SlottableTextProps>(
   (props, ref) => {
     const { nativeID } = useRootContext();
     return <Text ref={ref} nativeID={`${nativeID}_desc`} {...props} />;
-  }
+  },
 );
 
 Description.displayName = "DescriptionNativeDialog";

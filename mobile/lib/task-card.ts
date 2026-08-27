@@ -1,4 +1,4 @@
-import type { TaskCardState } from "@zenflow/shared";
+import type { SessionCardState } from "@zenflow/shared";
 
 export { deriveState, withOverlap, TASK_CARD_CLASSES } from "@zenflow/core";
 
@@ -7,7 +7,7 @@ export { deriveState, withOverlap, TASK_CARD_CLASSES } from "@zenflow/core";
  * sizing of `@zenflow/core`'s `TASK_CARD_CLASSES`, adapted for the Month
  * View's compact pill instead of a full day-timeline card.
  */
-export const MONTH_PILL_CLASSES: Record<TaskCardState, string> = {
+export const MONTH_PILL_CLASSES: Record<SessionCardState, string> = {
   fluid: "bg-brand-orange/[0.18] border-l-primary",
   overdue: "bg-rose-500/15 border-l-rose-500",
   conflict: "bg-amber-500/15 border-l-amber-500",
@@ -17,7 +17,7 @@ export const MONTH_PILL_CLASSES: Record<TaskCardState, string> = {
 };
 
 /** Pill label text color per state, paired with {@link MONTH_PILL_CLASSES}. */
-export const MONTH_PILL_TEXT_CLASSES: Record<TaskCardState, string> = {
+export const MONTH_PILL_TEXT_CLASSES: Record<SessionCardState, string> = {
   fluid: "text-brand-orange",
   overdue: "text-rose-600 dark:text-rose-300",
   conflict: "text-amber-700 dark:text-amber-300",

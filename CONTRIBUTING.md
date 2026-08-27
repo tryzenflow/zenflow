@@ -27,6 +27,7 @@ pnpm --filter <app> <script>   # target one app, e.g. pnpm --filter frontend dev
 
 ## Code style & formatting
 
+- **Comment why, not what**. Only comment what for algorithms, and comment "why" for why a decision is made.
 - **Formatter / linter: ESLint** (flat config per app). The **backend** also runs **Prettier**
   via `eslint-plugin-prettier`, so `eslint` is the single entry point for both.
 - **Indentation: 2 spaces** (no tabs), LF line endings, final newline, UTF-8 — enforced by
@@ -71,6 +72,7 @@ commit message is:
 `shared`, `scheduler`, `calendar`, `auth`, `tasks`, `ml`, `docs`.
 
 **Rules**
+
 - Summary in the imperative mood, lower-case, no trailing period (e.g. "add task comments").
 - A commit that introduces a breaking change appends `!` after the type/scope **and/or** adds
   a `BREAKING CHANGE:` footer describing it.
@@ -105,7 +107,7 @@ fill in every section rather than deleting the template. A good PR:
 
 1. **Has a Conventional Commit title** — the PR title becomes the squash-merge commit, so it
    must follow `type(scope): summary` just like a commit (see above).
-2. **Explains what & why** — lead with the motivation; the diff already shows the *what*.
+2. **Explains what & why** — lead with the motivation; the diff already shows the _what_.
 3. **Links its issue** — `Closes #123` (or `Refs #123`) so the issue auto-closes on merge.
 4. **Marks the area(s) touched** — frontend / backend / shared / ML / docs, so the right
    reviewer picks it up.

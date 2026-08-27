@@ -1,6 +1,6 @@
-import { View } from "react-native";
-import { toZonedTime } from "date-fns-tz";
 import { DAILY_HORIZON } from "@zenflow/core";
+import { toZonedTime } from "date-fns-tz";
+import { View } from "react-native";
 
 interface NowIndicatorProps {
   now: Date;

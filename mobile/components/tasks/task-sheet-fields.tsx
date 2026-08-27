@@ -2,7 +2,7 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
-import { MAX_TITLE_LENGTH, type TaskFormValues } from "@zenflow/core";
+import { MAX_TITLE_LENGTH, type SessionFormValues } from "@zenflow/core";
 import type { ReactNode } from "react";
 import { Controller, type UseFormReturn } from "react-hook-form";
 import { View } from "react-native";
@@ -13,10 +13,10 @@ import { TagAutocomplete } from "./form/tag-autocomplete";
 
 /**
  * The five task-sheet fields, in the mockup's order — Title → Duration →
- * Deadline → Tags → Description — shared by `CreateTaskSheet` and
- * `EditTaskSheet` so the two never drift on field order/validation wiring.
+ * Deadline → Tags → Description — shared by `CreateSessionSheet` and
+ * `EditSessionSheet` so the two never drift on field order/validation wiring.
  *
- * Unlike the web `TaskForm` (`frontend/src/components/tasks/form/task-form.tsx`),
+ * Unlike the web `SessionForm` (`frontend/src/components/tasks/form/task-form.tsx`),
  * which hides Duration entirely in edit mode (the web only changes duration
  * by dragging the block's resize handle on the calendar), the mobile mockup
  * (`mockups/task-sheets.html`'s "Edit · populated" frame) keeps the
@@ -25,11 +25,11 @@ import { TagAutocomplete } from "./form/tag-autocomplete";
  * the only way to change duration (a separate long-press
  * `ChangeDurationSheet` quick action used to exist alongside it but was
  * removed as redundant — see git history if reviving that gesture is ever
- * reconsidered). `EditTaskSheet` is responsible for turning a duration
+ * reconsidered). `EditSessionSheet` is responsible for turning a duration
  * change here into a `PATCH /tasks/:id/resize` call (see its `onSubmit`),
- * since `UpdateTaskInput` has no `durationMinutes` field.
+ * since `UpdateSessionInput` has no `durationMinutes` field.
  */
-export function TaskSheetFields({
+export function SessionSheetFields({
   initialValue = "",
   form,
   disabled,
@@ -37,7 +37,7 @@ export function TaskSheetFields({
   editing,
 }: {
   initialValue?: string;
-  form: UseFormReturn<TaskFormValues>;
+  form: UseFormReturn<SessionFormValues>;
   disabled?: boolean;
   tz: string;
   editing?: boolean;

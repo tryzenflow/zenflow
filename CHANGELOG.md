@@ -23,7 +23,7 @@ scaffolded to start sharing logic between `frontend/` and `mobile/`.
   never touching a task that's already started. Every mutation
   (create/update/drag/resize/delete) reoptimizes the whole pending schedule
   inline, in the same transaction, instead of asking first — undo-by-batch
-  (`TaskEvent.batchId`) is the safety net. This also fixes tightening a
+  (`SessionEvent.batchId`) is the safety net. This also fixes tightening a
   deadline past a task's current placement silently leaving it scheduled
   late instead of relocating it.
 
@@ -62,7 +62,7 @@ scaffolded to start sharing logic between `frontend/` and `mobile/`.
   in the past, which dropped every in-progress (started but not finished)
   task from scheduling — other tasks could then be placed right on top of it
   with no conflict ever flagged.
-- **Tasks are flagged overdue the moment their scheduled end passes their
+- **Sessions are flagged overdue the moment their scheduled end passes their
   deadline**, not only once the wall clock catches up — the cost-based
   scheduler can legally place a task after a tight deadline (a lateness
   cost, not a hard cutoff).
@@ -118,7 +118,7 @@ now carries a deadline and nothing else, the scheduler owns placement within
   tags in a way that shifts the corrected duration, or deleting a task prompts with
   three choices: reschedule only auto-scheduled tasks, reschedule everything
   (including manually-moved tasks), or do nothing. Whatever the cascade moves is
-  reported back in a "displaced" summary toast. Tasks already in the past or in
+  reported back in a "displaced" summary toast. Sessions already in the past or in
   progress never prompt — their placement is history.
 
 - **`POST /tasks/:id/reschedule-cascade` → `POST /tasks/reschedule-cascade`.** The
@@ -132,7 +132,7 @@ now carries a deadline and nothing else, the scheduler owns placement within
   and the earliest in-hours slot searching forward *past* the deadline. The old
   day/week/month "next period" granularity is gone.
 
-- **Task history distinguishes an auto-move from a user move.** A task repositioned
+- **Session history distinguishes an auto-move from a user move.** A task repositioned
   as collateral in someone else's cascade now records a `RESCHEDULED` event rather
   than `MOVE`, so the preference matrix no longer learns from placements the user
   never chose.
@@ -140,7 +140,7 @@ now carries a deadline and nothing else, the scheduler owns placement within
 ### Removed
 
 - **Fixed (pinned) tasks**, the `schedulingAnchor`, and the per-task `view`. Dropped
-  from the schema (`Task.fixed`, `Task.schedulingAnchor`, `Task.view`, the `ViewMode`
+  from the schema (`Session.fixed`, `Session.schedulingAnchor`, `Session.view`, the `ViewMode`
   enum), the API (no more `view` / `viewStart` / `viewEnd` on create, reschedule,
   complete, or delete), and the UI (the fixed-task form, the "outside view period"
   after-the-fact prompt).
@@ -243,7 +243,7 @@ now carries a deadline and nothing else, the scheduler owns placement within
 
 - **Drag-drop: undo toast when a task is moved outside its view period.**
   After dragging a task to a slot outside the day/week/month it was created in, a
-  toast appears ("Task moved outside this week") with **Keep** and **Undo** actions.
+  toast appears ("Session moved outside this week") with **Keep** and **Undo** actions.
   Undo reverts the move by re-calling the reschedule endpoint with the original start
   time and refreshes the calendar. The move is committed immediately so the drag feels
   instant; no confirmation dialog blocks the interaction.

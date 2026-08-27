@@ -1,11 +1,3 @@
-import * as Dialog from "@radix-ui/react-dialog";
-import * as React from "react";
-import {
-  type GestureResponderEvent,
-  Pressable,
-  Text,
-  View,
-} from "react-native";
 import * as Slot from "@/components/primitives/slot";
 import type {
   PressableRef,
@@ -15,7 +7,15 @@ import type {
   TextRef,
   ViewRef,
 } from "@/components/primitives/types";
-import {useAugmentedRef, useControllableState} from "../hooks";
+import * as Dialog from "@radix-ui/react-dialog";
+import * as React from "react";
+import {
+  type GestureResponderEvent,
+  Pressable,
+  Text,
+  View,
+} from "react-native";
+import { useAugmentedRef, useControllableState } from "../hooks";
 import type {
   DialogContentProps,
   DialogOverlayProps,
@@ -44,7 +44,7 @@ const Root = React.forwardRef<ViewRef, SlottableViewProps & DialogRootProps>(
     });
     const Component = asChild ? Slot.View : View;
     return (
-      <DialogContext.Provider value={{open, onOpenChange}}>
+      <DialogContext.Provider value={{ open, onOpenChange }}>
         <Dialog.Root
           open={open}
           defaultOpen={defaultOpen}
@@ -70,9 +70,9 @@ function useRootContext() {
 }
 
 const Trigger = React.forwardRef<PressableRef, SlottablePressableProps>(
-  ({asChild, onPress: onPressProp, role: _role, disabled, ...props}, ref) => {
-    const augmentedRef = useAugmentedRef({ref});
-    const {onOpenChange, open} = useRootContext();
+  ({ asChild, onPress: onPressProp, role: _role, disabled, ...props }, ref) => {
+    const augmentedRef = useAugmentedRef({ ref });
+    const { onOpenChange, open } = useRootContext();
     function onPress(ev: GestureResponderEvent) {
       if (onPressProp) {
         onPressProp(ev);
@@ -105,7 +105,7 @@ const Trigger = React.forwardRef<PressableRef, SlottablePressableProps>(
 
 Trigger.displayName = "TriggerWebDialog";
 
-function Portal({forceMount, container, children}: DialogPortalProps) {
+function Portal({ forceMount, container, children }: DialogPortalProps) {
   return (
     <Dialog.Portal
       forceMount={forceMount}
@@ -118,7 +118,7 @@ function Portal({forceMount, container, children}: DialogPortalProps) {
 const Overlay = React.forwardRef<
   PressableRef,
   SlottablePressableProps & DialogOverlayProps
->(({asChild, forceMount, ...props}, ref) => {
+>(({ asChild, forceMount, ...props }, ref) => {
   const Component = asChild ? Slot.Pressable : Pressable;
   return (
     <Dialog.Overlay forceMount={forceMount}>
@@ -165,9 +165,9 @@ const Content = React.forwardRef<
 Content.displayName = "ContentWebDialog";
 
 const Close = React.forwardRef<PressableRef, SlottablePressableProps>(
-  ({asChild, onPress: onPressProp, disabled, ...props}, ref) => {
-    const augmentedRef = useAugmentedRef({ref});
-    const {onOpenChange, open} = useRootContext();
+  ({ asChild, onPress: onPressProp, disabled, ...props }, ref) => {
+    const augmentedRef = useAugmentedRef({ ref });
+    const { onOpenChange, open } = useRootContext();
 
     function onPress(ev: GestureResponderEvent) {
       if (onPressProp) {
@@ -203,11 +203,15 @@ const Close = React.forwardRef<PressableRef, SlottablePressableProps>(
 Close.displayName = "CloseWebDialog";
 
 const Title = React.forwardRef<TextRef, SlottableTextProps>(
-  ({asChild, style, ...props}, ref) => {
+  ({ asChild, style, ...props }, ref) => {
     const Component = asChild ? Slot.Text : Text;
     return (
       <Dialog.Title asChild>
-        <Component ref={ref} style={[{fontFamily: "Geist"}, style]} {...props} />
+        <Component
+          ref={ref}
+          style={[{ fontFamily: "Geist" }, style]}
+          {...props}
+        />
       </Dialog.Title>
     );
   },
@@ -216,11 +220,15 @@ const Title = React.forwardRef<TextRef, SlottableTextProps>(
 Title.displayName = "TitleWebDialog";
 
 const Description = React.forwardRef<TextRef, SlottableTextProps>(
-  ({asChild, style, ...props}, ref) => {
+  ({ asChild, style, ...props }, ref) => {
     const Component = asChild ? Slot.Text : Text;
     return (
       <Dialog.Description asChild>
-        <Component ref={ref} style={[{fontFamily: "Geist"}, style]} {...props} />
+        <Component
+          ref={ref}
+          style={[{ fontFamily: "Geist" }, style]}
+          {...props}
+        />
       </Dialog.Description>
     );
   },

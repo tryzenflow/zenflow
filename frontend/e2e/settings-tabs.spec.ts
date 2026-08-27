@@ -2,13 +2,17 @@ import { test, expect } from "@playwright/test";
 import { login, uniqueEmail } from "./helpers/auth";
 
 /**
- * Settings is now a tabbed dialog: Work · Insights · Account.
+ * Settings is a tabbed dialog: Insights · Account. There is no "Work" tab —
+ * `workStart`/`workEnd`/`workDays` were dropped from `User` with no
+ * replacement (education-pivot migration; see `@zenflow/shared`'s `user.ts`),
+ * and the scheduler no longer constrains placement to a configured working
+ * window.
  * - Insights fetches GET /users/me/preference-matrix on open and renders the
- *   7×96 heatmap (or a cold-start empty state for a fresh user).
- * - Account hosts Log out.
+ *   7×24 heatmap (or a cold-start empty state for a fresh user).
+ * - Account hosts the signed-in identity + Log out.
  *
  * Requires: backend stack + MailHog + the GET /users/me/preference-matrix
- * endpoint (backend-engineer).
+ * endpoint.
  */
 async function openSettings(page: import("@playwright/test").Page) {
   await page.evaluate(() =>
@@ -21,18 +25,11 @@ test.describe("tabbed settings", () => {
   test.beforeEach(async ({ page, request }) => {
     const email = uniqueEmail("settings");
     await login(page, request, email);
-    // Skip onboarding fast if a fresh account landed there.
-    if (/\/onboarding$/.test(page.url())) {
-      const next = page.getByRole("button", { name: /continue/i });
-      for (let i = 0; i < 5; i++) await next.click();
-      await page.getByRole("button", { name: /start planning/i }).click();
-      await expect(page).toHaveURL(/\/$/);
-    }
   });
 
-  test("switches across all three tabs", async ({ page }) => {
+  test("switches across both tabs", async ({ page }) => {
     await openSettings(page);
-    for (const name of ["Work", "Insights", "Account"]) {
+    for (const name of ["Insights", "Account"]) {
       await page.getByRole("tab", { name: new RegExp(name, "i") }).click();
       await expect(
         page.getByRole("tab", { name: new RegExp(name, "i") }),
@@ -51,5 +48,17 @@ test.describe("tabbed settings", () => {
         .getByText(/no preferences learned yet/i)
         .or(page.getByText(/prefer/i)),
     ).toBeVisible({ timeout: 10_000 });
+  });
+
+  test("account tab shows the signed-in identity and timezone, no editable work-hours fields", async ({
+    page,
+  }) => {
+    await openSettings(page);
+    await page.getByRole("tab", { name: /account/i }).click();
+    await expect(page.getByText(/timezone/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /log out/i })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /save changes/i }),
+    ).toHaveCount(0);
   });
 });

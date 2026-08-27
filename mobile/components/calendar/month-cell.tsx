@@ -1,12 +1,12 @@
 import { Text } from "@/components/ui/text";
-import { isOutsideMonth, splitCellTasks } from "@/lib/month-date-math";
+import { isOutsideMonth, splitCellSessions } from "@/lib/month-date-math";
 import {
   MONTH_PILL_CLASSES,
   MONTH_PILL_TEXT_CLASSES,
   deriveState,
 } from "@/lib/task-card";
 import { cn } from "@/lib/utils";
-import type { Task } from "@zenflow/shared";
+import type { Session } from "@zenflow/shared";
 import * as Haptics from "expo-haptics";
 import { useMemo, useRef } from "react";
 import { Pressable, View } from "react-native";
@@ -17,20 +17,20 @@ export const CELL_HEIGHT = 88;
 interface MonthCellProps {
   day: Date;
   monthDate: Date;
-  tasks: Task[];
+  tasks: Session[];
   isToday: boolean;
   isWeekend: boolean;
   /** True while this cell is the current drag drop target. */
   isDropTarget: boolean;
   /** The task id currently being dragged (any cell), so its origin pill can
    * hide in place while the ghost overlay stands in for it. */
-  draggingTaskId: string | null;
+  draggingSessionId: string | null;
   /** Receives the day's tasks too — tapping a cell opens the detail sheet in
    * place rather than navigating to Day View. */
-  onPressDay: (day: Date, tasks: Task[]) => void;
-  onPressOverflow: (day: Date, tasks: Task[]) => void;
+  onPressDay: (day: Date, tasks: Session[]) => void;
+  onPressOverflow: (day: Date, tasks: Session[]) => void;
   onPillDragStart: (
-    task: Task,
+    task: Session,
     day: Date,
     absoluteX: number,
     absoluteY: number,
@@ -54,7 +54,7 @@ export function MonthCell({
   isToday,
   isWeekend,
   isDropTarget,
-  draggingTaskId,
+  draggingSessionId,
   onPressDay,
   onPressOverflow,
   onPillDragStart,
@@ -63,7 +63,7 @@ export function MonthCell({
   onPillDragCancel,
 }: MonthCellProps) {
   const outside = isOutsideMonth(day, monthDate);
-  const { visible, overflowCount } = splitCellTasks(tasks);
+  const { visible, overflowCount } = splitCellSessions(tasks);
 
   return (
     <Pressable
@@ -97,7 +97,7 @@ export function MonthCell({
               key={task.id}
               task={task}
               day={day}
-              hidden={draggingTaskId === task.id}
+              hidden={draggingSessionId === task.id}
               onDragStart={onPillDragStart}
               onDragUpdate={onPillDragUpdate}
               onDragEnd={onPillDragEnd}
@@ -122,11 +122,11 @@ export function MonthCell({
 }
 
 interface MonthPillProps {
-  task: Task;
+  task: Session;
   day: Date;
   hidden: boolean;
   onDragStart: (
-    task: Task,
+    task: Session,
     day: Date,
     absoluteX: number,
     absoluteY: number,

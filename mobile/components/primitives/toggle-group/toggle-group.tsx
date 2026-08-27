@@ -1,5 +1,3 @@
-import * as React from "react";
-import {type GestureResponderEvent, Pressable, View} from "react-native";
 import * as Slot from "@/components/primitives/slot";
 import type {
   PressableRef,
@@ -7,8 +5,10 @@ import type {
   SlottableViewProps,
   ViewRef,
 } from "@/components/primitives/types";
-import {ToggleGroupUtils} from "@/components/primitives/utils";
-import type {ToggleGroupItemProps, ToggleGroupRootProps} from "./types";
+import { ToggleGroupUtils } from "@/components/primitives/utils";
+import * as React from "react";
+import { type GestureResponderEvent, Pressable, View } from "react-native";
+import type { ToggleGroupItemProps, ToggleGroupRootProps } from "./types";
 
 const ToggleGroupContext = React.createContext<ToggleGroupRootProps | null>(
   null,
@@ -80,7 +80,7 @@ const Item = React.forwardRef<
     ref,
   ) => {
     const id = React.useId();
-    const {type, disabled, value, onValueChange} = useRootContext();
+    const { type, disabled, value, onValueChange } = useRootContext();
 
     function onPress(ev: GestureResponderEvent) {
       if (disabled || disabledProp) return;
@@ -104,10 +104,10 @@ const Item = React.forwardRef<
 
     const Component = asChild ? Slot.Pressable : Pressable;
     return (
-      <ItemContext.Provider value={{value: itemValue}}>
+      <ItemContext.Provider value={{ value: itemValue }}>
         <Component
           ref={ref}
-          key={`${ id }-item-${ value }`}
+          key={`${id}-item-${value}`}
           aria-disabled={disabled}
           role={type === "single" ? "radio" : "checkbox"}
           onPress={onPress}
@@ -140,4 +140,4 @@ function useItemContext() {
 
 const utils = ToggleGroupUtils;
 
-export {Item, Root, useItemContext, useRootContext, utils};
+export { Item, Root, useItemContext, useRootContext, utils };

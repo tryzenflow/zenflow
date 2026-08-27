@@ -6,20 +6,19 @@ import {
 import { MonthPager } from "@/components/calendar/month-pager";
 import { OverdueBadge } from "@/components/calendar/overdue-badge";
 import {
-  TaskListSheet,
-  type TaskListSheetHandle,
+  SessionListSheet,
+  type SessionListSheetHandle,
 } from "@/components/calendar/task-list-sheet";
-import { CreateTaskFab } from "@/components/tasks/create-task-fab";
+import { CreateSessionFab } from "@/components/tasks/create-task-fab";
 import { Text } from "@/components/ui/text";
-import { useScheduleRefresh } from "@/hooks/use-schedule-refresh";
 import { useUserStore } from "@/hooks/use-user-store";
-import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { addMonths, monthLabel } from "@/lib/month-date-math";
+import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { useFocusEffect } from "@react-navigation/native";
 import { zonedNow } from "@zenflow/core";
-import type { Task } from "@zenflow/shared";
+import type { Session } from "@zenflow/shared";
 import { type Href, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 
 /**
@@ -48,12 +47,12 @@ export default function MonthScreen() {
   const [overdueCount, setOverdueCount] = useState(0);
   // Bumped whenever the currently-focused page's data should be refetched —
   // returning from `/task/[id]/edit` (via `useFocusEffect`, same pattern as
-  // Day View) or after an Optimize apply.
+  // Day View).
   const [reloadToken, setReloadToken] = useState(0);
 
   const tabBarOverlay = useTabBarOverlayHeight();
 
-  const taskListSheetRef = useRef<TaskListSheetHandle>(null);
+  const taskListSheetRef = useRef<SessionListSheetHandle>(null);
 
   function goToMonth(next: Date) {
     setMonthDate(next);
@@ -66,13 +65,6 @@ export default function MonthScreen() {
     }, []),
   );
 
-  // The Optimize action lives in the tab bar now, outside this screen, so an
-  // apply/undo announces itself through the store instead of a callback.
-  const scheduleRefreshToken = useScheduleRefresh((s) => s.token);
-  useEffect(() => {
-    if (scheduleRefreshToken > 0) setReloadToken((n) => n + 1);
-  }, [scheduleRefreshToken]);
-
   // Tapping a day opens the same detail sheet the "+N more" pill does,
   // listing that day's tasks in place — it no longer navigates away to Day
   // View, so the month stays on screen and the sheet is dismissible with no
@@ -80,11 +72,11 @@ export default function MonthScreen() {
   // `drag` comes from the `MonthPage` that opened the sheet — i.e. the month
   // actually on screen — so long-press-dragging a row out of the sheet routes
   // straight back into that page's drag machinery.
-  function openDay(day: Date, tasks: Task[], drag: MonthDragHandle) {
+  function openDay(day: Date, tasks: Session[], drag: MonthDragHandle) {
     taskListSheetRef.current?.open(day, tasks, drag);
   }
 
-  function openTaskFromSheet(task: Task) {
+  function openSessionFromSheet(task: Session) {
     router.push(`/task/${task.id}/edit` as Href);
   }
 
@@ -133,15 +125,15 @@ export default function MonthScreen() {
               tz={tz}
               reloadToken={reloadToken}
               // Only the page the header is actually showing surfaces a load-
-              // error toast — confirmed live (Android emulator) that without
-              // this, the outer pager's off-screen prev/next pages can fail
-              // their own fetch in the same tick as the visible page and both
-              // call `toast()` in the same millisecond; `components/ui/toast.tsx`
-              // ids toasts with `Date.now()`, so simultaneous calls collide on
-              // one id and React throws a duplicate-key warning. Scoped here
-              // rather than fixed in the shared toast provider (out of this
-              // issue's file scope) — flagged in the PR summary as a
-              // pre-existing toast-id gap worth a follow-up.
+              // error toast — without this, the outer pager's off-screen
+              // prev/next pages can fail their own fetch in the same tick as
+              // the visible page and each would surface its own toast for a
+              // page the user isn't looking at. (The toasts themselves no
+              // longer collide on id if this ever fires simultaneously —
+              // `components/ui/toast.tsx` now ids with a monotonic counter,
+              // not `Date.now()` — but the gating here is still correct on
+              // its own terms: a stale/off-screen page's error isn't user-
+              // relevant.)
               isActive={monthLabel(pageMonthDate) === monthLabel(visibleMonth)}
               onDragActiveChange={setDragActive}
               onOverdueCountChange={setOverdueCount}
@@ -152,13 +144,13 @@ export default function MonthScreen() {
         />
       </View>
 
-      <TaskListSheet
+      <SessionListSheet
         ref={taskListSheetRef}
         tz={tz}
-        onSelectTask={openTaskFromSheet}
+        onSelectSession={openSessionFromSheet}
       />
 
-      <CreateTaskFab tz={tz} />
+      <CreateSessionFab tz={tz} />
     </View>
   );
 }

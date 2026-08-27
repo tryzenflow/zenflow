@@ -1,10 +1,10 @@
-import { listTasks, rescheduleTask } from "@/api/tasks";
+import { listSessions, updateSession } from "@/api/tasks";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import {
   dateKey,
   getMonthGridDays,
-  groupTasksByDate,
+  groupSessionsByDate,
   isOutsideMonth,
 } from "@/lib/month-date-math";
 import {
@@ -14,7 +14,7 @@ import {
 } from "@/lib/task-card";
 import { cn } from "@/lib/utils";
 import { zonedDate, zonedNow, zonedWallClockToUtc } from "@zenflow/core";
-import type { Task } from "@zenflow/shared";
+import type { Session } from "@zenflow/shared";
 import { isAxiosError } from "axios";
 import { format } from "date-fns";
 import * as Haptics from "expo-haptics";
@@ -24,13 +24,13 @@ import { CELL_HEIGHT } from "./month-cell";
 import { MonthGrid, MonthGridSkeleton } from "./month-grid";
 
 interface DragState {
-  task: Task;
+  task: Session;
   fromKey: string;
 }
 
 /**
  * The drag callbacks a `MonthPage` hands to whoever opens its day sheet, so a
- * long-press-drag started on a `TaskListSheet` row lands in the *same* page's
+ * long-press-drag started on a `SessionListSheet` row lands in the *same* page's
  * drag machinery (geometry, ghost, drop-target highlight, reschedule) that an
  * in-grid pill drag uses.
  *
@@ -44,7 +44,12 @@ interface DragState {
  * `end` many seconds later, so the methods must not close over a stale render.
  */
 export interface MonthDragHandle {
-  start: (task: Task, day: Date, absoluteX: number, absoluteY: number) => void;
+  start: (
+    task: Session,
+    day: Date,
+    absoluteX: number,
+    absoluteY: number,
+  ) => void;
   update: (absoluteX: number, absoluteY: number) => void;
   end: (absoluteX: number, absoluteY: number) => void;
   cancel: () => void;
@@ -82,8 +87,8 @@ interface MonthPageProps {
    * deadline, for the header's "N overdue" badge. Only the active page
    * reports, so the badge always describes the month on screen. */
   onOverdueCountChange: (count: number) => void;
-  onOpenDay: (day: Date, tasks: Task[], drag: MonthDragHandle) => void;
-  onOpenOverflow: (day: Date, tasks: Task[], drag: MonthDragHandle) => void;
+  onOpenDay: (day: Date, tasks: Session[], drag: MonthDragHandle) => void;
+  onOpenOverflow: (day: Date, tasks: Session[], drag: MonthDragHandle) => void;
 }
 
 /**
@@ -106,7 +111,7 @@ export function MonthPage({
   onOpenOverflow,
 }: MonthPageProps) {
   const { toast } = useToast();
-  const [tasks, setTasks] = useState<Task[] | null>(null);
+  const [tasks, setSessions] = useState<Session[] | null>(null);
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   const [ghostPos, setGhostPos] = useState<GhostPosition | null>(null);
@@ -135,14 +140,14 @@ export function MonthPage({
 
   const refetch = useCallback(async () => {
     try {
-      // No status filter (unlike Day View's `listTasks("day", …, "PENDING")`)
+      // No status filter (unlike Day View's `listSessions("day", …, "PENDING")`)
       // — the month grid shows completed pills too (line-through), matching
       // `mockups/month-view.html` and the un-filtered fetch
       // `frontend/src/components/calendar/layout.tsx` already does.
-      const res = await listTasks("month", monthDate);
-      setTasks(res.tasks);
+      const res = await listSessions("month", monthDate);
+      setSessions(res.sessions);
     } catch (error) {
-      setTasks((cur) => cur ?? []);
+      setSessions((cur) => cur ?? []);
       if (isActiveRef.current) {
         toast(
           errorMessage(error, "Couldn't load this month's tasks"),
@@ -158,7 +163,7 @@ export function MonthPage({
   }, [refetch, reloadToken]);
 
   const tasksByDate = useMemo(
-    () => groupTasksByDate(tasks ?? [], tz),
+    () => groupSessionsByDate(tasks ?? [], tz),
     [tasks, tz],
   );
 
@@ -218,7 +223,7 @@ export function MonthPage({
   }
 
   function handlePillDragStart(
-    task: Task,
+    task: Session,
     day: Date,
     absoluteX: number,
     absoluteY: number,
@@ -230,7 +235,7 @@ export function MonthPage({
     dragFromKeyRef.current = key;
     onDragActiveChange(true);
     // Seed the ghost at the finger straight away. The origin pill hides the
-    // moment the long-press activates (`draggingTaskId` → `MonthPill`'s
+    // moment the long-press activates (`draggingSessionId` → `MonthPill`'s
     // spacer), so without an initial position the task is simply *gone* from
     // the grid until the first `onUpdate` frame fires.
     setGhostPos({ x: absoluteX, y: absoluteY });
@@ -288,9 +293,8 @@ export function MonthPage({
     // Keep the task's wall-clock time-of-day, move it to the dropped day —
     // mirrors `frontend/src/components/calendar/month-view.tsx`'s
     // `onDragEnd`. Each recurring occurrence is already its own materialized
-    // `Task` row (CLAUDE.md §4) and `PATCH /tasks/:id/reschedule` only ever
-    // targets a single task id (`api/tasks.ts`'s `rescheduleTask` has no
-    // `scope` parameter) — so issue #21's "does drag need scope: 'one' |
+    // `Session` row (CLAUDE.md §4) and `PATCH /tasks/:id` only ever targets a
+    // single task id — so issue #21's "does drag need scope: 'one' |
     // 'following'?" open question doesn't apply here; there's nothing to
     // scope, the endpoint always acts on exactly the dragged occurrence.
     const wall = zonedDate(original.scheduledStartTime, tz);
@@ -298,8 +302,8 @@ export function MonthPage({
     wall.setFullYear(y, m - 1, d);
     const newStart = zonedWallClockToUtc(wall, tz);
 
-    const prevTasks = tasks;
-    setTasks((cur) =>
+    const prevSessions = tasks;
+    setSessions((cur) =>
       (cur ?? []).map((t) =>
         t.id === original.id
           ? { ...t, scheduledStartTime: newStart.toISOString() }
@@ -308,18 +312,20 @@ export function MonthPage({
     );
 
     try {
-      const res = await rescheduleTask(original.id, newStart.toISOString());
-      setTasks((cur) =>
-        (cur ?? []).map((t) => (t.id === original.id ? res.task : t)),
+      const updated = await updateSession(original.id, {
+        scheduledStartTime: newStart.toISOString(),
+      });
+      setSessions((cur) =>
+        (cur ?? []).map((t) => (t.id === original.id ? updated : t)),
       );
     } catch (error) {
-      setTasks(prevTasks ?? []); // rollback the optimistic move
+      setSessions(prevSessions ?? []); // rollback the optimistic move
       toast(errorMessage(error, "Couldn't reschedule task"), "destructive");
     }
   }
 
   // Same "read the callbacks out of a ref at fire time" pattern `MonthPill`
-  // uses, for the same reason in a longer-lived form: `TaskListSheet` captures
+  // uses, for the same reason in a longer-lived form: `SessionListSheet` captures
   // this handle once, when the sheet opens, and only calls `end` after the
   // drop — by which point `handlePillDragEnd`'s closure over `dragging` and
   // `tasks` must be the *current* one, not the render the sheet opened on. A
@@ -350,16 +356,18 @@ export function MonthPage({
   );
 
   const handleOpenDay = useCallback(
-    (day: Date, dayTasks: Task[]) => onOpenDay(day, dayTasks, dragHandle),
+    (day: Date, daySessions: Session[]) =>
+      onOpenDay(day, daySessions, dragHandle),
     [onOpenDay, dragHandle],
   );
   const handleOpenOverflow = useCallback(
-    (day: Date, dayTasks: Task[]) => onOpenOverflow(day, dayTasks, dragHandle),
+    (day: Date, daySessions: Session[]) =>
+      onOpenOverflow(day, daySessions, dragHandle),
     [onOpenOverflow, dragHandle],
   );
 
-  const ghostTask = dragging?.task ?? null;
-  const ghostState = ghostTask ? deriveState(ghostTask) : null;
+  const ghostSession = dragging?.task ?? null;
+  const ghostState = ghostSession ? deriveState(ghostSession) : null;
 
   return (
     <View ref={pageRef} onLayout={measureGeometry} className="flex-1">
@@ -373,7 +381,7 @@ export function MonthPage({
           today={today}
           tasksByDate={tasksByDate}
           highlightedKey={highlightedKey}
-          draggingTaskId={dragging?.task.id ?? null}
+          draggingSessionId={dragging?.task.id ?? null}
           onPressDay={handleOpenDay}
           onPressOverflow={handleOpenOverflow}
           onPillDragStart={handlePillDragStart}
@@ -386,7 +394,7 @@ export function MonthPage({
 
       {/* Drop-target highlight lives on `MonthCell` itself (`isDropTarget`);
           this floating pill is just the dragged copy following the finger. */}
-      {ghostTask && ghostPos && ghostState && (
+      {ghostSession && ghostPos && ghostState && (
         <View
           pointerEvents="none"
           style={{
@@ -416,12 +424,15 @@ export function MonthPage({
                 MONTH_PILL_TEXT_CLASSES[ghostState],
               )}
             >
-              {ghostTask.scheduledStartTime && (
+              {ghostSession.scheduledStartTime && (
                 <Text className="font-mono text-[10px] font-normal text-muted-foreground">
-                  {format(zonedDate(ghostTask.scheduledStartTime, tz), "H:mm")}{" "}
+                  {format(
+                    zonedDate(ghostSession.scheduledStartTime, tz),
+                    "H:mm",
+                  )}{" "}
                 </Text>
               )}
-              {ghostTask.title}
+              {ghostSession.title}
             </Text>
           </View>
         </View>

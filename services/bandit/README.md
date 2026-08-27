@@ -45,7 +45,7 @@ identity re-ranker, so pure EDF order wins until then.
 
 The data the model will consume already accumulates in Phase 1:
 
-- **`TaskEvent`** (`CREATE`/`MOVE`/`RESIZE`/`KEEP`/`COMPLETE`/`ABANDON`) with
+- **`SessionEvent`** (`CREATE`/`MOVE`/`RESIZE`/`KEEP`/`COMPLETE`/`ABANDON`) with
   `oldSnapshot`/`newSnapshot` (each carrying the task's tag names at event time, and the
   EDF-`suggestedStartTime` on MOVE/RESIZE) and a `rewardScore` field — the reward signal.
 - **`User.preferenceMatrix`** — a flat **672**-int **signed** matrix (7 days × 96
@@ -153,7 +153,7 @@ Eliminate the new-user data void using aggregate behavior across the whole user 
    context vector and fall back to pure EDF on timeout/error.
 4. Wire `BANDIT_SERVICE_URL` through backend config (it is already reserved alongside the
    `scheduler` service in `backend/compose.*.yml`).
-5. Feed `TaskEvent`s to `POST /update` so weights track real overrides.
+5. Feed `SessionEvent`s to `POST /update` so weights track real overrides.
 6. Reference [`docs/heuristic.md`](../../docs/heuristic.md) as the source of truth for the
    phased rollout and the Phase-2 heuristics that precede the bandit.
 

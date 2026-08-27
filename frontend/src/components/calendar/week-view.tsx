@@ -10,7 +10,6 @@ import { DndContext, DragEndEvent } from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useDragSensors } from "@/hooks/use-drag-sensors";
-import { DEFAULT_WORK_PREFS, getDayZones } from "@zenflow/core";
 import { DAILY_HORIZON, TIME_GRANULARITY, WEEK_STARTS_ON } from "@zenflow/core";
 import {
   isZonedToday,
@@ -37,7 +36,6 @@ export function WeekView({
   date: Date;
   onReschedule: (taskId: string, startISO: string) => void;
 }) {
-  const prefs = useUserStore((s) => s.user) ?? DEFAULT_WORK_PREFS;
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const sensors = useDragSensors();
   // `date` is already in user-tz space, so the week columns are too.
@@ -164,14 +162,12 @@ export function WeekView({
         </div>
         {weekDates.map((d) => {
           const today = isZonedToday(d, tz);
-          const { isWorkDay } = getDayZones(d, prefs);
           return (
             <div
               key={d.toISOString()}
               className={cn(
                 "flex flex-col items-center justify-center py-2",
                 today && "bg-muted",
-                !today && !isWorkDay && "zone-weekend",
               )}
             >
               <span
@@ -185,7 +181,7 @@ export function WeekView({
               <span
                 className={cn(
                   "mt-0.5 text-base font-bold leading-none",
-                  !today && !isWorkDay && "text-muted-foreground",
+                  !today && "text-muted-foreground",
                 )}
               >
                 {format(d, "d")}

@@ -30,14 +30,14 @@ model User {
   updatedAt          DateTime @updatedAt
 
   // Relations
-  tasks      Task[]
+  sessions      Session[]
   files      File[]
-  taskEvents TaskEvent[]
+  sessionEvents SessionEvent[]
   tags       Tag[]
 
   encryptionKeys UserEncryptionKey[]
   devices        UserDevice[]
-  taskSeries     TaskSeries[]
+  sessionSeries     SessionSeries[]
   integrations   Integration[]
   notifications  Notification[]
   slotProposals  SlotProposal[]
@@ -79,17 +79,15 @@ model UserDevice {
   @@index([userId])
 }
 
-// Links N session-instance Tasks of one "study sessions" goal. Deleting a
-// TaskSeries cascades to all its Task rows — that's how "delete whole series"
-// is implemented at the app layer.
-model TaskSeries {
+model SessionSeries {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
+  deadline  DateTime
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  tasks Task[]
+  sessions Session[]
 
   @@index([userId])
 }
@@ -102,49 +100,45 @@ model Tag {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Implicit many-to-many with Task.
-  tasks Task[]
+  // Implicit many-to-many with Session.
+  sessions Session[]
 
   @@unique([userId, name])
   @@index([userId])
 }
 
-enum TaskStatus {
+enum SessionStatus {
   PENDING
   DONE // completed
   ABANDONED // deadline passed while still PENDING (set by the overdue sweep)
 }
 
-enum TaskType {
+enum SessionType {
   MANUAL
   ASSIGNMENT
   EXAM
   LECTURE
 }
 
-enum TaskSource {
+enum SessionSource {
   USER
   LMS
   PORTAL
 }
 
-model Task {
+model Session {
   id                 String     @id @default(uuid())
   title              String
   note               String?
   durationMinutes    Int // positive multiple of 15
-  deadline           DateTime?
+  deadline           DateTime
   startTime          Int        @default(0) // minutes from midnight of the last manual placement (informational only)
-  status             TaskStatus @default(PENDING)
-  type               TaskType   @default(MANUAL)
-  source             TaskSource @default(USER)
+  status             SessionStatus @default(PENDING)
+  type               SessionType   @default(MANUAL)
+  source             SessionSource @default(USER)
 
   conflict           Boolean    @default(false)
-  manuallyMoved      Boolean    @default(false)
 
-  // limit the mobility of tasks when scheduling in a series so they don't fly around when optimizing
-  anchorStartTime    DateTime?
-  anchorEndTime      DateTime?
   scheduledStartTime DateTime?
   userId             String
   user               User       @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -152,18 +146,16 @@ model Task {
   // Per-user labels (implicit many-to-many).
   tags Tag[]
 
-  events TaskEvent[]
+  events SessionEvent[]
 
-  // Links N session-instance Task rows of one "study sessions" goal.
-  // Deleting the TaskSeries cascades to every session it owns.
   seriesId     String?
-  series       TaskSeries? @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  series       SessionSeries? @relation(fields: [seriesId], references: [id], onDelete: Cascade)
 
   // Denormalized convenience fields for cheap per-row rendering alongside seriesId.
   sessionIndex Int?
   sessionTotal Int?
 
-  reminders     TaskReminder[]
+  reminders     SessionReminder[]
   notifications Notification[]
   slotProposals SlotProposal[]
 
@@ -176,46 +168,42 @@ model Task {
   @@index([userId, seriesId, createdAt(sort: Asc)])
 }
 
-model TaskReminder {
-  id                  String
-  remindBeforeMinutes Int @default(15)
+model SessionReminder {
+  id                  String   @id @default(uuid())
+  remindBeforeMinutes Int      @default(15)
 
-  taskId  String
-  task    Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  @@unique([remindBeforeMinutes, taskId])
+  @@index([sessionId])
 }
 
-enum TaskEventType {
+enum SessionEventType {
   CREATE
-  MOVE // user dragged to another slot/day
+  MOVE
   RESIZE
-  KEEP // user left an EDF suggestion in place (completed in its suggested slot) — positive signal
-  COMPLETE // outcome: completed in its slot
-  ABANDON // outcome: deadline expired unresolved (emitted by the overdue sweep)
-  RESCHEDULED // task auto-repositioned as collateral in someone else's cascadeReschedule (not a user drag)
+  KEEP
+  COMPLETE
+  ABANDON
+  RESCHEDULED
 }
 
-model TaskEvent {
+model SessionEvent {
   id          BigInt        @id @default(autoincrement())
-  eventType   TaskEventType
+  eventType   SessionEventType
   oldSnapshot Json? // { scheduledStartTime, durationMinutes }; null on CREATE
   newSnapshot Json
   rewardScore Float         @default(1.0) // Phase-3 signal
   occurredAt  DateTime      @default(now())
 
-  batchId     String?
-
-  taskId String
-  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  sessionId String
+  session   Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   userId String // denormalized for partition/range queries
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, occurredAt(sort: Desc)])
-  @@index([taskId])
-  // Serves `undoBatch`: every TaskEvent written by one narrowResolve cascade.
-  @@index([userId, batchId])
+  @@index([sessionId])
 }
 
 model File {
@@ -249,15 +237,13 @@ model SlotProposal {
   pickedModel       SchedulingModel
   heuristicProposal Json
   linucbProposal    Json
-  batchId           String?
   timestamp         DateTime          @default(now())
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  taskId String
-  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
-
+  sessionId String
+  session   Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 }
 
 enum IntegrationProvider {
@@ -307,8 +293,8 @@ model Notification {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  taskId String?
-  task   Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  sessionId String?
+  session   Session?   @relation(fields: [sessionId], references: [id], onDelete: SetNull)
 
   @@index([userId, sentAt(sort: Desc)])
 }

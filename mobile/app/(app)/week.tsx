@@ -1,5 +1,5 @@
 import { CalendarDays } from "@/components/Icons";
-import { CreateTaskFab } from "@/components/tasks/create-task-fab";
+import { CreateSessionFab } from "@/components/tasks/create-task-fab";
 import { Text } from "@/components/ui/text";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
@@ -24,7 +24,7 @@ export default function WeekScreen() {
         </Text>
       </View>
 
-      <CreateTaskFab tz={tz} />
+      <CreateSessionFab tz={tz} />
     </View>
   );
 }

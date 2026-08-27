@@ -1,5 +1,5 @@
-import { create } from "zustand";
 import type { User } from "@zenflow/shared";
+import { create } from "zustand";
 
 type State = {
   user: User | null;

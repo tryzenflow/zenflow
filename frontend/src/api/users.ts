@@ -1,29 +1,18 @@
 import { api } from "./base";
-import type {
-  OnboardingInput,
-  UpdatePreferencesInput,
-  User,
-} from "@zenflow/shared";
-import type { PreferenceMatrixResponse } from "@/types/phase2";
+import type { PreferenceMatrixResponse } from "@zenflow/shared";
 
-export async function completeOnboarding(
-  input: OnboardingInput,
-): Promise<User> {
-  const { data } = await api.post("/users/me/onboarding", input);
-  return data.data;
-}
-
-export async function updatePreferences(
-  input: UpdatePreferencesInput,
-): Promise<User> {
-  const { data } = await api.put("/users/me/preferences", input);
-  return data.data;
-}
+// No `completeOnboarding`/`updatePreferences` — there is no onboarding flow
+// and no user-editable work-hours preferences anymore (both `workStart`/
+// `workEnd`/`workDays` and `onboardingComplete` were dropped from `User`
+// with no replacement — see `@zenflow/shared`'s `user.ts`). Timezone is
+// captured once at OTP signup via the `x-timezone` header (`api/auth.ts`)
+// and isn't editable after that.
 
 /**
- * The current user's 672-cell signed preference matrix for the Insights
- * heatmap (fetch-on-open). Row-major [day0..6][block0..95]; a cold-start user
- * comes back all-zeros, which the heatmap renders as an empty state.
+ * The current user's 168-cell (7 days × 24 one-hour buckets) signed
+ * preference matrix for the Insights heatmap (fetch-on-open). Row-major
+ * [day0..6][block0..23]; a cold-start user comes back all-zeros, which the
+ * heatmap renders as an empty state.
  */
 export async function getPreferenceMatrix(): Promise<PreferenceMatrixResponse> {
   const { data } = await api.get("/users/me/preference-matrix");

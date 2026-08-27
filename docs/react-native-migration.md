@@ -21,18 +21,18 @@
 
 ## Terminology
 
-| Term | Plain definition |
-|------|-----------------|
-| `mobile/` | The new Expo + React Native package, added at repo root alongside `frontend/` |
-| `packages/core/` | New workspace package `@zenflow/core` — pure utilities extracted from `frontend/src/utils/` |
-| Expo Router | File-based navigation for React Native (mirrors React Router's mental model; routes are files) |
-| NativeWind | Tailwind CSS compiled to RN `StyleSheet` objects at build time — no DOM dependency |
-| Reanimated | `react-native-reanimated` — worklet-based 60 fps gesture/animation library replacing dnd-kit |
-| RNGH | `react-native-gesture-handler` — native recognizers (pan, long-press, pinch) |
-| Bottom Sheet | `@gorhom/bottom-sheet` — native slide-up panel; replaces every Radix Dialog/Sheet |
-| EAS Build | Expo Application Services — cloud native builds for App Store / Play Store |
-| OKLch | The color space used in Tailwind v4 design tokens; **not** supported in RN `StyleSheet` directly and NativeWind has no built-in conversion, so `mobile/global.css` / `tailwind.config.ts` carry a hand-translated hex copy instead |
-| Wall-clock rule | All calendar `Date`s carry user-tz local fields — enforced by `tz.ts` helpers (CLAUDE.md §5) |
+| Term             | Plain definition                                                                                                                                                                                                                   |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mobile/`        | The new Expo + React Native package, added at repo root alongside `frontend/`                                                                                                                                                      |
+| `packages/core/` | New workspace package `@zenflow/core` — pure utilities extracted from `frontend/src/utils/`                                                                                                                                        |
+| Expo Router      | File-based navigation for React Native (mirrors React Router's mental model; routes are files)                                                                                                                                     |
+| NativeWind       | Tailwind CSS compiled to RN `StyleSheet` objects at build time — no DOM dependency                                                                                                                                                 |
+| Reanimated       | `react-native-reanimated` — worklet-based 60 fps gesture/animation library replacing dnd-kit                                                                                                                                       |
+| RNGH             | `react-native-gesture-handler` — native recognizers (pan, long-press, pinch)                                                                                                                                                       |
+| Bottom Sheet     | `@gorhom/bottom-sheet` — native slide-up panel; replaces every Radix Dialog/Sheet                                                                                                                                                  |
+| EAS Build        | Expo Application Services — cloud native builds for App Store / Play Store                                                                                                                                                         |
+| OKLch            | The color space used in Tailwind v4 design tokens; **not** supported in RN `StyleSheet` directly and NativeWind has no built-in conversion, so `mobile/global.css` / `tailwind.config.ts` carry a hand-translated hex copy instead |
+| Wall-clock rule  | All calendar `Date`s carry user-tz local fields — enforced by `tz.ts` helpers (CLAUDE.md §5)                                                                                                                                       |
 
 ---
 
@@ -45,6 +45,7 @@ Users have filed complaints specifically about the calendar on mobile web: no ta
 accidental touch drags, resize handles too small for fingers.
 
 This plan:
+
 1. Adds `mobile/` — a dedicated Expo app with native gesture-first calendar UX.
 2. Extracts portable pure-function utilities into `packages/core/` so both apps share one copy.
 3. Keeps `frontend/` and the backend unchanged; the API contract (`@zenflow/shared`) is untouched.
@@ -55,40 +56,40 @@ This plan:
 
 ### Portable — reuse as-is or with minimal adaptation
 
-| Artifact | Current location | Where it goes |
-|----------|-----------------|---------------|
-| All shared types (`Task`, `User`, `ViewMode`, `CreateTaskInput`, …) | `packages/shared/src/` | Already shared; add as `mobile/` workspace dep |
-| Timezone helpers (`zonedNow`, `zonedDate`, `zonedWallClockToUtc`, `isZonedToday`, `tzAbbrev`) | `frontend/src/utils/tz.ts` | Extract → `packages/core/src/tz.ts` |
-| Time formatting (`minutesToTime`, `timeToMinutes`, `formatMinutes`, `snapToNearestLaterQuarterHour`) | `frontend/src/utils/time.ts` | Extract → `packages/core/src/time.ts` |
-| Conflict-detection + overlap layout (`getOverlapLayout`, `BlockLayout`) | `frontend/src/utils/overlap.ts` | Extract → `packages/core/src/overlap.ts` |
-| Cross-midnight task splitting (`eventsForDay`, `DaySegment`) | `frontend/src/utils/blocks.ts` | Extract → `packages/core/src/blocks.ts` |
-| Date navigation (`shiftDateByView`) | `frontend/src/utils/navigation.ts` | Extract → `packages/core/src/navigation.ts` |
-| Constants (`DAILY_HORIZON`, `SLOT_MINUTES`, `WEEK_STARTS_ON`) | `frontend/src/utils/constants.ts` + `packages/shared/src/view.ts` | Use from `@zenflow/shared`; remove frontend duplication |
-| Task state derivation (fluid/fixed/overdue/conflict/completed) | `frontend/src/lib/task-card.ts` | Port to `mobile/src/lib/task-card.ts` — same logic, different style output (RN objects, not CSS strings) |
-| Zod task/user validation schemas | `frontend/src/utils/tasks.ts` | Port to `mobile/src/utils/tasks.ts` — identical |
-| `react-hook-form` + Zod form setup | `frontend/src/hooks/use-task-form.ts` | Works in RN — port hook directly |
-| Axios API layer (all endpoints) | `frontend/src/api/` | Port to `mobile/src/api/` — same functions; swap `VITE_API_URL` for Expo config var |
-| `date-fns` + `date-fns-tz` | `frontend/package.json` | Both work in RN — add to `mobile/package.json` |
-| Zustand user store | `frontend/src/hooks/use-user-store.ts` | Port as-is — Zustand works in RN |
+| Artifact                                                                                             | Current location                                                  | Where it goes                                                                                            |
+| ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| All shared types (`Session`, `User`, `ViewMode`, `CreateSessionInput`, …)                            | `packages/shared/src/`                                            | Already shared; add as `mobile/` workspace dep                                                           |
+| Timezone helpers (`zonedNow`, `zonedDate`, `zonedWallClockToUtc`, `isZonedToday`, `tzAbbrev`)        | `frontend/src/utils/tz.ts`                                        | Extract → `packages/core/src/tz.ts`                                                                      |
+| Time formatting (`minutesToTime`, `timeToMinutes`, `formatMinutes`, `snapToNearestLaterQuarterHour`) | `frontend/src/utils/time.ts`                                      | Extract → `packages/core/src/time.ts`                                                                    |
+| Conflict-detection + overlap layout (`getOverlapLayout`, `BlockLayout`)                              | `frontend/src/utils/overlap.ts`                                   | Extract → `packages/core/src/overlap.ts`                                                                 |
+| Cross-midnight task splitting (`eventsForDay`, `DaySegment`)                                         | `frontend/src/utils/blocks.ts`                                    | Extract → `packages/core/src/blocks.ts`                                                                  |
+| Date navigation (`shiftDateByView`)                                                                  | `frontend/src/utils/navigation.ts`                                | Extract → `packages/core/src/navigation.ts`                                                              |
+| Constants (`DAILY_HORIZON`, `SLOT_MINUTES`, `WEEK_STARTS_ON`)                                        | `frontend/src/utils/constants.ts` + `packages/shared/src/view.ts` | Use from `@zenflow/shared`; remove frontend duplication                                                  |
+| Session state derivation (fluid/fixed/overdue/conflict/completed)                                    | `frontend/src/lib/task-card.ts`                                   | Port to `mobile/src/lib/task-card.ts` — same logic, different style output (RN objects, not CSS strings) |
+| Zod task/user validation schemas                                                                     | `frontend/src/utils/tasks.ts`                                     | Port to `mobile/src/utils/tasks.ts` — identical                                                          |
+| `react-hook-form` + Zod form setup                                                                   | `frontend/src/hooks/use-task-form.ts`                             | Works in RN — port hook directly                                                                         |
+| Axios API layer (all endpoints)                                                                      | `frontend/src/api/`                                               | Port to `mobile/src/api/` — same functions; swap `VITE_API_URL` for Expo config var                      |
+| `date-fns` + `date-fns-tz`                                                                           | `frontend/package.json`                                           | Both work in RN — add to `mobile/package.json`                                                           |
+| Zustand user store                                                                                   | `frontend/src/hooks/use-user-store.ts`                            | Port as-is — Zustand works in RN                                                                         |
 
 ### Must be replaced — mobile-specific implementations needed
 
-| Artifact | Web version | React Native replacement | Notes |
-|----------|-------------|--------------------------|-------|
-| Drag & drop | `@dnd-kit/core` + pointer sensors | `react-native-gesture-handler` `PanGestureHandler` + `react-native-reanimated` | dnd-kit is DOM-only |
-| Resize handles | Pointer-driven 10px strips at block edges | Long-press task → bottom-sheet "Change duration" slider | 10px handles untouchable on phone |
-| All Radix UI primitives | `@radix-ui/*` (20+ packages) | `@gorhom/bottom-sheet` (sheet/dialog), React Native Reusables + `@rn-primitives/*` (dropdown), RN built-ins (tabs) | Radix is DOM-only |
-| Rich text note editor | Tiptap / ProseMirror | Native `TextInput` multiline (Phase 1, superseded); `@10play/tentap-editor` **(wired, see Phase 5 update below)** | Tiptap has no RN port — tentap runs it in a `react-native-webview` WebView with a native bridge instead |
-| Navigation | React Router v7 | Expo Router (file-based, same mental model) | |
-| CSS layout + OKLch design tokens | Tailwind v4 Vite plugin | NativeWind v4 (Tailwind v3-config-driven, compiled to RN `StyleSheet`); OKLch tokens hand-translated to hex once in `tailwind.config.ts` / `global.css` | RN `StyleSheet` rejects OKLch directly — NativeWind has no built-in OKLch→native conversion, unlike uniwind |
-| `position: absolute` % values | `top/left/width/height` as `%` strings | Same math; output numeric dp values (`(min / 1440) × totalHeight`) | |
-| Cookie session management | Browser HTTP-only cookies (automatic) | `@react-native-cookies/cookies` + axios interceptor + `expo-secure-store` | |
-| File uploads | `<input type="file">` multipart | `expo-image-picker` + `expo-document-picker` + `expo-file-system` | |
-| Toast notifications | Sonner | `react-native-toast-message` | |
-| Icons | `lucide-react` | `lucide-react-native` (drop-in name parity) | |
-| Keyboard shortcuts | `useViewShortcuts` (d/w/m, arrows) | Remove; replace with tab bar + swipe navigation | Not applicable on mobile |
-| PWA offline / service worker | `vite-plugin-pwa` | `expo-updates` OTA | |
-| Dark mode | `next-themes` + CSS `prefers-color-scheme` | NativeWind's `dark:` variant + `useColorScheme()` from `nativewind`, mirrored to `next-themes` on web builds | |
+| Artifact                         | Web version                                | React Native replacement                                                                                                                                | Notes                                                                                                       |
+| -------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Drag & drop                      | `@dnd-kit/core` + pointer sensors          | `react-native-gesture-handler` `PanGestureHandler` + `react-native-reanimated`                                                                          | dnd-kit is DOM-only                                                                                         |
+| Resize handles                   | Pointer-driven 10px strips at block edges  | Long-press task → bottom-sheet "Change duration" slider                                                                                                 | 10px handles untouchable on phone                                                                           |
+| All Radix UI primitives          | `@radix-ui/*` (20+ packages)               | `@gorhom/bottom-sheet` (sheet/dialog), React Native Reusables + `@rn-primitives/*` (dropdown), RN built-ins (tabs)                                      | Radix is DOM-only                                                                                           |
+| Rich text note editor            | Tiptap / ProseMirror                       | Native `TextInput` multiline (Phase 1, superseded); `@10play/tentap-editor` **(wired, see Phase 5 update below)**                                       | Tiptap has no RN port — tentap runs it in a `react-native-webview` WebView with a native bridge instead     |
+| Navigation                       | React Router v7                            | Expo Router (file-based, same mental model)                                                                                                             |                                                                                                             |
+| CSS layout + OKLch design tokens | Tailwind v4 Vite plugin                    | NativeWind v4 (Tailwind v3-config-driven, compiled to RN `StyleSheet`); OKLch tokens hand-translated to hex once in `tailwind.config.ts` / `global.css` | RN `StyleSheet` rejects OKLch directly — NativeWind has no built-in OKLch→native conversion, unlike uniwind |
+| `position: absolute` % values    | `top/left/width/height` as `%` strings     | Same math; output numeric dp values (`(min / 1440) × totalHeight`)                                                                                      |                                                                                                             |
+| Cookie session management        | Browser HTTP-only cookies (automatic)      | `@react-native-cookies/cookies` + axios interceptor + `expo-secure-store`                                                                               |                                                                                                             |
+| File uploads                     | `<input type="file">` multipart            | `expo-image-picker` + `expo-document-picker` + `expo-file-system`                                                                                       |                                                                                                             |
+| Toast notifications              | Sonner                                     | `react-native-toast-message`                                                                                                                            |                                                                                                             |
+| Icons                            | `lucide-react`                             | `lucide-react-native` (drop-in name parity)                                                                                                             |                                                                                                             |
+| Keyboard shortcuts               | `useViewShortcuts` (d/w/m, arrows)         | Remove; replace with tab bar + swipe navigation                                                                                                         | Not applicable on mobile                                                                                    |
+| PWA offline / service worker     | `vite-plugin-pwa`                          | `expo-updates` OTA                                                                                                                                      |                                                                                                             |
+| Dark mode                        | `next-themes` + CSS `prefers-color-scheme` | NativeWind's `dark:` variant + `useColorScheme()` from `nativewind`, mirrored to `next-themes` on web builds                                            |                                                                                                             |
 
 ---
 
@@ -213,20 +214,21 @@ This is the primary motivation for the mobile app. Each view is redesigned aroun
 
 ### Day View
 
-| Axis | Web behavior | Native replacement |
-|------|--------------|--------------------|
-| Layout | 1536px tall absolute CSS grid | `ScrollView` wrapping a `View` of height `24 × hourHeight` (default 64 dp/hr) |
-| Zoom | N/A | `PinchGestureHandler` adjusts `hourHeight` shared value (48–96 dp range); labels reflow live |
-| Task position | `top`/`height` as `%` strings | `top = (startMin / 1440) × totalHeight`, `height = (durationMin / 1440) × totalHeight` (numeric dp) |
-| Create task | Click empty cell | Long-press (300 ms) on time slot → haptic confirm → `CreateTaskSheet` pre-filled with tapped time |
-| Move task | dnd-kit `PointerSensor` drag | `PanGestureHandler` on `TaskBlock`; `Animated.View` follows finger; snaps to 15-min grid on `onEnd` |
-| Resize task | 10px top/bottom handle strips | Long-press task → `EditTaskSheet` with duration slider (15-min steps) |
-| Conflict layout | Horizontal column split via `getOverlapLayout` | Same algorithm from `@zenflow/core`; apply column fractions as numeric dp widths |
-| Now indicator | Red dot + gradient line, CSS absolute | `Animated.View` positioned at `(nowMin / 1440) × totalHeight`; refreshed every 60 s |
-| Work zones | CSS tinted bands | `View` overlays at work-hour dp offsets; same zone computation from `@zenflow/core` |
-| Scroll-to-now | None (manual) | `scrollRef.current.scrollTo({ y: nowOffset - screenH / 2 })` on mount |
+| Axis             | Web behavior                                   | Native replacement                                                                                     |
+| ---------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Layout           | 1536px tall absolute CSS grid                  | `ScrollView` wrapping a `View` of height `24 × hourHeight` (default 64 dp/hr)                          |
+| Zoom             | N/A                                            | `PinchGestureHandler` adjusts `hourHeight` shared value (48–96 dp range); labels reflow live           |
+| Session position | `top`/`height` as `%` strings                  | `top = (startMin / 1440) × totalHeight`, `height = (durationMin / 1440) × totalHeight` (numeric dp)    |
+| Create task      | Click empty cell                               | Long-press (300 ms) on time slot → haptic confirm → `CreateSessionSheet` pre-filled with tapped time   |
+| Move task        | dnd-kit `PointerSensor` drag                   | `PanGestureHandler` on `SessionBlock`; `Animated.View` follows finger; snaps to 15-min grid on `onEnd` |
+| Resize task      | 10px top/bottom handle strips                  | Long-press task → `EditSessionSheet` with duration slider (15-min steps)                               |
+| Conflict layout  | Horizontal column split via `getOverlapLayout` | Same algorithm from `@zenflow/core`; apply column fractions as numeric dp widths                       |
+| Now indicator    | Red dot + gradient line, CSS absolute          | `Animated.View` positioned at `(nowMin / 1440) × totalHeight`; refreshed every 60 s                    |
+| Work zones       | CSS tinted bands                               | `View` overlays at work-hour dp offsets; same zone computation from `@zenflow/core`                    |
+| Scroll-to-now    | None (manual)                                  | `scrollRef.current.scrollTo({ y: nowOffset - screenH / 2 })` on mount                                  |
 
 **Micro-states (must be in Figma):**
+
 - Empty day — ghost "Long press to add" hint at current-time slot
 - Long-press active — ghost block appears at pressed time, subtle scale on finger
 - Drag in progress — block lifts (shadow + 1.02 scale), amber snap-grid indicator every 15 min, haptic pulse on each snap
@@ -236,32 +238,34 @@ This is the primary motivation for the mobile app. Each view is redesigned aroun
 
 ### Week View
 
-| Axis | Web behavior | Native replacement |
-|------|--------------|--------------------|
-| Layout | 7-column CSS grid, horizontal scroll below `lg` | `FlatList` horizontal, `snapToInterval = screenWidth`, `decelerationRate="fast"` |
-| Per-day content | One day column with 24h grid | Full `DayTimeline` instance per page |
-| Day peek | N/A | Adjacent day visible at ±20 dp edge — swipe affordance |
-| Cross-day drag | Free 2D mouse drag | Block dragged to screen edge → auto-scroll `FlatList` to next/prev day page |
-| Week header | Sticky top bar with 7 day labels | 7 `TouchableOpacity` chips; tap jumps `FlatList.scrollToIndex` |
-| Vertical scroll sync | Independent per column | Shared `Reanimated.ScrollView` `contentOffset.y` across pages via shared value |
+| Axis                 | Web behavior                                    | Native replacement                                                               |
+| -------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------- |
+| Layout               | 7-column CSS grid, horizontal scroll below `lg` | `FlatList` horizontal, `snapToInterval = screenWidth`, `decelerationRate="fast"` |
+| Per-day content      | One day column with 24h grid                    | Full `DayTimeline` instance per page                                             |
+| Day peek             | N/A                                             | Adjacent day visible at ±20 dp edge — swipe affordance                           |
+| Cross-day drag       | Free 2D mouse drag                              | Block dragged to screen edge → auto-scroll `FlatList` to next/prev day page      |
+| Week header          | Sticky top bar with 7 day labels                | 7 `TouchableOpacity` chips; tap jumps `FlatList.scrollToIndex`                   |
+| Vertical scroll sync | Independent per column                          | Shared `Reanimated.ScrollView` `contentOffset.y` across pages via shared value   |
 
 **Micro-states:**
+
 - Normal week — today chip highlighted, other days neutral
 - Swipe transition — next day peeks at right edge with slight parallax
 - Cross-day drag — block snaps to next-day column when dragged to right edge
 
 ### Month View
 
-| Axis | Web behavior | Native replacement |
-|------|--------------|--------------------|
-| Layout | CSS `grid auto-rows-fr`, min 110px per cell | `FlatList` of 7-column week rows; fixed `cellHeight` |
-| Month navigation | Header prev/next buttons | Outer horizontal `FlatList`, `snapToInterval = screenWidth`, paginated by month |
-| Task overflow | "+N more" popover | Tap "+N more" → `@gorhom/bottom-sheet` listing all tasks for that day |
-| Day tap | No special action | `router.push('/?date=YYYY-MM-DD')` → day view for that date |
-| Task drag | Day-to-day, preserve time | Long-press task → drag to target cell; haptic on cell entry; release → PATCH `/tasks/:id/reschedule` |
-| Today highlight | Top border + "Today" badge | Bold date number + accent top border + colored chip |
+| Axis             | Web behavior                                | Native replacement                                                                                   |
+| ---------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Layout           | CSS `grid auto-rows-fr`, min 110px per cell | `FlatList` of 7-column week rows; fixed `cellHeight`                                                 |
+| Month navigation | Header prev/next buttons                    | Outer horizontal `FlatList`, `snapToInterval = screenWidth`, paginated by month                      |
+| Session overflow | "+N more" popover                           | Tap "+N more" → `@gorhom/bottom-sheet` listing all tasks for that day                                |
+| Day tap          | No special action                           | `router.push('/?date=YYYY-MM-DD')` → day view for that date                                          |
+| Session drag     | Day-to-day, preserve time                   | Long-press task → drag to target cell; haptic on cell entry; release → PATCH `/tasks/:id/reschedule` |
+| Today highlight  | Top border + "Today" badge                  | Bold date number + accent top border + colored chip                                                  |
 
 **Micro-states:**
+
 - Normal cells: work day / weekend / outside-month (dimmed)
 - Today cell
 - Cell with 1, 2, or 3 task pills
@@ -291,32 +295,32 @@ each in **light + dark** variants. Micro-states are separate frames, not overlay
 
 ### Screen frames
 
-| Screen | Micro-state variants |
-|--------|---------------------|
-| App icon + splash | — |
-| Login — email stage | Empty, filled, error, loading |
-| Login — OTP stage | Empty, partial fill (3/6 digits), auto-submit loading, invalid code error |
-| Onboarding step 0: Welcome | — |
-| Onboarding step 1: Work hours | Default, invalid window error |
-| Onboarding step 2: Work days | Default, single day selected |
-| Onboarding step 3: Role | Default, one role selected, "Skip" tapped |
-| Onboarding step 4: Duration mode | Each of the 3 modes selected |
-| Onboarding step 5: Summary | Review state, confirm loading |
-| Day view | Empty; with tasks; "Long press to add" ghost hint |
-| Day view — drag in progress | Block elevated + shadow, 15-min snap grid indicator |
-| Day view — conflict | Two side-by-side blocks, amber tint |
-| Day view — pinch zoom | Expanded hour density |
-| Week view | Normal Mon–Sun, today highlighted |
-| Week view — swipe transition | Next day peeking at right edge |
-| Month view | Normal; today cell highlighted |
-| Month view — overflow cell | "+3 more" bottom sheet expanded |
-| Create task sheet | Empty, filled, fixed-time toggle on |
-| Edit task sheet | All fields populated, tags shown |
-| Duration slider sheet | Slider at current value, 15-min step labels |
-| Overflow resolution sheet | Two options (`outsideHours` / `nextAvailable`) |
-| Settings screen | Preferences form (work hours, days, timezone, duration mode) |
+| Screen                           | Micro-state variants                                                      |
+| -------------------------------- | ------------------------------------------------------------------------- |
+| App icon + splash                | —                                                                         |
+| Login — email stage              | Empty, filled, error, loading                                             |
+| Login — OTP stage                | Empty, partial fill (3/6 digits), auto-submit loading, invalid code error |
+| Onboarding step 0: Welcome       | —                                                                         |
+| Onboarding step 1: Work hours    | Default, invalid window error                                             |
+| Onboarding step 2: Work days     | Default, single day selected                                              |
+| Onboarding step 3: Role          | Default, one role selected, "Skip" tapped                                 |
+| Onboarding step 4: Duration mode | Each of the 3 modes selected                                              |
+| Onboarding step 5: Summary       | Review state, confirm loading                                             |
+| Day view                         | Empty; with tasks; "Long press to add" ghost hint                         |
+| Day view — drag in progress      | Block elevated + shadow, 15-min snap grid indicator                       |
+| Day view — conflict              | Two side-by-side blocks, amber tint                                       |
+| Day view — pinch zoom            | Expanded hour density                                                     |
+| Week view                        | Normal Mon–Sun, today highlighted                                         |
+| Week view — swipe transition     | Next day peeking at right edge                                            |
+| Month view                       | Normal; today cell highlighted                                            |
+| Month view — overflow cell       | "+3 more" bottom sheet expanded                                           |
+| Create task sheet                | Empty, filled, fixed-time toggle on                                       |
+| Edit task sheet                  | All fields populated, tags shown                                          |
+| Duration slider sheet            | Slider at current value, 15-min step labels                               |
+| Overflow resolution sheet        | Two options (`outsideHours` / `nextAvailable`)                            |
+| Settings screen                  | Preferences form (work hours, days, timezone, duration mode)              |
 
-### Task card states frame
+### Session card states frame
 
 One frame showing all 5 states side-by-side (fluid, fixed, overdue, conflict, completed) with
 labels explaining the state trigger.
@@ -378,10 +382,10 @@ showing typography scale (Geist), spacing scale, and border-radius.
 2. `TimeGutter`: hour label `Text` nodes at `top = hour × hourHeight` offsets.
 3. `WorkZoneOverlay`: tinted `View`s at work-hour offsets using zone logic from `@zenflow/core`.
 4. `NowIndicator`: red `Animated.View`; `setInterval` every 60 s to recompute `top`.
-5. `TaskBlock`: `Animated.View` with absolute positioning; state → styles via ported `task-card.ts`;
-   `PanGestureHandler` for drag-to-move; long-press triggers `EditTaskSheet`.
+5. `SessionBlock`: `Animated.View` with absolute positioning; state → styles via ported `task-card.ts`;
+   `PanGestureHandler` for drag-to-move; long-press triggers `EditSessionSheet`.
 6. Overlap layout: call `getOverlapLayout` from `@zenflow/core`; apply column fractions as dp widths.
-7. Long-press on `TimeGutter` cell → open `CreateTaskSheet` pre-filled with snapped start time.
+7. Long-press on `TimeGutter` cell → open `CreateSessionSheet` pre-filled with snapped start time.
 8. `PinchGestureHandler` on `DayTimeline`: adjust `hourHeight` shared value (clamp 48–96).
 9. Auto-scroll to current time on mount.
 10. Haptic feedback (`expo-haptics`) on: 15-min drag snap, task create, task complete.
@@ -414,22 +418,22 @@ What shipped, differently from this section's original plan:
    `didDragRef` gate that ignores any `onMomentumScrollEnd` not preceded by a real
    `onScrollBeginDrag` — see that file's doc comments.
 3. `MonthCell` (`components/calendar/month-cell.tsx`): today gets an accent top border + filled
-   date chip; up to 2 pills (`splitCellTasks` in `lib/month-date-math.ts`, unit-tested), "+N more"
+   date chip; up to 2 pills (`splitCellSessions` in `lib/month-date-math.ts`, unit-tested), "+N more"
    overflow pill; outside-month days dimmed, no pills, not tappable/a drag target.
 4. Day tap → `router.push({ pathname: "/(app)", params: { date: <ISO> } })` — `app/(app)/index.tsx`
    (Day View) now reads an optional `date` query param via `useLocalSearchParams` instead of
    always defaulting to `zonedNow(tz)`, added specifically for this deep link.
-5. "+N more" → `components/calendar/task-list-sheet.tsx`'s `TaskListSheet`, built on the existing
+5. "+N more" → `components/calendar/task-list-sheet.tsx`'s `SessionListSheet`, built on the existing
    `@/components/ui/bottom-sheet` host (Phase 5's task sheets already established it — no new
    sheet infra needed, per this phase's original "coordinate rather than build your own" note).
-6. Task drag: a single `Gesture.Pan().activateAfterLongPress(350)` per pill (RNGH v2's built-in
+6. Session drag: a single `Gesture.Pan().activateAfterLongPress(350)` per pill (RNGH v2's built-in
    long-press-then-pan primitive, not a separate `LongPressGestureHandler`+`PanGestureHandler`
    pair) → `components/calendar/month-page.tsx` computes the drop-target cell from the grid's
    measured on-screen rect (`measureInWindow`) + the gesture's `absoluteX`/`absoluteY` → optimistic
-   move + `PATCH /tasks/:id/reschedule` (`rescheduleTask`, same endpoint Day View's reschedule
+   move + `PATCH /tasks/:id/reschedule` (`rescheduleSession`, same endpoint Day View's reschedule
    would use) with rollback + a destructive toast on failure. No `scope: "one" | "following"`
    parameter exists on that endpoint — each recurring occurrence is already its own materialized
-   `Task` row (CLAUDE.md §4), so the phase's original open question about drag scope doesn't apply.
+   `Session` row (CLAUDE.md §4), so the phase's original open question about drag scope doesn't apply.
 
 **Verified live (Android emulator only — no iOS device available):** the screen mounts, chevron
 pagination, weekend tinting, outside-month dimming, the loading skeleton, and the header/pager
@@ -438,21 +442,21 @@ sync fix above, all against a real (empty, since no backend was running in that 
 real task data, the overflow sheet's actual content, and tap-to-Day-View's full round trip — flag
 these for a follow-up on-device pass with the backend stack up.
 
-### Phase 5 — Task Forms + Settings (1 week)
+### Phase 5 — Session Forms + Settings (1 week)
 
 **Settings half: done**, ahead of this doc catching up — `app/(app)/settings.tsx` already
 ships the full preferences form (profile, working hours, work days, timezone, duration mode,
 insights, dark mode, sign-out); see `mobile/README.md`'s screens table.
 
-**Task Forms half: done** (GitHub issue #20 — `CreateTaskSheet`/`EditTaskSheet`/
+**Session Forms half: done** (GitHub issue #20 — `CreateSessionSheet`/`EditSessionSheet`/
 `ChangeDurationSheet`). What actually shipped, differently from this section's original plan:
 
-1. `CreateTaskSheet` / `EditTaskSheet` / `ChangeDurationSheet`, all on `@gorhom/bottom-sheet`
+1. `CreateSessionSheet` / `EditSessionSheet` / `ChangeDurationSheet`, all on `@gorhom/bottom-sheet`
    **v5** (bumped from the `^4.6.4` the scaffold started on — no breaking changes hit beyond a
    couple of TS-only fallout fixes: `BottomSheetModal` became a generic type alias in v5, so the
    two `components/{ui,primitives/bottomSheet}/bottom-sheet.native.tsx` ref wrappers now type
    against `BottomSheetModalMethods` instead of `React.ElementRef<typeof BottomSheetModal>`).
-2. `taskSchema` (+ `TaskFormValues`/`EditTaskFormValues`/`placementQualifier`) is **hoisted to
+2. `taskSchema` (+ `SessionFormValues`/`EditSessionFormValues`/`placementQualifier`) is **hoisted to
    `@zenflow/core`** (`packages/core/src/tasks.ts`) rather than ported to a second `mobile/`
    copy — resolves this doc's original "Portable" table entry for `frontend/src/utils/tasks.ts`
    the other direction from what it said (port to `mobile/src/utils/tasks.ts` — identical) once
@@ -467,13 +471,13 @@ insights, dark mode, sign-out); see `mobile/README.md`'s screens table.
    stepper, `components/tasks/form/duration-stepper.tsx` — **shown in both the create and edit
    sheets**, unlike the web dialog which hides duration entirely in edit mode; mobile has no
    drag-resize handles, so the edit sheet's stepper submits via a second `PATCH
-   /tasks/:id/resize` call alongside the metadata `PATCH /tasks/:id`, since `UpdateTaskInput`
+/tasks/:id/resize` call alongside the metadata `PATCH /tasks/:id`, since `UpdateSessionInput`
    has no `durationMinutes` field) → Deadline (`DeadlineChipRow`, a straight port of
    `deadline-chip-field.tsx`'s chip logic against `GET /tasks/deadline-options`) → Tags
    (`TagAutocomplete`, custom dropdown — see below) → Description (`DescriptionField`, see
    below). No fixed-time toggle and no `OverflowSheet`: both are obsolete against the current
    `@zenflow/shared` contract — the `overflow` envelope was already removed from
-   `CreateTaskResponse` before this phase started (every create/update now always resolves to a
+   `CreateSessionResponse` before this phase started (every create/update now always resolves to a
    concrete placement; see `frontend/src/utils/tasks.ts`'s `placementQualifier` doc comment),
    so there's nothing left for an overflow sheet to display.
 4. Tag autocomplete does **not** use `components/ui/combobox.tsx` (nested nav-style bottom
@@ -499,7 +503,7 @@ insights, dark mode, sign-out); see `mobile/README.md`'s screens table.
      editor's own top edge and shown/hidden by the bridge's `isFocused` state (plus while the
      link-entry row is open) — not a bubble anchored to the exact text-selection caret position
      like web's Tiptap bubble menu. `tentap-editor`'s `CoreEditorState` bridge state exposes a
-     `selection: { from, to }` text *offset* pair but no WebView-internal screen *coordinates* for
+     `selection: { from, to }` text _offset_ pair but no WebView-internal screen _coordinates_ for
      it, so there's nothing to anchor a true per-caret bubble to from native; showing/hiding on
      focus (not on "has a non-empty selection", which would incorrectly hide Upload whenever
      nothing's selected) is the closest reasonable approximation given that constraint. Marks/lists
@@ -508,7 +512,7 @@ insights, dark mode, sign-out); see `mobile/README.md`'s screens table.
      Embedded image/video nodes (matching web's `common/editor/video-block.tsx`/`audio-block.tsx`)
      are an explicit non-goal for now: `tentap-editor`'s `bridgeExtensions` API ships only a bare
      `ImageBridge.setImage(src)`, no video/audio bridge and no attrs for `controls`/sizing the way
-     the web nodes have, and there's no ergonomic extension point to register a *new* custom Tiptap
+     the web nodes have, and there's no ergonomic extension point to register a _new_ custom Tiptap
      node from the native side without patching the package's bundled WebView JS — "Upload file"
      stays a stub toast.
    - **Dependency resolution:** pinned to the Tiptap-v3-based `@10play/tentap-editor@^1.0.1` line
@@ -535,22 +539,23 @@ insights, dark mode, sign-out); see `mobile/README.md`'s screens table.
    tags are visible while editing, not a live-rendered preview — real parity needs this doc's
    Phase 2 richtext plan (`@10play/tentap-editor`), not attempted here. "Upload file" is a stub
    (toasts "not available yet"; no `expo-image-picker`/`expo-document-picker` wiring).~~
+
 6. Placement toast: **not** `react-native-toast-message` — the scaffold already had its own
    `ToastProvider`/`useToast` (`components/ui/toast.tsx`), used app-wide (e.g.
    `app/(app)/settings.tsx`), so the sheets use that instead of adding a second toast library.
    Only the plain success/conflict copy is ported (`mobile/lib/task-toasts.ts`, mirrors
    `create-task-dialog.tsx`'s one-line `toast.success`/`toast.warning`) — the richer Phase-2
    rationale toast (preferred-window / top-cells breakdown) is out of scope; only the toast
-   *surface*, not the scheduling intelligence behind it, was asked for.
+   _surface_, not the scheduling intelligence behind it, was asked for.
 7. Gesture wiring is **partial**, blocked on Phase 2/3/4 (the day/week/month screens are still
-   the placeholder stubs below — there's no positioned grid yet to long-press a *slot* against).
+   the placeholder stubs below — there's no positioned grid yet to long-press a _slot_ against).
    `app/(app)/index.tsx` got the minimal substitute the sheets needed to be exercisable end to
-   end: today's tasks as a plain list, tap → `EditTaskSheet`, long-press a row →
-   `ChangeDurationSheet`, long-press the empty area (or the FAB) → `CreateTaskSheet` pre-filled
+   end: today's tasks as a plain list, tap → `EditSessionSheet`, long-press a row →
+   `ChangeDurationSheet`, long-press the empty area (or the FAB) → `CreateSessionSheet` pre-filled
    with "now" snapped to the next 15-minute mark. True per-pixel slot targeting, drag-to-move,
    pinch-zoom, and the now-indicator/work-zone overlays remain Phase 2 work.
    - **Bug fix (post-#20 follow-up):** the FAB (and, latently, the long-press-empty-area
-     gesture) didn't reliably open `CreateTaskSheet` — `components/ui/bottom-sheet.native.tsx`'s
+     gesture) didn't reliably open `CreateSessionSheet` — `components/ui/bottom-sheet.native.tsx`'s
      `BottomSheetContent` exposed the caller's forwarded `ref` via
      `useImperativeHandle(ref, () => sheetRef.current ?? {}, [sheetRef.current])`, but
      `sheetRef.current` is a plain mutable ref, not reactive state, so that dependency array only
@@ -559,16 +564,16 @@ insights, dark mode, sign-out); see `mobile/README.md`'s screens table.
      after the component's first commit, so the imperative handle's first (and often only) run
      captured it as still `null` and returned the `{}` stub, leaving the caller's
      `ref.current?.present()` a silent no-op forever for any sheet that didn't happen to
-     re-render again shortly after mount (`EditTaskSheet` did, via its `getTaskDetails().then(
-     setTask)`, which is why tap-to-edit worked while the FAB/empty-area create path didn't).
+     re-render again shortly after mount (`EditSessionSheet` did, via its `getSessionDetails().then(
+setSession)`, which is why tap-to-edit worked while the FAB/empty-area create path didn't).
      Fixed by assigning both refs in a single merged callback ref instead, which fires exactly
      when React attaches/detaches the real instance regardless of timing.
    - **Bug fix #2 (post-#20 follow-up, sheets still didn't open after the merged-ref fix
-     above):** the actual remaining cause was `CreateTaskSheet`/`EditTaskSheet`/
+     above):** the actual remaining cause was `CreateSessionSheet`/`EditSessionSheet`/
      `ChangeDurationSheet` being externally controlled by an `open: boolean` + `onOpenChange`
      prop pair (state living in `app/(app)/index.tsx`), bridged through a
      `useControlledBottomSheet(open)` hook that called `ref.current?.present()`/`.dismiss()`
-     inside a `useEffect` keyed on `open` — i.e. one render tick *after* the triggering press
+     inside a `useEffect` keyed on `open` — i.e. one render tick _after_ the triggering press
      handler, not synchronously inside it. Every other working sheet in the app
      (`components/ui/time-picker.tsx`, `components/settings/duration-mode-picker-row.tsx`,
      `components/settings/timezone-picker-row.tsx`) calls `useBottomSheet()`'s `open`/`close`
@@ -582,11 +587,11 @@ insights, dark mode, sign-out); see `mobile/README.md`'s screens table.
      handler. `hooks/use-controlled-bottom-sheet.ts` was deleted. See `mobile/README.md`'s
      "Known pitfalls" section for the write-up future sheet authors should read.
    - **`week.tsx`/`month.tsx` (post-#20 follow-up):** both stub screens now also render a
-     `CreateTaskFab` (`components/tasks/create-task-fab.tsx`, factored out of `index.tsx`'s FAB +
-     `CreateTaskSheet` pairing) so task creation isn't Day-only, even though neither has a real
+     `CreateSessionFab` (`components/tasks/create-task-fab.tsx`, factored out of `index.tsx`'s FAB +
+     `CreateSessionSheet` pairing) so task creation isn't Day-only, even though neither has a real
      task list yet — `onCreated` is a plain success toast there instead of a list `refetch`.
-   - **Task form moved off bottom sheets onto its own screen (post-#20 follow-up):**
-     `CreateTaskSheet`/`EditTaskSheet` are gone — the form now lives at `app/task/new.tsx` /
+   - **Session form moved off bottom sheets onto its own screen (post-#20 follow-up):**
+     `CreateSessionSheet`/`EditSessionSheet` are gone — the form now lives at `app/task/new.tsx` /
      `app/task/[id]/edit.tsx`, pushed as `presentation: "modal"` Stack screens instead of
      presented via `@gorhom/bottom-sheet`. `ChangeDurationSheet` is untouched (still a sheet).
      See `mobile/README.md`'s "The task create/edit form is a full screen, not a bottom sheet"
@@ -628,9 +633,14 @@ insights, dark mode, sign-out); see `mobile/README.md`'s screens table.
 - [ ] Month view: tap any day cell navigates to day view for that date
 - [ ] Month view: "+N more" bottom sheet lists all tasks for that day
 
-### API contract (no backend changes expected)
+### API contract
 
 - `GET /api/v1/tasks?view=day&date=YYYY-MM-DD` returns correct tasks.
-- `PATCH /api/v1/tasks/:id/reschedule` body uses ISO-8601 UTC derived via `zonedWallClockToUtc`.
+- **Update (post-EDF-removal):** the backend rebuilt `tasks` as minimal CRUD and dropped the EDF
+  auto-placement scheduler — `PATCH /api/v1/tasks/:id/reschedule` (and `/resize`, `/complete`,
+  `/reschedule/resolve`, `reschedule/undo/:batchId`, `optimize/preview`, `optimize/apply`) no
+  longer exist. Every mutation (metadata edit, drag-reschedule, resize, complete) goes through one
+  generic `PATCH /api/v1/tasks/:id` with `UpdateSessionInput`; `scheduledStartTime` is a plain field
+  the client sets directly. See `mobile/README.md` for the current client-side surface.
 - `POST /api/v1/auth/otp/verify` sets `Set-Cookie` header; subsequent requests include it automatically via cookie jar.
 - All responses follow envelope `{ success, message, data }` — no changes needed.

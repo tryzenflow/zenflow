@@ -1,7 +1,13 @@
-import Svg, { Circle, Defs, LinearGradient, Path, Stop } from "react-native-svg";
-import { View } from "react-native";
-import { cn } from "@/lib/utils";
 import { Text } from "@/components/ui/text";
+import { cn } from "@/lib/utils";
+import { View } from "react-native";
+import Svg, {
+  Circle,
+  Defs,
+  LinearGradient,
+  Path,
+  Stop,
+} from "react-native-svg";
 
 /**
  * Zenflow sunrise mark — ported from frontend/src/components/logo.tsx (react-native-svg

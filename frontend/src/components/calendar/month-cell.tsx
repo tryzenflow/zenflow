@@ -1,13 +1,16 @@
 import { cn } from "@/lib/utils";
 import { Event } from "@zenflow/shared";
 import { TASK_CARD_CLASSES } from "@zenflow/core";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
 import { format, isSameDay, isSameMonth } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useUserStore } from "@/hooks/use-user-store";
-import { DEFAULT_WORK_PREFS, getDayZones } from "@zenflow/core";
 import { isZonedToday, zonedDate } from "@/utils/tz";
 
 export function MonthCell({
@@ -22,13 +25,14 @@ export function MonthCell({
   const { isOver, setNodeRef } = useDroppable({
     id: format(date, "yyyy-MM-dd"),
   });
-  const prefs = useUserStore((s) => s.user) ?? DEFAULT_WORK_PREFS;
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
 
   const outside = !isSameMonth(date, currentDate);
   const today = isZonedToday(date, tz);
-  const { isWorkDay } = getDayZones(date, prefs);
-  const nonWork = outside || !isWorkDay;
+  // There is no working-hours concept left to shade (see
+  // `day-column-background.tsx`'s doc comment) — the only remaining reason a
+  // cell dims is that it belongs to an adjacent month.
+  const nonWork = outside;
 
   return (
     <div
@@ -63,7 +67,7 @@ export function MonthCell({
         )}
       </div>
 
-      {/* Tasks — faded on off-days, mirroring the mockup. */}
+      {/* Sessions — faded on off-days, mirroring the mockup. */}
       <div
         className={cn(
           "flex-1 space-y-0.5 overflow-hidden",

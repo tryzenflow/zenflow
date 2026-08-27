@@ -3,11 +3,11 @@ import {
   addMonths,
   dateKey,
   getMonthGridDays,
-  groupTasksByDate,
+  groupSessionsByDate,
   isOutsideMonth,
   isWeekendColumn,
   monthLabel,
-  splitCellTasks,
+  splitCellSessions,
 } from "../month-date-math";
 
 describe("getMonthGridDays", () => {
@@ -88,39 +88,39 @@ describe("dateKey / monthLabel / addMonths", () => {
   });
 });
 
-describe("splitCellTasks", () => {
+describe("splitCellSessions", () => {
   it("shows everything with no overflow when at or under the cap", () => {
-    expect(splitCellTasks(["a", "b"], 2)).toEqual({
+    expect(splitCellSessions(["a", "b"], 2)).toEqual({
       visible: ["a", "b"],
       overflowCount: 0,
     });
-    expect(splitCellTasks(["a"], 2)).toEqual({
+    expect(splitCellSessions(["a"], 2)).toEqual({
       visible: ["a"],
       overflowCount: 0,
     });
-    expect(splitCellTasks([], 2)).toEqual({ visible: [], overflowCount: 0 });
+    expect(splitCellSessions([], 2)).toEqual({ visible: [], overflowCount: 0 });
   });
 
   it("caps at 2 and reports the correct overflow count on the 3rd+ task", () => {
-    expect(splitCellTasks(["a", "b", "c"], 2)).toEqual({
+    expect(splitCellSessions(["a", "b", "c"], 2)).toEqual({
       visible: ["a", "b"],
       overflowCount: 1,
     });
-    expect(splitCellTasks(["a", "b", "c", "d", "e"], 2)).toEqual({
+    expect(splitCellSessions(["a", "b", "c", "d", "e"], 2)).toEqual({
       visible: ["a", "b"],
       overflowCount: 3,
     });
   });
 
   it("defaults the cap to 2 (the fixed month-grid overflow cap)", () => {
-    expect(splitCellTasks(["a", "b", "c"])).toEqual({
+    expect(splitCellSessions(["a", "b", "c"])).toEqual({
       visible: ["a", "b"],
       overflowCount: 1,
     });
   });
 });
 
-describe("groupTasksByDate", () => {
+describe("groupSessionsByDate", () => {
   const tz = "UTC";
   function task(id: string, scheduledStartTime: string | null) {
     return { id, scheduledStartTime };
@@ -132,7 +132,7 @@ describe("groupTasksByDate", () => {
       task("b", "2026-06-15T14:30:00.000Z"),
       task("c", "2026-06-16T09:00:00.000Z"),
     ];
-    const grouped = groupTasksByDate(tasks, tz);
+    const grouped = groupSessionsByDate(tasks, tz);
     expect(grouped.get("2026-06-15")?.map((t) => t.id)).toEqual(["a", "b"]);
     expect(grouped.get("2026-06-16")?.map((t) => t.id)).toEqual(["c"]);
     expect(grouped.size).toBe(2);
@@ -140,7 +140,7 @@ describe("groupTasksByDate", () => {
 
   it("omits unplaced tasks (null scheduledStartTime)", () => {
     const tasks = [task("a", null), task("b", "2026-06-15T09:00:00.000Z")];
-    const grouped = groupTasksByDate(tasks, tz);
+    const grouped = groupSessionsByDate(tasks, tz);
     expect(grouped.size).toBe(1);
     expect(grouped.get("2026-06-15")?.map((t) => t.id)).toEqual(["b"]);
   });
@@ -148,7 +148,7 @@ describe("groupTasksByDate", () => {
   it("reasons in the given timezone, not UTC", () => {
     // 2026-06-15T23:30:00Z is already 2026-06-16 local in UTC+2.
     const tasks = [task("a", "2026-06-15T23:30:00.000Z")];
-    const grouped = groupTasksByDate(tasks, "Europe/Berlin");
+    const grouped = groupSessionsByDate(tasks, "Europe/Berlin");
     expect(grouped.has("2026-06-16")).toBe(true);
     expect(grouped.has("2026-06-15")).toBe(false);
   });
@@ -159,7 +159,7 @@ describe("groupTasksByDate", () => {
       task("evening", "2026-06-15T19:45:00.000Z"),
       task("dawn", "2026-06-15T06:15:00.000Z"),
     ];
-    const grouped = groupTasksByDate(tasks, tz);
+    const grouped = groupSessionsByDate(tasks, tz);
     expect(grouped.get("2026-06-15")?.map((t) => t.id)).toEqual([
       "dawn",
       "noon",
@@ -174,7 +174,7 @@ describe("groupTasksByDate", () => {
       task("d16-early", "2026-06-16T08:00:00.000Z"),
       task("d15-early", "2026-06-15T08:00:00.000Z"),
     ];
-    const grouped = groupTasksByDate(tasks, tz);
+    const grouped = groupSessionsByDate(tasks, tz);
     expect(grouped.get("2026-06-15")?.map((t) => t.id)).toEqual([
       "d15-early",
       "d15-late",
@@ -191,7 +191,7 @@ describe("groupTasksByDate", () => {
       task("second", "2026-06-15T09:00:00.000Z"),
       task("third", "2026-06-15T09:00:00.000Z"),
     ];
-    const grouped = groupTasksByDate(tasks, tz);
+    const grouped = groupSessionsByDate(tasks, tz);
     expect(grouped.get("2026-06-15")?.map((t) => t.id)).toEqual([
       "first",
       "second",
@@ -207,7 +207,7 @@ describe("groupTasksByDate", () => {
       task("morning", "2026-06-16T08:00:00.000Z"),
       task("just-after-midnight", "2026-06-15T23:30:00.000Z"),
     ];
-    const grouped = groupTasksByDate(tasks, "Europe/Berlin");
+    const grouped = groupSessionsByDate(tasks, "Europe/Berlin");
     expect(grouped.get("2026-06-16")?.map((t) => t.id)).toEqual([
       "just-after-midnight",
       "morning",

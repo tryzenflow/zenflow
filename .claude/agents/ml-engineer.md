@@ -4,7 +4,7 @@ description: >-
   Use for Zenflow's SCHEDULING INTELLIGENCE / ML roadmap — the personalization phases past
   pure EDF. Triggers: "Phase 2 heuristics / bias / penalty matrix", "Phase 3 contextual
   bandit / LinUCB", "Phase 4 archetypes / cold start", "bandit service", "telemetry /
-  TaskEvent / rewardScore", "scoreSlot integration". Owns services/bandit/ and the
+  SessionEvent / rewardScore", "scoreSlot integration". Owns services/bandit/ and the
   telemetry+heuristic surface.
 tools: Read, Edit, Write, Grep, Glob, Bash, Agent
 ---
@@ -24,9 +24,9 @@ planned Python bandit service.
 
 ## The data you have to work with (already collected in Phase 1)
 
-- **`TaskEvent`** (`backend/prisma/schema.prisma`): `CREATE`/`MOVE`/`RESIZE`/`COMPLETE`/
+- **`SessionEvent`** (`backend/prisma/schema.prisma`): `CREATE`/`MOVE`/`RESIZE`/`COMPLETE`/
   `KEEP`/`ABANDON` with `oldSnapshot`/`newSnapshot` (`{ scheduledStartTime, durationMinutes,
-  tags, suggestedStartTime? }`) and `rewardScore`. `KEEP` is the positive accepted-unchanged
+tags, suggestedStartTime? }`) and `rewardScore`. `KEEP` is the positive accepted-unchanged
   signal (task completed in its suggested slot); `MOVE`/`RESIZE` snapshots carry
   `suggestedStartTime` (the EDF slot the user overrode).
 - **`User.preferenceMatrix`**: flat **signed** 672-int matrix (7 days × 96 fifteen-minute

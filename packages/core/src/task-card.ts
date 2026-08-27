@@ -1,8 +1,7 @@
-import type { TaskCardState } from "@zenflow/shared";
+import type { SessionCardState } from "@zenflow/shared";
 
 interface StateInput {
   status: string;
-  conflict: boolean;
   deadline: string | null;
   scheduledStartTime: string | null;
   durationMinutes: number;
@@ -11,15 +10,15 @@ interface StateInput {
 /**
  * Derive the visual card state for a task (see docs/design-system.md).
  *
- * A task is "overdue" both once its deadline has already passed AND when the
- * cost-based scheduler (backend/src/scheduler/utils/edf.ts) couldn't find room
- * before a tight deadline and placed it past it anyway — that placement is
- * itself an overdue result the moment it lands, not just once the clock
- * catches up to the deadline.
+ * There is no auto-placement engine anymore (CLAUDE.md — the EDF scheduler
+ * was dropped), so "overdue" is purely a function of the task's own fields:
+ * either its deadline has already passed, or it's scheduled to run past a
+ * deadline it does have. "conflict" isn't derived here at all — it's folded
+ * in afterward by {@link withOverlap} from a real client-side time-overlap
+ * check, once layout has computed which blocks actually collide.
  */
-export function deriveState(t: StateInput, now = new Date()): TaskCardState {
+export function deriveState(t: StateInput, now = new Date()): SessionCardState {
   if (t.status === "DONE") return "completed";
-  if (t.conflict) return "conflict";
   if (t.deadline) {
     const deadlineMs = new Date(t.deadline).getTime();
     if (deadlineMs < now.getTime()) return "overdue";
@@ -40,15 +39,15 @@ export function deriveState(t: StateInput, now = new Date()): TaskCardState {
  * sit under a live one without it being a real clash).
  */
 export function withOverlap(
-  state: TaskCardState,
+  state: SessionCardState,
   overlapping: boolean,
-): TaskCardState {
+): SessionCardState {
   if (!overlapping || state === "completed") return state;
   return "conflict";
 }
 
 /** Semantic status classes — left-accent border + background per state. */
-export const TASK_CARD_CLASSES: Record<TaskCardState, string> = {
+export const TASK_CARD_CLASSES: Record<SessionCardState, string> = {
   fluid: "glass-task border-l-primary",
   overdue:
     "bg-rose-50/40 dark:bg-rose-950/10 border-l-rose-500 text-rose-950 dark:text-rose-100",

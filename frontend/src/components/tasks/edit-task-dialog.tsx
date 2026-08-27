@@ -1,7 +1,7 @@
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useTaskForm } from "@/hooks/use-task-form";
+import { useSessionForm } from "@/hooks/use-task-form";
 import { format } from "date-fns";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -9,61 +9,51 @@ import { isAxiosError } from "axios";
 import { errorToast } from "@/lib/toast";
 import { postData } from "@/api";
 import { useUserStore } from "@/hooks/use-user-store";
-import type { Task } from "@/types/tasks";
-import type { TaskEvent } from "@zenflow/shared";
-import { deleteTask, EditTaskFormValues } from "@/utils/tasks";
-import { TaskForm } from "./form/task-form";
-import { TaskHistory } from "./task-history-timeline";
+import type { Session } from "@/types/tasks";
+import { deleteSession, EditSessionFormValues } from "@/utils/tasks";
+import { SessionForm } from "./form/task-form";
 import { useFilesTracker } from "@/hooks/use-files-tracker";
-import { completeTask, getTaskDetails, updateTask } from "@/api/tasks";
+import { getSessionDetails, updateSession } from "@/api/tasks";
 import { Clock, Trash2 } from "lucide-react";
-import { showOfferToRescheduleToast } from "@/lib/scheduling-toasts";
 
-interface EditTaskDialogProps {
+interface EditSessionDialogProps {
   open: boolean;
   setOpen: (open: boolean) => void;
   taskId: string;
   onSaved: () => void;
 }
 
-export function EditTaskDialog({
+export function EditSessionDialog({
   open,
   setOpen,
   taskId,
   onSaved,
-}: EditTaskDialogProps) {
+}: EditSessionDialogProps) {
   const [loading, setLoading] = useState(false);
-  const [task, setTask] = useState<Task | null>(null);
-  const [events, setEvents] = useState<TaskEvent[]>([]);
+  const [task, setSession] = useState<Session | null>(null);
   const user = useUserStore((s) => s.user);
   const { newUploadsRef } = useFilesTracker();
 
   useEffect(() => {
     if (!open) return;
-    getTaskDetails(taskId).then((res) => {
-      setTask(res.task);
-      setEvents(res.events);
-    });
+    getSessionDetails(taskId).then(setSession);
   }, [taskId, open]);
 
-  // Refresh task details and history when the calendar dispatches a drag/resize
-  // update for this task (e.g. user drags the block while the panel is open).
+  // Refresh task details when the calendar dispatches a drag/resize update
+  // for this task (e.g. user drags the block while the panel is open).
   useEffect(() => {
     if (!open) return;
     const handler = (e: Event) => {
       const updatedId = (e as CustomEvent<string>).detail;
       if (updatedId === taskId) {
-        getTaskDetails(taskId).then((res) => {
-          setTask(res.task);
-          setEvents(res.events);
-        });
+        getSessionDetails(taskId).then(setSession);
       }
     };
     window.addEventListener("zenflow:task-updated", handler);
     return () => window.removeEventListener("zenflow:task-updated", handler);
   }, [taskId, open]);
 
-  const form = useTaskForm({
+  const form = useSessionForm({
     defaultValues: {
       title: "",
       duration: 60,
@@ -84,33 +74,21 @@ export function EditTaskDialog({
     });
   }, [task, form]);
 
-  async function onSubmit(values: EditTaskFormValues) {
+  async function onSubmit(values: EditSessionFormValues) {
     if (!user) return;
     setLoading(true);
     try {
-      const response = await updateTask(taskId, {
+      // One generic PATCH covers the whole metadata diff — there is no
+      // auto-placement engine to recompute a cascade or flag a conflict
+      // anymore, so this always just writes the fields and returns.
+      await updateSession(taskId, {
         title: values.title,
         note: values.note || null,
         deadline: values.deadline,
         tags: values.tags,
       });
       onSaved();
-      // A deadline/tags change that breaks the task's own (unchanged) slot no
-      // longer auto-searches for a new one — the same write flags
-      // `conflict: true` and returns `rationale` explaining why, and this
-      // shows the offer-to-reschedule Accept/Decline toast (Accept calls
-      // `resolveTaskPlacement`). No cascade toast here: update() never moves
-      // other tasks anymore, only ever leaves its own slot as-is or flagged.
-      if (response.rationale) {
-        showOfferToRescheduleToast(
-          taskId,
-          response.task.title,
-          response.rationale,
-          onSaved,
-        );
-      } else {
-        toast.success("Task updated 🎉");
-      }
+      toast.success("Session updated 🎉");
       setOpen(false);
     } catch (error) {
       errorToast(
@@ -125,9 +103,9 @@ export function EditTaskDialog({
   async function onComplete() {
     setLoading(true);
     try {
-      await completeTask(taskId);
+      await updateSession(taskId, { status: "DONE" });
       onSaved();
-      toast.success("Task completed");
+      toast.success("Session completed");
       setOpen(false);
     } catch (error) {
       errorToast(
@@ -142,12 +120,11 @@ export function EditTaskDialog({
   async function onDelete() {
     setLoading(true);
     try {
-      // Delete only frees this task's own slot and clears whatever was
-      // ONLY conflicting with it — it never cascades to reposition other
-      // tasks anymore, so there's nothing left for a cascade toast to show.
-      await deleteTask(taskId);
+      // Delete only frees this task's own slot — it never cascades to
+      // reposition other tasks anymore, so there's nothing left to prompt.
+      await deleteSession(taskId);
       onSaved();
-      toast.success("Task deleted");
+      toast.success("Session deleted");
       setOpen(false);
     } catch (error) {
       errorToast(
@@ -170,11 +147,9 @@ export function EditTaskDialog({
   const isDone = task?.status === "DONE";
   const statusColor = isDone
     ? "bg-emerald-500"
-    : task?.conflict
-      ? "bg-amber-500"
-      : task?.scheduledStartTime
-        ? "bg-primary"
-        : "bg-muted-foreground";
+    : task?.scheduledStartTime
+      ? "bg-primary"
+      : "bg-muted-foreground";
 
   const scheduledStart = task?.scheduledStartTime
     ? new Date(task.scheduledStartTime)
@@ -199,7 +174,7 @@ export function EditTaskDialog({
           <span className={cn("size-2 shrink-0 rounded-full", statusColor)} />
           <div className="min-w-0">
             <h2 className="truncate text-sm font-bold tracking-tight">
-              {task?.title || "Task detail"}
+              {task?.title || "Session detail"}
             </h2>
             {task && (
               <p className="truncate text-[11px] text-muted-foreground">
@@ -226,11 +201,7 @@ export function EditTaskDialog({
                 </p>
                 <p className="text-[11px] text-muted-foreground">
                   {task.durationMinutes} min ·{" "}
-                  {isDone
-                    ? "Completed"
-                    : task.manuallyMoved
-                      ? "Manually placed"
-                      : "EDF engine placed"}
+                  {isDone ? "Completed" : "Pending"}
                 </p>
               </div>
             </div>
@@ -247,7 +218,7 @@ export function EditTaskDialog({
           </div>
         )}
 
-        <TaskForm
+        <SessionForm
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           form={form as any}
           onSubmit={onSubmit}
@@ -257,7 +228,6 @@ export function EditTaskDialog({
           newUploadsRef={newUploadsRef}
           initialNote={task?.note ?? undefined}
           submitLabel="Save Changes"
-          bodyExtra={events.length > 0 && <TaskHistory events={events} />}
           footerExtra={
             <Button
               type="button"
@@ -266,7 +236,7 @@ export function EditTaskDialog({
               disabled={loading}
               className="h-8 w-full border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive"
             >
-              <Trash2 className="size-3.5" /> Delete Task
+              <Trash2 className="size-3.5" /> Delete Session
             </Button>
           }
         />

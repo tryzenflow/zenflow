@@ -34,7 +34,7 @@ interface ErrorBoundaryState {
  * creating that native view throws during render. Unhandled, that crash
  * unwound the whole `(app)/index` Day-screen tree, which is why *every*
  * sheet-opening gesture (FAB, long-press-empty-area, tap-to-edit) appeared
- * broken at once — `CreateTaskSheet` and `EditTaskSheet` are siblings under
+ * broken at once — `CreateSessionSheet` and `EditSessionSheet` are siblings under
  * that same tree, so one field's crash took the other down with it, not
  * just its own sheet. Wrapping just the WebView-backed field keeps a
  * failure there contained to a small inline fallback instead.

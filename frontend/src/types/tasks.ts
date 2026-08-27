@@ -1,5 +1,5 @@
-import type { CreateTaskInput, Task, UpdateTaskInput } from "@zenflow/shared";
+import type { CreateSessionInput, Session, UpdateSessionInput } from "@zenflow/shared";
 
-export type { Task };
-export type CreateTaskDto = CreateTaskInput;
-export type UpdateTaskDto = UpdateTaskInput;
+export type { Session };
+export type CreateSessionDto = CreateSessionInput;
+export type UpdateSessionDto = UpdateSessionInput;

@@ -237,9 +237,11 @@ export interface TimePickerRowProps {
 }
 
 /**
- * Labeled "label — value" row that opens the shared time-picker sheet — used
- * for onboarding/settings work-hours (`mockups/onboarding.html`'s "Sheet"
- * frame).
+ * Labeled "label — value" row that opens the shared time-picker sheet. Not
+ * currently used by any screen (the work-hours settings UI it originally
+ * backed was removed), but kept as a generic `components/ui/` primitive
+ * alongside `TimePickerInline` (which the deadline chip row does use) in
+ * case a future feature needs a full-row time picker.
  */
 export function TimePickerRow({
   label,

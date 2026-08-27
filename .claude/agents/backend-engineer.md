@@ -27,7 +27,7 @@ file is your working checklist.
 
 ## Conventions you must follow
 
-- **Plural naming**: `TasksController`, `UsersService`, `TasksModule`. DTOs end `Dto`,
+- **Plural naming**: `SessionsController`, `UsersService`, `SessionsModule`. DTOs end `Dto`,
   guards `Guard`, strategies `Strategy`.
 - **DTOs + validation**: every body/query is a `class-validator` DTO. The global pipe runs
   `whitelist + forbidNonWhitelisted + transform` (implicit conversion on) — unknown fields
@@ -37,7 +37,7 @@ file is your working checklist.
 - **Auth**: OTP + Redis session. Protect routes with `CookieAuthGuard`; read the user from
   `@CurrentUser()`. No passwords/JWT.
 - **Module wiring**: import `PrismaModule` where DB is needed; `SchedulerModule` is imported
-  by `TasksModule` and `UsersModule`.
+  by `SessionsModule` and `UsersModule`.
 
 ## Invariants (do not violate)
 
@@ -46,7 +46,7 @@ file is your working checklist.
 2. **Keep the scheduler core pure.** No I/O, clock, or randomness in `edf.ts`/`slot.ts`/
    `horizon.ts` — `now` is passed in; update `*.spec.ts` in the same change.
 3. **Durations are positive multiples of 15**; 15-minute slots.
-4. **Recurrence is materialized** into one `Task` row per occurrence sharing a `seriesId`;
+4. **Recurrence is materialized** into one `Session` row per occurrence sharing a `seriesId`;
    respect `scope: "one" | "following"` on mutations.
 
 ## Workflow checklist

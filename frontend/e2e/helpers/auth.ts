@@ -36,8 +36,9 @@ export function uniqueEmail(prefix = "e2e"): string {
 
 /**
  * Drive the OTP login UI end-to-end: enter the email, request the code, read it
- * from MailHog, and submit. Leaves the page authenticated (on `/` or
- * `/onboarding` depending on whether the account has onboarded).
+ * from MailHog, and submit. Leaves the page authenticated on `/` — there is no
+ * onboarding step, a fresh signup lands straight in the app (see `App.tsx` /
+ * `with-auth.tsx`).
  */
 export async function login(
   page: Page,
@@ -60,13 +61,5 @@ export async function login(
     await page.getByRole("textbox").last().fill(otp);
   }
 
-  await expect(page).toHaveURL(/\/(onboarding)?$/, { timeout: 15_000 });
-
-  // `WithAuth` (React StrictMode double-invokes its mount effects in dev)
-  // can bounce the URL "/" → "/onboarding" → "/" a couple of times right
-  // after login before settling — the assertion above can resolve mid-bounce,
-  // handing back a URL that's about to change again. Give it a beat to
-  // settle so callers checking `page.url()` for the onboarding redirect
-  // don't race it.
-  await page.waitForTimeout(500);
+  await expect(page).toHaveURL("/", { timeout: 15_000 });
 }

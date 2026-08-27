@@ -1,8 +1,7 @@
+import { cn } from "@/lib/utils";
 import * as React from "react";
 import { type ListRenderItemInfo, View } from "react-native";
-import { Text } from "./text";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { cn } from "@/lib/utils";
 import { Check, ChevronsUpDown, Search } from "../Icons";
 import {
   BottomSheet,
@@ -14,6 +13,7 @@ import {
   useBottomSheet,
 } from "./bottom-sheet";
 import { Button, buttonTextVariants, buttonVariants } from "./button";
+import { Text } from "./text";
 
 // TODO: refactor and move to UI
 // TODO: create web component, use https://ui.shadcn.com/docs/components/combobox
@@ -54,7 +54,7 @@ const Combobox = React.forwardRef<
       onSelectedItemChange,
       ...props
     },
-    ref
+    ref,
   ) => {
     const insets = useSafeAreaInsets();
     const [search, setSearch] = React.useState("");
@@ -113,7 +113,7 @@ const Combobox = React.forwardRef<
           </Button>
         );
       },
-      [selectedItem, selectedItemProp]
+      [selectedItem, selectedItemProp],
     );
 
     function onSubmitEditing() {
@@ -223,7 +223,7 @@ const Combobox = React.forwardRef<
         </BottomSheetContent>
       </BottomSheet>
     );
-  }
+  },
 );
 
 Combobox.displayName = "Combobox";

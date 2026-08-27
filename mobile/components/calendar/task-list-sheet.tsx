@@ -9,7 +9,7 @@ import { Text } from "@/components/ui/text";
 import { deriveState } from "@/lib/task-card";
 import { cn } from "@/lib/utils";
 import { zonedDate } from "@zenflow/core";
-import type { Task, TaskCardState } from "@zenflow/shared";
+import type { Session, SessionCardState } from "@zenflow/shared";
 import { format } from "date-fns";
 import * as Haptics from "expo-haptics";
 import {
@@ -24,27 +24,27 @@ import { type ListRenderItemInfo, Pressable, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import type { MonthDragHandle } from "./month-page";
 
-export interface TaskListSheetHandle {
+export interface SessionListSheetHandle {
   /** `drag` is the drag machinery of the `MonthPage` that opened this sheet,
    * so a row dragged out of here reschedules through exactly the same path an
    * in-grid pill drag does. */
-  open: (day: Date, tasks: Task[], drag: MonthDragHandle) => void;
+  open: (day: Date, tasks: Session[], drag: MonthDragHandle) => void;
 }
 
-interface TaskListSheetProps {
+interface SessionListSheetProps {
   tz: string;
   /** Tapping a row closes the sheet and hands the task back to the screen
    * (`app/(app)/month.tsx` pushes `/task/[id]/edit`). */
-  onSelectTask: (task: Task) => void;
+  onSelectSession: (task: Session) => void;
 }
 
-export const TaskListSheet = forwardRef<
-  TaskListSheetHandle,
-  TaskListSheetProps
->(({ tz, onSelectTask }, ref) => {
+export const SessionListSheet = forwardRef<
+  SessionListSheetHandle,
+  SessionListSheetProps
+>(({ tz, onSelectSession }, ref) => {
   const bottomSheet = useBottomSheet();
   const [day, setDay] = useState<Date | null>(null);
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasks, setSessions] = useState<Session[]>([]);
   const dragRef = useRef<MonthDragHandle | null>(null);
   // Read inside the pan callbacks, which are built once per row and must not
   // capture the day the sheet happened to be showing on that render.
@@ -53,9 +53,9 @@ export const TaskListSheet = forwardRef<
   useImperativeHandle(
     ref,
     () => ({
-      open: (nextDay, nextTasks, drag) => {
+      open: (nextDay, nextSessions, drag) => {
         setDay(nextDay);
-        setTasks(nextTasks);
+        setSessions(nextSessions);
         dayRef.current = nextDay;
         dragRef.current = drag;
         bottomSheet.open();
@@ -81,7 +81,7 @@ export const TaskListSheet = forwardRef<
    * `present()` re-opens it.
    */
   const handleRowDragStart = (
-    task: Task,
+    task: Session,
     absoluteX: number,
     absoluteY: number,
   ) => {
@@ -129,7 +129,7 @@ export const TaskListSheet = forwardRef<
         </BottomSheetHeader>
         <BottomSheetFlatList
           data={tasks}
-          keyExtractor={(item) => (item as Task).id}
+          keyExtractor={(item) => (item as Session).id}
           contentContainerClassName="px-5 pt-4"
           className="py-0"
           ListEmptyComponent={
@@ -146,7 +146,7 @@ export const TaskListSheet = forwardRef<
             item: rawItem,
             index,
           }: ListRenderItemInfo<unknown>) => {
-            const item = rawItem as Task;
+            const item = rawItem as Session;
             return (
               <View
                 className={cn(
@@ -156,12 +156,12 @@ export const TaskListSheet = forwardRef<
                   index > 0 && "border-t border-t-border",
                 )}
               >
-                <TaskListRow
+                <SessionListRow
                   task={item}
                   tz={tz}
                   onPress={() => {
                     bottomSheet.close();
-                    onSelectTask(item);
+                    onSelectSession(item);
                   }}
                   onDragStart={handleRowDragStart}
                   dragRef={dragRef}
@@ -174,16 +174,16 @@ export const TaskListSheet = forwardRef<
     </BottomSheet>
   );
 });
-TaskListSheet.displayName = "TaskListSheet";
+SessionListSheet.displayName = "SessionListSheet";
 
-const ROW_DOT_CLASSES: Record<TaskCardState, string> = {
+const ROW_DOT_CLASSES: Record<SessionCardState, string> = {
   fluid: "bg-brand-orange",
   overdue: "bg-rose-500",
   conflict: "bg-amber-500",
   completed: "bg-emerald-500",
 };
 
-const ROW_STATE_LABELS: Record<TaskCardState, string> = {
+const ROW_STATE_LABELS: Record<SessionCardState, string> = {
   fluid: "Auto-scheduled",
   overdue: "Overdue",
   conflict: "Conflict",
@@ -192,23 +192,23 @@ const ROW_STATE_LABELS: Record<TaskCardState, string> = {
 
 /** Sheet subtitle: "5 tasks", plus the mockup's "· all auto-scheduled" tail
  * when nothing on the day is completed/overdue/conflicting. */
-function summarize(tasks: Task[]): string {
+function summarize(tasks: Session[]): string {
   if (tasks.length === 0) return "No tasks";
   const count = `${tasks.length} ${tasks.length === 1 ? "task" : "tasks"}`;
   return count;
 }
 
-function TaskListRow({
+function SessionListRow({
   task,
   tz,
   onPress,
   onDragStart,
   dragRef,
 }: {
-  task: Task;
+  task: Session;
   tz: string;
   onPress: () => void;
-  onDragStart: (task: Task, absoluteX: number, absoluteY: number) => void;
+  onDragStart: (task: Session, absoluteX: number, absoluteY: number) => void;
   dragRef: RefObject<MonthDragHandle | null>;
 }) {
   const state = deriveState(task);
@@ -262,28 +262,28 @@ function TaskListRow({
         onPress={onPress}
         className="flex-row items-center gap-[13px] px-4 py-3.5"
       >
-      <Text className="w-[54px] flex-none text-right font-mono text-[15px] text-muted-foreground">
-        {timeLabel}
-      </Text>
-      <View
-        className={cn(
-          "h-[9px] w-[9px] flex-none rounded-full",
-          ROW_DOT_CLASSES[state],
-        )}
-      />
-      <View className="min-w-0 flex-1">
-        <Text
+        <Text className="w-[54px] flex-none text-right font-mono text-[15px] text-muted-foreground">
+          {timeLabel}
+        </Text>
+        <View
           className={cn(
-            "text-[15px] font-semibold text-foreground",
-            state === "completed" && "line-through",
+            "h-[9px] w-[9px] flex-none rounded-full",
+            ROW_DOT_CLASSES[state],
           )}
-          numberOfLines={1}
-        >
-          {task.title}
-        </Text>
-        <Text className="mt-0.5 text-[12.5px] text-muted-foreground">
-          {ROW_STATE_LABELS[state]} · {task.durationMinutes}m
-        </Text>
+        />
+        <View className="min-w-0 flex-1">
+          <Text
+            className={cn(
+              "text-[15px] font-semibold text-foreground",
+              state === "completed" && "line-through",
+            )}
+            numberOfLines={1}
+          >
+            {task.title}
+          </Text>
+          <Text className="mt-0.5 text-[12.5px] text-muted-foreground">
+            {ROW_STATE_LABELS[state]} · {task.durationMinutes}m
+          </Text>
         </View>
       </Pressable>
     </GestureDetector>

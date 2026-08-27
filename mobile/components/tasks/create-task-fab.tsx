@@ -11,7 +11,7 @@ import { Pressable, View } from "react-native";
  * long-press-empty-area gesture (`app/(app)/index.tsx`), which needs the
  * exact same computation without going through the FAB itself.
  */
-export function createTaskAtNowHref(tz: string): Href {
+export function createSessionAtNowHref(tz: string): Href {
   const now = zonedNow(tz);
   const snappedMinutes = snapToNearestLaterQuarterHour(
     now.getHours() * 60 + now.getMinutes(),
@@ -24,7 +24,7 @@ export function createTaskAtNowHref(tz: string): Href {
   } as Href;
 }
 
-export function CreateTaskFab({ tz }: { tz: string }) {
+export function CreateSessionFab({ tz }: { tz: string }) {
   const router = useRouter();
   const tabBarOverlay = useTabBarOverlayHeight();
   return (
@@ -43,7 +43,7 @@ export function CreateTaskFab({ tz }: { tz: string }) {
       className="absolute right-[18px] z-[35]"
     >
       <Pressable
-        onPress={() => router.push(createTaskAtNowHref(tz))}
+        onPress={() => router.push(createSessionAtNowHref(tz))}
         accessibilityRole="button"
         accessibilityLabel="New task"
         style={FAB_GLOW_INNER}

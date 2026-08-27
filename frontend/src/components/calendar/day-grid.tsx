@@ -53,7 +53,7 @@ export function DayGrid({ events, date }: { events: Event[]; date: Date }) {
 
       {/* day column */}
       <div className="bg-card relative">
-        <DayColumnBackground date={date} />
+        <DayColumnBackground />
 
         {isZonedToday(date, tz) && (
           <div

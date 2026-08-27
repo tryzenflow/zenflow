@@ -1,4 +1,4 @@
-/** A per-user label that can be attached to many tasks (m2m with Task). */
+/** A per-user label that can be attached to many tasks (m2m with Session). */
 export interface Tag {
   id: string;
   name: string;

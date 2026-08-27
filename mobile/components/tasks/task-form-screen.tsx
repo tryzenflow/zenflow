@@ -1,5 +1,6 @@
 import { X } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
+import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { useRouter } from "expo-router";
 import { type ReactNode, createContext, useContext, useRef } from "react";
 import {
@@ -11,7 +12,6 @@ import {
   findNodeHandle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 
 /**
  * The form screen's single scroll owner, exposed so a field far down the
@@ -26,18 +26,18 @@ import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
  * resizes the *window*; it doesn't scroll this ScrollView's content to
  * reveal whatever's now supposed to be visible in the shrunk viewport).
  */
-const TaskFormScrollContext =
+const SessionFormScrollContext =
   createContext<React.RefObject<ScrollView | null> | null>(null);
 
 /**
  * Scrolls a given node (by ref) into view above the keyboard, the same way
  * RN's `ScrollView` already does automatically for a focused native
  * `TextInput` — for callers (like the WebView note editor) that don't get
- * that behavior for free. No-ops outside `TaskFormScreen` or if the
+ * that behavior for free. No-ops outside `SessionFormScreen` or if the
  * scroll-responder API isn't available on this RN version/architecture.
  */
 export function useScrollIntoViewOnFocus() {
-  const scrollViewRef = useContext(TaskFormScrollContext);
+  const scrollViewRef = useContext(SessionFormScrollContext);
   return (nodeRef: React.RefObject<View | null>) => {
     const scrollView = scrollViewRef?.current;
     const node = nodeRef.current;
@@ -71,7 +71,7 @@ export function useScrollIntoViewOnFocus() {
  * gesture still work too, since this is a normal pushed Stack screen under
  * `presentation: "modal"`).
  */
-export function TaskFormScreen({
+export function SessionFormScreen({
   title,
   subtitle,
   headerRight,
@@ -136,9 +136,9 @@ export function TaskFormScreen({
           contentContainerStyle={{ paddingBottom: 32 }}
           keyboardShouldPersistTaps="handled"
         >
-          <TaskFormScrollContext.Provider value={scrollViewRef}>
+          <SessionFormScrollContext.Provider value={scrollViewRef}>
             {children}
-          </TaskFormScrollContext.Provider>
+          </SessionFormScrollContext.Provider>
         </ScrollView>
 
         <View className="border-t border-border bg-background h-0 shadow-lg shadow-primary/10">

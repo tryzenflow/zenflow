@@ -12,7 +12,7 @@
 <body>
   <div class="page-head">
     <h1><span class="dot"></span> Week View — swipeable day pages</h1>
-    <p>The RN redesign of <code>frontend/src/components/calendar/week-view.tsx</code> + <code>week-grid.tsx</code>. The 7-column desktop grid becomes a horizontal <code>FlatList</code> of full-height single-day timelines (<code>snapToInterval = screenWidth</code>), under a sticky 7-chip week header. Adjacent days "peek" at the screen edge to advertise the swipe. Each day's timeline is the full 24-hour scroll range (12 AM–11:59 PM, matching <code>day-column-background.tsx</code>'s always-24-hour grid), with non-work hours tinted <code>zone-nonwork</code> grey — frames are shown scrolled to the populated work-hours portion. Today = Tue Jun 30, 2026; week of Jun 29 – Jul 5.</p>
+    <p>The RN redesign of <code>frontend/src/components/calendar/week-view.tsx</code> + <code>week-grid.tsx</code>. The 7-column desktop grid becomes a horizontal <code>FlatList</code> of full-height single-day timelines (<code>snapToInterval = screenWidth</code>), under a sticky 7-chip week header. Adjacent days "peek" at the screen edge to advertise the swipe. Each day's timeline is the full 24-hour scroll range (12 AM–11:59 PM, matching <code>day-column-background.tsx</code>'s always-24-hour grid), — the work-hours shading (<code>zone-nonwork</code>) is gone along with <code>User.workStart</code>/<code>workEnd</code>/<code>workDays</code> in the education-pivot migration (<code>20260823155537_add_education_pivot</code>); every hour renders the same way now, and frames are shown scrolled to the populated portion of the day. Today = Tue Jun 30, 2026; week of Jun 29 – Jul 5.</p>
     <div class="crumbs"><a href="index.html">← All mobile mockups</a></div>
   </div>
 
@@ -79,9 +79,6 @@
                   <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">11 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
 
                   <div class="absolute left-14 right-[15px] top-1.5 bottom-0">
-                    <!-- non-work zones: full 24h day, work window 9:00-17:00 (shift = 8h prepended × 64px = 512px) -->
-                    <div class="absolute left-0 right-0 zone-nonwork" style="top:0;height:576px"></div>
-                    <div class="absolute left-0 right-0 zone-nonwork" style="top:1088px;height:448px"></div>
                     <div class="absolute left-1.5 right-1.5 flex items-center justify-between gap-1.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 shadow-sm bg-muted/60 border-l-success/60" style="top:512px;height:32px">
                       <span class="truncate min-w-0 flex-1 text-[10px] font-semibold leading-none text-muted-foreground line-through">Email triage</span>
                       <span class="shrink-0 font-mono text-[9px] text-muted-foreground leading-none">8:00 AM</span>
@@ -220,8 +217,6 @@
                   <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">10 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
                   <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">11 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
                   <div class="absolute left-14 right-[15px] top-1.5 bottom-0">
-                    <div class="absolute left-0 right-0 zone-nonwork" style="top:0;height:576px"></div>
-                    <div class="absolute left-0 right-0 zone-nonwork" style="top:1088px;height:448px"></div>
                     <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm glass-task border-l-primary" style="top:576px;height:48px"><div class="truncate text-xs font-semibold">Daily standup</div></div>
                     <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm glass-task border-l-primary" style="top:640px;height:96px"><div class="truncate text-xs font-semibold">Design review</div></div>
                     <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm glass-task border-l-primary" style="top:832px;height:64px"><div class="truncate text-xs font-semibold">1:1 with Priya</div></div>
@@ -256,8 +251,6 @@
                   <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">10 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
                   <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">11 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
                   <div class="absolute left-14 right-[15px] top-1.5 bottom-0">
-                    <div class="absolute left-0 right-0 zone-nonwork" style="top:0;height:576px"></div>
-                    <div class="absolute left-0 right-0 zone-nonwork" style="top:1088px;height:448px"></div>
                     <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm glass-task border-l-primary" style="top:576px;height:64px"><div class="truncate text-xs font-semibold">Sprint planning</div></div>
                     <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm glass-task border-l-primary" style="top:704px;height:80px"><div class="truncate text-xs font-semibold">Write RFC</div></div>
                   </div>
@@ -349,8 +342,6 @@
                 <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">10 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
                 <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">11 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
                 <div class="absolute left-14 right-[15px] top-1.5 bottom-0">
-                  <div class="absolute left-0 right-0 zone-nonwork" style="top:0;height:576px"></div>
-                  <div class="absolute left-0 right-0 zone-nonwork" style="top:1088px;height:448px"></div>
                   <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm glass-task border-l-primary" style="top:576px;height:48px"><div class="truncate text-xs font-semibold">Daily standup</div><div class="font-mono text-[10px] text-muted-foreground">9:00 – 9:45</div></div>
                   <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm glass-task border-l-primary" style="top:832px;height:64px"><div class="truncate text-xs font-semibold">1:1 with Priya</div><div class="font-mono text-[10px] text-muted-foreground">1:00 – 2:00</div></div>
                   <!-- the dragged block: lifted + nudged toward the right edge -->
@@ -541,8 +532,6 @@
                 <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">10 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
                 <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">11 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
                 <div class="absolute left-14 right-[15px] top-1.5 bottom-0">
-                  <div class="absolute left-0 right-0 zone-nonwork" style="top:0;height:576px"></div>
-                  <div class="absolute left-0 right-0 zone-nonwork" style="top:1088px;height:448px"></div>
                   <div class="bg-muted animate-pulse rounded-xl" style="position:absolute;top:520px;height:46px;left:0;right:0"></div>
                   <div class="bg-muted animate-pulse rounded-xl" style="position:absolute;top:640px;height:88px;left:0;right:0"></div>
                   <div class="bg-muted animate-pulse rounded-xl" style="position:absolute;top:812px;height:60px;left:0;right:0"></div>
@@ -641,8 +630,6 @@
                 <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">10 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
                 <div class="flex h-16"><div class="w-14 shrink-0 relative"><span class="absolute -top-1.5 right-2.5 text-[11px] text-muted-foreground tabular-nums">11 PM</span></div><div class="flex-1 border-t border-grid relative"></div></div>
                 <div class="absolute left-14 right-[15px] top-1.5 bottom-0">
-                  <div class="absolute left-0 right-0 zone-nonwork" style="top:0;height:576px"></div>
-                  <div class="absolute left-0 right-0 zone-nonwork" style="top:1088px;height:448px"></div>
                   <div class="absolute left-1.5 right-1.5 flex items-center justify-between gap-1.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 shadow-sm bg-muted/60 border-l-success/60" style="top:512px;height:32px"><span class="truncate min-w-0 flex-1 text-[10px] font-semibold leading-none text-muted-foreground line-through">Email triage</span><span class="shrink-0 font-mono text-[9px] text-muted-foreground leading-none">8:00 AM</span></div>
                   <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm glass-task border-l-primary" style="top:576px;height:48px"><div class="truncate text-xs font-semibold">Daily standup</div><div class="font-mono text-[10px] text-muted-foreground">9:00 – 9:45</div></div>
                   <div class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm glass-task border-l-primary" style="top:640px;height:96px"><div class="truncate text-xs font-semibold">Design review</div><div class="font-mono text-[10px] text-muted-foreground">10:00 – 11:30 · 90m</div></div>

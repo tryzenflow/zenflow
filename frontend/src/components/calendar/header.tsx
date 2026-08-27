@@ -1,11 +1,11 @@
-import { AlertTriangle, ChevronLeft, ChevronRight, Menu } from "lucide-react";
+import { ChevronLeft, ChevronRight, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ViewModeSelect } from "./view-mode-select";
 import { OptimizeButton } from "./optimize-button";
 import { endOfWeek, format, startOfMonth } from "date-fns";
 import { Dispatch, SetStateAction } from "react";
 import { ViewMode } from "@zenflow/shared";
-import { CreateTaskDialog } from "@/components/tasks/create-task-dialog";
+import { CreateSessionDialog } from "@/components/tasks/create-task-dialog";
 import { useUserStore } from "@/hooks/use-user-store";
 import { zonedNow } from "@/utils/tz";
 import { WEEK_STARTS_ON } from "@zenflow/core";
@@ -16,7 +16,6 @@ interface CalendarHeaderProps {
   setDate: Dispatch<SetStateAction<Date>>;
   currentView: ViewMode;
   setCurrentView: Dispatch<SetStateAction<ViewMode>>;
-  conflictCount: number;
   onChanged: () => void;
   /** Open the mobile nav drawer (hamburger is shown only below `lg`). */
   onOpenNav?: () => void;
@@ -27,7 +26,6 @@ export function CalendarHeader({
   setDate,
   currentView,
   setCurrentView,
-  conflictCount,
   onChanged,
   onOpenNav,
 }: CalendarHeaderProps) {
@@ -94,18 +92,9 @@ export function CalendarHeader({
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
-        {conflictCount > 0 && (
-          <span
-            title={`${conflictCount} task(s) couldn't be placed`}
-            className="inline-flex items-center gap-1 rounded-full border border-amber-400/50 bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-400"
-          >
-            <AlertTriangle className="size-3" />
-            {conflictCount}
-          </span>
-        )}
         <OptimizeButton onOptimized={onChanged} />
         <ViewModeSelect value={currentView} onChange={setCurrentView} />
-        <CreateTaskDialog
+        <CreateSessionDialog
           date={date}
           view={currentView}
           onCreated={onChanged}
