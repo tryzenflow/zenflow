@@ -1,8 +1,10 @@
 import { useCallback, useState } from "react";
-import { View } from "react-native";
+import { View, useWindowDimensions } from "react-native";
 import { Text } from "@/components/ui/text";
 import { AlertTriangle } from "@/components/Icons";
 import { cn } from "@/lib/utils";
+import { debugLog } from "@/lib/debug-log";
+import { getCrossDayOffset } from "@/lib/cross-day-offset";
 import { DAILY_HORIZON, TIME_GRANULARITY, zonedWallClockToUtc, zonedDate } from "@zenflow/core";
 import { withOverlap } from "@zenflow/core";
 import type { BlockLayout } from "@zenflow/core";
@@ -24,6 +26,10 @@ import Animated, {
 import * as Haptics from "expo-haptics";
 
 const TAGS_MIN_DURATION = 45;
+
+/** Screen-edge zone (px) a *lifted* block must be dragged into before the
+ * cross-day advance arms (orange glow) and then fires on a short hold. */
+const EDGE_ZONE = 150;
 
 const TAG_TINTS = [
   "border-orange-400/40 bg-orange-100/15 dark:border-orange-500/40 dark:bg-orange-500/10",
@@ -50,9 +56,10 @@ function fmt(iso: string, tz: string) {
 }
 
 function fmtMin(min: number, tz: string, refISO: string) {
-  const d = toZonedTime(new Date(refISO), tz);
-  d.setHours(Math.floor(min / 60), min % 60, 0, 0);
-  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const baseWall = zonedDate(refISO, tz);
+  const newWall = new Date(baseWall);
+  newWall.setHours(Math.floor(min / 60), min % 60, 0, 0);
+  return newWall.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
 interface DragSnap {
@@ -71,6 +78,14 @@ interface TaskBlockProps {
   onDragStateChange?: (snap: DragSnap | null) => void;
   onPress?: (taskId: string) => void;
   onComplete?: (taskId: string) => void;
+  /** Fired while a *lifted* block is dragged into the screen-edge zone,
+   * arming the Week pager's cross-day advance (glow + hold). */
+  onDragEdge?: (edge: "left" | "right") => void;
+  /** Fired while a *lifted* block is outside the edge zone — disarms any
+   * pending cross-day advance. */
+  onDragEdgeExit?: () => void;
+  /** Fired after a reschedule that landed on a different day than the source. */
+  onCrossDayReschedule?: (taskId: string, startISO: string) => void;
 }
 
 export function TaskBlock({
@@ -85,7 +100,11 @@ export function TaskBlock({
   onDragStateChange,
   onPress,
   onComplete,
+  onDragEdge,
+  onDragEdgeExit,
+  onCrossDayReschedule,
 }: TaskBlockProps) {
+  const { width: screenWidth } = useWindowDimensions();
   const startMin = minutesOfDayLocal(segment.start, tz);
   const rawEndMin = minutesOfDayLocal(segment.end, tz);
   const endMin = segment.continues || rawEndMin === 0 ? DAILY_HORIZON : rawEndMin;
@@ -111,6 +130,9 @@ export function TaskBlock({
   const isDragging = useSharedValue(0);
   const lastSnap = useSharedValue<number | null>(null);
   const [liveStartMin, setLiveStartMin] = useState<number | null>(null);
+  // Screen-edge zone the lifted block currently sits in (debug transitions
+  // only — `onDragEdge`/`onDragEdgeExit` are the real, idempotent consumers).
+  const edgeZoneSV = useSharedValue<"left" | "right" | null>(null);
 
   const COMPLETE_THRESHOLD = 80;
 
@@ -125,6 +147,7 @@ export function TaskBlock({
         { translateY: translateY.value },
         { translateX: translateX.value },
         { scale: withTiming(interpolate(d, [0, 1], [1, 1.02]), { duration: 150 }) },
+        { rotate: withTiming(d ? "1deg" : "0deg", { duration: 150 }) },
       ],
       shadowColor: "#000",
       shadowOpacity: withTiming(interpolate(d, [0, 1], [0, 0.3]), { duration: 150 }),
@@ -176,34 +199,78 @@ export function TaskBlock({
       const snappedMinutes =
         Math.round(deltaMinutes / TIME_GRANULARITY) * TIME_GRANULARITY;
 
-      if (snappedMinutes === 0) return;
+      // A cross-day drag (Week pager) shifts the wall clock by whole days so
+      // the drop lands on the adjacent day while keeping the time-of-day.
+      const dayOffset = getCrossDayOffset();
+
+      if (snappedMinutes === 0 && dayOffset === 0) return;
 
       const newStartMin = Math.max(
         0,
         Math.min(DAILY_HORIZON - TIME_GRANULARITY, startMin + snappedMinutes),
       );
 
-      const wall = zonedDate(segment.taskStart, tz);
-      wall.setHours(Math.floor(newStartMin / 60), newStartMin % 60, 0, 0);
-      const newStart = zonedWallClockToUtc(wall, tz);
+      const baseWall = zonedDate(segment.start, tz);
+      const newWall = new Date(baseWall);
+      newWall.setHours(Math.floor(newStartMin / 60), newStartMin % 60, 0, 0);
+
+      if (dayOffset !== 0) {
+        newWall.setDate(newWall.getDate() + dayOffset);
+      }
+
+      const newStart = zonedWallClockToUtc(newWall, tz);
+
+      debugLog("task.drop", {
+        task: segment.taskId,
+        dayOffset,
+        snappedMinutes,
+        newStartMin,
+        newStart: newStart.toISOString(),
+        sameAsSource: newStart.toISOString() === segment.taskStart,
+      });
 
       if (newStart.toISOString() === segment.taskStart) return;
 
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       onReschedule(segment.taskId, newStart.toISOString());
+      if (dayOffset !== 0) {
+        onCrossDayReschedule?.(segment.taskId, newStart.toISOString());
+      }
     },
-    [isInteractive, onReschedule, pxPerMin, startMin, segment.taskStart, segment.taskId, tz],
+    [
+      isInteractive,
+      onReschedule,
+      onCrossDayReschedule,
+      pxPerMin,
+      startMin,
+      segment.taskStart,
+      segment.taskId,
+      tz,
+    ],
   );
 
+  // Horizontal activation threshold (10px) must stay BELOW the Week pager's
+  // 12px `activeOffsetX` (week-pager.tsx): a touch that starts on a block
+  // then activates this pan first, and RNGH's exclusive parent/child
+  // arbitration fails the pager the moment we activate — so the day can never
+  // steal a block drag. The block owns any gesture that starts on it.
   const panGesture = Gesture.Pan()
     .enabled(isInteractive)
-    .activeOffsetX([-20, 20])
+    .activeOffsetX([-10, 10])
     .activeOffsetY([-10, 10])
+    .onBegin(() => {
+      runOnJS(debugLog)("task.gesture.begin", {
+        task: segment.taskId,
+      });
+    })
     .onUpdate((e) => {
       const absX = Math.abs(e.translationX);
       const absY = Math.abs(e.translationY);
 
-      if (absX > absY && e.translationX > 0) {
+      // Only a pure rightward swipe (never lifted vertically) is the "complete"
+      // gesture — once the block is lifted, rightward movement is a cross-day
+      // advance instead, so a diagonal drag toward the edge keeps working.
+      if (absX > absY && e.translationX > 0 && isDragging.value === 0) {
         translateX.value = e.translationX;
         checkOpacity.value = interpolate(
           e.translationX,
@@ -231,18 +298,51 @@ export function TaskBlock({
             runOnJS(reportSnap)(newStartMin);
           }
         }
+
+        // Cross-day affordance: while the block is lifted it is "carried" —
+          // it slides sideways with the finger, and once dragged into the
+          // screen-edge zone the Week pager arms its cross-day advance (orange
+          // glow, then a short hold swaps to the adjacent day). Only fire
+          // arm/disarm on zone transitions (not every frame) to prevent
+          // arm→disarm oscillation when the pointer sits near the boundary.
+if (isDragging.value === 1) {
+            translateX.value = e.translationX;
+          if (onDragEdge) {
+            const x = e.absoluteX;
+            const zone: "left" | "right" | null =
+              x <= EDGE_ZONE ? "left" : x >= screenWidth - EDGE_ZONE ? "right" : null;
+            if (zone !== edgeZoneSV.value) {
+              edgeZoneSV.value = zone;
+              if (zone) runOnJS(onDragEdge)(zone);
+              else if (onDragEdgeExit) runOnJS(onDragEdgeExit)();
+              runOnJS(debugLog)(
+                zone ? "task.zone.enter" : "task.zone.exit",
+                { task: segment.taskId, zone, x },
+              );
+            }
+          }
+        }
       }
     })
     .onEnd((e) => {
       const absX = Math.abs(e.translationX);
       const absY = Math.abs(e.translationY);
 
-      if (absX > absY && e.translationX > COMPLETE_THRESHOLD) {
+      if (
+        absX > absY &&
+        e.translationX > COMPLETE_THRESHOLD &&
+        isDragging.value === 0
+      ) {
         translateX.value = withTiming(blockWidth, { duration: 200 });
         checkOpacity.value = withTiming(0, { duration: 200 });
         runOnJS(triggerCompleteHaptic)();
         runOnJS(triggerComplete)();
-      } else if (absY > absX) {
+      } else if (absY > absX || isDragging.value === 1) {
+        runOnJS(debugLog)("task.gesture.end", {
+          task: segment.taskId,
+          translationX: e.translationX,
+          translationY: e.translationY,
+        });
         runOnJS(handleDragEnd)(e.translationY);
       }
 
@@ -253,6 +353,9 @@ export function TaskBlock({
     .onFinalize(() => {
       isDragging.value = 0;
       lastSnap.value = null;
+      runOnJS(debugLog)("task.gesture.finalize", {
+        task: segment.taskId,
+      });
       runOnJS(reportDragEnd)();
     });
 

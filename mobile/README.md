@@ -37,8 +37,11 @@ mobile/
 │       │                      # long-press empty area / FAB → create); see Phase 5 in
 │       │                      # docs/react-native-migration.md. Also reads an optional `date`
 │       │                      # query param (added for Month View's day-tap deep link).
-│       ├── week.tsx           # placeholder stub — calendar UI is future work, but still renders
-│       │                      # <CreateTaskFab> so task creation isn't Day-only
+│       ├── week.tsx           # Week — built: sticky 7-chip week header + a custom
+│       │                      # Reanimated "stacking" day pager (week-pager.tsx, the
+│       │                      # mockup's parallax/dim swipe transition) with swipe
+│       │                      # paging, chip-tap re-centering and cross-day task drag;
+│       │                      # see components/calendar/ below
 │       ├── month.tsx          # Month — built (RN migration Phase 4, issue #21): paginated
 │       │                      # Monday-first grid + overflow bottom sheet + long-press-drag
 │       │                      # reschedule; see components/calendar/ below
@@ -49,11 +52,20 @@ mobile/
 │   ├── primitives/            # headless behavior (portal, slot, useControllableState, …),
 │   │                          # each with a `.web.tsx` variant where native/web diverge
 │   ├── onboarding/, settings/ # screen-specific composite components
-│   ├── calendar/               # Month View: month-pager.tsx (outer horizontal FlatList pager),
-│   │                            # month-page.tsx (per-month fetch + drag orchestration),
-│   │                            # month-grid.tsx (7-col FlatList + loading skeleton),
-│   │                            # month-cell.tsx (cell + pill + long-press-drag gesture),
-│   │                            # task-list-sheet.tsx (the "+N more" overflow bottom sheet)
+│   ├── calendar/               # Week View: week-pager.tsx (custom Reanimated "stacking"
+│   │   │                       # day pager — Pan gesture + `progress` shared value,
+│   │   │                       # parallax/dim/shadow swipe transition, live 7–14-day
+│   │   │                       # window; settle math in lib/week-pager-math.ts),
+│   │   │                       # week-header.tsx (sticky month/week-range + 7-day chips),
+│   │   │                       # day-timeline.tsx (24h grid shared by Day and Week),
+│   │   │                       # task-block.tsx (grid block: drag reschedule + cross-day
+│   │   │                       # drag + complete-swipe), work-zone-overlay.tsx,
+│   │   │                       # now-indicator.tsx, time-gutter.tsx, peek.ts
+│   │   │                       # Month View: month-pager.tsx (outer horizontal FlatList pager),
+│   │   │                       # month-page.tsx (per-month fetch + drag orchestration),
+│   │   │                       # month-grid.tsx (7-col FlatList + loading skeleton),
+│   │   │                       # month-cell.tsx (cell + pill + long-press-drag gesture),
+│   │   │                       # task-list-sheet.tsx (the "+N more" overflow bottom sheet)
 │   ├── tasks/                 # task/new.tsx and task/[id]/edit.tsx full-screen forms (duration
 │   │   │                      # resize now lives entirely in the edit screen's stepper — see
 │   │   │                      # "The task create/edit form is a full screen" below), plus
@@ -103,7 +115,9 @@ call):
 | `(auth)` | `login.tsx` | Built — email stage → OTP verification stage |
 | `(onboarding)` | `index.tsx` | Built — work hours / work days / timezone wizard |
 | `(app)` | `index.tsx` (Day) | Built — EDF grid with pinch-zoom, long-press create, drag reschedule, pull-to-refresh. When a task runs past midnight, the day ends at a dashed `12:00 AM` boundary followed by a tall empty region; scrolling through it to the end flips to a next-day slice (`components/calendar/day-slice.tsx`) showing only the 12 AM–4 AM tail; swipe up returns. The empty region and flip only exist on days that actually have a past-midnight task. Task sheets (create/edit/change-duration) are wired against the grid: tap a task → edit, long-press a task → change duration, long-press the empty area or the FAB → create |
-| `(app)` | `week.tsx` | **Placeholder stub** — calendar UI is future work |
+| `(app)` | `week.tsx` (Week) | **Built** — sticky 7-chip week header (`components/calendar/week-header.tsx`) over a custom Reanimated "stacking" day pager (`week-pager.tsx`): one day page per full-width slot, `Gesture.Pan` swipe with deterministic one-page `withTiming` snapping (the settle decision lives in the pure `lib/week-pager-math.ts`), the mockup's swipe transition (outgoing day parallaxes out + dims while the incoming day stacks over it with a seam + shadow), idle next-day peek strip, chip-tap re-centering, and cross-day task drag: lift a block, drag it into the screen-edge zone (orange glow arms),
+hold ~400ms to advance exactly one day (once per drag), then drop it on the adjacent day (up to a 2-week live window,
+collapsing back to 7 days on drop) |
 | `(app)` | `month.tsx` (Month) | **Built** (RN migration Phase 4, issue #21) — paginated Monday-first grid (`components/calendar/`), "+N more" overflow bottom sheet, tap-a-day → Day View, long-press-drag a pill to reschedule |
 | `(app)` | `settings.tsx` | Built — profile row, theme toggle, timezone picker, insights panel |
 

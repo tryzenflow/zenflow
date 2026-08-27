@@ -26,6 +26,8 @@ import { useUserStore } from "@/hooks/use-user-store";
 import { useNow } from "@/hooks/use-now";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { listTasks, rescheduleTask, completeTask } from "@/api/tasks";
+import { debugLog } from "@/lib/debug-log";
+import { peekBlocksFromSegments, type PeekBlock } from "@/lib/peek";
 import { TimeGutter } from "./time-gutter";
 import { WorkZoneOverlay } from "./work-zone-overlay";
 import { NowIndicator } from "./now-indicator";
@@ -90,6 +92,25 @@ interface DayTimelineProps {
   onStateChange?: (state: TimelineState) => void;
   onReachBottom?: () => void;
   onOvernightTailsChange?: (tails: Task[]) => void;
+  /** Hide the per-day header — the Week screen renders its own sticky
+   * `WeekHeader` strip above the pager. Default `true` preserves the Day
+   * screen. */
+  showHeader?: boolean;
+  /** Show the "Long press to add" ghost on empty non-today days too — the
+   * Week mockup surfaces it on any empty day. Default `false`. */
+  showEmptyGhostAlways?: boolean;
+  /** Fired while a task is dragged near the screen's left/right edge. */
+  onDragEdge?: (edge: "left" | "right") => void;
+  /** Fired while a task is dragged outside the edge zone (disarms a pending
+   * cross-day advance). */
+  onDragEdgeExit?: () => void;
+  /** Fired when a task drag starts/stops (used to lock the pager). */
+  onDragChange?: (dragging: boolean) => void;
+  /** Fired after a task that was dragged onto another day is rescheduled. */
+  onCrossDayReschedule?: (taskId: string, startISO: string) => void;
+  /** Reports this day's tasks as mini-day blocks so a parent week pager can
+   * render its next-day peek strip from real data. */
+  onPeekChange?: (blocks: PeekBlock[], dayKey: string) => void;
 }
 
 export function DayTimeline({
@@ -101,6 +122,13 @@ export function DayTimeline({
   onStateChange,
   onReachBottom,
   onOvernightTailsChange,
+  showHeader = true,
+  showEmptyGhostAlways = false,
+  onDragEdge,
+  onDragEdgeExit,
+  onDragChange,
+  onCrossDayReschedule,
+  onPeekChange,
 }: DayTimelineProps) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const prefs = useUserStore((s) => s.user) ?? DEFAULT_WORK_PREFS;
@@ -145,6 +173,8 @@ export function DayTimeline({
     // refreshes.
     if (tasks.length === 0) setLoading(true);
     setError(false);
+    const startedAt = Date.now();
+    debugLog("day.fetch.start", { day: dayKey, refreshKey });
     listTasks("day", date, "all")
       .then((res) => {
         if (!cancelled) setTasks(res.tasks);
@@ -153,7 +183,10 @@ export function DayTimeline({
         if (!cancelled) setError(true);
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          debugLog("day.fetch.end", { day: dayKey, ms: Date.now() - startedAt });
+        }
       });
     return () => {
       cancelled = true;
@@ -165,12 +198,16 @@ export function DayTimeline({
   }, [loading, error, onStateChange]);
 
   const refetch = useCallback(async () => {
+    const startedAt = Date.now();
+    debugLog("day.refetch.start", { day: dayKey });
     try {
       const res = await listTasks("day", date, "all");
       setTasks(res.tasks);
       setError(false);
     } catch {
       setError(true);
+    } finally {
+      debugLog("day.refetch.end", { day: dayKey, ms: Date.now() - startedAt });
     }
   }, [date]);
 
@@ -226,6 +263,15 @@ export function DayTimeline({
   }, [tasks, date, tz]);
 
   const layout = useMemo(() => getOverlapLayout(segments), [segments]);
+
+  const peekBlocks = useMemo(
+    () => peekBlocksFromSegments(segments, date, tz),
+    [segments, date, tz],
+  );
+
+  useEffect(() => {
+    onPeekChange?.(peekBlocks, dayKey);
+  }, [peekBlocks, dayKey, onPeekChange]);
 
   const deadlineByTask = useMemo(() => {
     const map = new Map<string, string>();
@@ -345,6 +391,7 @@ export function DayTimeline({
 
   const handleReschedule = useCallback(
     async (taskId: string, startISO: string) => {
+      debugLog("day.reschedule.start", { task: taskId, startISO, day: dayKey });
       try {
         const res = await rescheduleTask(taskId, startISO);
         // The backend rechecked conflict flags around the new slot — patch the
@@ -356,6 +403,7 @@ export function DayTimeline({
       } catch {
         // Swallow the error — the finally below reconciles from the server.
       } finally {
+        debugLog("day.reschedule.end", { task: taskId });
         // Reconcile the whole day so a neighbor whose conflict flag the
         // backend cleared also turns back to normal.
         await refetch();
@@ -367,8 +415,9 @@ export function DayTimeline({
   const handleDragStateChange = useCallback(
     (snap: { startMin: number } | null) => {
       setDragSnap(snap);
+      onDragChange?.(snap !== null);
     },
-    [],
+    [onDragChange],
   );
 
   const dragChipLabel = useMemo(() => {
@@ -465,7 +514,8 @@ export function DayTimeline({
 
   return (
     <View className="flex-1 bg-background">
-      <View className="flex-row items-center justify-between px-4 pt-4 pb-4 border-b border-black/15 dark:border-white/15">
+      {showHeader && (
+        <View className="flex-row items-center justify-between px-4 pt-4 pb-4 border-b border-black/15 dark:border-white/15">
         <View className="min-w-0 flex-1">
           <Text className="text-xl font-bold tracking-tight">
             {format(date, "EEE, MMM d")}
@@ -498,6 +548,7 @@ export function DayTimeline({
           )}
         </View>
       </View>
+      )}
 
       <ScrollView
         ref={scrollRef}
@@ -599,7 +650,7 @@ export function DayTimeline({
                   <NowIndicator now={now} tz={tz} totalHeight={totalHeight} />
                 )}
 
-                {segments.length === 0 && isToday && (
+                {segments.length === 0 && (isToday || showEmptyGhostAlways) && (
                   <View
                     pointerEvents="none"
                     className="absolute left-1.5 right-1.5 z-20 items-center justify-center rounded-xl border-[1.5px] border-dashed border-brand-orange/55 bg-brand-orange/[0.07]"
@@ -634,6 +685,9 @@ export function DayTimeline({
                       onDragStateChange={handleDragStateChange}
                       onPress={onTaskPress}
                       onComplete={handleComplete}
+                      onDragEdge={onDragEdge}
+                      onDragEdgeExit={onDragEdgeExit}
+                      onCrossDayReschedule={onCrossDayReschedule}
                     />
                   );
                 })}
