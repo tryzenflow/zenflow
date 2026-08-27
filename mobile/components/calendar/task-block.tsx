@@ -106,7 +106,6 @@ export function SessionBlock({
   const isInteractive = !isCompleted && !isSplit;
   const dueSuffix = deadline ? ` · due ${fmt(deadline, tz)}` : "";
 
-  const baseTop = (startMin / DAILY_HORIZON) * totalHeight;
   const height = Math.max((duration / DAILY_HORIZON) * totalHeight, 16);
   const pxPerMin = totalHeight / DAILY_HORIZON;
 
@@ -117,13 +116,23 @@ export function SessionBlock({
   const lastSnap = useSharedValue<number | null>(null);
   const [liveStartMin, setLiveStartMin] = useState<number | null>(null);
 
-  // After a drop the reschedule round-trips and the card re-renders at its
-  // new `baseTop`; clear the transient drag offset (no animation) in that
-  // same commit so the card doesn't spring back to where the drag began.
+  // The card's vertical slot (minutes of day). Normally it just tracks
+  // `startMin` from props. On drop we set this to the target slot on the UI
+  // thread in the *same* frame the drag offset is zeroed, so the card is
+  // positioned entirely from the new slot with no intermediate frame where a
+  // freshly re-rendered `top` and the stale drag offset both apply — that
+  // one bad frame is the post-drop "shift". Once the reschedule round-trips
+  // and the prop catches up, the effect below drops the pin.
+  const pinnedStartMin = useSharedValue<number | null>(null);
+
   useEffect(() => {
+    // Prop-driven slot change (our drop confirmed, or an external
+    // reschedule): release the pin and any leftover offset so the card
+    // follows the prop again.
+    pinnedStartMin.value = null;
     translateY.value = 0;
     translateX.value = 0;
-  }, [segment.taskStart, translateX, translateY]);
+  }, [segment.taskStart, pinnedStartMin, translateX, translateY]);
 
   const COMPLETE_THRESHOLD = 80;
 
@@ -164,9 +173,14 @@ export function SessionBlock({
     }),
   }));
 
-  const wrapperStyle = useAnimatedStyle(() => ({
-    zIndex: isDragging.value ? 30 : 10,
-  }));
+  const wrapperStyle = useAnimatedStyle(() => {
+    const effectiveStart =
+      pinnedStartMin.value != null ? pinnedStartMin.value : startMin;
+    return {
+      top: (effectiveStart / DAILY_HORIZON) * totalHeight,
+      zIndex: isDragging.value ? 30 : 10,
+    };
+  });
 
   const reportSnap = useCallback(
     (min: number) => {
@@ -290,12 +304,12 @@ export function SessionBlock({
         );
 
         if (snappedMinutes !== 0 && newStartMin !== startMin) {
-          // Land on the drop target with no spring-back: pin the offset at
-          // the snapped slot and leave it. Once the new time round-trips and
-          // the card re-renders at its new `baseTop`, the effect above zeroes
-          // this offset in the same commit, so the move reads as instant
-          // rather than a bounce to the start followed by a jump.
-          translateY.value = (newStartMin - startMin) * pxPerMin;
+          // Re-anchor the card to the target slot and drop the drag offset in
+          // the same UI-thread frame — no spring-back, no overshoot — then
+          // fire the reschedule. `pinnedStartMin` holds this slot until the
+          // prop catches up.
+          pinnedStartMin.value = newStartMin;
+          translateY.value = 0;
           runOnJS(handleDragEnd)(e.translationY);
           runOnJS(reportDragSnapEnd)(newStartMin);
         } else {
@@ -344,8 +358,8 @@ export function SessionBlock({
       style={[
         wrapperStyle,
         isMultiColumn
-          ? { top: baseTop, left: leftOffset, width: blockWidth, height }
-          : { top: baseTop, height },
+          ? { left: leftOffset, width: blockWidth, height }
+          : { height },
       ]}
     >
       <Animated.View
