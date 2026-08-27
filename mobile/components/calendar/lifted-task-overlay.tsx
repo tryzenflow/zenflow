@@ -2,7 +2,6 @@ import { View, useWindowDimensions } from "react-native";
 import { Text } from "@/components/ui/text";
 import { AlertTriangle } from "@/components/Icons";
 import { cn } from "@/lib/utils";
-import { debugLog } from "@/lib/debug-log";
 import { DAILY_HORIZON, TIME_GRANULARITY, zonedWallClockToUtc, zonedDate } from "@zenflow/core";
 import { withOverlap } from "@zenflow/core";
 import type { BlockLayout } from "@zenflow/core";
@@ -148,12 +147,6 @@ export function LiftedTaskOverlay({
         wall.setDate(wall.getDate() + dir);
 
         const newStart = zonedWallClockToUtc(wall, tz);
-
-        runOnJS(debugLog)("overlay.drop", {
-          task: segment.taskId,
-          targetEdge,
-          newStart: newStart.toISOString(),
-        });
 
         runOnJS(onDrop)(segment.taskId, newStart.toISOString());
       } else {

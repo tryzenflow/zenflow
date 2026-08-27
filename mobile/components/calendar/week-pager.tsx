@@ -25,7 +25,6 @@ import {
 } from "@/lib/week-pager-math";
 import { DayTimeline } from "./day-timeline";
 import { type PeekBlock } from "@/lib/peek";
-import { debugLog } from "@/lib/debug-log";
 import {
   getCrossDayOffset,
   setCrossDayOffset,
@@ -105,7 +104,6 @@ export function WeekPager({
   onLongPress,
   onCrossDayReschedule,
 }: WeekPagerProps) {
-  debugLog("pager.mount", { focusedDate: dateKey(focusedDate) });
   const { width } = useWindowDimensions();
   const { isDarkColorScheme } = useColorScheme();
   const borderColor = isDarkColorScheme
@@ -165,7 +163,6 @@ export function WeekPager({
   // Stable identity so DayTimeline's peek-report effect doesn't re-fire on
   // every pager render.
   const handlePeekChange = useCallback((blocks: PeekBlock[], dayKey: string) => {
-    debugLog("pager.peek.change", { dayKey, blocksCount: blocks.length });
     setPeekByDay((prev) =>
       prev[dayKey] === blocks ? prev : { ...prev, [dayKey]: blocks },
     );
@@ -199,7 +196,6 @@ export function WeekPager({
   const pendingSettleRef = useRef(false);
 
   useLayoutEffect(() => {
-    debugLog("pager.progress.snap", { pending: pendingSettleRef.current, days: days.map(dateKey), width });
     if (!pendingSettleRef.current) return;
     pendingSettleRef.current = false;
     progress.value = -width;
@@ -207,15 +203,12 @@ export function WeekPager({
 
   useEffect(
     () => () => {
-      debugLog("pager.cleanup", { armTimer: !!armTimerRef.current });
       if (armTimerRef.current) clearTimeout(armTimerRef.current);
     },
     [],
   );
-
   const commitRoles = useCallback(
     (index: number) => {
-      debugLog("pager.roles.commit", { index });
       fromSV.value = index;
       toSV.value = index;
     },
@@ -252,7 +245,6 @@ export function WeekPager({
       setDays(centeredDays(landed));
       setFocusedIndex(1);
       commitRoles(1);
-      debugLog("pager.settle.land", { day: dateKey(landed), target });
     },
     [centeredDays, commitRoles, days],
   );
@@ -262,16 +254,13 @@ export function WeekPager({
   const handleFirstLayout = useCallback(() => {
     if (hasLaidOutRef.current) return;
     hasLaidOutRef.current = true;
-    debugLog("pager.layout.first", { width });
     requestAnimationFrame(() => {
       commitRoles(1);
       progress.value = -width;
     });
   }, [commitRoles, progress, width]);
-
   const snapTo = useCallback(
     (index: number, animated: boolean) => {
-      debugLog("pager.snap.to", { index, animated, targetProgress: -index * width });
       if (animated) {
         progress.value = withTiming(
           -index * width,
@@ -299,7 +288,6 @@ export function WeekPager({
   // `m`).
   const animateRolesTo = useCallback(
     (target: number, onDone?: (index: number) => void) => {
-      debugLog("pager.animate.roles", { from: focusedIndex, to: target, width });
       fromSV.value = focusedIndex;
       toSV.value = target;
       progress.value = withTiming(
@@ -332,7 +320,6 @@ export function WeekPager({
   useEffect(() => {
     // Guard against cross-day drag window rebuild (synchronous ref check)
     if (crossDayDragRef.current) return;
-    debugLog("pager.focus.change", { focusedDate: dateKey(focusedDate), settling, days: days.map(dateKey), focusedIndex });
     if (settling) return;
     const key = dateKey(focusedDate);
     const idx = days.findIndex((d) => dateKey(d) === key);
@@ -386,7 +373,6 @@ export function WeekPager({
       commitRoles(1);
       progress.value = -width;
       setSettling(false);
-      debugLog("pager.week.slide", { dir, day: dateKey(nextFocused) });
     },
     [
       centeredDays,
@@ -398,10 +384,8 @@ export function WeekPager({
       width,
     ],
   );
-
   const settleOn = useCallback(
     (target: number, flicked: boolean) => {
-      debugLog("pager.settle.on", { target, flicked, focusedIndex, days: days.map(dateKey) });
       // Lock the pan for the duration of the settle so an interrupt can't
       // flip the incoming/outgoing cover mid-animation.
       setSettling(true);
@@ -436,10 +420,8 @@ export function WeekPager({
       snapTo,
     ],
   );
-
   const handlePanEnd = useCallback(
     (dragPx: number, velocityX: number) => {
-      debugLog("pager.pan.end", { dragPx, velocityX, focusedIndex, width });
       const target = decideSettleTarget({
         dragPx,
         velocityX,
@@ -518,7 +500,6 @@ export function WeekPager({
     (edge: DragEdge) => {
       if (advancedRef.current) return;
       advancedRef.current = true;
-
       const dir = edge === "right" ? 1 : -1;
       const targetDay = shiftDays(days[focusedIndex], dir);
       setCrossDayOffset(getCrossDayOffset() + dir);
@@ -529,12 +510,6 @@ export function WeekPager({
       // Guard the focusedDate effect to prevent window rebuild mid-drag.
       crossDayDragRef.current = true;
       onFocusedDateChange(targetDay);
-      debugLog("pager.advance", {
-        edge,
-        target: dateKey(targetDay),
-        dayOffset: getCrossDayOffset(),
-        carrierIndex: focusedIndex,
-      });
     },
     [days, focusedIndex, onFocusedDateChange, shiftDays],
   );
@@ -553,7 +528,6 @@ export function WeekPager({
         armTimerRef.current = null;
       }
       armedEdgeSV.value = edge;
-      debugLog("pager.edge.arm", { edge });
       armTimerRef.current = setTimeout(() => {
         armTimerRef.current = null;
         advanceCrossDay(edge);
@@ -571,10 +545,8 @@ export function WeekPager({
       armTimerRef.current = null;
     }
     armedEdgeSV.value = null;
-    debugLog("pager.edge.disarm", {});
     setPill(null);
   }, [armedEdgeSV]);
-
   const handleDragChange = useCallback(
     (active: boolean) => {
       if (active) {
@@ -599,12 +571,6 @@ export function WeekPager({
         // it across strip snaps (carrierFix in PagerPage animatedStyle).
         carrierIndexSV.value = focusedIndex;
         carrierOriginSV.value = focusedIndex * width + progress.value;
-        debugLog("pager.drag.start", {
-          day: dateKey(days[focusedIndex]),
-          days: days.map(dateKey),
-          carrierIndex: focusedIndex,
-          dayOffset: getCrossDayOffset(),
-        });
         return;
       }
       dragActiveRef.current = false;
@@ -633,10 +599,6 @@ export function WeekPager({
       if (!startDay) return;
       const landed = shiftDays(startDay, dayOffset);
       if (!landed) return;
-      debugLog("pager.drag.end", {
-        landed: dateKey(landed),
-        dayOffset,
-      });
       const fresh = centeredDays(landed);
       setDays(fresh);
       setFocusedIndex(1);
@@ -660,7 +622,6 @@ export function WeekPager({
       shiftDays,
     ],
   );
-
   const orangeRgb = isDarkColorScheme
     ? BRAND_ORANGE_DARK
     : BRAND_ORANGE_LIGHT;
@@ -705,7 +666,6 @@ export function WeekPager({
       opacity: strip.prevDayOpacity,
     };
   });
-
   return (
     <View className="flex-1">
       <GestureDetector gesture={panGesture}>

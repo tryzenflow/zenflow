@@ -1,7 +1,6 @@
 import { AlertTriangle } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
-import { debugLog } from "@/lib/debug-log";
 import { getCrossDayOffset } from "@/lib/cross-day-offset";
 import {
   DAILY_HORIZON,
@@ -259,15 +258,6 @@ export function SessionBlock({
 
       const newStart = zonedWallClockToUtc(newWall, tz);
 
-      debugLog("task.drop", {
-        task: segment.taskId,
-        dayOffset,
-        snappedMinutes,
-        newStartMin,
-        newStart: newStart.toISOString(),
-        sameAsSource: newStart.toISOString() === segment.taskStart,
-      });
-
       if (newStart.toISOString() === segment.taskStart) return;
 
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -297,11 +287,6 @@ export function SessionBlock({
     .enabled(isInteractive)
     .activeOffsetX([-10, 10])
     .activeOffsetY([-10, 10])
-    .onBegin(() => {
-      runOnJS(debugLog)("task.gesture.begin", {
-        task: segment.taskId,
-      });
-    })
     .onUpdate((e) => {
       const absX = Math.abs(e.translationX);
       const absY = Math.abs(e.translationY);
@@ -358,11 +343,6 @@ export function SessionBlock({
               edgeZoneSV.value = zone;
               if (zone) runOnJS(onDragEdge)(zone);
               else if (onDragEdgeExit) runOnJS(onDragEdgeExit)();
-              runOnJS(debugLog)(zone ? "task.zone.enter" : "task.zone.exit", {
-                task: segment.taskId,
-                zone,
-                x,
-              });
             }
           }
         }
@@ -406,11 +386,6 @@ export function SessionBlock({
           pinnedStartMin.value = newStartMin;
           translateY.value = 0;
           translateX.value = 0;
-          runOnJS(debugLog)("task.gesture.end", {
-            task: segment.taskId,
-            translationX: e.translationX,
-            translationY: e.translationY,
-          });
           runOnJS(handleDragEnd)(e.translationY);
           runOnJS(reportDragSnapEnd)(newStartMin);
         } else {
@@ -427,9 +402,6 @@ export function SessionBlock({
     .onFinalize(() => {
       isDragging.value = 0;
       lastSnap.value = null;
-      runOnJS(debugLog)("task.gesture.finalize", {
-        task: segment.taskId,
-      });
       runOnJS(reportDragEnd)();
     });
 
