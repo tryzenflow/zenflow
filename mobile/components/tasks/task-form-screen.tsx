@@ -1,6 +1,5 @@
 import { X } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
-import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { useRouter } from "expo-router";
 import { type ReactNode, createContext, useContext, useRef } from "react";
 import {
@@ -86,13 +85,12 @@ export function SessionFormScreen({
 }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const tabBarOverlay = useTabBarOverlayHeight();
   const scrollViewRef = useRef<ScrollView | null>(null);
 
   return (
     <View
       className="flex-1 bg-background"
-      style={{ paddingTop: insets.top, paddingBottom: tabBarOverlay }}
+      style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
       <View className="flex-row items-center justify-between gap-3 border-b border-border px-5 pb-3.5 pt-2">
         <View className="flex-1">
@@ -116,15 +114,13 @@ export function SessionFormScreen({
       </View>
 
       {/*
-        Keyboard-aware wrapper for everything below the fixed header: on iOS
-        there's no OS-level window resize on keyboard show (unlike Android's
-        `softwareKeyboardLayoutMode: "resize"`, set in `app.config.ts`), so
-        `KeyboardAvoidingView`'s `padding` behavior is what pushes the scroll
-        content + footer up above the keyboard. On Android the OS resize
-        already shrinks this View's available height, so `undefined`
-        behavior (no extra offset) avoids double-compensating — this View
-        just needs to remain `flex-1` so the ScrollView/footer below reflow
-        into whatever height Android leaves it.
+        `flex-1` so this scroll region takes exactly the space between the
+        fixed header and the pinned footer (and scrolls internally rather
+        than growing to fit its content and shoving the footer around). On
+        Android `softwareKeyboardLayoutMode: "resize"` (`app.config.ts`)
+        shrinks the screen on keyboard show and RN auto-scrolls the focused
+        native TextInput into view; the WebView note editor scrolls itself
+        via `useScrollIntoViewOnFocus` above.
       */}
       <KeyboardAvoidingView
         className="flex-1"
@@ -141,7 +137,7 @@ export function SessionFormScreen({
           </SessionFormScrollContext.Provider>
         </ScrollView>
 
-        <View className="border-t border-border bg-background h-0 shadow-lg shadow-primary/10">
+        <View className="border-t border-border bg-background px-5 py-3 shadow-lg shadow-primary/10">
           {footer}
         </View>
       </KeyboardAvoidingView>
