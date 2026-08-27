@@ -5,36 +5,36 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
  * than in that component so screens (and their FABs) can position against it
  * without importing the bar itself.
  *
- * The bar is rendered **absolutely** over the screens, not as a flex sibling
- * of them — so it reserves no layout height at all and content can run
- * underneath it. Screens that must not be covered pad themselves by
- * `useTabBarOverlayHeight()`, which is only the *opaque* part: the headroom
- * above the bar's top line (for the glow strokes) is transparent and is fine
- * to draw under.
+ * The bar is a **floating pill**: absolutely positioned, inset from both side
+ * edges and lifted clear of the bottom safe area, drawn over the screens
+ * rather than as a flex sibling — so it reserves no layout height and content
+ * can scroll underneath it. Screens that must not be covered pad their bottom
+ * by `useTabBarOverlayHeight()`.
  */
 
-/** Height of the row the tab buttons actually live in (above the safe area). */
-export const BAR_HEIGHT = 56;
-/** Corner radius of the bar's outer top corners. */
-export const CORNER = 26;
-/** Transparent headroom above the bar's top line so the glow strokes (drawn
- * centered on the path) don't get clipped by the component's own bounds —
- * touches outside a view's bounds never reach it on Android, so anything
- * that should render or be tappable there has to fit inside this padding. */
-export const GLOW_HEADROOM = 10;
+/** Height of the pill itself (the row the tab buttons live in). */
+export const BAR_HEIGHT = 58;
+/** Inset from each screen side edge to the pill. */
+export const BAR_MARGIN = 16;
+/** Gap between the bottom safe-area edge and the bottom of the pill. */
+export const BAR_LIFT = 12;
+/** Pill corner radius — near-stadium at this height. */
+export const BAR_RADIUS = 26;
 
-/** Full height of the absolutely-positioned bar component, including the
- * transparent headroom. */
+/**
+ * Distance from the very bottom of the screen to the *top* of the floating
+ * pill — safe area + lift + the pill itself. What the bar's own container is
+ * offset by, and the amount of the screen's bottom edge it visually spans.
+ */
 export function useTabBarHeight(): number {
-  return GLOW_HEADROOM + BAR_HEIGHT + useSafeAreaInsets().bottom;
+  return useSafeAreaInsets().bottom + BAR_LIFT + BAR_HEIGHT;
 }
 
 /**
- * How much of the screen's bottom edge the bar actually paints over — what a
- * screen should pad by so its content isn't hidden. Excludes `GLOW_HEADROOM`,
- * which is transparent: padding by the full height would give back the dead
- * block the overlay exists to avoid.
+ * How much bottom padding a screen (or a FAB anchored to the bar) needs so
+ * its content clears the floating pill: the pill's full occupied height plus
+ * one more `BAR_LIFT` of breathing room above it.
  */
 export function useTabBarOverlayHeight(): number {
-  return BAR_HEIGHT + useSafeAreaInsets().bottom;
+  return useSafeAreaInsets().bottom + BAR_LIFT + BAR_HEIGHT + BAR_LIFT;
 }

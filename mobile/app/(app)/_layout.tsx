@@ -9,10 +9,9 @@ export const unstable_settings = {
 
 export default function AppTabsLayout() {
   return (
-    // Fully custom bar (`components/tab-bar.tsx`): the default one can't draw
-    // the convex hump the Optimize button sits on, and its rectangular
-    // `shadow*`/`elevation` read as almost nothing against the near-white
-    // background.
+    // Fully custom bar (`components/tab-bar.tsx`): a floating glassmorphic
+    // pill — the default edge-to-edge bar's rectangular `shadow*`/`elevation`
+    // read as almost nothing against the near-white background.
     <Tabs
       tabBar={(props) => <AppTabBar {...props} />}
       screenOptions={{ headerShown: false }}

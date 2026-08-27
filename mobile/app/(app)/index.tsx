@@ -5,7 +5,6 @@ import {
 } from "@/components/calendar/day-timeline";
 import { CreateSessionFab } from "@/components/tasks/create-task-fab";
 import { useUserStore } from "@/hooks/use-user-store";
-import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { useFocusEffect } from "@react-navigation/native";
 import { zonedDate, zonedNow } from "@zenflow/core";
 import type { Session } from "@zenflow/shared";
@@ -25,8 +24,6 @@ export default function DayScreen() {
   const [overnightTails, setOvernightTails] = useState<Session[]>([]);
   const [sliceDate, setSliceDate] = useState<Date>(() => zonedNow(tz));
   const { date: dateParam } = useLocalSearchParams<{ date?: string }>();
-
-  const tabBarOverlay = useTabBarOverlayHeight();
 
   // Accepts an optional `date` query param (ISO instant) so other screens can
   // deep-link into a specific day — currently only Month View's "tap a day
@@ -76,10 +73,12 @@ export default function DayScreen() {
   }, []);
 
   return (
-    <View
-      className="flex-1 bg-background"
-      style={{ paddingBottom: tabBarOverlay }}
-    >
+    // No bottom padding here: the tab bar is a floating pill that overlays the
+    // screen, so the timeline runs full-bleed and the grid shows through the
+    // pill's side gutters and the gap beneath it. The ScrollView inside
+    // `DayTimeline` pads its own content so the last hour still scrolls clear
+    // of the pill.
+    <View className="flex-1 bg-background">
       <DayTimeline
         date={date}
         onSessionPress={handleSessionPress}

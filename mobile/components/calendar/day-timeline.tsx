@@ -2,7 +2,6 @@ import { listSessions, updateSession } from "@/api/tasks";
 import {
   AlertCircle,
   AlertTriangle,
-  MousePointer2,
   RefreshCcw,
   RotateCw,
 } from "@/components/Icons";
@@ -71,13 +70,6 @@ const LOADING_PLACEHOLDERS = [
   { startMin: 15 * 60, duration: 45 },
 ];
 
-function fmtTime(iso: string, tz: string) {
-  return toZonedTime(new Date(iso), tz).toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
 function scrollToNowOffset(totalHeight: number): number {
   const now = new Date();
   const mins = now.getHours() * 60 + now.getMinutes();
@@ -85,12 +77,10 @@ function scrollToNowOffset(totalHeight: number): number {
 }
 
 /**
- * One shared card shape for every bottom-of-screen notification this screen
- * shows (drag-snap confirmation, overdue warning, …) — a single visual
- * language instead of each caller hand-rolling its own icon-chip-plus-text
- * layout. `subtitle` is optional: the drag-snap toast has none (it needs to
- * be readable well inside its ~2s lifetime), the overdue warning keeps one
- * since it's conveying more than a title can carry alone.
+ * One shared card shape for the bottom-of-screen notifications this screen
+ * shows (currently just the overdue warning) — a single visual language
+ * instead of hand-rolling an icon-chip-plus-text layout per caller.
+ * `subtitle` is optional.
  */
 function BottomToastCard({
   icon,
@@ -175,9 +165,6 @@ export function DayTimeline({
   const [error, setError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [dragSnap, setDragSnap] = useState<{ startMin: number } | null>(null);
-  const [dragEndSnap, setDragEndSnap] = useState<{
-    startMin: number;
-  } | null>(null);
 
   const baseHourHeight = useSharedValue(HOUR_HEIGHT_DEFAULT);
   const ghostY = useSharedValue(0);
@@ -308,14 +295,27 @@ export function DayTimeline({
   }, [segments]);
 
   const shownOverdueSession = useRef<string | null>(null);
+  // Sessions already past their deadline on the first successful load are
+  // ambient state — the header's "N overdue" badge is their surface. This
+  // toast is only for a session that *becomes* overdue while the screen is
+  // open (e.g. a save that lands past its deadline), so it doesn't nag on
+  // every cold start.
+  const overdueBaselined = useRef(false);
   const [overdueToast, setOverdueToast] = useState<{
     title: string;
-    subtitle: string;
+    subtitle?: string;
   } | null>(null);
 
   useEffect(() => {
     if (loading || error) return;
     const overdue = segments.find((s) => s.state === "overdue");
+
+    if (!overdueBaselined.current) {
+      overdueBaselined.current = true;
+      shownOverdueSession.current = overdue?.taskId ?? null;
+      return;
+    }
+
     if (!overdue) {
       shownOverdueSession.current = null;
       return;
@@ -323,30 +323,20 @@ export function DayTimeline({
     if (shownOverdueSession.current === overdue.taskId) return;
     shownOverdueSession.current = overdue.taskId;
 
-    const deadline = deadlineBySession.get(overdue.taskId);
-    const due =
-      deadline != null ? ` before its ${fmtTime(deadline, tz)} deadline` : "";
-    const range = `${fmtTime(overdue.taskStart, tz)}–${fmtTime(
-      overdue.taskEnd,
-      tz,
-    )}`;
+    // Kept deliberately short: a headline plus the task name. The earlier
+    // version spelled out the deadline time, the fitted range and why it
+    // didn't fit — too much to read for a transient toast.
     setOverdueToast({
       title: "Scheduled past deadline",
-      subtitle: `"${overdue.title}" couldn't fit${due} — scheduled ${range} instead.`,
+      subtitle: overdue.title,
     });
-  }, [loading, error, segments, deadlineBySession, tz]);
+  }, [loading, error, segments]);
 
   useEffect(() => {
     if (!overdueToast) return;
     const timer = setTimeout(() => setOverdueToast(null), 8000);
     return () => clearTimeout(timer);
   }, [overdueToast]);
-
-  useEffect(() => {
-    if (!dragEndSnap) return;
-    const timer = setTimeout(() => setDragEndSnap(null), 2500);
-    return () => clearTimeout(timer);
-  }, [dragEndSnap]);
 
   const scrollToNow = useCallback(() => {
     if (scrollRef.current) {
@@ -443,11 +433,6 @@ export function DayTimeline({
   const dragChipLabel = useMemo(
     () => formatSnapLabel(dragSnap),
     [formatSnapLabel, dragSnap],
-  );
-
-  const dragEndChipLabel = useMemo(
-    () => formatSnapLabel(dragEndSnap),
-    [formatSnapLabel, dragEndSnap],
   );
 
   const handleLongPress = useCallback(
@@ -583,6 +568,9 @@ export function DayTimeline({
         contentContainerClassName={
           error ? "flex-1 items-center justify-center px-8" : undefined
         }
+        contentContainerStyle={
+          error ? undefined : { paddingBottom: tabBarOverlay }
+        }
       >
         {error ? (
           <>
@@ -696,7 +684,6 @@ export function DayTimeline({
                       deadline={deadlineBySession.get(segment.taskId) ?? null}
                       onReschedule={handleReschedule}
                       onDragStateChange={handleDragStateChange}
-                      onDragEnd={(snap) => setDragEndSnap(snap)}
                       onPress={onSessionPress}
                       onComplete={handleComplete}
                     />
@@ -773,13 +760,6 @@ export function DayTimeline({
           className="absolute left-4 right-4 z-[100] gap-2"
           style={{ bottom: tabBarOverlay + 8 }}
         >
-          {dragEndSnap && (
-            <BottomToastCard
-              icon={<MousePointer2 size={17} className="text-brand-orange" />}
-              iconTint="bg-brand-orange/15"
-              title={`Snapped to ${dragEndChipLabel}`}
-            />
-          )}
           {overdueToast && (
             <BottomToastCard
               icon={

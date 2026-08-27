@@ -12,7 +12,7 @@ import type { BlockLayout } from "@zenflow/core";
 import type { DaySegment } from "@zenflow/shared";
 import { toZonedTime } from "date-fns-tz";
 import * as Haptics from "expo-haptics";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -116,6 +116,14 @@ export function SessionBlock({
   const isDragging = useSharedValue(0);
   const lastSnap = useSharedValue<number | null>(null);
   const [liveStartMin, setLiveStartMin] = useState<number | null>(null);
+
+  // After a drop the reschedule round-trips and the card re-renders at its
+  // new `baseTop`; clear the transient drag offset (no animation) in that
+  // same commit so the card doesn't spring back to where the drag began.
+  useEffect(() => {
+    translateY.value = 0;
+    translateX.value = 0;
+  }, [segment.taskStart, translateX, translateY]);
 
   const COMPLETE_THRESHOLD = 80;
 
@@ -270,27 +278,35 @@ export function SessionBlock({
         checkOpacity.value = withTiming(0, { duration: 200 });
         runOnJS(triggerCompleteHaptic)();
         runOnJS(triggerComplete)();
+        translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
+        translateX.value = withSpring(0, { damping: 20, stiffness: 300 });
       } else if (absY > absX) {
-        runOnJS(handleDragEnd)(e.translationY);
-
         const deltaMinutes = e.translationY / pxPerMin;
         const snappedMinutes =
           Math.round(deltaMinutes / TIME_GRANULARITY) * TIME_GRANULARITY;
+        const newStartMin = Math.max(
+          0,
+          Math.min(DAILY_HORIZON - TIME_GRANULARITY, startMin + snappedMinutes),
+        );
 
-        if (snappedMinutes !== 0) {
-          const newStartMin = Math.max(
-            0,
-            Math.min(
-              DAILY_HORIZON - TIME_GRANULARITY,
-              startMin + snappedMinutes,
-            ),
-          );
+        if (snappedMinutes !== 0 && newStartMin !== startMin) {
+          // Land on the drop target with no spring-back: pin the offset at
+          // the snapped slot and leave it. Once the new time round-trips and
+          // the card re-renders at its new `baseTop`, the effect above zeroes
+          // this offset in the same commit, so the move reads as instant
+          // rather than a bounce to the start followed by a jump.
+          translateY.value = (newStartMin - startMin) * pxPerMin;
+          runOnJS(handleDragEnd)(e.translationY);
           runOnJS(reportDragSnapEnd)(newStartMin);
+        } else {
+          translateY.value = 0;
         }
+        translateX.value = 0;
+      } else {
+        translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
+        translateX.value = withSpring(0, { damping: 20, stiffness: 300 });
       }
 
-      translateY.value = withSpring(0, { damping: 20, stiffness: 300 });
-      translateX.value = withSpring(0, { damping: 20, stiffness: 300 });
       checkOpacity.value = withTiming(0, { duration: 150 });
     })
     .onFinalize(() => {
