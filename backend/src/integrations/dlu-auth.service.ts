@@ -1,4 +1,5 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { HttpStatus, Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import type { IntegrationProvider } from "@zenflow/shared";
 
 /** Hard ceiling on a single probe request. */
@@ -6,7 +7,7 @@ const REQUEST_TIMEOUT_MS = 10_000;
 
 const ENDPOINTS: Record<IntegrationProvider, string> = {
   LMS: "https://lms.dlu.edu.vn",
-  PORTAL: "https://online.dlu.edu.vn",
+  PORTAL: "https://portal-api.dlu.edu.vn",
 };
 
 /**
@@ -28,6 +29,7 @@ const ENDPOINTS: Record<IntegrationProvider, string> = {
 @Injectable()
 export class DluAuthService {
   private readonly logger = new Logger(DluAuthService.name);
+  constructor(private readonly configService: ConfigService) {}
 
   async verifyCredentials(
     provider: IntegrationProvider,
@@ -72,6 +74,7 @@ export class DluAuthService {
       return !/\/login\/index\.php\??$/.test(location);
     }
     const body = await res.text();
+    console.log({ body });
     if (/loginerror|invalid login|Invalid login/i.test(body)) return false;
     throw new Error(`Unexpected LMS login response (status ${res.status})`);
   }
@@ -85,36 +88,27 @@ export class DluAuthService {
     username: string,
     password: string,
   ): Promise<boolean> {
-    const loginUrl = `${ENDPOINTS.PORTAL}/`;
-    const page = await this.get(loginUrl);
-
-    const hidden = (name: string): string =>
-      new RegExp(`name="${name}"[^>]*value="([^"]*)"`).exec(page.body)?.[1] ??
-      "";
-
+    const loginUrl = `${ENDPOINTS.PORTAL}/api/authenticate/authpsc`;
     const res = await this.fetch(loginUrl, {
       method: "POST",
       headers: {
-        "content-type": "application/x-www-form-urlencoded",
-        cookie: page.setCookie,
+        "content-type": "application/json",
+        apikey: this.configService.getOrThrow("PORTAL_API_KEY"),
+        clientid: "vhu",
       },
-      body: new URLSearchParams({
-        __VIEWSTATE: hidden("__VIEWSTATE"),
-        __VIEWSTATEGENERATOR: hidden("__VIEWSTATEGENERATOR"),
-        __EVENTVALIDATION: hidden("__EVENTVALIDATION"),
-        txtUsername: username,
-        txtPassword: password,
-        btnLogin: "Đăng nhập",
-      }).toString(),
-      redirect: "manual",
+      body: JSON.stringify({
+        password,
+        username,
+        type: 0,
+      }),
     });
 
-    if (res.status >= 300 && res.status < 400) return true;
-    const body = await res.text();
-    // The portal re-renders the form with a validation summary on failure.
-    if (/sai tên đăng nhập|mật khẩu|invalid|không đúng/i.test(body)) {
+    if (res.status === HttpStatus.OK) return true;
+    if (
+      res.status >= HttpStatus.BAD_REQUEST &&
+      res.status < HttpStatus.INTERNAL_SERVER_ERROR
+    )
       return false;
-    }
     throw new Error(`Unexpected portal login response (status ${res.status})`);
   }
 

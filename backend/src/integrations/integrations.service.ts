@@ -64,7 +64,7 @@ export class IntegrationsService {
         dto.username,
         dto.password,
       );
-    } catch {
+    } catch (error) {
       throw new ServiceUnavailableException(
         "Couldn't reach DLU to verify your account. Please try again in a moment.",
       );

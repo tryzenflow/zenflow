@@ -7,11 +7,6 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "backend:dev": "pnpm --filter backend start:dev",
-    "backend:prod": "pnpm --filter backend start:prod",
-    "frontend:dev": "pnpm --filter frontend dev",
-    "frontend:prod": "pnpm --filter frontend start",
-    "mobile:dev": "pnpm --filter mobile dev",
     "shared:build": "pnpm --filter @zenflow/shared build",
     "core:build": "pnpm --filter @zenflow/core build"
   },
@@ -39,7 +34,9 @@
           "zod": "*"
         },
         "peerDependenciesMeta": {
-          "zod": { "optional": true }
+          "zod": {
+            "optional": true
+          }
         }
       }
     }
