@@ -19,6 +19,8 @@ import { SchedulerModule } from "./scheduler/scheduler.module";
 import { ScheduleModule } from "@nestjs/schedule";
 import { RedisModule } from "./common/redis/redis.module";
 import { RateLimitModule } from "./common/rate-limit";
+import { CryptoModule } from "./crypto/crypto.module";
+import { IntegrationsModule } from "./integrations/integrations.module";
 
 @Module({
   imports: [
@@ -29,6 +31,20 @@ import { RateLimitModule } from "./common/rate-limit";
       validationSchema: Joi.object({
         DATABASE_URL: Joi.string().required(),
         SESSION_SECRET: Joi.string().required(),
+        // Per-provider master keys for the DLU-credential envelope scheme (see
+        // crypto/). 32 bytes, hex-encoded (64 chars) each. Each one wraps that
+        // provider's per-user UserEncryptionKey rows; never stored in the DB.
+        // The `_V<n>` suffix is the master-key version — add a new var (bump
+        // MasterKeyService.CURRENT_MASTER_KEY_VERSION) to rotate; unwrapping an
+        // old row still resolves its recorded version.
+        MASTER_LMS_ENCRYPTION_KEY_V1: Joi.string()
+          .length(64)
+          .regex(/^[0-9a-fA-F]+$/, "hex")
+          .required(),
+        MASTER_PORTAL_ENCRYPTION_KEY_V1: Joi.string()
+          .length(64)
+          .regex(/^[0-9a-fA-F]+$/, "hex")
+          .required(),
         CORS_ORIGIN: Joi.string().required(),
         CACHE_URL: Joi.string().uri().required(),
         // Separate Redis instance dedicated to LimitKit's rate-limit
@@ -96,6 +112,7 @@ import { RateLimitModule } from "./common/rate-limit";
     AuthModule,
     MailModule,
     SessionsModule,
+    CryptoModule,
     TagsModule,
     FilesModule,
     // Background cron providers (MatrixDecayService, AbandonedSessionsService)
@@ -103,6 +120,7 @@ import { RateLimitModule } from "./common/rate-limit";
     // SessionsService on create/deadline-edit. The old manual Optimize
     // controller (+ undo) was removed; see scheduler.module.ts.
     SchedulerModule,
+    IntegrationsModule,
   ],
   providers: [AppService, MailService],
   controllers: [AppController],

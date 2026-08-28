@@ -25,14 +25,11 @@ export class UsersService {
 
   async create(createUserDto: CreateUserDto) {
     try {
-      // Penalty-matrix defaults come from the Prisma schema. There's no
-      // onboarding flow left to gate on, so every new user starts
-      // `onboardingComplete: true` at the application layer — the schema's
-      // own `@default(false)` is intentionally overridden here rather than
-      // dropped in a migration (out of scope for this change; the column
-      // itself is left alone pending explicit sign-off on a real migration).
+      // The per-(user, provider) UserEncryptionKey is provisioned lazily on the
+      // first `POST /integrations` for that provider (see IntegrationsService),
+      // not here — a user who never connects a DLU account never gets one.
       return await this.prisma.user.create({
-        data: { ...createUserDto, name: "New User", onboardingComplete: true },
+        data: { ...createUserDto, name: "New User" },
       });
     } catch (error) {
       if (
