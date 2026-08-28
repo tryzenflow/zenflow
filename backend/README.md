@@ -3,18 +3,6 @@
 NestJS service that owns persistence, auth, file storage, and task CRUD. Part of the
 [Zenflow monorepo](../README.md) — start there for the big picture and quick start.
 
-> **Scheduler status.** The old Phase-1/2 EDF auto-placement engine (tiered `place.ts`/
-> `optimize.ts`, the softmax/Gumbel re-ranker, per-decision propensity logging) is gone —
-> deleted end-to-end. A drag/resize/manual reschedule is still a plain field write on
-> `PATCH /sessions/:id` (no engine involved). What DOES auto-place: a small, fully
-> deterministic **heuristic rank + best-fit-by-preference** engine (`scheduler/heuristic.ts`,
-> pure) runs IMPLICITLY and transparently — `POST /sessions` and any `PATCH /sessions/:id`
-> that changes a session's `deadline` repack just that one calendar day, no preview, no undo.
-> The old manual `POST /scheduler/optimize` (+ `POST /scheduler/optimize/undo/:batchId`)
-> surface has been removed entirely — see "The heuristic scheduler (implicit day reschedule)"
-> below. (The frontend's Optimize button is a known, accepted, temporarily-broken follow-up —
-> out of scope for the backend change that removed the endpoint.)
-
 ---
 
 ## Tech stack
@@ -138,37 +126,37 @@ service**. Briefly:
 
 ### `Session`
 
-| Field                           | Type            | Notes                                                                                                                                                                                                                                                                                                                               |
-| ------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ----------- |
-| `id`                            | uuid            | PK                                                                                                                                                                                                                                                                                                                                  |
-| `title`, `note`                 | string          | `note` is rich text (TipTap)                                                                                                                                                                                                                                                                                                        |
-| `durationMinutes`               | int             | **always a positive multiple of 15**                                                                                                                                                                                                                                                                                                |
-| `deadline`                      | DateTime?       | EDF ordering key (nulls last)                                                                                                                                                                                                                                                                                                       |
-| `tags`                          | `Tag[]`         | implicit many-to-many with `Tag` (per-user labels)                                                                                                                                                                                                                                                                                  |
+| Field                           | Type            | Notes                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                            | uuid            | PK                                                                                                                                                                                                                                                                                                                                                      |
+| `title`, `note`                 | string          | `note` is rich text (TipTap)                                                                                                                                                                                                                                                                                                                            |
+| `durationMinutes`               | int             | **always a positive multiple of 15**                                                                                                                                                                                                                                                                                                                    |
+| `deadline`                      | DateTime?       | EDF ordering key (nulls last)                                                                                                                                                                                                                                                                                                                           |
+| `tags`                          | `Tag[]`         | implicit many-to-many with `Tag` (per-user labels)                                                                                                                                                                                                                                                                                                      |
 | `manuallyMoved`                 | bool            | true → the user dragged/resized this task. **Purely informational** everywhere automatic (drives the "Manually placed" badge/telemetry) — no automatic path ever freezes/protects a task because of it. The ONE place it gates real behavior is Optimize's `"retainManual"` mode (explicit user opt-in); see "The heuristic scheduler (Optimize)" below |
-| `startTime`                     | int             | minutes from midnight of the last manual placement; informational only, not consulted by the scheduler                                                                                                                                                                                                                              |
-| `status`                        | `SessionStatus` | `PENDING`                                                                                                                                                                                                                                                                                                                           | `DONE` | `ABANDONED` |
-| `type`                          | `SessionType`   | `MANUAL` \| `ASSIGNMENT` \| `EXAM` \| `LECTURE`, default `MANUAL`. Not yet read by any endpoint.                                                                                                                                                                                                                                    |
-| `source`                        | `SessionSource` | `USER` \| `LMS` \| `PORTAL`, default `USER`. Not yet read by any endpoint.                                                                                                                                                                                                                                                          |
+| `startTime`                     | int             | minutes from midnight of the last manual placement; informational only, not consulted by the scheduler                                                                                                                                                                                                                                                  |
+| `status`                        | `SessionStatus` | `PENDING` \| `DONE` \| `ABANDONED`                                                                                                                                                                                                                                                                                                                      |
+| `type`                          | `SessionType`   | `MANUAL` \| `ASSIGNMENT` \| `EXAM` \| `LECTURE`, default `MANUAL`. Not yet read by any endpoint.                                                                                                                                                                                                                                                        |
+| `source`                        | `SessionSource` | `USER` \| `LMS` \| `PORTAL`, default `USER`. Not yet read by any endpoint.                                                                                                                                                                                                                                                                              |
 | `conflict`                      | bool            | true when the task overlaps another task's interval, OR has no valid placement at all (`scheduledStartTime` null). An overlap is now a normal, accepted state — a direct drag/resize can knowingly create one rather than auto-relocating either task; see "The heuristic scheduler (Optimize)" below                                                   |
-| `scheduledStartTime`            | DateTime?       | placement assigned by the EDF engine                                                                                                                                                                                                                                                                                                |
-| `userId`                        | uuid            | FK → `User`, `onDelete: Cascade`                                                                                                                                                                                                                                                                                                    |
-| `seriesId`                      | uuid?           | FK → `SessionSeries`, `onDelete: Cascade` — links session instances of a "study sessions" goal. Not yet written by any endpoint.                                                                                                                                                                                                    |
-| `sessionIndex` / `sessionTotal` | int?            | denormalized convenience fields alongside `seriesId` for cheap per-row rendering. Not yet written by any endpoint.                                                                                                                                                                                                                  |
+| `scheduledStartTime`            | DateTime?       | placement assigned by the EDF engine                                                                                                                                                                                                                                                                                                                    |
+| `userId`                        | uuid            | FK → `User`, `onDelete: Cascade`                                                                                                                                                                                                                                                                                                                        |
+| `seriesId`                      | uuid?           | FK → `SessionSeries`, `onDelete: Cascade` — links session instances of a "study sessions" goal. Not yet written by any endpoint.                                                                                                                                                                                                                        |
+| `sessionIndex` / `sessionTotal` | int?            | denormalized convenience fields alongside `seriesId` for cheap per-row rendering. Not yet written by any endpoint.                                                                                                                                                                                                                                      |
 
 Indexes: `[userId, deadline]`, `[userId, status]`, `[userId, scheduledStartTime]`,
 `[userId, seriesId, createdAt asc]`.
 
 ### `SessionEvent` (append-only audit trail — the ML fuel)
 
-| Field                         | Type               | Notes                                                                                                                                                                                                                                                                                                                                                                          |
-| ----------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ | -------- | ------ | ---------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`                          | BigInt             | autoincrement (serialized as decimal string over the wire)                                                                                                                                                                                                                                                                                                                     |
-| `eventType`                   | `SessionEventType` | `CREATE`                                                                                                                                                                                                                                                                                                                                                                       | `MOVE` | `RESIZE` | `KEEP` | `COMPLETE` | `ABANDON` | `RESCHEDULED`. `KEEP` = completed in the suggested slot (positive signal); `RESCHEDULED` = auto-repositioned as collateral in someone else's cascade (not a user drag). |
-| `oldSnapshot` / `newSnapshot` | Json               | `{ scheduledStartTime, durationMinutes, tags }` (tag names at event time); MOVE/RESIZE also carry `suggestedStartTime` (the overridden EDF slot); RESCHEDULED carries `propensity` when the softmax re-ranker actually chose the slot. `oldSnapshot` null on CREATE/KEEP.                                                                                                      |
-| `rewardScore`                 | float              | Phase-3 reward signal (default 1.0)                                                                                                                                                                                                                                                                                                                                            |
-| `occurredAt`                  | DateTime           | indexed desc per user                                                                                                                                                                                                                                                                                                                                                          |
-| `sessionId` / `userId`        | uuid               | FKs, cascade delete (`userId` denormalized for range queries)                                                                                                                                                                                                                                                                                                                  |
+| Field                         | Type               | Notes                                                                                                                                                                                                                                                                     |
+| ----------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | -------- | ------ | ---------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                          | BigInt             | autoincrement (serialized as decimal string over the wire)                                                                                                                                                                                                                |
+| `eventType`                   | `SessionEventType` | `CREATE`                                                                                                                                                                                                                                                                  | `MOVE` | `RESIZE` | `KEEP` | `COMPLETE` | `ABANDON` | `RESCHEDULED`. `KEEP` = completed in the suggested slot (positive signal); `RESCHEDULED` = auto-repositioned as collateral in someone else's cascade (not a user drag). |
+| `oldSnapshot` / `newSnapshot` | Json               | `{ scheduledStartTime, durationMinutes, tags }` (tag names at event time); MOVE/RESIZE also carry `suggestedStartTime` (the overridden EDF slot); RESCHEDULED carries `propensity` when the softmax re-ranker actually chose the slot. `oldSnapshot` null on CREATE/KEEP. |
+| `rewardScore`                 | float              | Phase-3 reward signal (default 1.0)                                                                                                                                                                                                                                       |
+| `occurredAt`                  | DateTime           | indexed desc per user                                                                                                                                                                                                                                                     |
+| `sessionId` / `userId`        | uuid               | FKs, cascade delete (`userId` denormalized for range queries)                                                                                                                                                                                                             |
 
 > There is no `batchId` field — the old manual Optimize action (and its undo) that used it
 > was removed. Every RESCHEDULED event the implicit day-reschedule writes stands alone.
@@ -265,11 +253,11 @@ Stores a student's DLU LMS / student-portal login for the ingestion watcher.
 only connection status. Types in `@zenflow/shared` (`ConnectIntegrationInput`,
 `IntegrationStatus`, `IntegrationStatusListResponse`).
 
-| Method | Path | Purpose |
-| ------ | ---- | ------- |
-| POST | `/integrations` | Connect a provider. Body `{ provider: "LMS" \| "PORTAL", username, password }`. Probes a live login first (`400` if rejected, `503` if DLU is unreachable, no write either way), then encrypts and upserts the row. |
-| GET | `/integrations` | `{ integrations: [{ provider, connected, lastVerifiedAt }] }` — one entry per provider. |
-| DELETE | `/integrations/:provider` | Disconnect. Idempotent; keeps the `UserEncryptionKey`. |
+| Method | Path                      | Purpose                                                                                                                                                                                                             |
+| ------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/integrations`           | Connect a provider. Body `{ provider: "LMS" \| "PORTAL", username, password }`. Probes a live login first (`400` if rejected, `503` if DLU is unreachable, no write either way), then encrypts and upserts the row. |
+| GET    | `/integrations`           | `{ integrations: [{ provider, connected, lastVerifiedAt }] }` — one entry per provider.                                                                                                                             |
+| DELETE | `/integrations/:provider` | Disconnect. Idempotent; keeps the `UserEncryptionKey`.                                                                                                                                                              |
 
 `DluAuthService` only does a pass/fail probe; scraping belongs to the ingestion service.
 
@@ -332,91 +320,6 @@ message }` envelope) and that the endpoint is usable again once the sliding wind
   mocks, so it has no external dependencies). `src/common/rate-limit/*.spec.ts` unit-tests the
   rule key/policy resolution and the 429→envelope exception filter.
 
-## The heuristic scheduler (implicit day reschedule)
-
-Source: [`src/scheduler/heuristic.ts`](src/scheduler/heuristic.ts) (pure rank + best-fit
-core) + [`day-reschedule.service.ts`](src/scheduler/day-reschedule.service.ts) (the only
-layer that touches Prisma). This replaces the old tiered EDF placer / softmax re-ranker
-end-to-end (deleted in `6d3f42b`) with a small, fully deterministic engine — see
-`docs/heuristic.md`'s "Current architecture" section for the full design writeup; this is the
-implementation summary.
-
-**There is no separate Optimize endpoint any more.** The old manual, on-demand
-`POST /scheduler/optimize` (+ `POST /scheduler/optimize/undo/:batchId`, preview/diff/undo UX)
-has been removed entirely. In its place, the engine runs **implicitly and transparently**:
-`SessionsService.create()` and `SessionsService.update()` (only when the PATCH actually
-changes `deadline`) call `DayRescheduleService.rescheduleDay()` right after the write,
-repacking just the ONE calendar day the (new) deadline falls on — full local-day window, no
-partial-window API surface, no preview step, and no undo. A plain drag/resize/manual
-reschedule (`PATCH /sessions/:id` with `scheduledStartTime` but no `deadline` change) is still
-a bare field write and never triggers a repack. `CreateSessionResponse`/`UpdateSessionResponse`
-carry an optional `dayReschedule: DayRescheduleResult` (`{ date, diffs }`) so the caller can
-see what moved, but there is no separate confirmation step or accept/decline flow — it's
-already applied by the time the response comes back.
-
-> The frontend's Optimize button (`frontend/src/components/calendar/optimize-button.tsx`) still
-> calls the now-deleted `POST /scheduler/optimize`. This is a known, accepted, **temporarily
-> broken** follow-up — intentionally out of scope for this backend change; `packages/shared/src/
-> optimize.ts` (`OptimizeInput`/`OptimizeDiff`/`OptimizeResponse`/`UndoOptimizeResponse`) is
-> deliberately left in place so the frontend keeps typechecking until that follow-up lands.
-
-- **`sortEDF(sessions, now)`** — sorts a day's candidate sessions by urgency: ascending
-  minutes-from-now-to-deadline, ties broken by `id` only (no preference-matrix tie-break).
-- **`bestFreeSlot(durationMinutes, occupied, windowStart, windowEnd, prefMatrix, timezone)`**
-  (not exported — exercised through `optimize()`) — scans every 15-minute-aligned candidate in
-  `[windowStart, windowEnd)`, skips anything that overlaps `occupied` or overruns `windowEnd`,
-  and returns the free candidate whose start-hour scores highest in the signed 7×24 preference
-  matrix (earliest start wins ties); `null` if nothing fits. `windowEnd` is rounded DOWN
-  (`floorToSlot`) to the nearest 15-minute boundary — deadlines are arbitrary user-entered
-  instants, not necessarily slot-aligned, so a session must never be placed to finish past the
-  exact deadline instant.
-- **`optimize(sessions, occupied, now, windowStart, windowEnd, prefMatrix, timezone)`** —
-  ranks, then greedily places each session via `bestFreeSlot`, folding each new placement into
-  `occupied` before placing the next so later (less urgent) sessions never collide with earlier
-  ones. A session `bestFreeSlot` can't place is skipped, not errored.
-
-When a user's stored `preferenceMatrix` is empty or malformed
-(`length !== PREFERENCE_MATRIX_LENGTH`), `heuristic.ts` falls back to a hardcoded cold-start
-default (`defaultPreferenceMatrix`): morning 8–11AM = 1, afternoon 2–5PM = 0.5, evening
-7–10PM = 0.2, everything else = 0 (never negative).
-
-**No seeded PRNG, no softmax sampling, no cost-blend** — fully deterministic given
-`(sessions, occupied, now, window, prefMatrix, timezone)`, which trivially satisfies
-CLAUDE.md invariant #2 (no I/O/clock/randomness in the pure core).
-
-### `DayRescheduleService` — the I/O wrapper
-
-`rescheduleDay(userId, dayLocalDateStr, timezone, preferenceMatrix, now)`: computes the day's
-UTC bounds (`minutesToUtc(dayLocalDateStr, 0, timezone)` … `minutesToUtc(dayLocalDateStr, 1439,
-timezone)`, same helper `SessionsService#list` uses), clamps the placement window's start to
-`max(now, dayStart)` so nothing lands in the past, loads the user's `PENDING`, `source: USER`
-sessions whose `deadline` or `scheduledStartTime` falls in that day (excludes `LMS`/`PORTAL`
-rows — fixed lecture/exam times the student can't move), builds `occupied` from every OTHER
-placed session in the window, calls the pure `optimize()`, then — inside one `$transaction` —
-for every session that actually moved, updates its `scheduledStartTime` and writes one
-`SessionEvent` (`eventType: RESCHEDULED`, `oldSnapshot`/`newSnapshot: { scheduledStartTime }` —
-no `batchId`, that field doesn't exist on the model). Returns `DayRescheduleResult`
-(`{ date, diffs: DayRescheduleDiff[] }`) — one diff per session actually moved; sessions the
-heuristic couldn't place are just omitted, not an error. Nothing is written when nothing moved.
-
-### Other scheduler pieces
-
-- **Matrix-decay cron** (`matrix-decay.service.ts`, `@Cron` daily): the I/O wrapper loads each
-  user's `preferenceMatrix` + `preferenceMatrixDecayedAt`, calls the pure `decayMatrix`
-  (`cell *= 2^(−Δdays / MATRIX_HALF_LIFE_DAYS)`, 21-day half-life), and writes back.
-- **Abandoned-session sweep** (`abandoned-sessions.service.ts`, `@Cron` hourly): flips a
-  `PENDING` session whose `deadline` passed (past a grace window) to `ABANDONED` and writes a
-  `SessionEvent` (`eventType: ABANDON`).
-
-> When you change `heuristic.ts` or `scheduler/utils/*`, update the matching `*.spec.ts` in
-> the same change (`heuristic.spec.ts`, `slot.spec.ts`, `horizon.spec.ts`,
-> `matrix-decay.spec.ts`) and run `pnpm --filter backend test`.
-
-Implemented: triggers 1–2 (auto-reschedule the affected day around session create /
-deadline-edit — this section). Deferred (not built yet — see `notes.md`): trigger 3
-(auto-reschedule around delete), `SessionSeries` CRUD + the even-spacing algorithm, and
-`SessionReminder` dispatch/sweep.
-
 ## Conventions
 
 - **Naming:** plural feature folders/classes (`SessionsController`, `UsersService`,
@@ -476,71 +379,11 @@ pnpm prisma:gen:dev      # regenerate the Prisma client → ../generated/prisma
 holds Postgres credentials for that Compose file. Required app vars (validated at boot via
 `@hapi/joi`):
 
-```env
-DATABASE_URL="postgres://admin:admin@zenflow-db:5432/zenflow?schema=public"
-CACHE_URL="redis://zenflow-cache:6379"
-RATE_LIMIT_CACHE_URL="redis://zenflow-cache-ratelimit:6379"  # dedicated Redis for LimitKit — see "Rate limiting"
-CORS_ORIGIN="http://localhost:5173"
-MAIL_TRANSPORT="smtp://zenflow-mail:25"
-SESSION_SECRET="change-me"
-# DLU-credential envelope master keys (src/crypto/), 32 bytes as 64 hex chars each:
-#   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-MASTER_LMS_ENCRYPTION_KEY_V1="<64 hex chars>"
-MASTER_PORTAL_ENCRYPTION_KEY_V1="<64 hex chars>"
-SESSION_TTL_MS=604800000                       # optional; idle session lifetime, defaults to 7 days
-COOKIE_SECURE=true                             # optional; Secure cookie flag, defaults to true
-COOKIE_SAMESITE=lax                            # optional; lax | none | strict, defaults to lax
-GRPC_SCHEDULER_URL="zenflow-scheduler:50051"   # reserved for the future ML service
-# LimitKit rate limits on the OTP-sending auth endpoints — see "Rate limiting" above.
-# All optional; shown here at their defaults.
-OTP_REQUEST_IP_WINDOW_SEC=60
-OTP_REQUEST_IP_LIMIT=5
-OTP_REQUEST_EMAIL_WINDOW_SEC=900
-OTP_REQUEST_EMAIL_LIMIT=3
-OTP_VERIFY_IP_WINDOW_SEC=60
-OTP_VERIFY_IP_LIMIT=20
-OTP_VERIFY_EMAIL_WINDOW_SEC=600
-OTP_VERIFY_EMAIL_LIMIT=10
+Copy `.env.example` to `.env.{dev,staging,prod,test}`:
+
+```bash
+cp .env.example .env.dev # same for .env.staging, .env.test, .env.prod
 ```
-
-Sessions are **rolling**: every authenticated request resets the session cookie and the
-Redis session TTL, so an actively-used session is extended on each call and won't expire
-mid-use. `SESSION_TTL_MS` is therefore an _idle_ timeout (cookie `maxAge` and Redis TTL are
-kept in sync). The option building lives in `src/auth/session.config.ts` (pure, unit-tested).
-
-**Session cookie flags (`COOKIE_SECURE` / `COOKIE_SAMESITE`).** These drive the session
-cookie's `Secure` and `SameSite` attributes and are decoupled from `NODE_ENV`:
-
-- **Dev / staging** (served over HTTP): `COOKIE_SECURE=false`, `COOKIE_SAMESITE=lax`.
-- **Production** (served over HTTPS): `COOKIE_SECURE=true`. The current deployment serves the
-  frontend at `https://zenflow.alphatrann.com` and the API at `https://zenflow-api.alphatrann.com`
-  — both subdomains of `alphatrann.com`, i.e. **same-site** — so `COOKIE_SAMESITE=lax` is
-  sufficient and preferred (Lax gives some CSRF protection that None gives up). These also match
-  the built-in defaults (`COOKIE_SECURE=true`, `COOKIE_SAMESITE=lax`), so `.env.prod` needs no
-  cookie overrides for this topology:
-
-  ```env
-  COOKIE_SECURE=true
-  COOKIE_SAMESITE=lax
-  CORS_ORIGIN="https://zenflow.alphatrann.com"   # EXACT frontend origin: scheme+host, no trailing slash
-  ```
-
-  `CORS_ORIGIN` must be the exact frontend origin (no trailing slash): credentialed requests
-  (`credentials: true` in `main.ts`) require the server to echo back the precise `Origin`, not a
-  wildcard.
-
-  **Only if the frontend is moved to a cross-site origin** (e.g. a raw `*.netlify.app` domain that
-  doesn't share the API's registrable domain) does the browser require `SameSite=None; Secure` to
-  send the cookie cross-site — then set `COOKIE_SAMESITE=none` (with `COOKIE_SECURE=true`). Browsers
-  reject `SameSite=None` cookies that aren't `Secure`, so `buildSessionOptions` throws at startup if
-  `COOKIE_SAMESITE=none` is paired with `COOKIE_SECURE=false`.
-
-  **The actual prod bug this guards against:** TLS is terminated at the Caddy reverse proxy, which
-  forwards plain HTTP plus an `X-Forwarded-Proto: https` header. Without `trust proxy`, Express saw
-  `req.secure === false` and express-session silently refused to emit the `Secure` cookie at all —
-  so login "succeeded" but no session cookie ever reached the browser, causing a 403 on every
-  subsequent request and a logout on reload. `main.ts` now sets `app.set("trust proxy", 1)` so
-  Express trusts the forwarded proto and emits the cookie.
 
 ## Running staging
 
