@@ -16,3 +16,8 @@ export const ABANDON_GRACE_MS = 60 * 60 * 1000;
  * opens a single unbounded transaction over the whole overdue backlog.
  */
 export const ABANDON_BATCH_SIZE = 100;
+
+/** AES-256-GCM: 96-bit IV (NIST SP 800-38D recommended), 256-bit key. */
+export const IV_RANDOM_BYTES_SIZE = 12;
+export const KEY_RANDOM_BYTES_SIZE = 32;
+export const ENCRYPTION_ALGORITHM = "aes-256-gcm";
