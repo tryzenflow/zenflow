@@ -1,18 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
-  SETTLE_DRAG_RATIO,
-  SETTLE_VELOCITY,
-  PARALLAX_FACTOR,
   CHROME_IN_PX,
-  SHADOW_STRIP_PEAK_OPACITY,
+  PARALLAX_FACTOR,
+  type PagePositionInput,
+  SETTLE_DRAG_RATIO,
+  SETTLE_MS,
+  SETTLE_VELOCITY,
   SHADOW_STRIP_FADE_PX,
-  decideSettleTarget,
+  SHADOW_STRIP_PEAK_OPACITY,
+  type ShadowStripInput,
   computePagePosition,
   computeShadowStrip,
   computeWeekSlideTarget,
+  decideSettleTarget,
   shouldSlideWeek,
-  type PagePositionInput,
-  type ShadowStripInput,
 } from "../week-pager-math";
 
 const WIDTH = 390;
@@ -29,6 +30,12 @@ function settle(input: Partial<Parameters<typeof decideSettleTarget>[0]>) {
     ...input,
   });
 }
+
+describe("SETTLE_MS", () => {
+  it("is the shared 200ms settle duration", () => {
+    expect(SETTLE_MS).toBe(200);
+  });
+});
 
 describe("decideSettleTarget", () => {
   it("stays put when the drag is short and the release is slow", () => {
@@ -47,17 +54,25 @@ describe("decideSettleTarget", () => {
   });
 
   it("a fast left flick advances even with a short drag", () => {
-    expect(settle({ dragPx: -0.2 * WIDTH, velocityX: -SETTLE_VELOCITY - 0.4 })).toBe(2);
+    expect(
+      settle({ dragPx: -0.2 * WIDTH, velocityX: -SETTLE_VELOCITY - 0.4 }),
+    ).toBe(2);
   });
 
   it("a fast right flick goes back even with a short drag", () => {
-    expect(settle({ dragPx: 0.2 * WIDTH, velocityX: SETTLE_VELOCITY + 0.4 })).toBe(0);
+    expect(
+      settle({ dragPx: 0.2 * WIDTH, velocityX: SETTLE_VELOCITY + 0.4 }),
+    ).toBe(0);
   });
 
   it("a flick against the drag direction wins over the position", () => {
     // Dragged 60% of a page left but flung back right — the fling decides.
-    expect(settle({ dragPx: -0.6 * WIDTH, velocityX: SETTLE_VELOCITY + 0.5 })).toBe(0);
-    expect(settle({ dragPx: 0.6 * WIDTH, velocityX: -SETTLE_VELOCITY - 0.5 })).toBe(2);
+    expect(
+      settle({ dragPx: -0.6 * WIDTH, velocityX: SETTLE_VELOCITY + 0.5 }),
+    ).toBe(0);
+    expect(
+      settle({ dragPx: 0.6 * WIDTH, velocityX: -SETTLE_VELOCITY - 0.5 }),
+    ).toBe(2);
   });
 
   it("release-velocity jitter on a long drag does not flip the direction", () => {
@@ -72,15 +87,21 @@ describe("decideSettleTarget", () => {
     // The focused page is always the middle index (1), so a settle can only
     // land on 0, 1, or 2; week jumps are decided by `shouldSlideWeek`.
     expect(settle({ dragPx: WIDTH, velocityX: SETTLE_VELOCITY + 0.5 })).toBe(0);
-    expect(settle({ dragPx: -WIDTH, velocityX: -SETTLE_VELOCITY - 0.5 })).toBe(2);
+    expect(settle({ dragPx: -WIDTH, velocityX: -SETTLE_VELOCITY - 0.5 })).toBe(
+      2,
+    );
     // Even a hard flick from the middle stays one page away.
     expect(settle({ dragPx: -2 * WIDTH, velocityX: -3 })).toBe(2);
     expect(settle({ dragPx: 2 * WIDTH, velocityX: 3 })).toBe(0);
   });
 
   it("handles a one-day window (either edge is the same page)", () => {
-    expect(settle({ dragPx: -WIDTH, velocityX: -1, dayCount: 1, startIndex: 0 })).toBe(1);
-    expect(settle({ dragPx: WIDTH, velocityX: 1, dayCount: 1, startIndex: 0 })).toBe(-1);
+    expect(
+      settle({ dragPx: -WIDTH, velocityX: -1, dayCount: 1, startIndex: 0 }),
+    ).toBe(1);
+    expect(
+      settle({ dragPx: WIDTH, velocityX: 1, dayCount: 1, startIndex: 0 }),
+    ).toBe(-1);
   });
 
   it("is symmetric around the exact half-page threshold", () => {
@@ -207,9 +228,17 @@ describe("computePagePosition", () => {
   it("outgoing page with drag gets parallax offset and dims", () => {
     // outIndex=2, dragging right by 100px → m = progress + outIndex*width = 100 + 780 = 880
     // factor=PARALLAX_FACTOR, parallax = (0.32-1)*880 = -585.6
-    const p = pos({ index: 2, outIndex: 2, toIndex: 2, progress: 100, dragging: 1 });
+    const p = pos({
+      index: 2,
+      outIndex: 2,
+      toIndex: 2,
+      progress: 100,
+      dragging: 1,
+    });
     expect(p.isOutgoing).toBe(true);
-    expect(p.translateX).toBeCloseTo(2 * WIDTH + 100 + (PARALLAX_FACTOR - 1) * (100 + 2 * WIDTH));
+    expect(p.translateX).toBeCloseTo(
+      2 * WIDTH + 100 + (PARALLAX_FACTOR - 1) * (100 + 2 * WIDTH),
+    );
     expect(p.opacity).toBeLessThan(1);
     expect(p.opacity).toBeGreaterThan(0);
   });
@@ -294,7 +323,9 @@ describe("computePagePosition", () => {
       carrierIndex: -1,
     });
     // Normal outgoing behavior — parallax applied
-    expect(p.translateX).toBeCloseTo(2 * WIDTH + 100 + (PARALLAX_FACTOR - 1) * (100 + 2 * WIDTH));
+    expect(p.translateX).toBeCloseTo(
+      2 * WIDTH + 100 + (PARALLAX_FACTOR - 1) * (100 + 2 * WIDTH),
+    );
   });
 
   it("carrier page stays visible (opacity 1) even when not outgoing/incoming", () => {

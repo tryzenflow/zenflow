@@ -1,35 +1,46 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { View, StyleSheet, useWindowDimensions } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import { format } from "date-fns";
-import { Text } from "@/components/ui/text";
 import { ChevronLeft, ChevronRight } from "@/components/Icons";
-import { useColorScheme } from "@/lib/useColorScheme";
+import { Text } from "@/components/ui/text";
 import { NAV_THEME } from "@/lib/constants";
+import {
+  getCrossDayOffset,
+  resetCrossDayOffset,
+  setCrossDayOffset,
+} from "@/lib/cross-day-offset";
+import { type PeekBlock } from "@/lib/peek";
+import { useColorScheme } from "@/lib/useColorScheme";
 import {
   centeredDays,
   dateKey,
   dayIndexInWeek,
   shiftDays,
+  shiftWeek,
 } from "@/lib/week-date-math";
 import {
-  decideSettleTarget,
+  OUTGOING_DIM_OPACITY,
+  PARALLAX_FACTOR,
+  SETTLE_MS,
+  SETTLE_VELOCITY,
+  SHADOW_STRIP_PX,
   computePagePosition,
   computeShadowStrip,
   computeWeekSlideTarget,
-  PARALLAX_FACTOR,
-  OUTGOING_DIM_OPACITY,
-  SHADOW_STRIP_PX,
-  SETTLE_VELOCITY,
+  decideSettleTarget,
   shouldSlideWeek,
 } from "@/lib/week-pager-math";
-import { DayTimeline } from "./day-timeline";
-import { type PeekBlock } from "@/lib/peek";
+import { format } from "date-fns";
+import { LinearGradient } from "expo-linear-gradient";
 import {
-  getCrossDayOffset,
-  setCrossDayOffset,
-  resetCrossDayOffset,
-} from "@/lib/cross-day-offset";
+  type ForwardedRef,
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { StyleSheet, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   Easing,
@@ -41,15 +52,20 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from "react-native-reanimated";
-import { PeekStrip, PEEK_STRIP_W } from "./week-peek-strip";
-import { PagerPage, type DragEdge } from "./week-pager-page";
+import { DayTimeline } from "./day-timeline";
+import { type DragEdge, PagerPage } from "./week-pager-page";
+import { PEEK_STRIP_W, PeekStrip } from "./week-peek-strip";
 
 /** Hold time (ms) a lifted block must sit in the screen-edge zone before the
  * cross-day advance fires (mockup's "lifted block at the edge → jumps"). */
 const CROSS_DAY_HOLD_MS = 400;
 
-/** Duration of the settle snap (and snap-back) after a swipe ends. */
-const SETTLE_MS = 200;
+/** `withTiming` config for every settle snap (and snap-back) after a swipe
+ * ends — `SETTLE_MS` is shared with the Week header so the two land together. */
+const SETTLE = {
+  duration: SETTLE_MS,
+  easing: Easing.out(Easing.cubic),
+} as const;
 
 const BRAND_ORANGE_LIGHT = "255, 142, 62";
 const BRAND_ORANGE_DARK = "255, 122, 36";
@@ -68,7 +84,36 @@ interface WeekPagerProps {
   /** Fired after a cross-day reschedule so the screen can bump the target
    * day's reload token (the source day refetches itself). */
   onCrossDayReschedule: (taskId: string, startISO: string) => void;
+  /** Strip offset shared value, owned by `WeekScreen`. The Week header reads
+   * it so its chip strip tracks the pager 1:1 during a week slide, and its
+   * own week-swipe writes it to drag this pager one page. */
+  progressSV: SharedValue<number>;
+  /** The header strip's own offset. The pager writes it (via `withTiming`)
+   * only when a day-swipe crosses a week boundary (`slideWeek`), so the
+   * header slides its week block in sync from rest. */
+  headerStripSV: SharedValue<number>;
+  /** A boundary-crossing day-swipe (`slideWeek`) started its animation — the
+   * header enters week-slide mode. */
+  onWeekSlideStart?: () => void;
+  /** …and finished, in week direction `dir` — the header re-centers its strip
+   * on the new week. */
+  onWeekSlideEnd?: (dir: -1 | 1) => void;
 }
+
+/** Imperative surface the Week header drives during its own week swipe — see
+ * `week-header.tsx`. The per-frame strip position is a plain shared-value
+ * write; only these three lifecycle moments cross back into React. */
+export type WeekPagerHandle = {
+  /** Header week-swipe began: build the same-weekday adjacent-week window so
+   * the page sliding in under the finger is the correct day. */
+  beginHeaderWeekDrag: () => void;
+  /** Header week-swipe committed in `dir` (−1 back, 1 forward): finish the
+   * one-page slide with `withTiming` and re-center the window. */
+  settleHeaderWeekDrag: (dir: -1 | 1) => void;
+  /** Header week-swipe released below threshold or cancelled: collapse the
+   * window back to `centeredDays(focused)` with no focus change. */
+  abortHeaderWeekDrag: () => void;
+};
 
 /**
  * Custom "stacking" pager for the mobile Week View — a hand-rolled
@@ -96,14 +141,21 @@ interface WeekPagerProps {
  * lifted block mounted for the whole gesture (GitHub issue #19's "cross-day
  * drag" frame).
  */
-export function WeekPager({
-  focusedDate,
-  onFocusedDateChange,
-  reloadKeyByDay,
-  onSessionPress,
-  onLongPress,
-  onCrossDayReschedule,
-}: WeekPagerProps) {
+function WeekPagerImpl(
+  {
+    focusedDate,
+    onFocusedDateChange,
+    reloadKeyByDay,
+    onSessionPress,
+    onLongPress,
+    onCrossDayReschedule,
+    progressSV,
+    headerStripSV,
+    onWeekSlideStart,
+    onWeekSlideEnd,
+  }: WeekPagerProps,
+  ref: ForwardedRef<WeekPagerHandle>,
+) {
   const { width } = useWindowDimensions();
   const { isDarkColorScheme } = useColorScheme();
   const borderColor = isDarkColorScheme
@@ -124,6 +176,14 @@ export function WeekPager({
   // swipe (the "next day stops covering the current day" glitch).
   const [settling, setSettling] = useState(false);
   const releaseSettle = useCallback(() => setSettling(false), []);
+  // 1 while the Week header owns the strip for its week swipe: the window is a
+  // transient same-weekday `[f−7, f, f+7]`, `progress` is driven from the
+  // header's pan, and the pager's own pan is disabled. Cleared when the
+  // header's settle/abort re-centers the window.
+  const [weekMode, setWeekMode] = useState(false);
+  // Synchronous mirror of `weekMode` — read by the imperative handlers before
+  // the state re-render lands (same reason as `crossDayDragRef`).
+  const weekModeRef = useRef(false);
   // Synchronous guard for cross-day drag — prevents focusedDate effect
   // from rebuilding the window mid-drag (refs are immediately readable,
   // unlike state which requires a render cycle).
@@ -133,11 +193,11 @@ export function WeekPager({
   const [peekByDay, setPeekByDay] = useState<Record<string, PeekBlock[]>>({});
 
   // Strip offset in px. Rest value: `-width` — the focused page is always
-  // the middle of the 3-page window. Initialized from the first render's
-  // focus so the window mounts showing the right day even before the first
-  // layout (the FlatList's unreliable `initialScrollIndex` workaround is
-  // gone; `handleFirstLayout` re-snaps as a safety net).
-  const progress = useSharedValue(-width);
+  // the middle of the 3-page window. Owned by `WeekScreen` (so the Week
+  // header can read it and drive it during a week swipe); aliased to
+  // `progress` here so the rest of this file is untouched. `handleFirstLayout`
+  // / the width-change effect in `WeekScreen` re-snap it.
+  const progress = progressSV;
   // Roles the pages' animated styles derive from (see PagerPage).
   const fromSV = useSharedValue(1);
   const toSV = useSharedValue(1);
@@ -162,11 +222,14 @@ export function WeekPager({
 
   // Stable identity so DayTimeline's peek-report effect doesn't re-fire on
   // every pager render.
-  const handlePeekChange = useCallback((blocks: PeekBlock[], dayKey: string) => {
-    setPeekByDay((prev) =>
-      prev[dayKey] === blocks ? prev : { ...prev, [dayKey]: blocks },
-    );
-  }, []);
+  const handlePeekChange = useCallback(
+    (blocks: PeekBlock[], dayKey: string) => {
+      setPeekByDay((prev) =>
+        prev[dayKey] === blocks ? prev : { ...prev, [dayKey]: blocks },
+      );
+    },
+    [],
+  );
 
   // Cross-day offset accumulated during a drag; TaskBlock reads it via the
   // module-level `getCrossDayOffset()` (not a useRef prop — Reanimated would
@@ -247,6 +310,93 @@ export function WeekPager({
       commitRoles(1);
     },
     [centeredDays, commitRoles, days],
+  );
+
+  // ── Week slide (header-driven, or a day-swipe that crosses a week edge) ────
+  //
+  // Both paths animate `progress` exactly one page and, on the header path,
+  // let the header's pan drive `progress` per-frame. The pager stays locked
+  // (`settling` + `weekMode`) for the whole transition; `settleRoles`
+  // re-centers the window at the end, deferring the `progress` snap to the
+  // `[days]` layout-effect so the swap is invisible.
+
+  // Header week-swipe began: swap the live window for a transient
+  // same-weekday `[f−7, f, f+7]` so the page sliding in under the finger is
+  // the correct day of the adjacent week. No `pendingSettleRef` — the header
+  // owns the strip position until its settle/abort.
+  const beginHeaderWeekDrag = useCallback(() => {
+    if (settling || dragActive || weekModeRef.current) return;
+    weekModeRef.current = true;
+    const f = days[focusedIndex];
+    setDays([shiftWeek(f, -1), f, shiftWeek(f, 1)]);
+    setFocusedIndex(1);
+    commitRoles(1);
+    draggingSV.value = 1; // parallax held while the finger drags
+    setWeekMode(true);
+    setSettling(true);
+  }, [settling, dragActive, days, focusedIndex, commitRoles, draggingSV]);
+
+  // Completion of a header week slide: clear week mode and re-center the
+  // window on `days[idx]` — the same-weekday adjacent-week day (`1 + dir`) on
+  // a commit, or `f` (`1`) on an abort.
+  const finishHeaderWeekRoles = useCallback(
+    (idx: number) => {
+      weekModeRef.current = false;
+      setWeekMode(false);
+      settleRoles(idx);
+    },
+    [settleRoles],
+  );
+
+  // Header week-swipe committed in `dir`: finish the one-page slide from
+  // wherever the finger left `progress`, roles set for the whole slide.
+  const settleHeaderWeekDrag = useCallback(
+    (dir: -1 | 1) => {
+      // `beginHeaderWeekDrag` bailed (pager was mid-settle) → let the pager's
+      // own `focusedDate` effect handle the committed week change instead.
+      if (!weekModeRef.current) return;
+      toSV.value = 1 + dir;
+      draggingSV.value = 0; // parallax eases back to 1x over the settle
+      progress.value = withTiming(-width - dir * width, SETTLE, () => {
+        "worklet";
+        // Re-center on the committed week whether or not the tween finished
+        // clean — `focusedDate` already moved, an interrupt just skips the
+        // last frames.
+        runOnJS(finishHeaderWeekRoles)(1 + dir);
+      });
+    },
+    [toSV, draggingSV, progress, width, finishHeaderWeekRoles],
+  );
+
+  // Header week-swipe released below threshold, or cancelled: collapse the
+  // transient window back to `centeredDays(f)`. Focus never changed, so the
+  // `focusedDate` effect no-ops once `settleRoles` clears `settling`.
+  const abortHeaderWeekDrag = useCallback(() => {
+    if (!weekModeRef.current) return; // begin bailed — nothing to collapse
+    draggingSV.value = 0;
+    weekModeRef.current = false;
+    setWeekMode(false);
+    settleRoles(1);
+  }, [draggingSV, settleRoles]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      beginHeaderWeekDrag,
+      settleHeaderWeekDrag,
+      abortHeaderWeekDrag,
+    }),
+    [beginHeaderWeekDrag, settleHeaderWeekDrag, abortHeaderWeekDrag],
+  );
+
+  // Completion of the boundary-cross week slide (`slideWeek`): re-center the
+  // pager window, then let the header re-center its strip on the new week.
+  const finishSlideWeek = useCallback(
+    (dir: 1 | -1) => {
+      settleRoles(1 + dir);
+      onWeekSlideEnd?.(dir);
+    },
+    [settleRoles, onWeekSlideEnd],
   );
 
   // Drives the initial center position (and a chip tap to a day in a week
@@ -352,36 +502,53 @@ export function WeekPager({
   // Slides the focused day a full week (the response to a swipe that escapes
   // a week edge: Monday swiped backward, Sunday swiped forward — a fast
   // fling past the edge, so the pager jumps the whole week rather than
-  // advancing one day). Instant, matching the old FlatList's
-  // `scrollToIndex(animated: false)`. The destination is the natural
-  // "next/previous day" past the boundary, not the same weekday: forward past
-  // Sunday lands on Monday of next week; backward past Monday lands on
-  // Sunday of previous week — the same place a slow drag would have ended up
-  // after fully crossing the edge. The neighbor that was sliding in survives
-  // the swap by key (it stays in the re-centered window), so only the two
-  // new far neighbors mount; the fresh window gets its roles committed so
-  // the pages render at full opacity on their slots — otherwise none of them
-  // matches the old window's outgoing/incoming indexes and the grid renders
-  // invisible (opacity 0).
+  // advancing one day). Animated as a one-page `withTiming` slide (was an
+  // instant `progress = -width` cut), and the header runs its own week-block
+  // slide in sync off `onWeekSlideStart` / `onWeekSlideEnd`. The destination
+  // is the natural "next/previous day" past the boundary, not the same
+  // weekday: forward past Sunday lands on Monday of next week; backward past
+  // Monday lands on Sunday of previous week — the same place a slow drag
+  // would have ended up after fully crossing the edge. The transient window
+  // keeps the current focused day at index 1 with `nextFocused` as the
+  // incoming neighbour (index `1 + dir`); `settleOn` already set `settling`,
+  // so the `focusedDate` effect stays out of the way until `finishSlideWeek`
+  // re-centers via `settleRoles`.
   const slideWeek = useCallback(
     (dir: 1 | -1) => {
-      const nextFocused = computeWeekSlideTarget(days[focusedIndex], dir);
-      const fresh = centeredDays(nextFocused);
-      setDays(fresh);
+      const current = days[focusedIndex];
+      const nextFocused = computeWeekSlideTarget(current, dir);
+      const win =
+        dir === 1
+          ? [days[0], current, nextFocused] // page 2 slides in from the right
+          : [nextFocused, current, days[2]]; // page 0 slides in from the left
+      setDays(win);
       setFocusedIndex(1);
-      onFocusedDateChange(nextFocused);
-      commitRoles(1);
-      progress.value = -width;
-      setSettling(false);
+      fromSV.value = 1;
+      toSV.value = 1 + dir;
+      draggingSV.value = 0;
+
+      onFocusedDateChange(nextFocused); // focus commits now; effect guarded by `settling`
+      onWeekSlideStart?.(); // header enters week-slide mode
+
+      const target = -width - dir * width;
+      headerStripSV.value = withTiming(target, SETTLE); // header strip from REST
+      progress.value = withTiming(target, SETTLE, () => {
+        "worklet";
+        runOnJS(finishSlideWeek)(dir);
+      });
     },
     [
-      centeredDays,
-      commitRoles,
       days,
       focusedIndex,
+      fromSV,
+      toSV,
+      draggingSV,
       onFocusedDateChange,
+      onWeekSlideStart,
+      headerStripSV,
       progress,
       width,
+      finishSlideWeek,
     ],
   );
   const settleOn = useCallback(
@@ -405,7 +572,7 @@ export function WeekPager({
       // header chip/title updates immediately — previously it only
       // updated at animation end (inside `settleRoles`), causing the
       // header to flash back to the previous day for 200 ms.
-      const landed = days[target];  
+      const landed = days[target];
       if (landed) onFocusedDateChange(landed);
       animateRolesTo(target, settleRoles);
     },
@@ -441,12 +608,13 @@ export function WeekPager({
   // deliberately ABOVE TaskBlock's 10px `activeOffsetX` (task-block.tsx), so
   // a gesture starting on a task block activates the block's pan first and
   // fails this one — the pager is effectively locked while a block is touched.
-  // Disabled while a task drag is active (`dragActive`) or a settle is running
-  // (`settling`) — both own the strip.
+  // Disabled while a task drag is active (`dragActive`), a settle is running
+  // (`settling`), or the Week header owns the strip for its week swipe
+  // (`weekMode`) — each owns the strip.
   const panGesture = useMemo(
     () =>
       Gesture.Pan()
-        .enabled(!dragActive && !settling)
+        .enabled(!dragActive && !settling && !weekMode)
         .activeOffsetX([-12, 12])
         .failOffsetY([-12, 12])
         .onBegin(() => {
@@ -480,7 +648,7 @@ export function WeekPager({
             });
           }
         }),
-    [dragActive, settling, focusedIndex, width, handlePanEnd],
+    [dragActive, settling, weekMode, focusedIndex, width, handlePanEnd],
   );
 
   // Fires after a lifted block has held in the edge zone for the hold time.
@@ -622,9 +790,7 @@ export function WeekPager({
       shiftDays,
     ],
   );
-  const orangeRgb = isDarkColorScheme
-    ? BRAND_ORANGE_DARK
-    : BRAND_ORANGE_LIGHT;
+  const orangeRgb = isDarkColorScheme ? BRAND_ORANGE_DARK : BRAND_ORANGE_LIGHT;
   // Glow overlays are always mounted; each gradient's opacity is driven by
   // `armedEdgeSV` (a shared value) so arming/disarming never re-renders
   // React — a re-render would recreate the TaskBlock gesture handler and
@@ -669,10 +835,7 @@ export function WeekPager({
   return (
     <View className="flex-1">
       <GestureDetector gesture={panGesture}>
-        <View
-          className="flex-1 overflow-hidden"
-          onLayout={handleFirstLayout}
-        >
+        <View className="flex-1 overflow-hidden" onLayout={handleFirstLayout}>
           {days.map((day, index) => (
             <PagerPage
               key={dateKey(day)}
@@ -700,9 +863,7 @@ export function WeekPager({
                 onPeekChange={handlePeekChange}
               />
               {index < days.length - 1 && (
-                <PeekStrip
-                  blocks={peekByDay[dateKey(days[index + 1])] ?? []}
-                />
+                <PeekStrip blocks={peekByDay[dateKey(days[index + 1])] ?? []} />
               )}
             </PagerPage>
           ))}
@@ -775,26 +936,29 @@ export function WeekPager({
           />
         </Animated.View>
         {pill && (
-            <View
-              style={{
-                position: "absolute",
-                top: 130,
-                ...(pill.edge === "right" ? { right: 10 } : { left: 10 }),
-              }}
-            >
-              <View className="flex-row items-center gap-1.5 rounded-full bg-brand-orange px-2.5 py-1 shadow-lg">
-                {pill.edge === "right" ? (
-                  <ChevronRight size={13} color="black" />
-                ) : (
-                  <ChevronLeft size={13} color="black" />
-                )}
-                <Text className="text-[11px] font-bold text-primary-foreground">
-                  {format(pill.day, "EEE, MMM d")}
-                </Text>
+          <View
+            style={{
+              position: "absolute",
+              top: 130,
+              ...(pill.edge === "right" ? { right: 10 } : { left: 10 }),
+            }}
+          >
+            <View className="flex-row items-center gap-1.5 rounded-full bg-brand-orange px-2.5 py-1 shadow-lg">
+              {pill.edge === "right" ? (
+                <ChevronRight size={13} color="black" />
+              ) : (
+                <ChevronLeft size={13} color="black" />
+              )}
+              <Text className="text-[11px] font-bold text-primary-foreground">
+                {format(pill.day, "EEE, MMM d")}
+              </Text>
             </View>
-            </View>
-          )}
-        </View>
+          </View>
+        )}
+      </View>
     </View>
   );
 }
+
+export const WeekPager = forwardRef(WeekPagerImpl);
+WeekPager.displayName = "WeekPager";

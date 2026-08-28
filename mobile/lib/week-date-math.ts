@@ -35,6 +35,19 @@ export function centeredDays(day: Date): Date[] {
   return [shiftDays(day, -1), day, shiftDays(day, 1)];
 }
 
+/** The Week header strip's 3 week blocks — previous / anchored / next week,
+ * each 7 dates Monday-first. The middle block (`weekDays(anchor)`) is the one
+ * shown at rest; the neighbours are pre-rendered so a week swipe slides one
+ * block in without a repaint. Mirrors `centeredDays` for the pager, scaled to
+ * a whole week. */
+export function weekHeaderBlocks(anchor: Date): Date[][] {
+  return [
+    weekDays(shiftWeek(anchor, -1)),
+    weekDays(anchor),
+    weekDays(shiftWeek(anchor, 1)),
+  ];
+}
+
 /** Monday-first column index of a day within its week (0 = Mon … 6 = Sun). */
 export function dayIndexInWeek(day: Date): number {
   return (day.getDay() + 6) % 7;

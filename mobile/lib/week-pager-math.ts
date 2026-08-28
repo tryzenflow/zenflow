@@ -59,6 +59,13 @@ export const SETTLE_DRAG_RATIO = 0.5;
  * half a page) moves the pager. */
 export const SETTLE_VELOCITY = 0.8;
 
+/** Duration (ms) of the settle snap (and snap-back) after a swipe ends —
+ * shared by the pager's `withTiming` settles and the Week header's week-slide
+ * so the two land on the same frame. Paired with `Easing.out(Easing.cubic)` at
+ * every call site (Easing itself can't live here — this module stays
+ * RN/reanimated-free so it's plain-Node testable). */
+export const SETTLE_MS = 200;
+
 export interface SettleInput {
   /** Finger translation at release, px. Negative = finger moved left (the
    * strip moved left → next day slides in). */
@@ -144,10 +151,7 @@ export function shouldSlideWeek(
  * edge — a flick just skips the intermediate days and lands where the slow
  * drag would have ended up after fully crossing the boundary.
  */
-export function computeWeekSlideTarget(
-  current: Date,
-  dir: 1 | -1,
-): Date {
+export function computeWeekSlideTarget(current: Date, dir: 1 | -1): Date {
   const adjacentWeekStart = addDays(weekStart(current), dir * 7);
   return dir === 1 ? adjacentWeekStart : addDays(adjacentWeekStart, 6);
 }
@@ -229,8 +233,7 @@ export function computePagePosition({
   const m = progress + outIndex * width;
   const absM = Math.abs(m);
 
-  const inIndex =
-    toIndex === outIndex ? outIndex + (m < 0 ? 1 : -1) : toIndex;
+  const inIndex = toIndex === outIndex ? outIndex + (m < 0 ? 1 : -1) : toIndex;
 
   const isOutgoing = index === outIndex;
   const isIncoming = index === inIndex;
@@ -249,8 +252,7 @@ export function computePagePosition({
   // strip's own slot+progress term AND the outgoing parallax (the carrier
   // page is typically the outgoing page during a rightward drag).
   const carrierFix = isCarrier
-    ? carrierOrigin -
-      (slot + progress + (isOutgoing ? (factor - 1) * m : 0))
+    ? carrierOrigin - (slot + progress + (isOutgoing ? (factor - 1) * m : 0))
     : 0;
 
   const translateX =
@@ -271,7 +273,15 @@ export function computePagePosition({
   const seam: "left" | "right" | null =
     isIncoming && sliding ? (fromRight ? "left" : "right") : null;
 
-  return { translateX, opacity, zIndex, isOutgoing, isIncoming, isCarrier, seam };
+  return {
+    translateX,
+    opacity,
+    zIndex,
+    isOutgoing,
+    isIncoming,
+    isCarrier,
+    seam,
+  };
 }
 
 // ── Incoming-page seam shadow strip ──────────────────────────────────────────
@@ -315,8 +325,7 @@ export function computeShadowStrip({
   "worklet";
   const m = progress + outIndex * width;
   const absM = Math.abs(m);
-  const inIndex =
-    toIndex === outIndex ? outIndex + (m < 0 ? 1 : -1) : toIndex;
+  const inIndex = toIndex === outIndex ? outIndex + (m < 0 ? 1 : -1) : toIndex;
 
   const sliding = absM > CHROME_IN_PX;
   const opacity = sliding

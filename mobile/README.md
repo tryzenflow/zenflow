@@ -38,11 +38,15 @@ mobile/
 │       │                      # long-press empty area / FAB → create); see Phase 5 in
 │       │                      # docs/react-native-migration.md. Also reads an optional `date`
 │       │                      # query param (added for Month View's day-tap deep link).
-│       ├── week.tsx           # Week — built: sticky 7-chip week header + a custom
-│       │                      # Reanimated "stacking" day pager (week-pager.tsx, the
-│       │                      # mockup's parallax/dim swipe transition) with swipe
-│       │                      # paging, chip-tap re-centering and cross-day session drag;
-│       │                      # see components/calendar/ below
+│       ├── week.tsx           # Week — built: sticky week header + a custom Reanimated
+│       │                      # "stacking" day pager (week-pager.tsx, the mockup's
+│       │                      # parallax/dim swipe transition) with swipe paging,
+│       │                      # chip-tap re-centering and cross-day session drag. Header
+│       │                      # and pager share `progressSV`/`headerStripSV` (owned here)
+│       │                      # so week changes — a header week swipe, or a day-swipe that
+│       │                      # crosses a week edge — slide the header's 3-week chip strip
+│       │                      # in lockstep with the pager's one-page slide.
+│       │                      # See components/calendar/ below
 │       ├── month.tsx          # Month — built (RN migration Phase 4, issue #21): paginated
 │       │                      # Monday-first grid + overflow bottom sheet + long-press-drag
 │       │                      # reschedule; see components/calendar/ below
@@ -56,8 +60,11 @@ mobile/
 │   ├── calendar/               # Week View: week-pager.tsx (custom Reanimated "stacking"
 │   │   │                       # day pager — Pan gesture + `progress` shared value,
 │   │   │                       # parallax/dim/shadow swipe transition, live 7–14-day
-│   │   │                       # window; settle math in lib/week-pager-math.ts),
-│   │   │                       # week-header.tsx (sticky month/week-range + 7-day chips),
+│   │   │                       # window; settle math in lib/week-pager-math.ts; exposes a
+│   │   │                       # `WeekPagerHandle` ref so the header can drive a week slide),
+│   │   │                       # week-header.tsx (sticky month/week-range + a 3-week chip
+│   │   │                       # strip that slides one block in lockstep with the pager;
+│   │   │                       # `weekHeaderBlocks` in lib/week-date-math.ts),
 │   │   │                       # day-timeline.tsx (24h grid shared by Day and Week),
 │   │   │                       # task-block.tsx (grid block: drag reschedule + cross-day
 │   │   │                       # drag + complete-swipe), now-indicator.tsx,

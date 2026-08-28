@@ -1,15 +1,22 @@
-import { WeekHeader } from "@/components/calendar/week-header";
-import { WeekPager } from "@/components/calendar/week-pager";
+import {
+  WeekHeader,
+  type WeekHeaderHandle,
+} from "@/components/calendar/week-header";
+import {
+  WeekPager,
+  type WeekPagerHandle,
+} from "@/components/calendar/week-pager";
 import { CreateSessionFab } from "@/components/tasks/create-task-fab";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { useFocusEffect } from "@react-navigation/native";
 import { zonedDate, zonedNow } from "@zenflow/core";
+import { format } from "date-fns";
 import * as Haptics from "expo-haptics";
 import { type Href, useRouter } from "expo-router";
-import { format } from "date-fns";
-import { useCallback, useState } from "react";
-import { View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { View, useWindowDimensions } from "react-native";
+import { useSharedValue } from "react-native-reanimated";
 
 export default function WeekScreen() {
   const router = useRouter();
@@ -30,6 +37,37 @@ export default function WeekScreen() {
   );
 
   const tabBarOverlay = useTabBarOverlayHeight();
+
+  // Strip offsets shared by the header and the pager so their week transitions
+  // move in lockstep. Rest = `-width` (focused page / middle week block
+  // centered). Owned here — the nearest common parent.
+  const { width } = useWindowDimensions();
+  const progressSV = useSharedValue(-width);
+  const headerStripSV = useSharedValue(-width);
+  const pagerRef = useRef<WeekPagerHandle>(null);
+  const headerRef = useRef<WeekHeaderHandle>(null);
+
+  const handleWeekDragBegin = useCallback(() => {
+    pagerRef.current?.beginHeaderWeekDrag();
+  }, []);
+  const handleWeekDragSettle = useCallback((dir: -1 | 1) => {
+    pagerRef.current?.settleHeaderWeekDrag(dir);
+  }, []);
+  const handleWeekDragAbort = useCallback(() => {
+    pagerRef.current?.abortHeaderWeekDrag();
+  }, []);
+  const handleWeekSlideStart = useCallback(() => {
+    headerRef.current?.onWeekSlideStart();
+  }, []);
+  const handleWeekSlideEnd = useCallback((dir: -1 | 1) => {
+    headerRef.current?.onWeekSlideEnd(dir);
+  }, []);
+
+  // Keep the shared offsets at rest across a width change (rotation).
+  useEffect(() => {
+    progressSV.value = -width;
+    headerStripSV.value = -width;
+  }, [width, progressSV, headerStripSV]);
 
   useFocusEffect(
     useCallback(() => {
@@ -73,19 +111,30 @@ export default function WeekScreen() {
   return (
     <View className="flex-1 bg-background">
       <WeekHeader
+        ref={headerRef}
         focusedDate={focusedDate}
         tz={tz}
         onSelectDay={setFocusedDate}
+        progressSV={progressSV}
+        headerStripSV={headerStripSV}
+        onWeekDragBegin={handleWeekDragBegin}
+        onWeekDragSettle={handleWeekDragSettle}
+        onWeekDragAbort={handleWeekDragAbort}
       />
 
       <View className="flex-1" style={{ paddingBottom: tabBarOverlay }}>
         <WeekPager
+          ref={pagerRef}
           focusedDate={focusedDate}
           onFocusedDateChange={setFocusedDate}
           reloadKeyByDay={reloadKeyByDay}
           onSessionPress={handleSessionPress}
           onLongPress={handleLongPress}
           onCrossDayReschedule={handleCrossDayReschedule}
+          progressSV={progressSV}
+          headerStripSV={headerStripSV}
+          onWeekSlideStart={handleWeekSlideStart}
+          onWeekSlideEnd={handleWeekSlideEnd}
         />
       </View>
 
