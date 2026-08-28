@@ -92,15 +92,13 @@ Defined in [`prisma/schema.prisma`](prisma/schema.prisma). Five core models belo
 (`User`, `Session`, `SessionEvent`, `Tag`, `File`), plus schema scaffolding for the DLU-pivot
 work — `UserEncryptionKey`, `UserDevice`, `SessionSeries`, `SlotProposal`, `Integration`,
 `Notification`, `CrawlJob`/`CrawlJobItem`, `CrawledUrl`, `PortalAPIJob`/`PortalAPIJobItem`.
-`UserEncryptionKey` + `Integration` are **live** (see _Integrations_ below); the rest are
-added ahead of their per-issue implementation and **not yet wired to any endpoint, DTO, or
+`UserEncryptionKey` and `Integration` are live (see _Integrations_); the rest are added
+ahead of their per-issue implementation and **not yet wired to any endpoint, DTO, or
 service**. Briefly:
 
-- `UserEncryptionKey` — per-`(user, provider)` data-encryption key (DEK), versioned
-  independently from the master key (`version` vs `masterKeyVersion`). The stored
-  `key`/`iv`/`authTag` are the DEK **after** being AES-256-GCM–wrapped under the
-  provider's master key (`MASTER_<provider>_ENCRYPTION_KEY_V<n>`, env only). Provisioned
-  lazily on first connect. See _Integrations_.
+- `UserEncryptionKey` — per-`(user, provider)` data-encryption key, stored wrapped
+  (`key`/`iv`/`authTag`) under that provider's env master key. `version` and
+  `masterKeyVersion` rotate independently. Created on first connect.
 - `UserDevice` — one row per Expo push registration (`platform`, `pushToken`), so a user
   can have multiple devices.
 - `SessionSeries` — links N session-instance `Session` rows of one "study sessions" goal;
@@ -109,13 +107,10 @@ service**. Briefly:
   `seriesId`/`sessionIndex`/`sessionTotal` to support this.
 - `SlotProposal` — one row per create/reschedule event, holding both the heuristic's and
   LinUCB's proposed placement plus which one (`pickedModel`) actually won.
-- `Integration` — encrypted LMS/portal credentials, one row per `(userId, provider)`.
-  `encryptedCredentials`/`iv`/`authTag` are the `{ username, password }` JSON blob
-  AES-256-GCM–encrypted under that user's current `UserEncryptionKey` DEK;
-  `encryptionVersion` records which DEK `version` was used. **Two-layer envelope:** a
-  DB dump alone yields nothing; a DB dump **plus** a master key yields only re-wrappable
-  per-user DEKs, not credentials — decrypting a credential still requires unwrapping that
-  user's DEK first. No plaintext username/password column exists.
+- `Integration` — LMS/portal credentials, one row per `(userId, provider)`. The
+  `{ username, password }` blob is AES-256-GCM–encrypted under the user's
+  `UserEncryptionKey` (`encryptedCredentials`/`iv`/`authTag`), which is itself wrapped
+  under the env master key — two layers, no plaintext credential column.
 - `Notification` — inbox row (assignment/exam detected on LMS, or a timetable change on
   the portal) a student can turn into a `Session`; `actionTakenAt` guards against double
   creation.
@@ -265,22 +260,18 @@ and is otherwise fixed — there is no later edit path.
 
 ### Integrations (`/integrations`)
 
-Stores a student's DLU LMS / student-portal login so a later watcher can re-authenticate
-on their behalf. `CookieAuthGuard` + `@CurrentUser()`; every route operates only on the
-caller's own rows. Credentials are held under the two-layer envelope described under
-_Database schema_ and are **never** returned — only connection status is.
+Stores a student's DLU LMS / student-portal login for the ingestion watcher.
+`CookieAuthGuard` + `@CurrentUser()`, own rows only. Credentials are never returned —
+only connection status. Types in `@zenflow/shared` (`ConnectIntegrationInput`,
+`IntegrationStatus`, `IntegrationStatusListResponse`).
 
-| Method | Path                     | Purpose                                                                                                                                                                                                                                                            |
-| ------ | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| POST   | `/integrations`          | Connect/re-connect a provider. Body `{ provider: "LMS" \| "PORTAL", username, password }`. Runs a **live login** against the real system first (`DluAuthService`) — a rejected login is `400`, an unreachable DLU is `503`, neither persists. On success: lazily provisions the `(user, provider)` DEK, encrypts the credentials under it, upserts the `Integration` row, sets `lastVerifiedAt`. Returns `IntegrationStatus`. |
-| GET    | `/integrations`          | `{ integrations: IntegrationStatus[] }` — one entry per provider, `{ provider, connected, lastVerifiedAt }`. No secret/ciphertext material under any field.                                                                                                          |
-| DELETE | `/integrations/:provider` | Disconnect. Deletes the `Integration` row; idempotent (no error if already absent). Leaves the `UserEncryptionKey` intact so a later reconnect needs no re-provisioning.                                                                                             |
+| Method | Path | Purpose |
+| ------ | ---- | ------- |
+| POST | `/integrations` | Connect a provider. Body `{ provider: "LMS" \| "PORTAL", username, password }`. Probes a live login first (`400` if rejected, `503` if DLU is unreachable, no write either way), then encrypts and upserts the row. |
+| GET | `/integrations` | `{ integrations: [{ provider, connected, lastVerifiedAt }] }` — one entry per provider. |
+| DELETE | `/integrations/:provider` | Disconnect. Idempotent; keeps the `UserEncryptionKey`. |
 
-Request/response types live in `@zenflow/shared` (`ConnectIntegrationInput`,
-`IntegrationStatus`, `IntegrationStatusListResponse`). Full credential scraping / session
-capture is **out of scope** here — `DluAuthService` only does a pass/fail probe; the
-watcher/ingestion service (issues #27 / #29 / #30) owns the rest and shares this scheme by
-reading the same rows.
+`DluAuthService` only does a pass/fail probe; scraping belongs to the ingestion service.
 
 Full live schema: **Swagger UI at `<API_URL>/api`**.
 
@@ -492,12 +483,8 @@ RATE_LIMIT_CACHE_URL="redis://zenflow-cache-ratelimit:6379"  # dedicated Redis f
 CORS_ORIGIN="http://localhost:5173"
 MAIL_TRANSPORT="smtp://zenflow-mail:25"
 SESSION_SECRET="change-me"
-# Per-provider master keys for the DLU-credential envelope (src/crypto/). 32 bytes as
-# 64 hex chars each; generate with
+# DLU-credential envelope master keys (src/crypto/), 32 bytes as 64 hex chars each:
 #   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-# The `_V<n>` suffix is the master-key version — add a new var + bump
-# MasterKeyService.CURRENT_MASTER_KEY_VERSION to rotate. A leak of both these plus a DB
-# dump exposes only re-wrappable per-user DEKs, not raw credentials.
 MASTER_LMS_ENCRYPTION_KEY_V1="<64 hex chars>"
 MASTER_PORTAL_ENCRYPTION_KEY_V1="<64 hex chars>"
 SESSION_TTL_MS=604800000                       # optional; idle session lifetime, defaults to 7 days
