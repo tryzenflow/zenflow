@@ -87,6 +87,7 @@ import { IntegrationsModule } from "./integrations/integrations.module";
           .positive()
           .default(600), // 10 min
         OTP_VERIFY_EMAIL_LIMIT: Joi.number().integer().positive().default(10),
+        PORTAL_API_KEY: Joi.string().required(),
       }),
     }),
     ScheduleModule.forRoot(),
