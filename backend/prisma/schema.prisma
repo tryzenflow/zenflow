@@ -25,7 +25,6 @@ model User {
   preferenceMatrix Float[] @default([])
   preferenceMatrixDecayedAt DateTime?
 
-  onboardingComplete Boolean  @default(false)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -43,20 +42,33 @@ model User {
   slotProposals  SlotProposal[]
 }
 
-// Per-user data-encryption key, itself protected by a server-held master key
-// kept outside the DB.
+// Per-(user, provider) data-encryption key, itself protected by a per-provider
+// server-held master key kept outside the DB
+// (MASTER_<provider>_ENCRYPTION_KEY_V<masterKeyVersion>).
 model UserEncryptionKey {
-  id        String   @id @default(uuid())
-  version   Int
+  id       String              @id @default(uuid())
+  provider IntegrationProvider
+  // DEK version — bumped when the per-user key itself is rotated. Independent of
+  // `masterKeyVersion`: rotating the DEK re-encrypts this user's Integration
+  // rows; rotating the master key only re-wraps `key` below.
+  version  Int
+  // Which MASTER_<provider>_ENCRYPTION_KEY_V<n> env secret wrapped `key`.
+  masterKeyVersion Int
+  // `key` is the DEK AFTER being wrapped (AES-256-GCM) under that master key;
+  // `iv` and `authTag` belong to that wrap operation, not to any credential.
+  // The plaintext DEK never touches the DB.
   key       String
   iv        String
+  authTag   String
   algorithm String
   createdAt DateTime @default(now())
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, provider, version])
   @@index([userId])
+  @@index([userId, provider, version(sort: Desc)])
 }
 
 enum DevicePlatform {
@@ -255,7 +267,13 @@ enum IntegrationProvider {
 model Integration {
   id                   String              @id @default(uuid())
   provider             IntegrationProvider
+  // `encryptedCredentials` is the JSON credential blob encrypted (AES-256-GCM)
+  // under the user's current UserEncryptionKey; `iv` and `authTag` belong to
+  // that operation. `encryptionVersion` tracks which UserEncryptionKey.version
+  // was used so a rotated key can still decrypt older rows.
   encryptedCredentials String
+  iv                   String?
+  authTag              String?
   encryptionVersion    Int
   lastVerifiedAt       DateTime?
   createdAt            DateTime            @default(now())
