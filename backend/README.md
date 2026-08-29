@@ -257,6 +257,7 @@ only connection status. Types in `@zenflow/shared` (`ConnectIntegrationInput`,
 | ------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | POST   | `/integrations`           | Connect a provider. Body `{ provider: "LMS" \| "PORTAL", username, password }`. Probes a live login first (`400` if rejected, `503` if DLU is unreachable, no write either way), then encrypts and upserts the row. |
 | GET    | `/integrations`           | `{ integrations: [{ provider, connected, lastVerifiedAt }] }` — one entry per provider.                                                                                                                             |
+| PATCH  | `/integrations/:provider` | Update a provider's credentials. Body `{ username?, password? }`. Probes a live login first (`400` if rejected, `503` if DLU is unreachable, no write either way), then encrypts and upserts the row.               |
 | DELETE | `/integrations/:provider` | Disconnect. Idempotent; keeps the `UserEncryptionKey`.                                                                                                                                                              |
 
 `DluAuthService` only does a pass/fail probe; scraping belongs to the ingestion service.
