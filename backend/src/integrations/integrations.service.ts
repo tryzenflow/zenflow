@@ -22,6 +22,7 @@ import { CryptoService } from "../crypto/crypto.service";
 import { MasterKeyService } from "../crypto/master-key.service";
 import { DluAuthService } from "./dlu-auth.service";
 import { ConnectIntegrationDto } from "./dto/connect-integration.dto";
+import { UpdateIntegrationDto } from "./dto/update-integration.dto";
 
 /** Every provider we report status for, connected or not. */
 const ALL_PROVIDERS: readonly IntegrationProvider[] = ["LMS", "PORTAL"];
@@ -57,53 +58,53 @@ export class IntegrationsService {
     user: User,
     dto: ConnectIntegrationDto,
   ): Promise<IntegrationStatus> {
-    let valid: boolean;
-    try {
-      valid = await this.dluAuth.verifyCredentials(
-        dto.provider,
-        dto.username,
-        dto.password,
-      );
-    } catch (error) {
-      throw new ServiceUnavailableException(
-        "Couldn't reach DLU to verify your account. Please try again in a moment.",
-      );
-    }
-    if (!valid) {
-      throw new BadRequestException(
-        `Could not sign in to your DLU ${this.label(dto.provider)} account. Check your username and password.`,
-      );
-    }
+    return this.storeCredentials(user, dto.provider, {
+      username: dto.username,
+      password: dto.password,
+    });
+  }
 
-    const dek = await this.ensureUserKey(user.id, dto.provider);
-    const iv = randomBytes(IV_RANDOM_BYTES_SIZE);
-    const { encrypted, authTag } = this.crypto.encryptString({
-      key: dek.key,
-      iv,
-      algorithm: ENCRYPTION_ALGORITHM,
-      secret: JSON.stringify({
+  async update(
+    user: User,
+    provider: IntegrationProvider,
+    dto: UpdateIntegrationDto,
+  ): Promise<IntegrationStatus> {
+    const current = await this.prisma.integration.findUnique({
+      where: { userId_provider: { userId: user.id, provider } },
+      select: {
+        encryptedCredentials: true,
+        iv: true,
+        authTag: true,
+        encryptionVersion: true,
+      },
+    });
+
+    if (!current) {
+      if (!dto.username || !dto.password) {
+        throw new BadRequestException(
+          "Provide both username and password to connect this provider for the first time.",
+        );
+      }
+      return this.storeCredentials(user, provider, {
         username: dto.username,
         password: dto.password,
-      }),
-    });
+      });
+    }
 
-    const now = new Date();
-    const payload = {
-      encryptedCredentials: encrypted,
-      iv: iv.toString("hex"),
-      authTag,
-      encryptionVersion: dek.version,
-      lastVerifiedAt: now,
-    };
-    const row = await this.prisma.integration.upsert({
-      where: {
-        userId_provider: { userId: user.id, provider: dto.provider },
-      },
-      create: { userId: user.id, provider: dto.provider, ...payload },
-      update: payload,
-    });
+    const existing = await this.revealCredentials(user.id, provider);
+    const username = dto.username ?? existing.username;
+    const password = dto.password ?? existing.password;
 
-    return this.toStatus(row.provider, row.lastVerifiedAt);
+    if (!username || !password) {
+      throw new BadRequestException(
+        "Provide at least a username or password to update this account.",
+      );
+    }
+
+    return this.storeCredentials(user, provider, {
+      username,
+      password,
+    });
   }
 
   /** `GET /integrations` — one entry per provider; no secret material. */
@@ -119,6 +120,57 @@ export class IntegrationsService {
         return this.toStatus(provider, row?.lastVerifiedAt ?? null, !!row);
       }),
     };
+  }
+
+  private async storeCredentials(
+    user: User,
+    provider: IntegrationProvider,
+    credentials: { username: string; password: string },
+  ): Promise<IntegrationStatus> {
+    let valid: boolean;
+    try {
+      valid = await this.dluAuth.verifyCredentials(
+        provider,
+        credentials.username,
+        credentials.password,
+      );
+    } catch (error) {
+      throw new ServiceUnavailableException(
+        "Couldn't reach DLU to verify your account. Please try again in a moment.",
+      );
+    }
+    if (!valid) {
+      throw new BadRequestException(
+        `Could not sign in to your DLU ${this.label(provider)} account. Check your username and password.`,
+      );
+    }
+
+    const dek = await this.ensureUserKey(user.id, provider);
+    const iv = randomBytes(IV_RANDOM_BYTES_SIZE);
+    const { encrypted, authTag } = this.crypto.encryptString({
+      key: dek.key,
+      iv,
+      algorithm: ENCRYPTION_ALGORITHM,
+      secret: JSON.stringify(credentials),
+    });
+
+    const now = new Date();
+    const payload = {
+      encryptedCredentials: encrypted,
+      iv: iv.toString("hex"),
+      authTag,
+      encryptionVersion: dek.version,
+      lastVerifiedAt: now,
+    };
+    const row = await this.prisma.integration.upsert({
+      where: {
+        userId_provider: { userId: user.id, provider },
+      },
+      create: { userId: user.id, provider, ...payload },
+      update: payload,
+    });
+
+    return this.toStatus(row.provider, row.lastVerifiedAt);
   }
 
   /** `DELETE /integrations/:provider` — idempotent; keeps the DEK. */

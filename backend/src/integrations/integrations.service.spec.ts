@@ -100,9 +100,7 @@ function makePrismaDouble() {
           ) ?? null,
         );
       },
-      deleteMany: (args: {
-        where: UP;
-      }): Promise<{ count: number }> => {
+      deleteMany: (args: { where: UP }): Promise<{ count: number }> => {
         let count = 0;
         for (let i = integrations.length - 1; i >= 0; i--) {
           if (
@@ -130,7 +128,8 @@ function makePrismaDouble() {
       findUnique: (args: {
         where: { userId_provider_version: UPV };
       }): Promise<KeyRow | null> => {
-        const { userId, provider, version } = args.where.userId_provider_version;
+        const { userId, provider, version } =
+          args.where.userId_provider_version;
         return Promise.resolve(
           keys.find(
             (k) =>
@@ -162,11 +161,16 @@ const LMS_MASTER = randomBytes(32).toString("hex");
 const PORTAL_MASTER = randomBytes(32).toString("hex");
 const ENV: Record<string, string> = {
   [`MASTER_LMS_ENCRYPTION_KEY_V${CURRENT_MASTER_KEY_VERSION}`]: LMS_MASTER,
-  [`MASTER_PORTAL_ENCRYPTION_KEY_V${CURRENT_MASTER_KEY_VERSION}`]: PORTAL_MASTER,
+  [`MASTER_PORTAL_ENCRYPTION_KEY_V${CURRENT_MASTER_KEY_VERSION}`]:
+    PORTAL_MASTER,
 };
 
 const USER = { id: "u1" } as User;
-const creds = { provider: "LMS" as const, username: "sv123", password: "pw-123" };
+const creds = {
+  provider: "LMS" as const,
+  username: "sv123",
+  password: "pw-123",
+};
 
 describe("IntegrationsService", () => {
   let service: IntegrationsService;
@@ -247,6 +251,62 @@ describe("IntegrationsService", () => {
       await expect(service.connect(USER, creds)).rejects.toBeInstanceOf(
         ServiceUnavailableException,
       );
+    });
+  });
+
+  describe("update", () => {
+    it("uses existing credentials when only password is supplied", async () => {
+      await service.connect(USER, creds);
+      const revealSpy = jest.spyOn(service, "revealCredentials");
+
+      const status = await service.update(USER, "LMS", { password: "new-pw" });
+
+      expect(revealSpy).toHaveBeenCalledWith("u1", "LMS");
+      expect(verifyCredentials).toHaveBeenLastCalledWith(
+        "LMS",
+        "sv123",
+        "new-pw",
+      );
+      expect(status).toEqual({
+        provider: "LMS",
+        connected: true,
+        lastVerifiedAt: expect.any(String) as string,
+      });
+      await expect(service.revealCredentials("u1", "LMS")).resolves.toEqual({
+        username: "sv123",
+        password: "new-pw",
+      });
+    });
+
+    it("uses existing credentials when only username is supplied", async () => {
+      await service.connect(USER, creds);
+      const revealSpy = jest.spyOn(service, "revealCredentials");
+
+      const status = await service.update(USER, "LMS", {
+        username: "new-user",
+      });
+
+      expect(revealSpy).toHaveBeenCalledWith("u1", "LMS");
+      expect(verifyCredentials).toHaveBeenLastCalledWith(
+        "LMS",
+        "new-user",
+        "pw-123",
+      );
+      expect(status).toEqual({
+        provider: "LMS",
+        connected: true,
+        lastVerifiedAt: expect.any(String) as string,
+      });
+      await expect(service.revealCredentials("u1", "LMS")).resolves.toEqual({
+        username: "new-user",
+        password: "pw-123",
+      });
+    });
+
+    it("requires both fields before creating a first connection", async () => {
+      await expect(
+        service.update(USER, "LMS", { password: "pw-123" }),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 
