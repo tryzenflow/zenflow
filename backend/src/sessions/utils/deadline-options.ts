@@ -5,8 +5,8 @@ import {
   endOfPeriod,
   weekStartStr,
   monthRange,
-} from "../../scheduler/utils/horizon";
-import { localDateStr, addDaysStr } from "../../scheduler/utils/slot";
+} from "../../scheduler/core/horizon";
+import { localDateStr, addDaysStr } from "../../scheduler/core/slot";
 import { User } from "../../../generated/prisma";
 
 /**

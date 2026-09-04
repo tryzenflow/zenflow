@@ -1,7 +1,6 @@
 import {
   IsArray,
   IsDivisibleBy,
-  IsIn,
   IsInt,
   IsISO8601,
   IsOptional,
@@ -10,13 +9,15 @@ import {
   Min,
   ValidateIf,
 } from "class-validator";
-import type { SessionStatus, UpdateSessionInput } from "@zenflow/shared";
+import type { UpdateSessionInput } from "@zenflow/shared";
 import { TIME_GRANULARITY } from "../../common/constants";
+import { IsRRule } from "../../common/validators/rrule.decorator";
 
 /**
- * Generic metadata/reschedule/resize/complete update — one `PATCH /tasks/:id`
- * covers all of it. Every field is a plain diff applied directly; there is no
- * cascade, conflict recompute, or displaced-tasks side effect.
+ * Generic metadata / reschedule / resize update — one `PATCH /sessions/:id`
+ * covers all of it. Every field is a plain diff applied directly. A change to a
+ * scheduled TASK's `scheduledStartTime` / `durationMinutes` also emits a `MOVE`
+ * SessionEvent (see `SessionsService.update`).
  */
 export class UpdateSessionDto implements UpdateSessionInput {
   @IsOptional()
@@ -35,7 +36,7 @@ export class UpdateSessionDto implements UpdateSessionInput {
   @IsDivisibleBy(TIME_GRANULARITY)
   durationMinutes?: number;
 
-  /** ISO-8601 deadline. Omit to leave unchanged — the field itself is never nullable. */
+  /** ISO-8601 deadline (TASK only). Omit to leave unchanged. */
   @IsOptional()
   @IsISO8601()
   deadline?: string;
@@ -51,7 +52,9 @@ export class UpdateSessionDto implements UpdateSessionInput {
   @IsISO8601()
   scheduledStartTime?: string | null;
 
+  /** RFC 5545 RRULE — for a recurring fixed session's series. `null` drops it. */
   @IsOptional()
-  @IsIn(["PENDING", "DONE", "ABANDONED"])
-  status?: SessionStatus;
+  @ValidateIf((_, v) => v !== null)
+  @IsRRule()
+  rrule?: string | null;
 }
