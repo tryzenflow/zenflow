@@ -1,7 +1,7 @@
 import { addDays, format, startOfWeek } from "date-fns";
 
 /**
- * Pure date-math helpers for the mobile Week View (`app/(app)/week.tsx`,
+ * Pure date-math helpers for the mobile Week View (`app/(app)/index.tsx`,
  * `components/calendar/week-pager.tsx`, `components/calendar/week-header.tsx`).
  * Kept framework-agnostic (no React/RN imports) so they're unit-testable with
  * a plain Node/Vitest run — see `lib/__tests__/week-date-math.test.ts`.

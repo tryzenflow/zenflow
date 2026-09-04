@@ -1,7 +1,11 @@
 import { Plus } from "@/components/Icons";
 import { FAB_GLOW_INNER, FAB_GLOW_OUTER } from "@/lib/fab-glow";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
-import { snapToNearestLaterQuarterHour, zonedNow } from "@zenflow/core";
+import {
+  snapToNearestLaterQuarterHour,
+  zonedNow,
+  zonedWallClockToUtc,
+} from "@zenflow/core";
 import { type Href, useRouter } from "expo-router";
 import { Pressable, View } from "react-native";
 
@@ -10,6 +14,12 @@ import { Pressable, View } from "react-native";
  * the next 15-minute mark — shared by the FAB below and the Day screen's
  * long-press-empty-area gesture (`app/(app)/index.tsx`), which needs the
  * exact same computation without going through the FAB itself.
+ *
+ * `?start=` is contracted to be a **true UTC instant** (both producers — this
+ * and `day-timeline.tsx`'s grid long-press — emit `zonedWallClockToUtc(...)`),
+ * so `new.tsx` can `zonedDate(start, tz)` it straight back to the pressed wall
+ * clock. Emitting the bare `snapped.toISOString()` here (a wall clock
+ * mislabelled `Z`) shifted the seeded time by the tz offset.
  */
 export function createSessionAtNowHref(tz: string): Href {
   const now = zonedNow(tz);
@@ -20,7 +30,7 @@ export function createSessionAtNowHref(tz: string): Href {
   snapped.setHours(0, Math.min(snappedMinutes, 23 * 60 + 45), 0, 0);
   return {
     pathname: "/task/new",
-    params: { start: snapped.toISOString() },
+    params: { start: zonedWallClockToUtc(snapped, tz).toISOString() },
   } as Href;
 }
 

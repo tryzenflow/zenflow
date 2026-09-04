@@ -45,9 +45,14 @@ const SETTLE = {
 } as const;
 
 interface WeekHeaderProps {
-  /** The day the pager is focused on — drives the title and range, and the
-   * `bg-muted` chip highlight. */
+  /** The *committed* focused day — anchors the chip carousel's week block and
+   * is what a chip tap / week swipe shifts from. */
   focusedDate: Date;
+  /** The day the pager is *currently* centred on, finger-tracked during a
+   * swipe (falls back to `focusedDate`). Drives only the month/year title, the
+   * week-range line, and the `bg-muted` chip highlight — the things the user
+   * watches move — so they follow the drag instead of snapping at settle. */
+  displayDate?: Date;
   tz: string;
   onSelectDay: (day: Date) => void;
   /** Pager strip offset, owned by `WeekScreen`. The header's week swipe writes
@@ -97,6 +102,7 @@ export type WeekHeaderHandle = {
 function WeekHeaderImpl(
   {
     focusedDate,
+    displayDate,
     tz,
     onSelectDay,
     progressSV,
@@ -110,16 +116,20 @@ function WeekHeaderImpl(
   const now = useNow();
   const { width } = useWindowDimensions();
 
+  // What the title / range / highlight read. The carousel and anchor logic
+  // stay on `focusedDate` so they never re-derive mid-swipe.
+  const shownDate = displayDate ?? focusedDate;
+
   const [weekBusy, setWeekBusy] = useState(false);
   // The strip's data anchor — decoupled from `focusedDate` so `blocks` never
   // re-derives mid-slide (that would swap the block sliding in for `f±14`).
   const [anchorDate, setAnchorDate] = useState(focusedDate);
 
   const blocks = useMemo(() => weekHeaderBlocks(anchorDate), [anchorDate]);
-  const focusedKey = useMemo(() => dateKey(focusedDate), [focusedDate]);
+  const focusedKey = useMemo(() => dateKey(shownDate), [shownDate]);
   const todayKey = useMemo(() => dateKey(toZonedTime(now, tz)), [now, tz]);
-  // Title/range track the committed focus (the strip does not).
-  const titleDays = useMemo(() => weekDays(focusedDate), [focusedDate]);
+  // Title/range track the (finger-following) shown day; the strip does not.
+  const titleDays = useMemo(() => weekDays(shownDate), [shownDate]);
 
   // 1 while a week slide owns the strip. A shared value (not React state) so
   // within-week pager day-swipes park the strip at `-width` with zero
@@ -302,7 +312,7 @@ function WeekHeaderImpl(
       <View className="overflow-hidden border-b border-border bg-background pt-2.5 pb-2">
         <View className="px-4 pb-2">
           <Text className="text-xl font-bold tracking-tight">
-            {format(focusedDate, "MMMM yyyy")}
+            {format(shownDate, "MMMM yyyy")}
           </Text>
           <Text className="mt-px text-[11.5px] font-medium text-muted-foreground">
             {format(titleDays[0], "MMM d")} – {format(titleDays[6], "MMM d")}

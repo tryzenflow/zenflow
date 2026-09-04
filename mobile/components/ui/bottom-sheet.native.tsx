@@ -57,12 +57,6 @@ type BottomSheetRef = React.ElementRef<typeof View>;
 type BottomSheetProps = React.ComponentPropsWithoutRef<typeof View>;
 
 interface BottomSheetContext {
-  // `BottomSheetModal` is a generic type alias in @gorhom/bottom-sheet v5
-  // (`type BottomSheetModal<T = never> = BottomSheetModalMethods<T>`), not a
-  // component class — `React.ElementRef<typeof BottomSheetModal>` no longer
-  // resolves cleanly against it, so the ref is typed against the imperative
-  // methods interface directly instead (same shape `BottomSheetModal<never>`
-  // aliases to).
   sheetRef: React.RefObject<BottomSheetModalMethods | null>;
 }
 
@@ -116,26 +110,6 @@ const BottomSheetContent = React.forwardRef<
       backgroundStyle,
       android_keyboardInputMode = "adjustResize",
       children,
-      // `@gorhom/bottom-sheet`'s own default (`keyboardBehavior="interactive"`)
-      // offsets the sheet upward by the *measured keyboard height* — a
-      // calculation meant for windows that DON'T already resize themselves
-      // (i.e. `android_keyboardInputMode="adjustPan"`). Pairing "interactive"
-      // with `android_keyboardInputMode="adjustResize"` (the default just
-      // above, needed elsewhere for plain-`TextInput` sheets) double-
-      // compensates on Android: the OS already shrinks the window to exclude
-      // the keyboard, then the library shifts the sheet up by that same
-      // keyboard height *again*, pushing fixed-height sheets (`snapPoints`
-      // + `enableDynamicSizing={false}`, e.g. `TagAutocomplete`'s nested
-      // sheet) further than intended — the nested `BottomSheetTextInput` and
-      // the rows below it end up shifted out of the resized viewport instead
-      // of settling just above the keyboard. `"fillParent"` avoids the
-      // double-compensation entirely: instead of computing an offset from
-      // keyboard height, it just expands the sheet to fill all the vertical
-      // space the (already-resized) window has left, so content reflows
-      // within that space instead of being translated past it.
-      // `keyboardBlurBehavior="restore"` (library default is `"none"`)
-      // returns the sheet to its original snap point once the keyboard
-      // closes, instead of leaving it expanded.
       keyboardBehavior = "fillParent",
       keyboardBlurBehavior = "restore",
       ...props
@@ -147,34 +121,6 @@ const BottomSheetContent = React.forwardRef<
     const { colors } = useTheme();
     const { sheetRef } = useBottomSheetContext();
 
-    // Merge the caller-supplied `ref` (e.g. `useBottomSheet()`'s ref, used by
-    // every sheet including `CreateSessionSheet`/`EditSessionSheet` — see their
-    // doc comments for why the earlier `useControlledBottomSheet`
-    // external-`open`-prop bridge was retired)
-    // with the `<BottomSheet>` wrapper's own context `sheetRef` (what
-    // `BottomSheetOpenTrigger`/`BottomSheetCloseTrigger`/`BottomSheetHeader`
-    // read via context): both need to end up pointing at the same live
-    // `BottomSheetModal` instance.
-    //
-    // This used to be a `useImperativeHandle(ref, () => sheetRef.current ?? {}, [sheetRef.current])`
-    // — but `sheetRef.current` is a plain mutable ref, not reactive state, so
-    // that dependency array is only ever re-evaluated on a render this
-    // component happens to re-run for some *other* reason. On mount,
-    // `@gorhom/bottom-sheet` attaches the real `BottomSheetModal` instance to
-    // `sheetRef` slightly after this component's own first commit (it mounts
-    // its portalled content on a later tick), so the imperative handle's
-    // *first* run captured `sheetRef.current` while it was still `null`,
-    // returned the `{}` stub, and then had no reason to run again — leaving
-    // `ref.current` (the caller's ref) permanently stubbed out, so
-    // `ref.current?.present()` silently no-op'd forever. This only "worked"
-    // for sheets that happened to re-render again shortly after mount for an
-    // unrelated reason (e.g. `EditSessionSheet`'s `getSessionDetails().then(setSession)`),
-    // which is exactly why `CreateSessionSheet`'s FAB / empty-area long-press
-    // (no such follow-up render) never opened while tap-to-edit did.
-    //
-    // Assigning both refs directly in a merged callback ref instead avoids
-    // the staleness: it fires exactly when React attaches/detaches the real
-    // instance, no matter when that happens.
     const setRefs = React.useCallback(
       (instance: BottomSheetModalMethods | null) => {
         sheetRef.current = instance;
@@ -233,42 +179,6 @@ const BottomSheetContent = React.forwardRef<
         keyboardBlurBehavior={keyboardBlurBehavior}
         {...props}
       >
-        {/* `@gorhom/bottom-sheet` renders a `BottomSheetModal`'s `children`
-            through `@gorhom/portal`'s `Portal` — which is NOT a real
-            `ReactDOM.createPortal`-style portal that preserves the ambient
-            React context stack. It's a fake portal: `Portal` stores the
-            element reference in a reducer-backed store
-            (`@gorhom/portal/src/state`), and a separate `<PortalHost>`
-            (mounted once, near the app root, alongside this app's single
-            `BottomSheetModalProvider` in `app/_layout.tsx`) renders it from
-            an entirely different branch of the tree. That means anything
-            passed as this component's `children` — `BottomSheetHeader`,
-            `BottomSheetScrollView`, etc. — actually renders *outside* the
-            `<BottomSheet>` wrapper's own `BottomSheetContext.Provider`
-            (defined further up this file), which only wraps this
-            `<BottomSheetContent>` and its sibling `<BottomSheetOpenTrigger>`
-            in THIS tree, not wherever `<PortalHost>` happens to sit.
-            `useBottomSheetContext()` calls made from inside that portaled
-            content (e.g. `BottomSheetHeader`'s close button,
-            `BottomSheetCloseTrigger`) therefore always resolved the
-            *default* context value (`{}`, since nothing provides one at the
-            portal's actual render location) — `sheetRef` came back
-            `undefined`, and `sheetRef.current?.dismiss()` threw "Cannot read
-            property 'current' of undefined" the instant anyone tapped a
-            sheet's header close X. `BottomSheetOpenTrigger` never hit this
-            because it isn't part of a `BottomSheetModal`'s portaled
-            `children` — it's a sibling of `<BottomSheetContent>` under the
-            same non-portaled `<BottomSheet>` wrapper, so its own
-            `useBottomSheetContext()` call resolves normally, which is why
-            opening a sheet always worked while closing it via the header X
-            crashed on every sheet using that button.
-            Re-establishing a `BottomSheetContext.Provider` right here, as
-            part of the same `children` subtree that actually travels through
-            the portal, fixes it: the Provider and every Consumer inside it
-            (`BottomSheetHeader`, `BottomSheetCloseTrigger`) now travel
-            together through the portal as one connected element tree, so the
-            Consumer sees a real Provider regardless of where `<PortalHost>`
-            physically renders it. */}
         <BottomSheetContext.Provider value={{ sheetRef }}>
           {/* `BottomSheetModal`'s `children` prop type also allows a
               `(data) => ReactNode` render-prop form (for the generic
@@ -400,27 +310,6 @@ const BottomSheetHeader = React.forwardRef<
   BottomSheetHeaderRef,
   BottomSheetHeaderProps
 >(({ className, children, ...props }, ref) => {
-  // Was `useBottomSheetModal().dismiss()` (no key) — `@gorhom/bottom-sheet`
-  // dismisses whichever sheet is *last in its shared, app-wide presented-
-  // sheets queue* when no key is given (see
-  // `BottomSheetModalProvider.tsx`'s `handleDismiss`), which is only ever
-  // "this sheet" by coincidence. On a screen with multiple independent
-  // nested sheets — the task form's `TagAutocomplete` sheet alongside
-  // `DeadlineChipRow`'s `InlineDateField`/`TimePickerInline` sheets, all
-  // siblings sharing one `BottomSheetModalProvider` — that queue can end up
-  // with a stale entry on top: `@gorhom/bottom-sheet`'s own
-  // `BottomSheetModalProvider`'s `handleWillUnmountSheet` (fired when a
-  // modal's `Portal` unmounts mid-dismiss, e.g. `TimePickerInline`'s sheet
-  // being torn down because `DeadlineChipRow`'s `chip` state changed away
-  // while that sheet's own close animation was still in flight) never
-  // splices that sheet's key out of the shared queue — only a *clean*
-  // dismiss-to-completion does, via `unmountSheet`. `useBottomSheetContext()`
-  // gives this exact `<BottomSheet>` instance's own `sheetRef` instead — the
-  // same one `BottomSheetOpenTrigger` already uses to *open* this sheet — so
-  // closing is deterministic regardless of what else is or isn't cleanly
-  // registered in that shared queue. (The web reimplementation in
-  // `bottom-sheet.tsx` already did it this way — this brings native in line
-  // with it.)
   const { sheetRef } = useBottomSheetContext();
   function close() {
     if (Keyboard.isVisible()) {

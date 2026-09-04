@@ -5,7 +5,10 @@ import {
   BottomSheetHeader,
   useBottomSheet,
 } from "@/components/ui/bottom-sheet";
+import { AlertTriangle, CalendarClock, MousePointer2 } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
+import { isSessionPastDeadline } from "@/lib/overdue";
+import { SESSION_TYPE_META } from "@/lib/session-type";
 import { deriveState } from "@/lib/task-card";
 import { cn } from "@/lib/utils";
 import { zonedDate } from "@zenflow/core";
@@ -23,12 +26,16 @@ import {
 import { type ListRenderItemInfo, Pressable, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import type { MonthDragHandle } from "./month-page";
+import { sessionTypeIcon } from "./session-type-badge";
 
 export interface SessionListSheetHandle {
   /** `drag` is the drag machinery of the `MonthPage` that opened this sheet,
    * so a row dragged out of here reschedules through exactly the same path an
    * in-grid pill drag does. */
   open: (day: Date, tasks: Session[], drag: MonthDragHandle) => void;
+  /** Animate the sheet away — used after a "Move to…" confirm, when this day's
+   * list has gone stale. */
+  close: () => void;
 }
 
 interface SessionListSheetProps {
@@ -36,12 +43,15 @@ interface SessionListSheetProps {
   /** Tapping a row closes the sheet and hands the task back to the screen
    * (`app/(app)/month.tsx` pushes `/task/[id]/edit`). */
   onSelectSession: (task: Session) => void;
+  /** A row's trailing "Move" button — opens the "Move to…" sheet for any date
+   * (incl. another month). Omit to hide the button. */
+  onReschedule?: (task: Session) => void;
 }
 
 export const SessionListSheet = forwardRef<
   SessionListSheetHandle,
   SessionListSheetProps
->(({ tz, onSelectSession }, ref) => {
+>(({ tz, onSelectSession, onReschedule }, ref) => {
   const bottomSheet = useBottomSheet();
   const [day, setDay] = useState<Date | null>(null);
   const [tasks, setSessions] = useState<Session[]>([]);
@@ -60,6 +70,7 @@ export const SessionListSheet = forwardRef<
         dragRef.current = drag;
         bottomSheet.open();
       },
+      close: () => bottomSheet.close(),
     }),
     [bottomSheet],
   );
@@ -127,6 +138,18 @@ export const SessionListSheet = forwardRef<
             </Text>
           </View>
         </BottomSheetHeader>
+        {tasks.length > 0 && (
+          <View className="mx-5 mb-1 mt-1 flex-row items-center gap-2 rounded-lg bg-muted/60 px-3 py-2">
+            <MousePointer2
+              size={13}
+              className="shrink-0 text-muted-foreground"
+            />
+            <Text className="flex-1 text-[12px] leading-snug text-muted-foreground">
+              Press and hold, then drag onto another day this month — or tap
+              Move to pick any date.
+            </Text>
+          </View>
+        )}
         <BottomSheetFlatList
           data={tasks}
           keyExtractor={(item) => (item as Session).id}
@@ -165,6 +188,9 @@ export const SessionListSheet = forwardRef<
                   }}
                   onDragStart={handleRowDragStart}
                   dragRef={dragRef}
+                  onReschedule={
+                    onReschedule ? () => onReschedule(item) : undefined
+                  }
                 />
               </View>
             );
@@ -176,22 +202,16 @@ export const SessionListSheet = forwardRef<
 });
 SessionListSheet.displayName = "SessionListSheet";
 
-const ROW_DOT_CLASSES: Record<SessionCardState, string> = {
-  fluid: "bg-brand-orange",
-  overdue: "bg-rose-500",
-  conflict: "bg-amber-500",
-  completed: "bg-emerald-500",
-};
-
 const ROW_STATE_LABELS: Record<SessionCardState, string> = {
   fluid: "Auto-scheduled",
-  overdue: "Overdue",
   conflict: "Conflict",
-  completed: "Completed",
+  assignment: "Assignment",
+  exam: "Exam",
+  lecture: "Lecture",
+  dnd: "Do not disturb",
 };
 
-/** Sheet subtitle: "5 tasks", plus the mockup's "· all auto-scheduled" tail
- * when nothing on the day is completed/overdue/conflicting. */
+/** Sheet subtitle: "5 tasks". */
 function summarize(tasks: Session[]): string {
   if (tasks.length === 0) return "No tasks";
   const count = `${tasks.length} ${tasks.length === 1 ? "task" : "tasks"}`;
@@ -204,14 +224,18 @@ function SessionListRow({
   onPress,
   onDragStart,
   dragRef,
+  onReschedule,
 }: {
   task: Session;
   tz: string;
   onPress: () => void;
   onDragStart: (task: Session, absoluteX: number, absoluteY: number) => void;
   dragRef: RefObject<MonthDragHandle | null>;
+  onReschedule?: () => void;
 }) {
   const state = deriveState(task);
+  const TypeIcon = sessionTypeIcon(task.type);
+  const late = isSessionPastDeadline(task);
   const timeLabel = task.scheduledStartTime
     ? format(zonedDate(task.scheduledStartTime, tz), "H:mm")
     : "—";
@@ -262,29 +286,47 @@ function SessionListRow({
         onPress={onPress}
         className="flex-row items-center gap-[13px] px-4 py-3.5"
       >
-        <Text className="w-[54px] flex-none text-right font-mono text-[15px] text-muted-foreground">
+        <Text className="w-[54px] flex-none text-right text-[15px] text-muted-foreground">
           {timeLabel}
         </Text>
-        <View
-          className={cn(
-            "h-[9px] w-[9px] flex-none rounded-full",
-            ROW_DOT_CLASSES[state],
-          )}
+        <TypeIcon
+          size={16}
+          className={cn("flex-none", SESSION_TYPE_META[task.type].textClass)}
         />
         <View className="min-w-0 flex-1">
           <Text
-            className={cn(
-              "text-[15px] font-semibold text-foreground",
-              state === "completed" && "line-through",
-            )}
+            className="text-[15px] font-semibold text-foreground"
             numberOfLines={1}
           >
             {task.title}
           </Text>
-          <Text className="mt-0.5 text-[12.5px] text-muted-foreground">
-            {ROW_STATE_LABELS[state]} · {task.durationMinutes}m
-          </Text>
+          <View className="mt-0.5 flex-row items-center gap-1.5">
+            <Text className="text-[12.5px] text-muted-foreground">
+              {ROW_STATE_LABELS[state]} · {task.durationMinutes}m
+            </Text>
+            {late && (
+              <View className="flex-row items-center gap-0.5">
+                <AlertTriangle
+                  size={11}
+                  className="text-amber-700 dark:text-amber-300"
+                />
+                <Text className="text-[12px] font-semibold text-amber-700 dark:text-amber-300">
+                  late
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
+        {onReschedule && (
+          <Pressable
+            onPress={onReschedule}
+            hitSlop={8}
+            accessibilityLabel={`Move ${task.title}`}
+            className="h-9 w-9 flex-none items-center justify-center rounded-full bg-muted"
+          >
+            <CalendarClock size={16} className="text-muted-foreground" />
+          </Pressable>
+        )}
       </Pressable>
     </GestureDetector>
   );

@@ -8,10 +8,12 @@ import { useUserStore } from "@/hooks/use-user-store";
 import { setAndroidNavigationBar } from "@/lib/android-navigation-bar";
 import { clearSession } from "@/lib/api-client";
 import { clearCachedSessionUser } from "@/lib/session";
+import { clearDaySessionCache } from "@/lib/session-cache";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
+import { resetTimelineScroll } from "@/lib/timeline-scroll";
 import { useColorScheme } from "@/lib/useColorScheme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Href, useRouter } from "expo-router";
+import { type Href, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
@@ -39,6 +41,10 @@ export default function SettingsScreen() {
     }
     await clearSession();
     await clearCachedSessionUser();
+    // Drop the calendar's in-memory day cache + shared scroll anchor so the
+    // next user never sees a flash of the previous account's days.
+    clearDaySessionCache();
+    resetTimelineScroll();
     setUser(null);
     setLoggingOut(false);
     router.replace("/(auth)/login" as Href);

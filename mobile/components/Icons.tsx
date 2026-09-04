@@ -18,6 +18,7 @@ import {
   Bold,
   BookOpen,
   Calendar,
+  CalendarClock,
   CalendarDays,
   CalendarRange,
   Check,
@@ -30,6 +31,7 @@ import {
   ChevronsDownUp,
   ChevronsUpDown,
   CircleUserRound,
+  ClipboardList,
   Clock,
   Cloud,
   Code,
@@ -40,11 +42,13 @@ import {
   GalleryHorizontal,
   Github,
   Globe,
+  GraduationCap,
   Highlighter,
   Home,
   Info,
   Italic,
   Lamp,
+  Lightbulb,
   LayoutGrid,
   LayoutPanelLeft,
   LifeBuoy,
@@ -63,6 +67,7 @@ import {
   Moon,
   MoonStar,
   MousePointer2,
+  Notebook,
   Palette,
   Plus,
   PlusCircle,
@@ -122,6 +127,7 @@ interopIcon(Ear);
 interopIcon(Fan);
 interopIcon(GalleryHorizontal);
 interopIcon(Lamp);
+interopIcon(Lightbulb);
 interopIcon(Table);
 interopIcon(ArrowDown);
 interopIcon(ArrowUp);
@@ -193,6 +199,10 @@ interopIcon(Upload);
 interopIcon(Trash2);
 interopIcon(RefreshCcw);
 interopIcon(Scale);
+interopIcon(CalendarClock);
+interopIcon(ClipboardList);
+interopIcon(GraduationCap);
+interopIcon(Notebook);
 
 export {
   Activity,
@@ -211,6 +221,7 @@ export {
   BarChart3,
   Bold,
   Calendar,
+  CalendarClock,
   CalendarDays,
   CalendarRange,
   Check,
@@ -224,6 +235,7 @@ export {
   ChevronsDownUp,
   ChevronsUpDown,
   CircleUserRound,
+  ClipboardList,
   Clock,
   Cloud,
   Code,
@@ -233,10 +245,12 @@ export {
   Fan,
   GalleryHorizontal,
   Globe,
+  GraduationCap,
   Highlighter,
   Info,
   Italic,
   Lamp,
+  Lightbulb,
   LayoutPanelLeft,
   LifeBuoy,
   Link2,
@@ -253,6 +267,7 @@ export {
   MinusCircle,
   MoonStar,
   MousePointer2,
+  Notebook,
   Plus,
   PlusCircle,
   Quote,
