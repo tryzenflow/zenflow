@@ -1,6 +1,6 @@
+import { DAY_MINUTES, type PeekBlock } from "@/lib/peek";
 import { useState } from "react";
 import { View } from "react-native";
-import { DAY_MINUTES, type PeekBlock } from "@/lib/peek";
 
 /** Width of the decorative "next day" peek strip on each page's right edge
  * (mirrors mockups/week-view.html's `w-3.5` affordance). */
@@ -9,9 +9,11 @@ export const PEEK_STRIP_W = 14;
 /** Block fill per task state, matching the day grid's state treatment. */
 export const PEEK_BLOCK_COLORS: Record<PeekBlock["state"], string> = {
   fluid: `rgba(255, 142, 62, 0.55)`,
-  overdue: "rgba(244, 63, 94, 0.6)",
   conflict: "rgba(245, 158, 11, 0.6)",
-  completed: "rgba(16, 185, 129, 0.45)",
+  assignment: "rgba(20, 184, 166, 0.55)",
+  exam: "rgba(244, 63, 94, 0.6)",
+  lecture: "rgba(14, 165, 233, 0.55)",
+  dnd: "rgba(148, 163, 184, 0.45)",
 };
 
 /** Right-edge sliver showing the next day's tasks as mini blocks, positioned

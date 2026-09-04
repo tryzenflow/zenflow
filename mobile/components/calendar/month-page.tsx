@@ -5,8 +5,9 @@ import {
   dateKey,
   getMonthGridDays,
   groupSessionsByDate,
-  isOutsideMonth,
 } from "@/lib/month-date-math";
+import { isPastDeadlineDrop } from "@/lib/overdue";
+import { SESSION_TYPE_META } from "@/lib/session-type";
 import {
   MONTH_PILL_CLASSES,
   MONTH_PILL_TEXT_CLASSES,
@@ -20,8 +21,10 @@ import { format } from "date-fns";
 import * as Haptics from "expo-haptics";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { CELL_HEIGHT } from "./month-cell";
 import { MonthGrid, MonthGridSkeleton } from "./month-grid";
+import { sessionTypeIcon } from "./session-type-badge";
 
 interface DragState {
   task: Session;
@@ -55,11 +58,6 @@ export interface MonthDragHandle {
   cancel: () => void;
 }
 
-interface GhostPosition {
-  x: number;
-  y: number;
-}
-
 function errorMessage(error: unknown, fallback: string): string {
   return (
     (isAxiosError(error) &&
@@ -83,10 +81,6 @@ interface MonthPageProps {
    * `MonthPager` — otherwise the horizontal swipe-to-next-month scroll
    * competes with the drag and usually wins. */
   onDragActiveChange: (active: boolean) => void;
-  /** Reports how many of this month's tasks the scheduler placed past their
-   * deadline, for the header's "N overdue" badge. Only the active page
-   * reports, so the badge always describes the month on screen. */
-  onOverdueCountChange: (count: number) => void;
   onOpenDay: (day: Date, tasks: Session[], drag: MonthDragHandle) => void;
   onOpenOverflow: (day: Date, tasks: Session[], drag: MonthDragHandle) => void;
 }
@@ -96,8 +90,11 @@ interface MonthPageProps {
  * /tasks?view=month`, which already pads its range to whole Monday-first
  * weeks server-side — see `backend/src/scheduler/utils/horizon.ts`'s
  * `displayDayRange` — so adjacent-month days come back populated too, no
- * client-side padding-fetch needed), the long-press-drag reschedule gesture,
- * and its own loading skeleton. Each page mounted by the outer
+ * client-side padding-fetch needed), the in-month long-press-drag reschedule
+ * gesture (day → day, from the grid or the day sheet), and its own loading
+ * skeleton. Moving a task to a *different* month is the "Move to…" sheet's job
+ * (`reschedule-sheet.tsx`), reached from the day sheet's per-row "Move" button —
+ * there is no edge-drag cross-month advance. Each page mounted by the outer
  * `MonthPager`/`month-pager.tsx` fetches independently.
  */
 export function MonthPage({
@@ -106,19 +103,31 @@ export function MonthPage({
   reloadToken,
   isActive,
   onDragActiveChange,
-  onOverdueCountChange,
   onOpenDay,
   onOpenOverflow,
 }: MonthPageProps) {
-  const { toast } = useToast();
+  const { toast, confirm } = useToast();
   const [tasks, setSessions] = useState<Session[] | null>(null);
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
-  const [ghostPos, setGhostPos] = useState<GhostPosition | null>(null);
+  // A day key to pulse for a moment right after a drop lands on it.
+  const [justDroppedKey, setJustDroppedKey] = useState<string | null>(null);
+  const justDroppedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+
+  // The drag ghost follows the finger on the UI thread via shared values —
+  // NOT per-frame React state. `setGhostPos` on every `onUpdate` frame was
+  // re-rendering `MonthPage` → `MonthGrid` → all ≤42 `MonthCell`s each frame,
+  // which is what made the Month drag lag.
+  const ghostX = useSharedValue(0);
+  const ghostY = useSharedValue(0);
+  const ghostVisible = useSharedValue(0);
+  const pageOffX = useSharedValue(0);
+  const pageOffY = useSharedValue(0);
 
   const pageRef = useRef<View>(null);
   const gridRef = useRef<View>(null);
-  const pageOffsetRef = useRef({ x: 0, y: 0 });
   const gridRectRef = useRef({ x: 0, y: 0, width: 0, rows: 0 });
   const lastHighlightRef = useRef<string | null>(null);
   // The dragged pill's origin day key, read inside the pan callbacks — a ref
@@ -127,7 +136,10 @@ export function MonthPage({
   const dragFromKeyRef = useRef<string | null>(null);
 
   const days = useMemo(() => getMonthGridDays(monthDate), [monthDate]);
-  const today = zonedNow(tz);
+  // Memoized so `MonthGrid` (now `React.memo`) sees a stable `today` prop
+  // across the per-cell-crossing `highlightedKey` re-renders of an in-month
+  // drag — otherwise a fresh `zonedNow(tz)` each render defeats the memo.
+  const today = useMemo(() => zonedNow(tz), [tz]);
 
   // Read via a ref inside `refetch` rather than a `useCallback` dep — toggling
   // `isActive` (the pager sliding this page in/out of the "center" slot)
@@ -167,15 +179,6 @@ export function MonthPage({
     [tasks, tz],
   );
 
-  useEffect(() => {
-    if (!isActive) return;
-    // While this month is still loading, report 0 rather than leaving the
-    // previous month's count on screen next to the new title.
-    onOverdueCountChange(
-      tasks ? tasks.filter((t) => deriveState(t) === "overdue").length : 0,
-    );
-  }, [isActive, tasks, onOverdueCountChange]);
-
   /**
    * Re-reads this page's and its grid's position in *window* coordinates.
    *
@@ -195,12 +198,13 @@ export function MonthPage({
    */
   const measureGeometry = useCallback(() => {
     pageRef.current?.measureInWindow((x, y) => {
-      pageOffsetRef.current = { x, y };
+      pageOffX.value = x;
+      pageOffY.value = y;
     });
     gridRef.current?.measureInWindow((x, y, width) => {
       gridRectRef.current = { x, y, width, rows: Math.ceil(days.length / 7) };
     });
-  }, [days.length]);
+  }, [days.length, pageOffX, pageOffY]);
 
   useEffect(() => {
     if (!isActive) return;
@@ -208,6 +212,24 @@ export function MonthPage({
     const id = requestAnimationFrame(measureGeometry);
     return () => cancelAnimationFrame(id);
   }, [isActive, measureGeometry]);
+
+  useEffect(
+    () => () => {
+      if (justDroppedTimerRef.current)
+        clearTimeout(justDroppedTimerRef.current);
+    },
+    [],
+  );
+
+  const ghostStyle = useAnimatedStyle(() => ({
+    position: "absolute",
+    left: ghostX.value - pageOffX.value - 48,
+    top: ghostY.value - pageOffY.value - 34,
+    width: 96,
+    opacity: ghostVisible.value,
+    // The mockup's `scale-[1.06] -rotate-[2.5deg]` "picked up" tilt.
+    transform: [{ scale: 1.06 }, { rotate: "-2.5deg" }],
+  }));
 
   function targetDayForPoint(
     absoluteX: number,
@@ -238,7 +260,9 @@ export function MonthPage({
     // moment the long-press activates (`draggingSessionId` → `MonthPill`'s
     // spacer), so without an initial position the task is simply *gone* from
     // the grid until the first `onUpdate` frame fires.
-    setGhostPos({ x: absoluteX, y: absoluteY });
+    ghostX.value = absoluteX;
+    ghostY.value = absoluteY;
+    ghostVisible.value = 1;
     // The day the drag started on is NOT a drop target — dropping back on it
     // is a no-op (`handlePillDragEnd` returns early on `targetKey ===
     // fromKey`), so highlighting it just reads as "this cell is armed".
@@ -247,15 +271,17 @@ export function MonthPage({
   }
 
   function handlePillDragUpdate(absoluteX: number, absoluteY: number) {
-    setGhostPos({ x: absoluteX, y: absoluteY });
+    ghostX.value = absoluteX;
+    ghostY.value = absoluteY;
+
     const target = targetDayForPoint(absoluteX, absoluteY);
     const targetKey = target ? dateKey(target) : null;
+    // Any grid cell — including the padded leading/trailing week — is a valid
+    // in-place drop target; a screen edge does nothing now (moving to another
+    // month is the "Move to…" sheet). `lastHighlightRef` gates the state write
+    // + haptic so they fire only on an actual cell change, not every frame.
     const key =
-      target &&
-      !isOutsideMonth(target, monthDate) &&
-      targetKey !== dragFromKeyRef.current
-        ? targetKey
-        : null;
+      target && targetKey !== dragFromKeyRef.current ? targetKey : null;
     if (key !== lastHighlightRef.current) {
       lastHighlightRef.current = key;
       setHighlightedKey(key);
@@ -271,10 +297,19 @@ export function MonthPage({
   function resetDragState() {
     setDragging(null);
     setHighlightedKey(null);
-    setGhostPos(null);
+    ghostVisible.value = 0;
     lastHighlightRef.current = null;
     dragFromKeyRef.current = null;
     onDragActiveChange(false);
+  }
+
+  function pulseDropCell(key: string) {
+    setJustDroppedKey(key);
+    if (justDroppedTimerRef.current) clearTimeout(justDroppedTimerRef.current);
+    justDroppedTimerRef.current = setTimeout(
+      () => setJustDroppedKey(null),
+      700,
+    );
   }
 
   async function handlePillDragEnd(absoluteX: number, absoluteY: number) {
@@ -282,46 +317,68 @@ export function MonthPage({
     const target = targetDayForPoint(absoluteX, absoluteY);
     resetDragState();
 
-    if (!drag || !target) return;
-    if (isOutsideMonth(target, monthDate)) return; // outside days aren't a valid drop target
-    const targetKey = dateKey(target);
-    if (targetKey === drag.fromKey) return; // no-op drop, same day it started on
-
+    if (!drag) return;
     const original = drag.task;
     if (!original.scheduledStartTime) return;
+    if (!target) return;
 
-    // Keep the task's wall-clock time-of-day, move it to the dropped day —
-    // mirrors `frontend/src/components/calendar/month-view.tsx`'s
-    // `onDragEnd`. Each recurring occurrence is already its own materialized
-    // `Session` row (CLAUDE.md §4) and `PATCH /tasks/:id` only ever targets a
-    // single task id — so issue #21's "does drag need scope: 'one' |
-    // 'following'?" open question doesn't apply here; there's nothing to
-    // scope, the endpoint always acts on exactly the dragged occurrence.
+    // Keep the task's wall-clock time-of-day; move the *day* — mirrors
+    // `frontend/src/components/calendar/month-view.tsx`'s `onDragEnd`. Each
+    // recurring occurrence is already its own materialized `Session` row
+    // (CLAUDE.md §4) and `PATCH /tasks/:id` only ever targets a single task id,
+    // so issue #21's "does drag need scope: 'one' | 'following'?" open question
+    // doesn't apply — the endpoint always acts on exactly the dragged occurrence.
+    // This drag only ever moves within the visible month's grid (incl. its
+    // padded leading/trailing week); a different month is the "Move to…" sheet.
+    const targetKey = dateKey(target);
+    if (targetKey === drag.fromKey) return; // no-op drop, same day
     const wall = zonedDate(original.scheduledStartTime, tz);
     const [y, m, d] = targetKey.split("-").map(Number);
     wall.setFullYear(y, m - 1, d);
-    const newStart = zonedWallClockToUtc(wall, tz);
+    const newStartISO = zonedWallClockToUtc(wall, tz).toISOString();
 
-    const prevSessions = tasks;
-    setSessions((cur) =>
-      (cur ?? []).map((t) =>
-        t.id === original.id
-          ? { ...t, scheduledStartTime: newStart.toISOString() }
-          : t,
-      ),
-    );
+    const landedKey = dateKey(zonedDate(newStartISO, tz));
 
-    try {
-      const updated = await updateSession(original.id, {
-        scheduledStartTime: newStart.toISOString(),
-      });
+    const applyMove = async () => {
+      pulseDropCell(landedKey);
+      const prevSessions = tasks;
       setSessions((cur) =>
-        (cur ?? []).map((t) => (t.id === original.id ? updated : t)),
+        (cur ?? []).map((t) =>
+          t.id === original.id
+            ? { ...t, scheduledStartTime: newStartISO }
+            : t,
+        ),
       );
-    } catch (error) {
-      setSessions(prevSessions ?? []); // rollback the optimistic move
-      toast(errorMessage(error, "Couldn't reschedule task"), "destructive");
+
+      try {
+        const updated = await updateSession(original.id, {
+          scheduledStartTime: newStartISO,
+        });
+        setSessions((cur) =>
+          (cur ?? []).map((t) => (t.id === original.id ? updated : t)),
+        );
+      } catch (error) {
+        setSessions(prevSessions ?? []); // rollback the optimistic move
+        toast(errorMessage(error, "Couldn't reschedule task"), "destructive");
+      }
+    };
+
+    // Dropping a session past its own deadline is almost always a slip — ask
+    // before the API call. `resetDragState` already ran, so a cancel just
+    // leaves the pill where it was.
+    if (isPastDeadlineDrop(newStartISO, original.deadline)) {
+      confirm("Schedule after the deadline?", {
+        description: "This session will start past its due time.",
+        confirmLabel: "Schedule anyway",
+        cancelLabel: "Cancel",
+        onConfirm: () => {
+          void applyMove();
+        },
+      });
+      return;
     }
+
+    await applyMove();
   }
 
   // Same "read the callbacks out of a ref at fire time" pattern `MonthPill`
@@ -368,6 +425,7 @@ export function MonthPage({
 
   const ghostSession = dragging?.task ?? null;
   const ghostState = ghostSession ? deriveState(ghostSession) : null;
+  const GhostIcon = ghostSession ? sessionTypeIcon(ghostSession.type) : null;
 
   return (
     <View ref={pageRef} onLayout={measureGeometry} className="flex-1">
@@ -384,28 +442,16 @@ export function MonthPage({
           draggingSessionId={dragging?.task.id ?? null}
           onPressDay={handleOpenDay}
           onPressOverflow={handleOpenOverflow}
-          onPillDragStart={handlePillDragStart}
-          onPillDragUpdate={handlePillDragUpdate}
-          onPillDragEnd={handlePillDragEnd}
-          onPillDragCancel={resetDragState}
           onGridLayout={measureGeometry}
+          justDroppedKey={justDroppedKey}
         />
       )}
 
       {/* Drop-target highlight lives on `MonthCell` itself (`isDropTarget`);
-          this floating pill is just the dragged copy following the finger. */}
-      {ghostSession && ghostPos && ghostState && (
-        <View
-          pointerEvents="none"
-          style={{
-            position: "absolute",
-            left: ghostPos.x - pageOffsetRef.current.x - 48,
-            top: ghostPos.y - pageOffsetRef.current.y - 34,
-            width: 96,
-            // The mockup's `scale-[1.06] -rotate-[2.5deg]` "picked up" tilt.
-            transform: [{ scale: 1.06 }, { rotate: "-2.5deg" }],
-          }}
-        >
+          this floating pill is just the dragged copy following the finger —
+          positioned on the UI thread from shared values. */}
+      {ghostSession && ghostState && GhostIcon && (
+        <Animated.View pointerEvents="none" style={ghostStyle}>
           <View
             className={cn(
               // Keeps the pills' `border-l-2` accent rather than the mockup's
@@ -413,19 +459,23 @@ export function MonthPage({
               // per-state border color in `MONTH_PILL_CLASSES` for the other
               // three sides, and an uncolored `border` there falls back to
               // black instead of inheriting.
-              "rounded-md border-l-2 px-1.5 py-1 shadow-lg",
+              "flex-row items-center gap-1 rounded-md border-l-2 px-1.5 py-1 shadow-lg",
               MONTH_PILL_CLASSES[ghostState],
             )}
           >
+            <GhostIcon
+              size={10}
+              className={SESSION_TYPE_META[ghostSession.type].textClass}
+            />
             <Text
               numberOfLines={1}
               className={cn(
-                "text-[10px] font-semibold",
+                "flex-1 text-[10px] font-semibold",
                 MONTH_PILL_TEXT_CLASSES[ghostState],
               )}
             >
               {ghostSession.scheduledStartTime && (
-                <Text className="font-mono text-[10px] font-normal text-muted-foreground">
+                <Text className="text-[10px] font-normal text-muted-foreground">
                   {format(
                     zonedDate(ghostSession.scheduledStartTime, tz),
                     "H:mm",
@@ -435,7 +485,7 @@ export function MonthPage({
               {ghostSession.title}
             </Text>
           </View>
-        </View>
+        </Animated.View>
       )}
     </View>
   );

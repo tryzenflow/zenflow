@@ -37,12 +37,22 @@ services:
     networks:
       - mail
 
+  bandit:
+    container_name: zenflow-bandit
+    build: ../services/bandit
+    ports:
+      - "8100:8000"
+    networks:
+      - bandit
+
 networks:
   db:
     driver: bridge
   cache:
     driver: bridge
   mail:
+    driver: bridge
+  bandit:
     driver: bridge
 
 volumes:

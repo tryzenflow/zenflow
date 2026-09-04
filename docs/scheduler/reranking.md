@@ -1,462 +1,170 @@
-# Zenflow Scheduler Reranking
+# LinUCB-to-Timestamp Scheduling Strategy
 
-## Goal
+How Zenflow turns LinUCB's coarse `(day, time-of-day)` scores into one concrete calendar
+timestamp — simply and deterministically, without moving any existing session.
 
-Define how Zenflow converts model-level scheduling preferences into concrete calendar timestamps.
+LinUCB (see [`../adr/0001-linucb-model-design.md`](../adr/0001-linucb-model-design.md))
+learns **which day × time-of-day regions a student prefers**. This document is the
+mapping layer that sits between LinUCB's scores and a real start time. It is used by both
+scheduling policies in the A/B test (the preference heuristic and LinUCB) so neither gets
+an advantage from a different realization mechanism.
 
-The scheduler separates:
+This intentionally does **not** attempt global schedule optimization. Global rescheduling
+and combinatorial optimization are out of scope — the research question is whether
+contextual online learning improves *temporal preference selection*, not whether a global
+optimizer can produce the theoretically optimal calendar.
 
-1. **candidate generation** — what times are feasible;
-2. **policy scoring** — which temporal preferences are desirable;
-3. **candidate reranking** — which concrete timestamp should actually be selected;
-4. **deviation weighting** — how strongly recent user adjustments influence the final ranking.
+## Where it runs
 
-The heuristic and LinUCB policies share the same candidate generation and final reranking logic.
+The live scheduler today is the deterministic heuristic —
+[`backend/src/scheduler/heuristic.ts`](../../backend/src/scheduler/heuristic.ts) (pure
+core) + [`heuristic-schedule.service.ts`](../../backend/src/scheduler/heuristic-schedule.service.ts)
+(the only Prisma layer — `scheduleTask` / `scheduleSeries`, single-session, no repack).
+See [`heuristic.md`](./heuristic.md). LinUCB scheduling adds a
+sibling path: a per-day call to the bandit service
+(`BANDIT_SERVICE_URL`, see `services/bandit/README.md`), then the mapping below. The
+`optimize()` slot-scoring and overlap-rate helpers are pure functions in
+`backend/src/scheduler/utils/` with `*.spec.ts` coverage (CLAUDE.md invariant 2).
+
+## Input / output
+
+```text
+input:  a TASK s with deadline dl_s and duration dur_s
+        the day's occupied intervals (fixed sessions, DND occurrences, other placed TASKs)
+output: one concrete scheduled start timestamp t_s
+```
+
+Only `TASK` sessions reach this path — fixed types and `DND` are user-pinned (ADR-0002).
 
 ---
 
-## 1. Scheduling Input
+## Algorithm
 
-A scheduling request contains:
+### 1. Score candidate day × time-of-day arms
 
-- task;
-- task duration `d`;
-- deadline `dl`;
-- current time `now`;
-- existing calendar sessions;
-- user availability;
-- user preference matrix;
-- recent user-adjusted placements;
-- relevant task/user/schedule features.
+For every candidate day `d` from the next 15-minute boundary through the deadline:
 
-Tasks are processed in earliest-deadline-first order.
+```text
+d ∈ [next_15min(now), dl_s]
+```
 
-After scheduling a task, its occupied interval is added to the schedule before processing the next task.
+build the LinUCB context vector for `(s, d)` (ADR-0001 §5, `d = 46`) and call `/predict`
+to score all five arms:
 
-Therefore, later tasks cannot reuse a slot already occupied by an earlier task.
+```text
+EARLY_MORNING = [00:00, 06:00)
+MORNING       = [06:00, 11:00)
+AFTERNOON     = [11:00, 17:00)
+EVENING       = [17:00, 20:00)
+NIGHT         = [20:00, 24:00)
+```
+
+Boundaries are half-open, lower-inclusive (a session starting at 17:00 is `EVENING`).
+This produces a grid:
+
+```text
+(day, arm) → LinUCB score
+
+(Tue, MORNING) → 0.42
+(Tue, NIGHT)   → 0.81
+(Wed, EVENING) → 0.76
+...
+```
+
+### 2. Generate concrete candidate slots
+
+Generate 15-minute-aligned start times from `next_15min(now)` through the deadline. A
+candidate `c` survives only if `[c, c + dur_s)` satisfies every **hard constraint**:
+
+1. `c ≥ next_15min(now)`
+2. `c + dur_s ≤ dl_s`
+3. `c` is on the 15-minute grid
+4. `[c, c + dur_s)` does not overlap any `occupied` interval — fixed sessions
+   (`ASSIGNMENT` / `EXAM` / `LECTURE`), standalone `DND`, recurring `DND` occurrences
+   (`expandRrule`), other already-placed `TASK`s
+5. the slot is **fully empty** — partial-overlap placement is not allowed
+
+Steps 1 and 4 mean `DND` is a hard block even though LinUCB scored its bucket in step 1;
+the filter removes it here.
+
+> **Update (scheduler reorg).** The old constraint 3 ("`c + dur_s ≤ the candidate day's
+> local midnight`") is gone: a slot may now start before local midnight and run into the
+> next morning up to the deadline, matching the heuristic path. `overlapRate` splits a
+> straddling slot at midnight and scores each side against its own day's arm scores.
+
+### 3. Derive a preference score for each concrete slot
+
+A concrete interval does not map to exactly one arm, so score it by how much it overlaps
+each arm on its day, in a **single pass**:
+
+```text
+slot_score(c) = Σ_arm  overlap_rate(c, arm) × score(day(c), arm)
+              + slotPreferenceScore(c)            ← cold-start blend (scheduler reorg)
+```
+
+`overlap_rate(c, arm)` is the fraction of `[c, c + dur_s)` that falls inside that arm's
+band. `slotPreferenceScore(c)` is the identical overlap-weighted preference score Policy A
+uses (`core/slot-score.ts`): the bandit service returns `0` for an arm with no accumulated
+reward, so without this addend a cold model would rank every slot equally. Example — a
+2-hour session starting 19:00:
+
+```text
+19:00–20:00 → EVENING   (overlap_rate 0.5)
+20:00–21:00 → NIGHT     (overlap_rate 0.5)
+slot_score = 0.5 · score(day, EVENING) + 0.5 · score(day, NIGHT)
+```
+
+One pass, one ranking. (An earlier draft sorted by overlap and then re-sorted by score;
+that produces a different, slower, and less meaningful ordering — dropped.)
+
+### 4. Rank and pick
+
+Rank the surviving (empty, feasible) slots by `slot_score` descending. Choose the
+highest. **Earliest start breaks ties** — deterministic, and no extra randomness after
+LinUCB has already made the learned decision.
+
+Because step 2 already filtered to empty slots, there is no "prefer empty among
+comparable" trade-off and no tolerance parameter: an occupied slot is simply not a
+candidate. Existing sessions are never displaced to realize a higher score.
+
+### 5. Fallback
+
+If the top-scored slot is unavailable (it will not be, post-filter, but the ranked list is
+walked defensively), continue down the ranked list to the next feasible empty slot. If a
+whole day's preferred region is occupied, a later day's slot wins:
+
+```text
+1. Tue 20:00  ← highest score, occupied  → filtered out in step 2
+2. Tue 20:15  ← occupied                 → filtered out
+3. Wed 19:00  ← next-best, empty          → selected
+```
+
+### 6. Record the proposal
+
+Write a `SlotProposal` with `proposedStartTime = t_s`, `selectedArm` (the arm with the
+largest overlap contribution to `t_s`), and `featureVector` (the length-`d` context for
+`day(t_s)`) so the delayed `MOVE` / `RETAINED` reward can update the right arm later
+(ADR-0001 §9).
 
 ---
 
-## 2. Candidate Generation
+## Design trade-off
 
-For each task, generate feasible 15-minute-aligned start times.
+**Advantages**
 
-```text
-first = next15Min(now)
+- Very simple, fully deterministic, easy to explain and test within the thesis timeline.
+- LinUCB owns the entire learned personalization signal; no second optimizer.
+- Schedules stay stable — no existing session is ever moved.
+- The same mapping serves both A/B policies.
 
-C = {
-    first,
-    first + 15min,
-    first + 30min,
-    ...
-}
-```
+**Disadvantages**
 
-A candidate `c` is valid only when:
-
-```text
-c + duration <= deadline
-```
-
-and it satisfies the scheduler's hard constraints.
-
-Examples:
-
-- no overlap with existing sessions;
-- user unavailable periods;
-- protected near-term sessions;
-- other absolute scheduling constraints.
-
-If no feasible candidate exists, the scheduling layer reports a scheduling conflict rather than asking LinUCB to violate a hard constraint.
-
----
-
-## 3. Time-of-Day Arms
-
-Zenflow uses five reusable temporal arms:
+- No global optimization of the day.
+- A highly preferred region can be unavailable even when rearranging other sessions could
+  have fit the task there.
+- Final-timestamp quality depends partly on the deterministic ranking + fallback.
 
 ```text
-EARLY_MORNING   00:00–06:00
-MORNING         06:00–11:00
-AFTERNOON       11:00–17:00
-EVENING         17:00–20:00
-NIGHT           20:00–24:00
+LinUCB → (day, time-of-day) scores → single-pass overlap-weighted slot scoring
+       → hard-constraint + empty-slot filter → earliest highest-scored slot → SlotProposal
 ```
-
-An arm represents a reusable temporal preference category rather than a concrete calendar timestamp.
-
-Therefore:
-
-```text
-Monday 09:00
-Tuesday 09:00
-Next month 10:00
-```
-
-can all share the `MORNING` arm while still having different contextual features.
-
----
-
-# 4. Preference Heuristic
-
-The heuristic uses the user's preference matrix as its primary temporal preference signal.
-
-The preference matrix is initialized with a cold-start prior representing typical expected student behavior.
-
-For example:
-
-```text
-MORNING        high
-AFTERNOON      medium
-EVENING        medium
-NIGHT          low/medium
-EARLY_MORNING  low
-```
-
-The matrix can subsequently change based on user behavior.
-
-The heuristic does not use a learned contextual model.
-
-For each concrete candidate:
-
-```text
-candidate
-    ↓
-determine temporal arm(s)
-    ↓
-obtain preference score
-    ↓
-apply deviation adjustment
-```
-
----
-
-## 5. LinUCB Policy
-
-LinUCB uses the same candidate pool and context features as the heuristic.
-
-For each candidate:
-
-```text
-candidate timestamp
-        ↓
-determine temporal arm
-        ↓
-construct candidate context x
-        ↓
-score arm with Disjoint LinUCB
-```
-
-Each student has independent LinUCB state.
-
-The five temporal arms therefore maintain separate model states:
-
-```text
-EARLY_MORNING → A, b
-MORNING       → A, b
-AFTERNOON     → A, b
-EVENING       → A, b
-NIGHT         → A, b
-```
-
-The arm score is produced by LinUCB.
-
-The LinUCB implementation does **not** decide the final ISO timestamp.
-
-The API/scheduler performs the concrete candidate ranking.
-
----
-
-## 6. Candidate Context
-
-The candidate context represents the scheduling situation at a particular candidate timestamp.
-
-Potential features include:
-
-- distance from current time;
-- distance to deadline;
-- task type;
-- exam/grade-risk weight;
-- day of week;
-- time of day;
-- current or projected workload;
-- user preference information;
-- other validated Zenflow-specific features.
-
-Features should be generated by a pure, testable feature-construction function.
-
-Features that are unavailable or consistently sparse should not be added merely for theoretical richness.
-
-For example, task descriptions should not automatically become model features if most tasks have no description.
-
----
-
-## 7. Candidate Spanning Multiple Arms
-
-A long task may cross time-of-day boundaries.
-
-Example:
-
-```text
-18:00 ─────────────── 21:00
-
-18–20 → EVENING
-20–21 → NIGHT
-```
-
-In this case, the candidate can receive contributions from multiple temporal arms weighted by the amount of time spent in each arm.
-
-For a candidate lasting four hours:
-
-```text
-14:00–18:00
-
-14–17 → AFTERNOON = 3h
-17–18 → EVENING   = 1h
-```
-
-The candidate's temporal score can therefore be calculated from the weighted contributions of the relevant arms.
-
-This prevents an arbitrary boundary from determining the score of an entire multi-hour session.
-
----
-
-## 8. User-Adjustment / Deviation Weight
-
-The policy score is not the final scheduling score.
-
-A user manually moving a session represents an explicit preference that should be respected when possible.
-
-For a candidate that deviates from a recent user placement:
-
-```text
-deviation(c)
-```
-
-measures how far the candidate is from the user's chosen placement.
-
-A stability weight controls how strongly that deviation affects ranking.
-
-The final score is:
-
-```text
-final_score(c, t)
-    = policy_score(c)
-      - λ_t × deviation(c)
-```
-
-where:
-
-- `c` is a concrete candidate;
-- `t` is the time elapsed since the user adjustment;
-- `λ_t` is the time-dependent deviation penalty;
-- `deviation(c)` measures the distance between the candidate and the user's chosen placement.
-
-The initial penalty is controlled by `λ₀`, the maximum deviation penalty immediately after the user adjustment.
-
-A suitable decay function is:
-
-```text
-λ_t = λ₀ × exp(-γt)
-```
-
-where:
-
-- `λ₀ ≥ 0` is the initial deviation-penalty strength;
-- `γ ≥ 0` controls the decay rate;
-- `t` is elapsed time since the user adjustment.
-
-At the moment of adjustment:
-
-```text
-λ_0 = λ₀
-```
-
-As time passes, the penalty decreases:
-
-```text
-t = 0       → λ_t = λ₀
-t increases → λ_t decreases
-t → ∞       → λ_t → 0
-```
-
-This means a recent user placement is strongly protected, while an old placement gradually becomes less influential.
-
-The decay rate can also be expressed using a half-life `h`:
-
-```text
-λ_t = λ₀ × 2^(-t/h)
-```
-
-where `h` is the amount of time required for the deviation penalty to decrease to half of its initial value.
-
-The half-life formulation is often easier to interpret operationally.
-
-For example:
-
-```text
-λ₀ = 1.0
-h  = 7 days
-```
-
-means that the deviation penalty is:
-
-```text
-1.0       immediately after adjustment
-0.5       after 7 days
-0.25      after 14 days
-0.125     after 21 days
-```
-
-The exact values of `λ₀` and `γ`, or equivalently `h`, should initially be treated as scheduler hyperparameters.
-
-They should be selected using validation data or a small sensitivity analysis rather than being learned by LinUCB.
-
-The deviation penalty is shared by both the heuristic and LinUCB policies.
-
-It is therefore **not part of the LinUCB model**.
-
----
-
-## 9. Constraint Priority
-
-Candidate selection follows this priority:
-
-```text
-1. Hard constraints
-       ↓
-2. Policy score
-       ↓
-3. Time-dependent user-placement deviation penalty
-       ↓
-4. Deterministic tie-breaking
-```
-
-Hard constraints cannot be overridden by model preference.
-
-Examples:
-
-```text
-deadline
-overlap
-unavailable period
-protected near-term session
-```
-
-A recent user placement is a strong preference, but not an absolute constraint.
-
-An urgent deadline may therefore cause the scheduler to move a previously user-adjusted task when no alternative placement remains feasible.
-
----
-
-## 10. Concrete Candidate Selection
-
-After policy scoring and shared reranking:
-
-```text
-candidate A → final score 0.71
-candidate B → final score 0.83
-candidate C → final score 0.65
-```
-
-select:
-
-```text
-candidate B
-```
-
-If multiple candidates have the same final score, use:
-
-> **Earliest feasible candidate first.**
-
-This keeps the initial scheduler deterministic and avoids introducing unnecessary randomness into the user experience.
-
----
-
-## 11. Scheduler Pipeline
-
-The complete pipeline is:
-
-```text
-Task
-  ↓
-EDF ordering
-  ↓
-Generate feasible 15-minute candidates
-  ↓
-Hard-constraint filtering
-  ↓
-┌───────────────────────┐
-│ Scheduling policy     │
-│                       │
-│ Heuristic → preference│
-│ LinUCB    → arm score │
-└───────────┬───────────┘
-            ↓
-      policy scores
-            ↓
- Calculate λ_t from the
- time since user adjustment
-            ↓
- Apply shared deviation penalty
-            ↓
-     final candidate score
-            ↓
-     earliest tie-break
-            ↓
-   concrete ISO timestamp
-            ↓
-      reserve the slot
-            ↓
-      next task
-```
-
----
-
-## 12. Responsibility Boundary
-
-The system deliberately separates responsibilities.
-
-### Heuristic / LinUCB
-
-Responsible for:
-
-> **How desirable is this temporal scheduling preference?**
-
-### Scheduler/API
-
-Responsible for:
-
-> **Which concrete feasible timestamp best realizes that preference while respecting the existing schedule and user decisions?**
-
-The scheduler/API also owns:
-
-- candidate generation;
-- hard-constraint filtering;
-- calculation of `λ_t`;
-- deviation measurement;
-- final candidate reranking;
-- deterministic tie-breaking.
-
-This allows the heuristic and LinUCB to be compared using the same downstream scheduling mechanism.
-
-The comparison therefore measures the difference between their **personalization/scoring strategies**, rather than differences in unrelated scheduling mechanics.
-
----
-
-## 13. Future Extensions
-
-The initial implementation should not learn intra-arm placement behavior.
-
-Potential future extensions include:
-
-- average completion distance from deadline;
-- preferred spacing between sessions;
-- historical completion time;
-- task-type-specific temporal preferences;
-- more granular temporal arms;
-- learned candidate-level scheduling features;
-- adaptive estimation of the deviation-decay half-life;
-- separate decay rates for different types of user adjustments.
-
-These should remain outside the initial model unless the thesis evaluation demonstrates a concrete need for them.

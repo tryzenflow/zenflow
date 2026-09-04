@@ -8,6 +8,7 @@ const chars = (n: number) => "a".repeat(n);
 describe("CreateSessionDto — title character limit", () => {
   it("accepts a title of exactly 60 characters", async () => {
     const dto = plainToInstance(CreateSessionDto, {
+      type: "TASK",
       title: chars(60),
       durationMinutes: 30,
       deadline: "2026-06-10T17:00:00.000Z",
@@ -18,6 +19,7 @@ describe("CreateSessionDto — title character limit", () => {
 
   it("rejects a title of 61 characters", async () => {
     const dto = plainToInstance(CreateSessionDto, {
+      type: "TASK",
       title: chars(61),
       durationMinutes: 30,
       deadline: "2026-06-10T17:00:00.000Z",

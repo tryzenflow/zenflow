@@ -1,10 +1,11 @@
+import math
 import random
 from typing import Any
 
 import numpy as np
 import pytest
 
-from src.models.linucb import LinUCB
+from src.models.linucb import LinUCB, score, update
 
 
 def make_model(**kwargs: Any) -> LinUCB:
@@ -133,6 +134,64 @@ class TestUpdate:
             model.update("a", x, float(true_theta @ x))
 
         np.testing.assert_allclose(model.theta("a"), true_theta, atol=1e-3)
+
+
+class TestFunctionalHelpers:
+    """The stateless ``score`` / ``update`` pair the HTTP layer reuses."""
+
+    def test_score_matches_manual_ucb(self):
+        a = np.array([[2.0, 0.0], [0.0, 4.0]])
+        b = np.array([1.0, 2.0])
+        x = np.array([1.0, 1.0])
+        a_inv = np.linalg.inv(a)
+        expected = float((a_inv @ b) @ x) + 0.5 * math.sqrt(float(x @ a_inv @ x))
+        assert score(a, b, x, 0.5) == pytest.approx(expected)
+
+    def test_score_agrees_with_select_arm(self):
+        model = make_model(alpha=0.3)
+        x = np.array([0.5, -0.2, 1.0])
+        model.update("a", np.array([1.0, 0.0, 0.0]), 1.0)
+        model.update("a", np.array([0.0, 1.0, 0.0]), -0.5)
+        params = model._get_or_create_arm("a")
+
+        theta_hat = params.a_inv @ params.b
+        bonus = 0.3 * math.sqrt(float(x @ params.a_inv @ x))
+        expected = float(theta_hat @ x) + bonus
+        assert score(params.A, params.b, x, 0.3) == pytest.approx(expected)
+
+    def test_score_of_the_ridge_prior_is_pure_exploration(self):
+        a = 2.0 * np.identity(3)
+        b = np.zeros(3)
+        x = np.array([1.0, 0.0, 0.0])
+        # theta_hat is zero, so only the alpha bonus survives.
+        assert score(a, b, x, 0.0) == pytest.approx(0.0)
+        assert score(a, b, x, 0.5) == pytest.approx(0.5 * math.sqrt(0.5))
+
+    def test_update_applies_the_rank_one_refresh(self):
+        a = np.identity(3)
+        b = np.zeros(3)
+        x = np.array([1.0, 2.0, 3.0])
+        new_a, new_b = update(a, b, x, 2.0)
+
+        np.testing.assert_allclose(new_a, np.identity(3) + np.outer(x, x))
+        np.testing.assert_allclose(new_b, 2.0 * x)
+
+    def test_update_does_not_mutate_its_inputs(self):
+        a = np.identity(2)
+        b = np.zeros(2)
+        update(a, b, np.array([1.0, 1.0]), 1.0)
+        np.testing.assert_allclose(a, np.identity(2))
+        np.testing.assert_allclose(b, np.zeros(2))
+
+    def test_update_matches_add_observation(self):
+        x = np.array([0.3, -0.7, 1.1])
+        model = make_model(ridge=1.0)
+        model.update("a", x, 0.9)
+        params = model._get_or_create_arm("a")
+
+        new_a, new_b = update(np.identity(3), np.zeros(3), x, 0.9)
+        np.testing.assert_allclose(new_a, params.A)
+        np.testing.assert_allclose(new_b, params.b)
 
 
 class TestRidge:

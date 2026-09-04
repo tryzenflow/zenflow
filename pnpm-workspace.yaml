@@ -1,5 +1,7 @@
 packages:
-  - "frontend"
+  # `frontend` (the web PWA) is archived — all UI work happens in `mobile/`.
+  # Left on disk for reference but out of the workspace so `pnpm -r` skips it.
+  # - "frontend"
   - "backend"
   - "mobile"
   - "mobile/*"

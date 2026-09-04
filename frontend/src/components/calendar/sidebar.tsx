@@ -51,28 +51,39 @@ function groupByDay(
 /** Row treatment per state — mirrors the calendar card colours (mockup 02). */
 const AGENDA_ROW: Record<SessionCardState, string> = {
   fluid: "border-border bg-card hover:bg-sidebar-accent",
-  overdue:
-    "border-rose-400/60 bg-rose-50/60 dark:border-rose-900/30 dark:bg-rose-950/20",
   conflict:
     "border-amber-400/50 bg-amber-50/60 dark:border-amber-900/20 dark:bg-amber-950/10",
-  completed: "border-border bg-card opacity-60",
+  assignment:
+    "border-teal-400/50 bg-teal-50/60 dark:border-teal-900/20 dark:bg-teal-950/20",
+  exam: "border-rose-400/50 bg-rose-50/60 dark:border-rose-900/20 dark:bg-rose-950/20",
+  lecture:
+    "border-sky-400/50 bg-sky-50/60 dark:border-sky-900/20 dark:bg-sky-950/20",
+  dnd: "border-slate-400/50 border-dashed bg-slate-50/60 dark:border-slate-700/40 dark:bg-slate-900/20",
 };
 
 const AGENDA_TIME: Record<SessionCardState, string> = {
   fluid: "text-muted-foreground",
-  overdue: "text-rose-600 dark:text-rose-400",
   conflict: "text-amber-600 dark:text-amber-400",
-  completed: "text-muted-foreground",
+  assignment: "text-teal-600 dark:text-teal-400",
+  exam: "text-rose-600 dark:text-rose-400",
+  lecture: "text-sky-600 dark:text-sky-400",
+  dnd: "text-muted-foreground",
 };
 
 const AGENDA_TAG: Partial<Record<SessionCardState, string>> = {
-  overdue: "Overdue",
   conflict: "Conflict",
+  assignment: "Assignment",
+  exam: "Exam",
+  lecture: "Lecture",
+  dnd: "Do not disturb",
 };
 
 const AGENDA_TAG_BADGE: Partial<Record<SessionCardState, string>> = {
-  overdue: "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-400",
   conflict: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-400",
+  assignment: "bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-400",
+  exam: "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-400",
+  lecture: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-400",
+  dnd: "bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-300",
 };
 
 function AgendaItem({ block, tz }: { block: Event; tz: string }) {

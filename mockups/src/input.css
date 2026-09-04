@@ -264,6 +264,38 @@ body {
   .hatch-conflict-pill {
     background-color: color-mix(in oklch, var(--color-amber-500) 9%, var(--card));
   }
+
+  /* --- DND / protected-time treatment ---------------------------------
+     A DND block is not a commitment — it's time the student has walled
+     off. It reads as "blocked" via a faint slate diagonal hatch over a
+     slate wash, paired on the block with:
+       hatch-dnd border-l-slate-400 [border-left-style:dashed]
+     and muted (text-muted-foreground) title/meta. Distinct from the flat
+     type tints (assignment teal / exam rose / lecture sky) by the stripes. */
+  .hatch-dnd {
+    background-color: color-mix(in oklch, var(--color-slate-500) 8%, var(--card));
+    background-image: repeating-linear-gradient(
+      45deg,
+      color-mix(in oklch, var(--color-slate-500) 22%, transparent) 0,
+      color-mix(in oklch, var(--color-slate-500) 22%, transparent) 1px,
+      transparent 1px,
+      transparent 7px
+    );
+  }
+  .dark .hatch-dnd {
+    background-color: color-mix(in oklch, var(--color-slate-500) 16%, var(--card));
+    background-image: repeating-linear-gradient(
+      45deg,
+      color-mix(in oklch, var(--color-slate-400) 26%, transparent) 0,
+      color-mix(in oklch, var(--color-slate-400) 26%, transparent) 1px,
+      transparent 1px,
+      transparent 7px
+    );
+  }
+  /* Compact echo for month/week mini-pills. */
+  .hatch-dnd-pill {
+    background-color: color-mix(in oklch, var(--color-slate-500) 12%, var(--card));
+  }
 }
 
 @layer base {
