@@ -1,4 +1,4 @@
-import { IsDateString, IsIn, IsOptional, MaxLength } from "class-validator";
+import { IsDateString, IsIn, MaxLength } from "class-validator";
 import type { ViewMode } from "@zenflow/shared";
 
 export class ListSessionsDto {
@@ -8,8 +8,4 @@ export class ListSessionsDto {
   @IsDateString()
   @MaxLength(10)
   date: string;
-
-  @IsOptional()
-  @IsIn(["PENDING", "DONE", "ABANDONED", "all"])
-  status?: "PENDING" | "DONE" | "ABANDONED" | "all";
 }

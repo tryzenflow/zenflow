@@ -1,1 +1,1 @@
-export * from "./session-with-tags";
+export * from "./session-row";

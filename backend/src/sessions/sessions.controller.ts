@@ -78,6 +78,54 @@ export class SessionsController {
     return { success: true, message: "Session updated", data };
   }
 
+  // NOTE: must precede @Delete(":id") so "series" isn't matched as an :id.
+  @Delete("series/:seriesId")
+  async removeSeries(
+    @Param("seriesId") seriesId: string,
+    @CurrentUser() user: User,
+  ) {
+    const data = await this.sessionsService.removeSeries(seriesId, user);
+    return {
+      success: true,
+      message: `Deleted ${data.removedSessionIds.length} sessions`,
+      data,
+    };
+  }
+
+  // "Delete this occurrence and all following" for a recurring (rrule) series:
+  // pulls the rrule's UNTIL back to just before `?from=<ISO instant>`.
+  @Delete("series/:seriesId/truncate")
+  async truncateSeriesFrom(
+    @Param("seriesId") seriesId: string,
+    @Query("from") from: string,
+    @CurrentUser() user: User,
+  ) {
+    const data = await this.sessionsService.truncateSeriesFrom(
+      seriesId,
+      from,
+      user,
+    );
+    return { success: true, message: "Series truncated", data };
+  }
+
+  @Delete("series/:seriesId/from/:sessionId")
+  async removeSeriesFrom(
+    @Param("seriesId") seriesId: string,
+    @Param("sessionId") sessionId: string,
+    @CurrentUser() user: User,
+  ) {
+    const data = await this.sessionsService.removeSeriesFrom(
+      seriesId,
+      sessionId,
+      user,
+    );
+    return {
+      success: true,
+      message: `Deleted ${data.removedSessionIds.length} sessions`,
+      data,
+    };
+  }
+
   @Delete(":id")
   async remove(@Param("id") id: string, @CurrentUser() user: User) {
     const data = await this.sessionsService.remove(id, user);

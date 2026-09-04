@@ -5,17 +5,17 @@ export const DAY_OF_WEEK = 7;
 export const TIME_GRANULARITY = 15;
 
 /**
- * Grace window (ms) before a deadline-overdue PENDING task is swept into the
- * ABANDONED state. Keeps the hourly sweep from racing a user who completes a
- * task slightly past its deadline. Default: 1 hour.
+ * Grace window (ms) after a scheduled TASK's end before the RETAINED sweep
+ * counts it as "kept" — leaves a short window for a last-minute drag. Default:
+ * 15 minutes.
  */
-export const ABANDON_GRACE_MS = 60 * 60 * 1000;
+export const RETAINED_GRACE_MS = 15 * 60 * 1000;
 
 /**
- * Max tasks the abandoned-task sweep processes per transaction, so one run never
- * opens a single unbounded transaction over the whole overdue backlog.
+ * Max sessions the RETAINED sweep processes per transaction, so one run never
+ * opens a single unbounded transaction over the whole elapsed backlog.
  */
-export const ABANDON_BATCH_SIZE = 100;
+export const RETAINED_BATCH_SIZE = 100;
 
 /** AES-256-GCM: 96-bit IV (NIST SP 800-38D recommended), 256-bit key. */
 export const IV_RANDOM_BYTES_SIZE = 12;
