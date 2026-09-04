@@ -22,14 +22,14 @@ export interface BlockLayout {
  * at `column / columns` width, so overlapping tasks sit next to each other
  * instead of stacking on top of (and visually swallowing) one another.
  *
- * A completed task no longer occupies its slot — the user already did it — so it
- * never raises a conflict and is never flagged itself: a live task scheduled on
- * top of a finished one is not a clash. A block is flagged as a conflict only
- * when it genuinely overlaps in time another LIVE (non-DONE) block in its
- * cluster, using the strict half-open rule `aStart < bEnd && bStart < aEnd`.
- * Blocks that merely touch at a boundary (`aEnd === bStart`) are placed into a
- * fresh cluster and always render at full width. Completed blocks still take a
- * column so they keep rendering side-by-side.
+ * A DND block is protected time, not a scheduled commitment — so it never
+ * raises a conflict and is never flagged itself: a live session scheduled on
+ * top of a DND block is not a clash. A block is flagged as a conflict only
+ * when it genuinely overlaps in time another non-DND block in its cluster,
+ * using the strict half-open rule `aStart < bEnd && bStart < aEnd`. Blocks
+ * that merely touch at a boundary (`aEnd === bStart`) are placed into a fresh
+ * cluster and always render at full width. DND blocks still take a column so
+ * they keep rendering side-by-side.
  *
  * The input array is treated as read-only — it is cloned before sorting.
  */
@@ -63,13 +63,13 @@ export function getOverlapLayout(
       colOf.set(keyOf(ev), col);
     }
     const columns = colEnds.length;
-    // A block conflicts only when it is live AND genuinely overlaps (strict
-    // half-open) some OTHER live block in the cluster. Touching boundaries
-    // (aEnd === bStart) do not clash; live-on-DONE is never a clash.
-    const live = cluster.filter((ev) => ev.status !== "DONE");
+    // A block conflicts only when it is non-DND AND genuinely overlaps (strict
+    // half-open) some OTHER non-DND block in the cluster. Touching boundaries
+    // (aEnd === bStart) do not clash; overlapping a DND block is never a clash.
+    const live = cluster.filter((ev) => ev.type !== "DND");
     for (const ev of cluster) {
       const conflict =
-        ev.status !== "DONE" &&
+        ev.type !== "DND" &&
         live.some((other) => {
           if (keyOf(other) === keyOf(ev)) return false;
           const aStart = new Date(ev.start).getTime();

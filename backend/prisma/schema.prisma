@@ -22,46 +22,82 @@ model User {
   timezone String   @default("Asia/Saigon") @db.VarChar(50)
   lang     Language @default(VI_VN)
 
-  preferenceMatrix Float[] @default([])
+  preferenceMatrix          Float[]   @default([])
   preferenceMatrixDecayedAt DateTime?
 
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
   sessions      Session[]
-  files      File[]
+  files         File[]
   sessionEvents SessionEvent[]
-  tags       Tag[]
+  tags          Tag[]
 
   encryptionKeys UserEncryptionKey[]
   devices        UserDevice[]
-  sessionSeries     SessionSeries[]
+  sessionSeries  SessionSeries[]
   integrations   Integration[]
   notifications  Notification[]
   slotProposals  SlotProposal[]
+
+  banditArmStates BanditArmState[]
+}
+
+/**
+ * Time-of-day arms for the Disjoint LinUCB scheduler
+ * (`docs/adr/0001-linucb-model-design.md` §2). Half-open, lower-inclusive
+ * local-wall-clock bands: EARLY_MORNING [00:00,06:00), MORNING [06:00,11:00),
+ * AFTERNOON [11:00,17:00), EVENING [17:00,20:00), NIGHT [20:00,24:00).
+ */
+enum SchedulingArm {
+  EARLY_MORNING
+  MORNING
+  AFTERNOON
+  EVENING
+  NIGHT
+}
+
+/**
+ * Per-(user, arm) LinUCB state. `A` is the row-major `d·d` design matrix, `b`
+ * the length-`d` response vector (`d = 46`, `FEATURE_DIM` in `@zenflow/shared`).
+ * The Python bandit service is stateless: the backend loads these, passes them
+ * in each `/predict` / `/update` payload and persists what comes back. Rows are
+ * lazily created at the ridge prior (`A = λI`, `b = 0`) on first use; `version`
+ * is a best-effort optimistic-concurrency guard for the delayed-feedback writer.
+ */
+model BanditArmState {
+  userId    String
+  arm       SchedulingArm
+  A         Float[]       @default([])
+  b         Float[]       @default([])
+  version   Int           @default(0)
+  updatedAt DateTime      @updatedAt
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, arm])
 }
 
 // Per-(user, provider) data-encryption key, itself protected by a per-provider
 // server-held master key kept outside the DB
 // (MASTER_<provider>_ENCRYPTION_KEY_V<masterKeyVersion>).
 model UserEncryptionKey {
-  id       String              @id @default(uuid())
-  provider IntegrationProvider
+  id               String              @id @default(uuid())
+  provider         IntegrationProvider
   // DEK version — bumped when the per-user key itself is rotated. Independent of
   // `masterKeyVersion`: rotating the DEK re-encrypts this user's Integration
   // rows; rotating the master key only re-wraps `key` below.
-  version  Int
+  version          Int
   // Which MASTER_<provider>_ENCRYPTION_KEY_V<n> env secret wrapped `key`.
   masterKeyVersion Int
   // `key` is the DEK AFTER being wrapped (AES-256-GCM) under that master key;
   // `iv` and `authTag` belong to that wrap operation, not to any credential.
   // The plaintext DEK never touches the DB.
-  key       String
-  iv        String
-  authTag   String
-  algorithm String
-  createdAt DateTime @default(now())
+  key              String
+  iv               String
+  authTag          String
+  algorithm        String
+  createdAt        DateTime            @default(now())
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -91,19 +127,6 @@ model UserDevice {
   @@index([userId])
 }
 
-model SessionSeries {
-  id        String   @id @default(uuid())
-  createdAt DateTime @default(now())
-  deadline  DateTime
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  sessions Session[]
-
-  @@index([userId])
-}
-
 model Tag {
   id        String   @id @default(uuid())
   name      String
@@ -119,17 +142,12 @@ model Tag {
   @@index([userId])
 }
 
-enum SessionStatus {
-  PENDING
-  DONE // completed
-  ABANDONED // deadline passed while still PENDING (set by the overdue sweep)
-}
-
 enum SessionType {
-  MANUAL
+  TASK
   ASSIGNMENT
   EXAM
   LECTURE
+  DND // do not disturb (non-study time to exclude from scheduling)
 }
 
 enum SessionSource {
@@ -139,29 +157,34 @@ enum SessionSource {
 }
 
 model Session {
-  id                 String     @id @default(uuid())
-  title              String
-  note               String?
-  durationMinutes    Int // positive multiple of 15
-  deadline           DateTime
-  startTime          Int        @default(0) // minutes from midnight of the last manual placement (informational only)
-  status             SessionStatus @default(PENDING)
-  type               SessionType   @default(MANUAL)
-  source             SessionSource @default(USER)
+  id              String        @id @default(uuid())
+  title           String
+  note            String?
+  durationMinutes Int // positive multiple of 15
+  deadline        DateTime? // required for TASK; null for fixed types (ASSIGNMENT/EXAM/LECTURE/DND)
+  type            SessionType   @default(TASK)
+  source          SessionSource @default(USER)
 
-  conflict           Boolean    @default(false)
+  conflict Boolean @default(false)
 
-  scheduledStartTime DateTime?
+  scheduledStartTime DateTime? // fixed types (ASSIGNMENT/EXAM/LECTURE/DND) are always scheduled; TASK is placed by the engine
   userId             String
-  user               User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Stamped on every user move/resize of a scheduled TASK; the RETAINED sweep
+  // treats `lastMovedAt == null` as "never moved".
+  lastMovedAt DateTime?
+  // Idempotency guard for the RETAINED sweep — set once the session has elapsed
+  // unmoved and its RETAINED SessionEvent has been written.
+  retainedAt  DateTime?
 
   // Per-user labels (implicit many-to-many).
   tags Tag[]
 
   events SessionEvent[]
 
-  seriesId     String?
-  series       SessionSeries? @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  seriesId String? // for series with rrule, only create a representative session and filter sessions belonging to a series whose rrule covers a particular day range
+  series   SessionSeries? @relation(fields: [seriesId], references: [id], onDelete: Cascade)
 
   // Denormalized convenience fields for cheap per-row rendering alongside seriesId.
   sessionIndex Int?
@@ -175,47 +198,141 @@ model Session {
   updatedAt DateTime @updatedAt
 
   @@index([userId, deadline])
-  @@index([userId, status])
   @@index([userId, scheduledStartTime])
   @@index([userId, seriesId, createdAt(sort: Asc)])
 }
 
+model SessionSeries {
+  id        String      @id @default(uuid())
+  createdAt DateTime    @default(now())
+  type      SessionType @default(DND) // recurring DND/ASSIGNMENT/EXAM/LECTURE (via rrule), or TASK (multi-sitting via sessionCount)
+  deadline  DateTime? // null for a recurring series; the shared deadline for a TASK series
+  rrule     String? // the recurrence rule — set for a recurring series, null for a TASK series
+  exdates   String[] @default([]) // ISO instants of individually-deleted occurrences (rrule series only)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  sessions Session[]
+
+  @@index([userId])
+}
+
+// exclaude DND, at most twice per session
 model SessionReminder {
-  id                  String   @id @default(uuid())
-  remindBeforeMinutes Int      @default(15)
+  id                  String @id @default(uuid())
+  remindBeforeMinutes Int    @default(15)
 
   sessionId String
-  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
 }
 
+enum SlotProposalEvent {
+  CREATE
+  DEADLINE_CHANGE
+  MANUAL_RESCHEDULE
+}
+
+enum SchedulingModel {
+  HEURISTIC
+  LINUCB
+}
+
+enum SlotProposalFeedback {
+  LIKE
+  DISLIKE
+}
+
+// A/B experiment record for the heuristic-vs-model scheduling comparison
+// (`docs/scheduler/ab-testing.md`). Columns only for now — nothing writes this
+// table yet; the ExperimentService / randomizer / pairwise + feedback UI are a
+// later phase.
+model SlotProposal {
+  id                String            @id @default(uuid())
+  experimentId      String
+  event             SlotProposalEvent
+  primaryPolicy     SchedulingModel // the randomized 50/50 assignment for this event
+  randomizationSeed String
+  observationCount  Int               @default(0) // user's reward-event count at proposal time → stable cold-start buckets
+
+  heuristicProposal Json // proposed schedule / day-repack diffs
+  modelProposal     Json? // model proposal — null until the model is wired
+  modelVersion      String?
+  proposedStartTime DateTime? // primary policy's concrete pick for this session
+  appliedStartTime  DateTime?
+
+  // The length-`d` LinUCB context vector for the selected day and the arm
+  // behind the chosen slot, kept so a delayed MOVE / RETAINED reward can call
+  // `/update` for the right arm (`docs/adr/0001-linucb-model-design.md` §9).
+  // Empty / null when the primary policy was the heuristic.
+  featureVector Float[]        @default([])
+  selectedArm   SchedulingArm?
+
+  sessionEvents SessionEvent[]
+
+  firstModifiedAt            DateTime? // outcome signals (denormalized, maintained by a later phase)
+  firstModificationType      SessionEventType?
+  acceptedWithoutModification Boolean?
+
+  pairwiseShown     Boolean          @default(false) // pairwise comparison (later)
+  pairwisePositions Json?
+  chosenByUser      SchedulingModel?
+
+  feedback   SlotProposalFeedback? // explicit 👍/👎 (later)
+  feedbackAt DateTime?
+
+  timestamp DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  sessionId String?
+  session   Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, timestamp])
+  @@index([experimentId])
+}
+
 enum SessionEventType {
   CREATE
-  MOVE
-  RESIZE
-  KEEP
-  COMPLETE
-  ABANDON
-  RESCHEDULED
+  MOVE // user drag or resize of a scheduled TASK (negative signal)
+  RETAINED // session elapsed without ever being moved (positive signal)
 }
 
 model SessionEvent {
-  id          BigInt        @id @default(autoincrement())
-  eventType   SessionEventType
-  oldSnapshot Json? // { scheduledStartTime, durationMinutes }; null on CREATE
-  newSnapshot Json
-  rewardScore Float         @default(1.0) // Phase-3 signal
-  occurredAt  DateTime      @default(now())
+  id                  BigInt           @id @default(autoincrement())
+  eventType           SessionEventType
+  oldSnapshot         Json? // { scheduledStartTime, durationMinutes, tags[], type }; null on CREATE/RETAINED
+  newSnapshot         Json
+  rewardScore         Float            @default(0.0) // CREATE 0 · MOVE -1 · RETAINED +1
+  dragDistanceMinutes Int? // signed (new − old start); null unless MOVE — for graded reward later
+  policy              SchedulingModel? // attribution once a model is live
+  // The `SessionSeries.id` shared by the N sittings placed in one
+  // `sessionCount > 1` create call — groups their CREATE events so the batch
+  // can be reverted (delete the series) as one action. Null for a single-sitting
+  // create. Plain scalar, not a relation: it must survive the series' deletion.
+  seriesId            String?
+  occurredAt          DateTime         @default(now())
 
-  sessionId String
-  session   Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  // Nullable + SetNull so RETAINED / observation-count history survives a
+  // session deletion (needed for cold-start bucketing).
+  sessionId String?
+  session   Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  // The LinUCB SlotProposal this MOVE / RETAINED delivered a delayed reward
+  // for, if any (`docs/adr/0001-linucb-model-design.md` §9).
+  slotProposalId String?
+  slotProposal   SlotProposal? @relation(fields: [slotProposalId], references: [id], onDelete: SetNull)
 
   userId String // denormalized for partition/range queries
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, occurredAt(sort: Desc)])
   @@index([sessionId])
+  @@index([slotProposalId])
+  @@index([seriesId])
 }
 
 model File {
@@ -231,31 +348,6 @@ model File {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
-}
-
-enum SlotProposalEvent {
-  CREATE
-  RESCHEDULE
-}
-
-enum SchedulingModel {
-  HEURISTIC
-  LINUCB
-}
-
-model SlotProposal {
-  id                String            @id @default(uuid())
-  event             SlotProposalEvent
-  pickedModel       SchedulingModel
-  heuristicProposal Json
-  linucbProposal    Json
-  timestamp         DateTime          @default(now())
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  sessionId String
-  session   Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 }
 
 enum IntegrationProvider {
@@ -295,9 +387,7 @@ enum NotificationTopic {
   EXAM
   TIMETABLE
   REMINDER
-  OVERDUE
 }
-
 
 model Notification {
   id            String            @id @default(uuid())
@@ -312,7 +402,7 @@ model Notification {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   sessionId String?
-  session   Session?   @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  session   Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
 
   @@index([userId, sentAt(sort: Desc)])
 }

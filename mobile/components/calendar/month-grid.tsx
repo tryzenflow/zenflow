@@ -1,15 +1,19 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
-import { dateKey, isWeekendColumn } from "@/lib/month-date-math";
+import { dateKey } from "@/lib/month-date-math";
 import { cn } from "@/lib/utils";
 import type { Session } from "@zenflow/shared";
 import { isSameDay } from "date-fns";
-import { forwardRef } from "react";
+import { forwardRef, memo } from "react";
 import { View } from "react-native";
 import { CELL_HEIGHT, MonthCell } from "./month-cell";
 
 // Monday-first — matches `WEEK_STARTS_ON` in `@/lib/month-date-math`.
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+/** Stable empty task list for days with nothing scheduled — a fresh `[]` per
+ * cell each render would defeat `MonthCell`'s `React.memo`. */
+const NO_TASKS: Session[] = [];
 
 /** Splits the flat grid-day list into rows of 7. `getMonthGridDays` always
  * returns whole Monday-first weeks, so every chunk is exactly 7 long. */
@@ -25,18 +29,11 @@ interface MonthGridProps {
   today: Date;
   tasksByDate: Map<string, Session[]>;
   highlightedKey: string | null;
+  /** Day key to briefly pulse right after a drag drop lands on it. */
+  justDroppedKey: string | null;
   draggingSessionId: string | null;
   onPressDay: (day: Date, tasks: Session[]) => void;
   onPressOverflow: (day: Date, tasks: Session[]) => void;
-  onPillDragStart: (
-    task: Session,
-    day: Date,
-    absoluteX: number,
-    absoluteY: number,
-  ) => void;
-  onPillDragUpdate: (absoluteX: number, absoluteY: number) => void;
-  onPillDragEnd: (absoluteX: number, absoluteY: number) => void;
-  onPillDragCancel: () => void;
   onGridLayout: () => void;
 }
 
@@ -47,81 +44,81 @@ interface MonthGridProps {
  * page is always sized to its own row count by the parent
  * (`month-page.tsx`), and pagination between months happens one level up via
  * the outer horizontal pager, not by scrolling this grid.
+ *
+ * `React.memo`'d: an in-month pill drag pushes `highlightedKey` on `MonthPage`
+ * once per crossed cell, re-rendering it — without this the whole 35–42-cell
+ * grid re-rendered each time. Props are the memoised `days` / `tasksByDate` /
+ * `today` from `MonthPage` plus primitives and stable callbacks.
  */
-export const MonthGrid = forwardRef<View, MonthGridProps>(function MonthGrid(
-  {
-    monthDate,
-    days,
-    today,
-    tasksByDate,
-    highlightedKey,
-    draggingSessionId,
-    onPressDay,
-    onPressOverflow,
-    onPillDragStart,
-    onPillDragUpdate,
-    onPillDragEnd,
-    onPillDragCancel,
-    onGridLayout,
-  },
-  ref,
-) {
-  return (
-    <View className="flex-1 px-3 pb-3.5 pt-2">
-      <View className="flex-row">
-        {WEEKDAY_LABELS.map((label) => (
-          <Text
-            key={label}
-            className="flex-1 py-2 text-center text-[10.5px] font-bold uppercase text-muted-foreground"
-          >
-            {label}
-          </Text>
-        ))}
-      </View>
+export const MonthGrid = memo(
+  forwardRef<View, MonthGridProps>(function MonthGrid(
+    {
+      monthDate,
+      days,
+      today,
+      tasksByDate,
+      highlightedKey,
+      justDroppedKey,
+      draggingSessionId,
+      onPressDay,
+      onPressOverflow,
+      onGridLayout,
+    },
+    ref,
+  ) {
+    return (
+      <View className="flex-1 px-3 pb-3.5 pt-2">
+        <View className="flex-row">
+          {WEEKDAY_LABELS.map((label) => (
+            <Text
+              key={label}
+              className="flex-1 py-2 text-center text-[10.5px] font-bold uppercase text-muted-foreground"
+            >
+              {label}
+            </Text>
+          ))}
+        </View>
 
-      <View
-        ref={ref}
-        onLayout={onGridLayout}
-        className="overflow-hidden rounded-xl border-l border-t border-border"
-      >
-        {/* Plain rows of `View`s, NOT a `FlatList numColumns={7}`. This grid
-            never scrolls (`MonthPage` sizes each page to its own row count)
-            and always renders all 35–42 cells, so virtualization bought
-            nothing — while nesting a `FlatList` inside `MonthPager`'s
-            horizontal `FlatList` is a nested VirtualizedList, which RN warns
-            about and which corrupts Android's view recycling when the screen
-            is detached (switching tabs): "addViewAt: failed to insert view
-            […] the specified child already has a parent". Same structure the
-            skeleton below already used. */}
-        {chunkIntoWeeks(days).map((week) => (
-          <View key={dateKey(week[0])} className="flex-row">
-            {week.map((day, col) => {
-              const key = dateKey(day);
-              return (
-                <MonthCell
-                  key={key}
-                  day={day}
-                  monthDate={monthDate}
-                  tasks={tasksByDate.get(key) ?? []}
-                  isToday={isSameDay(day, today)}
-                  isWeekend={isWeekendColumn(col)}
-                  isDropTarget={highlightedKey === key}
-                  draggingSessionId={draggingSessionId}
-                  onPressDay={onPressDay}
-                  onPressOverflow={onPressOverflow}
-                  onPillDragStart={onPillDragStart}
-                  onPillDragUpdate={onPillDragUpdate}
-                  onPillDragEnd={onPillDragEnd}
-                  onPillDragCancel={onPillDragCancel}
-                />
-              );
-            })}
-          </View>
-        ))}
+        <View
+          ref={ref}
+          onLayout={onGridLayout}
+          className="overflow-hidden rounded-xl border-l border-t border-border"
+        >
+          {/* Plain rows of `View`s, NOT a `FlatList numColumns={7}`. This grid
+              never scrolls (`MonthPage` sizes each page to its own row count)
+              and always renders all 35–42 cells, so virtualization bought
+              nothing — while nesting a `FlatList` inside `MonthPager`'s
+              horizontal `FlatList` is a nested VirtualizedList, which RN warns
+              about and which corrupts Android's view recycling when the screen
+              is detached (switching tabs): "addViewAt: failed to insert view
+              […] the specified child already has a parent". Same structure the
+              skeleton below already used. */}
+          {chunkIntoWeeks(days).map((week) => (
+            <View key={dateKey(week[0])} className="flex-row">
+              {week.map((day) => {
+                const key = dateKey(day);
+                return (
+                  <MonthCell
+                    key={key}
+                    day={day}
+                    monthDate={monthDate}
+                    tasks={tasksByDate.get(key) ?? NO_TASKS}
+                    isToday={isSameDay(day, today)}
+                    isDropTarget={highlightedKey === key}
+                    isJustDropped={justDroppedKey === key}
+                    draggingSessionId={draggingSessionId}
+                    onPressDay={onPressDay}
+                    onPressOverflow={onPressOverflow}
+                  />
+                );
+              })}
+            </View>
+          ))}
+        </View>
       </View>
-    </View>
-  );
-});
+    );
+  }),
+);
 
 const SKELETON_ROWS = 4;
 
@@ -179,10 +176,7 @@ export function MonthGridSkeleton() {
                 // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton cell, never reordered
                 key={`skeleton-cell-${row}-${col}`}
                 style={{ height: CELL_HEIGHT }}
-                className={cn(
-                  "flex-1 gap-[3px] overflow-hidden border-b border-r border-border p-[5px] pb-[3px]",
-                  isWeekendColumn(col) && "bg-muted/45",
-                )}
+                className="flex-1 gap-[3px] overflow-hidden border-b border-r border-border p-[5px] pb-[3px]"
               >
                 <Skeleton className="h-[14px] w-[18px] rounded" />
                 <Skeleton

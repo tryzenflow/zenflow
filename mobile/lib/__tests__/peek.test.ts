@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
 import type { DaySegment } from "@zenflow/shared";
+import { describe, expect, it } from "vitest";
 import { DAY_MINUTES, peekBlocksFromSegments } from "../peek";
 
 const TZ = "UTC";
@@ -18,7 +18,7 @@ function seg(
     title: `Task ${taskId}`,
     start: startISO,
     end: endISO,
-    status: "PENDING",
+    type: "TASK",
     tags: [],
     state,
     segmentId: taskId,
@@ -51,30 +51,27 @@ describe("peekBlocksFromSegments", () => {
   it("clamps a cross-midnight tail to the day start", () => {
     const blocks = peekBlocksFromSegments(
       [
-        seg(
-          "t1",
-          "2026-08-12T23:45:00Z",
-          "2026-08-13T00:15:00Z",
-          "fluid",
-          { segmentId: "t1::tail", continued: true },
-        ),
+        seg("t1", "2026-08-12T23:45:00Z", "2026-08-13T00:15:00Z", "fluid", {
+          segmentId: "t1::tail",
+          continued: true,
+        }),
       ],
       DAY,
       TZ,
     );
-    expect(blocks[0]).toMatchObject({ key: "t1::tail", startMin: 0, durationMin: 15 });
+    expect(blocks[0]).toMatchObject({
+      key: "t1::tail",
+      startMin: 0,
+      durationMin: 15,
+    });
   });
 
   it("caps a continuing head to the rest of the day", () => {
     const blocks = peekBlocksFromSegments(
       [
-        seg(
-          "t1",
-          "2026-08-13T23:30:00Z",
-          "2026-08-14T00:30:00Z",
-          "fluid",
-          { continues: true },
-        ),
+        seg("t1", "2026-08-13T23:30:00Z", "2026-08-14T00:30:00Z", "fluid", {
+          continues: true,
+        }),
       ],
       DAY,
       TZ,
@@ -95,18 +92,18 @@ describe("peekBlocksFromSegments", () => {
     const blocks = peekBlocksFromSegments(
       [
         seg("t1", "2026-08-13T09:00:00Z", "2026-08-13T10:00:00Z", "fluid"),
-        seg("t2", "2026-08-13T11:00:00Z", "2026-08-13T12:00:00Z", "overdue"),
+        seg("t2", "2026-08-13T11:00:00Z", "2026-08-13T12:00:00Z", "exam"),
         seg("t3", "2026-08-13T13:00:00Z", "2026-08-13T14:00:00Z", "conflict"),
-        seg("t4", "2026-08-13T15:00:00Z", "2026-08-13T16:00:00Z", "completed"),
+        seg("t4", "2026-08-13T15:00:00Z", "2026-08-13T16:00:00Z", "dnd"),
       ],
       DAY,
       TZ,
     );
     expect(blocks.map((b) => b.state)).toEqual([
       "fluid",
-      "overdue",
+      "exam",
       "conflict",
-      "completed",
+      "dnd",
     ]);
   });
 

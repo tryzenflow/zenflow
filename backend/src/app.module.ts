@@ -88,6 +88,11 @@ import { IntegrationsModule } from "./integrations/integrations.module";
           .default(600), // 10 min
         OTP_VERIFY_EMAIL_LIMIT: Joi.number().integer().positive().default(10),
         PORTAL_API_KEY: Joi.string().required(),
+        // Base URL of the stateless Python bandit service
+        // (services/bandit/, docs/adr/0001-linucb-model-design.md). Optional:
+        // when unset, LinUCB scheduling is disabled and every event falls back
+        // to the heuristic.
+        BANDIT_SERVICE_URL: Joi.string().uri().optional(),
       }),
     }),
     ScheduleModule.forRoot(),
@@ -116,10 +121,10 @@ import { IntegrationsModule } from "./integrations/integrations.module";
     CryptoModule,
     TagsModule,
     FilesModule,
-    // Background cron providers (MatrixDecayService, AbandonedSessionsService)
-    // plus DayRescheduleService, the implicit single-day repack triggered by
-    // SessionsService on create/deadline-edit. The old manual Optimize
-    // controller (+ undo) was removed; see scheduler.module.ts.
+    // Background cron providers (MatrixDecayService, RetainedSessionsService)
+    // plus HeuristicScheduleService / BanditScheduleService, the single-session
+    // placers SessionsService calls on create / deadline-edit. No day repack —
+    // an existing session is never moved; see scheduler.module.ts.
     SchedulerModule,
     IntegrationsModule,
   ],

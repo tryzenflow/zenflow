@@ -1,7 +1,7 @@
 [project]
 name = "bandit"
 version = "0.1.0"
-description = "Contextual bandit (LinUCB) service for Zenflow's scheduler — Phase 3"
+description = "Contextual bandit (LinUCB) service for Zenflow's scheduler"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -12,6 +12,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28",
     "mypy>=1.13",
     "pytest>=8.3",
     "ruff>=0.8",

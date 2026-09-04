@@ -9,25 +9,20 @@ import { View } from "react-native";
 import { DeadlineChipRow } from "./form/deadline-chip-row";
 import { DescriptionField } from "./form/description-field";
 import { DurationStepper } from "./form/duration-stepper";
+import { FixedTimeField } from "./form/fixed-time-field";
+import { RecurrenceField } from "./form/recurrence-field";
 import { TagAutocomplete } from "./form/tag-autocomplete";
 
 /**
- * The five task-sheet fields, in the mockup's order — Title → Duration →
- * Deadline → Tags → Description — shared by `CreateSessionSheet` and
- * `EditSessionSheet` so the two never drift on field order/validation wiring.
+ * Session-form fields, branched by `type` (watched from the form):
  *
- * Unlike the web `SessionForm` (`frontend/src/components/tasks/form/task-form.tsx`),
- * which hides Duration entirely in edit mode (the web only changes duration
- * by dragging the block's resize handle on the calendar), the mobile mockup
- * (`mockups/task-sheets.html`'s "Edit · populated" frame) keeps the
- * duration stepper visible and editable in the edit screen — mobile has no
- * drag-resize handles (too small for touch), so the edit screen's stepper is
- * the only way to change duration (a separate long-press
- * `ChangeDurationSheet` quick action used to exist alongside it but was
- * removed as redundant — see git history if reviving that gesture is ever
- * reconsidered). `EditSessionSheet` is responsible for turning a duration
- * change here into a `PATCH /tasks/:id/resize` call (see its `onSubmit`),
- * since `UpdateSessionInput` has no `durationMinutes` field.
+ * - **TASK** — Duration stepper (create only — an existing task is resized
+ *   from the calendar's "Move to…" sheet) + Deadline chip row.
+ * - **ASSIGNMENT / EXAM / LECTURE** — a fixed date + start/end time.
+ * - **DND** — the same fixed-time picker plus a recurrence builder.
+ *
+ * Title / Description / Tags render for every type. `typeSelector`, when given
+ * (create screen only), renders directly beneath the Title field.
  */
 export function SessionSheetFields({
   initialValue = "",
@@ -35,13 +30,25 @@ export function SessionSheetFields({
   disabled,
   tz,
   editing,
+  typeSelector,
+  deadlineWarning,
 }: {
   initialValue?: string;
   form: UseFormReturn<SessionFormValues>;
   disabled?: boolean;
   tz: string;
   editing?: boolean;
+  typeSelector?: ReactNode;
+  /** Shown (red) under the Deadline field — e.g. the picked deadline is
+   * earlier than where this TASK is already scheduled. */
+  deadlineWarning?: string;
 }) {
+  const type = form.watch("type");
+  const isTask = type === "TASK";
+  // Every fixed type can recur — a weekly lecture, a nightly DND block, a
+  // recurring lab. Only the flexible TASK has no "Repeat".
+  const canRepeat = type !== "TASK";
+
   return (
     <View className="gap-[18px]">
       <Controller
@@ -59,10 +66,6 @@ export function SessionSheetFields({
                 placeholder="What needs doing?"
                 className="h-[50px] rounded-xl border border-input bg-card px-4 text-base text-foreground"
               />
-              {/* Live character counter — validation itself only fires per
-                  the form's RHF mode (submit/blur), so this gives proactive
-                  feedback as the user types, matching the 60-character limit
-                  the shared `taskSchema` `.max()` enforces. */}
               <Text
                 className={cn(
                   "mt-1.5 self-end text-[11px] font-medium text-muted-foreground",
@@ -76,29 +79,13 @@ export function SessionSheetFields({
         }}
       />
 
-      {/*
-        Diagnostic re-order: was last (after Duration/Deadline/Tags) — moved
-        right after Title to test whether the keyboard-occlusion issue
-        reported against the WYSIWYG editor is about its depth in the
-        surrounding `ScrollView` (a field this far down needs more scroll-
-        into-view distance to clear the keyboard) or something inherent to
-        the WebView/keyboard interaction. Verified on-device: the editor no
-        longer needs to fight nearly as much scroll distance to clear the
-        keyboard when focused, and Title → Description → Duration →
-        Deadline → Tags still reads fine visually, so this re-order is being
-        kept (not just a temporary diagnostic swap) — see
-        `mobile/README.md` for the up-to-date field order if this changes
-        again.
-      */}
+      {typeSelector}
+
       <Controller
         control={form.control}
         name="note"
         render={({ field }) => (
           <Field label="Description">
-            {/* Contains a WebView-mount crash (missing native module — see
-                `ErrorBoundary`'s doc comment) to this field instead of
-                letting it take the whole sheet, and every sibling sheet on
-                this screen, down with it. */}
             <ErrorBoundary fallbackMessage="The description editor couldn't load. Everything else on this form still works.">
               <DescriptionField
                 initialValue={initialValue}
@@ -110,35 +97,85 @@ export function SessionSheetFields({
         )}
       />
 
-      <Controller
-        control={form.control}
-        name="duration"
-        render={({ field, fieldState }) => (
-          <Field label="Duration" error={fieldState.error?.message}>
-            <DurationStepper
-              value={field.value}
-              onChange={field.onChange}
-              disabled={disabled}
+      {isTask ? (
+        <>
+          {!editing && (
+            <Controller
+              control={form.control}
+              name="duration"
+              render={({ field, fieldState }) => (
+                <Field label="Duration" error={fieldState.error?.message}>
+                  <DurationStepper
+                    value={field.value ?? 60}
+                    onChange={field.onChange}
+                    disabled={disabled}
+                  />
+                </Field>
+              )}
             />
-          </Field>
-        )}
-      />
+          )}
 
-      <Controller
-        control={form.control}
-        name="deadline"
-        render={({ field, fieldState }) => (
-          <Field label="Deadline" error={fieldState.error?.message}>
-            <DeadlineChipRow
-              value={field.value}
-              onChange={field.onChange}
-              disabled={disabled}
-              editing={editing}
-              tz={tz}
-            />
-          </Field>
-        )}
-      />
+          <Controller
+            control={form.control}
+            name="deadline"
+            render={({ field, fieldState }) => (
+              <Field label="Deadline" error={fieldState.error?.message}>
+                <DeadlineChipRow
+                  value={field.value ?? ""}
+                  onChange={field.onChange}
+                  disabled={disabled}
+                  editing={editing}
+                  tz={tz}
+                  warning={deadlineWarning}
+                />
+              </Field>
+            )}
+          />
+        </>
+      ) : (
+        <Field
+          label="When"
+          error={
+            form.formState.errors.date?.message ??
+            form.formState.errors.startTime?.message ??
+            form.formState.errors.endTime?.message
+          }
+        >
+          <FixedTimeField
+            date={form.watch("date")}
+            startTime={form.watch("startTime")}
+            endTime={form.watch("endTime")}
+            onChangeDate={(v) =>
+              form.setValue("date", v, { shouldValidate: true })
+            }
+            onChangeStart={(v) =>
+              form.setValue("startTime", v, { shouldValidate: true })
+            }
+            onChangeEnd={(v) =>
+              form.setValue("endTime", v, { shouldValidate: true })
+            }
+            tz={tz}
+            disabled={disabled}
+          />
+        </Field>
+      )}
+
+      {canRepeat && (
+        <Field label="Repeat">
+          <Controller
+            control={form.control}
+            name="rrule"
+            render={({ field }) => (
+              <RecurrenceField
+                value={field.value}
+                onChange={field.onChange}
+                tz={tz}
+                disabled={disabled}
+              />
+            )}
+          />
+        </Field>
+      )}
 
       <Controller
         control={form.control}

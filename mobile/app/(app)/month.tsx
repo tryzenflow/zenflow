@@ -1,10 +1,14 @@
+import { updateSession } from "@/api/tasks";
 import { ChevronLeft, ChevronRight } from "@/components/Icons";
 import {
   type MonthDragHandle,
   MonthPage,
 } from "@/components/calendar/month-page";
 import { MonthPager } from "@/components/calendar/month-pager";
-import { OverdueBadge } from "@/components/calendar/overdue-badge";
+import {
+  RescheduleSheet,
+  type RescheduleSheetHandle,
+} from "@/components/calendar/reschedule-sheet";
 import {
   SessionListSheet,
   type SessionListSheetHandle,
@@ -44,7 +48,6 @@ export default function MonthScreen() {
   const [monthDate, setMonthDate] = useState(() => zonedNow(tz));
   const [visibleMonth, setVisibleMonth] = useState(monthDate);
   const [dragActive, setDragActive] = useState(false);
-  const [overdueCount, setOverdueCount] = useState(0);
   // Bumped whenever the currently-focused page's data should be refetched —
   // returning from `/task/[id]/edit` (via `useFocusEffect`, same pattern as
   // Day View).
@@ -53,6 +56,7 @@ export default function MonthScreen() {
   const tabBarOverlay = useTabBarOverlayHeight();
 
   const taskListSheetRef = useRef<SessionListSheetHandle>(null);
+  const rescheduleSheetRef = useRef<RescheduleSheetHandle>(null);
 
   function goToMonth(next: Date) {
     setMonthDate(next);
@@ -77,8 +81,29 @@ export default function MonthScreen() {
   }
 
   function openSessionFromSheet(task: Session) {
-    router.push(`/task/${task.id}/edit` as Href);
+    // A recurring occurrence's id is "<seriesId>::<startISO>" — encode it so
+    // the `::` / `:` survive the route path (Expo Router decodes the param).
+    router.push(`/task/${encodeURIComponent(task.id)}/edit` as Href);
   }
+
+  // Day sheet's per-row "Move" button → the "Move to…" sheet, stacked on top.
+  function openReschedule(task: Session) {
+    rescheduleSheetRef.current?.open(task);
+  }
+
+  // Confirm: one `PATCH /sessions/:id`, then refetch the visible month and drop
+  // the (now stale) day sheet.
+  const handleRescheduleConfirm = useCallback(
+    async (id: string, startISO: string, durationMinutes: number) => {
+      await updateSession(id, {
+        scheduledStartTime: startISO,
+        durationMinutes,
+      });
+      setReloadToken((n) => n + 1);
+      taskListSheetRef.current?.close();
+    },
+    [],
+  );
 
   return (
     <View className="flex-1 bg-background">
@@ -107,7 +132,6 @@ export default function MonthScreen() {
             </Pressable>
           </View>
         </View>
-        <OverdueBadge count={overdueCount} />
       </View>
 
       {/* The grid's rows are a fixed `CELL_HEIGHT`, so anything the tab bar
@@ -134,9 +158,10 @@ export default function MonthScreen() {
               // not `Date.now()` — but the gating here is still correct on
               // its own terms: a stale/off-screen page's error isn't user-
               // relevant.)
-              isActive={monthLabel(pageMonthDate) === monthLabel(visibleMonth)}
+              isActive={
+                monthLabel(pageMonthDate) === monthLabel(visibleMonth)
+              }
               onDragActiveChange={setDragActive}
-              onOverdueCountChange={setOverdueCount}
               onOpenDay={openDay}
               onOpenOverflow={openDay}
             />
@@ -148,6 +173,13 @@ export default function MonthScreen() {
         ref={taskListSheetRef}
         tz={tz}
         onSelectSession={openSessionFromSheet}
+        onReschedule={openReschedule}
+      />
+
+      <RescheduleSheet
+        ref={rescheduleSheetRef}
+        tz={tz}
+        onConfirm={handleRescheduleConfirm}
       />
 
       <CreateSessionFab tz={tz} />

@@ -70,6 +70,7 @@ export function InlineDateField({
   disabled,
   minDate,
   maxDate,
+  unboundedFuture,
 }: {
   value: Date | undefined;
   onChange: (date: Date) => void;
@@ -81,6 +82,10 @@ export function InlineDateField({
   minDate?: Date;
   /** Latest selectable date, inclusive. Defaults to `minDate + DAYS_AHEAD - 1`. */
   maxDate?: Date;
+  /** Drop the default `DAYS_AHEAD` forward cap entirely, so any future date is
+   * selectable (fixed sessions — a class/exam can be months out). Ignored when
+   * an explicit `maxDate` is given. */
+  unboundedFuture?: boolean;
 }) {
   const { minimumDate, maximumDate } = useMemo(() => {
     const today = dayStart(zonedNow(tz));
@@ -88,9 +93,11 @@ export function InlineDateField({
       minDate && dayStart(minDate) > today ? dayStart(minDate) : today;
     const ceiling = maxDate
       ? dayStart(maxDate)
-      : addDays(floor, DAYS_AHEAD - 1);
+      : unboundedFuture
+        ? undefined
+        : addDays(floor, DAYS_AHEAD - 1);
     return { minimumDate: floor, maximumDate: ceiling };
-  }, [tz, minDate, maxDate]);
+  }, [tz, minDate, maxDate, unboundedFuture]);
 
   // Falls back to `minimumDate` (today in `tz`, or `minDate`) when nothing is
   // selected yet, so the native picker always opens somewhere in range.

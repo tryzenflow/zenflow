@@ -3,6 +3,7 @@ import type {
   CreateSessionResponse,
   DeadlineOptionsResponse,
   RemoveSessionResponse,
+  RemoveSessionSeriesResponse,
   Session,
   SessionDetailResponse,
   SessionsListResponse,
@@ -60,28 +61,59 @@ export async function getDeadlineOptions(
 }
 
 /**
- * One generic update endpoint covers metadata edits, drag-reschedule,
- * resize, and complete (`{ status: "DONE" }`) — there is no auto-placement
- * engine to recompute a cascade, so every field is a plain diff.
+ * One generic update endpoint covers metadata edits, drag-reschedule, and
+ * resize. A change to a scheduled TASK's start/duration is recorded server-
+ * side as a `MOVE` signal; there is no completion state. Every field is a
+ * plain diff.
  */
 export async function updateSession(
   id: string,
   input: UpdateSessionInput,
 ): Promise<UpdateSessionResponse> {
-  const { data } = await api.patch(`/sessions/${id}`, input);
+  const { data } = await api.patch(
+    `/sessions/${encodeURIComponent(id)}`,
+    input,
+  );
   return data.data;
 }
 
 export async function getSessionDetails(
   id: string,
 ): Promise<SessionDetailResponse> {
-  const { data } = await api.get(`/sessions/${id}`);
+  const { data } = await api.get(`/sessions/${encodeURIComponent(id)}`);
   return data.data;
 }
 
+/**
+ * Delete a session. For a recurring occurrence pass its `"<seriesId>::<start>"`
+ * id — the backend excludes just that date (the rest of the series stays).
+ */
 export async function removeSession(
   id: string,
 ): Promise<RemoveSessionResponse> {
-  const { data } = await api.delete(`/sessions/${id}`);
+  const { data } = await api.delete(`/sessions/${encodeURIComponent(id)}`);
+  return data.data;
+}
+
+/** Delete a whole recurring series (every occurrence + the series row). */
+export async function removeSessionSeries(
+  seriesId: string,
+): Promise<RemoveSessionSeriesResponse> {
+  const { data } = await api.delete(`/sessions/series/${seriesId}`);
+  return data.data;
+}
+
+/**
+ * "Delete this occurrence and every one after it" — the backend pulls the
+ * series' RRULE `UNTIL` back to just before `fromStartISO` (or deletes the
+ * whole series if that's on/before the first occurrence).
+ */
+export async function truncateSessionSeries(
+  seriesId: string,
+  fromStartISO: string,
+): Promise<RemoveSessionSeriesResponse> {
+  const { data } = await api.delete(`/sessions/series/${seriesId}/truncate`, {
+    params: { from: fromStartISO },
+  });
   return data.data;
 }

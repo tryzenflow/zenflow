@@ -5,5 +5,4 @@ export * from "./view";
 export * from "./api";
 export * from "./integration";
 export * from "./schedule";
-export * from "./optimize";
-export * from "./day-reschedule";
+export * from "./bandit";

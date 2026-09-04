@@ -77,17 +77,10 @@ function requestResize(
   );
 }
 
-/** Notify the layout to mark this block's task complete (double-click/tap). */
-function requestComplete(taskId: string) {
-  window.dispatchEvent(
-    new CustomEvent("zenflow:complete-task", { detail: { taskId } }),
-  );
-}
-
 // Touch: how far a finger may drift before a press counts as a drag, not a tap.
 const TAP_MOVE_TOLERANCE = 8;
-// Delay before a single click opens the popover, so a double-click (which
-// completes the task) can cancel it first instead of flashing the popover open.
+// Delay before a single click opens the popover, so a double-click can cancel
+// it first instead of flashing the popover open.
 const SINGLE_CLICK_DELAY_MS = 220;
 
 export function ScheduledBlockItem({
@@ -115,11 +108,8 @@ export function ScheduledBlockItem({
   // Tail segments (continued: true) start at the clamped day boundary (00:00),
   // so their top-edge has no meaningful on-grid meaning — they stay click-only
   // and the underlying task is editable via the detail panel.
-  // Completed tasks are also non-interactive — the scheduler only tracks PENDING
-  // ones, so a drag would 404 with "Cannot find task".
-  const isCompleted = block.status === "DONE";
   const isSplit = Boolean(block.continued);
-  const isInteractive = !isCompleted && !isSplit;
+  const isInteractive = !isSplit;
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
       id: block.segmentId,
@@ -281,7 +271,7 @@ export function ScheduledBlockItem({
   // Tags need vertical room; on a short block they'd crowd out the title/time.
   const showTags = dispDuration > TAGS_MIN_DURATION && block.tags.length > 0;
 
-  // Click (no drag) opens a detail popover; double-click completes the task.
+  // Click (no drag) opens a detail popover.
   const [popoverOpen, setPopoverOpen] = useState(false);
 
   // Pointer-drift tracking so a drag/resize gesture isn't mistaken for a tap.
@@ -330,14 +320,6 @@ export function ScheduledBlockItem({
     }, SINGLE_CLICK_DELAY_MS);
   };
 
-  const handleDoubleClick = () => {
-    // Cancel the pending single-click and keep the popover closed.
-    clearPendingClick();
-    setPopoverOpen(false);
-    if (isCompleted) return; // don't re-complete a DONE block
-    requestComplete(block.taskId);
-  };
-
   const state = withOverlap(block.state, layout.conflict);
   const width = 100 / layout.columns;
 
@@ -365,13 +347,10 @@ export function ScheduledBlockItem({
           onPointerUp={endPress}
           onPointerCancel={endPress}
           onClick={handleClick}
-          onDoubleClick={handleDoubleClick}
           title={
             isSplit
               ? "Crosses midnight · click for details"
-              : isCompleted
-                ? "Completed · click for details"
-                : "Drag to reschedule · click for details · double-click to complete"
+              : "Drag to reschedule · click for details"
           }
           style={{
             top: `${(dispStart / DAILY_HORIZON) * 100}%`,
@@ -467,12 +446,7 @@ export function ScheduledBlockItem({
                   {block.continued && (
                     <CornerDownRight className="h-3 w-3 shrink-0 text-muted-foreground" />
                   )}
-                  <span
-                    className={cn(
-                      "truncate text-[10px] font-semibold leading-none",
-                      state === "completed" && "line-through",
-                    )}
-                  >
+                  <span className="truncate text-[10px] font-semibold leading-none">
                     {block.title}
                   </span>
                 </div>
@@ -488,12 +462,7 @@ export function ScheduledBlockItem({
                   {block.continued && (
                     <CornerDownRight className="h-3 w-3 shrink-0 text-muted-foreground" />
                   )}
-                  <span
-                    className={cn(
-                      "truncate text-xs font-semibold",
-                      state === "completed" && "line-through",
-                    )}
-                  >
+                  <span className="truncate text-xs font-semibold">
                     {block.title}
                   </span>
                 </div>
@@ -539,12 +508,7 @@ export function ScheduledBlockItem({
               )}
               aria-hidden
             />
-            <h3
-              className={cn(
-                "min-w-0 flex-1 text-sm font-semibold leading-snug",
-                state === "completed" && "line-through",
-              )}
-            >
+            <h3 className="min-w-0 flex-1 text-sm font-semibold leading-snug">
               {block.title}
             </h3>
           </div>
@@ -566,12 +530,6 @@ export function ScheduledBlockItem({
                       60_000,
                   ),
                 )}
-              </dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-muted-foreground">Status</dt>
-              <dd className="text-right capitalize">
-                {block.status.toLowerCase()}
               </dd>
             </div>
           </dl>

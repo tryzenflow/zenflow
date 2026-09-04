@@ -15,7 +15,7 @@ export function taskToBlock(task: Session): Event | null {
     title: task.title,
     start: start.toISOString(),
     end: end.toISOString(),
-    status: task.status,
+    type: task.type,
     tags: task.tags,
     state: deriveState(task),
   };

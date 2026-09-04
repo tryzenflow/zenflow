@@ -4,10 +4,13 @@ import { TimePickerInline } from "@/components/ui/time-picker";
 import { cn } from "@/lib/utils";
 import { zonedDate, zonedNow, zonedWallClockToUtc } from "@zenflow/core";
 import type { DeadlineOptionsResponse } from "@zenflow/shared";
-import { format, isSameDay } from "date-fns";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { addDays, format, isSameDay } from "date-fns";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import { InlineDateField } from "./inline-date-field";
+
+/** Custom deadlines can't be set further out than this many days from now. */
+const MAX_CUSTOM_DEADLINE_DAYS = 60;
 
 type ChipId =
   | "today"
@@ -54,6 +57,7 @@ export function DeadlineChipRow({
   disabled,
   editing,
   tz,
+  warning,
 }: {
   /** The resolved deadline, as a UTC ISO-8601 instant (or "" when unset). */
   value: string;
@@ -63,6 +67,9 @@ export function DeadlineChipRow({
    * "unset" — so the no-rush default below must not fire. */
   editing?: boolean;
   tz: string;
+  /** Shown (red) under the preview — e.g. this deadline lands before the
+   * session's already-scheduled start. */
+  warning?: string;
 }) {
   const [options, setOptions] = useState<DeadlineOptionsResponse | null>(null);
   const [chip, setChip] = useState<ChipId | null>(null);
@@ -178,6 +185,12 @@ export function DeadlineChipRow({
     ? format(zonedDate(value, tz), "EEE MMM d, h:mm a")
     : null;
 
+  // Hard cap on how far out a Custom deadline can be set (max 60 days).
+  const maxCustomDate = useMemo(
+    () => addDays(zonedNow(tz), MAX_CUSTOM_DEADLINE_DAYS),
+    [tz],
+  );
+
   return (
     <View className="gap-2">
       <View className="flex-row flex-wrap gap-1.5">
@@ -226,6 +239,7 @@ export function DeadlineChipRow({
               onChange={handleCustomDate}
               tz={tz}
               disabled={disabled}
+              maxDate={maxCustomDate}
             />
           </View>
           <View className="flex-1">
@@ -241,6 +255,12 @@ export function DeadlineChipRow({
 
       {preview && (
         <Text className="text-[11px] text-muted-foreground">Due {preview}</Text>
+      )}
+
+      {warning && (
+        <Text className="text-[11px] font-medium text-destructive">
+          {warning}
+        </Text>
       )}
     </View>
   );
