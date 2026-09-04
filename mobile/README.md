@@ -7,109 +7,57 @@ replacement for it. Part of the [Zenflow monorepo](../README.md).
 
 ## Tech stack
 
-| Concern            | Choice                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Framework          | Expo SDK 52, Expo Router (file-based, `app/`), React Native 0.76, React 18                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Styling            | Tailwind CSS **v3** via **[NativeWind](https://www.nativewind.dev) v4** — compiles `className` to native styles at build time. See [Known pitfalls](#known-pitfalls) — this is a different (and stricter) setup than the web app's Tailwind v4                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| UI primitives      | Hand-rolled shadcn/RN-Reusables-style components in `components/ui/`, backed by our own headless primitives in `components/primitives/` (no `@rn-primitives/*` package dependency), `lucide-react-native` + `phosphor-react-native` icons                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Fonts              | Geist (all weights) loaded locally from `assets/fonts/` via `expo-font` — see [Fonts](#fonts--font-weights)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| Language           | TypeScript (strict, `@/*` → repo-relative alias)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| State              | Zustand (`hooks/use-user-store.ts`, mirrors the web user store)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| Forms              | React Hook Form + Zod (`@hookform/resolvers`) — note-worthy version pin, see [Known pitfalls](#known-pitfalls). `taskSchema`/`SessionFormValues`/`placementQualifier` live in `@zenflow/core` (`packages/core/src/tasks.ts`), shared with `frontend/`'s equivalent (currently a parallel, hand-synced copy — see Phase 5 in `docs/react-native-migration.md`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| HTTP               | axios (`api/`), cookie-based session — see [Auth & session](#auth--session)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| Bottom sheets      | `@gorhom/bottom-sheet` **v5**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| Date picker        | [`@react-native-community/datetimepicker`](https://github.com/react-native-datetimepicker/datetimepicker) `8.2.0` — real native OS date picker (`components/tasks/form/inline-date-field.tsx`), Android dialog / iOS inline view behind the same pill + `BottomSheet` trigger pattern as `components/ui/time-picker.tsx`. Ships no `.web` variant (its platform-less fallback renders `null` + warns — same situation as the rich-text editor below); the web target isn't a shipping flow for this field today. **Requires a dev-client rebuild** (`expo run:android`/`expo run:ios`, or `expo prebuild` + `eas build --profile development`) — not verified on-device in this environment.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| Rich text editor   | [`@10play/tentap-editor`](https://github.com/10play/10tap-editor) `^1.0.1` — Tiptap/ProseMirror running in a `react-native-webview` WebView with a native RN bridge (the only real way to run Tiptap on RN — it has no native port). Pinned to the Tiptap-**v3**-based `1.0.x` line specifically (not the older, still-maintained `0.7.x`/Tiptap-v2 line) so its `@tiptap/*` transitive deps share a major version with `frontend/`'s own hoisted Tiptap v3 copies — `frontend/src/components/common/editor/{video,audio}-block.tsx` bare-import `@tiptap/core` relying on root hoisting (see the root `.npmrc`'s top comment), and mixing Tiptap v2 (mobile) + v3 (frontend) under one hoisted `node_modules/@tiptap/core` broke that resolution during install (confirmed empirically: installing the `0.7.x` line produced hard `unmet peer @tiptap/core@^2.7.0: found 3.26.0` conflicts). `react-native-webview` is pinned to `13.12.5`, the exact version Expo SDK 52's `bundledNativeModules.json` lists as compatible. **Adding this native module requires a dev-client rebuild** (`expo run:android`/`expo run:ios`) before it works on-device/emulator — not verified in this environment (no device/emulator available here); see `components/tasks/form/description-field.tsx`'s doc comment. |
-| Formatter / linter | [Biome](https://biomejs.dev) (not ESLint/Prettier — those are the web app's tooling). **Not currently an installed dependency anywhere in the repo** — `pnpm --filter mobile format` fails with "'biome' is not recognized" until `@biomejs/biome` is added as a devDependency; `pnpm dlx @biomejs/biome@1.5.3 check --apply .` works as a one-off in the meantime (matches the `biome.json` `$schema` version)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Concern            | Choice                                                                                                            |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| Framework          | Expo SDK 52, Expo Router (file-based, `app/`), React Native 0.76, React 18                                        |
+| Styling            | Tailwind CSS **v3** via **[NativeWind](https://www.nativewind.dev) v4**                                           |
+| UI primitives      | Hand-rolled shadcn/RN-Reusables-style components in `components/ui/`                                              |
+| Fonts              | Geist (all weights) loaded locally from `assets/fonts/` via `expo-font` — see [Fonts](#fonts--font-weights)       |
+| Language           | TypeScript (strict, `@/*` → repo-relative alias)                                                                  |
+| State              | Zustand (`hooks/use-user-store.ts`, mirrors the web user store)                                                   |
+| Forms              | React Hook Form + Zod (`@hookform/resolvers`)                                                                     |
+| HTTP               | axios (`api/`), cookie-based session — see [Auth & session](#auth--session)                                       |
+| Bottom sheets      | `@gorhom/bottom-sheet` **v5**                                                                                     |
+| Date picker        | [`@react-native-community/datetimepicker`](https://github.com/react-native-datetimepicker/datetimepicker) `8.2.0` |
+| Rich text editor   | [`@10play/tentap-editor`](https://github.com/10play/10tap-editor) `^1.0.1`                                        |
+| Formatter / linter | [Biome](https://biomejs.dev)                                                                                      |
 
 ## Project structure
 
 ```
 mobile/
-├── app/                       # Expo Router routes
-│   ├── _layout.tsx            # fonts, ThemeProvider, session hydration, AuthGate
-│   ├── global.css             # NativeWind theme source (Warm Sunrise tokens, see below)
-│   ├── (auth)/login.tsx       # email + OTP code, 2-stage login. No onboarding route: a fresh
-│   │                          # signup lands straight in (app) (timezone is captured once at
-│   │                          # OTP signup via the `x-timezone` header, not user-editable after)
-│   └── (app)/                 # tab navigator: index (Day), week, month, settings
-│       ├── index.tsx          # Day — still a Phase 2 grid stub, but with the task sheets wired
-│       │                      # against a plain task list (tap → edit, long-press → resize,
-│       │                      # long-press empty area / FAB → create); see Phase 5 in
-│       │                      # docs/react-native-migration.md. Also reads an optional `date`
-│       │                      # query param (added for Month View's day-tap deep link).
-│       ├── week.tsx           # Week — built: sticky week header + a custom Reanimated
-│       │                      # "stacking" day pager (week-pager.tsx, the mockup's
-│       │                      # parallax/dim swipe transition) with swipe paging,
-│       │                      # chip-tap re-centering and cross-day session drag. Header
-│       │                      # and pager share `progressSV`/`headerStripSV` (owned here)
-│       │                      # so week changes — a header week swipe, or a day-swipe that
-│       │                      # crosses a week edge — slide the header's 3-week chip strip
-│       │                      # in lockstep with the pager's one-page slide.
-│       │                      # See components/calendar/ below
-│       ├── month.tsx          # Month — built (RN migration Phase 4, issue #21): paginated
-│       │                      # Monday-first grid + overflow bottom sheet + long-press-drag
-│       │                      # reschedule; see components/calendar/ below
-│       └── settings.tsx       # fully built: profile, theme, insights
-├── api/                       # axios endpoint functions (auth, tasks, tags, users) + base.ts
+├── app/
+│   ├── _layout.tsx
+│   ├── global.css
+│   ├── (auth)/login.tsx
+│   └── (app)/
+│       ├── index.tsx
+│       ├── month.tsx
+│       └── settings.tsx
+├── api/
 ├── components/
-│   ├── ui/                    # shadcn-style components (button, dialog, select, toast, …)
-│   ├── primitives/            # headless behavior (portal, slot, useControllableState, …),
-│   │                          # each with a `.web.tsx` variant where native/web diverge
-│   ├── settings/               # screen-specific composite components
-│   ├── calendar/               # Week View: week-pager.tsx (custom Reanimated "stacking"
-│   │   │                       # day pager — Pan gesture + `progress` shared value,
-│   │   │                       # parallax/dim/shadow swipe transition, live 7–14-day
-│   │   │                       # window; settle math in lib/week-pager-math.ts; exposes a
-│   │   │                       # `WeekPagerHandle` ref so the header can drive a week slide),
-│   │   │                       # week-header.tsx (sticky month/week-range + a 3-week chip
-│   │   │                       # strip that slides one block in lockstep with the pager;
-│   │   │                       # `weekHeaderBlocks` in lib/week-date-math.ts),
-│   │   │                       # day-timeline.tsx (24h grid shared by Day and Week),
-│   │   │                       # task-block.tsx (grid block: drag reschedule + cross-day
-│   │   │                       # drag + complete-swipe), now-indicator.tsx,
-│   │   │                       # time-gutter.tsx, peek.ts
-│   │   │                       # Month View: month-pager.tsx (outer horizontal FlatList pager),
-│   │   │                       # month-page.tsx (per-month fetch + drag orchestration),
-│   │   │                       # month-grid.tsx (7-col FlatList + loading skeleton),
-│   │   │                       # month-cell.tsx (cell + pill + long-press-drag gesture),
-│   │   │                       # task-list-sheet.tsx (the "+N more" overflow bottom sheet)
-│   ├── tasks/                 # task/new.tsx and task/[id]/edit.tsx full-screen forms (duration
-│   │   │                      # resize now lives entirely in the edit screen's stepper — see
-│   │   │                      # "The task create/edit form is a full screen" below), plus
-│   │   │                      # CreateSessionFab (the reusable "+" FAB rendered on all three of
-│   │   │                      # index.tsx/week.tsx/month.tsx — the app's one task-creation
-│   │   │                      # entry point); the old EDF-era "Optimize" FAB/sheet was deleted
-│   │   │                      # with the EDF scheduler, and the later explicit "Optimize" Day
-│   │   │                      # View header pill / `POST /scheduler/optimize` endpoint has since
-│   │   │                      # been removed too — creating or editing a session's deadline now
-│   │   │                      # implicitly and silently repacks that one day server-side, see
-│   │   │                      # "Screens & routing" below
-│   │   └── form/               # duration stepper/slider, deadline chip row, tag autocomplete,
-│   │                           # description field (WYSIWYG, @10play/tentap-editor) + floating
-│   │                           # toolbar — see task-sheet-fields.tsx
-│   ├── error-boundary.tsx     # local render-crash containment (class component) — see
-│   │                          # Known pitfalls' "Blast-radius containment" note
+│   ├── ui/
+│   ├── primitives/
+│   ├── settings/
+│   ├── calendar/
+│   ├── tasks/
+│   │   └── form/
+│   ├── error-boundary.tsx
 │   └── tab-icons.tsx, Icons.tsx, logo.tsx, ThemeToggle.tsx
-├── hooks/                      # use-user-store (Zustand), use-local-storage, use-task-form
-│                                # (taskSchema from @zenflow/core)
+├── hooks/
 ├── lib/
-│   ├── api-client.ts           # cookie-aware axios instance — see Auth & session
-│   ├── session.ts               # SecureStore-backed cache (user + raw session cookie)
-│   ├── constants.ts             # NAV_THEME — hand-maintained hex mirror of global.css tokens
+│   ├── api-client.ts
+│   ├── session.ts
+│   ├── constants.ts
 │   ├── useColorScheme.tsx, android-navigation-bar.ts
-│   ├── tag-match.ts             # tag-autocomplete matching (prefix/substring, not cmdk fuzzy)
-│   ├── task-toasts.ts           # create/edit placement toast copy (success/conflict) — the
-│   │                             # implicit same-day repack (see below) is silent, no toast
-│   ├── task-card.ts             # deriveState + month-pill classes — hand-synced RN port of
-│   │                            # frontend/src/lib/task-card.ts, unit-tested
-│   ├── month-date-math.ts       # Month View's pure date-math/overflow-counting helpers
-│   │                            # (getMonthGridDays, splitCellSessions, groupSessionsByDate, …),
-│   │                            # unit-tested via Vitest (lib/__tests__/, `pnpm test`)
-│   └── utils.ts                # cn() (clsx + tailwind-merge)
-├── plugins/withAndroidBuildFixes.js  # Expo config plugin: Gradle/Kotlin build fixes
+│   ├── tag-match.ts
+│   ├── task-toasts.ts
+│   ├── task-card.ts
+│   ├── month-date-math.ts
+│   └── utils.ts
+├── plugins/withAndroidBuildFixes.js
 ├── global.css / tailwind.config.ts / metro.config.js / babel.config.js  # NativeWind wiring
-├── components.json             # path aliases for the ui/primitives generator pattern
+├── components.json
 └── biome.json
 ```
 
@@ -119,550 +67,12 @@ Two route groups under `app/`, gated by `AuthGate` in the root layout (mirrors t
 `with-auth.tsx` HOC, driven by the Zustand user store rather than a per-navigation `/auth/me`
 call):
 
-| Group | Screen(s) | State |
-|-------|-----------|-------|
-| `(auth)` | `login.tsx` | Built — email stage → OTP verification stage |
-| `(app)` | `index.tsx` (Day) | Built — EDF grid with pinch-zoom, long-press create, drag reschedule, pull-to-refresh. When a task runs past midnight, the day ends at a dashed `12:00 AM` boundary followed by a tall empty region; scrolling through it to the end flips to a next-day slice (`components/calendar/day-slice.tsx`) showing only the 12 AM–4 AM tail; swipe up returns. The empty region and flip only exist on days that actually have a past-midnight task. Session sheets (create/edit/change-duration) are wired against the grid: tap a task → edit, long-press a task → change duration, long-press the empty area or the FAB → create |
-| `(app)` | `week.tsx` (Week) | **Built** — sticky 7-chip week header (`components/calendar/week-header.tsx`) over a custom Reanimated "stacking" day pager (`week-pager.tsx`): one day page per full-width slot, `Gesture.Pan` swipe with deterministic one-page `withTiming` snapping (the settle decision lives in the pure `lib/week-pager-math.ts`), the mockup's swipe transition (outgoing day parallaxes out + dims while the incoming day stacks over it with a seam + shadow), idle next-day peek strip, chip-tap re-centering, and cross-day session drag: lift a block, drag it into the screen-edge zone (orange glow arms), hold ~400ms to advance exactly one day (once per drag), then drop it on the adjacent day (up to a 2-week live window, collapsing back to 7 days on drop) |
-| `(app)` | `month.tsx` (Month) | **Built** (RN migration Phase 4, issue #21) — paginated Monday-first grid (`components/calendar/`), "+N more" overflow bottom sheet, tap-a-day → Day View, long-press-drag a pill to reschedule |
-| `(app)` | `settings.tsx` | Built — profile row, theme toggle, insights panel |
-
-All three of `index.tsx`/`week.tsx`/`month.tsx` render `<CreateSessionFab>` (`components/tasks/create-task-fab.tsx`) as their task-creation entry point. The old EDF-era "Optimize schedule" action — `OptimizeFab`/`OptimizeModeField` and their `api/tasks.ts` surface (`optimizePreview`/`optimizeApply`/`undoBatch`/`resolveSessionPlacement`) — was deleted along with that scheduler engine and the tab bar's cradle that used to hold the FAB (`components/tab-bar.tsx` is a plain rounded-top bar now, see its own doc comment). A later, minimal explicit replacement (`POST /scheduler/optimize` / `POST /scheduler/optimize/undo/:batchId`, a small "Optimize" pill in Day View's header) has **also been removed** — there is no manual "optimize/reschedule" trigger anywhere in the app anymore, and `api/scheduler.ts` no longer exists. In its place, scheduling is now **implicit and transparent**: creating a session, or editing an existing session's `deadline`, automatically repacks just that one calendar day's other `PENDING` sessions server-side (EDF + preference-matrix placement, single-day window, no preview, no undo). `CreateSessionResponse`/`UpdateSessionResponse` (`@zenflow/shared`) carry an optional `dayReschedule: { date, diffs }` field describing what else moved, but neither `app/task/new.tsx` nor `app/task/[id]/edit.tsx` surface it — the repack is silent by design, no second toast. No new refetch plumbing was needed for this — Day View's `refreshKey` (`app/(app)/index.tsx`) and Month's `reloadToken` (`app/(app)/month.tsx`) already re-run their fetch via `useFocusEffect` when the create/edit screen's `router.back()` returns focus, so repacked sessions just show up.
-
-`AuthGate` redirects: no user → `(auth)`; otherwise → `(app)`. There is no onboarding gate or
-route — a fresh signup goes straight into `(app)` (timezone is captured once at OTP signup via
-the `x-timezone` header, see `api/auth.ts`, and isn't user-editable afterward). Group-qualified
-redirects (not a bare `/`) are still used for the `(auth)` → `(app)` case since both compile to
-the URL `/` — see the comment in `app/_layout.tsx`.
-
-## Auth & session
-
-No JWT (CLAUDE.md §7 — OTP + Redis session cookie, same backend contract as `frontend/`), but
-native can't use a browser cookie jar:
-
-- **Web:** the browser's own cookie jar + `withCredentials` handles everything — identical to
-  `frontend/`.
-- **Native:** the session cookie is `httpOnly`, so it can never be read back via
-  `android.webkit.CookieManager` (or any native cookie-jar API) — same restriction as
-  `document.cookie` in a browser. Instead, `lib/api-client.ts` captures the raw `Set-Cookie`
-  value itself the one time it's visible (a response header, not script-facing), replays it as
-  an explicit `Cookie` request header on every call, and persists it via `expo-secure-store`
-  (`lib/session.ts`) so it survives app restarts. A 401/403 from any guarded endpoint clears
-  both the cached cookie and the Zustand user, which lets `AuthGate` react.
-- `lib/api-client.ts` also rewrites a loopback `EXPO_PUBLIC_API_URL` to the LAN host Metro
-  reports (`Constants.expoConfig.hostUri`) when running on a physical device/emulator, where
-  `localhost` would otherwise resolve to the device itself.
-
-## Styling — NativeWind & the "Warm Sunrise" theme
-
-`app/global.css` ports the same OKLch-derived tokens as `frontend/src/index.css`, translated to
-sRGB `"R G B"` channel triples (NativeWind/RN can't consume `oklch()` or resolve `/<alpha-value>`
-against a bare hex string — see the comment block at the top of `global.css`). `tailwind.config.ts`
-maps these to the standard shadcn color names (`background`, `foreground`, `primary`, `muted`,
-etc.) plus the brand ramp (`orange`/`yellow`/`lime`).
-
-**Fonts & font weights:** RN has no synthetic font-weight — every weight needs its own loaded
-font file. `components/ui/text.tsx`'s `resolveGeistFontFamily()` reads a `font-*` utility
-(`font-medium`, `font-semibold`, …) off the resolved `className` and maps it to the matching
-`Geist-*` family loaded in the root layout, then strips the utility so NativeWind doesn't also
-try to turn it into a (wrong, synthetic) `fontWeight` style. Text variants (`Muted`, `Small`,
-`Lead`, `H1`–`H4`, …) live in `components/ui/typography.tsx`.
-
-## Known pitfalls
-
-### NativeWind silently resolving the wrong Tailwind major version
-
-**Symptom:** every screen renders with default React Native styling — plain black text at one
-size, no `text-muted-foreground`/`text-secondary`/size-variant classes applied, and all margin
-/padding/gap utilities missing. No error is thrown; the bundle builds and runs "successfully."
-
-**Cause:** the repo root's `tailwindcss` is hoisted at **v4** for `frontend/`'s own Tailwind v4
-setup. NativeWind 4.1.6 (this app's version) is built against Tailwind **v3** and expects its
-own private copy. The root `.npmrc` (`node-linker=hoisted`) carries
-`public-hoist-pattern[]=!nativewind`, which tells pnpm to keep NativeWind un-hoisted so it nests
-its own compatible `tailwindcss@3.4.1` inside `node_modules/nativewind/node_modules/` instead of
-resolving the root's hoisted v4 copy. If that `.npmrc` line is ever missing, reverted, or edited
-without a following `pnpm install`, NativeWind ends up walking up to the root's `tailwindcss@4.x`
-— which has a very different config/PostCSS surface — and its class-to-style compilation breaks
-across the board, with no visible error.
-
-**Fix / verification:**
-
-1. Confirm `public-hoist-pattern[]=!nativewind` is present in the repo-root `.npmrc`.
-2. Run `pnpm install` from the repo root (not just `mobile/`) — this is a workspace-wide hoist
-   decision, so it has to run at root.
-3. Verify: `node_modules/nativewind/node_modules/tailwindcss/package.json` should report a
-   `3.x` version, distinct from the root `node_modules/tailwindcss` (`4.x`, for `frontend/`).
-4. **Restart the Metro bundler with its cache cleared.** This is the step that's easy to miss:
-   `pnpm dev` / `dev:web` / `dev:android` all pass Expo's `--clear` (`-c`) flag, but the plain
-   `android` / `ios` scripts (`expo run:android` / `expo run:ios`) do **not** — so a Metro
-   process already running from before the `.npmrc`/`pnpm install` fix will keep serving the
-   stale, broken bundle from its in-memory + on-disk transform cache indefinitely, even after
-   `node_modules` is corrected. Kill any process holding port 8081, then either run
-   `pnpm --filter mobile dev:android` (has `-c`, reuses an already-installed dev-client build —
-   no native rebuild needed unless native code changed) or manually clear the cache
-   (`%LOCALAPPDATA%/Temp/metro-cache` and `metro-file-map-*` on Windows) before the next
-   `expo run:android`/`run:ios`.
-
-### Other pnpm workspace version splits (same root cause pattern)
-
-The root `.npmrc` carries a few other `public-hoist-pattern[]=!<pkg>` exclusions for the same
-reason — `frontend/` and `mobile/` want genuinely different major versions of a shared
-dependency, and `node-linker=hoisted` needs to be told which packages must keep their own nested
-copy instead of resolving the other workspace's hoisted one:
-
-- `zod` / `@hookform/resolvers` — the `.npmrc` comment above this exclusion still says `mobile/`
-  wants zod v3 + resolvers v3; that's stale. `mobile/package.json` declares `zod@^4.1.12` +
-  `@hookform/resolvers@^5.2.2` — the same majors as `frontend/` — confirmed by
-  `app/(auth)/login.tsx`'s `z.email()` call (a zod-v4-only top-level function) and by
-  `packages/core/src/tasks.ts`'s hoisted `taskSchema` (zod v4 `{ error: … }` issue syntax)
-  resolving and type-checking cleanly for `mobile/` (RN migration Phase 5, issue #20). Keeping
-  `zod`/`@hookform/resolvers` un-hoisted is still harmless now that both workspaces want the
-  same majors — just no longer load-bearing the way the comment describes.
-- `react-hook-form` — pinned to an exact version in `mobile/package.json` (see the `.npmrc`
-  comment) to force pnpm to nest a separate copy from `frontend/`'s, avoiding two live React
-  copies in one bundle.
-
-If a "works on frontend, broken on mobile" (or vice versa) bug involves one of these packages,
-check whether `.npmrc` and `mobile/package.json`'s pin are both still in sync with a recent
-`pnpm install` before looking anywhere else.
-
-Note `@10play/tentap-editor` deliberately avoided needing a _new_ entry here: it's pinned to the
-Tiptap-v3-based `1.0.x` line (not the also-current `0.7.x`/Tiptap-v2 line its own docs still lead
-with) specifically so its `@tiptap/*` transitive deps share a major version with `frontend/`'s
-already-hoisted Tiptap v3 copies instead of splitting — see the Tech stack table above.
-
-### `@10play/tentap-editor` / `react-native-webview` need a dev-client rebuild
-
-Both are native modules (the editor runs Tiptap inside a `react-native-webview` WebView with a
-native RN bridge). Installing them via `pnpm install` alone is not enough to use
-`components/tasks/form/description-field.tsx` on a device/emulator — Metro/JS-only reloads
-(`pnpm dev`/`dev:android`) won't pick up a brand-new native dependency; it needs a real native
-rebuild (`pnpm --filter mobile android` / `ios`) to link the new module into the dev client
-before the WebView will actually mount. This was **not** verified in the environment this was
-implemented in (no Android/iOS device or emulator available there) — `pnpm --filter mobile
-typecheck` is clean and the JS-level API usage was checked against the installed package's own
-`.d.ts` output, but the actual on-device WebView bridge round-trip is unverified. Rebuild and
-manually exercise the description field (all toolbar buttons, link insert, and that `note`
-round-trips as HTML through a create → edit cycle) before shipping.
-
-**Blast-radius containment:** if the dev client hasn't been rebuilt yet (or the native module is
-otherwise missing), mounting the WebView throws during render. `@gorhom/bottom-sheet` already
-defers mounting a `BottomSheetModal`'s content until `present()` is called, but that's still
-_during_ the same open attempt — so an unhandled throw there previously unwound all the way to
-Expo Router's per-route `ErrorBoundary` (`app/_layout.tsx`), unmounting the entire Day screen
-(`app/(app)/index.tsx`) and making every sheet-opening gesture on it — FAB, long-press-empty-area,
-tap-to-edit, long-press-to-resize — look equally broken, since `CreateSessionSheet`, `EditSessionSheet`,
-and `ChangeDurationSheet` are siblings under that one tree. `components/error-boundary.tsx` is a
-local class-component boundary now wrapping just `DescriptionField` in
-`components/tasks/task-sheet-fields.tsx`, so a WebView-mount failure degrades to an inline
-fallback in that one field instead of taking the rest of the form, and every other sheet on the
-screen, down with it. It doesn't fix the underlying missing-native-module issue — only a real
-dev-client rebuild does that.
-
-### Bottom sheets must call `.present()`/`.dismiss()` synchronously from the press handler
-
-**Symptom:** a `@gorhom/bottom-sheet` `BottomSheetModal` never opens (or never closes) even
-though the trigger `Pressable` fires and no error is thrown.
-
-**Cause:** `CreateSessionSheet`/`EditSessionSheet`/`ChangeDurationSheet` used to be externally
-controlled by an `open: boolean` + `onOpenChange` prop pair, driven by `useState` in the calling
-screen and bridged through a `useControlledBottomSheet(open)` hook that called
-`ref.current?.present()`/`.dismiss()` inside a `useEffect` keyed on `open` — i.e. _after_ a state
-update flowed through a re-render, never inside the actual `Pressable`'s `onPress`/`onLongPress`
-handler itself. Every other sheet in the app (`components/ui/time-picker.tsx`)
-instead calls `useBottomSheet()`'s `open`/`close` (or `BottomSheetOpenTrigger`'s internal
-`sheetRef.current?.present()`) **directly and synchronously inside the press handler**, and those
-always worked. The effect-driven indirection was the actual difference — not a WebView/native
-module issue (an earlier, unrelated hypothesis involving `@10play/tentap-editor` was ruled out:
-the sheets still didn't open with the rich-text editor removed entirely).
-
-**Fix:** the three task sheets are now `forwardRef` components exposing an imperative
-`open(...)`/handle via `useImperativeHandle`, each using `useBottomSheet()` internally and
-calling `bottomSheet.open()`/`.close()` synchronously wherever the old code called
-`onOpenChange(true)`/`(false)` — matching the working pattern exactly. Callers hold a
-`useRef<XSheetHandle>(null)` and call `xRef.current?.open(...)` directly inside the triggering
-`Pressable`'s `onPress`/`onLongPress` (see `app/(app)/index.tsx`). `hooks/use-controlled-bottom-sheet.ts`
-was deleted — don't reintroduce an effect-driven `open`-prop bridge for a new sheet; use
-`useBottomSheet()` + an imperative handle instead.
-
-### `BottomSheetOpenTrigger asChild` needs a real touchable as its direct child
-
-**Symptom:** tapping a trigger visually responds (e.g. it's rendered fine, maybe even has
-pressed-state styling from its own component) but the sheet never opens, with no error thrown.
-
-**Cause:** `asChild` clones the passed `onPress` onto its single child via
-`components/primitives/slot.tsx`'s `Slot.Pressable`, which only works if that child is a real
-touchable implementing RN's responder system (`Pressable`/`Touchable*`). `OptimizeFab`
-(`components/tasks/optimize-fab.tsx`) originally passed a bare `LinearGradient` (from
-`expo-linear-gradient`) as the `asChild` target — a purely visual view with no touch handling — so
-the cloned `onPress` was silently dropped and `sheetRef.current?.present()` never ran.
-
-**Fix:** always wrap non-touchable visual children (gradients, SVGs, plain `View`s) in a
-`Pressable` and make that `Pressable` the direct `asChild` child, with the visual content nested
-inside it — see `components/settings/profile-row.tsx`, `components/ui/time-picker.tsx` for the
-working pattern, and `OptimizeFab`'s FAB trigger for the fixed version.
-
-### `react-native-webview` has no real web implementation — gate WebView-backed UI by `Platform.OS`
-
-**Symptom:** on the web dev target only, `DescriptionField`'s rich-text editor
-(`components/tasks/form/description-field.tsx`, `@10play/tentap-editor`) grew unboundedly tall
-with no content typed, and unrelated focus interactions elsewhere in the same sheet threw
-`Error: Couldn't find a navigation context`.
-
-**Cause:** `react-native-webview@13.12.5`'s own package ships a static "not supported" stub
-(`node_modules/react-native-webview/src/WebView.tsx`, its comment literally names "Expo SDK
-'web' platform") that Metro's platform-extension resolution falls back to for `platform=web`,
-since the package has `.ios`/`.android`/`.macos`/`.windows` variants but no `.web` — confirmed by
-grepping the actual served Metro web bundle for that stub's literal text. `@10play/tentap-editor`'s
-`RichText` never runs on web as a result. `DescriptionField` is now a `Platform.OS` switch: native
-renders the full `DescriptionFieldEditor` (WYSIWYG, unaffected), web renders `DescriptionFieldWeb`,
-a plain `Textarea` bound to the same HTML-string `value`/`onChange` contract, capped with a
-NativeWind `max-h-*` so it can't grow unbounded either way. The native editor's injected
-stylesheet (`injectContentStyles`) also got fixes while investigating: `padding` was previously
-applied to both `body` _and_ `.ProseMirror` (a descendant of `body`), doubling the visual inset —
-now only `.ProseMirror` gets it; and `.ProseMirror` gets a `max-height` + `overflow-y: auto` cap,
-since the bundled editor HTML's base stylesheet sets `.ProseMirror { min-height: 100%; overflow:
-visible }` unconditionally. That cap used to matter doubly on native, back when `useEditorBridge`
-ran with `dynamicHeight: true` — a ResizeObserver inside the WebView reported `.ProseMirror`'s
-measured height to native on every content change, which resized the WebView's native container
-to match, so an unbounded/runaway measured height would have meant an unbounded native resize
-too. `dynamicHeight` is now `false` (see that file's own doc comments) specifically because
-resizing a _focused_ WebView's native container on every keystroke turned out to reliably dismiss
-Android's keyboard — the editor is a fixed-height WebView now (`RichText`'s `containerStyle`
-height, matching the `.ProseMirror` cap and the outer wrapper's `max-h`), scrolling internally
-past that height instead of ever resizing. The cap stays regardless, since it's also just the
-right visual bound for a fixed-height writing surface.
-
-**If you add another `react-native-webview`-backed feature:** don't assume it degrades gracefully
-on web on its own — either gate it by `Platform.OS !== "web"` with a real fallback (as above) or
-confirm the specific library you're wrapping ships its own `.web` implementation.
-
-### `@gorhom/bottom-sheet` components must come from `@/components/ui/bottom-sheet`, never straight from the package
-
-**Symptom:** on the web dev target only, opening/interacting with a task sheet
-(`CreateSessionSheet`/`EditSessionSheet`/`ChangeDurationSheet`) could destabilize the surrounding
-screen — up to and including an unrelated `Error: Couldn't find a navigation context` thrown from
-deep inside `@react-navigation/core` while focusing a plain `TextInput` (`TagAutocomplete`)
-elsewhere in the same sheet.
-
-**Cause:** `components/ui/bottom-sheet.tsx` (web) reimplements the `BottomSheet*` API on the
-`Dialog` primitive (Radix) — deliberately, since `BottomSheetContent` there is **not** a real
-`@gorhom/bottom-sheet` `<BottomSheetModal>` instance (see that file's header comment). The three
-task sheets nonetheless imported `BottomSheetScrollView` **directly from `@gorhom/bottom-sheet`**
-and rendered it as their scrollable body — but gorhom's own `BottomSheetScrollView` reads
-`useBottomSheetInternal()`, a context only a real gorhom `<BottomSheet>`/`<BottomSheetModal>`
-instance provides. On native this was always fine (`bottom-sheet.native.tsx`'s `BottomSheetContent`
-renders a real one), but on web it meant every task sheet's _entire body_ — `SessionSheetFields`,
-`TagAutocomplete`, `DescriptionField`, all of it — mounted inside a component that unconditionally
-throws `"'useBottomSheetInternal' cannot be used out of the BottomSheet!"`, the kind of
-render-time failure that can leave the surrounding tree (including sibling navigator state) in an
-inconsistent state, plausibly surfacing as an unrelated-looking error on the next re-render.
-
-**Fix:** `@/components/ui/bottom-sheet` now exports `BottomSheetScrollView` on both platforms —
-native re-exports gorhom's real component unchanged (context is always satisfied there), web gets
-a plain `ScrollView` wrapper (mirroring the existing `BottomSheetFlatList` pattern in the same
-file, which already avoided this trap). `create-task-sheet.tsx`/`edit-task-sheet.tsx`/
-`change-duration-sheet.tsx` now import it from there instead of `@gorhom/bottom-sheet`. **Don't
-import anything from `@gorhom/bottom-sheet` directly for use inside a sheet's body** — go through
-`@/components/ui/bottom-sheet` (adding a wrapper there if one's missing) so both platforms resolve
-to something that actually works; a bare `@gorhom/bottom-sheet` import type-checks fine (native's
-`moduleSuffixes` resolution masks the mismatch — see the next paragraph) but silently breaks on
-web only.
-
-`components/primitives/bottomSheet/bottom-sheet.native.tsx` used to be an orphaned duplicate of
-`components/ui/bottom-sheet.native.tsx` that predated the `setRefs`-callback-ref fix described
-above — `components/settings/ThemeItem.tsx` imported from it with the `.native` suffix spelled out
-explicitly in the specifier (bypassing the web/native split this section describes) and used
-`useBottomSheetModal()`'s ambient, queue-based `dismiss()` for its header close button instead of
-this exact `<BottomSheet>` instance's own `sheetRef`. On a screen that mounts more than one
-sheet-bearing settings row, that ambient dismiss can resolve to whatever's currently on top of
-`@gorhom/bottom-sheet`'s shared app-wide presented-sheets queue rather than "this" sheet, and the
-still-stale `useImperativeHandle(ref, () => sheetRef.current ?? {}, [sheetRef.current])` pattern in
-that duplicate file left plenty of surface for a `.current` of an unset ref to be read during that
-interaction — the reported crash ("Cannot read property 'current' of undefined" on pressing the
-Theme sheet's X button) traced back to this combination. `ThemeItem.tsx` now imports from
-`@/components/ui/bottom-sheet` like every other sheet in the app and uses `useBottomSheet()`'s own
-`ref`/`close()` (the same `BottomSheetHeader` from that file already reads this `<BottomSheet>`
-instance's context `sheetRef` directly, not the ambient queue — see its own doc comment). The
-orphaned duplicate file has been deleted.
-
-**Correction (confirmed on-device, Android emulator):** the `ThemeItem.tsx` duplicate-file fix
-above was real but was NOT the whole story — the same "Cannot read property 'current' of
-undefined" crash on a sheet's header X reproduced on every sheet using `BottomSheetHeader`'s close
-button (`TagAutocomplete`'s "Add tags" sheet, `OptimizeFab`'s "Optimize schedule" sheet, confirmed
-via `adb logcat`'s Hermes stack trace pointing at `close` in
-`components/ui/bottom-sheet.native.tsx`), not just the (actually-unreachable — `ThemeSettingItem`
-isn't rendered by any live screen) Theme sheet. The real, architectural cause: `@gorhom/bottom-sheet`
-renders a `BottomSheetModal`'s `children` through `@gorhom/portal`'s `Portal` — which is **not** a
-real `ReactDOM.createPortal`-style portal that preserves the ambient React context stack. It's a
-fake portal (`@gorhom/portal/src/components/portal/Portal.tsx`): `Portal` stores the element
-reference in a reducer-backed store, and a separate `<PortalHost>` (mounted once near the app root,
-alongside this app's single `BottomSheetModalProvider`) renders it from an entirely different
-branch of the tree. That means anything passed as `<BottomSheetContent>`'s `children` —
-`BottomSheetHeader`, `BottomSheetScrollView`, etc. — actually renders _outside_ the `<BottomSheet>`
-wrapper's own `BottomSheetContext.Provider` (`bottom-sheet.native.tsx`), which only wraps
-`<BottomSheetContent>` and its sibling `<BottomSheetOpenTrigger>` in the _calling_ tree, not
-wherever `<PortalHost>` happens to sit. `useBottomSheetContext()` calls made from inside that
-portaled content (`BottomSheetHeader`'s close button, `BottomSheetCloseTrigger`) therefore always
-resolved the _default_ context value (`{}`), so `sheetRef` came back `undefined` and
-`sheetRef.current?.dismiss()` threw. `BottomSheetOpenTrigger` never hit this because it isn't part
-of a `BottomSheetModal`'s portaled `children` — it's a sibling of `<BottomSheetContent>` under the
-same non-portaled `<BottomSheet>` wrapper — which is exactly why opening a sheet always worked
-while closing it via the header X crashed on every sheet using that button.
-
-**Fix:** `BottomSheetContent` (native) now re-establishes a `BottomSheetContext.Provider` directly
-around its own `children`, so the Provider travels through the portal together with every Consumer
-inside it (`BottomSheetHeader`, `BottomSheetCloseTrigger`) as one connected element tree — the
-Consumer sees a real Provider regardless of where `<PortalHost>` physically renders it. Verified
-live on an Android emulator (`adb`/`adb logcat`): opening + closing via the header X on both
-`TagAutocomplete`'s and `OptimizeFab`'s sheets no longer crashes, with no new `ReactNativeJS`
-errors in logcat across several open/close cycles. Web's `bottom-sheet.tsx` never had this bug —
-Radix's `DialogPrimitive.Portal` is a real portal and preserves context correctly, so only the
-native file needed the fix. If you add a new `useBottomSheetContext()` consumer anywhere that ends
-up inside a sheet's `children` (not its trigger), make sure it's still nested under this
-re-established Provider — don't reach for `@gorhom/bottom-sheet`'s own `useBottomSheetModal()` as a
-workaround (that's the ambient-queue bug from the section above).
-
-Also fixed while investigating: `BottomSheetHeader`'s close button (both platforms) is now a
-rounded-circle `Pressable`-style button (`h-8 w-8 rounded-full bg-muted`), matching
-`task-form-screen.tsx`'s header close button instead of a plain 24px ghost icon, for visual
-consistency between the sheeted and full-screen close affordances.
-
-### A nested scrollable inside a bottom sheet must be `BottomSheetScrollView`, never a plain `ScrollView` — even for taps-plus-drag columns
-
-**Symptom:** in `components/ui/time-picker.tsx`'s hour/minute/AM-PM sheet, tapping an hour or
-minute row worked, but dragging to scroll the hour/minute columns did nothing — only the AM/PM
-column (not scrollable, just two stacked `Pressable`s) behaved normally.
-
-**Cause:** `Column`'s scrollable list was a plain `ScrollView` imported straight from
-`"react-native"`. `TimePickerRow`/`TimePickerInline` always render `Column` inside
-`BottomSheetContent`, which on native is a real `@gorhom/bottom-sheet` `BottomSheetModal` — its own
-pan-gesture-handler-based drag gesture claims vertical touch by default. A bare RN `ScrollView`
-isn't registered with gorhom's internal gesture coordination (`useBottomSheetInternal()`), so it
-never gets a chance to claim the touch first; the sheet's own drag gesture wins every time,
-swallowing what should have been a scroll on the inner list. Taps still worked because taps aren't
-a drag gesture at all.
-
-**Fix:** `Column` now renders `BottomSheetScrollView` (re-exported per-platform from
-`@/components/ui/bottom-sheet`, already used correctly elsewhere in this app — see
-`change-duration-sheet.tsx`) instead of a plain `ScrollView`. It reads `useBottomSheetInternal()`
-internally, which is how the sheet knows to yield vertical touch to it. The `scrollRef`/`scrollTo`
-call sites (`useTimePickerScroll`'s `hourScrollRef`/`minuteScrollRef`, used to auto-scroll the
-active row into view on sheet open) didn't need any changes — `BottomSheetScrollView`'s ref is the
-same underlying `ScrollView` ref shape. **Same trap as the section above** (never import a gorhom
-scrollable straight from `@gorhom/bottom-sheet`, and never substitute a plain RN `ScrollView`/
-`FlatList` for one inside `BottomSheetContent`) — if you add another custom scrollable list inside
-any sheet body, reach for `BottomSheetScrollView`/`BottomSheetFlatList` from
-`@/components/ui/bottom-sheet` from the start.
-
-### The Custom-date deadline field uses the real native OS date picker, not a hand-rolled list
-
-`components/tasks/form/inline-date-field.tsx` used to render its own flat, scrollable day list
-inside a `BottomSheet` (no native date-picker dependency, to avoid a dev-client rebuild). It now
-uses `@react-native-community/datetimepicker` (`mode="date"`, `display="default"`) per explicit
-product direction — `expo-dev-client` was already a dependency, so this only needed a rebuild, not
-new infra. Android renders the OS dialog imperatively (mounted only while open, torn down via
-`onChange`'s `event.type`); iOS's `mode="date"` picker is an inline view, not itself a button, so it
-stays behind the same pill + `BottomSheet` trigger `TimePickerInline` already uses. The package
-ships no `.web` variant (its platform-less fallback renders `null` + warns, the same situation
-`react-native-webview` puts `DescriptionField` in — see the dedicated section further down); the web
-target isn't a shipping flow for this field today, so it falls through to the same iOS path rather
-than carrying a third UI. `value`/`onChange` keep this file's pre-existing "zoned" `Date`
-convention (local fields carry the `tz` wall clock, as `@zenflow/core`'s `zonedNow`/`zonedDate`
-produce) — this composes with the native picker for free, since both the JS runtime and the
-platform widget break an instant into calendar fields using the device's own timezone.
-
-### The task create/edit form is a full screen, not a bottom sheet
-
-`CreateSessionSheet`/`EditSessionSheet` (referenced by name in several sections above, as the sheets
-they were when those bugs were investigated) no longer exist. The task form now lives on its own
-route — `app/task/new.tsx` and `app/task/[id]/edit.tsx`, registered in `app/_layout.tsx`'s root
-`<Stack>` with `presentation: "modal"` — sharing chrome via
-`components/tasks/task-form-screen.tsx`. `ChangeDurationSheet` — a separate long-press quick
-action for resizing a task without opening the edit screen — was removed entirely as redundant;
-the edit screen's `DurationStepper` (`components/tasks/task-sheet-fields.tsx`) already covers
-resize, so long-pressing a task row no longer opens anything and tapping it is the only way in.
-The bottom-sheet-specific guidance above still matters for the sheets that remain
-(`components/ui/time-picker.tsx`, `components/settings/*-picker-row.tsx`,
-`components/tasks/optimize-fab.tsx`).
-
-Two knock-on changes from dropping the sheet-ref pattern:
-
-- **No more `onCreated`/`onSaved`/`onDeleted` callbacks threaded through a `useRef<XSheetHandle>`**
-  — a screen reached via `router.push` has no ref back to its caller. `app/(app)/index.tsx`
-  instead refetches via `useFocusEffect` (from `@react-navigation/native`) whenever the Day screen
-  regains focus, which covers all three cases (create/edit/delete) without per-action wiring.
-  `week.tsx`/`month.tsx` (no task list yet) dropped their `onCreated` toast entirely — the
-  new-task screen shows its own placement toast (via `lib/task-toasts.ts`) before calling
-  `router.back()`, same copy as before.
-- **Typed routes friction:** `app/task/new.tsx` and `app/task/[id]/edit.tsx` didn't exist when
-  `.expo/types/router.d.ts` (gitignored, Metro-generated) was last regenerated, so `Href`s built
-  against them need an `as Href` cast for now (see `createSessionAtNowHref` in
-  `components/tasks/create-task-fab.tsx`, and the `_layout.tsx` `<Redirect>`s, which already used
-  this pattern before this change) — running `pnpm dev`/`pnpm dev:web` once regenerates the file
-  and the casts stop being load-bearing (harmless either way).
-
-### `BottomSheetHeader`'s close button must dismiss its own sheet by local ref, not the ambient `useBottomSheetModal()`
-
-**Symptom:** on a screen with more than one nested `@gorhom/bottom-sheet` sheet mounted at once
-(the task form: `TagAutocomplete`'s sheet alongside `DeadlineChipRow`'s `InlineDateField`/
-`TimePickerInline` sheets, all siblings under one `BottomSheetModalProvider`), the header "X" could
-fail to close the sheet the user was actually looking at.
-
-**Cause:** `components/ui/bottom-sheet.native.tsx`'s `BottomSheetHeader`/`BottomSheetCloseTrigger`
-called `useBottomSheetModal().dismiss()` with no key — `@gorhom/bottom-sheet` v5's own
-`BottomSheetModalProvider` dismisses whichever sheet is _last in its shared, app-wide
-presented-sheets queue_ in that case (`BottomSheetModalProvider.tsx`'s `handleDismiss`), which is
-only "this sheet" by coincidence, not by construction. That queue can end up with a stale entry
-that was never cleanly popped: `handleWillUnmountSheet`/`handlePortalOnUnmount` (fired when a
-modal's `Portal` unmounts while its own dismiss animation is still in flight — e.g.
-`TimePickerInline`'s sheet getting torn down because `DeadlineChipRow`'s `chip` state changed away
-right as the user picked a time) never splices that sheet's key out of the queue; only a dismiss
-that runs all the way to completion does, via the modal's own `unmount()`. The web
-reimplementation (`components/ui/bottom-sheet.tsx`, Radix `Dialog`-based) never had this bug — it
-always closed via the local per-instance `sheetRef` from `useBottomSheetContext()` (the same ref
-`BottomSheetOpenTrigger` uses to _open_ the sheet), never the ambient provider.
-
-**Fix:** native's `BottomSheetHeader`/`BottomSheetCloseTrigger` now do the same —
-`useBottomSheetContext().sheetRef.current?.dismiss()` instead of `useBottomSheetModal().dismiss()`
-— so closing a sheet is deterministic (always _this_ sheet) regardless of what else is or isn't
-cleanly registered in the shared cross-sheet queue. If you add a new close affordance anywhere in
-`components/ui/bottom-sheet.native.tsx`, reach for the local `sheetRef` from
-`useBottomSheetContext()`, not `@gorhom/bottom-sheet`'s `useBottomSheetModal()`.
-
-### The task form screen needs its own `KeyboardAvoidingView` — it isn't inside a bottom sheet anymore
-
-`components/tasks/task-form-screen.tsx` is a plain full screen (see the previous section), not a
-`@gorhom/bottom-sheet` sheet — it doesn't get `BottomSheetModal`'s built-in
-`android_keyboardInputMode="adjustResize"` keyboard handling for free. Without an explicit
-keyboard-avoiding wrapper, the keyboard could sit on top of whatever's focused near the bottom of
-the form (the description editor, the tag picker trigger) and the fixed footer (Save/Cancel)
-wouldn't ride above it.
-
-**Fix:** `SessionFormScreen` wraps its `ScrollView` + footer in a `KeyboardAvoidingView`
-(`behavior="padding"` on iOS; `undefined` on Android, since `app.config.ts` now sets
-`android.softwareKeyboardLayoutMode: "resize"` so the OS itself shrinks the window instead).
-`components/tasks/form/description-field.tsx`'s rich-text editor is still capped (`max-h-[556px]`
-outer wrapper / `540px` `.ProseMirror`/`RichText` inner height as of this writing — see that
-file's own doc comments for the exact numbers) so it never grows to fight the outer scroll. If you add a new inline (non-sheeted) field near the
-bottom of this form, verify it isn't obscured with the keyboard open on both platforms — the sheet
--based pickers (tag autocomplete, deadline inline date/time) don't need this, they already get
-correct behavior from their own `BottomSheetModal`.
-
-### Title has a 60-character cap, enforced by the shared `taskSchema`
-
-`packages/core/src/tasks.ts`'s `taskSchema` (imported here from `@zenflow/core`, same as
-`frontend/src/utils/tasks.ts`'s hand-synced fork) rejects a title over `MAX_TITLE_LENGTH` (60) via
-a `.max()`; the message ("Title must be at most 60 characters.") surfaces through
-`SessionSheetFields`'s existing `Field`/`fieldState.error` rendering, no separate error UI needed.
-`SessionSheetFields`'s Title field also renders a live `{charCount}/{MAX_TITLE_LENGTH} characters`
-counter below the input, independent of the form's RHF validation mode, so the count updates as
-the user types rather than only after a submit/blur triggers validation. If you change the limit,
-change it once in `packages/core/src/tasks.ts` — don't hardcode `60` a second time here or in
-`frontend/`.
-
-### A `@gorhom/bottom-sheet` footer must be a flexbox sibling, not `footerComponent`, if the sheet has scrollable content that can grow
-
-**Symptom:** `OptimizeFab`'s sheet (`components/tasks/optimize-fab.tsx`) — expanding the
-"More options" mode-options list pushed the last row underneath the fixed Optimize/Reschedule/Done
-button, even after padding the scroll content's bottom inset to account for the footer's height.
-
-**Cause:** `footerComponent` (`@gorhom/bottom-sheet`'s own footer render-prop, wrapped here as
-`BottomSheetFooter`) renders as an **absolutely-positioned overlay** on top of the sheet's sized
-content — that's fine for a sheet whose content height never changes, but this sheet defaulted to
-`enableDynamicSizing={true}`, which sizes the sheet to its _scrollable content alone_ (not
-content + footer combined). No amount of scroll-content bottom padding fully avoids an overlay
-covering whatever's scrolled to the very bottom, since the overlay's z-order is fixed regardless of
-scroll position.
-
-**Fix:** switched this sheet to a fixed height (`enableDynamicSizing={false}` + explicit
-`snapPoints={["90%"]}`) and stopped using `footerComponent` entirely — `renderFooter` is now a
-plain function returning JSX, rendered as a normal flexbox sibling: `<BottomSheetHeader>`, then a
-`flex-1` wrapper containing `<BottomSheetScrollView className="flex-1" .../>`, followed by a plain
-sibling `<View>` footer with its own border-top/shadow/safe-area padding — the exact same
-non-absolute, flexbox-pinned-footer pattern already used by
-`components/tasks/task-form-screen.tsx` (a `flex-1` `ScrollView` + a plain sibling footer `View`;
-flexbox naturally reserves the footer's own height and the scroll view takes the rest — no measured-
-height padding hack needed once the footer isn't an overlay). Verified live on an Android emulator
-at every step (`form`/`confirmLarge`/`result`) with the mode-options list expanded — the footer
-never overlaps a row. `components/tasks/optimize-fab.tsx`'s sheet still uses `footerComponent` +
-fixed `snapPoints` deliberately (its content height never changes, so the overlay never has
-anything new to cover) — this fix only applies where scrollable content can grow past the
-footer's fixed position.
-
-### A fixed-`snapPoints` sheet needs `keyboardBehavior="interactive"`, not the shared default
-
-**Symptom:** `TagAutocomplete`'s "Add tags" sheet (`snapPoints={["70%"]}`,
-`enableDynamicSizing={false}`) expanded to full screen height the instant its search input was
-focused, leaving no dark backdrop visible at the top — instead of just nudging the existing 70%
-sheet up above the keyboard.
-
-**Cause:** `components/ui/bottom-sheet.native.tsx`'s shared `<BottomSheetContent>` defaults
-`keyboardBehavior` to `"fillParent"` (see that file's own doc comment for why — it's the right
-default for `enableDynamicSizing={true}` sheets paired with `android_keyboardInputMode="adjustResize"`).
-But `"fillParent"` expands **any** sheet to fill all available height above the keyboard — for a
-fixed-`snapPoints` sheet, that means growing past its intended size instead of preserving it.
-
-**Fix:** a caller with fixed `snapPoints` (like `TagAutocomplete`, and `components/ui/combobox.tsx`
-if it's ever wired into a live screen — currently unreachable, see below) should override
-`keyboardBehavior="interactive"` explicitly on its own `<BottomSheetContent>` (the prop is already
-individually destructured with a default in the shared file, so any caller can override it the same
-way `enableDynamicSizing`/`snapPoints` already do) — `"interactive"` (gorhom's own upstream default)
-translates the sheet upward by the keyboard height while preserving its existing snap point/size,
-instead of expanding it. Verified live: `TagAutocomplete`'s sheet now shifts up just enough to clear
-the keyboard while leaving a visible strip of dark backdrop at the top. `components/ui/combobox.tsx`
-has the identical shape (search input + list) but keeps the shared `enableDynamicSizing={true}`
-default rather than fixed `snapPoints` — and isn't imported by any live screen currently (confirmed
-by grepping the app) — so it wasn't changed; if it's ever wired up with fixed `snapPoints`, give it
-the same override.
-
-### The description editor's toolbar is a static bar _below_ the WebView, not a floating pill above it
-
-`components/tasks/form/description-field.tsx`'s `DescriptionFieldEditor` toolbar used to be an
-absolutely-positioned pill straddling the editor's top edge, shown only while
-`state.isFocused || linkOpen` — that didn't reliably hide on blur, so it became a plain,
-always-rendered, in-flow block instead. That in-flow block still sat _above_ the WebView, though,
-and that positioning had its own collision problem: Android's native text-selection toolbar (the
-copy/paste/select-all bar the OS renders over a focused/selected WebView) is a compositor-level
-overlay, not a view in RN's tree — it isn't clipped or z-ordered by sibling views, and it prefers
-to render _above_ the current selection's anchor point whenever there's room. With our toolbar
-in-flow above the WebView, selecting text near the editor's first line left the OS toolbar nowhere
-to go but into the space ours already occupied. The toolbar now renders **below** the `RichText`
-WebView instead (rounded-bottom corners/border, editor gets the rounded-top ones) — out of that
-collision zone entirely, since the OS toolbar's preferred render position and our bar's position
-are now on opposite sides. `.ProseMirror`'s injected top padding was also bumped slightly, so the
-first line isn't flush with the WebView's very top edge either. White background, black icons
-(`text-neutral-900`), with a light amber (`bg-amber-100`) active-state fill instead of the old
-dark-pill/white-icon/`bg-white/25` scheme, which would be invisible against a white bar.
-`SessionSheetFields` (`components/tasks/task-sheet-fields.tsx`) also now renders `DescriptionField`
-immediately after Title (Title → Description → Duration → Deadline → Tags) instead of last —
-verified on-device that this meaningfully reduces how far the field needs to scroll to clear the
-keyboard when focused, and reads fine visually; kept as the new order rather than a temporary
-diagnostic swap.
-
-### The description editor runs `dynamicHeight: false` — a WebView resize on every keystroke was dismissing Android's keyboard
-
-**Symptom:** on Android, typing a single character into the description editor could dismiss the
-keyboard immediately.
-
-**Cause:** `useEditorBridge({ dynamicHeight: true })` wires up a ResizeObserver _inside_ the
-WebView's document (`@10play/tentap-editor`'s `contentHeightListener`, gated by a `window.dynamicHeight`
-flag set at init) that watches `.ProseMirror`'s measured height and posts a `DocumentHeight`
-message back to native on every change; `RichText.tsx` then sets that height directly on the
-WebView's own `containerStyle`, resizing the _native_ WebView container. Since `.ProseMirror`'s
-content height changes on effectively every keystroke (text wraps, lines are added), this resized
-a _focused_ native WebView's layout dimensions continuously while typing — a known trigger on
-Android for the OS to tear down and recreate the WebView's input connection, which drops the
-keyboard. There's no debounce/threshold option on `dynamicHeight` to soften this.
-
-**Fix:** `dynamicHeight: false`, plus an explicit fixed `containerStyle` height on `RichText`
-matching the injected `.ProseMirror { max-height }` cap (see the previous "taller editor" note and
-that file's own doc comments) — the WebView never resizes after mount, content beyond the fixed
-height scrolls inside `.ProseMirror`'s own `overflow-y: auto` instead. This was already the
-direction the `max-height`/`overflow-y` CSS cap was pushing things (a fixed visual bound with
-internal scroll), so dropping `dynamicHeight` entirely turned out to be strictly simpler than
-trying to preserve it with debouncing the library doesn't expose.
+| Group    | Screen(s)                     | State                                |
+| -------- | ----------------------------- | ------------------------------------ |
+| `(auth)` | `login.tsx`                   | Email stage → OTP verification stage |
+| `(app)`  | `index.tsx` (Calendar / home) | Week view                            |
+| `(app)`  | `month.tsx` (Month)           | Month view                           |
+| `(app)`  | `settings.tsx`                | Settings                             |
 
 ## Local development
 

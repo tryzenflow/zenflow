@@ -29,6 +29,10 @@ export interface PagerPageProps {
   /** The carried page's `index * width + progress` at drag start — the page
    * is held at this screen position for the entire drag gesture. */
   carrierOriginSV: SharedValue<number>;
+  /** The WeekHeader strip's own offset (rest `-width`). Non-rest ⇒ the header
+   * is driving a week swipe/slide, and the pages drop the day-swipe parallax
+   * to track the finger 1:1 in lockstep with the header block. */
+  headerStripSV: SharedValue<number>;
   borderColor: string;
   children: React.ReactNode;
 }
@@ -56,6 +60,7 @@ export function PagerPage({
   draggingSV,
   carrierIndexSV,
   carrierOriginSV,
+  headerStripSV,
   borderColor,
   children,
 }: PagerPageProps) {
@@ -69,6 +74,9 @@ export function PagerPage({
       dragging: draggingSV.value ? 1 : 0,
       carrierIndex: carrierIndexSV.value,
       carrierOrigin: carrierOriginSV.value,
+      // Header strip off its rest (`-width`) ⇒ the header is running a week
+      // swipe/slide; the pages track it 1:1 instead of parallaxing.
+      headerDrag: Math.abs(headerStripSV.value + width) > 1 ? 1 : 0,
     });
 
     const seamStyle =

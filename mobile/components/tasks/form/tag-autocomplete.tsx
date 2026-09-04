@@ -12,7 +12,13 @@ import {
 import { Text } from "@/components/ui/text";
 import { matchTags } from "@/lib/tag-match";
 import { cn } from "@/lib/utils";
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import type { ListRenderItemInfo } from "react-native";
 import { Pressable, View } from "react-native";
 
@@ -49,7 +55,12 @@ export function TagAutocomplete({
       .catch(() => setExisting([]));
   }, []);
 
-  const trimmed = query.trim();
+  // The raw input value drives the TextInput synchronously; filtering runs off
+  // a deferred copy so a fast keystroke is never blocked by the synchronous
+  // list rebuild — that block is what was dropping/reordering the first
+  // character.
+  const deferredQuery = useDeferredValue(query);
+  const trimmed = deferredQuery.trim();
   const selectedSet = useMemo(
     () => new Set(value.map((v) => v.toLowerCase())),
     [value],
@@ -76,46 +87,128 @@ export function TagAutocomplete({
     !value.some((t) => t.toLowerCase() === trimmed.toLowerCase()) &&
     !knownTags.some((t) => t.toLowerCase() === trimmed.toLowerCase());
 
-  function add(name: string) {
-    const clean = name.trim();
-    if (!clean || value.some((t) => t.toLowerCase() === clean.toLowerCase()))
-      return;
-    onChange([...value, clean]);
-    if (!existing.some((t) => t.toLowerCase() === clean.toLowerCase())) {
-      setCreatedThisSession((prev) =>
-        prev.some((t) => t.toLowerCase() === clean.toLowerCase())
-          ? prev
-          : [...prev, clean],
-      );
-    }
-    // Left open so the user can add several tags in one visit — dismissed
-    // via the sheet header's close button, not on every pick.
-    setQuery("");
-  }
+  const add = useCallback(
+    (name: string) => {
+      const clean = name.trim();
+      if (!clean || value.some((t) => t.toLowerCase() === clean.toLowerCase()))
+        return;
+      onChange([...value, clean]);
+      if (!existing.some((t) => t.toLowerCase() === clean.toLowerCase())) {
+        setCreatedThisSession((prev) =>
+          prev.some((t) => t.toLowerCase() === clean.toLowerCase())
+            ? prev
+            : [...prev, clean],
+        );
+      }
+      // Left open so the user can add several tags in one visit — dismissed
+      // via the sheet header's close button, not on every pick.
+      setQuery("");
+    },
+    [value, existing, onChange],
+  );
 
-  function remove(tag: string) {
-    onChange(value.filter((t) => t.toLowerCase() !== tag.toLowerCase()));
-  }
+  const remove = useCallback(
+    (tag: string) => {
+      onChange(value.filter((t) => t.toLowerCase() !== tag.toLowerCase()));
+    },
+    [value, onChange],
+  );
 
   /** Toggle a row's selection — the same tap adds when unselected, removes
    * when already selected (mirrors the checkmark row already added to
    * `TimePickerInline`/`InlineDateField`). */
-  function toggle(name: string, isSelected: boolean) {
-    if (isSelected) remove(name);
-    else add(name);
-  }
+  const toggle = useCallback(
+    (name: string, isSelected: boolean) => {
+      if (isSelected) remove(name);
+      else add(name);
+    },
+    [add, remove],
+  );
 
-  const rows: Row[] = [
-    ...options.map(
-      (name): Row => ({
-        kind: "tag",
-        name,
-        selected: selectedSet.has(name.toLowerCase()),
-      }),
-    ),
-    ...(canCreate ? [{ kind: "create", name: trimmed } as Row] : []),
-  ];
-  if (rows.length === 0) rows.push({ kind: "empty" });
+  const rows = useMemo<Row[]>(() => {
+    const r: Row[] = [
+      ...options.map(
+        (name): Row => ({
+          kind: "tag",
+          name,
+          selected: selectedSet.has(name.toLowerCase()),
+        }),
+      ),
+      ...(canCreate ? [{ kind: "create", name: trimmed } as Row] : []),
+    ];
+    if (r.length === 0) r.push({ kind: "empty" });
+    return r;
+  }, [options, canCreate, trimmed, selectedSet]);
+
+  const keyExtractor = useCallback((item: unknown) => {
+    const row = item as Row;
+    return row.kind === "empty" ? "empty" : `${row.kind}:${row.name}`;
+  }, []);
+
+  const renderItem = useCallback(
+    ({ item }: ListRenderItemInfo<unknown>) => {
+      const row = item as Row;
+      if (row.kind === "empty") {
+        return (
+          <View className="items-center px-3 py-6">
+            <Text className="text-sm text-muted-foreground">
+              {trimmed
+                ? "No matching tags."
+                : "No tags yet — type to create one."}
+            </Text>
+          </View>
+        );
+      }
+      if (row.kind === "create") {
+        return (
+          <Pressable
+            onPress={() => add(row.name)}
+            className="mb-2 flex-row items-center gap-2.5 rounded-xl border border-border bg-card px-4 py-3.5"
+          >
+            <Plus size={16} className="shrink-0 text-muted-foreground" />
+            <Text className="flex-1 text-[15px] font-semibold text-brand-orange">
+              Create "{row.name}"
+            </Text>
+          </Pressable>
+        );
+      }
+      return (
+        <Pressable
+          onPress={() => toggle(row.name, row.selected)}
+          className={cn(
+            "mb-2 flex-row items-center gap-2.5 rounded-xl border px-4 py-3.5",
+            row.selected
+              ? "border-primary bg-primary/10"
+              : "border-border bg-card",
+          )}
+        >
+          <Tag
+            size={16}
+            className={cn(
+              "shrink-0",
+              row.selected ? "text-primary" : "text-muted-foreground",
+            )}
+          />
+          <Text
+            className={cn(
+              "flex-1 text-[15px]",
+              row.selected
+                ? "font-semibold text-foreground"
+                : "text-foreground",
+            )}
+          >
+            #{row.name}
+          </Text>
+          {row.selected && (
+            <View className="h-6 w-6 items-center justify-center rounded-full bg-primary">
+              <Check size={16} className="text-primary-foreground" />
+            </View>
+          )}
+        </Pressable>
+      );
+    },
+    [add, toggle, trimmed],
+  );
 
   return (
     <View className="gap-2">
@@ -192,93 +285,20 @@ export function TagAutocomplete({
               onChangeText={setQuery}
               placeholder="Search or create a tag…"
               returnKeyType="done"
-              onSubmitEditing={() => {
-                if (canCreate) add(trimmed);
-              }}
-              className="h-12 text-base"
+              onSubmitEditing={() => add(query.trim())}
+              className="h-14 text-lg"
             />
           </View>
 
           <BottomSheetFlatList
             data={rows}
-            keyExtractor={(item, i) => {
-              const row = item as Row;
-              return row.kind === "empty" ? "empty" : `${row.kind}:${row.name}`;
-            }}
+            keyExtractor={keyExtractor}
             className="px-4"
             keyboardShouldPersistTaps="handled"
-            renderItem={({ item }: ListRenderItemInfo<unknown>) => {
-              const row = item as Row;
-              if (row.kind === "empty") {
-                return (
-                  <View className="items-center px-3 py-6">
-                    <Text className="text-sm text-muted-foreground">
-                      {trimmed
-                        ? "No matching tags."
-                        : "No tags yet — type to create one."}
-                    </Text>
-                  </View>
-                );
-              }
-              if (row.kind === "create") {
-                return (
-                  <Pressable
-                    onPress={() => add(row.name)}
-                    className="mb-2 flex-row items-center gap-2.5 rounded-xl border border-border bg-card px-4 py-3.5"
-                  >
-                    <Plus
-                      size={16}
-                      className="shrink-0 text-muted-foreground"
-                    />
-                    <Text className="flex-1 text-[15px] font-semibold text-brand-orange">
-                      Create "{row.name}"
-                    </Text>
-                  </Pressable>
-                );
-              }
-              return (
-                <Pressable
-                  onPress={() => toggle(row.name, row.selected)}
-                  className={cn(
-                    "mb-2 flex-row items-center gap-2.5 rounded-xl border px-4 py-3.5",
-                    row.selected
-                      ? "border-primary bg-primary/10"
-                      : "border-border bg-card",
-                  )}
-                >
-                  <Tag
-                    size={16}
-                    className={cn(
-                      "shrink-0",
-                      row.selected ? "text-primary" : "text-muted-foreground",
-                    )}
-                  />
-                  <Text
-                    className={cn(
-                      "flex-1 text-[15px]",
-                      row.selected
-                        ? "font-semibold text-foreground"
-                        : "text-foreground",
-                    )}
-                  >
-                    #{row.name}
-                  </Text>
-                  {row.selected && (
-                    <View className="h-6 w-6 items-center justify-center rounded-full bg-primary">
-                      <Check size={16} className="text-primary-foreground" />
-                    </View>
-                  )}
-                </Pressable>
-              );
-            }}
+            renderItem={renderItem}
           />
         </BottomSheetContent>
       </BottomSheet>
-
-      <Text className="text-xs text-muted-foreground">
-        Tags help our system learn your preferences and personalize your
-        schedule in the future.
-      </Text>
     </View>
   );
 }

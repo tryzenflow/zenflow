@@ -1,6 +1,6 @@
 import { Settings } from "@/components/Icons";
 import { AppTabBar } from "@/components/tab-bar";
-import { DayTabIcon, MonthTabIcon, WeekTabIcon } from "@/components/tab-icons";
+import { MonthTabIcon, WeekTabIcon } from "@/components/tab-icons";
 import { Tabs } from "expo-router";
 
 export const unstable_settings = {
@@ -18,15 +18,6 @@ export default function AppTabsLayout() {
     >
       <Tabs.Screen
         name="index"
-        options={{
-          title: "Day",
-          tabBarIcon: ({ color, size }) => (
-            <DayTabIcon color={color} size={size} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="week"
         options={{
           title: "Week",
           tabBarIcon: ({ color, size }) => (

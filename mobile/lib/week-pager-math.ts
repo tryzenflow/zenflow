@@ -188,6 +188,10 @@ export interface PagePositionInput {
   carrierIndex: number;
   /** `index * width + progress` at the moment the task was lifted. */
   carrierOrigin: number;
+  /** 1 while the WeekHeader owns the strip for its week swipe — the pages then
+   * track the finger 1:1 (plain strip translate, no parallax lag), matching the
+   * header block's own 1:1 motion. Default 0. */
+  headerDrag?: 0 | 1;
 }
 
 export interface PagePositionOutput {
@@ -227,6 +231,7 @@ export function computePagePosition({
   dragging,
   carrierIndex,
   carrierOrigin,
+  headerDrag = 0,
 }: PagePositionInput): PagePositionOutput {
   "worklet";
   const slot = index * width;
@@ -238,6 +243,26 @@ export function computePagePosition({
   const isOutgoing = index === outIndex;
   const isIncoming = index === inIndex;
   const isCarrier = index === carrierIndex;
+
+  // Header-driven week slide: the WeekHeader chip strip moves 1:1 with the
+  // finger, so the day pages under it must too. The parallax path below would
+  // creep the focused (outgoing) page at PARALLAX_FACTOR while the header
+  // zipped a full page — which read as "only the header moves, the grid stays
+  // put". Plain strip translate here; keep just the incoming page's card seam
+  // for depth.
+  if (headerDrag) {
+    const sliding = absM > CHROME_IN_PX;
+    const fromRight = index === outIndex + 1;
+    return {
+      translateX: slot + progress,
+      opacity: isOutgoing || isIncoming ? 1 : 0,
+      zIndex: isIncoming ? 9 : isOutgoing ? 8 : 0,
+      isOutgoing,
+      isIncoming,
+      isCarrier: false,
+      seam: isIncoming && sliding ? (fromRight ? "left" : "right") : null,
+    };
+  }
 
   // Parallax factor: held at PARALLAX_FACTOR while the finger drags, then
   // eased to 1× over the settle so the outgoing page lands on its slot.
