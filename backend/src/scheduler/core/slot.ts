@@ -2,6 +2,7 @@ import { TIME_GRANULARITY } from "../../common/constants";
 
 export const MS_PER_MINUTE = 60_000;
 export const SLOT_MS = TIME_GRANULARITY * MS_PER_MINUTE;
+export const DAY_MS = 24 * 60 * MS_PER_MINUTE;
 
 /** A half-open occupied interval, in epoch milliseconds. */
 export interface Interval {
@@ -21,9 +22,9 @@ export function localDateStr(date: Date, timezone: string): string {
 }
 
 /**
- * Local calendar day a session should be scheduled *within* to meet
- * `deadline` — the day `SessionsService.create`/`.update` should ask
- * `DayRescheduleService.rescheduleDay` to repack.
+ * Local calendar day a `deadline` instant belongs to for scheduling purposes.
+ * Currently unused by the placers (which scan every day up to the deadline),
+ * kept as a tested helper for deadline-day math.
  *
  * `deadlineOptions` (`sessions/utils/deadline-options.ts`) computes every
  * quick-action deadline except "Today" as an EXCLUSIVE period ceiling:
@@ -53,6 +54,15 @@ export function addDaysStr(dateStr: string, n: number): string {
   const dt = new Date(Date.UTC(y, m - 1, d));
   dt.setUTCDate(dt.getUTCDate() + n);
   return dt.toISOString().slice(0, 10);
+}
+
+/** Whole calendar days between two 'YYYY-MM-DD' strings (`b − a`), pure UTC math. */
+export function dayDiffStr(a: string, b: string): number {
+  const [ay, am, ad] = a.split("-").map(Number);
+  const [by, bm, bd] = b.split("-").map(Number);
+  return Math.round(
+    (Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / DAY_MS,
+  );
 }
 
 /** ISO weekday for a 'YYYY-MM-DD' string: 1=Mon … 7=Sun. */
