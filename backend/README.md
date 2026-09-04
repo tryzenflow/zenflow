@@ -39,22 +39,39 @@ backend/
 │   │   └── utils/             # generate-otp, hide-email (+ *.spec.ts)
 │   ├── users/                 # profile (no onboarding/preferences endpoints — see below)
 │   │   └── decorators/        # @CurrentUser()
-│   ├── sessions/               # session CRUD; create/deadline-edit trigger the implicit
-│   │   │                       #   day reschedule below
+│   ├── sessions/               # session CRUD; create/deadline-edit place just the one
+│   │   │                       #   TASK (or a series) — nothing else moves (see below)
+│   │   ├── session-mapper.ts    # PURE — row → wire DTO / event snapshot
+│   │   ├── session-events.ts    # PURE — CREATE / MOVE SessionEvent builders
+│   │   ├── prisma-error.ts      # P2025 → 404 / else 500 mapper for update/remove
+│   │   ├── types/session-row.ts # SessionRow (tags + series) + WITH_TAGS_AND_SERIES
 │   │   └── ...
-│   ├── scheduler/              # the heuristic implicit-day-reschedule engine (see below)
-│   │   ├── heuristic.ts         # PURE — sortEDF() + bestFreeSlot() + optimize(), no I/O
-│   │   ├── heuristic.spec.ts
-│   │   ├── utils/               # PURE algorithm scaffolding — no I/O, fully unit-tested
-│   │   │   ├── slot.ts          # 15-min slot grid math, isoWeekday, overlap check
-│   │   │   ├── horizon.ts       # calendar math (period ceilings, calendar minutes)
-│   │   │   └── matrix-decay.ts  # pure exponential preference-matrix decay
-│   │   ├── day-reschedule.service.ts  # the only I/O layer: loads one day's candidates,
-│   │   │                              #   calls the pure core, writes SessionEvents in one
-│   │   │                              #   $transaction. No controller — SessionsService
-│   │   │                              #   calls it directly (see below)
-│   │   ├── matrix-decay.service.ts    # @Cron: daily preference-matrix decay
-│   │   └── abandoned-sessions.service.ts # @Cron: hourly overdue → ABANDONED sweep
+│   ├── scheduler/              # places ONE TASK / series — see "Scheduler architecture" below
+│   │   ├── core/                # PURE algorithm — no Prisma, no clock, no randomness
+│   │   │   ├── preference.ts        # matrixIndex / default+effective matrix / preferenceScoreAt
+│   │   │   ├── slot-score.ts        # slotPreferenceScore (overlap-weighted) + bestFreeSlot
+│   │   │   ├── linucb-slot-score.ts # Σ_arm overlapRate·predicted + slotPreferenceScore  (cold-start blend)
+│   │   │   ├── context-vector.ts    # buildContextVector() — the LinUCB d=46 feature vector
+│   │   │   ├── arms.ts              # 5 time-of-day arm bands, armOfMinute / overlapRate
+│   │   │   ├── series-spread.ts     # seriesDayOffsets + clampWindowForMember (± X/N window)
+│   │   │   ├── normalize.ts         # minMaxSigned + feature divisors
+│   │   │   ├── recurrence.ts        # rrule expand / occurrence-id helpers
+│   │   │   ├── matrix-decay.ts      # exponential preference-matrix decay
+│   │   │   ├── slot.ts              # 15-min slot grid math, isoWeekday, overlap check
+│   │   │   └── horizon.ts           # calendar math (period ceilings, calendar minutes)
+│   │   ├── types/               # placement.types.ts, day-load.types.ts, context-vector.types.ts
+│   │   └── io/                  # the ONLY Prisma / bandit-HTTP layer
+│   │       ├── day-load.ts              # one day's occupied intervals + workload
+│   │       ├── heuristic-placer.service.ts # HeuristicPlacer — placeTask / placeInWindow
+│   │       ├── bandit-placer.service.ts    # BanditPlacer — per-day /predict + slot pick
+│   │       ├── series-placer.service.ts    # SeriesPlacer — per-member bounded 50/50
+│   │       ├── task-placement.service.ts   # TaskPlacementService — the facade sessions/ calls
+│   │       ├── scheduling-feedback.service.ts # delayed LinUCB MOVE reward
+│   │       ├── retained-sessions.service.ts   # @Cron: RETAINED sweep (+ delayed LinUCB +1 reward)
+│   │       └── matrix-decay.service.ts        # @Cron: daily preference-matrix decay
+│   ├── bandit/                 # BanditService (HTTP client for services/bandit/) +
+│   │                           #   BanditArmStateRepository (per-user (A,b) load/save)
+│   ├── experiments/            # ExperimentService — 50/50 policy assignment + SlotProposal
 │   ├── files/                 # multipart upload/download to local disk
 │   ├── mail/                  # login email + Handlebars templates
 │   ├── prisma/                # PrismaService + Postgres error-code map
@@ -68,61 +85,34 @@ backend/
 └── .env.{dev,staging,prod,test} + docker.{dev,staging,prod,test}.env
 ```
 
-**Key layering rule:** `scheduler/heuristic.ts` and `scheduler/utils/` are **pure and
-deterministic** (no database, no clock, no randomness — `now` is always passed in).
-`DayRescheduleService` is the only thing that touches Prisma and records telemetry. Keep
-that split: it's what makes the engine unit-testable and what a future personalization
-pass will plug into.
+**Key layering rule:** everything in `scheduler/core/` is **pure and deterministic** — no
+database, no `new Date()`, no `Math.random()`; `now` is always passed in. `scheduler/io/*`
+(the placers, `day-load`, the A/B facade, the feedback writer, and the two crons) is the
+only layer that touches Prisma or the bandit HTTP service. Keep that split: it's what makes
+the engine unit-testable and what the personalization work plugs into. The placers only ever
+set `scheduledStartTime` on the session being created/edited — no existing session is moved
+and no reschedule telemetry is written. Full walkthrough + diagrams:
+[**Scheduler architecture**](#scheduler-architecture).
 
 ## Database schema
 
-Defined in [`prisma/schema.prisma`](prisma/schema.prisma). Five core models below
-(`User`, `Session`, `SessionEvent`, `Tag`, `File`), plus schema scaffolding for the DLU-pivot
-work — `UserEncryptionKey`, `UserDevice`, `SessionSeries`, `SlotProposal`, `Integration`,
-`Notification`, `CrawlJob`/`CrawlJobItem`, `CrawledUrl`, `PortalAPIJob`/`PortalAPIJobItem`.
-`UserEncryptionKey` and `Integration` are live (see _Integrations_); the rest are added
-ahead of their per-issue implementation and **not yet wired to any endpoint, DTO, or
-service**. Briefly:
-
-- `UserEncryptionKey` — per-`(user, provider)` data-encryption key, stored wrapped
-  (`key`/`iv`/`authTag`) under that provider's env master key. `version` and
-  `masterKeyVersion` rotate independently. Created on first connect.
-- `UserDevice` — one row per Expo push registration (`platform`, `pushToken`), so a user
-  can have multiple devices.
-- `SessionSeries` — links N session-instance `Session` rows of one "study sessions" goal;
-  deleting the series cascades to its sessions. `Session` gained `type`
-  (`MANUAL`/`ASSIGNMENT`/`EXAM`/`LECTURE`), `source` (`USER`/`LMS`/`PORTAL`), and
-  `seriesId`/`sessionIndex`/`sessionTotal` to support this.
-- `SlotProposal` — one row per create/reschedule event, holding both the heuristic's and
-  LinUCB's proposed placement plus which one (`pickedModel`) actually won.
-- `Integration` — LMS/portal credentials, one row per `(userId, provider)`. The
-  `{ username, password }` blob is AES-256-GCM–encrypted under the user's
-  `UserEncryptionKey` (`encryptedCredentials`/`iv`/`authTag`), which is itself wrapped
-  under the env master key — two layers, no plaintext credential column.
-- `Notification` — inbox row (assignment/exam detected on LMS, or a timetable change on
-  the portal) a student can turn into a `Session`; `actionTakenAt` guards against double
-  creation.
-- `CrawlJob`/`CrawlJobItem` and `PortalAPIJob`/`PortalAPIJobItem` — per-run job tracking
-  (shared `JobStatus` enum) for the LMS crawler and the portal API poller, each scoped to
-  an `Integration`.
-- `CrawledUrl` — global (cross-user) URL dedupe table so two students' crawls of the same
-  course activity don't double-detect.
+Defined in [`prisma/schema.prisma`](prisma/schema.prisma)
 
 ### `User`
 
-| Field                       | Type       | Notes                                                                                                                                                                                                                                                 |
-| --------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`                        | uuid       | PK                                                                                                                                                                                                                                                    |
-| `name`, `email`             | string     | `email` unique                                                                                                                                                                                                                                        |
-| `timezone`                  | string     | IANA, default `"UTC"`                                                                                                                                                                                                                                 |
-| `lang`                      | `Language` | `VI_VN` \| `EN_US`, default `EN_US`. Not yet read by any endpoint.                                                                                                                                                                                    |
-| `preferenceMatrix`          | int[]      | flat **672** ints (7 days × 96 fifteen-minute slots, slot-grid-aligned). **Signed** Phase-1 telemetry: a move-toward/keep increments a cell (+1), a move-away decrements it (−1), empty = 0 (neutral). **Not yet read** by the engine. Seeded lazily. |
-| `preferenceMatrixDecayedAt` | DateTime?  | When the daily decay cron last decayed `preferenceMatrix`; null until the first pass                                                                                                                                                                  |
-| `onboardingComplete`        | bool       | schema default `false`, but `UsersService.create()` always writes `true` — there's no onboarding flow left to gate on (see "Users" below). The column itself is unused dead weight pending a follow-up migration to drop it.                          |
+| Field                       | Type       | Notes                                                                                                                                                                                                                                                                                                                                                                              |
+| --------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                        | uuid       | PK                                                                                                                                                                                                                                                                                                                                                                                 |
+| `name`, `email`             | string     | `email` unique                                                                                                                                                                                                                                                                                                                                                                     |
+| `timezone`                  | string     | IANA, default `"UTC"`                                                                                                                                                                                                                                                                                                                                                              |
+| `lang`                      | `Language` | `VI_VN` \| `EN_US`, default `EN_US`. Not yet read by any endpoint.                                                                                                                                                                                                                                                                                                                 |
+| `preferenceMatrix`          | float[]    | flat **168** signed floats — 7 ISO weekdays × 24 one-hour buckets, row-major (`matrixIndex(isoWeekday, hour) = (isoWeekday−1)·24 + hour`). Positive = preferred, negative = disliked, 0 = neutral. **Read by the engine** — both `slotPreferenceScore` (Policy A) and the LinUCB context vector — and eroded nightly by the decay cron. Seeded lazily from the cold-start default. |
+| `preferenceMatrixDecayedAt` | DateTime?  | When the daily decay cron last decayed `preferenceMatrix`; null until the first pass                                                                                                                                                                                                                                                                                               |
+| `onboardingComplete`        | bool       | schema default `false`, but `UsersService.create()` always writes `true` — there's no onboarding flow left to gate on (see "Users" below). The column itself is unused dead weight pending a follow-up migration to drop it.                                                                                                                                                       |
 
 `workStart`/`workEnd`/`workDays` (a per-user working-hours window/working-days set) were
 **dropped with no replacement**. The scheduler now places tasks across the full
-24h/`DAILY_HORIZON` (1440 min) grid, every calendar day — see "The heuristic scheduler (Optimize)" below.
+24h/`DAILY_HORIZON` (1440 min) grid, every calendar day — see [Scheduler architecture](#scheduler-architecture).
 
 ### `Session`
 
@@ -141,25 +131,22 @@ service**. Briefly:
 | `conflict`                      | bool            | true when the task overlaps another task's interval, OR has no valid placement at all (`scheduledStartTime` null). An overlap is now a normal, accepted state — a direct drag/resize can knowingly create one rather than auto-relocating either task; see "The heuristic scheduler (Optimize)" below                                                   |
 | `scheduledStartTime`            | DateTime?       | placement assigned by the EDF engine                                                                                                                                                                                                                                                                                                                    |
 | `userId`                        | uuid            | FK → `User`, `onDelete: Cascade`                                                                                                                                                                                                                                                                                                                        |
-| `seriesId`                      | uuid?           | FK → `SessionSeries`, `onDelete: Cascade` — links session instances of a "study sessions" goal. Not yet written by any endpoint.                                                                                                                                                                                                                        |
-| `sessionIndex` / `sessionTotal` | int?            | denormalized convenience fields alongside `seriesId` for cheap per-row rendering. Not yet written by any endpoint.                                                                                                                                                                                                                                      |
+| `seriesId`                      | uuid?           | FK → `SessionSeries`, `onDelete: Cascade`. Set for a recurring fixed-type (`DND`/`ASSIGNMENT`/`EXAM`/`LECTURE`) representative and for every session of a `POST /sessions` `sessionCount > 1` `TASK` series.                                                                                                                                            |
+| `sessionIndex` / `sessionTotal` | int?            | 1-based position / total session count within a `TASK` series (null otherwise). Denormalized for cheap per-row rendering.                                                                                                                                                                                                                               |
 
 Indexes: `[userId, deadline]`, `[userId, status]`, `[userId, scheduledStartTime]`,
 `[userId, seriesId, createdAt asc]`.
 
 ### `SessionEvent` (append-only audit trail — the ML fuel)
 
-| Field                         | Type               | Notes                                                                                                                                                                                                                                                                     |
-| ----------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | -------- | ------ | ---------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`                          | BigInt             | autoincrement (serialized as decimal string over the wire)                                                                                                                                                                                                                |
-| `eventType`                   | `SessionEventType` | `CREATE`                                                                                                                                                                                                                                                                  | `MOVE` | `RESIZE` | `KEEP` | `COMPLETE` | `ABANDON` | `RESCHEDULED`. `KEEP` = completed in the suggested slot (positive signal); `RESCHEDULED` = auto-repositioned as collateral in someone else's cascade (not a user drag). |
-| `oldSnapshot` / `newSnapshot` | Json               | `{ scheduledStartTime, durationMinutes, tags }` (tag names at event time); MOVE/RESIZE also carry `suggestedStartTime` (the overridden EDF slot); RESCHEDULED carries `propensity` when the softmax re-ranker actually chose the slot. `oldSnapshot` null on CREATE/KEEP. |
-| `rewardScore`                 | float              | Phase-3 reward signal (default 1.0)                                                                                                                                                                                                                                       |
-| `occurredAt`                  | DateTime           | indexed desc per user                                                                                                                                                                                                                                                     |
-| `sessionId` / `userId`        | uuid               | FKs, cascade delete (`userId` denormalized for range queries)                                                                                                                                                                                                             |
-
-> There is no `batchId` field — the old manual Optimize action (and its undo) that used it
-> was removed. Every RESCHEDULED event the implicit day-reschedule writes stands alone.
+| Field                         | Type               | Notes                                                         |
+| ----------------------------- | ------------------ | ------------------------------------------------------------- |
+| `id`                          | BigInt             | autoincrement (serialized as decimal string over the wire)    |
+| `eventType`                   | `SessionEventType` | `CREATE` \| `MOVE` \| `RESIZE` \| `RETAINED`                  |
+| `oldSnapshot` / `newSnapshot` | Json               | `{ scheduledStartTime, durationMinutes, tags }`               |
+| `rewardScore`                 | float              | Phase-3 reward signal (default 1.0)                           |
+| `occurredAt`                  | DateTime           | indexed desc per user                                         |
+| `sessionId` / `userId`        | uuid               | FKs, cascade delete (`userId` denormalized for range queries) |
 
 ### `Tag`
 
@@ -205,11 +192,11 @@ Global prefix `**/api/v1**`. All routes except `POST /auth/otp/*` require
 
 ### Users (`/users`)
 
-| Method | Path                          | Purpose                                                                                                                                          |
-| ------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| GET    | `/users/me`                   | profile                                                                                                                                          |
-| PATCH  | `/users/update/basic-info`    | update name/email                                                                                                                                |
-| GET    | `/users/me/preference-matrix` | the current user's flat 672-int signed preference matrix for the Insights heatmap (`PreferenceMatrixResponse`; cold-start → all-zero). Read-only |
+| Method | Path                          | Purpose                                                                                                                                            |
+| ------ | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/users/me`                   | profile                                                                                                                                            |
+| PATCH  | `/users/update/basic-info`    | update name/email                                                                                                                                  |
+| GET    | `/users/me/preference-matrix` | the current user's flat 168-float signed preference matrix for the Insights heatmap (`PreferenceMatrixResponse`; cold-start → all-zero). Read-only |
 
 There is no onboarding endpoint and no preferences-update endpoint. Onboarding was removed
 entirely (no flow, no `onboardingComplete` gate — every new user is created with
@@ -230,7 +217,6 @@ and is otherwise fixed — there is no later edit path.
 | PATCH  | `/tasks/:id/reschedule`           | manual drag: writes the requested interval **unconditionally** (`SchedulerService.applyDirectPlacement`) — no search, no eviction — and pins `manuallyMoved: true` (informational). If the dropped slot now overlaps another task, BOTH are flagged `conflict: true` (one bounded, indexed-range recheck — `markConflicts`) and `rationale` names the overlap; neither is auto-relocated. `displaced` is always `[]`. Returns `RescheduleResponse`                                                                                                                                                                                                                                                                                                                                          |
 | PATCH  | `/tasks/:id/resize`               | edge-resize, snaps to 15-min grid — same direct-write + bounded conflict recheck `reschedule` uses, over the task's own new span                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | POST   | `/tasks/reschedule/undo/:batchId` | undo one batch (from `resolve`/Optimize-apply's `batchId`): reverts every task it moved back to its prior slot/duration, restored from each tagged `RESCHEDULED` `SessionEvent`'s `oldSnapshot`. Pre-flight "touched since" check: if a batched task was acted on again since, responds `{ requiresConfirmation: true, touchedSessionIds }` (writes nothing) instead — resubmit with body `{ strategy: "all" \| "excludeTouched" }`. 404 when `batchId` matches no event for this user. Returns `UndoBatchResponse`                                                                                                                                                                                                                                                                         |
-| PATCH  | `/tasks/:id/complete`             | mark DONE, records COMPLETE, then frees the slot (`SchedulerService.freeSlot`) — a bounded conflict-clear on a neighbor that was ONLY conflicting with this task. Nothing else ever moves                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | DELETE | `/tasks/:id`                      | delete the task, then free the slot it leaves behind (`SchedulerService.freeSlot`) — same bounded conflict-clear as `complete`. No reoptimize, no separate confirm step. Returns `RemoveSessionResponse` (`{ displaced: [], batchId? }` — always empty; kept for wire shape parity)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | POST   | `/tasks/optimize/preview`         | the one explicit, opt-in, multi-task action's dry run: `SchedulerService.optimizeWindow(..., { dryRun: true })` returns a **COUNT ONLY** (`OptimizePreviewResponse`) of how many tasks in `[windowStart, windowEnd]` would move under `mode` (`"full"` \| `"retainManual"` \| `"balanced"`) — never a per-task diff, nothing written. `windowEnd - windowStart` is capped server-side by `MAX_SCAN_DAYS` regardless of the client UI's own (tighter) cap                                                                                                                                                                                                                                                                                                                                    |
 | POST   | `/tasks/optimize/apply`           | recomputes the window server-side (never trusts the preview's count as stale) and writes every moved task in one batch, undoable via the undo endpoint above. Returns `OptimizeApplyResponse` (`{ count, batchId, fixedCount?, unchangedCount? }` — the `fixedCount`/`unchangedCount` pair is `"retainManual"`-only)                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -263,81 +249,6 @@ only connection status. Types in `@zenflow/shared` (`ConnectIntegrationInput`,
 `DluAuthService` only does a pass/fail probe; scraping belongs to the ingestion service.
 
 Full live schema: **Swagger UI at `<API_URL>/api`**.
-
-## Rate limiting
-
-The OTP-sending auth endpoints — `POST /auth/otp/request` (emails a code on every call)
-and `POST /auth/otp/verify` (guesses against a 6-digit code) — are rate-limited with
-[LimitKit](https://github.com/alphatrann/limitkit) (`@limitkit/core` + `@limitkit/nest` +
-`@limitkit/redis` + `@limitkit/memory`, all published on the public npm registry) to stop
-email-bombing, account enumeration, and OTP brute-forcing.
-
-- **Where it's wired:** [`src/common/rate-limit/`](src/common/rate-limit).
-  `RateLimitModule` registers `@limitkit/nest`'s `LimitModule` with a **global** rule set
-  that's a no-op in practice (a single, extremely generous placeholder rule — `LimitKit`'s
-  `RateLimiter` throws if given zero rules, and `LimitGuard` runs as `APP_GUARD` on every
-  request regardless). Real limiting is opt-in per route via the `@RateLimit()` decorator —
-  applied only to `AuthController`'s `otp/request` and `otp/verify` handlers
-  (`rate-limit.rules.ts`) — so the rest of the API is unaffected.
-- **Rules:** each guarded route layers a **per-IP** sliding window (the documented LimitKit
-  login example, `slidingWindow({ window, limit })`) with a **per-email** sliding window
-  (lower-cased, keyed off the request body), so an attacker spraying one victim's inbox from
-  many IPs is still capped. `otp/verify`'s limits are intentionally looser than
-  `otp/request`'s so a user retyping a mistyped code isn't blocked.
-- **Store:** `@limitkit/redis`'s `RedisStore`, backed by its own dedicated, already-connected
-  Redis client (`src/common/redis/` — `RATE_LIMIT_REDIS_CLIENT`, connected to
-  `RATE_LIMIT_CACHE_URL`) outside tests; `@limitkit/memory`'s `InMemoryStore` when
-  `NODE_ENV === "test"`, so tests never depend on a running Redis for rate-limit state.
-  This is a **separate physical Redis instance** from the one backing sessions/OTP codes
-  (`REDIS_CLIENT` / `CACHE_URL`) — rate-limit counters are high-churn, short-TTL keys, and
-  isolating them means that traffic can't evict or contend with session/OTP data (and vice
-  versa). See `compose.{dev,staging,prod}.yml`'s `redis-ratelimit` service.
-- **Rejection contract:** `LimitGuard` throws `TooManyRequestsException` (HTTP 429) with a
-  plain-string body; `TooManyRequestsFilter` (registered as a global `APP_FILTER` inside
-  `RateLimitModule`) re-shapes that into this app's `{ success: false, message }` envelope.
-  The guard's `RateLimit-Limit` / `RateLimit-Remaining` / `Reset-After` / `Retry-After`
-  headers (RFC 9331) pass through untouched.
-- **Env vars** (validated in the `@hapi/joi` boot schema in `app.module.ts`, all optional
-  with sensible defaults — see `.env.dev` / `.env.staging` / `.env.prod` / `.env.test` for
-  example values):
-
-  ```env
-  OTP_REQUEST_IP_WINDOW_SEC=60      # default 60
-  OTP_REQUEST_IP_LIMIT=5            # default 5   (the documented LimitKit login example)
-  OTP_REQUEST_EMAIL_WINDOW_SEC=900  # default 900 (15 min)
-  OTP_REQUEST_EMAIL_LIMIT=3         # default 3
-  OTP_VERIFY_IP_WINDOW_SEC=60       # default 60
-  OTP_VERIFY_IP_LIMIT=20            # default 20
-  OTP_VERIFY_EMAIL_WINDOW_SEC=600   # default 600 (10 min)
-  OTP_VERIFY_EMAIL_LIMIT=10         # default 10
-  ```
-
-- **Tests:** `test/rate-limit.e2e-spec.ts` proves N rapid requests to `POST /auth/otp/request`
-  and `POST /auth/otp/verify` 429 once the per-IP limit is hit (in the `{ success: false,
-message }` envelope) and that the endpoint is usable again once the sliding window rolls
-  over — against `@limitkit/memory`, never real Redis, and without needing Postgres/SMTP (it
-  boots a minimal `TestingModule` around the real `AuthController`/`AuthModule`/
-  `RateLimitModule` wiring, with `PrismaService`/`UsersService`/`MailService` swapped for bare
-  mocks, so it has no external dependencies). `src/common/rate-limit/*.spec.ts` unit-tests the
-  rule key/policy resolution and the 429→envelope exception filter.
-
-## Conventions
-
-- **Naming:** plural feature folders/classes (`SessionsController`, `UsersService`,
-  `SessionsModule`). DTOs end in `Dto`; guards in `Guard`; strategies in `Strategy`.
-- **DTOs + validation:** every request body/query is a `class-validator` DTO. The global
-  pipe runs `whitelist: true, forbidNonWhitelisted: true, transform: true` with implicit
-  conversion — so unknown fields are rejected and query params coerce to their typed shape.
-  Custom decorators: `@IsValidTimezone()`, plus `@CurrentUser()`. `Session.title` is capped at
-  60 characters via `class-validator`'s built-in `@MaxLength(60)`.
-- **Response shape:** controllers return `{ success: true, message, data }`; let NestJS
-  `HttpException`s propagate (don't swallow). Prisma errors map via
-  [`src/prisma/error-codes.ts`](src/prisma/error-codes.ts).
-- **Shared types are the contract:** request/response shapes live in `@zenflow/shared`
-  (`CreateSessionInput`, `SessionsListResponse`, `RescheduleResponse`, …). Change types there and
-  `pnpm shared:build` before relying on them.
-- **Module wiring:** a feature module imports `PrismaModule` when it needs the DB;
-  `SchedulerModule` is imported by `SessionsModule`.
 
 ## Local development
 
@@ -385,6 +296,273 @@ Copy `.env.example` to `.env.{dev,staging,prod,test}`:
 ```bash
 cp .env.example .env.dev # same for .env.staging, .env.test, .env.prod
 ```
+
+`BANDIT_SERVICE_URL` (optional, dev `http://localhost:8100`) points at the stateless Python
+bandit service (`services/bandit/`). When unset, LinUCB scheduling is disabled and every
+scheduling event falls back to the heuristic.
+
+## LinUCB scheduling (A/B experiment)
+
+`docs/adr/0001-linucb-model-design.md` + `docs/scheduler/{reranking,ab-testing}.md`, and
+the [Scheduler architecture](#scheduler-architecture) walkthrough below. On `POST /sessions`
+(a single `TASK`) and a `TASK` deadline change, `TaskPlacementService` places the one
+session via `HeuristicPlacer.placeTask`, then `ExperimentService.assignPolicy()` picks a
+50/50 `primaryPolicy`:
+
+- **HEURISTIC** — keep the heuristic placement; record a `SlotProposal`.
+- **LINUCB** — `BanditPlacer.placeTask()` builds one `d=46` context vector per candidate day
+  (`core/context-vector.ts`), calls the bandit service `/predict` once, scores the empty
+  hard-constraint-feasible 15-min slots by
+  `Σ_arm overlapRate·predicted + slotPreferenceScore` (`core/linucb-slot-score.ts` — the
+  preference term is a cold-start blend so a slot ranks sensibly before any arm has learned),
+  and picks the earliest top slot. A slot may run past local midnight up to the deadline. If
+  it produces a pick, THIS session's `scheduledStartTime` is overridden (no other session
+  moves); otherwise the heuristic placement stands. Either way a `SlotProposal` is recorded
+  with `featureVector` + `selectedArm`.
+
+A `sessionCount > 1` series is placed by `SeriesPlacer`: each member gets an even-spread
+target day, then goes through the **same per-member 50/50 heuristic-or-LinUCB pick**, with
+its candidate-day window clamped to `± max(1, floor(X/N))` days around the target (`X` =
+whole days to the deadline, `N` = member count). Members never overlap, ≤3 per calendar day,
+and one `SlotProposal` is recorded per member. A deadline edit re-runs the same path over
+the still-upcoming sittings.
+
+Delayed reward (ADR-0001 §9): the first user `MOVE` of a LinUCB-placed session sends a
+graded penalty (`-min(1, |dragMin| / 240)`) to that arm's `/update` (`SchedulingFeedbackService`);
+the `RETAINED` sweep sends `+1`. The returned `(A, b)` is persisted to `BanditArmState`; the
+`SessionEvent` links back via `slotProposalId`. Every part is best-effort — a bandit failure
+never breaks session create/update.
+
+## Scheduler architecture
+
+The scheduler places **one `TASK`** (or the members of one `TASK` series) into an empty
+15-minute slot and never moves anything else. It is split into a **pure core**
+(`scheduler/core/*` — scoring, ranking, arm bands, series math, the LinUCB feature vector,
+recurrence, decay; no Prisma, no `new Date()`, no `Math.random()`) and an **I/O layer**
+(`scheduler/io/*` — the placers, the one occupancy query, the A/B facade, the delayed-reward
+writer, and the two crons). `sessions/` talks to exactly two of them.
+
+### Module map
+
+```mermaid
+flowchart LR
+  subgraph sessions["sessions/"]
+    SS[SessionsService]
+  end
+
+  subgraph facade["scheduler/io — facade"]
+    TPS[TaskPlacementService]
+    SFS[SchedulingFeedbackService]
+  end
+
+  subgraph placers["scheduler/io — placers"]
+    HP[HeuristicPlacer]
+    BP[BanditPlacer]
+    SP[SeriesPlacer]
+    DL[day-load.ts\nthe only occupancy query]
+  end
+
+  subgraph crons["scheduler/io — @Cron"]
+    RSS[RetainedSessionsService\nEVERY_30_MINUTES]
+    MDS[MatrixDecayService\nEVERY_DAY_AT_3AM]
+  end
+
+  subgraph core["scheduler/core — pure"]
+    SC[slot-score.ts\nslotPreferenceScore + bestFreeSlot]
+    LSS[linucb-slot-score.ts]
+    CV[context-vector.ts]
+    ARMS[arms.ts]
+    SPREAD[series-spread.ts]
+    PREF[preference.ts]
+    REC[recurrence.ts]
+    MD[matrix-decay.ts]
+  end
+
+  EXP[ExperimentService\n50/50 assign + SlotProposal]
+  BANDIT[BanditService + BanditArmStateRepository\n→ services/bandit /predict /update]
+
+  SS --> TPS
+  SS --> SFS
+  TPS --> HP & BP & SP
+  TPS --> EXP
+  SP --> HP & BP & EXP
+  HP --> DL & SC
+  BP --> DL & CV & LSS & BANDIT
+  LSS --> ARMS & SC
+  SP --> SPREAD
+  SC --> PREF
+  DL --> REC
+  SFS --> BANDIT
+  RSS --> BANDIT
+  MDS --> MD
+```
+
+### Flow 1 — create a single `TASK`
+
+```mermaid
+sequenceDiagram
+  participant C as SessionsController
+  participant S as SessionsService
+  participant T as TaskPlacementService
+  participant H as HeuristicPlacer
+  participant E as ExperimentService
+  participant B as BanditPlacer
+  C->>S: create(dto)
+  S->>S: resolveTagIds + $tx( session.create + CREATE event )
+  S->>T: placeOnCreate({ user, task, now })
+  T->>H: placeTask → placeInWindow (per day: loadDayLoad + bestFreeSlot)
+  H-->>T: heuristic start (or null)
+  T->>T: session.update scheduledStartTime
+  T->>E: assignPolicy()  (50/50)
+  alt LINUCB
+    T->>B: placeTask (per day: loadDayLoad + buildContextVector → /predict → linucbSlotScore)
+    B-->>T: BanditPick (or null → heuristic stands)
+    T->>T: session.update scheduledStartTime (override)
+    T->>E: recordProposal(LINUCB, featureVector, selectedArm)
+  else HEURISTIC
+    T->>E: recordProposal(heuristic)
+  end
+  T-->>S: { scheduledStartTime, appliedPolicy }
+  S-->>C: toSessionDto(...)
+```
+
+### Flow 2 — create a `TASK` series (`sessionCount > 1`)
+
+```mermaid
+sequenceDiagram
+  participant S as SessionsService.createTaskSeries
+  participant T as TaskPlacementService
+  participant SP as SeriesPlacer
+  participant E as ExperimentService
+  participant H as HeuristicPlacer
+  participant B as BanditPlacer
+  S->>S: $tx( sessionSeries.create + N× session.create + N× CREATE event )
+  S->>T: placeSeriesOnCreate({ seriesId, members, deadline })
+  T->>SP: placeSeries(trigger "create")
+  Note over SP: seriesDayOffsets → per member: clampWindowForMember (± max(1,floor(X/N)))
+  loop each member
+    SP->>E: assignPolicy()
+    SP->>H: placeInWindow(window, extraOccupied = siblings, skipDay = ≤3/day cap)
+    opt LINUCB
+      SP->>B: placeInWindow(window, ...)
+    end
+    SP->>SP: accumulate sibling interval
+    SP->>E: recordProposal(...)   // one per member
+  end
+  SP-->>T: rows[]
+  T->>T: $tx( session.update scheduledStartTime for placed rows )
+  T-->>S: rows[]
+```
+
+### Flow 3 — deadline edit → redistribute
+
+```mermaid
+sequenceDiagram
+  participant S as SessionsService.update
+  participant T as TaskPlacementService
+  participant SP as SeriesPlacer
+  S->>S: $tx( applyFieldDiff detects newDeadline → session.update )
+  alt standalone TASK
+    S->>T: placeOnDeadlineChange({ task, now })
+    Note over T: identical to Flow 1 step 2, trigger "deadline-change"
+  else TASK series member
+    S->>T: redistributeSeries({ seriesId, members, newDeadline })
+    T->>T: partition past / upcoming;  past → fixedOccupied
+    T->>SP: placeSeries(upcoming, fixedOccupied, trigger "deadline-change")
+    T->>T: $tx( sessionSeries.deadline + session.updateMany deadline + upcoming starts )
+  end
+```
+
+### Flow 4 — delayed LinUCB reward
+
+```mermaid
+sequenceDiagram
+  participant S as SessionsService.update
+  participant F as SchedulingFeedbackService
+  participant R as RetainedSessionsService (@Cron)
+  participant BA as Bandit (/update + BanditArmState)
+  Note over S: first user MOVE of a scheduled TASK
+  S->>S: $tx( MOVE SessionEvent + lastMovedAt );  existing.lastMovedAt == null → firstMove
+  S->>F: onFirstMove(userId, sessionId, moveEventId, dragMinutes)
+  F->>F: slotProposal.findFirst(primaryPolicy LINUCB, selectedArm != null)
+  F->>BA: reward = drag==0 ? 0 : -min(1, |drag|/240) → loadAll → /update → save → link event
+  Note over R: every 30 min
+  R->>R: sweep — elapsed, never-moved USER TASK → RETAINED event (+1)
+  R->>BA: same loadAll → /update(+1) → save → link event
+```
+
+### Slot scoring — the overlap-weighted preference score
+
+`slotPreferenceScore` (`core/slot-score.ts`) scores a concrete interval by how much of it
+falls in each local **clock-hour block** it touches, weighted by that block's preference
+value:
+
+```text
+score(slot) = Σ over each hour block [h, h+1) the slot touches:
+                overlapFraction(slot ∩ [h, h+1)) · pref[weekday(h)][h]
+```
+
+A slot that only partially covers an hour contributes that hour fractionally — e.g. a
+**09:15–11:00** slot scores `0.75·pref[..][9] + 1.0·pref[..][10]`. `[start, end)` is
+half-open, so the block starting exactly at `end` is never scored. A midnight-spanning slot
+is split at local midnight and each side scored against its own day's weekday row. The
+matrix is **168 signed floats** — 7 ISO weekdays × 24 one-hour buckets, row-major
+(`matrixIndex(isoWeekday, hour) = (isoWeekday−1)·24 + hour`).
+
+### LinUCB slot score — cold-start blend
+
+`linucbSlotScore` (`core/linucb-slot-score.ts`) for a candidate 15-min start:
+
+```text
+score(slot) = Σ_arm overlapRate(slot, arm) · predicted[day][arm]   (the LinUCB term)
+            + slotPreferenceScore(slot)                            (cold-start blend)
+```
+
+The bandit service returns `0` for an arm with no accumulated reward, so the preference
+addend keeps slots meaningfully ordered before the model has learned anything. This deviates
+from `reranking.md` §3 / `ab-testing.md` §1B as originally written (LinUCB's slot score was
+the arm term alone); see the ADR-0001 addendum.
+
+### Series bounded window
+
+For a `sessionCount > 1` `TASK` series, `seriesDayOffsets(daySpan, N)` gives each member an
+even-spread **target** day offset, and `clampWindowForMember` bounds where that member may
+actually land:
+
+```text
+clamp  = max(1, floor(daySpan / N))          // wide for a sparse series, ±1 for a dense one
+window = [ target − clamp , target + clamp ] clamped to [0, daySpan]
+```
+
+`daySpan` = whole days from the next 15-min boundary to the deadline day, capped at
+`MAX_SCAN_DAYS − 1`. Each member is then placed by the same 50/50 pick as a single task
+inside that window; already-placed siblings are fed forward as hard blocks so members never
+overlap, and a day already holding `MAX_SERIES_PER_DAY` (3) sittings of this series is
+skipped. A member that finds nowhere comes back unplaced without blocking the rest.
+
+### Trace it in the source
+
+| Concept                                                                             | File                                          |
+| ----------------------------------------------------------------------------------- | --------------------------------------------- |
+| preference matrix helpers (`matrixIndex`, default/effective, `preferenceScoreAt`)   | `scheduler/core/preference.ts`                |
+| overlap-weighted slot score + best-free-slot search                                 | `scheduler/core/slot-score.ts`                |
+| LinUCB slot score + cold-start blend                                                | `scheduler/core/linucb-slot-score.ts`         |
+| the `d = 46` LinUCB context vector                                                  | `scheduler/core/context-vector.ts`            |
+| 5 time-of-day arm bands + `overlapRate` (splits at midnight)                        | `scheduler/core/arms.ts`                      |
+| series even spread + `± X/N` window                                                 | `scheduler/core/series-spread.ts`             |
+| feature normalization (`minMaxSigned`, divisors)                                    | `scheduler/core/normalize.ts`                 |
+| rrule expansion + occurrence-id helpers                                             | `scheduler/core/recurrence.ts`                |
+| exponential preference-matrix decay                                                 | `scheduler/core/matrix-decay.ts`              |
+| one day's occupied intervals + workload (the only occupancy query)                  | `scheduler/io/day-load.ts`                    |
+| Policy A placer — `placeTask` / `placeInWindow`                                     | `scheduler/io/heuristic-placer.service.ts`    |
+| Policy B placer — per-day `/predict` + slot pick                                    | `scheduler/io/bandit-placer.service.ts`       |
+| per-member bounded 50/50 series placement                                           | `scheduler/io/series-placer.service.ts`       |
+| the facade `sessions/` calls (place + persist + A/B)                                | `scheduler/io/task-placement.service.ts`      |
+| delayed first-move LinUCB reward                                                    | `scheduler/io/scheduling-feedback.service.ts` |
+| `RETAINED` sweep (+1 reward)                                                        | `scheduler/io/retained-sessions.service.ts`   |
+| nightly matrix decay cron                                                           | `scheduler/io/matrix-decay.service.ts`        |
+| 50/50 policy assignment + `SlotProposal` write                                      | `experiments/experiment.service.ts`           |
+| tuning constants (`MAX_SCAN_DAYS`, `MAX_SERIES_PER_DAY`, `BANDIT_*`, reward scales) | `scheduler/constants.ts`                      |
 
 ## Running staging
 
