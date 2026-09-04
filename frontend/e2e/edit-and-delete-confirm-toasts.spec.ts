@@ -1,27 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { login, uniqueEmail } from "./helpers/auth";
 
-/**
- * Reschedule redesign (notes.md): a deadline/tags edit or a delete no longer
- * has any confirm-before-reschedule prompt to show — there is no
- * auto-placement engine left to recompute a cascade (CLAUDE.md), so
- * `PATCH /sessions/:id` and `DELETE /sessions/:id` are plain writes with no
- * side effects on any other session. This exercises that neither a deadline
- * edit nor a delete surfaces a blocking prompt (triggers 1–3 from notes.md —
- * the reschedule-on-create/edit-deadline/delete prompts — are explicitly
- * deferred, not built).
- *
- * `POST /sessions` never sets `scheduledStartTime` (no auto-placement), so a
- * freshly created session is unscheduled and never renders as a calendar
- * block/agenda item (`@zenflow/core`'s `taskToBlock` returns `null` for an
- * unscheduled session). To exercise the edit/delete panel — which only opens
- * from a rendered block — this schedules the session directly via
- * `PATCH /sessions/:id` over the authenticated API context, then reloads so
- * it renders as a block to click.
- *
- * Requires: backend stack + MailHog (see playwright.config.ts).
- */
-
 const API_URL = process.env.VITE_API_URL ?? "http://localhost:5000/api/v1";
 
 async function createSession(page: Page, title: string): Promise<string> {
@@ -37,9 +16,11 @@ async function createSession(page: Page, title: string): Promise<string> {
     page.getByText(/session created — drag it onto the calendar/i),
   ).toBeVisible({ timeout: 10_000 });
 
-  const res = await page.context().request.get(`${API_URL}/sessions/suggestions`, {
-    params: { q: title, limit: 1 },
-  });
+  const res = await page
+    .context()
+    .request.get(`${API_URL}/sessions/suggestions`, {
+      params: { q: title, limit: 1 },
+    });
   const body = await res.json();
   const id: string = body.data.suggestions[0].id;
 
