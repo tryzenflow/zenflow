@@ -10,8 +10,3 @@ tw-test-out.css
 start-dev.bat
 start-dev.ps1
 startdev-*.bat
-
-# Local scratch / secrets
-cookies.txt
-TODO.md
-notes.md

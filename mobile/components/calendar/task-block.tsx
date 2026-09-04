@@ -90,7 +90,7 @@ function DueChip({ late, label }: { late: boolean; label: string }) {
   return (
     <View
       className={cn(
-        "flex-row items-center gap-0.5 rounded px-1 py-px",
+        "flex-row items-center gap-1 rounded px-1 py-0.5",
         late ? "bg-amber-500/15" : "bg-muted",
       )}
     >
@@ -100,15 +100,15 @@ function DueChip({ late, label }: { late: boolean; label: string }) {
           className="text-amber-700 dark:text-amber-300"
         />
       ) : (
-        <Clock size={9} className="text-muted-foreground" />
+        <Clock size={12} className="text-muted-foreground" />
       )}
       <Text
         className={cn(
-          "text-[9px] font-medium leading-none",
+          "text-xs font-medium leading-none",
           late ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground",
         )}
       >
-        {label}
+        Due {label}
       </Text>
     </View>
   );
