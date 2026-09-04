@@ -44,6 +44,36 @@ class ArmParams:
         self._a_inv = None
 
 
+def score(a: np.ndarray, b: np.ndarray, x: np.ndarray, alpha: float) -> float:
+    """UCB score for a single arm given its ``(A, b)`` state and context ``x``.
+
+    ``θ̂ᵀx + α·√(xᵀA⁻¹x)`` with ``θ̂ = A⁻¹b`` — the exact per-arm computation
+    from :meth:`LinUCB.select_arm`, lifted out so a stateless HTTP layer can
+    reuse it on caller-supplied ``(A, b)``. The caller owns shape agreement
+    (``a`` is ``(d, d)``, ``b`` and ``x`` are ``(d,)``).
+    """
+    a_inv: np.ndarray = np.linalg.inv(a)
+    theta_hat: np.ndarray = a_inv @ b
+    expected_reward = float(theta_hat @ x)
+    uncertainty = math.sqrt(max(float(x @ a_inv @ x), 0.0))
+    return expected_reward + alpha * uncertainty
+
+
+def update(
+    a: np.ndarray, b: np.ndarray, x: np.ndarray, reward: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """Fold one ``(context, reward)`` pair into ``(A, b)``.
+
+    ``A + xxᵀ``, ``b + reward·x`` — the math from
+    :meth:`ArmParams.add_observation`, returned as new arrays so the inputs are
+    left untouched (the HTTP ``/update`` handler needs the new state to return,
+    not a mutation).
+    """
+    new_a: np.ndarray = a + np.outer(x, x)
+    new_b: np.ndarray = b + reward * x
+    return new_a, new_b
+
+
 class LinUCB:
     """Disjoint LinUCB with lazily-created arms.
 
