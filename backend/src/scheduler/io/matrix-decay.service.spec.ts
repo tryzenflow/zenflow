@@ -1,6 +1,6 @@
 import { PREFERENCE_MATRIX_LENGTH } from "@zenflow/shared";
 import { MatrixDecayService } from "./matrix-decay.service";
-import { PrismaService } from "../prisma/prisma.service";
+import { PrismaService } from "../../prisma/prisma.service";
 
 /**
  * Coverage for the I/O wrapper around the PURE decay helper. We assert the

@@ -1,4 +1,4 @@
-import { deadlineDayStr, overlapsAny } from "./slot";
+import { addDaysStr, dayDiffStr, deadlineDayStr, overlapsAny } from "./slot";
 
 describe("overlapsAny — half-open interval overlap", () => {
   const occ = [
@@ -59,5 +59,30 @@ describe("deadlineDayStr — the day a deadline should be scheduled within", () 
     expect(
       deadlineDayStr(new Date("2026-08-28T04:00:00.000Z"), "America/New_York"),
     ).toBe("2026-08-27");
+  });
+});
+
+describe("dayDiffStr — whole calendar days between two date strings", () => {
+  it("is 0 for the same day", () => {
+    expect(dayDiffStr("2026-06-15", "2026-06-15")).toBe(0);
+  });
+
+  it("counts forward and backward", () => {
+    expect(dayDiffStr("2026-06-15", "2026-06-18")).toBe(3);
+    expect(dayDiffStr("2026-06-18", "2026-06-15")).toBe(-3);
+  });
+
+  it("crosses month and year boundaries", () => {
+    expect(dayDiffStr("2026-01-30", "2026-02-02")).toBe(3);
+    expect(dayDiffStr("2026-12-31", "2027-01-01")).toBe(1);
+  });
+
+  it("is DST-agnostic (pure UTC-midnight math)", () => {
+    // spans the US spring-forward — still a whole number of days
+    expect(dayDiffStr("2026-03-07", "2026-03-09")).toBe(2);
+  });
+
+  it("round-trips against addDaysStr", () => {
+    expect(dayDiffStr("2026-06-15", addDaysStr("2026-06-15", 42))).toBe(42);
   });
 });

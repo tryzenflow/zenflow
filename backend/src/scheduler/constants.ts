@@ -1,5 +1,17 @@
-/** How far ahead the engine will scan for an open slot for deadline-less tasks. */
-export const MAX_SCAN_DAYS = 90;
+/**
+ * How far ahead the engine will scan for an open slot, and the ~2-month
+ * effective deadline horizon.
+ *
+ * NOTE: `docs/adr/0001-linucb-model-design.md` §5.2/§10 quote `MAX_SCAN_DAYS = 90`.
+ * The code ships 60; it is also the `minMaxSigned` divisor for the context
+ * vector's `remaining_days_until_deadline` / `candidate_days_from_now` features,
+ * so changing it shifts every long-horizon placement AND every stored feature
+ * vector. Left at 60 deliberately — see the ADR addendum.
+ */
+export const MAX_SCAN_DAYS = 60;
+
+/** Max sessions of one `TASK` series allowed to land on a single calendar day (issue #32). */
+export const MAX_SERIES_PER_DAY = 3;
 
 /**
  * Per-update step size η for preference-matrix acquisition.
@@ -18,30 +30,33 @@ export const PREFERENCE_LEARNING_RATE = 0.1;
 export const MIN = 60_000;
 
 /**
- * Softmax/Boltzmann TEMPERATURE for the Phase-2 placement re-ranker
- * ({@link preferenceMatrixReRanker}). Controls how greedily the stochastic
- * logging policy samples among EDF-feasible slots: `logit = cellScore / T +
- * gumbel`, argmax → choice.
- *
- * Why a stochastic policy at all: a pure argmax only ever logs outcomes for the
- * single top-scored slot, which (a) biases the telemetry the roadmap learns from
- * and (b) makes Inverse-Propensity-Scoring (IPS) off-policy evaluation
- * degenerate — IPS needs a stochastic logging policy with recorded
- * propensities (docs/heuristic.md §Evaluation, before Phase 3's bandit).
- *
- * Choosing T: the signed matrix accumulates `±1` per move/keep, so a "meaningful"
- * preference delta between two feasible slots is on the order of a few units (a
- * cell visited a handful of times). With 1-hour buckets cells accumulate signal
- * ~4× faster than the old 15-min slots, so meaningful deltas appear sooner —
- * a user needs far fewer interactions before the matrix has actionable signal.
- * `T = 1.0` makes a 1-unit gap an `e¹ ≈ 2.7×` odds ratio and a 3-unit gap
- * ≈ `20×` — i.e. it still strongly prefers liked buckets while leaving real
- * exploration mass on the rest. A 3-unit delta will be reached faster now that
- * each move/keep touches a coarser cell. Larger T over-explores (→ uniform,
- * MAR regresses); `T → 0` recovers the deterministic argmax (today's greedy
- * Phase-2). T=1.0 remains valid but may benefit from downward tuning once real
- * data confirms faster convergence. Validated against the sim MAR guardrail
- * (must not regress vs greedy Phase-2; must still beat Phase-1) — tune DOWN if
- * a run regresses.
+ * Reward written on the `SessionEvent` for each outcome of the move-or-keep
+ * model. A user drag/resize of a scheduled TASK is a negative signal; a TASK
+ * that elapses unmoved (detected by the RETAINED sweep) is a positive one.
+ * `CREATE` events carry a neutral 0.
  */
-export const RERANKER_TEMPERATURE = 1.0;
+export const SESSION_MOVE_REWARD = -1.0;
+export const SESSION_RETAINED_REWARD = 1.0;
+
+/**
+ * Disjoint LinUCB scheduling parameters
+ * (`docs/adr/0001-linucb-model-design.md` §10). `BANDIT_ALPHA` is the
+ * exploration coefficient on `α·√(xᵀA⁻¹x)`; `BANDIT_RIDGE` is the ridge `λ`
+ * (`A = λI` at cold start). Both are sent to the Python bandit service in every
+ * `/predict` / `/update` payload.
+ */
+export const BANDIT_ALPHA = 0.15;
+export const BANDIT_RIDGE = 1.0;
+
+/**
+ * `D_SCALE` for the graded `MOVE` reward: the displacement (in minutes, from
+ * the model's originally proposed start) at which the penalty saturates at −1.
+ * `reward = dragDistanceMinutes === 0 ? 0 : -min(1, |drag| / MOVE_REWARD_SCALE_MINUTES)`.
+ */
+export const MOVE_REWARD_SCALE_MINUTES = 240;
+
+/** Stamped on `SlotProposal.modelVersion` for LinUCB proposals. */
+export const BANDIT_MODEL_VERSION = "linucb-d46-v1";
+
+/** `SlotProposal.experimentId` for the heuristic-vs-LinUCB A/B experiment. */
+export const BANDIT_EXPERIMENT_ID = "linucb-heuristic-v1";
