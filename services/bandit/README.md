@@ -1,63 +1,62 @@
 # Zenflow Bandit Service
 
-Python service hosting the **Phase 3** contextual bandit (LinUCB) and, later, the
-**Phase 4** collaborative-archetype cold-start seeding for Zenflow's scheduler.
-The authoritative roadmap lives in [`docs/heuristic.md`](../../docs/heuristic.md).
+A small Python service hosting the **Disjoint LinUCB** model that personalizes Zenflow's
+task scheduling. Linear algebra is a poor fit for the NestJS/TypeScript backend, so the
+model lives here and the API calls it over internal HTTP (`BANDIT_SERVICE_URL`).
 
-> **Status: model core + offline evaluation harness implemented; HTTP surface not yet.**
-> `LinUCB`, the `Policy` abstraction, and the replay evaluator are in place and tested.
-> The FastAPI routes below are still to come, so the NestJS API does not call this
-> service yet — Phase 1's deterministic EDF engine
-> ([`backend/src/scheduler`](../../backend/src/scheduler)) remains the live scheduler.
+Design: [`docs/adr/0001-linucb-model-design.md`](../../docs/adr/0001-linucb-model-design.md).
+Arm → timestamp mapping: [`docs/scheduler/reranking.md`](../../docs/scheduler/reranking.md).
+Experiment: [`docs/scheduler/ab-testing.md`](../../docs/scheduler/ab-testing.md).
 
-> **Scope note (Phase 2 ≠ here).** The Phase-2 heuristics (signed-matrix re-ranker,
-> matrix decay) and the simulation/evaluation harness live in the **NestJS backend**,
-> not this service — they are pure TypeScript that re-ranks EDF's feasible set, so they
-> belong next to the scheduler core
-> ([`backend/src/scheduler/reranker.ts`](../../backend/src/scheduler/reranker.ts),
-> `matrix-decay.ts`) and the harness in
-> [`backend/src/simulation`](../../backend/src/simulation) (`pnpm sim:run | sim:eval |
-sim:recovery | sim:significance`). This Python service is reserved for **Phase 3+**
-> (LinUCB) where a linear model genuinely needs a non-TS runtime. See
-> [`docs/phase-2-evaluation-steps.md`](../../docs/phase-2-evaluation-steps.md).
->
-> **Note (2026-08-20):** Phase 2's per-tag duration-bias corrector (`duration-bias.ts`,
-> the `DurationAdjustmentMode` preference, `GET /users/me/tag-bias`) has been removed
-> entirely — it is not a Phase-2-lives-elsewhere omission from this README, it no longer
-> exists anywhere. See
-> [`docs/heuristic.md`](../../docs/heuristic.md#removed-per-tag-duration-bias-correction)
-> and [ADR-0001](../../docs/adr/0001-phase-2-scheduling-heuristic-and-transparency-ui.md)
-> for why. Tags remain a live signal for Phase 3+ via multi-hot encoding in the bandit's
-> context vector (see below) — this removal does not touch that.
+> **Status: model core, offline replay evaluator, and the FastAPI HTTP surface
+> (`src/api.py`: `GET /health`, `POST /predict`, `POST /update`) implemented and tested.
+> The backend integration seam is not wired yet** — until it is, the live scheduler is the
+> deterministic heuristic in [`backend/src/scheduler`](../../backend/src/scheduler)
+> (`heuristic.ts` + `day-reschedule.service.ts`).
 
----
+## Design
 
-## Why a separate service
+- **Disjoint LinUCB.** Each of the 5 time-of-day arms keeps its own ridge regression
+  `A = λI + Σ xxᵀ`, `b = Σ r·x` over a context vector shared across arms, scored by
+  `θ̂ᵀx + α·√(xᵀA⁻¹x)`. `λ = 1.0`, `α = 0.15` (ADR-0001 §10). `A⁻¹` is cached per arm and
+  invalidated on update. The `LinUCB` class is arm-agnostic — arms are created lazily by
+  string key at the ridge prior — so the same code serves 3 arms (the offline demo) or 5
+  (production).
+- **Canonical arms** (`SchedulingArm` in `@zenflow/shared`), half-open, lower-inclusive:
+  `EARLY_MORNING [00:00,06:00)`, `MORNING [06:00,11:00)`, `AFTERNOON [11:00,17:00)`,
+  `EVENING [17:00,20:00)`, `NIGHT [20:00,24:00)`.
+- **Context vector** `d = 46` — session (`remaining_days_until_deadline`, `duration`),
+  user (`day_preference_profile[24]`), candidate day (`day_of_week[7]`,
+  `candidate_days_from_now`, `workload_by_type[10]`, `semester_phase`), bias. Full table
+  and normalization: ADR-0001 §5.
+- **Stateless service.** This service holds **no per-user state**. The NestJS backend owns
+  `(A, b)` persistence (Postgres table `BanditArmState`, ADR-0001 §6.1) and passes the 5
+  arms' `(A, b)` in every request; `/update` returns the new `(A, b)` for the backend to
+  persist. This keeps all durable state in one database and makes the "fall back to the
+  heuristic when the service is down" path trivial.
+- **Reproducible.** The only randomness is uniform tie-breaking from an injected
+  `random.Random` — no `Math.random()`, no clock reads, no module-global RNG
+  (mirrors the scheduler-core invariant in [`CLAUDE.md`](../../CLAUDE.md)).
 
-Linear bandit is a poor fit for the NestJS/TypeScript
-backend. The plan is a small Python service the API calls over internal HTTP
-(`BANDIT_SERVICE_URL`) only at task-creation time. The EDF engine already exposes the
-`feasibleSlots()` + `SlotReRanker` seam in
-[`backend/src/scheduler/edf.ts`](../../backend/src/scheduler/edf.ts) and
-[`reranker.ts`](../../backend/src/scheduler/reranker.ts) (wrapped by `SchedulerService`)
-where bandit scoring will plug in as a re-ranker over the feasible set — Phase 1 ships the
-identity re-ranker, so pure EDF order wins until then.
+## HTTP surface
 
-The data the model will consume already accumulates in Phase 1:
+| Route           | Purpose                                                                                  |
+| --------------- | -------------------------------------------------------------------------------------- |
+| `GET /health`   | Liveness probe → `{"status":"ok"}`.                                                      |
+| `POST /predict` | Body: `alpha`, `ridge`, `state` (all 5 arms' `(A, b)`, `[]` = cold ridge prior), `contexts` (`[{day, x}]`). Returns `{scores: {day: {arm: score}}}` — all 5 arms for every day. A cold arm scores `0.0` (no exploration bonus until it has data). |
+| `POST /update`  | Body: `ridge`, `arm`, `x`, `reward`, `state` (that arm's `(A, b)`, `[]` = cold). Returns the new `{A, b}` (`A` is `d*d` row-major). |
 
-- **`SessionEvent`** (`CREATE`/`MOVE`/`RESIZE`/`KEEP`/`COMPLETE`/`ABANDON`) with
-  `oldSnapshot`/`newSnapshot` (each carrying the task's tag names at event time, and the
-  EDF-`suggestedStartTime` on MOVE/RESIZE) and a `rewardScore` field — the reward signal.
-- **`User.preferenceMatrix`** — a flat **672**-int **signed** matrix (7 days × 96
-  fifteen-minute slots, slot-grid-aligned). Manual moves decrement the vacated cell (−1) and
-  increment the destination (+1); a KEEP/complete-in-slot increments the kept cell (+1).
-- **`User.roleArchetypeId`** — reserved for Phase-4 cold-start cluster assignment.
+`d` is inferred from the length of `x` and validated (all `x` equal; each non-empty `A` is
+`d*d`, each non-empty `b` is `d`); bad shapes / non-finite values / `alpha < 0` /
+`ridge <= 0` / an unknown `arm` → HTTP 422.
+
+Reward values (ADR-0001 §7): `RETAINED → +1`; `MOVE → −clamp(|dragDistanceMinutes| / 240, 0, 1)`;
+resize-only `MOVE` (`dragDistanceMinutes == 0`) → `0`. `CREATE` is never sent.
 
 ## Toolchain
 
-Managed with [uv](https://docs.astral.sh/uv/) (Python 3.12). Unlike the rest of the
-monorepo, this service is **not** a pnpm workspace — run its commands from
-`services/bandit/`.
+Managed with [uv](https://docs.astral.sh/uv/) (Python 3.12). This service is **not** a
+pnpm workspace — run its commands from `services/bandit/`.
 
 ```powershell
 uv sync                      # create .venv and install deps (incl. dev group)
@@ -66,6 +65,7 @@ uv run ruff check .          # lint
 uv run ruff format .         # format
 uv run mypy                  # typecheck (strict)
 uv run python -m src.main    # replay-evaluation demo: LinUCB vs. random baseline
+uv run uvicorn src.api:app --reload --port 8000   # serve the HTTP API locally
 ```
 
 Python is **4-space** indented (PEP 8 / Ruff), which the root
@@ -75,87 +75,48 @@ Python is **4-space** indented (PEP 8 / Ruff), which the root
 
 ```
 services/bandit/
+├── Dockerfile                      # python:3.12-slim + uv; runs uvicorn src.api:app on :8000
 ├── src/
-│   ├── main.py                      # demo entry point (FastAPI app to come)
+│   ├── api.py                      # FastAPI app + the 3 route handlers (/health, /predict, /update)
+│   ├── schemas.py                  # Pydantic request/response models + ArmId / ARM_IDS
+│   ├── serialization.py            # numpy glue + 422 guards (hydrate, all_finite, require_422)
+│   ├── main.py                     # replay-evaluation demo
 │   ├── models/
-│   │   └── linucb.py                # disjoint LinUCB (Li et al., 2010, Alg. 1)
+│   │   └── linucb.py               # disjoint LinUCB + stateless score()/update() helpers
 │   └── evaluators/
-│       ├── event.py                 # one logged interaction (x, arm, payoff)
-│       ├── policy.py                # Policy ABC + RandomPolicy, LinUCBPolicy
-│       └── policy_evaluator.py      # unbiased replay evaluation (Alg. 3)
-└── tests/                           # pytest suite mirroring src/
+│       ├── event.py                # one logged interaction (x, arm, payoff)
+│       ├── policy.py               # Policy ABC + RandomPolicy, LinUCBPolicy
+│       └── policy_evaluator.py     # unbiased replay evaluation (Alg. 3)
+└── tests/                          # pytest suite mirroring src/ (test_api.py routes, test_schemas.py models)
 ```
 
-### The model — `LinUCB`
-
-Disjoint LinUCB: each arm keeps its own ridge regression `A = λI + Σ xxᵀ`, `b = Σ r·x`
-over a context vector shared across arms, and is scored by
-`θ̂ᵀx + α·√(xᵀA⁻¹x)`. Arms are created lazily at the ridge prior, so `update()` is safe
-for an arm the model never selected — the normal case in replay, where the logged arm
-came from a different policy. `A⁻¹` is cached per arm and invalidated on update.
-
-The model is a reproducible function of `(inputs + seed)`: the only randomness is
-uniform tie-breaking, drawn from an **injected** `random.Random`. This mirrors the
-scheduler-core invariant in [`CLAUDE.md`](../../CLAUDE.md) — no `Math.random()`, no
-clock reads, no module-global RNG.
+Container: `docker compose -f backend/compose.dev.yml up bandit` — published on the host at
+`http://localhost:8100` (`BANDIT_SERVICE_URL` for backend dev, which runs on the host).
 
 ### Offline evaluation — `PolicyEvaluator`
 
 Implements the unbiased replay estimator (Li et al., 2010, Algorithm 3): given a log
-produced by a **uniformly random** logging policy, an event is _retained_ when the
-policy under evaluation agrees with the logged arm (it scores and learns from it) and
-_discarded_ otherwise. `EvaluationResult` reports `n_matched` alongside the average
-payoff, and flags `exhausted` when the log ran out before the requested trial count —
-so an estimate resting on fewer samples than intended is visible rather than silent.
+produced by a **uniformly random** logging policy, an event is _retained_ when the policy
+under evaluation agrees with the logged arm (it scores and learns from it) and _discarded_
+otherwise. `EvaluationResult` reports `n_matched` alongside the average payoff and flags
+`exhausted` when the log ran out before the requested trial count. Use it to sweep `α` and
+confirm the shipped default stays stable (does not select `EARLY_MORNING` as best on flat
+data).
 
-## Planned HTTP surface
+## Integration checklist
 
-| Route           | Purpose                                                          |
-| --------------- | ---------------------------------------------------------------- |
-| `POST /predict` | recommended slot (LinUCB arm) for a task's feature vector        |
-| `POST /update`  | apply the reward signal (1.0 accepted / 0.0 moved / 0.5 resized) |
-| `POST /seed`    | cold-start a new user from an archetype's weight matrix          |
-
-## Phase 3 — Contextual Bandits (LinUCB)
-
-Replace rigid heuristics with a policy that balances exploring new schedule distributions
-against exploiting known habits, updating in real time.
-
-- **Feature vectorization (context):** tags are flattened into a fixed-width **multi-hot
-  encoded vector** over the global tag pool (e.g. two of six tags → `[1,0,1,0,0,0]`). The
-  full context vector is assembled as:
-
-  `[day_of_week, hours_to_deadline, t₁, t₂, …, tₙ, current_day_load]`
-
-- **The loop:**
-  1. NestJS flattens the multi-tag context and POSTs the vector to the bandit service.
-  2. The service scores the available time slots (arms) and returns the highest-reward slot.
-  3. The user accepts it (high reward) or drags it elsewhere (negative reward), updating the
-     model weights in real time.
-
-## Phase 4 — Collaborative Archetypes & Cold Start
-
-Eliminate the new-user data void using aggregate behavior across the whole user base.
-
-- **Matrix factorization** (e.g. LightFM / collaborative filtering) over a **tag
-  co-occurrence matrix** to learn how users cluster cross-functional work.
-- **User archetypes** from multi-tag signatures (e.g. `#dev`+`#ops` → "Night Owl
-  Developer"; `#marketing`+`#copy` → "Creative Lead").
-- **Cold start:** map a new user's onboarding role to an archetype and seed their
-  multi-hot bandit weights + preference matrix from that cluster's baseline averages
-  (`User.roleArchetypeId`).
-
-## Integration checklist (remaining)
-
-1. Wrap `LinUCB` in the FastAPI routes above (`src/main.py` is currently a demo entry point).
-2. Add model persistence — state is in-process today, so it does not survive a restart.
-3. Implement `scoreSlot()` in the NestJS scheduler to call `POST /predict` with the
-   context vector and fall back to pure EDF on timeout/error.
-4. Wire `BANDIT_SERVICE_URL` through backend config (it is already reserved alongside the
-   `scheduler` service in `backend/compose.*.yml`).
-5. Feed `SessionEvent`s to `POST /update` so weights track real overrides.
-6. Reference [`docs/heuristic.md`](../../docs/heuristic.md) as the source of truth for the
-   phased rollout and the Phase-2 heuristics that precede the bandit.
+- [x] `src/api.py` — FastAPI wrapping the LinUCB math in `GET /health`, `POST /predict`,
+      `POST /update` (stateless: `(A, b)` in the payload).
+- [x] `Dockerfile` + a `bandit` service in `backend/compose.dev.yml` (host `:8100`).
+- [ ] Backend: set `BANDIT_SERVICE_URL` in `backend/.env.dev` / `.env.example`.
+- [ ] Backend: `@zenflow/shared` types (`SchedulingArm`, predict/update request+response);
+      `BanditArmState` Prisma model + migration; `SlotProposal.featureVector` +
+      `selectedArm`; `SessionEvent.slotProposalId`.
+- [ ] Backend: a bandit HTTP client with a timeout and heuristic fallback; a per-day
+      scheduling service that builds the context, calls `/predict`, and runs the
+      `reranking.md` mapping; a 50/50 experiment randomizer that writes `SlotProposal`.
+- [ ] Backend: on the first `MOVE` / on `RETAINED`, compute the reward, call `/update`, and
+      persist the returned `(A, b)`.
 
 ## Contributing
 
