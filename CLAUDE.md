@@ -8,7 +8,7 @@ product overview; this file is the conventions + "how to not break things" refer
 | Area                          | Path                          | Owner subagent      | Reference                                                                                      |
 | ----------------------------- | ----------------------------- | ------------------- | ---------------------------------------------------------------------------------------------- |
 | Frontend (React PWA)          | `frontend/`                   | `frontend-engineer` | [frontend/README.md](frontend/README.md)                                                       |
-| Backend (NestJS API + EDF)    | `backend/`                    | `backend-engineer`  | [backend/README.md](backend/README.md)                                                         |
+| Backend (NestJS API + scheduler) | `backend/`                 | `backend-engineer`  | [backend/README.md](backend/README.md)                                                         |
 | Shared types (FE/BE contract) | `packages/shared/`            | `backend-engineer`  | —                                                                                              |
 | ML / scheduling future        | `services/bandit/`, telemetry | `ml-engineer`       | [services/bandit/README.md](services/bandit/README.md), [docs/heuristic.md](docs/heuristic.md) |
 
@@ -37,20 +37,29 @@ frontend `dev | build | typecheck | lint | test:e2e`.
    `packages/shared/src`. Change them there, then `pnpm shared:build` so both FE and BE see
    the new types. Don't duplicate these shapes in either app.
 
-2. **The scheduler core is pure.** `backend/src/scheduler/edf.ts` (and `slot.ts`,
-   `horizon.ts`, `reranker.ts`) take `now` as a parameter and do no I/O. **No _uncontrolled_
-   randomness** — the core may use randomness only via an **injected seed**, so it stays a
-   pure, reproducible function of `(inputs + seed)` (never `Math.random()` or the clock; the
-   softmax re-ranker's Gumbel noise comes from a seeded PRNG, seeded per-task by the service).
-   Only `scheduler.service.ts` touches Prisma / writes telemetry. Keep that split. Any change
-   to a pure function must update its `*.spec.ts` in the same change.
+2. **The scheduler core is pure.** Everything in `backend/src/scheduler/core/*`
+   (`slot-score.ts`, `linucb-slot-score.ts`, `preference.ts`, `arms.ts`, `series-spread.ts`,
+   `context-vector.ts`, `slot.ts`, `horizon.ts`, `recurrence.ts`, `matrix-decay.ts`, …) takes
+   `now` as a parameter and does **no I/O and no randomness at all** — never `Math.random()`,
+   never the clock. Only `backend/src/scheduler/io/*` (the placer services, `day-load.ts`, the
+   `TaskPlacementService` A/B facade, `SchedulingFeedbackService`, and the two `@Cron`
+   services) touches Prisma or the bandit HTTP service / writes telemetry. Keep that split.
+   Any change to a pure function must update its `*.spec.ts` in the same change. See
+   [backend/README.md](backend/README.md) → "Scheduler architecture".
 
 3. **Durations are always positive multiples of 15** (minutes). Slots are 15-minute;
    `DAILY_HORIZON` = 1440. Don't introduce off-grid times.
 
-4. **Recurrence is materialized, not virtual.** A recurring task is expanded into one real
-   `Session` row per occurrence, all sharing a `seriesId`. Each row schedules independently and
-   is safe to mutate alone; bulk edits use `scope: "one" | "following"`.
+4. **Two kinds of series.** A multi-sitting `TASK` (`sessionCount > 1`) is *materialized* — one
+   real `Session` row per sitting, all sharing a `seriesId`, each scheduled independently. A
+   recurring **fixed** session (`DND` / `ASSIGNMENT` / `EXAM` / `LECTURE` with an `rrule`) is
+   *virtual* — one `SessionSeries` holds the `rrule` + `exdates`, one representative `Session`
+   row anchors the first occurrence, and `SessionsService.list()` fans it out into occurrences
+   whose `id` is `"<seriesId>::<startISO>"`. Editing/deleting such an occurrence id is routed by
+   the backend: `PATCH` applies series-wide (time-of-day re-anchors, doesn't drop occurrences);
+   `DELETE` on the occurrence id adds it to `exdates` ("this one");
+   `DELETE /sessions/series/:id/truncate?from=<ISO>` pulls the rrule `UNTIL` back ("this and
+   following"); `DELETE /sessions/series/:id` drops the whole series.
 
 5. **Timezone wall-clock rule (frontend).** All calendar `Date`s carry the user-tz wall
    clock in their local fields — go through `frontend/src/utils/tz.ts`, never a bare

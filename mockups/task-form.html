@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Zenflow Mobile — Session sheets</title>
+    <title>Zenflow Mobile — Task form screen</title>
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/@fontsource-variable/geist@5.2.6/index.css"
@@ -17,7 +17,7 @@
   </head>
   <body>
     <div class="page-head">
-      <h1><span class="dot"></span> Session sheets — native bottom sheets</h1>
+      <h1><span class="dot"></span> Task form screen — native bottom sheet</h1>
       <p>
         Every Radix <code>Dialog</code> becomes a
         <code>@gorhom/bottom-sheet</code> slide-up over a dimmed calendar
@@ -35,15 +35,15 @@
         <code>components/common/editor/toolbar.tsx</code> (Bold · Italic ·
         Underline · Highlight · Blockquote · Link · file upload · Bullets ·
         Numbering), see the "Edit · populated" frame below. A
-        <b>Sessions</b> stepper (mobile-only — DLU thesis-scope §3.4, mobile
-        issue #33) sits right after Duration for "how many study sessions does
-        this need" — see the dedicated section below. Creating a session, or
-        editing an existing session's deadline, now automatically and
-        transparently repacks that one calendar day's other sessions
-        server-side — no manual trigger, no preview, no undo — surfaced only
-        via a toast alongside the existing placement toast
-        (<code>dayRescheduleToastMessage</code> in
-        <code>lib/task-toasts.ts</code>).
+        A <b>"How many sessions?"</b> stepper (mobile-only — DLU thesis-scope
+        §3.4, mobile issue #33) sits right after Duration. Leave it at 1 for a
+        normal task; set it higher when a piece of study should be spread over
+        several days. Zenflow drops each task into the best free slot on its
+        own and never shifts anything you've already planned. When a task has
+        more than one session, they're placed as a set — spaced out between now
+        and the deadline, at most three on any one day — and the
+        <b>"Managing a multi-session plan"</b> section below covers undoing that
+        set, deleting part of it, and what happens when the deadline moves.
       </p>
       <div class="crumbs"><a href="index.html">← All mobile mockups</a></div>
     </div>
@@ -745,30 +745,30 @@
       </div>
     </div>
 
-    <!-- ============ SESSIONS (#33) ============ -->
+    <!-- ============ HOW MANY SESSIONS (#33) ============ -->
     <div class="state-section">
-      <h2>Study sessions</h2>
+      <h2>How many sessions?</h2>
       <p>
-        The "how many sessions does this need" question from
-        <code>docs/thesis-scope.md</code> §3.4 — a
-        <code>SessionStepper</code> (same −/+ pattern as Duration, steps by 1,
-        floors at 1, <b>no upper clamp</b>: the 3-per-day figure students hear
-        about is a placement outcome the backend spreads across enough days, not
-        an input ceiling) sits right after Duration, before Deadline. This also
-        corrects the field order shown below to match the shipped
-        <code>task-sheet-fields.tsx</code> —
-        <b>Title → Description → Duration → Sessions → Deadline → Tags</b> —
-        which the older "Create"/"Edit" frames above predate; only these two new
-        frames reflect the current order.
+        A stepper (same −/+ control as Duration) right after Duration, for study
+        you'd rather spread over a few days — "I want to revise for this exam
+        four times before Friday". It defaults to 1, where the task behaves
+        exactly like any other. Above 1, Zenflow creates that many linked
+        sessions and books them as a set: spaced out between now and the
+        deadline, and never more than three on one day. Dev notes:
+        <code>docs/thesis-scope.md</code> §3.4, mobile issue #33; field order is
+        <b>Title → Description → Duration → Sessions → Deadline → Tags</b>
+        (matches <code>task-sheet-fields.tsx</code>; the older "Create" / "Edit"
+        frames above predate it).
       </p>
     </div>
     <div class="gallery">
       <!-- Create with sessions -->
       <div class="frame">
         <div class="caption">
-          <span class="tag">Create · sessions</span>
+          <span class="tag">New task · 3 sessions</span>
           <div class="sub">
-            Exam prep · 3 sessions requested · current field order
+            "Revise for the Algorithms midterm" — broken into 3 sessions before
+            the deadline
           </div>
         </div>
         <div class="device">
@@ -893,7 +893,7 @@
                     >
                     <input
                       class="h-[50px] w-full rounded-xl border border-input bg-card px-4 text-base text-foreground outline-none placeholder:text-muted-foreground border-ring ring-[3px] ring-ring/50 dark:bg-input/30"
-                      value="Study for Algorithms midterm"
+                      value="Revise for the Algorithms midterm"
                     />
                   </div>
                   <div class="mb-[18px]">
@@ -934,7 +934,7 @@
                     <div
                       class="text-[12.5px] text-muted-foreground mt-[7px] leading-snug"
                     >
-                      15-minute steps — each sitting is this long.
+                      15-minute steps — how long one session runs.
                     </div>
                   </div>
                   <div class="mb-[18px]">
@@ -962,10 +962,8 @@
                     <div
                       class="text-[12.5px] text-muted-foreground mt-[7px] leading-snug"
                     >
-                      This is the total across the whole task — Zenflow
-                      partitions it across the days until your deadline,
-                      doubling up (e.g. 2 sessions / day) only if there isn't a
-                      day for each.
+                      Total for this task. Zenflow spreads them out between now
+                      and your deadline — up to 3 a day if it needs to.
                     </div>
                   </div>
                   <div class="mb-[18px]">
@@ -1066,9 +1064,10 @@
       <!-- Placed toast -->
       <div class="frame">
         <div class="caption">
-          <span class="tag">Placed · summary toast</span>
+          <span class="tag">Scheduled · one toast + Undo</span>
           <div class="sub">
-            Sheet closed · partial-placement tone, mirrors placementToastMessage
+            Form closes, one toast for the whole plan. Undo removes all the
+            sessions it just added.
           </div>
         </div>
         <div class="device">
@@ -1167,7 +1166,7 @@
                         "
                       >
                         <div class="truncate text-xs font-semibold">
-                          Study for Algorithms midterm
+                          Revise for the Algorithms midterm
                         </div>
                         <div
                           class="font-mono text-[10px] text-muted-foreground"
@@ -1205,12 +1204,17 @@
                 ></span>
                 <div class="min-w-0 flex-1">
                   <div class="text-[13.5px] font-semibold text-foreground">
-                    3 of 3 sessions scheduled
+                    All 3 sessions on your calendar
                   </div>
                   <div class="text-[12px] text-muted-foreground mt-0.5">
-                    Today, tomorrow, and Fri — none on the same day
+                    Today, tomorrow and Friday
                   </div>
                 </div>
+                <button
+                  class="shrink-0 self-center rounded-lg px-2.5 py-1 text-[12.5px] font-semibold text-primary"
+                >
+                  Undo
+                </button>
               </div>
             </div>
             <div class="relative shrink-0" style="height: 86px">
@@ -2664,28 +2668,45 @@
       </div>
     </div>
 
-    <!-- ============ DAY RESCHEDULE ============ -->
+    <!-- ============ MANAGING A MULTI-SESSION PLAN (#32) ============ -->
     <div class="state-section">
-      <h2>Day reschedule</h2>
+      <h2>Managing a multi-session plan</h2>
       <p>
-        Creating a session, or editing an existing session's
-        <code>deadline</code>, silently repacks that one calendar day's other
-        pending sessions server-side (EDF + preference-matrix placement,
-        single-day window) — no manual trigger, no diff preview, no undo.
-        The client's only job is a toast when something else moved,
-        composed by <code>dayRescheduleToastMessage</code> in
-        <code>lib/task-toasts.ts</code>; it can stack with the existing
-        placement toast when a create fires both.
+        A task with more than one session comes with a small set of controls
+        for changing your mind:
+      </p>
+      <ul>
+        <li>
+          <b>Undo</b> right after adding it — takes all the new sessions back
+          off your calendar in one tap.
+        </li>
+        <li>
+          <b>Delete a session</b> on its own — the rest of the plan stays put;
+          each session is just a normal task once it's on the calendar.
+        </li>
+        <li>
+          <b>Delete this one and everything after it</b> — for when a plan is
+          only half wrong; earlier sessions are left alone.
+        </li>
+        <li>
+          <b>Delete the whole plan</b> — clears every session in it at once.
+        </li>
+      </ul>
+      <p>
+        Moving the deadline on any session moves the deadline for the whole
+        plan, and the still-to-come sessions re-space to fit the new window —
+        tighter if you pulled it in, looser if you pushed it out. Dev note:
+        issue #32.
       </p>
     </div>
     <div class="gallery">
-      <!-- Day reschedule toast -->
+      <!-- Deadline moved, plan re-spaced -->
       <div class="frame">
         <div class="caption">
-          <span class="tag">Day reschedule · toast</span>
+          <span class="tag">Deadline moved · plan re-spaced</span>
           <div class="sub">
-            Sheet closed · mirrors dayRescheduleToastMessage, no preview or
-            undo
+            Changing one session's deadline changes it for the whole plan and
+            re-spaces what's left. A quick thumbs up / down on the new spacing.
           </div>
         </div>
         <div class="device">
@@ -2784,12 +2805,12 @@
                         "
                       >
                         <div class="truncate text-xs font-semibold">
-                          Study for Algorithms midterm
+                          Revise for the Algorithms midterm
                         </div>
                         <div
                           class="font-mono text-[10px] text-muted-foreground"
                         >
-                          11:00–12:30
+                          11:00–12:30 · 2 of 3
                         </div>
                       </div>
                     </div>
@@ -2806,27 +2827,73 @@
                 </div>
               </div>
               <div
-                class="absolute inset-x-0 bottom-[130px] z-[60] mx-5 flex items-start gap-2.5 rounded-2xl border border-border bg-popover px-4 py-3 shadow-[0_14px_30px_-10px_rgba(0,0,0,0.35)]"
+                class="absolute inset-x-0 bottom-[130px] z-[60] mx-5 flex flex-col gap-2.5 rounded-2xl border border-border bg-popover px-4 py-3 shadow-[0_14px_30px_-10px_rgba(0,0,0,0.35)]"
               >
-                <span
-                  class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 [&_svg]:size-3"
-                  ><svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2.5"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  >
-                    <path d="M17 2.1 21 6l-4 3.9" />
-                    <path d="M3 11V9a4 4 0 0 1 4-4h14" />
-                    <path d="M7 21.9 3 18l4-3.9" />
-                    <path d="M21 13v2a4 4 0 0 1-4 4H3" /></svg
-                ></span>
-                <div class="min-w-0 flex-1">
-                  <div class="text-[13.5px] font-semibold text-foreground">
-                    3 other sessions moved today
+                <div class="flex items-start gap-2.5">
+                  <span
+                    class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 [&_svg]:size-3"
+                    ><svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M17 2.1 21 6l-4 3.9" />
+                      <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+                      <path d="M7 21.9 3 18l4-3.9" />
+                      <path d="M21 13v2a4 4 0 0 1-4 4H3" /></svg
+                  ></span>
+                  <div class="min-w-0 flex-1">
+                    <div class="text-[13.5px] font-semibold text-foreground">
+                      New deadline set — plan moved up
+                    </div>
+                    <div class="text-[12px] text-muted-foreground mt-0.5">
+                      Your last 2 sessions are now Wed and Fri. Finished ones
+                      stay where they were.
+                    </div>
                   </div>
+                </div>
+                <div class="flex items-center gap-2 pl-[30px]">
+                  <button
+                    aria-label="This spacing works"
+                    class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-[12.5px] font-semibold text-foreground [&_svg]:size-[15px]"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M7 10v12" />
+                      <path
+                        d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"
+                      />
+                    </svg>
+                    Looks good
+                  </button>
+                  <button
+                    aria-label="Not the spacing I wanted"
+                    class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-[12.5px] font-semibold text-foreground [&_svg]:size-[15px]"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M17 14V2" />
+                      <path
+                        d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"
+                      />
+                    </svg>
+                    Not quite
+                  </button>
                 </div>
               </div>
             </div>
@@ -2988,12 +3055,13 @@
         </div>
       </div>
 
-      <!-- Stacked with placement toast -->
+      <!-- Delete series action sheet -->
       <div class="frame">
         <div class="caption">
-          <span class="tag">Stacked · placed + day reschedule</span>
+          <span class="tag">Delete · how much</span>
           <div class="sub">
-            Create closes the sheet · both toasts can fire from one submit
+            Long-press a session that's part of a plan, and Zenflow asks how far
+            the delete should reach.
           </div>
         </div>
         <div class="device">
@@ -3092,12 +3160,12 @@
                         "
                       >
                         <div class="truncate text-xs font-semibold">
-                          Study for Algorithms midterm
+                          Revise for the Algorithms midterm
                         </div>
                         <div
                           class="font-mono text-[10px] text-muted-foreground"
                         >
-                          11:00–12:30
+                          11:00–12:30 · 2 of 3
                         </div>
                       </div>
                     </div>
@@ -3113,54 +3181,47 @@
                   </div>
                 </div>
               </div>
+              <div class="absolute inset-0 z-[55] bg-black/40"></div>
               <div
-                class="absolute inset-x-0 bottom-[130px] z-[60] mx-5 flex flex-col gap-2"
+                class="absolute inset-x-0 bottom-[18px] z-[60] mx-2 rounded-3xl border border-border bg-popover px-4 pt-2.5 pb-4 shadow-[0_-14px_40px_-10px_rgba(0,0,0,0.4)]"
               >
                 <div
-                  class="flex items-start gap-2.5 rounded-2xl border border-border bg-popover px-4 py-3 shadow-[0_14px_30px_-10px_rgba(0,0,0,0.35)]"
-                >
-                  <span
-                    class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 [&_svg]:size-3"
-                    ><svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="3"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    >
-                      <polyline points="20 6 9 17 4 12" /></svg
-                  ></span>
-                  <div class="min-w-0 flex-1">
-                    <div class="text-[13.5px] font-semibold text-foreground">
-                      Scheduled for Tue Jul 1, 11:00
-                    </div>
+                  class="mx-auto mb-3 h-1 w-9 rounded-full bg-muted-foreground/30"
+                ></div>
+                <div class="px-1 pb-2">
+                  <div class="text-[14px] font-semibold text-foreground">
+                    Revise for the Algorithms midterm
+                  </div>
+                  <div class="text-[12px] text-muted-foreground">
+                    Session 2 of 3
                   </div>
                 </div>
-                <div
-                  class="flex items-start gap-2.5 rounded-2xl border border-border bg-popover px-4 py-3 shadow-[0_14px_30px_-10px_rgba(0,0,0,0.35)]"
+                <button
+                  class="flex w-full items-center gap-3 rounded-xl px-3 py-3.5 text-left active:bg-muted"
                 >
-                  <span
-                    class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 [&_svg]:size-3"
-                    ><svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2.5"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    >
-                      <path d="M17 2.1 21 6l-4 3.9" />
-                      <path d="M3 11V9a4 4 0 0 1 4-4h14" />
-                      <path d="M7 21.9 3 18l4-3.9" />
-                      <path d="M21 13v2a4 4 0 0 1-4 4H3" /></svg
-                  ></span>
-                  <div class="min-w-0 flex-1">
-                    <div class="text-[13.5px] font-semibold text-foreground">
-                      3 other sessions moved today
-                    </div>
-                  </div>
-                </div>
+                  <span class="text-[14.5px] font-medium text-foreground"
+                    >Just this session</span
+                  >
+                </button>
+                <button
+                  class="flex w-full items-center gap-3 rounded-xl px-3 py-3.5 text-left active:bg-muted"
+                >
+                  <span class="text-[14.5px] font-medium text-foreground"
+                    >This session and the one after it</span
+                  >
+                </button>
+                <button
+                  class="flex w-full items-center gap-3 rounded-xl px-3 py-3.5 text-left active:bg-muted"
+                >
+                  <span class="text-[14.5px] font-semibold text-destructive"
+                    >The whole plan (all 3)</span
+                  >
+                </button>
+                <button
+                  class="mt-1.5 w-full rounded-xl border border-border bg-card py-3 text-[14.5px] font-semibold text-foreground"
+                >
+                  Cancel
+                </button>
               </div>
             </div>
             <div class="relative shrink-0" style="height: 86px">
