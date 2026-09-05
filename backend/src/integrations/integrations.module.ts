@@ -3,12 +3,14 @@ import { PrismaModule } from "../prisma/prisma.module";
 import { CryptoModule } from "../crypto/crypto.module";
 import { IntegrationsService } from "./integrations.service";
 import { IntegrationsController } from "./integrations.controller";
-import { DluAuthService } from "./dlu-auth.service";
+import { LMSModule } from "src/lms/lms.module";
+import { PortalAPIModule } from "src/portal/portal-api.module";
+import { IntegrationAuthService } from "./integration-auth.service";
 
 @Module({
-  imports: [PrismaModule, CryptoModule],
+  imports: [PrismaModule, CryptoModule, LMSModule, PortalAPIModule],
   controllers: [IntegrationsController],
-  providers: [IntegrationsService, DluAuthService],
+  providers: [IntegrationsService, IntegrationAuthService],
   exports: [IntegrationsService],
 })
 export class IntegrationsModule {}
