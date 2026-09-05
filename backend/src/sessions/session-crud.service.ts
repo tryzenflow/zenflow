@@ -19,6 +19,7 @@ import {
   occurrenceId,
   parseOccurrenceId,
 } from "../scheduler/core/recurrence";
+import { DAY_MS } from "../scheduler/core/slot";
 import { CreateSessionDto } from "./dto/create-session.dto";
 import { ListSessionSuggestionsDto } from "./dto/list-session-suggestions.dto";
 import { ListSessionsDto } from "./dto/list-sessions.dto";
@@ -218,7 +219,16 @@ export class SessionCrudService {
         userId: user.id,
         OR: [
           { scheduledStartTime: null },
-          { scheduledStartTime: { gte: displayStart, lte: displayEnd } },
+          // A day back so a plain session that started the previous evening
+          // and runs past midnight into this window is still fetched —
+          // filtered to actual overlap below (mirrors day-load.ts's
+          // occupancy scan for the same class of bug on the placement side).
+          {
+            scheduledStartTime: {
+              gte: new Date(displayStart.getTime() - DAY_MS),
+              lte: displayEnd,
+            },
+          },
           // Series representatives: first-occurrence instant may be outside the
           // window; expanded below.
           { seriesId: { not: null } },
@@ -234,11 +244,15 @@ export class SessionCrudService {
         for (const occ of expandRrule(
           row.series.rrule,
           row.scheduledStartTime,
-          displayStart,
+          // Same day-back widening as above, so an occurrence that started
+          // the previous day and crosses into this window isn't dropped.
+          new Date(displayStart.getTime() - DAY_MS),
           displayEnd,
           tz,
           row.series.exdates,
         )) {
+          const occEnd = occ.getTime() + row.durationMinutes * 60_000;
+          if (occEnd <= displayStart.getTime()) continue; // ended before this day
           sessions.push({
             ...base,
             id: occurrenceId(row.seriesId, occ),
@@ -246,6 +260,17 @@ export class SessionCrudService {
           });
         }
       } else {
+        // A plain row's scheduledStartTime may sit in the previous day (the
+        // widened query above) but its interval never reach into this
+        // window — only keep it if it actually overlaps. Unscheduled rows
+        // (scheduledStartTime null) always pass through untouched.
+        if (
+          row.scheduledStartTime &&
+          row.scheduledStartTime.getTime() + row.durationMinutes * 60_000 <=
+            displayStart.getTime()
+        ) {
+          continue;
+        }
         sessions.push(toSessionDto(row));
       }
     }
