@@ -4,6 +4,12 @@ import { CreateSessionDto } from "./create-session.dto";
 import { UpdateSessionDto } from "./update-session.dto";
 
 const chars = (n: number) => "a".repeat(n);
+// Always well beyond `Date.now()` — not this spec's concern (feasibility is
+// covered by feasible-task-window.decorator.spec.ts) — so it never trips the
+// deadline's `@IsFeasibleTaskWindow` check regardless of when this runs.
+const FAR_FUTURE_DEADLINE = new Date(
+  Date.now() + 365 * 24 * 60 * 60 * 1000,
+).toISOString();
 
 describe("CreateSessionDto — title character limit", () => {
   it("accepts a title of exactly 60 characters", async () => {
@@ -11,7 +17,7 @@ describe("CreateSessionDto — title character limit", () => {
       type: "TASK",
       title: chars(60),
       durationMinutes: 30,
-      deadline: "2026-06-10T17:00:00.000Z",
+      deadline: FAR_FUTURE_DEADLINE,
     });
     const errors = await validate(dto);
     expect(errors).toHaveLength(0);
@@ -22,7 +28,7 @@ describe("CreateSessionDto — title character limit", () => {
       type: "TASK",
       title: chars(61),
       durationMinutes: 30,
-      deadline: "2026-06-10T17:00:00.000Z",
+      deadline: FAR_FUTURE_DEADLINE,
     });
     const errors = await validate(dto);
     expect(errors.some((e) => e.property === "title")).toBe(true);

@@ -29,6 +29,8 @@ import {
   ChevronRight,
   ChevronUp,
   ChevronsDownUp,
+  ChevronsLeft,
+  ChevronsRight,
   ChevronsUpDown,
   CircleUserRound,
   ClipboardList,
@@ -137,6 +139,8 @@ interopIcon(MenuSquare);
 interopIcon(Check);
 interopIcon(CheckCircle);
 interopIcon(ChevronsDownUp);
+interopIcon(ChevronsLeft);
+interopIcon(ChevronsRight);
 interopIcon(ChevronsUpDown);
 interopIcon(Copy);
 interopIcon(CalendarDays);
@@ -233,6 +237,8 @@ export {
   ChevronRight,
   ChevronUp,
   ChevronsDownUp,
+  ChevronsLeft,
+  ChevronsRight,
   ChevronsUpDown,
   CircleUserRound,
   ClipboardList,

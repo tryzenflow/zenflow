@@ -1,4 +1,3 @@
-import { SessionType } from "../../../generated/prisma";
 import type { PrismaService } from "../../prisma/prisma.service";
 import {
   emptyWorkloadByType,
@@ -15,17 +14,28 @@ import { DAY_MS, type Interval } from "../core/slot";
  * {@link HeuristicScheduleService} (uses `occupied`) and
  * {@link BanditScheduleService} (uses both).
  *
- * `occupied` = fixed sessions (`ASSIGNMENT` / `EXAM` / `LECTURE`), standalone
- * `DND`, recurring `DND` occurrences (`expandRrule`), and every other already
- * placed `TASK` — minus any `excludeSessionIds` (the rows being (re)placed).
- * A session whose interval *overlaps* `[dayStart, dayEnd)` counts, even if it
- * started the previous evening and runs past midnight into this day — the query
- * looks a day back and keeps anything still running at `dayStart`.
+ * `occupied` = every non-recurring row (standalone fixed sessions, a
+ * materialized `TASK` series' sittings, and every other already placed `TASK`)
+ * plus every occurrence of every *recurring* series (any type with an
+ * `rrule` — `DND`, or a recurring `ASSIGNMENT` / `EXAM` / `LECTURE`), expanded
+ * via `expandRrule` — minus any `excludeSessionIds` (the rows being
+ * (re)placed). A row that belongs to a recurring series is excluded from the
+ * plain-row scan and only ever counted through the expansion, so its own
+ * anchor-day occurrence isn't double-counted. A session whose interval
+ * *overlaps* `[dayStart, dayEnd)` counts, even if it started the previous
+ * evening and runs past midnight into this day — the query looks a day back
+ * and keeps anything still running at `dayStart`.
  *
  * `occupiedLookaheadMs` extends only the `occupied` scan past `dayEnd` (not the
  * workload accounting, which stays keyed by the session's start day) so a
  * cross-midnight placement on this day can see the next morning's blocks it
  * must not collide with. Default `0` (legacy behaviour).
+ *
+ * `excludeSeriesId`, when given, drops every row belonging to that series from
+ * both the plain-row scan and the recurring-expansion loop — so a
+ * `wouldConflict` check for a series' own new landing doesn't treat that
+ * series' other members/occurrences as a conflict with itself. Default
+ * `undefined` (no-op; every existing caller is unaffected).
  *
  * This is the only I/O in the pure-core split (CLAUDE.md invariant 2); the math
  * lives in `heuristic.ts` / `context-vector.ts` / `arms.ts`. The `DayLoad`
@@ -40,6 +50,7 @@ export async function loadDayLoad(
     timezone: string;
     excludeSessionIds?: string[];
     occupiedLookaheadMs?: number;
+    excludeSeriesId?: string;
   },
 ): Promise<DayLoad> {
   const {
@@ -49,6 +60,7 @@ export async function loadDayLoad(
     timezone,
     excludeSessionIds = [],
     occupiedLookaheadMs = 0,
+    excludeSeriesId,
   } = args;
   const dayStartMs = dayStart.getTime();
   const dayEndMs = dayEnd.getTime();
@@ -58,7 +70,14 @@ export async function loadDayLoad(
     where: {
       userId,
       ...(excludeSessionIds.length ? { id: { notIn: excludeSessionIds } } : {}),
-      seriesId: null,
+      // A standalone session, or a materialized-series member (a multi-sitting
+      // TASK's sittings) — anything whose series has no rrule, since each such
+      // row IS its own real occurrence. A recurring series' representative row
+      // (rrule set) is excluded here and picked up only via the expansion loop
+      // below, so it isn't double-counted.
+      OR: [{ seriesId: null }, { series: { is: { rrule: null } } }],
+      // Drop every row of the series being test-landed for itself, if any.
+      ...(excludeSeriesId ? { NOT: { seriesId: excludeSeriesId } } : {}),
       // A day back so a session that began the previous night and runs into
       // this day is still returned; filtered to actual overlap below.
       scheduledStartTime: { gte: new Date(dayStartMs - DAY_MS), lte: scanEnd },
@@ -90,10 +109,15 @@ export async function loadDayLoad(
     }
   }
 
-  // Recurring DND blocks: one representative row per series, expanded to the
-  // occurrences that land on this day.
-  const dndSeries = await prisma.sessionSeries.findMany({
-    where: { userId, type: SessionType.DND },
+  // Recurring blocks of ANY type (DND, or a recurring ASSIGNMENT/EXAM/LECTURE):
+  // one representative row per series, expanded to the occurrences that land
+  // on this day.
+  const recurringSeries = await prisma.sessionSeries.findMany({
+    where: {
+      userId,
+      rrule: { not: null },
+      ...(excludeSeriesId ? { id: { not: excludeSeriesId } } : {}),
+    },
     include: {
       sessions: {
         select: { scheduledStartTime: true, durationMinutes: true },
@@ -102,7 +126,7 @@ export async function loadDayLoad(
       },
     },
   });
-  for (const series of dndSeries) {
+  for (const series of recurringSeries) {
     const rep = series.sessions[0];
     if (!series.rrule || !rep?.scheduledStartTime) continue;
     for (const occStart of expandRrule(
@@ -118,7 +142,7 @@ export async function loadDayLoad(
       if (end <= dayStartMs) continue;
       occupied.push({ start, end });
       if (start < dayStartMs || start >= dayEndMs) continue;
-      addWorkload(SessionType.DND, rep.durationMinutes);
+      addWorkload(series.type, rep.durationMinutes);
     }
   }
 

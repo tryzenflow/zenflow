@@ -102,7 +102,7 @@ export const MonthGrid = memo(
                     key={key}
                     day={day}
                     monthDate={monthDate}
-                    tasks={tasksByDate.get(key) ?? NO_TASKS}
+                    sessions={tasksByDate.get(key) ?? NO_TASKS}
                     isToday={isSameDay(day, today)}
                     isDropTarget={highlightedKey === key}
                     isJustDropped={justDroppedKey === key}

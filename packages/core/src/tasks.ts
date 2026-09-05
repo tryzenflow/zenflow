@@ -17,6 +17,15 @@ import { DAILY_HORIZON, SLOT_MINUTES, type Session } from "@zenflow/shared";
  */
 export const MAX_TITLE_LENGTH = 60;
 
+/**
+ * Ceiling on a TASK's `sessionCount` (issue #33) — must mirror the backend's
+ * `MAX_SESSION_COUNT` (`backend/src/sessions/dto/create-session.dto.ts`):
+ * `MAX_SERIES_PER_DAY (3) × MAX_SCAN_DAYS (60)`. A request above this can
+ * never be placed in full no matter how loose the deadline is, since the
+ * placer never puts more than 3 sittings of one series on the same day.
+ */
+export const MAX_TASK_SESSION_COUNT = 180;
+
 export const SESSION_FORM_TYPES = [
   "TASK",
   "ASSIGNMENT",
@@ -56,6 +65,16 @@ export const sessionSchema = z
       .max(DAILY_HORIZON, { error: "Session duration must be at most 24 hours" })
       .optional(),
     deadline: z.string().optional(),
+    /**
+     * Number of study sessions (`TASK` only). Omitted or `1` → one ordinary
+     * task; `> 1` → a series of N sessions spread across `now … deadline`.
+     * No upper-bound check (and no error message) here on purpose —
+     * `SessionCountStepper` physically disables `+` at
+     * `MAX_TASK_SESSION_COUNT`, so the UI can't produce a value that needs
+     * one; the backend's `@Max` on `CreateSessionDto.sessionCount` is the
+     * actual enforcement, for a direct API call bypassing the form.
+     */
+    sessionCount: z.int().min(1, { error: "At least 1 session" }).optional(),
 
     // Fixed / DND
     date: z.string().optional(),
@@ -67,19 +86,43 @@ export const sessionSchema = z
   })
   .superRefine((v, ctx) => {
     if (v.type === "TASK") {
-      if (v.duration == null) {
+      const durationOk = v.duration != null;
+      if (!durationOk) {
         ctx.addIssue({
           code: "custom",
           message: "Pick a duration",
           path: ["duration"],
         });
       }
-      if (!v.deadline || Number.isNaN(Date.parse(v.deadline))) {
+      const deadlineOk = !!v.deadline && !Number.isNaN(Date.parse(v.deadline));
+      if (!deadlineOk) {
         ctx.addIssue({
           code: "custom",
           message: "Pick a deadline",
           path: ["deadline"],
         });
+      }
+      // Coarse feasibility guard (issue #33): reject up front when there
+      // isn't even enough raw time to fit every sitting back-to-back before
+      // the deadline — mirrors the backend's `@IsFeasibleTaskWindow` (a
+      // necessary, not sufficient, check; the placer's own pre-flight still
+      // catches "the arithmetic fits but every day is already full"). The
+      // `"\n"` splits a short title from its description: rendered as two
+      // lines inline (React Native `Text` breaks on `\n`), and as a toast
+      // title + description via mobile's `splitToastMessage`.
+      if (durationOk && deadlineOk) {
+        const sessionCount = Math.max(1, Math.trunc(v.sessionCount ?? 1));
+        const neededMs = (v.duration as number) * sessionCount * 60_000;
+        if (Date.now() + neededMs > Date.parse(v.deadline as string)) {
+          ctx.addIssue({
+            code: "custom",
+            message:
+              sessionCount > 1
+                ? `Can't fit ${sessionCount} sessions before the deadline\nLoosen the deadline or reduce the number of sessions.`
+                : "Won't fit before the deadline\nPick a later deadline.",
+            path: ["deadline"],
+          });
+        }
       }
       return;
     }

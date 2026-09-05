@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
-import { NotFoundException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { SessionsService } from "./sessions.service";
 import { SessionCrudService } from "./session-crud.service";
 import { SeriesService } from "./series.service";
@@ -83,6 +83,10 @@ function fakeTagsService() {
  */
 function fakeTaskPlacement() {
   return {
+    // Pre-flight feasibility — "feasible" by default so the existing
+    // create-success assertions below don't have to opt in.
+    canPlaceTask: jest.fn().mockResolvedValue(true),
+    canPlaceSeries: jest.fn().mockResolvedValue(true),
     placeOnCreate: jest
       .fn()
       .mockResolvedValue({ scheduledStartTime: null, appliedPolicy: "NONE" }),
@@ -330,6 +334,78 @@ describe("SessionsService.create", () => {
     expect(seriesIds).toEqual(["series-1", "series-1", "series-1"]);
   });
 
+  it("TASK: rejects and creates nothing when no slot fits before the deadline", async () => {
+    const sessionCreate = jest.fn();
+    const eventCreate = jest.fn();
+    const prisma = prismaWithTx({
+      session: { create: sessionCreate },
+      sessionEvent: { create: eventCreate },
+    });
+    const placement = fakeTaskPlacement();
+    placement.canPlaceTask.mockResolvedValue(false);
+    const service = makeService(
+      prisma as never,
+      fakeTagsService() as never,
+      placement as never,
+      fakeSchedulingFeedback() as never,
+    );
+
+    const dto: CreateSessionDto = {
+      type: "TASK",
+      title: "Too tight",
+      durationMinutes: 60,
+      deadline: "2026-06-10T17:00:00.000Z",
+    };
+
+    await expect(service.create(dto, user)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(sessionCreate).not.toHaveBeenCalled();
+    expect(eventCreate).not.toHaveBeenCalled();
+    expect(placement.placeOnCreate).not.toHaveBeenCalled();
+  });
+
+  it("TASK series: rejects and creates nothing when any member has no feasible slot", async () => {
+    const sessionCreate = jest.fn();
+    const seriesCreate = jest.fn();
+    const eventCreate = jest.fn();
+    const prisma = {
+      $transaction: (fn: (t: unknown) => unknown) =>
+        fn({
+          session: { create: sessionCreate },
+          sessionEvent: { create: eventCreate },
+          sessionSeries: { create: seriesCreate },
+        }),
+    };
+    const placement = fakeTaskPlacement();
+    placement.canPlaceSeries.mockResolvedValue(false);
+    const service = makeService(
+      prisma as never,
+      fakeTagsService() as never,
+      placement as never,
+      fakeSchedulingFeedback() as never,
+    );
+
+    const dto: CreateSessionDto = {
+      type: "TASK",
+      title: "Exam prep",
+      durationMinutes: 60,
+      deadline: "2026-06-08T00:00:00.000Z",
+      sessionCount: 5,
+    };
+
+    await expect(service.create(dto, user)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(placement.canPlaceSeries).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionCount: 5, durationMinutes: 60 }),
+    );
+    expect(seriesCreate).not.toHaveBeenCalled();
+    expect(sessionCreate).not.toHaveBeenCalled();
+    expect(eventCreate).not.toHaveBeenCalled();
+    expect(placement.placeSeriesOnCreate).not.toHaveBeenCalled();
+  });
+
   it("ASSIGNMENT: pins scheduledStartTime, leaves deadline null, never runs a placer", async () => {
     const created = session({
       id: "a-1",
@@ -531,6 +607,139 @@ describe("SessionsService.list", () => {
       true,
     );
     expect(result.sessions.every((s) => s.type === "DND")).toBe(true);
+  });
+
+  it("includes a plain session that starts the previous day and crosses midnight into the requested day", async () => {
+    // "day" view for 2026-06-10 (UTC) — an 8h DND block starting 22:00 on
+    // 2026-06-09 runs until 06:00 on 2026-06-10, so it overlaps the window.
+    const crossing = session({
+      id: "sleep-1",
+      type: "DND",
+      deadline: null,
+      durationMinutes: 8 * 60,
+      scheduledStartTime: new Date("2026-06-09T22:00:00.000Z"),
+    });
+    const findMany = jest.fn().mockResolvedValue([crossing]);
+    const prisma = { session: { findMany } };
+    const service = makeService(
+      prisma as never,
+      fakeTagsService() as never,
+      fakeTaskPlacement() as never,
+      fakeSchedulingFeedback() as never,
+    );
+
+    const result = await service.list(
+      { view: "day", date: "2026-06-10" },
+      user,
+    );
+
+    expect(result.sessions.map((s) => s.id)).toContain("sleep-1");
+
+    // The widened lower bound is passed to the query.
+    const [{ where }] = findMany.mock.calls[0] as [
+      {
+        where: {
+          OR: Array<{ scheduledStartTime?: { gte?: Date; lte?: Date } }>;
+        };
+      },
+    ];
+    const rangedClause = where.OR.find(
+      (c) => c.scheduledStartTime?.gte !== undefined,
+    );
+    expect(rangedClause?.scheduledStartTime?.gte).toEqual(
+      new Date("2026-06-09T00:00:00.000Z"),
+    );
+  });
+
+  it("excludes a plain session entirely on the previous day with no overlap into the requested day", async () => {
+    const noOverlap = session({
+      id: "no-overlap-1",
+      durationMinutes: 60,
+      scheduledStartTime: new Date("2026-06-09T10:00:00.000Z"),
+    });
+    // The prisma double still "returns" the row (as the widened query would),
+    // to prove list() itself filters it out by the overlap guard.
+    const findMany = jest.fn().mockResolvedValue([noOverlap]);
+    const prisma = { session: { findMany } };
+    const service = makeService(
+      prisma as never,
+      fakeTagsService() as never,
+      fakeTaskPlacement() as never,
+      fakeSchedulingFeedback() as never,
+    );
+
+    const result = await service.list(
+      { view: "day", date: "2026-06-10" },
+      user,
+    );
+
+    expect(result.sessions.map((s) => s.id)).not.toContain("no-overlap-1");
+  });
+
+  it("always includes an unscheduled TASK regardless of the requested window", async () => {
+    const unscheduled = session({
+      id: "unscheduled-1",
+      type: "TASK",
+      scheduledStartTime: null,
+    });
+    const findMany = jest.fn().mockResolvedValue([unscheduled]);
+    const prisma = { session: { findMany } };
+    const service = makeService(
+      prisma as never,
+      fakeTagsService() as never,
+      fakeTaskPlacement() as never,
+      fakeSchedulingFeedback() as never,
+    );
+
+    const result = await service.list(
+      { view: "day", date: "2026-06-10" },
+      user,
+    );
+
+    expect(result.sessions.map((s) => s.id)).toContain("unscheduled-1");
+  });
+
+  it("includes a recurring occurrence that starts the previous day and crosses midnight into the requested day", async () => {
+    const series: SessionSeries = {
+      id: "series-sleep",
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      type: "DND",
+      deadline: null,
+      rrule: "FREQ=DAILY",
+      exdates: [],
+      userId: user.id,
+    };
+    const rep = session({
+      id: "sleep-rep",
+      type: "DND",
+      deadline: null,
+      durationMinutes: 8 * 60,
+      seriesId: "series-sleep",
+      series,
+      // First occurrence anchored well before the requested window.
+      scheduledStartTime: new Date("2026-06-01T22:00:00.000Z"),
+    });
+    const findMany = jest.fn().mockResolvedValue([rep]);
+    const prisma = { session: { findMany } };
+    const service = makeService(
+      prisma as never,
+      fakeTagsService() as never,
+      fakeTaskPlacement() as never,
+      fakeSchedulingFeedback() as never,
+    );
+
+    const result = await service.list(
+      { view: "day", date: "2026-06-10" },
+      user,
+    );
+
+    // The occurrence that started 2026-06-09T22:00Z and runs to 06:00 the
+    // next day must show up for the 2026-06-10 window.
+    expect(
+      result.sessions.some(
+        (s) => s.scheduledStartTime === "2026-06-09T22:00:00.000Z",
+      ),
+    ).toBe(true);
   });
 });
 

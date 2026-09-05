@@ -112,6 +112,18 @@ export type CreateSessionInput =
   | CreateDndInput;
 
 /**
+ * Which occurrences a series-member update applies to (mirrors the delete
+ * scopes, minus "this occurrence only" — a drag/resize/reschedule of a single
+ * recurring fixed occurrence has no per-occurrence detach primitive, so
+ * `"following"` is its finest granularity). Only meaningful when the PATCHed
+ * session belongs to a series; omit for a one-off session or to keep today's
+ * default (a materialized TASK sitting patches only itself; a recurring
+ * occurrence re-anchors the whole series' time-of-day — see
+ * `UpdateSessionDto`).
+ */
+export type UpdateScope = "occurrence" | "following" | "series";
+
+/**
  * Generic metadata / reschedule / resize update — one endpoint
  * (`PATCH /sessions/:id`) covers all of it. Each field is a plain diff applied
  * directly.
@@ -130,6 +142,14 @@ export interface UpdateSessionInput {
    * deletions since the pattern changed. `null` drops the recurrence.
    */
   rrule?: string | null;
+  /** Which series members a `scheduledStartTime`/`durationMinutes` change applies to. */
+  scope?: UpdateScope;
+  /**
+   * With `scope: "following" | "series"`, leave any instance whose new
+   * landing slot would overlap another session untouched instead of moving
+   * it there. Ignored otherwise.
+   */
+  skipConflicting?: boolean;
 }
 
 export interface SessionsListResponse {
@@ -166,6 +186,8 @@ export interface CreateSessionResponse extends Session {
 export interface UpdateSessionResponse extends Session {
   /** Present only when a `TASK` series was redistributed — its members in `sessionIndex` order. */
   sessions?: Session[];
+  /** Ids left untouched by a `skipConflicting` update because their new landing slot conflicted. */
+  skippedSessionIds?: string[];
 }
 export type SessionDetailResponse = Session;
 

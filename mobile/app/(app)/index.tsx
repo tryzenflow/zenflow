@@ -5,6 +5,12 @@ import {
   type RescheduleSheetHandle,
 } from "@/components/calendar/reschedule-sheet";
 import {
+  type PendingSessionUpdate,
+  type UpdateRecurringScope,
+  UpdateRecurringSheet,
+  type UpdateRecurringSheetHandle,
+} from "@/components/calendar/update-recurring-sheet";
+import {
   WeekHeader,
   type WeekHeaderHandle,
 } from "@/components/calendar/week-header";
@@ -14,12 +20,12 @@ import {
 } from "@/components/calendar/week-pager";
 import { CreateSessionFab } from "@/components/tasks/create-task-fab";
 import { useUserStore } from "@/hooks/use-user-store";
+import { useWeekDayTypes } from "@/hooks/use-week-day-types";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { dateKey } from "@/lib/week-date-math";
 import { useFocusEffect } from "@react-navigation/native";
 import { zonedDate, zonedNow } from "@zenflow/core";
-import type { Session } from "@zenflow/shared";
-import * as Haptics from "expo-haptics";
+import type { Session, UpdateScope } from "@zenflow/shared";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { View, useWindowDimensions } from "react-native";
@@ -87,6 +93,10 @@ export default function WeekScreen() {
 
   const tabBarOverlay = useTabBarOverlayHeight();
 
+  // Per-day distinct session types for the visible week, for the header's
+  // dot row — see `use-week-day-types.ts`.
+  const dayTypes = useWeekDayTypes(visibleDate, tz, focusTick);
+
   // Strip offsets shared by the header and the pager so their week transitions
   // move in lockstep. Rest = `-width` (focused page / middle week block
   // centered). Owned here — the nearest common parent.
@@ -96,6 +106,7 @@ export default function WeekScreen() {
   const pagerRef = useRef<WeekPagerHandle>(null);
   const headerRef = useRef<WeekHeaderHandle>(null);
   const rescheduleSheetRef = useRef<RescheduleSheetHandle>(null);
+  const updateScopeSheetRef = useRef<UpdateRecurringSheetHandle>(null);
 
   const handleWeekDragBegin = useCallback(() => {
     pagerRef.current?.beginHeaderWeekDrag();
@@ -155,29 +166,47 @@ export default function WeekScreen() {
     [router],
   );
 
-  const handleLongPress = useCallback(
-    (timeISO: string) => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-      router.push({
-        pathname: "/task/new",
-        params: { start: timeISO },
-      } as Href);
-    },
-    [router],
-  );
-
   // Long-press a block → open the "Move to…" sheet for that session.
   const handleRequestReschedule = useCallback((session: Session) => {
     rescheduleSheetRef.current?.open(session);
   }, []);
 
   // The sheet's confirm — a single `PATCH /sessions/:id` (move + resize).
+  // `scope`/`skipConflicting` are only set when the session belongs to a
+  // series and `handleRequestScopedUpdate` below resolved a choice.
   const handleRescheduleConfirm = useCallback(
-    async (id: string, startISO: string, durationMinutes: number) => {
+    async (
+      id: string,
+      startISO: string,
+      durationMinutes: number,
+      scope?: UpdateScope,
+      skipConflicting?: boolean,
+    ) => {
       await updateSession(id, {
         scheduledStartTime: startISO,
         durationMinutes,
+        scope,
+        skipConflicting,
       });
+    },
+    [],
+  );
+
+  // A drag/reschedule that targets a session belonging to a series routes
+  // through this scope-confirmation sheet before the caller (`RescheduleSheet`
+  // or `WeekPager` → `DayTimeline`) commits.
+  const handleRequestScopedUpdate = useCallback(
+    (
+      session: Session,
+      pending: PendingSessionUpdate,
+      onResolve: (
+        choice: {
+          scope: UpdateRecurringScope;
+          skipConflicting: boolean;
+        } | null,
+      ) => void,
+    ) => {
+      updateScopeSheetRef.current?.open(session, pending, onResolve);
     },
     [],
   );
@@ -211,6 +240,7 @@ export default function WeekScreen() {
         onWeekDragBegin={handleWeekDragBegin}
         onWeekDragSettle={handleWeekDragSettle}
         onWeekDragAbort={handleWeekDragAbort}
+        dayTypes={dayTypes}
       />
 
       <View className="flex-1" style={{ paddingBottom: tabBarOverlay }}>
@@ -221,13 +251,13 @@ export default function WeekScreen() {
           onVisibleDateChange={handleVisibleDateChange}
           focusTick={focusTick}
           onSessionPress={handleSessionPress}
-          onLongPress={handleLongPress}
           progressSV={progressSV}
           headerStripSV={headerStripSV}
           onWeekSlideStart={handleWeekSlideStart}
           onWeekSlideEnd={handleWeekSlideEnd}
           onActiveStateChange={setTimelineState}
           onRequestReschedule={handleRequestReschedule}
+          onRequestScopedUpdate={handleRequestScopedUpdate}
           flashSessionId={flashId}
         />
       </View>
@@ -239,7 +269,9 @@ export default function WeekScreen() {
         tz={tz}
         onConfirm={handleRescheduleConfirm}
         onMoved={handleMoved}
+        onRequestScopedUpdate={handleRequestScopedUpdate}
       />
+      <UpdateRecurringSheet ref={updateScopeSheetRef} />
     </View>
   );
 }
