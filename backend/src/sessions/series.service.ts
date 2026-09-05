@@ -9,7 +9,16 @@ import { type User } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
 import { TagsService } from "../tags/tags.service";
 import { TaskPlacementService } from "../scheduler/io/task-placement.service";
-import { occurrenceId, rruleWithUntil } from "../scheduler/core/recurrence";
+import { wouldConflict } from "../scheduler/io/conflict-check";
+import {
+  expandRrule,
+  firstOccurrence,
+  occurrenceId,
+  rruleWithUntil,
+} from "../scheduler/core/recurrence";
+import { MAX_SCAN_DAYS } from "../scheduler/constants";
+import { DAY_MS, localDateStr } from "../scheduler/core/slot";
+import { minutesToUtc } from "../common/utils";
 import { CreateSessionDto } from "./dto/create-session.dto";
 import { SessionRow, WITH_TAGS_AND_SERIES } from "./types/session-row";
 import { toSessionDto } from "./session-mapper";
@@ -218,6 +227,208 @@ export class SeriesService {
       });
       return { seriesId, removedSessionIds: [], seriesGone: false };
     });
+  }
+
+  /**
+   * A `TASK` series' "this and later sittings" / "all sittings" reschedule
+   * (issue: drag/resize confirmation scopes). Every affected sibling KEEPS
+   * its own calendar date — only its time-of-day (and, if resized, its
+   * duration) changes, so no sitting's date ever shifts. Reuses `removeFrom`'s
+   * sibling-selection shape: `following` = every sitting whose `sessionIndex`
+   * is ≥ the anchor's (falling back to `createdAt` order when `sessionIndex`
+   * is unset), `scopeAll` = every sitting in the series.
+   *
+   * With `skipConflicting`, each candidate landing is checked via
+   * {@link wouldConflict} (excluding every id in this series, since a
+   * materialized TASK series never lands its own sittings on top of each
+   * other) — a sitting whose new landing would overlap something else is left
+   * untouched and its id recorded in `skippedSessionIds`.
+   *
+   * Returns every member (`sessionIndex` order, same shape {@link redistribute}
+   * returns) — untouched/skipped members come back with their prior state.
+   */
+  async updateSiblingTimeOfDay(
+    seriesId: string,
+    anchorSessionId: string,
+    change: { timeOfDayMinutes: number; durationMinutes?: number },
+    scopeAll: boolean,
+    skipConflicting: boolean,
+    user: User,
+  ): Promise<{ sessions: SharedSession[]; skippedSessionIds: string[] }> {
+    return this.prisma.$transaction(async (tx) => {
+      const members = await tx.session.findMany({
+        where: { seriesId, userId: user.id },
+        include: WITH_TAGS_AND_SERIES,
+        orderBy: [{ sessionIndex: "asc" }, { createdAt: "asc" }],
+      });
+      if (members.length === 0)
+        throw new NotFoundException(`Cannot find series with id ${seriesId}`);
+
+      const anchor = members.find((m) => m.id === anchorSessionId);
+      if (!anchor)
+        throw new NotFoundException(
+          `Session ${anchorSessionId} is not part of series ${seriesId}`,
+        );
+
+      const targets = scopeAll
+        ? members
+        : anchor.sessionIndex != null
+          ? members.filter(
+              (m) =>
+                m.sessionIndex != null &&
+                m.sessionIndex >= (anchor.sessionIndex as number),
+            )
+          : members.filter(
+              (m) => m.createdAt.getTime() >= anchor.createdAt.getTime(),
+            );
+
+      const allMemberIds = members.map((m) => m.id);
+      const skippedSessionIds: string[] = [];
+      const updatedById = new Map<string, SessionRow>();
+
+      for (const sibling of targets) {
+        // No date to keep for a not-yet-placed sitting — nothing to re-anchor.
+        if (!sibling.scheduledStartTime) continue;
+
+        const dayStr = localDateStr(sibling.scheduledStartTime, user.timezone);
+        const newStart = minutesToUtc(
+          dayStr,
+          change.timeOfDayMinutes,
+          user.timezone,
+        );
+        const newDuration = change.durationMinutes ?? sibling.durationMinutes;
+
+        if (skipConflicting) {
+          const conflict = await wouldConflict(tx, {
+            userId: user.id,
+            timezone: user.timezone,
+            start: newStart,
+            durationMinutes: newDuration,
+            excludeSessionIds: allMemberIds,
+            excludeSeriesId: seriesId,
+          });
+          if (conflict) {
+            skippedSessionIds.push(sibling.id);
+            continue;
+          }
+        }
+
+        const row = await tx.session.update({
+          where: { id: sibling.id },
+          data: { scheduledStartTime: newStart, durationMinutes: newDuration },
+          include: WITH_TAGS_AND_SERIES,
+        });
+        updatedById.set(sibling.id, row);
+      }
+
+      const sessions = members.map((m) =>
+        toSessionDto(updatedById.get(m.id) ?? m),
+      );
+      return { sessions, skippedSessionIds };
+    });
+  }
+
+  /**
+   * A recurring fixed series' "this and following" reschedule — no
+   * per-occurrence detach primitive exists, so this is the finest granularity
+   * a recurring drag/resize can target. Reuses {@link truncateFrom} to cut the
+   * OLD series off just before `fromOccurrenceStartISO` (or delete it outright
+   * if the cutoff lands on/before its first occurrence), then spins up a brand
+   * new `SessionSeries` + representative `Session` — same type/title/note/tags
+   * and the SAME rrule pattern — anchored at the new date/time going forward.
+   *
+   * With `skipConflicting`, every occurrence of the NEW series up to
+   * {@link MAX_SCAN_DAYS} out is expanded ({@link expandRrule}) and checked via
+   * {@link wouldConflict} (excluding the new series' own row); a conflicting
+   * occurrence is pushed onto the new series' `exdates` via
+   * {@link excludeOccurrence} — same primitive "delete just this occurrence"
+   * uses — rather than moved on top of something else.
+   */
+  async updateRecurringFollowing(
+    seriesId: string,
+    fromOccurrenceStartISO: string,
+    change: { scheduledStartTime: string; durationMinutes: number },
+    skipConflicting: boolean,
+    user: User,
+  ): Promise<{ session: SharedSession; skippedSessionIds: string[] }> {
+    const oldSeries = await this.prisma.sessionSeries.findFirst({
+      where: { id: seriesId, userId: user.id },
+      include: {
+        sessions: {
+          orderBy: { createdAt: "asc" },
+          take: 1,
+          include: WITH_TAGS_AND_SERIES,
+        },
+      },
+    });
+    const rep = oldSeries?.sessions[0];
+    if (!oldSeries || !oldSeries.rrule || !rep)
+      throw new NotFoundException(`Cannot find recurring series ${seriesId}`);
+    const rrule = oldSeries.rrule;
+
+    await this.truncateFrom(seriesId, fromOccurrenceStartISO, user);
+
+    const newStart = new Date(change.scheduledStartTime);
+    const repStart = firstOccurrence(rrule, newStart, user.timezone);
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      const series = await tx.sessionSeries.create({
+        data: { type: rep.type, rrule, deadline: null, userId: user.id },
+      });
+      const s = await tx.session.create({
+        data: {
+          type: rep.type,
+          source: rep.source,
+          title: rep.title,
+          note: rep.note,
+          durationMinutes: change.durationMinutes,
+          deadline: null,
+          scheduledStartTime: repStart,
+          seriesId: series.id,
+          tags: { connect: rep.tags.map((t) => ({ id: t.id })) },
+          userId: user.id,
+        },
+        include: WITH_TAGS_AND_SERIES,
+      });
+      await tx.sessionEvent.create({
+        data: createEventData(s, user.id, series.id),
+      });
+      return s;
+    });
+
+    const skippedSessionIds: string[] = [];
+    if (skipConflicting) {
+      const scanEnd = new Date(repStart.getTime() + MAX_SCAN_DAYS * DAY_MS);
+      const occStarts = expandRrule(
+        rrule,
+        repStart,
+        repStart,
+        scanEnd,
+        user.timezone,
+      );
+      for (const occStart of occStarts) {
+        const conflict = await wouldConflict(this.prisma, {
+          userId: user.id,
+          timezone: user.timezone,
+          start: occStart,
+          durationMinutes: change.durationMinutes,
+          excludeSessionIds: [created.id],
+          excludeSeriesId: created.seriesId as string,
+        });
+        if (conflict) {
+          await this.excludeOccurrence(
+            created.seriesId as string,
+            occStart.toISOString(),
+            user,
+          );
+          skippedSessionIds.push(
+            occurrenceId(created.seriesId as string, occStart),
+          );
+        }
+      }
+    }
+
+    return { session: toSessionDto(created), skippedSessionIds };
   }
 
   /**

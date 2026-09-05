@@ -12,7 +12,9 @@ import {
   ValidateIf,
 } from "class-validator";
 import { TIME_GRANULARITY } from "../../common/constants";
+import { MAX_SCAN_DAYS, MAX_SERIES_PER_DAY } from "../../scheduler/constants";
 import { IsRRule } from "../../common/validators/rrule.decorator";
+import { IsFeasibleTaskWindow } from "../../common/validators/feasible-task-window.decorator";
 import type { SessionType } from "@zenflow/shared";
 
 export const SESSION_TYPES: SessionType[] = [
@@ -22,6 +24,15 @@ export const SESSION_TYPES: SessionType[] = [
   "LECTURE",
   "DND",
 ];
+
+/**
+ * Ceiling on how many sittings a `TASK` series may request. The placer can
+ * never place more than `MAX_SERIES_PER_DAY` sittings/day over its
+ * `MAX_SCAN_DAYS`-day scheduling horizon, so a request above this product can
+ * never be placed in full no matter how loose the deadline is (issue #33) —
+ * `MAX_SERIES_PER_DAY × MAX_SCAN_DAYS` = 1 × 60 = 60.
+ */
+export const MAX_SESSION_COUNT = MAX_SERIES_PER_DAY * MAX_SCAN_DAYS;
 
 /**
  * The 3-tab create form, flattened. `type` discriminates:
@@ -49,9 +60,15 @@ export class CreateSessionDto {
   @IsDivisibleBy(TIME_GRANULARITY)
   durationMinutes: number;
 
-  /** ISO-8601 deadline — required for a `TASK`, absent for fixed types. */
+  /**
+   * ISO-8601 deadline — required for a `TASK`, absent for fixed types.
+   * `@IsFeasibleTaskWindow` additionally rejects a deadline that leaves no
+   * time to fit `durationMinutes × sessionCount` back-to-back before it (a
+   * coarse, necessary-not-sufficient check — see that decorator's doc).
+   */
   @ValidateIf((o: CreateSessionDto) => o.type === "TASK")
   @IsISO8601()
+  @IsFeasibleTaskWindow()
   deadline?: string;
 
   /**
@@ -63,7 +80,7 @@ export class CreateSessionDto {
   @ValidateIf((o: CreateSessionDto) => o.type === "TASK")
   @IsInt()
   @Min(1)
-  @Max(30)
+  @Max(MAX_SESSION_COUNT)
   sessionCount?: number;
 
   /** ISO-8601 start — required for the fixed types (`ASSIGNMENT`/`EXAM`/`LECTURE`/`DND`). */

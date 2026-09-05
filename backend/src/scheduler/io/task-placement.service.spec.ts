@@ -131,3 +131,72 @@ describe("TaskPlacementService.placeOnCreate", () => {
     expect(res).toEqual({ scheduledStartTime: null, appliedPolicy: "NONE" });
   });
 });
+
+describe("TaskPlacementService.canPlaceTask / canPlaceSeries", () => {
+  it("canPlaceTask is true when the heuristic finds a slot, using a placeholder id (no row exists yet)", async () => {
+    const slot = new Date("2026-06-09T09:00:00.000Z");
+    const { svc, heuristic } = makeDeps({ heuristicStart: slot });
+
+    const ok = await svc.canPlaceTask({
+      user,
+      durationMinutes: 60,
+      deadline: task.deadline,
+      now,
+    });
+
+    expect(ok).toBe(true);
+    expect(heuristic.placeTask.mock.calls[0][1].id).not.toBe("t1");
+  });
+
+  it("canPlaceTask is false when nothing fits, and touches no prisma/experiment write", async () => {
+    const { svc, sessionUpdate, experiment } = makeDeps({
+      heuristicStart: null,
+    });
+
+    const ok = await svc.canPlaceTask({
+      user,
+      durationMinutes: 60,
+      deadline: task.deadline,
+      now,
+    });
+
+    expect(ok).toBe(false);
+    expect(sessionUpdate).not.toHaveBeenCalled();
+    expect(experiment.recordProposal).not.toHaveBeenCalled();
+  });
+
+  it("canPlaceSeries is true only when every member gets a slot (dry run)", async () => {
+    const seriesPlacer = {
+      placeSeries: jest.fn().mockResolvedValue([
+        { id: "p-0", scheduledStartTime: new Date("2026-06-02T09:00:00Z") },
+        { id: "p-1", scheduledStartTime: new Date("2026-06-05T09:00:00Z") },
+        { id: "p-2", scheduledStartTime: null },
+      ]),
+    };
+    const svc = new TaskPlacementService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      seriesPlacer as never,
+    );
+
+    const ok = await svc.canPlaceSeries({
+      user,
+      durationMinutes: 60,
+      sessionCount: 3,
+      deadline: task.deadline,
+      now,
+    });
+
+    expect(ok).toBe(false);
+    expect(seriesPlacer.placeSeries).toHaveBeenCalledWith(
+      "u1",
+      expect.objectContaining({ deadline: task.deadline }),
+      "UTC",
+      [],
+      now,
+      { trigger: "create", dryRun: true },
+    );
+  });
+});

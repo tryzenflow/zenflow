@@ -201,8 +201,12 @@ function SessionBlockImpl({
   const state = withOverlap(segment.state, layout.conflict);
   const isConflict = state === "conflict";
   const isSplit = Boolean(segment.continued);
-  // DND and fixed sessions are pinned — only a flexible TASK can be dragged.
-  const isInteractive = !isSplit && segment.type === "TASK";
+  // Any whole (non-split) block can be dragged/long-pressed into "Move
+  // to…" — fixed types (DND/ASSIGNMENT/EXAM/LECTURE) route through the same
+  // gesture as TASK now; a series/recurring touch is disambiguated by the
+  // scope-confirmation sheet upstream (see `update-recurring-sheet.tsx`),
+  // not by locking the gesture out here.
+  const isInteractive = !isSplit;
   // …but every block (incl. a recurring lecture/exam/DND occurrence) is
   // tappable, so it can open its edit screen — the surface for "delete just
   // this occurrence".
@@ -723,7 +727,7 @@ function SessionBlockImpl({
                   {segment.title}
                 </Text>
               </View>
-              <View className="mt-1 flex-row flex-wrap items-center gap-1">
+              <View className="flex-row flex-wrap items-center gap-1">
                 <Text
                   className={cn(
                     "text-[10px] text-muted-foreground leading-none",
@@ -751,7 +755,7 @@ function SessionBlockImpl({
                 {dueChip && <DueChip {...dueChip} />}
               </View>
               {showTags && (
-                <View className="mt-0.5 flex-row flex-wrap gap-1 overflow-hidden">
+                <View className="flex-row flex-wrap gap-1 overflow-hidden">
                   {segment.tags.slice(0, 3).map((t) => (
                     <View
                       key={t}
@@ -760,6 +764,13 @@ function SessionBlockImpl({
                       <Text className="text-[9px] font-medium">{t}</Text>
                     </View>
                   ))}
+                  {segment.tags.length > 3 && (
+                    <View className="rounded border border-border bg-muted px-1.5 py-0.5">
+                      <Text className="text-[9px] font-medium text-muted-foreground">
+                        +{segment.tags.length - 3}
+                      </Text>
+                    </View>
+                  )}
                 </View>
               )}
             </>

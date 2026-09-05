@@ -28,10 +28,10 @@ preference matrix. No global optimization, no randomness, no I/O in the core.
 | `backend/src/scheduler/core/preference.ts` | pure — `matrixIndex`, default/effective matrix, `preferenceScoreAt` |
 | `backend/src/scheduler/io/heuristic-placer.service.ts` | Prisma layer — loads each candidate day's `occupied`, picks one slot (`placeTask` / `placeInWindow`) |
 | `backend/src/scheduler/io/series-placer.service.ts` | `SeriesPlacer` — per-member bounded 50/50 placement of a `sessionCount` series |
-| `backend/src/scheduler/core/series-spread.ts` | pure — `seriesDayOffsets` (even spread) + `clampWindowForMember` (± X/N window) |
+| `backend/src/scheduler/core/series-spread.ts` | pure — `seriesDayWindows` (non-overlapping per-member day buckets) |
 | `backend/src/scheduler/io/matrix-decay.service.ts` | nightly exponential decay of every user's `preferenceMatrix` |
 | `backend/src/scheduler/io/retained-sessions.service.ts` | half-hourly RETAINED sweep (the "keep" signal) |
-| `backend/src/scheduler/core/recurrence.ts` | `expandRrule` — DND series → occurrence instants |
+| `backend/src/scheduler/core/recurrence.ts` | `expandRrule` — any recurring series (`DND` or a recurring `ASSIGNMENT`/`EXAM`/`LECTURE`) → occurrence instants |
 
 ## The preference matrix
 
@@ -56,8 +56,11 @@ deadline changes. Adding a fixed / DND session schedules nothing (they are user-
 `scheduleTask(user, { id, durationMinutes, deadline }, tz, preferenceMatrix, now)`:
 
 1. For every local calendar day from `next_15min(now)` through the deadline (capped at
-   `MAX_SCAN_DAYS`), load that day's `occupied` intervals (fixed sessions, DND
-   occurrences, other placed TASKs — via `loadDayLoad`, excluding this task's own row).
+   `MAX_SCAN_DAYS`), load that day's `occupied` intervals — via `loadDayLoad`, excluding
+   this task's own row: standalone fixed sessions, other placed/materialized `TASK`
+   sittings (including another series' members), and every occurrence of every recurring
+   series (`DND`, or a recurring `ASSIGNMENT`/`EXAM`/`LECTURE`), expanded from its
+   representative row.
    `loadDayLoad` looks a day back and a task-length forward of the nominal `[00:00, 24:00)`
    so a session that started the previous evening and runs past midnight — or one this
    scan might place across the *next* midnight — is visible for collision checks.
@@ -94,12 +97,12 @@ Creating a `TASK` with `sessionCount: N` (N > 1) makes one `SessionSeries` (`typ
 shared `deadline`, no `rrule`) and N linked `Session` rows (`sessionIndex` 1..N,
 `sessionTotal` N), then hands the batch to `SeriesPlacer.placeSeries`:
 
-- **Even spread.** `seriesDayOffsets(daySpan, N)` targets session `i` at
-  `round(i · daySpan / (N − 1))` days from the scan start — first session on day 0, last on
-  the deadline day, the rest evenly between (`round` lets a few drift a day).
-- **Bounded window.** `clampWindowForMember` gives each member the day range
-  `target ± max(1, floor(daySpan / N))`, clamped to `[0, daySpan]` — wide for a sparse
-  series, `±1` for a dense one. The member is then placed **through the same 50/50
+- **Non-overlapping windows.** `seriesDayWindows(daySpan, N)` partitions the `daySpan + 1`
+  days into `N` contiguous buckets — `base = floor(totalDays / N)` days each, with the LAST
+  `totalDays % N` buckets getting one extra day. Member `i`'s window is exactly its bucket:
+  no two members' windows can ever overlap, unlike the earlier "even-spread target ± a
+  symmetric clamp" scheme, whose overlapping windows could let two sessions cluster onto one
+  day while a neighboring day sat empty. The member is then placed **through the same 50/50
   heuristic-or-LinUCB pick as a single task**, restricted to that window; a day already
   holding `MAX_SERIES_PER_DAY` (= 3) sittings of this series is skipped.
 - Siblings never overlap (each placement is fed forward as a hard block). A member with

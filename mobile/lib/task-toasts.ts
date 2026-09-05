@@ -1,9 +1,66 @@
+import type { useToast } from "@/components/ui/toast";
 import { placementQualifier, zonedDate } from "@zenflow/core";
 import type { Session } from "@zenflow/shared";
+import { isAxiosError } from "axios";
 import { format } from "date-fns";
 
 export interface PlacementToastUser {
   timezone: string;
+}
+
+type ToastFn = ReturnType<typeof useToast>["toast"];
+
+/**
+ * Split a raw error/validation message into a short toast title + optional
+ * description. A message that wants a two-part toast embeds a "\n" between
+ * them (see e.g. the backend's `NO_FEASIBLE_SLOT_MESSAGE` /
+ * `IsFeasibleTaskWindow`, and `sessionSchema`'s feasibility issue) — a plain
+ * one-line message comes back unchanged, as a title with no description.
+ * Exists so a long guidance sentence never renders as one wrapped, bold
+ * line — a title + a calmer description line reads far better.
+ */
+export function splitToastMessage(raw: string): {
+  title: string;
+  description?: string;
+} {
+  const i = raw.indexOf("\n");
+  if (i === -1) return { title: raw };
+  return {
+    title: raw.slice(0, i).trim(),
+    description: raw.slice(i + 1).trim() || undefined,
+  };
+}
+
+/** Show `raw` (optionally "\n"-split, see {@link splitToastMessage}) as a
+ * `variant` toast, title + description instead of one long line. */
+export function showSplitToast(
+  toast: ToastFn,
+  raw: string,
+  variant: "success" | "destructive" | "warning" = "destructive",
+): void {
+  const { title, description } = splitToastMessage(raw);
+  toast(title, variant, undefined, undefined, undefined, undefined, {
+    description,
+  });
+}
+
+/**
+ * Extract a caught request's server-sent message (or `fallback`, for a
+ * non-HTTP failure / an empty response) and show it as a destructive toast
+ * via {@link showSplitToast}. The one-stop replacement for the
+ * `isAxiosError(error) && ... ?.message` extraction every create/edit/delete
+ * catch block here used to repeat inline.
+ */
+export function showErrorToast(
+  toast: ToastFn,
+  error: unknown,
+  fallback: string,
+): void {
+  const raw =
+    (isAxiosError(error) &&
+      (error.response?.data as { message?: string } | undefined)?.message) ||
+    fallback;
+  showSplitToast(toast, raw, "destructive");
 }
 
 /**

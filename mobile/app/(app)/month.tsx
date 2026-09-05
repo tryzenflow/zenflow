@@ -13,6 +13,12 @@ import {
   SessionListSheet,
   type SessionListSheetHandle,
 } from "@/components/calendar/task-list-sheet";
+import {
+  type PendingSessionUpdate,
+  type UpdateRecurringScope,
+  UpdateRecurringSheet,
+  type UpdateRecurringSheetHandle,
+} from "@/components/calendar/update-recurring-sheet";
 import { CreateSessionFab } from "@/components/tasks/create-task-fab";
 import { Text } from "@/components/ui/text";
 import { useUserStore } from "@/hooks/use-user-store";
@@ -20,7 +26,7 @@ import { addMonths, monthLabel } from "@/lib/month-date-math";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { useFocusEffect } from "@react-navigation/native";
 import { zonedNow } from "@zenflow/core";
-import type { Session } from "@zenflow/shared";
+import type { Session, UpdateScope } from "@zenflow/shared";
 import { type Href, useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
@@ -57,6 +63,7 @@ export default function MonthScreen() {
 
   const taskListSheetRef = useRef<SessionListSheetHandle>(null);
   const rescheduleSheetRef = useRef<RescheduleSheetHandle>(null);
+  const updateScopeSheetRef = useRef<UpdateRecurringSheetHandle>(null);
 
   function goToMonth(next: Date) {
     setMonthDate(next);
@@ -92,15 +99,43 @@ export default function MonthScreen() {
   }
 
   // Confirm: one `PATCH /sessions/:id`, then refetch the visible month and drop
-  // the (now stale) day sheet.
+  // the (now stale) day sheet. `scope`/`skipConflicting` are only set when the
+  // session belongs to a series and `handleRequestScopedUpdate` below
+  // resolved a choice.
   const handleRescheduleConfirm = useCallback(
-    async (id: string, startISO: string, durationMinutes: number) => {
+    async (
+      id: string,
+      startISO: string,
+      durationMinutes: number,
+      scope?: UpdateScope,
+      skipConflicting?: boolean,
+    ) => {
       await updateSession(id, {
         scheduledStartTime: startISO,
         durationMinutes,
+        scope,
+        skipConflicting,
       });
       setReloadToken((n) => n + 1);
       taskListSheetRef.current?.close();
+    },
+    [],
+  );
+
+  // The shared `RescheduleSheet`'s scope-confirmation deferral — same wiring
+  // as the Week screen's own instance.
+  const handleRequestScopedUpdate = useCallback(
+    (
+      session: Session,
+      pending: PendingSessionUpdate,
+      onResolve: (
+        choice: {
+          scope: UpdateRecurringScope;
+          skipConflicting: boolean;
+        } | null,
+      ) => void,
+    ) => {
+      updateScopeSheetRef.current?.open(session, pending, onResolve);
     },
     [],
   );
@@ -180,7 +215,9 @@ export default function MonthScreen() {
         ref={rescheduleSheetRef}
         tz={tz}
         onConfirm={handleRescheduleConfirm}
+        onRequestScopedUpdate={handleRequestScopedUpdate}
       />
+      <UpdateRecurringSheet ref={updateScopeSheetRef} />
 
       <CreateSessionFab tz={tz} />
     </View>

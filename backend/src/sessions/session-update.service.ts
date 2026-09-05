@@ -5,17 +5,30 @@ import { PrismaService } from "../prisma/prisma.service";
 import { TagsService } from "../tags/tags.service";
 import { TaskPlacementService } from "../scheduler/io/task-placement.service";
 import { SchedulingFeedbackService } from "../scheduler/io/scheduling-feedback.service";
+import { wouldConflict } from "../scheduler/io/conflict-check";
 import {
+  expandRrule,
   firstOccurrence,
+  occurrenceId,
   parseOccurrenceId,
   reanchorTimeOfDay,
 } from "../scheduler/core/recurrence";
+import { MAX_SCAN_DAYS } from "../scheduler/constants";
+import { DAY_MS } from "../scheduler/core/slot";
+import { utcToMinutes } from "../common/utils";
 import { UpdateSessionDto } from "./dto/update-session.dto";
 import { SessionRow, WITH_TAGS_AND_SERIES } from "./types/session-row";
 import { toSessionDto } from "./session-mapper";
 import { moveEventData } from "./session-events";
 import { mapSessionPrismaError } from "./prisma-error";
 import { SeriesService } from "./series.service";
+
+/** `dto` carries an actual reschedule/resize — the only case `scope` matters. */
+function isRescheduleChange(dto: UpdateSessionDto): boolean {
+  return (
+    dto.scheduledStartTime !== undefined || dto.durationMinutes !== undefined
+  );
+}
 
 /**
  * `PATCH /sessions/:id` — a plain field diff, plus (for fixed types) the
@@ -49,8 +62,36 @@ export class SessionUpdateService {
       // through the representative row: metadata applies series-wide; a
       // `scheduledStartTime` change shifts only the *time of day* (the
       // first-occurrence date is kept so the rrule anchor can't drop earlier
-      // occurrences).
+      // occurrences) — UNLESS `scope: "following"` asks for a genuine
+      // "this and every occurrence after it" split, which has no
+      // representative-row-reanchor equivalent and needs its own series.
       const occ = parseOccurrenceId(id);
+      if (occ && dto.scope === "following" && isRescheduleChange(dto)) {
+        const rep = await this.prisma.session.findFirst({
+          where: { seriesId: occ.seriesId, userId: user.id },
+          select: { scheduledStartTime: true, durationMinutes: true },
+        });
+        if (!rep || !rep.scheduledStartTime)
+          throw new NotFoundException(`Cannot find session with id ${id}`);
+        const { session, skippedSessionIds } =
+          await this.series.updateRecurringFollowing(
+            occ.seriesId,
+            occ.startISO,
+            {
+              scheduledStartTime:
+                dto.scheduledStartTime ?? rep.scheduledStartTime.toISOString(),
+              durationMinutes: dto.durationMinutes ?? rep.durationMinutes,
+            },
+            dto.skipConflicting ?? false,
+            user,
+          );
+        return {
+          ...session,
+          skippedSessionIds: skippedSessionIds.length
+            ? skippedSessionIds
+            : undefined,
+        };
+      }
       if (occ) {
         const rep = await this.prisma.session.findFirst({
           where: { seriesId: occ.seriesId, userId: user.id },
@@ -68,11 +109,60 @@ export class SessionUpdateService {
         }
       }
 
+      // A real row belonging to a materialized TASK series ("this and later
+      // sittings" / "all sittings") reschedules every affected sibling's
+      // time-of-day (never its date) instead of just this one row — resolved
+      // BEFORE the main transaction so it can delegate to its own.
+      if (
+        !occ &&
+        (dto.scope === "following" || dto.scope === "series") &&
+        isRescheduleChange(dto)
+      ) {
+        const existingForScope = await this.prisma.session.findFirst({
+          where: { id, userId: user.id },
+          select: {
+            seriesId: true,
+            scheduledStartTime: true,
+            series: { select: { type: true } },
+          },
+        });
+        if (
+          existingForScope?.seriesId &&
+          existingForScope.series?.type === "TASK"
+        ) {
+          const anchorStart = dto.scheduledStartTime
+            ? new Date(dto.scheduledStartTime)
+            : existingForScope.scheduledStartTime;
+          if (anchorStart) {
+            const { sessions, skippedSessionIds } =
+              await this.series.updateSiblingTimeOfDay(
+                existingForScope.seriesId,
+                id,
+                {
+                  timeOfDayMinutes: utcToMinutes(anchorStart, user.timezone),
+                  durationMinutes: dto.durationMinutes,
+                },
+                dto.scope === "series",
+                dto.skipConflicting ?? false,
+                user,
+              );
+            const rep = sessions.find((s) => s.id === id) ?? sessions[0];
+            return {
+              ...rep,
+              sessions,
+              skippedSessionIds: skippedSessionIds.length
+                ? skippedSessionIds
+                : undefined,
+            };
+          }
+        }
+      }
+
       const updated = await this.prisma.$transaction(
         async (tx): Promise<SessionRow> => {
           const existing = await tx.session.findFirst({
             where: { id, userId: user.id },
-            include: { tags: true },
+            include: WITH_TAGS_AND_SERIES,
           });
           if (!existing)
             throw new NotFoundException(`Cannot find session with id ${id}`);
@@ -263,7 +353,53 @@ export class SessionUpdateService {
         });
       }
 
-      return toSessionDto(updated);
+      // "All occurrences" (scope "series", or omitted — today's default
+      // whole-series reanchor) with `skipConflicting`: the reanchor above
+      // already moved every occurrence's time-of-day at once (it's virtual —
+      // one representative row), so prune out whichever upcoming landings now
+      // collide instead of leaving them overlapping.
+      let skippedSessionIds: string[] | undefined;
+      if (
+        occ &&
+        dto.skipConflicting &&
+        (dto.scope === "series" || dto.scope === undefined) &&
+        updated.seriesId &&
+        updated.series?.rrule &&
+        updated.scheduledStartTime
+      ) {
+        const seriesId = updated.seriesId;
+        const scanEnd = new Date(now.getTime() + MAX_SCAN_DAYS * DAY_MS);
+        const occStarts = expandRrule(
+          updated.series.rrule,
+          updated.scheduledStartTime,
+          now,
+          scanEnd,
+          user.timezone,
+          updated.series.exdates,
+        );
+        const skipped: string[] = [];
+        for (const occStart of occStarts) {
+          const conflict = await wouldConflict(this.prisma, {
+            userId: user.id,
+            timezone: user.timezone,
+            start: occStart,
+            durationMinutes: updated.durationMinutes,
+            excludeSessionIds: [updated.id],
+            excludeSeriesId: seriesId,
+          });
+          if (conflict) {
+            await this.series.excludeOccurrence(
+              seriesId,
+              occStart.toISOString(),
+              user,
+            );
+            skipped.push(occurrenceId(seriesId, occStart));
+          }
+        }
+        if (skipped.length) skippedSessionIds = skipped;
+      }
+
+      return { ...toSessionDto(updated), skippedSessionIds };
     } catch (error) {
       mapSessionPrismaError(error, id, "update");
     }

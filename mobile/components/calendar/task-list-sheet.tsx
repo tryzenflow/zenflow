@@ -5,8 +5,13 @@ import {
   BottomSheetHeader,
   useBottomSheet,
 } from "@/components/ui/bottom-sheet";
-import { AlertTriangle, CalendarClock, MousePointer2 } from "@/components/Icons";
+import {
+  AlertTriangle,
+  CalendarClock,
+  MousePointer2,
+} from "@/components/Icons";
 import { Text } from "@/components/ui/text";
+import { isContinuationEntry } from "@/lib/month-date-math";
 import { isSessionPastDeadline } from "@/lib/overdue";
 import { SESSION_TYPE_META } from "@/lib/session-type";
 import { deriveState } from "@/lib/task-card";
@@ -54,7 +59,7 @@ export const SessionListSheet = forwardRef<
 >(({ tz, onSelectSession, onReschedule }, ref) => {
   const bottomSheet = useBottomSheet();
   const [day, setDay] = useState<Date | null>(null);
-  const [tasks, setSessions] = useState<Session[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
   const dragRef = useRef<MonthDragHandle | null>(null);
   // Read inside the pan callbacks, which are built once per row and must not
   // capture the day the sheet happened to be showing on that render.
@@ -134,12 +139,12 @@ export const SessionListSheet = forwardRef<
               {day ? format(day, "EEE, MMM d") : ""}
             </Text>
             <Text className="mt-[3px] text-[13px] text-muted-foreground">
-              {summarize(tasks)}
+              {summarize(sessions)}
             </Text>
           </View>
         </BottomSheetHeader>
-        {tasks.length > 0 && (
-          <View className="mx-5 mb-1 mt-1 flex-row items-center gap-2 rounded-lg bg-muted/60 px-3 py-2">
+        {sessions.length > 0 && (
+          <View className="mx-5 mb-1 mt-2 flex-row items-center gap-2 rounded-lg bg-muted/60 px-3 py-2">
             <MousePointer2
               size={13}
               className="shrink-0 text-muted-foreground"
@@ -151,7 +156,7 @@ export const SessionListSheet = forwardRef<
           </View>
         )}
         <BottomSheetFlatList
-          data={tasks}
+          data={sessions}
           keyExtractor={(item) => (item as Session).id}
           contentContainerClassName="px-5 pt-4"
           className="py-0"
@@ -175,7 +180,7 @@ export const SessionListSheet = forwardRef<
                 className={cn(
                   "overflow-hidden border-x border-border bg-card",
                   index === 0 && "rounded-t-2xl border-t",
-                  index === tasks.length - 1 && "rounded-b-2xl border-b",
+                  index === sessions.length - 1 && "rounded-b-2xl border-b",
                   index > 0 && "border-t border-t-border",
                 )}
               >
@@ -189,7 +194,9 @@ export const SessionListSheet = forwardRef<
                   onDragStart={handleRowDragStart}
                   dragRef={dragRef}
                   onReschedule={
-                    onReschedule ? () => onReschedule(item) : undefined
+                    onReschedule && !isContinuationEntry(item)
+                      ? () => onReschedule(item)
+                      : undefined
                   }
                 />
               </View>
@@ -211,10 +218,9 @@ const ROW_STATE_LABELS: Record<SessionCardState, string> = {
   dnd: "Do not disturb",
 };
 
-/** Sheet subtitle: "5 tasks". */
 function summarize(tasks: Session[]): string {
   if (tasks.length === 0) return "No tasks";
-  const count = `${tasks.length} ${tasks.length === 1 ? "task" : "tasks"}`;
+  const count = `${tasks.length} ${tasks.length === 1 ? "session" : "sessions"}`;
   return count;
 }
 
@@ -236,8 +242,28 @@ function SessionListRow({
   const state = deriveState(task);
   const TypeIcon = sessionTypeIcon(task.type);
   const late = isSessionPastDeadline(task);
+  // The tail `groupSessionsByDate` synthesizes on the next day for a session
+  // crossing midnight — same underlying session as a row on yesterday's
+  // sheet, not a second one, so it isn't independently draggable/reschedulable
+  // (mirrors `task-block.tsx`'s `isSplit` day/week rule; `onReschedule` is
+  // already omitted for it at the call site above).
+  const continuation = isContinuationEntry(task);
   const timeLabel = task.scheduledStartTime
     ? format(zonedDate(task.scheduledStartTime, tz), "H:mm")
+    : "—";
+  // A continuation row's own `scheduledStartTime` is still yesterday's real
+  // start — the subtitle shows when the tail actually ends today instead.
+  const continuationEndLabel = task.scheduledStartTime
+    ? format(
+        zonedDate(
+          new Date(
+            new Date(task.scheduledStartTime).getTime() +
+              task.durationMinutes * 60_000,
+          ).toISOString(),
+          tz,
+        ),
+        "H:mm",
+      )
     : "—";
 
   // Mirrors `MonthPill`'s gesture exactly — one `Pan` with
@@ -252,16 +278,23 @@ function SessionListRow({
   // above it (the sheet's own pan and the list's scroll): neither activates
   // while the finger is stationary, so the long-press wins the race, and once
   // this pan is active it owns the touch.
-  const latest = useRef({ task, onDragStart, dragRef });
-  latest.current = { task, onDragStart, dragRef };
+  const latest = useRef({ task, onDragStart, dragRef, continuation });
+  latest.current = { task, onDragStart, dragRef, continuation };
 
   const pan = useMemo(
     () =>
       Gesture.Pan()
         .activateAfterLongPress(350)
+        // A continuation row is the same session as a row on yesterday's
+        // sheet, not a second, independently movable one — `.enabled(false)`
+        // stops the pan from ever activating; the `onStart` bail-out below is
+        // a second guard in case a row is ever reused for a different task
+        // across a re-render without this memo re-running.
+        .enabled(!continuation)
         .runOnJS(true)
         .onStart((e) => {
           const c = latest.current;
+          if (c.continuation) return;
           c.onDragStart(c.task, e.absoluteX, e.absoluteY);
         })
         .onUpdate((e) => {
@@ -277,7 +310,8 @@ function SessionListRow({
         .onFinalize((_e, success) => {
           if (!success) latest.current.dragRef.current?.cancel();
         }),
-    [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [continuation],
   );
 
   return (
@@ -287,12 +321,18 @@ function SessionListRow({
         className="flex-row items-center gap-[13px] px-4 py-3.5"
       >
         <Text className="w-[54px] flex-none text-right text-[15px] text-muted-foreground">
-          {timeLabel}
+          {continuation ? "0:00" : timeLabel}
         </Text>
-        <TypeIcon
-          size={16}
-          className={cn("flex-none", SESSION_TYPE_META[task.type].textClass)}
-        />
+        {continuation ? (
+          <Text className="w-4 flex-none text-center text-[13px] leading-none text-muted-foreground">
+            ↳
+          </Text>
+        ) : (
+          <TypeIcon
+            size={16}
+            className={cn("flex-none", SESSION_TYPE_META[task.type].textClass)}
+          />
+        )}
         <View className="min-w-0 flex-1">
           <Text
             className="text-[15px] font-semibold text-foreground"
@@ -302,7 +342,9 @@ function SessionListRow({
           </Text>
           <View className="mt-0.5 flex-row items-center gap-1.5">
             <Text className="text-[12.5px] text-muted-foreground">
-              {ROW_STATE_LABELS[state]} · {task.durationMinutes}m
+              {continuation
+                ? `Continued from yesterday · ends ${continuationEndLabel}`
+                : `${ROW_STATE_LABELS[state]} · ${task.durationMinutes}m`}
             </Text>
             {late && (
               <View className="flex-row items-center gap-0.5">

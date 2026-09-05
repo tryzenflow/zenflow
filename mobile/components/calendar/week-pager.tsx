@@ -1,7 +1,6 @@
 import { NAV_THEME } from "@/lib/constants";
 import type { PeekBlock } from "@/lib/peek";
 import { useColorScheme } from "@/lib/useColorScheme";
-import type { Session } from "@zenflow/shared";
 import {
   centeredDays,
   dateKey,
@@ -19,6 +18,7 @@ import {
   decideSettleTarget,
   shouldSlideWeek,
 } from "@/lib/week-pager-math";
+import type { Session } from "@zenflow/shared";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   type ForwardedRef,
@@ -45,6 +45,10 @@ import Animated, {
   type SharedValue,
 } from "react-native-reanimated";
 import { DayTimeline, type TimelineState } from "./day-timeline";
+import type {
+  PendingSessionUpdate,
+  UpdateRecurringScope,
+} from "./update-recurring-sheet";
 import { type DragEdge, PagerPage } from "./week-pager-page";
 import { PEEK_STRIP_W, PeekStrip } from "./week-peek-strip";
 
@@ -87,7 +91,6 @@ interface WeekPagerProps {
    * re-syncs (forwarded to each page's `DayTimeline` as its `refreshKey`). */
   focusTick: number;
   onSessionPress?: (taskId: string) => void;
-  onLongPress?: (timeISO: string) => void;
   /** Strip offset shared value, owned by `WeekScreen`. The Week header reads
    * it so its chip strip tracks the pager 1:1 during a week slide, and its
    * own week-swipe writes it to drag this pager one page. */
@@ -109,6 +112,18 @@ interface WeekPagerProps {
    * screen opens the "Move to…" sheet with this session. Forwarded straight
    * through from the active `DayTimeline`. */
   onRequestReschedule?: (session: Session) => void;
+  /** Same-shaped scope-confirmation deferral as `DayTimeline`'s own prop —
+   * plain passthrough to the active `DayTimeline`. */
+  onRequestScopedUpdate?: (
+    session: Session,
+    pending: PendingSessionUpdate,
+    onResolve: (
+      choice: {
+        scope: UpdateRecurringScope;
+        skipConflicting: boolean;
+      } | null,
+    ) => void,
+  ) => void;
   /** Session id to pulse on the focused day — a teleport target. Forwarded to
    * the active `DayTimeline` only. */
   flashSessionId?: string | null;
@@ -162,13 +177,13 @@ function WeekPagerImpl(
     onVisibleDateChange,
     focusTick,
     onSessionPress,
-    onLongPress,
     progressSV,
     headerStripSV,
     onWeekSlideStart,
     onWeekSlideEnd,
     onActiveStateChange,
     onRequestReschedule,
+    onRequestScopedUpdate,
     flashSessionId = null,
   }: WeekPagerProps,
   ref: ForwardedRef<WeekPagerHandle>,
@@ -956,14 +971,13 @@ function WeekPagerImpl(
                 <DayTimeline
                   date={day}
                   showHeader={false}
-                  showEmptyGhostAlways
                   refreshKey={focusTick}
                   isActive={active}
                   syncScroll
                   onSessionPress={onSessionPress}
-                  onLongPress={onLongPress}
                   onDragChange={handleDragChange}
                   onRequestReschedule={onRequestReschedule}
+                  onRequestScopedUpdate={onRequestScopedUpdate}
                   onPeekChange={handlePeekChange}
                   rightInset={PEEK_STRIP_W}
                   onStateChange={active ? onActiveStateChange : undefined}

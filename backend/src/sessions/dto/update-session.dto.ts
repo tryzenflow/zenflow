@@ -1,6 +1,8 @@
 import {
   IsArray,
+  IsBoolean,
   IsDivisibleBy,
+  IsIn,
   IsInt,
   IsISO8601,
   IsOptional,
@@ -9,7 +11,7 @@ import {
   Min,
   ValidateIf,
 } from "class-validator";
-import type { UpdateSessionInput } from "@zenflow/shared";
+import type { UpdateScope, UpdateSessionInput } from "@zenflow/shared";
 import { TIME_GRANULARITY } from "../../common/constants";
 import { IsRRule } from "../../common/validators/rrule.decorator";
 
@@ -57,4 +59,18 @@ export class UpdateSessionDto implements UpdateSessionInput {
   @ValidateIf((_, v) => v !== null)
   @IsRRule()
   rrule?: string | null;
+
+  /** Which series members a `scheduledStartTime`/`durationMinutes` change applies to. */
+  @IsOptional()
+  @IsIn(["occurrence", "following", "series"])
+  scope?: UpdateScope;
+
+  /**
+   * With `scope: "following" | "series"`, leave any instance whose new landing
+   * slot would overlap another session untouched instead of moving it there.
+   * Ignored otherwise.
+   */
+  @IsOptional()
+  @IsBoolean()
+  skipConflicting?: boolean;
 }

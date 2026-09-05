@@ -14,6 +14,10 @@ import type {
 
 type Trigger = "create" | "deadline-change";
 
+/** Placeholder id for a pre-flight feasibility scan — no `Session` row exists
+ * yet, so this never matches a real occupied interval to exclude. */
+const PREFLIGHT_TASK_ID = "__preflight__";
+
 /**
  * The single placement entry point `sessions/` talks to. It owns the whole
  * "place a `TASK` and persist its `scheduledStartTime`" flow — heuristic pass,
@@ -169,6 +173,69 @@ export class TaskPlacementService {
    * inserted the rows + `CREATE` events. Returns one row per member
    * (`null` start = nothing free fit).
    */
+  /**
+   * Read-only pre-flight feasibility check for a single `TASK` create — `true`
+   * iff at least one empty slot fits `durationMinutes` somewhere in
+   * `now … deadline`. Runs the same {@link HeuristicPlacer.placeTask} scan a
+   * real create would, but against a placeholder id (no `Session` row exists
+   * yet) — no DB write, no telemetry. `SessionCrudService.create` calls this
+   * BEFORE inserting anything, so an infeasible create never persists an
+   * unplaced task (no rollback needed).
+   */
+  async canPlaceTask(args: {
+    user: User;
+    durationMinutes: number;
+    deadline: Date;
+    now: Date;
+  }): Promise<boolean> {
+    const start = await this.heuristic.placeTask(
+      args.user.id,
+      {
+        id: PREFLIGHT_TASK_ID,
+        durationMinutes: args.durationMinutes,
+        deadline: args.deadline,
+      },
+      args.user.timezone,
+      args.user.preferenceMatrix,
+      args.now,
+    );
+    return start !== null;
+  }
+
+  /**
+   * Read-only pre-flight feasibility check for a `TASK` series create —
+   * `true` iff EVERY member (`sessionCount` sittings of `durationMinutes`)
+   * can be placed somewhere in `now … deadline` under the real placement
+   * constraints (per-day cap, sibling spacing — {@link SeriesPlacer.placeSeries}
+   * with `dryRun: true`). One infeasible member fails the whole check, so
+   * `SessionCrudService.create` can reject the batch before any row exists —
+   * no partially-placed series is ever persisted.
+   */
+  async canPlaceSeries(args: {
+    user: User;
+    durationMinutes: number;
+    sessionCount: number;
+    deadline: Date;
+    now: Date;
+  }): Promise<boolean> {
+    const members: SeriesMemberInput[] = Array.from(
+      { length: args.sessionCount },
+      (_, i) => ({
+        id: `${PREFLIGHT_TASK_ID}-${i}`,
+        durationMinutes: args.durationMinutes,
+      }),
+    );
+    const placements = await this.seriesPlacer.placeSeries(
+      args.user.id,
+      { members, deadline: args.deadline },
+      args.user.timezone,
+      args.user.preferenceMatrix,
+      args.now,
+      { trigger: "create", dryRun: true },
+    );
+    return placements.every((p) => p.scheduledStartTime !== null);
+  }
+
   async placeSeriesOnCreate(args: {
     user: User;
     seriesId: string;
