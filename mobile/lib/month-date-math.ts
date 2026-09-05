@@ -1,4 +1,4 @@
-import { zonedDate } from "@zenflow/core";
+import { zonedDate, zonedWallClockToUtc } from "@zenflow/core";
 import {
   addMonths as dateFnsAddMonths,
   eachDayOfInterval,
@@ -6,6 +6,7 @@ import {
   endOfWeek,
   format,
   isSameMonth,
+  startOfDay,
   startOfMonth,
   startOfWeek,
 } from "date-fns";
@@ -21,9 +22,17 @@ import {
  * `frontend/src/utils/constants.ts`), translated to RN idioms.
  */
 
-export const WEEK_STARTS_ON = 1 as const;
+export const WEEK_STARTS_ON = 1;
 
 export const MONTH_PILL_CAP = 2;
+
+export const MONTH_CELL_VISIBILITY_WEIGHTS = {
+  EXAM: 10,
+  ASSIGNMENT: 5,
+  LECTURE: 3,
+  TASK: 1,
+  DND: 0,
+};
 
 /**
  * Every date-of-day rendered in a month's grid: the Monday-first weeks
@@ -90,34 +99,75 @@ export function splitCellSessions<T>(
 
 interface ScheduledLike {
   scheduledStartTime: string | null;
+  durationMinutes: number;
 }
 
 /**
- * Group a flat task list by the user-tz calendar day its
- * `scheduledStartTime` falls on. Sessions with no `scheduledStartTime` are
- * omitted — mirrors `frontend/src/components/calendar/month-grid.tsx`'s
- * `isSameDay(d, zonedDate(e.start, tz))` filter, which only ever runs over
- * already-placed events.
- *
- * Each day's tasks come back sorted ascending by `scheduledStartTime`. Sorting
- * here rather than at each render site is deliberate: this one map feeds both
- * the grid cells (via `splitCellSessions`) and the day/overflow sheet (the same
- * array is handed straight to `SessionListSheet`), so one sort keeps the two in
- * agreement. It also gives "+N more" its intended meaning — the cell shows the
- * `MONTH_PILL_CAP` *earliest* tasks and the overflow rolls up the rest, rather
- * than whatever order the API happened to return.
+ * Module-private marker for a shallow-cloned "tail" entry `groupSessionsByDate`
+ * adds to the *next* day's bucket when a session's scheduled interval crosses
+ * midnight — see {@link isContinuationEntry}. A `Symbol` property (rather than
+ * a visible field) keeps `T`'s shape untouched, so the function's return type
+ * stays a plain `Map<string, T[]>` and every existing consumer (drag payloads,
+ * `SessionListSheet`, `updateSession` calls, …) keeps working unmodified on a
+ * continuation entry — it IS the same session, just also needs a distinct
+ * on-screen treatment where it appears a second time.
  */
+const CONTINUATION_MARKER = Symbol("month-continuation");
+
+/**
+ * True for a continuation entry `groupSessionsByDate` synthesized for a
+ * session that crosses midnight — the tail copy placed in the *next* day's
+ * bucket. `MonthCell`/`MonthPill` use this to render it distinctly ("this is
+ * the tail of something that started yesterday", not a second session), and
+ * drag-start handlers use it to refuse to drag/reschedule that copy — same
+ * read-only rule the day/week timeline applies to a `segment.continued`
+ * block (`task-block.tsx`'s `isSplit`).
+ */
+export function isContinuationEntry(task: object): boolean {
+  return CONTINUATION_MARKER in task;
+}
+
+/** True when `task`'s scheduled interval (in `tz`) runs past the midnight
+ * that ends its start day — the `{ scheduledStartTime, durationMinutes }`
+ * counterpart of `@zenflow/core`'s `crossesMidnight(event, tz)` (which takes
+ * an already-resolved `{ start, end }` `Event`). Mirrors
+ * `mobile/lib/blocks.ts`'s `eventsForDay` `continues` check (`evEndMs >
+ * dayEndMs`) rather than a same-day comparison, so a session ending exactly
+ * at midnight — no actual minute spills into the next day — does not get a
+ * next-day tail. */
+function crossesMidnightSession(task: ScheduledLike, tz: string): boolean {
+  if (!task.scheduledStartTime) return false;
+  const startMsValue = Date.parse(task.scheduledStartTime);
+  const startWall = zonedDate(task.scheduledStartTime, tz);
+  const dayStartWall = startOfDay(startWall);
+  const nextDayWall = new Date(dayStartWall);
+  nextDayWall.setDate(nextDayWall.getDate() + 1);
+  const dayEndMs = zonedWallClockToUtc(nextDayWall, tz).getTime();
+  const endMs = startMsValue + task.durationMinutes * 60_000;
+  return endMs > dayEndMs;
+}
+
 export function groupSessionsByDate<T extends ScheduledLike>(
   tasks: T[],
   tz: string,
 ): Map<string, T[]> {
   const map = new Map<string, T[]>();
-  for (const task of tasks) {
-    if (!task.scheduledStartTime) continue;
-    const key = dateKey(zonedDate(task.scheduledStartTime, tz));
+  const add = (key: string, task: T) => {
     const existing = map.get(key);
     if (existing) existing.push(task);
     else map.set(key, [task]);
+  };
+  for (const task of tasks) {
+    if (!task.scheduledStartTime) continue;
+    const startWall = zonedDate(task.scheduledStartTime, tz);
+    add(dateKey(startWall), task);
+
+    if (crossesMidnightSession(task, tz)) {
+      const nextDayWall = new Date(startWall);
+      nextDayWall.setDate(nextDayWall.getDate() + 1);
+      const continuation: T = { ...task, [CONTINUATION_MARKER]: true };
+      add(dateKey(nextDayWall), continuation);
+    }
   }
   // `Array.prototype.sort` is stable (ES2019+), so tasks sharing a start time
   // keep the order the API returned them in.

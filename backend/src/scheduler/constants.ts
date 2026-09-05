@@ -11,7 +11,7 @@
 export const MAX_SCAN_DAYS = 60;
 
 /** Max sessions of one `TASK` series allowed to land on a single calendar day (issue #32). */
-export const MAX_SERIES_PER_DAY = 3;
+export const MAX_SERIES_PER_DAY = 1;
 
 /**
  * Per-update step size η for preference-matrix acquisition.

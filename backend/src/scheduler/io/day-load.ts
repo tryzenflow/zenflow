@@ -31,6 +31,12 @@ import { DAY_MS, type Interval } from "../core/slot";
  * cross-midnight placement on this day can see the next morning's blocks it
  * must not collide with. Default `0` (legacy behaviour).
  *
+ * `excludeSeriesId`, when given, drops every row belonging to that series from
+ * both the plain-row scan and the recurring-expansion loop — so a
+ * `wouldConflict` check for a series' own new landing doesn't treat that
+ * series' other members/occurrences as a conflict with itself. Default
+ * `undefined` (no-op; every existing caller is unaffected).
+ *
  * This is the only I/O in the pure-core split (CLAUDE.md invariant 2); the math
  * lives in `heuristic.ts` / `context-vector.ts` / `arms.ts`. The `DayLoad`
  * return type lives in `day-load.types.ts`.
@@ -44,6 +50,7 @@ export async function loadDayLoad(
     timezone: string;
     excludeSessionIds?: string[];
     occupiedLookaheadMs?: number;
+    excludeSeriesId?: string;
   },
 ): Promise<DayLoad> {
   const {
@@ -53,6 +60,7 @@ export async function loadDayLoad(
     timezone,
     excludeSessionIds = [],
     occupiedLookaheadMs = 0,
+    excludeSeriesId,
   } = args;
   const dayStartMs = dayStart.getTime();
   const dayEndMs = dayEnd.getTime();
@@ -68,6 +76,8 @@ export async function loadDayLoad(
       // (rrule set) is excluded here and picked up only via the expansion loop
       // below, so it isn't double-counted.
       OR: [{ seriesId: null }, { series: { is: { rrule: null } } }],
+      // Drop every row of the series being test-landed for itself, if any.
+      ...(excludeSeriesId ? { NOT: { seriesId: excludeSeriesId } } : {}),
       // A day back so a session that began the previous night and runs into
       // this day is still returned; filtered to actual overlap below.
       scheduledStartTime: { gte: new Date(dayStartMs - DAY_MS), lte: scanEnd },
@@ -103,7 +113,11 @@ export async function loadDayLoad(
   // one representative row per series, expanded to the occurrences that land
   // on this day.
   const recurringSeries = await prisma.sessionSeries.findMany({
-    where: { userId, rrule: { not: null } },
+    where: {
+      userId,
+      rrule: { not: null },
+      ...(excludeSeriesId ? { id: { not: excludeSeriesId } } : {}),
+    },
     include: {
       sessions: {
         select: { scheduledStartTime: true, durationMinutes: true },

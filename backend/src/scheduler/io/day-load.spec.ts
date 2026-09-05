@@ -42,6 +42,7 @@ function makeFakePrisma(sessions: FakeSession[], seriesList: FakeSeries[]) {
           where: {
             userId: string;
             id?: { notIn: string[] };
+            NOT?: { seriesId: string };
             OR?: Array<
               { seriesId: null } | { series: { is: { rrule: null } } }
             >;
@@ -52,6 +53,7 @@ function makeFakePrisma(sessions: FakeSession[], seriesList: FakeSeries[]) {
           const rows = sessions.filter((s) => {
             if (s.userId !== where.userId) return false;
             if (where.id?.notIn.includes(s.id)) return false;
+            if (where.NOT && s.seriesId === where.NOT.seriesId) return false;
             if (where.OR) {
               const matches = where.OR.some((cond) => {
                 if ("seriesId" in cond) return s.seriesId === cond.seriesId;
@@ -84,11 +86,18 @@ function makeFakePrisma(sessions: FakeSession[], seriesList: FakeSeries[]) {
     },
     sessionSeries: {
       findMany: jest.fn(
-        (args: { where: { userId: string; rrule?: { not: null } } }) => {
+        (args: {
+          where: {
+            userId: string;
+            rrule?: { not: null };
+            id?: { not: string };
+          };
+        }) => {
           const { where } = args;
           const rows = seriesList.filter((s) => {
             if (s.userId !== where.userId) return false;
             if (where.rrule && s.rrule === null) return false;
+            if (where.id?.not && s.id === where.id.not) return false;
             return true;
           });
           return Promise.resolve(
@@ -274,5 +283,90 @@ describe("loadDayLoad", () => {
       },
     ]);
     expect(workloadByType.DND).toEqual({ hours: 0.5, count: 1 });
+  });
+
+  it("excludeSeriesId drops that series from both the plain-row and recurring scans", async () => {
+    const prisma = makeFakePrisma(
+      [
+        {
+          id: "sitting-2",
+          userId: "u1",
+          seriesId: "task-series-1",
+          seriesRrule: null,
+          scheduledStartTime: new Date("2026-06-15T09:00:00.000Z"),
+          durationMinutes: 60,
+          type: "TASK",
+        },
+        {
+          id: "lecture-rep",
+          userId: "u1",
+          seriesId: "lecture-series-1",
+          seriesRrule: "FREQ=DAILY",
+          scheduledStartTime: new Date("2026-06-08T10:00:00.000Z"),
+          durationMinutes: 90,
+          type: "LECTURE",
+        },
+      ],
+      [
+        {
+          id: "lecture-series-1",
+          userId: "u1",
+          type: "LECTURE",
+          rrule: "FREQ=DAILY",
+          rep: {
+            scheduledStartTime: new Date("2026-06-08T10:00:00.000Z"),
+            durationMinutes: 90,
+          },
+        },
+      ],
+    );
+
+    const { occupied } = await loadDayLoad(prisma as never, {
+      userId: "u1",
+      dayStart,
+      dayEnd,
+      timezone: TZ,
+      excludeSeriesId: "lecture-series-1",
+    });
+
+    // The materialized TASK sitting (a different series) still counts...
+    expect(occupied).toEqual([
+      {
+        start: new Date("2026-06-15T09:00:00.000Z").getTime(),
+        end: new Date("2026-06-15T10:00:00.000Z").getTime(),
+      },
+    ]);
+    // ...but the excluded series' occurrence on this day does not.
+    expect(
+      occupied.some(
+        (o) => o.start === new Date("2026-06-15T10:00:00.000Z").getTime(),
+      ),
+    ).toBe(false);
+  });
+
+  it("defaults excludeSeriesId to a no-op, leaving existing callers unaffected", async () => {
+    const prisma = makeFakePrisma(
+      [
+        {
+          id: "sitting-2",
+          userId: "u1",
+          seriesId: "task-series-1",
+          seriesRrule: null,
+          scheduledStartTime: new Date("2026-06-15T09:00:00.000Z"),
+          durationMinutes: 60,
+          type: "TASK",
+        },
+      ],
+      [],
+    );
+
+    const { occupied } = await loadDayLoad(prisma as never, {
+      userId: "u1",
+      dayStart,
+      dayEnd,
+      timezone: TZ,
+    });
+
+    expect(occupied).toHaveLength(1);
   });
 });

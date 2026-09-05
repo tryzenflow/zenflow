@@ -143,7 +143,7 @@ const BottomSheetContent = React.forwardRef<
               { position: "fixed", left: 0, right: 0, bottom: 0 } as ViewStyle
             }
             className={cn(
-              "z-50 mx-auto flex max-h-[85vh] w-full max-w-[480px] flex-col rounded-t-[26px] border border-b-0 border-border bg-background pb-6 pt-2.5 shadow-2xl",
+              "z-50 mx-auto flex max-h-[85vh] w-full max-w-[480px] flex-col overflow-hidden rounded-t-[26px] border border-b-0 border-border bg-background pb-6 pt-2.5 shadow-2xl",
               open
                 ? "web:animate-in web:slide-in-from-bottom web:fade-in-0 web:duration-300"
                 : "web:animate-out web:slide-out-to-bottom web:fade-out-0 web:duration-200",

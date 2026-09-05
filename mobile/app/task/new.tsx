@@ -11,6 +11,8 @@ import { combineToUtc, shiftHhmm, splitZoned } from "@/lib/session-time";
 import {
   RESCHEDULE_HINT,
   placementToastMessage,
+  showErrorToast,
+  showSplitToast,
   shouldSurfaceRescheduleHint,
 } from "@/lib/task-toasts";
 import {
@@ -20,17 +22,18 @@ import {
   zonedDate,
 } from "@zenflow/core";
 import type { CreateSessionInput } from "@zenflow/shared";
-import { isAxiosError } from "axios";
 import { format } from "date-fns";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo } from "react";
 
 const DEFAULT_DURATION = 60;
+const DEFAULT_SESSION_COUNT = 1;
 
 const EMPTY_DEFAULTS: SessionFormValues = {
   type: "TASK",
   title: "",
   duration: DEFAULT_DURATION,
+  sessionCount: DEFAULT_SESSION_COUNT,
   tags: [],
   note: "",
   deadline: "",
@@ -51,6 +54,12 @@ function toCreateInput(
       type: "TASK",
       durationMinutes: values.duration ?? DEFAULT_DURATION,
       deadline: values.deadline as string,
+      // Omitted/1 → one ordinary task; >1 → a series (issue #33) — see
+      // SessionCountField.
+      sessionCount:
+        values.sessionCount && values.sessionCount > 1
+          ? values.sessionCount
+          : undefined,
     };
   }
 
@@ -140,6 +149,8 @@ export default function NewSessionScreen() {
             ...common,
             type: "TASK",
             duration: form.getValues("duration") ?? DEFAULT_DURATION,
+            sessionCount:
+              form.getValues("sessionCount") ?? DEFAULT_SESSION_COUNT,
             deadline: form.getValues("deadline") ?? "",
           }
         : {
@@ -158,7 +169,7 @@ export default function NewSessionScreen() {
     try {
       const response = await createSession(toCreateInput(values, tz));
       const { message, variant } = placementToastMessage(response, user);
-      toast(message, variant === "success" ? "success" : "destructive");
+      showSplitToast(toast, message, variant);
       if (shouldSurfaceRescheduleHint()) {
         toast("Tip", "tip", 6000, "top", false, undefined, {
           description: RESCHEDULE_HINT,
@@ -179,18 +190,17 @@ export default function NewSessionScreen() {
         router.back();
       }
     } catch (error) {
-      const message =
-        (isAxiosError(error) &&
-          (error.response?.data as { message?: string } | undefined)
-            ?.message) ||
-        "Something went wrong when creating the session";
-      toast(message, "destructive");
+      showErrorToast(
+        toast,
+        error,
+        "Something went wrong when creating the session",
+      );
     }
   }
 
   function onInvalid(errors: Record<string, { message?: string } | undefined>) {
     const first = Object.values(errors)[0];
-    if (first?.message) toast(String(first.message), "destructive");
+    if (first?.message) showSplitToast(toast, String(first.message));
   }
 
   // A TASK is engine-placed, so a "· starts H:mm" here would be a lie — show
@@ -198,8 +208,8 @@ export default function NewSessionScreen() {
   const subtitle = !initialStart
     ? "New session"
     : type === "TASK"
-      ? format(initialStart, "EEEE, MMM d")
-      : `${format(initialStart, "EEEE, MMM d")} · starts ${format(
+      ? `From ${format(initialStart, "EEEE, MMM d")}`
+      : `From ${format(initialStart, "EEEE, MMM d")} · starts ${format(
           initialStart,
           "h:mm a",
         )}`;

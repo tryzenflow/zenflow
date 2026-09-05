@@ -1,6 +1,11 @@
 import { AlertTriangle } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
-import { isOutsideMonth, splitCellSessions } from "@/lib/month-date-math";
+import {
+  isContinuationEntry,
+  isOutsideMonth,
+  MONTH_CELL_VISIBILITY_WEIGHTS,
+  splitCellSessions,
+} from "@/lib/month-date-math";
 import { isSessionPastDeadline } from "@/lib/overdue";
 import { SESSION_TYPE_META } from "@/lib/session-type";
 import {
@@ -10,16 +15,16 @@ import {
 } from "@/lib/task-card";
 import { cn } from "@/lib/utils";
 import type { Session } from "@zenflow/shared";
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import { Pressable, View } from "react-native";
 import { sessionTypeIcon } from "./session-type-badge";
 
-export const CELL_HEIGHT = 88;
+export const CELL_HEIGHT = 96;
 
 interface MonthCellProps {
   day: Date;
   monthDate: Date;
-  tasks: Session[];
+  sessions: Session[];
   isToday: boolean;
   /** True while this cell is the current drag drop target. */
   isDropTarget: boolean;
@@ -57,7 +62,7 @@ interface MonthCellProps {
 export const MonthCell = memo(function MonthCell({
   day,
   monthDate,
-  tasks,
+  sessions,
   isToday,
   isDropTarget,
   isJustDropped,
@@ -66,11 +71,25 @@ export const MonthCell = memo(function MonthCell({
   onPressOverflow,
 }: MonthCellProps) {
   const outside = isOutsideMonth(day, monthDate);
-  const { visible, overflowCount } = splitCellSessions(tasks);
+
+  // `groupSessionsByDate` always hands us `sessions` in chronological order
+  // (the day sheet relies on that), so re-sort a copy by type severity here —
+  // this decides which `MONTH_PILL_CAP` sessions win the visible slots when a
+  // day overflows, not the render order of the day sheet itself.
+  const bySeverity = useMemo(
+    () =>
+      [...sessions].sort(
+        (a, b) =>
+          MONTH_CELL_VISIBILITY_WEIGHTS[b.type] -
+          MONTH_CELL_VISIBILITY_WEIGHTS[a.type],
+      ),
+    [sessions],
+  );
+  const { visible, overflowCount } = splitCellSessions(bySeverity);
 
   return (
     <Pressable
-      onPress={() => onPressDay(day, tasks)}
+      onPress={() => onPressDay(day, sessions)}
       style={{ width: `${100 / 7}%`, height: CELL_HEIGHT }}
       className={cn(
         "border-b border-r border-border p-[5px] pb-[6px]",
@@ -96,13 +115,13 @@ export const MonthCell = memo(function MonthCell({
         {visible.map((task) => (
           <MonthPill
             key={task.id}
-            task={task}
+            session={task}
             hidden={draggingSessionId === task.id}
           />
         ))}
         {overflowCount > 0 && (
           <Pressable
-            onPress={() => onPressOverflow(day, tasks)}
+            onPress={() => onPressOverflow(day, sessions)}
             hitSlop={6}
             className="rounded-[5px] px-1 py-0.5"
           >
@@ -117,34 +136,26 @@ export const MonthCell = memo(function MonthCell({
 });
 
 interface MonthPillProps {
-  task: Session;
+  session: Session;
   /** True while this session is being dragged (from the day sheet) — the pill
    * hides in place so the floating ghost is the only copy on screen. */
   hidden: boolean;
 }
 
-/**
- * One task pill in a month cell — a plain, non-interactive chip. Rescheduling
- * by drag is offered only from the day/overflow sheet (`task-list-sheet.tsx`),
- * so the grid pill has no gesture of its own; tapping anywhere in the cell
- * opens that sheet. A session scheduled past its own deadline gets an amber
- * "late" treatment (`AlertTriangle`) — the same annotation the day/week block
- * carries. `React.memo`'d for the same reason as `MonthCell`: a mid-drag grid
- * re-render shouldn't re-render every pill.
- */
-const MonthPill = memo(function MonthPill({ task, hidden }: MonthPillProps) {
-  const state = deriveState(task);
-  const late = isSessionPastDeadline(task);
-  const Icon = sessionTypeIcon(task.type);
+const MonthPill = memo(function MonthPill({ session, hidden }: MonthPillProps) {
+  const state = deriveState(session);
+  const late = isSessionPastDeadline(session);
+  const Icon = sessionTypeIcon(session.type);
+  const continuation = isContinuationEntry(session);
 
   return (
     <View
       style={hidden ? { opacity: 0 } : undefined}
       className={cn(
         "flex-row items-center gap-1 rounded-[5px] border-l-2 px-1.5 py-0.5",
-        late
-          ? "border-l-amber-500 bg-amber-500/15"
-          : MONTH_PILL_CLASSES[state],
+        late ? "border-l-amber-500 bg-amber-500/15" : MONTH_PILL_CLASSES[state],
+        continuation &&
+          "rounded-t-none border-t-[1.5px] border-t-muted-foreground/50 [border-top-style:dashed]",
       )}
     >
       {late ? (
@@ -152,10 +163,14 @@ const MonthPill = memo(function MonthPill({ task, hidden }: MonthPillProps) {
           size={9}
           className="shrink-0 text-amber-700 dark:text-amber-300"
         />
+      ) : continuation ? (
+        <Text className="shrink-0 text-[9px] leading-none text-muted-foreground">
+          ↳
+        </Text>
       ) : (
         <Icon
           size={9}
-          className={cn("shrink-0", SESSION_TYPE_META[task.type].textClass)}
+          className={cn("shrink-0", SESSION_TYPE_META[session.type].textClass)}
         />
       )}
       <Text
@@ -167,7 +182,7 @@ const MonthPill = memo(function MonthPill({ task, hidden }: MonthPillProps) {
             : MONTH_PILL_TEXT_CLASSES[state],
         )}
       >
-        {task.title}
+        {session.title}
       </Text>
     </View>
   );

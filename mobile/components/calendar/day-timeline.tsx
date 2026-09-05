@@ -6,6 +6,7 @@ import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { useNow } from "@/hooks/use-now";
 import { useUserStore } from "@/hooks/use-user-store";
+import { isPastDeadlineDrop } from "@/lib/overdue";
 import { type PeekBlock, peekBlocksFromSegments } from "@/lib/peek";
 import {
   fetchDaySessions,
@@ -13,7 +14,7 @@ import {
   isDayCacheFresh,
   setCachedDaySessions,
 } from "@/lib/session-cache";
-import { isPastDeadlineDrop } from "@/lib/overdue";
+import { getSeriesKind } from "@/lib/session-series";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import {
   getTimelineScrollFraction,
@@ -22,17 +23,14 @@ import {
 } from "@/lib/timeline-scroll";
 import {
   DAILY_HORIZON,
-  TIME_GRANULARITY,
   eventsForDay,
   getOverlapLayout,
   tasksToBlocks,
   zonedNow,
-  zonedWallClockToUtc,
 } from "@zenflow/core";
 import type { Session } from "@zenflow/shared";
-import { addDays, format, startOfDay } from "date-fns";
+import { format } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
-import * as Haptics from "expo-haptics";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type LayoutChangeEvent,
@@ -48,34 +46,21 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   clamp,
-  withTiming,
   runOnJS,
 } from "react-native-reanimated";
 import { NowIndicator } from "./now-indicator";
 import { SessionBlock } from "./task-block";
 import { TimeGutter } from "./time-gutter";
+import type {
+  PendingSessionUpdate,
+  UpdateRecurringScope,
+} from "./update-recurring-sheet";
 
 const GUTTER_WIDTH = 64;
-const EMPTY_GHOST_MINUTES = 45;
 const HOUR_HEIGHT_DEFAULT = 64;
 const HOUR_HEIGHT_MIN = 48;
 const HOUR_HEIGHT_MAX = 96;
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
-
-/**
- * How many hours past midnight the grid keeps scrolling into, when the next day
- * has anything in that window — a task from *this* day that the scheduler
- * placed across midnight (it can now start as late as 23:45 and run its full
- * length past 00:00, see `docs/scheduler/heuristic.md`), or an early task on
- * the next day. The tail region is dimmed ("tomorrow") and read-only.
- */
-const OVERNIGHT_TAIL_HOURS = 6;
-
-/** Minutes-from-local-midnight of an ISO instant, in `tz`. */
-function minutesOfDayLocal(iso: string, tz: string): number {
-  const d = toZonedTime(new Date(iso), tz);
-  return d.getHours() * 60 + d.getMinutes();
-}
 
 const LOADING_PLACEHOLDERS = [
   { startMin: 8 * 60 + 15, duration: 60 },
@@ -127,16 +112,12 @@ export type TimelineState = "loading" | "error" | "ready";
 interface DayTimelineProps {
   date?: Date;
   onSessionPress?: (taskId: string) => void;
-  onLongPress?: (timeISO: string) => void;
   refreshKey?: number;
   onStateChange?: (state: TimelineState) => void;
   /** Hide the per-day header — the Week screen renders its own sticky
    * `WeekHeader` strip above the pager. Default `true` preserves the Day
    * screen. */
   showHeader?: boolean;
-  /** Show the "Long press to add" ghost on empty non-today days too — the
-   * Week pager surfaces it on any empty day. Default `false`. */
-  showEmptyGhostAlways?: boolean;
   /** Bottom padding for the scroll content (px). When omitted, falls back to
    * `tabBarOverlay` if the header is shown, else `0`. The Day pager passes the
    * overlay height explicitly so its headerless pages still scroll clear of
@@ -152,6 +133,21 @@ interface DayTimelineProps {
    * screen opens the "Move to…" sheet. This timeline resolves the id to the
    * full `Session` from its own list before calling up. */
   onRequestReschedule?: (session: Session) => void;
+  /** When a drag-drop's target session belongs to a series
+   * (`getSeriesKind` !== "none"), defers the commit to the caller's
+   * scope-confirmation sheet (`UpdateRecurringSheet`) instead of committing
+   * directly. `onResolve(null)` means the user backed out — the same revert
+   * path as the existing past-deadline cancel runs (`refetch()`). */
+  onRequestScopedUpdate?: (
+    session: Session,
+    pending: PendingSessionUpdate,
+    onResolve: (
+      choice: {
+        scope: UpdateRecurringScope;
+        skipConflicting: boolean;
+      } | null,
+    ) => void,
+  ) => void;
   /** Reports this day's sessions as mini-day blocks so a parent week pager
    * can render its next-day peek strip from real data. */
   onPeekChange?: (blocks: PeekBlock[], dayKey: string) => void;
@@ -178,15 +174,14 @@ interface DayTimelineProps {
 export function DayTimeline({
   date: propDate,
   onSessionPress,
-  onLongPress,
   refreshKey,
   onStateChange,
   showHeader = true,
-  showEmptyGhostAlways = false,
   contentBottomInset,
   onSubtitleChange,
   onDragChange,
   onRequestReschedule,
+  onRequestScopedUpdate,
   onPeekChange,
   rightInset = 0,
   isActive = true,
@@ -216,8 +211,6 @@ export function DayTimeline({
   const contentWidth = screenWidth - GUTTER_WIDTH - rightInset;
 
   const dayKey = format(date, "yyyy-MM-dd");
-  const nextDate = useMemo(() => addDays(startOfDay(date), 1), [date]);
-  const nextDayKey = format(nextDate, "yyyy-MM-dd");
 
   // Seed from the session cache so a day already visited this session paints
   // instantly (stale-while-revalidate) — no skeleton flash when paging back
@@ -251,8 +244,6 @@ export function DayTimeline({
   const effectiveFlashId = rescheduleFlashId ?? flashSessionId;
 
   const baseHourHeight = useSharedValue(HOUR_HEIGHT_DEFAULT);
-  const ghostY = useSharedValue(0);
-  const ghostVisible = useSharedValue(0);
   // Px the grid has auto-scrolled since the current block drag began (0 when
   // idle). Shared with every `SessionBlock` so a dragged block stays under the
   // finger while the grid scrolls and its drop slot accounts for the travel.
@@ -347,33 +338,6 @@ export function DayTimeline({
     }
   }, [date]);
 
-  // The early hours of the *next* day, drawn dimmed below the midnight line so
-  // the timeline reads continuously across it: the post-midnight tail of a task
-  // this day's scheduler placed across midnight, plus any genuine early task on
-  // the next day. Seeded from the session cache and prefetched (deduped) so the
-  // tail is populated before the user pages onto that day.
-  const [nextDayTasks, setNextDayTasks] = useState<Session[]>(
-    () => getCachedDaySessions(nextDayKey) ?? [],
-  );
-  useEffect(() => {
-    let cancelled = false;
-    const cached = getCachedDaySessions(nextDayKey);
-    if (cached) setNextDayTasks(cached);
-    fetchDaySessions(nextDayKey, () =>
-      listSessions("day", nextDate).then((r) => r.sessions),
-    )
-      .then((s) => {
-        if (!cancelled)
-          setNextDayTasks((prev) => (sameSessions(prev, s) ? prev : s));
-      })
-      .catch(() => {
-        /* the tail just stays empty; the main day is unaffected */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [nextDayKey, refreshKey, nextDate]);
-
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -390,49 +354,16 @@ export function DayTimeline({
 
   const layout = useMemo(() => getOverlapLayout(segments), [segments]);
 
-  // Genuine early tasks on the *next* day — the `::tail` piece of this day's
-  // own crossing blocks is excluded because those blocks now draw their full
-  // height straight through the midnight line (`drawThroughMidnight`).
-  const tailSegments = useMemo(() => {
-    const cutoff = OVERNIGHT_TAIL_HOURS * 60;
-    return eventsForDay(tasksToBlocks(nextDayTasks), nextDate, tz).filter(
-      (s) => !s.continued && minutesOfDayLocal(s.start, tz) < cutoff,
-    );
-  }, [nextDayTasks, nextDate, tz]);
-  const tailLayout = useMemo(
-    () => getOverlapLayout(tailSegments),
-    [tailSegments],
-  );
-
-  // A task on *this* day that the scheduler placed across midnight — known
-  // immediately from this day's own data, so the extended region is reserved
-  // on first paint (no late "tail pops in" flash).
-  const thisDayCrosses = useMemo(
+  // A task clamped at the midnight line (its flat bottom edge + "→ next day"
+  // label, task-block.tsx) gets the dashed boundary marker under it — the
+  // mockup only draws this line when there's a crossing block to bound.
+  const hasMidnightCrossing = useMemo(
     () => segments.some((s) => s.continues),
     [segments],
   );
-  const showTail = thisDayCrosses || tailSegments.length > 0;
-
-  // Only extend the grid as far as there is actually content past midnight
-  // (rounded up to the hour), capped at OVERNIGHT_TAIL_HOURS.
-  const tailHours = useMemo(() => {
-    if (!showTail) return 0;
-    let maxMin = 60;
-    for (const s of segments) {
-      if (s.continues) {
-        maxMin = Math.max(maxMin, minutesOfDayLocal(s.taskEnd, tz));
-      }
-    }
-    for (const s of tailSegments) {
-      maxMin = Math.max(maxMin, minutesOfDayLocal(s.end, tz));
-    }
-    return Math.min(OVERNIGHT_TAIL_HOURS, Math.max(1, Math.ceil(maxMin / 60)));
-  }, [showTail, segments, tailSegments, tz]);
-  const tailHeight = hourHeight * tailHours;
 
   const bottomInset = contentBottomInset ?? (showHeader ? tabBarOverlay : 0);
-  contentHeightRef.current =
-    totalHeight + (showTail ? tailHeight : 0) + bottomInset;
+  contentHeightRef.current = totalHeight + bottomInset;
 
   // Report this day's blocks so a parent Week pager can draw its next-day
   // peek strip from real data.
@@ -637,10 +568,15 @@ export function DayTimeline({
 
   const handleReschedule = useCallback(
     async (taskId: string, startISO: string) => {
-      const commit = async () => {
+      const commit = async (
+        scope?: UpdateRecurringScope,
+        skipConflicting?: boolean,
+      ) => {
         try {
           const updated = await updateSession(taskId, {
             scheduledStartTime: startISO,
+            scope,
+            skipConflicting,
           });
           // Patch the dragged task from the authoritative response so its new
           // time shows immediately; the refetch below re-derives every card's
@@ -657,6 +593,34 @@ export function DayTimeline({
         }
       };
 
+      // A dragged session that belongs to a series defers to the
+      // scope-confirmation sheet before committing — same lookup
+      // `handleRequestReschedule` already does. `onResolve(null)` (cancel)
+      // takes the same revert path as the past-deadline cancel below
+      // (`refetch()`), since nothing was optimistically written yet.
+      const commitWithScope = () => {
+        const session = tasks.find((t) => t.id === taskId);
+        const seriesKind = session ? getSeriesKind(session) : "none";
+        if (session && seriesKind !== "none" && onRequestScopedUpdate) {
+          onRequestScopedUpdate(
+            session,
+            {
+              scheduledStartTime: startISO,
+              durationMinutes: session.durationMinutes,
+            },
+            (choice) => {
+              if (!choice) {
+                void refetch();
+                return;
+              }
+              void commit(choice.scope, choice.skipConflicting);
+            },
+          );
+          return;
+        }
+        void commit();
+      };
+
       // Dragging a block past its own deadline is almost always a slip — ask
       // before committing. Cancelling just refetches, which snaps the block
       // back to its real (server) position.
@@ -667,7 +631,7 @@ export function DayTimeline({
           confirmLabel: "Schedule anyway",
           cancelLabel: "Cancel",
           onConfirm: () => {
-            void commit();
+            commitWithScope();
           },
           onCancel: () => {
             void refetch();
@@ -676,9 +640,16 @@ export function DayTimeline({
         return;
       }
 
-      await commit();
+      commitWithScope();
     },
-    [confirm, deadlineBySession, refetch, triggerRescheduleFlash],
+    [
+      confirm,
+      deadlineBySession,
+      refetch,
+      triggerRescheduleFlash,
+      tasks,
+      onRequestScopedUpdate,
+    ],
   );
 
   const handleDragStateChange = useCallback(
@@ -728,32 +699,6 @@ export function DayTimeline({
     [formatSnapLabel, dragSnap],
   );
 
-  const handleLongPress = useCallback(
-    (y: number) => {
-      const pxPerMin = totalHeight / DAILY_HORIZON;
-      const minutes =
-        Math.round(y / pxPerMin / TIME_GRANULARITY) * TIME_GRANULARITY;
-      const clampedMin = Math.max(
-        0,
-        Math.min(DAILY_HORIZON - TIME_GRANULARITY, minutes),
-      );
-
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-      // `date` already carries the tz wall clock in its local fields — copy it
-      // plainly, set the pressed time, then convert once to a true instant.
-      // A second `zonedDate(date, tz)` here re-applied the offset and rolled an
-      // evening press to the next calendar day for +ve tz offsets.
-      const wall = new Date(date);
-      wall.setHours(Math.floor(clampedMin / 60), clampedMin % 60, 0, 0);
-      const wallISO = zonedWallClockToUtc(wall, tz).toISOString();
-
-      // Open create-task at the pressed time
-      onLongPress?.(wallISO);
-    },
-    [date, tz, totalHeight],
-  );
-
   const zoomGesture = Gesture.Pinch()
     .onUpdate((e) => {
       const newHeight = clamp(
@@ -767,39 +712,8 @@ export function DayTimeline({
       runOnJS(setHourHeight)(baseHourHeight.value);
     });
 
-  const longPressGesture = Gesture.LongPress()
-    .minDuration(500)
-    .onBegin((e) => {
-      const pxPerMin = totalHeight / DAILY_HORIZON;
-      const minutes =
-        Math.round(e.absoluteY / pxPerMin / TIME_GRANULARITY) *
-        TIME_GRANULARITY;
-      const clampedMin = Math.max(
-        0,
-        Math.min(DAILY_HORIZON - TIME_GRANULARITY, minutes),
-      );
-      ghostY.value = (clampedMin / DAILY_HORIZON) * totalHeight;
-      ghostVisible.value = withTiming(1, { duration: 200 });
-    })
-    .onEnd((e) => {
-      ghostVisible.value = withTiming(0, { duration: 150 });
-      runOnJS(handleLongPress)(e.absoluteY);
-    })
-    .onFinalize(() => {
-      ghostVisible.value = withTiming(0, { duration: 150 });
-    });
-
-  const contentGesture = Gesture.Simultaneous(zoomGesture, longPressGesture);
-
   const animatedContentStyle = useAnimatedStyle(() => ({
-    height:
-      baseHourHeight.value * 24 +
-      (showTail ? baseHourHeight.value * tailHours : 0),
-  }));
-
-  const ghostStyle = useAnimatedStyle(() => ({
-    top: ghostY.value,
-    opacity: ghostVisible.value,
+    height: baseHourHeight.value * 24,
   }));
 
   const nowClock = toZonedTime(now, tz);
@@ -808,12 +722,6 @@ export function DayTimeline({
     hour: "numeric",
     minute: "2-digit",
   })}`;
-  const emptyGhostTop =
-    (Math.min(nowMinutes, DAILY_HORIZON - EMPTY_GHOST_MINUTES) /
-      DAILY_HORIZON) *
-    totalHeight;
-  const emptyGhostHeight = (EMPTY_GHOST_MINUTES / DAILY_HORIZON) * totalHeight;
-
   // The one-line status shown under the day title — rendered in the built-in
   // header, and also reported up (`onSubtitleChange`) so a parent that draws
   // its own header (the Day pager) keeps the same live status.
@@ -949,27 +857,9 @@ export function DayTimeline({
             </View>
           </Animated.View>
         ) : (
-          <GestureDetector gesture={contentGesture}>
+          <GestureDetector gesture={zoomGesture}>
             <Animated.View style={animatedContentStyle} className="relative">
               <TimeGutter hourHeight={hourHeight} />
-
-              {showTail && (
-                <View
-                  className="absolute left-0"
-                  style={{
-                    top: totalHeight,
-                    width: GUTTER_WIDTH,
-                    height: tailHeight,
-                  }}
-                >
-                  <TimeGutter
-                    hourHeight={hourHeight}
-                    fromHour={0}
-                    toHour={tailHours}
-                    showZeroLabel
-                  />
-                </View>
-              )}
 
               <View
                 className="absolute top-0 bottom-0 bg-card"
@@ -987,38 +877,8 @@ export function DayTimeline({
                   />
                 ))}
 
-                {showTail && (
-                  <>
-                    {/* Dimmed "tomorrow" wash + its own hour lines. */}
-                    <View
-                      pointerEvents="none"
-                      className="absolute left-0 right-0 bg-muted/40"
-                      style={{ top: totalHeight, height: tailHeight }}
-                    />
-                    {Array.from({ length: tailHours }, (_, i) => (
-                      <View
-                        key={`tail-line-${i}`}
-                        className="absolute left-0 right-0 bg-border/50"
-                        style={{ top: totalHeight + i * hourHeight, height: 1 }}
-                      />
-                    ))}
-                  </>
-                )}
-
                 {isToday && (
                   <NowIndicator now={now} tz={tz} totalHeight={totalHeight} />
-                )}
-
-                {segments.length === 0 && (isToday || showEmptyGhostAlways) && (
-                  <View
-                    pointerEvents="none"
-                    className="absolute left-1.5 right-1.5 z-20 items-center justify-center rounded-xl border-[1.5px] border-dashed border-brand-orange/55 bg-brand-orange/[0.07]"
-                    style={{ top: emptyGhostTop, height: emptyGhostHeight }}
-                  >
-                    <Text className="text-xs font-semibold text-brand-orange">
-                      Long press to add
-                    </Text>
-                  </View>
                 )}
 
                 {segments.map((segment) => {
@@ -1044,11 +904,8 @@ export function DayTimeline({
                       onDragStateChange={handleDragStateChange}
                       onPress={onSessionPress}
                       onRequestReschedule={handleRequestReschedule}
-                      drawThroughMidnight
                       autoScrollDeltaSV={
-                        segment.type === "TASK" && !segment.continued
-                          ? autoScrollDeltaSV
-                          : undefined
+                        !segment.continued ? autoScrollDeltaSV : undefined
                       }
                       onDragVerticalEdge={handleDragVerticalEdge}
                       bottomInset={tabBarOverlay}
@@ -1057,44 +914,11 @@ export function DayTimeline({
                   );
                 })}
 
-                {/* The next day's early hours, dimmed and read-only, so a task
-                  the scheduler placed across midnight reads as one continuous
-                  run and tomorrow's first commitments are visible in context.
-                  Each block positions itself from local-midnight, so the
-                  wrapper just pushes the whole set below the 24:00 line. */}
-                {showTail && (
-                  <View
-                    pointerEvents="none"
-                    className="absolute left-0 right-0 opacity-60"
-                    style={{ top: totalHeight, bottom: 0 }}
-                  >
-                    {tailSegments.map((segment) => {
-                      const bl = tailLayout.get(segment.segmentId) ?? {
-                        column: 0,
-                        columns: 1,
-                        conflict: false,
-                      };
-                      const w = contentWidth / bl.columns;
-                      return (
-                        <SessionBlock
-                          key={`tail-${segment.segmentId}`}
-                          segment={segment}
-                          layout={bl}
-                          tz={tz}
-                          totalHeight={totalHeight}
-                          leftOffset={bl.column * w}
-                          blockWidth={w}
-                          deadline={null}
-                        />
-                      );
-                    })}
-                  </View>
-                )}
-
-                {/* Dashed midnight boundary — drawn after the blocks so the
-                  line sits over the crossing block's edge, mirroring
-                  mockups/day-view.html's 12:00 AM. */}
-                {showTail && (
+                {/* Dashed boundary at the bottom of the fixed 24h grid — a
+                  crossing block's flat clamped edge (task-block.tsx's
+                  `rounded-b-none` + "→ next day" label) sits right above it,
+                  mirroring mockups/day-view.html's 12:00 AM marker. */}
+                {hasMidnightCrossing && (
                   <View
                     pointerEvents="none"
                     className="absolute left-0 right-0 z-20 h-0 border-t border-dashed border-muted-foreground/55"
@@ -1123,18 +947,6 @@ export function DayTimeline({
                     </View>
                   </View>
                 )}
-
-                <Animated.View
-                  pointerEvents="none"
-                  style={ghostStyle}
-                  className="absolute left-0 right-0 z-30 mx-1"
-                >
-                  <View className="h-[52px] items-center justify-center rounded-lg border border-dashed border-primary/50 bg-primary/5">
-                    <Text className="text-xs font-medium text-primary/60">
-                      + Add task
-                    </Text>
-                  </View>
-                </Animated.View>
               </View>
             </Animated.View>
           </GestureDetector>

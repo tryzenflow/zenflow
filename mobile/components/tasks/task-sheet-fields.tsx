@@ -11,13 +11,19 @@ import { DescriptionField } from "./form/description-field";
 import { DurationStepper } from "./form/duration-stepper";
 import { FixedTimeField } from "./form/fixed-time-field";
 import { RecurrenceField } from "./form/recurrence-field";
+import { SessionCountField } from "./form/session-count-field";
 import { TagAutocomplete } from "./form/tag-autocomplete";
 
 /**
  * Session-form fields, branched by `type` (watched from the form):
  *
- * - **TASK** — Duration stepper (create only — an existing task is resized
- *   from the calendar's "Move to…" sheet) + Deadline chip row.
+ * - **TASK** — Duration stepper + Sessions field (both create only — an
+ *   existing task is resized from the calendar's "Move to…" sheet, and a
+ *   series' count can't be changed after creation) + Deadline chip row. A
+ *   Sessions count > 1 requests a series (issue #33), capped at one session
+ *   per day (`SessionCountField`); `sessionSchema`'s `superRefine` surfaces
+ *   an infeasible duration×count under the Deadline field, same as a plain
+ *   missing deadline.
  * - **ASSIGNMENT / EXAM / LECTURE** — a fixed date + start/end time.
  * - **DND** — the same fixed-time picker plus a recurrence builder.
  *
@@ -108,6 +114,24 @@ export function SessionSheetFields({
                   <DurationStepper
                     value={field.value ?? 60}
                     onChange={field.onChange}
+                    disabled={disabled}
+                  />
+                </Field>
+              )}
+            />
+          )}
+
+          {!editing && (
+            <Controller
+              control={form.control}
+              name="sessionCount"
+              render={({ field }) => (
+                <Field label="Sessions">
+                  <SessionCountField
+                    value={field.value ?? 1}
+                    onChange={field.onChange}
+                    deadline={form.watch("deadline")}
+                    duration={form.watch("duration")}
                     disabled={disabled}
                   />
                 </Field>

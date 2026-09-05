@@ -6,36 +6,52 @@
  */
 
 /**
- * `count` non-decreasing day offsets in `[0, daySpan]`, spread as evenly as
- * possible — session `i` targets `round(i · daySpan / (count − 1))`. The first
- * session targets day 0 (the scan start), the last targets `daySpan` (the
- * deadline day). `count === 1` → `[0]`.
+ * Non-overlapping day-window `[lo, hi]` (inclusive day offsets from the scan
+ * start) for each of `count` members spread across `[0, daySpan]`
+ * (`daySpan + 1` calendar days).
+ *
+ * Replaces the old "even-spread target day ± a symmetric clamp" approach:
+ * that scheme's windows could overlap between adjacent members — the target
+ * day itself was never guaranteed free, and a wide-enough clamp let two
+ * members "reach into" the same day from opposite sides — so two sessions
+ * could cluster onto one day while a neighboring day the series was
+ * supposed to use sat empty.
+ *
+ * Here the `daySpan + 1` days are partitioned into `count` contiguous,
+ * non-overlapping buckets instead: `base = floor((daySpan + 1) / count)`
+ * days each, with the LAST `(daySpan + 1) % count` buckets getting one extra
+ * day to absorb whatever doesn't divide evenly (so the series still starts
+ * on day 0 and the remainder lands closest to the deadline, not spread
+ * through the middle). Member `i`'s window is exactly its bucket — its
+ * "freedom" to be placed anywhere inside it without ever touching another
+ * member's bucket, so no two members' windows can overlap by construction.
+ *
+ * `count` may exceed `daySpan + 1` (more sessions requested than days
+ * available) — buckets then collapse toward the tail, several members
+ * sharing a single day's window. That's a genuinely unsolvable overlap (more
+ * sessions than days), not something this function can spread away;
+ * {@link MAX_SERIES_PER_DAY} and the series pre-flight
+ * (`TaskPlacementService.canPlaceSeries`) are what keep that case safe, not
+ * this function.
  */
-export function seriesDayOffsets(daySpan: number, count: number): number[] {
-  const span = Math.max(0, Math.floor(daySpan));
-  if (count <= 1) return [0];
-  const offsets: number[] = [];
-  for (let i = 0; i < count; i++) {
-    offsets.push(Math.round((i * span) / (count - 1)));
-  }
-  return offsets;
-}
-
-/**
- * The candidate-day window for one series member, as `[lo, hi]` day offsets
- * (inclusive) clamped to `[0, daySpan]`. Each member may drift at most
- * `clamp = max(1, floor(daySpan / count))` days from its even-spread `target`
- * (D3) — wide windows for a sparse series, `±1` for a dense one — so members
- * stay spread out while a tight or ideal day can still absorb 2–3 sittings.
- */
-export function clampWindowForMember(
+export function seriesDayWindows(
   daySpan: number,
   count: number,
-  target: number,
-): [number, number] {
+): [number, number][] {
   const span = Math.max(0, Math.floor(daySpan));
-  const clamp = Math.max(1, Math.floor(span / Math.max(1, count)));
-  const lo = Math.max(0, target - clamp);
-  const hi = Math.min(span, target + clamp);
-  return [lo, hi];
+  const totalDays = span + 1;
+  const n = Math.max(1, Math.floor(count));
+  const base = Math.floor(totalDays / n);
+  const remainder = totalDays % n;
+
+  const windows: [number, number][] = [];
+  let cursor = 0;
+  for (let i = 0; i < n; i++) {
+    const size = Math.max(1, base + (i >= n - remainder ? 1 : 0));
+    const lo = Math.min(cursor, span);
+    const hi = Math.min(span, lo + size - 1);
+    windows.push([lo, hi]);
+    cursor += size;
+  }
+  return windows;
 }
