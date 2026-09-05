@@ -53,7 +53,7 @@ backend/
 │   │   │   ├── linucb-slot-score.ts # Σ_arm overlapRate·predicted + slotPreferenceScore  (cold-start blend)
 │   │   │   ├── context-vector.ts    # buildContextVector() — the LinUCB d=46 feature vector
 │   │   │   ├── arms.ts              # 5 time-of-day arm bands, armOfMinute / overlapRate
-│   │   │   ├── series-spread.ts     # seriesDayOffsets + clampWindowForMember (± X/N window)
+│   │   │   ├── series-spread.ts     # seriesDayWindows — non-overlapping per-member day buckets
 │   │   │   ├── normalize.ts         # minMaxSigned + feature divisors
 │   │   │   ├── recurrence.ts        # rrule expand / occurrence-id helpers
 │   │   │   ├── matrix-decay.ts      # exponential preference-matrix decay
@@ -203,6 +203,16 @@ entirely (no flow, no `onboardingComplete` gate — every new user is created wi
 `onboardingComplete: true`). `timezone` is captured once at OTP signup (`x-timezone` header
 on `POST /auth/otp/verify` → `AuthService.createUserIfNotExists` → `UsersService.create()`)
 and is otherwise fixed — there is no later edit path.
+
+The `if (!user)` branch of `AuthService.createUserIfNotExists` (a brand-new signup, fires
+once per account) also seeds 4 default daily-recurring `DND` blocks onto the new user's
+calendar via `SessionsService.create()` — the same `DND` + `rrule` path a user's own "create
+a recurring DND" action goes through — so the calendar isn't empty on day one and the
+scheduler already avoids these times: Breakfast 06:00–07:00, Lunch & rest 11:00–13:00,
+Evening chill & dinner 17:00–19:00, and Sleep 22:00–06:00 (`rrule: "FREQ=DAILY"`, each
+anchored to "today" in the user's own timezone; Sleep intentionally crosses midnight).
+Seeding is best-effort — each block is created independently and any failure is logged
+(`Logger.warn`) and swallowed, never blocking or failing the OTP-verify response.
 
 ### Sessions (`/tasks`)
 
@@ -439,7 +449,7 @@ sequenceDiagram
   S->>S: $tx( sessionSeries.create + N× session.create + N× CREATE event )
   S->>T: placeSeriesOnCreate({ seriesId, members, deadline })
   T->>SP: placeSeries(trigger "create")
-  Note over SP: seriesDayOffsets → per member: clampWindowForMember (± max(1,floor(X/N)))
+  Note over SP: seriesDayWindows → per member: its own non-overlapping day bucket
   loop each member
     SP->>E: assignPolicy()
     SP->>H: placeInWindow(window, extraOccupied = siblings, skipDay = ≤3/day cap)
@@ -525,20 +535,30 @@ the arm term alone); see the ADR-0001 addendum.
 
 ### Series bounded window
 
-For a `sessionCount > 1` `TASK` series, `seriesDayOffsets(daySpan, N)` gives each member an
-even-spread **target** day offset, and `clampWindowForMember` bounds where that member may
-actually land:
+For a `sessionCount > 1` `TASK` series, `seriesDayWindows(daySpan, N)` partitions the
+`daySpan + 1` days into `N` contiguous, **non-overlapping** buckets — no two members' windows
+can ever touch:
 
 ```text
-clamp  = max(1, floor(daySpan / N))          // wide for a sparse series, ±1 for a dense one
-window = [ target − clamp , target + clamp ] clamped to [0, daySpan]
+totalDays = daySpan + 1
+base      = floor(totalDays / N)             // days per member, at minimum
+remainder = totalDays % N                    // the LAST `remainder` members get one extra day
 ```
+
+Member `i`'s window is exactly its bucket: `base` days each, except the last `remainder`
+members get `base + 1` (so the series still starts on day 0 and the slack lands closest to the
+deadline). This replaced an earlier "even-spread target ± a symmetric clamp" scheme whose
+windows could overlap between adjacent members — letting two sessions cluster onto the same
+day while a neighboring day the series was supposed to use sat empty.
 
 `daySpan` = whole days from the next 15-min boundary to the deadline day, capped at
 `MAX_SCAN_DAYS − 1`. Each member is then placed by the same 50/50 pick as a single task
-inside that window; already-placed siblings are fed forward as hard blocks so members never
+inside its window; already-placed siblings are fed forward as hard blocks so members never
 overlap, and a day already holding `MAX_SERIES_PER_DAY` (3) sittings of this series is
-skipped. A member that finds nowhere comes back unplaced without blocking the rest.
+skipped. A member that finds nowhere comes back unplaced without blocking the rest. `N` can
+exceed `totalDays` (more sessions than days) — buckets then collapse toward the tail, several
+members sharing one day's window; that's an unavoidable overlap the day cap and the series
+pre-flight (`TaskPlacementService.canPlaceSeries`) keep safe, not this partition.
 
 ### Trace it in the source
 
