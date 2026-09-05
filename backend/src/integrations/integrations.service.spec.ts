@@ -13,7 +13,7 @@ import {
   MasterKeyService,
 } from "../crypto/master-key.service";
 import { ENCRYPTION_ALGORITHM } from "../common/constants";
-import { DluAuthService } from "./dlu-auth.service";
+import { IntegrationAuthService } from "./integration-auth.service";
 import { IntegrationsService } from "./integrations.service";
 
 // ── in-memory Prisma double ────────────────────────────────────────────────
@@ -189,7 +189,7 @@ describe("IntegrationsService", () => {
         MasterKeyService,
         { provide: PrismaService, useValue: db.prisma },
         { provide: ConfigService, useValue: { get: (n: string) => ENV[n] } },
-        { provide: DluAuthService, useValue: { verifyCredentials } },
+        { provide: IntegrationAuthService, useValue: { verifyCredentials } },
       ],
     }).compile();
 
