@@ -106,7 +106,8 @@ export async function removeSessionSeries(
 /**
  * "Delete this occurrence and every one after it" — the backend pulls the
  * series' RRULE `UNTIL` back to just before `fromStartISO` (or deletes the
- * whole series if that's on/before the first occurrence).
+ * whole series if that's on/before the first occurrence). Recurring (rrule)
+ * series only — throws for a materialized TASK series, which has no rrule.
  */
 export async function truncateSessionSeries(
   seriesId: string,
@@ -115,5 +116,23 @@ export async function truncateSessionSeries(
   const { data } = await api.delete(`/sessions/series/${seriesId}/truncate`, {
     params: { from: fromStartISO },
   });
+  return data.data;
+}
+
+/**
+ * "Delete this sitting and every later one" for a materialized multi-sitting
+ * TASK series — deletes `sessionId` and every session after it in
+ * `sessionIndex` order, keeping earlier sittings (and the series row, unless
+ * nothing is left). Materialized TASK series only — there's no `sessionId`
+ * to anchor on for a recurring (rrule) series, which uses
+ * `truncateSessionSeries` instead.
+ */
+export async function removeSeriesFrom(
+  seriesId: string,
+  sessionId: string,
+): Promise<RemoveSessionSeriesResponse> {
+  const { data } = await api.delete(
+    `/sessions/series/${seriesId}/from/${sessionId}`,
+  );
   return data.data;
 }

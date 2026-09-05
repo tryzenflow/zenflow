@@ -1,5 +1,6 @@
 import {
   getSessionDetails,
+  removeSeriesFrom,
   removeSession,
   removeSessionSeries,
   truncateSessionSeries,
@@ -19,9 +20,12 @@ import { useToast } from "@/components/ui/toast";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
 import { isSessionPastDeadline } from "@/lib/overdue";
+import { getSeriesKind } from "@/lib/session-series";
 import {
   RESCHEDULE_HINT,
   shouldSurfaceRescheduleHint,
+  showErrorToast,
+  showSplitToast,
 } from "@/lib/task-toasts";
 import {
   type EditSessionFormValues,
@@ -31,7 +35,6 @@ import {
   zonedWallClockToUtc,
 } from "@zenflow/core";
 import type { Session, UpdateSessionInput } from "@zenflow/shared";
-import { isAxiosError } from "axios";
 import { format } from "date-fns";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
@@ -117,12 +120,7 @@ export default function EditSessionScreen() {
         }
       })
       .catch((error) => {
-        const message =
-          (isAxiosError(error) &&
-            (error.response?.data as { message?: string } | undefined)
-              ?.message) ||
-          "Couldn't open this session";
-        toast(message, "destructive");
+        showErrorToast(toast, error, "Couldn't open this session");
         router.back();
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -178,54 +176,58 @@ export default function EditSessionScreen() {
         router.back();
       }
     } catch (error) {
-      const message =
-        (isAxiosError(error) &&
-          (error.response?.data as { message?: string } | undefined)
-            ?.message) ||
-        "Failed to update the session";
-      toast(message, "destructive");
+      showErrorToast(toast, error, "Failed to update the session");
     }
   }
 
   function onInvalid(errors: Record<string, { message?: string } | undefined>) {
     const first = Object.values(errors)[0];
-    if (first?.message) toast(String(first.message), "destructive");
+    if (first?.message) showSplitToast(toast, String(first.message));
   }
 
   async function runDelete(scope: DeleteRecurringScope) {
     if (!task) return;
+    const seriesKind = getSeriesKind(task);
     setDeleting(true);
     try {
       if (scope === "series" && task.seriesId) {
+        // Generic — works for both a recurring (rrule) series and a
+        // materialized TASK series.
         await removeSessionSeries(task.seriesId);
       } else if (
         scope === "following" &&
         task.seriesId &&
+        seriesKind === "recurring" &&
         task.scheduledStartTime
       ) {
         await truncateSessionSeries(task.seriesId, task.scheduledStartTime);
+      } else if (
+        scope === "following" &&
+        task.seriesId &&
+        seriesKind === "task"
+      ) {
+        // `task.id` is already a plain session id for a materialized TASK
+        // sitting (no occurrence-ref parsing needed).
+        await removeSeriesFrom(task.seriesId, task.id);
       } else {
         // "occurrence": for a recurring session `task.id` is
         // "<seriesId>::<start>" and the backend drops just that date; for a
-        // one-off it's a plain delete.
+        // TASK sitting or a one-off it's a plain delete.
         await removeSession(task.id);
       }
       toast(
         scope === "series"
           ? "Series deleted"
           : scope === "following"
-            ? "This and later occurrences removed"
+            ? seriesKind === "task"
+              ? "This and later sittings removed"
+              : "This and later occurrences removed"
             : "Session deleted",
         "success",
       );
       router.back();
     } catch (error) {
-      const message =
-        (isAxiosError(error) &&
-          (error.response?.data as { message?: string } | undefined)
-            ?.message) ||
-        "Failed to delete the session";
-      toast(message, "destructive");
+      showErrorToast(toast, error, "Failed to delete the session");
     } finally {
       setDeleting(false);
     }
@@ -233,8 +235,8 @@ export default function EditSessionScreen() {
 
   function onDelete() {
     if (!task) return;
-    const isRecurring = !!task.seriesId && !!task.rrule;
-    if (!isRecurring) {
+    const seriesKind = getSeriesKind(task);
+    if (seriesKind === "none") {
       void runDelete("occurrence");
       return;
     }
@@ -299,7 +301,11 @@ export default function EditSessionScreen() {
         </View>
       )}
 
-      <DeleteRecurringSheet ref={deleteScopeSheet} onChoose={runDelete} />
+      <DeleteRecurringSheet
+        ref={deleteScopeSheet}
+        kind={task && getSeriesKind(task) === "task" ? "task" : "recurring"}
+        onChoose={runDelete}
+      />
     </SessionFormScreen>
   );
 }

@@ -17,15 +17,25 @@ import {
 } from "react";
 import { Pressable, View } from "react-native";
 
-/** Which slice of a recurring series a delete should hit. */
+/** Which slice of a series a delete should hit. */
 export type DeleteRecurringScope = "occurrence" | "following" | "series";
 
+/**
+ * Which flavor of series this sheet is choosing a scope for (see
+ * `lib/session-series.ts`'s `SeriesKind`, minus `"none"` — the sheet never
+ * opens for a non-series session) — governs copy only, not behavior; the
+ * caller still owns which API calls each scope maps to.
+ */
+export type DeleteRecurringSheetKind = "recurring" | "task";
+
 export interface DeleteRecurringSheetHandle {
-  /** Open the chooser for the occurrence starting on `occurrenceDate`. */
+  /** Open the chooser for the occurrence/sitting starting on `occurrenceDate`. */
   open: (occurrenceDate: Date) => void;
 }
 
 interface DeleteRecurringSheetProps {
+  /** Which flavor of series this is deleting from — flexes copy. Defaults to "recurring". */
+  kind?: DeleteRecurringSheetKind;
   /** Called with the chosen scope once the user taps a row (sheet closes itself). */
   onChoose: (scope: DeleteRecurringScope) => void;
 }
@@ -38,27 +48,65 @@ interface Option {
   destructive?: boolean;
 }
 
-const OPTIONS: Option[] = [
+const COPY: Record<
+  DeleteRecurringSheetKind,
   {
-    scope: "occurrence",
-    Icon: Trash2,
-    label: "This occurrence",
-    hint: (d) => `Only ${d} is removed.`,
+    title: string;
+    tappedLabel: string;
+    options: Option[];
+  }
+> = {
+  recurring: {
+    title: "Delete recurring session",
+    tappedLabel: "Tapped occurrence",
+    options: [
+      {
+        scope: "occurrence",
+        Icon: Trash2,
+        label: "This occurrence",
+        hint: (d) => `Only ${d} is removed.`,
+      },
+      {
+        scope: "following",
+        Icon: CalendarRange,
+        label: "This and all following",
+        hint: (d) => `The series ends before ${d}.`,
+      },
+      {
+        scope: "series",
+        Icon: CalendarDays,
+        label: "All occurrences",
+        hint: () => "Delete the entire series.",
+        destructive: true,
+      },
+    ],
   },
-  {
-    scope: "following",
-    Icon: CalendarRange,
-    label: "This and all following",
-    hint: (d) => `The series ends before ${d}.`,
+  task: {
+    title: "Delete session",
+    tappedLabel: "This sitting",
+    options: [
+      {
+        scope: "occurrence",
+        Icon: Trash2,
+        label: "This sitting",
+        hint: (d) => `Only ${d} is removed.`,
+      },
+      {
+        scope: "following",
+        Icon: CalendarRange,
+        label: "This and all later sittings",
+        hint: (d) => `Sittings from ${d} onward are removed.`,
+      },
+      {
+        scope: "series",
+        Icon: CalendarDays,
+        label: "All sittings",
+        hint: () => "Delete the entire task and all its sittings.",
+        destructive: true,
+      },
+    ],
   },
-  {
-    scope: "series",
-    Icon: CalendarDays,
-    label: "All occurrences",
-    hint: () => "Delete the entire series.",
-    destructive: true,
-  },
-];
+};
 
 /**
  * Bottom-sheet replacement for the OS `Alert` that used to ask "delete which
@@ -74,9 +122,10 @@ const OPTIONS: Option[] = [
 export const DeleteRecurringSheet = forwardRef<
   DeleteRecurringSheetHandle,
   DeleteRecurringSheetProps
->(({ onChoose }, ref) => {
+>(({ kind = "recurring", onChoose }, ref) => {
   const sheet = useBottomSheet();
   const [date, setDate] = useState<Date | null>(null);
+  const { title, tappedLabel, options } = COPY[kind];
 
   useImperativeHandle(
     ref,
@@ -104,11 +153,11 @@ export const DeleteRecurringSheet = forwardRef<
           <View className="flex-row items-start justify-between gap-3">
             <View className="min-w-0 flex-1">
               <Text className="text-[19px] font-bold tracking-tight">
-                Delete recurring session
+                {title}
               </Text>
               {!!dateLabel && (
                 <Text className="mt-[3px] text-[13px] text-muted-foreground">
-                  Tapped occurrence · {dateLabel}
+                  {tappedLabel} · {dateLabel}
                 </Text>
               )}
             </View>
@@ -122,7 +171,7 @@ export const DeleteRecurringSheet = forwardRef<
           </View>
 
           <View className="gap-2.5">
-            {OPTIONS.map(({ scope, Icon, label, hint, destructive }) => (
+            {options.map(({ scope, Icon, label, hint, destructive }) => (
               <Pressable
                 key={scope}
                 onPress={() => pick(scope)}
