@@ -3,10 +3,11 @@ import { SeriesPlacer } from "./series-placer.service";
 
 /**
  * `SeriesPlacer` with fake placers + experiment plumbing. The per-slot scoring
- * and day-scan math live in `core/*.spec.ts` / `heuristic-placer.service.spec.ts`;
- * here we prove the D3 wiring — one 50/50 pick per member, the `± floor(X/N)`
- * window, per-member `recordProposal`, sibling accumulation, and that an
- * unplaceable member doesn't block the rest.
+ * and day-scan math live in `core/*.spec.ts` / `heuristic-placer.service.spec.ts`
+ * (the non-overlapping day-window partition itself is `series-spread.spec.ts`);
+ * here we prove the wiring — one 50/50 pick per member, each member's window
+ * from `seriesDayWindows`, per-member `recordProposal`, sibling accumulation,
+ * and that an unplaceable member doesn't block the rest.
  */
 
 const TZ = "UTC";
@@ -115,7 +116,7 @@ describe("SeriesPlacer.placeSeries", () => {
     expect(linucbProposal).toBeTruthy();
   });
 
-  it("clamps each member's window to ± floor(daySpan / count) around its target", async () => {
+  it("gives each member its own non-overlapping day-window (seriesDayWindows)", async () => {
     const experiment = makeExperiment("HEURISTIC");
     const heuristic = {
       placeInWindow: jest.fn().mockResolvedValue({
@@ -130,7 +131,7 @@ describe("SeriesPlacer.placeSeries", () => {
       bandit as never,
     );
 
-    // 2 members over a ~30-day span → clamp = floor(29/2) = 14. Targets 0 and 29.
+    // 31 days (span=30), 2 members → seriesDayWindows(30, 2) = [[0,14],[15,30]].
     await svc.placeSeries(
       "u1",
       { members: members(2), deadline: DEADLINE },
@@ -142,9 +143,15 @@ describe("SeriesPlacer.placeSeries", () => {
 
     const [firstWindow] = heuristic.placeInWindow.mock.calls[0].slice(5, 6);
     const [secondWindow] = heuristic.placeInWindow.mock.calls[1].slice(5, 6);
-    expect(firstWindow.firstDayStr).toBe("2026-06-01"); // target 0 − 14 → clamped 0
-    expect(firstWindow.lastDayStr).toBe("2026-06-15"); // 0 + 14
-    expect(secondWindow.lastDayStr).toBe("2026-06-30"); // target 29 + 14 → clamped 29
+    expect(firstWindow).toEqual({
+      firstDayStr: "2026-06-01",
+      lastDayStr: "2026-06-15",
+    });
+    // Starts the day right after the first window ends — no overlap.
+    expect(secondWindow).toEqual({
+      firstDayStr: "2026-06-16",
+      lastDayStr: "2026-07-01",
+    });
   });
 
   it("feeds each placed sibling forward as an extra hard block", async () => {
@@ -216,5 +223,39 @@ describe("SeriesPlacer.placeSeries", () => {
       true,
     ]);
     expect(experiment.recordProposal).toHaveBeenCalledTimes(3);
+  });
+
+  it("dryRun places via the heuristic only, and writes nothing (no policy assignment, no proposal, no bandit)", async () => {
+    const experiment = makeExperiment("LINUCB"); // would route to the bandit if not for dryRun
+    const heuristic = {
+      placeInWindow: jest.fn().mockResolvedValue({
+        start: new Date("2026-06-10T08:00:00.000Z"),
+        score: 1,
+      }),
+    };
+    const bandit = { placeInWindow: jest.fn() };
+    const svc = new SeriesPlacer(
+      experiment as never,
+      heuristic as never,
+      bandit as never,
+    );
+
+    const rows = await svc.placeSeries(
+      "u1",
+      { members: members(3), deadline: DEADLINE },
+      TZ,
+      MATRIX,
+      NOW,
+      { trigger: "create", dryRun: true },
+    );
+
+    expect(rows.map((r) => r.scheduledStartTime !== null)).toEqual([
+      true,
+      true,
+      true,
+    ]);
+    expect(bandit.placeInWindow).not.toHaveBeenCalled();
+    expect(experiment.assignPolicy).not.toHaveBeenCalled();
+    expect(experiment.recordProposal).not.toHaveBeenCalled();
   });
 });

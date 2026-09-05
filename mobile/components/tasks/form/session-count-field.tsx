@@ -131,7 +131,7 @@ export function SessionCountField({
         >
           <Text
             className={cn(
-              "text-[11px] font-medium tabular-nums text-muted-foreground",
+              "font-medium tabular-nums text-muted-foreground",
               atMin && "opacity-40",
             )}
           >
@@ -196,7 +196,7 @@ export function SessionCountField({
         >
           <Text
             className={cn(
-              "text-[11px] font-medium tabular-nums text-muted-foreground",
+              "font-medium tabular-nums text-muted-foreground",
               atMax && "opacity-40",
             )}
           >

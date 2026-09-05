@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import type {
   CreateSessionResponse,
   RemoveSessionResponse,
@@ -30,11 +34,25 @@ import { mapSessionPrismaError } from "./prisma-error";
 import { SeriesService } from "./series.service";
 
 /**
+ * Shown when a `TASK` (or series) has no feasible slot anywhere between now
+ * and its deadline — {@link SessionCrudService.create}'s pre-flight check
+ * rejects the whole create with this message before inserting anything, so
+ * nothing accumulates half-placed. A `"\n"` splits a short title from its
+ * description — the mobile client's `splitToastMessage` renders the two
+ * lines separately instead of one long wrapped, bold line.
+ */
+export const NO_FEASIBLE_SLOT_MESSAGE =
+  "No open slot before the deadline\nLoosen the deadline or reduce the number of sessions, then try again.";
+
+/**
  * Plain session CRUD: `create` (dispatches by type — single `TASK`,
  * recurring-fixed, one-off-fixed; a `sessionCount > 1` `TASK` goes to
  * {@link SeriesService}), `list` (fans recurring reps into virtual occurrences),
  * `suggestions`, `findById`, `remove`. A single `TASK` create is placed via
- * {@link TaskPlacementService}; nothing else on the calendar moves.
+ * {@link TaskPlacementService}; nothing else on the calendar moves. A `TASK`
+ * (or series) with no feasible slot before its deadline is rejected by a
+ * pre-flight check ({@link NO_FEASIBLE_SLOT_MESSAGE}) before anything is
+ * inserted.
  */
 @Injectable()
 export class SessionCrudService {
@@ -55,6 +73,27 @@ export class SessionCrudService {
     if (dto.type === "TASK") {
       const deadline = new Date(dto.deadline as string);
       const sessionCount = Math.max(1, Math.trunc(dto.sessionCount ?? 1));
+
+      // Pre-flight feasibility — BEFORE any row is inserted, so an
+      // infeasible request never leaves an unplaced task/series behind (no
+      // rollback needed; see NO_FEASIBLE_SLOT_MESSAGE).
+      const feasible =
+        sessionCount > 1
+          ? await this.taskPlacement.canPlaceSeries({
+              user,
+              durationMinutes: dto.durationMinutes,
+              sessionCount,
+              deadline,
+              now,
+            })
+          : await this.taskPlacement.canPlaceTask({
+              user,
+              durationMinutes: dto.durationMinutes,
+              deadline,
+              now,
+            });
+      if (!feasible) throw new BadRequestException(NO_FEASIBLE_SLOT_MESSAGE);
+
       if (sessionCount > 1) {
         return this.series.createTaskSeries(
           dto,

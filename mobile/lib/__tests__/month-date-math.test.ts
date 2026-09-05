@@ -4,6 +4,7 @@ import {
   dateKey,
   getMonthGridDays,
   groupSessionsByDate,
+  isContinuationEntry,
   isOutsideMonth,
   isWeekendColumn,
   monthLabel,
@@ -122,8 +123,12 @@ describe("splitCellSessions", () => {
 
 describe("groupSessionsByDate", () => {
   const tz = "UTC";
-  function task(id: string, scheduledStartTime: string | null) {
-    return { id, scheduledStartTime };
+  function task(
+    id: string,
+    scheduledStartTime: string | null,
+    durationMinutes = 60,
+  ) {
+    return { id, scheduledStartTime, durationMinutes };
   }
 
   it("groups tasks by their user-tz scheduled day", () => {
@@ -212,5 +217,89 @@ describe("groupSessionsByDate", () => {
       "just-after-midnight",
       "morning",
     ]);
+  });
+
+  describe("sessions crossing midnight", () => {
+    it("adds a continuation entry to the next day's bucket for a task spanning 11pm-1am", () => {
+      // 2026-06-15T23:00Z + 120min = 2026-06-16T01:00Z.
+      const tasks = [task("overnight", "2026-06-15T23:00:00.000Z", 120)];
+      const grouped = groupSessionsByDate(tasks, tz);
+
+      expect(grouped.get("2026-06-15")?.map((t) => t.id)).toEqual([
+        "overnight",
+      ]);
+      expect(grouped.get("2026-06-16")?.map((t) => t.id)).toEqual([
+        "overnight",
+      ]);
+
+      const startEntry = grouped.get("2026-06-15")![0];
+      const tailEntry = grouped.get("2026-06-16")![0];
+      expect(isContinuationEntry(startEntry)).toBe(false);
+      expect(isContinuationEntry(tailEntry)).toBe(true);
+      // The tail is a distinct clone, not the same reference as the start
+      // entry — so flagging one doesn't retroactively flag the other.
+      expect(tailEntry).not.toBe(startEntry);
+      // It still carries the session's real data (same id, same duration) —
+      // `MonthPill`/`SessionListRow` key off `isContinuationEntry`, not a
+      // different id, to render it distinctly.
+      expect(tailEntry.scheduledStartTime).toBe(startEntry.scheduledStartTime);
+      expect(tailEntry.durationMinutes).toBe(startEntry.durationMinutes);
+    });
+
+    it("adds a continuation entry for a long overnight block (e.g. a 10pm-6am sleep DND)", () => {
+      // 2026-06-15T22:00Z + 8h = 2026-06-16T06:00Z.
+      const tasks = [task("sleep", "2026-06-15T22:00:00.000Z", 8 * 60)];
+      const grouped = groupSessionsByDate(tasks, tz);
+
+      expect(grouped.get("2026-06-15")?.map((t) => t.id)).toEqual(["sleep"]);
+      expect(grouped.get("2026-06-16")?.map((t) => t.id)).toEqual(["sleep"]);
+      expect(isContinuationEntry(grouped.get("2026-06-16")![0])).toBe(true);
+    });
+
+    it("does not add a continuation entry for a same-day task (regression)", () => {
+      const tasks = [task("same-day", "2026-06-15T09:00:00.000Z", 60)];
+      const grouped = groupSessionsByDate(tasks, tz);
+
+      expect(grouped.size).toBe(1);
+      expect(grouped.get("2026-06-15")?.map((t) => t.id)).toEqual([
+        "same-day",
+      ]);
+      expect(isContinuationEntry(grouped.get("2026-06-15")![0])).toBe(false);
+    });
+
+    it("does not add a continuation entry for a task ending exactly at midnight", () => {
+      // 2026-06-15T22:00Z + 120min = 2026-06-16T00:00Z exactly — no minute
+      // actually spills into the next day.
+      const tasks = [task("ends-at-midnight", "2026-06-15T22:00:00.000Z", 120)];
+      const grouped = groupSessionsByDate(tasks, tz);
+
+      expect(grouped.size).toBe(1);
+      expect(grouped.has("2026-06-16")).toBe(false);
+    });
+
+    it("puts the continuation entry first in the next day's sort order", () => {
+      // The continuation's real start (previous day) is always earlier than
+      // any same-day task's start time.
+      const tasks = [
+        task("next-day-morning", "2026-06-16T08:00:00.000Z", 30),
+        task("overnight", "2026-06-15T23:00:00.000Z", 120),
+      ];
+      const grouped = groupSessionsByDate(tasks, tz);
+      expect(grouped.get("2026-06-16")?.map((t) => t.id)).toEqual([
+        "overnight",
+        "next-day-morning",
+      ]);
+      expect(isContinuationEntry(grouped.get("2026-06-16")![0])).toBe(true);
+    });
+
+    it("reasons about the crossing in the given timezone, not UTC", () => {
+      // 20:00 local in UTC+9 (Asia/Tokyo) is 11:00Z; +6h = 02:00 local the
+      // next day, i.e. it crosses midnight locally even though the UTC
+      // instants (11:00Z start, 17:00Z end) never cross a UTC day boundary.
+      const tasks = [task("jst-overnight", "2026-06-15T11:00:00.000Z", 360)];
+      const grouped = groupSessionsByDate(tasks, "Asia/Tokyo");
+      expect(grouped.has("2026-06-16")).toBe(true);
+      expect(isContinuationEntry(grouped.get("2026-06-16")![0])).toBe(true);
+    });
   });
 });

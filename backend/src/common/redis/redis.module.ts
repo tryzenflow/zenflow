@@ -1,7 +1,9 @@
-import { Global, Module } from "@nestjs/common";
+import { Global, Logger, Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { createClient, type RedisClientType } from "redis";
 import { RATE_LIMIT_REDIS_CLIENT, REDIS_CLIENT } from "./redis.constants";
+
+const logger = new Logger("RedisModule");
 
 /**
  * Builds a `redis` (node-redis) client for the given connection URL. In
@@ -19,6 +21,13 @@ async function createRedisClient(
   const client = createClient({
     url: configService.get<string>(urlKey),
   });
+  // node-redis emits `error` on every failed connection attempt, including
+  // ones its own `reconnectStrategy` is about to retry with backoff — e.g.
+  // the Docker Desktop port-forward on Windows can lag a moment behind
+  // `docker compose up` reporting the container started. An `EventEmitter`
+  // with no `error` listener throws on emit, which crashed the whole process
+  // on that first transient timeout instead of letting the retry proceed.
+  client.on("error", (err) => logger.warn(`Redis client error: ${err}`));
   if (configService.get<string>("NODE_ENV") !== "test") {
     await client.connect();
   }

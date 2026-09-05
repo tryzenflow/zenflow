@@ -21,7 +21,10 @@ import { format } from "date-fns";
 import * as Haptics from "expo-haptics";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
-import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
 import { CELL_HEIGHT } from "./month-cell";
 import { MonthGrid, MonthGridSkeleton } from "./month-grid";
 import { sessionTypeIcon } from "./session-type-badge";
@@ -107,7 +110,7 @@ export function MonthPage({
   onOpenOverflow,
 }: MonthPageProps) {
   const { toast, confirm } = useToast();
-  const [tasks, setSessions] = useState<Session[] | null>(null);
+  const [sessions, setSessions] = useState<Session[] | null>(null);
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   // A day key to pulse for a moment right after a drop lands on it.
@@ -175,8 +178,8 @@ export function MonthPage({
   }, [refetch, reloadToken]);
 
   const tasksByDate = useMemo(
-    () => groupSessionsByDate(tasks ?? [], tz),
-    [tasks, tz],
+    () => groupSessionsByDate(sessions ?? [], tz),
+    [sessions, tz],
   );
 
   /**
@@ -341,12 +344,10 @@ export function MonthPage({
 
     const applyMove = async () => {
       pulseDropCell(landedKey);
-      const prevSessions = tasks;
+      const prevSessions = sessions;
       setSessions((cur) =>
         (cur ?? []).map((t) =>
-          t.id === original.id
-            ? { ...t, scheduledStartTime: newStartISO }
-            : t,
+          t.id === original.id ? { ...t, scheduledStartTime: newStartISO } : t,
         ),
       );
 
@@ -429,7 +430,7 @@ export function MonthPage({
 
   return (
     <View ref={pageRef} onLayout={measureGeometry} className="flex-1">
-      {tasks === null ? (
+      {sessions === null ? (
         <MonthGridSkeleton />
       ) : (
         <MonthGrid
