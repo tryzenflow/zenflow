@@ -19,6 +19,12 @@ export interface SessionTypeMeta {
   badgeClass: string;
   /** Text + icon colour, paired with {@link badgeClass}. */
   textClass: string;
+  /**
+   * Solid (non-alpha) fill for a small indicator — `badgeClass`'s translucent
+   * tint reads as barely-there at a 4-6px dot size, so the week header's
+   * per-day dot row (`components/calendar/week-header.tsx`) uses this instead.
+   */
+  dotClass: string;
 }
 
 export const SESSION_TYPE_META: Record<SessionType, SessionTypeMeta> = {
@@ -26,28 +32,41 @@ export const SESSION_TYPE_META: Record<SessionType, SessionTypeMeta> = {
     label: "Task",
     badgeClass: "border-brand-orange/40 bg-brand-orange/15",
     textClass: "text-brand-orange",
+    dotClass: "bg-brand-orange",
   },
   ASSIGNMENT: {
     label: "Assignment",
     badgeClass: "border-teal-500/40 bg-teal-500/15",
     textClass: "text-teal-700 dark:text-teal-300",
+    dotClass: "bg-teal-500",
   },
   EXAM: {
     label: "Exam",
     badgeClass: "border-rose-500/40 bg-rose-500/15",
     textClass: "text-rose-600 dark:text-rose-300",
+    dotClass: "bg-rose-500",
   },
   LECTURE: {
     label: "Lecture",
     badgeClass: "border-sky-500/40 bg-sky-500/15",
     textClass: "text-sky-700 dark:text-sky-300",
+    dotClass: "bg-sky-500",
   },
   DND: {
     label: "Do not disturb",
     badgeClass: "border-slate-400/40 bg-slate-500/15",
     textClass: "text-muted-foreground",
+    dotClass: "bg-slate-400",
   },
 };
+
+/** Canonical display order for a set of session types (e.g. the week
+ * header's per-day dot row) — insertion order of {@link SESSION_TYPE_META},
+ * so the dots land in the same order on every day regardless of the order
+ * the API returned the underlying sessions in. */
+export const SESSION_TYPE_ORDER = Object.keys(
+  SESSION_TYPE_META,
+) as SessionType[];
 
 /**
  * A deadline label that always carries the date — the bare `due 9:00 AM` it

@@ -1,5 +1,6 @@
 import { Text } from "@/components/ui/text";
 import { useNow } from "@/hooks/use-now";
+import { SESSION_TYPE_META, SESSION_TYPE_ORDER } from "@/lib/session-type";
 import {
   dateKey,
   shiftWeek,
@@ -8,6 +9,7 @@ import {
   weekStart,
 } from "@/lib/week-date-math";
 import { SETTLE_MS } from "@/lib/week-pager-math";
+import type { SessionType } from "@zenflow/shared";
 import { format } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 import {
@@ -70,6 +72,10 @@ interface WeekHeaderProps {
   /** Header week swipe released below threshold or cancelled: the pager
    * collapses its window back with no focus change. */
   onWeekDragAbort: () => void;
+  /** Distinct `SessionType`s scheduled on each day of the visible week,
+   * keyed by `dateKey` (`use-week-day-types.ts`) — drives the small dot row
+   * under each day-number circle. Absent/empty for a day renders no dots. */
+  dayTypes: Map<string, SessionType[]>;
 }
 
 /** Imperative surface the pager drives when a day-swipe crosses a week edge
@@ -110,6 +116,7 @@ function WeekHeaderImpl(
     onWeekDragBegin,
     onWeekDragSettle,
     onWeekDragAbort,
+    dayTypes,
   }: WeekHeaderProps,
   ref: ForwardedRef<WeekHeaderHandle>,
 ) {
@@ -276,6 +283,13 @@ function WeekHeaderImpl(
     const key = dateKey(day);
     const isFocused = key === focusedKey;
     const isToday = key === todayKey;
+    // Dedupe already happened in `sessionTypesByDay`; sort into a stable,
+    // canonical order so the dots don't jitter between renders/days.
+    const types = (dayTypes.get(key) ?? [])
+      .slice()
+      .sort(
+        (a, b) => SESSION_TYPE_ORDER.indexOf(a) - SESSION_TYPE_ORDER.indexOf(b),
+      );
     return (
       <Pressable
         key={key}
@@ -285,6 +299,10 @@ function WeekHeaderImpl(
         }`}
         accessibilityLabel={`${format(day, "EEEE, MMMM d")}${
           isToday ? ", today" : ""
+        }${
+          types.length > 0
+            ? `, ${types.map((t) => SESSION_TYPE_META[t].label).join(", ")}`
+            : ""
         }`}
       >
         <Text className="text-[10.5px] font-semibold uppercase text-muted-foreground">
@@ -302,6 +320,16 @@ function WeekHeaderImpl(
           >
             {format(day, "d")}
           </Text>
+        </View>
+        {/* Fixed-height row so a 0-dot day reserves the same space as a
+            5-dot day — the chip's height never jumps day to day. */}
+        <View className="h-[5px] flex-row items-center gap-[3px]">
+          {types.map((type) => (
+            <View
+              key={type}
+              className={`h-[4px] w-[4px] rounded-full ${SESSION_TYPE_META[type].dotClass}`}
+            />
+          ))}
         </View>
       </Pressable>
     );
