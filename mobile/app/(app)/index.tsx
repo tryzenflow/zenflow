@@ -14,6 +14,7 @@ import {
 } from "@/components/calendar/week-pager";
 import { CreateSessionFab } from "@/components/tasks/create-task-fab";
 import { useUserStore } from "@/hooks/use-user-store";
+import { useWeekDayTypes } from "@/hooks/use-week-day-types";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { dateKey } from "@/lib/week-date-math";
 import { useFocusEffect } from "@react-navigation/native";
@@ -86,6 +87,10 @@ export default function WeekScreen() {
   );
 
   const tabBarOverlay = useTabBarOverlayHeight();
+
+  // Per-day distinct session types for the visible week, for the header's
+  // dot row — see `use-week-day-types.ts`.
+  const dayTypes = useWeekDayTypes(visibleDate, tz, focusTick);
 
   // Strip offsets shared by the header and the pager so their week transitions
   // move in lockstep. Rest = `-width` (focused page / middle week block
@@ -211,6 +216,7 @@ export default function WeekScreen() {
         onWeekDragBegin={handleWeekDragBegin}
         onWeekDragSettle={handleWeekDragSettle}
         onWeekDragAbort={handleWeekDragAbort}
+        dayTypes={dayTypes}
       />
 
       <View className="flex-1" style={{ paddingBottom: tabBarOverlay }}>
