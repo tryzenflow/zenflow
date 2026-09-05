@@ -21,6 +21,8 @@ import { RedisModule } from "./common/redis/redis.module";
 import { RateLimitModule } from "./common/rate-limit";
 import { CryptoModule } from "./crypto/crypto.module";
 import { IntegrationsModule } from "./integrations/integrations.module";
+import { LMSModule } from "./lms/lms.module";
+import { PortalAPIModule } from "./portal/portal-api.module";
 
 @Module({
   imports: [
@@ -119,6 +121,8 @@ import { IntegrationsModule } from "./integrations/integrations.module";
     MailModule,
     SessionsModule,
     CryptoModule,
+    LMSModule,
+    PortalAPIModule,
     TagsModule,
     FilesModule,
     // Background cron providers (MatrixDecayService, RetainedSessionsService)

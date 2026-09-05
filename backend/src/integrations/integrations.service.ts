@@ -20,7 +20,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { CryptoService } from "../crypto/crypto.service";
 import { MasterKeyService } from "../crypto/master-key.service";
-import { DluAuthService } from "./dlu-auth.service";
+import { IntegrationAuthService } from "./integration-auth.service";
 import { ConnectIntegrationDto } from "./dto/connect-integration.dto";
 import { UpdateIntegrationDto } from "./dto/update-integration.dto";
 
@@ -50,7 +50,7 @@ export class IntegrationsService {
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
     private readonly masterKeys: MasterKeyService,
-    private readonly dluAuth: DluAuthService,
+    private readonly integrationAuth: IntegrationAuthService,
   ) {}
 
   /** `POST /integrations` — verify against DLU, then encrypt + upsert. */
@@ -129,12 +129,13 @@ export class IntegrationsService {
   ): Promise<IntegrationStatus> {
     let valid: boolean;
     try {
-      valid = await this.dluAuth.verifyCredentials(
+      valid = await this.integrationAuth.verifyCredentials(
         provider,
         credentials.username,
         credentials.password,
       );
     } catch (error) {
+      console.error(error);
       throw new ServiceUnavailableException(
         "Couldn't reach DLU to verify your account. Please try again in a moment.",
       );

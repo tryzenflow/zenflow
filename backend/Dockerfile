@@ -1,12 +1,4 @@
 # syntax=docker/dockerfile:1
-
-# Zenflow API image.
-#
-# IMPORTANT: the build context is the MONOREPO ROOT, not backend/, because the API
-# depends on the @zenflow/shared workspace package (packages/shared). Build with:
-#   docker build -t zenflow-api:latest -f backend/Dockerfile .
-# (see backend/build_images.sh). This is a pnpm workspace — do not use npm/yarn here.
-
 # ---- Base: pnpm via corepack (+ openssl for Prisma's musl engine on alpine) ----
 FROM node:20-alpine AS base
 RUN apk add --no-cache openssl \
@@ -51,6 +43,18 @@ ENV PORT=5000
 # Production node_modules + manifest (npm scripts) from the deploy bundle...
 COPY --from=builder /app/deploy/node_modules ./node_modules
 COPY --from=builder /app/deploy/package.json ./package.json
+
+# Chromium runtime dependencies
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont
+
+# Install Playwright's Chromium browser
+RUN pnpm exec playwright install chromium
 
 # ...and the build artifacts. dist/ and generated/ are gitignored, so the deploy
 # bundle omits them — copy them straight from the builder's backend workspace.
