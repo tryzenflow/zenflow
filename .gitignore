@@ -10,3 +10,13 @@ tw-test-out.css
 start-dev.bat
 start-dev.ps1
 startdev-*.bat
+
+# Captured DLU API responses, session cookies and scratch notes. These hold
+# real student/course/teacher data and live session tokens — never commit them.
+INTEGRATION_DOCS.md
+quiz_lms.json
+notes.md
+TODO.md
+cookies*.txt
+moodle_cookies.txt
+scratch_screenshot*.png

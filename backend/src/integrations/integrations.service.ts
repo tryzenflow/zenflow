@@ -36,7 +36,7 @@ type LatestJob = { status: JobStatus; createdAt: Date };
  * branching on `provider` at every call site.
  */
 const LATEST_JOB_SELECT = {
-  crawlJobs: {
+  lmsSyncJobs: {
     orderBy: { createdAt: "desc" },
     take: 1,
     select: { status: true, createdAt: true },
@@ -49,10 +49,10 @@ const LATEST_JOB_SELECT = {
 } as const;
 
 function latestJobOf(row: {
-  crawlJobs?: LatestJob[];
+  lmsSyncJobs?: LatestJob[];
   portalApiJobs?: LatestJob[];
 }): LatestJob | null {
-  return row.crawlJobs?.[0] ?? row.portalApiJobs?.[0] ?? null;
+  return row.lmsSyncJobs?.[0] ?? row.portalApiJobs?.[0] ?? null;
 }
 
 interface DecryptedDek {
@@ -139,7 +139,7 @@ export class IntegrationsService {
    * `GET /integrations` — one entry per provider; no secret material.
    *
    * `lastSyncedAt` / `lastSyncStatus` come from the newest job row for that
-   * integration (`CrawlJob` for LMS, `PortalAPIJob` for the portal). Only that
+   * integration (`LmsSyncJob` for LMS, `PortalAPIJob` for the portal). Only that
    * pair is exposed: the job's items — request URLs, status codes, raw response
    * bodies — stay backend-internal diagnostics.
    */
