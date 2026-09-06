@@ -188,6 +188,10 @@ export default function RootLayout() {
                 name="task/[id]/edit"
                 options={{ presentation: "modal" }}
               />
+              <Stack.Screen
+                name="connect-dlu-account"
+                options={{ presentation: "modal" }}
+              />
             </Stack>
             <AuthGate />
             <StatusBar hidden={true} />

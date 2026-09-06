@@ -8,7 +8,9 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "shared:build": "pnpm --filter @zenflow/shared build",
-    "core:build": "pnpm --filter @zenflow/core build"
+    "core:build": "pnpm --filter @zenflow/core build",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -40,5 +42,10 @@
         }
       }
     }
+  },
+  "dependencies": {
+    "expo": "~52.0.49",
+    "react": "18.3.1",
+    "react-native": "0.76.9"
   }
 }

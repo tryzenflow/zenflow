@@ -59,8 +59,19 @@ const buttonTextVariants = cva(
   },
 );
 
-type ButtonProps = React.ComponentPropsWithoutRef<typeof Pressable> &
-  VariantProps<typeof buttonVariants>;
+type ButtonProps = {
+  className?: string;
+  children?: React.ReactNode;
+  disabled?: boolean;
+  onPress?: () => void;
+  onLongPress?: () => void;
+  style?: any;
+  testID?: string;
+  accessible?: boolean;
+  accessibilityLabel?: string;
+  hitSlop?: number | { top?: number; bottom?: number; left?: number; right?: number };
+  delayLongPress?: number;
+} & VariantProps<typeof buttonVariants>;
 
 const Button = React.forwardRef<
   React.ElementRef<typeof Pressable>,
