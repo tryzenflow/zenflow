@@ -21,12 +21,16 @@ export const INTEGRATION_BATCH_SIZE = 50;
  */
 export const MAX_RESPONSE_BODY_CHARS = 200_000;
 
-/** One `Integration` a watcher has to visit, with the owner's timezone. */
+/**
+ * One `Integration` a watcher has to visit.
+ *
+ * Deliberately carries no timezone: upstream wall-clock strings are parsed in
+ * `DLU_TZ` (a property of the data), and the student's own zone is applied at
+ * render time by the client (invariant #5).
+ */
 export interface IntegrationTarget {
   integrationId: string;
   userId: string;
-  /** `User.timezone`; may be the schema default `"UTC"`. */
-  timezone: string;
 }
 
 /**
@@ -74,7 +78,7 @@ export async function eachIntegrationTarget(
   for (;;) {
     const page = await prisma.integration.findMany({
       where: { provider, ...(userId ? { userId } : {}) },
-      select: { id: true, userId: true, user: { select: { timezone: true } } },
+      select: { id: true, userId: true },
       orderBy: { id: "asc" },
       take: INTEGRATION_BATCH_SIZE,
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
@@ -86,7 +90,6 @@ export async function eachIntegrationTarget(
       await handle({
         integrationId: row.id,
         userId: row.userId,
-        timezone: row.user.timezone,
       });
       visited += 1;
     }

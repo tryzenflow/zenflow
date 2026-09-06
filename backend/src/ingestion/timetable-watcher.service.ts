@@ -112,7 +112,7 @@ export class TimetableWatcherService {
           hocky,
           tuan,
         );
-        const parsed = parseTimetable(rows, this.wallClockTimezone(target));
+        const parsed = parseTimetable(rows, this.wallClockTimezone());
         await this.upsertSections(parsed.sections);
         const outcome = await this.materializer.materialize(
           target.userId,
@@ -155,13 +155,16 @@ export class TimetableWatcherService {
    * The timezone the portal's `dd/MM/yyyy` + `07g30` wall-clock strings are
    * turned into instants in.
    *
-   * The student's own timezone when they have one, falling back to `DLU_TZ` —
-   * these are DLU students sitting in DLU classrooms, so the two normally
-   * coincide, and honouring the user's zone keeps a class at the hour their
-   * calendar renders it at.
+   * Always `DLU_TZ`, never the student's own zone: "07g30" is a fact about a
+   * classroom in Vietnam, so it is a property of the upstream data, not of
+   * whoever is reading it. Parsing it in the viewer's zone would place the
+   * class at the wrong instant for any student not set to Asia/Saigon — one
+   * studying abroad, or mid-exchange. The user's timezone governs *rendering*
+   * (invariant #5, `frontend/src/utils/tz.ts`), which happens later, off the
+   * UTC instant stored here.
    */
-  private wallClockTimezone(target: IntegrationTarget): string {
-    return target.timezone || this.dluTimezone;
+  private wallClockTimezone(): string {
+    return this.dluTimezone;
   }
 
   private async signIn(
