@@ -88,7 +88,6 @@ export class DluAuthService {
     username: string,
     password: string,
   ): Promise<boolean> {
-    this.logger.log(`Portal response: cook`);
     const loginUrl = `${ENDPOINTS.PORTAL}/api/authenticate/authpsc`;
     const res = await this.fetch(loginUrl, {
       method: "POST",
@@ -103,9 +102,6 @@ export class DluAuthService {
         type: 0,
       }),
     });
-
-    const body = await res.text();
-    this.logger.log(`Portal response: ${res.status} ${body}`);
 
     if (res.status === HttpStatus.OK) return true;
     if (
