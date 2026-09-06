@@ -221,7 +221,7 @@ export function ConnectDluAccountScreen({ onBack }: { onBack?: () => void }) {
           contentContainerClassName="px-5"
         >
           {allConnected && (
-            <View className="mt-5 mb-5 flex items-center gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-3">
+            <View className="mt-5 mb-5 flex flex-row items-center gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-3">
               <View className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-600">
                 <Check size={14} className="text-emerald-600" strokeWidth={3} />
               </View>
@@ -230,12 +230,14 @@ export function ConnectDluAccountScreen({ onBack }: { onBack?: () => void }) {
               </Text>
             </View>
           )}
-          <Text className="mt-5 mb-5 text-[13.5px] leading-relaxed text-muted-foreground">
-            Link an account and Zenflow keeps an eye on it for new assignments
-            and timetable changes.
-          </Text>
+          {!allConnected && (
+            <Text className="mt-5 mb-5 text-[13.5px] leading-relaxed text-muted-foreground">
+              Link an account and Zenflow keeps an eye on it for new assignments
+              and timetable changes.
+            </Text>
+          )}
           <View className="overflow-hidden rounded-2xl border dark:border-gray-300 border-gray-700 bg-card">
-            {(["LMS", "Portal"] as IntegrationProvider[]).map(
+            {(["LMS", "PORTAL"] as IntegrationProvider[]).map(
               (provider, index) => (
                 <View
                   key={provider}
@@ -291,11 +293,13 @@ export function ConnectDluAccountScreen({ onBack }: { onBack?: () => void }) {
               ),
             )}
           </View>
-          <Muted className="mt-3.5 text-[12px] leading-snug px-2">
-            Your login is used only to check DLU on your behalf, and never shown
-            to anyone.
-          </Muted>
-        </ScrollView>
+{!allConnected && (
+            <Muted className="mt-3.5 text-[12px] leading-snug px-2">
+              Your login is used only to check DLU on your behalf, and never shown
+              to anyone.
+            </Muted>
+          )}
+          </ScrollView>
       </View>
 
       {/* Overlay sheets */}
@@ -313,9 +317,11 @@ export function ConnectDluAccountScreen({ onBack }: { onBack?: () => void }) {
                 {selectedProvider === "LMS" ? "LMS" : "Portal"}
               </Text>
             </View>
+            {!error && (
             <Text className="mb-4 text-[13.5px] leading-relaxed text-muted-foreground">
               Same student ID and password you use on the DLU site.
             </Text>
+          )}
             {error && (
               <View className="mb-4 flex flex-row items-start gap-2.5 rounded-2xl border border-destructive/40 bg-destructive/10 px-6 py-3">
                 <View className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-destructive/15 text-destructive">
