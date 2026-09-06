@@ -133,9 +133,10 @@ Defined in [`prisma/schema.prisma`](prisma/schema.prisma)
 | `userId`                        | uuid            | FK → `User`, `onDelete: Cascade`                                                                                                                                                                                                                                                                                                                        |
 | `seriesId`                      | uuid?           | FK → `SessionSeries`, `onDelete: Cascade`. Set for a recurring fixed-type (`DND`/`ASSIGNMENT`/`EXAM`/`LECTURE`) representative and for every session of a `POST /sessions` `sessionCount > 1` `TASK` series.                                                                                                                                            |
 | `sessionIndex` / `sessionTotal` | int?            | 1-based position / total session count within a `TASK` series (null otherwise). Denormalized for cheap per-row rendering.                                                                                                                                                                                                                               |
+| `externalKey`                   | string?         | Stable identity of the upstream DLU item this session mirrors; null for user-created sessions. `"lms:assign:<instance>"` \| `"lms:quiz:<instance>"` \| `"portal:exam:<Examination>"` \| `"portal:meeting:<WeekScheduleID>"`. The LMS half keys on the activity **`instance`**, never the calendar event id. Unique per `[userId, externalKey]` — this is the ingestion idempotency guard: the watchers re-fetch the same window every cron tick and upsert on it, so a re-run can't duplicate the calendar. |
 
 Indexes: `[userId, deadline]`, `[userId, status]`, `[userId, scheduledStartTime]`,
-`[userId, seriesId, createdAt asc]`.
+`[userId, seriesId, createdAt asc]`; unique `[userId, externalKey]`.
 
 ### `SessionEvent` (append-only audit trail — the ML fuel)
 
@@ -167,6 +168,23 @@ atomically inside the task transaction. The wire format keeps `Session.tags` as 
 ### `File`
 
 `id`, `originalName`, `filename`, `path`, `mimetype`, `size`, `userId` (cascade).
+
+### DLU ingestion tables
+
+| Table                             | Purpose                                                                                                                                                                                                                              |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `LmsCourse`                       | A Moodle course from the LMS calendar response's `course` block. Deduped on `lmsCourseId` (Moodle `course.id`).                                                                                                                       |
+| `PortalSection`                   | One student-portal course section — curriculum unit × term × group × teacher × room. Deduped on `scheduleStudyUnitId`; indexed `[yearStudy, termId]`, the access path for a whole-term refresh.                                       |
+| `CrawlJob` / `CrawlJobItem`       | Per-run tracking for the LMS watcher (`PENDING → PROCESSING → COMPLETED \| FAILED`), one item per upstream request with `url`, `attempt`, `statusCode`, `responseBody`. The raw body is kept so a bad parse stays diagnosable.        |
+| `PortalAPIJob` / `PortalAPIJobItem` | The same shape for the portal poller — `CrawlJobItem` was widened to match it field-for-field.                                                                                                                                      |
+| `Notification`                    | Raised alongside each ingested item, `sessionId` pointing at the session the watcher wrote. Topics `ASSIGNMENT` \| `EXAM` \| `TIMETABLE` \| `REMINDER`.                                                                               |
+
+**LMS and portal course identity are deliberately independent.** `LmsCourse` and
+`PortalSection` describe the same real-world class but share no identifier and are never
+joined: there is no correlation table and no foreign key between them. The two systems
+name courses differently, so any mapping would be a fuzzy string match — and nothing in
+the ingestion path needs it, since an LMS item is scheduled from LMS data alone and a
+timetable meeting from portal data alone.
 
 > **Sessions are one-off, and every task is flexible.** A `POST /tasks` always creates
 > exactly one `Session` row, placed via the narrow single-task tiered placer (no more "fixed"
@@ -306,6 +324,14 @@ Copy `.env.example` to `.env.{dev,staging,prod,test}`:
 ```bash
 cp .env.example .env.dev # same for .env.staging, .env.test, .env.prod
 ```
+
+DLU ingestion config (all validated with defaults, so a deployment that omits them still
+boots): `LMS_URL` / `PORTAL_API_URL` (upstream base URLs — read with `getOrThrow` at
+service construction, which is why they must always resolve), `LMS_TIMEOUT_MS` (15000) /
+`PORTAL_API_TIMEOUT_MS` (10000) per-request timeouts, `DLU_TZ` (`Asia/Ho_Chi_Minh` — the
+timezone the upstream wall-clock strings are in, not the user's), and `INGESTION_ENABLED`
+(kill switch for the watcher crons; `false` in `.env.test` so a test run can never reach
+DLU). `PORTAL_API_KEY` stays required with no default.
 
 `BANDIT_SERVICE_URL` (optional, dev `http://localhost:8100`) points at the stateless Python
 bandit service (`services/bandit/`). When unset, LinUCB scheduling is disabled and every
