@@ -210,6 +210,8 @@ describe("IntegrationsService", () => {
         provider: "LMS",
         connected: true,
         lastVerifiedAt: expect.any(String) as string,
+        lastSyncedAt: null,
+        lastSyncStatus: null,
       });
 
       expect(db.keys).toHaveLength(1);
@@ -271,6 +273,8 @@ describe("IntegrationsService", () => {
         provider: "LMS",
         connected: true,
         lastVerifiedAt: expect.any(String) as string,
+        lastSyncedAt: null,
+        lastSyncStatus: null,
       });
       await expect(service.revealCredentials("u1", "LMS")).resolves.toEqual({
         username: "sv123",
@@ -296,6 +300,8 @@ describe("IntegrationsService", () => {
         provider: "LMS",
         connected: true,
         lastVerifiedAt: expect.any(String) as string,
+        lastSyncedAt: null,
+        lastSyncStatus: null,
       });
       await expect(service.revealCredentials("u1", "LMS")).resolves.toEqual({
         username: "new-user",
@@ -321,8 +327,16 @@ describe("IntegrationsService", () => {
             provider: "LMS",
             connected: true,
             lastVerifiedAt: expect.any(String) as string,
+            lastSyncedAt: null,
+            lastSyncStatus: null,
           },
-          { provider: "PORTAL", connected: false, lastVerifiedAt: null },
+          {
+            provider: "PORTAL",
+            connected: false,
+            lastVerifiedAt: null,
+            lastSyncedAt: null,
+            lastSyncStatus: null,
+          },
         ]),
       );
     });
@@ -336,6 +350,8 @@ describe("IntegrationsService", () => {
         provider: "LMS",
         connected: false,
         lastVerifiedAt: null,
+        lastSyncedAt: null,
+        lastSyncStatus: null,
       });
       await expect(service.disconnect(USER, "LMS")).resolves.toBeDefined();
 
