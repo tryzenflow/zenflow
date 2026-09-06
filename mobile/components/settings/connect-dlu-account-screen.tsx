@@ -293,13 +293,13 @@ export function ConnectDluAccountScreen({ onBack }: { onBack?: () => void }) {
               ),
             )}
           </View>
-{!allConnected && (
+          {!allConnected && (
             <Muted className="mt-3.5 text-[12px] leading-snug px-2">
-              Your login is used only to check DLU on your behalf, and never shown
-              to anyone.
+              Your login is used only to check DLU on your behalf, and never
+              shown to anyone.
             </Muted>
           )}
-          </ScrollView>
+        </ScrollView>
       </View>
 
       {/* Overlay sheets */}
@@ -310,7 +310,7 @@ export function ConnectDluAccountScreen({ onBack }: { onBack?: () => void }) {
           index={0}
           enablePanDownToClose={true}
         >
-          <BottomSheetView className="pb-8">
+          <BottomSheetView className="" style={{ paddingBottom: 30 }}>
             <View className=" pb-3 pt-1">
               <Text className="text-xl font-bold tracking-tight">
                 Sign in to your DLU{" "}
@@ -318,12 +318,12 @@ export function ConnectDluAccountScreen({ onBack }: { onBack?: () => void }) {
               </Text>
             </View>
             {!error && (
-            <Text className="mb-4 text-[13.5px] leading-relaxed text-muted-foreground">
-              Same student ID and password you use on the DLU site.
-            </Text>
-          )}
+              <Text className="mb-4 text-[13.5px] leading-relaxed text-muted-foreground">
+                Same student ID and password you use on the DLU site.
+              </Text>
+            )}
             {error && (
-              <View className="mb-4 flex flex-row items-start gap-2.5 rounded-2xl border border-destructive/40 bg-destructive/10 px-6 py-3">
+              <View className="mb-4 flex flex-row items-start gap-2.5 rounded-2xl border border-destructive/40 bg-destructive/10 px-3 py-3">
                 <View className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-destructive/15 text-destructive">
                   <AlertCircle
                     size={14}
