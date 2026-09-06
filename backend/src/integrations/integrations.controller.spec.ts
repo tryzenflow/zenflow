@@ -11,6 +11,7 @@ describe("IntegrationsController", () => {
   const status = jest.fn();
   const update = jest.fn();
   const disconnect = jest.fn();
+  const sync = jest.fn();
 
   beforeEach(async () => {
     connect.mockReset().mockResolvedValue({
@@ -29,13 +30,20 @@ describe("IntegrationsController", () => {
       connected: false,
       lastVerifiedAt: null,
     });
+    sync.mockReset().mockResolvedValue({
+      provider: "LMS",
+      connected: true,
+      lastVerifiedAt: "2026-08-28T00:00:00.000Z",
+      lastSyncedAt: "2026-09-06T04:00:00.000Z",
+      lastSyncStatus: "COMPLETED",
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [IntegrationsController],
       providers: [
         {
           provide: IntegrationsService,
-          useValue: { connect, status, update, disconnect },
+          useValue: { connect, status, update, disconnect, sync },
         },
       ],
     }).compile();
@@ -100,6 +108,23 @@ describe("IntegrationsController", () => {
     expect(update).toHaveBeenCalledWith(USER, "LMS", dto);
     expect(res.success).toBe(true);
     expect(res.message).toBe("LMS account credentials updated");
+  });
+
+  it("answers sync() with the provider's status, not a counts payload", async () => {
+    const res = await controller.sync(USER, "LMS");
+
+    expect(sync).toHaveBeenCalledWith(USER, "LMS");
+    expect(res).toEqual({
+      success: true,
+      message: "LMS sync finished",
+      data: {
+        provider: "LMS",
+        connected: true,
+        lastVerifiedAt: "2026-08-28T00:00:00.000Z",
+        lastSyncedAt: "2026-09-06T04:00:00.000Z",
+        lastSyncStatus: "COMPLETED",
+      },
+    });
   });
 
   it("wraps disconnect() in the success envelope", async () => {

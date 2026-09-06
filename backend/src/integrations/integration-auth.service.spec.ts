@@ -48,7 +48,7 @@ describe("IntegrationAuthService", () => {
   });
 
   it("accepts a portal login that yields a token", async () => {
-    authenticate.mockResolvedValue("TOKEN");
+    authenticate.mockResolvedValue({ ok: true, token: "TOKEN" });
 
     await expect(service.verifyCredentials("PORTAL", "sv", "pw")).resolves.toBe(
       true,
@@ -56,11 +56,24 @@ describe("IntegrationAuthService", () => {
     expect(authenticate).toHaveBeenCalledWith("sv", "pw");
   });
 
-  it("rejects a portal login that yields an empty token", async () => {
-    authenticate.mockResolvedValue("");
+  it("returns false — not a throw — for a wrong portal password", async () => {
+    // Same regression as the LMS case above: `authenticate` used to throw on
+    // any 4xx, so a typo surfaced as 503 "Couldn't reach DLU" rather than 400.
+    authenticate.mockResolvedValue({
+      ok: false,
+      reason: "INVALID_CREDENTIALS",
+    });
 
     await expect(service.verifyCredentials("PORTAL", "sv", "pw")).resolves.toBe(
       false,
     );
+  });
+
+  it("propagates a genuine portal outage so it can surface as 503", async () => {
+    authenticate.mockRejectedValue(new Error("DLU is unreachable"));
+
+    await expect(
+      service.verifyCredentials("PORTAL", "sv", "pw"),
+    ).rejects.toThrow("DLU is unreachable");
   });
 });

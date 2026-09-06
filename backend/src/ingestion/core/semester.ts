@@ -80,3 +80,38 @@ export function isoWeek(date: Date, tz: string): number {
   const daysSinceJan1 = (d.getTime() - jan1) / 86_400_000;
   return Math.ceil((daysSinceJan1 + 1) / 7);
 }
+
+/** A calendar year plus a **1-based** month (1 = January), as Moodle wants it. */
+export interface CalendarMonth {
+  year: number;
+  month: number;
+}
+
+/**
+ * The calendar month `now` falls in, in timezone `tz`, plus the `count - 1`
+ * months that follow it.
+ *
+ * The LMS watcher fetches two: a quiz that opens on the 30th and closes on the
+ * 2nd is a lone `open` event in one month's response and a complete
+ * open/close pair in the next, so one month alone would silently drop it (see
+ * `parse-lms.ts`). The timezone matters for the same reason it does in
+ * `resolveSemester` — around midnight at a month boundary the server's month
+ * and the university's month are different months.
+ */
+export function monthsFrom(
+  now: Date,
+  tz: string,
+  count: number,
+): CalendarMonth[] {
+  const { year, month } = yearMonthIn(now, tz);
+  const months: CalendarMonth[] = [];
+  for (let i = 0; i < count; i++) {
+    // Month indices are 1-based, so shift to 0-based for the divmod and back.
+    const zeroBased = month - 1 + i;
+    months.push({
+      year: year + Math.floor(zeroBased / 12),
+      month: (zeroBased % 12) + 1,
+    });
+  }
+  return months;
+}

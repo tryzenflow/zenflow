@@ -1,0 +1,406 @@
+import { Prisma } from "../../generated/prisma";
+import { PrismaService } from "../prisma/prisma.service";
+import { MaterializerService } from "./materializer.service";
+import type { ParsedBlock } from "./core/types";
+
+// ── in-memory Prisma double ────────────────────────────────────────────────
+// Same idiom as integrations.service.spec.ts: a real object graph rather than
+// assertions on call arguments, so "one Session, one Notification after two
+// runs" is checked against what is actually stored.
+
+interface SessionRow {
+  id: string;
+  userId: string;
+  externalKey: string | null;
+  title: string;
+  note: string | null;
+  type: string;
+  source: string;
+  durationMinutes: number;
+  scheduledStartTime: Date | null;
+  lastMovedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  tags: { name: string }[];
+  series: null;
+}
+
+interface NotificationRow {
+  id: string;
+  userId: string;
+  sessionId: string | null;
+  topic: string;
+  title: string;
+  content: string;
+}
+
+function makePrismaDouble() {
+  const sessions: SessionRow[] = [];
+  const notifications: NotificationRow[] = [];
+  const events: Record<string, unknown>[] = [];
+
+  const client = {
+    session: {
+      findUnique: (args: {
+        where: { userId_externalKey: { userId: string; externalKey: string } };
+      }) => {
+        const { userId, externalKey } = args.where.userId_externalKey;
+        return Promise.resolve(
+          sessions.find(
+            (s) => s.userId === userId && s.externalKey === externalKey,
+          ) ?? null,
+        );
+      },
+      create: (args: { data: Record<string, unknown> }) => {
+        const data = args.data;
+        const externalKey = (data.externalKey as string | null) ?? null;
+        const userId = data.userId as string;
+        if (
+          externalKey !== null &&
+          sessions.some(
+            (s) => s.userId === userId && s.externalKey === externalKey,
+          )
+        ) {
+          // What Postgres does when the [userId, externalKey] unique index is
+          // violated — the race signal the materializer swallows.
+          return Promise.reject(
+            new Prisma.PrismaClientKnownRequestError("Unique constraint", {
+              code: "P2002",
+              clientVersion: "6",
+            }),
+          );
+        }
+        const row: SessionRow = {
+          id: `s${sessions.length + 1}`,
+          userId,
+          externalKey,
+          title: data.title as string,
+          note: (data.note as string | null) ?? null,
+          type: data.type as string,
+          source: data.source as string,
+          durationMinutes: data.durationMinutes as number,
+          scheduledStartTime: (data.scheduledStartTime as Date) ?? null,
+          lastMovedAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          tags: [],
+          series: null,
+        };
+        sessions.push(row);
+        return Promise.resolve(row);
+      },
+      update: (args: {
+        where: { id: string };
+        data: Record<string, unknown>;
+      }) => {
+        const row = sessions.find((s) => s.id === args.where.id);
+        if (!row) throw new Error(`no session ${args.where.id}`);
+        Object.assign(row, args.data);
+        return Promise.resolve(row);
+      },
+    },
+    sessionEvent: {
+      create: (args: { data: Record<string, unknown> }) => {
+        events.push(args.data);
+        return Promise.resolve({ id: BigInt(events.length) });
+      },
+    },
+    notification: {
+      create: (args: { data: Record<string, unknown> }) => {
+        const row: NotificationRow = {
+          id: `n${notifications.length + 1}`,
+          userId: args.data.userId as string,
+          sessionId: (args.data.sessionId as string | null) ?? null,
+          topic: args.data.topic as string,
+          title: args.data.title as string,
+          content: args.data.content as string,
+        };
+        notifications.push(row);
+        return Promise.resolve(row);
+      },
+      findFirst: (args: { where: Record<string, unknown> }) =>
+        Promise.resolve(
+          notifications.find((n) =>
+            Object.entries(args.where).every(
+              ([k, v]) => (n as unknown as Record<string, unknown>)[k] === v,
+            ),
+          ) ?? null,
+        ),
+    },
+    $transaction: <T>(fn: (tx: unknown) => Promise<T>): Promise<T> =>
+      fn(client),
+  };
+
+  return { client, sessions, notifications, events };
+}
+
+// ── fixtures (deliberately fictional — never real DLU data) ────────────────
+const USER = "u1";
+
+function block(over: Partial<ParsedBlock> = {}): ParsedBlock {
+  return {
+    externalKey: "lms:assign:800001",
+    title: "Môn học Mẫu Một — bài tập 1",
+    type: "ASSIGNMENT",
+    scheduledStartTime: new Date("2026-09-10T03:00:00.000Z"),
+    durationMinutes: 15,
+    location: null,
+    note: null,
+    ...over,
+  };
+}
+
+function makeService() {
+  const db = makePrismaDouble();
+  const service = new MaterializerService(
+    db.client as unknown as PrismaService,
+  );
+  return { db, service };
+}
+
+describe("MaterializerService", () => {
+  describe("create", () => {
+    it("writes the session, its CREATE event and one notification", async () => {
+      const { db, service } = makeService();
+
+      const outcome = await service.materialize(USER, [block()], "LMS");
+
+      expect(outcome).toEqual({
+        created: 1,
+        updated: 0,
+        unchanged: 0,
+        guarded: 0,
+      });
+      expect(db.sessions).toHaveLength(1);
+      expect(db.sessions[0]).toMatchObject({
+        userId: USER,
+        source: "LMS",
+        type: "ASSIGNMENT",
+        externalKey: "lms:assign:800001",
+        durationMinutes: 15,
+      });
+      // Ingested rows join the same audit trail as user-pinned ones.
+      expect(db.events).toHaveLength(1);
+      expect(db.events[0]).toMatchObject({ eventType: "CREATE" });
+
+      expect(db.notifications).toHaveLength(1);
+      expect(db.notifications[0]).toMatchObject({
+        topic: "ASSIGNMENT",
+        sessionId: db.sessions[0].id,
+      });
+    });
+
+    it("folds the room into the note, since Session has no location column", async () => {
+      const { db, service } = makeService();
+
+      await service.materialize(
+        USER,
+        [
+          block({
+            externalKey: "portal:meeting:600001",
+            type: "LECTURE",
+            location: "X01.01",
+            note: "Thi máy",
+          }),
+        ],
+        "PORTAL",
+      );
+
+      expect(db.sessions[0].note).toBe("Thi máy · Room X01.01");
+    });
+
+    it("maps EXAM and LECTURE onto their notification topics", async () => {
+      const { db, service } = makeService();
+
+      await service.materialize(
+        USER,
+        [
+          block({ externalKey: "portal:exam:500001", type: "EXAM" }),
+          block({ externalKey: "portal:meeting:600001", type: "LECTURE" }),
+        ],
+        "PORTAL",
+      );
+
+      expect(db.notifications.map((n) => n.topic)).toEqual([
+        "EXAM",
+        "TIMETABLE",
+      ]);
+    });
+
+    it("treats a P2002 race as a no-op rather than an error", async () => {
+      const { db, service } = makeService();
+      // Pretend a concurrent run inserted the row between our findUnique and
+      // our create: the double rejects the second insert with P2002.
+      db.sessions.push({
+        id: "s0",
+        userId: USER,
+        externalKey: "lms:assign:800001",
+        title: "already there",
+        note: null,
+        type: "ASSIGNMENT",
+        source: "LMS",
+        durationMinutes: 15,
+        scheduledStartTime: new Date("2026-09-10T03:00:00.000Z"),
+        lastMovedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        tags: [],
+        series: null,
+      });
+      const findUnique = jest
+        .spyOn(db.client.session, "findUnique")
+        .mockResolvedValueOnce(null);
+
+      const outcome = await service.materialize(USER, [block()], "LMS");
+
+      expect(findUnique).toHaveBeenCalled();
+      expect(outcome.created).toBe(0);
+      expect(outcome.unchanged).toBe(1);
+      expect(db.sessions).toHaveLength(1);
+      expect(db.notifications).toHaveLength(0);
+    });
+  });
+
+  describe("idempotency", () => {
+    it("is a no-op on a re-run: one session, one notification", async () => {
+      const { db, service } = makeService();
+      const items = [block()];
+
+      const first = await service.materialize(USER, items, "LMS");
+      const second = await service.materialize(USER, items, "LMS");
+
+      expect(first.created).toBe(1);
+      expect(second).toEqual({
+        created: 0,
+        updated: 0,
+        unchanged: 1,
+        guarded: 0,
+      });
+      expect(db.sessions).toHaveLength(1);
+      expect(db.notifications).toHaveLength(1);
+      expect(db.events).toHaveLength(1);
+    });
+  });
+
+  describe("upstream change", () => {
+    it("follows a move on a session the student has never touched", async () => {
+      const { db, service } = makeService();
+      await service.materialize(USER, [block()], "LMS");
+
+      const moved = block({
+        scheduledStartTime: new Date("2026-09-11T03:00:00.000Z"),
+      });
+      const outcome = await service.materialize(USER, [moved], "LMS");
+
+      expect(outcome.updated).toBe(1);
+      expect(db.sessions[0].scheduledStartTime).toEqual(
+        new Date("2026-09-11T03:00:00.000Z"),
+      );
+      expect(db.notifications).toHaveLength(2);
+      expect(db.notifications[1].title).toContain("Updated:");
+      // Not a user action, so it must not enter the ML event trail...
+      expect(db.events).toHaveLength(1);
+      // ...nor claim the student moved it.
+      expect(db.sessions[0].lastMovedAt).toBeNull();
+    });
+
+    it("settles down: the run after an upstream change is unchanged again", async () => {
+      const { db, service } = makeService();
+      await service.materialize(USER, [block()], "LMS");
+      const moved = block({
+        scheduledStartTime: new Date("2026-09-11T03:00:00.000Z"),
+      });
+      await service.materialize(USER, [moved], "LMS");
+
+      const third = await service.materialize(USER, [moved], "LMS");
+
+      expect(third.unchanged).toBe(1);
+      expect(db.notifications).toHaveLength(2);
+    });
+
+    it("notices a title-only change", async () => {
+      const { db, service } = makeService();
+      await service.materialize(USER, [block()], "LMS");
+
+      const outcome = await service.materialize(
+        USER,
+        [block({ title: "Môn học Mẫu Một — bài tập 1 (gia hạn)" })],
+        "LMS",
+      );
+
+      expect(outcome.updated).toBe(1);
+      expect(db.sessions[0].title).toBe(
+        "Môn học Mẫu Một — bài tập 1 (gia hạn)",
+      );
+    });
+  });
+
+  describe("don't clobber a student's edit", () => {
+    it("leaves a moved session alone and raises a TIMETABLE notification", async () => {
+      const { db, service } = makeService();
+      await service.materialize(USER, [block()], "LMS");
+      // The student dragged it, so the row carries their fingerprint.
+      db.sessions[0].lastMovedAt = new Date("2026-09-08T12:00:00.000Z");
+      db.sessions[0].scheduledStartTime = new Date("2026-09-09T01:00:00.000Z");
+
+      const outcome = await service.materialize(
+        USER,
+        [block({ scheduledStartTime: new Date("2026-09-11T03:00:00.000Z") })],
+        "LMS",
+      );
+
+      expect(outcome).toEqual({
+        created: 0,
+        updated: 0,
+        unchanged: 0,
+        guarded: 1,
+      });
+      // Their placement survived untouched.
+      expect(db.sessions[0].scheduledStartTime).toEqual(
+        new Date("2026-09-09T01:00:00.000Z"),
+      );
+      expect(db.notifications).toHaveLength(2);
+      expect(db.notifications[1]).toMatchObject({
+        topic: "TIMETABLE",
+        sessionId: db.sessions[0].id,
+      });
+      expect(db.notifications[1].content).toContain("2026-09-11T03:00:00.000Z");
+    });
+
+    it("does not re-raise the same warning on every tick", async () => {
+      const { db, service } = makeService();
+      await service.materialize(USER, [block()], "LMS");
+      db.sessions[0].lastMovedAt = new Date("2026-09-08T12:00:00.000Z");
+      db.sessions[0].scheduledStartTime = new Date("2026-09-09T01:00:00.000Z");
+      const upstream = [
+        block({ scheduledStartTime: new Date("2026-09-11T03:00:00.000Z") }),
+      ];
+
+      await service.materialize(USER, upstream, "LMS");
+      await service.materialize(USER, upstream, "LMS");
+      await service.materialize(USER, upstream, "LMS");
+
+      expect(db.notifications).toHaveLength(2);
+    });
+
+    it("does speak up when upstream moves again", async () => {
+      const { db, service } = makeService();
+      await service.materialize(USER, [block()], "LMS");
+      db.sessions[0].lastMovedAt = new Date("2026-09-08T12:00:00.000Z");
+
+      await service.materialize(
+        USER,
+        [block({ scheduledStartTime: new Date("2026-09-11T03:00:00.000Z") })],
+        "LMS",
+      );
+      await service.materialize(
+        USER,
+        [block({ scheduledStartTime: new Date("2026-09-12T03:00:00.000Z") })],
+        "LMS",
+      );
+
+      expect(db.notifications).toHaveLength(3);
+      expect(db.notifications[2].content).toContain("2026-09-12T03:00:00.000Z");
+    });
+  });
+});

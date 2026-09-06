@@ -94,7 +94,44 @@ describe("PortalAPIService", () => {
     it("returns the Token on a 200", async () => {
       fetchMock.mockResolvedValueOnce(reply({ json: { Token: "TOKEN" } }));
 
-      await expect(service.authenticate("sv", "pw")).resolves.toBe("TOKEN");
+      await expect(service.authenticate("sv", "pw")).resolves.toEqual({
+        ok: true,
+        token: "TOKEN",
+      });
+    });
+
+    it.each([400, 401, 403])(
+      "reports a rejected login as a result, not a throw (status %i)",
+      async (status) => {
+        // The regression this guards: any 4xx used to throw, and
+        // `IntegrationsService.storeCredentials` maps every throw to a 503
+        // "Couldn't reach DLU" — so a wrong password told the student the
+        // university was offline instead of 400 "check your password".
+        fetchMock.mockResolvedValueOnce(
+          reply({ status, json: { message: "sai mật khẩu" } }),
+        );
+
+        await expect(service.authenticate("sv", "nope")).resolves.toEqual({
+          ok: false,
+          reason: "INVALID_CREDENTIALS",
+        });
+      },
+    );
+
+    it("throws on a 200 that carries no token", async () => {
+      fetchMock.mockResolvedValueOnce(reply({ json: { Token: "" } }));
+
+      await expect(service.authenticate("sv", "pw")).rejects.toThrow(
+        "Portal accepted the login but returned no token",
+      );
+    });
+
+    it("throws on an unexpected status — that is the site, not the student", async () => {
+      fetchMock.mockResolvedValueOnce(reply({ status: 500 }));
+
+      await expect(service.authenticate("sv", "pw")).rejects.toThrow(
+        "Unexpected portal login response (status 500)",
+      );
     });
 
     it("collapses a transport failure into 'DLU is unreachable'", async () => {
