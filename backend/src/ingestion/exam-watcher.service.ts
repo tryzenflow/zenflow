@@ -79,7 +79,10 @@ export class ExamWatcherService {
 
     try {
       const rows = await this.portal.fetchExams(token, namhoc, hocky);
-      const parsed = parseExams(rows, target.timezone || this.dluTimezone);
+      // Always DLU_TZ: "07g30" describes a Vietnamese exam hall, so it belongs
+      // to the upstream data, not to whoever reads it. The student's zone
+      // governs rendering (invariant #5), off the UTC instant stored here.
+      const parsed = parseExams(rows, this.dluTimezone);
       const outcome = await this.materializer.materialize(
         target.userId,
         parsed.items,

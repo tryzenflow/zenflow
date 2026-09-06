@@ -81,7 +81,7 @@ describe("sleep", () => {
 describe("eachIntegrationTarget", () => {
   /** Pages `rows` the way Prisma's cursor pagination would. */
   function prismaOver(
-    rows: { id: string; userId: string; provider: string; timezone: string }[],
+    rows: { id: string; userId: string; provider: string }[],
   ) {
     const calls: Record<string, unknown>[] = [];
     const client = {
@@ -105,7 +105,6 @@ describe("eachIntegrationTarget", () => {
             page.slice(0, args.take).map((r) => ({
               id: r.id,
               userId: r.userId,
-              user: { timezone: r.timezone },
             })),
           );
         },
@@ -118,7 +117,6 @@ describe("eachIntegrationTarget", () => {
     id: `int-${String(n).padStart(4, "0")}`,
     userId: `u${n}`,
     provider,
-    timezone: "Asia/Ho_Chi_Minh",
   });
 
   it("visits every integration for the provider, in id order", async () => {
@@ -134,16 +132,19 @@ describe("eachIntegrationTarget", () => {
     expect(seen).toEqual(["int-0001", "int-0002"]);
   });
 
-  it("carries the owner's timezone through", async () => {
+  it("carries no timezone — upstream wall clocks are parsed in DLU_TZ", async () => {
+    // A watcher must not be able to reach for the viewer's zone when turning
+    // the portal's "07g30" into an instant: that string describes a Vietnamese
+    // classroom, so it belongs to the data, not the reader (invariant #5).
     const { prisma } = prismaOver([row(1)]);
-    const zones: string[] = [];
+    const targets: unknown[] = [];
 
     await eachIntegrationTarget(prisma, "LMS", undefined, (t) => {
-      zones.push(t.timezone);
+      targets.push(t);
       return Promise.resolve();
     });
 
-    expect(zones).toEqual(["Asia/Ho_Chi_Minh"]);
+    expect(targets).toEqual([{ integrationId: "int-0001", userId: "u1" }]);
   });
 
   it("pages past the batch size instead of loading the table", async () => {
