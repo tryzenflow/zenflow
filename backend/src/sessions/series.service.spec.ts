@@ -32,6 +32,7 @@ function session(overrides: Partial<SessionRow> & { id: string }): SessionRow {
   return {
     title: "Session",
     note: null,
+    location: null,
     durationMinutes: 60,
     deadline: null,
     tags: [],

@@ -191,7 +191,7 @@ function DescriptionFieldEditor({
       // keeps any embedded image/video to a sane thumbnail-ish size, same
       // idea as the web editor's `prose-img:max-h-64` (`frontend/src/
       // index.css`).
-      `${fontFace} body { background-color: ${bg}; } .ProseMirror { background-color: ${bg}; color: ${fg}; font-family: ${fontFamily}; font-size: 15px; padding: 4px 12px; line-height: 0.8; overflow-y: auto; } .ProseMirror a { color: ${linkColor}; text-decoration: underline; } .ProseMirror img, .ProseMirror video { max-height: 200px; width: auto; object-fit: contain; border-radius: 8px; }`,
+      `${fontFace} body { background-color: ${bg}; } .ProseMirror { background-color: ${bg}; color: ${fg}; font-family: ${fontFamily}; font-size: 15px; padding: 4px 12px; line-height: 1.15; overflow-y: auto; } .ProseMirror a { color: ${linkColor}; text-decoration: underline; } .ProseMirror img, .ProseMirror video { max-height: 200px; width: auto; object-fit: contain; border-radius: 8px; }`,
       "description-field-theme",
     );
   }

@@ -1,13 +1,20 @@
-import { localDateStr } from "../../scheduler/core/slot";
+import { fromZonedTime } from "date-fns-tz";
+import {
+  addDaysStr,
+  DAY_MS,
+  isoWeekday,
+  localDateStr,
+} from "../../scheduler/core/slot";
 
 /**
  * DLU academic-calendar math.
  *
  * These values are **request parameters**, not scheduling inputs: the student
  * portal's timetable and exam endpoints are addressed by
- * `(namhoc, hocky[, tuan])` — academic year, term, ISO week — and there is no
- * "give me everything current" call. So before a watcher can fetch anything it
- * has to work out which term "now" falls in.
+ * `(academicYear, semester[, tuan])` — academic year, term, ISO week — and
+ * there is no "give me everything current" call. So before a watcher can fetch
+ * anything it has to work out which term "now" falls in, and — for the
+ * timetable — which weeks that term spans.
  *
  * Pure: `now` is always a parameter, the timezone is always explicit (the
  * server does not run in `Asia/Ho_Chi_Minh`, so the host clock's month is not
@@ -17,12 +24,28 @@ import { localDateStr } from "../../scheduler/core/slot";
 /** The three DLU terms, as the portal spells them. */
 export type TermId = "HK01" | "HK02" | "HK03";
 
-/** The `(namhoc, hocky)` pair the portal endpoints take. */
+/**
+ * How far ahead of `now` a term is resolved.
+ *
+ * DLU publishes a term's timetable before the term opens, so resolving the
+ * calendar strictly at `now` would leave a student staring at an empty
+ * calendar over every changeover — the run on the last Sunday of December
+ * would still be asking for HK01. Looking two weeks ahead rolls the watchers
+ * onto the new term while the outgoing one's rows are already stored, so the
+ * switch is invisible.
+ */
+export const SEMESTER_LOOKAHEAD_WEEKS = 2;
+
+/** The `(academicYear, semester)` pair the portal takes, plus the term's span. */
 export interface ResolvedSemester {
   /** Academic year, `"2026-2027"`. */
-  namhoc: string;
+  academicYear: string;
   /** Term id. */
-  hocky: TermId;
+  semester: TermId;
+  /** First instant of the term — Monday 00:00 of its opening week, in `tz`. */
+  startDate: Date;
+  /** Last instant of the term — Sunday 23:59:59.999 of its final week, in `tz`. */
+  endDate: Date;
 }
 
 /** Calendar year/month (1–12) of an instant in the given IANA timezone. */
@@ -31,28 +54,124 @@ function yearMonthIn(now: Date, tz: string): { year: number; month: number } {
   return { year, month };
 }
 
+/** `'YYYY-MM-DD'` of the last day of `month` (1-based) in `year`. */
+function lastDayOfMonthStr(year: number, month: number): string {
+  // Day 0 of the *following* month is the last day of this one.
+  return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+}
+
+/** `'YYYY-MM-DD'` of the Monday opening the ISO week that holds `dateStr`. */
+function isoWeekStartStr(dateStr: string): string {
+  return addDaysStr(dateStr, 1 - isoWeekday(dateStr));
+}
+
 /**
- * Which `(namhoc, hocky)` the instant `now` falls in, in timezone `tz`.
+ * Monday of the **last week** of `month` — the ISO week holding its last day.
  *
- * Terms (per `INTEGRATION_DOCS.md`):
- *  - **HK01** — August … December
- *  - **HK02** — January … May
- *  - **HK03** — June … July
- *
- * The academic year is named for the calendar year its HK01 starts in, so the
- * Dec→Jan rollover does **not** change `namhoc`: December 2026 and January
- * 2027 are both `"2026-2027"`. The year only rolls at the Jul→Aug boundary,
- * which is exactly where HK03 ends and the next HK01 begins.
+ * Every DLU term boundary is phrased that way ("the last week of July", "the
+ * last week of December"), and such a week routinely straddles the month end:
+ * the last week of July 2026 is Mon 27 Jul – Sun 2 Aug, which is equally "the
+ * first week of August".
  */
-export function resolveSemester(now: Date, tz: string): ResolvedSemester {
-  const { year, month } = yearMonthIn(now, tz);
+function lastWeekStartStr(year: number, month: number): string {
+  return isoWeekStartStr(lastDayOfMonthStr(year, month));
+}
 
-  const hocky: TermId = month >= 8 ? "HK01" : month >= 6 ? "HK03" : "HK02";
-  // month >= 8 → we are in the first half of the academic year; otherwise we
-  // are in the tail of the one that started last August.
-  const startYear = month >= 8 ? year : year - 1;
+/**
+ * The four week-boundaries of the academic year opening in `startYear`, as
+ * `'YYYY-MM-DD'` Mondays. Each term runs up to, but not into, the next.
+ */
+function termBoundaries(startYear: number): Record<TermId | "end", string> {
+  return {
+    /** Last week of July — HK01 opens. */
+    HK01: lastWeekStartStr(startYear, 7),
+    /** Last week of December — HK01 closes, HK02 opens. */
+    HK02: lastWeekStartStr(startYear, 12),
+    /** Last week of May — HK02 closes, HK03 opens. */
+    HK03: lastWeekStartStr(startYear + 1, 5),
+    /** Last week of July again — HK03 closes on the week before it. */
+    end: lastWeekStartStr(startYear + 1, 7),
+  };
+}
 
-  return { namhoc: `${startYear}-${startYear + 1}`, hocky };
+/** The instant a `'YYYY-MM-DD'` wall-clock day starts in timezone `tz`. */
+function dayStartIn(dateStr: string, tz: string): Date {
+  return fromZonedTime(`${dateStr}T00:00:00.000`, tz);
+}
+
+/**
+ * Which `(academicYear, semester)` the instant `now` falls in, in timezone
+ * `tz`, and the window that term covers.
+ *
+ * Terms, as DLU publishes them. Boundaries are *weeks*, not month ends, so a
+ * `tuan` never has to be split across two terms:
+ *  - **HK01** — the last week of July … the week before the last week of December
+ *  - **HK02** — the last week of December … the week before the last week of May
+ *  - **HK03** — the last week of May … the week before the last week of July
+ *
+ * The academic year is named for the calendar year its HK01 opens in, so the
+ * Dec→Jan rollover does **not** change `academicYear`: December 2026 and
+ * January 2027 are both `"2026-2027"`. The year only rolls where HK03 ends and
+ * the next HK01 begins, in late July.
+ *
+ * `lookaheadWeeks` shifts the instant the term is *resolved* at (see
+ * {@link SEMESTER_LOOKAHEAD_WEEKS}); it does not move the returned window, so
+ * `startDate` is legitimately in the future for the last fortnight of a term.
+ */
+export function resolveSemester(
+  now: Date,
+  tz: string,
+  lookaheadWeeks: number = SEMESTER_LOOKAHEAD_WEEKS,
+): ResolvedSemester {
+  const probe = localDateStr(
+    new Date(now.getTime() + lookaheadWeeks * 7 * DAY_MS),
+    tz,
+  );
+  const [probeYear] = probe.split("-").map(Number);
+
+  // Before this July's HK01 opens we are still inside the year that opened
+  // last July.
+  const startYear =
+    probe >= lastWeekStartStr(probeYear, 7) ? probeYear : probeYear - 1;
+  const bounds = termBoundaries(startYear);
+
+  // Plain string comparison: 'YYYY-MM-DD' sorts chronologically.
+  const semester: TermId =
+    probe < bounds.HK02 ? "HK01" : probe < bounds.HK03 ? "HK02" : "HK03";
+  const nextStart =
+    semester === "HK01"
+      ? bounds.HK02
+      : semester === "HK02"
+        ? bounds.HK03
+        : bounds.end;
+
+  return {
+    academicYear: `${startYear}-${startYear + 1}`,
+    semester,
+    startDate: dayStartIn(bounds[semester], tz),
+    // A term ends the instant the next one opens.
+    endDate: new Date(dayStartIn(nextStart, tz).getTime() - 1),
+  };
+}
+
+/**
+ * ISO-8601 week number (1–53) of a `'YYYY-MM-DD'` day.
+ *
+ * Standard ISO rule: the week a date belongs to is the week containing that
+ * week's Thursday, and week 1 is the week containing 4 January. Computed with
+ * pure `Date.UTC` arithmetic, so no DST or host-tz effects can leak in.
+ */
+function isoWeekOfStr(dateStr: string): number {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const d = new Date(Date.UTC(year, month - 1, day));
+
+  // Shift to the Thursday of this ISO week (Sunday counts as weekday 7).
+  const weekday = d.getUTCDay() === 0 ? 7 : d.getUTCDay();
+  d.setUTCDate(d.getUTCDate() + 4 - weekday);
+
+  // Week 1 is the week holding 1 January of the Thursday's year.
+  const jan1 = Date.UTC(d.getUTCFullYear(), 0, 1);
+  return Math.ceil(((d.getTime() - jan1) / DAY_MS + 1) / 7);
 }
 
 /**
@@ -61,24 +180,33 @@ export function resolveSemester(now: Date, tz: string): ResolvedSemester {
  *
  * Verified against the captured timetable row: `Ngay: "17/08/2026"` carries
  * `Week: 34`, and 17 Aug 2026 is indeed the Monday of ISO week 34.
- *
- * Standard ISO rule: the week a date belongs to is the week containing that
- * week's Thursday, and week 1 is the week containing 4 January. Computed with
- * pure `Date.UTC` arithmetic on the localized date parts, so no DST or host-tz
- * effects can leak in.
  */
 export function isoWeek(date: Date, tz: string): number {
-  const [year, month, day] = localDateStr(date, tz).split("-").map(Number);
-  const d = new Date(Date.UTC(year, month - 1, day));
+  return isoWeekOfStr(localDateStr(date, tz));
+}
 
-  // Shift to the Thursday of this ISO week (Sunday counts as weekday 7).
-  const isoWeekday = d.getUTCDay() === 0 ? 7 : d.getUTCDay();
-  d.setUTCDate(d.getUTCDate() + 4 - isoWeekday);
-
-  // Week 1 is the week holding 1 January of the Thursday's year.
-  const jan1 = Date.UTC(d.getUTCFullYear(), 0, 1);
-  const daysSinceJan1 = (d.getTime() - jan1) / 86_400_000;
-  return Math.ceil((daysSinceJan1 + 1) / 7);
+/**
+ * Every `tuan` covering `[from, to]` in timezone `tz`, in calendar order.
+ *
+ * Week *numbers* cannot be enumerated arithmetically — they wrap 52 (or 53) →
+ * 1 inside HK02, which straddles New Year — so this walks the calendar one
+ * Monday at a time and reads each week's number off the date. The first entry
+ * is the week `from` falls in even when `from` is mid-week: the portal answers
+ * a whole week at a time, so a partial week still has to be fetched whole.
+ *
+ * Returns `[]` when `to` precedes the Monday of `from`'s week.
+ */
+export function isoWeeksBetween(from: Date, to: Date, tz: string): number[] {
+  const last = localDateStr(to, tz);
+  const weeks: number[] = [];
+  for (
+    let monday = isoWeekStartStr(localDateStr(from, tz));
+    monday <= last;
+    monday = addDaysStr(monday, 7)
+  ) {
+    weeks.push(isoWeekOfStr(monday));
+  }
+  return weeks;
 }
 
 /** A calendar year plus a **1-based** month (1 = January), as Moodle wants it. */

@@ -49,6 +49,7 @@ export interface MoodleCalendarEvent {
   /** Unix epoch seconds Moodle sorts by; equals `timestart` in practice. */
   timesort?: number | null;
   location?: string | null;
+  description?: string | null;
   course?: MoodleCourseRef | null;
 }
 
@@ -192,7 +193,7 @@ export function parseMonthlyView(
       // `timestart` IS the due instant; the block sits just before it.
       ...reminderBefore(new Date(event.timestart * 1000)),
       location: event.location?.trim() || null,
-      note: null,
+      note: event.description || null,
       lmsCourseId: event.course?.id ?? null,
     });
   }

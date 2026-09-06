@@ -55,6 +55,8 @@ export const sessionSchema = z
       }),
     tags: z.array(z.string()).default([]),
     note: z.string().optional(),
+    /** Free-text location (room / building). Optional for every session type. */
+    location: z.string().optional(),
 
     // TASK-only
     duration: z

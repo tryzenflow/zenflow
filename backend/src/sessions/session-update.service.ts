@@ -170,6 +170,7 @@ export class SessionUpdateService {
           const data: Prisma.SessionUpdateInput = {};
           if (dto.title !== undefined) data.title = dto.title;
           if (dto.note !== undefined) data.note = dto.note;
+          if (dto.location !== undefined) data.location = dto.location;
 
           const durationChanged =
             dto.durationMinutes !== undefined &&

@@ -36,6 +36,7 @@ const EMPTY_DEFAULTS: SessionFormValues = {
   sessionCount: DEFAULT_SESSION_COUNT,
   tags: [],
   note: "",
+  location: "",
   deadline: "",
 };
 
@@ -46,6 +47,7 @@ function toCreateInput(
   const base = {
     title: values.title,
     note: values.note || null,
+    location: values.location || null,
     tags: values.tags,
   };
   if (values.type === "TASK") {
@@ -141,6 +143,7 @@ export default function NewSessionScreen() {
     const common = {
       title: form.getValues("title"),
       note: form.getValues("note"),
+      location: form.getValues("location"),
       tags: form.getValues("tags"),
     };
     form.reset(

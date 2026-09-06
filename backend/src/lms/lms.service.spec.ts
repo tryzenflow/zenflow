@@ -8,19 +8,27 @@ const config = {
     ({ LMS_URL: BASE, LMS_TIMEOUT_MS: "15000" })[key],
 } as unknown as ConfigService;
 
-/** Minimal `Response` stand-in — `getSetCookie()` is what the client reads. */
+/**
+ * Minimal `Response` stand-in — `getSetCookie()` and `get("location")` are the
+ * two header reads the client makes.
+ */
 const reply = (
   init: {
     status?: number;
     body?: string;
     json?: unknown;
     setCookie?: string[];
+    location?: string;
   } = {},
 ): Response =>
   ({
     status: init.status ?? 200,
     ok: (init.status ?? 200) < 400,
-    headers: { getSetCookie: () => init.setCookie ?? [] },
+    headers: {
+      getSetCookie: () => init.setCookie ?? [],
+      get: (name: string) =>
+        name.toLowerCase() === "location" ? (init.location ?? null) : null,
+    },
     text: () => Promise.resolve(init.body ?? ""),
     json: () => Promise.resolve(init.json),
   }) as unknown as Response;
@@ -36,9 +44,14 @@ const LOGIN_FORM = reply({
   setCookie: ["MoodleSession=anonymous; path=/; HttpOnly"],
 });
 
-/** Moodle regenerates the session id on a successful login. */
+/**
+ * Moodle regenerates the session id on a successful login, and bounces through
+ * `?testsession=<id>` — a query string, so it is not the bare login form a
+ * rejection sends you back to.
+ */
 const LOGIN_REDIRECT = reply({
   status: 303,
+  location: `${BASE}/login/index.php?testsession=42`,
   setCookie: ["MoodleSession=authenticated; path=/; HttpOnly"],
 });
 
@@ -92,6 +105,22 @@ describe("LMSService.login", () => {
     expect(dashboardInit.headers.cookie).toBe("MoodleSession=authenticated");
   });
 
+  it("reads a bounce back to the bare login form as a rejected password", async () => {
+    fetchMock.mockResolvedValueOnce(LOGIN_FORM).mockResolvedValueOnce(
+      reply({
+        status: 303,
+        location: `${BASE}/login/index.php`,
+        setCookie: ["MoodleSession=anonymous; path=/; HttpOnly"],
+      }),
+    );
+
+    await expect(service.login("sv", "wrong")).resolves.toEqual({
+      ok: false,
+      reason: "INVALID_CREDENTIALS",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("reports a rejected password as a result, not an exception", async () => {
     fetchMock.mockResolvedValueOnce(LOGIN_FORM).mockResolvedValueOnce(
       reply({
@@ -114,14 +143,36 @@ describe("LMSService.login", () => {
     await expect(service.login("sv", "pw")).rejects.toThrow(/unreachable/i);
   });
 
-  it("throws on a 200 that is neither a redirect nor a recognizable error", async () => {
+  it("accepts a 200 without a redirect — DLU answers the POST in place", async () => {
+    fetchMock
+      .mockResolvedValueOnce(LOGIN_FORM)
+      .mockResolvedValueOnce(
+        reply({
+          status: 200,
+          body: "<h1>Dashboard</h1>",
+          setCookie: ["MoodleSession=authenticated; path=/; HttpOnly"],
+        }),
+      )
+      .mockResolvedValueOnce(DASHBOARD);
+
+    await expect(service.login("sv", "pw")).resolves.toEqual({
+      ok: true,
+      session: {
+        cookie: "MoodleSession=authenticated",
+        sesskey: "TESTSESSKEY",
+      },
+    });
+  });
+
+  it("lets the sesskey lookup, not the wording, judge an unrecognizable 200", async () => {
     fetchMock
       .mockResolvedValueOnce(LOGIN_FORM)
       .mockResolvedValueOnce(
         reply({ status: 200, body: "<h1>Maintenance</h1>" }),
-      );
+      )
+      .mockResolvedValueOnce(reply({ body: "<h1>Maintenance</h1>" }));
 
-    await expect(service.login("sv", "pw")).rejects.toThrow(/Unexpected LMS/);
+    await expect(service.login("sv", "pw")).rejects.toThrow(/no sesskey/);
   });
 
   it("throws when the dashboard carries no sesskey", async () => {

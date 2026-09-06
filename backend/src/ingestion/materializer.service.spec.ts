@@ -14,6 +14,7 @@ interface SessionRow {
   externalKey: string | null;
   title: string;
   note: string | null;
+  location: string | null;
   type: string;
   source: string;
   durationMinutes: number;
@@ -76,6 +77,7 @@ function makePrismaDouble() {
           externalKey,
           title: data.title as string,
           note: (data.note as string | null) ?? null,
+          location: (data.location as string | null) ?? null,
           type: data.type as string,
           source: data.source as string,
           durationMinutes: data.durationMinutes as number,
@@ -190,7 +192,7 @@ describe("MaterializerService", () => {
       });
     });
 
-    it("folds the room into the note, since Session has no location column", async () => {
+    it("writes the room to the location column and leaves the note untouched", async () => {
       const { db, service } = makeService();
 
       await service.materialize(
@@ -200,13 +202,14 @@ describe("MaterializerService", () => {
             externalKey: "portal:meeting:600001",
             type: "LECTURE",
             location: "X01.01",
-            note: "Thi máy",
+            note: null,
           }),
         ],
         "PORTAL",
       );
 
-      expect(db.sessions[0].note).toBe("Thi máy · Room X01.01");
+      expect(db.sessions[0].location).toBe("X01.01");
+      expect(db.sessions[0].note).toBeNull();
     });
 
     it("maps EXAM and LECTURE onto their notification topics", async () => {
@@ -237,6 +240,7 @@ describe("MaterializerService", () => {
         externalKey: "lms:assign:800001",
         title: "already there",
         note: null,
+        location: null,
         type: "ASSIGNMENT",
         source: "LMS",
         durationMinutes: 15,

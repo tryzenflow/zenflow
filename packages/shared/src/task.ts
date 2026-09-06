@@ -22,6 +22,12 @@ export interface Session {
   id: string;
   title: string;
   note: string | null;
+  /**
+   * Free-text location (room / building / campus), or `null`. Set directly by
+   * the client for a user-pinned session; written by the DLU watchers from the
+   * upstream room for an ingested fixed session.
+   */
+  location: string | null;
   /** Always a positive multiple of 15. */
   durationMinutes: number;
   /**
@@ -62,6 +68,8 @@ export interface CreateTaskInput {
   type: "TASK";
   title: string;
   note?: string | null;
+  /** Free-text location (room / building), optional. */
+  location?: string | null;
   /** Positive multiple of 15. */
   durationMinutes: number;
   /** ISO-8601 deadline — required for a `TASK`; shared by every session of a series. */
@@ -81,6 +89,8 @@ export interface CreateFixedSessionInput {
   type: "ASSIGNMENT" | "EXAM" | "LECTURE";
   title: string;
   note?: string | null;
+  /** Free-text location (room / building), optional. */
+  location?: string | null;
   /** Positive multiple of 15 (the client derives it from start/end pickers). */
   durationMinutes: number;
   /** ISO-8601 instant — required; there is no deadline for a fixed session. */
@@ -99,6 +109,8 @@ export interface CreateDndInput {
   type: "DND";
   title: string;
   note?: string | null;
+  /** Free-text location (room / building), optional. */
+  location?: string | null;
   durationMinutes: number;
   scheduledStartTime: string;
   /** RFC 5545 RRULE; omit for a one-off block. */
@@ -131,6 +143,8 @@ export type UpdateScope = "occurrence" | "following" | "series";
 export interface UpdateSessionInput {
   title?: string;
   note?: string | null;
+  /** Free-text location (room / building). `null` clears it; omit to leave unchanged. */
+  location?: string | null;
   durationMinutes?: number;
   /** ISO-8601 deadline (TASK only). Omit to leave unchanged. */
   deadline?: string;

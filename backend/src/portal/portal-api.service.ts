@@ -39,7 +39,7 @@ const REJECTED_LOGIN_STATUSES: readonly number[] = [
  * `PORTAL_API_KEY` in config and is never hardcoded and never logged.
  *
  * The timetable and exam endpoints are addressed by academic coordinates
- * (`namhoc`, `hocky`, `tuan`), not by date range; `ingestion/core/semester.ts`
+ * (`academicYear`, `semester`, `tuan`), not by date range; `ingestion/core/semester.ts`
  * turns "now" into those. Responses are handed to the pure parsers in
  * `ingestion/core/parse-portal.ts`.
  */
@@ -114,13 +114,13 @@ export class PortalAPIService {
    */
   async fetchTimetable(
     token: string,
-    namhoc: string,
-    hocky: string,
+    academicYear: string,
+    semester: string,
     tuan: number,
   ): Promise<PortalTimetableRow[]> {
     const query = new URLSearchParams({
-      namhoc,
-      hocky,
+      namhoc: academicYear,
+      hocky: semester,
       tuan: String(tuan),
     });
     return this.getJson<PortalTimetableRow>(
@@ -136,10 +136,13 @@ export class PortalAPIService {
    */
   async fetchExams(
     token: string,
-    namhoc: string,
-    hocky: string,
+    academicYear: string,
+    semester: string,
   ): Promise<PortalExamRow[]> {
-    const query = new URLSearchParams({ namhoc, hocky });
+    const query = new URLSearchParams({
+      namhoc: academicYear,
+      hocky: semester,
+    });
     return this.getJson<PortalExamRow>(`/api/student/exam?${query}`, token);
   }
 

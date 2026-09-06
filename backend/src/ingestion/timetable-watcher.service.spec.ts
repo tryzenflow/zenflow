@@ -107,8 +107,15 @@ function makePrismaDouble(
 
 // ── fixtures (deliberately fictional — never real DLU data) ────────────────
 
-/** Monday 17 Aug 2026, 11:00 in Vietnam — ISO week 34. */
+/** Monday 17 Aug 2026, 11:00 in Vietnam — ISO week 34, inside HK01 2026-2027. */
 const NOW = new Date("2026-08-17T04:00:00.000Z");
+
+/**
+ * The weeks a run at {@link NOW} has to cover: everything left of HK01, which
+ * closes on Sun 27 Dec 2026 (the last week of December opens HK02) — so weeks
+ * 34 through 52.
+ */
+const REMAINING_WEEKS = Array.from({ length: 19 }, (_, i) => 34 + i);
 
 const TIMETABLE_ROWS: PortalTimetableRow[] = [
   {
@@ -195,15 +202,46 @@ describe("TimetableWatcherService", () => {
     expect(w.db.jobs).toHaveLength(0);
   });
 
-  it("resolves the term and asks for this week and the next", async () => {
+  it("resolves the term and asks for every week left in it", async () => {
     const w = makeWatcher();
 
     await expect(w.service.run(NOW)).resolves.toBe(1);
 
+    // One sign-in for the whole sweep, not one per week.
     expect(w.authenticate).toHaveBeenCalledTimes(1);
-    expect(w.fetchTimetable.mock.calls).toEqual([
-      ["test-token", "2026-2027", "HK01", 34],
-      ["test-token", "2026-2027", "HK01", 35],
+    expect(w.fetchTimetable.mock.calls).toEqual(
+      REMAINING_WEEKS.map((week) => ["test-token", "2026-2027", "HK01", week]),
+    );
+  });
+
+  it("does not look back at weeks the student has already lived through", async () => {
+    const w = makeWatcher();
+
+    // Sunday 25 Oct 2026 — week 43 is nearly over, but the portal answers per
+    // week, so the current week is still fetched whole; 34–42 are not.
+    await w.service.run(new Date("2026-10-25T04:00:00.000Z"));
+
+    const weeks = w.fetchTimetable.mock.calls.map((c) => (c as unknown[])[3]);
+    expect(weeks[0]).toBe(43);
+    expect(weeks[weeks.length - 1]).toBe(52);
+  });
+
+  it("starts at the new term's opening week once the lookahead rolls over", async () => {
+    const w = makeWatcher();
+
+    // Sunday 20 Dec 2026: HK01 has days left, but HK02 opens within the
+    // two-week lookahead, so the sweep jumps to HK02's first week (53) rather
+    // than re-reading HK01's tail.
+    await w.service.run(new Date("2026-12-20T04:00:00.000Z"));
+
+    const calls = w.fetchTimetable.mock.calls as unknown[][];
+    expect(calls[0]).toEqual(["test-token", "2026-2027", "HK02", 53]);
+    expect(calls[1]).toEqual(["test-token", "2026-2027", "HK02", 1]);
+    expect(calls[calls.length - 1]).toEqual([
+      "test-token",
+      "2026-2027",
+      "HK02",
+      21,
     ]);
   });
 
@@ -213,8 +251,9 @@ describe("TimetableWatcherService", () => {
     await w.service.run(NOW);
 
     expect(w.db.jobStatusLog).toEqual(["PENDING", "PROCESSING", "COMPLETED"]);
-    expect(w.db.items).toHaveLength(2);
+    expect(w.db.items).toHaveLength(REMAINING_WEEKS.length);
     expect(w.db.items[0].url).toContain("tuan=34");
+    expect(w.db.items[w.db.items.length - 1].url).toContain("tuan=52");
   });
 
   it("materializes the parsed meetings as PORTAL-sourced", async () => {
@@ -285,14 +324,17 @@ describe("TimetableWatcherService", () => {
       .mockRejectedValueOnce(
         new Error("Portal request to /api/student/x failed (status 500)"),
       )
-      .mockResolvedValueOnce(TIMETABLE_ROWS);
+      .mockResolvedValue(TIMETABLE_ROWS);
     const w = makeWatcher({ fetchTimetable });
 
     await w.service.run(NOW);
 
-    expect(w.db.items.map((i) => i.status)).toEqual(["FAILED", "COMPLETED"]);
+    expect(w.db.items.map((i) => i.status)).toEqual([
+      "FAILED",
+      ...REMAINING_WEEKS.slice(1).map(() => "COMPLETED"),
+    ]);
     expect(w.db.items[0].statusCode).toBe(500);
     expect(w.db.jobs[0].status).toBe("COMPLETED");
-    expect(w.materialize).toHaveBeenCalledTimes(1);
+    expect(w.materialize).toHaveBeenCalledTimes(REMAINING_WEEKS.length - 1);
   });
 });
