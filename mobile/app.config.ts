@@ -7,7 +7,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: "Zenflow",
   slug: "zenflow",
-  newArchEnabled: true,
+  newArchEnabled: false,
   version: "0.1.0",
   orientation: "portrait",
   icon: "./assets/images/icon.png",

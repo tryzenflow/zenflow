@@ -38,8 +38,11 @@ import {
   Cloud,
   Code,
   Copy,
+  CreditCard,
   Database,
   Ear,
+  Eye,
+  EyeOff,
   Fan,
   GalleryHorizontal,
   Github,
@@ -66,6 +69,7 @@ import {
   MessageCircleQuestion,
   MessageSquare,
   MinusCircle,
+  Monitor,
   Moon,
   MoonStar,
   MousePointer2,
@@ -126,6 +130,8 @@ interopIcon(Calendar);
 interopIcon(CircleUserRound);
 interopIcon(Database);
 interopIcon(Ear);
+interopIcon(Eye);
+interopIcon(EyeOff);
 interopIcon(Fan);
 interopIcon(GalleryHorizontal);
 interopIcon(Lamp);
@@ -143,6 +149,7 @@ interopIcon(ChevronsLeft);
 interopIcon(ChevronsRight);
 interopIcon(ChevronsUpDown);
 interopIcon(Copy);
+interopIcon(CreditCard);
 interopIcon(CalendarDays);
 interopIcon(Sparkles);
 interopIcon(Bold);
@@ -160,6 +167,7 @@ interopIcon(LifeBuoy);
 interopIcon(LogOut);
 interopIcon(Mail);
 interopIcon(MessageSquare);
+interopIcon(Monitor);
 interopIcon(Plus);
 interopIcon(PlusCircle);
 interopIcon(UserPlus);
@@ -246,8 +254,11 @@ export {
   Cloud,
   Code,
   Copy,
+  CreditCard,
   Database,
   Ear,
+  Eye,
+  EyeOff,
   Fan,
   GalleryHorizontal,
   Globe,
@@ -271,6 +282,7 @@ export {
   MessageCircleQuestion,
   MessageSquare,
   MinusCircle,
+  Monitor,
   MoonStar,
   MousePointer2,
   Notebook,
