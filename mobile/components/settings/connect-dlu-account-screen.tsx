@@ -310,7 +310,7 @@ export function ConnectDluAccountScreen({ onBack }: { onBack?: () => void }) {
           index={0}
           enablePanDownToClose={true}
         >
-          <BottomSheetView className="flex-1 pb-8">
+          <BottomSheetView className="pb-8">
             <View className=" pb-3 pt-1">
               <Text className="text-xl font-bold tracking-tight">
                 Sign in to your DLU{" "}
