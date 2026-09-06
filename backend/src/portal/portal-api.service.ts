@@ -6,6 +6,31 @@ import type {
 } from "../ingestion/core/parse-portal";
 
 /**
+ * Outcome of {@link PortalAPIService.authenticate}.
+ *
+ * Mirrors `LmsLoginResult` on purpose: rejected credentials are a **result**,
+ * not an exception, because the caller has to tell them apart from "the portal
+ * is down". `IntegrationsService.storeCredentials` maps any throw to a `503`
+ * "Couldn't reach DLU", so a wrong password that throws tells a student with a
+ * typo that the university is offline. Only genuine transport/site failures
+ * throw.
+ */
+export type PortalAuthResult =
+  | { ok: true; token: string }
+  | { ok: false; reason: "INVALID_CREDENTIALS" };
+
+/**
+ * Statuses the portal answers a rejected login with. Any other 4xx (a 404 from
+ * a moved endpoint, say) is the site misbehaving, not the student, so it
+ * throws.
+ */
+const REJECTED_LOGIN_STATUSES: readonly number[] = [
+  Number(HttpStatus.BAD_REQUEST),
+  Number(HttpStatus.UNAUTHORIZED),
+  Number(HttpStatus.FORBIDDEN),
+];
+
+/**
  * HTTP client for the DLU student portal API (`PORTAL_API_URL`).
  *
  * Three endpoints, all JSON, all behind the same three headers:
@@ -31,11 +56,18 @@ export class PortalAPIService {
   }
 
   /**
-   * DLU student portal (ASP.NET WebForms). A full `__VIEWSTATE` round-trip
-   * belongs to the ingestion service; here we submit the standard login form
-   * and treat a redirect away from the login page as success.
+   * Exchange a student's portal credentials for the bearer token every other
+   * call needs.
+   *
+   * Returns `{ ok: false, reason: "INVALID_CREDENTIALS" }` when the portal
+   * answers and rejects the login (`400`/`401`/`403`); throws only when the
+   * portal is unreachable or answers in a shape we cannot make sense of — a
+   * `200` with no `Token`, or an unexpected status. See {@link PortalAuthResult}.
    */
-  async authenticate(username: string, password: string): Promise<string> {
+  async authenticate(
+    username: string,
+    password: string,
+  ): Promise<PortalAuthResult> {
     const loginUrl = `${this.endpoint}/api/authenticate/authpsc`;
     const res = await this.fetch(loginUrl, {
       method: "POST",
@@ -51,22 +83,25 @@ export class PortalAPIService {
       }),
     });
 
-    const json = (await res.json()) as Record<string, unknown> | null;
-
-    if (res.status === Number(HttpStatus.OK)) {
-      if (!json || !("Token" in json))
-        throw new Error(`Login successfully, but cannot find token`);
-
-      return json.Token as string;
+    if (REJECTED_LOGIN_STATUSES.includes(res.status)) {
+      // The portal answered — it just doesn't like these credentials. Never
+      // log the body: it echoes the submitted username.
+      return { ok: false, reason: "INVALID_CREDENTIALS" };
     }
 
-    if (
-      res.status >= Number(HttpStatus.BAD_REQUEST) &&
-      res.status < Number(HttpStatus.INTERNAL_SERVER_ERROR)
-    )
-      throw new Error(
-        `Client error when trying to authenticate portal API (status: ${res.status}, message: ${JSON.stringify(json)})`,
-      );
+    const json = (await res.json().catch(() => null)) as Record<
+      string,
+      unknown
+    > | null;
+
+    if (res.status === Number(HttpStatus.OK)) {
+      const token = json?.Token;
+      if (typeof token !== "string" || token.length === 0) {
+        throw new Error("Portal accepted the login but returned no token");
+      }
+      return { ok: true, token };
+    }
+
     throw new Error(`Unexpected portal login response (status ${res.status})`);
   }
 

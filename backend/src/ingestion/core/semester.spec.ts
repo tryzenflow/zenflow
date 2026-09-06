@@ -1,4 +1,4 @@
-import { isoWeek, resolveSemester } from "./semester";
+import { isoWeek, monthsFrom, resolveSemester } from "./semester";
 
 const VN = "Asia/Ho_Chi_Minh"; // UTC+7, no DST — the DLU_TZ default
 
@@ -91,5 +91,43 @@ describe("isoWeek", () => {
     const instant = new Date("2026-08-23T18:00:00.000Z");
     expect(isoWeek(instant, "UTC")).toBe(34);
     expect(isoWeek(instant, VN)).toBe(35);
+  });
+});
+
+describe("monthsFrom", () => {
+  it("returns the current month first, 1-based", () => {
+    expect(monthsFrom(vn("2026-09-06T10:00:00"), VN, 1)).toEqual([
+      { year: 2026, month: 9 },
+    ]);
+  });
+
+  it("returns the current month and the next one", () => {
+    expect(monthsFrom(vn("2026-09-06T10:00:00"), VN, 2)).toEqual([
+      { year: 2026, month: 9 },
+      { year: 2026, month: 10 },
+    ]);
+  });
+
+  it("rolls the year over at the Dec to Jan boundary", () => {
+    expect(monthsFrom(vn("2026-12-31T23:30:00"), VN, 2)).toEqual([
+      { year: 2026, month: 12 },
+      { year: 2027, month: 1 },
+    ]);
+  });
+
+  it("reads the month in the given timezone, not the host clock", () => {
+    // 23:30 UTC on 31 Aug is already 06:30 on 1 Sep in Vietnam.
+    const instant = new Date("2026-08-31T23:30:00.000Z");
+    expect(monthsFrom(instant, "UTC", 1)).toEqual([{ year: 2026, month: 8 }]);
+    expect(monthsFrom(instant, VN, 1)).toEqual([{ year: 2026, month: 9 }]);
+  });
+
+  it("wraps past a full year when asked for many months", () => {
+    expect(monthsFrom(vn("2026-11-10T08:00:00"), VN, 4)).toEqual([
+      { year: 2026, month: 11 },
+      { year: 2026, month: 12 },
+      { year: 2027, month: 1 },
+      { year: 2027, month: 2 },
+    ]);
   });
 });

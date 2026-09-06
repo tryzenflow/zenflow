@@ -73,16 +73,24 @@ backend/
 │   │                           #   BanditArmStateRepository (per-user (A,b) load/save)
 │   ├── experiments/            # ExperimentService — 50/50 policy assignment + SlotProposal
 │   ├── ingestion/             # DLU LMS/portal ingestion (issues #27/#29/#30)
-│   │   └── core/               # PURE parsers — no Prisma, no clock, no randomness
-│   │       ├── semester.ts         # resolveSemester / isoWeek — the portal's (namhoc, hocky, tuan)
-│   │       ├── period-map.ts       # teaching periods ("tiết") → wall-clock minutes
-│   │       ├── grid.ts             # 15-minute grid snapping (invariant #3)
-│   │       ├── parse-lms.ts        # Moodle monthly calendar → assignment / quiz blocks
-│   │       ├── parse-portal.ts     # timetable + exam rows → lecture / exam blocks
-│   │       └── types.ts            # ParsedBlock / ParsedLmsItem / ParsedPortalItem / SkippedItem
+│   │   ├── core/               # PURE parsers — no Prisma, no clock, no randomness
+│   │   │   ├── semester.ts         # resolveSemester / isoWeek / monthsFrom — the portal's (namhoc, hocky, tuan)
+│   │   │   ├── period-map.ts       # teaching periods ("tiết") → wall-clock minutes
+│   │   │   ├── grid.ts             # 15-minute grid snapping (invariant #3)
+│   │   │   ├── parse-lms.ts        # Moodle monthly calendar → assignment / quiz blocks
+│   │   │   ├── parse-portal.ts     # timetable + exam rows → lecture / exam blocks
+│   │   │   └── types.ts            # ParsedBlock / ParsedLmsItem / ParsedPortalItem / SkippedItem
+│   │   ├── lms-watcher.service.ts       # @Cron EVERY_HOUR — this month + next
+│   │   ├── timetable-watcher.service.ts # @Cron 03:00 — this ISO week + next
+│   │   ├── exam-watcher.service.ts      # @Cron 04:00 — the whole term, one request
+│   │   ├── materializer.service.ts      # the write-back: Session + Notification, idempotent
+│   │   ├── ingestion-jobs.service.ts    # per-run LmsSyncJob / PortalAPIJob + item rows
+│   │   ├── ingestion-sync.service.ts    # the POST /integrations/:provider/sync seam
+│   │   └── watcher-support.ts           # integration paging, sleep, job-item diagnostics
 │   ├── lms/                   # LMSService — fetch-based Moodle client (login → sesskey, calendar)
 │   ├── portal/                # PortalAPIService — student-portal client (auth, timetable, exams)
 │   ├── integrations/          # encrypted DLU credential storage + live login probe
+│   ├── notifications/         # the ingestion inbox — read + acknowledge only
 │   ├── files/                 # multipart upload/download to local disk
 │   ├── mail/                  # login email + Handlebars templates
 │   ├── prisma/                # PrismaService + Postgres error-code map
@@ -261,6 +269,74 @@ hardcoded, never logged). Timeouts come from `LMS_TIMEOUT_MS` / `PORTAL_API_TIME
 `lms:assign:<instance>`, `lms:quiz:<instance>`, `portal:meeting:<WeekScheduleID>`,
 `portal:exam:<Examination>`.
 
+### Watchers (the three crons)
+
+Same house shape as the scheduler's crons (`scheduler/io/matrix-decay.service.ts`): a thin
+`@Cron` delegating to a testable `run(now = new Date(), userId?)` that takes its clock as a
+parameter. `userId` narrows the sweep to one student — that is the manual sync endpoint,
+running the *same* code rather than a second path that could drift.
+
+| Service | Cron | Requests per student per run |
+| --- | --- | --- |
+| `lms-watcher.service.ts` | `EVERY_HOUR` | 2 — the current month and the next (a quiz opening on the 30th and closing on the 2nd is only a complete pair in one of them) |
+| `timetable-watcher.service.ts` | `EVERY_DAY_AT_3AM` | 2 — the current ISO week and the next, for the resolved `(namhoc, hocky)` |
+| `exam-watcher.service.ts` | `EVERY_DAY_AT_4AM` | 1 — `/api/student/exam` returns a whole term |
+
+The LMS gets the hourly slot because a deadline can be published or moved at any time; a
+timetable and an exam schedule change a handful of times a term, so polling them hourly
+would be almost entirely wasted requests. Every run gates on `INGESTION_ENABLED` first.
+
+Each run: page the `Integration` rows for the provider (cursor-paginated, 50 at a time),
+process students **sequentially** with a fixed `INGESTION_REQUEST_DELAY_MS` pause between
+outbound requests, decrypt via `IntegrationsService.revealCredentials`, **log in once** and
+reuse the session/token for the whole run, then parse, upsert the course catalog
+(`LmsCourse` by `lmsCourseId`, `PortalSection` by `scheduleStudyUnitId`) and hand the blocks
+to the materializer. Politeness is deliberately this trivial — no queue, no rate limiter, no
+circuit breaker; those are deferred and the layering is shaped so they land additively.
+
+Portal wall-clock strings are converted using the student's own `User.timezone`, falling
+back to `DLU_TZ`; the academic coordinates (`namhoc`, `hocky`, `tuan`) are always resolved in
+`DLU_TZ`, since they are a property of the university's calendar rather than the student's.
+
+**Job tracking.** One `LmsSyncJob` / `PortalAPIJob` per student per run
+(`PENDING → PROCESSING → COMPLETED | FAILED`) tied to the `Integration`, and one `*JobItem`
+per outbound request (`url`, `attempt`, `statusCode`, `responseBody`). An item is written
+`PROCESSING` *before* the request, so a process killed mid-flight leaves evidence of which
+call hung. `responseBody` holds `{ body, skipped, error? }` — the raw upstream payload plus
+the parser's `SkippedItem[]`, because "this payload produced nothing" is a bug report while
+"…*because periods 5–6 are undocumented*" is an answer. A failed item stays `FAILED` and the
+run continues; only a **login** failure fails the job, because without a session there is no
+request to attach the failure to. These rows are not mere diagnostics: they are what
+`IntegrationStatus.lastSyncedAt` / `.lastSyncStatus` are derived from.
+
+Nothing wraps N writes in one interactive `$transaction` — `PrismaService` sets a 20s
+timeout and warns about exactly that; every item is its own small transaction.
+
+### Write-back (`materializer.service.ts`)
+
+An ingested item lands on the calendar **and** raises a notification, whose call to action
+is "plan work around this", not "confirm this item" — it already exists upstream.
+
+- **Session** — inserted through `sessions/fixed-session-writer.ts`'s `insertFixedSession`,
+  the same insert `SessionCrudService` uses for a user-pinned fixed session, so `source`,
+  `externalKey` and the `CREATE` `SessionEvent` cannot drift between the two paths. The HTTP
+  DTO is not reusable here: `CreateSessionDto` has no `source` field and sits behind
+  `forbidNonWhitelisted`. `ParsedBlock.location` is folded into `note` (there is no
+  `location` column).
+- **Idempotent** on `[userId, externalKey]`, so an hourly re-run of the same window is a
+  no-op; `P2002` is the race signal for two runs overlapping on one item.
+- **Never clobbers a student's edit.** If the row has `lastMovedAt != null`, an upstream
+  change does not overwrite it — the session is left exactly as they left it and a
+  `TIMETABLE` notification says the two now disagree (#30's open question, resolved in the
+  student's favour). That warning is deduplicated on its content, which embeds the upstream
+  instant, because unlike a normal change this disagreement never resolves itself; a
+  *further* upstream move still speaks up.
+- **Follows** an upstream change on a session the student never touched — without writing a
+  `SessionEvent` and without setting `lastMovedAt`. Both mean "the user did this", and
+  fabricating one would feed the LinUCB reward signal a move nobody made.
+- **A quiet re-run is quiet**: notifications are raised only for genuinely new or changed
+  items.
+
 ## API endpoints
 
 Global prefix `**/api/v1**`. All routes except `POST /auth/otp/*` require
@@ -339,9 +415,26 @@ only connection status. Types in `@zenflow/shared` (`ConnectIntegrationInput`,
 | Method | Path                      | Purpose                                                                                                                                                                                                             |
 | ------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | POST   | `/integrations`           | Connect a provider. Body `{ provider: "LMS" \| "PORTAL", username, password }`. Probes a live login first (`400` if rejected, `503` if DLU is unreachable, no write either way), then encrypts and upserts the row. |
-| GET    | `/integrations`           | `{ integrations: [{ provider, connected, lastVerifiedAt }] }` — one entry per provider.                                                                                                                             |
+| GET    | `/integrations`           | `{ integrations: [{ provider, connected, lastVerifiedAt, lastSyncedAt, lastSyncStatus }] }` — one entry per provider. The last pair is derived from the newest job row for that integration, not a denormalized column. |
 | PATCH  | `/integrations/:provider` | Update a provider's credentials. Body `{ username?, password? }`. Probes a live login first (`400` if rejected, `503` if DLU is unreachable, no write either way), then encrypts and upserts the row.               |
 | DELETE | `/integrations/:provider` | Disconnect. Idempotent; keeps the `UserEncryptionKey`.                                                                                                                                                              |
+| POST   | `/integrations/:provider/sync` | Run this student's watchers **now** — the manual counterpart to the crons (`LMS` runs one watcher; `PORTAL` runs the timetable and exam watchers in turn). `404` if the provider isn't connected. Awaits the run, then answers with that provider's `IntegrationStatus`, so `lastSyncedAt` / `lastSyncStatus` describe the sync just performed. Deliberately **not** a per-run counts payload: those counts live in the job rows and the logs. |
+
+### Notifications (`/notifications`)
+
+The ingestion inbox. Rows are written by the watchers' materializer, never by a client, so
+there is no create or delete route. `CookieAuthGuard` + `@CurrentUser()`, own rows only;
+types in `@zenflow/shared` (`NotificationTopic`, `NotificationDto`,
+`NotificationsListResponse`).
+
+| Method | Path                                 | Purpose                                                                                                                                                                                                                                                        |
+| ------ | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| GET    | `/notifications?limit=&offset=`      | One page, **unread first** then newest-first. `limit` 1–100 (default 20). `unreadCount` counts the whole inbox, not the page — it drives the badge, which must not shrink as the user pages. Offset rather than a cursor, because reading a row changes the first sort key. |
+| PATCH  | `/notifications/:id/read`            | Stamp `readAt`. Idempotent, and keeps the first instant. `404` if the row isn't the caller's.                                                                                                                                                                   |
+| PATCH  | `/notifications/:id/action-taken`    | Stamp `actionTakenAt` — acting on a notification is not the same as seeing it. Same idempotency and `404`.                                                                                                                                                      |
+
+`GET /notifications` formally belongs to #31; it lives here now because nothing else makes
+the rows the watchers write reachable. Confirm/dismiss semantics stay in #31.
 
 `IntegrationAuthService` only does a pass/fail probe; parsing belongs to `ingestion/core/`.
 The probe's return/throw split is what produces the two status codes: it returns `false`
@@ -404,7 +497,9 @@ service construction, which is why they must always resolve), `LMS_TIMEOUT_MS` (
 `PORTAL_API_TIMEOUT_MS` (10000) per-request timeouts, `DLU_TZ` (`Asia/Ho_Chi_Minh` — the
 timezone the upstream wall-clock strings are in, not the user's), and `INGESTION_ENABLED`
 (kill switch for the watcher crons; `false` in `.env.test` so a test run can never reach
-DLU). `PORTAL_API_KEY` stays required with no default.
+DLU) and `INGESTION_REQUEST_DELAY_MS` (750; the fixed pause between a watcher's outbound
+requests — the entirety of the baseline's politeness policy, so it is config rather than a
+constant; `0` in `.env.test`). `PORTAL_API_KEY` stays required with no default.
 
 `BANDIT_SERVICE_URL` (optional, dev `http://localhost:8100`) points at the stateless Python
 bandit service (`services/bandit/`). When unset, LinUCB scheduling is disabled and every

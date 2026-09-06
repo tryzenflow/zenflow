@@ -35,7 +35,10 @@ export class IntegrationAuthService {
       return result.ok;
     }
 
-    const token = await this.portalAPIService.authenticate(username, password);
-    return !!token;
+    // Symmetrical with the LMS branch: `authenticate` reports a rejected
+    // password as `{ ok: false }` and throws only when the portal is down, so
+    // a typo can't masquerade as an outage.
+    const result = await this.portalAPIService.authenticate(username, password);
+    return result.ok;
   }
 }

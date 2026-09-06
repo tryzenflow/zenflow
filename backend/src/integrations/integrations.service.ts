@@ -1,5 +1,7 @@
 import {
   BadRequestException,
+  forwardRef,
+  Inject,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -21,6 +23,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CryptoService } from "../crypto/crypto.service";
 import { MasterKeyService } from "../crypto/master-key.service";
 import { IntegrationAuthService } from "./integration-auth.service";
+import { IngestionSyncService } from "../ingestion/ingestion-sync.service";
 import { ConnectIntegrationDto } from "./dto/connect-integration.dto";
 import { UpdateIntegrationDto } from "./dto/update-integration.dto";
 
@@ -79,6 +82,10 @@ export class IntegrationsService {
     private readonly crypto: CryptoService,
     private readonly masterKeys: MasterKeyService,
     private readonly integrationAuth: IntegrationAuthService,
+    // Mutually dependent by design: the watchers need `revealCredentials`, and
+    // the manual sync trigger needs the watchers. See `IngestionModule`.
+    @Inject(forwardRef(() => IngestionSyncService))
+    private readonly ingestionSync: IngestionSyncService,
   ) {}
 
   /** `POST /integrations` — verify against DLU, then encrypt + upsert. */
@@ -164,6 +171,49 @@ export class IntegrationsService {
         );
       }),
     };
+  }
+
+  /**
+   * `POST /integrations/:provider/sync` — run this student's watchers now.
+   *
+   * The reply is the provider's {@link IntegrationStatus}, **not** a per-run
+   * counts payload: what the run did lives in its job rows and the logs, and
+   * the only run facts that belong in the API contract are `lastSyncedAt` /
+   * `lastSyncStatus` — which this reads back *after* awaiting the run, so they
+   * describe the sync just performed rather than the previous one.
+   *
+   * `PORTAL` covers two upstream endpoints (timetable and exams), so it runs
+   * two watchers and the status reflects whichever job row finished last.
+   */
+  async sync(
+    user: User,
+    provider: IntegrationProvider,
+  ): Promise<IntegrationStatus> {
+    const connected = await this.prisma.integration.findUnique({
+      where: { userId_provider: { userId: user.id, provider } },
+      select: { id: true },
+    });
+    if (!connected) {
+      throw new NotFoundException(
+        `No ${this.label(provider)} account connected`,
+      );
+    }
+
+    await this.ingestionSync.syncNow(user.id, provider);
+    return this.statusOf(user.id, provider);
+  }
+
+  /** One provider's status, re-read from the DB (job rows included). */
+  private async statusOf(
+    userId: string,
+    provider: IntegrationProvider,
+  ): Promise<IntegrationStatus> {
+    const row = await this.prisma.integration.findUnique({
+      where: { userId_provider: { userId, provider } },
+      select: { provider: true, lastVerifiedAt: true, ...LATEST_JOB_SELECT },
+    });
+    if (!row) return this.toStatus(provider, null, false);
+    return this.toStatus(provider, row.lastVerifiedAt, true, latestJobOf(row));
   }
 
   private async storeCredentials(
