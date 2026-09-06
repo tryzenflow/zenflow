@@ -407,7 +407,7 @@ export function ConnectDluAccountScreen({ onBack }: { onBack?: () => void }) {
           index={1}
           enablePanDownToClose={true}
         >
-          <BottomSheetView>
+          <BottomSheetView style={{ paddingBottom: 30 }}>
             <View className=" pb-3 pt-1">
               <Text className="text-xl font-bold tracking-tight">
                 Disconnect the {selectedProvider === "LMS" ? "LMS" : "Portal"}?
