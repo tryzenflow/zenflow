@@ -190,6 +190,25 @@ model Session {
   sessionIndex Int?
   sessionTotal Int?
 
+  // Stable identity of the upstream DLU item this session mirrors — null for
+  // every user-created session. Format is "<source>:<kind>:<upstream id>":
+  //
+  //   "lms:assign:<instance>"        Moodle assignment  (mod_assign instance)
+  //   "lms:quiz:<instance>"          Moodle quiz        (mod_quiz instance)
+  //   "portal:exam:<Examination>"    portal exam row
+  //   "portal:meeting:<WeekScheduleID>"  one timetable meeting
+  //
+  // The LMS half deliberately keys on the activity `instance`, never the
+  // calendar event id: one quiz emits two events (open + close) with different
+  // ids but one instance, and a teacher re-creating a due date mints a fresh
+  // event id for the same activity.
+  //
+  // This is the ingestion idempotency guard. The watchers run on a cron and
+  // re-fetch the same window every tick, so every write upserts on
+  // [userId, externalKey]; without the unique constraint each tick would
+  // duplicate the student's whole calendar.
+  externalKey String?
+
   reminders     SessionReminder[]
   notifications Notification[]
   slotProposals SlotProposal[]
@@ -197,6 +216,7 @@ model Session {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([userId, externalKey])
   @@index([userId, deadline])
   @@index([userId, scheduledStartTime])
   @@index([userId, seriesId, createdAt(sort: Asc)])
@@ -208,7 +228,7 @@ model SessionSeries {
   type      SessionType @default(DND) // recurring DND/ASSIGNMENT/EXAM/LECTURE (via rrule), or TASK (multi-sitting via sessionCount)
   deadline  DateTime? // null for a recurring series; the shared deadline for a TASK series
   rrule     String? // the recurrence rule — set for a recurring series, null for a TASK series
-  exdates   String[] @default([]) // ISO instants of individually-deleted occurrences (rrule series only)
+  exdates   String[]    @default([]) // ISO instants of individually-deleted occurrences (rrule series only)
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -272,8 +292,8 @@ model SlotProposal {
 
   sessionEvents SessionEvent[]
 
-  firstModifiedAt            DateTime? // outcome signals (denormalized, maintained by a later phase)
-  firstModificationType      SessionEventType?
+  firstModifiedAt             DateTime? // outcome signals (denormalized, maintained by a later phase)
+  firstModificationType       SessionEventType?
   acceptedWithoutModification Boolean?
 
   pairwiseShown     Boolean          @default(false) // pairwise comparison (later)
@@ -427,11 +447,17 @@ model CrawlJob {
 }
 
 model CrawlJobItem {
-  id        String    @id @default(uuid())
-  url       String
-  status    JobStatus @default(PENDING)
-  attempt   Int       @default(0)
-  createdAt DateTime  @default(now())
+  id           String    @id @default(uuid())
+  url          String
+  status       JobStatus @default(PENDING)
+  attempt      Int       @default(0)
+  // Mirrors PortalAPIJobItem field-for-field on purpose: while ingestion is
+  // still being validated against the live LMS, having the raw upstream JSON
+  // sitting on the item row is what makes a bad parse diagnosable after the
+  // fact, without re-running the fetch against a moving target.
+  statusCode   Int?
+  responseBody String?
+  createdAt    DateTime  @default(now())
 
   crawlJobId String
   crawlJob   CrawlJob @relation(fields: [crawlJobId], references: [id], onDelete: Cascade)
@@ -472,4 +498,60 @@ model PortalAPIJobItem {
   portalApiJob   PortalAPIJob @relation(fields: [portalApiJobId], references: [id], onDelete: Cascade)
 
   @@index([portalApiJobId])
+}
+
+// ---------------------------------------------------------------------------
+// DLU course identity — two independent catalogs.
+//
+// A Moodle course (LmsCourse) and a portal timetable section (PortalSection)
+// describe the same real-world class, but there is deliberately NO correlation
+// table, no foreign key and no mapping between them: the two systems share no
+// identifier, their names differ (abbreviations, diacritics, group suffixes),
+// and every join we could build would be a fuzzy string match that is wrong
+// often enough to corrupt a student's calendar. Nothing in the ingestion path
+// needs the join either — an LMS item is scheduled from LMS data alone and a
+// timetable meeting from portal data alone.
+//
+// Both tables are plain, cross-user reference data, deduped on the upstream id.
+// They exist so an ingested Session can be traced back to a human-readable
+// course without re-fetching, and so the later shared cross-student catalog
+// (deferred) has somewhere to land.
+// ---------------------------------------------------------------------------
+
+// A Moodle course, as it appears in the `course` block of the LMS calendar
+// (core_calendar_get_calendar_monthly_view) response.
+model LmsCourse {
+  id          String  @id @default(uuid())
+  lmsCourseId Int     @unique // Moodle course.id, e.g. 90001 — the upstream identity
+  fullName    String
+  shortName   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// One student-portal course section — a specific offering of a curriculum unit
+// in one term, taught by one teacher to one group in one room.
+model PortalSection {
+  id                  String  @id @default(uuid())
+  // The portal's ScheduleStudyUnitID, e.g. "99910AB100101". Composite by
+  // construction (term + curriculum + group), but treated as an opaque
+  // upstream identity — we never parse it.
+  scheduleStudyUnitId String  @unique
+  curriculumId        String? // "10AB1001"
+  curriculumName      String // "Môn học Mẫu Một"
+  yearStudy           String // academic year, "2026-2027"
+  termId              String // "HK01" | "HK02" | "HK03"
+  groupNo             String? // "Nhóm: 01"
+  teacherName         String? // FullName
+  roomId              String? // RoomID, "X01.01"
+  buildingName        String? // "A27"
+  campusName          String? // CampusName / Address
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // The watcher fetches a whole term at a time, so (yearStudy, termId) is the
+  // access path for every refresh and every stale-section sweep.
+  @@index([yearStudy, termId])
 }
