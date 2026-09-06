@@ -1,10 +1,12 @@
 import { logout as logoutRequest } from "@/api/auth";
-import { LogOut, Moon } from "@/components/Icons";
+import { LogOut, Moon, ChevronRight } from "@/components/Icons";
 import { ProfileRow } from "@/components/settings/profile-row";
 import { SettingsSectionLabel } from "@/components/settings/settings-header";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
 import { useUserStore } from "@/hooks/use-user-store";
+import { useIntegrationStore } from "@/hooks/use-integration-store";
+import { getIntegrationStatus } from "@/api/dlu";
 import { setAndroidNavigationBar } from "@/lib/android-navigation-bar";
 import { clearSession } from "@/lib/api-client";
 import { clearCachedSessionUser } from "@/lib/session";
@@ -14,16 +16,36 @@ import { resetTimelineScroll } from "@/lib/timeline-scroll";
 import { useColorScheme } from "@/lib/useColorScheme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { type Href, useRouter } from "expo-router";
-import { useState } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { useEffect, useState } from "react";
+import {
+  Pressable,
+  ScrollView,
+  View,
+} from "react-native";
 
 /** Single flat Settings screen — mirrors mockups/settings.html exactly. */
 export default function SettingsScreen() {
   const router = useRouter();
   const user = useUserStore((s) => s.user);
   const setUser = useUserStore((s) => s.setUser);
+  const { setIntegrations, setLoading } = useIntegrationStore();
   const { isDarkColorScheme, setColorScheme } = useColorScheme();
   const [loggingOut, setLoggingOut] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    getIntegrationStatus()
+      .then((res) => {
+        if (mounted) setIntegrations(res.integrations);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [setIntegrations, setLoading]);
 
   function toggleDarkMode() {
     const next = isDarkColorScheme ? "light" : "dark";
@@ -88,6 +110,17 @@ export default function SettingsScreen() {
         </View>
 
         <SettingsSectionLabel>Account</SettingsSectionLabel>
+        <View className="mb-[18px] overflow-hidden rounded-2xl border border-border bg-card">
+          <Pressable
+            onPress={() => router.push("/connect-dlu-account" as Href)}
+            className="flex-row items-center gap-[13px] bg-card px-4 py-3.5"
+          >
+            <Text className="text-[15px] font-semibold flex-1">
+              Connect DLU account
+            </Text>
+            <ChevronRight size={18} className="text-muted-foreground" />
+          </Pressable>
+        </View>
         <View className="mb-[18px] overflow-hidden rounded-2xl border border-border bg-card">
           <Pressable
             onPress={handleSignOut}
