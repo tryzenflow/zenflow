@@ -72,6 +72,17 @@ backend/
 │   ├── bandit/                 # BanditService (HTTP client for services/bandit/) +
 │   │                           #   BanditArmStateRepository (per-user (A,b) load/save)
 │   ├── experiments/            # ExperimentService — 50/50 policy assignment + SlotProposal
+│   ├── ingestion/             # DLU LMS/portal ingestion (issues #27/#29/#30)
+│   │   └── core/               # PURE parsers — no Prisma, no clock, no randomness
+│   │       ├── semester.ts         # resolveSemester / isoWeek — the portal's (namhoc, hocky, tuan)
+│   │       ├── period-map.ts       # teaching periods ("tiết") → wall-clock minutes
+│   │       ├── grid.ts             # 15-minute grid snapping (invariant #3)
+│   │       ├── parse-lms.ts        # Moodle monthly calendar → assignment / quiz blocks
+│   │       ├── parse-portal.ts     # timetable + exam rows → lecture / exam blocks
+│   │       └── types.ts            # ParsedBlock / ParsedLmsItem / ParsedPortalItem / SkippedItem
+│   ├── lms/                   # LMSService — fetch-based Moodle client (login → sesskey, calendar)
+│   ├── portal/                # PortalAPIService — student-portal client (auth, timetable, exams)
+│   ├── integrations/          # encrypted DLU credential storage + live login probe
 │   ├── files/                 # multipart upload/download to local disk
 │   ├── mail/                  # login email + Handlebars templates
 │   ├── prisma/                # PrismaService + Postgres error-code map
@@ -192,6 +203,64 @@ timetable meeting from portal data alone.
 > `rrule`, no `seriesId`, no `scope`. True recurrence may be reintroduced later as a
 > deliberate feature on top of this simplified scheduler.
 
+## DLU ingestion
+
+Pulls a student's Moodle assignments/quizzes, class timetable and exam schedule onto their
+calendar. **API-only** — the LMS and the portal both expose JSON, so there is no crawling,
+no HTML scraping and no headless browser anywhere in the image.
+
+Same layering rule as the scheduler: `ingestion/core/*` is **pure** (no Prisma, no
+`new Date()`, no randomness — `now` and the timezone are always parameters), and only the
+HTTP clients in `lms/` and `portal/` do I/O.
+
+### Clients
+
+| Call | Endpoint |
+| --- | --- |
+| `LMSService.login(username, password)` | 4 steps: `GET /login/index.php` (scrape `logintoken`) → `POST /login/index.php` (`redirect: "manual"`; Moodle **regenerates** `MoodleSession`, so the cookie on *this* response is the authenticated one) → `GET /my/` → `sesskey` out of the inline `M.cfg`. Returns `{ ok: false, reason: "INVALID_CREDENTIALS" }` for a rejected password; throws only on a real outage. |
+| `LMSService.fetchMonthlyView(session, year, month)` | `POST /lib/ajax/service.php?sesskey=…&info=core_calendar_get_calendar_monthly_view`. `month` is 1-based. |
+| `PortalAPIService.authenticate(username, password)` | `POST /api/authenticate/authpsc` → `Token`. |
+| `PortalAPIService.fetchTimetable(token, namhoc, hocky, tuan)` | `GET /api/student/DrawingStudentSchedules` — one ISO week of meetings. |
+| `PortalAPIService.fetchExams(token, namhoc, hocky)` | `GET /api/student/exam` — a whole term. |
+
+`sesskey` is a per-session CSRF token Moodle renders into the page body (`M.cfg`, hidden
+inputs, printed URLs) — never a cookie, never a header, which is why it is invisible in the
+Network tab. It is bound to `MoodleSession` and rotates with it, so it is held in a local
+variable for one watcher run and never cached. Portal calls carry
+`Authorization: Bearer <token>`, `Clientid: vhu` and `Apikey` (from `PORTAL_API_KEY`; never
+hardcoded, never logged). Timeouts come from `LMS_TIMEOUT_MS` / `PORTAL_API_TIMEOUT_MS`.
+
+### Parsers (`ingestion/core/`)
+
+- **`semester.ts`** — the portal is addressed by academic coordinates, not dates.
+  `resolveSemester(now, tz)` → `{ namhoc, hocky }` (HK01 Aug–Dec, HK02 Jan–May, HK03
+  Jun–Jul; `namhoc` only rolls at the Jul→Aug boundary), and `isoWeek(date, tz)` → the
+  `tuan` parameter.
+- **`period-map.ts`** — the timetable never returns clock times, only teaching periods.
+  1–4 = 07:30–11:10 (20-min break after 2), 7–10 = 13:00–16:30 (10-min break after 8),
+  11–14 = 16:40–20:00. **Periods 5–6 are undocumented**, so any span touching them returns
+  `null`, the row is skipped, and the reason is returned for the job item — guessing would
+  silently put a class on the calendar at the wrong hour.
+- **`grid.ts`** — DLU times are routinely off-grid (a 4-period lecture is 220 minutes; the
+  evening block starts at 16:40), so every block is snapped **outward** (start down, end up)
+  to keep invariant #3: 07:30–11:10 ⇒ 07:30 + 225 min, 16:40–20:00 ⇒ 16:30 + 210 min.
+- **`parse-lms.ts`** — keeps `assign` and `quiz` events that sort after `now`; `attendance`
+  is explicitly excluded. Moodle's `timestart` **is already a real Unix epoch** — never
+  re-zone it into VN time. A quiz emits **two events sharing one `instance`**
+  (`eventtype: "open"` / `"close"`) with different event ids, so quizzes are grouped by
+  `instance`, which is also the `externalKey` identity (an event id changes when a teacher
+  re-creates a due date). Window ≤ 200 min ⇒ one contiguous `EXAM` block; longer, or a lone
+  `close`, ⇒ a 15-minute reminder before the close; a lone `open` is skipped (its close
+  arrives in the next month's fetch — which is why two months are fetched).
+- **`parse-portal.ts`** — timetable rows become one `LECTURE` per meeting; exam rows parse
+  `NgayThi` (`dd/MM/yyyy`), `GioThi` (`"07g30"` — `g` for *giờ*) and `ThoiLuong` (minutes,
+  rounded up to a multiple of 15). Wall-clock → UTC always goes through
+  `common/utils`' `minutesToUtc`, never hand-rolled timezone math.
+
+`externalKey` is what makes a re-run idempotent (`@@unique([userId, externalKey])`):
+`lms:assign:<instance>`, `lms:quiz:<instance>`, `portal:meeting:<WeekScheduleID>`,
+`portal:exam:<Examination>`.
+
 ## API endpoints
 
 Global prefix `**/api/v1**`. All routes except `POST /auth/otp/*` require
@@ -274,7 +343,11 @@ only connection status. Types in `@zenflow/shared` (`ConnectIntegrationInput`,
 | PATCH  | `/integrations/:provider` | Update a provider's credentials. Body `{ username?, password? }`. Probes a live login first (`400` if rejected, `503` if DLU is unreachable, no write either way), then encrypts and upserts the row.               |
 | DELETE | `/integrations/:provider` | Disconnect. Idempotent; keeps the `UserEncryptionKey`.                                                                                                                                                              |
 
-`DluAuthService` only does a pass/fail probe; scraping belongs to the ingestion service.
+`IntegrationAuthService` only does a pass/fail probe; parsing belongs to `ingestion/core/`.
+The probe's return/throw split is what produces the two status codes: it returns `false`
+when DLU answers and **rejects** the credentials (`400`), and throws only when DLU is
+unreachable or answers incomprehensibly (`503`). `LMSService.login` therefore reports a
+wrong password as `{ ok: false, reason: "INVALID_CREDENTIALS" }` rather than throwing.
 
 Full live schema: **Swagger UI at `<API_URL>/api`**.
 

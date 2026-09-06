@@ -3,8 +3,8 @@ import { PrismaModule } from "../prisma/prisma.module";
 import { CryptoModule } from "../crypto/crypto.module";
 import { IntegrationsService } from "./integrations.service";
 import { IntegrationsController } from "./integrations.controller";
-import { LMSModule } from "src/lms/lms.module";
-import { PortalAPIModule } from "src/portal/portal-api.module";
+import { LMSModule } from "../lms/lms.module";
+import { PortalAPIModule } from "../portal/portal-api.module";
 import { IntegrationAuthService } from "./integration-auth.service";
 
 @Module({

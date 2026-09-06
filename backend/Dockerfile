@@ -44,18 +44,6 @@ ENV PORT=5000
 COPY --from=builder /app/deploy/node_modules ./node_modules
 COPY --from=builder /app/deploy/package.json ./package.json
 
-# Chromium runtime dependencies
-RUN apk add --no-cache \
-    chromium \
-    nss \
-    freetype \
-    harfbuzz \
-    ca-certificates \
-    ttf-freefont
-
-# Install Playwright's Chromium browser
-RUN pnpm exec playwright install chromium
-
 # ...and the build artifacts. dist/ and generated/ are gitignored, so the deploy
 # bundle omits them — copy them straight from the builder's backend workspace.
 COPY --from=builder /app/backend/dist ./dist
