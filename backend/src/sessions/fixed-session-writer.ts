@@ -34,6 +34,8 @@ export interface FixedSessionInput {
   source: SessionSource;
   title: string;
   note?: string | null;
+  /** Free-text location (room / building); null/absent when unknown. */
+  location?: string | null;
   /** Positive multiple of 15 (invariant #3). */
   durationMinutes: number;
   /** Where the block sits; fixed sessions are always scheduled. */
@@ -60,6 +62,7 @@ export async function insertFixedSession(
       source: input.source,
       title: input.title,
       note: input.note ?? null,
+      location: input.location ?? null,
       durationMinutes: input.durationMinutes,
       // Fixed types are pinned in time, so they carry no EDF ordering key.
       deadline: null,

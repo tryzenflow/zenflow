@@ -81,7 +81,7 @@ describe("parseTimetable", () => {
         externalKey: "portal:meeting:600001",
         title: "Môn học Mẫu Một",
         type: "LECTURE",
-        // Periods 1–4 = 07:30–11:10 VN, widened to 07:30–11:15 (225 min).
+        // Periods 1–4 = 07:30–11:15 VN, already on the 15-min grid (225 min).
         scheduledStartTime: new Date("2026-08-17T00:30:00.000Z"),
         durationMinutes: 225,
         location: "X01.01",
@@ -91,17 +91,18 @@ describe("parseTimetable", () => {
     ]);
   });
 
-  it("pulls the 16:40 evening block back onto the grid", () => {
+  it("maps the evening block (periods 11–14) straight through, on grid", () => {
     const { items } = parseTimetable(
       [{ ...LECTURE_ROW, WeekScheduleID: 2, PeriodID: 11 }],
       VN,
     );
 
-    // 16:40–20:00 VN → 16:30–20:00 (210 min); 16:30 VN = 09:30 UTC.
+    // Periods 11–14 = 16:45–20:00 VN, already on the 15-min grid (195 min);
+    // 16:45 VN = 09:45 UTC.
     expect(items[0].scheduledStartTime).toEqual(
-      new Date("2026-08-17T09:30:00.000Z"),
+      new Date("2026-08-17T09:45:00.000Z"),
     );
-    expect(items[0].durationMinutes).toBe(210);
+    expect(items[0].durationMinutes).toBe(195);
   });
 
   it("returns the section bundle, deduped, with curriculum id and group from the HTML blob", () => {
@@ -197,7 +198,7 @@ describe("parseExams", () => {
         scheduledStartTime: new Date("2025-12-01T00:30:00.000Z"),
         durationMinutes: 120,
         location: "X02.01",
-        note: "Thi máy",
+        note: null,
         scheduleStudyUnitId: "99810AB100302",
       },
       {
@@ -207,7 +208,7 @@ describe("parseExams", () => {
         scheduledStartTime: new Date("2025-12-08T00:30:00.000Z"),
         durationMinutes: 60,
         location: "VP_MAU",
-        note: "Báo cáo TTTT,TL",
+        note: null,
         scheduleStudyUnitId: "99810AB100402",
       },
       {
@@ -218,7 +219,7 @@ describe("parseExams", () => {
         scheduledStartTime: new Date("2025-12-12T02:30:00.000Z"),
         durationMinutes: 90,
         location: "X02.01",
-        note: "Thi máy",
+        note: null,
         scheduleStudyUnitId: "99810AB1005D02",
       },
     ]);

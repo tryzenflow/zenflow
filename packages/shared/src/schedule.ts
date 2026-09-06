@@ -33,6 +33,8 @@ export interface Event {
   type: SessionType;
   tags: string[];
   state: SessionCardState;
+  /** Free-text location (room / building) carried through from the session, or null. */
+  location?: string | null;
 }
 
 /**

@@ -51,7 +51,7 @@ export class ExamWatcherService {
     this.dluTimezone = this.config.get<string>("DLU_TZ") ?? "Asia/Ho_Chi_Minh";
   }
 
-  @Cron(CronExpression.EVERY_DAY_AT_4AM)
+  @Cron(CronExpression.EVERY_WEEK)
   async handleCron(): Promise<void> {
     const count = await this.run();
     if (count > 0) {
@@ -73,12 +73,12 @@ export class ExamWatcherService {
     const token = await this.signIn(target, jobId);
     if (!token) return;
 
-    const { namhoc, hocky } = resolveSemester(now, this.dluTimezone);
-    const url = `${this.endpoint}/api/student/exam?namhoc=${namhoc}&hocky=${hocky}`;
+    const { academicYear, semester } = resolveSemester(now, this.dluTimezone);
+    const url = `${this.endpoint}/api/student/exam?namhoc=${academicYear}&hocky=${semester}`;
     const itemId = await this.jobs.beginItem("PORTAL", jobId, url);
 
     try {
-      const rows = await this.portal.fetchExams(token, namhoc, hocky);
+      const rows = await this.portal.fetchExams(token, academicYear, semester);
       // Always DLU_TZ: "07g30" describes a Vietnamese exam hall, so it belongs
       // to the upstream data, not to whoever reads it. The student's zone
       // governs rendering (invariant #5), off the UTC instant stored here.

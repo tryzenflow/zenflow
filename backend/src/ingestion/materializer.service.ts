@@ -13,7 +13,7 @@ export type IngestedSource = Extract<SessionSource, "LMS" | "PORTAL">;
 export interface MaterializeOutcome {
   /** New sessions written (each with its notification). */
   created: number;
-  /** Existing sessions whose upstream time/title/note moved and were rewritten. */
+  /** Existing sessions whose upstream time/title/note/location moved and were rewritten. */
   updated: number;
   /** Already on the calendar, identical — the common case on a re-run. */
   unchanged: number;
@@ -31,21 +31,11 @@ function topicOf(type: IngestedSessionType): NotificationTopic {
   return "TIMETABLE";
 }
 
-/**
- * `Session` has no `location` column, and the room is the single most useful
- * thing about a timetable meeting, so it is folded into the note alongside
- * whatever the parser already put there (an exam's format, say).
- */
-function noteOf(block: ParsedBlock): string | null {
-  const parts = [block.note, block.location ? `Room ${block.location}` : null];
-  const joined = parts.filter((p): p is string => !!p).join(" · ");
-  return joined.length > 0 ? joined : null;
-}
-
 /** The upstream-facing fields a re-run may find changed. */
 interface ComparableSession {
   title: string;
   note: string | null;
+  location: string | null;
   durationMinutes: number;
   scheduledStartTime: Date | null;
 }
@@ -56,7 +46,8 @@ function differsFromUpstream(
 ): boolean {
   return (
     existing.title !== block.title ||
-    existing.note !== noteOf(block) ||
+    existing.note !== block.note ||
+    existing.location !== block.location ||
     existing.durationMinutes !== block.durationMinutes ||
     existing.scheduledStartTime?.getTime() !==
       block.scheduledStartTime.getTime()
@@ -130,6 +121,7 @@ export class MaterializerService {
           id: true,
           title: true,
           note: true,
+          location: true,
           durationMinutes: true,
           scheduledStartTime: true,
           lastMovedAt: true,
@@ -177,7 +169,8 @@ export class MaterializerService {
           type: block.type,
           source,
           title: block.title,
-          note: noteOf(block),
+          note: block.note,
+          location: block.location,
           durationMinutes: block.durationMinutes,
           scheduledStartTime: block.scheduledStartTime,
           externalKey: block.externalKey,
@@ -223,7 +216,8 @@ export class MaterializerService {
         where: { id: sessionId },
         data: {
           title: block.title,
-          note: noteOf(block),
+          note: block.note,
+          location: block.location,
           durationMinutes: block.durationMinutes,
           scheduledStartTime: block.scheduledStartTime,
         },

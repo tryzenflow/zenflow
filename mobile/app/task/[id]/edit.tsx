@@ -46,6 +46,7 @@ const EMPTY_DEFAULTS: EditSessionFormValues = {
   duration: 60,
   tags: [],
   note: "",
+  location: "",
   deadline: "",
 };
 
@@ -93,6 +94,7 @@ export default function EditSessionScreen() {
           title: res.title,
           tags: res.tags,
           note: res.note ?? "",
+          location: res.location ?? "",
         };
         if (res.type === "TASK") {
           form.reset({
@@ -131,6 +133,7 @@ export default function EditSessionScreen() {
     const patch: UpdateSessionInput = {
       title: values.title,
       note: values.note || null,
+      location: values.location || null,
       tags: values.tags,
     };
     if (values.type === "TASK") {

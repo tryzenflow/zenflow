@@ -305,7 +305,7 @@ function WeekHeaderImpl(
             : ""
         }`}
       >
-        <Text className="text-[10.5px] font-semibold uppercase text-muted-foreground">
+        <Text className="text-[10.5px] font-semibold text-muted-foreground">
           {format(day, "EEE")}
         </Text>
         <View

@@ -64,7 +64,7 @@ export class LmsWatcherService {
     );
   }
 
-  @Cron(CronExpression.EVERY_HOUR)
+  @Cron(CronExpression.EVERY_30_MINUTES)
   async handleCron(): Promise<void> {
     const count = await this.run();
     if (count > 0) {

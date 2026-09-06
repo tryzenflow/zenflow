@@ -113,16 +113,24 @@ export class LMSService {
     // on THIS response is the authenticated one.
     cookie = this.sessionCookie(submitted) ?? cookie;
 
-    const redirected = submitted.status >= 300 && submitted.status < 400;
-    if (!redirected) {
-      const body = await submitted.text();
-      const haystack = body.toLowerCase();
+    if (submitted.status >= 300 && submitted.status < 400) {
+      // A rejected login bounces straight back to the bare form; an accepted
+      // one redirects to `…/login/index.php?testsession=<id>` or to a wanted
+      // page, both of which carry a query string.
+      const location = submitted.headers.get("location") ?? "";
+      if (/\/login\/index\.php\/?$/.test(location)) {
+        return { ok: false, reason: "INVALID_CREDENTIALS" };
+      }
+    } else {
+      // DLU answers the POST with 200 rather than a redirect, so "did it work"
+      // has to be read off the body: a rejection re-renders the form with an
+      // error, a success renders the page we were headed for. An unrecognised
+      // 200 is NOT treated as a failure — the sesskey lookup below is the real
+      // check, and it distinguishes the two without guessing at wording.
+      const haystack = (await submitted.text()).toLowerCase();
       if (LOGIN_ERROR_MARKERS.some((marker) => haystack.includes(marker))) {
         return { ok: false, reason: "INVALID_CREDENTIALS" };
       }
-      throw new Error(
-        `Unexpected LMS login response (status ${submitted.status})`,
-      );
     }
 
     if (!cookie)

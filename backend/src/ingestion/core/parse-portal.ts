@@ -12,11 +12,11 @@ import type {
  *
  * Two endpoints, two shapes:
  *
- *  - `GET /api/student/DrawingStudentSchedules?namhoc&hocky&tuan` — one row per
+ *  - `GET /api/student/DrawingStudentSchedules?academicYear&semester&tuan` — one row per
  *    class **meeting** in one ISO week. Times are expressed as teaching periods
  *    (`PeriodID` + `NumberOfPeriods`), never as clock times, so `period-map.ts`
  *    has to translate them.
- *  - `GET /api/student/exam?namhoc&hocky` — one row per exam, with real
+ *  - `GET /api/student/exam?academicYear&semester` — one row per exam, with real
  *    Vietnamese-formatted date/time strings (`"01/12/2025"`, `"07g30"` — note
  *    the `g` separator, short for *giờ*) and a duration in minutes as a string.
  *
@@ -290,7 +290,9 @@ export function parseExams(
       scheduledStartTime: minutesToUtc(dateStr, block.startMin, timezone),
       durationMinutes: block.durationMinutes,
       location: orNull(row.PhongThi) ?? orNull(row.DiaDiem),
-      note: orNull(row.HinhThucThi),
+      // The exam format (`HinhThucThi`) is deliberately dropped — an ingested
+      // fixed session carries only its room, in `location`, and no note.
+      note: null,
       scheduleStudyUnitId: orNull(row.ScheduleStudyUnitID),
     });
   }

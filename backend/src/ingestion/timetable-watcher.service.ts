@@ -4,9 +4,8 @@ import { Cron, CronExpression } from "@nestjs/schedule";
 import { IntegrationsService } from "../integrations/integrations.service";
 import { PortalAPIService } from "../portal/portal-api.service";
 import { PrismaService } from "../prisma/prisma.service";
-import { DAY_MS } from "../scheduler/core/slot";
 import { parseTimetable } from "./core/parse-portal";
-import { isoWeek, resolveSemester } from "./core/semester";
+import { isoWeeksBetween, resolveSemester } from "./core/semester";
 import type { ParsedPortalSection } from "./core/types";
 import { IngestionJobsService } from "./ingestion-jobs.service";
 import { MaterializerService } from "./materializer.service";
@@ -29,10 +28,16 @@ import {
  * is idle.
  *
  * The portal has no "give me the current week" call: the endpoint is addressed
- * by academic coordinates `(namhoc, hocky, tuan)`, so every run first resolves
- * which term and ISO week "now" falls in (`ingestion/core/semester.ts`) and
- * then asks for this week and the next one, giving a student who looks ahead a
- * populated calendar rather than an empty one.
+ * by academic coordinates `(academicYear, semester, tuan)`, so every run first
+ * resolves which term "now" falls in (`ingestion/core/semester.ts`) and then
+ * walks **every remaining ISO week of that term**, so a student who looks
+ * months ahead sees a populated calendar rather than an empty one.
+ *
+ * That is ~20 requests per student on the first run of a term, shrinking by one
+ * a week as the term is consumed, spaced by `INGESTION_REQUEST_DELAY_MS`. Daily
+ * and off-peak, it stays well inside what the portal serves a single logged-in
+ * student, and re-fetching settled weeks is what lets a mid-term room or time
+ * change actually land.
  *
  * Shape copied from `scheduler/io/matrix-decay.service.ts` — a thin `@Cron`
  * over a `run(now, userId?)` that takes its clock as a parameter, so
@@ -61,7 +66,7 @@ export class TimetableWatcherService {
     );
   }
 
-  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  @Cron(CronExpression.EVERY_WEEKEND)
   async handleCron(): Promise<void> {
     const count = await this.run();
     if (count > 0) {
@@ -85,32 +90,34 @@ export class TimetableWatcherService {
 
     // The academic coordinates are a property of the university's calendar, so
     // they are resolved in DLU's timezone, never the student's.
-    const { namhoc, hocky } = resolveSemester(now, this.dluTimezone);
-    const weeks = [
-      isoWeek(now, this.dluTimezone),
-      isoWeek(new Date(now.getTime() + 7 * DAY_MS), this.dluTimezone),
-    ];
+    const { academicYear, semester, startDate, endDate } = resolveSemester(
+      now,
+      this.dluTimezone,
+    );
+
+    const from = now > startDate ? now : startDate;
+    const weeks = isoWeeksBetween(from, endDate, this.dluTimezone);
 
     let created = 0;
     let updated = 0;
     let guarded = 0;
     let first = true;
 
-    for (const tuan of weeks) {
+    for (const week of weeks) {
       if (!first) await sleep(this.requestDelayMs);
       first = false;
 
       const url =
         `${this.endpoint}/api/student/DrawingStudentSchedules` +
-        `?namhoc=${namhoc}&hocky=${hocky}&tuan=${tuan}`;
+        `?namhoc=${academicYear}&hocky=${semester}&tuan=${week}`;
       const itemId = await this.jobs.beginItem("PORTAL", jobId, url);
 
       try {
         const rows = await this.portal.fetchTimetable(
           token,
-          namhoc,
-          hocky,
-          tuan,
+          academicYear,
+          semester,
+          week,
         );
         const parsed = parseTimetable(rows, this.wallClockTimezone());
         await this.upsertSections(parsed.sections);
@@ -135,7 +142,7 @@ export class TimetableWatcherService {
           responseBody: jobItemBody({ error: errorMessage(error) }),
         });
         this.logger.warn(
-          `Timetable week ${tuan} failed for integration ` +
+          `Timetable week ${week} failed for integration ` +
             `${target.integrationId}: ${errorMessage(error)}`,
         );
       }

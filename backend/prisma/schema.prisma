@@ -160,6 +160,11 @@ model Session {
   id              String        @id @default(uuid())
   title           String
   note            String?
+  // Where the session takes place — a room / building / campus string. Free
+  // text for a user-pinned session; for an ingested fixed session the DLU
+  // watchers write the upstream room here (portal `PhongThi` / `RoomID`,
+  // Moodle event `location`). Optional and never used by the scheduler.
+  location        String?
   durationMinutes Int // positive multiple of 15
   deadline        DateTime? // required for TASK; null for fixed types (ASSIGNMENT/EXAM/LECTURE/DND)
   type            SessionType   @default(TASK)
