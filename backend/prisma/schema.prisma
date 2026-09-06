@@ -394,7 +394,7 @@ model Integration {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  crawlJobs     CrawlJob[]
+  lmsSyncJobs   LmsSyncJob[]
   portalApiJobs PortalAPIJob[]
 
   @@unique([userId, provider])
@@ -434,8 +434,9 @@ enum JobStatus {
   FAILED
 }
 
-// Per-run job tracking for the LMS watcher.
-model CrawlJob {
+// Per-run job tracking for the LMS watcher. Named "sync", not "crawl":
+// the watcher reads Moodle's JSON calendar API, it does not scrape pages.
+model LmsSyncJob {
   id        String    @id @default(uuid())
   status    JobStatus @default(PENDING)
   createdAt DateTime  @default(now())
@@ -443,10 +444,10 @@ model CrawlJob {
   integrationId String
   integration   Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
 
-  items CrawlJobItem[]
+  items LmsSyncJobItem[]
 }
 
-model CrawlJobItem {
+model LmsSyncJobItem {
   id           String    @id @default(uuid())
   url          String
   status       JobStatus @default(PENDING)
@@ -459,21 +460,13 @@ model CrawlJobItem {
   responseBody String?
   createdAt    DateTime  @default(now())
 
-  crawlJobId String
-  crawlJob   CrawlJob @relation(fields: [crawlJobId], references: [id], onDelete: Cascade)
+  lmsSyncJobId String
+  lmsSyncJob   LmsSyncJob @relation(fields: [lmsSyncJobId], references: [id], onDelete: Cascade)
 
-  @@index([crawlJobId])
+  @@index([lmsSyncJobId])
 }
 
-// Global (cross-user) dedupe table so two students' crawls of the same
-// course activity don't double-detect.
-model CrawledUrl {
-  id        String   @id @default(uuid())
-  url       String   @unique
-  createdAt DateTime @default(now())
-}
-
-// Same job-tracking shape as CrawlJob/CrawlJobItem, for the portal API poller.
+// Same job-tracking shape as LmsSyncJob/LmsSyncJobItem, for the portal API poller.
 model PortalAPIJob {
   id        String    @id @default(uuid())
   status    JobStatus @default(PENDING)
