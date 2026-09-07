@@ -7,7 +7,7 @@ import {
   splitCellSessions,
 } from "@/lib/month-date-math";
 import { isSessionPastDeadline } from "@/lib/overdue";
-import { SESSION_TYPE_META } from "@/lib/session-type";
+import { SESSION_TYPE_META } from "@zenflow/core";
 import {
   MONTH_PILL_CLASSES,
   MONTH_PILL_TEXT_CLASSES,

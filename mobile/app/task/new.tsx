@@ -7,7 +7,6 @@ import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
-import { combineToUtc, shiftHhmm, splitZoned } from "@/lib/session-time";
 import {
   RESCHEDULE_HINT,
   placementToastMessage,
@@ -18,7 +17,10 @@ import {
 import {
   type SessionFormType,
   type SessionFormValues,
+  combineToUtc,
   hhmmToMinutes,
+  shiftHhmm,
+  splitZoned,
   zonedDate,
 } from "@zenflow/core";
 import type { CreateSessionInput } from "@zenflow/shared";

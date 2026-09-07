@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/bottom-sheet";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Text } from "@/components/ui/text";
-import { getSeriesKind } from "@/lib/session-series";
+import { getSeriesKind } from "@zenflow/core";
 import { cn } from "@/lib/utils";
 import type { Session } from "@zenflow/shared";
 import * as Haptics from "expo-haptics";

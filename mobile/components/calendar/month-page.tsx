@@ -7,14 +7,18 @@ import {
   groupSessionsByDate,
 } from "@/lib/month-date-math";
 import { isPastDeadlineDrop } from "@/lib/overdue";
-import { SESSION_TYPE_META } from "@/lib/session-type";
 import {
   MONTH_PILL_CLASSES,
   MONTH_PILL_TEXT_CLASSES,
   deriveState,
 } from "@/lib/task-card";
 import { cn } from "@/lib/utils";
-import { zonedDate, zonedNow, zonedWallClockToUtc } from "@zenflow/core";
+import {
+  SESSION_TYPE_META,
+  zonedDate,
+  zonedNow,
+  zonedWallClockToUtc,
+} from "@zenflow/core";
 import type { Session } from "@zenflow/shared";
 import { isAxiosError } from "axios";
 import { format } from "date-fns";

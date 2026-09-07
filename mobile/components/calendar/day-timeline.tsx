@@ -14,7 +14,6 @@ import {
   isDayCacheFresh,
   setCachedDaySessions,
 } from "@/lib/session-cache";
-import { getSeriesKind } from "@/lib/session-series";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import {
   getTimelineScrollFraction,
@@ -25,6 +24,7 @@ import {
   DAILY_HORIZON,
   eventsForDay,
   getOverlapLayout,
+  getSeriesKind,
   tasksToBlocks,
   zonedNow,
 } from "@zenflow/core";
