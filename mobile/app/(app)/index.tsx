@@ -18,6 +18,7 @@ import {
   WeekPager,
   type WeekPagerHandle,
 } from "@/components/calendar/week-pager";
+import { NotificationBell } from "@/components/notification-bell";
 import { CreateSessionFab } from "@/components/tasks/create-task-fab";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useWeekDayTypes } from "@/hooks/use-week-day-types";
@@ -229,6 +230,7 @@ export default function WeekScreen() {
 
   return (
     <View className="flex-1 bg-background">
+      <NotificationBell />
       <WeekHeader
         ref={headerRef}
         focusedDate={focusedDate}

@@ -5,6 +5,7 @@ import {
   MonthPage,
 } from "@/components/calendar/month-page";
 import { MonthPager } from "@/components/calendar/month-pager";
+import { NotificationBell } from "@/components/notification-bell";
 import {
   RescheduleSheet,
   type RescheduleSheetHandle,
@@ -142,6 +143,7 @@ export default function MonthScreen() {
 
   return (
     <View className="flex-1 bg-background">
+      <NotificationBell />
       <View className="flex-row justify-between items-center gap-3 border-b border-border bg-background px-4 py-4">
         <View className="min-w-0 shrink gap-1">
           <View className="flex-row items-center gap-2">
