@@ -19,6 +19,9 @@ import type { Session } from "@zenflow/shared";
 import { TagsField } from "./tag-field";
 import { TitleField } from "./title-field";
 import { DeadlineChipField } from "./deadline-chip-field";
+import { FixedTimeField } from "./fixed-time-field";
+import { RecurrenceField } from "./recurrence-field";
+import { SessionCountField } from "./session-count-field";
 import { useUserStore } from "@/hooks/use-user-store";
 import { zonedDate, zonedNow, zonedWallClockToUtc } from "@/utils/tz";
 
@@ -47,12 +50,7 @@ function shiftedDeadline(
 
   const candidate = zonedNow(tz);
   candidate.setDate(candidate.getDate() + leadDays);
-  candidate.setHours(
-    deadlineZoned.getHours(),
-    deadlineZoned.getMinutes(),
-    0,
-    0,
-  );
+  candidate.setHours(deadlineZoned.getHours(), deadlineZoned.getMinutes(), 0, 0);
 
   const earliestFit = zonedNow(tz);
   earliestFit.setMinutes(earliestFit.getMinutes() + durationMinutes);
@@ -85,8 +83,14 @@ interface SessionFormProps {
   /** Extra actions rendered under the Cancel/Save row (e.g. delete). */
   footerExtra?: ReactNode;
   /**
-   * Edit mode: hide the scheduling fields (duration) — placement and
-   * duration are changed on the calendar, not here.
+   * Rendered directly under the Title field (create dialog only) — the
+   * `SessionTypeTabs` selector. Omitted in edit mode, where `type` is fixed.
+   */
+  typeSelector?: ReactNode;
+  /**
+   * Edit mode: hide the create-only scheduling fields (duration, session
+   * count) and keep the plain title input. Placement and duration are changed
+   * on the calendar, not here.
    */
   editing?: boolean;
 }
@@ -101,8 +105,12 @@ export function SessionForm({
   submitLabel = "Save",
   bodyExtra,
   footerExtra,
+  typeSelector,
   editing = false,
 }: SessionFormProps) {
+  const type = form.watch("type");
+  const isTask = type === "TASK";
+  const canRepeat = type !== "TASK";
   const duration = form.watch("duration");
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
 
@@ -113,19 +121,16 @@ export function SessionForm({
   const [noteSeed, setNoteSeed] = useState(initialNote);
   useEffect(() => setNoteSeed(initialNote), [initialNote]);
 
-  // Populate the create form from a picked existing session. Mirrors the field
-  // layout of the form (see create-session-dialog's onSubmit for the inverse map).
+  // Populate the create form from a picked existing session (TASK only).
   const applySuggestion = (s: Session) => {
-    form.setValue("title", s.title, {
-      shouldValidate: true,
-      shouldDirty: true,
-    });
+    form.setValue("title", s.title, { shouldValidate: true, shouldDirty: true });
     form.setValue("duration", s.durationMinutes, {
       shouldValidate: true,
       shouldDirty: true,
     });
     form.setValue("tags", s.tags ?? [], { shouldDirty: true });
     form.setValue("note", s.note ?? "", { shouldDirty: true });
+    form.setValue("location", s.location ?? "", { shouldDirty: true });
     setNoteSeed(s.note ?? "");
     form.setValue("deadline", shiftedDeadline(s, tz, s.durationMinutes), {
       shouldValidate: true,
@@ -138,7 +143,7 @@ export function SessionForm({
       <form
         onSubmit={form.handleSubmit(onSubmit, (errors) => {
           // Surface validation failures even when the offending field is hidden
-          // (e.g. fixed-time fields while in flexible mode), so submit never
+          // (e.g. fixed-time fields while in TASK mode), so submit never
           // silently no-ops.
           const first = Object.values(errors)[0];
           if (first?.message) toast.error(String(first.message));
@@ -176,76 +181,175 @@ export function SessionForm({
             )}
           />
 
-          {/* Duration — quick-pick + custom (create only: editing changes
-              duration by resizing the block on the calendar) */}
-          {!editing && (
+          {/* Session type (create only) */}
+          {typeSelector && (
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold">Type</p>
+              {typeSelector}
+            </div>
+          )}
+
+          {/* Location — every session type, optional */}
+          <FormField
+            control={form.control}
+            name="location"
+            render={({ field }) => (
+              <FormItem className="space-y-1.5">
+                <FormLabel className="text-xs font-semibold">Location</FormLabel>
+                <FormControl>
+                  <Input
+                    disabled={loading}
+                    placeholder="Room, building, or link (optional)"
+                    value={field.value ?? ""}
+                    onChange={field.onChange}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {isTask ? (
+            <>
+              {/* Duration — quick-pick + custom (create only) */}
+              {!editing && (
+                <FormField
+                  control={form.control}
+                  name="duration"
+                  render={({ field }) => (
+                    <FormItem className="space-y-2">
+                      <FormLabel className="text-xs font-semibold">
+                        Duration
+                      </FormLabel>
+                      <div className="grid grid-cols-5 gap-1.5">
+                        {DURATION_PRESETS.map((m) => {
+                          const active = duration === m;
+                          return (
+                            <button
+                              key={m}
+                              type="button"
+                              disabled={loading}
+                              onClick={() => field.onChange(m)}
+                              className={cn(
+                                "h-8 rounded-md border text-xs font-semibold transition-colors disabled:opacity-50",
+                                active
+                                  ? "border-primary bg-primary/15 font-bold text-primary"
+                                  : "border-border bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary",
+                              )}
+                            >
+                              {presetLabel(m)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="h-px flex-1 bg-border" />
+                        <span className="text-[10px] text-muted-foreground">
+                          or custom
+                        </span>
+                        <div className="h-px flex-1 bg-border" />
+                      </div>
+                      <DurationInput
+                        className="w-full"
+                        disabled={loading}
+                        value={duration ?? 60}
+                        onChange={field.onChange}
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {/* Sessions — multi-sitting series (create only) */}
+              {!editing && (
+                <FormField
+                  control={form.control}
+                  name="sessionCount"
+                  render={({ field }) => (
+                    <FormItem className="space-y-2">
+                      <FormLabel className="text-xs font-semibold">
+                        Sessions
+                      </FormLabel>
+                      <SessionCountField
+                        value={field.value ?? 1}
+                        onChange={field.onChange}
+                        deadline={form.watch("deadline")}
+                        duration={form.watch("duration")}
+                        disabled={loading}
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {/* Deadline — quick-action chips; required for a TASK. */}
+              <FormField
+                control={form.control}
+                name="deadline"
+                render={({ field }) => (
+                  <FormItem className="space-y-1.5">
+                    <FormLabel className="text-xs font-semibold">
+                      Deadline
+                    </FormLabel>
+                    <DeadlineChipField
+                      value={field.value ?? ""}
+                      onChange={field.onChange}
+                      disabled={loading}
+                      editing={editing}
+                    />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </>
+          ) : (
+            /* Fixed / DND — a pinned date + start/end time */
+            <FormItem className="space-y-1.5">
+              <FormLabel className="text-xs font-semibold">When</FormLabel>
+              <FixedTimeField
+                date={form.watch("date")}
+                startTime={form.watch("startTime")}
+                endTime={form.watch("endTime")}
+                onChangeDate={(v) =>
+                  form.setValue("date", v, { shouldValidate: true })
+                }
+                onChangeStart={(v) =>
+                  form.setValue("startTime", v, { shouldValidate: true })
+                }
+                onChangeEnd={(v) =>
+                  form.setValue("endTime", v, { shouldValidate: true })
+                }
+                disabled={loading}
+              />
+              <p className="text-[11px] text-destructive">
+                {form.formState.errors.date?.message ??
+                  form.formState.errors.startTime?.message ??
+                  form.formState.errors.endTime?.message ??
+                  ""}
+              </p>
+            </FormItem>
+          )}
+
+          {/* Repeat — every fixed type (assignment / exam / lecture / DND) */}
+          {canRepeat && (
             <FormField
               control={form.control}
-              name="duration"
+              name="rrule"
               render={({ field }) => (
-                <FormItem className="space-y-2">
-                  <FormLabel className="text-xs font-semibold">
-                    Duration
-                  </FormLabel>
-                  <div className="grid grid-cols-5 gap-1.5">
-                    {DURATION_PRESETS.map((m) => {
-                      const active = duration === m;
-                      return (
-                        <button
-                          key={m}
-                          type="button"
-                          disabled={loading}
-                          onClick={() => field.onChange(m)}
-                          className={cn(
-                            "h-8 rounded-md border text-xs font-semibold transition-colors disabled:opacity-50",
-                            active
-                              ? "border-primary bg-primary/15 font-bold text-primary"
-                              : "border-border bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary",
-                          )}
-                        >
-                          {presetLabel(m)}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="h-px flex-1 bg-border" />
-                    <span className="text-[10px] text-muted-foreground">
-                      or custom
-                    </span>
-                    <div className="h-px flex-1 bg-border" />
-                  </div>
-                  <DurationInput
-                    className="w-full"
-                    disabled={loading}
-                    value={duration}
+                <FormItem className="space-y-1.5">
+                  <FormLabel className="text-xs font-semibold">Repeat</FormLabel>
+                  <RecurrenceField
+                    value={field.value}
                     onChange={field.onChange}
+                    disabled={loading}
                   />
                   <FormMessage />
                 </FormItem>
               )}
             />
           )}
-
-          {/* Deadline — quick-action chips (todo.md); required now. */}
-          <FormField
-            control={form.control}
-            name="deadline"
-            render={({ field }) => (
-              <FormItem className="space-y-1.5">
-                <FormLabel className="text-xs font-semibold">
-                  Deadline
-                </FormLabel>
-                <DeadlineChipField
-                  value={field.value}
-                  onChange={field.onChange}
-                  disabled={loading}
-                  editing={editing}
-                />
-                <FormMessage />
-              </FormItem>
-            )}
-          />
 
           {/* Tags */}
           <FormField

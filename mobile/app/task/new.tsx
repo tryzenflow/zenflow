@@ -7,7 +7,6 @@ import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
-import { combineToUtc, shiftHhmm, splitZoned } from "@/lib/session-time";
 import {
   RESCHEDULE_HINT,
   placementToastMessage,
@@ -18,7 +17,10 @@ import {
 import {
   type SessionFormType,
   type SessionFormValues,
+  combineToUtc,
   hhmmToMinutes,
+  shiftHhmm,
+  splitZoned,
   zonedDate,
 } from "@zenflow/core";
 import type { CreateSessionInput } from "@zenflow/shared";
@@ -36,6 +38,7 @@ const EMPTY_DEFAULTS: SessionFormValues = {
   sessionCount: DEFAULT_SESSION_COUNT,
   tags: [],
   note: "",
+  location: "",
   deadline: "",
 };
 
@@ -46,6 +49,7 @@ function toCreateInput(
   const base = {
     title: values.title,
     note: values.note || null,
+    location: values.location || null,
     tags: values.tags,
   };
   if (values.type === "TASK") {
@@ -141,6 +145,7 @@ export default function NewSessionScreen() {
     const common = {
       title: form.getValues("title"),
       note: form.getValues("note"),
+      location: form.getValues("location"),
       tags: form.getValues("tags"),
     };
     form.reset(

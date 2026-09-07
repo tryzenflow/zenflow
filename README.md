@@ -3,15 +3,22 @@
 > A deadline-driven calendar that schedules your work for you — then learns how you
 > actually work and personalizes itself over time.
 
-You tell Zenflow **what** needs doing (title, estimated duration, earliest start,
-deadline, tags) and Zenflow decides **when**: an Earliest-Deadline-First (EDF) engine
-drops each task into the first open 15-minute slot inside your working hours. When you
-drag or resize a task to fix the machine's guess, every edit is recorded as a
-`SessionEvent`. That audit trail is the fuel for the personalization roadmap — heuristics
-today, contextual bandits and collaborative cold-start later (see
-[`docs/heuristic.md`](docs/heuristic.md)).
+You tell Zenflow **what** needs doing (a study `TASK` with a duration and a deadline, or a
+fixed `LECTURE` / `EXAM` / `ASSIGNMENT` / `DND` block) and Zenflow decides **when**: the
+scheduler places each new `TASK` into its single best free 15-minute slot before the
+deadline, scored by a per-user time-of-day preference. Fixed sessions stay where you put
+them. When you drag or resize a placed task, that edit is recorded as a `SessionEvent`
+(move-or-keep) — the fuel for the personalization roadmap: a preference heuristic today,
+a per-student contextual bandit (LinUCB) running as a live A/B experiment, collaborative
+cold-start later. See [`docs/scheduler/heuristic.md`](docs/scheduler/heuristic.md) and
+[`docs/adr/`](docs/adr/).
 
-**Status:** Phase 1 (deterministic EDF) is shipped. Phases 2–4 are planned.
+Students can also connect their university's **Moodle LMS** and **student portal** so
+assignment deadlines, the class timetable and exam schedule land on the calendar
+automatically, with an in-app notification inbox.
+
+**Status:** the preference heuristic (Policy A) and the LinUCB A/B path (Policy B) are both
+shipped; the personalization writers past that are planned.
 
 ---
 
@@ -19,24 +26,27 @@ today, contextual bandits and collaborative cold-start later (see
 
 This is a **pnpm workspace monorepo** (pnpm `10.32.1`).
 
-| Path                                   | What it is                                                            | Docs                                                   |
+| Path                                   | What it is                                                              | Docs                                                    |
 | -------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------ |
-| [`frontend/`](frontend/)               | React 19 + Vite PWA — the calendar UI                                 | [frontend/README.md](frontend/README.md)               |
-| [`backend/`](backend/)                 | NestJS API — auth, tasks, files, and the EDF scheduler                | [backend/README.md](backend/README.md)                 |
-| [`packages/shared/`](packages/shared/) | `@zenflow/shared` — the TS types shared by FE + BE (the API contract) | —                                                      |
-| [`services/bandit/`](services/bandit/) | Placeholder FastAPI ML service for Phases 3–4                         | [services/bandit/README.md](services/bandit/README.md) |
-| [`docs/`](docs/)                       | Design docs — currently the scheduling/ML roadmap                     | [docs/heuristic.md](docs/heuristic.md)                 |
+| [`frontend/`](frontend/)               | React 19 + Vite PWA — the desktop calendar client                     | [frontend/README.md](frontend/README.md)               |
+| [`mobile/`](mobile/)                   | Expo + React Native app (iOS / Android / web)                         | [mobile/README.md](mobile/README.md)                   |
+| [`backend/`](backend/)                 | NestJS API — auth, sessions, files, DLU ingestion, the scheduler      | [backend/README.md](backend/README.md)                 |
+| [`packages/shared/`](packages/shared/) | `@zenflow/shared` — the TS types shared by FE + mobile + BE (contract) | —                                                      |
+| [`packages/core/`](packages/core/)     | `@zenflow/core` — calendar-block / overlap / form-schema logic shared by both clients | —                                     |
+| [`services/bandit/`](services/bandit/) | FastAPI service hosting the Disjoint LinUCB model                     | [services/bandit/README.md](services/bandit/README.md) |
+| [`docs/`](docs/)                       | ADRs + the scheduling/ML design docs                                 | [docs/adr/](docs/adr/), [docs/scheduler/](docs/scheduler/) |
 | [`CLAUDE.md`](CLAUDE.md)               | Operating guide + conventions for Claude Code and contributors        | [CLAUDE.md](CLAUDE.md)                                 |
 
 ## Tech stack at a glance
 
-| Layer       | Choices                                                                                                                                                 |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Frontend    | React 19, Vite 6, Tailwind v4 (OKLch tokens), Radix UI, Zustand, React Router 7, React Hook Form + Zod, dnd-kit, TipTap, date-fns-tz, rrule, Playwright |
-| Backend     | NestJS 11, Prisma 6 + PostgreSQL, Redis (sessions + cache), Passport (OTP), rrule + luxon + date-fns, class-validator, Swagger, Jest                    |
-| Shared      | TypeScript types (`@zenflow/shared`), built to CommonJS                                                                                                 |
-| ML (future) | Python + FastAPI (LinUCB → LightFM); not yet implemented                                                                                                |
-| Infra       | Docker Compose (api, postgres, redis, mail, scheduler, Caddy)                                                                                           |
+| Layer    | Choices                                                                                                                                               |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Frontend | React 19, Vite 6, Tailwind v4 (OKLch tokens), Radix UI, Zustand, React Router 7, React Hook Form + Zod, dnd-kit, TipTap, date-fns-tz, rrule, Playwright |
+| Mobile   | Expo SDK 52, React Native 0.76, Expo Router, NativeWind, `@gorhom/bottom-sheet`, Reanimated, tentap editor                                              |
+| Backend  | NestJS 11, Prisma 6 + PostgreSQL, Redis (sessions + cache), Passport (OTP), rrule + luxon + date-fns, class-validator, Swagger, Jest                    |
+| Shared   | `@zenflow/shared` (contract types) + `@zenflow/core` (client logic), built to CommonJS                                                                 |
+| ML       | Python + FastAPI hosting Disjoint LinUCB; called over internal HTTP (`BANDIT_SERVICE_URL`), heuristic fallback when absent                              |
+| Infra    | Docker Compose (api, postgres, redis ×2, mail, bandit, Caddy)                                                                                          |
 
 ## Quick start
 
@@ -82,14 +92,16 @@ Per-app scripts live in each app's `package.json` — see the app READMEs.
 
 Zenflow's intelligence is staged. Each phase reuses the prior phase's data.
 
-| Phase | Mechanism                                                | Status                                |
-| ----- | -------------------------------------------------------- | ------------------------------------- |
-| **1** | Pure EDF sorting (deterministic)                         | **Shipped** — `backend/src/scheduler` |
-| **2** | Modified EDF + per-tag bias + 7×48 penalty matrix        | Planned                               |
-| **3** | Contextual bandits (LinUCB) in a FastAPI service         | Planned — `services/bandit`           |
-| **4** | Bandits + collaborative filtering / archetype cold-start | Planned                               |
+| Phase | Mechanism                                                                 | Status                                              |
+| ----- | ----------------------------------------------------------------------- | -------------------------------------------------- |
+| **1** | Preference heuristic — score each free slot by a per-user 7×24 time-of-day matrix (Policy A) | **Shipped** — `backend/src/scheduler` |
+| **2** | Nightly decay + move-or-keep learning writer for that matrix           | Partial — decay cron shipped; learning writer planned |
+| **3** | Per-student Disjoint LinUCB (Policy B), 50/50 A/B against Policy A       | **Shipped** — `services/bandit` + `scheduler/io`   |
+| **4** | Collaborative filtering / archetype cold-start                          | Planned                                            |
 
-Full details and the data model behind each phase: [`docs/heuristic.md`](docs/heuristic.md).
+Design docs: [`docs/scheduler/heuristic.md`](docs/scheduler/heuristic.md),
+[`docs/adr/0001-linucb-model-design.md`](docs/adr/0001-linucb-model-design.md),
+[`docs/adr/0002-scheduling-simplification.md`](docs/adr/0002-scheduling-simplification.md).
 
 ## Working in this repo with Claude Code
 

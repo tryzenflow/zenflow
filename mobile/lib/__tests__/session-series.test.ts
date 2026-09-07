@@ -1,6 +1,6 @@
 import type { Session } from "@zenflow/shared";
 import { describe, expect, it } from "vitest";
-import { getSeriesKind } from "../session-series";
+import { getSeriesKind } from "@zenflow/core";
 
 function task(overrides: Partial<Pick<Session, "seriesId" | "rrule">>) {
   return { seriesId: null, rrule: null, ...overrides };

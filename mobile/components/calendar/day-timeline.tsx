@@ -14,7 +14,6 @@ import {
   isDayCacheFresh,
   setCachedDaySessions,
 } from "@/lib/session-cache";
-import { getSeriesKind } from "@/lib/session-series";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import {
   getTimelineScrollFraction,
@@ -25,6 +24,7 @@ import {
   DAILY_HORIZON,
   eventsForDay,
   getOverlapLayout,
+  getSeriesKind,
   tasksToBlocks,
   zonedNow,
 } from "@zenflow/core";
@@ -123,9 +123,9 @@ interface DayTimelineProps {
    * overlay height explicitly so its headerless pages still scroll clear of
    * the floating tab-bar pill while the grid stays full-bleed behind it. */
   contentBottomInset?: number;
-  /** Reports the one-line status shown under the day title (task/overlap
-   * count, "Now …", load state) so a parent drawing its own header keeps the
-   * same live status. */
+  /** Reports the one-line status shown under the day title (task count,
+   * "Now …", load state) so a parent drawing its own header keeps the same
+   * live status. */
   onSubtitleChange?: (subtitle: string) => void;
   /** Fired when a session drag starts/stops (used to lock the pager). */
   onDragChange?: (dragging: boolean) => void;
@@ -384,23 +384,6 @@ export function DayTimeline({
     return map;
   }, [tasks]);
 
-  const overlapCount = useMemo(() => {
-    // DND blocks are protected time, not commitments — they don't count toward
-    // the "N overlapping" hint.
-    const live = segments.filter((s) => s.type !== "DND");
-    let pairs = 0;
-    for (let i = 0; i < live.length; i++) {
-      for (let j = i + 1; j < live.length; j++) {
-        const aStart = new Date(live[i].start).getTime();
-        const aEnd = new Date(live[i].end).getTime();
-        const bStart = new Date(live[j].start).getTime();
-        const bEnd = new Date(live[j].end).getTime();
-        if (aStart < bEnd && bStart < aEnd) pairs++;
-      }
-    }
-    return pairs;
-  }, [segments]);
-
   const scrollToNow = useCallback(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({
@@ -580,8 +563,7 @@ export function DayTimeline({
           });
           // Patch the dragged task from the authoritative response so its new
           // time shows immediately; the refetch below re-derives every card's
-          // overlap-based conflict state (client-side only, see `withOverlap`),
-          // since neighbors' state can shift too.
+          // column layout, since neighbors' positions can shift too.
           setSessions((prev) =>
             prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)),
           );
@@ -731,15 +713,11 @@ export function DayTimeline({
       ? "Couldn't sync"
       : dragSnap
         ? "Moving · release to reschedule"
-        : overlapCount > 0
-          ? `${overlapCount} overlap${overlapCount > 1 ? "s" : ""} · ${
-              tasks.length
-            } tasks`
-          : tasks.length === 0
-            ? `${nowLabel} · nothing scheduled`
-            : `${nowLabel} · ${tasks.length} task${
-                tasks.length === 1 ? "" : "s"
-              } today`;
+        : tasks.length === 0
+          ? `${nowLabel} · nothing scheduled`
+          : `${nowLabel} · ${tasks.length} task${
+              tasks.length === 1 ? "" : "s"
+            } today`;
 
   useEffect(() => {
     onSubtitleChange?.(subtitle);

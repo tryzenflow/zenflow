@@ -65,6 +65,7 @@ import {
   LogOut,
   type LucideIcon,
   Mail,
+  MapPin,
   MenuSquare,
   MessageCircleQuestion,
   MessageSquare,
@@ -166,6 +167,7 @@ interopIcon(Cloud);
 interopIcon(LifeBuoy);
 interopIcon(LogOut);
 interopIcon(Mail);
+interopIcon(MapPin);
 interopIcon(MessageSquare);
 interopIcon(Monitor);
 interopIcon(Plus);
@@ -278,6 +280,7 @@ export {
   LogOut,
   Settings,
   Mail,
+  MapPin,
   MenuSquare,
   MessageCircleQuestion,
   MessageSquare,

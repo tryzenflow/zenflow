@@ -1,12 +1,4 @@
 # syntax=docker/dockerfile:1
-
-# Zenflow API image.
-#
-# IMPORTANT: the build context is the MONOREPO ROOT, not backend/, because the API
-# depends on the @zenflow/shared workspace package (packages/shared). Build with:
-#   docker build -t zenflow-api:latest -f backend/Dockerfile .
-# (see backend/build_images.sh). This is a pnpm workspace — do not use npm/yarn here.
-
 # ---- Base: pnpm via corepack (+ openssl for Prisma's musl engine on alpine) ----
 FROM node:20-alpine AS base
 RUN apk add --no-cache openssl \

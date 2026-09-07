@@ -1,12 +1,14 @@
 import {
   BadRequestException,
+  forwardRef,
+  Inject,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { randomBytes } from "crypto";
-import type { User } from "../../generated/prisma";
+import type { JobStatus, User } from "../../generated/prisma";
 import type {
   IntegrationProvider,
   IntegrationStatus,
@@ -20,12 +22,41 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { CryptoService } from "../crypto/crypto.service";
 import { MasterKeyService } from "../crypto/master-key.service";
-import { DluAuthService } from "./dlu-auth.service";
+import { IntegrationAuthService } from "./integration-auth.service";
+import { IngestionSyncService } from "../ingestion/ingestion-sync.service";
 import { ConnectIntegrationDto } from "./dto/connect-integration.dto";
 import { UpdateIntegrationDto } from "./dto/update-integration.dto";
 
 /** Every provider we report status for, connected or not. */
 const ALL_PROVIDERS: readonly IntegrationProvider[] = ["LMS", "PORTAL"];
+
+/** Newest ingestion run for an integration, whichever table it lives in. */
+type LatestJob = { status: JobStatus; createdAt: Date };
+
+/**
+ * Both job tables are shaped the same; a provider only ever populates one of
+ * them, so taking the newest of each and picking the non-empty side avoids
+ * branching on `provider` at every call site.
+ */
+const LATEST_JOB_SELECT = {
+  lmsSyncJobs: {
+    orderBy: { createdAt: "desc" },
+    take: 1,
+    select: { status: true, createdAt: true },
+  },
+  portalApiJobs: {
+    orderBy: { createdAt: "desc" },
+    take: 1,
+    select: { status: true, createdAt: true },
+  },
+} as const;
+
+function latestJobOf(row: {
+  lmsSyncJobs?: LatestJob[];
+  portalApiJobs?: LatestJob[];
+}): LatestJob | null {
+  return row.lmsSyncJobs?.[0] ?? row.portalApiJobs?.[0] ?? null;
+}
 
 interface DecryptedDek {
   key: Buffer;
@@ -50,7 +81,11 @@ export class IntegrationsService {
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
     private readonly masterKeys: MasterKeyService,
-    private readonly dluAuth: DluAuthService,
+    private readonly integrationAuth: IntegrationAuthService,
+    // Mutually dependent by design: the watchers need `revealCredentials`, and
+    // the manual sync trigger needs the watchers. See `IngestionModule`.
+    @Inject(forwardRef(() => IngestionSyncService))
+    private readonly ingestionSync: IngestionSyncService,
   ) {}
 
   /** `POST /integrations` — verify against DLU, then encrypt + upsert. */
@@ -107,19 +142,78 @@ export class IntegrationsService {
     });
   }
 
-  /** `GET /integrations` — one entry per provider; no secret material. */
+  /**
+   * `GET /integrations` — one entry per provider; no secret material.
+   *
+   * `lastSyncedAt` / `lastSyncStatus` come from the newest job row for that
+   * integration (`LmsSyncJob` for LMS, `PortalAPIJob` for the portal). Only that
+   * pair is exposed: the job's items — request URLs, status codes, raw response
+   * bodies — stay backend-internal diagnostics.
+   */
   async status(user: User): Promise<IntegrationStatusListResponse> {
     const rows = await this.prisma.integration.findMany({
       where: { userId: user.id },
-      select: { provider: true, lastVerifiedAt: true },
+      select: {
+        provider: true,
+        lastVerifiedAt: true,
+        ...LATEST_JOB_SELECT,
+      },
     });
     const byProvider = new Map(rows.map((r) => [r.provider, r]));
     return {
       integrations: ALL_PROVIDERS.map((provider) => {
         const row = byProvider.get(provider);
-        return this.toStatus(provider, row?.lastVerifiedAt ?? null, !!row);
+        return this.toStatus(
+          provider,
+          row?.lastVerifiedAt ?? null,
+          !!row,
+          row ? latestJobOf(row) : null,
+        );
       }),
     };
+  }
+
+  /**
+   * `POST /integrations/:provider/sync` — run this student's watchers now.
+   *
+   * The reply is the provider's {@link IntegrationStatus}, **not** a per-run
+   * counts payload: what the run did lives in its job rows and the logs, and
+   * the only run facts that belong in the API contract are `lastSyncedAt` /
+   * `lastSyncStatus` — which this reads back *after* awaiting the run, so they
+   * describe the sync just performed rather than the previous one.
+   *
+   * `PORTAL` covers two upstream endpoints (timetable and exams), so it runs
+   * two watchers and the status reflects whichever job row finished last.
+   */
+  async sync(
+    user: User,
+    provider: IntegrationProvider,
+  ): Promise<IntegrationStatus> {
+    const connected = await this.prisma.integration.findUnique({
+      where: { userId_provider: { userId: user.id, provider } },
+      select: { id: true },
+    });
+    if (!connected) {
+      throw new NotFoundException(
+        `No ${this.label(provider)} account connected`,
+      );
+    }
+
+    await this.ingestionSync.syncNow(user.id, provider);
+    return this.statusOf(user.id, provider);
+  }
+
+  /** One provider's status, re-read from the DB (job rows included). */
+  private async statusOf(
+    userId: string,
+    provider: IntegrationProvider,
+  ): Promise<IntegrationStatus> {
+    const row = await this.prisma.integration.findUnique({
+      where: { userId_provider: { userId, provider } },
+      select: { provider: true, lastVerifiedAt: true, ...LATEST_JOB_SELECT },
+    });
+    if (!row) return this.toStatus(provider, null, false);
+    return this.toStatus(provider, row.lastVerifiedAt, true, latestJobOf(row));
   }
 
   private async storeCredentials(
@@ -129,12 +223,12 @@ export class IntegrationsService {
   ): Promise<IntegrationStatus> {
     let valid: boolean;
     try {
-      valid = await this.dluAuth.verifyCredentials(
+      valid = await this.integrationAuth.verifyCredentials(
         provider,
         credentials.username,
         credentials.password,
       );
-    } catch (error) {
+    } catch {
       throw new ServiceUnavailableException(
         "Couldn't reach DLU to verify your account. Please try again in a moment.",
       );
@@ -168,9 +262,17 @@ export class IntegrationsService {
       },
       create: { userId: user.id, provider, ...payload },
       update: payload,
+      include: LATEST_JOB_SELECT,
     });
 
-    return this.toStatus(row.provider, row.lastVerifiedAt);
+    // Re-connecting doesn't erase the run history, so report the same sync
+    // state `GET /integrations` would.
+    return this.toStatus(
+      row.provider,
+      row.lastVerifiedAt,
+      true,
+      latestJobOf(row),
+    );
   }
 
   /** `DELETE /integrations/:provider` — idempotent; keeps the DEK. */
@@ -274,11 +376,14 @@ export class IntegrationsService {
     provider: IntegrationProvider,
     lastVerifiedAt: Date | null,
     connected = true,
+    lastSync: LatestJob | null = null,
   ): IntegrationStatus {
     return {
       provider,
       connected,
       lastVerifiedAt: lastVerifiedAt ? lastVerifiedAt.toISOString() : null,
+      lastSyncedAt: lastSync ? lastSync.createdAt.toISOString() : null,
+      lastSyncStatus: lastSync ? lastSync.status : null,
     };
   }
 

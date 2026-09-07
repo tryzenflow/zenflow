@@ -1,6 +1,6 @@
 import { Text } from "@/components/ui/text";
 import { useNow } from "@/hooks/use-now";
-import { SESSION_TYPE_META, SESSION_TYPE_ORDER } from "@/lib/session-type";
+import { SESSION_TYPE_META, SESSION_TYPE_ORDER } from "@zenflow/core";
 import {
   dateKey,
   shiftWeek,
@@ -305,7 +305,7 @@ function WeekHeaderImpl(
             : ""
         }`}
       >
-        <Text className="text-[10.5px] font-semibold uppercase text-muted-foreground">
+        <Text className="text-[10.5px] font-semibold text-muted-foreground">
           {format(day, "EEE")}
         </Text>
         <View

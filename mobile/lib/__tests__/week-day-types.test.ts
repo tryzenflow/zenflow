@@ -9,6 +9,7 @@ function session(overrides: Partial<Session>): Session {
     id: "s1",
     title: "t",
     note: null,
+    location: null,
     durationMinutes: 60,
     deadline: null,
     type: "TASK",

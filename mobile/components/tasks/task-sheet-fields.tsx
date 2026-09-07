@@ -27,8 +27,8 @@ import { TagAutocomplete } from "./form/tag-autocomplete";
  * - **ASSIGNMENT / EXAM / LECTURE** — a fixed date + start/end time.
  * - **DND** — the same fixed-time picker plus a recurrence builder.
  *
- * Title / Description / Tags render for every type. `typeSelector`, when given
- * (create screen only), renders directly beneath the Title field.
+ * Title / Description / Location / Tags render for every type. `typeSelector`,
+ * when given (create screen only), renders directly beneath the Title field.
  */
 export function SessionSheetFields({
   initialValue = "",
@@ -99,6 +99,22 @@ export function SessionSheetFields({
                 disabled={disabled}
               />
             </ErrorBoundary>
+          </Field>
+        )}
+      />
+
+      <Controller
+        control={form.control}
+        name="location"
+        render={({ field, fieldState }) => (
+          <Field label="Location" error={fieldState.error?.message}>
+            <Input
+              editable={!disabled}
+              value={field.value ?? ""}
+              onChangeText={field.onChange}
+              placeholder="Room, building, or link (optional)"
+              className="h-[50px] rounded-xl border border-input bg-card px-4 text-base text-foreground"
+            />
           </Field>
         )}
       />

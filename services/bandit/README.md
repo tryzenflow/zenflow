@@ -8,11 +8,14 @@ Design: [`docs/adr/0001-linucb-model-design.md`](../../docs/adr/0001-linucb-mode
 Arm → timestamp mapping: [`docs/scheduler/reranking.md`](../../docs/scheduler/reranking.md).
 Experiment: [`docs/scheduler/ab-testing.md`](../../docs/scheduler/ab-testing.md).
 
-> **Status: model core, offline replay evaluator, and the FastAPI HTTP surface
-> (`src/api.py`: `GET /health`, `POST /predict`, `POST /update`) implemented and tested.
-> The backend integration seam is not wired yet** — until it is, the live scheduler is the
-> deterministic heuristic in [`backend/src/scheduler`](../../backend/src/scheduler)
-> (`heuristic.ts` + `day-reschedule.service.ts`).
+> **Status: wired end to end.** The model core, offline replay evaluator and FastAPI
+> surface (`src/api.py`: `GET /health`, `POST /predict`, `POST /update`) are implemented
+> and tested; the NestJS backend calls this service as **Policy B** in a 50/50 A/B against
+> the preference heuristic (Policy A). `BanditPlacer` (`backend/src/scheduler/io/bandit-placer.service.ts`)
+> builds the context and picks the slot; `BanditService` + `BanditArmStateRepository`
+> (`backend/src/bandit/`) own the HTTP calls and `(A, b)` persistence;
+> `SchedulingFeedbackService` sends the delayed reward. With `BANDIT_SERVICE_URL` unset,
+> every scheduling event falls back to Policy A.
 
 ## Design
 
@@ -108,15 +111,17 @@ data).
 - [x] `src/api.py` — FastAPI wrapping the LinUCB math in `GET /health`, `POST /predict`,
       `POST /update` (stateless: `(A, b)` in the payload).
 - [x] `Dockerfile` + a `bandit` service in `backend/compose.dev.yml` (host `:8100`).
-- [ ] Backend: set `BANDIT_SERVICE_URL` in `backend/.env.dev` / `.env.example`.
-- [ ] Backend: `@zenflow/shared` types (`SchedulingArm`, predict/update request+response);
-      `BanditArmState` Prisma model + migration; `SlotProposal.featureVector` +
+- [x] Backend: `BANDIT_SERVICE_URL` in `backend/.env.example`, validated in `app.module.ts`.
+- [x] Backend: `@zenflow/shared` bandit types (`SchedulingArm`, predict/update
+      request+response); `BanditArmState` Prisma model; `SlotProposal.featureVector` +
       `selectedArm`; `SessionEvent.slotProposalId`.
-- [ ] Backend: a bandit HTTP client with a timeout and heuristic fallback; a per-day
-      scheduling service that builds the context, calls `/predict`, and runs the
-      `reranking.md` mapping; a 50/50 experiment randomizer that writes `SlotProposal`.
-- [ ] Backend: on the first `MOVE` / on `RETAINED`, compute the reward, call `/update`, and
-      persist the returned `(A, b)`.
+- [x] Backend: `BanditService` HTTP client with timeout + heuristic fallback
+      (`backend/src/bandit/`); `BanditPlacer` per-day context + `/predict` + slot pick
+      (`scheduler/io/bandit-placer.service.ts`); `ExperimentService` 50/50 randomizer that
+      writes `SlotProposal` (`backend/src/experiments/`).
+- [x] Backend: `SchedulingFeedbackService` computes the reward on the first `MOVE`, and
+      `RetainedSessionsService` on `RETAINED`, calls `/update`, and persists the returned
+      `(A, b)` (`scheduler/io/`).
 
 ## Contributing
 

@@ -5,7 +5,7 @@ const API_URL = process.env.VITE_API_URL ?? "http://localhost:5000/api/v1";
 
 async function createSession(page: Page, title: string): Promise<string> {
   await page
-    .getByRole("button", { name: /new task/i })
+    .getByRole("button", { name: /new session/i })
     .first()
     .click();
   await page.getByRole("textbox", { name: /session name/i }).fill(title);
@@ -13,7 +13,9 @@ async function createSession(page: Page, title: string): Promise<string> {
   await page.getByRole("button", { name: /create session/i }).click();
 
   await expect(
-    page.getByText(/session created — drag it onto the calendar/i),
+    page
+      .getByText(/scheduled for/i)
+      .or(page.getByText(/drag it onto the calendar/i)),
   ).toBeVisible({ timeout: 10_000 });
 
   const res = await page

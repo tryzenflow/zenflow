@@ -32,6 +32,13 @@ export class UpdateSessionDto implements UpdateSessionInput {
   @IsString()
   note?: string | null;
 
+  /** Free-text location (room / building). `null` clears it; omit to leave unchanged. */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  @MaxLength(200, { message: "Location must be at most 200 characters." })
+  location?: string | null;
+
   @IsOptional()
   @IsInt()
   @Min(TIME_GRANULARITY)

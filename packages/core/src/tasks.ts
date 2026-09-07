@@ -18,13 +18,13 @@ import { DAILY_HORIZON, SLOT_MINUTES, type Session } from "@zenflow/shared";
 export const MAX_TITLE_LENGTH = 60;
 
 /**
- * Ceiling on a TASK's `sessionCount` (issue #33) — must mirror the backend's
+ * Ceiling on a `TASK`'s `sessionCount` — mirrors the backend's
  * `MAX_SESSION_COUNT` (`backend/src/sessions/dto/create-session.dto.ts`):
- * `MAX_SERIES_PER_DAY (3) × MAX_SCAN_DAYS (60)`. A request above this can
- * never be placed in full no matter how loose the deadline is, since the
- * placer never puts more than 3 sittings of one series on the same day.
+ * `MAX_SERIES_PER_DAY (1) × MAX_SCAN_DAYS (60)`. A request above this can never
+ * be placed in full no matter how loose the deadline is, since the placer puts
+ * at most one sitting of a series on any calendar day.
  */
-export const MAX_TASK_SESSION_COUNT = 180;
+export const MAX_TASK_SESSION_COUNT = 60;
 
 export const SESSION_FORM_TYPES = [
   "TASK",
@@ -55,6 +55,8 @@ export const sessionSchema = z
       }),
     tags: z.array(z.string()).default([]),
     note: z.string().optional(),
+    /** Free-text location (room / building). Optional for every session type. */
+    location: z.string().optional(),
 
     // TASK-only
     duration: z
@@ -193,4 +195,25 @@ export function placementQualifier(
     return "pastDeadline";
 
   return "onTime";
+}
+
+/**
+ * Which kind of series (if any) a session belongs to (CLAUDE.md invariant #4).
+ * `seriesId` is set for both:
+ * - a recurring **fixed** series (`rrule` set) — virtual occurrences; scope
+ *   choices are "this occurrence" / truncate the rrule / delete the series;
+ * - a materialized multi-sitting **TASK** series (`rrule` null, `sessionTotal`
+ *   set instead) — real rows; scope choices are "this sitting" / delete it and
+ *   later sittings by `sessionIndex` / delete the series.
+ *
+ * `"none"` covers a one-off fixed session or a single-sitting TASK — no scope
+ * choice needed, delete is always just that one row.
+ */
+export type SeriesKind = "none" | "recurring" | "task";
+
+export function getSeriesKind(
+  session: Pick<Session, "seriesId" | "rrule">,
+): SeriesKind {
+  if (!session.seriesId) return "none";
+  return session.rrule ? "recurring" : "task";
 }

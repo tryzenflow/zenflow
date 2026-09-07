@@ -22,7 +22,7 @@ export type DeleteRecurringScope = "occurrence" | "following" | "series";
 
 /**
  * Which flavor of series this sheet is choosing a scope for (see
- * `lib/session-series.ts`'s `SeriesKind`, minus `"none"` — the sheet never
+ * `@zenflow/core`'s `SeriesKind`, minus `"none"` — the sheet never
  * opens for a non-series session) — governs copy only, not behavior; the
  * caller still owns which API calls each scope maps to.
  */

@@ -7,7 +7,7 @@ import {
   Notebook,
 } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
-import { SESSION_TYPE_META } from "@/lib/session-type";
+import { SESSION_TYPE_META } from "@zenflow/core";
 import { cn } from "@/lib/utils";
 import type { SessionType } from "@zenflow/shared";
 import { View } from "react-native";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { combineToUtc, shiftHhmm, splitZoned } from "../session-time";
+import { combineToUtc, shiftHhmm, splitZoned } from "@zenflow/core";
 
 // UTC+7, no DST — the tz the plan's manual-QA matrix pins to.
 const TZ = "Asia/Saigon";
