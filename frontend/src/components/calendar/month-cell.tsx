@@ -133,7 +133,6 @@ function MonthEventItem({ ev }: { ev: Event }) {
       className={cn(
         "relative z-30 mt-0 h-auto w-full justify-start gap-x-1 rounded border border-l-2 px-1.5 py-0.5 text-[10px] font-medium",
         transform && "cursor-grabbing shadow-lg",
-        ev.state === "completed" && "line-through",
         TASK_CARD_CLASSES[ev.state],
       )}
     >

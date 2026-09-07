@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BarChart3, LogOut, UserRound } from "lucide-react";
+import { BarChart3, LogOut, Plug, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUserStore } from "@/hooks/use-user-store";
 import { logout } from "@/api/auth";
 import { UserPreferencesPanel } from "@/components/settings/preferences";
+import { IntegrationsPanel } from "@/components/settings/integrations";
 
 /** Log the user out locally even if the network call fails, then route to login. */
 async function performLogout(navigate: (to: string) => void) {
@@ -51,10 +52,11 @@ interface SettingsDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-type TabId = "insights" | "account";
+type TabId = "insights" | "integrations" | "account";
 
 const TABS: { id: TabId; label: string; icon: typeof BarChart3 }[] = [
   { id: "insights", label: "Insights", icon: BarChart3 },
+  { id: "integrations", label: "Integrations", icon: Plug },
   { id: "account", label: "Account", icon: UserRound },
 ];
 
@@ -114,6 +116,16 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 description="When Zenflow schedules your sessions on the hot zones highlighted in green."
               >
                 {tab === "insights" && <UserPreferencesPanel />}
+              </Section>
+            </TabsContent>
+
+            {/* Integrations — connect LMS / student portal (fetch-on-open) */}
+            <TabsContent value="integrations" className="mt-0 space-y-6">
+              <Section
+                title="University accounts"
+                description="Sync assignments, exams and classes from your school's systems."
+              >
+                {tab === "integrations" && <IntegrationsPanel />}
               </Section>
             </TabsContent>
 
