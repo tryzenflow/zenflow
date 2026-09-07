@@ -41,8 +41,11 @@ export interface ParsedBlock {
 
 /** A {@link ParsedBlock} from the Moodle calendar, tagged with its course. */
 export interface ParsedLmsItem extends ParsedBlock {
-  /** Moodle `course.id`; joins to `LmsCourse.lmsCourseId`. Null if absent. */
-  lmsCourseId: number | null;
+  /**
+   * The Moodle course this item belongs to — its `fullName` becomes a tag on
+   * the session. Null when the event carried no usable `course` block.
+   */
+  lmsCourse: ParsedLmsCourse | null;
 }
 
 /** A distinct Moodle course seen in a calendar response — upserted as `LmsCourse`. */

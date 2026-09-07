@@ -127,6 +127,18 @@ const sortSeconds = (event: MoodleCalendarEvent) =>
   event.timesort ?? event.timestart;
 
 /**
+ * The `ParsedLmsCourse` for an event's `course` block, looked up in the
+ * already-built catalog. Null when the event carried no usable course.
+ */
+function courseOf(
+  event: MoodleCalendarEvent,
+  courses: Map<number, ParsedLmsCourse>,
+): ParsedLmsCourse | null {
+  const id = event.course?.id;
+  return Number.isInteger(id) ? (courses.get(id!) ?? null) : null;
+}
+
+/**
  * Parse one month of the Moodle calendar into calendar blocks.
  *
  * Kept: `assign` and `quiz` events whose sort time is strictly **after**
@@ -194,7 +206,7 @@ export function parseMonthlyView(
       ...reminderBefore(new Date(event.timestart * 1000)),
       location: event.location?.trim() || null,
       note: event.description || null,
-      lmsCourseId: event.course?.id ?? null,
+      lmsCourse: courseOf(event, courses),
     });
   }
 
@@ -236,7 +248,7 @@ export function parseMonthlyView(
       type: "EXAM" as const,
       location: close.location?.trim() || null,
       note: null,
-      lmsCourseId: close.course?.id ?? null,
+      lmsCourse: courseOf(close, courses),
     };
 
     if (!open) {

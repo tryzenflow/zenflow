@@ -85,10 +85,15 @@ describe("parseTimetable", () => {
         scheduledStartTime: new Date("2026-08-17T00:30:00.000Z"),
         durationMinutes: 225,
         location: "X01.01",
-        note: null,
+        note: "GV: Nguyễn Văn A",
         scheduleStudyUnitId: "99910AB100101",
       },
     ]);
+  });
+
+  it("falls back to a null note when the row names no teacher", () => {
+    const { items } = parseTimetable([{ ...LECTURE_ROW, FullName: null }], VN);
+    expect(items[0].note).toBeNull();
   });
 
   it("maps the evening block (periods 11–14) straight through, on grid", () => {
