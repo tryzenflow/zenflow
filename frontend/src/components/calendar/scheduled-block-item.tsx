@@ -1,7 +1,7 @@
 import { useUserStore } from "@/hooks/use-user-store";
 import { useHighlightStore } from "@/hooks/use-highlight-store";
 import { cn } from "@/lib/utils";
-import { TASK_CARD_CLASSES, withOverlap } from "@zenflow/core";
+import { TASK_CARD_CLASSES } from "@zenflow/core";
 import {
   Popover,
   PopoverAnchor,
@@ -14,8 +14,9 @@ import { zonedDate, zonedWallClockToUtc } from "@/utils/tz";
 import { CSS } from "@dnd-kit/utilities";
 import { useDndMonitor, useDraggable, type DragEndEvent } from "@dnd-kit/core";
 import { toZonedTime } from "date-fns-tz";
-import { CornerDownRight } from "lucide-react";
+import { CornerDownRight, MapPin } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { SessionTypeBadge } from "./session-type-badge";
 
 function minutesOfDay(iso: string, tz: string) {
   const d = toZonedTime(new Date(iso), tz);
@@ -320,7 +321,10 @@ export function ScheduledBlockItem({
     }, SINGLE_CLICK_DELAY_MS);
   };
 
-  const state = withOverlap(block.state, layout.conflict);
+  // A manually-created overlap gets no distinct card treatment — an overlapping
+  // session renders in exactly its normal type colour. The clash is still
+  // resolved *spatially* (side-by-side columns via `layout`), just not tinted.
+  const state = block.state;
   const width = 100 / layout.columns;
 
   return (
@@ -361,7 +365,10 @@ export function ScheduledBlockItem({
           }}
         >
           {/* Edge-resize handles — pointer-driven so they work for mouse and touch
-          alike. They claim the gesture before dnd-kit's move-drag can start. */}
+          alike. They claim the gesture before dnd-kit's move-drag can start.
+          On a very short block (a 15-min session is only ~16px tall) the two
+          full-size handles would meet in the middle and swallow every tap, so
+          they shrink to leave a clickable core that still opens the popover. */}
           {isInteractive && (
             <>
               <div
@@ -369,7 +376,10 @@ export function ScheduledBlockItem({
                 onPointerMove={moveResize}
                 onPointerUp={endResize}
                 onPointerCancel={endResize}
-                className="absolute inset-x-0.5 top-0 z-30 flex h-2.5 touch-none cursor-ns-resize items-start justify-center"
+                className={cn(
+                  "absolute inset-x-0.5 top-0 z-30 flex touch-none cursor-ns-resize items-start justify-center",
+                  isCompact ? "h-1" : "h-2.5",
+                )}
                 title="Drag to resize"
               >
                 <div className="mt-0.5 h-0.5 w-6 rounded-full bg-foreground/0 transition-colors group-hover:bg-foreground/30" />
@@ -379,7 +389,10 @@ export function ScheduledBlockItem({
                 onPointerMove={moveResize}
                 onPointerUp={endResize}
                 onPointerCancel={endResize}
-                className="absolute inset-x-0.5 bottom-0 z-30 flex h-2.5 touch-none cursor-ns-resize items-end justify-center"
+                className={cn(
+                  "absolute inset-x-0.5 bottom-0 z-30 flex touch-none cursor-ns-resize items-end justify-center",
+                  isCompact ? "h-1" : "h-2.5",
+                )}
                 title="Drag to resize"
               >
                 <div className="mb-0.5 h-0.5 w-6 rounded-full bg-foreground/0 transition-colors group-hover:bg-foreground/30" />
@@ -473,6 +486,19 @@ export function ScheduledBlockItem({
                       ? `${fmt(block.taskStart, tz)} → next day`
                       : `${fmt(block.taskStart, tz)} – ${fmt(block.taskEnd, tz)}`}
                 </span>
+                {(block.type !== "TASK" || block.location) && (
+                  <div className="mt-0.5 flex flex-wrap items-center gap-1 overflow-hidden">
+                    {block.type !== "TASK" && (
+                      <SessionTypeBadge type={block.type} />
+                    )}
+                    {block.location && (
+                      <span className="inline-flex items-center gap-0.5 text-[9px] text-muted-foreground">
+                        <MapPin className="h-2.5 w-2.5" />
+                        <span className="truncate">{block.location}</span>
+                      </span>
+                    )}
+                  </div>
+                )}
                 {showTags && (
                   <div className="mt-0.5 flex flex-wrap gap-1 overflow-hidden">
                     {block.tags.slice(0, 3).map((t) => (
@@ -533,14 +559,6 @@ export function ScheduledBlockItem({
               </dd>
             </div>
           </dl>
-
-          {state === "conflict" && (
-            <div className="flex flex-wrap gap-2 text-xs">
-              <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
-                Overlap
-              </span>
-            </div>
-          )}
 
           {block.tags.length > 0 && (
             <div className="flex flex-wrap gap-1">
