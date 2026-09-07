@@ -1,7 +1,7 @@
 # ADR-0002: Scheduling & Session-Model Simplification
 
 **Status:** Accepted
-**Date:** 2026-08-30
+**Date:** 2026-08-30 · **Last updated:** 2026-09-07
 **Supersedes:** the completion/abandonment lifecycle and the manual "Optimize" surface.
 
 ---
@@ -10,9 +10,11 @@
 
 The session model had accreted a full completion lifecycle (`SessionStatus`
 `PENDING | DONE | ABANDONED`, `COMPLETE` / `ABANDON` / `KEEP` events, an hourly overdue
-sweep) on top of a scheduler engine that had already been reduced to a single pure
-heuristic. The completion states carried little signal — a student rarely marks work done —
-while adding UI (checkmarks, "Mark done", strikethrough) and telemetry surface.
+sweep) on top of a scheduler that had already been reduced to a single pure heuristic. The
+completion states carried little signal — a student rarely marks study work done — while
+adding UI (checkmarks, "Mark done", strikethrough) and telemetry surface. This ADR removes
+that, adds the education-focused session types, and fixes the personalization signal to a
+single **move-or-keep** outcome.
 
 ## 2. Decision
 
@@ -25,10 +27,9 @@ A scheduled session has exactly two outcomes:
   `Session.lastMovedAt`.
 - **Keep** — the session's interval elapses and it was never moved. The half-hourly
   `RetainedSessionsService` sweep writes a `RETAINED` `SessionEvent` (`rewardScore = +1`)
-  and stamps `Session.retainedAt` (idempotency). It replaces the deleted
-  `AbandonedSessionsService`.
+  and stamps `Session.retainedAt` (idempotency).
 
-`SessionEventType` is now `CREATE | MOVE | RETAINED`. `SessionStatus`, `Session.status`,
+`SessionEventType` is `CREATE | MOVE | RETAINED`. `SessionStatus`, `Session.status`,
 `Session.startTime`, and the `OVERDUE` notification topic are removed.
 
 ### 2.2 Session types
@@ -37,69 +38,61 @@ A scheduled session has exactly two outcomes:
 
 | Type | Deadline | Scheduled by | Recurrence | Draggable |
 | --- | --- | --- | --- | --- |
-| `TASK` | required | the engine (implicit day repack) | no | yes |
-| `ASSIGNMENT` / `EXAM` / `LECTURE` | none | the user pins `scheduledStartTime` | no | no |
-| `DND` | none | the user pins `scheduledStartTime` | optional `rrule` | no |
+| `TASK` | required | the engine (into one empty slot) | via `sessionCount > 1` (a materialized series) | yes |
+| `ASSIGNMENT` / `EXAM` / `LECTURE` | none | the user (or a DLU sync) pins `scheduledStartTime` | optional `rrule` | yes (a plain field write) |
+| `DND` | none | the user pins `scheduledStartTime` | optional `rrule` | yes (a plain field write) |
 
-`Session.deadline` is now nullable. Fixed types and DND blocks are hard `occupied` intervals
-the day repack schedules around; they are never auto-moved.
+`Session.deadline` is nullable. The engine places **only** the session being created or
+deadline-edited (or the members of one new `TASK` series) into an already-free slot — it
+never moves another session. Fixed types and `DND` blocks are hard `occupied` intervals the
+placer schedules around.
 
 ### 2.3 Manual creation via a 3-tab form
 
-`mobile/`'s create screen gains a `SessionTypeTabs` selector: **Task** (default) / **Fixed**
-(with an Assignment·Exam·Lecture segment) / **Do Not Disturb**. Fixed/DND capture
+Both clients' create form has a `SessionTypeTabs` selector: **Task** (default) / **Fixed**
+(with an Assignment · Exam · Lecture segment) / **Do Not Disturb**. Fixed/DND capture
 date + start-time + end-time; the client derives `durationMinutes` and the concrete
-`scheduledStartTime`. DND adds a constrained RRULE builder
-(`FREQ=DAILY|WEEKLY`, `INTERVAL`, `BYDAY`, `UNTIL`).
+`scheduledStartTime`. Every non-`TASK` type gets a constrained RRULE builder
+(`FREQ=DAILY|WEEKLY`, `BYDAY`, `UNTIL`).
 
-### 2.4 Recurring DND
+### 2.4 Series — two kinds
 
-A recurring DND block is one `SessionSeries` (`type: DND`, `deadline: null`, `rrule`) plus a
-single representative `Session` at the first occurrence. Occurrences are expanded at read
-time via `backend/src/scheduler/utils/recurrence.ts` (`expandRrule`, wrapping the `rrule`
-package) — never materialized. `SessionsService.list` emits per-occurrence virtual rows
-(`id = "<seriesId>::<iso>"`); `DayRescheduleService` folds occurrences into `occupied`.
+- **Recurring fixed session** (`DND` / `ASSIGNMENT` / `EXAM` / `LECTURE` with an `rrule`) —
+  *virtual*: one `SessionSeries` holds the `rrule` + `exdates`, one representative `Session`
+  anchors the first occurrence, and `SessionsService.list()` fans it out into occurrences
+  whose `id` is `"<seriesId>::<startISO>"` (`expandRrule`, never materialized).
+- **Multi-sitting `TASK`** (`sessionCount > 1`) — *materialized*: N real `Session` rows
+  share one `seriesId` and `deadline`, each placed independently and spread across
+  `now … deadline`.
 
-### 2.5 A/B testing — schema readiness only
+Editing / deleting a series member is routed by the backend:
+`PATCH /sessions/:id` with `scope` (`occurrence` / `following` / `series`) and optional
+`skipConflicting`; `DELETE /sessions/:id` on an occurrence id adds it to `exdates`;
+`DELETE /sessions/series/:id/truncate?from=<ISO>` pulls a recurring rrule's `UNTIL` back;
+`DELETE /sessions/series/:id/from/:sessionId` drops a `TASK` sitting and every later one;
+`DELETE /sessions/series/:id` drops the whole series.
 
-`SlotProposal` is reshaped to hold everything `docs/scheduler/ab-testing.md` needs
-(`experimentId`, `randomizationSeed`, `primaryPolicy`, `observationCount`,
-`proposedStartTime` / `appliedStartTime`, `firstModifiedAt` / `acceptedWithoutModification`,
-pairwise + `feedback` columns). `SessionEvent` gains `dragDistanceMinutes` + `policy`, and
-both models' `sessionId` becomes nullable with `onDelete: SetNull` so history survives a
-delete. **Nothing writes `SlotProposal` yet** — the `ExperimentService`, the 50/50
-randomizer, the pairwise / like-dislike UI, and the `preferenceMatrix` learning writer are a
-later phase, now unblocked by the LinUCB spec reconciliation (2026-08-31) — see
-`docs/adr/0001-linucb-model-design.md` (§5 feature vector, §7 reward, §9 delayed feedback,
-§11 A/B) and `docs/scheduler/ab-testing.md`.
+### 2.5 A/B experiment
 
-### 2.6 Frontend archived
+`SlotProposal` holds everything [`docs/scheduler/ab-testing.md`](../scheduler/ab-testing.md)
+needs (`experimentId`, `randomizationSeed`, `primaryPolicy`, `observationCount`,
+`proposedStartTime` / `appliedStartTime`, `featureVector`, `selectedArm`). `SessionEvent`
+carries `dragDistanceMinutes` + `slotProposalId`; both models' `sessionId` is nullable with
+`onDelete: SetNull` so history survives a delete.
 
-The web PWA (`frontend/`) is dropped from the pnpm workspace. All UI lives in `mobile/`.
+`ExperimentService` **writes a `SlotProposal` on every `TASK` scheduling event** and assigns
+a 50/50 `primaryPolicy` (`HEURISTIC` — Policy A; `LINUCB` — Policy B, calling the Python
+bandit service). The delayed reward path (first `MOVE` / `RETAINED` → `/update` →
+`BanditArmState`) is live. See [ADR-0001](0001-linucb-model-design.md).
 
 ## 3. Consequences
 
 - The migration is destructive (drops `SessionStatus`, `Session.status`, `Session.startTime`,
-  rewrites `SessionEventType`). Dev DB is reset; there is no production database.
-- `docs/scheduler/reranking.md` / `services/bandit/linucb.md` were rewritten (2026-08-31)
-  against the current `heuristic.ts` / `day-reschedule.service.ts`; the re-ranker seam,
-  `BANDIT_SERVICE_URL`, and the per-day bandit call still need to be built (tracked in
-  `services/bandit/README.md`).
-
-> **Addendum (2026-08-31).** The implicit **day repack** described in §2.2 / §2.4 is
-> withdrawn. `DayRescheduleService` is deleted; `HeuristicScheduleService` (`scheduleTask`
-> / `scheduleSeries`) places **only** the session being created or deadline-edited and
-> never moves another session (`docs/scheduler/reranking.md`, `docs/scheduler/heuristic.md`).
-> `SessionSeries` now also backs `TASK` series (`POST /sessions` `sessionCount > 1`,
-> nullable `rrule`); `DND` occurrences are still folded into `occupied` by `day-load.ts`.
-
-> **Addendum (2026-09-01).** Reorg only, no behavior change to this ADR's model: the
-> placement services were renamed and split — `HeuristicScheduleService` →
-> `scheduler/io/heuristic-placer.service.ts` (`HeuristicPlacer`, `placeTask` /
-> `placeInWindow`); `BanditScheduleService` → `scheduler/io/bandit-placer.service.ts`
-> (`BanditPlacer`); series placement moved to `scheduler/io/series-placer.service.ts`
-> (`SeriesPlacer`); `SessionsService` now calls one facade,
-> `scheduler/io/task-placement.service.ts` (`TaskPlacementService`), plus
-> `SchedulingFeedbackService` for the first-move reward. Pure math lives in
-> `scheduler/core/*`. `TASK`-series members now go through the A/B path (see the ADR-0001
-> addendum).
+  rewrites `SessionEventType`). The dev DB is reset; there is no production database.
+- Both `frontend/` (the web PWA) and `mobile/` (Expo) are active clients of the
+  `@zenflow/shared` contract; shared calendar logic lives in `@zenflow/core`.
+- Scheduler code is split into a pure `backend/src/scheduler/core/*` (scoring, ranking, arm
+  bands, series math, recurrence, decay — no I/O, no clock, no randomness) and an I/O
+  `backend/src/scheduler/io/*` (`HeuristicPlacer`, `BanditPlacer`, `SeriesPlacer`, the
+  `TaskPlacementService` facade `sessions/` calls, `SchedulingFeedbackService`, and the two
+  `@Cron` services). See [`backend/README.md` → "Scheduler architecture"](../../backend/README.md#scheduler-architecture).
