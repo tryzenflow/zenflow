@@ -72,6 +72,25 @@ backend/
 │   ├── bandit/                 # BanditService (HTTP client for services/bandit/) +
 │   │                           #   BanditArmStateRepository (per-user (A,b) load/save)
 │   ├── experiments/            # ExperimentService — 50/50 policy assignment + SlotProposal
+│   ├── ingestion/             # DLU LMS/portal ingestion (issues #27/#29/#30)
+│   │   ├── core/               # PURE parsers — no Prisma, no clock, no randomness
+│   │   │   ├── semester.ts         # resolveSemester / isoWeek(sBetween) / monthsFrom — the portal's (academicYear, semester, tuan)
+│   │   │   ├── period-map.ts       # teaching periods ("tiết") → wall-clock minutes
+│   │   │   ├── grid.ts             # 15-minute grid snapping (invariant #3)
+│   │   │   ├── parse-lms.ts        # Moodle monthly calendar → assignment / quiz blocks
+│   │   │   ├── parse-portal.ts     # timetable + exam rows → lecture / exam blocks
+│   │   │   └── types.ts            # ParsedBlock / ParsedLmsItem / ParsedPortalItem / SkippedItem
+│   │   ├── lms-watcher.service.ts       # @Cron EVERY_HOUR — this month + next
+│   │   ├── timetable-watcher.service.ts # @Cron 03:00 — this ISO week + next
+│   │   ├── exam-watcher.service.ts      # @Cron 04:00 — the whole term, one request
+│   │   ├── materializer.service.ts      # the write-back: Session + Notification, idempotent
+│   │   ├── ingestion-jobs.service.ts    # per-run LmsSyncJob / PortalAPIJob + item rows
+│   │   ├── ingestion-sync.service.ts    # the POST /integrations/:provider/sync seam
+│   │   └── watcher-support.ts           # integration paging, sleep, job-item diagnostics
+│   ├── lms/                   # LMSService — fetch-based Moodle client (login → sesskey, calendar)
+│   ├── portal/                # PortalAPIService — student-portal client (auth, timetable, exams)
+│   ├── integrations/          # encrypted DLU credential storage + live login probe
+│   ├── notifications/         # the ingestion inbox — read + acknowledge only
 │   ├── files/                 # multipart upload/download to local disk
 │   ├── mail/                  # login email + Handlebars templates
 │   ├── prisma/                # PrismaService + Postgres error-code map
@@ -108,7 +127,7 @@ Defined in [`prisma/schema.prisma`](prisma/schema.prisma)
 | `lang`                      | `Language` | `VI_VN` \| `EN_US`, default `EN_US`. Not yet read by any endpoint.                                                                                                                                                                                                                                                                                                                 |
 | `preferenceMatrix`          | float[]    | flat **168** signed floats — 7 ISO weekdays × 24 one-hour buckets, row-major (`matrixIndex(isoWeekday, hour) = (isoWeekday−1)·24 + hour`). Positive = preferred, negative = disliked, 0 = neutral. **Read by the engine** — both `slotPreferenceScore` (Policy A) and the LinUCB context vector — and eroded nightly by the decay cron. Seeded lazily from the cold-start default. |
 | `preferenceMatrixDecayedAt` | DateTime?  | When the daily decay cron last decayed `preferenceMatrix`; null until the first pass                                                                                                                                                                                                                                                                                               |
-| `onboardingComplete`        | bool       | schema default `false`, but `UsersService.create()` always writes `true` — there's no onboarding flow left to gate on (see "Users" below). The column itself is unused dead weight pending a follow-up migration to drop it.                                                                                                                                                       |
+| `onboardingComplete`        | bool       | `UsersService.create()` always writes `true`; there is no onboarding flow. Unused by any endpoint.                                                                                                                                                                                                                                                                              |
 
 `workStart`/`workEnd`/`workDays` (a per-user working-hours window/working-days set) were
 **dropped with no replacement**. The scheduler now places tasks across the full
@@ -116,26 +135,27 @@ Defined in [`prisma/schema.prisma`](prisma/schema.prisma)
 
 ### `Session`
 
-| Field                           | Type            | Notes                                                                                                                                                                                                                                                                                                                                                   |
-| ------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`                            | uuid            | PK                                                                                                                                                                                                                                                                                                                                                      |
-| `title`, `note`                 | string          | `note` is rich text (TipTap)                                                                                                                                                                                                                                                                                                                            |
-| `durationMinutes`               | int             | **always a positive multiple of 15**                                                                                                                                                                                                                                                                                                                    |
-| `deadline`                      | DateTime?       | EDF ordering key (nulls last)                                                                                                                                                                                                                                                                                                                           |
-| `tags`                          | `Tag[]`         | implicit many-to-many with `Tag` (per-user labels)                                                                                                                                                                                                                                                                                                      |
-| `manuallyMoved`                 | bool            | true → the user dragged/resized this task. **Purely informational** everywhere automatic (drives the "Manually placed" badge/telemetry) — no automatic path ever freezes/protects a task because of it. The ONE place it gates real behavior is Optimize's `"retainManual"` mode (explicit user opt-in); see "The heuristic scheduler (Optimize)" below |
-| `startTime`                     | int             | minutes from midnight of the last manual placement; informational only, not consulted by the scheduler                                                                                                                                                                                                                                                  |
-| `status`                        | `SessionStatus` | `PENDING` \| `DONE` \| `ABANDONED`                                                                                                                                                                                                                                                                                                                      |
-| `type`                          | `SessionType`   | `MANUAL` \| `ASSIGNMENT` \| `EXAM` \| `LECTURE`, default `MANUAL`. Not yet read by any endpoint.                                                                                                                                                                                                                                                        |
-| `source`                        | `SessionSource` | `USER` \| `LMS` \| `PORTAL`, default `USER`. Not yet read by any endpoint.                                                                                                                                                                                                                                                                              |
-| `conflict`                      | bool            | true when the task overlaps another task's interval, OR has no valid placement at all (`scheduledStartTime` null). An overlap is now a normal, accepted state — a direct drag/resize can knowingly create one rather than auto-relocating either task; see "The heuristic scheduler (Optimize)" below                                                   |
-| `scheduledStartTime`            | DateTime?       | placement assigned by the EDF engine                                                                                                                                                                                                                                                                                                                    |
-| `userId`                        | uuid            | FK → `User`, `onDelete: Cascade`                                                                                                                                                                                                                                                                                                                        |
-| `seriesId`                      | uuid?           | FK → `SessionSeries`, `onDelete: Cascade`. Set for a recurring fixed-type (`DND`/`ASSIGNMENT`/`EXAM`/`LECTURE`) representative and for every session of a `POST /sessions` `sessionCount > 1` `TASK` series.                                                                                                                                            |
-| `sessionIndex` / `sessionTotal` | int?            | 1-based position / total session count within a `TASK` series (null otherwise). Denormalized for cheap per-row rendering.                                                                                                                                                                                                                               |
+| Field                           | Type            | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                            | uuid            | PK                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `title`, `note`                 | string          | `note` is rich text (TipTap)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `location`                      | string?         | free-text room / building, optional. Set directly by the client; the DLU watchers write the upstream room here (portal `PhongThi`/`RoomID`, Moodle event `location`). Never read by the scheduler.                                                                                                                                                                                                                                                                                                             |
+| `durationMinutes`               | int             | **always a positive multiple of 15**                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `deadline`                      | DateTime?       | set for `TASK`; `null` for the fixed types. Ordering key for placement.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `tags`                          | `Tag[]`         | implicit many-to-many with `Tag` (per-user labels)                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `type`                          | `SessionType`   | `TASK` \| `ASSIGNMENT` \| `EXAM` \| `LECTURE` \| `DND`. `TASK` is engine-placed; the rest are user-pinned.                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `source`                        | `SessionSource` | `USER` \| `LMS` \| `PORTAL`, default `USER`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `conflict`                      | bool            | true when the session overlaps another's interval, or has no valid placement (`scheduledStartTime` null). An overlap is an accepted state — a direct drag/resize can knowingly create one; neither session is auto-relocated.                                                                                                                                                                                                                                                                             |
+| `scheduledStartTime`            | DateTime?       | the engine's placement for a `TASK`; the client-supplied instant for a fixed / `DND` session; `null` while unplaced.                                                                                                                                                                                                                                                                                                                                                                                          |
+| `lastMovedAt` / `retainedAt`    | DateTime?       | move-or-keep bookkeeping (ADR-0002 §2.1). `lastMovedAt == null` = never moved; the half-hourly `RETAINED` sweep stamps `retainedAt`.                                                                                                                                                                                                                                                                                                                                                                          |
+| `rrule`                         | —               | on `SessionSeries`, not `Session` — the bare recurrence rule for a recurring fixed series (`null` for a `TASK` series). `exdates` holds individually-deleted occurrences.                                                                                                                                                                                                                                                                                                                                     |
+| `userId`                        | uuid            | FK → `User`, `onDelete: Cascade`                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `seriesId`                      | uuid?           | FK → `SessionSeries`, `onDelete: Cascade`. Set for a recurring fixed-type (`DND`/`ASSIGNMENT`/`EXAM`/`LECTURE`) representative and for every session of a `POST /sessions` `sessionCount > 1` `TASK` series.                                                                                                                                                                                                                                                                                                |
+| `sessionIndex` / `sessionTotal` | int?            | 1-based position / total session count within a `TASK` series (null otherwise). Denormalized for cheap per-row rendering.                                                                                                                                                                                                                                                                                                                                                                                   |
+| `externalKey`                   | string?         | Stable identity of the upstream DLU item this session mirrors; null for user-created sessions. `"lms:assign:<instance>"` \| `"lms:quiz:<instance>"` \| `"portal:exam:<Examination>"` \| `"portal:meeting:<WeekScheduleID>"`. The LMS half keys on the activity **`instance`**, never the calendar event id. Unique per `[userId, externalKey]` — this is the ingestion idempotency guard: the watchers re-fetch the same window every cron tick and upsert on it, so a re-run can't duplicate the calendar. |
 
-Indexes: `[userId, deadline]`, `[userId, status]`, `[userId, scheduledStartTime]`,
-`[userId, seriesId, createdAt asc]`.
+Indexes: `[userId, deadline]`, `[userId, scheduledStartTime]`,
+`[userId, seriesId, createdAt asc]`; unique `[userId, externalKey]`.
 
 ### `SessionEvent` (append-only audit trail — the ML fuel)
 
@@ -168,11 +188,165 @@ atomically inside the task transaction. The wire format keeps `Session.tags` as 
 
 `id`, `originalName`, `filename`, `path`, `mimetype`, `size`, `userId` (cascade).
 
-> **Sessions are one-off, and every task is flexible.** A `POST /tasks` always creates
-> exactly one `Session` row, placed via the narrow single-task tiered placer (no more "fixed"
-> tasks — that isn't the point of a smart scheduler). There is no recurrence: no
-> `rrule`, no `seriesId`, no `scope`. True recurrence may be reintroduced later as a
-> deliberate feature on top of this simplified scheduler.
+### DLU ingestion tables
+
+| Table                               | Purpose                                                                                                                                                                                                                        |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `LmsCourse`                         | A Moodle course from the LMS calendar response's `course` block. Deduped on `lmsCourseId` (Moodle `course.id`).                                                                                                                |
+| `PortalSection`                     | One student-portal course section — curriculum unit × term × group × teacher × room. Deduped on `scheduleStudyUnitId`; indexed `[yearStudy, termId]`, the access path for a whole-term refresh.                                |
+| `LmsSyncJob` / `LmsSyncJobItem`     | Per-run tracking for the LMS watcher (`PENDING → PROCESSING → COMPLETED \| FAILED`), one item per upstream request with `url`, `attempt`, `statusCode`, `responseBody`. The raw body is kept so a bad parse stays diagnosable. |
+| `PortalAPIJob` / `PortalAPIJobItem` | The same shape for the portal poller — `LmsSyncJobItem` was widened to match it field-for-field.                                                                                                                               |
+| `Notification`                      | Raised alongside each ingested item, `sessionId` pointing at the session the watcher wrote. Topics `ASSIGNMENT` \| `EXAM` \| `TIMETABLE` \| `REMINDER`.                                                                        |
+
+**LMS and portal course identity are deliberately independent.** `LmsCourse` and
+`PortalSection` describe the same real-world class but share no identifier and are never
+joined: there is no correlation table and no foreign key between them. The two systems
+name courses differently, so any mapping would be a fuzzy string match — and nothing in
+the ingestion path needs it, since an LMS item is scheduled from LMS data alone and a
+timetable meeting from portal data alone.
+
+> **Session model.** A `POST /sessions` creates one `Session`, or — for a `TASK` with
+> `sessionCount > 1` — a materialized series of N rows sharing a `seriesId`. A recurring
+> fixed session (`DND` / `ASSIGNMENT` / `EXAM` / `LECTURE` with an `rrule`) is a virtual
+> series: one `SessionSeries` + one representative row, fanned out into occurrences at read
+> time. See invariant #4 in [CLAUDE.md](../CLAUDE.md) and
+> [ADR-0002](../docs/adr/0002-scheduling-simplification.md) §2.4.
+
+## DLU ingestion
+
+Pulls a student's Moodle assignments/quizzes, class timetable and exam schedule onto their
+calendar. **API-only** — the LMS and the portal both expose JSON, so there is no crawling,
+no HTML scraping and no headless browser anywhere in the image.
+
+Same layering rule as the scheduler: `ingestion/core/*` is **pure** (no Prisma, no
+`new Date()`, no randomness — `now` and the timezone are always parameters), and only the
+HTTP clients in `lms/` and `portal/` do I/O.
+
+### Clients
+
+| Call                                                                   | Endpoint                                                                                                                                                                                                                                                                                                                                                                    |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LMSService.login(username, password)`                                 | 4 steps: `GET /login/index.php` (scrape `logintoken`) → `POST /login/index.php` (`redirect: "manual"`; Moodle **regenerates** `MoodleSession`, so the cookie on _this_ response is the authenticated one) → `GET /my/` → `sesskey` out of the inline `M.cfg`. Returns `{ ok: false, reason: "INVALID_CREDENTIALS" }` for a rejected password; throws only on a real outage. |
+| `LMSService.fetchMonthlyView(session, year, month)`                    | `POST /lib/ajax/service.php?sesskey=…&info=core_calendar_get_calendar_monthly_view`. `month` is 1-based.                                                                                                                                                                                                                                                                    |
+| `PortalAPIService.authenticate(username, password)`                    | `POST /api/authenticate/authpsc` → `Token`.                                                                                                                                                                                                                                                                                                                                 |
+| `PortalAPIService.fetchTimetable(token, academicYear, semester, tuan)` | `GET /api/student/DrawingStudentSchedules` — one ISO week of meetings.                                                                                                                                                                                                                                                                                                      |
+| `PortalAPIService.fetchExams(token, academicYear, semester)`           | `GET /api/student/exam` — a whole term.                                                                                                                                                                                                                                                                                                                                     |
+
+`sesskey` is a per-session CSRF token Moodle renders into the page body (`M.cfg`, hidden
+inputs, printed URLs) — never a cookie, never a header, which is why it is invisible in the
+Network tab. It is bound to `MoodleSession` and rotates with it, so it is held in a local
+variable for one watcher run and never cached. Portal calls carry
+`Authorization: Bearer <token>`, `Clientid: vhu` and `Apikey` (from `PORTAL_API_KEY`; never
+hardcoded, never logged). Timeouts come from `LMS_TIMEOUT_MS` / `PORTAL_API_TIMEOUT_MS`.
+
+### Parsers (`ingestion/core/`)
+
+- **`semester.ts`** — the portal is addressed by academic coordinates, not dates.
+  `resolveSemester(now, tz)` → `{ academicYear, semester, startDate, endDate }`. Term
+  boundaries are **weeks**, never month ends, so a `tuan` is never split across two terms:
+  HK01 opens the last week of July, HK02 the last week of December, HK03 the last week of
+  May, and HK03 closes on the week before the next HK01 (`academicYear` only rolls there).
+  The term is resolved `SEMESTER_LOOKAHEAD_WEEKS` (2) ahead of `now`, so the watchers move
+  onto a new term a fortnight before it opens and nobody sees an empty calendar on day one —
+  `startDate` is then legitimately in the future. `isoWeek(date, tz)` → one `tuan`;
+  `isoWeeksBetween(from, to, tz)` → every `tuan` in a window, walking the calendar a Monday
+  at a time because the numbers wrap 52/53 → 1 inside HK02.
+- **`period-map.ts`** — the timetable never returns clock times, only teaching periods.
+  1–4 = 07:30–11:10 (20-min break after 2), 7–10 = 13:00–16:30 (10-min break after 8),
+  11–14 = 16:40–20:00. **Periods 5–6 are undocumented**, so any span touching them returns
+  `null`, the row is skipped, and the reason is returned for the job item — guessing would
+  silently put a class on the calendar at the wrong hour.
+- **`grid.ts`** — DLU times are routinely off-grid (a 4-period lecture is 220 minutes; the
+  evening block starts at 16:40), so every block is snapped **outward** (start down, end up)
+  to keep invariant #3: 07:30–11:10 ⇒ 07:30 + 225 min, 16:40–20:00 ⇒ 16:30 + 210 min.
+- **`parse-lms.ts`** — keeps `assign` and `quiz` events that sort after `now`; `attendance`
+  is explicitly excluded. Moodle's `timestart` **is already a real Unix epoch** — never
+  re-zone it into VN time. A quiz emits **two events sharing one `instance`**
+  (`eventtype: "open"` / `"close"`) with different event ids, so quizzes are grouped by
+  `instance`, which is also the `externalKey` identity (an event id changes when a teacher
+  re-creates a due date). Window ≤ 200 min ⇒ one contiguous `EXAM` block; longer, or a lone
+  `close`, ⇒ a 15-minute reminder before the close; a lone `open` is skipped (its close
+  arrives in the next month's fetch — which is why two months are fetched).
+- **`parse-portal.ts`** — timetable rows become one `LECTURE` per meeting; exam rows parse
+  `NgayThi` (`dd/MM/yyyy`), `GioThi` (`"07g30"` — `g` for _giờ_) and `ThoiLuong` (minutes,
+  rounded up to a multiple of 15). Wall-clock → UTC always goes through
+  `common/utils`' `minutesToUtc`, never hand-rolled timezone math.
+
+`externalKey` is what makes a re-run idempotent (`@@unique([userId, externalKey])`):
+`lms:assign:<instance>`, `lms:quiz:<instance>`, `portal:meeting:<WeekScheduleID>`,
+`portal:exam:<Examination>`.
+
+### Watchers (the three crons)
+
+Same house shape as the scheduler's crons (`scheduler/io/matrix-decay.service.ts`): a thin
+`@Cron` delegating to a testable `run(now = new Date(), userId?)` that takes its clock as a
+parameter. `userId` narrows the sweep to one student — that is the manual sync endpoint,
+running the _same_ code rather than a second path that could drift.
+
+| Service                        | Cron               | Requests per student per run                                                                                                  |
+| ------------------------------ | ------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `lms-watcher.service.ts`       | `EVERY_HOUR`       | 2 — the current month and the next (a quiz opening on the 30th and closing on the 2nd is only a complete pair in one of them) |
+| `timetable-watcher.service.ts` | `EVERY_DAY_AT_3AM` | ≤ 22 — every ISO week left in the resolved `(academicYear, semester)`, from the current week to the term's last            |
+| `exam-watcher.service.ts`      | `EVERY_DAY_AT_4AM` | 1 — `/api/student/exam` returns a whole term                                                                                  |
+
+The LMS gets the hourly slot because a deadline can be published or moved at any time; a
+timetable and an exam schedule change a handful of times a term, so polling them hourly
+would be almost entirely wasted requests. The timetable trades width for that low frequency:
+one daily run walks the rest of the term rather than just the next fortnight, so a student
+who looks months ahead sees real classes, and a mid-term room or time change still lands.
+The sweep shrinks by a week every week. Every run gates on `INGESTION_ENABLED` first.
+
+Each run: page the `Integration` rows for the provider (cursor-paginated, 50 at a time),
+process students **sequentially** with a fixed `INGESTION_REQUEST_DELAY_MS` pause between
+outbound requests, decrypt via `IntegrationsService.revealCredentials`, **log in once** and
+reuse the session/token for the whole run, then parse, upsert the course catalog
+(`LmsCourse` by `lmsCourseId`, `PortalSection` by `scheduleStudyUnitId`) and hand the blocks
+to the materializer. Politeness is deliberately this trivial — no queue, no rate limiter, no
+circuit breaker; those are deferred and the layering is shaped so they land additively.
+
+Portal wall-clock strings are converted using the student's own `User.timezone`, falling
+back to `DLU_TZ`; the academic coordinates (`academicYear`, `semester`, `tuan`) are always resolved in
+`DLU_TZ`, since they are a property of the university's calendar rather than the student's.
+
+**Job tracking.** One `LmsSyncJob` / `PortalAPIJob` per student per run
+(`PENDING → PROCESSING → COMPLETED | FAILED`) tied to the `Integration`, and one `*JobItem`
+per outbound request (`url`, `attempt`, `statusCode`, `responseBody`). An item is written
+`PROCESSING` _before_ the request, so a process killed mid-flight leaves evidence of which
+call hung. `responseBody` holds `{ body, skipped, error? }` — the raw upstream payload plus
+the parser's `SkippedItem[]`, because "this payload produced nothing" is a bug report while
+"…_because periods 5–6 are undocumented_" is an answer. A failed item stays `FAILED` and the
+run continues; only a **login** failure fails the job, because without a session there is no
+request to attach the failure to. These rows are not mere diagnostics: they are what
+`IntegrationStatus.lastSyncedAt` / `.lastSyncStatus` are derived from.
+
+Nothing wraps N writes in one interactive `$transaction` — `PrismaService` sets a 20s
+timeout and warns about exactly that; every item is its own small transaction.
+
+### Write-back (`materializer.service.ts`)
+
+An ingested item lands on the calendar **and** raises a notification, whose call to action
+is "plan work around this", not "confirm this item" — it already exists upstream.
+
+- **Session** — inserted through `sessions/fixed-session-writer.ts`'s `insertFixedSession`,
+  the same insert `SessionCrudService` uses for a user-pinned fixed session, so `source`,
+  `externalKey` and the `CREATE` `SessionEvent` cannot drift between the two paths. The HTTP
+  DTO is not reusable here: `CreateSessionDto` has no `source` field and sits behind
+  `forbidNonWhitelisted`. `ParsedBlock.location` is written straight to the `Session.location`
+  column; an ingested fixed session carries no `note` (the portal exam format `HinhThucThi`
+  is dropped on parse).
+- **Idempotent** on `[userId, externalKey]`, so an hourly re-run of the same window is a
+  no-op; `P2002` is the race signal for two runs overlapping on one item.
+- **Never clobbers a student's edit.** If the row has `lastMovedAt != null`, an upstream
+  change does not overwrite it — the session is left exactly as they left it and a
+  `TIMETABLE` notification says the two now disagree (#30's open question, resolved in the
+  student's favour). That warning is deduplicated on its content, which embeds the upstream
+  instant, because unlike a normal change this disagreement never resolves itself; a
+  _further_ upstream move still speaks up.
+- **Follows** an upstream change on a session the student never touched — without writing a
+  `SessionEvent` and without setting `lastMovedAt`. Both mean "the user did this", and
+  fabricating one would feed the LinUCB reward signal a move nobody made.
+- **A quiet re-run is quiet**: notifications are raised only for genuinely new or changed
+  items.
 
 ## API endpoints
 
@@ -214,22 +388,25 @@ anchored to "today" in the user's own timezone; Sleep intentionally crosses midn
 Seeding is best-effort — each block is created independently and any failure is logged
 (`Logger.warn`) and swallowed, never blocking or failing the OTP-verify response.
 
-### Sessions (`/tasks`)
+### Sessions (`/sessions`)
 
-| Method | Path                              | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| ------ | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| POST   | `/tasks`                          | create a single task, always placed via the narrow single-task tiered placer (`SchedulerService.placeNewSession` → `place.ts`'s `placeSession`, Tier1→2→3). Only ever picks an already-free slot — **never** displaces another task. `displaced` is always `[]`. Only comes back unplaced (`conflict: true`) in the rare genuinely-saturated-calendar case                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| GET    | `/tasks?view=&date=&status=`      | list within the view window (+ unplaced conflicts). DB-level filter: `scheduledStartTime IS NULL OR BETWEEN displayStart AND displayEnd` — never fetches the user's whole task history                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| GET    | `/tasks/suggestions?q=&limit=`    | title-autocomplete: the user's existing tasks, **newest first** and **deduped by title** (case-insensitive), optionally filtered by the `q` substring. `limit` 1–50, default 10. Returns `SessionSuggestionsResponse` (`{ suggestions: Session[] }`). Read-only; never reschedules. Declared **before** `/tasks/:id` so it isn't matched as an id                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| GET    | `/tasks/:id`                      | task detail + last events                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| PATCH  | `/tasks/:id`                      | metadata only (title/note/deadline/tags) saved immediately. **Never auto-searches.** `tags` is only actually rewritten when the requested set differs (order-insensitive) from the task's current tags — not merely present in the body, since both clients resend the full form on every save. If the new deadline leaves the task's own UNCHANGED slot no longer valid, `UpdateSessionResponse.rationale` explains it's now broken and the frontend/mobile show an Accept/Decline toast — this does **not** set `conflict: true` (that's an "overdue own-slot-vs-own-deadline" case, not a double-booking; `conflict` is reserved for genuine pairwise overlap, see `markConflicts` below). `displaced`/`batchId` are always empty/null; Accept calls the separate resolve endpoint below |
-| POST   | `/tasks/:id/reschedule/resolve`   | Edit-accept: re-places a task `update()` just reported as broken, via the same Tier1→2→3 search `placeNewSession` uses (`SchedulerService.resolveInvalidPlacement`) — excludes the task's own stale slot from occupied space. No body. A no-op (task returned as-is) when the task isn't currently flagged conflicting AND its own slot still fits its own deadline (recomputed server-side, since `update()` doesn't persist a flag for this case). Writes a `RESCHEDULED` event + fresh `batchId` (undoable) when it does move something. Returns `RescheduleResponse`                                                                                                                                                                                                                    |
-| PATCH  | `/tasks/:id/reschedule`           | manual drag: writes the requested interval **unconditionally** (`SchedulerService.applyDirectPlacement`) — no search, no eviction — and pins `manuallyMoved: true` (informational). If the dropped slot now overlaps another task, BOTH are flagged `conflict: true` (one bounded, indexed-range recheck — `markConflicts`) and `rationale` names the overlap; neither is auto-relocated. `displaced` is always `[]`. Returns `RescheduleResponse`                                                                                                                                                                                                                                                                                                                                          |
-| PATCH  | `/tasks/:id/resize`               | edge-resize, snaps to 15-min grid — same direct-write + bounded conflict recheck `reschedule` uses, over the task's own new span                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| POST   | `/tasks/reschedule/undo/:batchId` | undo one batch (from `resolve`/Optimize-apply's `batchId`): reverts every task it moved back to its prior slot/duration, restored from each tagged `RESCHEDULED` `SessionEvent`'s `oldSnapshot`. Pre-flight "touched since" check: if a batched task was acted on again since, responds `{ requiresConfirmation: true, touchedSessionIds }` (writes nothing) instead — resubmit with body `{ strategy: "all" \| "excludeTouched" }`. 404 when `batchId` matches no event for this user. Returns `UndoBatchResponse`                                                                                                                                                                                                                                                                         |
-| DELETE | `/tasks/:id`                      | delete the task, then free the slot it leaves behind (`SchedulerService.freeSlot`) — same bounded conflict-clear as `complete`. No reoptimize, no separate confirm step. Returns `RemoveSessionResponse` (`{ displaced: [], batchId? }` — always empty; kept for wire shape parity)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| POST   | `/tasks/optimize/preview`         | the one explicit, opt-in, multi-task action's dry run: `SchedulerService.optimizeWindow(..., { dryRun: true })` returns a **COUNT ONLY** (`OptimizePreviewResponse`) of how many tasks in `[windowStart, windowEnd]` would move under `mode` (`"full"` \| `"retainManual"` \| `"balanced"`) — never a per-task diff, nothing written. `windowEnd - windowStart` is capped server-side by `MAX_SCAN_DAYS` regardless of the client UI's own (tighter) cap                                                                                                                                                                                                                                                                                                                                    |
-| POST   | `/tasks/optimize/apply`           | recomputes the window server-side (never trusts the preview's count as stale) and writes every moved task in one batch, undoable via the undo endpoint above. Returns `OptimizeApplyResponse` (`{ count, batchId, fixedCount?, unchangedCount? }` — the `fixedCount`/`unchangedCount` pair is `"retainManual"`-only)                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+Controller is `@Controller("sessions")`; there is no `/tasks` route. Drag, resize and
+reschedule are all the one `PATCH /sessions/:id` — a plain field diff, recorded server-side
+as a `MOVE` signal. There is no completion/status, no `/reschedule`, `/resize`, `/optimize`
+or `/undo` route.
+
+| Method | Path                                          | Purpose                                                                                                                                                                                                                                                             |
+| ------ | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/sessions`                                   | Create a session (`CreateSessionDto` — the `CreateSessionInput` union). A `TASK` is placed into its single best free slot (`TaskPlacementService`), or, with `sessionCount > 1`, a materialized series spread across `now … deadline` (`sessions[]` in the response). A fixed / `DND` session is written at the client-supplied `scheduledStartTime`, with an optional `rrule`. Never displaces another session. |
+| GET    | `/sessions?view=&date=`                       | List within the view window (`day` / `week` / `month`) + unplaced sessions. DB-level range filter — never fetches the whole history. Recurring fixed series are fanned out into per-occurrence virtual rows.                                                          |
+| GET    | `/sessions/suggestions?q=&limit=`             | Title autocomplete — the user's existing sessions, newest first, deduped by title (case-insensitive), optional `q` substring. `limit` 1–50, default 10. Declared before `/sessions/:id`. Read-only.                                                                  |
+| GET    | `/sessions/deadline-options?anchor=`          | The six deadline quick-chip instants (Today / Tomorrow / This week / Next week / This month / No rush), from `horizon.ts` ceiling math relative to `anchor`.                                                                                                         |
+| GET    | `/sessions/:id`                               | Session detail. For a recurring occurrence, `:id` is `"<seriesId>::<startISO>"` (URL-encoded).                                                                                                                                                                       |
+| PATCH  | `/sessions/:id`                               | `UpdateSessionDto` — metadata (title/note/location/tags/deadline), `scheduledStartTime` / `durationMinutes` (drag / resize), `rrule`. `scope` (`occurrence` / `following` / `series`) + `skipConflicting` narrow a change to a series member; a recurring-occurrence PATCH re-anchors the series' time-of-day. Response may carry `sessions[]` (series redistribution) and `skippedSessionIds`. |
+| DELETE | `/sessions/:id`                               | Delete one session; on an occurrence id, add that date to the series' `exdates`. Frees the slot. Returns `{ id }`.                                                                                                                                                   |
+| DELETE | `/sessions/series/:seriesId`                  | Delete the whole series (every occurrence/sitting + the series row).                                                                                                                                                                                                |
+| DELETE | `/sessions/series/:seriesId/truncate?from=`   | Recurring series only — pull the rrule's `UNTIL` back to just before `from` ("this and following").                                                                                                                                                                  |
+| DELETE | `/sessions/series/:seriesId/from/:sessionId`  | Materialized `TASK` series only — delete that sitting and every later one by `sessionIndex`; earlier sittings kept.                                                                                                                                                  |
 
 ### Tags (`/tags`)
 
@@ -249,14 +426,35 @@ Stores a student's DLU LMS / student-portal login for the ingestion watcher.
 only connection status. Types in `@zenflow/shared` (`ConnectIntegrationInput`,
 `IntegrationStatus`, `IntegrationStatusListResponse`).
 
-| Method | Path                      | Purpose                                                                                                                                                                                                             |
-| ------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| POST   | `/integrations`           | Connect a provider. Body `{ provider: "LMS" \| "PORTAL", username, password }`. Probes a live login first (`400` if rejected, `503` if DLU is unreachable, no write either way), then encrypts and upserts the row. |
-| GET    | `/integrations`           | `{ integrations: [{ provider, connected, lastVerifiedAt }] }` — one entry per provider.                                                                                                                             |
-| PATCH  | `/integrations/:provider` | Update a provider's credentials. Body `{ username?, password? }`. Probes a live login first (`400` if rejected, `503` if DLU is unreachable, no write either way), then encrypts and upserts the row.               |
-| DELETE | `/integrations/:provider` | Disconnect. Idempotent; keeps the `UserEncryptionKey`.                                                                                                                                                              |
+| Method | Path                           | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------ | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/integrations`                | Connect a provider. Body `{ provider: "LMS" \| "PORTAL", username, password }`. Probes a live login first (`400` if rejected, `503` if DLU is unreachable, no write either way), then encrypts and upserts the row.                                                                                                                                                                                                                            |
+| GET    | `/integrations`                | `{ integrations: [{ provider, connected, lastVerifiedAt, lastSyncedAt, lastSyncStatus }] }` — one entry per provider. The last pair is derived from the newest job row for that integration, not a denormalized column.                                                                                                                                                                                                                        |
+| PATCH  | `/integrations/:provider`      | Update a provider's credentials. Body `{ username?, password? }`. Probes a live login first (`400` if rejected, `503` if DLU is unreachable, no write either way), then encrypts and upserts the row.                                                                                                                                                                                                                                          |
+| DELETE | `/integrations/:provider`      | Disconnect. Idempotent; keeps the `UserEncryptionKey`.                                                                                                                                                                                                                                                                                                                                                                                         |
+| POST   | `/integrations/:provider/sync` | Run this student's watchers **now** — the manual counterpart to the crons (`LMS` runs one watcher; `PORTAL` runs the timetable and exam watchers in turn). `404` if the provider isn't connected. Awaits the run, then answers with that provider's `IntegrationStatus`, so `lastSyncedAt` / `lastSyncStatus` describe the sync just performed. Deliberately **not** a per-run counts payload: those counts live in the job rows and the logs. |
 
-`DluAuthService` only does a pass/fail probe; scraping belongs to the ingestion service.
+### Notifications (`/notifications`)
+
+The ingestion inbox. Rows are written by the watchers' materializer, never by a client, so
+there is no create or delete route. `CookieAuthGuard` + `@CurrentUser()`, own rows only;
+types in `@zenflow/shared` (`NotificationTopic`, `NotificationDto`,
+`NotificationsListResponse`).
+
+| Method | Path                              | Purpose                                                                                                                                                                                                                                                                     |
+| ------ | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/notifications?limit=&offset=`   | One page, **unread first** then newest-first. `limit` 1–100 (default 20). `unreadCount` counts the whole inbox, not the page — it drives the badge, which must not shrink as the user pages. Offset rather than a cursor, because reading a row changes the first sort key. |
+| PATCH  | `/notifications/:id/read`         | Stamp `readAt`. Idempotent, and keeps the first instant. `404` if the row isn't the caller's.                                                                                                                                                                               |
+| PATCH  | `/notifications/:id/action-taken` | Stamp `actionTakenAt` — acting on a notification is not the same as seeing it. Same idempotency and `404`.                                                                                                                                                                  |
+
+`GET /notifications` formally belongs to #31; it lives here now because nothing else makes
+the rows the watchers write reachable. Confirm/dismiss semantics stay in #31.
+
+`IntegrationAuthService` only does a pass/fail probe; parsing belongs to `ingestion/core/`.
+The probe's return/throw split is what produces the two status codes: it returns `false`
+when DLU answers and **rejects** the credentials (`400`), and throws only when DLU is
+unreachable or answers incomprehensibly (`503`). `LMSService.login` therefore reports a
+wrong password as `{ ok: false, reason: "INVALID_CREDENTIALS" }` rather than throwing.
 
 Full live schema: **Swagger UI at `<API_URL>/api`**.
 
@@ -307,6 +505,16 @@ Copy `.env.example` to `.env.{dev,staging,prod,test}`:
 cp .env.example .env.dev # same for .env.staging, .env.test, .env.prod
 ```
 
+DLU ingestion config (all validated with defaults, so a deployment that omits them still
+boots): `LMS_URL` / `PORTAL_API_URL` (upstream base URLs — read with `getOrThrow` at
+service construction, which is why they must always resolve), `LMS_TIMEOUT_MS` (15000) /
+`PORTAL_API_TIMEOUT_MS` (10000) per-request timeouts, `DLU_TZ` (`Asia/Ho_Chi_Minh` — the
+timezone the upstream wall-clock strings are in, not the user's), and `INGESTION_ENABLED`
+(kill switch for the watcher crons; `false` in `.env.test` so a test run can never reach
+DLU) and `INGESTION_REQUEST_DELAY_MS` (750; the fixed pause between a watcher's outbound
+requests — the entirety of the baseline's politeness policy, so it is config rather than a
+constant; `0` in `.env.test`). `PORTAL_API_KEY` stays required with no default.
+
 `BANDIT_SERVICE_URL` (optional, dev `http://localhost:8100`) points at the stateless Python
 bandit service (`services/bandit/`). When unset, LinUCB scheduling is disabled and every
 scheduling event falls back to the heuristic.
@@ -333,9 +541,9 @@ session via `HeuristicPlacer.placeTask`, then `ExperimentService.assignPolicy()`
 A `sessionCount > 1` series is placed by `SeriesPlacer`: each member gets an even-spread
 target day, then goes through the **same per-member 50/50 heuristic-or-LinUCB pick**, with
 its candidate-day window clamped to `± max(1, floor(X/N))` days around the target (`X` =
-whole days to the deadline, `N` = member count). Members never overlap, ≤3 per calendar day,
-and one `SlotProposal` is recorded per member. A deadline edit re-runs the same path over
-the still-upcoming sittings.
+whole days to the deadline, `N` = member count). Members never overlap, at most
+`MAX_SERIES_PER_DAY` (1) per calendar day, and one `SlotProposal` is recorded per member. A
+deadline edit re-runs the same path over the still-upcoming sittings.
 
 Delayed reward (ADR-0001 §9): the first user `MOVE` of a LinUCB-placed session sends a
 graded penalty (`-min(1, |dragMin| / 240)`) to that arm's `/update` (`SchedulingFeedbackService`);
@@ -529,9 +737,8 @@ score(slot) = Σ_arm overlapRate(slot, arm) · predicted[day][arm]   (the LinUCB
 ```
 
 The bandit service returns `0` for an arm with no accumulated reward, so the preference
-addend keeps slots meaningfully ordered before the model has learned anything. This deviates
-from `reranking.md` §3 / `ab-testing.md` §1B as originally written (LinUCB's slot score was
-the arm term alone); see the ADR-0001 addendum.
+addend keeps slots meaningfully ordered before the model has learned anything
+(ADR-0001 §8).
 
 ### Series bounded window
 
@@ -554,7 +761,7 @@ day while a neighboring day the series was supposed to use sat empty.
 `daySpan` = whole days from the next 15-min boundary to the deadline day, capped at
 `MAX_SCAN_DAYS − 1`. Each member is then placed by the same 50/50 pick as a single task
 inside its window; already-placed siblings are fed forward as hard blocks so members never
-overlap, and a day already holding `MAX_SERIES_PER_DAY` (3) sittings of this series is
+overlap, and a day already holding `MAX_SERIES_PER_DAY` (1) sitting of this series is
 skipped. A member that finds nowhere comes back unplaced without blocking the rest. `N` can
 exceed `totalDays` (more sessions than days) — buckets then collapse toward the tail, several
 members sharing one day's window; that's an unavoidable overlap the day cap and the series

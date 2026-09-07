@@ -1,6 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import {
   BadRequestException,
+  NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -13,8 +14,9 @@ import {
   MasterKeyService,
 } from "../crypto/master-key.service";
 import { ENCRYPTION_ALGORITHM } from "../common/constants";
-import { DluAuthService } from "./dlu-auth.service";
+import { IntegrationAuthService } from "./integration-auth.service";
 import { IntegrationsService } from "./integrations.service";
+import { IngestionSyncService } from "../ingestion/ingestion-sync.service";
 
 // ── in-memory Prisma double ────────────────────────────────────────────────
 interface IntegrationRow {
@@ -44,9 +46,33 @@ interface KeyRow {
 type UP = { userId: string; provider: string };
 type UPV = UP & { version: number };
 
+/** Newest-first job rows per integration, the shape LATEST_JOB_SELECT reads. */
+interface JobRow {
+  integrationId: string;
+  table: "lmsSyncJobs" | "portalApiJobs";
+  status: string;
+  createdAt: Date;
+}
+
 function makePrismaDouble() {
   const integrations: IntegrationRow[] = [];
   const keys: KeyRow[] = [];
+  const jobs: JobRow[] = [];
+
+  /** What `include`/`select`ing LATEST_JOB_SELECT yields for one integration. */
+  const withJobs = (row: IntegrationRow) => {
+    const newest = (table: JobRow["table"]) =>
+      jobs
+        .filter((j) => j.integrationId === row.id && j.table === table)
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        .slice(0, 1)
+        .map((j) => ({ status: j.status, createdAt: j.createdAt }));
+    return {
+      ...row,
+      lmsSyncJobs: newest("lmsSyncJobs"),
+      portalApiJobs: newest("portalApiJobs"),
+    };
+  };
 
   const prisma = {
     integration: {
@@ -65,7 +91,7 @@ function makePrismaDouble() {
         );
         if (existing) {
           Object.assign(existing, args.update, { updatedAt: new Date() });
-          return Promise.resolve(existing);
+          return Promise.resolve(withJobs(existing));
         }
         const row: IntegrationRow = {
           id: `i${integrations.length + 1}`,
@@ -77,28 +103,20 @@ function makePrismaDouble() {
           ...args.create,
         };
         integrations.push(row);
-        return Promise.resolve(row);
+        return Promise.resolve(withJobs(row));
       },
-      findMany: (args: {
-        where: { userId: string };
-      }): Promise<Pick<IntegrationRow, "provider" | "lastVerifiedAt">[]> =>
+      findMany: (args: { where: { userId: string } }) =>
         Promise.resolve(
           integrations
             .filter((r) => r.userId === args.where.userId)
-            .map((r) => ({
-              provider: r.provider,
-              lastVerifiedAt: r.lastVerifiedAt,
-            })),
+            .map((r) => withJobs(r)),
         ),
-      findUnique: (args: {
-        where: { userId_provider: UP };
-      }): Promise<IntegrationRow | null> => {
+      findUnique: (args: { where: { userId_provider: UP } }) => {
         const { userId, provider } = args.where.userId_provider;
-        return Promise.resolve(
-          integrations.find(
-            (r) => r.userId === userId && r.provider === provider,
-          ) ?? null,
+        const row = integrations.find(
+          (r) => r.userId === userId && r.provider === provider,
         );
+        return Promise.resolve(row ? withJobs(row) : null);
       },
       deleteMany: (args: { where: UP }): Promise<{ count: number }> => {
         let count = 0;
@@ -153,7 +171,7 @@ function makePrismaDouble() {
     },
   };
 
-  return { prisma, integrations, keys };
+  return { prisma, integrations, keys, jobs };
 }
 
 // ── fixtures ──────────────────────────────────────────────────────────────
@@ -176,11 +194,13 @@ describe("IntegrationsService", () => {
   let service: IntegrationsService;
   let crypto: CryptoService;
   let verifyCredentials: jest.Mock;
+  let syncNow: jest.Mock;
   let db: ReturnType<typeof makePrismaDouble>;
 
   beforeEach(async () => {
     db = makePrismaDouble();
     verifyCredentials = jest.fn().mockResolvedValue(true);
+    syncNow = jest.fn().mockResolvedValue(undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -189,7 +209,8 @@ describe("IntegrationsService", () => {
         MasterKeyService,
         { provide: PrismaService, useValue: db.prisma },
         { provide: ConfigService, useValue: { get: (n: string) => ENV[n] } },
-        { provide: DluAuthService, useValue: { verifyCredentials } },
+        { provide: IntegrationAuthService, useValue: { verifyCredentials } },
+        { provide: IngestionSyncService, useValue: { syncNow } },
       ],
     }).compile();
 
@@ -210,6 +231,8 @@ describe("IntegrationsService", () => {
         provider: "LMS",
         connected: true,
         lastVerifiedAt: expect.any(String) as string,
+        lastSyncedAt: null,
+        lastSyncStatus: null,
       });
 
       expect(db.keys).toHaveLength(1);
@@ -271,6 +294,8 @@ describe("IntegrationsService", () => {
         provider: "LMS",
         connected: true,
         lastVerifiedAt: expect.any(String) as string,
+        lastSyncedAt: null,
+        lastSyncStatus: null,
       });
       await expect(service.revealCredentials("u1", "LMS")).resolves.toEqual({
         username: "sv123",
@@ -296,6 +321,8 @@ describe("IntegrationsService", () => {
         provider: "LMS",
         connected: true,
         lastVerifiedAt: expect.any(String) as string,
+        lastSyncedAt: null,
+        lastSyncStatus: null,
       });
       await expect(service.revealCredentials("u1", "LMS")).resolves.toEqual({
         username: "new-user",
@@ -321,10 +348,106 @@ describe("IntegrationsService", () => {
             provider: "LMS",
             connected: true,
             lastVerifiedAt: expect.any(String) as string,
+            lastSyncedAt: null,
+            lastSyncStatus: null,
           },
-          { provider: "PORTAL", connected: false, lastVerifiedAt: null },
+          {
+            provider: "PORTAL",
+            connected: false,
+            lastVerifiedAt: null,
+            lastSyncedAt: null,
+            lastSyncStatus: null,
+          },
         ]),
       );
+    });
+
+    it("surfaces the newest job row as lastSyncedAt / lastSyncStatus", async () => {
+      await service.connect(USER, creds);
+      const integrationId = db.integrations[0].id;
+      // Two runs for this student; only the newer one may be reported.
+      db.jobs.push(
+        {
+          integrationId,
+          table: "lmsSyncJobs",
+          status: "FAILED",
+          createdAt: new Date("2026-09-05T01:00:00.000Z"),
+        },
+        {
+          integrationId,
+          table: "lmsSyncJobs",
+          status: "COMPLETED",
+          createdAt: new Date("2026-09-06T01:00:00.000Z"),
+        },
+      );
+
+      const { integrations } = await service.status(USER);
+      const lms = integrations.find((i) => i.provider === "LMS");
+
+      expect(lms).toMatchObject({
+        lastSyncedAt: "2026-09-06T01:00:00.000Z",
+        lastSyncStatus: "COMPLETED",
+      });
+    });
+  });
+
+  describe("sync", () => {
+    it("runs the watchers, then reports the run just performed", async () => {
+      await service.connect(USER, creds);
+      const integrationId = db.integrations[0].id;
+      // The watchers write their job row; this stands in for that.
+      syncNow.mockImplementation(() => {
+        db.jobs.push({
+          integrationId,
+          table: "lmsSyncJobs",
+          status: "COMPLETED",
+          createdAt: new Date("2026-09-06T04:00:00.000Z"),
+        });
+        return Promise.resolve();
+      });
+
+      const status = await service.sync(USER, "LMS");
+
+      expect(syncNow).toHaveBeenCalledWith("u1", "LMS");
+      expect(status).toMatchObject({
+        provider: "LMS",
+        connected: true,
+        lastSyncedAt: "2026-09-06T04:00:00.000Z",
+        lastSyncStatus: "COMPLETED",
+      });
+      // Never a counts payload — run counts stay in the job rows and the logs.
+      expect(Object.keys(status).sort()).toEqual([
+        "connected",
+        "lastSyncStatus",
+        "lastSyncedAt",
+        "lastVerifiedAt",
+        "provider",
+      ]);
+    });
+
+    it("reports a failed run rather than throwing", async () => {
+      await service.connect(USER, creds);
+      const integrationId = db.integrations[0].id;
+      syncNow.mockImplementation(() => {
+        db.jobs.push({
+          integrationId,
+          table: "lmsSyncJobs",
+          status: "FAILED",
+          createdAt: new Date("2026-09-06T04:00:00.000Z"),
+        });
+        return Promise.resolve();
+      });
+
+      await expect(service.sync(USER, "LMS")).resolves.toMatchObject({
+        lastSyncStatus: "FAILED",
+      });
+    });
+
+    it("404s when the provider is not connected, and runs nothing", async () => {
+      await expect(service.sync(USER, "PORTAL")).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(syncNow).not.toHaveBeenCalled();
     });
   });
 
@@ -336,6 +459,8 @@ describe("IntegrationsService", () => {
         provider: "LMS",
         connected: false,
         lastVerifiedAt: null,
+        lastSyncedAt: null,
+        lastSyncStatus: null,
       });
       await expect(service.disconnect(USER, "LMS")).resolves.toBeDefined();
 

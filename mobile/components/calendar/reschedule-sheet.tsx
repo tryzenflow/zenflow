@@ -10,8 +10,8 @@ import { Text } from "@/components/ui/text";
 import { TimePickerInline } from "@/components/ui/time-picker";
 import { useToast } from "@/components/ui/toast";
 import { isPastDeadlineDrop } from "@/lib/overdue";
-import { getSeriesKind } from "@/lib/session-series";
 import {
+  getSeriesKind,
   snapToNearestLaterQuarterHour,
   zonedDate,
   zonedNow,
@@ -84,7 +84,7 @@ const MAX_START_MIN = 23 * 60 + 45;
  * running into the next day, rather than requiring a second date input. The
  * confirm path rebuilds a wall-clock `Date` from the date + start time and
  * runs it through `zonedWallClockToUtc`, exactly like
- * `lib/session-time.ts`'s `combineToUtc`; the derived `durationMinutes` (End −
+ * `@zenflow/core`'s `combineToUtc`; the derived `durationMinutes` (End −
  * Start, +24h when it wraps) is what also makes this double as a resize.
  */
 export const RescheduleSheet = forwardRef<

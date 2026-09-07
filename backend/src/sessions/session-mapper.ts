@@ -12,6 +12,7 @@ export function toSessionDto(row: SessionRow): SharedSession {
     id: row.id,
     title: row.title,
     note: row.note,
+    location: row.location,
     durationMinutes: row.durationMinutes,
     deadline: row.deadline ? row.deadline.toISOString() : null,
     type: row.type,

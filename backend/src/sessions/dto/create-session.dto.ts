@@ -54,6 +54,13 @@ export class CreateSessionDto {
   @IsString()
   note?: string | null;
 
+  /** Free-text location (room / building) — optional for every session type. */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsString()
+  @MaxLength(200, { message: "Location must be at most 200 characters." })
+  location?: string | null;
+
   /** Session duration in minutes (always a positive multiple of 15, required). */
   @IsInt()
   @Min(TIME_GRANULARITY)

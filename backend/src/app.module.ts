@@ -21,6 +21,10 @@ import { RedisModule } from "./common/redis/redis.module";
 import { RateLimitModule } from "./common/rate-limit";
 import { CryptoModule } from "./crypto/crypto.module";
 import { IntegrationsModule } from "./integrations/integrations.module";
+import { LMSModule } from "./lms/lms.module";
+import { PortalAPIModule } from "./portal/portal-api.module";
+import { IngestionModule } from "./ingestion/ingestion.module";
+import { NotificationsModule } from "./notifications/notifications.module";
 
 @Module({
   imports: [
@@ -88,6 +92,37 @@ import { IntegrationsModule } from "./integrations/integrations.module";
           .default(600), // 10 min
         OTP_VERIFY_EMAIL_LIMIT: Joi.number().integer().positive().default(10),
         PORTAL_API_KEY: Joi.string().required(),
+        // --- DLU ingestion (lms/, portal/, ingestion/) ---------------------
+        // These three are read with `getOrThrow` by LMSService /
+        // PortalAPIService, so they must always resolve — the defaults below
+        // are the real public DLU endpoints and exist so a deployment that
+        // forgets them still boots instead of throwing at construction.
+        // Base URL of the DLU Moodle LMS (lms/lms.service.ts).
+        LMS_URL: Joi.string().uri().default("https://lms.dlu.edu.vn"),
+        // Base URL of the DLU student-portal JSON API
+        // (portal/portal-api.service.ts).
+        PORTAL_API_URL: Joi.string()
+          .uri()
+          .default("https://portal-api.dlu.edu.vn"),
+        // Per-request timeouts in ms (both services use AbortSignal.timeout).
+        // The LMS budget is the looser of the two: its login is a multi-step
+        // form flow, not a single JSON call.
+        PORTAL_API_TIMEOUT_MS: Joi.number().integer().positive().default(10000),
+        LMS_TIMEOUT_MS: Joi.number().integer().positive().default(15000),
+        // IANA timezone every DLU wall-clock string (timetable `Ngay`/`GioThi`,
+        // exam schedules) is expressed in. Not the user's timezone — it is a
+        // property of the upstream data, so it is config, not per-user state.
+        DLU_TZ: Joi.string().default("Asia/Ho_Chi_Minh"),
+        // Kill switch for the ingestion crons. Off means the watchers stay
+        // registered but return immediately, so a misbehaving upstream can be
+        // shut out without a redeploy of the whole API.
+        INGESTION_ENABLED: Joi.boolean().default(true),
+        // Fixed pause between a watcher's outbound requests, in ms. This is
+        // the entirety of the baseline's politeness policy (no queue, no rate
+        // limiter, no circuit breaker — all deliberately deferred), so it is
+        // config rather than a constant: DLU's tolerance can be discovered
+        // without a redeploy. `0` in `.env.test` so a suite never waits on it.
+        INGESTION_REQUEST_DELAY_MS: Joi.number().integer().min(0).default(750),
         // Base URL of the stateless Python bandit service
         // (services/bandit/, docs/adr/0001-linucb-model-design.md). Optional:
         // when unset, LinUCB scheduling is disabled and every event falls back
@@ -119,6 +154,8 @@ import { IntegrationsModule } from "./integrations/integrations.module";
     MailModule,
     SessionsModule,
     CryptoModule,
+    LMSModule,
+    PortalAPIModule,
     TagsModule,
     FilesModule,
     // Background cron providers (MatrixDecayService, RetainedSessionsService)
@@ -127,6 +164,10 @@ import { IntegrationsModule } from "./integrations/integrations.module";
     // an existing session is never moved; see scheduler.module.ts.
     SchedulerModule,
     IntegrationsModule,
+    // The three DLU watcher crons (@Cron) plus their write-back; mutually
+    // dependent with IntegrationsModule via forwardRef, see ingestion.module.ts.
+    IngestionModule,
+    NotificationsModule,
   ],
   providers: [AppService, MailService],
   controllers: [AppController],

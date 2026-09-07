@@ -38,6 +38,7 @@ function session(overrides: Partial<SessionRow> & { id: string }): SessionRow {
   return {
     title: "Session",
     note: null,
+    location: null,
     durationMinutes: 60,
     deadline: new Date("2026-01-05T12:00:00.000Z"),
     tags: [],
@@ -52,6 +53,7 @@ function session(overrides: Partial<SessionRow> & { id: string }): SessionRow {
     seriesId: null,
     sessionIndex: null,
     sessionTotal: null,
+    externalKey: null,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     ...overrides,
@@ -193,6 +195,7 @@ describe("SessionsService.create", () => {
       id: "session-1",
       title: "Write report",
       note: null,
+      location: null,
       durationMinutes: 30,
       deadline: "2026-06-10T17:00:00.000Z",
       type: "TASK",

@@ -12,8 +12,8 @@ type InputProps = {
   placeholder?: string;
   secureTextEntry?: boolean;
   editable?: boolean;
-  autoComplete?: "name" | "email" | "username" | "password" | "off" | string;
-  autoCapitalize?: "none" | "sentences" | "words" | "characters" | boolean;
+  autoComplete?: "name" | "email" | "username" | "password" | "off";
+  autoCapitalize?: "none" | "sentences" | "words" | "characters";
   autoCorrect?: boolean;
   autoFocus?: boolean;
   maxLength?: number;

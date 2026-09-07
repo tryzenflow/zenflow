@@ -72,7 +72,7 @@ export const MonthGrid = memo(
           {WEEKDAY_LABELS.map((label) => (
             <Text
               key={label}
-              className="flex-1 py-2 text-center text-[10.5px] font-bold uppercase text-muted-foreground"
+              className="flex-1 py-2 text-center text-[10.5px] font-bold text-muted-foreground"
             >
               {label}
             </Text>

@@ -1,15 +1,14 @@
-import { AlertTriangle, Clock } from "@/components/Icons";
+import { AlertTriangle, Clock, MapPin } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
-import { formatDeadlineShort } from "@/lib/session-type";
 import { cn } from "@/lib/utils";
 import { differenceInCalendarDays } from "date-fns";
 import {
   DAILY_HORIZON,
   TIME_GRANULARITY,
+  formatDeadlineShort,
   zonedDate,
   zonedWallClockToUtc,
 } from "@zenflow/core";
-import { withOverlap } from "@zenflow/core";
 import type { BlockLayout } from "@zenflow/core";
 import type { DaySegment } from "@zenflow/shared";
 import { toZonedTime } from "date-fns-tz";
@@ -114,6 +113,24 @@ function DueChip({ late, label }: { late: boolean; label: string }) {
   );
 }
 
+/** Compact room / building marker on the block's meta line. `MapPin` + the
+ * session's `location` string, truncated to one line — shown after the time
+ * range (and any due chip) whenever the session carries a location. */
+function LocationChip({ location }: { location: string }) {
+  return (
+    <View className="min-w-0 flex-row items-center gap-1 rounded bg-muted px-1 py-0.5">
+      <MapPin size={11} className="shrink-0 text-muted-foreground" />
+      <Text
+        className="shrink text-xs font-medium leading-none text-muted-foreground"
+        numberOfLines={1}
+        ellipsizeMode="tail"
+      >
+        {location}
+      </Text>
+    </View>
+  );
+}
+
 interface DragSnap {
   startMin: number;
 }
@@ -198,8 +215,9 @@ function SessionBlockImpl({
   // Short blocks show just the type icon; roomy ones get the icon + label.
   const typeBadgeIconOnly = duration <= TAGS_MIN_DURATION;
 
-  const state = withOverlap(segment.state, layout.conflict);
-  const isConflict = state === "conflict";
+  // Overlapping blocks render in their normal type colour — no conflict state,
+  // no annotation. `layout` still lays them out side-by-side in columns.
+  const state = segment.state;
   const isSplit = Boolean(segment.continued);
   // Any whole (non-split) block can be dragged/long-pressed into "Move
   // to…" — fixed types (DND/ASSIGNMENT/EXAM/LECTURE) route through the same
@@ -598,17 +616,15 @@ function SessionBlockImpl({
     flashing ? "ring-2 ring-amber-400" : "ring-1 ring-amber-500/40",
   );
   const stateClasses =
-    state === "conflict"
-      ? `${borderChrome} border-l-amber-500 bg-amber-50/40 dark:bg-amber-950/10`
-      : state === "dnd"
-        ? `${borderChrome} border-l-slate-400 [border-left-style:dashed] bg-slate-500/[0.07] dark:bg-slate-400/10`
-        : state === "assignment"
-          ? `${borderChrome} border-l-teal-500 bg-teal-50/50 dark:bg-teal-950/20`
-          : state === "exam"
-            ? `${borderChrome} border-l-rose-500 bg-rose-50/50 dark:bg-rose-950/20`
-            : state === "lecture"
-              ? `${borderChrome} border-l-sky-500 bg-sky-50/50 dark:bg-sky-950/20`
-              : `${borderChrome} border-l-primary glass-task`;
+    state === "dnd"
+      ? `${borderChrome} border-l-slate-400 [border-left-style:dashed] bg-slate-500/[0.07] dark:bg-slate-400/10`
+      : state === "assignment"
+        ? `${borderChrome} border-l-teal-500 bg-teal-50/50 dark:bg-teal-950/20`
+        : state === "exam"
+          ? `${borderChrome} border-l-rose-500 bg-rose-50/50 dark:bg-rose-950/20`
+          : state === "lecture"
+            ? `${borderChrome} border-l-sky-500 bg-sky-50/50 dark:bg-sky-950/20`
+            : `${borderChrome} border-l-primary glass-task`;
 
   const isMultiColumn = layout.columns > 1;
 
@@ -665,10 +681,7 @@ function SessionBlockImpl({
                   <SessionTypeBadge type={segment.type} size="sm" iconOnly />
                 )}
                 <Text
-                  className={cn(
-                    "min-w-0 flex-1 text-sm font-semibold leading-none",
-                    isConflict && "text-amber-700 dark:text-amber-300",
-                  )}
+                  className="min-w-0 flex-1 text-sm font-semibold leading-none"
                   numberOfLines={1}
                   ellipsizeMode="tail"
                 >
@@ -676,12 +689,7 @@ function SessionBlockImpl({
                 </Text>
               </View>
               <View className="mt-1 shrink-0 flex-row items-center gap-1">
-                <Text
-                  className={cn(
-                    "text-[9px] text-muted-foreground leading-none",
-                    isConflict && "text-amber-700/90 dark:text-amber-300/90",
-                  )}
-                >
+                <Text className="text-[9px] text-muted-foreground leading-none">
                   {segment.continued
                     ? `ends ${fmt(segment.taskEnd, tz)}`
                     : liveStartMin != null
@@ -689,21 +697,13 @@ function SessionBlockImpl({
                       : fmt(segment.taskStart, tz)}
                 </Text>
                 {dueChip && <DueChip {...dueChip} />}
+                {!!segment.location && (
+                  <LocationChip location={segment.location} />
+                )}
               </View>
             </>
           ) : (
             <>
-              {isConflict && (
-                <View className="self-start flex-row items-center justify-center gap-1 rounded-md border border-transparent bg-amber-500/15 px-2 py-0.5">
-                  <AlertTriangle
-                    size={11}
-                    className="translate-y-[-0.5px] text-amber-700 dark:text-amber-300"
-                  />
-                  <Text className="text-[10px] font-semibold leading-[11px] text-amber-700 dark:text-amber-300">
-                    Overlap
-                  </Text>
-                </View>
-              )}
               <View className="min-w-0 flex-row items-center gap-1.5">
                 {segment.continued ? (
                   <Text className="shrink-0 text-[10px] text-muted-foreground">
@@ -717,10 +717,7 @@ function SessionBlockImpl({
                   />
                 )}
                 <Text
-                  className={cn(
-                    "min-w-0 flex-1 text-sm font-semibold leading-none",
-                    isConflict && "text-amber-700 dark:text-amber-300",
-                  )}
+                  className="min-w-0 flex-1 text-sm font-semibold leading-none"
                   numberOfLines={1}
                   ellipsizeMode="tail"
                 >
@@ -728,12 +725,7 @@ function SessionBlockImpl({
                 </Text>
               </View>
               <View className="flex-row flex-wrap items-center gap-1">
-                <Text
-                  className={cn(
-                    "text-[10px] text-muted-foreground leading-none",
-                    isConflict && "text-amber-700/90 dark:text-amber-300/90",
-                  )}
-                >
+                <Text className="text-[10px] text-muted-foreground leading-none">
                   {segment.continued
                     ? `cont. → ${fmt(segment.taskEnd, tz)}`
                     : segment.continues && !drawsThrough
@@ -753,6 +745,9 @@ function SessionBlockImpl({
                           )}
                 </Text>
                 {dueChip && <DueChip {...dueChip} />}
+                {!!segment.location && (
+                  <LocationChip location={segment.location} />
+                )}
               </View>
               {showTags && (
                 <View className="flex-row flex-wrap gap-1 overflow-hidden">

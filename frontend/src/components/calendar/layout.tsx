@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Event, ViewMode } from "@zenflow/shared";
+import { Event, Session, UpdateScope, ViewMode } from "@zenflow/shared";
 import { CalendarHeader } from "./header";
 import { useViewShortcuts } from "@/hooks/use-view-shortcuts";
 import { DayView } from "./day-view";
@@ -11,13 +11,16 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { EditSessionDialog } from "@/components/tasks/edit-task-dialog";
 import { CreateSessionDialog } from "@/components/tasks/create-task-dialog";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
+import {
+  UpdateRecurringDialog,
+  type ScopeChoice,
+} from "./update-recurring-dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { CalendarCheck, Plus } from "lucide-react";
 import { listSessions, updateSession } from "@/api/tasks";
-import { tasksToBlocks } from "@zenflow/core";
+import { getSeriesKind, tasksToBlocks } from "@zenflow/core";
 import { isAxiosError } from "axios";
-import { toast } from "sonner";
 import { errorToast } from "@/lib/toast";
 import { useUserStore } from "@/hooks/use-user-store";
 import { zonedDate, zonedNow } from "@/utils/tz";
@@ -34,7 +37,6 @@ const DATE_PARAM_FORMAT = "yyyy-MM-dd";
  */
 function parseDateParam(dateStr: string | null, tz: string): Date | null {
   if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
-  // Interpret the date string as midnight wall-clock in user-tz.
   const utc = fromZonedTime(dateStr + "T12:00:00", tz);
   if (!isValid(utc)) return null;
   return toZonedTime(utc, tz);
@@ -44,8 +46,6 @@ export function CalendarLayout() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
 
-  // The cursor day is held in user-tz space (its local fields are the user's
-  // wall clock), so every downstream day comparison stays in that tz.
   const [date, setDate] = useState<Date>(() => {
     const resolved = useUserStore.getState().user?.timezone || "UTC";
     return (
@@ -58,8 +58,6 @@ export function CalendarLayout() {
     return VALID_VIEWS.includes(raw as ViewMode) ? (raw as ViewMode) : "day";
   });
 
-  // Sync view + date back into the URL whenever they change.  Use `replace`
-  // so every date navigation doesn't flood the browser history stack.
   useEffect(() => {
     setSearchParams(
       { view: viewMode, date: format(date, DATE_PARAM_FORMAT) },
@@ -73,15 +71,30 @@ export function CalendarLayout() {
   const [editId, setEditId] = useState<string | null>(null);
   const [navOpen, setNavOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // Tracks an in-flight load so mutations can wait for it before issuing a PUT
-  // against a task id the server may have just deleted / re-materialized via a
-  // cascade. Dragging a block whose id is no longer in the freshly-loaded list
-  // is what produced the spurious "Cannot find task with id …" 404 toast.
+  // The full session rows behind `blocks`, so drag/resize can tell whether a
+  // dragged block belongs to a series and needs a scope choice.
+  const sessionsById = useRef<Map<string, Session>>(new Map());
+  // Tracks an in-flight load so mutations can wait for it before PATCHing a
+  // session id the server may have just dropped.
   const inFlight = useRef<Promise<Event[]> | null>(null);
+
+  // Bridge the async drop handlers to the scope-picker dialog: `requestScope`
+  // opens it and resolves once the user chooses (or dismisses).
+  const [scopePrompt, setScopePrompt] = useState<{
+    kind: "recurring" | "task";
+    resolve: (choice: ScopeChoice | null) => void;
+  } | null>(null);
+
+  function requestScope(
+    kind: "recurring" | "task",
+  ): Promise<ScopeChoice | null> {
+    return new Promise((resolve) => setScopePrompt({ kind, resolve }));
+  }
 
   async function refetch(): Promise<Event[]> {
     const load = (async () => {
       const data = await listSessions(viewMode, date);
+      sessionsById.current = new Map(data.sessions.map((s) => [s.id, s]));
       const next = tasksToBlocks(data.sessions);
       setBlocks(next);
       return next;
@@ -91,9 +104,7 @@ export function CalendarLayout() {
       return await load;
     } catch (error) {
       if (isAxiosError(error))
-        errorToast(
-          error.response?.data?.message || "Failed to load sessions",
-        );
+        errorToast(error.response?.data?.message || "Failed to load sessions");
       return [];
     } finally {
       if (inFlight.current === load) inFlight.current = null;
@@ -105,43 +116,76 @@ export function CalendarLayout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, viewMode]);
 
-  // Open the detail panel when a block/sidebar item requests it.
   useEffect(() => {
     const handler = (e: Event | CustomEvent) => {
       setEditId((e as CustomEvent).detail as string);
-      setNavOpen(false); // close the mobile drawer if the tap came from it
+      setNavOpen(false);
     };
     window.addEventListener("zenflow:open-task", handler as EventListener);
     return () =>
       window.removeEventListener("zenflow:open-task", handler as EventListener);
   }, []);
 
-  // Open the settings dialog when the sidebar footer requests it.
   useEffect(() => {
     const handler = () => {
       setSettingsOpen(true);
-      setNavOpen(false); // close the mobile drawer if the tap came from it
+      setNavOpen(false);
     };
     window.addEventListener("zenflow:open-settings", handler);
     return () => window.removeEventListener("zenflow:open-settings", handler);
   }, []);
 
-  async function onReschedule(taskId: string, startISO: string) {
-    // If a load is mid-flight (e.g. the cascade after a delete), wait for it so
-    // we never PUT against an id the server has already dropped. The dragged
-    // block carries the latest optimistic state; the await only blocks the
-    // network call, not the UI.
+  // Jump the calendar to a `YYYY-MM-DD` day — used by the notification inbox to
+  // land on the start of an ingested term's timetable.
+  useEffect(() => {
+    const handler = (e: Event | CustomEvent) => {
+      const target = parseDateParam((e as CustomEvent).detail as string, tz);
+      if (!target) return;
+      setDate(target);
+      setNavOpen(false);
+    };
+    window.addEventListener("zenflow:goto-date", handler as EventListener);
+    return () =>
+      window.removeEventListener("zenflow:goto-date", handler as EventListener);
+  }, [tz]);
+
+  /**
+   * Commit a start/duration change. When the block belongs to a series the
+   * user first picks a scope in `UpdateRecurringDialog`; a one-off just writes.
+   */
+  async function commitMove(
+    taskId: string,
+    patch: { scheduledStartTime: string; durationMinutes?: number },
+  ) {
     if (inFlight.current) {
       const fresh = await inFlight.current;
-      // The task vanished server-side (deleted, or its recurrence row was
-      // re-materialized under a new id). Don't fire a 404; the refetch already
-      // dropped the stale block from the grid.
       if (!fresh.some((b) => b.taskId === taskId)) return;
     }
+
+    const session = sessionsById.current.get(taskId);
+    const kind = session ? getSeriesKind(session) : "none";
+    let scope: UpdateScope | undefined;
+    let skipConflicting: boolean | undefined;
+    if (kind !== "none") {
+      const choice = await requestScope(kind);
+      if (!choice) {
+        await refetch(); // user cancelled — snap the block back
+        return;
+      }
+      scope = choice.scope;
+      skipConflicting = choice.skipConflicting;
+    }
+
     try {
-      // Plain field write — no auto-placement engine, so this never cascades
-      // to any other session.
-      await updateSession(taskId, { scheduledStartTime: startISO });
+      const res = await updateSession(taskId, {
+        ...patch,
+        ...(scope ? { scope, skipConflicting } : {}),
+      });
+      if (res.skippedSessionIds?.length) {
+        errorToast(
+          `${res.skippedSessionIds.length} session(s) left in place — the new slot conflicted`,
+        );
+      }
       window.dispatchEvent(
         new CustomEvent("zenflow:task-updated", { detail: taskId }),
       );
@@ -149,10 +193,12 @@ export function CalendarLayout() {
       if (isAxiosError(error))
         errorToast(error.response?.data?.message || "Failed to reschedule");
     } finally {
-      // Always reconcile with the server so the block reflects the real
-      // persisted slot.
       await refetch();
     }
+  }
+
+  async function onReschedule(taskId: string, startISO: string) {
+    await commitMove(taskId, { scheduledStartTime: startISO });
   }
 
   async function onResize(
@@ -160,8 +206,7 @@ export function CalendarLayout() {
     startISO: string,
     durationMinutes: number,
   ) {
-    // Optimistic: reflect the new size immediately so the block doesn't snap
-    // back to its old height for the round-trip. refetch() reconciles after.
+    // Optimistic: reflect the new size immediately; refetch() reconciles after.
     setBlocks((bs) =>
       bs.map((b) =>
         b.taskId === taskId
@@ -175,34 +220,12 @@ export function CalendarLayout() {
           : b,
       ),
     );
-    // Same stale-id guard as onReschedule: never resize a task the server has
-    // dropped while a load was in flight.
-    if (inFlight.current) {
-      const fresh = await inFlight.current;
-      if (!fresh.some((b) => b.taskId === taskId)) return;
-    }
-    try {
-      // Same as onReschedule: a plain field write, no cascade.
-      await updateSession(taskId, {
-        scheduledStartTime: startISO,
-        durationMinutes,
-      });
-      window.dispatchEvent(
-        new CustomEvent("zenflow:task-updated", { detail: taskId }),
-      );
-    } catch (error) {
-      if (isAxiosError(error))
-        errorToast(error.response?.data?.message || "Failed to resize");
-    } finally {
-      // Always reconcile with the server so the block reflects the real
-      // persisted slot.
-      await refetch();
-    }
+    await commitMove(taskId, {
+      scheduledStartTime: startISO,
+      durationMinutes,
+    });
   }
 
-  // Blocks dispatch resize requests via a window event (see ScheduledBlockItem),
-  // mirroring zenflow:open-task. A ref keeps the listener bound to the latest
-  // closure without re-subscribing on every render.
   const onResizeRef = useRef(onResize);
   onResizeRef.current = onResize;
   useEffect(() => {
@@ -218,48 +241,6 @@ export function CalendarLayout() {
       );
   }, []);
 
-  async function onComplete(taskId: string) {
-    // Optimistic: flip the block to DONE so it reflects immediately; refetch()
-    // reconciles after the round-trip.
-    setBlocks((bs) =>
-      bs.map((b) => (b.taskId === taskId ? { ...b, status: "DONE" } : b)),
-    );
-    try {
-      await updateSession(taskId, { status: "DONE" });
-      toast.success("Session completed");
-    } catch (error) {
-      if (isAxiosError(error))
-        errorToast(
-          error.response?.data?.message || "Failed to complete session",
-        );
-    } finally {
-      await refetch();
-    }
-  }
-
-  // Double-click/tap on a block dispatches zenflow:complete-task; bound via a
-  // ref exactly like the resize listener above.
-  const onCompleteRef = useRef(onComplete);
-  onCompleteRef.current = onComplete;
-  useEffect(() => {
-    const handler = (e: Event | CustomEvent) => {
-      const { taskId } = (e as CustomEvent).detail;
-      onCompleteRef.current(taskId);
-    };
-    window.addEventListener("zenflow:complete-task", handler as EventListener);
-    return () =>
-      window.removeEventListener(
-        "zenflow:complete-task",
-        handler as EventListener,
-      );
-  }, []);
-
-  // The agenda mirrors the active view's window, sorted chronologically; the
-  // sidebar groups by day when the window spans more than one. For day/week the
-  // backend display range equals the focal window, so `blocks` is already
-  // scoped. In month view the backend also returns the prev/next-month tasks the
-  // grid renders at its dimmed edge cells, so we filter the agenda back to the
-  // focal month (same tz-based month membership as month-cell.tsx).
   const agenda = useMemo(() => {
     const scoped =
       viewMode === "month"
@@ -274,7 +255,6 @@ export function CalendarLayout() {
     <div className="flex h-screen">
       <CalendarSidebar agenda={agenda} view={viewMode} />
 
-      {/* Mobile/tablet nav drawer — same content as the desktop rail. */}
       <Sheet open={navOpen} onOpenChange={setNavOpen}>
         <SheetContent
           side="left"
@@ -294,11 +274,7 @@ export function CalendarLayout() {
           onChanged={refetch}
           onOpenNav={() => setNavOpen(true)}
         />
-        {/* `relative` so the floating glass controls overlay the grid without
-            scrolling with it. */}
         <div className="relative min-h-0 flex-1">
-          {/* Jump-to-today — floating, centered, glassmorphism. Replaces the
-              old header "Today" button. */}
           <Button
             variant="outline"
             size="default"
@@ -312,8 +288,6 @@ export function CalendarLayout() {
             Today
           </Button>
 
-          {/* Floating add-task action — opens the same CreateSessionDialog the
-              header used to host. Glassmorphism, mirrors the today control. */}
           <CreateSessionDialog
             date={date}
             view={viewMode}
@@ -322,7 +296,7 @@ export function CalendarLayout() {
             trigger={
               <Button
                 size="icon-lg"
-                aria-label="New task"
+                aria-label="New session"
                 className={cn(
                   "sm:hidden glass-header absolute right-4 bottom-8 z-30",
                   "size-12 rounded-full border border-primary/30 text-primary-foreground shadow-lg",
@@ -374,6 +348,17 @@ export function CalendarLayout() {
         />
       )}
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      {scopePrompt && (
+        <UpdateRecurringDialog
+          open
+          kind={scopePrompt.kind}
+          onResolve={(choice) => {
+            const { resolve } = scopePrompt;
+            setScopePrompt(null);
+            resolve(choice);
+          }}
+        />
+      )}
     </div>
   );
 }

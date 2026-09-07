@@ -46,6 +46,28 @@ export class IntegrationsController {
     return { success: true, message: "Integration status", data };
   }
 
+  /**
+   * Run this provider's ingestion watchers for the current user, right now.
+   *
+   * The manual counterpart to the crons — the same `run()`, narrowed to one
+   * student — so a connected account can be verified end to end without waiting
+   * for the next tick. Returns the provider's status, whose `lastSyncedAt` /
+   * `lastSyncStatus` describe the run just performed.
+   */
+  @Post(":provider/sync")
+  async sync(
+    @CurrentUser() user: User,
+    @Param("provider", new ParseEnumPipe(IntegrationProviderEnum))
+    provider: IntegrationProvider,
+  ) {
+    const data = await this.integrations.sync(user, provider);
+    return {
+      success: true,
+      message: `${provider} sync finished`,
+      data,
+    };
+  }
+
   @Patch(":provider")
   async update(
     @CurrentUser() user: User,

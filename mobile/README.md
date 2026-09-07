@@ -1,7 +1,9 @@
 # Zenflow Mobile
 
-Expo + React Native app for iOS/Android/web — coexists with the web `frontend/`, not a
-replacement for it. Part of the [Zenflow monorepo](../README.md).
+Expo + React Native app for iOS/Android/web — an active client of the `@zenflow/shared`
+contract alongside the web [`frontend/`](../frontend/README.md), sharing calendar and
+form logic via [`@zenflow/core`](../packages/core). Part of the
+[Zenflow monorepo](../README.md).
 
 ---
 
@@ -26,53 +28,55 @@ replacement for it. Part of the [Zenflow monorepo](../README.md).
 
 ```
 mobile/
-├── app/
-│   ├── _layout.tsx
-│   ├── global.css
-│   ├── (auth)/login.tsx
-│   └── (app)/
-│       ├── index.tsx
-│       ├── month.tsx
-│       └── settings.tsx
-├── api/
+├── app/                       # Expo Router (file-based)
+│   ├── _layout.tsx            # root Stack + AuthGate + providers
+│   ├── +not-found.tsx
+│   ├── (auth)/_layout.tsx, login.tsx
+│   ├── (app)/_layout.tsx      # custom 3-tab bar (Week / Month / Settings)
+│   ├── (app)/index.tsx        # Week view (paginated day timeline + 7-day chip strip)
+│   ├── (app)/month.tsx        # Month grid
+│   ├── (app)/settings.tsx     # flat settings screen
+│   ├── task/new.tsx           # create session (modal)
+│   ├── task/[id]/edit.tsx     # edit session (modal)
+│   └── notifications.tsx      # ingestion inbox (modal)
+├── api/                       # auth, tasks, users, tags, files, integrations, notifications
 ├── components/
-│   ├── ui/
-│   ├── primitives/
-│   ├── settings/
-│   ├── calendar/
-│   ├── tasks/
-│   │   └── form/
-│   ├── error-boundary.tsx
-│   └── tab-icons.tsx, Icons.tsx, logo.tsx, ThemeToggle.tsx
-├── hooks/
-├── lib/
-│   ├── api-client.ts
-│   ├── session.ts
-│   ├── constants.ts
-│   ├── useColorScheme.tsx, android-navigation-bar.ts
-│   ├── tag-match.ts
-│   ├── task-toasts.ts
-│   ├── task-card.ts
-│   ├── month-date-math.ts
-│   └── utils.ts
+│   ├── ui/  primitives/       # hand-rolled shadcn/RN-Reusables primitives
+│   ├── calendar/              # day-timeline, week/month pagers, task-block,
+│   │                          #   reschedule-sheet, update-recurring-sheet, session-type-badge
+│   ├── tasks/                 # task-form-screen, task-sheet-fields, delete-recurring-sheet
+│   │   └── form/              # session-type-tabs, recurrence, fixed-time, session-count,
+│   │                          #   deadline-chip, duration-stepper, tag-autocomplete, description
+│   ├── settings/              # profile-row, integrations-section, settings-header
+│   ├── notification-bell.tsx  # floating bell → app/notifications.tsx
+│   ├── tab-bar.tsx, tab-icons.tsx, Icons.tsx, logo.tsx, error-boundary.tsx
+├── hooks/                     # use-user-store, use-task-form, use-week-day-types, use-now, …
+├── lib/                       # api-client, session(-cache), blocks, overlap, peek,
+│                              #   week-/month-date-math, timeline-scroll, task-toasts, tag-match, utils
 ├── plugins/withAndroidBuildFixes.js
 ├── global.css / tailwind.config.ts / metro.config.js / babel.config.js  # NativeWind wiring
-├── components.json
-└── biome.json
+└── components.json / biome.json / vitest.config.ts
 ```
 
 ## Screens & routing
 
-Two route groups under `app/`, gated by `AuthGate` in the root layout (mirrors the web
-`with-auth.tsx` HOC, driven by the Zustand user store rather than a per-navigation `/auth/me`
-call):
+`AuthGate` in the root layout (mirrors the web `with-auth.tsx` HOC, driven by the Zustand
+user store) gates two route groups. The tab bar (`components/tab-bar.tsx`, custom
+glassmorphic pill) has three tabs: **Week**, **Month**, **Settings**.
 
-| Group    | Screen(s)                     | State                                |
-| -------- | ----------------------------- | ------------------------------------ |
-| `(auth)` | `login.tsx`                   | Email stage → OTP verification stage |
-| `(app)`  | `index.tsx` (Calendar / home) | Week view                            |
-| `(app)`  | `month.tsx` (Month)           | Month view                           |
-| `(app)`  | `settings.tsx`                | Settings                             |
+| Route                  | Screen                       | Notes                                        |
+| ---------------------- | ---------------------------- | -------------------------------------------- |
+| `/(auth)/login`        | email → OTP                  | timezone captured on verify                  |
+| `/(app)` (Week tab)    | `index.tsx`                  | the home screen; day view folded in — no Day route |
+| `/(app)/month`         | `month.tsx`                  | Monday-first month grid                      |
+| `/(app)/settings`      | `settings.tsx`               | Profile · Appearance · Integrations · Account |
+| `/task/new`            | `task/new.tsx` (modal)       | create — 3-tab session-type selector         |
+| `/task/[id]/edit`      | `task/[id]/edit.tsx` (modal) | edit — type read-only; series-scope delete   |
+| `/notifications`       | `notifications.tsx` (modal)  | DLU LMS / portal notification inbox          |
+
+Session model, series-scope editing, recurrence and the reschedule ("Move to…") flow match
+the web client — see [ADR-0002](../docs/adr/0002-scheduling-simplification.md) and
+[`frontend/README.md`](../frontend/README.md).
 
 ## Local development
 
@@ -91,14 +95,11 @@ pnpm typecheck      # tsc --noEmit
 pnpm test           # vitest run — lib/**/*.test.ts only, see below
 ```
 
-**Testing:** `mobile/` now has a minimal Vitest setup (`vitest.config.ts`, scoped to
-`lib/**/*.test.ts`) for pure, RN-free logic modules — `lib/month-date-math.ts` and
-`lib/task-card.ts`'s tests (`lib/__tests__/`) are the first coverage in this workspace. This is
-narrower than a real component/screen test runner: anything importing React Native or
-`@gorhom/bottom-sheet` still has no automated coverage (no RN test renderer is configured), and
-neither does `@zenflow/core`'s `taskSchema`/`placementQualifier` or `mobile/lib/tag-match.ts` yet
-— flagged as a gap, not silently worked around. If a real component-testing setup gets added
-later, it should probably subsume this file-scoped config rather than run alongside it.
+**Testing:** Vitest (`vitest.config.ts`, scoped to `lib/**/*.test.ts`) covers the pure,
+RN-free logic modules under `lib/__tests__/` — date math, session cache, overdue/peek,
+session-series/count/time/type helpers, task-card, task-toasts. Anything importing React
+Native or `@gorhom/bottom-sheet` has no automated coverage (no RN test renderer is
+configured) — a known gap.
 
 Set `EXPO_PUBLIC_API_URL` in `.env.development` (defaults to
 `http://localhost:5000/api/v1`) so the axios client targets the API; on a physical

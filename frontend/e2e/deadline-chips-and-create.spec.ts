@@ -2,21 +2,19 @@ import { test, expect } from "@playwright/test";
 import { login, uniqueEmail } from "./helpers/auth";
 
 /**
- * Scheduler-rewrite frontend flows (notes.md):
+ * Create flow:
  *  - Deadline quick-action chips (Today/Tomorrow/This week/Next week/This
- *    month/No rush/Custom) replace the old date+time inputs; deadline is
- *    required now. Today/Tomorrow/Custom additionally reveal a custom time
- *    picker (not the native `<input type="time">`).
- *  - Create is direct: submitting the form calls `POST /sessions` immediately,
- *    no confirm toast in between. There is no auto-placement engine anymore
- *    (CLAUDE.md) — `POST /sessions` never sets `scheduledStartTime`, so a
- *    freshly created session always comes back unscheduled.
+ *    month/No rush/Custom); deadline is required for a TASK. Today/Tomorrow/
+ *    Custom reveal a custom time picker (not the native `<input type="time">`).
+ *  - Submitting calls `POST /sessions` immediately, no confirm toast. The
+ *    backend places the TASK into its best free slot and the toast reports
+ *    where it landed.
  *
  * Requires: backend stack + MailHog (see playwright.config.ts).
  */
 
 async function openCreateSheet(page: import("@playwright/test").Page, title: string) {
-  await page.getByRole("button", { name: /new task/i }).first().click();
+  await page.getByRole("button", { name: /new session/i }).first().click();
   await page.getByRole("textbox", { name: /session name/i }).fill(title);
 }
 
@@ -93,13 +91,13 @@ test.describe("direct create flow", () => {
     await page.getByRole("button", { name: /^this week$/i }).click();
     await page.getByRole("button", { name: /create session/i }).click();
 
-    // No propose/confirm toast — the session is created directly. There is
-    // no auto-placement engine, so it always lands unscheduled.
-    await expect(page.getByText(/suggested placement/i)).toBeHidden({
-      timeout: 3_000,
-    });
+    // No propose/confirm step — one direct write, then a toast reporting the
+    // placement ("Scheduled for …") or, on a saturated calendar, that it needs
+    // dragging onto the grid.
     await expect(
-      page.getByText(/session created — drag it onto the calendar/i),
+      page
+        .getByText(/scheduled for/i)
+        .or(page.getByText(/drag it onto the calendar/i)),
     ).toBeVisible({ timeout: 10_000 });
   });
 });

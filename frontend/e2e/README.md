@@ -34,21 +34,17 @@ pnpm --filter frontend test:e2e:ui     # Playwright UI mode
 
 ## Specs
 
-- `settings-tabs.spec.ts` — the tabbed Settings dialog (Insights · Account;
-  there is no "Work" tab anymore — `workStart`/`workEnd`/`workDays` were
-  dropped from `User` with no replacement); the Insights heatmap
-  fetch-on-open / cold-start.
+- `settings-tabs.spec.ts` — the tabbed Settings dialog (Insights · Integrations
+  · Account); the Insights heatmap fetch-on-open / cold-start; the Integrations
+  tab listing the LMS + student-portal cards.
 - `deadline-chips-and-create.spec.ts` — the deadline quick-action chip row and
-  the direct (no confirm-toast) create flow. A freshly created session is
-  always unscheduled — there's no auto-placement engine anymore.
+  the direct (no confirm-toast) create flow; the backend places the TASK and
+  the toast reports where it landed.
 - `edit-and-delete-confirm-toasts.spec.ts` — a deadline edit or a delete is a
-  plain write with no cascade/confirm prompt (notes.md triggers 1–3 are
-  explicitly deferred, not built).
-- `optimize.spec.ts` — the minimal Optimize header button
-  (`POST /scheduler/optimize` over a fixed "now → +14 days" window, applied
-  immediately with an Undo toast) — no mode picker, no preview step.
+  plain `PATCH` / `DELETE` with no cascade or confirm prompt.
 
-> These require the backend stack (Postgres/Redis/MailHog) up, and — for
-> `settings-tabs.spec.ts` / `optimize.spec.ts` — the
-> `GET /users/me/preference-matrix` and `POST /scheduler/optimize*` endpoints
-> wired live.
+> All specs need the backend stack (Postgres/Redis/MailHog) up, plus the
+> `GET /users/me/preference-matrix` and `GET /integrations` endpoints wired live.
+>
+> Not yet covered: creating a fixed / recurring session via the 3-tab type
+> selector, and the series-scope dialog on a drag/delete.

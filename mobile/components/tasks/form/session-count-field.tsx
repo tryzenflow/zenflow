@@ -1,11 +1,11 @@
 import { Text } from "@/components/ui/text";
+import { cn } from "@/lib/utils";
 import {
+  MAX_TASK_SESSION_COUNT,
   daysUntilDeadline,
   maxFeasibleSessionCount,
   sessionCadenceLabel,
-} from "@/lib/session-count";
-import { cn } from "@/lib/utils";
-import { MAX_TASK_SESSION_COUNT } from "@zenflow/core";
+} from "@zenflow/core";
 import * as Haptics from "expo-haptics";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type LayoutChangeEvent, Pressable, View } from "react-native";

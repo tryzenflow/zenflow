@@ -3,7 +3,7 @@ import {
   SESSION_TYPE_META,
   formatDeadlineLabel,
   formatDeadlineShort,
-} from "../session-type";
+} from "@zenflow/core";
 
 const UTC = "UTC";
 

@@ -104,14 +104,7 @@ function AgendaItem({ block, tz }: { block: Event; tz: string }) {
         AGENDA_ROW[block.state],
       )}
     >
-      <span
-        className={cn(
-          "min-w-0 flex-1 truncate font-medium",
-          block.state === "completed" && "text-muted-foreground line-through",
-        )}
-      >
-        {block.title}
-      </span>
+      <span className="min-w-0 flex-1 truncate font-medium">{block.title}</span>
       {tag && (
         <span
           className={cn(
@@ -123,12 +116,9 @@ function AgendaItem({ block, tz }: { block: Event; tz: string }) {
         </span>
       )}
       <span
-        className={cn(
-          "shrink-0 font-mono text-[10px]",
-          AGENDA_TIME[block.state],
-        )}
+        className={cn("shrink-0 font-mono text-[10px]", AGENDA_TIME[block.state])}
       >
-        {block.state === "completed" ? "Done" : time}
+        {time}
       </span>
     </button>
   );
@@ -245,29 +235,29 @@ export function SidebarBody({ agenda, view }: SidebarProps) {
         </Label>
         <ul className="space-y-1 text-[11px] leading-snug text-muted-foreground">
           <li>
-            <span className="font-semibold text-foreground">Click</span> on a
-            task to view its details.
+            <span className="font-semibold text-foreground">Click</span> a
+            session to view its details.
           </li>
           <li>
-            <span className="font-semibold text-foreground">Drag</span> a task
+            <span className="font-semibold text-foreground">Drag</span> a session
             to reschedule it.
           </li>
           <li>
             <span className="font-semibold text-foreground">Hold and drag</span>{" "}
-            one edge of a task to resize it.
-          </li>
-          <li>
-            <span className="font-semibold text-foreground">Double-click</span>{" "}
-            to mark a task as completed.
+            one edge to resize it.
           </li>
           <li>
             New tasks start unscheduled — drag them onto the calendar to give
-            them a slot, or use{" "}
-            <span className="font-semibold text-foreground">Optimize</span> to
-            place them for you.
+            them a slot.
           </li>
           <li>
-            Overlapping tasks are flagged as{" "}
+            <span className="font-semibold text-foreground">Fixed</span> sessions
+            (lectures, exams, assignments) and{" "}
+            <span className="font-semibold text-foreground">Do Not Disturb</span>{" "}
+            blocks carry their own colour.
+          </li>
+          <li>
+            Overlapping sessions are flagged as{" "}
             <span className="font-semibold text-amber-600">conflicts</span>.
           </li>
         </ul>

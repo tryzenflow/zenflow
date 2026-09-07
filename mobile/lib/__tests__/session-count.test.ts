@@ -1,10 +1,10 @@
-import { MAX_TASK_SESSION_COUNT } from "@zenflow/core";
-import { describe, expect, it } from "vitest";
 import {
+  MAX_TASK_SESSION_COUNT,
   daysUntilDeadline,
   maxFeasibleSessionCount,
   sessionCadenceLabel,
-} from "../session-count";
+} from "@zenflow/core";
+import { describe, expect, it } from "vitest";
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;

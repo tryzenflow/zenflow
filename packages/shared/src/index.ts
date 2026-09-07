@@ -6,3 +6,4 @@ export * from "./api";
 export * from "./integration";
 export * from "./schedule";
 export * from "./bandit";
+export * from "./notification";

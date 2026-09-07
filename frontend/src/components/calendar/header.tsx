@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ViewModeSelect } from "./view-mode-select";
-import { OptimizeButton } from "./optimize-button";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { endOfWeek, format, startOfMonth } from "date-fns";
 import { Dispatch, SetStateAction } from "react";
 import { ViewMode } from "@zenflow/shared";
@@ -92,7 +92,7 @@ export function CalendarHeader({
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
-        <OptimizeButton onOptimized={onChanged} />
+        <NotificationBell />
         <ViewModeSelect value={currentView} onChange={setCurrentView} />
         <CreateSessionDialog
           date={date}

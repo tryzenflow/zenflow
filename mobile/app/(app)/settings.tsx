@@ -1,5 +1,6 @@
 import { logout as logoutRequest } from "@/api/auth";
 import { LogOut, Moon, ChevronRight } from "@/components/Icons";
+import { IntegrationsSection } from "@/components/settings/integrations-section";
 import { ProfileRow } from "@/components/settings/profile-row";
 import { SettingsSectionLabel } from "@/components/settings/settings-header";
 import { Switch } from "@/components/ui/switch";
@@ -108,6 +109,8 @@ export default function SettingsScreen() {
             />
           </View>
         </View>
+
+        <IntegrationsSection />
 
         <SettingsSectionLabel>Account</SettingsSectionLabel>
         <View className="mb-[18px] overflow-hidden rounded-2xl border border-border bg-card">

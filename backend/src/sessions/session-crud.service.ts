@@ -11,7 +11,7 @@ import type {
   SessionSuggestionsResponse,
   SessionsListResponse,
 } from "@zenflow/shared";
-import { Prisma, type User } from "../../generated/prisma";
+import { Prisma, type SessionType, type User } from "../../generated/prisma";
 import { minutesToUtc } from "../common/utils";
 import { PrismaService } from "../prisma/prisma.service";
 import { TagsService } from "../tags/tags.service";
@@ -30,6 +30,7 @@ import { ListSessionsDto } from "./dto/list-sessions.dto";
 import { WITH_TAGS_AND_SERIES } from "./types/session-row";
 import { toSessionDto } from "./session-mapper";
 import { createEventData } from "./session-events";
+import { insertFixedSession } from "./fixed-session-writer";
 import { mapSessionPrismaError } from "./prisma-error";
 import { SeriesService } from "./series.service";
 
@@ -133,6 +134,7 @@ export class SessionCrudService {
           source: "USER",
           title: dto.title,
           note: dto.note ?? null,
+          location: dto.location ?? null,
           durationMinutes: dto.durationMinutes,
           deadline,
           tags: { connect: tagIds.map((id) => ({ id })) },
@@ -189,23 +191,18 @@ export class SessionCrudService {
           userId: user.id,
         },
       });
-      const s = await tx.session.create({
-        data: {
-          type: dto.type,
-          source: "USER",
-          title: dto.title,
-          note: dto.note ?? null,
-          durationMinutes: dto.durationMinutes,
-          deadline: null,
-          scheduledStartTime: repStart,
-          seriesId: series.id,
-          tags: { connect: tagIds.map((id) => ({ id })) },
-          userId: user.id,
-        },
-        include: WITH_TAGS_AND_SERIES,
+      return insertFixedSession(tx, {
+        userId: user.id,
+        type: dto.type as Exclude<SessionType, "TASK">,
+        source: "USER",
+        title: dto.title,
+        note: dto.note,
+        location: dto.location,
+        durationMinutes: dto.durationMinutes,
+        scheduledStartTime: repStart,
+        seriesId: series.id,
+        tagIds,
       });
-      await tx.sessionEvent.create({ data: createEventData(s, user.id) });
-      return s;
     });
 
     return toSessionDto(created);
@@ -225,22 +222,19 @@ export class SessionCrudService {
         user.id,
         cleanTags,
       );
-      const s = await tx.session.create({
-        data: {
-          type: dto.type,
-          source: "USER",
-          title: dto.title,
-          note: dto.note ?? null,
-          durationMinutes: dto.durationMinutes,
-          deadline: null,
-          scheduledStartTime: start,
-          tags: { connect: tagIds.map((id) => ({ id })) },
-          userId: user.id,
-        },
-        include: WITH_TAGS_AND_SERIES,
+      // Shared with the DLU watchers' materializer so `source` /
+      // `externalKey` / the CREATE event can't drift between the two paths.
+      return insertFixedSession(tx, {
+        userId: user.id,
+        type: dto.type as Exclude<SessionType, "TASK">,
+        source: "USER",
+        title: dto.title,
+        note: dto.note,
+        location: dto.location,
+        durationMinutes: dto.durationMinutes,
+        scheduledStartTime: start,
+        tagIds,
       });
-      await tx.sessionEvent.create({ data: createEventData(s, user.id) });
-      return s;
     });
 
     return toSessionDto(created);
