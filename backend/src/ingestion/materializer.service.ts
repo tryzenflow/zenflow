@@ -4,7 +4,12 @@ import { Prisma, type SessionSource } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { PrismaService } from "../prisma/prisma.service";
 import { insertFixedSession } from "../sessions/fixed-session-writer";
-import type { IngestedSessionType, ParsedBlock } from "./core/types";
+import { TagsService } from "../tags/tags.service";
+import type {
+  IngestedSessionType,
+  ParsedBlock,
+  ParsedLmsItem,
+} from "./core/types";
 
 /** Which DLU system a batch of blocks came from. */
 export type IngestedSource = Extract<SessionSource, "LMS" | "PORTAL">;
@@ -29,6 +34,16 @@ function topicOf(type: IngestedSessionType): NotificationTopic {
   if (type === "ASSIGNMENT") return "ASSIGNMENT";
   if (type === "EXAM") return "EXAM";
   return "TIMETABLE";
+}
+
+/**
+ * Tag names to hang on the session. Today that is the LMS course's full name
+ * (portal timetable blocks carry their section metadata in `note`/`location`
+ * instead) — an empty list for anything without one.
+ */
+function tagNamesOf(block: ParsedBlock): string[] {
+  const course = (block as Partial<ParsedLmsItem>).lmsCourse;
+  return course ? [course.fullName] : [];
 }
 
 /** The upstream-facing fields a re-run may find changed. */
@@ -91,7 +106,10 @@ function isUniqueViolation(error: unknown): boolean {
 export class MaterializerService {
   private readonly logger = new Logger(MaterializerService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly tagsService: TagsService,
+  ) {}
 
   /**
    * Write `blocks` onto `userId`'s calendar.
@@ -164,6 +182,11 @@ export class MaterializerService {
   ): Promise<boolean> {
     try {
       await this.prisma.$transaction(async (tx) => {
+        const tagIds = await this.tagsService.resolveTagIds(
+          tx,
+          userId,
+          tagNamesOf(block),
+        );
         const row = await insertFixedSession(tx, {
           userId,
           type: block.type,
@@ -173,6 +196,7 @@ export class MaterializerService {
           location: block.location,
           durationMinutes: block.durationMinutes,
           scheduledStartTime: block.scheduledStartTime,
+          tagIds,
           externalKey: block.externalKey,
         });
         await tx.notification.create({

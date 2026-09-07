@@ -160,7 +160,11 @@ describe("parseMonthlyView — assignments", () => {
         durationMinutes: 15,
         location: null,
         note: null,
-        lmsCourseId: 90002,
+        lmsCourse: {
+          lmsCourseId: 90002,
+          fullName: COURSE_90002.fullname,
+          shortName: COURSE_90002.shortname,
+        },
       },
     ]);
   });
@@ -199,7 +203,11 @@ describe("parseMonthlyView — quizzes", () => {
         durationMinutes: 60,
         location: null,
         note: null,
-        lmsCourseId: 90003,
+        lmsCourse: {
+          lmsCourseId: 90003,
+          fullName: COURSE_90003.fullname,
+          shortName: COURSE_90003.shortname,
+        },
       },
     ]);
   });

@@ -3,6 +3,7 @@ import { IntegrationsModule } from "../integrations/integrations.module";
 import { LMSModule } from "../lms/lms.module";
 import { PortalAPIModule } from "../portal/portal-api.module";
 import { PrismaModule } from "../prisma/prisma.module";
+import { TagsModule } from "../tags/tags.module";
 import { ExamWatcherService } from "./exam-watcher.service";
 import { IngestionJobsService } from "./ingestion-jobs.service";
 import { IngestionSyncService } from "./ingestion-sync.service";
@@ -32,6 +33,7 @@ import { TimetableWatcherService } from "./timetable-watcher.service";
     PrismaModule,
     LMSModule,
     PortalAPIModule,
+    TagsModule,
     forwardRef(() => IntegrationsModule),
   ],
   providers: [

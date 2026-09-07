@@ -184,6 +184,7 @@ export function parseTimetable(
     }
 
     const block = snapToGrid(span.startMin, span.endMin);
+    const teacher = orNull(row.FullName);
     items.push({
       externalKey: ref,
       title:
@@ -194,7 +195,9 @@ export function parseTimetable(
       scheduledStartTime: minutesToUtc(dateStr, block.startMin, timezone),
       durationMinutes: block.durationMinutes,
       location: orNull(row.RoomID),
-      note: null,
+      // The one bit of section metadata worth carrying onto the block itself —
+      // "who teaches this" is useful at a glance on the calendar.
+      note: teacher ? `GV: ${teacher}` : null,
       scheduleStudyUnitId: orNull(row.ScheduleStudyUnitID),
     });
 

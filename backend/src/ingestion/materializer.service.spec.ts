@@ -1,7 +1,8 @@
 import { Prisma } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
 import { MaterializerService } from "./materializer.service";
-import type { ParsedBlock } from "./core/types";
+import { TagsService } from "../tags/tags.service";
+import type { ParsedBlock, ParsedLmsItem } from "./core/types";
 
 // ── in-memory Prisma double ────────────────────────────────────────────────
 // Same idiom as integrations.service.spec.ts: a real object graph rather than
@@ -39,8 +40,37 @@ function makePrismaDouble() {
   const sessions: SessionRow[] = [];
   const notifications: NotificationRow[] = [];
   const events: Record<string, unknown>[] = [];
+  const tags: { id: string; userId: string; name: string }[] = [];
 
   const client = {
+    // Enough of `tag` for `TagsService.resolveTagIds` — find-or-create by name.
+    tag: {
+      createMany: (args: {
+        data: { userId: string; name: string }[];
+        skipDuplicates?: boolean;
+      }) => {
+        for (const d of args.data) {
+          if (!tags.some((t) => t.userId === d.userId && t.name === d.name)) {
+            tags.push({
+              id: `t${tags.length + 1}`,
+              userId: d.userId,
+              name: d.name,
+            });
+          }
+        }
+        return Promise.resolve({ count: args.data.length });
+      },
+      findMany: (args: { where: { userId: string; name: { in: string[] } } }) =>
+        Promise.resolve(
+          tags
+            .filter(
+              (t) =>
+                t.userId === args.where.userId &&
+                args.where.name.in.includes(t.name),
+            )
+            .map((t) => ({ id: t.id })),
+        ),
+    },
     session: {
       findUnique: (args: {
         where: { userId_externalKey: { userId: string; externalKey: string } };
@@ -85,7 +115,12 @@ function makePrismaDouble() {
           lastMovedAt: null,
           createdAt: new Date(),
           updatedAt: new Date(),
-          tags: [],
+          tags: (
+            (data.tags as { connect?: { id: string }[] } | undefined)
+              ?.connect ?? []
+          ).map(({ id }) => ({
+            name: tags.find((t) => t.id === id)?.name ?? id,
+          })),
           series: null,
         };
         sessions.push(row);
@@ -133,7 +168,7 @@ function makePrismaDouble() {
       fn(client),
   };
 
-  return { client, sessions, notifications, events };
+  return { client, sessions, notifications, events, tags };
 }
 
 // ── fixtures (deliberately fictional — never real DLU data) ────────────────
@@ -154,8 +189,10 @@ function block(over: Partial<ParsedBlock> = {}): ParsedBlock {
 
 function makeService() {
   const db = makePrismaDouble();
+  const tagsService = new TagsService(db.client as unknown as PrismaService);
   const service = new MaterializerService(
     db.client as unknown as PrismaService,
+    tagsService,
   );
   return { db, service };
 }
@@ -190,6 +227,40 @@ describe("MaterializerService", () => {
         topic: "ASSIGNMENT",
         sessionId: db.sessions[0].id,
       });
+    });
+
+    it("tags the session with the LMS course's full name", async () => {
+      const { db, service } = makeService();
+
+      const lmsItem: ParsedLmsItem = {
+        ...block({ externalKey: "lms:assign:800009" }),
+        lmsCourse: {
+          lmsCourseId: 90002,
+          fullName: "Môn học Mẫu Ba - MHK99PM",
+          shortName: "MHK99PM",
+        },
+      };
+
+      await service.materialize(USER, [lmsItem], "LMS");
+
+      expect(db.sessions[0].tags).toEqual([
+        { name: "Môn học Mẫu Ba - MHK99PM" },
+      ]);
+      expect(db.tags.map((t) => t.name)).toEqual(["Môn học Mẫu Ba - MHK99PM"]);
+    });
+
+    it("adds no tag when the LMS item carries no course", async () => {
+      const { db, service } = makeService();
+
+      const lmsItem: ParsedLmsItem = {
+        ...block({ externalKey: "lms:assign:800010" }),
+        lmsCourse: null,
+      };
+
+      await service.materialize(USER, [lmsItem], "LMS");
+
+      expect(db.sessions[0].tags).toEqual([]);
+      expect(db.tags).toHaveLength(0);
     });
 
     it("writes the room to the location column and leaves the note untouched", async () => {
