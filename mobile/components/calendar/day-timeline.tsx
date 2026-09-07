@@ -133,6 +133,10 @@ interface DayTimelineProps {
    * screen opens the "Move to…" sheet. This timeline resolves the id to the
    * full `Session` from its own list before calling up. */
   onRequestReschedule?: (session: Session) => void;
+  /** When set, a block long-press asks the screen to open its action menu
+   * (Move to… / Add study session before this) rather than jumping straight
+   * to the "Move to…" sheet. */
+  onRequestBlockMenu?: (session: Session) => void;
   /** When a drag-drop's target session belongs to a series
    * (`getSeriesKind` !== "none"), defers the commit to the caller's
    * scope-confirmation sheet (`UpdateRecurringSheet`) instead of committing
@@ -181,6 +185,7 @@ export function DayTimeline({
   onSubtitleChange,
   onDragChange,
   onRequestReschedule,
+  onRequestBlockMenu,
   onRequestScopedUpdate,
   onPeekChange,
   rightInset = 0,
@@ -661,6 +666,16 @@ export function DayTimeline({
     [tasks, onRequestReschedule],
   );
 
+  // Long-press → the screen's block action menu (falls back to the plain
+  // reschedule sheet when the screen didn't wire a menu — see `SessionBlock`).
+  const handleRequestBlockMenu = useCallback(
+    (taskId: string) => {
+      const session = tasks.find((t) => t.id === taskId);
+      if (session) onRequestBlockMenu?.(session);
+    },
+    [tasks, onRequestBlockMenu],
+  );
+
   const formatSnapLabel = useCallback(
     (snap: { startMin: number } | null) => {
       if (!snap) return "";
@@ -882,6 +897,11 @@ export function DayTimeline({
                       onDragStateChange={handleDragStateChange}
                       onPress={onSessionPress}
                       onRequestReschedule={handleRequestReschedule}
+                      onLongPressMenu={
+                        onRequestBlockMenu
+                          ? handleRequestBlockMenu
+                          : undefined
+                      }
                       autoScrollDeltaSV={
                         !segment.continued ? autoScrollDeltaSV : undefined
                       }

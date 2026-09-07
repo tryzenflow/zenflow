@@ -3,6 +3,7 @@ import {
   markNotificationActionTaken,
   markNotificationRead,
 } from "@/api/notifications";
+import { getSessionDetails } from "@/api/tasks";
 import {
   Bell,
   CalendarClock,
@@ -73,12 +74,17 @@ export default function NotificationsScreen() {
       );
       markNotificationRead(n.id).catch(() => {});
     }
-    if (n.sessionId) {
-      if (!n.actionTakenAt) markNotificationActionTaken(n.id).catch(() => {});
-      router.replace(
-        `/task/${encodeURIComponent(n.sessionId)}/edit` as Href,
-      );
+    if (!n.sessionId) return;
+    try {
+      // The ingested session may have been deleted since — surface an error
+      // rather than opening an empty editor.
+      await getSessionDetails(n.sessionId);
+    } catch {
+      toast("That item isn't on your calendar anymore.", "destructive");
+      return;
     }
+    if (!n.actionTakenAt) markNotificationActionTaken(n.id).catch(() => {});
+    router.replace(`/task/${encodeURIComponent(n.sessionId)}/edit` as Href);
   };
 
   return (
