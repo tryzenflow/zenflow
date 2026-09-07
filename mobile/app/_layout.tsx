@@ -192,6 +192,11 @@ export default function RootLayout() {
                 name="connect-dlu-account"
                 options={{ presentation: "modal" }}
               />
+              {/* The ingestion inbox — DLU LMS / portal notifications. */}
+              <Stack.Screen
+                name="notifications"
+                options={{ presentation: "modal" }}
+              />
             </Stack>
             <AuthGate />
             <StatusBar hidden={true} />
