@@ -112,6 +112,9 @@ interface WeekPagerProps {
    * screen opens the "Move to…" sheet with this session. Forwarded straight
    * through from the active `DayTimeline`. */
   onRequestReschedule?: (session: Session) => void;
+  /** Long-press on a block → the screen's block action menu. Forwarded
+   * straight through to the active `DayTimeline`. */
+  onRequestBlockMenu?: (session: Session) => void;
   /** Same-shaped scope-confirmation deferral as `DayTimeline`'s own prop —
    * plain passthrough to the active `DayTimeline`. */
   onRequestScopedUpdate?: (
@@ -183,6 +186,7 @@ function WeekPagerImpl(
     onWeekSlideEnd,
     onActiveStateChange,
     onRequestReschedule,
+    onRequestBlockMenu,
     onRequestScopedUpdate,
     flashSessionId = null,
   }: WeekPagerProps,
@@ -977,6 +981,7 @@ function WeekPagerImpl(
                   onSessionPress={onSessionPress}
                   onDragChange={handleDragChange}
                   onRequestReschedule={onRequestReschedule}
+                  onRequestBlockMenu={onRequestBlockMenu}
                   onRequestScopedUpdate={onRequestScopedUpdate}
                   onPeekChange={handlePeekChange}
                   rightInset={PEEK_STRIP_W}

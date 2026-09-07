@@ -24,6 +24,7 @@ import {
   markNotificationRead,
 } from "@/api/notifications";
 import { getSessionDetails } from "@/api/tasks";
+import { errorToast } from "@/lib/toast";
 
 const POLL_MS = 60_000;
 
@@ -166,7 +167,19 @@ export function NotificationBell() {
   const rows = useMemo(() => buildRows(items), [items]);
 
   const jumpToSession = async (n: NotificationDto) => {
-    if (!n.sessionId) return;
+    if (!n.sessionId || navigating.current) return;
+    navigating.current = true;
+    try {
+      // The ingested session may have been deleted since the notification was
+      // raised — check before navigating so a dead notification surfaces an
+      // error toast instead of opening an empty editor.
+      await getSessionDetails(n.sessionId);
+    } catch {
+      errorToast("That item isn't on your calendar anymore.");
+      navigating.current = false;
+      return;
+    }
+    navigating.current = false;
     window.dispatchEvent(
       new CustomEvent("zenflow:open-task", { detail: n.sessionId }),
     );

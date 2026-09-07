@@ -20,13 +20,14 @@ import {
   UpdateRecurringSheet,
   type UpdateRecurringSheetHandle,
 } from "@/components/calendar/update-recurring-sheet";
+import { TodayButton } from "@/components/calendar/today-button";
 import { CreateSessionFab } from "@/components/tasks/create-task-fab";
 import { Text } from "@/components/ui/text";
 import { useUserStore } from "@/hooks/use-user-store";
 import { addMonths, monthLabel } from "@/lib/month-date-math";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { useFocusEffect } from "@react-navigation/native";
-import { zonedNow } from "@zenflow/core";
+import { zonedNow, zonedWallClockToUtc } from "@zenflow/core";
 import type { Session, UpdateScope } from "@zenflow/shared";
 import { type Href, useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
@@ -87,6 +88,18 @@ export default function MonthScreen() {
   function openDay(day: Date, tasks: Session[], drag: MonthDragHandle) {
     taskListSheetRef.current?.open(day, tasks, drag);
   }
+
+  // Double tap a day cell → Week view with that day selected. The Week screen
+  // reads `date` as a UTC instant and re-homes it to the tz wall clock.
+  const handleDoubleTapDay = useCallback(
+    (day: Date) => {
+      router.navigate({
+        pathname: "/",
+        params: { date: zonedWallClockToUtc(day, tz).toISOString() },
+      } as Href);
+    },
+    [router, tz],
+  );
 
   function openSessionFromSheet(task: Session) {
     // A recurring occurrence's id is "<seriesId>::<startISO>" — encode it so
@@ -201,10 +214,16 @@ export default function MonthScreen() {
               onDragActiveChange={setDragActive}
               onOpenDay={openDay}
               onOpenOverflow={openDay}
+              onDoubleTapDay={handleDoubleTapDay}
             />
           )}
         />
       </View>
+
+      <TodayButton
+        visible={monthLabel(visibleMonth) !== monthLabel(zonedNow(tz))}
+        onPress={() => goToMonth(zonedNow(tz))}
+      />
 
       <SessionListSheet
         ref={taskListSheetRef}

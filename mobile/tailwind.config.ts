@@ -9,10 +9,17 @@ export default {
   // that live outside these globs are never seen by the scanner, so the
   // utilities are never generated and the classes silently no-op at runtime —
   // which left overdue pills with RN's default black border and no background.
+  // `@zenflow/core` matters for the same reason: `session-type.ts`'s
+  // `SESSION_TYPE_META` holds the per-type `dotClass`/`badgeClass`/`textClass`
+  // strings (`bg-teal-500`, `bg-sky-500`, …) that the week-header dot row and
+  // the type badge render — without this only `bg-brand-orange` (used
+  // literally elsewhere in mobile) survived, so every non-TASK dot was
+  // invisible. The web app scans it the same way (`@source` in `index.css`).
   content: [
     "./app/**/*.{ts,tsx}",
     "./components/**/*.{ts,tsx}",
     "./lib/**/*.{ts,tsx}",
+    "../packages/core/src/**/*.{ts,tsx}",
   ],
   presets: [require("nativewind/preset")],
   theme: {
