@@ -1,11 +1,15 @@
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
+import {
+  type RecurrenceFreq as Freq,
+  type RecurrenceState,
+  fromRrule,
+  toRrule,
+} from "@zenflow/core";
 import { format } from "date-fns";
 import { useMemo } from "react";
 import { Pressable, View } from "react-native";
 import { InlineDateField } from "./inline-date-field";
-
-type Freq = "NONE" | "DAILY" | "WEEKLY";
 
 const WEEKDAYS: { key: string; label: string }[] = [
   { key: "MO", label: "M" },
@@ -16,48 +20,6 @@ const WEEKDAYS: { key: string; label: string }[] = [
   { key: "SA", label: "S" },
   { key: "SU", label: "S" },
 ];
-
-interface RecurrenceState {
-  freq: Freq;
-  byday: string[];
-  until?: string; // YYYY-MM-DD
-}
-
-/** RRULE subset string → editor state. */
-export function fromRrule(rrule: string | undefined): RecurrenceState {
-  if (!rrule) return { freq: "NONE", byday: [] };
-  const parts = Object.fromEntries(
-    rrule
-      .replace(/^RRULE:/i, "")
-      .split(";")
-      .map((p) => p.split("=") as [string, string]),
-  );
-  const freq = (parts.FREQ as Freq) ?? "NONE";
-  const byday = parts.BYDAY ? parts.BYDAY.split(",") : [];
-  let until: string | undefined;
-  if (parts.UNTIL) {
-    const m = /^(\d{4})(\d{2})(\d{2})/.exec(parts.UNTIL);
-    if (m) until = `${m[1]}-${m[2]}-${m[3]}`;
-  }
-  return {
-    freq: freq === "DAILY" || freq === "WEEKLY" ? freq : "NONE",
-    byday,
-    until,
-  };
-}
-
-/** Editor state → RRULE subset string (or undefined for a one-off). */
-export function toRrule(state: RecurrenceState): string | undefined {
-  if (state.freq === "NONE") return undefined;
-  const parts = [`FREQ=${state.freq}`];
-  if (state.freq === "WEEKLY" && state.byday.length > 0) {
-    parts.push(`BYDAY=${state.byday.join(",")}`);
-  }
-  if (state.until) {
-    parts.push(`UNTIL=${state.until.replace(/-/g, "")}T000000Z`);
-  }
-  return parts.join(";");
-}
 
 /**
  * Recurrence builder for the fixed session types (DND / assignment / exam /

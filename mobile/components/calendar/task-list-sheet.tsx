@@ -13,10 +13,9 @@ import {
 import { Text } from "@/components/ui/text";
 import { isContinuationEntry } from "@/lib/month-date-math";
 import { isSessionPastDeadline } from "@/lib/overdue";
-import { SESSION_TYPE_META } from "@/lib/session-type";
 import { deriveState } from "@/lib/task-card";
 import { cn } from "@/lib/utils";
-import { zonedDate } from "@zenflow/core";
+import { SESSION_TYPE_META, zonedDate } from "@zenflow/core";
 import type { Session, SessionCardState } from "@zenflow/shared";
 import { format } from "date-fns";
 import * as Haptics from "expo-haptics";

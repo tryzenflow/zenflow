@@ -1,17 +1,14 @@
-import { zonedDate } from "@zenflow/core";
 import type { SessionType } from "@zenflow/shared";
 import { differenceInCalendarDays, format } from "date-fns";
+import { zonedDate } from "./tz";
 
 /**
- * Per-session-type presentation — human label and the chip tint classes, keyed
+ * Per-session-type presentation — human label and Tailwind tint classes, keyed
  * by the raw {@link SessionType} (not the derived `SessionCardState`, so a
- * conflicting TASK still reads as a Task). The tints are the same palette
- * already used by `task-block.tsx`'s `stateClasses` and `lib/task-card.ts`'s
- * `MONTH_PILL_CLASSES` so a badge, a left-accent and a month pill all agree.
- *
- * The per-type icon lives in `components/calendar/session-type-badge.tsx` (it
- * pulls in `lucide-react-native`, which this RN-free module must not) — matched
- * to `components/tasks/form/session-type-tabs.tsx`.
+ * conflicting `TASK` still reads as a Task). The tints match
+ * {@link TASK_CARD_CLASSES} so a badge, a left-accent and a month pill agree.
+ * Per-type icons live in each app's `session-type-badge` component (they pull
+ * in a platform icon set this RN-and-DOM-free module must not).
  */
 export interface SessionTypeMeta {
   label: string;
@@ -19,11 +16,7 @@ export interface SessionTypeMeta {
   badgeClass: string;
   /** Text + icon colour, paired with {@link badgeClass}. */
   textClass: string;
-  /**
-   * Solid (non-alpha) fill for a small indicator — `badgeClass`'s translucent
-   * tint reads as barely-there at a 4-6px dot size, so the week header's
-   * per-day dot row (`components/calendar/week-header.tsx`) uses this instead.
-   */
+  /** Solid (non-alpha) fill for a small indicator dot. */
   dotClass: string;
 }
 
@@ -60,17 +53,15 @@ export const SESSION_TYPE_META: Record<SessionType, SessionTypeMeta> = {
   },
 };
 
-/** Canonical display order for a set of session types (e.g. the week
- * header's per-day dot row) — insertion order of {@link SESSION_TYPE_META},
- * so the dots land in the same order on every day regardless of the order
- * the API returned the underlying sessions in. */
+/** Canonical display order for a set of session types — insertion order of
+ * {@link SESSION_TYPE_META}, so dots/badges land consistently regardless of the
+ * order the API returned the underlying sessions in. */
 export const SESSION_TYPE_ORDER = Object.keys(
   SESSION_TYPE_META,
 ) as SessionType[];
 
 /**
- * A deadline label that always carries the date — the bare `due 9:00 AM` it
- * replaces was ambiguous (which day?). Near-term deadlines read
+ * A deadline label that always carries the date. Near-term deadlines read
  * `due today 9:00 AM` / `due tomorrow 9:00 AM`; anything else is
  * `due Mar 4, 9:00 AM`, with the year appended only when it differs from the
  * current one. All comparisons are in the user's timezone.
@@ -96,16 +87,11 @@ export function formatDeadlineLabel(
 }
 
 /**
- * A terse deadline label for the inline "due" chip on a scheduled block — no
- * "due" prefix, no clock time unless the deadline falls on the reference day.
- * `ref` is the day the chip is shown against (the block's start), so the label
- * reads relative to where it's rendered, not wall-clock now:
- * - same day    → `3:00 PM`
- * - +1 day      → `tomorrow`
- * - this year   → `Mar 4`
- * - other year  → `Mar 4 2027`
- * All comparisons are in the user's timezone. A past-deadline block never
- * reaches this — the caller shows a "late" chip instead.
+ * A terse deadline label for the inline "due" chip on a scheduled block. `ref`
+ * is the day the chip is shown against (the block's start), so the label reads
+ * relative to where it's rendered, not wall-clock now: same day → `3:00 PM`;
+ * +1 day → `tomorrow`; this year → `Mar 4`; other year → `Mar 4 2027`. A
+ * past-deadline block never reaches this — the caller shows a "late" chip.
  */
 export function formatDeadlineShort(
   deadlineISO: string,

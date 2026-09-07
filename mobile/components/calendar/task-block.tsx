@@ -1,11 +1,11 @@
 import { AlertTriangle, Clock, MapPin } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
-import { formatDeadlineShort } from "@/lib/session-type";
 import { cn } from "@/lib/utils";
 import { differenceInCalendarDays } from "date-fns";
 import {
   DAILY_HORIZON,
   TIME_GRANULARITY,
+  formatDeadlineShort,
   zonedDate,
   zonedWallClockToUtc,
 } from "@zenflow/core";

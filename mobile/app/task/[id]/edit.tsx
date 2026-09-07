@@ -20,7 +20,6 @@ import { useToast } from "@/components/ui/toast";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
 import { isSessionPastDeadline } from "@/lib/overdue";
-import { getSeriesKind } from "@/lib/session-series";
 import {
   RESCHEDULE_HINT,
   shouldSurfaceRescheduleHint,
@@ -30,6 +29,7 @@ import {
 import {
   type EditSessionFormValues,
   type SessionFormType,
+  getSeriesKind,
   hhmmToMinutes,
   zonedDate,
   zonedWallClockToUtc,
