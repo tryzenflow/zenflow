@@ -111,11 +111,7 @@ const prismaStub = {
       Promise.resolve(
         rows
           .filter((r) => matches(r, args.where))
-          .sort(
-            (a, b) =>
-              Number(!!a.readAt) - Number(!!b.readAt) ||
-              b.sentAt.getTime() - a.sentAt.getTime(),
-          )
+          .sort((a, b) => b.sentAt.getTime() - a.sentAt.getTime())
           .slice(args.skip, args.skip + args.take),
       ),
     count: (args: { where: Record<string, unknown> }) =>
@@ -176,7 +172,7 @@ describe("Notifications (e2e)", () => {
   });
 
   describe("GET /notifications", () => {
-    it("answers with the envelope, unread first, and the inbox-wide unread count", async () => {
+    it("answers with the envelope, newest first, and the inbox-wide unread count", async () => {
       const res = await request(app.getHttpServer()).get("/notifications");
 
       expect(res.status).toBe(200);
@@ -185,11 +181,11 @@ describe("Notifications (e2e)", () => {
         message: "Found 2 notifications",
       });
       const data = body<ListData>(res).data;
-      expect(data.notifications.map((n) => n.id)).toEqual(["n1", "n2"]);
+      expect(data.notifications.map((n) => n.id)).toEqual(["n2", "n1"]);
       expect(data.unreadCount).toBe(1);
       // Another student's row is never in the page or the count.
       expect(data.notifications.map((n) => n.id)).not.toContain("n3");
-      expect(data.notifications[0].sentAt).toBe("2026-09-01T00:00:00.000Z");
+      expect(data.notifications[0].sentAt).toBe("2026-09-02T00:00:00.000Z");
     });
 
     it("coerces and honours limit/offset", async () => {

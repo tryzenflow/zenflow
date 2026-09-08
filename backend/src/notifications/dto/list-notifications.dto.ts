@@ -14,9 +14,8 @@ export class ListNotificationsDto {
   /**
    * How many notifications to skip.
    *
-   * Offset rather than a cursor because the inbox is sorted unread-first: a
-   * cursor over a two-key sort whose first key *changes when the user reads a
-   * row* would skip or repeat entries as they page.
+   * A plain offset: the inbox is a small, bounded list sorted newest-first, so
+   * the extra machinery of a keyset cursor buys nothing here.
    */
   @IsOptional()
   @Type(() => Number)

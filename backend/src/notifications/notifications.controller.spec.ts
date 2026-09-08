@@ -8,11 +8,13 @@ const USER = { id: "u1" } as User;
 const DTO = {
   id: "n1",
   topic: "ASSIGNMENT" as const,
+  kind: "NEW" as const,
   title: "New assignment: Môn học Mẫu Một",
   content: "Added to your calendar from DLU.",
   sentAt: "2026-09-01T00:00:00.000Z",
   readAt: null,
   actionTakenAt: null,
+  eventEndsAt: null,
   sessionId: "s1",
 };
 
@@ -21,6 +23,7 @@ describe("NotificationsController", () => {
   const list = jest.fn();
   const markRead = jest.fn();
   const markActionTaken = jest.fn();
+  const remove = jest.fn();
 
   beforeEach(async () => {
     list
@@ -32,13 +35,14 @@ describe("NotificationsController", () => {
     markActionTaken
       .mockReset()
       .mockResolvedValue({ ...DTO, actionTakenAt: "2026-09-06T00:00:00.000Z" });
+    remove.mockReset().mockResolvedValue({ id: "n1" });
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [NotificationsController],
       providers: [
         {
           provide: NotificationsService,
-          useValue: { list, markRead, markActionTaken },
+          useValue: { list, markRead, markActionTaken, remove },
         },
       ],
     }).compile();
@@ -79,5 +83,16 @@ describe("NotificationsController", () => {
     expect(res.success).toBe(true);
     expect(res.message).toBe("Notification marked as acted on");
     expect(res.data.actionTakenAt).toBe("2026-09-06T00:00:00.000Z");
+  });
+
+  it("wraps remove() in the success envelope", async () => {
+    const res = await controller.remove(USER, "n1");
+
+    expect(remove).toHaveBeenCalledWith(USER, "n1");
+    expect(res).toEqual({
+      success: true,
+      message: "Notification dismissed",
+      data: { id: "n1" },
+    });
   });
 });

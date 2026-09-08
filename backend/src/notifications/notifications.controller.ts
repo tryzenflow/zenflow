@@ -1,16 +1,20 @@
 import {
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
   Query,
+  Sse,
   UseGuards,
 } from "@nestjs/common";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
-import { type User } from "../../generated/prisma";
+import { Notification, type User } from "../../generated/prisma";
 import { ListNotificationsDto } from "./dto/list-notifications.dto";
 import { NotificationsService } from "./notifications.service";
+import { NotificationEvent } from "./types";
+import { filter, fromEvent, map } from "rxjs";
 
 /**
  * The ingestion inbox — read + acknowledge only.
@@ -24,8 +28,20 @@ import { NotificationsService } from "./notifications.service";
 @UseGuards(CookieAuthGuard)
 export class NotificationsController {
   constructor(private readonly notifications: NotificationsService) {}
+  @Sse("stream")
+  async sendInApp(@CurrentUser() user: User) {
+    return fromEvent(
+      this.notifications.notificationEmitter,
+      NotificationEvent.NEW_SESSION,
+    ).pipe(
+      filter((data) => (data as Notification).userId === user.id),
+      map((data) => ({
+        data: this.notifications.toNotificationDto(data as Notification),
+      })),
+    );
+  }
 
-  /** One page of the caller's inbox, unread first, plus the unread badge count. */
+  /** One page of the caller's inbox, newest first, plus the unread badge count. */
   @Get()
   async list(@CurrentUser() user: User, @Query() dto: ListNotificationsDto) {
     const data = await this.notifications.list(user, dto);
@@ -48,5 +64,12 @@ export class NotificationsController {
   async markActionTaken(@CurrentUser() user: User, @Param("id") id: string) {
     const data = await this.notifications.markActionTaken(user, id);
     return { success: true, message: "Notification marked as acted on", data };
+  }
+
+  /** Dismiss (hard-delete) one notification. 404 if it is not the caller's. */
+  @Delete(":id")
+  async remove(@CurrentUser() user: User, @Param("id") id: string) {
+    const data = await this.notifications.remove(user, id);
+    return { success: true, message: "Notification dismissed", data };
   }
 }

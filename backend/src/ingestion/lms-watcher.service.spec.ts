@@ -1,6 +1,7 @@
 import { ConfigService } from "@nestjs/config";
 import type { IntegrationsService } from "../integrations/integrations.service";
 import type { LMSService } from "../lms/lms.service";
+import type { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import type { MoodleMonthlyView } from "./core/parse-lms";
 import { IngestionJobsService } from "./ingestion-jobs.service";
@@ -200,6 +201,9 @@ function makeWatcher(
   const materialize = jest
     .fn()
     .mockResolvedValue({ created: 1, updated: 0, unchanged: 0, guarded: 0 });
+  const reconcileDeleted = jest
+    .fn()
+    .mockResolvedValue({ deleted: 0, keptWithWarning: 0 });
   const revealCredentials = jest
     .fn()
     .mockResolvedValue({ username: "sv0001", password: "pw" });
@@ -210,7 +214,8 @@ function makeWatcher(
     { get: (name: string) => env[name] } as unknown as ConfigService,
     { login, fetchMonthlyView } as unknown as LMSService,
     new IngestionJobsService(prisma),
-    { materialize } as unknown as MaterializerService,
+    { materialize, reconcileDeleted } as unknown as MaterializerService,
+    { notify: jest.fn(), create: jest.fn() } as unknown as NotificationsService,
     { revealCredentials } as unknown as IntegrationsService,
   );
 
@@ -220,6 +225,7 @@ function makeWatcher(
     login,
     fetchMonthlyView,
     materialize,
+    reconcileDeleted,
     revealCredentials,
   };
 }
