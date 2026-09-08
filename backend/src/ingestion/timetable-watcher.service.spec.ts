@@ -176,6 +176,9 @@ function makeWatcher(
   const materialize = jest
     .fn()
     .mockResolvedValue({ created: 1, updated: 0, unchanged: 0, guarded: 0 });
+  const reconcileDeleted = jest
+    .fn()
+    .mockResolvedValue({ deleted: 0, keptWithWarning: 0 });
   const revealCredentials = jest
     .fn()
     .mockResolvedValue({ username: "sv0001", password: "pw" });
@@ -186,11 +189,18 @@ function makeWatcher(
     { get: (name: string) => env[name] } as unknown as ConfigService,
     { authenticate, fetchTimetable } as unknown as PortalAPIService,
     new IngestionJobsService(prisma),
-    { materialize } as unknown as MaterializerService,
+    { materialize, reconcileDeleted } as unknown as MaterializerService,
     { revealCredentials } as unknown as IntegrationsService,
   );
 
-  return { db, service, authenticate, fetchTimetable, materialize };
+  return {
+    db,
+    service,
+    authenticate,
+    fetchTimetable,
+    materialize,
+    reconcileDeleted,
+  };
 }
 
 describe("TimetableWatcherService", () => {

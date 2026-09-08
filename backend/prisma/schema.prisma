@@ -414,14 +414,27 @@ enum NotificationTopic {
   REMINDER
 }
 
+// How the inbox row is categorised for its badge: something new on the
+// calendar, an upstream change to an existing item, or an item dropped upstream.
+enum NotificationKind {
+  NEW
+  CHANGE
+  DROP
+}
+
 model Notification {
   id            String            @id @default(uuid())
   sentAt        DateTime          @default(now())
   readAt        DateTime?
   actionTakenAt DateTime?
   topic         NotificationTopic
+  kind          NotificationKind  @default(NEW)
   title         String
   content       String
+  // The fixed end instant of the session behind this row (start + duration) —
+  // an ASSIGNMENT/EXAM/LECTURE is always scheduled, so this is the "due" / "at"
+  // time the inbox shows. Null for grouped rows and for drops (no one session).
+  eventEndsAt   DateTime?
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
