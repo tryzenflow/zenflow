@@ -147,7 +147,11 @@ draggable/resizable block with a click popover.
 `components/notifications/notification-bell.tsx` — a header bell with an unread-count badge
 that opens a popover listing the DLU watchers' notifications (`GET /notifications`,
 polled). Opening it marks the shown rows read (`PATCH /notifications/:id/read`); a row that
-points at a session opens it and stamps `action-taken`.
+points at a session opens it and stamps `action-taken`. Each row shows the calendar type's
+icon/tint, a `kind` badge (New / Change / Drop), a spelled-out relative time and, for an
+assignment/exam/lecture, its `eventEndsAt` as a `due`/clock label. Unread rows get a red
+dot + bold meta; a `NEW` row also gets a red alert mark. The hover ✕ dismisses
+(`DELETE /notifications/:id`) — the web counterpart of mobile's swipe.
 
 ## Timezone model (important)
 
