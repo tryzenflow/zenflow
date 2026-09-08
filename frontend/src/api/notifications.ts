@@ -28,3 +28,9 @@ export async function markNotificationActionTaken(
   const { data } = await api.patch(`/notifications/${id}/action-taken`);
   return data.data;
 }
+
+/** Dismiss (hard-delete) one notification. 404 if it is not the caller's. */
+export async function dismissNotification(id: string): Promise<{ id: string }> {
+  const { data } = await api.delete(`/notifications/${id}`);
+  return data.data;
+}
