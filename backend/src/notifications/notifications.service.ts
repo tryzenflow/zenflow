@@ -9,7 +9,55 @@ import { Prisma, type Notification, type User } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { PrismaService } from "../prisma/prisma.service";
 import { ListNotificationsDto } from "./dto/list-notifications.dto";
+import { NotificationEvent } from "./types";
 import { EventEmitter2 } from "@nestjs/event-emitter";
+
+/**
+ * One of each inbox row style, cycled by {@link NotificationsService.raiseSamples}
+ * for the dev-only test trigger.
+ */
+const DEV_SAMPLES: CreateNotificationInput[] = [
+  {
+    topic: "ASSIGNMENT",
+    kind: "NEW",
+    title: "New assignment: Sorting Algorithms",
+    content: "Added from your LMS. Plan the work that leads up to it.",
+    sessionId: null,
+    eventEndsAt: null,
+  },
+  {
+    topic: "EXAM",
+    kind: "NEW",
+    title: "New exam: Midterm — Room A305",
+    content: "Added from your portal. Plan revision sessions before it.",
+    sessionId: null,
+    eventEndsAt: null,
+  },
+  {
+    topic: "TIMETABLE",
+    kind: "NEW",
+    title: "Timetable for semester 1 is available",
+    content: "12 classes were added to your calendar.",
+    sessionId: null,
+    eventEndsAt: null,
+  },
+  {
+    topic: "TIMETABLE",
+    kind: "CHANGE",
+    title: "Updated: Databases — Room B210",
+    content: "The portal moved this class.",
+    sessionId: null,
+    eventEndsAt: null,
+  },
+  {
+    topic: "TIMETABLE",
+    kind: "DROP",
+    title: "Lectures removed: Data Structures Lab",
+    content: "These classes were taken off your DLU timetable.",
+    sessionId: null,
+    eventEndsAt: null,
+  },
+];
 
 /** What the materializer passes to {@link NotificationsService.create}. */
 export interface CreateNotificationInput {
@@ -70,6 +118,28 @@ export class NotificationsService {
     });
 
     return newNotification;
+  }
+
+  /**
+   * Dev-only: write `count` fake rows (cycling {@link DEV_SAMPLES}) and emit
+   * `NEW_SESSION` for each — exactly what the materializer does, so they reach
+   * the SSE stream and `PushService`. Called from `POST /notifications/dev/raise`
+   * so the emit runs in the API process; a standalone script has its own
+   * in-memory emitter with no listeners.
+   */
+  async raiseSamples(userId: string, count = 1): Promise<NotificationDto[]> {
+    const n = Math.max(1, Math.min(20, count));
+    const raised: NotificationDto[] = [];
+    for (let i = 0; i < n; i++) {
+      const sample = DEV_SAMPLES[i % DEV_SAMPLES.length];
+      const row = await this.create(userId, {
+        ...sample,
+        title: n > 1 ? `${sample.title} (#${i + 1})` : sample.title,
+      });
+      this.notify(NotificationEvent.NEW_SESSION, row);
+      raised.push(toNotificationDto(row));
+    }
+    return raised;
   }
 
   /**

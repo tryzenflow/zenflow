@@ -173,7 +173,7 @@
                 class="absolute inset-x-0 bottom-[64px] z-[60] mx-5 flex items-center gap-3 rounded-2xl border border-border bg-popover px-4 py-3.5 text-left shadow-[0_14px_30px_-10px_rgba(0,0,0,0.35)]"
               >
                 <span
-                  class="inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary [&_svg]:size-[18px]"
+                  class="inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-teal-500/40 bg-teal-500/15 text-teal-700 [&_svg]:size-[18px]"
                   ><svg
                     viewBox="0 0 24 24"
                     fill="none"
@@ -182,8 +182,14 @@
                     stroke-linecap="round"
                     stroke-linejoin="round"
                   >
-                    <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
-                    <path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5" /></svg
+                    <rect x="8" y="2" width="8" height="4" rx="1" />
+                    <path
+                      d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"
+                    />
+                    <path d="M12 11h4" />
+                    <path d="M12 16h4" />
+                    <path d="M8 11h.01" />
+                    <path d="M8 16h.01" /></svg
                 ></span>
                 <div class="min-w-0 flex-1">
                   <div class="text-[13.5px] font-semibold text-foreground">
@@ -198,7 +204,7 @@
                     Due Jul 8
                   </div>
                 </div>
-                <span class="text-muted-foreground [&_svg]:size-4"
+                <span class="text-destructive [&_svg]:size-4"
                   ><svg
                     viewBox="0 0 24 24"
                     fill="none"
@@ -207,7 +213,9 @@
                     stroke-linecap="round"
                     stroke-linejoin="round"
                   >
-                    <polyline points="9 18 15 12 9 6" /></svg
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" x2="12" y1="8" y2="12" />
+                    <line x1="12" x2="12.01" y1="16" y2="16" /></svg
                 ></span>
               </button>
             </div>
@@ -470,8 +478,21 @@
               </button>
               <div class="text-xl font-bold tracking-[-0.02em]">Inbox</div>
               <span
-                class="ml-auto rounded-full bg-destructive px-2 py-0.5 text-[11px] font-bold leading-none text-white"
-                >3 unread</span
+                class="ml-auto inline-flex items-center gap-1 rounded-full border-2 border-red-500/50 bg-red-500/10 px-2.5 py-1 text-[12px] font-bold leading-none text-red-700 [&_svg]:size-3.5"
+                ><svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="shrink-0"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" x2="12" y1="8" y2="12" />
+                  <line x1="12" x2="12.01" y1="16" y2="16" />
+                </svg>
+                3 unread</span
               >
             </div>
             <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden">
@@ -810,8 +831,21 @@
               </button>
               <div class="text-xl font-bold tracking-[-0.02em]">Inbox</div>
               <span
-                class="ml-auto rounded-full bg-destructive px-2 py-0.5 text-[11px] font-bold leading-none text-white"
-                >1 unread</span
+                class="ml-auto inline-flex items-center gap-1 rounded-full border-2 border-red-500/50 bg-red-500/10 px-2.5 py-1 text-[12px] font-bold leading-none text-red-700 [&_svg]:size-3.5"
+                ><svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="shrink-0"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" x2="12" y1="8" y2="12" />
+                  <line x1="12" x2="12.01" y1="16" y2="16" />
+                </svg>
+                1 unread</span
               >
             </div>
             <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden">
@@ -1100,6 +1134,390 @@
               </div>
             </div>
             <div class="home-indicator"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="state-section">
+      <h2>Frontend web</h2>
+      <p>
+        The web PWA
+        (<code>frontend/src/components/notifications/notification-bell.tsx</code>)
+        surfaces the same inbox from the header-bar bell, and the same
+        &ldquo;landed on your calendar&rdquo; push as a
+        <b>bottom-right toast</b> rather than a system notification. Unread
+        styling matches mobile: a tinted row
+        (<code>bg-primary/[0.04]</code>), a red dot, a bold title + meta line,
+        and — for a <b>New</b> item — a red <b>!</b>; the popover header carries a
+        red-bordered <b>&ldquo;N&nbsp;unread&rdquo;</b> pill. Hovering a row
+        reveals the <b>✕</b> (the web stand-in for swipe-to-dismiss). The toast
+        borrows the calendar type's icon + tint and jumps to the session on
+        click.
+      </p>
+    </div>
+    <div class="gallery">
+      <!-- Web · bell popover -->
+      <div class="frame" style="width: 470px">
+        <div class="caption">
+          <span class="tag">Web · bell popover</span>
+          <div class="sub">
+            Header bell → the inbox dropdown. Unread rows tinted + dotted +
+            bold; the middle row shows the hover ✕.
+          </div>
+        </div>
+        <div
+          class="w-full overflow-hidden rounded-xl border border-border bg-card text-foreground shadow-[0_30px_60px_-15px_rgba(0,0,0,0.4)]"
+        >
+          <div
+            class="flex items-center gap-2 border-b border-border/70 bg-muted/40 px-3.5 py-2.5"
+          >
+            <span class="size-2.5 rounded-full" style="background: #ef4444"></span>
+            <span class="size-2.5 rounded-full" style="background: #f59e0b"></span>
+            <span class="size-2.5 rounded-full" style="background: #22c55e"></span>
+            <span
+              class="ml-2 flex-1 truncate rounded bg-background/70 px-2 py-1 text-[10.5px] text-muted-foreground"
+              >app.zenflow.io/calendar</span
+            >
+          </div>
+          <div
+            class="flex h-12 items-center justify-between border-b border-border/70 px-4"
+          >
+            <span
+              class="flex items-center gap-1.5 text-[13px] font-bold tracking-[-0.01em]"
+              ><span
+                class="inline-block size-4 rounded-[5px]"
+                style="
+                  background: linear-gradient(135deg, #ff8e3e, #f0b101, #d8f998);
+                "
+              ></span>
+              Zenflow</span
+            >
+            <span
+              class="relative inline-flex size-8 items-center justify-center rounded-md text-foreground [&_svg]:size-4"
+              ><svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg
+              ><span
+                class="absolute -right-0.5 -top-0.5 flex min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-bold leading-4 text-white"
+                >3</span
+              ></span
+            >
+          </div>
+          <div class="relative h-[380px] overflow-hidden bg-background">
+            <div class="absolute inset-0 opacity-[0.35]">
+              <div class="mt-10 border-t border-grid"></div>
+              <div class="mt-14 border-t border-grid"></div>
+              <div class="mt-14 border-t border-grid"></div>
+              <div class="mt-14 border-t border-grid"></div>
+            </div>
+            <div
+              class="absolute right-3 top-3 w-[26rem] overflow-hidden rounded-lg border border-border bg-popover shadow-[0_16px_40px_-12px_rgba(0,0,0,0.35)]"
+            >
+              <div
+                class="flex items-center justify-between gap-3 px-4 pt-3 pb-1.5"
+              >
+                <span class="text-[10.5px] text-muted-foreground"
+                  >Click a row to open it · hover to dismiss</span
+                >
+                <span
+                  class="inline-flex shrink-0 items-center gap-1 rounded-full border-2 border-red-500/50 bg-red-500/10 px-2 py-1 text-[11px] font-bold leading-none text-red-700 [&_svg]:size-3.5"
+                  ><svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" x2="12" y1="8" y2="12" />
+                    <line x1="12" x2="12.01" y1="16" y2="16" /></svg
+                  >3 unread</span
+                >
+              </div>
+              <div class="divide-y divide-border">
+                <!-- Unread · NEW assignment -->
+                <div
+                  class="group relative flex w-full items-stretch bg-primary/[0.04]"
+                >
+                  <div
+                    class="flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 pr-10 text-left"
+                  >
+                    <span
+                      class="flex size-9 shrink-0 items-center justify-center rounded-xl border border-teal-500/40 bg-teal-500/15 text-teal-700 [&_svg]:size-[18px]"
+                      ><svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <rect x="8" y="2" width="8" height="4" rx="1" />
+                        <path
+                          d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"
+                        />
+                        <path d="M12 11h4" />
+                        <path d="M12 16h4" />
+                        <path d="M8 11h.01" />
+                        <path d="M8 16h.01" /></svg
+                    ></span>
+                    <span class="min-w-0 flex-1">
+                      <span class="flex items-center gap-1.5"
+                        ><span
+                          class="size-1.5 shrink-0 rounded-full bg-destructive"
+                        ></span
+                        ><span class="truncate text-[13px] font-semibold"
+                          >New assignment: Sorting Algorithms</span
+                        ></span
+                      >
+                      <span
+                        class="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-foreground/80"
+                        ><span
+                          class="shrink-0 rounded border border-primary/30 bg-primary/10 px-1 py-px text-[9px] font-semibold uppercase leading-none tracking-wide text-primary"
+                          >New</span
+                        ><span class="text-muted-foreground">·</span
+                        ><span class="shrink-0">12 minutes ago</span
+                        ><span class="text-muted-foreground">·</span
+                        ><span class="truncate">due Jul 8</span></span
+                      >
+                    </span>
+                  </div>
+                  <span
+                    class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2"
+                    ><svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      class="size-4 text-destructive"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" x2="12" y1="8" y2="12" />
+                      <line x1="12" x2="12.01" y1="16" y2="16" /></svg
+                  ></span>
+                </div>
+
+                <!-- Read · CHANGE — shown mid-hover: ✕ revealed -->
+                <div class="group relative flex w-full items-stretch bg-muted/60">
+                  <div
+                    class="flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 pr-10 text-left"
+                  >
+                    <span
+                      class="flex size-9 shrink-0 items-center justify-center rounded-xl border border-sky-500/40 bg-sky-500/15 text-sky-700 [&_svg]:size-[18px]"
+                      ><svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path
+                          d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"
+                        />
+                        <path d="M22 10v6" />
+                        <path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5" /></svg
+                    ></span>
+                    <span class="min-w-0 flex-1">
+                      <span class="flex items-center gap-1.5"
+                        ><span class="truncate text-[13px] font-medium"
+                          >Updated: Databases — Room B210</span
+                        ></span
+                      >
+                      <span
+                        class="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground"
+                        ><span
+                          class="shrink-0 rounded border border-amber-500/30 bg-amber-500/10 px-1 py-px text-[9px] font-semibold uppercase leading-none tracking-wide text-amber-700"
+                          >Change</span
+                        ><span>·</span><span class="shrink-0">yesterday</span
+                        ><span>·</span
+                        ><span class="truncate">Jul 9, 2:00 PM</span></span
+                      >
+                    </span>
+                  </div>
+                  <button
+                    class="absolute right-2 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md bg-muted text-foreground [&_svg]:size-3.5"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M18 6 6 18" />
+                      <path d="m6 6 12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                <!-- Read · DROP — neutral badge, no indicator -->
+                <div class="group relative flex w-full items-stretch">
+                  <div
+                    class="flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 pr-10 text-left"
+                  >
+                    <span
+                      class="flex size-9 shrink-0 items-center justify-center rounded-xl border border-sky-500/40 bg-sky-500/15 text-sky-700 [&_svg]:size-[18px]"
+                      ><svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path
+                          d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"
+                        />
+                        <path d="M22 10v6" />
+                        <path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5" /></svg
+                    ></span>
+                    <span class="min-w-0 flex-1">
+                      <span class="flex items-center gap-1.5"
+                        ><span class="truncate text-[13px] font-medium"
+                          >Lectures removed: Data Structures Lab</span
+                        ></span
+                      >
+                      <span
+                        class="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground"
+                        ><span
+                          class="shrink-0 rounded border border-border bg-muted px-1 py-px text-[9px] font-semibold uppercase leading-none tracking-wide text-muted-foreground"
+                          >Drop</span
+                        ><span>·</span
+                        ><span class="shrink-0">2 days ago</span></span
+                      >
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Web · tap-to-act toast -->
+      <div class="frame" style="width: 470px">
+        <div class="caption">
+          <span class="tag">Web · tap-to-act toast</span>
+          <div class="sub">
+            An SSE push while the app is open — bottom-right, over the calendar.
+            Icon + tint match the inbox row; click to jump to the session.
+          </div>
+        </div>
+        <div
+          class="w-full overflow-hidden rounded-xl border border-border bg-card text-foreground shadow-[0_30px_60px_-15px_rgba(0,0,0,0.4)]"
+        >
+          <div
+            class="flex items-center gap-2 border-b border-border/70 bg-muted/40 px-3.5 py-2.5"
+          >
+            <span class="size-2.5 rounded-full" style="background: #ef4444"></span>
+            <span class="size-2.5 rounded-full" style="background: #f59e0b"></span>
+            <span class="size-2.5 rounded-full" style="background: #22c55e"></span>
+            <span
+              class="ml-2 flex-1 truncate rounded bg-background/70 px-2 py-1 text-[10.5px] text-muted-foreground"
+              >app.zenflow.io/calendar</span
+            >
+          </div>
+          <div
+            class="flex h-12 items-center justify-between border-b border-border/70 px-4"
+          >
+            <span
+              class="flex items-center gap-1.5 text-[13px] font-bold tracking-[-0.01em]"
+              ><span
+                class="inline-block size-4 rounded-[5px]"
+                style="
+                  background: linear-gradient(135deg, #ff8e3e, #f0b101, #d8f998);
+                "
+              ></span>
+              Zenflow</span
+            >
+            <span
+              class="relative inline-flex size-8 items-center justify-center rounded-md text-foreground [&_svg]:size-4"
+              ><svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg
+              ><span
+                class="absolute -right-0.5 -top-0.5 flex min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-bold leading-4 text-white"
+                >1</span
+              ></span
+            >
+          </div>
+          <div class="relative h-[380px] overflow-hidden bg-background">
+            <div class="absolute inset-0 opacity-[0.35]">
+              <div class="mt-10 border-t border-grid"></div>
+              <div class="mt-14 border-t border-grid"></div>
+              <div class="mt-14 border-t border-grid"></div>
+              <div class="mt-14 border-t border-grid"></div>
+            </div>
+            <button
+              class="absolute bottom-4 right-4 flex w-[22rem] items-center gap-3 rounded-2xl border border-border bg-popover px-4 py-3.5 text-left shadow-[0_14px_30px_-10px_rgba(0,0,0,0.35)]"
+            >
+              <span
+                class="flex size-9 shrink-0 items-center justify-center rounded-xl border border-teal-500/40 bg-teal-500/15 text-teal-700 [&_svg]:size-[18px]"
+                ><svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <rect x="8" y="2" width="8" height="4" rx="1" />
+                  <path
+                    d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"
+                  />
+                  <path d="M12 11h4" />
+                  <path d="M12 16h4" />
+                  <path d="M8 11h.01" />
+                  <path d="M8 16h.01" /></svg
+              ></span>
+              <span class="min-w-0 flex-1">
+                <span
+                  class="block truncate text-[13.5px] font-semibold text-foreground"
+                  >New assignment: Sorting Algorithms</span
+                >
+                <span
+                  class="mt-0.5 block truncate text-[12px] text-muted-foreground"
+                  >Added from your LMS. Plan the work that leads up to it.</span
+                >
+                <span
+                  class="mt-0.5 block text-[12px] capitalize text-muted-foreground"
+                  >due Jul 8</span
+                >
+              </span>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="size-4 shrink-0 text-destructive"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" x2="12" y1="8" y2="12" />
+                <line x1="12" x2="12.01" y1="16" y2="16" />
+              </svg>
+            </button>
           </div>
         </div>
       </div>
