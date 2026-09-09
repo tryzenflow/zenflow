@@ -10,11 +10,13 @@ interface Row {
   userId: string;
   sessionId: string | null;
   topic: string;
+  kind: string;
   title: string;
   content: string;
   sentAt: Date;
   readAt: Date | null;
   actionTakenAt: Date | null;
+  eventEndsAt: Date | null;
 }
 
 function makePrismaDouble(rows: Row[]) {
@@ -26,6 +28,17 @@ function makePrismaDouble(rows: Row[]) {
 
   const client = {
     notification: {
+      create: (args: { data: Record<string, unknown> }) => {
+        const created = {
+          id: `gen-${rows.length + 1}`,
+          sentAt: new Date("2026-09-01T00:00:00.000Z"),
+          readAt: null,
+          actionTakenAt: null,
+          ...args.data,
+        } as Row;
+        rows.push(created);
+        return Promise.resolve(created);
+      },
       findMany: (args: {
         where: Record<string, unknown>;
         take: number;
@@ -33,12 +46,8 @@ function makePrismaDouble(rows: Row[]) {
       }) => {
         const found = rows
           .filter((r) => matches(r, args.where))
-          // Unread first, then newest first — what the orderBy asks Postgres for.
-          .sort(
-            (a, b) =>
-              Number(!!a.readAt) - Number(!!b.readAt) ||
-              b.sentAt.getTime() - a.sentAt.getTime(),
-          );
+          // Newest first — what the orderBy asks Postgres for.
+          .sort((a, b) => b.sentAt.getTime() - a.sentAt.getTime());
         return Promise.resolve(found.slice(args.skip, args.skip + args.take));
       },
       count: (args: { where: Record<string, unknown> }) =>
@@ -61,6 +70,18 @@ function makePrismaDouble(rows: Row[]) {
         Object.assign(row, args.data);
         return Promise.resolve(row);
       },
+      delete: (args: { where: Record<string, unknown> }) => {
+        const i = rows.findIndex((r) => matches(r, args.where));
+        if (i === -1) {
+          return Promise.reject(
+            new Prisma.PrismaClientKnownRequestError("not found", {
+              code: "P2025",
+              clientVersion: "6",
+            }),
+          );
+        }
+        return Promise.resolve(rows.splice(i, 1)[0]);
+      },
     },
   };
 
@@ -76,11 +97,13 @@ function row(over: Partial<Row> & { id: string }): Row {
     userId: "u1",
     sessionId: "s1",
     topic: "ASSIGNMENT",
+    kind: "NEW",
     title: "New assignment: Môn học Mẫu Một",
     content: "Added to your calendar from DLU.",
     sentAt: new Date("2026-09-01T00:00:00.000Z"),
     readAt: null,
     actionTakenAt: null,
+    eventEndsAt: null,
     ...over,
   };
 }
@@ -95,7 +118,7 @@ function makeService(rows: Row[]) {
 
 describe("NotificationsService", () => {
   describe("list", () => {
-    it("returns unread first, newest first within that", async () => {
+    it("returns newest first, regardless of read state", async () => {
       const { service } = makeService([
         row({ id: "n1", sentAt: new Date("2026-09-01T00:00:00.000Z") }),
         row({
@@ -108,7 +131,7 @@ describe("NotificationsService", () => {
 
       const data = await service.list(USER, {});
 
-      expect(data.notifications.map((n) => n.id)).toEqual(["n3", "n1", "n2"]);
+      expect(data.notifications.map((n) => n.id)).toEqual(["n2", "n3", "n1"]);
     });
 
     it("counts unread across the whole inbox, not just the page", async () => {
@@ -156,11 +179,13 @@ describe("NotificationsService", () => {
       expect(dto).toEqual({
         id: "n1",
         topic: "ASSIGNMENT",
+        kind: "NEW",
         title: "New assignment: Môn học Mẫu Một",
         content: "Added to your calendar from DLU.",
         sentAt: "2026-09-01T00:00:00.000Z",
         readAt: null,
         actionTakenAt: null,
+        eventEndsAt: null,
         sessionId: null,
       });
     });
@@ -220,6 +245,69 @@ describe("NotificationsService", () => {
       await expect(service.markActionTaken(USER, "n1")).rejects.toBeInstanceOf(
         NotFoundException,
       );
+    });
+  });
+
+  describe("remove", () => {
+    it("hard-deletes the caller's notification", async () => {
+      const { db, service } = makeService([
+        row({ id: "n1" }),
+        row({ id: "n2" }),
+      ]);
+
+      await expect(service.remove(USER, "n1")).resolves.toEqual({ id: "n1" });
+      expect(db.rows.map((r) => r.id)).toEqual(["n2"]);
+    });
+
+    it("404s on another student's notification, leaving it in place", async () => {
+      const { db, service } = makeService([row({ id: "n1", userId: "u2" })]);
+
+      await expect(service.remove(USER, "n1")).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(db.rows).toHaveLength(1);
+    });
+
+    it("404s on an id that does not exist", async () => {
+      const { service } = makeService([]);
+
+      await expect(service.remove(USER, "nope")).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe("raiseSamples", () => {
+    it("writes a row and emits NEW_SESSION for each, cycling the sample styles", async () => {
+      const { db, service } = makeService([]);
+      const emitted: { title: string }[] = [];
+      service.notificationEmitter.on("session.new", (p: { title: string }) =>
+        emitted.push(p),
+      );
+
+      const raised = await service.raiseSamples(USER.id, 3);
+
+      expect(raised).toHaveLength(3);
+      expect(db.rows).toHaveLength(3);
+      expect(emitted.map((p) => p.title)).toEqual(raised.map((n) => n.title));
+      // count > 1 → titles are numbered so a burst is legible
+      expect(raised.every((n) => /\(#\d+\)$/.test(n.title))).toBe(true);
+    });
+
+    it("does not number the title for a single notification", async () => {
+      const { service } = makeService([]);
+
+      const [only] = await service.raiseSamples(USER.id, 1);
+
+      expect(only.title).not.toMatch(/\(#\d+\)$/);
+    });
+
+    it("clamps count to at least 1", async () => {
+      const { db, service } = makeService([]);
+
+      await service.raiseSamples(USER.id, 0);
+
+      expect(db.rows).toHaveLength(1);
     });
   });
 });

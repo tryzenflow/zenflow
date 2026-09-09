@@ -87,6 +87,18 @@ export class ExamWatcherService {
         target.userId,
         parsed.items,
         "PORTAL",
+        now,
+      );
+
+      // The whole term comes back in this one response, so a completed fetch is
+      // a full picture: any ingested exam it no longer lists has been withdrawn.
+      const seenKeys = new Set(parsed.items.map((item) => item.externalKey));
+      const recon = await this.materializer.reconcileDeleted(
+        target.userId,
+        "PORTAL",
+        ["EXAM"],
+        seenKeys,
+        now,
       );
 
       await this.jobs.completeItem("PORTAL", itemId, {
@@ -95,11 +107,14 @@ export class ExamWatcherService {
         responseBody: jobItemBody({ body: rows, skipped: parsed.skipped }),
       });
 
-      if (outcome.created + outcome.updated + outcome.guarded > 0) {
+      if (
+        outcome.created + outcome.updated + outcome.guarded + recon.deleted >
+        0
+      ) {
         this.logger.log(
           `Exam sync for integration ${target.integrationId}: ` +
             `${outcome.created} new, ${outcome.updated} updated, ` +
-            `${outcome.guarded} kept as edited`,
+            `${outcome.guarded} kept as edited, ${recon.deleted} removed`,
         );
       }
     } catch (error) {

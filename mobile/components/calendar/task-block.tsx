@@ -1,9 +1,11 @@
 import { AlertTriangle, Clock, MapPin } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
+import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
 import { differenceInCalendarDays } from "date-fns";
 import {
   DAILY_HORIZON,
+  SESSION_TYPE_META,
   TIME_GRANULARITY,
   formatDeadlineShort,
   zonedDate,
@@ -16,6 +18,7 @@ import * as Haptics from "expo-haptics";
 import { memo, useCallback, useEffect, useState } from "react";
 import { View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Svg, { Defs, Path, Pattern, Rect } from "react-native-svg";
 import Animated, {
   Easing,
   useAnimatedReaction,
@@ -28,7 +31,7 @@ import Animated, {
   runOnJS,
   type SharedValue,
 } from "react-native-reanimated";
-import { SessionTypeBadge } from "./session-type-badge";
+import { SessionTypeBadge, sessionTypeIcon } from "./session-type-badge";
 
 const TAGS_MIN_DURATION = 45;
 
@@ -152,6 +155,11 @@ interface SessionBlockProps {
    * and opens the `RescheduleSheet`. Replaces the old edge-drag cross-day
    * mechanic. */
   onRequestReschedule?: (taskId: string) => void;
+  /** When set, a still-finger long-press opens this action menu instead of
+   * going straight to the reschedule sheet — the menu offers "Move to…" and
+   * "Add study session before this". Falls back to `onRequestReschedule` when
+   * unset. */
+  onLongPressMenu?: (taskId: string) => void;
   /** In the extended-grid timeline, a block whose task runs past midnight is
    * drawn at its TRUE height through the 24:00 line into the dimmed tail —
    * instead of clamping its bottom to midnight (`continues`). */
@@ -186,6 +194,7 @@ function SessionBlockImpl({
   onDragEnd,
   onPress,
   onRequestReschedule,
+  onLongPressMenu,
   drawThroughMidnight = false,
   autoScrollDeltaSV,
   onDragVerticalEdge,
@@ -193,6 +202,7 @@ function SessionBlockImpl({
   flash = false,
 }: SessionBlockProps) {
   const { height: screenHeight } = useWindowDimensions();
+  const { isDarkColorScheme } = useColorScheme();
   const startMin = minutesOfDayLocal(segment.start, tz);
   const rawEndMin = minutesOfDayLocal(segment.end, tz);
   // A task spilling past midnight normally clamps its bottom to 24:00
@@ -211,6 +221,9 @@ function SessionBlockImpl({
       : rawEndMin;
   const duration = endMin - startMin;
   const isCompact = duration < 30;
+  // Bare Lucide icon for the one-line compact layout (the bordered
+  // `SessionTypeBadge` chip is itself taller than a 15-min block).
+  const CompactTypeIcon = sessionTypeIcon(segment.type);
   const showTags = duration > TAGS_MIN_DURATION && segment.tags.length > 0;
   // Short blocks show just the type icon; roomy ones get the icon + label.
   const typeBadgeIconOnly = duration <= TAGS_MIN_DURATION;
@@ -327,12 +340,12 @@ function SessionBlockImpl({
   // block gets shoved by `autoScroll.value` and visibly slides against the
   // grid while the timeline auto-scrolls.
   const moveStyle = useAnimatedStyle(() => {
-    const lift = liftProgress.value;
-    // 0 → 1 over the flash (`flashProgress` decays 1 → 0). A quick scale pop
-    // early, settling back to rest — replaces the old shrink-in.
+    // Only a create / reschedule / teleport plays the scale-and-ring "landing"
+    // flash (`flashProgress` decays 1 → 0 — a quick scale pop settling back to
+    // rest). A plain drag no longer scales or tilts the card: it just tracks
+    // the finger (and lifts its shadow, `shadowStyle`).
     const p = 1 - flashProgress.value;
     const pop = interpolate(p, [0, 0.35, 1], [1, 1.05, 1]);
-    const scale = (1 + lift * 0.02) * pop;
     return {
       transform: [
         {
@@ -343,8 +356,7 @@ function SessionBlockImpl({
             isDragging.value === 1 ? snapOffsetY.value : translateY.value,
         },
         { translateX: translateX.value + interpolate(p, [0, 1], [10, 0]) },
-        { scale },
-        { rotate: `${lift}deg` },
+        { scale: pop },
       ],
     };
   });
@@ -583,10 +595,11 @@ function SessionBlockImpl({
     onPress?.(segment.taskId);
   }, [onPress, segment.taskId]);
 
-  const triggerReschedule = useCallback(() => {
+  const triggerLongPress = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    onRequestReschedule?.(segment.taskId);
-  }, [onRequestReschedule, segment.taskId]);
+    if (onLongPressMenu) onLongPressMenu(segment.taskId);
+    else onRequestReschedule?.(segment.taskId);
+  }, [onLongPressMenu, onRequestReschedule, segment.taskId]);
 
   const tapGesture = Gesture.Tap()
     .enabled(isTappable)
@@ -599,11 +612,11 @@ function SessionBlockImpl({
   // `Exclusive` race and runs the in-day vertical time-drag as before. `Tap`
   // stays simultaneous with the pair so a quick tap still opens the editor.
   const longPressGesture = Gesture.LongPress()
-    .enabled(isInteractive && !!onRequestReschedule)
+    .enabled(isInteractive && (!!onRequestReschedule || !!onLongPressMenu))
     .minDuration(350)
     .maxDistance(12)
     .onStart(() => {
-      runOnJS(triggerReschedule)();
+      runOnJS(triggerLongPress)();
     });
 
   const composedGesture = Gesture.Simultaneous(
@@ -613,8 +626,21 @@ function SessionBlockImpl({
 
   const borderChrome = cn(
     "border-t-black border-r-black border-b-black dark:border-t-white/50 dark:border-r-white/50 dark:border-b-white/50",
+    // The resting `ring-1` is part of every block's normal chrome (it softens
+    // the hard 1px border); the flash just intensifies it. Drag changes
+    // neither — the only "landing" effect is the flash on create / reschedule /
+    // teleport.
     flashing ? "ring-2 ring-amber-400" : "ring-1 ring-amber-500/40",
   );
+  // Diagonal hatch fill for DND blocks (mirrors `.hatch-dnd` in
+  // mockups/day-view.html). SVG `<Pattern>` id must be unique per block or a
+  // second DND block on screen re-uses the first's (empty) def — and it has to
+  // be a clean token, since `segmentId` can carry `::`/`:` from a recurring
+  // occurrence id, which breaks a `url(#…)` reference.
+  const dndHatchId = `dnd-hatch-${segment.segmentId.replace(/[^a-zA-Z0-9]/g, "")}`;
+  const dndHatchStroke = isDarkColorScheme
+    ? "rgb(148,163,184)" // slate-400
+    : "rgb(100,116,139)"; // slate-500
   const stateClasses =
     state === "dnd"
       ? `${borderChrome} border-l-slate-400 [border-left-style:dashed] bg-slate-500/[0.07] dark:bg-slate-400/10`
@@ -656,7 +682,7 @@ function SessionBlockImpl({
           className={cn(
             "flex overflow-hidden rounded-[10px] border border-l-4",
             isCompact
-              ? "items-center justify-between gap-1.5 px-2.5"
+              ? "flex-row items-center gap-1 px-2"
               : "flex-col gap-0.5 px-2.5 py-1.5",
             segment.continues && !drawsThrough && "rounded-b-none",
             segment.continued && "rounded-t-none [border-top-style:dashed]",
@@ -670,38 +696,69 @@ function SessionBlockImpl({
             tz,
           )} to ${fmt(segment.taskEnd, tz)}`}
         >
+          {state === "dnd" && (
+            <View pointerEvents="none" className="absolute inset-0">
+              <Svg width="100%" height="100%">
+                <Defs>
+                  <Pattern
+                    id={dndHatchId}
+                    patternUnits="userSpaceOnUse"
+                    width={7}
+                    height={7}
+                    patternTransform="rotate(45)"
+                  >
+                    <Path
+                      d="M0,0 V7"
+                      stroke={dndHatchStroke}
+                      strokeWidth={1}
+                      strokeOpacity={0.3}
+                    />
+                  </Pattern>
+                </Defs>
+                <Rect
+                  x={0}
+                  y={0}
+                  width="100%"
+                  height="100%"
+                  fill={`url(#${dndHatchId})`}
+                />
+              </Svg>
+            </View>
+          )}
           {isCompact ? (
-            <>
-              <View className="w-full min-w-0 flex-1 flex-row items-center gap-1">
-                {segment.continued ? (
-                  <Text className="shrink-0 text-[10px] text-muted-foreground">
-                    ↳
-                  </Text>
-                ) : (
-                  <SessionTypeBadge type={segment.type} size="sm" iconOnly />
-                )}
-                <Text
-                  className="min-w-0 flex-1 text-sm font-semibold leading-none"
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
-                  {segment.title}
+            // A 15-min block is only ~16px tall — one tight row: type icon,
+            // title (truncated), start time. No second line, no chips; there
+            // simply isn't the height, and stacking them clipped the title to
+            // nothing.
+            <View className="w-full min-w-0 flex-row items-center gap-1">
+              {segment.continued ? (
+                <Text className="shrink-0 text-[10px] leading-none text-muted-foreground">
+                  ↳
                 </Text>
-              </View>
-              <View className="mt-1 shrink-0 flex-row items-center gap-1">
-                <Text className="text-[9px] text-muted-foreground leading-none">
-                  {segment.continued
-                    ? `ends ${fmt(segment.taskEnd, tz)}`
-                    : liveStartMin != null
-                      ? fmtMin(liveStartMin, tz, segment.taskStart)
-                      : fmt(segment.taskStart, tz)}
-                </Text>
-                {dueChip && <DueChip {...dueChip} />}
-                {!!segment.location && (
-                  <LocationChip location={segment.location} />
-                )}
-              </View>
-            </>
+              ) : (
+                <CompactTypeIcon
+                  size={11}
+                  className={cn(
+                    "shrink-0",
+                    SESSION_TYPE_META[segment.type].textClass,
+                  )}
+                />
+              )}
+              <Text
+                className="min-w-0 flex-1 text-[11px] font-semibold leading-none"
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {segment.title}
+              </Text>
+              <Text className="shrink-0 text-[9px] leading-none text-muted-foreground">
+                {segment.continued
+                  ? `ends ${fmt(segment.taskEnd, tz)}`
+                  : liveStartMin != null
+                    ? fmtMin(liveStartMin, tz, segment.taskStart)
+                    : fmt(segment.taskStart, tz)}
+              </Text>
+            </View>
           ) : (
             <>
               <View className="min-w-0 flex-row items-center gap-1.5">

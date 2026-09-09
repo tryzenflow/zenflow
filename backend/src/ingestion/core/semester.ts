@@ -30,7 +30,7 @@ export type TermId = "HK01" | "HK02" | "HK03";
  * DLU publishes a term's timetable before the term opens, so resolving the
  * calendar strictly at `now` would leave a student staring at an empty
  * calendar over every changeover — the run on the last Sunday of December
- * would still be asking for HK01. Looking two weeks ahead rolls the watchers
+ * would still be asking for semester 1. Looking two weeks ahead rolls the watchers
  * onto the new term while the outgoing one's rows are already stored, so the
  * switch is invisible.
  */

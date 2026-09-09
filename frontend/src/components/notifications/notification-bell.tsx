@@ -1,10 +1,24 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+} from "react";
 import { formatDistanceToNow } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
-import { Bell, Check, ChevronRight, type LucideIcon } from "lucide-react";
+import {
+  Bell,
+  Check,
+  ChevronRight,
+  CircleAlert,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { SESSION_TYPE_META } from "@zenflow/core";
 import type {
   NotificationDto,
+  NotificationKind,
   NotificationTopic,
   SessionType,
 } from "@zenflow/shared";
@@ -17,15 +31,15 @@ import { Button } from "@/components/ui/button";
 import { sessionTypeIcon } from "@/components/calendar/session-type-badge";
 import { cn } from "@/lib/utils";
 import { useUserStore } from "@/hooks/use-user-store";
-import { resolveSemester } from "@/utils/semester";
 import {
+  dismissNotification,
   listNotifications,
   markNotificationActionTaken,
   markNotificationRead,
 } from "@/api/notifications";
 import { getSessionDetails } from "@/api/tasks";
-
-const POLL_MS = 60_000;
+import { errorToast } from "@/lib/toast";
+import { toast } from "sonner";
 
 /** Which session type a topic put on the calendar — `REMINDER` puts nothing. */
 const TOPIC_TYPE: Record<NotificationTopic, SessionType | null> = {
@@ -46,108 +60,91 @@ function topicVisual(topic: NotificationTopic): {
   tint: string;
 } {
   const type = TOPIC_TYPE[topic];
-  if (!type) return { Icon: Bell, tint: "bg-primary/15 text-primary" };
+  if (!type)
+    return { Icon: Bell, tint: "border-primary/40 bg-primary/15 text-primary" };
   const meta = SESSION_TYPE_META[type];
   return {
     Icon: sessionTypeIcon(type),
-    tint: cn(meta.badgeClass, meta.textClass),
+    tint: cn("border", meta.badgeClass, meta.textClass),
   };
 }
 
 /**
- * The materializer raises one `TIMETABLE` notification per ingested lecture
- * meeting, titled `"New class: <name>"` — a whole term's worth. Those fold into
- * one per-semester group; timetable *changes* ("Updated: …", "… moved at DLU")
- * keep their own row, since those are the ones a student needs to act on.
+ * The event-category badge. The materializer stamps every row's `kind`:
+ * `NEW` (something landed on the calendar), `CHANGE` (an upstream edit to an
+ * item already there) or `DROP` (an item pulled upstream).
  */
-function isBulkLecture(n: NotificationDto): boolean {
-  return n.topic === "TIMETABLE" && n.title.startsWith("New class:");
-}
+const KIND_BADGE: Record<
+  NotificationKind,
+  { label: string; className: string }
+> = {
+  NEW: {
+    label: "New",
+    className: "border-primary/30 bg-primary/10 text-primary",
+  },
+  CHANGE: {
+    label: "Change",
+    className:
+      "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  },
+  DROP: {
+    label: "Drop",
+    className: "border-border bg-muted text-muted-foreground",
+  },
+};
 
-interface SemesterRow {
-  kind: "semester";
-  key: string;
-  label: string;
-  /** `'YYYY-MM-DD'` the term opens — the fallback jump target. */
-  startDate: string;
-  count: number;
-  /** Newest member — drives the "detected …" stamp. */
-  newest: NotificationDto;
-  unread: boolean;
-  /** Session behind each member, for finding the first lecture's real date. */
-  memberSessionIds: string[];
-}
-
-type Row = { kind: "item"; n: NotificationDto } | SemesterRow;
-
-/** Collapse bulk-lecture notifications into per-semester groups, order preserved. */
-function buildRows(items: NotificationDto[]): Row[] {
-  const rows: Row[] = [];
-  const groups = new Map<string, SemesterRow>();
-
-  for (const n of items) {
-    if (!isBulkLecture(n)) {
-      rows.push({ kind: "item", n });
-      continue;
-    }
-    const sem = resolveSemester(new Date(n.sentAt));
-    let group = groups.get(sem.key);
-    if (!group) {
-      group = {
-        kind: "semester",
-        key: sem.key,
-        label: sem.label,
-        startDate: sem.startDate,
-        count: 0,
-        newest: n,
-        unread: false,
-        memberSessionIds: [],
-      };
-      groups.set(sem.key, group);
-      rows.push(group);
-    }
-    group.count += 1;
-    if (n.sessionId) group.memberSessionIds.push(n.sessionId);
-    if (n.sentAt > group.newest.sentAt) group.newest = n;
-    if (!n.readAt) group.unread = true;
-  }
-
-  return rows;
+/**
+ * The fixed "due" / "at" label for a row, off the linked session's end instant
+ * (`eventEndsAt`). An assignment reads `due Jul 8`; an exam or lecture, which
+ * has a clock time, reads `Jul 5, 9:00 AM`. Null for grouped rows and drops.
+ */
+function eventTimeLabel(n: NotificationDto, tz: string): string | null {
+  if (!n.eventEndsAt) return null;
+  const at = new Date(n.eventEndsAt);
+  const date = formatInTimeZone(at, tz, "MMM d");
+  if (n.topic === "ASSIGNMENT") return `due ${date}`;
+  return `${date}, ${formatInTimeZone(at, tz, "h:mm a")}`;
 }
 
 /**
  * The ingestion inbox — a header bell with an unread-count badge that opens a
  * popover list of the DLU watchers' notifications. Opening it marks the shown
- * unread rows read; a row that points at a session gets a "View session"
- * action, and a term's worth of ingested lectures collapses into one
- * per-semester group that jumps the calendar to the first lecture. Mirrors
- * mobile's `app/notifications.tsx`.
+ * unread rows read; a row that points at a session opens it on the calendar, a
+ * `NEW` row flags itself with a red mark, and any row can be dismissed with the
+ * hover ✕ (the web counterpart of mobile's swipe). Mirrors mobile's
+ * `app/notifications.tsx`.
  */
 export function NotificationBell() {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const [items, setItems] = useState<NotificationDto[]>([]);
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const navigating = useRef(false);
+  const openRef = useRef(false);
+  // Ids dismissed this session. A poll that was already in flight when a row
+  // was deleted would otherwise re-add it before its DELETE lands.
+  const dismissed = useRef<Set<string>>(new Set());
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
+    // Don't refetch while the popover is open (unless forced): opening it marks
+    // every shown row read, which re-sorts the server page (unread-first) and
+    // can push rows the user is looking at out of the `limit` window. The
+    // effect below resyncs once it closes.
+    if (openRef.current && !force) return;
     try {
       const res = await listNotifications({ limit: 50 });
-      setItems(res.notifications);
+      setItems(res.notifications.filter((n) => !dismissed.current.has(n.id)));
       setUnread(res.unreadCount);
     } catch {
       // Inbox is best-effort — a failed poll just keeps the last state.
     }
   }, []);
 
+  // Mirror open state for `load`, and resync once the popover closes.
   useEffect(() => {
-    load();
-    timer.current = setInterval(load, POLL_MS);
-    return () => {
-      if (timer.current) clearInterval(timer.current);
-    };
-  }, [load]);
+    openRef.current = open;
+    if (!open) load();
+  }, [open, load]);
 
   // Mark everything currently shown as read when the popover opens.
   useEffect(() => {
@@ -163,10 +160,20 @@ export function NotificationBell() {
     Promise.allSettled(stale.map((n) => markNotificationRead(n.id)));
   }, [open, items]);
 
-  const rows = useMemo(() => buildRows(items), [items]);
-
   const jumpToSession = async (n: NotificationDto) => {
-    if (!n.sessionId) return;
+    if (!n.sessionId || navigating.current) return;
+    navigating.current = true;
+    try {
+      // The ingested session may have been deleted since the notification was
+      // raised — check before navigating so a dead notification surfaces an
+      // error toast instead of opening an empty editor.
+      await getSessionDetails(n.sessionId);
+    } catch {
+      errorToast("That item isn't on your calendar anymore.");
+      navigating.current = false;
+      return;
+    }
+    navigating.current = false;
     window.dispatchEvent(
       new CustomEvent("zenflow:open-task", { detail: n.sessionId }),
     );
@@ -174,43 +181,77 @@ export function NotificationBell() {
     if (!n.actionTakenAt) {
       setItems((prev) =>
         prev.map((x) =>
-          x.id === n.id
-            ? { ...x, actionTakenAt: new Date().toISOString() }
-            : x,
+          x.id === n.id ? { ...x, actionTakenAt: new Date().toISOString() } : x,
         ),
       );
       markNotificationActionTaken(n.id).catch(() => {});
     }
   };
 
-  // A timetable group has no single session to open — it lands the calendar on
-  // the first lecture of the term. That date isn't on the notification, so the
-  // member sessions are read to find the earliest `scheduledStartTime`, falling
-  // back to the term-opening day from the academic calendar.
-  const jumpToTermStart = async (row: SemesterRow) => {
-    if (navigating.current) return;
-    navigating.current = true;
-    setOpen(false);
-    let day = row.startDate;
-    try {
-      const settled = await Promise.allSettled(
-        row.memberSessionIds.map((id) => getSessionDetails(id)),
-      );
-      const earliest = settled
-        .flatMap((r) =>
-          r.status === "fulfilled" && r.value.scheduledStartTime
-            ? [r.value.scheduledStartTime]
-            : [],
-        )
-        .sort()[0];
-      if (earliest) day = formatInTimeZone(new Date(earliest), tz, "yyyy-MM-dd");
-    } catch {
-      // keep the academic-calendar fallback
-    } finally {
-      navigating.current = false;
-    }
-    window.dispatchEvent(new CustomEvent("zenflow:goto-date", { detail: day }));
+  const dismiss = (n: NotificationDto, e: MouseEvent) => {
+    e.stopPropagation();
+    dismissed.current.add(n.id);
+    setItems((prev) => prev.filter((x) => x.id !== n.id));
+    if (!n.readAt) setUnread((u) => Math.max(0, u - 1));
+    dismissNotification(n.id).catch(() => {
+      dismissed.current.delete(n.id);
+      errorToast("Couldn't dismiss that notification.");
+      load(true);
+    });
   };
+
+  // The SSE effect mounts once; keep the incoming-notification toast pointed at
+  // the current tz + navigation handler without reconnecting the stream on
+  // every render.
+  const latest = useRef({ tz, jumpToSession });
+
+  useEffect(() => {
+    latest.current = { tz, jumpToSession };
+    // 1. Initialize the EventSource connection
+    const eventSource = new EventSource(
+      `${import.meta.env.VITE_API_URL}/notifications/stream`,
+      { withCredentials: true },
+    );
+
+    // 2. Listen for generic message events
+    eventSource.onmessage = (event) => {
+      const newData = JSON.parse(event.data) as NotificationDto;
+      setItems((newItems) => [newData, ...newItems]);
+      setUnread((prevUnread) => prevUnread + 1);
+      // Tap-to-act toast (bottom-right) — mirrors mobile's foreground push and
+      // the `detected-items.html` mockup: the calendar type's icon + tint, then
+      // tap to jump to the session it landed on.
+      const { tz: currentTz, jumpToSession: jump } = latest.current;
+      toast.custom(
+        (id) => (
+          <NotificationToast
+            n={newData}
+            tz={currentTz}
+            onOpen={() => {
+              toast.dismiss(id);
+              jump(newData);
+            }}
+          />
+        ),
+        { duration: 8000 },
+      );
+    };
+
+    // 4. Handle errors and connection state
+    eventSource.onerror = (error) => {
+      // show a user-friendly error message or handle reconnection logic here
+      errorToast(
+        "Failed to receive notifications. Please check your connection. Retrying...",
+      );
+      console.error("SSE error:", error);
+    };
+
+    // 5. Cleanup: Close the connection when the component unmounts
+    return () => {
+      eventSource.close();
+      console.log("SSE connection closed");
+    };
+  }, []); // Empty dependency array ensures this runs once on mount
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -223,21 +264,14 @@ export function NotificationBell() {
         >
           <Bell className="size-4" />
           {unread > 0 && (
-            <span className="absolute -right-0.5 -top-0.5 flex min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold leading-4 text-primary-foreground">
+            <span className="absolute -right-0.5 -top-0.5 flex min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-bold leading-4 text-white">
               {unread > 9 ? "9+" : unread}
             </span>
           )}
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[26rem] p-0">
-        <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
-          <span className="text-sm font-semibold">Notifications</span>
-          <span className="text-[11px] text-muted-foreground">
-            {unread > 0 ? `${unread} unread` : "All caught up"}
-          </span>
-        </div>
-
-        {rows.length === 0 ? (
+        {items.length === 0 ? (
           <div className="flex flex-col items-center px-8 py-10 text-center">
             <span className="mb-3 flex size-12 items-center justify-center rounded-full border border-primary/30 bg-primary/10 text-primary">
               <Check className="size-5" />
@@ -250,60 +284,174 @@ export function NotificationBell() {
             </p>
           </div>
         ) : (
-          <div className="max-h-[28rem] divide-y divide-border overflow-y-auto">
-            {rows.map((row) =>
-              row.kind === "semester" ? (
-                <SemesterGroup
-                  key={row.key}
-                  row={row}
-                  onOpen={() => jumpToTermStart(row)}
-                />
-              ) : (
+          <>
+            <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-1.5">
+              <span className="text-[10.5px] text-muted-foreground">
+                Click a row to open it · hover to dismiss
+              </span>
+              {unread > 0 && (
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border-2 border-red-500/50 bg-red-500/10 px-2 py-1 text-[11px] font-bold leading-none text-red-700 dark:text-red-300">
+                  <CircleAlert className="size-3.5" />
+                  {unread} unread
+                </span>
+              )}
+            </div>
+            <div className="max-h-[28rem] divide-y divide-border overflow-y-auto">
+              {items.map((n) => (
                 <NotificationRow
-                  key={row.n.id}
-                  n={row.n}
-                  onOpen={() => jumpToSession(row.n)}
+                  key={n.id}
+                  n={n}
+                  tz={tz}
+                  onOpen={() => jumpToSession(n)}
+                  onDismiss={(e) => dismiss(n, e)}
                 />
-              ),
-            )}
-          </div>
+              ))}
+            </div>
+          </>
         )}
       </PopoverContent>
     </Popover>
   );
 }
 
-function RowShell({
-  tint,
-  icon: Icon,
-  title,
-  meta,
-  hint,
-  unread,
-  chevron,
-  onClick,
-  disabled,
+function NotificationRow({
+  n,
+  tz,
+  onOpen,
+  onDismiss,
 }: {
-  tint: string;
-  icon: LucideIcon;
-  title: string;
-  meta: string;
-  hint?: string;
-  unread: boolean;
-  chevron: boolean;
-  onClick: () => void;
-  disabled: boolean;
+  n: NotificationDto;
+  tz: string;
+  onOpen: () => void;
+  onDismiss: (e: MouseEvent) => void;
 }) {
+  const { Icon, tint } = topicVisual(n.topic);
+  const badge = KIND_BADGE[n.kind];
+  const unread = !n.readAt;
+  const navigable = Boolean(n.sessionId);
+  const relative = formatDistanceToNow(new Date(n.sentAt), { addSuffix: true });
+  const when = eventTimeLabel(n, tz);
+
+  return (
+    <div
+      className={cn(
+        "group relative flex w-full items-stretch",
+        unread && "bg-primary/[0.04]",
+      )}
+    >
+      <button
+        type="button"
+        onClick={onOpen}
+        disabled={!navigable}
+        title={n.content}
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 pr-10 text-left",
+          navigable && "hover:bg-muted",
+        )}
+      >
+        <span
+          className={cn(
+            "flex size-9 shrink-0 items-center justify-center rounded-xl",
+            tint,
+          )}
+        >
+          <Icon className="size-[18px]" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1.5">
+            {unread && (
+              <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
+            )}
+            <span
+              className={cn(
+                "truncate text-[13px]",
+                unread ? "font-semibold" : "font-medium",
+              )}
+            >
+              {n.title}
+            </span>
+          </span>
+          <span
+            className={cn(
+              "mt-1 flex items-center gap-1.5 text-[11px]",
+              unread
+                ? "font-medium text-foreground/80"
+                : "text-muted-foreground",
+            )}
+          >
+            <span
+              className={cn(
+                "shrink-0 rounded border px-1 py-px text-[9px] font-semibold uppercase leading-none tracking-wide",
+                badge.className,
+              )}
+            >
+              {badge.label}
+            </span>
+            <span className="text-muted-foreground">·</span>
+            <span className="shrink-0">{relative}</span>
+            {when && (
+              <>
+                <span className="text-muted-foreground">·</span>
+                <span className="truncate">{when}</span>
+              </>
+            )}
+          </span>
+        </span>
+      </button>
+      {/* Right-side indicator, vertically centred against the row. It's swapped
+          out for the dismiss button on hover so the ✕ lands in the exact same
+          spot as the alert / chevron (right-3 for a size-4 icon and right-2 for
+          the size-6 button both centre 20px from the edge). */}
+      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition group-hover:opacity-0">
+        {n.kind === "NEW" ? (
+          <CircleAlert
+            className="size-4 text-destructive"
+            aria-label="Needs your attention"
+          />
+        ) : (
+          navigable && <ChevronRight className="size-4 text-muted-foreground" />
+        )}
+      </span>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Dismiss"
+        className="absolute right-2 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground opacity-0 transition hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+      >
+        <X className="size-3.5" />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The tap-to-act toast for a notification that arrives over SSE while the app
+ * is open — the web counterpart of mobile's foreground push. Same chrome as an
+ * inbox row: the calendar type's icon + tint on the left, the title/detail
+ * stacked, and a red `!` (a `NEW` item) or a chevron on the right. Clicking it
+ * jumps to the session; sonner auto-dismisses it after its duration.
+ */
+function NotificationToast({
+  n,
+  tz,
+  onOpen,
+}: {
+  n: NotificationDto;
+  tz: string;
+  onOpen: () => void;
+}) {
+  const { Icon, tint } = topicVisual(n.topic);
+  const when = eventTimeLabel(n, tz);
+  const navigable = Boolean(n.sessionId);
+
   return (
     <button
       type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={hint}
+      onClick={onOpen}
+      disabled={!navigable}
       className={cn(
-        "flex w-full items-center gap-3 px-4 py-3 text-left",
-        !disabled && "hover:bg-muted",
-        unread && "bg-primary/[0.04]",
+        "flex w-[22rem] items-center gap-3 rounded-2xl border border-border bg-popover px-4 py-3.5 text-left shadow-[0_14px_30px_-10px_rgba(0,0,0,0.35)]",
+        navigable && "transition hover:bg-muted",
       )}
     >
       <span
@@ -315,69 +463,28 @@ function RowShell({
         <Icon className="size-[18px]" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5">
-          {unread && (
-            <span className="size-1.5 shrink-0 rounded-full bg-primary" />
-          )}
-          <span className="truncate text-[13px] font-semibold">{title}</span>
+        <span className="block truncate text-[13.5px] font-semibold text-foreground">
+          {n.title}
         </span>
-        <span className="mt-0.5 block truncate text-[11.5px] text-muted-foreground">
-          {meta}
+        <span className="mt-0.5 block truncate text-[12px] text-muted-foreground">
+          {n.content}
         </span>
+        {when && (
+          <span className="mt-0.5 block text-[12px] capitalize text-muted-foreground">
+            {when}
+          </span>
+        )}
       </span>
-      {chevron && (
-        <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+      {n.kind === "NEW" ? (
+        <CircleAlert
+          className="size-4 shrink-0 text-destructive"
+          aria-label="Needs your attention"
+        />
+      ) : (
+        navigable && (
+          <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+        )
       )}
     </button>
-  );
-}
-
-function NotificationRow({
-  n,
-  onOpen,
-}: {
-  n: NotificationDto;
-  onOpen: () => void;
-}) {
-  const { Icon, tint } = topicVisual(n.topic);
-  const relative = formatDistanceToNow(new Date(n.sentAt), { addSuffix: true });
-  return (
-    <RowShell
-      tint={tint}
-      icon={Icon}
-      title={n.title}
-      meta={n.sessionId ? `${relative} · View session` : relative}
-      hint={n.content}
-      unread={!n.readAt}
-      chevron={Boolean(n.sessionId)}
-      onClick={onOpen}
-      disabled={!n.sessionId}
-    />
-  );
-}
-
-function SemesterGroup({
-  row,
-  onOpen,
-}: {
-  row: SemesterRow;
-  onOpen: () => void;
-}) {
-  const { Icon, tint } = topicVisual("TIMETABLE");
-  const relative = formatDistanceToNow(new Date(row.newest.sentAt), {
-    addSuffix: true,
-  });
-  return (
-    <RowShell
-      tint={tint}
-      icon={Icon}
-      title={`${row.label} timetable`}
-      meta={`${row.count} ${row.count === 1 ? "class" : "classes"} added · ${relative}`}
-      hint={`Go to the first ${row.label} class`}
-      unread={row.unread}
-      chevron
-      onClick={onOpen}
-      disabled={false}
-    />
   );
 }

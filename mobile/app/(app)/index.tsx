@@ -11,6 +11,11 @@ import {
   type UpdateRecurringSheetHandle,
 } from "@/components/calendar/update-recurring-sheet";
 import {
+  BlockActionsSheet,
+  type BlockActionsSheetHandle,
+} from "@/components/calendar/block-actions-sheet";
+import { TodayButton } from "@/components/calendar/today-button";
+import {
   WeekHeader,
   type WeekHeaderHandle,
 } from "@/components/calendar/week-header";
@@ -27,6 +32,7 @@ import { dateKey } from "@/lib/week-date-math";
 import { useFocusEffect } from "@react-navigation/native";
 import { zonedDate, zonedNow } from "@zenflow/core";
 import type { Session, UpdateScope } from "@zenflow/shared";
+import { differenceInCalendarDays } from "date-fns";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { View, useWindowDimensions } from "react-native";
@@ -108,6 +114,7 @@ export default function WeekScreen() {
   const headerRef = useRef<WeekHeaderHandle>(null);
   const rescheduleSheetRef = useRef<RescheduleSheetHandle>(null);
   const updateScopeSheetRef = useRef<UpdateRecurringSheetHandle>(null);
+  const blockActionsSheetRef = useRef<BlockActionsSheetHandle>(null);
 
   const handleWeekDragBegin = useCallback(() => {
     pagerRef.current?.beginHeaderWeekDrag();
@@ -171,6 +178,35 @@ export default function WeekScreen() {
   const handleRequestReschedule = useCallback((session: Session) => {
     rescheduleSheetRef.current?.open(session);
   }, []);
+
+  // Long-press a block → open its action menu (Move to… / Add study session
+  // before this).
+  const handleRequestBlockMenu = useCallback((session: Session) => {
+    blockActionsSheetRef.current?.open(session);
+  }, []);
+
+  // "Add study session before this" → a new TASK whose deadline is the block's
+  // start, pre-filled with roughly half the whole days until then as its
+  // session count (min 1).
+  const handleSessionBefore = useCallback(
+    (session: Session) => {
+      const start = session.scheduledStartTime;
+      if (!start) {
+        rescheduleSheetRef.current?.open(session);
+        return;
+      }
+      const daysUntil = Math.max(
+        1,
+        differenceInCalendarDays(zonedDate(start, tz), zonedNow(tz)),
+      );
+      const sessions = Math.max(1, Math.floor(daysUntil / 2));
+      router.push({
+        pathname: "/task/new",
+        params: { deadline: start, sessions: String(sessions) },
+      } as Href);
+    },
+    [tz, router],
+  );
 
   // The sheet's confirm — a single `PATCH /sessions/:id` (move + resize).
   // `scope`/`skipConflicting` are only set when the session belongs to a
@@ -259,13 +295,24 @@ export default function WeekScreen() {
           onWeekSlideEnd={handleWeekSlideEnd}
           onActiveStateChange={setTimelineState}
           onRequestReschedule={handleRequestReschedule}
+          onRequestBlockMenu={handleRequestBlockMenu}
           onRequestScopedUpdate={handleRequestScopedUpdate}
           flashSessionId={flashId}
         />
       </View>
 
+      <TodayButton
+        visible={dateKey(visibleDate) !== dateKey(zonedNow(tz))}
+        onPress={() => commitFocusedDate(zonedNow(tz))}
+      />
+
       {timelineState === "ready" && <CreateSessionFab tz={tz} />}
 
+      <BlockActionsSheet
+        ref={blockActionsSheetRef}
+        onReschedule={handleRequestReschedule}
+        onSessionBefore={handleSessionBefore}
+      />
       <RescheduleSheet
         ref={rescheduleSheetRef}
         tz={tz}

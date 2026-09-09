@@ -101,7 +101,13 @@ export class TimetableWatcherService {
     let created = 0;
     let updated = 0;
     let guarded = 0;
+    let deleted = 0;
     let first = true;
+    // Every meeting key the run saw, plus whether every week came back — the
+    // deletion pass needs both, so a failed week is not read as "every class
+    // that week was cancelled".
+    const seenKeys = new Set<string>();
+    let allFetchesOk = true;
 
     for (const week of weeks) {
       if (!first) await sleep(this.requestDelayMs);
@@ -125,10 +131,12 @@ export class TimetableWatcherService {
           target.userId,
           parsed.items,
           "PORTAL",
+          now,
         );
         created += outcome.created;
         updated += outcome.updated;
         guarded += outcome.guarded;
+        for (const item of parsed.items) seenKeys.add(item.externalKey);
 
         await this.jobs.completeItem("PORTAL", itemId, {
           status: "COMPLETED",
@@ -136,6 +144,7 @@ export class TimetableWatcherService {
           responseBody: jobItemBody({ body: rows, skipped: parsed.skipped }),
         });
       } catch (error) {
+        allFetchesOk = false;
         await this.jobs.completeItem("PORTAL", itemId, {
           status: "FAILED",
           statusCode: statusCodeOf(error),
@@ -148,12 +157,26 @@ export class TimetableWatcherService {
       }
     }
 
+    // Lectures upstream no longer lists for the rest of the term are cancelled
+    // classes — retire them, but only if every week came back.
+    if (allFetchesOk) {
+      const recon = await this.materializer.reconcileDeleted(
+        target.userId,
+        "PORTAL",
+        ["LECTURE"],
+        seenKeys,
+        now,
+      );
+      deleted = recon.deleted;
+    }
+
     await this.jobs.finishJob("PORTAL", jobId, "COMPLETED");
 
-    if (created + updated + guarded > 0) {
+    if (created + updated + guarded + deleted > 0) {
       this.logger.log(
         `Timetable sync for integration ${target.integrationId}: ` +
-          `${created} new, ${updated} updated, ${guarded} kept as edited`,
+          `${created} new, ${updated} updated, ${guarded} kept as edited, ` +
+          `${deleted} removed`,
       );
     }
   }

@@ -30,3 +30,9 @@ export async function markNotificationActionTaken(
   const { data } = await api.patch(`/notifications/${id}/action-taken`);
   return data.data;
 }
+
+/** Dismiss (hard-delete) one notification — the swipe-to-dismiss action. */
+export async function dismissNotification(id: string): Promise<{ id: string }> {
+  const { data } = await api.delete(`/notifications/${id}`);
+  return data.data;
+}

@@ -1,6 +1,8 @@
+import type { ConfigService } from "@nestjs/config";
 import { Prisma } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
 import { MaterializerService } from "./materializer.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import { TagsService } from "../tags/tags.service";
 import type { ParsedBlock, ParsedLmsItem } from "./core/types";
 
@@ -32,8 +34,36 @@ interface NotificationRow {
   userId: string;
   sessionId: string | null;
   topic: string;
+  kind: string;
   title: string;
   content: string;
+  eventEndsAt: Date | null;
+}
+
+/** The subset of Prisma `where` operators the materializer actually uses. */
+function matchesWhere(
+  row: SessionRow,
+  where: Record<string, unknown>,
+): boolean {
+  return Object.entries(where).every(([key, cond]) => {
+    if (key === "externalKey" && isPlainObject(cond) && "not" in cond) {
+      return row.externalKey !== cond.not;
+    }
+    if (key === "type" && isPlainObject(cond) && Array.isArray(cond.in)) {
+      return (cond.in as string[]).includes(row.type);
+    }
+    if (key === "scheduledStartTime" && isPlainObject(cond)) {
+      const at = row.scheduledStartTime?.getTime() ?? -Infinity;
+      if ("gte" in cond && at < (cond.gte as Date).getTime()) return false;
+      if ("lte" in cond && at > (cond.lte as Date).getTime()) return false;
+      return true;
+    }
+    return (row as unknown as Record<string, unknown>)[key] === cond;
+  });
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
 function makePrismaDouble() {
@@ -135,6 +165,21 @@ function makePrismaDouble() {
         Object.assign(row, args.data);
         return Promise.resolve(row);
       },
+      // Enough of `findMany` / `count` / `delete` for the reconciliation +
+      // grouping paths: filter on userId, source, type (plain or `{ in }`),
+      // externalKey `{ not: null }`, and a `scheduledStartTime` `{ gte, lte }`.
+      findMany: (args: { where: Record<string, unknown> }) =>
+        Promise.resolve(sessions.filter((s) => matchesWhere(s, args.where))),
+      count: (args: { where: Record<string, unknown> }) =>
+        Promise.resolve(
+          sessions.filter((s) => matchesWhere(s, args.where)).length,
+        ),
+      delete: (args: { where: { id: string } }) => {
+        const i = sessions.findIndex((s) => s.id === args.where.id);
+        if (i === -1) throw new Error(`no session ${args.where.id}`);
+        const [row] = sessions.splice(i, 1);
+        return Promise.resolve(row);
+      },
     },
     sessionEvent: {
       create: (args: { data: Record<string, unknown> }) => {
@@ -149,8 +194,10 @@ function makePrismaDouble() {
           userId: args.data.userId as string,
           sessionId: (args.data.sessionId as string | null) ?? null,
           topic: args.data.topic as string,
+          kind: (args.data.kind as string) ?? "NEW",
           title: args.data.title as string,
           content: args.data.content as string,
+          eventEndsAt: (args.data.eventEndsAt as Date | null) ?? null,
         };
         notifications.push(row);
         return Promise.resolve(row);
@@ -189,13 +236,38 @@ function block(over: Partial<ParsedBlock> = {}): ParsedBlock {
 
 function makeService() {
   const db = makePrismaDouble();
-  const tagsService = new TagsService(db.client as unknown as PrismaService);
+  const prisma = db.client as unknown as PrismaService;
+  const tagsService = new TagsService(prisma);
+  // The real service — its `create` writes through the same `notification`
+  // double, and `notify` just emits on an in-process EventEmitter2 nobody
+  // here listens to.
+  const notifications = new NotificationsService(prisma);
+  const config = {
+    get: (name: string) => (name === "DLU_TZ" ? "Asia/Ho_Chi_Minh" : undefined),
+  } as unknown as ConfigService;
   const service = new MaterializerService(
-    db.client as unknown as PrismaService,
+    prisma,
     tagsService,
+    notifications,
+    config,
   );
   return { db, service };
 }
+
+/** A lecture block for a DLU term (`now` in the tests sits in HK01 2026). */
+function lecture(over: Partial<ParsedBlock> = {}): ParsedBlock {
+  return block({
+    externalKey: "portal:meeting:700001",
+    title: "Môn học Mẫu Một — buổi học",
+    type: "LECTURE",
+    scheduledStartTime: new Date("2026-09-10T02:00:00.000Z"),
+    location: "X01.01",
+    ...over,
+  });
+}
+
+/** An instant inside HK01 of the 2026–2027 DLU academic year. */
+const IN_TERM = new Date("2026-09-08T00:00:00.000Z");
 
 describe("MaterializerService", () => {
   describe("create", () => {
@@ -476,6 +548,257 @@ describe("MaterializerService", () => {
 
       expect(db.notifications).toHaveLength(3);
       expect(db.notifications[2].content).toContain("2026-09-12T03:00:00.000Z");
+    });
+  });
+
+  describe("timetable grouping", () => {
+    const many = (n: number): ParsedBlock[] =>
+      Array.from({ length: n }, (_, i) =>
+        lecture({
+          externalKey: `portal:meeting:7100${String(i).padStart(2, "0")}`,
+          title: `Buổi học ${i + 1}`,
+          scheduledStartTime: new Date(Date.UTC(2026, 8, 10 + i, 2, 0, 0)),
+        }),
+      );
+
+    it("folds a whole term's lectures into one 'timetable is available' row", async () => {
+      const { db, service } = makeService();
+
+      const outcome = await service.materialize(
+        USER,
+        many(12),
+        "PORTAL",
+        IN_TERM,
+      );
+
+      expect(outcome.created).toBe(12);
+      expect(db.sessions).toHaveLength(12);
+      // One notification, not twelve.
+      expect(db.notifications).toHaveLength(1);
+      expect(db.notifications[0]).toMatchObject({
+        topic: "TIMETABLE",
+        kind: "NEW",
+        title: "Timetable for semester 1 is available",
+        // Points at the earliest meeting, for the calendar to land on.
+        sessionId: db.sessions[0].id,
+        // A group has no single event time.
+        eventEndsAt: null,
+      });
+    });
+
+    it("lists the class names for a small mid-term addition", async () => {
+      const { db, service } = makeService();
+
+      await service.materialize(
+        USER,
+        [
+          lecture({ externalKey: "portal:meeting:72001", title: "Đại số" }),
+          lecture({ externalKey: "portal:meeting:72002", title: "Giải tích" }),
+        ],
+        "PORTAL",
+        IN_TERM,
+      );
+
+      expect(db.notifications).toHaveLength(1);
+      expect(db.notifications[0].title).toBe("New lectures: Đại số, Giải tích");
+      expect(db.notifications[0].topic).toBe("TIMETABLE");
+    });
+
+    it("announces the term only once across the run's many weekly batches", async () => {
+      const { db, service } = makeService();
+
+      // Week one crosses the threshold; later weeks must stay quiet.
+      await service.materialize(USER, many(10), "PORTAL", IN_TERM);
+      await service.materialize(
+        USER,
+        many(10).map((b, i) => ({
+          ...b,
+          externalKey: `portal:meeting:7300${i}`,
+        })),
+        "PORTAL",
+        IN_TERM,
+      );
+
+      const grouped = db.notifications.filter(
+        (n) => n.title === "Timetable for semester 1 is available",
+      );
+      expect(grouped).toHaveLength(1);
+    });
+
+    it("stays quiet on a re-run of the same batch", async () => {
+      const { db, service } = makeService();
+      const items = many(12);
+
+      await service.materialize(USER, items, "PORTAL", IN_TERM);
+      await service.materialize(USER, items, "PORTAL", IN_TERM);
+
+      expect(db.notifications).toHaveLength(1);
+    });
+
+    it("still raises one notification per assignment (those are actionable)", async () => {
+      const { db, service } = makeService();
+
+      await service.materialize(
+        USER,
+        [
+          block({ externalKey: "lms:assign:1" }),
+          block({ externalKey: "lms:assign:2" }),
+        ],
+        "LMS",
+        IN_TERM,
+      );
+
+      expect(db.notifications).toHaveLength(2);
+      expect(db.notifications.every((n) => n.topic === "ASSIGNMENT")).toBe(
+        true,
+      );
+      // A per-item row carries the session's fixed end instant for its badge.
+      expect(db.notifications[0].kind).toBe("NEW");
+      expect(db.notifications[0].eventEndsAt).toBeInstanceOf(Date);
+    });
+  });
+
+  describe("upstream deletion", () => {
+    it("retires an ingested session upstream no longer lists", async () => {
+      const { db, service } = makeService();
+      await service.materialize(
+        USER,
+        [
+          lecture({ externalKey: "portal:meeting:80001", title: "Kept" }),
+          lecture({ externalKey: "portal:meeting:80002", title: "Gone" }),
+        ],
+        "PORTAL",
+        IN_TERM,
+      );
+      expect(db.sessions).toHaveLength(2);
+
+      const recon = await service.reconcileDeleted(
+        USER,
+        "PORTAL",
+        ["LECTURE"],
+        new Set(["portal:meeting:80001"]),
+        IN_TERM,
+      );
+
+      expect(recon).toEqual({ deleted: 1, keptWithWarning: 0 });
+      expect(db.sessions.map((s) => s.externalKey)).toEqual([
+        "portal:meeting:80001",
+      ]);
+      const removal = db.notifications.at(-1)!;
+      expect(removal.topic).toBe("TIMETABLE");
+      expect(removal.kind).toBe("DROP");
+      expect(removal.title).toContain("Gone");
+      expect(removal.sessionId).toBeNull();
+    });
+
+    it("keeps — and warns about — a session the student had hand-moved", async () => {
+      const { db, service } = makeService();
+      await service.materialize(
+        USER,
+        [lecture({ externalKey: "portal:meeting:81001", title: "Mine now" })],
+        "PORTAL",
+        IN_TERM,
+      );
+      db.sessions[0].lastMovedAt = new Date("2026-09-07T00:00:00.000Z");
+
+      const recon = await service.reconcileDeleted(
+        USER,
+        "PORTAL",
+        ["LECTURE"],
+        new Set<string>(),
+        IN_TERM,
+      );
+
+      expect(recon).toEqual({ deleted: 0, keptWithWarning: 1 });
+      expect(db.sessions).toHaveLength(1);
+      const warn = db.notifications.at(-1)!;
+      expect(warn.title).toContain("removed at DLU");
+      expect(warn.sessionId).toBe(db.sessions[0].id);
+    });
+
+    it("is a no-op on a settled re-run", async () => {
+      const { db, service } = makeService();
+      await service.materialize(
+        USER,
+        [lecture({ externalKey: "portal:meeting:82001" })],
+        "PORTAL",
+        IN_TERM,
+      );
+
+      await service.reconcileDeleted(
+        USER,
+        "PORTAL",
+        ["LECTURE"],
+        new Set<string>(),
+        IN_TERM,
+      );
+      const before = db.notifications.length;
+      const again = await service.reconcileDeleted(
+        USER,
+        "PORTAL",
+        ["LECTURE"],
+        new Set<string>(),
+        IN_TERM,
+      );
+
+      expect(again).toEqual({ deleted: 0, keptWithWarning: 0 });
+      expect(db.notifications).toHaveLength(before);
+    });
+
+    it("leaves sessions outside the run's forward window alone", async () => {
+      const { db, service } = makeService();
+      await service.materialize(
+        USER,
+        [
+          lecture({
+            externalKey: "portal:meeting:83001",
+            // A month before `now` — behind the deletion horizon.
+            scheduledStartTime: new Date("2026-08-01T02:00:00.000Z"),
+          }),
+        ],
+        "PORTAL",
+        IN_TERM,
+      );
+
+      const recon = await service.reconcileDeleted(
+        USER,
+        "PORTAL",
+        ["LECTURE"],
+        new Set<string>(),
+        IN_TERM,
+      );
+
+      expect(recon.deleted).toBe(0);
+      expect(db.sessions).toHaveLength(1);
+    });
+
+    it("groups a bulk timetable removal", async () => {
+      const { db, service } = makeService();
+      const items = Array.from({ length: 11 }, (_, i) =>
+        lecture({
+          externalKey: `portal:meeting:8400${i}`,
+          title: `Buổi ${i}`,
+          scheduledStartTime: new Date(Date.UTC(2026, 8, 12 + i, 2, 0, 0)),
+        }),
+      );
+      await service.materialize(USER, items, "PORTAL", IN_TERM);
+      const before = db.notifications.length;
+
+      const recon = await service.reconcileDeleted(
+        USER,
+        "PORTAL",
+        ["LECTURE"],
+        new Set<string>(),
+        IN_TERM,
+      );
+
+      expect(recon.deleted).toBe(11);
+      expect(db.sessions).toHaveLength(0);
+      expect(db.notifications).toHaveLength(before + 1);
+      expect(db.notifications.at(-1)!.title).toBe(
+        "Your semester 1 timetable changed",
+      );
+      expect(db.notifications.at(-1)!.content).toContain("11 classes");
     });
   });
 });

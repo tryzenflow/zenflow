@@ -14,6 +14,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme={theme as ToasterProps["theme"]}
+      position="bottom-right"
       className="toaster group"
       // Always render toasts at full height/position instead of sonner's
       // default collapsed-stack-until-hover look — that default causes a

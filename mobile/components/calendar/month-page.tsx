@@ -90,6 +90,8 @@ interface MonthPageProps {
   onDragActiveChange: (active: boolean) => void;
   onOpenDay: (day: Date, tasks: Session[], drag: MonthDragHandle) => void;
   onOpenOverflow: (day: Date, tasks: Session[], drag: MonthDragHandle) => void;
+  /** Double tap on a cell → jump to the Week view with that day selected. */
+  onDoubleTapDay: (day: Date) => void;
 }
 
 /**
@@ -112,6 +114,7 @@ export function MonthPage({
   onDragActiveChange,
   onOpenDay,
   onOpenOverflow,
+  onDoubleTapDay,
 }: MonthPageProps) {
   const { toast, confirm } = useToast();
   const [sessions, setSessions] = useState<Session[] | null>(null);
@@ -446,6 +449,7 @@ export function MonthPage({
           highlightedKey={highlightedKey}
           draggingSessionId={dragging?.task.id ?? null}
           onPressDay={handleOpenDay}
+          onDoubleTapDay={onDoubleTapDay}
           onPressOverflow={handleOpenOverflow}
           onGridLayout={measureGeometry}
           justDroppedKey={justDroppedKey}

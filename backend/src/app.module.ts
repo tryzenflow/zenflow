@@ -25,6 +25,7 @@ import { LMSModule } from "./lms/lms.module";
 import { PortalAPIModule } from "./portal/portal-api.module";
 import { IngestionModule } from "./ingestion/ingestion.module";
 import { NotificationsModule } from "./notifications/notifications.module";
+import { DevicesModule } from "./devices/devices.module";
 
 @Module({
   imports: [
@@ -128,6 +129,23 @@ import { NotificationsModule } from "./notifications/notifications.module";
         // when unset, LinUCB scheduling is disabled and every event falls back
         // to the heuristic.
         BANDIT_SERVICE_URL: Joi.string().uri().optional(),
+        // --- Native mobile push (devices/) --------------------------------
+        // Each provider self-disables when its vars are unset, like
+        // BANDIT_SERVICE_URL: FcmSender needs FCM_SERVICE_ACCOUNT, ApnsSender
+        // needs all four APNS_* below. With neither configured, POST /devices
+        // still records tokens but nothing is ever sent.
+        // Base64 of the Firebase service-account JSON (the `project_id` is
+        // inside it). Android delivery via firebase-admin.
+        FCM_SERVICE_ACCOUNT: Joi.string().optional(),
+        // Base64 of the APNs auth key (`AuthKey_XXXXXXXXXX.p8` contents) plus
+        // its 10-char key id, the Apple team id, and the app bundle id (which
+        // is the APNs `topic`). iOS delivery via @parse/node-apn, token auth.
+        APNS_KEY: Joi.string().optional(),
+        APNS_KEY_ID: Joi.string().optional(),
+        APNS_TEAM_ID: Joi.string().optional(),
+        APNS_BUNDLE_ID: Joi.string().optional(),
+        // true -> api.push.apple.com, false -> the sandbox gateway.
+        APNS_PRODUCTION: Joi.boolean().default(false),
       }),
     }),
     ScheduleModule.forRoot(),
@@ -168,6 +186,10 @@ import { NotificationsModule } from "./notifications/notifications.module";
     // dependent with IntegrationsModule via forwardRef, see ingestion.module.ts.
     IngestionModule,
     NotificationsModule,
+    // Native mobile push — a second subscriber to the notification emitter
+    // (like the SSE stream), plus POST/DELETE /devices. Self-disables per
+    // provider when its FCM_*/APNS_* env is unset; see devices.module.ts.
+    DevicesModule,
   ],
   providers: [AppService, MailService],
   controllers: [AppController],

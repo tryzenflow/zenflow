@@ -1,6 +1,7 @@
 import { forwardRef, Module } from "@nestjs/common";
 import { IntegrationsModule } from "../integrations/integrations.module";
 import { LMSModule } from "../lms/lms.module";
+import { NotificationsModule } from "../notifications/notifications.module";
 import { PortalAPIModule } from "../portal/portal-api.module";
 import { PrismaModule } from "../prisma/prisma.module";
 import { TagsModule } from "../tags/tags.module";
@@ -34,6 +35,7 @@ import { TimetableWatcherService } from "./timetable-watcher.service";
     LMSModule,
     PortalAPIModule,
     TagsModule,
+    NotificationsModule,
     forwardRef(() => IntegrationsModule),
   ],
   providers: [

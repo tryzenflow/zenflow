@@ -30,12 +30,28 @@ export type NotificationTopic =
   | "TIMETABLE"
   | "REMINDER";
 
+/**
+ * How the row is categorised, for its inbox badge:
+ * - `NEW` — something new landed on the calendar
+ * - `CHANGE` — an upstream change to an item already on the calendar
+ * - `DROP` — an item was removed upstream
+ */
+export type NotificationKind = "NEW" | "CHANGE" | "DROP";
+
 /** One notification as returned by the notifications endpoints. */
 export interface NotificationDto {
   id: string;
   topic: NotificationTopic;
+  kind: NotificationKind;
   title: string;
   content: string;
+  /**
+   * ISO-8601 end instant of the fixed session behind this row (its
+   * `scheduledStartTime` + duration) — the "due"/"at" time the inbox shows for
+   * an assignment, exam or lecture. Null for grouped timetable rows and for
+   * removals, which have no single session.
+   */
+  eventEndsAt: string | null;
   /** ISO-8601 instant the notification was raised. */
   sentAt: string;
   /** ISO-8601 instant the user read it, or null while unread. */

@@ -33,6 +33,7 @@ interface MonthGridProps {
   justDroppedKey: string | null;
   draggingSessionId: string | null;
   onPressDay: (day: Date, tasks: Session[]) => void;
+  onDoubleTapDay: (day: Date) => void;
   onPressOverflow: (day: Date, tasks: Session[]) => void;
   onGridLayout: () => void;
 }
@@ -61,6 +62,7 @@ export const MonthGrid = memo(
       justDroppedKey,
       draggingSessionId,
       onPressDay,
+      onDoubleTapDay,
       onPressOverflow,
       onGridLayout,
     },
@@ -108,6 +110,7 @@ export const MonthGrid = memo(
                     isJustDropped={justDroppedKey === key}
                     draggingSessionId={draggingSessionId}
                     onPressDay={onPressDay}
+                    onDoubleTapDay={onDoubleTapDay}
                     onPressOverflow={onPressOverflow}
                   />
                 );

@@ -15,7 +15,7 @@ import {
 } from "@/lib/task-card";
 import { cn } from "@/lib/utils";
 import type { Session } from "@zenflow/shared";
-import { memo, useMemo } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import { Pressable, View } from "react-native";
 import { sessionTypeIcon } from "./session-type-badge";
 
@@ -33,11 +33,17 @@ interface MonthCellProps {
   /** The task id currently being dragged (any cell), so its origin pill can
    * hide in place while the ghost overlay stands in for it. */
   draggingSessionId: string | null;
-  /** Receives the day's tasks too — tapping a cell opens the detail sheet in
-   * place rather than navigating to Day View. */
+  /** Receives the day's tasks too — a single tap opens the detail sheet in
+   * place rather than navigating away. */
   onPressDay: (day: Date, tasks: Session[]) => void;
+  /** A double tap on the cell jumps to the Week view with this day selected. */
+  onDoubleTapDay: (day: Date) => void;
   onPressOverflow: (day: Date, tasks: Session[]) => void;
 }
+
+/** Max gap (ms) between two taps on a cell for the second to count as a
+ * double tap → Week view. A single tap resolves after this delay. */
+const DOUBLE_TAP_MS = 240;
 
 /**
  * A single day cell in the Month grid — RN port of
@@ -68,9 +74,40 @@ export const MonthCell = memo(function MonthCell({
   isJustDropped,
   draggingSessionId,
   onPressDay,
+  onDoubleTapDay,
   onPressOverflow,
 }: MonthCellProps) {
   const outside = isOutsideMonth(day, monthDate);
+
+  // Single vs. double tap: a single tap opens the day sheet (deferred by
+  // `DOUBLE_TAP_MS` so a second tap can cancel it); a double tap jumps to
+  // Week view. `Pressable` has no native double-tap, so it's timed here.
+  const lastTapRef = useRef(0);
+  const singleTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (singleTapTimer.current) clearTimeout(singleTapTimer.current);
+    },
+    [],
+  );
+  const handlePress = () => {
+    const now = Date.now();
+    if (now - lastTapRef.current < DOUBLE_TAP_MS) {
+      lastTapRef.current = 0;
+      if (singleTapTimer.current) {
+        clearTimeout(singleTapTimer.current);
+        singleTapTimer.current = null;
+      }
+      onDoubleTapDay(day);
+      return;
+    }
+    lastTapRef.current = now;
+    if (singleTapTimer.current) clearTimeout(singleTapTimer.current);
+    singleTapTimer.current = setTimeout(() => {
+      singleTapTimer.current = null;
+      onPressDay(day, sessions);
+    }, DOUBLE_TAP_MS);
+  };
 
   // `groupSessionsByDate` always hands us `sessions` in chronological order
   // (the day sheet relies on that), so re-sort a copy by type severity here —
@@ -89,7 +126,7 @@ export const MonthCell = memo(function MonthCell({
 
   return (
     <Pressable
-      onPress={() => onPressDay(day, sessions)}
+      onPress={handlePress}
       style={{ width: `${100 / 7}%`, height: CELL_HEIGHT }}
       className={cn(
         "border-b border-r border-border p-[5px] pb-[6px]",

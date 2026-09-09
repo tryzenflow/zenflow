@@ -10,6 +10,7 @@ import { useIntegrationStore } from "@/hooks/use-integration-store";
 import { getIntegrationStatus } from "@/api/dlu";
 import { setAndroidNavigationBar } from "@/lib/android-navigation-bar";
 import { clearSession } from "@/lib/api-client";
+import { dropPushRegistration } from "@/lib/push";
 import { clearCachedSessionUser } from "@/lib/session";
 import { clearDaySessionCache } from "@/lib/session-cache";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
@@ -57,6 +58,8 @@ export default function SettingsScreen() {
 
   async function handleSignOut() {
     setLoggingOut(true);
+    // Drop this device from push while the session cookie is still valid.
+    await dropPushRegistration();
     try {
       await logoutRequest();
     } catch {

@@ -104,7 +104,14 @@ function toCreateInput(
  * `initialStart` / `initialDefaults` below).
  */
 export default function NewSessionScreen() {
-  const { start } = useLocalSearchParams<{ start?: string }>();
+  const { start, deadline, sessions } = useLocalSearchParams<{
+    start?: string;
+    /** UTC ISO instant — pre-selects the deadline (used by the Day/Week
+     * block long-press "Add study session before this"). */
+    deadline?: string;
+    /** Pre-fills the session count when > 1 (same source). */
+    sessions?: string;
+  }>();
   const router = useRouter();
   const user = useUserStore((s) => s.user);
   const tz = user?.timezone || "UTC";
@@ -127,15 +134,18 @@ export default function NewSessionScreen() {
   // (it's always engine-placed — `CreateSessionInput` has no
   // `scheduledStartTime`), but carrying them costs nothing.
   const initialDefaults = useMemo<SessionFormValues>(() => {
-    if (!start) return EMPTY_DEFAULTS;
-    const { date, startTime } = splitZoned(start, tz);
-    return {
-      ...EMPTY_DEFAULTS,
-      date,
-      startTime,
-      endTime: shiftHhmm(startTime, DEFAULT_DURATION),
-    };
-  }, [start, tz]);
+    const base: SessionFormValues = { ...EMPTY_DEFAULTS };
+    if (deadline) base.deadline = deadline;
+    const n = sessions ? Number.parseInt(sessions, 10) : Number.NaN;
+    if (Number.isFinite(n) && n > 1) base.sessionCount = n;
+    if (start) {
+      const { date, startTime } = splitZoned(start, tz);
+      base.date = date;
+      base.startTime = startTime;
+      base.endTime = shiftHhmm(startTime, DEFAULT_DURATION);
+    }
+    return base;
+  }, [start, deadline, sessions, tz]);
 
   const form = useSessionForm({ defaultValues: initialDefaults });
   const loading = form.formState.isSubmitting;

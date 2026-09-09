@@ -20,6 +20,7 @@ import {
   type DeleteRecurringScope,
 } from "./delete-recurring-dialog";
 import { SESSION_TYPE_META } from "@zenflow/core";
+import { sessionTypeIcon } from "@/components/calendar/session-type-badge";
 import {
   getSessionDetails,
   removeSeriesFrom,
@@ -217,6 +218,7 @@ export function EditSessionDialog({
       ? new Date(scheduledStart.getTime() + task.durationMinutes * 60_000)
       : null;
   const typeMeta = task ? SESSION_TYPE_META[task.type] : null;
+  const TypeIcon = task ? sessionTypeIcon(task.type) : null;
 
   return (
     <Sheet open={open} onOpenChange={setOpen} modal={false}>
@@ -227,12 +229,20 @@ export function EditSessionDialog({
       >
         {/* Header */}
         <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-5">
-          <span
-            className={cn(
-              "size-2 shrink-0 rounded-full",
-              task?.scheduledStartTime ? "bg-primary" : "bg-muted-foreground",
-            )}
-          />
+          {typeMeta && TypeIcon ? (
+            <span
+              className={cn(
+                "flex size-8 shrink-0 items-center justify-center rounded-lg border",
+                typeMeta.badgeClass,
+                typeMeta.textClass,
+              )}
+              title={typeMeta.label}
+            >
+              <TypeIcon className="size-4" />
+            </span>
+          ) : (
+            <span className="size-2 shrink-0 rounded-full bg-muted-foreground" />
+          )}
           <div className="min-w-0">
             <h2 className="truncate text-sm font-bold tracking-tight">
               {task?.title || "Session detail"}

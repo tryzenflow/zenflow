@@ -18,6 +18,7 @@ import {
   statusCodeOf,
   type IntegrationTarget,
 } from "./watcher-support";
+import { NotificationsService } from "../notifications/notifications.service";
 
 /**
  * Two: the current month and the next one. A quiz that opens on the 30th and
@@ -52,6 +53,7 @@ export class LmsWatcherService {
     private readonly lms: LMSService,
     private readonly jobs: IngestionJobsService,
     private readonly materializer: MaterializerService,
+    private readonly notifications: NotificationsService,
     // Circular by construction: ingestion needs `revealCredentials`, and
     // `IntegrationsController` needs this watcher for the manual sync trigger.
     @Inject(forwardRef(() => IntegrationsService))
@@ -101,7 +103,13 @@ export class LmsWatcherService {
     let created = 0;
     let updated = 0;
     let guarded = 0;
+    let deleted = 0;
     let first = true;
+    // Every externalKey any month of this run saw, and whether every fetch
+    // succeeded — deletion reconciliation needs both (a missing month must not
+    // read as "everything that month was cancelled").
+    const seenKeys = new Set<string>();
+    let allFetchesOk = true;
 
     for (const { year, month } of monthsFrom(
       now,
@@ -126,10 +134,12 @@ export class LmsWatcherService {
           target.userId,
           parsed.items,
           "LMS",
+          now,
         );
         created += outcome.created;
         updated += outcome.updated;
         guarded += outcome.guarded;
+        for (const item of parsed.items) seenKeys.add(item.externalKey);
 
         await this.jobs.completeItem("LMS", itemId, {
           status: "COMPLETED",
@@ -139,6 +149,7 @@ export class LmsWatcherService {
       } catch (error) {
         // One bad month does not abort the run: the other month may well have
         // come back fine, and the item row records exactly what went wrong.
+        allFetchesOk = false;
         await this.jobs.completeItem("LMS", itemId, {
           status: "FAILED",
           statusCode: statusCodeOf(error),
@@ -151,12 +162,26 @@ export class LmsWatcherService {
       }
     }
 
+    // Only retire vanished items when the whole window came back — otherwise a
+    // failed month would delete every assignment it should have contained.
+    if (allFetchesOk) {
+      const recon = await this.materializer.reconcileDeleted(
+        target.userId,
+        "LMS",
+        ["ASSIGNMENT", "EXAM"],
+        seenKeys,
+        now,
+      );
+      deleted = recon.deleted;
+    }
+
     await this.jobs.finishJob("LMS", jobId, "COMPLETED");
 
-    if (created + updated + guarded > 0) {
+    if (created + updated + guarded + deleted > 0) {
       this.logger.log(
         `LMS sync for integration ${target.integrationId}: ` +
-          `${created} new, ${updated} updated, ${guarded} kept as edited`,
+          `${created} new, ${updated} updated, ${guarded} kept as edited, ` +
+          `${deleted} removed`,
       );
     }
   }
