@@ -448,7 +448,7 @@ only connection status. Types in `@zenflow/shared` (`ConnectIntegrationInput`,
 ### Notifications (`/notifications`)
 
 The ingestion inbox — written by the materializer, never a client (no create route).
-`CookieAuthGuard`, own rows only. Types: `NotificationTopic`, `NotificationKind`,
+`CookieAuthGuard` per route, own rows only. Types: `NotificationTopic`, `NotificationKind`,
 `NotificationDto`, `NotificationsListResponse`. Each row has a `kind` (`NEW`/`CHANGE`/`DROP`)
 and, for a per-item assignment/exam/lecture, an `eventEndsAt` (the "due"/"at" time; null for
 grouped rows and drops).
@@ -459,6 +459,7 @@ grouped rows and drops).
 | PATCH  | `/notifications/:id/read`         | Stamp `readAt`. Idempotent; `404` if not the caller's.   |
 | PATCH  | `/notifications/:id/action-taken` | Stamp `actionTakenAt` (distinct from read). Idempotent.  |
 | DELETE | `/notifications/:id`              | Dismiss (hard delete, caller-scoped).                    |
+| POST   | `/notifications/dev/raise`        | **Dev only** (`404` when `NODE_ENV=production`), no guard. Body `{ userId, count? }` — raises fake rows in-process so the SSE stream + push fire. Driven by `scripts/send-test-notification.ts`. |
 
 The live channel is SSE — see [Live notifications](#live-notifications-sse).
 
@@ -485,15 +486,19 @@ emits on `NotificationsService.notificationEmitter`; the stream forwards each ne
 `NotificationDto` for the current user. Used by the web bell for live updates; mobile
 consumes it for foreground delivery.
 
-To exercise the inbox + stream + push without a DLU sync or cron changes:
+`notificationEmitter` is a plain in-process `EventEmitter2` — a separate Node process (a
+standalone script, another instance) that emits on its own copy reaches no SSE client here.
+
+To exercise the inbox + stream + push without a DLU sync or cron changes, with
+`start:dev` already running:
 
 ```bash
-pnpm --filter backend exec ts-node -r tsconfig-paths/register \
-  scripts/send-test-notification.ts <userId> [count]
+pnpm --filter backend exec ts-node scripts/send-test-notification.ts <userId> [count]
 ```
 
-It writes a real `Notification` row and emits `NEW_SESSION`, so the SSE stream and
-`PushService` both fire.
+It `POST`s to the dev-only `/notifications/dev/raise`, which writes real `Notification`
+rows and emits `NEW_SESSION` **inside the running server**, so the SSE stream and
+`PushService` both fire. Set `API_URL` if the server isn't on `:5000`.
 
 `IntegrationAuthService` only does a pass/fail probe; parsing belongs to `ingestion/core/`.
 The probe's return/throw split is what produces the two status codes: it returns `false`
