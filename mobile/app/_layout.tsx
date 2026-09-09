@@ -1,6 +1,7 @@
 import { me } from "@/api/auth";
 import { PortalHost } from "@/components/primitives/portal";
 import { ToastProvider } from "@/components/ui/toast";
+import { usePushRegistration } from "@/hooks/use-push-registration";
 import { useUserStore } from "@/hooks/use-user-store";
 import { setAndroidNavigationBar } from "@/lib/android-navigation-bar";
 import { restoreSessionCookie } from "@/lib/api-client";
@@ -43,6 +44,16 @@ export {
 } from "expo-router";
 
 SplashScreen.preventAutoHideAsync();
+
+/**
+ * Headless: registers this device for native push while signed in and routes
+ * a tapped notification. Rendered as a sibling of <Stack> (like <AuthGate/>)
+ * so its `useRouter()` sits under the mounted navigator.
+ */
+function PushRegistrar() {
+  usePushRegistration();
+  return null;
+}
 
 /**
  * Auth gate: no server round-trip on every navigation, just a redirect based
@@ -199,6 +210,7 @@ export default function RootLayout() {
               />
             </Stack>
             <AuthGate />
+            <PushRegistrar />
             <StatusBar hidden={true} />
           </BottomSheetModalProvider>
         </ThemeProvider>

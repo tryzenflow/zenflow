@@ -112,11 +112,15 @@ enum DevicePlatform {
   ANDROID
 }
 
-// Expo push registration; one row per device so a user can have multiple.
+// Native push registration (FCM on Android, APNs on iOS); one row per device
+// so a user can have multiple. `pushToken` is the raw provider token — an
+// opaque string, unique per (app install, device, provider), so it is the
+// natural key: registration upserts on it and a device re-homes to whoever
+// logs in on it (the `userId` is rewritten on conflict).
 model UserDevice {
   id         String         @id @default(uuid())
   platform   DevicePlatform
-  pushToken  String
+  pushToken  String         @unique
   createdAt  DateTime       @default(now())
   updatedAt  DateTime       @updatedAt
   lastSeenAt DateTime?

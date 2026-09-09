@@ -16,6 +16,10 @@ web-build/
 *.key
 *.mobileprovision
 
+# Firebase / APNs config — per-environment, obtained out of band (see README)
+google-services.json
+GoogleService-Info.plist
+
 # Metro
 .metro-health-check*
 

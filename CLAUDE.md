@@ -104,6 +104,12 @@ frontend `dev | build | typecheck | lint | test:e2e`.
   origin-based). Backend `CORS_ORIGIN` (`.env.dev`) is a comma-separated list
   (split in `main.ts`) and must contain both dev web origins.
 - OTP login emails are caught by MailHog in the local Docker stack.
+- Native push (`backend/src/devices/`, `POST`/`DELETE /devices`): Android via
+  `FCM_SERVICE_ACCOUNT`, iOS via `APNS_KEY` + `APNS_KEY_ID` + `APNS_TEAM_ID` +
+  `APNS_BUNDLE_ID` (+ `APNS_PRODUCTION`). All optional — each provider
+  self-disables when its vars are unset, like `BANDIT_SERVICE_URL`; unset in
+  `.env.test`. `PushService` fans every notification out over the same emitter
+  the SSE stream uses.
 
 ## Keeping docs in sync
 
