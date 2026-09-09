@@ -28,6 +28,17 @@ function makePrismaDouble(rows: Row[]) {
 
   const client = {
     notification: {
+      create: (args: { data: Record<string, unknown> }) => {
+        const created = {
+          id: `gen-${rows.length + 1}`,
+          sentAt: new Date("2026-09-01T00:00:00.000Z"),
+          readAt: null,
+          actionTakenAt: null,
+          ...args.data,
+        } as Row;
+        rows.push(created);
+        return Promise.resolve(created);
+      },
       findMany: (args: {
         where: Record<string, unknown>;
         take: number;
@@ -263,6 +274,40 @@ describe("NotificationsService", () => {
       await expect(service.remove(USER, "nope")).rejects.toBeInstanceOf(
         NotFoundException,
       );
+    });
+  });
+
+  describe("raiseSamples", () => {
+    it("writes a row and emits NEW_SESSION for each, cycling the sample styles", async () => {
+      const { db, service } = makeService([]);
+      const emitted: { title: string }[] = [];
+      service.notificationEmitter.on("session.new", (p: { title: string }) =>
+        emitted.push(p),
+      );
+
+      const raised = await service.raiseSamples(USER.id, 3);
+
+      expect(raised).toHaveLength(3);
+      expect(db.rows).toHaveLength(3);
+      expect(emitted.map((p) => p.title)).toEqual(raised.map((n) => n.title));
+      // count > 1 → titles are numbered so a burst is legible
+      expect(raised.every((n) => /\(#\d+\)$/.test(n.title))).toBe(true);
+    });
+
+    it("does not number the title for a single notification", async () => {
+      const { service } = makeService([]);
+
+      const [only] = await service.raiseSamples(USER.id, 1);
+
+      expect(only.title).not.toMatch(/\(#\d+\)$/);
+    });
+
+    it("clamps count to at least 1", async () => {
+      const { db, service } = makeService([]);
+
+      await service.raiseSamples(USER.id, 0);
+
+      expect(db.rows).toHaveLength(1);
     });
   });
 });

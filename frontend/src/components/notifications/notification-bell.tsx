@@ -200,7 +200,13 @@ export function NotificationBell() {
     });
   };
 
+  // The SSE effect mounts once; keep the incoming-notification toast pointed at
+  // the current tz + navigation handler without reconnecting the stream on
+  // every render.
+  const latest = useRef({ tz, jumpToSession });
+
   useEffect(() => {
+    latest.current = { tz, jumpToSession };
     // 1. Initialize the EventSource connection
     const eventSource = new EventSource(
       `${import.meta.env.VITE_API_URL}/notifications/stream`,
@@ -209,11 +215,26 @@ export function NotificationBell() {
 
     // 2. Listen for generic message events
     eventSource.onmessage = (event) => {
-      const newData = JSON.parse(event.data);
-      console.log("Received notification:", newData);
+      const newData = JSON.parse(event.data) as NotificationDto;
       setItems((newItems) => [newData, ...newItems]);
       setUnread((prevUnread) => prevUnread + 1);
-      toast.info("New notification received!");
+      // Tap-to-act toast (bottom-right) — mirrors mobile's foreground push and
+      // the `detected-items.html` mockup: the calendar type's icon + tint, then
+      // tap to jump to the session it landed on.
+      const { tz: currentTz, jumpToSession: jump } = latest.current;
+      toast.custom(
+        (id) => (
+          <NotificationToast
+            n={newData}
+            tz={currentTz}
+            onOpen={() => {
+              toast.dismiss(id);
+              jump(newData);
+            }}
+          />
+        ),
+        { duration: 8000 },
+      );
     };
 
     // 4. Handle errors and connection state
@@ -269,7 +290,8 @@ export function NotificationBell() {
                 Click a row to open it · hover to dismiss
               </span>
               {unread > 0 && (
-                <span className="shrink-0 rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border-2 border-red-500/50 bg-red-500/10 px-2 py-1 text-[11px] font-bold leading-none text-red-700 dark:text-red-300">
+                  <CircleAlert className="size-3.5" />
                   {unread} unread
                 </span>
               )}
@@ -399,5 +421,70 @@ function NotificationRow({
         <X className="size-3.5" />
       </button>
     </div>
+  );
+}
+
+/**
+ * The tap-to-act toast for a notification that arrives over SSE while the app
+ * is open — the web counterpart of mobile's foreground push. Same chrome as an
+ * inbox row: the calendar type's icon + tint on the left, the title/detail
+ * stacked, and a red `!` (a `NEW` item) or a chevron on the right. Clicking it
+ * jumps to the session; sonner auto-dismisses it after its duration.
+ */
+function NotificationToast({
+  n,
+  tz,
+  onOpen,
+}: {
+  n: NotificationDto;
+  tz: string;
+  onOpen: () => void;
+}) {
+  const { Icon, tint } = topicVisual(n.topic);
+  const when = eventTimeLabel(n, tz);
+  const navigable = Boolean(n.sessionId);
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      disabled={!navigable}
+      className={cn(
+        "flex w-[22rem] items-center gap-3 rounded-2xl border border-border bg-popover px-4 py-3.5 text-left shadow-[0_14px_30px_-10px_rgba(0,0,0,0.35)]",
+        navigable && "transition hover:bg-muted",
+      )}
+    >
+      <span
+        className={cn(
+          "flex size-9 shrink-0 items-center justify-center rounded-xl",
+          tint,
+        )}
+      >
+        <Icon className="size-[18px]" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13.5px] font-semibold text-foreground">
+          {n.title}
+        </span>
+        <span className="mt-0.5 block truncate text-[12px] text-muted-foreground">
+          {n.content}
+        </span>
+        {when && (
+          <span className="mt-0.5 block text-[12px] capitalize text-muted-foreground">
+            {when}
+          </span>
+        )}
+      </span>
+      {n.kind === "NEW" ? (
+        <CircleAlert
+          className="size-4 shrink-0 text-destructive"
+          aria-label="Needs your attention"
+        />
+      ) : (
+        navigable && (
+          <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+        )
+      )}
+    </button>
   );
 }
