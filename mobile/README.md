@@ -1,28 +1,27 @@
 # Zenflow Mobile
 
-Expo + React Native app for iOS/Android/web — an active client of the `@zenflow/shared`
-contract alongside the web [`frontend/`](../frontend/README.md), sharing calendar and
-form logic via [`@zenflow/core`](../packages/core). Part of the
+Expo + React Native app (iOS/Android/web). Shares the `@zenflow/shared` contract and
+`@zenflow/core` logic with the web [`frontend/`](../frontend/README.md). Part of the
 [Zenflow monorepo](../README.md).
 
 ---
 
 ## Tech stack
 
-| Concern            | Choice                                                                                                            |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| Framework          | Expo SDK 52, Expo Router (file-based, `app/`), React Native 0.76, React 18                                        |
-| Styling            | Tailwind CSS **v3** via **[NativeWind](https://www.nativewind.dev) v4**                                           |
-| UI primitives      | Hand-rolled shadcn/RN-Reusables-style components in `components/ui/`                                              |
-| Fonts              | Geist (all weights) loaded locally from `assets/fonts/` via `expo-font` — see [Fonts](#fonts--font-weights)       |
-| Language           | TypeScript (strict, `@/*` → repo-relative alias)                                                                  |
-| State              | Zustand (`hooks/use-user-store.ts`, mirrors the web user store)                                                   |
-| Forms              | React Hook Form + Zod (`@hookform/resolvers`)                                                                     |
-| HTTP               | axios (`api/`), cookie-based session — see [Auth & session](#auth--session)                                       |
-| Bottom sheets      | `@gorhom/bottom-sheet` **v5**                                                                                     |
-| Date picker        | [`@react-native-community/datetimepicker`](https://github.com/react-native-datetimepicker/datetimepicker) `8.2.0` |
-| Rich text editor   | [`@10play/tentap-editor`](https://github.com/10play/10tap-editor) `^1.0.1`                                        |
-| Formatter / linter | [Biome](https://biomejs.dev)                                                                                      |
+| Concern       | Choice                                              |
+| ------------- | -------------------------------------------------- |
+| Framework     | Expo SDK 52, Expo Router, React Native 0.76, React 18 |
+| Styling       | Tailwind v3 via NativeWind v4                       |
+| UI primitives | Hand-rolled shadcn/RN-Reusables in `components/ui/` |
+| Fonts         | Geist, local via `expo-font`                        |
+| Language      | TypeScript (strict, `@/*` alias)                    |
+| State         | Zustand                                             |
+| Forms         | React Hook Form + Zod                               |
+| HTTP          | axios (`api/`), cookie session                      |
+| Bottom sheets | `@gorhom/bottom-sheet` v5                           |
+| Date picker   | `@react-native-community/datetimepicker`            |
+| Rich text     | `@10play/tentap-editor`                             |
+| Formatter     | Biome                                              |
 
 ## Project structure
 
@@ -60,23 +59,21 @@ mobile/
 
 ## Screens & routing
 
-`AuthGate` in the root layout (mirrors the web `with-auth.tsx` HOC, driven by the Zustand
-user store) gates two route groups. The tab bar (`components/tab-bar.tsx`, custom
-glassmorphic pill) has three tabs: **Week**, **Month**, **Settings**.
+`AuthGate` (root layout, Zustand-driven) gates two route groups. Custom tab bar: **Week**,
+**Month**, **Settings**.
 
-| Route                  | Screen                       | Notes                                        |
-| ---------------------- | ---------------------------- | -------------------------------------------- |
-| `/(auth)/login`        | email → OTP                  | timezone captured on verify                  |
-| `/(app)` (Week tab)    | `index.tsx`                  | the home screen; day view folded in — no Day route |
-| `/(app)/month`         | `month.tsx`                  | Monday-first month grid                      |
-| `/(app)/settings`      | `settings.tsx`               | Profile · Appearance · Integrations · Account |
-| `/task/new`            | `task/new.tsx` (modal)       | create — 3-tab session-type selector         |
-| `/task/[id]/edit`      | `task/[id]/edit.tsx` (modal) | edit — type read-only; series-scope delete   |
-| `/notifications`       | `notifications.tsx` (modal)  | DLU LMS / portal notification inbox          |
+| Route               | Screen                      | Notes                                    |
+| ------------------- | --------------------------- | ---------------------------------------- |
+| `/(auth)/login`     | email → OTP                 | timezone captured on verify              |
+| `/(app)` (Week tab) | `index.tsx`                 | home; day view folded in                 |
+| `/(app)/month`      | `month.tsx`                 | Monday-first month grid                  |
+| `/(app)/settings`   | `settings.tsx`              | profile, appearance, integrations        |
+| `/task/new`         | `task/new.tsx` (modal)      | create                                   |
+| `/task/[id]/edit`   | `task/[id]/edit.tsx` (modal)| edit; type read-only                     |
+| `/notifications`    | `notifications.tsx` (modal) | ingestion inbox                          |
 
-Session model, series-scope editing, recurrence and the reschedule ("Move to…") flow match
-the web client — see [ADR-0002](../docs/adr/0002-scheduling-simplification.md) and
-[`frontend/README.md`](../frontend/README.md).
+Session model, series-scope editing, recurrence and reschedule match the web client — see
+[ADR-0002](../docs/adr/0002-scheduling-simplification.md).
 
 ## Local development
 
@@ -95,22 +92,27 @@ pnpm typecheck      # tsc --noEmit
 pnpm test           # vitest run — lib/**/*.test.ts only, see below
 ```
 
-**Testing:** Vitest (`vitest.config.ts`, scoped to `lib/**/*.test.ts`) covers the pure,
-RN-free logic modules under `lib/__tests__/` — date math, session cache, overdue/peek,
-session-series/count/time/type helpers, task-card, task-toasts. Anything importing React
-Native or `@gorhom/bottom-sheet` has no automated coverage (no RN test renderer is
-configured) — a known gap.
+**Testing:** Vitest, scoped to `lib/**/*.test.ts` — pure RN-free logic only. Components
+have no automated coverage.
 
-Set `EXPO_PUBLIC_API_URL` in `.env.development` (defaults to
-`http://localhost:5000/api/v1`) so the axios client targets the API; on a physical
-device/emulator a loopback host is auto-rewritten to the dev machine's LAN address (see
-[Auth & session](#auth--session)).
+`EXPO_PUBLIC_API_URL` (`.env.development`, default `http://localhost:5000/api/v1`) points
+the axios client at the API; a loopback host is auto-rewritten to the dev machine's LAN
+address on device/emulator.
+
+## Push notifications
+
+The backend (`backend/src/devices/`) speaks FCM/APNs directly, so the app registers the
+**raw** device token (`Notifications.getDevicePushTokenAsync()`, not an Expo token) via
+`POST /devices`.
+
+- `lib/push.ts` — permission, token, `POST`/`DELETE /devices`.
+  `hooks/use-push-registration.ts` (mounted in `app/_layout.tsx`) registers while signed
+  in and deep-links a tapped notification; sign-out unregisters.
+- **Android:** drop `google-services.json` next to `app.config.ts` (auto-detected); absent → push inert.
+- **iOS:** `expo-notifications` plugin adds the entitlement; needs a backend APNs key + a real device.
+- Adding a native module needs a fresh dev-client build (`pnpm android` / `pnpm ios`).
 
 ## Contributing
 
-- **Formatter / linter:** [Biome](https://biomejs.dev), not ESLint/Prettier —
-  `pnpm --filter mobile format`. 2-space indentation ([`.editorconfig`](../.editorconfig)).
-- **Commits:** [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/),
-  e.g. `fix(mobile): …`, `feat(mobile): …`.
-
-See the repo-wide **[CONTRIBUTING.md](../CONTRIBUTING.md)** for setup, branching, and testing.
+Biome (`pnpm --filter mobile format`), 2-space indent, Conventional Commits. See the
+repo-wide [CONTRIBUTING.md](../CONTRIBUTING.md).
