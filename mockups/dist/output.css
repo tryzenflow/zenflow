@@ -434,6 +434,9 @@
   .mt-3\.5 {
     margin-top: calc(var(--spacing) * 3.5);
   }
+  .mt-4 {
+    margin-top: calc(var(--spacing) * 4);
+  }
   .mt-5 {
     margin-top: calc(var(--spacing) * 5);
   }
@@ -647,6 +650,9 @@
   }
   .h-\[38px\] {
     height: 38px;
+  }
+  .h-\[42px\] {
+    height: 42px;
   }
   .h-\[46px\] {
     height: 46px;
@@ -1251,6 +1257,12 @@
       background-color: color-mix(in oklab, var(--background) 92%, transparent);
     }
   }
+  .bg-background\/\[0\.94\] {
+    background-color: var(--background);
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(in oklab, var(--background) 94%, transparent);
+    }
+  }
   .bg-black\/40 {
     background-color: color-mix(in srgb, #000 40%, transparent);
     @supports (color: color-mix(in lab, red, red)) {
@@ -1428,6 +1440,12 @@
       background-color: color-mix(in oklab, var(--primary) 4%, transparent);
     }
   }
+  .bg-primary\/\[0\.08\] {
+    background-color: var(--primary);
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(in oklab, var(--primary) 8%, transparent);
+    }
+  }
   .bg-red-500\/10 {
     background-color: color-mix(in srgb, oklch(63.7% 0.237 25.331) 10%, transparent);
     @supports (color: color-mix(in lab, red, red)) {
@@ -1469,6 +1487,12 @@
   }
   .bg-success {
     background-color: var(--success);
+  }
+  .bg-success\/15 {
+    background-color: var(--success);
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(in oklab, var(--success) 15%, transparent);
+    }
   }
   .bg-teal-500\/15 {
     background-color: color-mix(in srgb, oklch(70.4% 0.14 182.503) 15%, transparent);
@@ -1755,6 +1779,9 @@
   .text-\[17px\] {
     font-size: 17px;
   }
+  .text-\[18\.5px\] {
+    font-size: 18.5px;
+  }
   .text-\[19px\] {
     font-size: 19px;
   }
@@ -1902,6 +1929,9 @@
   }
   .text-slate-600 {
     color: var(--color-slate-600);
+  }
+  .text-success {
+    color: var(--success);
   }
   .text-teal-700 {
     color: var(--color-teal-700);
@@ -2088,6 +2118,12 @@
     --tw-ring-color: var(--primary);
     @supports (color: color-mix(in lab, red, red)) {
       --tw-ring-color: color-mix(in oklab, var(--primary) 40%, transparent);
+    }
+  }
+  .ring-primary\/70 {
+    --tw-ring-color: var(--primary);
+    @supports (color: color-mix(in lab, red, red)) {
+      --tw-ring-color: color-mix(in oklab, var(--primary) 70%, transparent);
     }
   }
   .ring-ring\/20 {
