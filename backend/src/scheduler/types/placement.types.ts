@@ -12,6 +12,7 @@ export interface PlaceableTask {
   id: string;
   durationMinutes: number;
   deadline: Date;
+  prevStartMs?: number;
 }
 
 /** An already-clamped local-day candidate range, inclusive on both ends. */

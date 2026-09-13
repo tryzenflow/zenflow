@@ -166,7 +166,6 @@ export class SessionUpdateService {
           });
           if (!existing)
             throw new NotFoundException(`Cannot find session with id ${id}`);
-
           const data: Prisma.SessionUpdateInput = {};
           if (dto.title !== undefined) data.title = dto.title;
           if (dto.note !== undefined) data.note = dto.note;
@@ -345,6 +344,7 @@ export class SessionUpdateService {
               id: updated.id,
               durationMinutes: updated.durationMinutes,
               deadline: newDeadline,
+              prevStartMs: updated.scheduledStartTime?.getTime(),
             },
             now,
           });
