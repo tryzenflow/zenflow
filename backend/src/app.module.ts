@@ -26,6 +26,7 @@ import { PortalAPIModule } from "./portal/portal-api.module";
 import { IngestionModule } from "./ingestion/ingestion.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { DevicesModule } from "./devices/devices.module";
+import { ObservabilityModule } from "./observability/observability.module";
 
 @Module({
   imports: [
@@ -146,8 +147,39 @@ import { DevicesModule } from "./devices/devices.module";
         APNS_BUNDLE_ID: Joi.string().optional(),
         // true -> api.push.apple.com, false -> the sandbox gateway.
         APNS_PRODUCTION: Joi.boolean().default(false),
+        // --- Observability (observability/, tracing.ts) -------------------
+        // NODE_ENV is also read directly by several modules; declare it so it
+        // has one validated default. `tracing.ts` reads the OTEL_* vars
+        // itself (it is preloaded before Nest), they are listed here only so
+        // a deployment sees them documented + defaulted.
+        NODE_ENV: Joi.string()
+          .valid("development", "production", "test")
+          .default("development"),
+        LOG_LEVEL: Joi.string()
+          .valid("trace", "debug", "info", "warn", "error", "fatal", "silent")
+          .optional(),
+        // Overrides package.json version in logs / the OTel resource.
+        SERVICE_VERSION: Joi.string().optional(),
+        OTEL_SERVICE_NAME: Joi.string().default("zenflow-api"),
+        // OTLP/HTTP collector base (the SDK appends /v1/traces, /v1/metrics).
+        OTEL_EXPORTER_OTLP_ENDPOINT: Joi.string()
+          .uri()
+          .default("http://localhost:4318"),
+        // "true" turns the whole SDK into a no-op (tracing.ts short-circuits).
+        OTEL_SDK_DISABLED: Joi.boolean().default(false),
+        OTEL_TRACES_SAMPLER: Joi.string().default("parentbased_traceidratio"),
+        OTEL_TRACES_SAMPLER_ARG: Joi.number().min(0).max(1).default(1),
+        OTEL_METRIC_EXPORT_INTERVAL_MS: Joi.number()
+          .integer()
+          .positive()
+          .default(60000),
+        // A request at/above this many ms is always logged, sampling aside.
+        HTTP_SLOW_REQUEST_MS: Joi.number().integer().positive().default(1000),
       }),
     }),
+    // Logging + CLS correlation + the global exception filter / HTTP metrics
+    // interceptor. First so its Nest logger and filter cover everything below.
+    ObservabilityModule,
     ScheduleModule.forRoot(),
     CacheModule.registerAsync({
       isGlobal: true,

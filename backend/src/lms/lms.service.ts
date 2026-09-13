@@ -1,6 +1,14 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { MoodleMonthlyView } from "../ingestion/core/parse-lms";
+import { lmsClientDuration } from "../observability/metrics";
+
+/** Low-cardinality operation label for the LMS RED histogram. */
+function lmsOperation(url: string): string {
+  if (url.includes("/lib/ajax/service.php")) return "fetch_monthly_view";
+  if (url.includes("/login/") || url.includes("/my/")) return "login";
+  return "other";
+}
 
 /**
  * HTTP client for the DLU LMS (a Moodle at `LMS_URL`).
@@ -225,12 +233,22 @@ export class LMSService {
    * the URL's query string or any body — a login POST carries a password.
    */
   private async fetch(url: string, init: RequestInit): Promise<Response> {
+    const operation = lmsOperation(url);
+    const start = process.hrtime.bigint();
+    const record = (status: string) =>
+      lmsClientDuration.record(Number(process.hrtime.bigint() - start) / 1e9, {
+        operation,
+        status,
+      });
     try {
-      return await fetch(url, {
+      const res = await fetch(url, {
         ...init,
         signal: AbortSignal.timeout(this.requestTimeout),
       });
+      record(String(res.status));
+      return res;
     } catch (err) {
+      record((err as Error).name === "TimeoutError" ? "timeout" : "error");
       this.logger.warn(
         `LMS request to ${url.split("?")[0]} failed: ${(err as Error).message}`,
       );

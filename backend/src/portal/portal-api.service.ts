@@ -4,6 +4,15 @@ import type {
   PortalExamRow,
   PortalTimetableRow,
 } from "../ingestion/core/parse-portal";
+import { portalClientDuration } from "../observability/metrics";
+
+/** Low-cardinality operation label for the portal RED histogram. */
+function portalOperation(url: string): string {
+  if (url.includes("/api/authenticate/")) return "authenticate";
+  if (url.includes("/DrawingStudentSchedules")) return "fetch_timetable";
+  if (url.includes("/api/student/exam")) return "fetch_exams";
+  return "other";
+}
 
 /**
  * Outcome of {@link PortalAPIService.authenticate}.
@@ -174,12 +183,22 @@ export class PortalAPIService {
   }
 
   private async fetch(url: string, init: RequestInit): Promise<Response> {
+    const operation = portalOperation(url);
+    const start = process.hrtime.bigint();
+    const record = (status: string) =>
+      portalClientDuration.record(
+        Number(process.hrtime.bigint() - start) / 1e9,
+        { operation, status },
+      );
     try {
-      return await fetch(url, {
+      const res = await fetch(url, {
         ...init,
         signal: AbortSignal.timeout(this.requestTimeout),
       });
+      record(String(res.status));
+      return res;
     } catch (err) {
+      record((err as Error).name === "TimeoutError" ? "timeout" : "error");
       this.logger.warn(
         `DLU probe request to ${url} failed: ${(err as Error).message}`,
       );

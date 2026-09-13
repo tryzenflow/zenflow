@@ -1,6 +1,11 @@
 import { forwardRef, Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Cron, CronExpression } from "@nestjs/schedule";
+import { runCronJob } from "../observability/cron";
+import {
+  ingestionLastSuccess,
+  ingestionUpstreamItems,
+} from "../observability/metrics";
 import { IntegrationsService } from "../integrations/integrations.service";
 import { PortalAPIService } from "../portal/portal-api.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -53,10 +58,12 @@ export class ExamWatcherService {
 
   @Cron(CronExpression.EVERY_WEEK)
   async handleCron(): Promise<void> {
-    const count = await this.run();
-    if (count > 0) {
-      this.logger.log(`Synced the exam schedule for ${count} student(s)`);
-    }
+    await runCronJob("exam-watcher", async () => {
+      const count = await this.run();
+      if (count > 0) {
+        this.logger.log(`Synced the exam schedule for ${count} student(s)`);
+      }
+    });
   }
 
   /** Sync every connected student's exam schedule (or just `userId`'s). */
@@ -106,6 +113,11 @@ export class ExamWatcherService {
         statusCode: 200,
         responseBody: jobItemBody({ body: rows, skipped: parsed.skipped }),
       });
+      ingestionUpstreamItems.add(1, {
+        operation: "portal_exam",
+        status: "COMPLETED",
+      });
+      ingestionLastSuccess.record(now.getTime() / 1000, { provider: "PORTAL" });
 
       if (
         outcome.created + outcome.updated + outcome.guarded + recon.deleted >
@@ -125,6 +137,10 @@ export class ExamWatcherService {
         status: "FAILED",
         statusCode: statusCodeOf(error),
         responseBody: jobItemBody({ error: errorMessage(error) }),
+      });
+      ingestionUpstreamItems.add(1, {
+        operation: "portal_exam",
+        status: "FAILED",
       });
       this.logger.warn(
         `Exam schedule failed for integration ${target.integrationId}: ${errorMessage(error)}`,

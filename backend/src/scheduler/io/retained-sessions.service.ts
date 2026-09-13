@@ -12,6 +12,7 @@ import { RETAINED_BATCH_SIZE, RETAINED_GRACE_MS } from "../../common/constants";
 import { SESSION_RETAINED_REWARD } from "../constants";
 import { BanditService } from "../../bandit/bandit.service";
 import { BanditArmStateRepository } from "../../bandit/bandit-arm-state.repository";
+import { runCronJob } from "../../observability/cron";
 
 type RetainedCandidate = Prisma.SessionGetPayload<{
   select: {
@@ -50,10 +51,12 @@ export class RetainedSessionsService {
   /** Every 30 minutes. `now` is injectable for tests. */
   @Cron(CronExpression.EVERY_30_MINUTES)
   async handleCron(): Promise<void> {
-    const count = await this.sweep();
-    if (count > 0) {
-      this.logger.log(`Marked ${count} session(s) RETAINED`);
-    }
+    await runCronJob("retained-sessions", async () => {
+      const count = await this.sweep();
+      if (count > 0) {
+        this.logger.log(`Marked ${count} session(s) RETAINED`);
+      }
+    });
   }
 
   async sweep(now = new Date(), userId?: string): Promise<number> {

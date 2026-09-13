@@ -18,7 +18,8 @@ import { ListNotificationsDto } from "./dto/list-notifications.dto";
 import { RaiseDevNotificationDto } from "./dto/raise-dev-notification.dto";
 import { NotificationsService } from "./notifications.service";
 import { NotificationEvent } from "./types";
-import { filter, fromEvent, map } from "rxjs";
+import { filter, fromEvent, map, Observable } from "rxjs";
+import { sseActiveConnections } from "../observability/metrics";
 
 /**
  * The ingestion inbox — read + acknowledge only.
@@ -34,7 +35,7 @@ export class NotificationsController {
   @Sse("stream")
   @UseGuards(CookieAuthGuard)
   async sendInApp(@CurrentUser() user: User) {
-    return fromEvent(
+    const events$ = fromEvent(
       this.notifications.notificationEmitter,
       NotificationEvent.NEW_SESSION,
     ).pipe(
@@ -43,6 +44,17 @@ export class NotificationsController {
         data: this.notifications.toNotificationDto(data as Notification),
       })),
     );
+
+    // Track how many /notifications/stream subscriptions are open — long-lived
+    // connections that leak on unclean disconnects show up as a rising gauge.
+    return new Observable((subscriber) => {
+      sseActiveConnections.add(1);
+      const sub = events$.subscribe(subscriber);
+      return () => {
+        sseActiveConnections.add(-1);
+        sub.unsubscribe();
+      };
+    });
   }
 
   /**

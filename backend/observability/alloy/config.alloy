@@ -1,0 +1,113 @@
+// Grafana Alloy — ships container stdout/stderr to Loki.
+//
+// The NestJS API and the Python bandit service both log one JSON object per
+// line (nestjs-pino / src.otel._JsonFormatter). This pipeline discovers every
+// container on the host, tags each line with its compose service, and for the
+// JSON services lifts `level` to a label and the trace id to structured
+// metadata so Grafana can pivot a log straight to its trace in Tempo.
+
+logging {
+  level  = "warn"
+  format = "logfmt"
+}
+
+discovery.docker "containers" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "10s"
+}
+
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+
+  // /zenflow-api-prod -> zenflow-api-prod
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+  // compose service key: api, bandit, postgres, redis, ...
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "compose_project"
+  }
+  rule {
+    source_labels = ["__meta_docker_container_log_stream"]
+    target_label  = "stream"
+  }
+  // Drop the stack's own plumbing — it is noisy and self-referential.
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    regex         = "(grafana|loki|tempo|prometheus|alloy|otel-collector|cadvisor|node-exporter)"
+    action        = "drop"
+  }
+}
+
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.containers.output
+  forward_to = [loki.process.enrich.receiver]
+}
+
+loki.process "enrich" {
+  // API (nestjs-pino): { "level": "...", "traceId": "...", "event": "...", ... }
+  stage.match {
+    selector = "{service=\"api\"}"
+
+    stage.json {
+      expressions = {
+        level     = "level",
+        traceId   = "traceId",
+        event     = "event",
+        component = "component",
+      }
+    }
+    stage.labels {
+      values = {
+        level     = "",
+        component = "",
+      }
+    }
+    stage.structured_metadata {
+      values = {
+        traceId = "",
+        event   = "",
+      }
+    }
+  }
+
+  // Bandit service: { "level": "...", "trace_id": "...", "component": "...", ... }
+  stage.match {
+    selector = "{service=\"bandit\"}"
+
+    stage.json {
+      expressions = {
+        level     = "level",
+        traceId   = "trace_id",
+        component = "component",
+      }
+    }
+    stage.labels {
+      values = {
+        level     = "",
+        component = "",
+      }
+    }
+    stage.structured_metadata {
+      values = {
+        traceId = "",
+      }
+    }
+  }
+
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

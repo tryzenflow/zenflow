@@ -1,0 +1,171 @@
+{
+  "uid": "zenflow-scheduler-bandit",
+  "title": "Zenflow · Scheduler & Bandit",
+  "tags": ["zenflow", "scheduler", "bandit"],
+  "timezone": "browser",
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "annotations": { "list": [] },
+  "links": [],
+  "templating": { "list": [] },
+  "panels": [
+    { "id": 1, "type": "row", "title": "Placement decisions (A/B)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 } },
+    {
+      "id": 2, "type": "timeseries", "title": "Proposals/s by policy",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "drawStyle": "line", "fillOpacity": 20, "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (policy) (rate(scheduler_proposals_total[$__rate_interval]))", "legendFormat": "{{policy}}" } ]
+    },
+    {
+      "id": 3, "type": "timeseries", "title": "Proposals/s by trigger",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "drawStyle": "line", "fillOpacity": 20, "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (trigger) (rate(scheduler_proposals_total[$__rate_interval]))", "legendFormat": "{{trigger}}" } ]
+    },
+    {
+      "id": 4, "type": "piechart", "title": "Applied policy split (range)",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "pieType": "donut", "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (applied) (increase(scheduler_applied_policy_total[$__range]))", "legendFormat": "{{applied}}" } ]
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Bandit fallback/s by reason",
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "drawStyle": "bars", "fillOpacity": 70, "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["sum"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (reason) (rate(scheduler_bandit_fallback_total[$__rate_interval]))", "legendFormat": "{{reason}}" } ]
+    },
+    {
+      "id": 6, "type": "stat", "title": "Fallback rate (fallbacks ÷ proposals, range)",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 0.1 }, { "color": "red", "value": 0.3 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(increase(scheduler_bandit_fallback_total[$__range])) / clamp_min(sum(increase(scheduler_proposals_total[$__range])), 1)" } ]
+    },
+
+    { "id": 10, "type": "row", "title": "Arms, rewards, session events", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 } },
+    {
+      "id": 11, "type": "piechart", "title": "Time-of-day arm selection (range)",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 18 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "pieType": "pie", "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (arm) (increase(scheduler_bandit_arm_selected_total[$__range]))", "legendFormat": "{{arm}}" } ]
+    },
+    {
+      "id": 12, "type": "timeseries", "title": "Session events/s by type",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 18 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "drawStyle": "line", "fillOpacity": 20, "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (type) (rate(scheduler_session_events_total[$__rate_interval]))", "legendFormat": "{{type}}" } ]
+    },
+    {
+      "id": 13, "type": "timeseries", "title": "Reward updates/s by source · result",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 18 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "drawStyle": "bars", "fillOpacity": 70, "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (source, result) (rate(scheduler_reward_updates_total[$__rate_interval]))", "legendFormat": "{{source}} · {{result}}" } ]
+    },
+    {
+      "id": 14, "type": "heatmap", "title": "User MOVE drag distance (minutes)",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 26 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "m", "custom": { "hideFrom": { "tooltip": false, "viz": false, "legend": false } } }, "overrides": [] },
+      "options": { "calculate": false, "cellGap": 1, "color": { "scheme": "Oranges", "mode": "scheme" }, "yAxis": { "unit": "m" }, "legend": { "show": true }, "tooltip": { "mode": "single", "yHistogram": true } },
+      "targets": [ { "refId": "A", "format": "heatmap", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (le) (increase({__name__=~\"scheduler_session_move_drag_minutes(_minutes)?_bucket\"}[$__rate_interval]))", "legendFormat": "{{le}}" } ]
+    },
+
+    { "id": 20, "type": "row", "title": "Cron / watcher handlers", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 35 } },
+    {
+      "id": 21, "type": "table", "title": "Cron runs (range) — ok vs error",
+      "gridPos": { "h": 8, "w": 10, "x": 0, "y": 36 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": {}, "overrides": [
+        { "matcher": { "id": "byName", "options": "error" }, "properties": [ { "id": "custom.cellOptions", "value": { "type": "color-background" } }, { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } } ] }
+      ] },
+      "options": { "showHeader": true, "sortBy": [ { "displayName": "job", "desc": false } ] },
+      "targets": [
+        { "refId": "A", "format": "table", "instant": true, "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (job) (increase(scheduler_cron_runs_total{result=\"ok\"}[$__range]))" },
+        { "refId": "B", "format": "table", "instant": true, "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (job) (increase(scheduler_cron_runs_total{result=\"error\"}[$__range]))" }
+      ],
+      "transformations": [
+        { "id": "merge", "options": {} },
+        { "id": "organize", "options": { "renameByName": { "job": "job", "Value #A": "ok", "Value #B": "error" }, "excludeByName": { "Time": true } } }
+      ]
+    },
+    {
+      "id": 22, "type": "timeseries", "title": "Cron duration p95 by job",
+      "gridPos": { "h": 8, "w": 14, "x": 10, "y": 36 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["max", "lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.95, sum by (le, job) (rate({__name__=~\"scheduler_cron_duration_seconds_bucket\"}[$__rate_interval])))", "legendFormat": "{{job}}" } ]
+    },
+
+    { "id": 30, "type": "row", "title": "Bandit service (Python / LinUCB)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 44 } },
+    {
+      "id": 31, "type": "timeseries", "title": "/predict latency quantiles",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 45 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.50, sum(rate(bandit_predict_duration_seconds_bucket[$__rate_interval])) by (le))", "legendFormat": "p50" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.95, sum(rate(bandit_predict_duration_seconds_bucket[$__rate_interval])) by (le))", "legendFormat": "p95" },
+        { "refId": "C", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.99, sum(rate(bandit_predict_duration_seconds_bucket[$__rate_interval])) by (le))", "legendFormat": "p99" }
+      ]
+    },
+    {
+      "id": 32, "type": "timeseries", "title": "/update latency p95",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 45 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.95, sum(rate(bandit_update_duration_seconds_bucket[$__rate_interval])) by (le))", "legendFormat": "p95" } ]
+    },
+    {
+      "id": 33, "type": "stat", "title": "Singular-matrix failures (range)",
+      "gridPos": { "h": 8, "w": 4, "x": 16, "y": 45 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(increase(bandit_singular_matrix_total[$__range]))" } ]
+    },
+    {
+      "id": 34, "type": "timeseries", "title": "Cold arms per /predict (avg)",
+      "gridPos": { "h": 8, "w": 4, "x": 20, "y": 45 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0, "max": 5, "custom": { "drawStyle": "line", "fillOpacity": 20 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(rate(bandit_predict_cold_arms_sum[$__rate_interval])) / clamp_min(sum(rate(bandit_predict_cold_arms_count[$__rate_interval])), 0.001)", "legendFormat": "cold arms" } ]
+    },
+    {
+      "id": 35, "type": "timeseries", "title": "Bandit client (API → service) rate & p95",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 53 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [
+        { "matcher": { "id": "byRegexp", "options": "/p95.*/" }, "properties": [ { "id": "unit", "value": "s" }, { "id": "custom.axisPlacement", "value": "right" } ] },
+        { "matcher": { "id": "byRegexp", "options": "/rate.*/" }, "properties": [ { "id": "unit", "value": "reqps" } ] }
+      ] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (operation) (rate(bandit_client_request_duration_seconds_count[$__rate_interval]))", "legendFormat": "rate · {{operation}}" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.95, sum by (le, operation) (rate(bandit_client_request_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "p95 · {{operation}}" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,95 @@
+{
+  "uid": "zenflow-ingestion",
+  "title": "Zenflow · Ingestion & Watchers",
+  "tags": ["zenflow", "ingestion"],
+  "timezone": "browser",
+  "editable": true,
+  "graphTooltip": 1,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-24h", "to": "now" },
+  "annotations": { "list": [] },
+  "links": [],
+  "templating": { "list": [] },
+  "panels": [
+    { "id": 1, "type": "row", "title": "Freshness", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 } },
+    {
+      "id": 2, "type": "stat", "title": "Time since last successful sync, by provider",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 1 },
+      "description": "Fed by the ingestion_last_success_timestamp gauge. Empty until that gauge lands (issue 53 follow-up).",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 3600 }, { "color": "red", "value": 172800 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none", "textMode": "value_and_name", "orientation": "horizontal" },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "time() - max by (provider) (ingestion_last_success_timestamp_seconds)", "legendFormat": "{{provider}}" } ]
+    },
+
+    { "id": 10, "type": "row", "title": "Materialization", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 7 } },
+    {
+      "id": 11, "type": "timeseries", "title": "Materialized blocks/s by outcome",
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "drawStyle": "bars", "fillOpacity": 70, "stacking": { "mode": "normal" } } }, "overrides": [
+        { "matcher": { "id": "byName", "options": "unchanged" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "super-light-yellow" } } ] },
+        { "matcher": { "id": "byName", "options": "created" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] },
+        { "matcher": { "id": "byName", "options": "updated" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } } ] },
+        { "matcher": { "id": "byName", "options": "guarded" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } } ] }
+      ] },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["sum"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (outcome) (rate(ingestion_blocks_total[$__rate_interval]))", "legendFormat": "{{outcome}}" } ]
+    },
+    {
+      "id": 12, "type": "stat", "title": "Redundant work — unchanged ratio (range)",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 0.7 }, { "color": "red", "value": 0.95 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(increase(ingestion_blocks_total{outcome=\"unchanged\"}[$__range])) / clamp_min(sum(increase(ingestion_blocks_total[$__range])), 1)" } ]
+    },
+    {
+      "id": 13, "type": "timeseries", "title": "Blocks/s by source",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "drawStyle": "line", "fillOpacity": 20, "stacking": { "mode": "normal" } } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (source) (rate(ingestion_blocks_total[$__rate_interval]))", "legendFormat": "{{source}}" } ]
+    },
+    {
+      "id": 14, "type": "timeseries", "title": "Reconciliation deletes/s by source (destructive)",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "drawStyle": "bars", "fillOpacity": 70 } }, "overrides": [
+        { "matcher": { "id": "byType", "options": "number" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] }
+      ] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (source) (rate(ingestion_reconcile_deleted_total[$__rate_interval]))", "legendFormat": "{{source}}" } ]
+    },
+
+    { "id": 20, "type": "row", "title": "Upstream calls", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 } },
+    {
+      "id": 21, "type": "timeseries", "title": "Upstream items/s by operation · status",
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (operation, status) (rate(ingestion_upstream_items_total[$__rate_interval]))", "legendFormat": "{{operation}} · {{status}}" } ]
+    },
+    {
+      "id": 22, "type": "timeseries", "title": "Watcher (cron) duration p95",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.95, sum by (le, job) (rate({__name__=~\"scheduler_cron_duration_seconds_bucket\", job=~\".*(watcher|watch).*\"}[$__rate_interval])))", "legendFormat": "{{job}}" } ]
+    },
+
+    { "id": 30, "type": "row", "title": "Ingestion logs", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 } },
+    {
+      "id": 31, "type": "logs", "title": "Watcher / materializer log lines",
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 33 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "options": { "showTime": true, "wrapLogMessage": true, "prettifyLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" },
+      "targets": [ { "refId": "A", "datasource": { "type": "loki", "uid": "loki" }, "expr": "{service=\"api\"} | json | component =~ `(?i).*(watcher|ingestion|materializer|portal|lms).*`" } ]
+    }
+  ]
+}

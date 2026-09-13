@@ -9,6 +9,7 @@ import type {
   SchedulingArm,
 } from "@zenflow/shared";
 import { BANDIT_ALPHA, BANDIT_RIDGE } from "../scheduler/constants";
+import { banditClientDuration } from "../observability/metrics";
 
 /** Hard ceiling on a single call to the bandit service. */
 const REQUEST_TIMEOUT_MS = 2_000;
@@ -83,6 +84,13 @@ export class BanditService {
 
   private async post<T>(path: string, body: unknown): Promise<T | null> {
     const url = `${this.baseUrl}${path}`;
+    const operation = path.replace(/^\//, "");
+    const start = process.hrtime.bigint();
+    const record = (status: string) =>
+      banditClientDuration.record(
+        Number(process.hrtime.bigint() - start) / 1e9,
+        { operation, status },
+      );
     try {
       const res = await fetch(url, {
         method: "POST",
@@ -90,6 +98,7 @@ export class BanditService {
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
+      record(String(res.status));
       if (!res.ok) {
         this.logger.warn(
           `bandit ${path} returned ${res.status}; falling back to heuristic`,
@@ -98,6 +107,7 @@ export class BanditService {
       }
       return (await res.json()) as T;
     } catch (err) {
+      record((err as Error).name === "TimeoutError" ? "timeout" : "error");
       this.logger.warn(
         `bandit ${path} unreachable (${(err as Error).message}); falling back to heuristic`,
       );

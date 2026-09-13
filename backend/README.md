@@ -849,6 +849,31 @@ pre-flight (`TaskPlacementService.canPlaceSeries`) keep safe, not this partition
 | 50/50 policy assignment + `SlotProposal` write                                      | `experiments/experiment.service.ts`           |
 | tuning constants (`MAX_SCAN_DAYS`, `MAX_SERIES_PER_DAY`, `BANDIT_*`, reward scales) | `scheduler/constants.ts`                      |
 
+## Observability
+
+Traces, metrics and logs (issue #53). App-side instrumentation lives in
+`src/observability/` + `src/tracing.ts` (preloaded via `node --require ./dist/tracing.js`
+in `start:prod`); it is a no-op unless `OTEL_SDK_DISABLED=false`. All of it stays in
+`scheduler/io/*` and above — the `core/*` pure functions take no tracer (CLAUDE.md #2).
+
+| Signal      | Emitted by                                                              | Path to Grafana                                            |
+| ----------- | --------------------------------------------------------------------- | --------------------------------------------------------- |
+| **Traces**  | auto-instrumentations (http/express/nest/undici/pg/redis) + `withSpan()` seams (`otel.ts`) + Prisma | OTLP → OTel Collector → **Tempo**                          |
+| **Metrics** | OTel Meter instruments in `observability/metrics.ts` (HTTP RED, outbound RED, ingestion, scheduler/bandit, push, SSE) | OTLP → Collector `prometheus` exporter ← **Prometheus** scrape |
+| **Logs**    | `nestjs-pino` JSON (one line, `message` key, `traceId`/`correlationId`/`userId` mixin) | container stdout → **Alloy** → **Loki**                    |
+
+The Grafana stack (Collector, Tempo, Loki, Alloy, Prometheus, node-exporter, cAdvisor,
+Grafana) is defined in **`compose.prod.yml`** and, for local use, the standalone
+**`compose.observability.yml`**. Config + provisioned datasources + three dashboards
+(*API Overview*, *Scheduler & Bandit*, *Ingestion & Watchers*) live in
+[`observability/`](observability/README.md) — start there.
+
+```bash
+# Standalone stack, then run the API locally against it:
+docker compose -f compose.observability.yml up -d          # Grafana → :3000
+OTEL_SDK_DISABLED=false OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 pnpm start:prod
+```
+
 ## Running staging
 
 **Prerequisites:** Docker (with Compose) and Node 20+ — `build_images.sh` shells out to

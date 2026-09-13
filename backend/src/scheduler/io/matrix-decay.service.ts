@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { PrismaService } from "../../prisma/prisma.service";
+import { runCronJob } from "../../observability/cron";
 import { PREFERENCE_MATRIX_LENGTH } from "@zenflow/shared";
 import { decayMatrix, MATRIX_HALF_LIFE_DAYS } from "../core/matrix-decay";
 
@@ -37,10 +38,12 @@ export class MatrixDecayService {
   /** Daily sweep at ~03:00 server time. `now` is injectable for tests. */
   @Cron(CronExpression.EVERY_DAY_AT_3AM)
   async handleCron(): Promise<void> {
-    const count = await this.decayAll();
-    if (count > 0) {
-      this.logger.log(`Decayed ${count} preference matrix(es)`);
-    }
+    await runCronJob("matrix-decay", async () => {
+      const count = await this.decayAll();
+      if (count > 0) {
+        this.logger.log(`Decayed ${count} preference matrix(es)`);
+      }
+    });
   }
 
   /**
