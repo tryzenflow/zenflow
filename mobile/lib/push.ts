@@ -21,6 +21,11 @@ export const ANDROID_CHANNEL_ID = "default";
 
 /** How a foreground push is presented while the app is open. */
 export function configureForegroundHandler(): void {
+  // No native push on web (see file header) — `expo-notifications` has no
+  // web shim for this call, and it runs at module scope (before any
+  // Platform-gated effect), so an unguarded call here throws on import and
+  // breaks the whole root layout's module evaluation on web.
+  if (Platform.OS === "web") return;
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,

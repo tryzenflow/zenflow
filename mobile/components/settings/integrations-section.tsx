@@ -222,11 +222,11 @@ function ProviderRow({
                 </Button>
                 <Button
                   className="w-full"
-                  variant="outline"
+                  variant="destructive"
                   disabled={busy !== null}
                   onPress={disconnect}
                 >
-                  <Text className="font-semibold text-destructive">
+                  <Text className="font-semibold text-destructive-foreground">
                     {busy === "disconnect" ? "Disconnecting…" : "Disconnect"}
                   </Text>
                 </Button>
@@ -256,10 +256,7 @@ export function IntegrationsSection() {
       <SettingsSectionLabel>Integrations</SettingsSectionLabel>
       <View className="overflow-hidden rounded-2xl border border-border bg-card">
         {PROVIDERS.map((p, i) => (
-          <View
-            key={p.id}
-            className={cn(i > 0 && "border-t border-border")}
-          >
+          <View key={p.id} className={cn(i > 0 && "border-t border-border")}>
             <ProviderRow
               provider={p}
               status={statuses.find((s) => s.provider === p.id)}

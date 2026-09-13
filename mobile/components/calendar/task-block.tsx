@@ -169,6 +169,11 @@ interface SessionBlockProps {
    * finger while the grid scrolls, and folded into the drop slot so it lands
    * where intended even when that slot started off-screen. */
   autoScrollDeltaSV?: SharedValue<number>;
+  /** Written directly (no `runOnJS`) by the actively-dragged block with its
+   * live snapped slot (minutes-of-day), left at -1 when idle. Lets
+   * `DayTimeline`'s drop-destination line track the drag on the UI thread
+   * with zero bridge latency instead of chasing a JS-state update. */
+  dragPreviewMinSV?: SharedValue<number>;
   /** Fired (on change) with the vertical auto-scroll direction the lifted
    * block is asking for: −1 (up), 1 (down), 0 (none). */
   onDragVerticalEdge?: (dir: -1 | 0 | 1) => void;
@@ -197,6 +202,7 @@ function SessionBlockImpl({
   onLongPressMenu,
   drawThroughMidnight = false,
   autoScrollDeltaSV,
+  dragPreviewMinSV,
   onDragVerticalEdge,
   bottomInset = 0,
   flash = false,
@@ -284,7 +290,6 @@ function SessionBlockImpl({
   // Raw finger translationY of the live drag, so the auto-scroll reaction can
   // re-snap without a fresh touch event.
   const fingerTYSV = useSharedValue(0);
-  const [liveStartMin, setLiveStartMin] = useState<number | null>(null);
   // Last reported vertical auto-scroll direction (fire `onDragVerticalEdge`
   // only on change).
   const vEdgeSV = useSharedValue<-1 | 0 | 1>(0);
@@ -292,6 +297,10 @@ function SessionBlockImpl({
   // else an inert local so the worklet math is uniform.
   const localAutoScroll = useSharedValue(0);
   const autoScroll = autoScrollDeltaSV ?? localAutoScroll;
+  // -1 = no drag preview to show. Falls back to a local inert value when the
+  // parent doesn't wire one (mirrors `autoScroll`'s pattern above).
+  const localDragPreviewMin = useSharedValue(-1);
+  const dragPreviewMin = dragPreviewMinSV ?? localDragPreviewMin;
 
   // The card's vertical slot (minutes of day). Normally it just tracks
   // `startMin` from props. On drop we set this to the target slot on the UI
@@ -313,11 +322,13 @@ function SessionBlockImpl({
   }, [segment.taskStart, pinnedStartMin, snapOffsetY, translateX, translateY]);
 
   // Drive the lift chrome once when the drag starts / ends — not per frame.
+  const [isDraggingJS, setIsDraggingJS] = useState(false);
   useAnimatedReaction(
     () => isDragging.value,
     (dragging, prev) => {
       if (dragging === prev) return;
       liftProgress.value = withTiming(dragging, { duration: 150 });
+      runOnJS(setIsDraggingJS)(dragging === 1);
     },
   );
 
@@ -401,14 +412,12 @@ function SessionBlockImpl({
 
   const reportSnap = useCallback(
     (min: number) => {
-      setLiveStartMin(min);
       onDragStateChange?.({ startMin: min });
     },
     [onDragStateChange],
   );
 
   const reportDragEnd = useCallback(() => {
-    setLiveStartMin(null);
     onDragStateChange?.(null);
   }, [onDragStateChange]);
 
@@ -466,6 +475,7 @@ function SessionBlockImpl({
         DAILY_HORIZON - TIME_GRANULARITY,
       );
       snapOffsetY.value = (nsm - startMin) * pxPerMin;
+      dragPreviewMin.value = nsm;
       if (lastSnap.value !== nsm) {
         lastSnap.value = nsm;
         runOnJS(reportSnap)(nsm);
@@ -507,6 +517,7 @@ function SessionBlockImpl({
         // Move the card itself to the snapped slot (content-space px) — it
         // now shows exactly where it will land.
         snapOffsetY.value = (newStartMin - startMin) * pxPerMin;
+        dragPreviewMin.value = newStartMin;
 
         if (lastSnap.value !== newStartMin) {
           lastSnap.value = newStartMin;
@@ -584,6 +595,7 @@ function SessionBlockImpl({
       snapOffsetY.value = 0;
       lastSnap.value = null;
       fingerTYSV.value = 0;
+      dragPreviewMin.value = -1;
       if (onDragVerticalEdge && vEdgeSV.value !== 0) {
         vEdgeSV.value = 0;
         runOnJS(onDragVerticalEdge)(0);
@@ -664,11 +676,13 @@ function SessionBlockImpl({
           : { height },
       ]}
     >
-      <Animated.View
-        pointerEvents="none"
-        style={footprintStyle}
-        className="absolute inset-0 rounded-[10px] border-[1.5px] border-dashed border-muted-foreground/40 bg-muted/40"
-      />
+      {isDraggingJS && (
+        <Animated.View
+          pointerEvents="none"
+          style={footprintStyle}
+          className="absolute inset-0 rounded-[10px] border-[1.5px] border-dashed border-muted-foreground/40 bg-muted/40"
+        />
+      )}
       {flashing && (
         <Animated.View
           pointerEvents="none"
@@ -678,7 +692,7 @@ function SessionBlockImpl({
       )}
       <GestureDetector gesture={composedGesture}>
         <Animated.View
-          style={[moveStyle, shadowStyle, { height }]}
+          style={[moveStyle, { height }]}
           className={cn(
             "flex overflow-hidden rounded-[10px] border border-l-4",
             isCompact
@@ -754,9 +768,7 @@ function SessionBlockImpl({
               <Text className="shrink-0 text-[9px] leading-none text-muted-foreground">
                 {segment.continued
                   ? `ends ${fmt(segment.taskEnd, tz)}`
-                  : liveStartMin != null
-                    ? fmtMin(liveStartMin, tz, segment.taskStart)
-                    : fmt(segment.taskStart, tz)}
+                  : fmt(segment.taskStart, tz)}
               </Text>
             </View>
           ) : (
@@ -787,19 +799,10 @@ function SessionBlockImpl({
                     ? `cont. → ${fmt(segment.taskEnd, tz)}`
                     : segment.continues && !drawsThrough
                       ? `${fmt(segment.taskStart, tz)} → next day`
-                      : liveStartMin != null
-                        ? joinRange(
-                            fmtMin(liveStartMin, tz, segment.taskStart),
-                            fmtMin(
-                              Math.min(liveStartMin + duration, DAILY_HORIZON),
-                              tz,
-                              segment.taskStart,
-                            ),
-                          )
-                        : joinRange(
-                            fmt(segment.taskStart, tz),
-                            fmt(segment.taskEnd, tz),
-                          )}
+                      : joinRange(
+                          fmt(segment.taskStart, tz),
+                          fmt(segment.taskEnd, tz),
+                        )}
                 </Text>
                 {dueChip && <DueChip {...dueChip} />}
                 {!!segment.location && (

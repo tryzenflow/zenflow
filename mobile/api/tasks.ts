@@ -13,6 +13,7 @@ import type {
 } from "@zenflow/shared";
 import { format } from "date-fns";
 import { api } from "./base";
+import { notifySessionsMutated } from "@/lib/session-cache";
 
 /**
  * No `status` param — the backend doesn't filter by status (rejected as an
@@ -43,6 +44,7 @@ export async function createSession(
   input: CreateSessionInput,
 ): Promise<CreateSessionResponse> {
   const { data } = await api.post("/sessions", input);
+  notifySessionsMutated();
   return data.data;
 }
 
@@ -74,6 +76,7 @@ export async function updateSession(
     `/sessions/${encodeURIComponent(id)}`,
     input,
   );
+  notifySessionsMutated();
   return data.data;
 }
 
@@ -92,6 +95,7 @@ export async function removeSession(
   id: string,
 ): Promise<RemoveSessionResponse> {
   const { data } = await api.delete(`/sessions/${encodeURIComponent(id)}`);
+  notifySessionsMutated();
   return data.data;
 }
 
@@ -100,6 +104,7 @@ export async function removeSessionSeries(
   seriesId: string,
 ): Promise<RemoveSessionSeriesResponse> {
   const { data } = await api.delete(`/sessions/series/${seriesId}`);
+  notifySessionsMutated();
   return data.data;
 }
 
@@ -116,6 +121,7 @@ export async function truncateSessionSeries(
   const { data } = await api.delete(`/sessions/series/${seriesId}/truncate`, {
     params: { from: fromStartISO },
   });
+  notifySessionsMutated();
   return data.data;
 }
 
@@ -134,5 +140,6 @@ export async function removeSeriesFrom(
   const { data } = await api.delete(
     `/sessions/series/${seriesId}/from/${sessionId}`,
   );
+  notifySessionsMutated();
   return data.data;
 }
