@@ -106,22 +106,15 @@ otherwise. `EvaluationResult` reports `n_matched` alongside the average payoff a
 confirm the shipped default stays stable (does not select `EARLY_MORNING` as best on flat
 data).
 
-## Integration checklist
+## Backend integration points
 
-- [x] `src/api.py` — FastAPI wrapping the LinUCB math in `GET /health`, `POST /predict`,
-      `POST /update` (stateless: `(A, b)` in the payload).
-- [x] `Dockerfile` + a `bandit` service in `backend/compose.dev.yml` (host `:8100`).
-- [x] Backend: `BANDIT_SERVICE_URL` in `backend/.env.example`, validated in `app.module.ts`.
-- [x] Backend: `@zenflow/shared` bandit types (`SchedulingArm`, predict/update
-      request+response); `BanditArmState` Prisma model; `SlotProposal.featureVector` +
-      `selectedArm`; `SessionEvent.slotProposalId`.
-- [x] Backend: `BanditService` HTTP client with timeout + heuristic fallback
-      (`backend/src/bandit/`); `BanditPlacer` per-day context + `/predict` + slot pick
-      (`scheduler/io/bandit-placer.service.ts`); `ExperimentService` 50/50 randomizer that
-      writes `SlotProposal` (`backend/src/experiments/`).
-- [x] Backend: `SchedulingFeedbackService` computes the reward on the first `MOVE`, and
-      `RetainedSessionsService` on `RETAINED`, calls `/update`, and persists the returned
-      `(A, b)` (`scheduler/io/`).
+`BanditPlacer` (`scheduler/io/bandit-placer.service.ts`) builds the per-day context and
+calls `/predict` via `BanditService` (`backend/src/bandit/`, timeout + heuristic fallback);
+`ExperimentService` (`backend/src/experiments/`) is the 50/50 randomizer that writes
+`SlotProposal`. `SchedulingFeedbackService` (first `MOVE`) and `RetainedSessionsService`
+(`RETAINED`) compute the reward, call `/update`, and persist the returned `(A, b)` on
+`BanditArmState`. Shared types live in `@zenflow/shared` (`SchedulingArm`, predict/update
+request+response).
 
 ## Contributing
 

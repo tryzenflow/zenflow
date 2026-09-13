@@ -8,6 +8,11 @@ import {
 } from "@/lib/month-date-math";
 import { isPastDeadlineDrop } from "@/lib/overdue";
 import {
+  DAY_CACHE_TTL_MS,
+  getSessionMutationEpoch,
+  sameSessions,
+} from "@/lib/session-cache";
+import {
   MONTH_PILL_CLASSES,
   MONTH_PILL_TEXT_CLASSES,
   deriveState,
@@ -160,6 +165,14 @@ export function MonthPage({
     isActiveRef.current = isActive;
   }, [isActive]);
 
+  // Mirrors `day-timeline.tsx`'s day cache: remembers the mutation epoch and
+  // timestamp of this page's last successful fetch so a plain screen-focus
+  // bump (`reloadToken`, from `month.tsx`'s `useFocusEffect`) doesn't hit the
+  // network when nothing has actually changed since. `notifySessionsMutated`
+  // (called from every `api/tasks.ts` mutation) bumps the epoch — that's the
+  // only thing that forces a real revalidation before the TTL is up.
+  const lastFetchRef = useRef<{ epoch: number; at: number } | null>(null);
+
   const refetch = useCallback(async () => {
     try {
       // No status filter (unlike Day View's `listSessions("day", …, "PENDING")`)
@@ -167,7 +180,16 @@ export function MonthPage({
       // `mockups/month-view.html` and the un-filtered fetch
       // `frontend/src/components/calendar/layout.tsx` already does.
       const res = await listSessions("month", monthDate);
-      setSessions(res.sessions);
+      lastFetchRef.current = {
+        epoch: getSessionMutationEpoch(),
+        at: Date.now(),
+      };
+      // A revalidation that comes back identical must not re-render the
+      // whole grid — same guard `day-timeline.tsx` uses to avoid the
+      // "refetch on every focus" flicker.
+      setSessions((prev) =>
+        prev != null && sameSessions(prev, res.sessions) ? prev : res.sessions,
+      );
     } catch (error) {
       setSessions((cur) => cur ?? []);
       if (isActiveRef.current) {
@@ -181,6 +203,12 @@ export function MonthPage({
   }, [monthDate]);
 
   useEffect(() => {
+    const last = lastFetchRef.current;
+    const fresh =
+      last != null &&
+      last.epoch === getSessionMutationEpoch() &&
+      Date.now() - last.at < DAY_CACHE_TTL_MS;
+    if (fresh) return;
     refetch();
   }, [refetch, reloadToken]);
 

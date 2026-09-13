@@ -1,6 +1,6 @@
 import type { SchedulingArm } from "@zenflow/shared";
 import { ARM_BANDS, armOfMinute, overlapRate } from "./arms";
-import { slotPreferenceScore } from "./slot-score";
+import { slotPreferenceScore, stabilityScore } from "./slot-score";
 
 /**
  * LinUCB → concrete-slot score for one candidate 15-minute-aligned start
@@ -23,6 +23,7 @@ import { slotPreferenceScore } from "./slot-score";
 export interface LinucbSlotScoreInput {
   startMs: number;
   endMs: number;
+  prevStartMs?: number;
   timezone: string;
   /** Per-arm LinUCB scores for the candidate day. */
   armScores: Partial<Record<SchedulingArm, number>>;
@@ -37,7 +38,8 @@ export interface LinucbSlotScore {
 }
 
 export function linucbSlotScore(input: LinucbSlotScoreInput): LinucbSlotScore {
-  const { startMs, endMs, timezone, armScores, prefMatrix } = input;
+  const { startMs, endMs, timezone, armScores, prefMatrix, prevStartMs } =
+    input;
 
   let armTerm = 0;
   let topArm: SchedulingArm = armOfMinute(0);
@@ -57,6 +59,8 @@ export function linucbSlotScore(input: LinucbSlotScoreInput): LinucbSlotScore {
   }
 
   const score =
-    armTerm + slotPreferenceScore(prefMatrix, startMs, endMs, timezone);
+    armTerm +
+    slotPreferenceScore(prefMatrix, startMs, endMs, timezone) +
+    (prevStartMs ? stabilityScore(prevStartMs, startMs) : 0); // prevent instabiilty when rescheduling a manually moved block
   return { score, topArm };
 }

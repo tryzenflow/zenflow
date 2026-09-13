@@ -1,22 +1,28 @@
 import { NestFactory } from "@nestjs/core";
 import { NestExpressApplication } from "@nestjs/platform-express";
+import { Logger } from "nestjs-pino";
 import { AppModule } from "./app.module";
 import session from "express-session";
 import { ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
-import type { RedisClientType } from "redis";
-import { RedisStore } from "connect-redis";
+import type { Redis } from "ioredis";
 import passport from "passport";
 import { buildSessionOptions } from "./auth/session.config";
 import { REDIS_CLIENT } from "./common/redis/redis.constants";
+import { IoredisSessionStore } from "./common/redis/ioredis-session.store";
 
 // 7 days. Default lifetime of an idle session; with rolling sessions an
 // actively-used session keeps getting extended on every request.
 const DEFAULT_SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    // Hold startup logs until the pino logger below is installed, so even
+    // bootstrap lines are structured JSON.
+    bufferLogs: true,
+  });
+  app.useLogger(app.get(Logger));
   // TLS is terminated by the Caddy reverse proxy, which forwards plain HTTP to
   // this app with the real scheme in `X-Forwarded-Proto`. Trusting the first
   // proxy hop makes `req.secure` reflect that header, so express-session will
@@ -53,14 +59,18 @@ async function bootstrap() {
     }),
   );
 
-  // The already-connected Redis client backing sessions/OTP codes (see
-  // common/redis/redis.module.ts). The LimitKit rate limiter (common/
-  // rate-limit/) uses its own separate `RATE_LIMIT_REDIS_CLIENT` /
-  // `RATE_LIMIT_CACHE_URL` instance instead of this one.
-  const redisClient = app.get<RedisClientType>(REDIS_CLIENT);
+  // The Redis client backing sessions/OTP codes (see
+  // common/redis/redis.module.ts) — connects in the background, not awaited
+  // here. The LimitKit rate limiter (common/rate-limit/) uses its own
+  // separate `RATE_LIMIT_REDIS_CLIENT` / `RATE_LIMIT_CACHE_URL` instance
+  // instead of this one.
+  const redisClient = app.get<Redis>(REDIS_CLIENT);
+  const sessionTtlMs =
+    configService.get<number>("SESSION_TTL_MS") ?? DEFAULT_SESSION_TTL_MS;
 
-  const redisStore = new RedisStore({
+  const redisStore = new IoredisSessionStore({
     client: redisClient,
+    ttlSec: Math.ceil(sessionTtlMs / 1000),
   });
 
   const swaggerConfig = new DocumentBuilder()
@@ -76,8 +86,7 @@ async function bootstrap() {
       buildSessionOptions({
         secret: configService.get("SESSION_SECRET")!,
         store: redisStore,
-        ttlMs:
-          configService.get<number>("SESSION_TTL_MS") ?? DEFAULT_SESSION_TTL_MS,
+        ttlMs: sessionTtlMs,
         secure: configService.get<boolean>("COOKIE_SECURE")!,
         sameSite: configService.get<"lax" | "none" | "strict">(
           "COOKIE_SAMESITE",

@@ -34,7 +34,7 @@ const COURSE_90003 = {
 const ASSIGN_DUE_0739: MoodleCalendarEvent = {
   id: 700001,
   name: "Bài tập Mẫu 01 đến hạn",
-  location: "",
+  url: "https://lms.dlu.edu.vn/mod/assign/view.php?id=800001",
   modulename: "assign",
   instance: 800001,
   eventtype: "due",
@@ -47,7 +47,7 @@ const ASSIGN_DUE_0739: MoodleCalendarEvent = {
 const ATTENDANCE: MoodleCalendarEvent = {
   id: 700002,
   name: "Điểm danh",
-  location: "",
+  url: "https://lms.dlu.edu.vn/mod/attendance/view.php?id=800003",
   modulename: "attendance",
   instance: 800003,
   eventtype: "attendance",
@@ -60,7 +60,7 @@ const ATTENDANCE: MoodleCalendarEvent = {
 const ASSIGN_DUE_2359: MoodleCalendarEvent = {
   id: 700003,
   name: "Bài thực hành Mẫu 07 đến hạn",
-  location: "",
+  url: "https://lms.dlu.edu.vn/mod/assign/view.php?id=800002",
   modulename: "assign",
   instance: 800002,
   eventtype: "due",
@@ -73,7 +73,7 @@ const ASSIGN_DUE_2359: MoodleCalendarEvent = {
 const QUIZ_OPEN: MoodleCalendarEvent = {
   id: 700004,
   name: "BÀI THU HOẠCH MẪU mở",
-  location: "",
+  url: "https://lms.dlu.edu.vn/mod/quiz/view.php?id=800004",
   modulename: "quiz",
   instance: 800004,
   eventtype: "open",
@@ -85,7 +85,7 @@ const QUIZ_OPEN: MoodleCalendarEvent = {
 const QUIZ_CLOSE: MoodleCalendarEvent = {
   id: 700005,
   name: "BÀI THU HOẠCH MẪU đóng",
-  location: "",
+  url: "https://lms.dlu.edu.vn/mod/quiz/view.php?id=800004",
   modulename: "quiz",
   instance: 800004,
   eventtype: "close",
@@ -158,8 +158,8 @@ describe("parseMonthlyView — assignments", () => {
         type: "ASSIGNMENT",
         scheduledStartTime: new Date("2026-04-01T00:15:00.000Z"),
         durationMinutes: 15,
-        location: null,
-        note: null,
+        location: ASSIGN_DUE_0739.url,
+        note: `<p><a href="${ASSIGN_DUE_0739.url}">Submission Link</a></p>`,
         lmsCourse: {
           lmsCourseId: 90002,
           fullName: COURSE_90002.fullname,
@@ -167,6 +167,19 @@ describe("parseMonthlyView — assignments", () => {
         },
       },
     ]);
+  });
+
+  it("puts the event url in location and appends a submission link to the note", () => {
+    const description = "<p>Remember to attach your report.</p>";
+    const [item] = parseMonthlyView(
+      view([{ ...ASSIGN_DUE_0739, description }]),
+      BEFORE_ALL,
+    ).items;
+
+    expect(item.location).toBe(ASSIGN_DUE_0739.url);
+    expect(item.note).toBe(
+      `${description}<p><a href="${ASSIGN_DUE_0739.url}">Submission Link</a></p>`,
+    );
   });
 
   it("handles an 11:59 PM deadline (16:59 UTC → 16:30–16:45)", () => {
@@ -201,8 +214,8 @@ describe("parseMonthlyView — quizzes", () => {
         // 17:35–18:25 VN, widened onto the grid to 17:30–18:30.
         scheduledStartTime: new Date("2024-10-25T10:30:00.000Z"),
         durationMinutes: 60,
-        location: null,
-        note: null,
+        location: QUIZ_OPEN.url,
+        note: `<p><a href="${QUIZ_OPEN.url}">Exam Link</a></p>`,
         lmsCourse: {
           lmsCourseId: 90003,
           fullName: COURSE_90003.fullname,
@@ -263,6 +276,9 @@ describe("parseMonthlyView — quizzes", () => {
     expect(items[0].scheduledStartTime).toEqual(
       new Date("2024-10-25T11:00:00.000Z"),
     );
+    // No open event survived the `now` filter, so there's no link to show.
+    expect(items[0].location).toBeNull();
+    expect(items[0].note).toBeNull();
   });
 
   it("skips a lone open and says why", () => {

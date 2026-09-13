@@ -1,5 +1,11 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { SchedulingModel, type User } from "../../../generated/prisma";
+import type { Span } from "@opentelemetry/api";
+import { withSpan } from "../../observability/otel";
+import {
+  schedulerAppliedPolicy,
+  schedulerBanditFallback,
+} from "../../observability/metrics";
 import { PrismaService } from "../../prisma/prisma.service";
 import { ExperimentService } from "../../experiments/experiment.service";
 import { HeuristicPlacer } from "./heuristic-placer.service";
@@ -64,7 +70,21 @@ export class TaskPlacementService {
    * persist + `recordProposal`. Best-effort: any A/B failure leaves the
    * heuristic placement standing.
    */
-  private async placeSingle(
+  private placeSingle(
+    user: User,
+    task: PlaceableTask,
+    trigger: Trigger,
+    now: Date,
+  ): Promise<PlacementResult> {
+    return withSpan(
+      "scheduler.placeSingle",
+      (span) => this.placeSingleInner(span, user, task, trigger, now),
+      { "scheduling.trigger": trigger, "session.id": task.id },
+    );
+  }
+
+  private async placeSingleInner(
+    span: Span,
     user: User,
     task: PlaceableTask,
     trigger: Trigger,
@@ -88,10 +108,12 @@ export class TaskPlacementService {
     let appliedPolicy: PlacementResult["appliedPolicy"] = heuristicStart
       ? "HEURISTIC"
       : "NONE";
+    let assignedPolicy: SchedulingModel | "NONE" = "NONE";
 
     try {
       const { primaryPolicy, randomizationSeed } =
         this.experiment.assignPolicy();
+      assignedPolicy = primaryPolicy;
       const heuristicProposal = {
         scheduledStartTime: heuristicStart?.toISOString() ?? null,
       };
@@ -143,6 +165,12 @@ export class TaskPlacementService {
         appliedStart = pick.scheduledStartTime;
         appliedPolicy = "LINUCB";
       } else {
+        if (primaryPolicy === SchedulingModel.LINUCB) {
+          // LinUCB was the assigned arm but produced nothing — the heuristic
+          // placement stands. `no_pick` covers URL unset / timeout / non-2xx /
+          // no surviving slot (BanditPlacer collapses them all to `null`).
+          schedulerBanditFallback.add(1, { reason: "no_pick", trigger });
+        }
         await this.experiment.recordProposal({
           userId: user.id,
           sessionId: task.id,
@@ -157,12 +185,23 @@ export class TaskPlacementService {
         });
       }
     } catch (err) {
+      schedulerBanditFallback.add(1, { reason: "exception", trigger });
       this.logger.warn(
         `scheduling experiment (${trigger}) failed for session ${task.id}: ${
           (err as Error).message
         }`,
       );
     }
+
+    schedulerAppliedPolicy.add(1, {
+      assigned: assignedPolicy,
+      applied: appliedPolicy,
+      trigger,
+    });
+    span.setAttributes({
+      "scheduling.assigned_policy": assignedPolicy,
+      "scheduling.applied_policy": appliedPolicy,
+    });
 
     return { scheduledStartTime: appliedStart ?? null, appliedPolicy };
   }

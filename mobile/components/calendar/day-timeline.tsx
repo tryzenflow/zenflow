@@ -12,6 +12,7 @@ import {
   fetchDaySessions,
   getCachedDaySessions,
   isDayCacheFresh,
+  sameSessions,
   setCachedDaySessions,
 } from "@/lib/session-cache";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
@@ -76,35 +77,6 @@ function scrollToNowOffset(totalHeight: number, tz: string): number {
   const now = zonedNow(tz);
   const mins = now.getHours() * 60 + now.getMinutes();
   return Math.max(0, (mins / DAILY_HORIZON) * totalHeight - 120);
-}
-
-/**
- * Do two session lists render identically? Paging back to a day whose cache has
- * gone stale triggers a revalidation fetch that almost always returns the same
- * data — without this guard the resulting `setSessions(freshArray)` re-renders
- * the whole timeline (new `segments`, every `SessionBlock` re-mounts its memo)
- * for no visible change, which reads as a flicker. Compare only the fields the
- * timeline actually draws from.
- */
-function sameSessions(a: Session[], b: Session[]): boolean {
-  if (a === b) return true;
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    const x = a[i];
-    const y = b[i];
-    if (
-      x.id !== y.id ||
-      x.title !== y.title ||
-      x.scheduledStartTime !== y.scheduledStartTime ||
-      x.durationMinutes !== y.durationMinutes ||
-      x.deadline !== y.deadline ||
-      x.type !== y.type ||
-      x.updatedAt !== y.updatedAt
-    ) {
-      return false;
-    }
-  }
-  return true;
 }
 
 export type TimelineState = "loading" | "error" | "ready";
@@ -229,44 +201,27 @@ export function DayTimeline({
   const [error, setError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [dragSnap, setDragSnap] = useState<{ startMin: number } | null>(null);
-  // Session id to pulse right now — a within-day drag drop flashes the moved
-  // block in place; a teleport passes `flashSessionId` down instead.
-  const [rescheduleFlashId, setRescheduleFlashId] = useState<string | null>(
-    null,
-  );
-  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const triggerRescheduleFlash = useCallback((id: string) => {
-    setRescheduleFlashId(id);
-    if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
-    flashTimerRef.current = setTimeout(() => setRescheduleFlashId(null), 900);
-  }, []);
-  useEffect(
-    () => () => {
-      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
-    },
-    [],
-  );
-  const effectiveFlashId = rescheduleFlashId ?? flashSessionId;
+  // Only a create / reschedule / teleport (the screen-level `flashSessionId`)
+  // plays the "just landed" flash — a within-day drag drop no longer flashes
+  // the moved block in place.
 
   const baseHourHeight = useSharedValue(HOUR_HEIGHT_DEFAULT);
   // Px the grid has auto-scrolled since the current block drag began (0 when
   // idle). Shared with every `SessionBlock` so a dragged block stays under the
   // finger while the grid scrolls and its drop slot accounts for the travel.
   const autoScrollDeltaSV = useSharedValue(0);
+  // Live drop-preview slot (minutes of day), written directly on the UI
+  // thread by whichever block is being dragged (see `task-block.tsx`'s pan
+  // gesture) — the orange drop-line below reads this instead of `dragSnap`
+  // state so its position never lags the finger. Sentinel `-1` = hidden.
+  const dragPreviewMinSV = useSharedValue(-1);
   const scrollYRef = useRef(0);
   const viewportHRef = useRef(0);
   const contentHeightRef = useRef(0);
   const autoScrollDirRef = useRef<-1 | 0 | 1>(0);
   const autoScrollRafRef = useRef<number | null>(null);
-  const prevRefreshKeyRef = useRef(refreshKey);
   useEffect(() => {
     let cancelled = false;
-    // A screen-focus bump (`refreshKey`) is a hard "something may have changed
-    // elsewhere" signal and always revalidates. A plain mount / page-in is
-    // not.
-    const focusChanged = refreshKey !== prevRefreshKeyRef.current;
-    prevRefreshKeyRef.current = refreshKey;
-
     // Show the full-screen skeleton only when there's genuinely nothing
     // cached for this day. A warm day (screen focus, implicit day-reschedule
     // after a create/edit, paging back to a visited day) updates `tasks` in
@@ -275,10 +230,18 @@ export function DayTimeline({
     const cached = getCachedDaySessions(dayKey);
     if (cached == null) setLoading(true);
 
-    // Paging back to a day fetched seconds ago: reuse the cache, no network,
-    // no skeleton — this is what removed the "swipe away, swipe back, watch it
-    // reload" flicker. Focus refetches still fall through.
-    if (cached != null && !focusChanged && isDayCacheFresh(dayKey)) {
+    // Fresh cache — no network at all, not even a quiet background
+    // revalidation. This covers both "paging back to a day fetched seconds
+    // ago" AND a plain screen-focus bump (`refreshKey` — switching tabs,
+    // coming back from a screen that didn't touch any session): freshness is
+    // the only thing that decides whether to hit the network, never focus by
+    // itself. `notifySessionsMutated` (called from every `api/tasks.ts`
+    // mutation) is what expires `isDayCacheFresh` — a real change, not a
+    // focus event, is what invalidates the cache. Without this a screen-focus
+    // alone refetched every mounted day every single time, which is both the
+    // "swipe away, swipe back, watch it reload" flicker and redundant network
+    // traffic on plain tab switches.
+    if (cached != null && isDayCacheFresh(dayKey)) {
       setSessions(cached);
       setError(false);
       setLoading(false);
@@ -572,7 +535,6 @@ export function DayTimeline({
           setSessions((prev) =>
             prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)),
           );
-          triggerRescheduleFlash(taskId);
         } catch {
           // Swallow the error — the finally below reconciles from the server.
         } finally {
@@ -629,14 +591,7 @@ export function DayTimeline({
 
       commitWithScope();
     },
-    [
-      confirm,
-      deadlineBySession,
-      refetch,
-      triggerRescheduleFlash,
-      tasks,
-      onRequestScopedUpdate,
-    ],
+    [confirm, deadlineBySession, refetch, tasks, onRequestScopedUpdate],
   );
 
   const handleDragStateChange = useCallback(
@@ -712,6 +667,17 @@ export function DayTimeline({
   const animatedContentStyle = useAnimatedStyle(() => ({
     height: baseHourHeight.value * 24,
   }));
+
+  // The orange drop-line's position — driven straight from the UI-thread
+  // `dragPreviewMinSV` (see `task-block.tsx`'s pan gesture) instead of the
+  // `dragSnap` React state, so it snaps to the finger with zero bridge
+  // latency instead of lagging a state round-trip behind. Hidden (opacity 0)
+  // while no block reports a preview slot (`-1` sentinel).
+  const dragLineStyle = useAnimatedStyle(() => {
+    const min = dragPreviewMinSV.value;
+    if (min < 0) return { opacity: 0 };
+    return { opacity: 1, top: (min / DAILY_HORIZON) * totalHeight };
+  });
 
   const nowClock = toZonedTime(now, tz);
   const nowMinutes = nowClock.getHours() * 60 + nowClock.getMinutes();
@@ -905,9 +871,12 @@ export function DayTimeline({
                       autoScrollDeltaSV={
                         !segment.continued ? autoScrollDeltaSV : undefined
                       }
+                      dragPreviewMinSV={
+                        !segment.continued ? dragPreviewMinSV : undefined
+                      }
                       onDragVerticalEdge={handleDragVerticalEdge}
                       bottomInset={tabBarOverlay}
-                      flash={segment.taskId === effectiveFlashId}
+                      flash={segment.taskId === flashSessionId}
                     />
                   );
                 })}
@@ -930,21 +899,17 @@ export function DayTimeline({
                   </View>
                 )}
 
-                {dragSnap && (
-                  <View
-                    pointerEvents="none"
-                    className="absolute left-0 right-0 z-20 border-t-2 border-dashed border-brand-orange"
-                    style={{
-                      top: (dragSnap.startMin / DAILY_HORIZON) * totalHeight,
-                    }}
-                  >
-                    <View className="absolute right-2 -translate-y-1/2 rounded-md bg-brand-orange px-1.5 py-px">
-                      <Text className="text-[10px] font-bold text-primary-foreground">
-                        {dragChipLabel}
-                      </Text>
-                    </View>
+                <Animated.View
+                  pointerEvents="none"
+                  className="absolute left-0 right-0 z-20 border-t-2 border-dashed border-brand-orange"
+                  style={dragLineStyle}
+                >
+                  <View className="absolute right-2 -translate-y-1/2 rounded-md bg-brand-orange px-1.5 py-px">
+                    <Text className="text-[10px] font-bold text-primary-foreground">
+                      {dragChipLabel}
+                    </Text>
                   </View>
-                )}
+                </Animated.View>
               </View>
             </Animated.View>
           </GestureDetector>

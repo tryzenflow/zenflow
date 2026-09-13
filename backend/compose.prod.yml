@@ -18,6 +18,8 @@ services:
         condition: service_started
       migrations:
         condition: service_completed_successfully
+      otel-collector:
+        condition: service_started
     env_file:
       - .env.prod
 
@@ -66,6 +68,166 @@ services:
     networks:
       - api
 
+  # --- Observability stack (see observability/README.md) --------------------
+  # Receives OTLP/HTTP from the API (src/tracing.ts) and the bandit service on
+  # :4318, fans traces -> Tempo, metrics -> Prometheus (scrape :8889),
+  # logs -> Loki. .env.prod must set
+  # OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318.
+  otel-collector:
+    container_name: zenflow-otel-collector-prod
+    image: otel/opentelemetry-collector-contrib:0.135.0
+    restart: unless-stopped
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./observability/otel-collector-config.yaml:/etc/otel/config.yaml:ro
+    expose:
+      - "4317"
+      - "4318"
+      - "8889"
+    networks:
+      - api
+    depends_on:
+      - tempo
+      - loki
+
+  # Traces. Metrics-generator remote-writes span metrics + the service graph
+  # into Prometheus.
+  tempo:
+    container_name: zenflow-tempo-prod
+    image: grafana/tempo:2.7.1
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ./observability/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    expose:
+      - "3200"
+    networks:
+      - api
+
+  # Logs. Fed by Alloy (container stdout) and by the collector (app OTLP logs).
+  loki:
+    container_name: zenflow-loki-prod
+    image: grafana/loki:3.3.2
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/loki-config.yaml"]
+    volumes:
+      - ./observability/loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki_data:/loki
+    expose:
+      - "3100"
+    networks:
+      - api
+
+  # Ships every container's stdout/stderr to Loki, tagged by compose service.
+  alloy:
+    container_name: zenflow-alloy-prod
+    image: grafana/alloy:v1.5.1
+    restart: unless-stopped
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy_data:/var/lib/alloy/data
+    expose:
+      - "12345"
+    networks:
+      - api
+    depends_on:
+      - loki
+
+  # Metrics. Scrapes the collector (app), node-exporter (host), cAdvisor
+  # (per-container), and accepts remote-write from Tempo.
+  prometheus:
+    container_name: zenflow-prometheus-prod
+    image: prom/prometheus:v3.1.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-remote-write-receiver
+      - --enable-feature=exemplar-storage,native-histograms
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    expose:
+      - "9090"
+    networks:
+      - api
+
+  node-exporter:
+    container_name: zenflow-node-exporter-prod
+    image: prom/node-exporter:v1.8.2
+    restart: unless-stopped
+    command:
+      - --path.rootfs=/host
+    volumes:
+      - /:/host:ro,rslave
+    expose:
+      - "9100"
+    networks:
+      - api
+
+  cadvisor:
+    container_name: zenflow-cadvisor-prod
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    expose:
+      - "8080"
+    networks:
+      - api
+
+  # Dashboards + Explore. Bound to loopback only — reach it with an SSH tunnel
+  # or put it behind Caddy with auth. Anonymous access is OFF here (unlike the
+  # standalone compose.observability.yml).
+  grafana:
+    container_name: zenflow-grafana-prod
+    image: grafana/grafana:11.4.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000}
+      GF_FEATURE_TOGGLES_ENABLE: traceqlEditor traceToMetrics
+      GF_LOG_LEVEL: warn
+      # Server-side PNG rendering (panel/report exports, alert images).
+      GF_RENDERING_SERVER_URL: http://grafana-renderer:8081/render
+      GF_RENDERING_CALLBACK_URL: http://grafana:3000/
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks:
+      - api
+    depends_on:
+      - prometheus
+      - tempo
+      - loki
+
+  grafana-renderer:
+    container_name: zenflow-grafana-renderer-prod
+    image: grafana/grafana-image-renderer:3.11.6
+    restart: unless-stopped
+    environment:
+      RENDERING_MODE: default
+    expose:
+      - "8081"
+    networks:
+      - api
+
   caddy:
     image: caddy:2.11.4
     container_name: caddy
@@ -92,3 +254,8 @@ volumes:
   caddy_data:
   caddy_config:
   uploads:
+  tempo_data:
+  loki_data:
+  alloy_data:
+  prometheus_data:
+  grafana_data:

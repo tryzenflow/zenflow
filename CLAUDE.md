@@ -10,7 +10,7 @@ product overview; this file is the conventions + "how to not break things" refer
 | Frontend (React PWA)          | `frontend/`                   | `frontend-engineer` | [frontend/README.md](frontend/README.md)                                                       |
 | Backend (NestJS API + scheduler) | `backend/`                 | `backend-engineer`  | [backend/README.md](backend/README.md)                                                         |
 | Shared types (FE/BE contract) | `packages/shared/`            | `backend-engineer`  | —                                                                                              |
-| ML / scheduling future        | `services/bandit/`, telemetry | `ml-engineer`       | [services/bandit/README.md](services/bandit/README.md), [docs/scheduler/heuristic.md](docs/scheduler/heuristic.md) |
+| ML scheduling (heuristic + LinUCB) | `services/bandit/`, telemetry | `ml-engineer`  | [services/bandit/README.md](services/bandit/README.md), [docs/scheduler/heuristic.md](docs/scheduler/heuristic.md) |
 
 Delegate area work to the matching subagent in `.claude/agents/`.
 

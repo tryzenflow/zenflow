@@ -56,7 +56,7 @@ Radix UI, Zustand, React Router 7, dnd-kit, TipTap).
    context + `rescheduleSession`/`resizeSession` API fns.
 3. New data calls go in `src/api/` returning `@zenflow/shared` types.
 4. Before finishing: `pnpm --filter frontend typecheck` and `lint`; add/adjust Playwright
-   Playwright specs in `e2e/` when behavior changes and run them; update `frontend/README.md`
-   if structure/screens/conventions changed.
+   specs in `e2e/` when behavior changes and run them; update `frontend/README.md` if
+   structure/screens/conventions changed.
 
 When a task needs an API/schema change, hand off to `backend-engineer`.

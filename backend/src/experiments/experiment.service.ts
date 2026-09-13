@@ -11,6 +11,10 @@ import {
   BANDIT_MODEL_VERSION,
 } from "../scheduler/constants";
 import { EVENT_MAP, type RecordProposalArgs } from "./experiment.types";
+import {
+  schedulerArmSelected,
+  schedulerProposals,
+} from "../observability/metrics";
 
 /**
  * A/B experiment plumbing for heuristic-vs-LinUCB scheduling
@@ -73,6 +77,14 @@ export class ExperimentService {
           sessionId: args.sessionId,
         },
       });
+
+      schedulerProposals.add(1, {
+        policy: args.primaryPolicy,
+        trigger: args.trigger,
+      });
+      if (args.selectedArm) {
+        schedulerArmSelected.add(1, { arm: args.selectedArm });
+      }
     } catch (err) {
       this.logger.warn(
         `recordProposal failed for session=${args.sessionId}: ${(err as Error).message}`,

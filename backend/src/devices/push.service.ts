@@ -7,6 +7,8 @@ import { PrismaService } from "../prisma/prisma.service";
 import { ApnsSender } from "./apns.sender";
 import { FcmSender } from "./fcm.sender";
 import type { PushMessage } from "./types";
+import { pushDevicesPruned, pushSend } from "../observability/metrics";
+import { withSpan } from "../observability/otel";
 
 /**
  * Fans every raised {@link Notification} out to the user's registered devices.
@@ -35,13 +37,18 @@ export class PushService implements OnModuleInit {
   }
 
   private async handleNewSession(row: Notification): Promise<void> {
-    try {
-      await this.sendToUser(row.userId, row);
-    } catch (err) {
-      this.logger.warn(
-        `push for notification ${row.id} failed: ${(err as Error).message}`,
-      );
-    }
+    // Fired from the notification EventEmitter via `void ...`, so there is no
+    // ambient async context — open a fresh root span (a full parent/child link
+    // back to the materializer trace would need context capture at `notify()`).
+    await withSpan("push.handleNewSession", async () => {
+      try {
+        await this.sendToUser(row.userId, row);
+      } catch (err) {
+        this.logger.warn(
+          `push for notification ${row.id} failed: ${(err as Error).message}`,
+        );
+      }
+    });
   }
 
   /**
@@ -92,6 +99,8 @@ export class PushService implements OnModuleInit {
     this.logger.log(
       `sendToUser(${userId}): fcm ${fcmRes.sent}/${android.length} ok, apns ${apnsRes.sent}/${ios.length} ok`,
     );
+    recordPushResult("fcm", android.length, fcmRes);
+    recordPushResult("apns", ios.length, apnsRes);
 
     const stale = [...fcmRes.invalidTokens, ...apnsRes.invalidTokens];
     if (stale.length > 0) {
@@ -99,6 +108,7 @@ export class PushService implements OnModuleInit {
         where: { pushToken: { in: stale } },
       });
       this.logger.log(`pruned ${count} dead device token(s)`);
+      pushDevicesPruned.add(count);
     }
   }
 
@@ -113,4 +123,19 @@ export class PushService implements OnModuleInit {
         : "/notifications",
     };
   }
+}
+
+/** Split one provider's send result into sent / failed / invalid_token counts. */
+function recordPushResult(
+  provider: "fcm" | "apns",
+  attempted: number,
+  res: { sent: number; invalidTokens: string[] },
+): void {
+  if (attempted === 0) return;
+  const invalid = res.invalidTokens.length;
+  const failed = Math.max(0, attempted - res.sent - invalid);
+  if (res.sent > 0) pushSend.add(res.sent, { provider, result: "sent" });
+  if (failed > 0) pushSend.add(failed, { provider, result: "failed" });
+  if (invalid > 0)
+    pushSend.add(invalid, { provider, result: "invalid_token" });
 }

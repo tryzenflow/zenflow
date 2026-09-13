@@ -1,6 +1,11 @@
 import { forwardRef, Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Cron, CronExpression } from "@nestjs/schedule";
+import { runCronJob } from "../observability/cron";
+import {
+  ingestionLastSuccess,
+  ingestionUpstreamItems,
+} from "../observability/metrics";
 import { IntegrationsService } from "../integrations/integrations.service";
 import { LMSService, type LmsSession } from "../lms/lms.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -66,12 +71,14 @@ export class LmsWatcherService {
     );
   }
 
-  @Cron(CronExpression.EVERY_30_MINUTES)
+  @Cron("0 */15 * * * *")
   async handleCron(): Promise<void> {
-    const count = await this.run();
-    if (count > 0) {
-      this.logger.log(`Synced the LMS calendar for ${count} student(s)`);
-    }
+    await runCronJob("lms-watcher", async () => {
+      const count = await this.run();
+      if (count > 0) {
+        this.logger.log(`Synced the LMS calendar for ${count} student(s)`);
+      }
+    });
   }
 
   /**
@@ -146,6 +153,10 @@ export class LmsWatcherService {
           statusCode: 200,
           responseBody: jobItemBody({ body: view, skipped: parsed.skipped }),
         });
+        ingestionUpstreamItems.add(1, {
+          operation: "lms_calendar",
+          status: "COMPLETED",
+        });
       } catch (error) {
         // One bad month does not abort the run: the other month may well have
         // come back fine, and the item row records exactly what went wrong.
@@ -154,6 +165,10 @@ export class LmsWatcherService {
           status: "FAILED",
           statusCode: statusCodeOf(error),
           responseBody: jobItemBody({ error: errorMessage(error) }),
+        });
+        ingestionUpstreamItems.add(1, {
+          operation: "lms_calendar",
+          status: "FAILED",
         });
         this.logger.warn(
           `LMS calendar ${year}-${month} failed for integration ` +
@@ -173,6 +188,7 @@ export class LmsWatcherService {
         now,
       );
       deleted = recon.deleted;
+      ingestionLastSuccess.record(now.getTime() / 1000, { provider: "LMS" });
     }
 
     await this.jobs.finishJob("LMS", jobId, "COMPLETED");

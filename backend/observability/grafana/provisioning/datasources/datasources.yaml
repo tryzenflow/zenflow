@@ -1,0 +1,80 @@
+apiVersion: 1
+
+# Three wired-together datasources. UIDs are fixed so the provisioned
+# dashboards can reference them directly, and so the cross-links below resolve:
+#   Loki log  --(traceId)-->  Tempo trace
+#   Tempo span --(service)-->  Loki logs  /  Prometheus RED
+#   Prometheus exemplar --(trace_id)--> Tempo trace
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      httpMethod: POST
+      timeInterval: 15s
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: tempo
+          urlDisplayLabel: View trace
+
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: -5m
+        spanEndTimeShift: 5m
+        filterByTraceID: true
+        filterBySpanID: false
+        tags:
+          - key: service.name
+            value: service
+      tracesToMetrics:
+        datasourceUid: prometheus
+        spanStartTimeShift: -5m
+        spanEndTimeShift: 5m
+        queries:
+          - name: Span request rate
+            query: sum(rate(traces_spanmetrics_calls_total{$__tags}[$__rate_interval]))
+          - name: Span p95 latency
+            query: histogram_quantile(0.95, sum(rate(traces_spanmetrics_latency_bucket{$__tags}[$__rate_interval])) by (le))
+      serviceMap:
+        datasourceUid: prometheus
+      nodeGraph:
+        enabled: true
+      lokiSearch:
+        datasourceUid: loki
+      traceQuery:
+        timeShiftEnabled: true
+        spanStartTimeShift: -5m
+        spanEndTimeShift: 5m
+
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      maxLines: 1000
+      derivedFields:
+        # traceId arrives as structured metadata from Alloy...
+        - name: TraceID
+          matcherType: label
+          matcherRegex: traceId
+          url: "$${__value.raw}"
+          datasourceUid: tempo
+          urlDisplayLabel: View trace
+        # ...and as a fallback, pull it straight out of a raw JSON line.
+        - name: TraceID (json)
+          matcherType: regex
+          matcherRegex: '"traceId":"(\w+)"'
+          url: "$${__value.raw}"
+          datasourceUid: tempo
+          urlDisplayLabel: View trace

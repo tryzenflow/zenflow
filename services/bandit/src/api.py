@@ -16,11 +16,13 @@ guards in :mod:`src.serialization`. This module is only the app and its routes.
 from __future__ import annotations
 
 import math
+import time
 
 import numpy as np
 from fastapi import FastAPI
 
 from src.models.linucb import score, update
+from src.otel import setup_otel
 from src.schemas import (
     ARM_IDS,
     ArmId,
@@ -30,8 +32,16 @@ from src.schemas import (
     UpdateResponse,
 )
 from src.serialization import all_finite, hydrate, require_422
+from src.telemetry import (
+    cold_arms,
+    predict_duration,
+    singular_matrix,
+    tracer,
+    update_duration,
+)
 
 app = FastAPI(title="Zenflow Bandit Service", version="0.1.0")
+setup_otel(app)
 
 
 @app.get("/health")
@@ -56,6 +66,7 @@ def predict(request: PredictRequest) -> PredictResponse:
         )
 
     d = len(request.contexts[0].x)
+    started = time.perf_counter()
 
     # Hydrate each arm once. A fully-empty state is "cold" -> fixed 0.0 score.
     is_cold: dict[ArmId, bool] = {}
@@ -67,18 +78,34 @@ def predict(request: PredictRequest) -> PredictResponse:
         if not cold:
             hydrated[arm] = hydrate(st, d, request.ridge)
 
-    scores: dict[str, dict[ArmId, float]] = {}
-    for ctx in request.contexts:
-        x: np.ndarray = np.asarray(ctx.x, dtype=np.float64)
-        row: dict[ArmId, float] = {}
-        for arm in ARM_IDS:
-            if is_cold[arm]:
-                row[arm] = 0.0
-            else:
-                a, b = hydrated[arm]
-                row[arm] = score(a, b, x, request.alpha)
-        scores[ctx.day] = row
+    cold_count = sum(is_cold.values())
 
+    with tracer.start_as_current_span(
+        "linucb.score_all",
+        attributes={
+            "linucb.days": len(request.contexts),
+            "linucb.dim": d,
+            "linucb.cold_arms": cold_count,
+        },
+    ):
+        scores: dict[str, dict[ArmId, float]] = {}
+        for ctx in request.contexts:
+            x: np.ndarray = np.asarray(ctx.x, dtype=np.float64)
+            row: dict[ArmId, float] = {}
+            for arm in ARM_IDS:
+                if is_cold[arm]:
+                    row[arm] = 0.0
+                else:
+                    a, b = hydrated[arm]
+                    try:
+                        row[arm] = score(a, b, x, request.alpha)
+                    except np.linalg.LinAlgError:
+                        singular_matrix.add(1, {"op": "predict"})
+                        raise
+            scores[ctx.day] = row
+
+    predict_duration.record(time.perf_counter() - started)
+    cold_arms.record(cold_count)
     return PredictResponse(scores=scores)
 
 
@@ -94,8 +121,10 @@ def update_arm(request: UpdateRequest) -> UpdateResponse:
         "state must be finite",
     )
 
+    started = time.perf_counter()
     d = len(request.x)
     x: np.ndarray = np.asarray(request.x, dtype=np.float64)
     a, b = hydrate(request.state, d, request.ridge)
     new_a, new_b = update(a, b, x, request.reward)
+    update_duration.record(time.perf_counter() - started)
     return UpdateResponse(A=new_a.reshape(-1).tolist(), b=new_b.tolist())

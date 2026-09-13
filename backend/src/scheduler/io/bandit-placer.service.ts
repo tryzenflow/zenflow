@@ -197,6 +197,7 @@ export class BanditPlacer {
           timezone,
           armScores: dayScores,
           prefMatrix: preferenceMatrix,
+          prevStartMs: task.prevStartMs,
         });
 
         if (

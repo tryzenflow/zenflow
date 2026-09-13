@@ -50,6 +50,10 @@ export function slotPreferenceScore(
   return total;
 }
 
+export function stabilityScore(prevStartMs: number, newStartMs: number) {
+  return Math.abs((newStartMs - prevStartMs) / HOUR_MS);
+}
+
 /**
  * Scan every 15-minute-aligned candidate start in `[windowStart, windowEnd)`
  * and return the free one (no overlap with `occupied`) whose start-hour has the

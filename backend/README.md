@@ -12,7 +12,7 @@ NestJS service that owns persistence, auth, file storage, and task CRUD. Part of
 | Framework            | NestJS 11 (Express platform)                                                                                                      |
 | Language             | TypeScript 5.7 (ES2023, `nodenext`)                                                                                               |
 | ORM / DB             | Prisma 6 + PostgreSQL                                                                                                             |
-| Sessions &amp; cache | Redis (`connect-redis` sessions, `@nestjs/cache-manager` + keyv)                                                                  |
+| Sessions &amp; cache | Redis via `ioredis` (custom `IoredisSessionStore` for sessions, `@nestjs/cache-manager` + keyv for cache/OTP)                     |
 | Auth                 | Passport `local` strategy used for **email OTP** (no passwords)                                                                   |
 | Scheduling/time      | `luxon`, `date-fns` / `date-fns-tz`                                                                                               |
 | Validation           | `class-validator` + `class-transformer` (global `ValidationPipe`)                                                                 |
@@ -163,7 +163,7 @@ Indexes: `[userId, deadline]`, `[userId, scheduledStartTime]`,
 | `id`                          | BigInt             | autoincrement (serialized as decimal string over the wire)    |
 | `eventType`                   | `SessionEventType` | `CREATE` \| `MOVE` \| `RESIZE` \| `RETAINED`                  |
 | `oldSnapshot` / `newSnapshot` | Json               | `{ scheduledStartTime, durationMinutes, tags }`               |
-| `rewardScore`                 | float              | Phase-3 reward signal (default 1.0)                           |
+| `rewardScore`                 | float              | LinUCB reward signal (default 1.0)                            |
 | `occurredAt`                  | DateTime           | indexed desc per user                                         |
 | `sessionId` / `userId`        | uuid               | FKs, cascade delete (`userId` denormalized for range queries) |
 
@@ -848,6 +848,31 @@ pre-flight (`TaskPlacementService.canPlaceSeries`) keep safe, not this partition
 | nightly matrix decay cron                                                           | `scheduler/io/matrix-decay.service.ts`        |
 | 50/50 policy assignment + `SlotProposal` write                                      | `experiments/experiment.service.ts`           |
 | tuning constants (`MAX_SCAN_DAYS`, `MAX_SERIES_PER_DAY`, `BANDIT_*`, reward scales) | `scheduler/constants.ts`                      |
+
+## Observability
+
+Traces, metrics and logs (issue #53). App-side instrumentation lives in
+`src/observability/` + `src/tracing.ts` (preloaded via `node --require ./dist/tracing.js`
+in `start:prod`); it is a no-op unless `OTEL_SDK_DISABLED=false`. All of it stays in
+`scheduler/io/*` and above — the `core/*` pure functions take no tracer (CLAUDE.md #2).
+
+| Signal      | Emitted by                                                              | Path to Grafana                                            |
+| ----------- | --------------------------------------------------------------------- | --------------------------------------------------------- |
+| **Traces**  | auto-instrumentations (http/express/nest/undici/pg/redis) + `withSpan()` seams (`otel.ts`) + Prisma | OTLP → OTel Collector → **Tempo**                          |
+| **Metrics** | OTel Meter instruments in `observability/metrics.ts` (HTTP RED, outbound RED, ingestion, scheduler/bandit, push, SSE) | OTLP → Collector `prometheus` exporter ← **Prometheus** scrape |
+| **Logs**    | `nestjs-pino` JSON (one line, `message` key, `traceId`/`correlationId`/`userId` mixin) | container stdout → **Alloy** → **Loki**                    |
+
+The Grafana stack (Collector, Tempo, Loki, Alloy, Prometheus, node-exporter, cAdvisor,
+Grafana) is defined in **`compose.prod.yml`** and, for local use, the standalone
+**`compose.observability.yml`**. Config + provisioned datasources + three dashboards
+(*API Overview*, *Scheduler & Bandit*, *Ingestion & Watchers*) live in
+[`observability/`](observability/README.md) — start there.
+
+```bash
+# Standalone stack, then run the API locally against it:
+docker compose -f compose.observability.yml up -d          # Grafana → :3000
+OTEL_SDK_DISABLED=false OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 pnpm start:prod
+```
 
 ## Running staging
 

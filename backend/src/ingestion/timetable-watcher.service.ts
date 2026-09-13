@@ -1,6 +1,11 @@
 import { forwardRef, Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Cron, CronExpression } from "@nestjs/schedule";
+import { runCronJob } from "../observability/cron";
+import {
+  ingestionLastSuccess,
+  ingestionUpstreamItems,
+} from "../observability/metrics";
 import { IntegrationsService } from "../integrations/integrations.service";
 import { PortalAPIService } from "../portal/portal-api.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -68,10 +73,12 @@ export class TimetableWatcherService {
 
   @Cron(CronExpression.EVERY_WEEKEND)
   async handleCron(): Promise<void> {
-    const count = await this.run();
-    if (count > 0) {
-      this.logger.log(`Synced the timetable for ${count} student(s)`);
-    }
+    await runCronJob("timetable-watcher", async () => {
+      const count = await this.run();
+      if (count > 0) {
+        this.logger.log(`Synced the timetable for ${count} student(s)`);
+      }
+    });
   }
 
   /** Sync every connected student's timetable (or just `userId`'s). */
@@ -143,12 +150,20 @@ export class TimetableWatcherService {
           statusCode: 200,
           responseBody: jobItemBody({ body: rows, skipped: parsed.skipped }),
         });
+        ingestionUpstreamItems.add(1, {
+          operation: "portal_timetable",
+          status: "COMPLETED",
+        });
       } catch (error) {
         allFetchesOk = false;
         await this.jobs.completeItem("PORTAL", itemId, {
           status: "FAILED",
           statusCode: statusCodeOf(error),
           responseBody: jobItemBody({ error: errorMessage(error) }),
+        });
+        ingestionUpstreamItems.add(1, {
+          operation: "portal_timetable",
+          status: "FAILED",
         });
         this.logger.warn(
           `Timetable week ${week} failed for integration ` +
@@ -168,6 +183,7 @@ export class TimetableWatcherService {
         now,
       );
       deleted = recon.deleted;
+      ingestionLastSuccess.record(now.getTime() / 1000, { provider: "PORTAL" });
     }
 
     await this.jobs.finishJob("PORTAL", jobId, "COMPLETED");

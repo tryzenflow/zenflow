@@ -131,7 +131,8 @@ export const MonthCell = memo(function MonthCell({
       className={cn(
         "border-b border-r border-border p-[5px] pb-[6px]",
         outside ? "bg-muted/40" : "bg-transparent",
-        isToday && "border-t-2 border-t-primary",
+        isToday &&
+          "border-t-2 border-t-orange-500 bg-orange-50 dark:bg-orange-950/20",
         (isDropTarget || isJustDropped) && "bg-primary/[0.14]",
       )}
     >

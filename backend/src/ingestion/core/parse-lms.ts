@@ -48,7 +48,7 @@ export interface MoodleCalendarEvent {
   timestart: number;
   /** Unix epoch seconds Moodle sorts by; equals `timestart` in practice. */
   timesort?: number | null;
-  location?: string | null;
+  url: string;
   description?: string | null;
   course?: MoodleCourseRef | null;
 }
@@ -198,14 +198,15 @@ export function parseMonthlyView(
       });
       continue;
     }
+    const submissionLinkHtml = `<p><a href="${event.url}">Submission Link</a></p>`;
     items.push({
       externalKey: `lms:assign:${event.instance}`,
       title: event.name,
       type: "ASSIGNMENT",
       // `timestart` IS the due instant; the block sits just before it.
       ...reminderBefore(new Date(event.timestart * 1000)),
-      location: event.location?.trim() || null,
-      note: event.description || null,
+      location: event.url.trim(),
+      note: (event.description || "") + submissionLinkHtml,
       lmsCourse: courseOf(event, courses),
     });
   }
@@ -246,8 +247,8 @@ export function parseMonthlyView(
       externalKey,
       title: quizTitle(close.name),
       type: "EXAM" as const,
-      location: close.location?.trim() || null,
-      note: null,
+      location: open?.url.trim() ?? null,
+      note: open?.url ? `<p><a href="${open?.url}">Exam Link</a></p>` : null,
       lmsCourse: courseOf(close, courses),
     };
 

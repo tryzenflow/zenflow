@@ -18,6 +18,10 @@ import type {
   ParsedLmsItem,
 } from "./core/types";
 import { NotificationsService } from "../notifications/notifications.service";
+import {
+  ingestionBlocks,
+  ingestionReconcileDeleted,
+} from "../observability/metrics";
 import { NotificationEvent } from "../notifications/types";
 
 /** Which DLU system a batch of blocks came from. */
@@ -274,6 +278,12 @@ export class MaterializerService {
       await this.announceLectureChanges(userId, source, lectureChanges, now);
     }
 
+    // `unchanged` / total ≈ how much of the run was redundant re-work (the
+    // thing a cache on this path would save). `source` is portal|lms.
+    for (const [label, n] of Object.entries(outcome)) {
+      if (n > 0) ingestionBlocks.add(n, { source, outcome: label });
+    }
+
     return outcome;
   }
 
@@ -360,6 +370,9 @@ export class MaterializerService {
         `Reconciled ${source} deletions for ${userId}: ` +
           `${removable.length} removed, ${kept.length} kept as edited`,
       );
+    }
+    if (removable.length > 0) {
+      ingestionReconcileDeleted.add(removable.length, { source });
     }
 
     return { deleted: removable.length, keptWithWarning: kept.length };

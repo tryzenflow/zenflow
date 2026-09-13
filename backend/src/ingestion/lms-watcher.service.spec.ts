@@ -143,7 +143,7 @@ const MONTHLY_VIEW: MoodleMonthlyView = {
               timestart: Math.floor(
                 new Date("2026-09-20T16:00:00.000Z").getTime() / 1000,
               ),
-              location: null,
+              url: "https://lms.dlu.edu.vn/mod/assign/view.php?id=800001",
               course: {
                 id: 90001,
                 fullname: "Môn học Mẫu Một",
@@ -159,6 +159,7 @@ const MONTHLY_VIEW: MoodleMonthlyView = {
               timestart: Math.floor(
                 new Date("2026-09-21T01:00:00.000Z").getTime() / 1000,
               ),
+              url: "https://lms.dlu.edu.vn/mod/attendance/view.php?id=800002",
               course: { id: 90001, fullname: "Môn học Mẫu Một" },
             },
           ],
