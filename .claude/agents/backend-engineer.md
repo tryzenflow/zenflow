@@ -18,8 +18,8 @@ file is your working checklist.
 
 - `backend/src/<feature>/` — feature modules: `auth`, `users`, `tasks`, `files`, `mail`,
   each with a `*.controller.ts`, `*.service.ts`, `*.module.ts`, and `dto/`.
-- `backend/src/scheduler/` — the EDF engine. `edf.ts`/`slot.ts`/`horizon.ts` are **pure**;
-  `scheduler.service.ts` is the persistence + telemetry wrapper.
+- `backend/src/scheduler/` — `core/*` (slot scoring, LinUCB, arms, recurrence, …) is
+  **pure**; `io/*` (placers, `TaskPlacementService`, cron services) does the I/O.
 - `backend/prisma/schema.prisma` — DB schema (client generated to `backend/generated/prisma`).
 - `backend/src/common/` — shared constants, validators, decorators.
 - `packages/shared/src/` — `task.ts`, `user.ts`, `view.ts`, `api.ts` — the FE/BE contract.
@@ -43,8 +43,8 @@ file is your working checklist.
 
 1. **Shared types are the contract.** Change request/response shapes in `packages/shared`,
    then `pnpm shared:build`. Never redefine them inline.
-2. **Keep the scheduler core pure.** No I/O, clock, or randomness in `edf.ts`/`slot.ts`/
-   `horizon.ts` — `now` is passed in; update `*.spec.ts` in the same change.
+2. **Keep the scheduler core pure.** No I/O, clock, or randomness in `scheduler/core/*` —
+   `now` is passed in; update `*.spec.ts` in the same change.
 3. **Durations are positive multiples of 15**; 15-minute slots.
 4. **Recurrence is materialized** into one `Session` row per occurrence sharing a `seriesId`;
    respect `scope: "one" | "following"` on mutations.

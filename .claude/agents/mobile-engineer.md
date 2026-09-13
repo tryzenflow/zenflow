@@ -87,24 +87,13 @@ before with no visible error.
    `pnpm --filter mobile format`. Update `mobile/README.md` if structure/screens/conventions
    changed, and `docs/react-native-migration.md` if it changes phase scope/status.
 4. For UI/gesture changes, verify live on a running Android emulator or iOS simulator before
-   reporting done — there is no Playwright MCP for `mobile/` (that's web-only, see
-   `frontend-engineer`/`code-reviewer`). Boot the app (`pnpm --filter mobile android` / `ios`,
-   or `dev` + press `a`/`i` in Metro), then drive it from Bash:
-   - **Android emulator:** `adb shell input tap <x> <y>`, `adb shell input swipe <x1> <y1> <x2>
-     <y2> [duration]`, `adb shell input text "<string>"`, `adb shell input keyevent <KEYCODE>`
-     (e.g. `KEYCODE_BACK`, `KEYCODE_ENTER`). Grab `adb exec-out screencap -p >
-     screenshot.png` (or `adb shell screencap -p /sdcard/s.png && adb pull /sdcard/s.png`) to
-     inspect the result. `adb logcat` for RN/native errors.
-   - **iOS simulator:** `xcrun simctl io booted screenshot screenshot.png` for a snapshot;
-     `xcrun simctl` has no direct input-injection equivalent to `adb shell input` — for taps/
-     swipes/text entry use `xcrun simctl launch --console booted <bundle-id>` plus AppleScript
-     via `osascript` targeting Simulator.app, or fall back to the Android flow above as the
-     primary verification path and treat iOS as a visual/screenshot spot-check.
-   Confirm the actual sheet-open, gesture, or form flow you changed — not just that the app
-   boots — and note in your summary which device/OS you verified on if only one was available.
-4. Commit only files under `mobile/` (+ `packages/core/` if you touched shared logic there) with
-   a Conventional Commit (`feat(mobile): …` / `fix(mobile): …`) and the required
-   Co-Authored-By trailer.
+   reporting done — there is no Playwright MCP for `mobile/` (that's web-only). Boot the app
+   (`pnpm --filter mobile android` / `ios`, or `dev` + press `a`/`i` in Metro), drive it via
+   `adb shell input tap/swipe/text/keyevent` (Android) or `xcrun simctl` (iOS, screenshot-only —
+   fall back to Android for input-driven checks), and confirm the actual flow you changed, not
+   just that the app boots. Note which device/OS you verified on.
+5. Commit only files under `mobile/` (+ `packages/core/` if touched) with a Conventional Commit
+   (`feat(mobile): …` / `fix(mobile): …`) and the required Co-Authored-By trailer.
 
 When a task needs an API/schema change, hand off to `backend-engineer`. When it's the same
 feature on the web PWA, that's `frontend-engineer`'s side — coordinate rather than porting it

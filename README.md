@@ -88,16 +88,17 @@ pnpm -r test            # run every package's tests
 
 Per-app scripts live in each app's `package.json` — see the app READMEs.
 
-## The scheduling roadmap
+## Scheduling: heuristic vs. LinUCB
 
-Zenflow's intelligence is staged. Each phase reuses the prior phase's data.
+Two policies run a live 50/50 A/B, both shipped:
 
-| Phase | Mechanism                                                                 | Status                                              |
-| ----- | ----------------------------------------------------------------------- | -------------------------------------------------- |
-| **1** | Preference heuristic — score each free slot by a per-user 7×24 time-of-day matrix (Policy A) | **Shipped** — `backend/src/scheduler` |
-| **2** | Nightly decay + move-or-keep learning writer for that matrix           | Partial — decay cron shipped; learning writer planned |
-| **3** | Per-student Disjoint LinUCB (Policy B), 50/50 A/B against Policy A       | **Shipped** — `services/bandit` + `scheduler/io`   |
-| **4** | Collaborative filtering / archetype cold-start                          | Planned                                            |
+| Policy | Mechanism                                                                       | Lives in                    |
+| ------ | -------------------------------------------------------------------------------- | ---------------------------- |
+| A — heuristic | Score each free slot against a per-user 7×24 time-of-day preference matrix, decayed nightly | `backend/src/scheduler`     |
+| B — LinUCB    | Per-student Disjoint LinUCB contextual bandit, falls back to A on error/timeout   | `services/bandit`, `scheduler/io` |
+
+Planned next: a move-or-keep learning writer for the preference matrix, and collaborative
+cold-start (archetype-seeded weights for new users).
 
 Design docs: [`docs/scheduler/heuristic.md`](docs/scheduler/heuristic.md),
 [`docs/adr/0001-linucb-model-design.md`](docs/adr/0001-linucb-model-design.md),

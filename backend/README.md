@@ -163,7 +163,7 @@ Indexes: `[userId, deadline]`, `[userId, scheduledStartTime]`,
 | `id`                          | BigInt             | autoincrement (serialized as decimal string over the wire)    |
 | `eventType`                   | `SessionEventType` | `CREATE` \| `MOVE` \| `RESIZE` \| `RETAINED`                  |
 | `oldSnapshot` / `newSnapshot` | Json               | `{ scheduledStartTime, durationMinutes, tags }`               |
-| `rewardScore`                 | float              | Phase-3 reward signal (default 1.0)                           |
+| `rewardScore`                 | float              | LinUCB reward signal (default 1.0)                            |
 | `occurredAt`                  | DateTime           | indexed desc per user                                         |
 | `sessionId` / `userId`        | uuid               | FKs, cascade delete (`userId` denormalized for range queries) |
 
