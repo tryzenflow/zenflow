@@ -7,7 +7,7 @@ import {
   InMemoryStore,
   fixedWindow as memoryFixedWindow,
 } from "@limitkit/memory";
-import type { RedisClientType } from "redis";
+import type { Redis } from "ioredis";
 import { RedisModule } from "../redis/redis.module";
 import { RATE_LIMIT_REDIS_CLIENT } from "../redis/redis.constants";
 import { setRateLimitRuntimeConfig } from "./rate-limit.constants";
@@ -44,7 +44,7 @@ const GLOBAL_NOOP_LIMIT = 1_000_000;
       inject: [ConfigService, RATE_LIMIT_REDIS_CLIENT],
       useFactory: (
         configService: ConfigService,
-        rateLimitRedisClient: RedisClientType,
+        rateLimitRedisClient: Redis,
       ) => {
         const isTest = configService.get<string>("NODE_ENV") === "test";
 

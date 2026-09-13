@@ -12,7 +12,7 @@ NestJS service that owns persistence, auth, file storage, and task CRUD. Part of
 | Framework            | NestJS 11 (Express platform)                                                                                                      |
 | Language             | TypeScript 5.7 (ES2023, `nodenext`)                                                                                               |
 | ORM / DB             | Prisma 6 + PostgreSQL                                                                                                             |
-| Sessions &amp; cache | Redis (`connect-redis` sessions, `@nestjs/cache-manager` + keyv)                                                                  |
+| Sessions &amp; cache | Redis via `ioredis` (custom `IoredisSessionStore` for sessions, `@nestjs/cache-manager` + keyv for cache/OTP)                     |
 | Auth                 | Passport `local` strategy used for **email OTP** (no passwords)                                                                   |
 | Scheduling/time      | `luxon`, `date-fns` / `date-fns-tz`                                                                                               |
 | Validation           | `class-validator` + `class-transformer` (global `ValidationPipe`)                                                                 |

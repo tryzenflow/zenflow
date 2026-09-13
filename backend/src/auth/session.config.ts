@@ -12,8 +12,9 @@ export interface SessionConfigParams {
    * request resets the cookie expiry and, in turn, the store (Redis) TTL — so
    * an actively-used session keeps getting extended and never expires mid-use.
    *
-   * `connect-redis` derives the Redis key TTL from `cookie.maxAge`, so setting
-   * `maxAge` here keeps the cookie and the Redis TTL in sync by construction.
+   * `IoredisSessionStore` derives the Redis key TTL from `cookie.expires`
+   * (set from `maxAge` by `express-session`), so setting `maxAge` here keeps
+   * the cookie and the Redis TTL in sync by construction.
    */
   ttlMs: number;
   /**
