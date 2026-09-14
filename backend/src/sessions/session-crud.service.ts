@@ -32,18 +32,7 @@ import { toSessionDto } from "./session-mapper";
 import { createEventData } from "./session-events";
 import { insertFixedSession } from "./fixed-session-writer";
 import { mapSessionPrismaError } from "./prisma-error";
-import { SeriesService } from "./series.service";
-
-/**
- * Shown when a `TASK` (or series) has no feasible slot anywhere between now
- * and its deadline — {@link SessionCrudService.create}'s pre-flight check
- * rejects the whole create with this message before inserting anything, so
- * nothing accumulates half-placed. A `"\n"` splits a short title from its
- * description — the mobile client's `splitToastMessage` renders the two
- * lines separately instead of one long wrapped, bold line.
- */
-export const NO_FEASIBLE_SLOT_MESSAGE =
-  "No open slot before the deadline\nLoosen the deadline or reduce the number of sessions, then try again.";
+import { NO_FEASIBLE_SLOT_MESSAGE, SeriesService } from "./series.service";
 
 /**
  * Plain session CRUD: `create` (dispatches by type — single `TASK`,
@@ -321,14 +310,35 @@ export class SessionCrudService {
     const where: Prisma.SessionWhereInput = { userId: user.id };
     if (q) where.title = { contains: q, mode: "insensitive" };
 
+    // Overfetch before deduping — a chatty multi-sitting TASK series can eat
+    // up the top `limit` rows with sittings that collapse to a single
+    // suggestion below, which would otherwise starve the final list. Capped
+    // so a broad title match can't force an unbounded scan.
+    const overfetch = Math.min(limit * 4, 200);
+
     const rows = await this.prisma.session.findMany({
       where,
       orderBy: { createdAt: "desc" },
       include: WITH_TAGS_AND_SERIES,
-      take: limit,
+      take: overfetch,
     });
 
-    return { suggestions: rows.map((r) => toSessionDto(r)) };
+    // Dedupe by normalized title — an autocomplete list that repeats the same
+    // title (e.g. a task re-created several times while testing, or every
+    // sitting of a multi-session series) isn't useful; show each distinct
+    // title once. Rows are already `createdAt desc`, so the first row seen
+    // per key is the most-recently-created one.
+    const seen = new Set<string>();
+    const deduped: typeof rows = [];
+    for (const row of rows) {
+      const key = row.title.trim().toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(row);
+      if (deduped.length >= limit) break;
+    }
+
+    return { suggestions: deduped.map((r) => toSessionDto(r)) };
   }
 
   async findById(id: string, user: User): Promise<SessionDetailResponse> {
