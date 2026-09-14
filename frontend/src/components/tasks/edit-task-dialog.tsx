@@ -97,6 +97,7 @@ export function EditSessionDialog({
         ...common,
         duration: task.durationMinutes,
         deadline: task.deadline ?? "",
+        sessionCount: task.sessionTotal ?? 1,
       });
     } else {
       const start = task.scheduledStartTime
@@ -128,8 +129,12 @@ export function EditSessionDialog({
       };
       if (values.type === "TASK") {
         // Duration (resize) is owned by the calendar now — the edit form only
-        // touches a TASK's deadline.
+        // touches a TASK's deadline and, now, its session count (grow/shrink
+        // the series).
         patch.deadline = values.deadline;
+        if (values.sessionCount != null) {
+          patch.sessionCount = values.sessionCount;
+        }
       } else if (values.date && values.startTime && values.endTime) {
         const [y, mo, d] = values.date.split("-").map(Number);
         const [h, mi] = values.startTime.split(":").map(Number);
@@ -285,6 +290,14 @@ export function EditSessionDialog({
           onSubmit={onSubmit}
           loading={loading}
           editing
+          editingInstance={
+            task
+              ? {
+                  scheduledStartTime: task.scheduledStartTime,
+                  durationMinutes: task.durationMinutes,
+                }
+              : undefined
+          }
           onCancel={handleClose}
           newUploadsRef={newUploadsRef}
           initialNote={task?.note ?? undefined}

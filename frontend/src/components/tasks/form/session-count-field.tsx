@@ -21,16 +21,20 @@ export function SessionCountField({
   onChange,
   deadline,
   duration,
+  from,
   disabled,
 }: {
   value: number;
   onChange: (value: number) => void;
   deadline: string | undefined;
   duration: number | undefined;
+  /** Window start for the feasible-max estimate — defaults to `now`. Edit
+   * mode passes an adjusted "now" (see `effectiveNowForSessionCountEdit`). */
+  from?: Date;
   disabled?: boolean;
 }) {
-  const feasible = maxFeasibleSessionCount(deadline, duration);
-  const days = daysUntilDeadline(deadline);
+  const feasible = maxFeasibleSessionCount(deadline, duration, from);
+  const days = daysUntilDeadline(deadline, from);
   const ceiling = feasible > 0 ? feasible : MAX_TASK_SESSION_COUNT;
   const max = Math.max(1, Math.min(ceiling, days));
 

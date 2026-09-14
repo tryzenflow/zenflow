@@ -7,6 +7,7 @@ import {
   IsISO8601,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
   ValidateIf,
@@ -14,6 +15,7 @@ import {
 import type { UpdateScope, UpdateSessionInput } from "@zenflow/shared";
 import { TIME_GRANULARITY } from "../../common/constants";
 import { IsRRule } from "../../common/validators/rrule.decorator";
+import { MAX_SESSION_COUNT } from "./create-session.dto";
 
 /**
  * Generic metadata / reschedule / resize update — one `PATCH /sessions/:id`
@@ -49,6 +51,18 @@ export class UpdateSessionDto implements UpdateSessionInput {
   @IsOptional()
   @IsISO8601()
   deadline?: string;
+
+  /**
+   * New total sitting count for a TASK series (TASK only). Raising it grows
+   * the series; lowering it shrinks it (rejected if a to-be-removed sitting
+   * already started). A plain single TASK is promoted into a series when
+   * raised above 1.
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(MAX_SESSION_COUNT)
+  sessionCount?: number;
 
   @IsOptional()
   @IsArray()
