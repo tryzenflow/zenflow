@@ -111,6 +111,19 @@ services:
     image: gcr.io/cadvisor/cadvisor:v0.49.1
     restart: unless-stopped
     privileged: true
+    # On a cgroup v2 host, cAdvisor otherwise runs in its own private cgroup
+    # namespace and can only see its own cgroup — every container_* series
+    # for sibling containers comes back empty even though the target is up.
+    #
+    # Also needs the host's Docker daemon on the classic overlay2 graphdriver,
+    # not the containerd-snapshotter image store Docker Engine defaults new
+    # installs to (`docker info` → Driver Type: io.containerd.snapshotter.v1):
+    # cAdvisor's Docker reader can't resolve a container's read-write layer
+    # under that layout ("failed to identify the read-write layer ID ...") and
+    # every container_* series comes back with no name/image label. Set
+    # `{"features": {"containerd-snapshotter": false}}` in the host's
+    # /etc/docker/daemon.json and restart dockerd if so.
+    cgroup: host
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
