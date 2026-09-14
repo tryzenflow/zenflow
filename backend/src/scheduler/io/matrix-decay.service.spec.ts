@@ -1,3 +1,4 @@
+import { Test, TestingModule } from "@nestjs/testing";
 import { PREFERENCE_MATRIX_LENGTH } from "@zenflow/shared";
 import { MatrixDecayService } from "./matrix-decay.service";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -33,6 +34,16 @@ function makePrisma(rows: UserRow[]) {
   return { prisma, updates };
 }
 
+async function makeService(prisma: PrismaService): Promise<MatrixDecayService> {
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      MatrixDecayService,
+      { provide: PrismaService, useValue: prisma },
+    ],
+  }).compile();
+  return module.get<MatrixDecayService>(MatrixDecayService);
+}
+
 describe("MatrixDecayService.decayAll", () => {
   const now = new Date("2026-06-20T03:00:00.000Z");
 
@@ -44,7 +55,7 @@ describe("MatrixDecayService.decayAll", () => {
         preferenceMatrixDecayedAt: null,
       },
     ]);
-    const svc = new MatrixDecayService(prisma);
+    const svc = await makeService(prisma);
     const count = await svc.decayAll(now);
 
     expect(count).toBe(0);
@@ -62,7 +73,7 @@ describe("MatrixDecayService.decayAll", () => {
         preferenceMatrixDecayedAt: new Date("2026-06-01T03:00:00.000Z"),
       },
     ]);
-    const svc = new MatrixDecayService(prisma);
+    const svc = await makeService(prisma);
     const count = await svc.decayAll(now);
 
     expect(count).toBe(0);
@@ -79,7 +90,7 @@ describe("MatrixDecayService.decayAll", () => {
         preferenceMatrixDecayedAt: last,
       },
     ]);
-    const svc = new MatrixDecayService(prisma);
+    const svc = await makeService(prisma);
     const count = await svc.decayAll(now);
 
     expect(count).toBe(1);
@@ -103,7 +114,7 @@ describe("MatrixDecayService.decayAll", () => {
         preferenceMatrixDecayedAt: now,
       },
     ]);
-    const svc = new MatrixDecayService(prisma);
+    const svc = await makeService(prisma);
     const count = await svc.decayAll(now);
     expect(count).toBe(0);
     expect(updates).toHaveLength(0);

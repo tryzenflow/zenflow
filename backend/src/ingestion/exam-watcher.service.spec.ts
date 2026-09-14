@@ -1,11 +1,12 @@
+import { Test, TestingModule } from "@nestjs/testing";
 import { ConfigService } from "@nestjs/config";
-import type { IntegrationsService } from "../integrations/integrations.service";
-import type { PortalAPIService } from "../portal/portal-api.service";
+import { IntegrationsService } from "../integrations/integrations.service";
+import { PortalAPIService } from "../portal/portal-api.service";
 import { PrismaService } from "../prisma/prisma.service";
 import type { PortalExamRow } from "./core/parse-portal";
 import { ExamWatcherService } from "./exam-watcher.service";
 import { IngestionJobsService } from "./ingestion-jobs.service";
-import type { MaterializerService } from "./materializer.service";
+import { MaterializerService } from "./materializer.service";
 
 // ── in-memory Prisma double (PortalAPIJob side) ────────────────────────────
 
@@ -119,7 +120,7 @@ const ENV: Record<string, unknown> = {
   INGESTION_ENABLED: true,
 };
 
-function makeWatcher(
+async function makeWatcher(
   opts: {
     env?: Record<string, unknown>;
     authenticate?: jest.Mock;
@@ -143,14 +144,27 @@ function makeWatcher(
     .mockResolvedValue({ username: "sv0001", password: "pw" });
 
   const prisma = db.client as unknown as PrismaService;
-  const service = new ExamWatcherService(
-    prisma,
-    { get: (name: string) => env[name] } as unknown as ConfigService,
-    { authenticate, fetchExams } as unknown as PortalAPIService,
-    new IngestionJobsService(prisma),
-    { materialize, reconcileDeleted } as unknown as MaterializerService,
-    { revealCredentials } as unknown as IntegrationsService,
-  );
+
+  // IngestionJobsService is the real class, wired via DI over the fake
+  // prisma double — everything else that touches the network/DLU is mocked.
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      ExamWatcherService,
+      IngestionJobsService,
+      { provide: PrismaService, useValue: prisma },
+      {
+        provide: ConfigService,
+        useValue: { get: (name: string) => env[name] },
+      },
+      { provide: PortalAPIService, useValue: { authenticate, fetchExams } },
+      {
+        provide: MaterializerService,
+        useValue: { materialize, reconcileDeleted },
+      },
+      { provide: IntegrationsService, useValue: { revealCredentials } },
+    ],
+  }).compile();
+  const service = module.get<ExamWatcherService>(ExamWatcherService);
 
   return {
     db,
@@ -164,7 +178,7 @@ function makeWatcher(
 
 describe("ExamWatcherService", () => {
   it("does nothing when INGESTION_ENABLED is off", async () => {
-    const w = makeWatcher({ env: { INGESTION_ENABLED: false } });
+    const w = await makeWatcher({ env: { INGESTION_ENABLED: false } });
 
     await expect(w.service.run(NOW)).resolves.toBe(0);
     expect(w.authenticate).not.toHaveBeenCalled();
@@ -172,7 +186,7 @@ describe("ExamWatcherService", () => {
   });
 
   it("costs exactly one request: a whole term in one response", async () => {
-    const w = makeWatcher();
+    const w = await makeWatcher();
 
     await expect(w.service.run(NOW)).resolves.toBe(1);
 
@@ -185,7 +199,7 @@ describe("ExamWatcherService", () => {
   });
 
   it("materializes the exams and records what it dropped", async () => {
-    const w = makeWatcher();
+    const w = await makeWatcher();
 
     await w.service.run(NOW);
 
@@ -213,7 +227,7 @@ describe("ExamWatcherService", () => {
     const authenticate = jest
       .fn()
       .mockResolvedValue({ ok: false, reason: "INVALID_CREDENTIALS" });
-    const w = makeWatcher({ authenticate });
+    const w = await makeWatcher({ authenticate });
 
     await w.service.run(NOW);
 
@@ -227,7 +241,7 @@ describe("ExamWatcherService", () => {
       .mockRejectedValue(
         new Error("Portal request to /api/student/exam failed (status 502)"),
       );
-    const w = makeWatcher({ fetchExams });
+    const w = await makeWatcher({ fetchExams });
 
     await w.service.run(NOW);
 
@@ -237,7 +251,7 @@ describe("ExamWatcherService", () => {
   });
 
   it("narrows to one student for the manual trigger", async () => {
-    const w = makeWatcher();
+    const w = await makeWatcher();
 
     await expect(w.service.run(NOW, "u2")).resolves.toBe(0);
     expect(w.db.jobs).toHaveLength(0);

@@ -1,10 +1,11 @@
+import { Test, TestingModule } from "@nestjs/testing";
 import { ConfigService } from "@nestjs/config";
-import type { IntegrationsService } from "../integrations/integrations.service";
-import type { PortalAPIService } from "../portal/portal-api.service";
+import { IntegrationsService } from "../integrations/integrations.service";
+import { PortalAPIService } from "../portal/portal-api.service";
 import { PrismaService } from "../prisma/prisma.service";
 import type { PortalTimetableRow } from "./core/parse-portal";
 import { IngestionJobsService } from "./ingestion-jobs.service";
-import type { MaterializerService } from "./materializer.service";
+import { MaterializerService } from "./materializer.service";
 import { TimetableWatcherService } from "./timetable-watcher.service";
 
 // ── in-memory Prisma double (PortalAPIJob side) ────────────────────────────
@@ -154,7 +155,7 @@ const ENV: Record<string, unknown> = {
   INGESTION_REQUEST_DELAY_MS: 0,
 };
 
-function makeWatcher(
+async function makeWatcher(
   opts: {
     env?: Record<string, unknown>;
     authenticate?: jest.Mock;
@@ -184,14 +185,27 @@ function makeWatcher(
     .mockResolvedValue({ username: "sv0001", password: "pw" });
 
   const prisma = db.client as unknown as PrismaService;
-  const service = new TimetableWatcherService(
-    prisma,
-    { get: (name: string) => env[name] } as unknown as ConfigService,
-    { authenticate, fetchTimetable } as unknown as PortalAPIService,
-    new IngestionJobsService(prisma),
-    { materialize, reconcileDeleted } as unknown as MaterializerService,
-    { revealCredentials } as unknown as IntegrationsService,
-  );
+
+  // IngestionJobsService is the real class, wired via DI over the fake
+  // prisma double — everything else that touches the network/DLU is mocked.
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      TimetableWatcherService,
+      IngestionJobsService,
+      { provide: PrismaService, useValue: prisma },
+      {
+        provide: ConfigService,
+        useValue: { get: (name: string) => env[name] },
+      },
+      { provide: PortalAPIService, useValue: { authenticate, fetchTimetable } },
+      {
+        provide: MaterializerService,
+        useValue: { materialize, reconcileDeleted },
+      },
+      { provide: IntegrationsService, useValue: { revealCredentials } },
+    ],
+  }).compile();
+  const service = module.get<TimetableWatcherService>(TimetableWatcherService);
 
   return {
     db,
@@ -205,7 +219,7 @@ function makeWatcher(
 
 describe("TimetableWatcherService", () => {
   it("does nothing when INGESTION_ENABLED is off", async () => {
-    const w = makeWatcher({ env: { INGESTION_ENABLED: false } });
+    const w = await makeWatcher({ env: { INGESTION_ENABLED: false } });
 
     await expect(w.service.run(NOW)).resolves.toBe(0);
     expect(w.authenticate).not.toHaveBeenCalled();
@@ -213,7 +227,7 @@ describe("TimetableWatcherService", () => {
   });
 
   it("resolves the term and asks for every week left in it", async () => {
-    const w = makeWatcher();
+    const w = await makeWatcher();
 
     await expect(w.service.run(NOW)).resolves.toBe(1);
 
@@ -225,7 +239,7 @@ describe("TimetableWatcherService", () => {
   });
 
   it("does not look back at weeks the student has already lived through", async () => {
-    const w = makeWatcher();
+    const w = await makeWatcher();
 
     // Sunday 25 Oct 2026 — week 43 is nearly over, but the portal answers per
     // week, so the current week is still fetched whole; 34–42 are not.
@@ -237,7 +251,7 @@ describe("TimetableWatcherService", () => {
   });
 
   it("starts at the new term's opening week once the lookahead rolls over", async () => {
-    const w = makeWatcher();
+    const w = await makeWatcher();
 
     // Sunday 20 Dec 2026: HK01 has days left, but HK02 opens within the
     // two-week lookahead, so the sweep jumps to HK02's first week (53) rather
@@ -256,7 +270,7 @@ describe("TimetableWatcherService", () => {
   });
 
   it("walks the portal job through its lifecycle", async () => {
-    const w = makeWatcher();
+    const w = await makeWatcher();
 
     await w.service.run(NOW);
 
@@ -267,7 +281,7 @@ describe("TimetableWatcherService", () => {
   });
 
   it("materializes the parsed meetings as PORTAL-sourced", async () => {
-    const w = makeWatcher();
+    const w = await makeWatcher();
 
     await w.service.run(NOW);
 
@@ -288,7 +302,7 @@ describe("TimetableWatcherService", () => {
   });
 
   it("keeps the parser's skip reasons on the job item", async () => {
-    const w = makeWatcher();
+    const w = await makeWatcher();
 
     await w.service.run(NOW);
 
@@ -301,7 +315,7 @@ describe("TimetableWatcherService", () => {
   });
 
   it("upserts the section catalog", async () => {
-    const w = makeWatcher();
+    const w = await makeWatcher();
 
     await w.service.run(NOW);
 
@@ -320,7 +334,7 @@ describe("TimetableWatcherService", () => {
     const authenticate = jest
       .fn()
       .mockResolvedValue({ ok: false, reason: "INVALID_CREDENTIALS" });
-    const w = makeWatcher({ authenticate });
+    const w = await makeWatcher({ authenticate });
 
     await w.service.run(NOW);
 
@@ -335,7 +349,7 @@ describe("TimetableWatcherService", () => {
         new Error("Portal request to /api/student/x failed (status 500)"),
       )
       .mockResolvedValue(TIMETABLE_ROWS);
-    const w = makeWatcher({ fetchTimetable });
+    const w = await makeWatcher({ fetchTimetable });
 
     await w.service.run(NOW);
 

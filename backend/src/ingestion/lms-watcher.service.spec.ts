@@ -1,12 +1,13 @@
+import { Test, TestingModule } from "@nestjs/testing";
 import { ConfigService } from "@nestjs/config";
-import type { IntegrationsService } from "../integrations/integrations.service";
-import type { LMSService } from "../lms/lms.service";
-import type { NotificationsService } from "../notifications/notifications.service";
+import { IntegrationsService } from "../integrations/integrations.service";
+import { LMSService } from "../lms/lms.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import type { MoodleMonthlyView } from "./core/parse-lms";
 import { IngestionJobsService } from "./ingestion-jobs.service";
 import { LmsWatcherService } from "./lms-watcher.service";
-import type { MaterializerService } from "./materializer.service";
+import { MaterializerService } from "./materializer.service";
 
 // ── in-memory Prisma double ────────────────────────────────────────────────
 
@@ -176,7 +177,7 @@ const ENV: Record<string, unknown> = {
   INGESTION_REQUEST_DELAY_MS: 0,
 };
 
-function makeWatcher(
+async function makeWatcher(
   opts: {
     integrations?: { id: string; userId: string; timezone: string }[];
     env?: Record<string, unknown>;
@@ -210,15 +211,31 @@ function makeWatcher(
     .mockResolvedValue({ username: "sv0001", password: "pw" });
 
   const prisma = db.client as unknown as PrismaService;
-  const service = new LmsWatcherService(
-    prisma,
-    { get: (name: string) => env[name] } as unknown as ConfigService,
-    { login, fetchMonthlyView } as unknown as LMSService,
-    new IngestionJobsService(prisma),
-    { materialize, reconcileDeleted } as unknown as MaterializerService,
-    { notify: jest.fn(), create: jest.fn() } as unknown as NotificationsService,
-    { revealCredentials } as unknown as IntegrationsService,
-  );
+
+  // IngestionJobsService is the real class, wired via DI over the fake
+  // prisma double — everything else that touches the network/DLU is mocked.
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      LmsWatcherService,
+      IngestionJobsService,
+      { provide: PrismaService, useValue: prisma },
+      {
+        provide: ConfigService,
+        useValue: { get: (name: string) => env[name] },
+      },
+      { provide: LMSService, useValue: { login, fetchMonthlyView } },
+      {
+        provide: MaterializerService,
+        useValue: { materialize, reconcileDeleted },
+      },
+      {
+        provide: NotificationsService,
+        useValue: { notify: jest.fn(), create: jest.fn() },
+      },
+      { provide: IntegrationsService, useValue: { revealCredentials } },
+    ],
+  }).compile();
+  const service = module.get<LmsWatcherService>(LmsWatcherService);
 
   return {
     db,
@@ -234,7 +251,7 @@ function makeWatcher(
 describe("LmsWatcherService", () => {
   describe("the INGESTION_ENABLED gate", () => {
     it("does nothing at all when the kill switch is off", async () => {
-      const w = makeWatcher({ env: { INGESTION_ENABLED: false } });
+      const w = await makeWatcher({ env: { INGESTION_ENABLED: false } });
 
       await expect(w.service.run(NOW)).resolves.toBe(0);
 
@@ -244,7 +261,7 @@ describe("LmsWatcherService", () => {
     });
 
     it("honours the string form the raw env hands back", async () => {
-      const w = makeWatcher({ env: { INGESTION_ENABLED: "false" } });
+      const w = await makeWatcher({ env: { INGESTION_ENABLED: "false" } });
 
       await expect(w.service.run(NOW)).resolves.toBe(0);
       expect(w.db.jobs).toHaveLength(0);
@@ -253,7 +270,7 @@ describe("LmsWatcherService", () => {
 
   describe("a healthy run", () => {
     it("logs in once and fetches the current month and the next", async () => {
-      const w = makeWatcher();
+      const w = await makeWatcher();
 
       await expect(w.service.run(NOW)).resolves.toBe(1);
 
@@ -269,7 +286,7 @@ describe("LmsWatcherService", () => {
     });
 
     it("walks the job through PENDING, PROCESSING and COMPLETED", async () => {
-      const w = makeWatcher();
+      const w = await makeWatcher();
 
       await w.service.run(NOW);
 
@@ -281,7 +298,7 @@ describe("LmsWatcherService", () => {
     });
 
     it("records one item per request, with its url and raw body", async () => {
-      const w = makeWatcher();
+      const w = await makeWatcher();
 
       await w.service.run(NOW);
 
@@ -302,7 +319,7 @@ describe("LmsWatcherService", () => {
     });
 
     it("hands the parsed blocks to the materializer as LMS-sourced", async () => {
-      const w = makeWatcher();
+      const w = await makeWatcher();
 
       await w.service.run(NOW);
 
@@ -323,7 +340,7 @@ describe("LmsWatcherService", () => {
     });
 
     it("upserts the courses the calendar mentioned", async () => {
-      const w = makeWatcher();
+      const w = await makeWatcher();
 
       await w.service.run(NOW);
 
@@ -343,7 +360,7 @@ describe("LmsWatcherService", () => {
         .mockRejectedValueOnce(
           new Error("LMS calendar request failed (status 503)"),
         );
-      const w = makeWatcher({ fetchMonthlyView });
+      const w = await makeWatcher({ fetchMonthlyView });
 
       await w.service.run(NOW);
 
@@ -362,7 +379,7 @@ describe("LmsWatcherService", () => {
       const login = jest
         .fn()
         .mockResolvedValue({ ok: false, reason: "INVALID_CREDENTIALS" });
-      const w = makeWatcher({ login });
+      const w = await makeWatcher({ login });
 
       await w.service.run(NOW);
 
@@ -375,7 +392,7 @@ describe("LmsWatcherService", () => {
       const login = jest
         .fn()
         .mockRejectedValue(new Error("DLU LMS is unreachable"));
-      const w = makeWatcher({ login });
+      const w = await makeWatcher({ login });
 
       await w.service.run(NOW);
 
@@ -391,7 +408,7 @@ describe("LmsWatcherService", () => {
           ok: true,
           session: { cookie: "MoodleSession=x", sesskey: "TESTSESSKEY" },
         });
-      const w = makeWatcher({
+      const w = await makeWatcher({
         login,
         integrations: [
           { id: "int-1", userId: "u1", timezone: "Asia/Ho_Chi_Minh" },
@@ -407,7 +424,7 @@ describe("LmsWatcherService", () => {
 
   describe("the manual trigger", () => {
     it("narrows the sweep to one student", async () => {
-      const w = makeWatcher({
+      const w = await makeWatcher({
         integrations: [
           { id: "int-1", userId: "u1", timezone: "Asia/Ho_Chi_Minh" },
           { id: "int-2", userId: "u2", timezone: "Asia/Ho_Chi_Minh" },

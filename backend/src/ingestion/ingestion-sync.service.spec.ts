@@ -1,11 +1,18 @@
-import type { ExamWatcherService } from "./exam-watcher.service";
+import { Test, TestingModule } from "@nestjs/testing";
+// `IngestionSyncService` must be imported before `ExamWatcherService` here:
+// exam-watcher.service.ts -> integrations.service.ts -> ingestion-sync.service.ts
+// is a real circular import (the IntegrationsModule <-> IngestionModule cycle
+// documented on IngestionSyncService), and starting the module graph from
+// ExamWatcherService instead makes `ExamWatcherService` still-undefined when
+// IngestionSyncService's own `design:paramtypes` decorator metadata runs.
 import { IngestionSyncService } from "./ingestion-sync.service";
-import type { LmsWatcherService } from "./lms-watcher.service";
-import type { TimetableWatcherService } from "./timetable-watcher.service";
+import { ExamWatcherService } from "./exam-watcher.service";
+import { LmsWatcherService } from "./lms-watcher.service";
+import { TimetableWatcherService } from "./timetable-watcher.service";
 
 const NOW = new Date("2026-09-06T04:00:00.000Z");
 
-function makeService() {
+async function makeService() {
   const order: string[] = [];
   const lms = jest.fn(() => {
     order.push("lms");
@@ -20,18 +27,22 @@ function makeService() {
     return Promise.resolve(1);
   });
 
-  const service = new IngestionSyncService(
-    { run: lms } as unknown as LmsWatcherService,
-    { run: timetable } as unknown as TimetableWatcherService,
-    { run: exam } as unknown as ExamWatcherService,
-  );
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      IngestionSyncService,
+      { provide: LmsWatcherService, useValue: { run: lms } },
+      { provide: TimetableWatcherService, useValue: { run: timetable } },
+      { provide: ExamWatcherService, useValue: { run: exam } },
+    ],
+  }).compile();
+  const service = module.get<IngestionSyncService>(IngestionSyncService);
 
   return { service, lms, timetable, exam, order };
 }
 
 describe("IngestionSyncService", () => {
   it("runs only the LMS watcher for LMS, narrowed to the caller", async () => {
-    const s = makeService();
+    const s = await makeService();
 
     await s.service.syncNow("u1", "LMS", NOW);
 
@@ -41,7 +52,7 @@ describe("IngestionSyncService", () => {
   });
 
   it("runs both portal watchers, one after the other", async () => {
-    const s = makeService();
+    const s = await makeService();
 
     await s.service.syncNow("u1", "PORTAL", NOW);
 
@@ -52,7 +63,7 @@ describe("IngestionSyncService", () => {
   });
 
   it("resolves only once the run is done, so the status can be re-read", async () => {
-    const s = makeService();
+    const s = await makeService();
     let settled = false;
     s.exam.mockImplementation(
       () =>

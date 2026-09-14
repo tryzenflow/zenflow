@@ -1,4 +1,5 @@
-import type { ConfigService } from "@nestjs/config";
+import { Test, TestingModule } from "@nestjs/testing";
+import { ConfigService } from "@nestjs/config";
 import { Prisma } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
 import { MaterializerService } from "./materializer.service";
@@ -234,23 +235,26 @@ function block(over: Partial<ParsedBlock> = {}): ParsedBlock {
   };
 }
 
-function makeService() {
+async function makeService() {
   const db = makePrismaDouble();
   const prisma = db.client as unknown as PrismaService;
-  const tagsService = new TagsService(prisma);
-  // The real service — its `create` writes through the same `notification`
-  // double, and `notify` just emits on an in-process EventEmitter2 nobody
-  // here listens to.
-  const notifications = new NotificationsService(prisma);
   const config = {
     get: (name: string) => (name === "DLU_TZ" ? "Asia/Ho_Chi_Minh" : undefined),
   } as unknown as ConfigService;
-  const service = new MaterializerService(
-    prisma,
-    tagsService,
-    notifications,
-    config,
-  );
+
+  // TagsService and NotificationsService are the real classes, wired via
+  // Nest's DI container over the fake prisma double — their `create` writes
+  // go through the same `notification`/`tag` tables the assertions read.
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      MaterializerService,
+      TagsService,
+      NotificationsService,
+      { provide: PrismaService, useValue: prisma },
+      { provide: ConfigService, useValue: config },
+    ],
+  }).compile();
+  const service = module.get<MaterializerService>(MaterializerService);
   return { db, service };
 }
 
@@ -272,7 +276,7 @@ const IN_TERM = new Date("2026-09-08T00:00:00.000Z");
 describe("MaterializerService", () => {
   describe("create", () => {
     it("writes the session, its CREATE event and one notification", async () => {
-      const { db, service } = makeService();
+      const { db, service } = await makeService();
 
       const outcome = await service.materialize(USER, [block()], "LMS");
 
@@ -302,7 +306,7 @@ describe("MaterializerService", () => {
     });
 
     it("tags the session with the LMS course's full name", async () => {
-      const { db, service } = makeService();
+      const { db, service } = await makeService();
 
       const lmsItem: ParsedLmsItem = {
         ...block({ externalKey: "lms:assign:800009" }),
@@ -322,7 +326,7 @@ describe("MaterializerService", () => {
     });
 
     it("adds no tag when the LMS item carries no course", async () => {
-      const { db, service } = makeService();
+      const { db, service } = await makeService();
 
       const lmsItem: ParsedLmsItem = {
         ...block({ externalKey: "lms:assign:800010" }),
@@ -336,7 +340,7 @@ describe("MaterializerService", () => {
     });
 
     it("writes the room to the location column and leaves the note untouched", async () => {
-      const { db, service } = makeService();
+      const { db, service } = await makeService();
 
       await service.materialize(
         USER,
@@ -356,7 +360,7 @@ describe("MaterializerService", () => {
     });
 
     it("maps EXAM and LECTURE onto their notification topics", async () => {
-      const { db, service } = makeService();
+      const { db, service } = await makeService();
 
       await service.materialize(
         USER,
@@ -374,7 +378,7 @@ describe("MaterializerService", () => {
     });
 
     it("treats a P2002 race as a no-op rather than an error", async () => {
-      const { db, service } = makeService();
+      const { db, service } = await makeService();
       // Pretend a concurrent run inserted the row between our findUnique and
       // our create: the double rejects the second insert with P2002.
       db.sessions.push({
@@ -410,7 +414,7 @@ describe("MaterializerService", () => {
 
   describe("idempotency", () => {
     it("is a no-op on a re-run: one session, one notification", async () => {
-      const { db, service } = makeService();
+      const { db, service } = await makeService();
       const items = [block()];
 
       const first = await service.materialize(USER, items, "LMS");
@@ -431,7 +435,7 @@ describe("MaterializerService", () => {
 
   describe("upstream change", () => {
     it("follows a move on a session the student has never touched", async () => {
-      const { db, service } = makeService();
+      const { db, service } = await makeService();
       await service.materialize(USER, [block()], "LMS");
 
       const moved = block({
@@ -452,7 +456,7 @@ describe("MaterializerService", () => {
     });
 
     it("settles down: the run after an upstream change is unchanged again", async () => {
-      const { db, service } = makeService();
+      const { db, service } = await makeService();
       await service.materialize(USER, [block()], "LMS");
       const moved = block({
         scheduledStartTime: new Date("2026-09-11T03:00:00.000Z"),
@@ -466,7 +470,7 @@ describe("MaterializerService", () => {
     });
 
     it("notices a title-only change", async () => {
-      const { db, service } = makeService();
+      const { db, service } = await makeService();
       await service.materialize(USER, [block()], "LMS");
 
       const outcome = await service.materialize(
@@ -484,7 +488,7 @@ describe("MaterializerService", () => {
 
   describe("don't clobber a student's edit", () => {
     it("leaves a moved session alone and raises a TIMETABLE notification", async () => {
-      const { db, service } = makeService();
+      const { db, service } = await makeService();
       await service.materialize(USER, [block()], "LMS");
       // The student dragged it, so the row carries their fingerprint.
       db.sessions[0].lastMovedAt = new Date("2026-09-08T12:00:00.000Z");
@@ -515,7 +519,7 @@ describe("MaterializerService", () => {
     });
 
     it("does not re-raise the same warning on every tick", async () => {
-      const { db, service } = makeService();
+      const { db, service } = await makeService();
       await service.materialize(USER, [block()], "LMS");
       db.sessions[0].lastMovedAt = new Date("2026-09-08T12:00:00.000Z");
       db.sessions[0].scheduledStartTime = new Date("2026-09-09T01:00:00.000Z");
@@ -531,7 +535,7 @@ describe("MaterializerService", () => {
     });
 
     it("does speak up when upstream moves again", async () => {
-      const { db, service } = makeService();
+      const { db, service } = await makeService();
       await service.materialize(USER, [block()], "LMS");
       db.sessions[0].lastMovedAt = new Date("2026-09-08T12:00:00.000Z");
 
@@ -562,7 +566,7 @@ describe("MaterializerService", () => {
       );
 
     it("folds a whole term's lectures into one 'timetable is available' row", async () => {
-      const { db, service } = makeService();
+      const { db, service } = await makeService();
 
       const outcome = await service.materialize(
         USER,
@@ -587,7 +591,7 @@ describe("MaterializerService", () => {
     });
 
     it("lists the class names for a small mid-term addition", async () => {
-      const { db, service } = makeService();
+      const { db, service } = await makeService();
 
       await service.materialize(
         USER,
@@ -605,7 +609,7 @@ describe("MaterializerService", () => {
     });
 
     it("announces the term only once across the run's many weekly batches", async () => {
-      const { db, service } = makeService();
+      const { db, service } = await makeService();
 
       // Week one crosses the threshold; later weeks must stay quiet.
       await service.materialize(USER, many(10), "PORTAL", IN_TERM);
@@ -626,7 +630,7 @@ describe("MaterializerService", () => {
     });
 
     it("stays quiet on a re-run of the same batch", async () => {
-      const { db, service } = makeService();
+      const { db, service } = await makeService();
       const items = many(12);
 
       await service.materialize(USER, items, "PORTAL", IN_TERM);
@@ -636,7 +640,7 @@ describe("MaterializerService", () => {
     });
 
     it("still raises one notification per assignment (those are actionable)", async () => {
-      const { db, service } = makeService();
+      const { db, service } = await makeService();
 
       await service.materialize(
         USER,
@@ -660,7 +664,7 @@ describe("MaterializerService", () => {
 
   describe("upstream deletion", () => {
     it("retires an ingested session upstream no longer lists", async () => {
-      const { db, service } = makeService();
+      const { db, service } = await makeService();
       await service.materialize(
         USER,
         [
@@ -692,7 +696,7 @@ describe("MaterializerService", () => {
     });
 
     it("keeps — and warns about — a session the student had hand-moved", async () => {
-      const { db, service } = makeService();
+      const { db, service } = await makeService();
       await service.materialize(
         USER,
         [lecture({ externalKey: "portal:meeting:81001", title: "Mine now" })],
@@ -717,7 +721,7 @@ describe("MaterializerService", () => {
     });
 
     it("is a no-op on a settled re-run", async () => {
-      const { db, service } = makeService();
+      const { db, service } = await makeService();
       await service.materialize(
         USER,
         [lecture({ externalKey: "portal:meeting:82001" })],
@@ -746,7 +750,7 @@ describe("MaterializerService", () => {
     });
 
     it("leaves sessions outside the run's forward window alone", async () => {
-      const { db, service } = makeService();
+      const { db, service } = await makeService();
       await service.materialize(
         USER,
         [
@@ -773,7 +777,7 @@ describe("MaterializerService", () => {
     });
 
     it("groups a bulk timetable removal", async () => {
-      const { db, service } = makeService();
+      const { db, service } = await makeService();
       const items = Array.from({ length: 11 }, (_, i) =>
         lecture({
           externalKey: `portal:meeting:8400${i}`,

@@ -1,20 +1,19 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return */
-import { AuthService } from "./auth.service";
+import { Test, TestingModule } from "@nestjs/testing";
+import { CACHE_MANAGER } from "@nestjs/cache-manager";
+import {
+  BadRequestException,
+  InternalServerErrorException,
+  NotFoundException,
+} from "@nestjs/common";
 import type { User } from "../../generated/prisma";
+import { AuthService } from "./auth.service";
+import { UsersService } from "../users/users.service";
+import { MailService } from "../mail/mail.service";
 
-/**
- * Focused coverage for `AuthService.createUserIfNotExists`'s new-user seeding:
- * a brand-new signup gets 4 default recurring DND blocks (breakfast, lunch,
- * evening chill/dinner, sleep) via `SessionsService.create`; an existing user
- * logging back in gets none (re)created; and a seeding failure never bubbles
- * up past `createUserIfNotExists` (best-effort, per CLAUDE.md invariant on
- * OTP/session flows never breaking on non-critical side effects).
- */
-
-const newUser: User = {
-  id: "user-1",
-  name: "New User",
-  email: "new@example.com",
+const existingUser: User = {
+  id: "user-existing",
+  name: "Existing User",
+  email: "existing@example.com",
   timezone: "UTC",
   lang: "EN_US",
   preferenceMatrix: [],
@@ -23,113 +22,114 @@ const newUser: User = {
   updatedAt: new Date("2026-09-05T00:00:00.000Z"),
 } as unknown as User;
 
-function makeService(overrides?: {
-  findByEmail?: jest.Mock;
-  create?: jest.Mock;
-  sessionsCreate?: jest.Mock;
-}) {
-  const usersService = {
-    findByEmail: overrides?.findByEmail ?? jest.fn().mockResolvedValue(null),
-    create: overrides?.create ?? jest.fn().mockResolvedValue(newUser),
-  };
-  const mailService = { sendLoginEmail: jest.fn() };
-  const sessionsService = {
-    create: overrides?.sessionsCreate ?? jest.fn().mockResolvedValue({}),
-  };
-  const cacheManager = { set: jest.fn(), get: jest.fn(), del: jest.fn() };
+describe("AuthService", () => {
+  let service: AuthService;
+  let cacheManager: { get: jest.Mock; set: jest.Mock; del: jest.Mock };
+  let usersService: { findByEmail: jest.Mock; create: jest.Mock };
+  let mailService: { sendLoginEmail: jest.Mock };
 
-  const service = new AuthService(
-    cacheManager as never,
-    usersService as never,
-    mailService as never,
-    sessionsService as never,
-  );
-  return { service, usersService, mailService, sessionsService };
-}
+  beforeEach(async () => {
+    cacheManager = { get: jest.fn(), set: jest.fn(), del: jest.fn() };
+    usersService = {
+      findByEmail: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockResolvedValue(existingUser),
+    };
+    mailService = { sendLoginEmail: jest.fn().mockResolvedValue(undefined) };
 
-describe("AuthService.createUserIfNotExists", () => {
-  beforeEach(() => {
-    // `seedDefaultDndBlocks` anchors "today" off the real clock — freeze it
-    // so the expected ISO instants below are deterministic regardless of
-    // when the suite actually runs.
-    jest.useFakeTimers().setSystemTime(new Date("2026-09-05T12:00:00.000Z"));
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        { provide: CACHE_MANAGER, useValue: cacheManager },
+        { provide: UsersService, useValue: usersService },
+        { provide: MailService, useValue: mailService },
+      ],
+    }).compile();
+
+    service = module.get<AuthService>(AuthService);
   });
 
-  afterEach(() => {
-    jest.useRealTimers();
-  });
+  describe("requestOTPCode", () => {
+    it("caches the generated OTP and emails it to the given address", async () => {
+      await service.requestOTPCode("new@example.com");
 
-  it("seeds exactly 4 default DND blocks with the right times/rrule for a brand-new user", async () => {
-    const { service, sessionsService } = makeService();
-
-    const result = await service.createUserIfNotExists(
-      "new@example.com",
-      "UTC",
-    );
-
-    expect(result).toBe(newUser);
-    expect(sessionsService.create).toHaveBeenCalledTimes(4);
-
-    const calls = sessionsService.create.mock.calls.map((c) => c[0]);
-    expect(calls.every((dto) => dto.type === "DND")).toBe(true);
-    expect(calls.every((dto) => dto.rrule === "FREQ=DAILY")).toBe(true);
-    expect(
-      sessionsService.create.mock.calls.every((c) => c[1] === newUser),
-    ).toBe(true);
-
-    expect(calls).toEqual([
-      expect.objectContaining({
-        title: "Breakfast",
-        durationMinutes: 60,
-        scheduledStartTime: "2026-09-05T06:00:00.000Z",
-      }),
-      expect.objectContaining({
-        title: "Lunch & rest",
-        durationMinutes: 120,
-        scheduledStartTime: "2026-09-05T11:00:00.000Z",
-      }),
-      expect.objectContaining({
-        title: "Evening chill & dinner",
-        durationMinutes: 120,
-        scheduledStartTime: "2026-09-05T17:00:00.000Z",
-      }),
-      expect.objectContaining({
-        title: "Sleep",
-        durationMinutes: 480,
-        scheduledStartTime: "2026-09-05T22:00:00.000Z",
-      }),
-    ]);
-  });
-
-  it("does NOT (re)create any sessions for an existing user logging in again", async () => {
-    const existing = { ...newUser, id: "user-existing" };
-    const { service, sessionsService, usersService } = makeService({
-      findByEmail: jest.fn().mockResolvedValue(existing),
+      expect(cacheManager.set).toHaveBeenCalledWith(
+        "otp:new@example.com",
+        expect.any(String),
+      );
+      const [, cachedOtp] = cacheManager.set.mock.calls[0] as [string, string];
+      expect(mailService.sendLoginEmail).toHaveBeenCalledWith(
+        "new@example.com",
+        cachedOtp,
+      );
     });
 
-    const result = await service.createUserIfNotExists(
-      "existing@example.com",
-      "UTC",
-    );
+    it("wraps a mail delivery failure in an InternalServerErrorException", async () => {
+      mailService.sendLoginEmail.mockRejectedValue(new Error("ECONNREFUSED"));
 
-    expect(result).toBe(existing);
-    expect(usersService.create).not.toHaveBeenCalled();
-    expect(sessionsService.create).not.toHaveBeenCalled();
+      await expect(service.requestOTPCode("new@example.com")).rejects.toThrow(
+        InternalServerErrorException,
+      );
+    });
   });
 
-  it("still returns the created user when seeding throws — signup is never broken by a seeding failure", async () => {
-    const { service, sessionsService } = makeService({
-      sessionsCreate: jest.fn().mockRejectedValue(new Error("boom")),
+  describe("createUserIfNotExists", () => {
+    it("creates a new user when none exists for the email", async () => {
+      const result = await service.createUserIfNotExists(
+        "new@example.com",
+        "UTC",
+      );
+
+      expect(usersService.create).toHaveBeenCalledWith({
+        email: "new@example.com",
+        timezone: "UTC",
+      });
+      expect(result).toBe(existingUser);
     });
 
-    const result = await service.createUserIfNotExists(
-      "new@example.com",
-      "UTC",
-    );
+    it("returns the existing user without creating one when the email is already registered", async () => {
+      usersService.findByEmail.mockResolvedValue(existingUser);
 
-    expect(result).toBe(newUser);
-    // All 4 blocks are attempted independently — one failing doesn't stop
-    // the others.
-    expect(sessionsService.create).toHaveBeenCalledTimes(4);
+      const result = await service.createUserIfNotExists(
+        "existing@example.com",
+        "UTC",
+      );
+
+      expect(result).toBe(existingUser);
+      expect(usersService.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("verifyOTPCode", () => {
+    it("clears the cached OTP on a correct code", async () => {
+      cacheManager.get.mockResolvedValue("123456");
+
+      await service.verifyOTPCode("a@example.com", "123456");
+
+      expect(cacheManager.del).toHaveBeenCalledWith("otp:a@example.com");
+    });
+
+    it("throws NotFoundException when no OTP is cached (missing/expired)", async () => {
+      cacheManager.get.mockResolvedValue(null);
+
+      await expect(
+        service.verifyOTPCode("a@example.com", "123456"),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it("throws BadRequestException on a mismatched code", async () => {
+      cacheManager.get.mockResolvedValue("123456");
+
+      await expect(
+        service.verifyOTPCode("a@example.com", "000000"),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it("wraps an unexpected cache failure in an InternalServerErrorException", async () => {
+      cacheManager.get.mockRejectedValue(new Error("Redis down"));
+
+      await expect(
+        service.verifyOTPCode("a@example.com", "123456"),
+      ).rejects.toThrow(InternalServerErrorException);
+    });
   });
 });

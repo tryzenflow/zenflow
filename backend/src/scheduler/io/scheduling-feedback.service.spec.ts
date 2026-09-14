@@ -1,4 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
+import { Test, TestingModule } from "@nestjs/testing";
+import { PrismaService } from "../../prisma/prisma.service";
+import { BanditArmStateRepository } from "../../bandit/bandit-arm-state.repository";
+import { BanditService } from "../../bandit/bandit.service";
 import { SchedulingFeedbackService } from "./scheduling-feedback.service";
 
 /**
@@ -7,7 +11,7 @@ import { SchedulingFeedbackService } from "./scheduling-feedback.service";
  * `sessions.service.spec.ts` used to assert about `applyBanditMoveFeedback`.
  */
 
-function makeSvc(over: { proposal?: unknown; updateResult?: unknown }) {
+async function makeSvc(over: { proposal?: unknown; updateResult?: unknown }) {
   const slotFindFirst = jest.fn().mockResolvedValue(
     over.proposal === undefined
       ? {
@@ -33,17 +37,21 @@ function makeSvc(over: { proposal?: unknown; updateResult?: unknown }) {
     }),
     save: jest.fn().mockResolvedValue(undefined),
   };
-  const svc = new SchedulingFeedbackService(
-    prisma as never,
-    bandit as never,
-    armStates as never,
-  );
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      SchedulingFeedbackService,
+      { provide: PrismaService, useValue: prisma },
+      { provide: BanditService, useValue: bandit },
+      { provide: BanditArmStateRepository, useValue: armStates },
+    ],
+  }).compile();
+  const svc = module.get<SchedulingFeedbackService>(SchedulingFeedbackService);
   return { svc, bandit, armStates, eventUpdate };
 }
 
 describe("SchedulingFeedbackService.onFirstMove", () => {
   it("grades a drag by displacement and pushes the reward to /update, then links the event", async () => {
-    const { svc, bandit, armStates, eventUpdate } = makeSvc({});
+    const { svc, bandit, armStates, eventUpdate } = await makeSvc({});
 
     await svc.onFirstMove("u1", "s1", 42n, 120);
 
@@ -60,21 +68,21 @@ describe("SchedulingFeedbackService.onFirstMove", () => {
   });
 
   it("sends reward 0 for a resize-only move (zero drag distance)", async () => {
-    const { svc, bandit } = makeSvc({});
+    const { svc, bandit } = await makeSvc({});
     await svc.onFirstMove("u1", "s1", 1n, 0);
     expect(bandit.update.mock.calls[0][2]).toBe(0);
   });
 
   it("does nothing when there is no LinUCB proposal for the session", async () => {
-    const { svc, bandit } = makeSvc({ proposal: null });
+    const { svc, bandit } = await makeSvc({ proposal: null });
     await svc.onFirstMove("u1", "s1", 1n, 60);
     expect(bandit.update).not.toHaveBeenCalled();
   });
 
   it("swallows a bandit failure without throwing", async () => {
-    const { svc } = makeSvc({});
+    const { svc } = await makeSvc({});
     // loadAll returns a state, /update rejects — must not bubble.
-    const { svc: svc2, bandit } = makeSvc({});
+    const { svc: svc2, bandit } = await makeSvc({});
     bandit.update.mockRejectedValueOnce(new Error("bandit down"));
     await expect(svc2.onFirstMove("u1", "s1", 1n, 60)).resolves.toBeUndefined();
     await expect(svc.onFirstMove("u1", "s1", 1n, 60)).resolves.toBeUndefined();

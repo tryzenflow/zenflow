@@ -1,3 +1,4 @@
+import { Test, TestingModule } from "@nestjs/testing";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { type Notification } from "../../generated/prisma";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -56,7 +57,7 @@ const ROW = {
   sessionId: "s1",
 } as unknown as Notification;
 
-function make(opts: {
+async function make(opts: {
   devices?: DeviceRow[];
   fcm?: ReturnType<typeof fakeSender>;
   apns?: ReturnType<typeof fakeSender>;
@@ -68,19 +69,25 @@ function make(opts: {
   } as unknown as NotificationsService;
   const fcm = opts.fcm ?? fakeSender(true);
   const apns = opts.apns ?? fakeSender(true);
-  const service = new PushService(
-    db.client as unknown as PrismaService,
-    notifications,
-    fcm as unknown as FcmSender,
-    apns as unknown as ApnsSender,
-  );
+
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      PushService,
+      { provide: PrismaService, useValue: db.client },
+      { provide: NotificationsService, useValue: notifications },
+      { provide: FcmSender, useValue: fcm },
+      { provide: ApnsSender, useValue: apns },
+    ],
+  }).compile();
+  const service = module.get<PushService>(PushService);
+
   return { db, service, fcm, apns, notifications };
 }
 
 describe("PushService", () => {
   describe("sendToUser", () => {
     it("is a no-op when both senders are disabled", async () => {
-      const { service, db, fcm, apns } = make({
+      const { service, db, fcm, apns } = await make({
         devices: [{ platform: "ANDROID", pushToken: "a1", userId: "u1" }],
         fcm: fakeSender(false),
         apns: fakeSender(false),
@@ -94,7 +101,7 @@ describe("PushService", () => {
     });
 
     it("does nothing when the user has no devices", async () => {
-      const { service, fcm, apns } = make({ devices: [] });
+      const { service, fcm, apns } = await make({ devices: [] });
 
       await service.sendToUser("u1", ROW);
 
@@ -103,7 +110,7 @@ describe("PushService", () => {
     });
 
     it("routes Android tokens to FCM and iOS tokens to APNs, with title/body/data", async () => {
-      const { service, fcm, apns } = make({
+      const { service, fcm, apns } = await make({
         devices: [
           { platform: "ANDROID", pushToken: "a1", userId: "u1" },
           { platform: "ANDROID", pushToken: "a2", userId: "u1" },
@@ -129,14 +136,14 @@ describe("PushService", () => {
     });
 
     it("uses the /notifications url when the row has no session", async () => {
-      const { service, fcm } = make({
+      const { service, fcm } = await make({
         devices: [{ platform: "ANDROID", pushToken: "a1", userId: "u1" }],
       });
 
       await service.sendToUser("u1", {
         ...ROW,
         sessionId: null,
-      } as unknown as Notification);
+      });
 
       expect(fcm.send).toHaveBeenCalledWith(
         ["a1"],
@@ -150,7 +157,7 @@ describe("PushService", () => {
     });
 
     it("prunes every dead token both senders report", async () => {
-      const { service, db } = make({
+      const { service, db } = await make({
         devices: [
           { platform: "ANDROID", pushToken: "a-dead", userId: "u1" },
           { platform: "ANDROID", pushToken: "a-ok", userId: "u1" },
@@ -169,7 +176,7 @@ describe("PushService", () => {
     });
 
     it("does not call deleteMany when nothing is stale", async () => {
-      const { service, db } = make({
+      const { service, db } = await make({
         devices: [{ platform: "ANDROID", pushToken: "a1", userId: "u1" }],
       });
 
@@ -182,7 +189,7 @@ describe("PushService", () => {
   describe("onModuleInit listener", () => {
     it("pushes on a NEW_SESSION emit for the row's user", async () => {
       const emitter = new EventEmitter2();
-      const { service } = make({ emitter });
+      const { service } = await make({ emitter });
       const spy = jest
         .spyOn(service, "sendToUser")
         .mockResolvedValue(undefined);
@@ -196,7 +203,7 @@ describe("PushService", () => {
 
     it("swallows a rejected send so the emitter never sees it", async () => {
       const emitter = new EventEmitter2();
-      const { service } = make({ emitter });
+      const { service } = await make({ emitter });
       jest.spyOn(service, "sendToUser").mockRejectedValue(new Error("boom"));
 
       service.onModuleInit();
