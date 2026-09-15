@@ -4,6 +4,7 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import { Session } from "@zenflow/shared";
+import { SESSION_TYPE_META } from "@zenflow/core";
 import {
   Command,
   CommandList,
@@ -15,6 +16,8 @@ import { useState, useRef, useEffect } from "react";
 import { listSessionSuggestions } from "@/api/tasks";
 import { FormControl } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { sessionTypeIcon } from "@/components/calendar/session-type-badge";
+import { cn } from "@/lib/utils";
 
 const durationLabel = (m: number) =>
   m % 60 === 0
@@ -106,26 +109,40 @@ export function TitleField({
           <CommandList>
             <CommandEmpty>No matching tasks.</CommandEmpty>
             <CommandGroup heading="Your tasks">
-              {suggestions.map((task) => (
-                <CommandItem
-                  key={task.id}
-                  value={task.id}
-                  onSelect={() => pick(task)}
-                  className="flex-col items-start gap-0.5"
-                >
-                  <span className="truncate text-xs font-medium">
-                    {task.title}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground">
-                    {[
-                      durationLabel(task.durationMinutes),
-                      ...task.tags.slice(0, 2).map((t) => `#${t}`),
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </span>
-                </CommandItem>
-              ))}
+              {suggestions.map((task) => {
+                const meta = SESSION_TYPE_META[task.type];
+                const Icon = sessionTypeIcon(task.type);
+                return (
+                  <CommandItem
+                    key={task.id}
+                    value={task.id}
+                    onSelect={() => pick(task)}
+                    className="items-center gap-2"
+                  >
+                    <span
+                      className={cn(
+                        "flex size-7 shrink-0 items-center justify-center rounded-lg border",
+                        meta.badgeClass,
+                      )}
+                    >
+                      <Icon className={cn("size-3.5", meta.textClass)} />
+                    </span>
+                    <span className="flex min-w-0 flex-col gap-0.5">
+                      <span className="truncate text-xs font-medium">
+                        {task.title}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {[
+                          durationLabel(task.durationMinutes),
+                          ...task.tags.slice(0, 2).map((t) => `#${t}`),
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                    </span>
+                  </CommandItem>
+                );
+              })}
             </CommandGroup>
           </CommandList>
         </Command>

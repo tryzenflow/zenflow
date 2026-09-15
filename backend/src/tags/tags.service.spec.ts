@@ -1,7 +1,19 @@
+import { Test, TestingModule } from "@nestjs/testing";
+import { PrismaService } from "../prisma/prisma.service";
 import { TagsService } from "./tags.service";
 import type { User } from "../../generated/prisma";
 
 const user = { id: "user-1" } as User;
+
+async function makeService(findMany: jest.Mock) {
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      TagsService,
+      { provide: PrismaService, useValue: { tag: { findMany } } },
+    ],
+  }).compile();
+  return module.get<TagsService>(TagsService);
+}
 
 describe("TagsService.list", () => {
   it("returns the user's tags name-sorted, wrapped in { tags }", async () => {
@@ -10,8 +22,7 @@ describe("TagsService.list", () => {
       { id: "t2", name: "work" },
     ];
     const findMany = jest.fn().mockResolvedValue(rows);
-    const prisma = { tag: { findMany } };
-    const service = new TagsService(prisma as never);
+    const service = await makeService(findMany);
 
     const res = await service.list(user);
 
@@ -24,8 +35,7 @@ describe("TagsService.list", () => {
   });
 
   it("returns an empty list when the user has no tags", async () => {
-    const prisma = { tag: { findMany: jest.fn().mockResolvedValue([]) } };
-    const service = new TagsService(prisma as never);
+    const service = await makeService(jest.fn().mockResolvedValue([]));
 
     const res = await service.list(user);
 

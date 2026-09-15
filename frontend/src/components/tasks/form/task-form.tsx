@@ -8,7 +8,10 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import type { SessionFormValues } from "@zenflow/core";
+import {
+  effectiveNowForSessionCountEdit,
+  type SessionFormValues,
+} from "@zenflow/core";
 import { UseFormReturn } from "react-hook-form";
 import { useEffect, useState, type ReactNode } from "react";
 import { DurationInput } from "@/components/tasks/duration-input";
@@ -88,11 +91,18 @@ interface SessionFormProps {
    */
   typeSelector?: ReactNode;
   /**
-   * Edit mode: hide the create-only scheduling fields (duration, session
-   * count) and keep the plain title input. Placement and duration are changed
-   * on the calendar, not here.
+   * Edit mode: hide the create-only scheduling fields (duration) and keep the
+   * plain title input. Placement and duration are changed on the calendar,
+   * not here.
    */
   editing?: boolean;
+  /**
+   * Edit mode only: the schedule info of the specific `TASK` sitting
+   * currently open in the form, used to bound the session-count slider's
+   * feasible-max window off an adjusted "now" (see
+   * `effectiveNowForSessionCountEdit`). Undefined in create mode.
+   */
+  editingInstance?: { scheduledStartTime: string | null; durationMinutes: number };
 }
 
 export function SessionForm({
@@ -107,6 +117,7 @@ export function SessionForm({
   footerExtra,
   typeSelector,
   editing = false,
+  editingInstance,
 }: SessionFormProps) {
   const type = form.watch("type");
   const isTask = type === "TASK";
@@ -124,6 +135,7 @@ export function SessionForm({
   // Populate the create form from a picked existing session (TASK only).
   const applySuggestion = (s: Session) => {
     form.setValue("title", s.title, { shouldValidate: true, shouldDirty: true });
+    form.setValue("type", s.type, { shouldDirty: true });
     form.setValue("duration", s.durationMinutes, {
       shouldValidate: true,
       shouldDirty: true,
@@ -261,28 +273,33 @@ export function SessionForm({
                 />
               )}
 
-              {/* Sessions — multi-sitting series (create only) */}
-              {!editing && (
-                <FormField
-                  control={form.control}
-                  name="sessionCount"
-                  render={({ field }) => (
-                    <FormItem className="space-y-2">
-                      <FormLabel className="text-xs font-semibold">
-                        Sessions
-                      </FormLabel>
-                      <SessionCountField
-                        value={field.value ?? 1}
-                        onChange={field.onChange}
-                        deadline={form.watch("deadline")}
-                        duration={form.watch("duration")}
-                        disabled={loading}
-                      />
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
+              {/* Sessions — multi-sitting series count; editable in both
+                  create and edit mode (edit bounds its feasible-max window
+                  off the edited sitting's own schedule, not raw "now"). */}
+              <FormField
+                control={form.control}
+                name="sessionCount"
+                render={({ field }) => (
+                  <FormItem className="space-y-2">
+                    <FormLabel className="text-xs font-semibold">
+                      Sessions
+                    </FormLabel>
+                    <SessionCountField
+                      value={field.value ?? 1}
+                      onChange={field.onChange}
+                      deadline={form.watch("deadline")}
+                      duration={form.watch("duration")}
+                      from={
+                        editingInstance
+                          ? effectiveNowForSessionCountEdit(editingInstance)
+                          : undefined
+                      }
+                      disabled={loading}
+                    />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               {/* Deadline — quick-action chips; required for a TASK. */}
               <FormField

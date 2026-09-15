@@ -1,4 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
+import { Test, TestingModule } from "@nestjs/testing";
+import { PrismaService } from "../../prisma/prisma.service";
+import { ExperimentService } from "../../experiments/experiment.service";
+import { HeuristicPlacer } from "./heuristic-placer.service";
+import { BanditPlacer } from "./bandit-placer.service";
+import { SeriesPlacer } from "./series-placer.service";
 import { TaskPlacementService } from "./task-placement.service";
 
 /**
@@ -20,7 +26,27 @@ const task = {
 };
 const now = new Date("2026-06-08T00:00:00.000Z");
 
-function makeDeps(over: {
+async function makeTaskPlacementService(
+  prisma: unknown,
+  experiment: unknown,
+  heuristic: unknown,
+  bandit: unknown,
+  seriesPlacer: unknown,
+): Promise<TaskPlacementService> {
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      TaskPlacementService,
+      { provide: PrismaService, useValue: prisma },
+      { provide: ExperimentService, useValue: experiment },
+      { provide: HeuristicPlacer, useValue: heuristic },
+      { provide: BanditPlacer, useValue: bandit },
+      { provide: SeriesPlacer, useValue: seriesPlacer },
+    ],
+  }).compile();
+  return module.get<TaskPlacementService>(TaskPlacementService);
+}
+
+async function makeDeps(over: {
   heuristicStart?: Date | null;
   policy?: "HEURISTIC" | "LINUCB";
   pick?: unknown;
@@ -47,12 +73,12 @@ function makeDeps(over: {
       ? jest.fn().mockRejectedValue(new Error("bandit down"))
       : jest.fn().mockResolvedValue(over.pick ?? null),
   };
-  const svc = new TaskPlacementService(
-    prisma as never,
-    experiment as never,
-    heuristic as never,
-    bandit as never,
-    { placeSeries: jest.fn() } as never,
+  const svc = await makeTaskPlacementService(
+    prisma,
+    experiment,
+    heuristic,
+    bandit,
+    { placeSeries: jest.fn() },
   );
   return { svc, sessionUpdate, experiment, heuristic, bandit };
 }
@@ -60,7 +86,7 @@ function makeDeps(over: {
 describe("TaskPlacementService.placeOnCreate", () => {
   it("keeps the heuristic placement and records a proposal when HEURISTIC is primary", async () => {
     const slot = new Date("2026-06-09T09:00:00.000Z");
-    const { svc, sessionUpdate, experiment, bandit } = makeDeps({
+    const { svc, sessionUpdate, experiment, bandit } = await makeDeps({
       heuristicStart: slot,
       policy: "HEURISTIC",
     });
@@ -87,7 +113,7 @@ describe("TaskPlacementService.placeOnCreate", () => {
       selectedArm: "NIGHT",
       featureVector: new Array<number>(46).fill(0),
     };
-    const { svc, sessionUpdate, experiment } = makeDeps({
+    const { svc, sessionUpdate, experiment } = await makeDeps({
       heuristicStart: heuristicSlot,
       policy: "LINUCB",
       pick,
@@ -109,7 +135,7 @@ describe("TaskPlacementService.placeOnCreate", () => {
 
   it("falls back to the heuristic placement when the bandit throws", async () => {
     const slot = new Date("2026-06-09T09:00:00.000Z");
-    const { svc, experiment } = makeDeps({
+    const { svc, experiment } = await makeDeps({
       heuristicStart: slot,
       policy: "LINUCB",
       banditThrows: true,
@@ -126,7 +152,10 @@ describe("TaskPlacementService.placeOnCreate", () => {
   });
 
   it("reports NONE when nothing free fits", async () => {
-    const { svc } = makeDeps({ heuristicStart: null, policy: "HEURISTIC" });
+    const { svc } = await makeDeps({
+      heuristicStart: null,
+      policy: "HEURISTIC",
+    });
     const res = await svc.placeOnCreate({ user, task, now });
     expect(res).toEqual({ scheduledStartTime: null, appliedPolicy: "NONE" });
   });
@@ -135,7 +164,7 @@ describe("TaskPlacementService.placeOnCreate", () => {
 describe("TaskPlacementService.canPlaceTask / canPlaceSeries", () => {
   it("canPlaceTask is true when the heuristic finds a slot, using a placeholder id (no row exists yet)", async () => {
     const slot = new Date("2026-06-09T09:00:00.000Z");
-    const { svc, heuristic } = makeDeps({ heuristicStart: slot });
+    const { svc, heuristic } = await makeDeps({ heuristicStart: slot });
 
     const ok = await svc.canPlaceTask({
       user,
@@ -149,7 +178,7 @@ describe("TaskPlacementService.canPlaceTask / canPlaceSeries", () => {
   });
 
   it("canPlaceTask is false when nothing fits, and touches no prisma/experiment write", async () => {
-    const { svc, sessionUpdate, experiment } = makeDeps({
+    const { svc, sessionUpdate, experiment } = await makeDeps({
       heuristicStart: null,
     });
 
@@ -173,13 +202,7 @@ describe("TaskPlacementService.canPlaceTask / canPlaceSeries", () => {
         { id: "p-2", scheduledStartTime: null },
       ]),
     };
-    const svc = new TaskPlacementService(
-      {} as never,
-      {} as never,
-      {} as never,
-      {} as never,
-      seriesPlacer as never,
-    );
+    const svc = await makeTaskPlacementService({}, {}, {}, {}, seriesPlacer);
 
     const ok = await svc.canPlaceSeries({
       user,

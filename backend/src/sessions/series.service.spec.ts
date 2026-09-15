@@ -1,6 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { NotFoundException } from "@nestjs/common";
-import { SeriesService } from "./series.service";
+import { Test, TestingModule } from "@nestjs/testing";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { PrismaService } from "../prisma/prisma.service";
+import { TagsService } from "../tags/tags.service";
+import { TaskPlacementService } from "../scheduler/io/task-placement.service";
+import { NO_FEASIBLE_SLOT_MESSAGE, SeriesService } from "./series.service";
 import { occurrenceId } from "../scheduler/core/recurrence";
 import type { Tag, Session, SessionSeries, User } from "../../generated/prisma";
 
@@ -54,12 +58,24 @@ function session(overrides: Partial<SessionRow> & { id: string }): SessionRow {
   };
 }
 
-function makeSeriesService(prisma: unknown) {
-  return new SeriesService(
-    prisma as never,
-    { resolveTagIds: jest.fn().mockResolvedValue([]) } as never,
-    { placeSeriesOnCreate: jest.fn(), redistributeSeries: jest.fn() } as never,
-  );
+async function makeSeriesService(
+  prisma: unknown,
+  tags: unknown = { resolveTagIds: jest.fn().mockResolvedValue([]) },
+  placement: unknown = {
+    canPlaceSeries: jest.fn(),
+    placeSeriesOnCreate: jest.fn(),
+    redistributeSeries: jest.fn(),
+  },
+): Promise<SeriesService> {
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      SeriesService,
+      { provide: PrismaService, useValue: prisma },
+      { provide: TagsService, useValue: tags },
+      { provide: TaskPlacementService, useValue: placement },
+    ],
+  }).compile();
+  return module.get<SeriesService>(SeriesService);
 }
 
 describe("SeriesService.updateSiblingTimeOfDay", () => {
@@ -104,7 +120,7 @@ describe("SeriesService.updateSiblingTimeOfDay", () => {
       ),
     );
     const { prisma } = buildPrisma(sessionUpdate);
-    const service = makeSeriesService(prisma);
+    const service = await makeSeriesService(prisma);
 
     const { sessions, skippedSessionIds } =
       await service.updateSiblingTimeOfDay(
@@ -147,7 +163,7 @@ describe("SeriesService.updateSiblingTimeOfDay", () => {
       ),
     );
     const { prisma } = buildPrisma(sessionUpdate);
-    const service = makeSeriesService(prisma);
+    const service = await makeSeriesService(prisma);
 
     await service.updateSiblingTimeOfDay(
       "task-series-1",
@@ -211,7 +227,7 @@ describe("SeriesService.updateSiblingTimeOfDay", () => {
       sessionSeries: { findMany: jest.fn().mockResolvedValue([]) },
       $transaction: (fn: (t: unknown) => unknown) => fn(prisma),
     };
-    const service = makeSeriesService(prisma);
+    const service = await makeSeriesService(prisma);
 
     const { sessions, skippedSessionIds } =
       await service.updateSiblingTimeOfDay(
@@ -247,7 +263,7 @@ describe("SeriesService.updateSiblingTimeOfDay", () => {
       session: { findMany: jest.fn().mockResolvedValue([]) },
       $transaction: (fn: (t: unknown) => unknown) => fn(prisma),
     };
-    const service = makeSeriesService(prisma);
+    const service = await makeSeriesService(prisma);
 
     await expect(
       service.updateSiblingTimeOfDay(
@@ -266,7 +282,7 @@ describe("SeriesService.updateSiblingTimeOfDay", () => {
       session: { findMany: jest.fn().mockResolvedValue(members) },
       $transaction: (fn: (t: unknown) => unknown) => fn(prisma),
     };
-    const service = makeSeriesService(prisma);
+    const service = await makeSeriesService(prisma);
 
     await expect(
       service.updateSiblingTimeOfDay(
@@ -404,7 +420,7 @@ describe("SeriesService.updateRecurringFollowing", () => {
   it("truncates the old series and creates a new one anchored at the new date/time, carrying title/note/tags/type forward", async () => {
     const { prisma, seriesUpdate, seriesCreate, sessionCreate, eventCreate } =
       buildPrisma({ rrule: "FREQ=DAILY" });
-    const service = makeSeriesService(prisma);
+    const service = await makeSeriesService(prisma);
 
     const result = await service.updateRecurringFollowing(
       oldSeriesId,
@@ -455,7 +471,7 @@ describe("SeriesService.updateRecurringFollowing", () => {
       rrule: "FREQ=DAILY;COUNT=3",
       conflicting,
     });
-    const service = makeSeriesService(prisma);
+    const service = await makeSeriesService(prisma);
 
     const result = await service.updateRecurringFollowing(
       oldSeriesId,
@@ -481,7 +497,7 @@ describe("SeriesService.updateRecurringFollowing", () => {
       sessionSeries: { findFirst: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn(),
     };
-    const service = makeSeriesService(prisma);
+    const service = await makeSeriesService(prisma);
 
     await expect(
       service.updateRecurringFollowing(
@@ -492,5 +508,381 @@ describe("SeriesService.updateRecurringFollowing", () => {
         user,
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+/**
+ * Edit-mode "session count" resize/promote — the create-mode session-count
+ * slider's edit-mode counterpart (issue: editable sessionCount). Exercises
+ * `resizeSessionCount` (grow/shrink/no-op/not-found) and `promoteToSeries`
+ * directly against hand-rolled `PrismaService` / `TaskPlacementService` /
+ * `TagsService` doubles, mirroring this file's other describe blocks.
+ * `SessionUpdateService`'s routing into these (single-TASK promotion, the
+ * sessionCount-vs-deadline branch priority) is covered by
+ * `session-update.service.spec.ts`.
+ */
+describe("SeriesService.resizeSessionCount", () => {
+  const seriesId = "task-series-1";
+  const deadline = new Date("2026-07-01T00:00:00.000Z");
+
+  function seriesRow(): SessionSeries {
+    return {
+      id: seriesId,
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      type: "TASK",
+      deadline,
+      rrule: null,
+      exdates: [],
+      userId: user.id,
+    };
+  }
+
+  function twoMembers(): SessionRow[] {
+    return [
+      session({
+        id: "s-1",
+        seriesId,
+        sessionIndex: 1,
+        sessionTotal: 2,
+        deadline,
+        durationMinutes: 60,
+        scheduledStartTime: new Date("2026-06-01T08:00:00.000Z"),
+      }),
+      session({
+        id: "s-2",
+        seriesId,
+        sessionIndex: 2,
+        sessionTotal: 2,
+        deadline,
+        durationMinutes: 60,
+        scheduledStartTime: new Date("2026-06-03T08:00:00.000Z"),
+      }),
+    ];
+  }
+
+  function makeTransaction(tx: Record<string, unknown>) {
+    return (arg: unknown) =>
+      typeof arg === "function"
+        ? (arg as (t: unknown) => unknown)(tx)
+        : Promise.all(arg as Promise<unknown>[]);
+  }
+
+  it("grows the series: new rows continue sessionIndex, sessionTotal is rewritten on every member, a CREATE event fires per new row, and only the new members are placed", async () => {
+    const members = twoMembers();
+    const seriesFindFirst = jest.fn().mockResolvedValue(seriesRow());
+    const memberFindMany = jest.fn().mockResolvedValue(members);
+    const sessionUpdateMany = jest.fn().mockResolvedValue({ count: 2 });
+    let createdCount = 0;
+    const sessionCreate = jest.fn((args: { data: Record<string, unknown> }) => {
+      createdCount++;
+      return Promise.resolve(
+        session({
+          id: `s-new-${createdCount}`,
+          seriesId,
+          deadline,
+          durationMinutes: 60,
+          sessionIndex: args.data.sessionIndex as number,
+          sessionTotal: args.data.sessionTotal as number,
+          title: args.data.title as string,
+        }),
+      );
+    });
+    const eventCreate = jest.fn().mockResolvedValue({});
+    const tx = {
+      session: { updateMany: sessionUpdateMany, create: sessionCreate },
+      sessionEvent: { create: eventCreate },
+    };
+    const prisma = {
+      sessionSeries: { findFirst: seriesFindFirst },
+      session: { findMany: memberFindMany },
+      $transaction: makeTransaction(tx),
+    };
+    const placement = {
+      canPlaceSeries: jest.fn().mockResolvedValue(true),
+      placeSeriesOnCreate: jest.fn().mockResolvedValue([
+        {
+          id: "s-new-1",
+          scheduledStartTime: new Date("2026-06-05T08:00:00.000Z"),
+        },
+        {
+          id: "s-new-2",
+          scheduledStartTime: new Date("2026-06-07T08:00:00.000Z"),
+        },
+      ]),
+    };
+    const service = await makeSeriesService(
+      prisma,
+      { resolveTagIds: jest.fn() },
+      placement,
+    );
+
+    const now = new Date("2026-05-30T00:00:00.000Z");
+    const result = await service.resizeSessionCount(seriesId, 4, user, now);
+
+    expect(placement.canPlaceSeries).toHaveBeenCalledWith({
+      user,
+      durationMinutes: 60,
+      sessionCount: 2,
+      deadline,
+      now,
+    });
+    expect(sessionCreate).toHaveBeenCalledTimes(2);
+    expect(sessionCreate.mock.calls[0][0].data.sessionIndex).toBe(3);
+    expect(sessionCreate.mock.calls[1][0].data.sessionIndex).toBe(4);
+    expect(sessionCreate.mock.calls[0][0].data.sessionTotal).toBe(4);
+    expect(sessionCreate.mock.calls[0][0].data.title).toBe(members[0].title);
+    expect(eventCreate).toHaveBeenCalledTimes(2);
+    expect(sessionUpdateMany).toHaveBeenCalledWith({
+      where: { seriesId, userId: user.id },
+      data: { sessionTotal: 4 },
+    });
+    expect(placement.placeSeriesOnCreate).toHaveBeenCalledWith({
+      user,
+      seriesId,
+      members: [
+        { id: "s-new-1", durationMinutes: 60 },
+        { id: "s-new-2", durationMinutes: 60 },
+      ],
+      deadline,
+      now,
+    });
+
+    expect(result.map((s) => s.id)).toEqual([
+      "s-1",
+      "s-2",
+      "s-new-1",
+      "s-new-2",
+    ]);
+    expect(result.every((s) => s.sessionTotal === 4)).toBe(true);
+    expect(result.find((s) => s.id === "s-new-1")?.scheduledStartTime).toBe(
+      "2026-06-05T08:00:00.000Z",
+    );
+  });
+
+  it("rejects growing with NO_FEASIBLE_SLOT_MESSAGE and writes nothing when the added sittings don't fit", async () => {
+    const seriesFindFirst = jest.fn().mockResolvedValue(seriesRow());
+    const memberFindMany = jest.fn().mockResolvedValue(twoMembers());
+    const transaction = jest.fn();
+    const prisma = {
+      sessionSeries: { findFirst: seriesFindFirst },
+      session: { findMany: memberFindMany },
+      $transaction: transaction,
+    };
+    const placement = {
+      canPlaceSeries: jest.fn().mockResolvedValue(false),
+      placeSeriesOnCreate: jest.fn(),
+    };
+    const service = await makeSeriesService(
+      prisma,
+      { resolveTagIds: jest.fn() },
+      placement,
+    );
+
+    await expect(
+      service.resizeSessionCount(
+        seriesId,
+        4,
+        user,
+        new Date("2026-05-30T00:00:00.000Z"),
+      ),
+    ).rejects.toThrow(NO_FEASIBLE_SLOT_MESSAGE);
+    expect(transaction).not.toHaveBeenCalled();
+    expect(placement.placeSeriesOnCreate).not.toHaveBeenCalled();
+  });
+
+  it("shrinks the series: removes the highest-sessionIndex members and rewrites sessionTotal on the survivors", async () => {
+    const now = new Date("2026-05-30T00:00:00.000Z");
+    const members = [
+      session({
+        id: "s-1",
+        seriesId,
+        sessionIndex: 1,
+        sessionTotal: 3,
+        deadline,
+        scheduledStartTime: new Date("2026-06-01T08:00:00.000Z"),
+      }),
+      session({
+        id: "s-2",
+        seriesId,
+        sessionIndex: 2,
+        sessionTotal: 3,
+        deadline,
+        scheduledStartTime: new Date("2026-06-05T08:00:00.000Z"),
+      }),
+      session({
+        id: "s-3",
+        seriesId,
+        sessionIndex: 3,
+        sessionTotal: 3,
+        deadline,
+        scheduledStartTime: null,
+      }),
+    ];
+    const seriesFindFirst = jest.fn().mockResolvedValue(seriesRow());
+    const memberFindMany = jest.fn().mockResolvedValue(members);
+    const deleteMany = jest.fn().mockResolvedValue({ count: 1 });
+    const updateMany = jest.fn().mockResolvedValue({ count: 2 });
+    const prisma = {
+      sessionSeries: { findFirst: seriesFindFirst },
+      session: { findMany: memberFindMany, deleteMany, updateMany },
+      $transaction: (arg: unknown) => Promise.all(arg as Promise<unknown>[]),
+    };
+    const placement = {
+      canPlaceSeries: jest.fn(),
+      placeSeriesOnCreate: jest.fn(),
+    };
+    const service = await makeSeriesService(
+      prisma,
+      { resolveTagIds: jest.fn() },
+      placement,
+    );
+
+    const result = await service.resizeSessionCount(seriesId, 2, user, now);
+
+    expect(deleteMany).toHaveBeenCalledWith({
+      where: { id: { in: ["s-3"] }, userId: user.id },
+    });
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { seriesId, userId: user.id },
+      data: { sessionTotal: 2 },
+    });
+    expect(result.map((s) => s.id)).toEqual(["s-1", "s-2"]);
+    expect(result.every((s) => s.sessionTotal === 2)).toBe(true);
+  });
+
+  it("rejects shrinking and writes nothing when a removal candidate has already started", async () => {
+    const now = new Date("2026-06-05T09:00:00.000Z");
+    const members = [
+      session({
+        id: "s-1",
+        seriesId,
+        sessionIndex: 1,
+        sessionTotal: 3,
+        deadline,
+        scheduledStartTime: new Date("2026-06-01T08:00:00.000Z"),
+      }),
+      // Being removed (highest 2 indices) and already started relative to `now`.
+      session({
+        id: "s-2",
+        seriesId,
+        sessionIndex: 2,
+        sessionTotal: 3,
+        deadline,
+        scheduledStartTime: new Date("2026-06-05T08:00:00.000Z"),
+      }),
+      session({
+        id: "s-3",
+        seriesId,
+        sessionIndex: 3,
+        sessionTotal: 3,
+        deadline,
+        scheduledStartTime: new Date("2026-06-10T08:00:00.000Z"),
+      }),
+    ];
+    const seriesFindFirst = jest.fn().mockResolvedValue(seriesRow());
+    const memberFindMany = jest.fn().mockResolvedValue(members);
+    const transaction = jest.fn();
+    const prisma = {
+      sessionSeries: { findFirst: seriesFindFirst },
+      session: { findMany: memberFindMany },
+      $transaction: transaction,
+    };
+    const placement = {
+      canPlaceSeries: jest.fn(),
+      placeSeriesOnCreate: jest.fn(),
+    };
+    const service = await makeSeriesService(
+      prisma,
+      { resolveTagIds: jest.fn() },
+      placement,
+    );
+
+    await expect(
+      service.resizeSessionCount(seriesId, 1, user, now),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it("is a no-op and writes nothing when targetCount already matches", async () => {
+    const members = twoMembers();
+    const seriesFindFirst = jest.fn().mockResolvedValue(seriesRow());
+    const memberFindMany = jest.fn().mockResolvedValue(members);
+    const transaction = jest.fn();
+    const prisma = {
+      sessionSeries: { findFirst: seriesFindFirst },
+      session: { findMany: memberFindMany },
+      $transaction: transaction,
+    };
+    const placement = {
+      canPlaceSeries: jest.fn(),
+      placeSeriesOnCreate: jest.fn(),
+    };
+    const service = await makeSeriesService(
+      prisma,
+      { resolveTagIds: jest.fn() },
+      placement,
+    );
+
+    const result = await service.resizeSessionCount(
+      seriesId,
+      2,
+      user,
+      new Date(),
+    );
+
+    expect(transaction).not.toHaveBeenCalled();
+    expect(result.map((s) => s.id)).toEqual(["s-1", "s-2"]);
+  });
+
+  it("throws NotFoundException when the series doesn't exist / isn't a TASK series / isn't the user's", async () => {
+    const seriesFindFirst = jest.fn().mockResolvedValue(null);
+    const prisma = {
+      sessionSeries: { findFirst: seriesFindFirst },
+      session: { findMany: jest.fn() },
+    };
+    const placement = {
+      canPlaceSeries: jest.fn(),
+      placeSeriesOnCreate: jest.fn(),
+    };
+    const service = await makeSeriesService(
+      prisma,
+      { resolveTagIds: jest.fn() },
+      placement,
+    );
+
+    await expect(
+      service.resizeSessionCount("nope", 3, user, new Date()),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe("SeriesService.promoteToSeries", () => {
+  it("creates a new SessionSeries and backfills seriesId/sessionIndex/sessionTotal onto the existing row", async () => {
+    const deadline = new Date("2026-07-01T00:00:00.000Z");
+    const seriesCreate = jest.fn().mockResolvedValue({ id: "new-series-1" });
+    const sessionUpdate = jest.fn().mockResolvedValue({});
+    const prisma = {
+      $transaction: (fn: (t: unknown) => unknown) =>
+        fn({
+          sessionSeries: { create: seriesCreate },
+          session: { update: sessionUpdate },
+        }),
+    };
+    const service = await makeSeriesService(
+      prisma,
+      { resolveTagIds: jest.fn() },
+      { canPlaceSeries: jest.fn(), placeSeriesOnCreate: jest.fn() },
+    );
+
+    const seriesId = await service.promoteToSeries("plain-1", deadline, user);
+
+    expect(seriesId).toBe("new-series-1");
+    expect(seriesCreate).toHaveBeenCalledWith({
+      data: { type: "TASK", rrule: null, deadline, userId: user.id },
+    });
+    expect(sessionUpdate).toHaveBeenCalledWith({
+      where: { id: "plain-1" },
+      data: { seriesId: "new-series-1", sessionIndex: 1, sessionTotal: 1 },
+    });
   });
 });

@@ -1,12 +1,20 @@
-name: zenflow-prod
+name: zenflow-staging
 services:
   api:
     container_name: zenflow-api-staging
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
     image: zenflow-api:2.1.0
     expose:
       - "5000"
     networks:
-      - api
+      - edge
+      - db
+      - cache
+      - ratelimit
+      - bandit
+      - mail
     volumes:
       - uploads:/app/uploads
     depends_on:
@@ -23,11 +31,25 @@ services:
     env_file:
       - .env.staging
 
+  bandit:
+    container_name: zenflow-bandit-staging
+    build: ../services/bandit
+    expose:
+      - "8000"
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    networks:
+      - bandit
+
   migrations:
     container_name: zenflow-db-migration-staging
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
     image: zenflow-api:2.1.0
     networks:
-      - api
+      - db
+      - egress
     command: pnpm prisma:migrate:deploy
     depends_on:
       postgres:
@@ -45,7 +67,7 @@ services:
     env_file:
       - docker.staging.env
     networks:
-      - api
+      - db
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -58,7 +80,7 @@ services:
     expose:
       - "6379"
     networks:
-      - api
+      - cache
 
   redis-ratelimit:
     container_name: zenflow-cache-ratelimit-staging
@@ -66,7 +88,7 @@ services:
     expose:
       - "6379"
     networks:
-      - api
+      - ratelimit
 
   mail:
     container_name: zenflow-mail-staging
@@ -76,7 +98,7 @@ services:
     ports:
       - 8025:8025
     networks:
-      - api
+      - mail
 
   caddy:
     image: caddy:2.11.4
@@ -89,10 +111,25 @@ services:
     depends_on:
       - api
     networks:
-      - api
+      - edge
 
 networks:
-  api:
+  edge:
+    driver: bridge
+  egress:
+    driver: bridge
+  db:
+    driver: bridge
+    internal: true
+  cache:
+    driver: bridge
+    internal: true
+  ratelimit:
+    driver: bridge
+    internal: true
+  bandit:
+    driver: bridge
+  mail:
     driver: bridge
 
 volumes:

@@ -410,10 +410,10 @@ so the scheduler avoids them from day one. Best-effort — a failure is logged a
 | ------ | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | POST   | `/sessions`                                  | Create. A `TASK` → its best free slot (or, `sessionCount > 1`, a materialized series across `now…deadline`); a fixed/`DND` session at the given `scheduledStartTime` + optional `rrule`. Never displaces. |
 | GET    | `/sessions?view=&date=`                      | List the `day`/`week`/`month` window + unplaced. Recurring series fanned to virtual rows. |
-| GET    | `/sessions/suggestions?q=&limit=`            | Title autocomplete (newest first, deduped). `limit` 1–50, default 10. |
+| GET    | `/sessions/suggestions?q=&limit=`            | Title autocomplete (newest first, deduped by normalized title — a series' sittings, or a re-created title, collapse to the most recent). `limit` 1–50, default 10. |
 | GET    | `/sessions/deadline-options?anchor=`         | The six deadline quick-chip instants relative to `anchor`.        |
 | GET    | `/sessions/:id`                              | Detail. Recurring occurrence id: `"<seriesId>::<startISO>"` (URL-encoded). |
-| PATCH  | `/sessions/:id`                              | `UpdateSessionDto` — metadata, drag/resize, `rrule`. `scope` + `skipConflicting` narrow a series change; may return `sessions[]` + `skippedSessionIds`. |
+| PATCH  | `/sessions/:id`                              | `UpdateSessionDto` — metadata, drag/resize, `rrule`, `sessionCount`. `scope` + `skipConflicting` narrow a series change; `sessionCount` grows/shrinks a `TASK` series (or promotes a plain `TASK` into one); may return `sessions[]` + `skippedSessionIds`. |
 | DELETE | `/sessions/:id`                              | Delete one; on an occurrence id, add the date to `exdates`. Returns `{ id }`. |
 | DELETE | `/sessions/series/:seriesId`                 | Delete the whole series.                                          |
 | DELETE | `/sessions/series/:seriesId/truncate?from=`  | Recurring series only — pull the rrule's `UNTIL` back to just before `from` ("this and following").                                                                                                                                                                                                                                                                                                              |
@@ -612,7 +612,10 @@ never breaks session create/update.
 ## Scheduler architecture
 
 The scheduler places **one `TASK`** (or the members of one `TASK` series) into an empty
-15-minute slot and never moves anything else. It is split into a **pure core**
+15-minute slot and never moves anything else. An existing `TASK` series' sitting count can
+also be resized after creation (`PATCH /sessions/:id` with `sessionCount` — grow/shrink/promote
+a plain `TASK` into a series, `SeriesService.resizeSessionCount`/`promoteToSeries`) — see Flow
+5. It is split into a **pure core**
 (`scheduler/core/*` — scoring, ranking, arm bands, series math, the LinUCB feature vector,
 recurrence, decay; no Prisma, no `new Date()`, no `Math.random()`) and an **I/O layer**
 (`scheduler/io/*` — the placers, the one occupancy query, the A/B facade, the delayed-reward
@@ -767,6 +770,36 @@ sequenceDiagram
   R->>BA: same loadAll → /update(+1) → save → link event
 ```
 
+### Flow 5 — edit-mode `sessionCount` resize/promote
+
+```mermaid
+sequenceDiagram
+  participant S as SessionUpdateService.update
+  participant SR as SeriesService
+  participant T as TaskPlacementService
+  participant SP as SeriesPlacer
+  Note over S: PATCH /sessions/:id with sessionCount
+  alt no existing seriesId AND sessionCount > 1
+    S->>SR: promoteToSeries(sessionId, deadline, user)
+    SR->>SR: $tx( sessionSeries.create + session.update seriesId/sessionIndex=1/sessionTotal=1 )
+  end
+  S->>SR: resizeSessionCount(seriesId, targetCount, user, now)
+  alt grow (targetCount > memberCount)
+    SR->>T: canPlaceSeries({ sessionCount: added })  // pre-flight, added sittings only
+    T-->>SR: feasible?
+    SR->>SR: $tx( session.updateMany sessionTotal + N× session.create + N× CREATE event )
+    SR->>T: placeSeriesOnCreate({ seriesId, members: newMembers, deadline })
+    T->>SP: placeSeries(trigger "create")
+    Note over SP: day-load naturally schedules around the already-persisted existing members
+    SP-->>T: rows[]
+    T->>T: $tx( session.update scheduledStartTime for placed rows )
+  else shrink (targetCount < memberCount)
+    Note over SR: candidates = highest-sessionIndex members;<br/>any already started (scheduledStartTime ≤ now) → reject, write nothing
+    SR->>SR: $tx( session.deleteMany + session.updateMany sessionTotal )
+  end
+  SR-->>S: every member, sessionIndex order
+```
+
 ### Slot scoring — the overlap-weighted preference score
 
 `slotPreferenceScore` (`core/slot-score.ts`) scores a concrete interval by how much of it
@@ -843,6 +876,7 @@ pre-flight (`TaskPlacementService.canPlaceSeries`) keep safe, not this partition
 | Policy B placer — per-day `/predict` + slot pick                                    | `scheduler/io/bandit-placer.service.ts`       |
 | per-member bounded 50/50 series placement                                           | `scheduler/io/series-placer.service.ts`       |
 | the facade `sessions/` calls (place + persist + A/B)                                | `scheduler/io/task-placement.service.ts`      |
+| `TASK` series lifecycle — create, deadline redistribute, edit-mode `sessionCount` resize/promote | `sessions/series.service.ts`       |
 | delayed first-move LinUCB reward                                                    | `scheduler/io/scheduling-feedback.service.ts` |
 | `RETAINED` sweep (+1 reward)                                                        | `scheduler/io/retained-sessions.service.ts`   |
 | nightly matrix decay cron                                                           | `scheduler/io/matrix-decay.service.ts`        |

@@ -1,5 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
+import { Test, TestingModule } from "@nestjs/testing";
 import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { PrismaService } from "../prisma/prisma.service";
+import { TagsService } from "../tags/tags.service";
+import { TaskPlacementService } from "../scheduler/io/task-placement.service";
+import { SchedulingFeedbackService } from "../scheduler/io/scheduling-feedback.service";
 import { SessionsService } from "./sessions.service";
 import { SessionCrudService } from "./session-crud.service";
 import { SeriesService } from "./series.service";
@@ -106,26 +111,30 @@ function fakeSchedulingFeedback() {
 }
 
 /**
- * Wire the facade to real collaborators (they're thin) over the fake prisma /
- * tags / placement / feedback doubles, so every existing behavioural assertion
- * still exercises the delegation path end to end.
+ * Wire the facade to real collaborators (they're thin) via Nest's DI
+ * container — mirroring `SessionsModule`'s real provider wiring — over the
+ * fake prisma / tags / placement / feedback doubles, so every existing
+ * behavioural assertion still exercises the delegation path end to end.
  */
-function makeService(
-  prisma: never,
-  tags: never,
-  placement: never = fakeTaskPlacement() as never,
-  feedback: never = fakeSchedulingFeedback() as never,
-) {
-  const series = new SeriesService(prisma, tags, placement);
-  const crud = new SessionCrudService(prisma, tags, placement, series);
-  const updates = new SessionUpdateService(
-    prisma,
-    tags,
-    placement,
-    feedback,
-    series,
-  );
-  return new SessionsService(crud, series, updates);
+async function makeService(
+  prisma: unknown,
+  tags: unknown,
+  placement: unknown = fakeTaskPlacement(),
+  feedback: unknown = fakeSchedulingFeedback(),
+): Promise<SessionsService> {
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      SessionsService,
+      SessionCrudService,
+      SeriesService,
+      SessionUpdateService,
+      { provide: PrismaService, useValue: prisma },
+      { provide: TagsService, useValue: tags },
+      { provide: TaskPlacementService, useValue: placement },
+      { provide: SchedulingFeedbackService, useValue: feedback },
+    ],
+  }).compile();
+  return module.get<SessionsService>(SessionsService);
 }
 
 /** Build a prisma double whose `$transaction` runs against the given tx double. */
@@ -155,11 +164,11 @@ describe("SessionsService.create", () => {
     });
     const tagsService = fakeTagsService();
     const placement = fakeTaskPlacement();
-    const service = makeService(
-      prisma as never,
-      tagsService as never,
-      placement as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      tagsService,
+      placement,
+      fakeSchedulingFeedback(),
     );
 
     const dto = {
@@ -226,11 +235,11 @@ describe("SessionsService.create", () => {
       scheduledStartTime: slot,
       appliedPolicy: "HEURISTIC",
     });
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      placement as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      placement,
+      fakeSchedulingFeedback(),
     );
 
     const dto: CreateSessionDto = {
@@ -289,11 +298,11 @@ describe("SessionsService.create", () => {
       { id: "s-2", scheduledStartTime: new Date("2026-06-05T09:00:00.000Z") },
       { id: "s-3", scheduledStartTime: null },
     ]);
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      placement as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      placement,
+      fakeSchedulingFeedback(),
     );
 
     const dto: CreateSessionDto = {
@@ -346,11 +355,11 @@ describe("SessionsService.create", () => {
     });
     const placement = fakeTaskPlacement();
     placement.canPlaceTask.mockResolvedValue(false);
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      placement as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      placement,
+      fakeSchedulingFeedback(),
     );
 
     const dto: CreateSessionDto = {
@@ -382,11 +391,11 @@ describe("SessionsService.create", () => {
     };
     const placement = fakeTaskPlacement();
     placement.canPlaceSeries.mockResolvedValue(false);
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      placement as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      placement,
+      fakeSchedulingFeedback(),
     );
 
     const dto: CreateSessionDto = {
@@ -422,11 +431,11 @@ describe("SessionsService.create", () => {
       sessionEvent: { create: jest.fn().mockResolvedValue({}) },
     });
     const placement = fakeTaskPlacement();
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      placement as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      placement,
+      fakeSchedulingFeedback(),
     );
 
     const dto = {
@@ -471,11 +480,11 @@ describe("SessionsService.create", () => {
       sessionEvent: { create: jest.fn().mockResolvedValue({}) },
     });
     const placement = fakeTaskPlacement();
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      placement as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      placement,
+      fakeSchedulingFeedback(),
     );
 
     const dto = {
@@ -523,11 +532,11 @@ describe("SessionsService.create", () => {
       sessionEvent: { create: jest.fn().mockResolvedValue({}) },
     });
     const placement = fakeTaskPlacement();
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      placement as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      placement,
+      fakeSchedulingFeedback(),
     );
 
     const dto = {
@@ -553,11 +562,11 @@ describe("SessionsService.list", () => {
     const rows = [session({ id: "session-1" })];
     const findMany = jest.fn().mockResolvedValue(rows);
     const prisma = { session: { findMany } };
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      fakeTaskPlacement() as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      fakeTaskPlacement(),
+      fakeSchedulingFeedback(),
     );
 
     const result = await service.list(
@@ -593,11 +602,11 @@ describe("SessionsService.list", () => {
     });
     const findMany = jest.fn().mockResolvedValue([rep]);
     const prisma = { session: { findMany } };
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      fakeTaskPlacement() as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      fakeTaskPlacement(),
+      fakeSchedulingFeedback(),
     );
 
     const result = await service.list(
@@ -624,11 +633,11 @@ describe("SessionsService.list", () => {
     });
     const findMany = jest.fn().mockResolvedValue([crossing]);
     const prisma = { session: { findMany } };
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      fakeTaskPlacement() as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      fakeTaskPlacement(),
+      fakeSchedulingFeedback(),
     );
 
     const result = await service.list(
@@ -664,11 +673,11 @@ describe("SessionsService.list", () => {
     // to prove list() itself filters it out by the overlap guard.
     const findMany = jest.fn().mockResolvedValue([noOverlap]);
     const prisma = { session: { findMany } };
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      fakeTaskPlacement() as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      fakeTaskPlacement(),
+      fakeSchedulingFeedback(),
     );
 
     const result = await service.list(
@@ -687,11 +696,11 @@ describe("SessionsService.list", () => {
     });
     const findMany = jest.fn().mockResolvedValue([unscheduled]);
     const prisma = { session: { findMany } };
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      fakeTaskPlacement() as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      fakeTaskPlacement(),
+      fakeSchedulingFeedback(),
     );
 
     const result = await service.list(
@@ -724,11 +733,11 @@ describe("SessionsService.list", () => {
     });
     const findMany = jest.fn().mockResolvedValue([rep]);
     const prisma = { session: { findMany } };
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      fakeTaskPlacement() as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      fakeTaskPlacement(),
+      fakeSchedulingFeedback(),
     );
 
     const result = await service.list(
@@ -746,16 +755,111 @@ describe("SessionsService.list", () => {
   });
 });
 
+describe("SessionsService.suggestions", () => {
+  it("collapses every sitting of one TASK series into a single suggestion (the most recently created)", async () => {
+    const rows = [
+      session({
+        id: "s-3",
+        seriesId: "series-1",
+        title: "Study",
+        createdAt: new Date("2026-01-03T00:00:00.000Z"),
+      }),
+      session({
+        id: "s-2",
+        seriesId: "series-1",
+        title: "Study",
+        createdAt: new Date("2026-01-02T00:00:00.000Z"),
+      }),
+      session({
+        id: "s-1",
+        seriesId: "series-1",
+        title: "Study",
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      }),
+    ];
+    const findMany = jest.fn().mockResolvedValue(rows);
+    const prisma = { session: { findMany } };
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      fakeTaskPlacement(),
+      fakeSchedulingFeedback(),
+    );
+
+    const result = await service.suggestions({ limit: 10 }, user);
+
+    expect(result.suggestions).toHaveLength(1);
+    expect(result.suggestions[0].id).toBe("s-3");
+    // Overfetches (limit × 4) before deduping so the series' sittings eating
+    // up the top rows can't starve the final deduped list.
+    expect(findMany.mock.calls[0][0].take).toBe(40);
+  });
+
+  it("collapses two independently-created tasks that share a title into just the most recent", async () => {
+    const rows = [
+      session({
+        id: "s-2",
+        title: "Read chapter 1",
+        createdAt: new Date("2026-01-02T00:00:00.000Z"),
+      }),
+      session({
+        id: "s-1",
+        title: "Read chapter 1",
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      }),
+    ];
+    const findMany = jest.fn().mockResolvedValue(rows);
+    const prisma = { session: { findMany } };
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      fakeTaskPlacement(),
+      fakeSchedulingFeedback(),
+    );
+
+    const result = await service.suggestions({}, user);
+
+    expect(result.suggestions.map((s) => s.id)).toEqual(["s-2"]);
+  });
+
+  it("dedupes titles case-insensitively, ignoring surrounding whitespace", async () => {
+    const rows = [
+      session({
+        id: "s-2",
+        title: "  Build Web  ",
+        createdAt: new Date("2026-01-02T00:00:00.000Z"),
+      }),
+      session({
+        id: "s-1",
+        title: "build web",
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      }),
+    ];
+    const findMany = jest.fn().mockResolvedValue(rows);
+    const prisma = { session: { findMany } };
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      fakeTaskPlacement(),
+      fakeSchedulingFeedback(),
+    );
+
+    const result = await service.suggestions({}, user);
+
+    expect(result.suggestions.map((s) => s.id)).toEqual(["s-2"]);
+  });
+});
+
 describe("SessionsService.findById", () => {
   it("returns the mapped session when found", async () => {
     const row = session({ id: "session-1" });
     const findUnique = jest.fn().mockResolvedValue(row);
     const prisma = { session: { findUnique } };
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      fakeTaskPlacement() as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      fakeTaskPlacement(),
+      fakeSchedulingFeedback(),
     );
 
     const result = await service.findById("session-1", user);
@@ -765,11 +869,11 @@ describe("SessionsService.findById", () => {
   it("throws NotFoundException when missing", async () => {
     const findUnique = jest.fn().mockResolvedValue(null);
     const prisma = { session: { findUnique } };
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      fakeTaskPlacement() as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      fakeTaskPlacement(),
+      fakeSchedulingFeedback(),
     );
 
     await expect(service.findById("missing", user)).rejects.toBeInstanceOf(
@@ -792,11 +896,11 @@ describe("SessionsService.update", () => {
     });
     const tagsService = fakeTagsService();
     const placement = fakeTaskPlacement();
-    const service = makeService(
-      prisma as never,
-      tagsService as never,
-      placement as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      tagsService,
+      placement,
+      fakeSchedulingFeedback(),
     );
 
     const dto: UpdateSessionDto = { title: "New title" };
@@ -827,11 +931,11 @@ describe("SessionsService.update", () => {
       sessionEvent: { create: eventCreate },
       slotProposal: { findFirst: () => Promise.resolve(null) },
     });
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      fakeTaskPlacement() as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      fakeTaskPlacement(),
+      fakeSchedulingFeedback(),
     );
 
     await service.update(
@@ -862,11 +966,11 @@ describe("SessionsService.update", () => {
       sessionEvent: { create: eventCreate },
       slotProposal: { findFirst: () => Promise.resolve(null) },
     });
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      fakeTaskPlacement() as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      fakeTaskPlacement(),
+      fakeSchedulingFeedback(),
     );
 
     await service.update("session-1", { durationMinutes: 90 }, user);
@@ -891,11 +995,11 @@ describe("SessionsService.update", () => {
       sessionEvent: { create: eventCreate },
       slotProposal: { findFirst: () => Promise.resolve(null) },
     });
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      fakeTaskPlacement() as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      fakeTaskPlacement(),
+      fakeSchedulingFeedback(),
     );
 
     await service.update(
@@ -923,11 +1027,11 @@ describe("SessionsService.update", () => {
       sessionEvent: { create: jest.fn().mockResolvedValue({}) },
     });
     const placement = fakeTaskPlacement();
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      placement as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      placement,
+      fakeSchedulingFeedback(),
     );
 
     await service.update(
@@ -956,11 +1060,11 @@ describe("SessionsService.update", () => {
       sessionEvent: { create: jest.fn().mockResolvedValue({}) },
     });
     const placement = fakeTaskPlacement();
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      placement as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      placement,
+      fakeSchedulingFeedback(),
     );
 
     const result = await service.update(
@@ -1019,11 +1123,11 @@ describe("SessionsService.update", () => {
       { id: "s-1", scheduledStartTime: new Date("2026-06-02T09:00:00.000Z") },
       { id: "s-2", scheduledStartTime: new Date("2026-06-06T09:00:00.000Z") },
     ]);
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      placement as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      placement,
+      fakeSchedulingFeedback(),
     );
 
     const result = await service.update(
@@ -1052,11 +1156,11 @@ describe("SessionsService.update", () => {
       session: { findFirst, update: jest.fn() },
       sessionEvent: { create: jest.fn() },
     });
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      fakeTaskPlacement() as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      fakeTaskPlacement(),
+      fakeSchedulingFeedback(),
     );
 
     await expect(
@@ -1073,11 +1177,11 @@ describe("SessionsService.remove", () => {
     const prisma = prismaWithTx({
       session: { findFirst, delete: del },
     });
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      fakeTaskPlacement() as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      fakeTaskPlacement(),
+      fakeSchedulingFeedback(),
     );
 
     const result = await service.remove("session-1", user);
@@ -1093,11 +1197,11 @@ describe("SessionsService.remove", () => {
     const prisma = prismaWithTx({
       session: { findFirst, delete: jest.fn() },
     });
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      fakeTaskPlacement() as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      fakeTaskPlacement(),
+      fakeSchedulingFeedback(),
     );
 
     await expect(service.remove("missing", user)).rejects.toBeInstanceOf(
@@ -1118,11 +1222,11 @@ describe("SessionsService.remove", () => {
         fn({ session: { findFirst: jest.fn(), delete: del } }),
       sessionSeries: { findFirst: seriesFindFirst, update: seriesUpdate },
     };
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      fakeTaskPlacement() as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      fakeTaskPlacement(),
+      fakeSchedulingFeedback(),
     );
 
     const result = await service.remove(
@@ -1150,11 +1254,11 @@ describe("SessionsService.remove", () => {
         fn({ session: { findFirst: jest.fn(), delete: jest.fn() } }),
       sessionSeries: { findFirst: seriesFindFirst, update: seriesUpdate },
     };
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      fakeTaskPlacement() as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      fakeTaskPlacement(),
+      fakeSchedulingFeedback(),
     );
 
     await service.remove("series-1::2026-09-03T09:00:00.000Z", user);
@@ -1173,11 +1277,11 @@ describe("SessionsService.removeSeries", () => {
     const prisma = prismaWithTx({
       sessionSeries: { findFirst: seriesFindFirst, delete: seriesDelete },
     });
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      fakeTaskPlacement() as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      fakeTaskPlacement(),
+      fakeSchedulingFeedback(),
     );
 
     const result = await service.removeSeries("series-1", user);
@@ -1197,11 +1301,11 @@ describe("SessionsService.removeSeries", () => {
         delete: jest.fn(),
       },
     });
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      fakeTaskPlacement() as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      fakeTaskPlacement(),
+      fakeSchedulingFeedback(),
     );
 
     await expect(service.removeSeries("nope", user)).rejects.toBeInstanceOf(
@@ -1232,11 +1336,11 @@ describe("SessionsService.truncateSeriesFrom", () => {
         delete: seriesDelete,
       },
     });
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      fakeTaskPlacement() as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      fakeTaskPlacement(),
+      fakeSchedulingFeedback(),
     );
 
     const result = await service.truncateSeriesFrom(
@@ -1281,11 +1385,11 @@ describe("SessionsService.truncateSeriesFrom", () => {
         delete: seriesDelete,
       },
     });
-    const service = makeService(
-      prisma as never,
-      fakeTagsService() as never,
-      fakeTaskPlacement() as never,
-      fakeSchedulingFeedback() as never,
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      fakeTaskPlacement(),
+      fakeSchedulingFeedback(),
     );
 
     const result = await service.truncateSeriesFrom(
@@ -1311,7 +1415,7 @@ describe("SessionsService.removeSeriesFrom", () => {
     { id: "s-3", sessionIndex: 3, createdAt: new Date("2026-01-01T00:02:00Z") },
   ];
 
-  function buildService(deleteMany: jest.Mock, seriesDelete: jest.Mock) {
+  async function buildService(deleteMany: jest.Mock, seriesDelete: jest.Mock) {
     const prisma = prismaWithTx({
       sessionSeries: {
         findFirst: jest.fn().mockResolvedValue({
@@ -1323,13 +1427,13 @@ describe("SessionsService.removeSeriesFrom", () => {
       },
       session: { deleteMany },
     });
-    return makeService(prisma as never, fakeTagsService() as never);
+    return makeService(prisma, fakeTagsService());
   }
 
   it("deletes the named session and every later one, keeps the earlier ones", async () => {
     const deleteMany = jest.fn().mockResolvedValue({ count: 2 });
     const seriesDelete = jest.fn().mockResolvedValue({});
-    const service = buildService(deleteMany, seriesDelete);
+    const service = await buildService(deleteMany, seriesDelete);
 
     const result = await service.removeSeriesFrom("series-1", "s-2", user);
 
@@ -1347,7 +1451,7 @@ describe("SessionsService.removeSeriesFrom", () => {
   it("removes the series row too when the first session is the anchor", async () => {
     const deleteMany = jest.fn().mockResolvedValue({ count: 3 });
     const seriesDelete = jest.fn().mockResolvedValue({});
-    const service = buildService(deleteMany, seriesDelete);
+    const service = await buildService(deleteMany, seriesDelete);
 
     const result = await service.removeSeriesFrom("series-1", "s-1", user);
 
@@ -1359,7 +1463,7 @@ describe("SessionsService.removeSeriesFrom", () => {
   });
 
   it("throws NotFoundException when the session is not part of the series", async () => {
-    const service = buildService(jest.fn(), jest.fn());
+    const service = await buildService(jest.fn(), jest.fn());
     await expect(
       service.removeSeriesFrom("series-1", "not-mine", user),
     ).rejects.toBeInstanceOf(NotFoundException);

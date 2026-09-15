@@ -148,6 +148,15 @@ export interface UpdateSessionInput {
   durationMinutes?: number;
   /** ISO-8601 deadline (TASK only). Omit to leave unchanged. */
   deadline?: string;
+  /**
+   * New total sitting count for a TASK series (the whole series, not just this
+   * row). Raising it adds sittings placed between now and the deadline;
+   * lowering it removes the highest-indexed (most recently added) sittings —
+   * rejected if any of those has already started. A plain single TASK
+   * (no existing series) with `sessionCount > 1` is promoted into a series.
+   * Ignored for non-TASK types.
+   */
+  sessionCount?: number;
   tags?: string[];
   scheduledStartTime?: string | null;
   /**
@@ -171,9 +180,12 @@ export interface SessionsListResponse {
 }
 
 /**
- * Title-autocomplete suggestions: the user's existing sessions, newest first and
- * deduped by title, optionally filtered by the text typed so far. Each item is
- * a full {@link Session} so selecting one can populate the rest of the create form.
+ * Title-autocomplete suggestions: the user's existing sessions, newest first
+ * and deduped by normalized title — a multi-sitting TASK series' N sittings,
+ * or a title independently re-created more than once, all collapse to just
+ * the most-recently-created match — optionally filtered by the text typed so
+ * far. Each item is a full {@link Session} so selecting one can populate the
+ * rest of the create form.
  */
 export interface SessionSuggestionsResponse {
   suggestions: Session[];

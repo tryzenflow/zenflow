@@ -2,7 +2,11 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
-import { MAX_TITLE_LENGTH, type SessionFormValues } from "@zenflow/core";
+import {
+  MAX_TITLE_LENGTH,
+  effectiveNowForSessionCountEdit,
+  type SessionFormValues,
+} from "@zenflow/core";
 import type { ReactNode } from "react";
 import { Controller, type UseFormReturn } from "react-hook-form";
 import { View } from "react-native";
@@ -17,13 +21,14 @@ import { TagAutocomplete } from "./form/tag-autocomplete";
 /**
  * Session-form fields, branched by `type` (watched from the form):
  *
- * - **TASK** — Duration stepper + Sessions field (both create only — an
- *   existing task is resized from the calendar's "Move to…" sheet, and a
- *   series' count can't be changed after creation) + Deadline chip row. A
- *   Sessions count > 1 requests a series (issue #33), capped at one session
- *   per day (`SessionCountField`); `sessionSchema`'s `superRefine` surfaces
- *   an infeasible duration×count under the Deadline field, same as a plain
- *   missing deadline.
+ * - **TASK** — Duration stepper (create only — an existing task is resized
+ *   from the calendar's "Move to…" sheet) + Sessions field (editable in both
+ *   create and edit mode; edit mode bounds its feasible-max window off the
+ *   edited sitting's own schedule via `editingInstance`, not raw "now") +
+ *   Deadline chip row. A Sessions count > 1 requests a series (issue #33),
+ *   capped at one session per day (`SessionCountField`); `sessionSchema`'s
+ *   `superRefine` surfaces an infeasible duration×count under the Deadline
+ *   field, same as a plain missing deadline.
  * - **ASSIGNMENT / EXAM / LECTURE** — a fixed date + start/end time.
  * - **DND** — the same fixed-time picker plus a recurrence builder.
  *
@@ -38,6 +43,7 @@ export function SessionSheetFields({
   editing,
   typeSelector,
   deadlineWarning,
+  editingInstance,
 }: {
   initialValue?: string;
   form: UseFormReturn<SessionFormValues>;
@@ -48,6 +54,16 @@ export function SessionSheetFields({
   /** Shown (red) under the Deadline field — e.g. the picked deadline is
    * earlier than where this TASK is already scheduled. */
   deadlineWarning?: string;
+  /**
+   * Edit mode only: the schedule info of the specific `TASK` sitting
+   * currently open in the form, used to bound the session-count slider's
+   * feasible-max window off an adjusted "now" (see
+   * `effectiveNowForSessionCountEdit`). Undefined in create mode.
+   */
+  editingInstance?: {
+    scheduledStartTime: string | null;
+    durationMinutes: number;
+  };
 }) {
   const type = form.watch("type");
   const isTask = type === "TASK";
@@ -137,23 +153,26 @@ export function SessionSheetFields({
             />
           )}
 
-          {!editing && (
-            <Controller
-              control={form.control}
-              name="sessionCount"
-              render={({ field }) => (
-                <Field label="Sessions">
-                  <SessionCountField
-                    value={field.value ?? 1}
-                    onChange={field.onChange}
-                    deadline={form.watch("deadline")}
-                    duration={form.watch("duration")}
-                    disabled={disabled}
-                  />
-                </Field>
-              )}
-            />
-          )}
+          <Controller
+            control={form.control}
+            name="sessionCount"
+            render={({ field }) => (
+              <Field label="Sessions">
+                <SessionCountField
+                  value={field.value ?? 1}
+                  onChange={field.onChange}
+                  deadline={form.watch("deadline")}
+                  duration={form.watch("duration")}
+                  from={
+                    editingInstance
+                      ? effectiveNowForSessionCountEdit(editingInstance)
+                      : undefined
+                  }
+                  disabled={disabled}
+                />
+              </Field>
+            )}
+          />
 
           <Controller
             control={form.control}

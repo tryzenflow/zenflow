@@ -115,6 +115,29 @@ not started yet — a shorter window tightens the spacing, a longer one relaxes 
 sittings keep their slot. Editing one member's deadline is the whole-series deadline edit;
 there is no per-member deadline.
 
+### Editing `sessionCount` (`SeriesService.resizeSessionCount`)
+
+`PATCH /sessions/:id` with `sessionCount` resizes an existing `TASK` series post-creation —
+the edit-mode counterpart of the create-time session-count slider:
+
+- **Grow** (`sessionCount` > current member count) — a pre-flight feasibility check
+  (`TaskPlacementService.canPlaceSeries`, over just the *added* sittings) rejects the whole
+  resize up front if they have nowhere to fit; otherwise `targetCount − memberCount` new rows
+  are cloned from the representative member (title/note/location/tags/duration/deadline),
+  `sessionIndex` continuing from the current max, and placed via
+  `TaskPlacementService.placeSeriesOnCreate` — since the existing members are already
+  persisted rows, the normal day-load occupancy scan schedules around them without moving
+  them. `sessionTotal` is rewritten onto every member, old and new, and each new row gets its
+  own `CREATE` `SessionEvent`.
+- **Shrink** (`sessionCount` < current member count) — always drops the highest-`sessionIndex`
+  (most recently added) sittings first; rejected outright, with nothing written, if any of
+  those has already started (`scheduledStartTime ≤ now`). `sessionTotal` is rewritten onto the
+  survivors.
+- **Promotion** — a plain single `TASK` (no series yet) patched with `sessionCount > 1` is
+  first promoted into a 1-member `SessionSeries` (`SeriesService.promoteToSeries`), then grown
+  exactly like the series case above — symmetric with create-mode's "raise the count to make
+  a series."
+
 The N `CREATE` events share a `batchId` (echoed on `CreateSessionResponse.batchId`).
 Reverting a batch, or clearing a series outright, is `DELETE /sessions/series/:seriesId`;
 `DELETE /sessions/series/:seriesId/from/:sessionId` drops that session and every later one

@@ -101,6 +101,7 @@ export default function EditSessionScreen() {
             ...common,
             duration: res.durationMinutes,
             deadline: res.deadline ?? "",
+            sessionCount: res.sessionTotal ?? 1,
           });
         } else {
           const start = res.scheduledStartTime
@@ -138,8 +139,12 @@ export default function EditSessionScreen() {
     };
     if (values.type === "TASK") {
       // Duration (resize) is owned by the calendar's "Move to…" sheet now —
-      // the edit form only touches a TASK's deadline.
+      // the edit form only touches a TASK's deadline and, now, its session
+      // count (grow/shrink the series).
       patch.deadline = values.deadline;
+      if (values.sessionCount != null) {
+        patch.sessionCount = values.sessionCount;
+      }
     } else if (values.date && values.startTime && values.endTime) {
       const [y, mo, d] = values.date.split("-").map(Number);
       const [h, mi] = values.startTime.split(":").map(Number);
@@ -294,6 +299,10 @@ export default function EditSessionScreen() {
               ? "Earlier than this session's scheduled start — it'll be marked late."
               : undefined
           }
+          editingInstance={{
+            scheduledStartTime: task.scheduledStartTime,
+            durationMinutes: task.durationMinutes,
+          }}
         />
       ) : (
         <View className="items-center py-16">

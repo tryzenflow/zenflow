@@ -2,11 +2,20 @@ name: zenflow-prod
 services:
   api:
     container_name: zenflow-api-prod
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
     image: zenflow-api:2.1.0
     expose:
       - "5000"
     networks:
-      - api
+      - edge
+      - db
+      - cache
+      - ratelimit
+      - bandit
+      - mail
+      - o11y
     volumes:
       - uploads:/app/uploads
     depends_on:
@@ -23,11 +32,26 @@ services:
     env_file:
       - .env.prod
 
+  bandit:
+    container_name: zenflow-bandit-prod
+    build: ../services/bandit
+    expose:
+      - "8000"
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    networks:
+      - bandit
+      - o11y
+
   migrations:
     container_name: zenflow-db-migration-prod
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
     image: zenflow-api:2.1.0
     networks:
-      - api
+      - db
+      - egress
     command: pnpm prisma:migrate:deploy
     depends_on:
       postgres:
@@ -45,7 +69,7 @@ services:
     env_file:
       - docker.prod.env
     networks:
-      - api
+      - db
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -58,7 +82,7 @@ services:
     expose:
       - "6379"
     networks:
-      - api
+      - cache
 
   redis-ratelimit:
     container_name: zenflow-cache-ratelimit-prod
@@ -66,7 +90,7 @@ services:
     expose:
       - "6379"
     networks:
-      - api
+      - ratelimit
 
   # --- Observability stack (see observability/README.md) --------------------
   # Receives OTLP/HTTP from the API (src/tracing.ts) and the bandit service on
@@ -85,7 +109,7 @@ services:
       - "4318"
       - "8889"
     networks:
-      - api
+      - o11y
     depends_on:
       - tempo
       - loki
@@ -103,7 +127,7 @@ services:
     expose:
       - "3200"
     networks:
-      - api
+      - o11y
 
   # Logs. Fed by Alloy (container stdout) and by the collector (app OTLP logs).
   loki:
@@ -117,7 +141,7 @@ services:
     expose:
       - "3100"
     networks:
-      - api
+      - o11y
 
   # Ships every container's stdout/stderr to Loki, tagged by compose service.
   alloy:
@@ -136,7 +160,7 @@ services:
     expose:
       - "12345"
     networks:
-      - api
+      - o11y
     depends_on:
       - loki
 
@@ -158,7 +182,7 @@ services:
     expose:
       - "9090"
     networks:
-      - api
+      - o11y
 
   node-exporter:
     container_name: zenflow-node-exporter-prod
@@ -171,13 +195,26 @@ services:
     expose:
       - "9100"
     networks:
-      - api
+      - o11y
 
   cadvisor:
     container_name: zenflow-cadvisor-prod
     image: gcr.io/cadvisor/cadvisor:v0.49.1
     restart: unless-stopped
     privileged: true
+    # On a cgroup v2 host, cAdvisor otherwise runs in its own private cgroup
+    # namespace and can only see its own cgroup — every container_* series
+    # for sibling containers comes back empty even though the target is up.
+    #
+    # Also needs the host's Docker daemon on the classic overlay2 graphdriver,
+    # not the containerd-snapshotter image store Docker Engine defaults new
+    # installs to (`docker info` → Driver Type: io.containerd.snapshotter.v1):
+    # cAdvisor's Docker reader can't resolve a container's read-write layer
+    # under that layout ("failed to identify the read-write layer ID ...") and
+    # every container_* series comes back with no name/image label. Set
+    # `{"features": {"containerd-snapshotter": false}}` in the host's
+    # /etc/docker/daemon.json and restart dockerd if so.
+    cgroup: host
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
@@ -187,7 +224,7 @@ services:
     expose:
       - "8080"
     networks:
-      - api
+      - o11y
 
   # Dashboards + Explore. Bound to loopback only — reach it with an SSH tunnel
   # or put it behind Caddy with auth. Anonymous access is OFF here (unlike the
@@ -209,9 +246,9 @@ services:
       - ./observability/grafana/dashboards:/etc/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
     ports:
-      - "127.0.0.1:3000:3000"
+      - "3000:3000"
     networks:
-      - api
+      - o11y
     depends_on:
       - prometheus
       - tempo
@@ -226,7 +263,7 @@ services:
     expose:
       - "8081"
     networks:
-      - api
+      - o11y
 
   caddy:
     image: caddy:2.11.4
@@ -237,16 +274,43 @@ services:
       - "443:443"
       - "443:443/udp"
     volumes:
-      - ./Caddyfile.prod:/etc/caddy/Caddyfile
+      - ./Caddyfile.staging:/etc/caddy/Caddyfile
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
       - api
     networks:
-      - api
+      - edge
+
+  mail:
+    container_name: zenflow-mail-staging
+    image: mailhog/mailhog:v1.0.1
+    expose:
+      - "1025"
+    ports:
+      - 8025:8025
+    networks:
+      - mail
 
 networks:
-  api:
+  edge:
+    driver: bridge
+  egress:
+    driver: bridge
+  db:
+    driver: bridge
+    internal: true
+  cache:
+    driver: bridge
+    internal: true
+  ratelimit:
+    driver: bridge
+    internal: true
+  bandit:
+    driver: bridge
+  o11y:
+    driver: bridge
+  mail:
     driver: bridge
 
 volumes:

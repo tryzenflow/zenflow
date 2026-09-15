@@ -320,6 +320,37 @@ export class SessionUpdateService {
         );
       }
 
+      // Edit-mode "session count" resize/promote (the create-mode session-count
+      // slider's edit-mode counterpart). Symmetric with create: raising a plain
+      // TASK's count above 1 promotes it into a series; changing an existing
+      // series' count grows or shrinks it. Takes priority over the plain
+      // deadline-redistribution branch below when both are present in the same
+      // PATCH — the grow path already re-places the new sittings using the
+      // row's own (possibly just-updated) deadline.
+      if (dto.sessionCount !== undefined && updated.type === "TASK") {
+        const seriesId =
+          updated.seriesId ??
+          (dto.sessionCount > 1
+            ? await this.series.promoteToSeries(
+                updated.id,
+                updated.deadline as Date,
+                user,
+              )
+            : null);
+        if (seriesId) {
+          const seriesSessions = await this.series.resizeSessionCount(
+            seriesId,
+            dto.sessionCount,
+            user,
+            now,
+          );
+          const rep =
+            seriesSessions.find((s) => s.id === updated.id) ??
+            seriesSessions[0];
+          return { ...rep, sessions: seriesSessions };
+        }
+      }
+
       // A deadline change re-places just the affected TASK — a standalone task
       // into its new best empty slot, or a whole series redistributed across the
       // new window. No other session is ever moved.

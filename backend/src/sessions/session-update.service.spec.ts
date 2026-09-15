@@ -59,6 +59,8 @@ function fakeSeries() {
     updateRecurringFollowing: jest.fn(),
     redistribute: jest.fn(),
     excludeOccurrence: jest.fn().mockResolvedValue({ id: "noop" }),
+    promoteToSeries: jest.fn(),
+    resizeSessionCount: jest.fn(),
   };
 }
 
@@ -328,6 +330,113 @@ describe("SessionUpdateService — TASK-series sitting, scope following/series",
 
     expect(series.updateSiblingTimeOfDay).not.toHaveBeenCalled();
     expect(update).toHaveBeenCalled();
+  });
+});
+
+describe("SessionUpdateService — sessionCount resize/promote", () => {
+  it("an existing series' sessionCount change delegates straight to resizeSessionCount", async () => {
+    const existing = session({
+      id: "s-1",
+      type: "TASK",
+      seriesId: "series-1",
+      deadline: new Date("2026-06-20T00:00:00.000Z"),
+    });
+    const findFirst = jest.fn().mockResolvedValue(existing);
+    const update = jest.fn().mockResolvedValue(existing);
+    const prisma = {
+      $transaction: (fn: (t: unknown) => unknown) =>
+        fn({
+          session: { findFirst, update },
+          sessionEvent: { create: jest.fn() },
+        }),
+    };
+    const series = fakeSeries();
+    const grownSessions = [
+      { id: "s-1" },
+      { id: "s-2" },
+      { id: "s-3" },
+      { id: "s-4" },
+    ];
+    series.resizeSessionCount.mockResolvedValue(grownSessions);
+    const service = makeService(prisma as never, series);
+
+    const result = await service.update("s-1", { sessionCount: 4 }, user);
+
+    expect(series.promoteToSeries).not.toHaveBeenCalled();
+    expect(series.resizeSessionCount).toHaveBeenCalledWith(
+      "series-1",
+      4,
+      user,
+      expect.any(Date),
+    );
+    expect(result.sessions).toBe(grownSessions);
+    expect(result.id).toBe("s-1");
+  });
+
+  it("promotes a plain single TASK (no series) into a series, then grows it", async () => {
+    const deadline = new Date("2026-06-20T00:00:00.000Z");
+    const existing = session({
+      id: "plain-1",
+      type: "TASK",
+      seriesId: null,
+      deadline,
+    });
+    const findFirst = jest.fn().mockResolvedValue(existing);
+    const update = jest.fn().mockResolvedValue(existing);
+    const prisma = {
+      $transaction: (fn: (t: unknown) => unknown) =>
+        fn({
+          session: { findFirst, update },
+          sessionEvent: { create: jest.fn() },
+        }),
+    };
+    const series = fakeSeries();
+    series.promoteToSeries.mockResolvedValue("new-series-1");
+    const grownSessions = [{ id: "plain-1" }, { id: "new-2" }];
+    series.resizeSessionCount.mockResolvedValue(grownSessions);
+    const service = makeService(prisma as never, series);
+
+    const result = await service.update("plain-1", { sessionCount: 2 }, user);
+
+    expect(series.promoteToSeries).toHaveBeenCalledWith(
+      "plain-1",
+      deadline,
+      user,
+    );
+    expect(series.resizeSessionCount).toHaveBeenCalledWith(
+      "new-series-1",
+      2,
+      user,
+      expect.any(Date),
+    );
+    expect(result.sessions).toBe(grownSessions);
+    expect(result.id).toBe("plain-1");
+  });
+
+  it("sessionCount: 1 on a plain single TASK is a no-op — falls through to the plain PATCH", async () => {
+    const existing = session({
+      id: "plain-1",
+      type: "TASK",
+      seriesId: null,
+      deadline: new Date("2026-06-20T00:00:00.000Z"),
+    });
+    const findFirst = jest.fn().mockResolvedValue(existing);
+    const update = jest.fn().mockResolvedValue(existing);
+    const prisma = {
+      $transaction: (fn: (t: unknown) => unknown) =>
+        fn({
+          session: { findFirst, update },
+          sessionEvent: { create: jest.fn() },
+        }),
+    };
+    const series = fakeSeries();
+    const service = makeService(prisma as never, series);
+
+    const result = await service.update("plain-1", { sessionCount: 1 }, user);
+
+    expect(series.promoteToSeries).not.toHaveBeenCalled();
+    expect(series.resizeSessionCount).not.toHaveBeenCalled();
+    expect(result.sessions).toBeUndefined();
   });
 });
 

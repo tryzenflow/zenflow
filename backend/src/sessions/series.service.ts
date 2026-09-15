@@ -1,11 +1,15 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import type {
   CreateSessionResponse,
   RemoveSessionResponse,
   RemoveSessionSeriesResponse,
   Session as SharedSession,
 } from "@zenflow/shared";
-import { type User } from "../../generated/prisma";
+import { type SessionSeries, type User } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
 import { TagsService } from "../tags/tags.service";
 import { TaskPlacementService } from "../scheduler/io/task-placement.service";
@@ -23,6 +27,18 @@ import { CreateSessionDto } from "./dto/create-session.dto";
 import { SessionRow, WITH_TAGS_AND_SERIES } from "./types/session-row";
 import { toSessionDto } from "./session-mapper";
 import { createEventData } from "./session-events";
+
+/**
+ * Shown when a `TASK` (or series, or a series being grown) has no feasible
+ * slot anywhere between now and its deadline — {@link SessionCrudService.create}'s
+ * and {@link SeriesService.resizeSessionCount}'s pre-flight checks reject the
+ * whole operation with this message before inserting anything, so nothing
+ * accumulates half-placed. A `"\n"` splits a short title from its description —
+ * the mobile client's `splitToastMessage` renders the two lines separately
+ * instead of one long wrapped, bold line.
+ */
+export const NO_FEASIBLE_SLOT_MESSAGE =
+  "No open slot before the deadline\nLoosen the deadline or reduce the number of sessions, then try again.";
 
 /**
  * Every `SessionSeries` lifecycle op — the `sessionCount > 1` `TASK` batch, its
@@ -151,6 +167,206 @@ export class SeriesService {
         scheduledStartTime: startById.get(m.id) ?? null,
       }),
     );
+  }
+
+  /**
+   * Promote a plain one-off `TASK` (no `seriesId`) into a 1-member series so it
+   * can be grown by {@link resizeSessionCount} — mirrors the single-row shape
+   * `createTaskSeries` gives a fresh series, just backfilled onto the existing
+   * row instead of inserted fresh. Symmetric with create-mode's "raise the
+   * count to make a series". Returns the new series id.
+   */
+  async promoteToSeries(
+    sessionId: string,
+    deadline: Date,
+    user: User,
+  ): Promise<string> {
+    return this.prisma.$transaction(async (tx) => {
+      const series = await tx.sessionSeries.create({
+        data: { type: "TASK", rrule: null, deadline, userId: user.id },
+      });
+      await tx.session.update({
+        where: { id: sessionId },
+        data: { seriesId: series.id, sessionIndex: 1, sessionTotal: 1 },
+      });
+      return series.id;
+    });
+  }
+
+  /**
+   * Edit-mode "session count" resize — change an existing `TASK` series' total
+   * sitting count after creation. A no-op when `targetCount` already matches;
+   * otherwise delegates to {@link growSeries} or {@link shrinkSeries}. Returns
+   * every member (`sessionIndex` order, same shape {@link redistribute} returns).
+   */
+  async resizeSessionCount(
+    seriesId: string,
+    targetCount: number,
+    user: User,
+    now: Date,
+  ): Promise<SharedSession[]> {
+    const series = await this.prisma.sessionSeries.findFirst({
+      where: { id: seriesId, userId: user.id, type: "TASK" },
+    });
+    if (!series)
+      throw new NotFoundException(`Cannot find TASK series ${seriesId}`);
+
+    const members = await this.prisma.session.findMany({
+      where: { seriesId, userId: user.id },
+      include: WITH_TAGS_AND_SERIES,
+      orderBy: [{ sessionIndex: "asc" }, { createdAt: "asc" }],
+    });
+    if (members.length === 0)
+      throw new NotFoundException(`Cannot find TASK series ${seriesId}`);
+
+    if (targetCount === members.length) {
+      return members.map((m) => toSessionDto(m));
+    }
+    if (targetCount > members.length) {
+      return this.growSeries(series, members, targetCount, user, now);
+    }
+    return this.shrinkSeries(series, members, targetCount, user, now);
+  }
+
+  /**
+   * Add `targetCount - members.length` sittings to an existing `TASK` series —
+   * cloned from the representative (first) member's title/note/location/tags/
+   * durationMinutes/deadline, mirroring `createTaskSeries`'s row-creation loop.
+   * A pre-flight feasibility check ({@link NO_FEASIBLE_SLOT_MESSAGE}) over just
+   * the added sittings — reusing the same series-feasibility scan a fresh
+   * series create runs ({@link TaskPlacementService.canPlaceSeries}) — rejects
+   * the whole resize before any row is inserted. The new sittings are then
+   * placed via {@link TaskPlacementService.placeSeriesOnCreate}: since the
+   * existing members are already-persisted rows, the placer's normal day-load
+   * scan naturally schedules around them (and everything else on the
+   * calendar) without moving them. `sessionTotal` is rewritten onto every
+   * member, old and new.
+   */
+  private async growSeries(
+    series: SessionSeries,
+    members: SessionRow[],
+    targetCount: number,
+    user: User,
+    now: Date,
+  ): Promise<SharedSession[]> {
+    const addCount = targetCount - members.length;
+    const rep = members[0];
+    const deadline = rep.deadline as Date;
+
+    const feasible = await this.taskPlacement.canPlaceSeries({
+      user,
+      durationMinutes: rep.durationMinutes,
+      sessionCount: addCount,
+      deadline,
+      now,
+    });
+    if (!feasible) throw new BadRequestException(NO_FEASIBLE_SLOT_MESSAGE);
+
+    const maxIndex = Math.max(...members.map((m) => m.sessionIndex ?? 0));
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      await tx.session.updateMany({
+        where: { seriesId: series.id, userId: user.id },
+        data: { sessionTotal: targetCount },
+      });
+
+      const rows: SessionRow[] = [];
+      for (let i = 0; i < addCount; i++) {
+        const s = await tx.session.create({
+          data: {
+            type: "TASK",
+            source: "USER",
+            title: rep.title,
+            note: rep.note,
+            location: rep.location,
+            durationMinutes: rep.durationMinutes,
+            deadline,
+            seriesId: series.id,
+            sessionIndex: maxIndex + i + 1,
+            sessionTotal: targetCount,
+            tags: { connect: rep.tags.map((t) => ({ id: t.id })) },
+            userId: user.id,
+          },
+          include: WITH_TAGS_AND_SERIES,
+        });
+        await tx.sessionEvent.create({
+          data: createEventData(s, user.id, series.id),
+        });
+        rows.push(s);
+      }
+      return rows;
+    });
+
+    const placements = await this.taskPlacement.placeSeriesOnCreate({
+      user,
+      seriesId: series.id,
+      members: created.map((r) => ({
+        id: r.id,
+        durationMinutes: r.durationMinutes,
+      })),
+      deadline,
+      now,
+    });
+    const startById = new Map(
+      placements.map((p) => [p.id, p.scheduledStartTime]),
+    );
+
+    const allRows = [
+      ...members.map((m) => ({ ...m, sessionTotal: targetCount })),
+      ...created.map((r) => ({
+        ...r,
+        sessionTotal: targetCount,
+        scheduledStartTime: startById.get(r.id) ?? null,
+      })),
+    ];
+    return allRows
+      .sort((a, b) => (a.sessionIndex ?? 0) - (b.sessionIndex ?? 0))
+      .map((m) => toSessionDto(m));
+  }
+
+  /**
+   * Remove `members.length - targetCount` sittings from an existing `TASK`
+   * series — always the highest-`sessionIndex` ones (the most recently added).
+   * If any candidate has already started (`scheduledStartTime <= now`), the
+   * whole operation is rejected before anything is written — no partial
+   * shrink. Otherwise the candidates are deleted and `sessionTotal` is
+   * rewritten onto the remaining members in one transaction.
+   */
+  private async shrinkSeries(
+    series: SessionSeries,
+    members: SessionRow[],
+    targetCount: number,
+    user: User,
+    now: Date,
+  ): Promise<SharedSession[]> {
+    const removeCount = members.length - targetCount;
+    const candidates = members.slice(-removeCount);
+
+    const alreadyStarted = candidates.some(
+      (c) =>
+        c.scheduledStartTime != null &&
+        c.scheduledStartTime.getTime() <= now.getTime(),
+    );
+    if (alreadyStarted) {
+      throw new BadRequestException(
+        `Can't reduce to ${targetCount} sessions — one of the sessions being removed has already started.`,
+      );
+    }
+
+    const removedIds = candidates.map((c) => c.id);
+    const keep = members.slice(0, targetCount);
+
+    await this.prisma.$transaction([
+      this.prisma.session.deleteMany({
+        where: { id: { in: removedIds }, userId: user.id },
+      }),
+      this.prisma.session.updateMany({
+        where: { seriesId: series.id, userId: user.id },
+        data: { sessionTotal: targetCount },
+      }),
+    ]);
+
+    return keep.map((m) => toSessionDto({ ...m, sessionTotal: targetCount }));
   }
 
   /**
