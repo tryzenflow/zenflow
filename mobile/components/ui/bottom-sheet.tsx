@@ -140,7 +140,7 @@ const BottomSheetContent = React.forwardRef<
           />
           <DialogPrimitive.Content
             style={
-              { position: "fixed", left: 0, right: 0, bottom: 0 } as ViewStyle
+              { position: "fixed", left: 0, right: 0, bottom: 0 } as unknown as ViewStyle
             }
             className={cn(
               "z-50 mx-auto flex max-h-[85vh] w-full max-w-[480px] flex-col overflow-hidden rounded-t-[26px] border border-b-0 border-border bg-background pb-2 pt-2.5 shadow-2xl",

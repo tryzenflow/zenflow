@@ -1,6 +1,7 @@
 import { me } from "@/api/auth";
 import { PortalHost } from "@/components/primitives/portal";
 import { ToastProvider } from "@/components/ui/toast";
+import { useNotificationsSubscription } from "@/hooks/use-notifications";
 import { usePushRegistration } from "@/hooks/use-push-registration";
 import { useUserStore } from "@/hooks/use-user-store";
 import { setAndroidNavigationBar } from "@/lib/android-navigation-bar";
@@ -52,6 +53,15 @@ SplashScreen.preventAutoHideAsync();
  */
 function PushRegistrar() {
   usePushRegistration();
+  return null;
+}
+
+/**
+ * Headless: subscribes to live SSE notifications (/notifications/stream),
+ * presents foreground tap-to-act toast, and triggers AppState catch-up fetch.
+ */
+function NotificationsSubscriber() {
+  useNotificationsSubscription();
   return null;
 }
 
@@ -128,33 +138,37 @@ export default function RootLayout() {
     (async () => {
       setLoading(true);
       try {
+        console.log("[_layout] Restoring cached session and cookie...");
         const cached = await readCachedSessionUser();
         if (cached) setUser(cached);
-        // Restore the persisted native session cookie (no-op on web, where
-        // the browser's own cookie jar applies) before the first request
-        // goes out — `api-client.ts`'s request interceptor needs it in
-        // memory to attach the `Cookie` header.
         await restoreSessionCookie();
+      } catch (err) {
+        console.warn("[_layout] Session cache read error:", err);
+      } finally {
+        setLoading(false);
+      }
+
+      // Reconcile against `/auth/me` in the background (non-blocking)
+      try {
+        console.log("[_layout] Background /auth/me check...");
         const fresh = await me();
         setUser(fresh);
         if (fresh) await cacheSessionUser(fresh);
         else await clearCachedSessionUser();
-      } catch {
-        // Network/offline error, or a genuine auth failure: on 401/403 the
-        // global interceptor in `api-client.ts` already cleared the user, so
-        // there's nothing more to do here either way.
-      } finally {
-        setLoading(false);
+      } catch (err) {
+        console.log("[_layout] Background /auth/me finished (unauthenticated or network error):", err);
       }
     })();
   }, []);
 
-  // Keep the splash screen up until BOTH fonts and the session are resolved
-  // — hiding it on fonts alone let the Stack's default initial screen (e.g.
-  // the app tabs) flash briefly before `AuthGate` had a verdict, then swap
-  // to login once hydration caught up.
+  // Keep the splash screen up until BOTH fonts and the local session are resolved
   React.useEffect(() => {
-    if ((fontsLoaded || fontError) && !loading) SplashScreen.hideAsync();
+    console.log("[_layout] fontsLoaded:", fontsLoaded, "fontError:", fontError, "loading:", loading);
+    if ((fontsLoaded || fontError) && !loading) {
+      SplashScreen.hideAsync().catch((err) => {
+        console.warn("[_layout] SplashScreen.hideAsync warning:", err);
+      });
+    }
   }, [fontsLoaded, fontError, loading]);
 
   if (!fontsLoaded && !fontError) {
@@ -211,6 +225,7 @@ export default function RootLayout() {
             </Stack>
             <AuthGate />
             <PushRegistrar />
+            <NotificationsSubscriber />
             <StatusBar hidden={true} />
           </BottomSheetModalProvider>
         </ThemeProvider>

@@ -26,6 +26,8 @@ function makePrismaDouble(rows: Row[]) {
       return v === null ? value === null : value === v;
     });
 
+  const sessions: Record<string, unknown>[] = [];
+
   const client = {
     notification: {
       create: (args: { data: Record<string, unknown> }) => {
@@ -83,9 +85,19 @@ function makePrismaDouble(rows: Row[]) {
         return Promise.resolve(rows.splice(i, 1)[0]);
       },
     },
+    session: {
+      create: (args: { data: Record<string, unknown> }) => {
+        const created = {
+          id: `sess-${sessions.length + 1}`,
+          ...args.data,
+        };
+        sessions.push(created);
+        return Promise.resolve(created);
+      },
+    },
   };
 
-  return { client, rows };
+  return { client, rows, sessions };
 }
 
 // ── fixtures ──────────────────────────────────────────────────────────────
@@ -274,6 +286,24 @@ describe("NotificationsService", () => {
       await expect(service.remove(USER, "nope")).rejects.toBeInstanceOf(
         NotFoundException,
       );
+    });
+  });
+
+  describe("create", () => {
+    it("auto-materializes a session titled from the real ingested title, never a hardcoded demo title", async () => {
+      const { db, service } = makeService([]);
+
+      await service.create("u1", {
+        topic: "TIMETABLE",
+        kind: "NEW",
+        title: "Timetable for Semester 2 Update",
+        content: "Room B12 schedule change.",
+        sessionId: null,
+        eventEndsAt: null,
+      });
+
+      expect(db.sessions).toHaveLength(1);
+      expect(db.sessions[0].title).toBe("Timetable for Semester 2 Update");
     });
   });
 

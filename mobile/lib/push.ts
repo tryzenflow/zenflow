@@ -30,7 +30,7 @@ export function configureForegroundHandler(): void {
     handleNotification: async () => ({
       shouldShowAlert: true,
       shouldPlaySound: true,
-      shouldSetBadge: false,
+      shouldSetBadge: true,
     }),
   });
 }
@@ -40,8 +40,10 @@ export async function ensureAndroidChannel(): Promise<void> {
   if (Platform.OS !== "android") return;
   await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
     name: "General",
-    importance: Notifications.AndroidImportance.DEFAULT,
-    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
+    importance: Notifications.AndroidImportance.MAX,
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: "#f97316",
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
   });
 }
 
@@ -66,8 +68,9 @@ export async function getNativePushToken(): Promise<NativePushToken | null> {
 
   const existing = await Notifications.getPermissionsAsync();
   let status = existing.status;
-  if (status !== "granted" && existing.canAskAgain) {
-    status = (await Notifications.requestPermissionsAsync()).status;
+  if (status !== "granted") {
+    const requested = await Notifications.requestPermissionsAsync();
+    status = requested.status;
   }
   if (status !== "granted") {
     debugLog("push", `permission not granted (${status})`);

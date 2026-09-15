@@ -312,7 +312,16 @@ function Toast({
             <Icon size={17} color={accent} />
           </View>
 
-          <View className="flex-1">
+          <Pressable
+            className="flex-1"
+            disabled={!action || Boolean(confirm)}
+            onPress={() => {
+              if (action && !confirm) {
+                action.onPress();
+                dismiss(0);
+              }
+            }}
+          >
             <Text
               className={
                 description ? "text-sm font-medium" : "text-sm font-semibold"
@@ -329,9 +338,11 @@ function Toast({
                 {description ?? confirm?.description}
               </Text>
             ) : null}
-          </View>
+          </Pressable>
+        </View>
 
-          {action && !confirm && (
+        {action && !confirm && (
+          <View className="mt-2.5 flex-row justify-end">
             <Pressable
               onPress={() => {
                 action.onPress();
@@ -342,19 +353,22 @@ function Toast({
                 borderRadius: 999,
                 borderWidth: 1,
                 borderColor: palette.border,
-                paddingHorizontal: 12,
-                paddingVertical: 4,
+                paddingHorizontal: 14,
+                paddingVertical: 5,
+                backgroundColor: isDarkColorScheme
+                  ? "rgba(255, 255, 255, 0.06)"
+                  : "rgba(0, 0, 0, 0.04)",
               }}
             >
               <Text
-                className="text-[13px] font-bold"
+                className="text-[13px] font-semibold"
                 style={{ color: palette.text }}
               >
                 {action.label}
               </Text>
             </Pressable>
-          )}
-        </View>
+          </View>
+        )}
 
         {confirm && (
           <View className="mt-3 flex-row justify-end" style={{ gap: 8 }}>
