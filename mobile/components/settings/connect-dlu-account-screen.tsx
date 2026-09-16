@@ -26,8 +26,13 @@ import { useToast } from "@/components/ui/toast";
 import { useIntegrationStore } from "@/hooks/use-integration-store";
 import { cn } from "@/lib/utils";
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { Pressable, ScrollView, View, type ViewStyle } from "react-native";
 import type { IntegrationProvider, IntegrationStatus } from "@zenflow/shared";
+
+/** `backdropFilter` is web-only CSS (react-native-web passes it through) and isn't in RN's `ViewStyle`. */
+const webBlurHeaderStyle: ViewStyle & { backdropFilter?: string } = {
+  backdropFilter: "blur(18px) saturate(1.4)",
+};
 
 function ProviderIcon({
   provider,
@@ -202,7 +207,7 @@ export function ConnectDluAccountScreen({ onBack }: { onBack?: () => void }) {
       {/* Header */}
       <View
         className="border-b border-border/70 bg-background/80 px-6 py-4 flex-row items-center justify-start"
-        style={{ backdropFilter: "blur(18px) saturate(1.4)" }}
+        style={webBlurHeaderStyle}
       >
         <Pressable onPress={onBack} accessibilityLabel="Back" className="mr-3">
           <ChevronLeft size={24} className="text-foreground" />

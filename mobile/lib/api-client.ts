@@ -29,7 +29,7 @@ function resolveBaseURL(): string | undefined {
 
   try {
     const url = new URL(envUrl);
-    if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
+    if (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "10.0.2.2") {
       url.hostname = lanHost;
       return url.toString();
     }
@@ -39,19 +39,10 @@ function resolveBaseURL(): string | undefined {
   return envUrl;
 }
 
-/**
- * Cookie-aware axios instance for the OTP session cookie (CLAUDE.md §7 — no
- * JWT, the backend sets an httpOnly Set-Cookie on `/auth/otp/verify`).
- *
- * - Web (Expo web target): the browser's own cookie jar handles this via
- *   `withCredentials`, same as `frontend/`. Nothing else needed.
- * - Native (iOS/Android): we capture the raw `Set-Cookie` value ourselves and
- *   replay it verbatim as a `Cookie` header on every request — see
- *   `sessionCookie` below for why we don't read it back from a cookie jar.
- */
 export const api = axios.create({
   baseURL: resolveBaseURL(),
   withCredentials: true,
+  timeout: 8000,
 });
 
 /**
@@ -129,4 +120,12 @@ export async function clearSession() {
   if (Platform.OS !== "web") {
     await clearCachedSessionCookie();
   }
+}
+
+export function getSessionCookie(): string | null {
+  return sessionCookie;
+}
+
+export function getBaseURL(): string | undefined {
+  return api.defaults.baseURL || resolveBaseURL();
 }

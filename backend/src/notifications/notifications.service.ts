@@ -5,7 +5,13 @@ import type {
   NotificationsListResponse,
   NotificationTopic,
 } from "@zenflow/shared";
-import { Prisma, type Notification, type User } from "../../generated/prisma";
+import {
+  Prisma,
+  type Notification,
+  type SessionSource,
+  type SessionType,
+  type User,
+} from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { PrismaService } from "../prisma/prisma.service";
 import { ListNotificationsDto } from "./dto/list-notifications.dto";
@@ -70,6 +76,35 @@ export interface CreateNotificationInput {
   eventEndsAt: Date | null;
 }
 
+/**
+ * Topic → (session type, source, default duration) used whenever a notification
+ * auto-materializes a calendar session, in both {@link NotificationsService.create}
+ * and {@link NotificationsService.raiseSamples}.
+ */
+function resolveSessionDefaults(topic: NotificationTopic): {
+  type: SessionType;
+  source: SessionSource;
+  durationMinutes: number;
+} {
+  switch (topic) {
+    case "EXAM":
+      return { type: "EXAM", source: "PORTAL", durationMinutes: 120 };
+    case "TIMETABLE":
+      return { type: "LECTURE", source: "PORTAL", durationMinutes: 90 };
+    case "ASSIGNMENT":
+    default:
+      return { type: "TASK", source: "LMS", durationMinutes: 90 };
+  }
+}
+
+/** Strips the notification-title framing ("New assignment: ", "Updated: ") down to the underlying event/course title. */
+function cleanNotificationTitle(title: string): string {
+  return title
+    .replace(/^New (assignment|exam): /i, "")
+    .replace(/^Updated: /i, "")
+    .trim();
+}
+
 /** Row → wire shape: instants become ISO-8601 strings, absences become `null`. */
 function toNotificationDto(row: Notification): NotificationDto {
   return {
@@ -113,8 +148,73 @@ export class NotificationsService {
     dto: CreateNotificationInput,
     tx?: Prisma.TransactionClient,
   ): Promise<Notification> {
-    const newNotification = await (tx ?? this.prisma).notification.create({
-      data: { ...dto, userId },
+    const db = tx ?? this.prisma;
+    let sessionId = dto.sessionId;
+    let eventEndsAt = dto.eventEndsAt;
+
+    // Automatically create a calendar session/task if none is attached and kind is not DROP
+    if (!sessionId && dto.kind !== "DROP" && db?.session) {
+      try {
+        const { type, source, durationMinutes } = resolveSessionDefaults(
+          dto.topic,
+        );
+        const cleanTitle = cleanNotificationTitle(dto.title);
+
+        const roomMatch = (dto.title + " " + dto.content).match(
+          /(?:Room|Phòng)\s+([A-Za-z0-9-]+)/i,
+        );
+        const location = roomMatch ? roomMatch[0] : null;
+
+        const now = new Date();
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(9, 0, 0, 0);
+
+        let scheduledStartTime: Date = tomorrow;
+        let deadline: Date | null = null;
+
+        if (eventEndsAt) {
+          scheduledStartTime = new Date(
+            eventEndsAt.getTime() - durationMinutes * 60000,
+          );
+          if (type === "TASK" || type === "EXAM") {
+            deadline = eventEndsAt;
+          }
+        } else {
+          eventEndsAt = new Date(
+            scheduledStartTime.getTime() + durationMinutes * 60000,
+          );
+          if (type === "TASK" || type === "EXAM") {
+            deadline = eventEndsAt;
+          }
+        }
+
+        const createdSession = await db.session.create({
+          data: {
+            userId,
+            title: cleanTitle,
+            type,
+            source,
+            location,
+            durationMinutes,
+            scheduledStartTime,
+            deadline,
+            note: dto.content,
+          },
+        });
+        sessionId = createdSession.id;
+      } catch (err) {
+        console.warn("[notifications] Auto task creation failed:", err);
+      }
+    }
+
+    const newNotification = await db.notification.create({
+      data: {
+        ...dto,
+        sessionId,
+        eventEndsAt,
+        userId,
+      },
     });
 
     return newNotification;
@@ -130,11 +230,74 @@ export class NotificationsService {
   async raiseSamples(userId: string, count = 1): Promise<NotificationDto[]> {
     const n = Math.max(1, Math.min(20, count));
     const raised: NotificationDto[] = [];
+
+    const now = new Date();
+    // Schedule sample items starting from tomorrow
+    const baseDate = new Date(now);
+    baseDate.setMinutes(0, 0, 0);
+    baseDate.setHours(baseDate.getHours() + 14);
+
     for (let i = 0; i < n; i++) {
       const sample = DEV_SAMPLES[i % DEV_SAMPLES.length];
+      const sessionStart = new Date(
+        baseDate.getTime() + i * 24 * 60 * 60 * 1000,
+      );
+      let sessionId: string | null = null;
+      let eventEndsAt: Date | null = null;
+
+      if (sample.kind !== "DROP") {
+        const { type, source, durationMinutes } = resolveSessionDefaults(
+          sample.topic,
+        );
+        let title = cleanNotificationTitle(sample.title).replace(
+          / \(#\d+\)$/,
+          "",
+        );
+        let location: string | null = null;
+        let deadline: Date | null = null;
+
+        if (sample.topic === "ASSIGNMENT") {
+          deadline = new Date(sessionStart.getTime() + 4 * 60 * 60 * 1000);
+          eventEndsAt = deadline;
+        } else if (sample.topic === "EXAM") {
+          location = "Room A305";
+          deadline = new Date(sessionStart.getTime() + durationMinutes * 60000);
+          eventEndsAt = deadline;
+        } else if (sample.topic === "TIMETABLE") {
+          if (sample.title.toLowerCase().includes("semester 1")) {
+            title = "Computer Architecture";
+            location = "Room C201";
+          } else {
+            location = "Room B210";
+          }
+          eventEndsAt = new Date(
+            sessionStart.getTime() + durationMinutes * 60000,
+          );
+        }
+
+        if (this.prisma?.session?.create) {
+          const createdSession = await this.prisma.session.create({
+            data: {
+              userId,
+              title: n > 1 ? `${title} (#${i + 1})` : title,
+              type,
+              source,
+              location,
+              durationMinutes,
+              scheduledStartTime: sessionStart,
+              deadline,
+              note: sample.content,
+            },
+          });
+          sessionId = createdSession.id;
+        }
+      }
+
       const row = await this.create(userId, {
         ...sample,
         title: n > 1 ? `${sample.title} (#${i + 1})` : sample.title,
+        sessionId,
+        eventEndsAt,
       });
       this.notify(NotificationEvent.NEW_SESSION, row);
       raised.push(toNotificationDto(row));

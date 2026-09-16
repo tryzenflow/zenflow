@@ -52,12 +52,17 @@ function withKotlinVersionPin(config) {
   return withGradleProperties(config, (config) => {
     config.modResults = config.modResults.filter(
       (item) =>
-        !(item.type === "property" && item.key === "android.kotlinVersion"),
+        !(item.type === "property" && (item.key === "android.kotlinVersion" || item.key === "android.minSdkVersion")),
     );
     config.modResults.push({
       type: "property",
       key: "android.kotlinVersion",
       value: REACT_NATIVE_KOTLIN_VERSION,
+    });
+    config.modResults.push({
+      type: "property",
+      key: "android.minSdkVersion",
+      value: "24",
     });
     return config;
   });

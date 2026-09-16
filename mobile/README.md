@@ -99,15 +99,16 @@ have no automated coverage.
 the axios client at the API; a loopback host is auto-rewritten to the dev machine's LAN
 address on device/emulator.
 
-## Push notifications
+## Push & live notifications
 
-The backend (`backend/src/devices/`) speaks FCM/APNs directly, so the app registers the
-**raw** device token (`Notifications.getDevicePushTokenAsync()`, not an Expo token) via
-`POST /devices`.
+The backend (`backend/src/devices/` and `backend/src/notifications/`) drives direct push and live SSE notifications:
 
-- `lib/push.ts` — permission, token, `POST`/`DELETE /devices`.
-  `hooks/use-push-registration.ts` (mounted in `app/_layout.tsx`) registers while signed
-  in and deep-links a tapped notification; sign-out unregisters.
+- **SSE Live Stream:** The bell badge (`components/notification-bell.tsx`) and inbox (`app/notifications.tsx`) consume `GET /notifications/stream` live via `react-native-sse` wrapped behind `api/notifications.ts` (replaying the session cookie). No `setInterval` polling is used; `GET /notifications` is reserved for initial list, pagination, and `AppState` `active` reconnect catch-up.
+- **Detected-items Inbox:** `app/notifications.tsx` matches `mockups/detected-items.html` with topic-specific icons and tints (assignment teal, exam rose, timetable sky, reminder primary), kind badges (`NEW`, `CHANGE`, `DROP`), spelled-out relative time, and `eventEndsAt` labels. Swiping left reveals Dismiss (`DELETE /notifications/:id`) with immediate optimistic removal.
+- **Foreground Push & Tap-to-Act Toast:** Live notifications and foregrounded pushes present an in-app tap-to-act toast jumping to the affected calendar session, protected by a deleted-session guard (`GET /sessions/:id`, showing a toast on 404).
+- **Native Push Plumbing:** The backend speaks FCM/APNs directly, so the app registers the **raw** device token (`Notifications.getDevicePushTokenAsync()`, not an Expo token) via `POST /devices`.
+  - `lib/push.ts` — permission, token, `POST`/`DELETE /devices`.
+  - `hooks/use-push-registration.ts` and `hooks/use-notifications.ts` (mounted in `app/_layout.tsx`) handle token lifecycle, background tap routing, and live SSE streaming; sign-out unregisters.
 - **Android:** drop `google-services.json` next to `app.config.ts` (auto-detected); absent → push inert.
 - **iOS:** `expo-notifications` plugin adds the entitlement; needs a backend APNs key + a real device.
 - Adding a native module needs a fresh dev-client build (`pnpm android` / `pnpm ios`).
