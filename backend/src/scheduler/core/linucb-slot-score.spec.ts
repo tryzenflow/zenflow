@@ -89,4 +89,53 @@ describe("linucbSlotScore", () => {
     expect(score).toBeCloseTo(12);
     expect(topArm).toBe("NIGHT");
   });
+
+  it("scores a slot closer to prevStartMs higher than a farther one, all else equal (stability sign regression)", () => {
+    // Flat arm scores and flat preference matrix, so the only thing that can
+    // differ between the two candidates is the stability term. Before the
+    // fix, `stabilityScore` returned a positive, growing-with-distance value
+    // that got ADDED to the score — rewarding the farther slot. It must now
+    // reward the closer one instead.
+    const prevStartMs = ms(MON, "09:00");
+    const closer = linucbSlotScore({
+      startMs: ms(MON, "10:00"), // 1h from prevStartMs
+      endMs: ms(MON, "11:00"),
+      timezone: TZ,
+      armScores: { MORNING: 1 },
+      prefMatrix: ZERO,
+      prevStartMs,
+    });
+    const farther = linucbSlotScore({
+      startMs: ms(MON, "14:00"), // 5h from prevStartMs
+      endMs: ms(MON, "15:00"),
+      timezone: TZ,
+      armScores: { AFTERNOON: 1 },
+      prefMatrix: ZERO,
+      prevStartMs,
+    });
+    expect(closer.score).toBeGreaterThan(farther.score);
+  });
+
+  it("the stability term never outweighs a real arm-score difference", () => {
+    const prevStartMs = ms(MON, "09:00");
+    // Far from prevStartMs but a much better-learned arm.
+    const farButBetterArm = linucbSlotScore({
+      startMs: ms(MON, "18:00"),
+      endMs: ms(MON, "19:00"),
+      timezone: TZ,
+      armScores: { EVENING: 5 },
+      prefMatrix: ZERO,
+      prevStartMs,
+    });
+    // Right at prevStartMs but a cold/unlearned arm.
+    const closeButColdArm = linucbSlotScore({
+      startMs: ms(MON, "09:00"),
+      endMs: ms(MON, "10:00"),
+      timezone: TZ,
+      armScores: {},
+      prefMatrix: ZERO,
+      prevStartMs,
+    });
+    expect(farButBetterArm.score).toBeGreaterThan(closeButColdArm.score);
+  });
 });

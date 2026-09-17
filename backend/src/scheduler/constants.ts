@@ -30,6 +30,35 @@ export const PREFERENCE_LEARNING_RATE = 0.1;
 export const MIN = 60_000;
 
 /**
+ * Weight and saturation point for the slot-scoring "stability" nudge
+ * (`core/slot-score.ts`'s `stabilityScore`, used by both `bestFreeSlot` and
+ * `linucbSlotScore`): a light penalty for moving a session away from the
+ * start time the user last set manually, so it isn't churned without good
+ * reason.
+ *
+ * `STABILITY_WEIGHT` caps the term's maximum contribution to the total
+ * score. It has to stay well under the scale of the terms it sits beside:
+ * LinUCB's own arm-score term is a weighted blend of `/predict` outputs
+ * whose inputs (context features, rewards) are all clamped to `[-1, 1]`
+ * (`docs/adr/0001-linucb-model-design.md` §4/§5), plus a bounded UCB
+ * exploration bonus (`BANDIT_ALPHA · √(xᵀA⁻¹x)`) — so it typically lands in
+ * the low single digits. The preference-matrix term (`slotPreferenceScore`)
+ * sums per-hour cells that are themselves clamped to `[-1, 1]`. At
+ * `STABILITY_WEIGHT = 0.1`, the stability term can contribute at most ±0.1
+ * — an order of magnitude below either, so it can only break near-ties
+ * between otherwise-similar candidates, never outweigh real personalization.
+ *
+ * `STABILITY_SATURATION_HOURS` is the distance at which the penalty maxes
+ * out: beyond this many hours from the previous manually-set start, moving
+ * even further away costs no more. Without a cap, a rescheduling window
+ * spanning the full `MAX_SCAN_DAYS` horizon would let raw hour-distance grow
+ * into the hundreds and swamp every other term — the same saturating-distance
+ * shape already used for the `MOVE` reward (`MOVE_REWARD_SCALE_MINUTES`).
+ */
+export const STABILITY_WEIGHT = 0.1;
+export const STABILITY_SATURATION_HOURS = 4;
+
+/**
  * Reward written on the `SessionEvent` for each outcome of the move-or-keep
  * model. A user drag/resize of a scheduled TASK is a negative signal; a TASK
  * that elapses unmoved (detected by the RETAINED sweep) is a positive one.
@@ -60,3 +89,13 @@ export const BANDIT_MODEL_VERSION = "linucb-d46-v1";
 
 /** `SlotProposal.experimentId` for the heuristic-vs-LinUCB A/B experiment. */
 export const BANDIT_EXPERIMENT_ID = "linucb-heuristic-v1";
+
+/**
+ * Fraction of `TASK` create / deadline-change events (and, independently,
+ * series members) that run **both** `HeuristicPlacer` and `BanditPlacer` and
+ * get `SlotProposal.pairwiseShown = true` (`docs/scheduler/ab-testing.md`
+ * §3). Every other event runs exactly one algorithm — the existing 50/50
+ * `primaryPolicy` pick — same as before this existed. Independent draw from
+ * `primaryPolicy`'s own 50/50 roll.
+ */
+export const PAIRWISE_SAMPLE_RATE = 0.2;

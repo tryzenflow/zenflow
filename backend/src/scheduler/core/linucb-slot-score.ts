@@ -9,12 +9,16 @@ import { slotPreferenceScore, stabilityScore } from "./slot-score";
  * ```text
  * score(c) = Σ_arm overlapRate(c, arm) · predicted[day][arm]   (the LinUCB term)
  *          + slotPreferenceScore(c)                            (D4 cold-start blend)
+ *          + stabilityScore(prevStart, c)                      (light stickiness nudge, when prevStartMs is given)
  * ```
  *
  * The preference addend is the same overlap-weighted heuristic score used by
  * Policy A (`slot-score.ts`), so a slot still ranks sensibly before any arm has
  * accumulated reward — a cold LinUCB arm scores `0` from the service, leaving
- * the preference term to break the tie.
+ * the preference term to break the tie. The stability addend is a small,
+ * fixed, saturating penalty (`STABILITY_WEIGHT`, `constants.ts`) for drifting
+ * away from `prevStartMs` — the session's last manually-set start, when
+ * known — so it can only break near-ties, never outrank real personalization.
  *
  * `armScores` is the `/predict` output for the candidate day (missing arm → 0).
  * A slot may span local midnight (D5): `overlapRate` splits it, so both the
@@ -61,6 +65,6 @@ export function linucbSlotScore(input: LinucbSlotScoreInput): LinucbSlotScore {
   const score =
     armTerm +
     slotPreferenceScore(prefMatrix, startMs, endMs, timezone) +
-    (prevStartMs ? stabilityScore(prevStartMs, startMs) : 0); // prevent instabiilty when rescheduling a manually moved block
+    (prevStartMs !== undefined ? stabilityScore(prevStartMs, startMs) : 0);
   return { score, topArm };
 }

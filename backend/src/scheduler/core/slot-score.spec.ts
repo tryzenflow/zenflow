@@ -1,6 +1,11 @@
-import { bestFreeSlot, slotPreferenceScore } from "./slot-score";
+import {
+  bestFreeSlot,
+  slotPreferenceScore,
+  stabilityScore,
+} from "./slot-score";
 import { matrixIndex } from "./preference";
 import { Interval } from "./slot";
+import { STABILITY_SATURATION_HOURS, STABILITY_WEIGHT } from "../constants";
 
 const TZ = "UTC";
 // 2026-06-15T00:00:00Z is a Monday (isoWeekday 1); 2026-06-16 is the Tuesday.
@@ -281,5 +286,120 @@ describe("slotPreferenceScore — overlap-weighted hour-bucket sum (D2)", () => 
     );
     // 30 min in Mon 23 (0.5·4) + 30 min in Tue 00 (0.5·6) = 2 + 3 = 5.
     expect(s).toBeCloseTo(5);
+  });
+});
+
+describe("stabilityScore — light penalty for drifting from the manually-set start", () => {
+  const prev = at(MONDAY, "09:00").getTime();
+
+  it("is zero at zero distance", () => {
+    expect(stabilityScore(prev, prev)).toBeCloseTo(0);
+  });
+
+  it("is negative and grows more negative (bug fix: NOT positive/growing) as distance increases", () => {
+    const oneHourAway = stabilityScore(prev, prev + 60 * 60_000);
+    const twoHoursAway = stabilityScore(prev, prev + 2 * 60 * 60_000);
+    expect(oneHourAway).toBeLessThan(0);
+    expect(twoHoursAway).toBeLessThan(oneHourAway);
+  });
+
+  it("a closer candidate scores higher (less negative) than a farther one", () => {
+    const close = stabilityScore(prev, prev + 30 * 60_000); // 30 min away
+    const far = stabilityScore(prev, prev + 3 * 60 * 60_000); // 3h away
+    expect(close).toBeGreaterThan(far);
+  });
+
+  it("is symmetric in the direction of the move", () => {
+    const before = stabilityScore(prev, prev - 90 * 60_000);
+    const after = stabilityScore(prev, prev + 90 * 60_000);
+    expect(before).toBeCloseTo(after);
+  });
+
+  it("saturates at STABILITY_SATURATION_HOURS — moving further doesn't cost more", () => {
+    const atSaturation = stabilityScore(
+      prev,
+      prev + STABILITY_SATURATION_HOURS * 60 * 60_000,
+    );
+    const wellPastSaturation = stabilityScore(
+      prev,
+      prev + 10_000 * 60 * 60_000,
+    );
+    expect(atSaturation).toBeCloseTo(-STABILITY_WEIGHT);
+    expect(wellPastSaturation).toBeCloseTo(-STABILITY_WEIGHT);
+  });
+
+  it("never exceeds STABILITY_WEIGHT in magnitude", () => {
+    const max = stabilityScore(prev, prev + 999 * 60 * 60_000);
+    expect(Math.abs(max)).toBeCloseTo(STABILITY_WEIGHT);
+    expect(Math.abs(max)).toBeLessThanOrEqual(STABILITY_WEIGHT + 1e-9);
+  });
+});
+
+describe("bestFreeSlot — stability nudge toward the previous manually-set start", () => {
+  it("picks the free slot closer to prevStartMs over a farther one when preference is flat", () => {
+    const prevStartMs = at(MONDAY, "09:00").getTime();
+    const start = bestFreeSlot(
+      15,
+      [],
+      at(MONDAY, "09:00"),
+      at(MONDAY, "12:00"),
+      ZERO_MATRIX,
+      TZ,
+      undefined,
+      prevStartMs,
+    );
+    // With a flat preference matrix, every free slot ties at 0 preference —
+    // the stability nudge must break the tie toward 09:00, the closest slot
+    // to prevStartMs, rather than earliest-start-wins picking some other slot.
+    expect(start?.toISOString()).toBe(`${MONDAY}T09:00:00.000Z`);
+  });
+
+  it("a slot closer to prevStartMs outscores a farther one even when the farther one would otherwise win on earliest-start", () => {
+    const prevStartMs = at(MONDAY, "11:00").getTime();
+    // Without stability, 09:00 (earliest) would win the tie. With stability,
+    // 11:00 — right at prevStartMs — must win instead.
+    const start = bestFreeSlot(
+      15,
+      [],
+      at(MONDAY, "09:00"),
+      at(MONDAY, "12:00"),
+      ZERO_MATRIX,
+      TZ,
+      undefined,
+      prevStartMs,
+    );
+    expect(start?.toISOString()).toBe(`${MONDAY}T11:00:00.000Z`);
+  });
+
+  it("without prevStartMs, behaves exactly as before (earliest free slot wins flat ties)", () => {
+    const start = bestFreeSlot(
+      15,
+      [],
+      at(MONDAY, "09:00"),
+      at(MONDAY, "12:00"),
+      ZERO_MATRIX,
+      TZ,
+    );
+    expect(start?.toISOString()).toBe(`${MONDAY}T09:00:00.000Z`);
+  });
+
+  it("a strong preference signal still outranks the stability nudge", () => {
+    const prevStartMs = at(MONDAY, "09:00").getTime();
+    const matrix = matrixWithPeak(1, 11, 1); // 11:00 hour strongly preferred
+    const start = bestFreeSlot(
+      15,
+      [],
+      at(MONDAY, "09:00"),
+      at(MONDAY, "12:00"),
+      matrix,
+      TZ,
+      undefined,
+      prevStartMs,
+    );
+    // 11:00 scores 1 (preference) − a small stability penalty; every other
+    // slot scores 0 preference minus a smaller-or-equal stability penalty.
+    // The preference term dominates, so 11:00 still wins despite being
+    // farther from prevStartMs than 09:00 itself.
+    expect(start?.toISOString()).toBe(`${MONDAY}T11:00:00.000Z`);
   });
 });

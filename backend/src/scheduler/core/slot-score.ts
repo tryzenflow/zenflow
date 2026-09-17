@@ -8,6 +8,7 @@ import {
 } from "./slot";
 import { effectivePreferenceMatrix, preferenceScoreAt } from "./preference";
 import { utcToMinutes } from "../../common/utils";
+import { STABILITY_SATURATION_HOURS, STABILITY_WEIGHT } from "../constants";
 
 const HOUR_MS = 60 * MS_PER_MINUTE;
 
@@ -50,8 +51,23 @@ export function slotPreferenceScore(
   return total;
 }
 
+/**
+ * Signed, ready-to-add "don't churn this without good reason" penalty for
+ * moving a session away from the start time the user last set manually
+ * (`prevStartMs`) — same "return the final signed contribution" convention
+ * as {@link slotPreferenceScore}, so callers just add it directly. Always
+ * `≤ 0`: the further `newStartMs` sits from `prevStartMs`, the more negative,
+ * saturating at `STABILITY_SATURATION_HOURS` so a candidate a day away is no
+ * more penalized than one just past the saturation point — see
+ * `STABILITY_WEIGHT` in `constants.ts` for why the cap is sized the way it
+ * is relative to the other scoring terms.
+ */
 export function stabilityScore(prevStartMs: number, newStartMs: number) {
-  return Math.abs((newStartMs - prevStartMs) / HOUR_MS);
+  const distanceHours = Math.abs(newStartMs - prevStartMs) / HOUR_MS;
+  const saturation =
+    Math.min(distanceHours, STABILITY_SATURATION_HOURS) /
+    STABILITY_SATURATION_HOURS;
+  return -STABILITY_WEIGHT * saturation;
 }
 
 /**
@@ -66,6 +82,10 @@ export function stabilityScore(prevStartMs: number, newStartMs: number) {
  * uses `windowEnd = nextMidnight`, `fitWindowEnd = min(deadline, nextMidnight +
  * duration − one slot)`, so a task may start as late as 23:45 and run its full
  * length into the small hours (`io/heuristic-placer.service.ts`).
+ *
+ * `prevStartMs`, when given, adds {@link stabilityScore}'s light penalty for
+ * drifting away from the session's last manually-set start, so an otherwise
+ * tied or near-tied candidate that's closer to it wins.
  */
 export function bestFreeSlot(
   durationMinutes: number,
@@ -75,6 +95,7 @@ export function bestFreeSlot(
   prefMatrix: number[],
   timezone: string,
   fitWindowEnd: Date = windowEnd,
+  prevStartMs?: number,
 ): Date | null {
   const durationMs = durationMinutes * MS_PER_MINUTE;
   // Both ceilings are typically capped to a session's deadline by the caller,
@@ -95,7 +116,9 @@ export function bestFreeSlot(
     if (end > fitCeilMs) continue;
     if (overlapsAny(occupied, start, end)) continue;
 
-    const total = slotPreferenceScore(prefMatrix, start, end, timezone);
+    const total =
+      slotPreferenceScore(prefMatrix, start, end, timezone) +
+      (prevStartMs !== undefined ? stabilityScore(prevStartMs, start) : 0);
     if (best === null || total > best.score) {
       best = { start, score: total };
     }
