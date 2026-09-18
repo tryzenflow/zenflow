@@ -50,27 +50,27 @@ describe("buildContextVector", () => {
     expect(oneHot).toEqual([0, 0, 1, 0, 0, 0, 0]);
   });
 
-  it("slices the candidate weekday's 24 preference cells (cold-start default)", () => {
-    // defaultPreferenceMatrix: hours 8–10 → 1, 14–16 → 0.5, 19–21 → 0.2.
-    const v = buildContextVector(input({ candidateIsoWeekday: 3 }));
-    const profile = v.slice(2, 26);
-    expect(profile).toHaveLength(24);
-    expect(profile[8]).toBeCloseTo(1);
-    expect(profile[14]).toBeCloseTo(0.5);
-    expect(profile[20]).toBeCloseTo(0.2);
-    expect(profile[0]).toBe(0);
-  });
-
-  it("clamps preference cells into [-1, 1]", () => {
+  it("day_preference_profile[24] is reserved and always 0, regardless of the stored matrix (Item 3B1)", () => {
+    // Item 3B1: LinUCB no longer sees the preference matrix at all — the
+    // 24 slots stay in the vector (d stays 46) but are hardcoded zero, even
+    // for a matrix that would otherwise score strongly non-zero here.
     const matrix = new Array<number>(168).fill(0);
-    matrix[(3 - 1) * 24 + 5] = 7; // Wed, hour 5 → should clamp to 1
-    matrix[(3 - 1) * 24 + 6] = -4; // → clamp to -1
+    matrix[(3 - 1) * 24 + 5] = 7;
+    matrix[(3 - 1) * 24 + 6] = -4;
     const v = buildContextVector(
       input({ candidateIsoWeekday: 3, preferenceMatrix: matrix }),
     );
     const profile = v.slice(2, 26);
-    expect(profile[5]).toBe(1);
-    expect(profile[6]).toBe(-1);
+    expect(profile).toHaveLength(24);
+    expect(profile.every((cell) => cell === 0)).toBe(true);
+  });
+
+  it("day_preference_profile[24] is zeroed even for the cold-start default matrix", () => {
+    const v = buildContextVector(
+      input({ candidateIsoWeekday: 3, preferenceMatrix: [] }),
+    );
+    const profile = v.slice(2, 26);
+    expect(profile.every((cell) => cell === 0)).toBe(true);
   });
 
   it("normalizes workload_by_type with the TASK entry at offsets 40/41", () => {

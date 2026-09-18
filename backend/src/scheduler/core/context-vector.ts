@@ -1,7 +1,6 @@
 import { FEATURE_DIM } from "@zenflow/shared";
 import { clamp } from "../../common/utils";
 import { MAX_SCAN_DAYS } from "../constants";
-import { effectivePreferenceMatrix, matrixIndex } from "./preference";
 import {
   WORKLOAD_TYPES,
   type ContextVectorInput,
@@ -24,9 +23,9 @@ import {
  * transforms in `utils/normalize.ts`.
  *
  * Returns exactly {@link FEATURE_DIM} (46) elements, in the ADR §5.1 order:
- * `remaining_days_until_deadline`, `duration`, `day_preference_profile[24]`,
- * `day_of_week[7]`, `candidate_days_from_now`, `workload_by_type[10]`,
- * `semester_phase`, bias.
+ * `remaining_days_until_deadline`, `duration`, `day_preference_profile[24]`
+ * (reserved, always 0 — Item 3B1, see below), `day_of_week[7]`,
+ * `candidate_days_from_now`, `workload_by_type[10]`, `semester_phase`, bias.
  */
 export function buildContextVector(input: ContextVectorInput): number[] {
   const vec: number[] = [];
@@ -37,11 +36,17 @@ export function buildContextVector(input: ContextVectorInput): number[] {
   // 2. duration
   vec.push(minMaxSigned(input.durationMinutes, DURATION_DIVISOR));
 
-  // 3. day_preference_profile[24] — the candidate weekday's 24 hour buckets.
-  const matrix = effectivePreferenceMatrix(input.preferenceMatrix);
+  // 3. day_preference_profile[24] — ZEROED (Item 3B1): LinUCB no longer sees
+  // the preference matrix as an input feature. The 24 slots stay in the
+  // vector (d stays 46 — no BanditArmState/SlotProposal migration) but are
+  // permanently 0, so they can never contribute to θ̂ᵀx and never receive
+  // gradient from a reward update (an always-zero xᵢ means every ridge-
+  // regression update leaves that θᵢ at its prior, forever). This is
+  // behaviorally equivalent to "LinUCB doesn't learn from this feature,"
+  // implemented as a one-line, migration-free change instead of a dimension
+  // change (ADR-0001 §5.1/§5.2's `day_preference_profile[24]` row).
   for (let hour = 0; hour < 24; hour++) {
-    const cell = matrix[matrixIndex(input.candidateIsoWeekday, hour)] ?? 0;
-    vec.push(clamp(cell, -1, 1));
+    vec.push(0);
   }
 
   // 4. day_of_week[7] one-hot, ISO weekday (Mon → index 0).

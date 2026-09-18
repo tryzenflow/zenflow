@@ -85,7 +85,7 @@ arm). The vector is deliberately small — behavioral data is limited.
 | ------------- | ------------------------------ | ---- | ----------------------------------------------------------------------------- |
 | session       | `remaining_days_until_deadline`| 1    | continuous, normalized (§5.2)                                                 |
 | session       | `duration`                     | 1    | minutes (positive multiple of 15), normalized (§5.2)                         |
-| user / day    | `day_preference_profile[24]`   | 24   | the candidate day's 24-hour row slice of `User.preferenceMatrix`, normalized |
+| user / day    | `day_preference_profile[24]`   | 24   | reserved, always 0 (Item 3B1) — no longer fed from `User.preferenceMatrix`; kept only so `d` stays 46 |
 | candidate day | `day_of_week`                  | 7    | one-hot, ISO weekday (Mon = index 0)                                          |
 | candidate day | `candidate_days_from_now`      | 1    | whole days from today, normalized (§5.2)                                      |
 | candidate day | `workload_by_type`             | 10   | for each `SessionType` {LECTURE, ASSIGNMENT, EXAM, TASK, DND}: (scheduled hours, session count) already placed on that day, normalized (§5.2) |
@@ -110,7 +110,7 @@ running mean/variance, so the transform is stateless and reproducible.
 | --------------------------------------------------- | -------------------------------------------------------------- |
 | `remaining_days_until_deadline`, `candidate_days_from_now` | `clamp(x / MAX_SCAN_DAYS, 0, 1) · 2 − 1`  (`MAX_SCAN_DAYS = 60`) |
 | `duration`                                          | `clamp(minutes / 480, 0, 1) · 2 − 1`                            |
-| `day_preference_profile[24]` (per cell)            | `clamp(cell, −1, 1)`  (cold-start values are in `[0, 1]`; nightly decay only shrinks magnitude) |
+| `day_preference_profile[24]` (per cell)            | reserved, always 0 (Item 3B1) — the preference matrix now only influences LinUCB's slot choice post-hoc, via `PREFERENCE_NUDGE_WEIGHT` in `linucb-best-slot.ts`'s `bestMinuteInArm`, not this context vector |
 | `workload_by_type` hours / count (per entry)       | `clamp(hours / 12, 0, 1)`, `clamp(count / 8, 0, 1)`             |
 | `semester_phase`                                    | already `[0, 1]` → `· 2 − 1`                                    |
 | one-hot groups, bias                                | not normalized                                                  |

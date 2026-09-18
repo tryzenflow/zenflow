@@ -50,8 +50,8 @@ backend/
 │   │   ├── core/                # PURE algorithm — no Prisma, no clock, no randomness
 │   │   │   ├── preference.ts        # matrixIndex / default+effective matrix / preferenceScoreAt
 │   │   │   ├── slot-score.ts        # slotPreferenceScore (overlap-weighted) + bestFreeSlot
-│   │   │   ├── linucb-slot-score.ts # Σ_arm overlapRate·predicted + slotPreferenceScore  (cold-start blend)
-│   │   │   ├── context-vector.ts    # buildContextVector() — the LinUCB d=46 feature vector
+│   │   │   ├── linucb-best-slot.ts  # rankArmsByScore (LinUCB-only) + bestMinuteInArm (B1 nudge + stability) + fallback
+│   │   │   ├── context-vector.ts    # buildContextVector() — the LinUCB d=46 feature vector (day_preference_profile[24] reserved, always 0 — Item 3B1)
 │   │   │   ├── arms.ts              # 5 time-of-day arm bands, armOfMinute / overlapRate
 │   │   │   ├── series-spread.ts     # seriesDayWindows — non-overlapping per-member day buckets
 │   │   │   ├── normalize.ts         # minMaxSigned + feature divisors
@@ -418,6 +418,7 @@ so the scheduler avoids them from day one. Best-effort — a failure is logged a
 | DELETE | `/sessions/series/:seriesId`                 | Delete the whole series.                                          |
 | DELETE | `/sessions/series/:seriesId/truncate?from=`  | Recurring series only — pull the rrule's `UNTIL` back to just before `from` ("this and following").                                                                                                                                                                                                                                                                                                              |
 | DELETE | `/sessions/series/:seriesId/from/:sessionId` | Materialized `TASK` series only — delete that sitting and every later one by `sessionIndex`; earlier sittings kept.                                                                                                                                                                                                                                                                                              |
+| POST   | `/sessions/:id/slot-pick`                    | `{ slotProposalId, chose: "primary" \| "alternative" }` — records which side of a pairwise-sampled `SlotProposal` the user picked (`pairwiseShown` events only); `"alternative"` applies that start as an ordinary `MOVE`. Idempotent, best-effort — never blocks the flow. See [LinUCB scheduling](#linucb-scheduling-ab-experiment). |
 
 ### Tags (`/tags`)
 
@@ -582,31 +583,49 @@ concern.
 `docs/adr/0001-linucb-model-design.md` + `docs/scheduler/{reranking,ab-testing}.md`, and
 the [Scheduler architecture](#scheduler-architecture) walkthrough below. On `POST /sessions`
 (a single `TASK`) and a `TASK` deadline change, `TaskPlacementService` places the one
-session via `HeuristicPlacer.placeTask`, then `ExperimentService.assignPolicy()` picks a
-50/50 `primaryPolicy`:
+session via `HeuristicPlacer.placeTask`, then hands the A/B decision to
+`SchedulingExperimentCoordinator`, which calls `ExperimentService.assignPolicy()` for a 50/50
+`primaryPolicy` **and** an independent `PAIRWISE_SAMPLE_RATE` (20%) pairwise-sample draw:
 
-- **HEURISTIC** — keep the heuristic placement; record a `SlotProposal`.
+- **HEURISTIC, not sampled** (the common case) — keep the heuristic placement; the bandit
+  never runs; record a `SlotProposal` with `modelProposal` null, `pairwiseShown` false.
 - **LINUCB** — `BanditPlacer.placeTask()` builds one `d=46` context vector per candidate day
-  (`core/context-vector.ts`), calls the bandit service `/predict` once, scores the empty
-  hard-constraint-feasible 15-min slots by
-  `Σ_arm overlapRate·predicted + slotPreferenceScore` (`core/linucb-slot-score.ts` — the
-  preference term is a cold-start blend so a slot ranks sensibly before any arm has learned),
-  and picks the earliest top slot. A slot may run past local midnight up to the deadline. If
-  it produces a pick, THIS session's `scheduledStartTime` is overridden (no other session
-  moves); otherwise the heuristic placement stands. Either way a `SlotProposal` is recorded
-  with `featureVector` + `selectedArm`.
+  (`core/context-vector.ts` — `day_preference_profile[24]` is reserved and always 0, Item
+  3B1: the preference matrix is no longer an input feature), calls the bandit service
+  `/predict` once, then picks a slot in two steps (`core/linucb-best-slot.ts`, Item 3B2):
+  `rankArmsByScore` ranks the 5 `SchedulingArm`s by LinUCB's own per-arm score alone (no
+  preference/stability influence), then `bestMinuteInArm` searches only the minutes whose
+  local time falls in the top-ranked arm's band, scored by a small duration-normalized
+  preference nudge (`PREFERENCE_NUDGE_WEIGHT`) plus the stability term — falling through to
+  the next-ranked arm when the current one has zero feasible slots. A slot may run past local
+  midnight up to the deadline. If it produces a pick, THIS session's `scheduledStartTime` is
+  overridden (no other session moves); otherwise the heuristic placement stands.
+- **sampled for pairwise** (independent of `primaryPolicy`) — the bandit runs too, even when
+  HEURISTIC is primary, purely for comparison: nothing about which slot gets applied changes,
+  but the `SlotProposal` gets `pairwiseShown = true` plus both proposals, so
+  `POST /sessions/:id/slot-pick` (`docs/scheduler/ab-testing.md` §3) has something to offer. A
+  bandit failure here degrades to the non-sampled case — `pairwiseShown` is only ever true
+  when a real bandit pick exists.
 
-A `sessionCount > 1` series is placed by `SeriesPlacer`: each member gets an even-spread
-target day, then goes through the **same per-member 50/50 heuristic-or-LinUCB pick**, with
-its candidate-day window clamped to `± max(1, floor(X/N))` days around the target (`X` =
-whole days to the deadline, `N` = member count). Members never overlap, at most
-`MAX_SERIES_PER_DAY` (1) per calendar day, and one `SlotProposal` is recorded per member. A
-deadline edit re-runs the same path over the still-upcoming sittings.
+A `sessionCount > 1` series is placed by `SeriesPlacer`, going through the **same
+coordinator per member**, with each member's candidate-day window clamped to
+`± max(1, floor(X/N))` days around its even-spread target day (`X` = whole days to the
+deadline, `N` = member count). Members never overlap, at most `MAX_SERIES_PER_DAY` (1) per
+calendar day, and one `SlotProposal` is recorded per member. A deadline edit re-runs the same
+path over the still-upcoming sittings. (Per-member divergence isn't surfaced on the series
+response yet — the pairwise picker's series surface is designed in #41 — but the sampling and
+`SlotProposal` writes happen identically to the single-task path.)
 
-Delayed reward (ADR-0001 §9): the first user `MOVE` of a LinUCB-placed session sends a
-graded penalty (`-min(1, |dragMin| / 240)`) to that arm's `/update` (`SchedulingFeedbackService`);
-the `RETAINED` sweep sends `+1`. The returned `(A, b)` is persisted to `BanditArmState`; the
-`SessionEvent` links back via `slotProposalId`. Every part is best-effort — a bandit failure
+Delayed reward (ADR-0001 §9): the first user `MOVE` of a LinUCB-placed session — including a
+`POST /sessions/:id/slot-pick` pick of the alternative, which applies exactly like a drag —
+sends a graded penalty (`dragDistanceReward`, `core/reward.ts`:
+`-min(1, |dragMin| / 240)`) to that arm's `/update`
+(`SchedulingFeedbackService.onFirstMove` → shared `applyDelayedReward`); the `RETAINED` sweep
+(`RetainedSessionsService`, also via `applyDelayedReward`) sends `+1`. The returned `(A, b)`
+is persisted to `BanditArmState`; the `SessionEvent` links back via `slotProposalId`. The same
+first-modification call also stamps `SlotProposal.firstModifiedAt` /
+`firstModificationType` / `acceptedWithoutModification` (a `"primary"`/blank slot-pick sets
+`acceptedWithoutModification = true` instead). Every part is best-effort — a bandit failure
 never breaks session create/update.
 
 ## Scheduler architecture
@@ -632,6 +651,11 @@ flowchart LR
   subgraph facade["scheduler/io — facade"]
     TPS[TaskPlacementService]
     SFS[SchedulingFeedbackService]
+    SPS[SlotPickService\nsessions/]
+  end
+
+  subgraph coord["scheduler/io — A/B decision"]
+    SEC[SchedulingExperimentCoordinator\nassign policy + pairwise sample\n→ maybe bandit → record proposal]
   end
 
   subgraph placers["scheduler/io — placers"]
@@ -648,7 +672,7 @@ flowchart LR
 
   subgraph core["scheduler/core — pure"]
     SC[slot-score.ts\nslotPreferenceScore + bestFreeSlot]
-    LSS[linucb-slot-score.ts]
+    LBS[linucb-best-slot.ts\nrankArmsByScore + bestMinuteInArm]
     CV[context-vector.ts]
     ARMS[arms.ts]
     SPREAD[series-spread.ts]
@@ -657,22 +681,25 @@ flowchart LR
     MD[matrix-decay.ts]
   end
 
-  EXP[ExperimentService\n50/50 assign + SlotProposal]
+  EXP[ExperimentService\nprimaryPolicy 50/50 + pairwise sample\n+ SlotProposal write]
   BANDIT[BanditService + BanditArmStateRepository\n→ services/bandit /predict /update]
 
   SS --> TPS
   SS --> SFS
-  TPS --> HP & BP & SP
-  TPS --> EXP
-  SP --> HP & BP & EXP
+  SS --> SPS
+  TPS --> HP & SP
+  TPS --> SEC
+  SP --> HP & SEC
+  SEC --> EXP & BP
+  SPS --> SFS
   HP --> DL & SC
-  BP --> DL & CV & LSS & BANDIT
-  LSS --> ARMS & SC
+  BP --> DL & CV & LBS & BANDIT
+  LBS --> ARMS & SC
   SP --> SPREAD
   SC --> PREF
   DL --> REC
   SFS --> BANDIT
-  RSS --> BANDIT
+  RSS --> SFS
   MDS --> MD
 ```
 
@@ -684,6 +711,7 @@ sequenceDiagram
   participant S as SessionsService
   participant T as TaskPlacementService
   participant H as HeuristicPlacer
+  participant X as SchedulingExperimentCoordinator
   participant E as ExperimentService
   participant B as BanditPlacer
   C->>S: create(dto)
@@ -691,19 +719,28 @@ sequenceDiagram
   S->>T: placeOnCreate({ user, task, now })
   T->>H: placeTask → placeInWindow (per day: loadDayLoad + bestFreeSlot)
   H-->>T: heuristic start (or null)
-  T->>T: session.update scheduledStartTime
-  T->>E: assignPolicy()  (50/50)
-  alt LINUCB
-    T->>B: placeTask (per day: loadDayLoad + buildContextVector → /predict → linucbSlotScore)
-    B-->>T: BanditPick (or null → heuristic stands)
-    T->>T: session.update scheduledStartTime (override)
-    T->>E: recordProposal(LINUCB, featureVector, selectedArm)
-  else HEURISTIC
-    T->>E: recordProposal(heuristic)
+  T->>T: session.update scheduledStartTime (baseline)
+  T->>X: run({ heuristicStart, runBandit })
+  X->>E: assignPolicy()  (primaryPolicy 50/50 + independent pairwise-sample draw)
+  alt primaryPolicy LINUCB, or sampled for pairwise
+    X->>B: placeTask (per day: loadDayLoad + buildContextVector → /predict → rankArmsByScore → bestMinuteInArm)
+    B-->>X: BanditPick (or null → heuristic stands / not effectively sampled)
   end
-  T-->>S: { scheduledStartTime, appliedPolicy }
-  S-->>C: toSessionDto(...)
+  X->>X: pick winner (LINUCB only if primary AND a pick exists) + divergence
+  X->>E: recordProposal(primaryPolicy, pairwiseShown, both proposals when sampled)
+  X-->>T: { appliedStart, appliedPolicy, slotProposalId, alternativeSlot, divergent }
+  opt winner differs from the baseline
+    T->>T: session.update scheduledStartTime (override)
+  end
+  T-->>S: PlacementResult
+  S-->>C: CreateSessionResponse (+ slotProposalId/primarySlot/alternativeSlot/divergent)
 ```
+
+A pairwise-sampled event's `alternativeSlot`/`divergent` let the client offer a pick via
+`POST /sessions/:id/slot-pick` (`docs/scheduler/ab-testing.md` §3) — `SlotPickService`
+(`sessions/`) applies the alternative as an ordinary `MOVE` when chosen (reusing
+`SchedulingFeedbackService.onFirstMove`'s reward path unchanged), or just records
+"kept" otherwise.
 
 ### Flow 2 — create a `TASK` series (`sessionCount > 1`)
 
@@ -712,7 +749,7 @@ sequenceDiagram
   participant S as SessionsService.createTaskSeries
   participant T as TaskPlacementService
   participant SP as SeriesPlacer
-  participant E as ExperimentService
+  participant X as SchedulingExperimentCoordinator
   participant H as HeuristicPlacer
   participant B as BanditPlacer
   S->>S: $tx( sessionSeries.create + N× session.create + N× CREATE event )
@@ -720,13 +757,11 @@ sequenceDiagram
   T->>SP: placeSeries(trigger "create")
   Note over SP: seriesDayWindows → per member: its own non-overlapping day bucket
   loop each member
-    SP->>E: assignPolicy()
-    SP->>H: placeInWindow(window, extraOccupied = siblings, skipDay = ≤3/day cap)
-    opt LINUCB
-      SP->>B: placeInWindow(window, ...)
-    end
+    SP->>H: placeInWindow(window, extraOccupied = siblings, skipDay = ≤1/day cap)
+    SP->>X: run({ heuristicStart, runBandit: placeInWindow(...) })
+    Note over X: same assign + maybe-bandit + record as Flow 1 — one SlotProposal per member
+    X-->>SP: appliedStart
     SP->>SP: accumulate sibling interval
-    SP->>E: recordProposal(...)   // one per member
   end
   SP-->>T: rows[]
   T->>T: $tx( session.update scheduledStartTime for placed rows )
@@ -756,18 +791,21 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-  participant S as SessionsService.update
+  participant S as SessionsService.update / SlotPickService
   participant F as SchedulingFeedbackService
   participant R as RetainedSessionsService (@Cron)
   participant BA as Bandit (/update + BanditArmState)
-  Note over S: first user MOVE of a scheduled TASK
+  Note over S: first user MOVE of a scheduled TASK (a drag, or a slot-pick "alternative")
   S->>S: $tx( MOVE SessionEvent + lastMovedAt );  existing.lastMovedAt == null → firstMove
   S->>F: onFirstMove(userId, sessionId, moveEventId, dragMinutes)
+  F->>F: applyDelayedReward(reward = dragDistanceReward(dragMinutes), modificationType = MOVE)
   F->>F: slotProposal.findFirst(primaryPolicy LINUCB, selectedArm != null)
-  F->>BA: reward = drag==0 ? 0 : -min(1, |drag|/240) → loadAll → /update → save → link event
+  F->>BA: loadAll → /update(reward) → save → link event
+  F->>F: firstModifiedAt still null? stamp firstModifiedAt/firstModificationType/acceptedWithoutModification=false
   Note over R: every 30 min
   R->>R: sweep — elapsed, never-moved USER TASK → RETAINED event (+1)
-  R->>BA: same loadAll → /update(+1) → save → link event
+  R->>F: applyDelayedReward(SESSION_RETAINED_REWARD, modificationType = null)
+  F->>BA: same loadAll → /update(+1) → save → link event
 ```
 
 ### Flow 5 — edit-mode `sessionCount` resize/promote
@@ -818,18 +856,35 @@ is split at local midnight and each side scored against its own day's weekday ro
 matrix is **168 signed floats** — 7 ISO weekdays × 24 one-hour buckets, row-major
 (`matrixIndex(isoWeekday, hour) = (isoWeekday−1)·24 + hour`).
 
-### LinUCB slot score — cold-start blend
+### LinUCB slot selection — arm choice, then minute choice (Item 3B1/B2)
 
-`linucbSlotScore` (`core/linucb-slot-score.ts`) for a candidate 15-min start:
+`core/linucb-best-slot.ts` splits arm selection from minute selection so the preference
+matrix can never bleed a placement into an arm LinUCB's own scores didn't actually favor:
 
 ```text
-score(slot) = Σ_arm overlapRate(slot, arm) · predicted[day][arm]   (the LinUCB term)
-            + slotPreferenceScore(slot)                            (cold-start blend)
+rankArmsByScore(days)   — ranks the 5 SchedulingArms by max(/predict score) over any
+                           candidate day; no preference or stability influence at all.
+
+bestMinuteInArm(arm, …) — scans only the 15-min starts whose local minute-of-day falls in
+                           `arm`'s ARM_BANDS window (armOfMinute), scored by:
+                             (slotPreferenceScore(slot) / durationHours) · PREFERENCE_NUDGE_WEIGHT
+                             + STABILITY_WEIGHT · stabilityScore(prevStart, slot)
+                           — no arm term, since the arm is already fixed. `null` when this
+                           arm has zero feasible slots anywhere in the horizon.
+
+bestLinucbSlot(input)   — tries each ranked arm in turn via bestMinuteInArm, falling through
+                           to the next arm on `null`; returns `null` only once every arm is
+                           exhausted (same "nothing survives" contract as before).
 ```
 
-The bandit service returns `0` for an arm with no accumulated reward, so the preference
-addend keeps slots meaningfully ordered before the model has learned anything
-(ADR-0001 §8).
+`PREFERENCE_NUDGE_WEIGHT` (`constants.ts`, `0.1`) keeps the preference-matrix rerank small
+enough to only break near-ties LinUCB itself can't yet distinguish — it's a post-hoc nudge
+on the already-chosen arm's minute, never a second competing signal, and never fed into
+LinUCB's own context vector (`context-vector.ts` zeroes `day_preference_profile[24]`). The
+preference matrix itself is reinforced by real outcomes — `+1` on a `RETAINED` session,
+`-1` on a session's first `MOVE` — via `preference.ts`'s `reinforcePreferenceCell`, called
+from both `RetainedSessionsService` and `SessionUpdateService`'s first-move path
+unconditionally on which policy placed the session (Item 3B3).
 
 ### Series bounded window
 
@@ -864,24 +919,28 @@ pre-flight (`TaskPlacementService.canPlaceSeries`) keep safe, not this partition
 | ----------------------------------------------------------------------------------- | --------------------------------------------- |
 | preference matrix helpers (`matrixIndex`, default/effective, `preferenceScoreAt`)   | `scheduler/core/preference.ts`                |
 | overlap-weighted slot score + best-free-slot search                                 | `scheduler/core/slot-score.ts`                |
-| LinUCB slot score + cold-start blend                                                | `scheduler/core/linucb-slot-score.ts`         |
+| LinUCB two-step slot selection (`rankArmsByScore` + `bestMinuteInArm`)              | `scheduler/core/linucb-best-slot.ts`          |
+| preference-matrix reinforcement (`reinforcePreferenceCell`)                         | `scheduler/core/preference.ts`                |
 | the `d = 46` LinUCB context vector                                                  | `scheduler/core/context-vector.ts`            |
 | 5 time-of-day arm bands + `overlapRate` (splits at midnight)                        | `scheduler/core/arms.ts`                      |
 | series even spread + `± X/N` window                                                 | `scheduler/core/series-spread.ts`             |
 | feature normalization (`minMaxSigned`, divisors)                                    | `scheduler/core/normalize.ts`                 |
 | rrule expansion + occurrence-id helpers                                             | `scheduler/core/recurrence.ts`                |
 | exponential preference-matrix decay                                                 | `scheduler/core/matrix-decay.ts`              |
+| pure delayed-reward math (`dragDistanceReward`)                                     | `scheduler/core/reward.ts`                    |
 | one day's occupied intervals + workload (the only occupancy query)                  | `scheduler/io/day-load.ts`                    |
 | Policy A placer — `placeTask` / `placeInWindow`                                     | `scheduler/io/heuristic-placer.service.ts`    |
 | Policy B placer — per-day `/predict` + slot pick                                    | `scheduler/io/bandit-placer.service.ts`       |
-| per-member bounded 50/50 series placement                                           | `scheduler/io/series-placer.service.ts`       |
-| the facade `sessions/` calls (place + persist + A/B)                                | `scheduler/io/task-placement.service.ts`      |
+| per-member series placement (delegates the A/B decision to the coordinator)         | `scheduler/io/series-placer.service.ts`       |
+| the facade `sessions/` calls (heuristic baseline + persist)                         | `scheduler/io/task-placement.service.ts`      |
+| the A/B + pairwise-sample decision, shared by single-task and series placement      | `scheduler/io/scheduling-experiment-coordinator.service.ts` |
 | `TASK` series lifecycle — create, deadline redistribute, edit-mode `sessionCount` resize/promote | `sessions/series.service.ts`       |
-| delayed first-move LinUCB reward                                                    | `scheduler/io/scheduling-feedback.service.ts` |
-| `RETAINED` sweep (+1 reward)                                                        | `scheduler/io/retained-sessions.service.ts`   |
+| delayed reward (first-`MOVE` + `RETAINED`) + `SlotProposal` acceptance columns       | `scheduler/io/scheduling-feedback.service.ts` |
+| `RETAINED` sweep — finds + marks elapsed sessions, delegates reward to the above     | `scheduler/io/retained-sessions.service.ts`   |
+| `POST /sessions/:id/slot-pick`                                                       | `sessions/slot-pick.service.ts`               |
 | nightly matrix decay cron                                                           | `scheduler/io/matrix-decay.service.ts`        |
-| 50/50 policy assignment + `SlotProposal` write                                      | `experiments/experiment.service.ts`           |
-| tuning constants (`MAX_SCAN_DAYS`, `MAX_SERIES_PER_DAY`, `BANDIT_*`, reward scales) | `scheduler/constants.ts`                      |
+| `primaryPolicy` 50/50 + pairwise-sample draw + `SlotProposal` write                  | `experiments/experiment.service.ts`           |
+| tuning constants (`MAX_SCAN_DAYS`, `MAX_SERIES_PER_DAY`, `BANDIT_*`, `PAIRWISE_SAMPLE_RATE`, reward scales) | `scheduler/constants.ts`      |
 
 ## Observability
 
