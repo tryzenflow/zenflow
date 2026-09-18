@@ -25,7 +25,7 @@ import { DAY_MS, localDateStr } from "../scheduler/core/slot";
 import { minutesToUtc } from "../common/utils";
 import { CreateSessionDto } from "./dto/create-session.dto";
 import { SessionRow, WITH_TAGS_AND_SERIES } from "./types/session-row";
-import { toSessionDto } from "./session-mapper";
+import { NO_SLOT_PROPOSAL, toSessionDto } from "./session-mapper";
 import { createEventData } from "./session-events";
 
 /**
@@ -124,7 +124,7 @@ export class SeriesService {
     const sessions = rows.map((r) =>
       toSessionDto({ ...r, scheduledStartTime: startById.get(r.id) ?? null }),
     );
-    return { ...sessions[0], sessions };
+    return { ...sessions[0], ...NO_SLOT_PROPOSAL, sessions };
   }
 
   /**

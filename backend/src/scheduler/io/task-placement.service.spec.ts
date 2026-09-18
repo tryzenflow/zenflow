@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { Test, TestingModule } from "@nestjs/testing";
 import { PrismaService } from "../../prisma/prisma.service";
-import { ExperimentService } from "../../experiments/experiment.service";
+import { SchedulingExperimentCoordinator } from "./scheduling-experiment-coordinator.service";
 import { HeuristicPlacer } from "./heuristic-placer.service";
 import { BanditPlacer } from "./bandit-placer.service";
 import { SeriesPlacer } from "./series-placer.service";
@@ -9,9 +9,11 @@ import { TaskPlacementService } from "./task-placement.service";
 
 /**
  * `TaskPlacementService.placeOnCreate` / `placeOnDeadlineChange` — the single-TASK
- * A/B facade. Absorbs what `sessions.service.spec.ts` used to assert about
- * `runSchedulingExperiment`. Series placement is covered by
- * `series-placer.service.spec.ts`.
+ * A/B facade. The A/B assignment + pairwise/bandit routing itself is
+ * `scheduling-experiment-coordinator.service.spec.ts`; here we prove the
+ * heuristic-write → coordinator-run → override-write sequencing and that a
+ * coordinator failure always leaves the heuristic placement standing. Series
+ * placement is covered by `series-placer.service.spec.ts`.
  */
 
 const user = {
@@ -28,7 +30,7 @@ const now = new Date("2026-06-08T00:00:00.000Z");
 
 async function makeTaskPlacementService(
   prisma: unknown,
-  experiment: unknown,
+  coordinator: unknown,
   heuristic: unknown,
   bandit: unknown,
   seriesPlacer: unknown,
@@ -37,7 +39,7 @@ async function makeTaskPlacementService(
     providers: [
       TaskPlacementService,
       { provide: PrismaService, useValue: prisma },
-      { provide: ExperimentService, useValue: experiment },
+      { provide: SchedulingExperimentCoordinator, useValue: coordinator },
       { provide: HeuristicPlacer, useValue: heuristic },
       { provide: BanditPlacer, useValue: bandit },
       { provide: SeriesPlacer, useValue: seriesPlacer },
@@ -49,44 +51,62 @@ async function makeTaskPlacementService(
 async function makeDeps(over: {
   heuristicStart?: Date | null;
   policy?: "HEURISTIC" | "LINUCB";
-  pick?: unknown;
+  pick?: {
+    scheduledStartTime: Date;
+    selectedArm: string;
+    featureVector: number[];
+  };
   banditThrows?: boolean;
 }) {
   const sessionUpdate = jest.fn().mockResolvedValue({});
   const prisma = { session: { update: sessionUpdate } };
-  const experiment = {
-    assignPolicy: jest.fn(() => ({
-      primaryPolicy: over.policy ?? "HEURISTIC",
-      randomizationSeed: "seed",
-    })),
-    recordProposal: jest.fn().mockResolvedValue(undefined),
+  const heuristicStart =
+    over.heuristicStart === undefined ? null : over.heuristicStart;
+  const coordinator = {
+    run: over.banditThrows
+      ? jest.fn().mockRejectedValue(new Error("bandit down"))
+      : jest.fn(async (input: { runBandit: () => Promise<unknown> }) => {
+          const primaryPolicy = over.policy ?? "HEURISTIC";
+          const banditPick =
+            primaryPolicy === "LINUCB" ? await input.runBandit() : null;
+          return {
+            appliedStart: banditPick
+              ? (banditPick as { scheduledStartTime: Date }).scheduledStartTime
+              : heuristicStart,
+            appliedPolicy: banditPick
+              ? "LINUCB"
+              : heuristicStart
+                ? "HEURISTIC"
+                : "NONE",
+            assignedPolicy: primaryPolicy,
+            banditAttempted: primaryPolicy === "LINUCB",
+            banditPick,
+            slotProposalId: banditPick ? "p1" : null,
+            alternativeSlot: null,
+            divergent: false,
+          };
+        }),
   };
   const heuristic = {
-    placeTask: jest
-      .fn()
-      .mockResolvedValue(
-        over.heuristicStart === undefined ? null : over.heuristicStart,
-      ),
+    placeTask: jest.fn().mockResolvedValue(heuristicStart),
   };
   const bandit = {
-    placeTask: over.banditThrows
-      ? jest.fn().mockRejectedValue(new Error("bandit down"))
-      : jest.fn().mockResolvedValue(over.pick ?? null),
+    placeTask: jest.fn().mockResolvedValue(over.pick ?? null),
   };
   const svc = await makeTaskPlacementService(
     prisma,
-    experiment,
+    coordinator,
     heuristic,
     bandit,
     { placeSeries: jest.fn() },
   );
-  return { svc, sessionUpdate, experiment, heuristic, bandit };
+  return { svc, sessionUpdate, coordinator, heuristic, bandit };
 }
 
 describe("TaskPlacementService.placeOnCreate", () => {
-  it("keeps the heuristic placement and records a proposal when HEURISTIC is primary", async () => {
+  it("keeps the heuristic placement and runs the coordinator when HEURISTIC is primary", async () => {
     const slot = new Date("2026-06-09T09:00:00.000Z");
-    const { svc, sessionUpdate, experiment, bandit } = await makeDeps({
+    const { svc, sessionUpdate, coordinator, bandit } = await makeDeps({
       heuristicStart: slot,
       policy: "HEURISTIC",
     });
@@ -96,24 +116,26 @@ describe("TaskPlacementService.placeOnCreate", () => {
     expect(res).toEqual({
       scheduledStartTime: slot,
       appliedPolicy: "HEURISTIC",
+      slotProposalId: null,
+      alternativeSlot: null,
+      divergent: false,
     });
     expect(sessionUpdate).toHaveBeenCalledWith({
       where: { id: "t1" },
       data: { scheduledStartTime: slot },
     });
     expect(bandit.placeTask).not.toHaveBeenCalled();
-    expect(experiment.recordProposal).toHaveBeenCalledTimes(1);
-    expect(experiment.recordProposal.mock.calls[0][0].selectedArm).toBeNull();
+    expect(coordinator.run).toHaveBeenCalledTimes(1);
   });
 
-  it("overrides with the LinUCB pick and records a LINUCB proposal", async () => {
+  it("overrides with the LinUCB pick and reports its proposal id", async () => {
     const heuristicSlot = new Date("2026-06-09T09:00:00.000Z");
     const pick = {
       scheduledStartTime: new Date("2026-06-09T20:00:00.000Z"),
       selectedArm: "NIGHT",
       featureVector: new Array<number>(46).fill(0),
     };
-    const { svc, sessionUpdate, experiment } = await makeDeps({
+    const { svc, sessionUpdate } = await makeDeps({
       heuristicStart: heuristicSlot,
       policy: "LINUCB",
       pick,
@@ -124,18 +146,17 @@ describe("TaskPlacementService.placeOnCreate", () => {
     expect(res).toEqual({
       scheduledStartTime: pick.scheduledStartTime,
       appliedPolicy: "LINUCB",
+      slotProposalId: "p1",
+      alternativeSlot: null,
+      divergent: false,
     });
     // heuristic write then LinUCB override write.
     expect(sessionUpdate).toHaveBeenCalledTimes(2);
-    expect(experiment.recordProposal).toHaveBeenCalledTimes(1);
-    expect(experiment.recordProposal.mock.calls[0][0].selectedArm).toBe(
-      "NIGHT",
-    );
   });
 
-  it("falls back to the heuristic placement when the bandit throws", async () => {
+  it("falls back to the heuristic placement when the coordinator throws", async () => {
     const slot = new Date("2026-06-09T09:00:00.000Z");
-    const { svc, experiment } = await makeDeps({
+    const { svc, sessionUpdate } = await makeDeps({
       heuristicStart: slot,
       policy: "LINUCB",
       banditThrows: true,
@@ -146,9 +167,12 @@ describe("TaskPlacementService.placeOnCreate", () => {
     expect(res).toEqual({
       scheduledStartTime: slot,
       appliedPolicy: "HEURISTIC",
+      slotProposalId: null,
+      alternativeSlot: null,
+      divergent: false,
     });
-    // The throw happened before recordProposal — best-effort, no crash.
-    expect(experiment.recordProposal).not.toHaveBeenCalled();
+    // Only the heuristic write happened — no override write followed the throw.
+    expect(sessionUpdate).toHaveBeenCalledTimes(1);
   });
 
   it("reports NONE when nothing free fits", async () => {
@@ -157,7 +181,13 @@ describe("TaskPlacementService.placeOnCreate", () => {
       policy: "HEURISTIC",
     });
     const res = await svc.placeOnCreate({ user, task, now });
-    expect(res).toEqual({ scheduledStartTime: null, appliedPolicy: "NONE" });
+    expect(res).toEqual({
+      scheduledStartTime: null,
+      appliedPolicy: "NONE",
+      slotProposalId: null,
+      alternativeSlot: null,
+      divergent: false,
+    });
   });
 });
 
@@ -177,8 +207,8 @@ describe("TaskPlacementService.canPlaceTask / canPlaceSeries", () => {
     expect(heuristic.placeTask.mock.calls[0][1].id).not.toBe("t1");
   });
 
-  it("canPlaceTask is false when nothing fits, and touches no prisma/experiment write", async () => {
-    const { svc, sessionUpdate, experiment } = await makeDeps({
+  it("canPlaceTask is false when nothing fits, and touches no prisma/coordinator write", async () => {
+    const { svc, sessionUpdate, coordinator } = await makeDeps({
       heuristicStart: null,
     });
 
@@ -191,7 +221,7 @@ describe("TaskPlacementService.canPlaceTask / canPlaceSeries", () => {
 
     expect(ok).toBe(false);
     expect(sessionUpdate).not.toHaveBeenCalled();
-    expect(experiment.recordProposal).not.toHaveBeenCalled();
+    expect(coordinator.run).not.toHaveBeenCalled();
   });
 
   it("canPlaceSeries is true only when every member gets a slot (dry run)", async () => {

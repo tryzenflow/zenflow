@@ -12,6 +12,7 @@ import {
 import { SessionsService } from "./sessions.service";
 import { CreateSessionDto } from "./dto/create-session.dto";
 import { UpdateSessionDto } from "./dto/update-session.dto";
+import { SlotPickDto } from "./dto/slot-pick.dto";
 import { ListSessionsDto } from "./dto/list-sessions.dto";
 import { ListSessionSuggestionsDto } from "./dto/list-session-suggestions.dto";
 import { DeadlineOptionsDto } from "./dto/deadline-options.dto";
@@ -76,6 +77,16 @@ export class SessionsController {
   ) {
     const data = await this.sessionsService.update(id, dto, user);
     return { success: true, message: "Session updated", data };
+  }
+
+  @Post(":id/slot-pick")
+  async slotPick(
+    @Param("id") id: string,
+    @Body() dto: SlotPickDto,
+    @CurrentUser() user: User,
+  ) {
+    const data = await this.sessionsService.slotPick(id, dto, user);
+    return { success: true, message: "Slot pick recorded", data };
   }
 
   // NOTE: must precede @Delete(":id") so "series" isn't matched as an :id.

@@ -28,7 +28,11 @@ import { CreateSessionDto } from "./dto/create-session.dto";
 import { ListSessionSuggestionsDto } from "./dto/list-session-suggestions.dto";
 import { ListSessionsDto } from "./dto/list-sessions.dto";
 import { WITH_TAGS_AND_SERIES } from "./types/session-row";
-import { toSessionDto } from "./session-mapper";
+import {
+  slotProposalFieldsOf,
+  toCreateSessionResponse,
+  toSessionDto,
+} from "./session-mapper";
 import { createEventData } from "./session-events";
 import { insertFixedSession } from "./fixed-session-writer";
 import { mapSessionPrismaError } from "./prisma-error";
@@ -136,7 +140,7 @@ export class SessionCrudService {
     });
 
     // heuristic → 50/50 A/B → optional LinUCB override + SlotProposal.
-    const { scheduledStartTime } = await this.taskPlacement.placeOnCreate({
+    const placement = await this.taskPlacement.placeOnCreate({
       user,
       task: {
         id: created.id,
@@ -145,7 +149,10 @@ export class SessionCrudService {
       },
       now,
     });
-    return toSessionDto({ ...created, scheduledStartTime });
+    return toCreateSessionResponse(
+      { ...created, scheduledStartTime: placement.scheduledStartTime },
+      slotProposalFieldsOf(placement),
+    );
   }
 
   /**
@@ -194,7 +201,7 @@ export class SessionCrudService {
       });
     });
 
-    return toSessionDto(created);
+    return toCreateSessionResponse(created);
   }
 
   /** A one-off fixed session (`ASSIGNMENT` / `EXAM` / `LECTURE` / non-recurring
@@ -226,7 +233,7 @@ export class SessionCrudService {
       });
     });
 
-    return toSessionDto(created);
+    return toCreateSessionResponse(created);
   }
 
   async list(dto: ListSessionsDto, user: User): Promise<SessionsListResponse> {

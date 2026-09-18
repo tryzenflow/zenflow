@@ -7,10 +7,13 @@ import {
   schedulerBanditFallback,
 } from "../../observability/metrics";
 import { PrismaService } from "../../prisma/prisma.service";
-import { ExperimentService } from "../../experiments/experiment.service";
 import { HeuristicPlacer } from "./heuristic-placer.service";
 import { BanditPlacer } from "./bandit-placer.service";
 import { SeriesPlacer } from "./series-placer.service";
+import {
+  SchedulingExperimentCoordinator,
+  type ExperimentPlacementOutcome,
+} from "./scheduling-experiment-coordinator.service";
 import type {
   PlaceableTask,
   PlacementResult,
@@ -41,7 +44,7 @@ export class TaskPlacementService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly experiment: ExperimentService,
+    private readonly coordinator: SchedulingExperimentCoordinator,
     private readonly heuristic: HeuristicPlacer,
     private readonly bandit: BanditPlacer,
     private readonly seriesPlacer: SeriesPlacer,
@@ -90,100 +93,97 @@ export class TaskPlacementService {
     trigger: Trigger,
     now: Date,
   ): Promise<PlacementResult> {
-    const heuristicStart = await this.heuristic.placeTask(
+    const heuristicStart = await this.computeHeuristicStart(user, task, now);
+    await this.applyStart(task.id, heuristicStart);
+
+    const outcome = await this.runExperimentSafely(
+      user,
+      task,
+      trigger,
+      now,
+      heuristicStart,
+    );
+    await this.applyWinningSlotIfDifferent(task.id, heuristicStart, outcome);
+
+    this.logPlacement(trigger, task.id, heuristicStart, outcome);
+    this.emitPlacementTelemetry(span, trigger, heuristicStart, outcome);
+
+    return {
+      scheduledStartTime: outcome?.appliedStart ?? heuristicStart,
+      appliedPolicy:
+        outcome?.appliedPolicy ?? (heuristicStart ? "HEURISTIC" : "NONE"),
+      slotProposalId: outcome?.slotProposalId ?? null,
+      alternativeSlot: outcome?.alternativeSlot ?? null,
+      divergent: outcome?.divergent ?? false,
+    };
+  }
+
+  private computeHeuristicStart(
+    user: User,
+    task: PlaceableTask,
+    now: Date,
+  ): Promise<Date | null> {
+    return this.heuristic.placeTask(
       user.id,
       task,
       user.timezone,
       user.preferenceMatrix,
       now,
     );
-    if (heuristicStart) {
-      await this.prisma.session.update({
-        where: { id: task.id },
-        data: { scheduledStartTime: heuristicStart },
-      });
-    }
+  }
 
-    let appliedStart = heuristicStart;
-    let appliedPolicy: PlacementResult["appliedPolicy"] = heuristicStart
-      ? "HEURISTIC"
-      : "NONE";
-    let assignedPolicy: SchedulingModel | "NONE" = "NONE";
+  private async applyStart(taskId: string, start: Date | null): Promise<void> {
+    if (!start) return;
+    await this.prisma.session.update({
+      where: { id: taskId },
+      data: { scheduledStartTime: start },
+    });
+  }
 
+  /** The coordinator may have applied a different (LinUCB) start than the
+   * heuristic pass already persisted — write it if so. */
+  private async applyWinningSlotIfDifferent(
+    taskId: string,
+    heuristicStart: Date | null,
+    outcome: ExperimentPlacementOutcome | null,
+  ): Promise<void> {
+    if (!outcome?.appliedStart) return;
+    if (outcome.appliedStart.getTime() === heuristicStart?.getTime()) return;
+    await this.applyStart(taskId, outcome.appliedStart);
+  }
+
+  /** The A/B assignment + optional bandit run — best-effort, the heuristic
+   * placement above always stands if this fails. */
+  private async runExperimentSafely(
+    user: User,
+    task: PlaceableTask,
+    trigger: Trigger,
+    now: Date,
+    heuristicStart: Date | null,
+  ): Promise<ExperimentPlacementOutcome | null> {
     try {
-      const { primaryPolicy, randomizationSeed } =
-        this.experiment.assignPolicy();
-      assignedPolicy = primaryPolicy;
-      const heuristicProposal = {
-        scheduledStartTime: heuristicStart?.toISOString() ?? null,
-      };
-
-      const pick =
-        primaryPolicy === SchedulingModel.LINUCB
-          ? await this.bandit.placeTask(
-              user.id,
-              task,
-              user.timezone,
-              user.preferenceMatrix,
-              now,
-            )
-          : null;
-
-      this.logger.log(
-        `schedule[${trigger}] session=${task.id} assignedPolicy=${primaryPolicy} ` +
-          `applied=${pick ? "LINUCB" : heuristicStart ? "HEURISTIC" : "NONE"} ` +
-          `heuristicProposal=${heuristicStart?.toISOString() ?? "none"} ` +
-          `linucbProposal=${
-            pick
-              ? `${pick.scheduledStartTime.toISOString()} (arm=${pick.selectedArm})`
-              : primaryPolicy === SchedulingModel.LINUCB
-                ? "none"
-                : "n/a (not primary)"
-          }`,
-      );
-
-      if (pick) {
-        await this.prisma.session.update({
-          where: { id: task.id },
-          data: { scheduledStartTime: pick.scheduledStartTime },
-        });
-        await this.experiment.recordProposal({
-          userId: user.id,
-          sessionId: task.id,
-          trigger,
-          primaryPolicy,
-          randomizationSeed,
-          heuristicProposal,
-          proposedStartTime: pick.scheduledStartTime,
-          modelProposal: {
-            scheduledStartTime: pick.scheduledStartTime,
-            selectedArm: pick.selectedArm,
-          },
-          featureVector: pick.featureVector,
-          selectedArm: pick.selectedArm,
-        });
-        appliedStart = pick.scheduledStartTime;
-        appliedPolicy = "LINUCB";
-      } else {
-        if (primaryPolicy === SchedulingModel.LINUCB) {
-          // LinUCB was the assigned arm but produced nothing — the heuristic
-          // placement stands. `no_pick` covers URL unset / timeout / non-2xx /
-          // no surviving slot (BanditPlacer collapses them all to `null`).
-          schedulerBanditFallback.add(1, { reason: "no_pick", trigger });
-        }
-        await this.experiment.recordProposal({
-          userId: user.id,
-          sessionId: task.id,
-          trigger,
-          primaryPolicy,
-          randomizationSeed,
-          heuristicProposal,
-          proposedStartTime: heuristicStart,
-          modelProposal: null,
-          featureVector: [],
-          selectedArm: null,
-        });
+      const outcome = await this.coordinator.run({
+        userId: user.id,
+        sessionId: task.id,
+        trigger,
+        heuristicStart,
+        runBandit: () =>
+          this.bandit.placeTask(
+            user.id,
+            task,
+            user.timezone,
+            user.preferenceMatrix,
+            now,
+          ),
+      });
+      if (outcome.banditAttempted && !outcome.banditPick) {
+        // LinUCB was attempted (primary or pairwise-sampled) but produced
+        // nothing — the heuristic placement stands. `no_pick` covers URL
+        // unset / timeout / non-2xx / no surviving slot (BanditPlacer
+        // collapses them all to `null`).
+        schedulerBanditFallback.add(1, { reason: "no_pick", trigger });
       }
+      return outcome;
     } catch (err) {
       schedulerBanditFallback.add(1, { reason: "exception", trigger });
       this.logger.warn(
@@ -191,8 +191,41 @@ export class TaskPlacementService {
           (err as Error).message
         }`,
       );
+      return null;
     }
+  }
 
+  private logPlacement(
+    trigger: Trigger,
+    taskId: string,
+    heuristicStart: Date | null,
+    outcome: ExperimentPlacementOutcome | null,
+  ): void {
+    const pick =
+      outcome?.appliedPolicy === "LINUCB" ? outcome.banditPick : null;
+    this.logger.log(
+      `schedule[${trigger}] session=${taskId} assignedPolicy=${outcome?.assignedPolicy ?? "NONE"} ` +
+        `applied=${outcome?.appliedPolicy ?? (heuristicStart ? "HEURISTIC" : "NONE")} ` +
+        `heuristicProposal=${heuristicStart?.toISOString() ?? "none"} ` +
+        `linucbProposal=${
+          pick
+            ? `${pick.scheduledStartTime.toISOString()} (arm=${pick.selectedArm})`
+            : outcome?.assignedPolicy === SchedulingModel.LINUCB
+              ? "none"
+              : "n/a (not primary)"
+        }`,
+    );
+  }
+
+  private emitPlacementTelemetry(
+    span: Span,
+    trigger: Trigger,
+    heuristicStart: Date | null,
+    outcome: ExperimentPlacementOutcome | null,
+  ): void {
+    const assignedPolicy = outcome?.assignedPolicy ?? "NONE";
+    const appliedPolicy =
+      outcome?.appliedPolicy ?? (heuristicStart ? "HEURISTIC" : "NONE");
     schedulerAppliedPolicy.add(1, {
       assigned: assignedPolicy,
       applied: appliedPolicy,
@@ -202,8 +235,6 @@ export class TaskPlacementService {
       "scheduling.assigned_policy": assignedPolicy,
       "scheduling.applied_policy": appliedPolicy,
     });
-
-    return { scheduledStartTime: appliedStart ?? null, appliedPolicy };
   }
 
   /**
