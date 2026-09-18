@@ -62,15 +62,16 @@ export const STABILITY_SATURATION_HOURS = 4;
  * Weight of the fixed, post-hoc preference-matrix nudge used ONLY to rank
  * exact minutes within LinUCB's already-chosen arm (Item 3B1/B2) — never to
  * choose the arm itself (B2 picks the arm from LinUCB's own per-arm scores
- * alone), and never fed into LinUCB's context vector (`context-vector.ts`
- * zeroes `day_preference_profile[24]`, Item 3B1).
+ * alone), and never fed into LinUCB's context vector at all (the preference
+ * matrix was dropped from `context-vector.ts` entirely — it's no longer even
+ * a reserved/zeroed slot).
  *
  * LinUCB's own arm score (`θ̂ᵀx + α·√(xᵀA⁻¹x)`) is fit against rewards in
  * `[-1, 1]` (`SESSION_RETAINED_REWARD` / `SESSION_MOVE_REWARD` /
  * `dragDistanceReward`'s range — ADR-0001 §7), so a trained arm's score is
  * itself O(1) in typical magnitude, with the `α·√(...)` exploration term
  * adding at most roughly another unit early on (bounded by `α·√FEATURE_DIM ≈
- * 0.15·√46 ≈ 1.0` for a single early observation under the `λ = 1` ridge
+ * 0.15·√22 ≈ 0.7` for a single early observation under the `λ = 1` ridge
  * prior, per ADR-0001 §6/§10) before shrinking as more data arrives.
  * `slotPreferenceScore` is duration-scaled (a sum over every clock-hour the
  * slot touches, so an N-hour slot's raw value is up to `N`, not `O(1)`) —
@@ -114,7 +115,7 @@ export const BANDIT_RIDGE = 1.0;
 export const MOVE_REWARD_SCALE_MINUTES = 240;
 
 /** Stamped on `SlotProposal.modelVersion` for LinUCB proposals. */
-export const BANDIT_MODEL_VERSION = "linucb-d46-v1";
+export const BANDIT_MODEL_VERSION = "linucb-d22-v1";
 
 /** `SlotProposal.experimentId` for the heuristic-vs-LinUCB A/B experiment. */
 export const BANDIT_EXPERIMENT_ID = "linucb-heuristic-v1";

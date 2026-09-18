@@ -65,7 +65,7 @@ describe("ExperimentService.recordProposal", () => {
     expect(data.event).toBe("CREATE");
     expect(data.primaryPolicy).toBe("LINUCB");
     expect(data.observationCount).toBe(7);
-    expect(data.modelVersion).toBe("linucb-d46-v1");
+    expect(data.modelVersion).toBe("linucb-d22-v1");
     expect(data.selectedArm).toBe("NIGHT");
     expect(data.featureVector).toEqual([0.1, 0.2]);
     expect(data.modelProposal).toEqual({

@@ -1,7 +1,7 @@
 # ADR-0001: Disjoint LinUCB Model Design for Zenflow Scheduling
 
 **Status:** Accepted
-**Date:** 2026-08-29 · **Last updated:** 2026-09-07
+**Date:** 2026-08-29 · **Last updated:** 2026-09-18
 **Decision:** Use per-student Disjoint LinUCB with reusable time-of-day arms.
 
 Related: [`docs/scheduler/reranking.md`](../scheduler/reranking.md) (arm → timestamp
@@ -79,22 +79,29 @@ context vector `x` and scores it against each of the 5 arms:
 The arm is **not** duplicated in the context (disjoint LinUCB keeps a separate model per
 arm). The vector is deliberately small — behavioral data is limited.
 
-### 5.1 Feature vector (d = 46)
+### 5.1 Feature vector (d = 22)
 
 | Group         | Feature                        | Dims | Encoding / source                                                              |
 | ------------- | ------------------------------ | ---- | ----------------------------------------------------------------------------- |
 | session       | `remaining_days_until_deadline`| 1    | continuous, normalized (§5.2)                                                 |
 | session       | `duration`                     | 1    | minutes (positive multiple of 15), normalized (§5.2)                         |
-| user / day    | `day_preference_profile[24]`   | 24   | reserved, always 0 (Item 3B1) — no longer fed from `User.preferenceMatrix`; kept only so `d` stays 46 |
 | candidate day | `day_of_week`                  | 7    | one-hot, ISO weekday (Mon = index 0)                                          |
 | candidate day | `candidate_days_from_now`      | 1    | whole days from today, normalized (§5.2)                                      |
 | candidate day | `workload_by_type`             | 10   | for each `SessionType` {LECTURE, ASSIGNMENT, EXAM, TASK, DND}: (scheduled hours, session count) already placed on that day, normalized (§5.2) |
 | candidate day | `semester_phase`               | 1    | fraction through the academic term from the DLU term calendar, `(now − term_start) / (term_end − term_start)` clamped to `[0, 1]`, then `·2 − 1`; `0` if no term calendar is available |
 | —             | bias term                      | 1    | constant `1`                                                                 |
 
-**Total `d = 46`.** This fixes the width of every stored vector: `BanditArmState.A`
-(46 × 46), `BanditArmState.b` (46), `SlotProposal.featureVector` (46). Changing `d` is a
-migration.
+**Total `d = 22`.** This fixes the width of every stored vector: `BanditArmState.A`
+(22 × 22), `BanditArmState.b` (22), `SlotProposal.featureVector` (22). Changing `d` is
+normally a migration; `day_preference_profile[24]` (Item 3B1's reserved, always-zero
+slots — never fed from `User.preferenceMatrix`, never read by LinUCB) was dropped
+outright instead of kept, since no stored `A`/`b`/`featureVector` had accumulated any
+real signal there. `BANDIT_MODEL_VERSION` was bumped (`linucb-d46-v1` →
+`linucb-d22-v1`) to mark the boundary. `User.preferenceMatrix` still influences LinUCB's
+slot choice, just never as a context-vector feature — a fixed, duration-normalized
+post-hoc nudge (`PREFERENCE_NUDGE_WEIGHT` in `constants.ts`) breaks ties between
+minutes/days within LinUCB's already-chosen arm (`linucb-best-slot.ts`'s
+`bestMinuteInArm`), same as before this change.
 
 Deliberately excluded: tags (per-user, no global vocabulary — `Tag @@unique([userId, name])`);
 a session `type` one-hot (constant — TASK-only scheduling); a separate exam / grade-risk
@@ -110,7 +117,6 @@ running mean/variance, so the transform is stateless and reproducible.
 | --------------------------------------------------- | -------------------------------------------------------------- |
 | `remaining_days_until_deadline`, `candidate_days_from_now` | `clamp(x / MAX_SCAN_DAYS, 0, 1) · 2 − 1`  (`MAX_SCAN_DAYS = 60`) |
 | `duration`                                          | `clamp(minutes / 480, 0, 1) · 2 − 1`                            |
-| `day_preference_profile[24]` (per cell)            | reserved, always 0 (Item 3B1) — the preference matrix now only influences LinUCB's slot choice post-hoc, via `PREFERENCE_NUDGE_WEIGHT` in `linucb-best-slot.ts`'s `bestMinuteInArm`, not this context vector |
 | `workload_by_type` hours / count (per entry)       | `clamp(hours / 12, 0, 1)`, `clamp(count / 8, 0, 1)`             |
 | `semester_phase`                                    | already `[0, 1]` → `· 2 − 1`                                    |
 | one-hot groups, bias                                | not normalized                                                  |
@@ -147,7 +153,7 @@ database** — not pgvector, not a separate instance (`(A, b)` is never queried 
 model BanditArmState {
   userId    String
   arm       SchedulingArm
-  A         Float[]        // d·d row-major, d = 46
+  A         Float[]        // d·d row-major, d = 22
   b         Float[]        // d
   version   Int            @default(0)  // optimistic-concurrency guard
   updatedAt DateTime       @updatedAt
@@ -278,7 +284,7 @@ per member. See [`ab-testing.md`](../scheduler/ab-testing.md).
 ## 12. Decision summary
 
 ```text
-context vector x (user × task × candidate day), d = 46
+context vector x (user × task × candidate day), d = 22
     ↓
 5 half-open time-of-day arms, Disjoint LinUCB (λ = 1.0, α = 0.15)
     ↓

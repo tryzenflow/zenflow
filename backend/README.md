@@ -51,7 +51,7 @@ backend/
 │   │   │   ├── preference.ts        # matrixIndex / default+effective matrix / preferenceScoreAt
 │   │   │   ├── slot-score.ts        # slotPreferenceScore (overlap-weighted) + bestFreeSlot
 │   │   │   ├── linucb-best-slot.ts  # rankArmsByScore (LinUCB-only) + bestMinuteInArm (B1 nudge + stability) + fallback
-│   │   │   ├── context-vector.ts    # buildContextVector() — the LinUCB d=46 feature vector (day_preference_profile[24] reserved, always 0 — Item 3B1)
+│   │   │   ├── context-vector.ts    # buildContextVector() — the LinUCB d=22 feature vector (no preference-matrix input)
 │   │   │   ├── arms.ts              # 5 time-of-day arm bands, armOfMinute / overlapRate
 │   │   │   ├── series-spread.ts     # seriesDayWindows — non-overlapping per-member day buckets
 │   │   │   ├── normalize.ts         # minMaxSigned + feature divisors
@@ -589,10 +589,10 @@ session via `HeuristicPlacer.placeTask`, then hands the A/B decision to
 
 - **HEURISTIC, not sampled** (the common case) — keep the heuristic placement; the bandit
   never runs; record a `SlotProposal` with `modelProposal` null, `pairwiseShown` false.
-- **LINUCB** — `BanditPlacer.placeTask()` builds one `d=46` context vector per candidate day
-  (`core/context-vector.ts` — `day_preference_profile[24]` is reserved and always 0, Item
-  3B1: the preference matrix is no longer an input feature), calls the bandit service
-  `/predict` once, then picks a slot in two steps (`core/linucb-best-slot.ts`, Item 3B2):
+- **LINUCB** — `BanditPlacer.placeTask()` builds one `d=22` context vector per candidate day
+  (`core/context-vector.ts` — the preference matrix isn't an input feature at all), calls
+  the bandit service `/predict` once, then picks a slot in two steps
+  (`core/linucb-best-slot.ts`, Item 3B2):
   `rankArmsByScore` ranks the 5 `SchedulingArm`s by LinUCB's own per-arm score alone (no
   preference/stability influence), then `bestMinuteInArm` searches only the minutes whose
   local time falls in the top-ranked arm's band, scored by a small duration-normalized
@@ -880,7 +880,8 @@ bestLinucbSlot(input)   — tries each ranked arm in turn via bestMinuteInArm, f
 `PREFERENCE_NUDGE_WEIGHT` (`constants.ts`, `0.1`) keeps the preference-matrix rerank small
 enough to only break near-ties LinUCB itself can't yet distinguish — it's a post-hoc nudge
 on the already-chosen arm's minute, never a second competing signal, and never fed into
-LinUCB's own context vector (`context-vector.ts` zeroes `day_preference_profile[24]`). The
+LinUCB's own context vector at all (`context-vector.ts` has no preference-matrix input —
+the reserved, always-zero slots from Item 3B1 were dropped outright, `d`: 46 → 22). The
 preference matrix itself is reinforced by real outcomes — `+1` on a `RETAINED` session,
 `-1` on a session's first `MOVE` — via `preference.ts`'s `reinforcePreferenceCell`, called
 from both `RetainedSessionsService` and `SessionUpdateService`'s first-move path
@@ -921,7 +922,7 @@ pre-flight (`TaskPlacementService.canPlaceSeries`) keep safe, not this partition
 | overlap-weighted slot score + best-free-slot search                                 | `scheduler/core/slot-score.ts`                |
 | LinUCB two-step slot selection (`rankArmsByScore` + `bestMinuteInArm`)              | `scheduler/core/linucb-best-slot.ts`          |
 | preference-matrix reinforcement (`reinforcePreferenceCell`)                         | `scheduler/core/preference.ts`                |
-| the `d = 46` LinUCB context vector                                                  | `scheduler/core/context-vector.ts`            |
+| the `d = 22` LinUCB context vector                                                  | `scheduler/core/context-vector.ts`            |
 | 5 time-of-day arm bands + `overlapRate` (splits at midnight)                        | `scheduler/core/arms.ts`                      |
 | series even spread + `± X/N` window                                                 | `scheduler/core/series-spread.ts`             |
 | feature normalization (`minMaxSigned`, divisors)                                    | `scheduler/core/normalize.ts`                 |

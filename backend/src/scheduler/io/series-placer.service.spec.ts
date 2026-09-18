@@ -117,7 +117,7 @@ describe("SeriesPlacer.placeSeries", () => {
       placeInWindow: jest.fn().mockResolvedValue({
         scheduledStartTime: new Date("2026-06-16T20:00:00.000Z"),
         selectedArm: "NIGHT",
-        featureVector: new Array<number>(46).fill(0),
+        featureVector: new Array<number>(22).fill(0),
       }),
     };
     const svc = new SeriesPlacer(

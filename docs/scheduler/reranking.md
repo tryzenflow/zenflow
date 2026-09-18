@@ -48,7 +48,7 @@ For every candidate day `d` from the next 15-minute boundary through the deadlin
 d ∈ [next_15min(now), dl_s]
 ```
 
-build the LinUCB context vector for `(s, d)` (ADR-0001 §5, `d = 46`) and call `/predict`
+build the LinUCB context vector for `(s, d)` (ADR-0001 §5, `d = 22`) and call `/predict`
 to score all five arms:
 
 ```text

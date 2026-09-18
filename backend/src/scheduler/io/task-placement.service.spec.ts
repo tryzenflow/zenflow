@@ -133,7 +133,7 @@ describe("TaskPlacementService.placeOnCreate", () => {
     const pick = {
       scheduledStartTime: new Date("2026-06-09T20:00:00.000Z"),
       selectedArm: "NIGHT",
-      featureVector: new Array<number>(46).fill(0),
+      featureVector: new Array<number>(22).fill(0),
     };
     const { svc, sessionUpdate } = await makeDeps({
       heuristicStart: heuristicSlot,

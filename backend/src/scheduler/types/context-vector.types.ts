@@ -35,8 +35,6 @@ export interface ContextVectorInput {
   remainingDaysUntilDeadline: number;
   /** Task duration in minutes (positive multiple of 15). */
   durationMinutes: number;
-  /** The user's stored flat preference matrix (168 cells; falls back if malformed). */
-  preferenceMatrix: number[];
   /** ISO weekday of the candidate day: 1 = Mon … 7 = Sun. */
   candidateIsoWeekday: number;
   /** Whole days from today to the candidate day. */

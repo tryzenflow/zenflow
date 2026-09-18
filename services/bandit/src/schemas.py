@@ -1,7 +1,7 @@
 """Wire contract for the bandit HTTP surface — Pydantic request/response models.
 
 Field names must match the NestJS backend exactly (ADR-0001 §6.1). ``d`` (the
-context dimension, 46 in production) is **inferred** from the length of ``x`` and
+context dimension, 22 in production) is **inferred** from the length of ``x`` and
 validated by the cross-field ``model_validator``s here — never hardcoded.
 """
 
