@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
 import { RetainedSessionsService } from "./retained-sessions.service";
+import { SchedulingFeedbackService } from "./scheduling-feedback.service";
 import { RETAINED_GRACE_MS } from "../../common/constants";
 
 interface Row {
@@ -9,6 +10,7 @@ interface Row {
   scheduledStartTime: Date | null;
   durationMinutes: number;
   tags: { name: string }[];
+  user: { timezone: string };
 }
 
 const NOW = new Date("2026-06-15T12:00:00.000Z");
@@ -20,6 +22,7 @@ function row(over: Partial<Row> & { id: string }): Row {
     scheduledStartTime: new Date("2026-06-15T08:00:00.000Z"),
     durationMinutes: 60,
     tags: [],
+    user: { timezone: "UTC" },
     ...over,
   };
 }
@@ -30,6 +33,7 @@ function makeService(
 ) {
   const updates: { id: string; data: Record<string, unknown> }[] = [];
   const events: Record<string, unknown>[] = [];
+  const userUpdates: { id: string; data: Record<string, unknown> }[] = [];
 
   const findMany = jest.fn();
   batches.forEach((b) => findMany.mockResolvedValueOnce(b));
@@ -51,6 +55,20 @@ function makeService(
         return Promise.resolve({ id: BigInt(++eventSeq) });
       }),
     },
+    user: {
+      update: jest.fn(
+        (args: { where: { id: string }; data: Record<string, unknown> }) => {
+          userUpdates.push({ id: args.where.id, data: args.data });
+          return Promise.resolve({});
+        },
+      ),
+    },
+    $queryRaw: jest.fn().mockResolvedValue([
+      {
+        preferenceMatrix: new Array<number>(168).fill(0),
+        preferenceMatrixDecayedAt: null,
+      },
+    ]),
   };
 
   const banditUpdate = jest
@@ -76,15 +94,18 @@ function makeService(
     $transaction: (fn: (t: typeof tx) => unknown) => fn(tx),
   };
 
+  const schedulingFeedback = new SchedulingFeedbackService(
+    prisma as never,
+    bandit as never,
+    armStates as never,
+  );
+
   return {
-    service: new RetainedSessionsService(
-      prisma as never,
-      bandit as never,
-      armStates as never,
-    ),
+    service: new RetainedSessionsService(prisma as never, schedulingFeedback),
     findMany,
     updates,
     events,
+    userUpdates,
     banditUpdate,
     armSave,
   };
@@ -185,5 +206,36 @@ describe("RetainedSessionsService.sweep", () => {
     const { service, banditUpdate } = makeService([[row({ id: "s1" })]]);
     await service.sweep(NOW);
     expect(banditUpdate).not.toHaveBeenCalled();
+  });
+
+  it("reinforces the user's preference matrix with +1 on the kept hour, regardless of policy (Item 3B3)", async () => {
+    const { service, userUpdates } = makeService([
+      [
+        row({
+          id: "s1",
+          scheduledStartTime: new Date("2026-06-15T09:00:00.000Z"), // Monday 09:00 UTC
+          user: { timezone: "UTC" },
+        }),
+      ],
+    ]);
+
+    await service.sweep(NOW);
+
+    expect(userUpdates).toHaveLength(1);
+    expect(userUpdates[0].id).toBe("user-1");
+    const written = userUpdates[0].data.preferenceMatrix as number[];
+    // Monday (wd=1), hour 9 → matrixIndex(1, 9) = 9.
+    expect(written[9]).toBeCloseTo(0.1); // PREFERENCE_LEARNING_RATE · (+1)
+  });
+
+  it("reinforces the preference matrix even when there is no LinUCB proposal for the session", async () => {
+    const { service, userUpdates, banditUpdate } = makeService([
+      [row({ id: "s1" })],
+    ]);
+
+    await service.sweep(NOW);
+
+    expect(banditUpdate).not.toHaveBeenCalled();
+    expect(userUpdates).toHaveLength(1);
   });
 });

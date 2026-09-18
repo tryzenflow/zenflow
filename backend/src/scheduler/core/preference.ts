@@ -2,7 +2,8 @@ import {
   PREFERENCE_MATRIX_LENGTH,
   PREFERENCE_SLOTS_PER_DAY,
 } from "@zenflow/shared";
-import { utcToMinutes } from "../../common/utils";
+import { clamp, utcToMinutes } from "../../common/utils";
+import { PREFERENCE_LEARNING_RATE } from "../constants";
 import { isoWeekday, localDateStr } from "./slot";
 
 /**
@@ -54,4 +55,43 @@ export function preferenceScoreAt(
   const wd = isoWeekday(dateStr);
   const hour = Math.floor(utcToMinutes(instant, timezone) / 60);
   return matrix[matrixIndex(wd, hour)] ?? 0;
+}
+
+/**
+ * One additive reinforcement step for a single hour-bucket cell (Item 3B3):
+ *
+ *   matrix[idx] = clamp(matrix[idx] + PREFERENCE_LEARNING_RATE · delta, -1, 1)
+ *
+ * `delta` is `+1` for a kept placement (`RETAINED`), `-1` for a first move
+ * away from one (`MOVE`) — never the raw drag-distance-graded reward; B3
+ * reinforces the MATRIX (a coarse per-hour like/dislike signal shared by
+ * both policies), not LinUCB's own graded reward (that's `dragDistanceReward`,
+ * unrelated). At `η = 0.1` (the existing `PREFERENCE_LEARNING_RATE`), ten
+ * consecutive same-direction events on one bucket converge to the ±1
+ * ceiling — matching the constant's own doc comment. Only `idx`, the ONE
+ * hour bucket containing `atMs`'s local start instant, is touched — not an
+ * overlap-weighted spread across every hour a session's duration touches
+ * (`slotPreferenceScore`'s convention for SCORING an extended interval).
+ * Reinforcement credits a single concrete decision point (the hour a user
+ * did or didn't reject), so it reuses `preferenceScoreAt`'s existing
+ * single-hour-bucket indexing convention instead.
+ *
+ * Returns a NEW array (matrix is not mutated) — same convention as
+ * `decayMatrix`.
+ */
+export function reinforcePreferenceCell(
+  matrix: number[],
+  atMs: number,
+  timezone: string,
+  delta: 1 | -1,
+  rate: number = PREFERENCE_LEARNING_RATE,
+): number[] {
+  const effective = effectivePreferenceMatrix(matrix);
+  const idx = matrixIndex(
+    isoWeekday(localDateStr(new Date(atMs), timezone)),
+    Math.floor(utcToMinutes(new Date(atMs), timezone) / 60),
+  );
+  const next = [...effective];
+  next[idx] = clamp(next[idx] + rate * delta, -1, 1);
+  return next;
 }

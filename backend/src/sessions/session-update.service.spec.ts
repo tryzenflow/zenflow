@@ -77,18 +77,24 @@ function fakeTaskPlacement() {
 }
 
 function fakeSchedulingFeedback() {
-  return { onFirstMove: jest.fn().mockResolvedValue(undefined) };
+  return {
+    onFirstMove: jest.fn().mockResolvedValue(undefined),
+    reinforcePreferenceMatrix: jest.fn().mockResolvedValue(undefined),
+  };
 }
 
 function makeService(
   prisma: never,
   series: ReturnType<typeof fakeSeries> = fakeSeries(),
+  schedulingFeedback: ReturnType<
+    typeof fakeSchedulingFeedback
+  > = fakeSchedulingFeedback(),
 ) {
   return new SessionUpdateService(
     prisma,
     fakeTagsService() as never,
     fakeTaskPlacement() as never,
-    fakeSchedulingFeedback() as never,
+    schedulingFeedback as never,
     series as never,
   );
 }
@@ -152,6 +158,116 @@ describe("SessionUpdateService — no scope (regression: byte-for-byte unchanged
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: "sit-2" } }),
     );
+  });
+});
+
+describe("SessionUpdateService — preference-matrix reinforcement (Item 3B3)", () => {
+  it("a first drag/resize of a user TASK reinforces the preference matrix with -1 on the OLD (rejected) hour", async () => {
+    const oldStart = new Date("2026-06-11T08:00:00.000Z");
+    const existing = session({
+      id: "task-1",
+      type: "TASK",
+      source: "USER",
+      lastMovedAt: null,
+      scheduledStartTime: oldStart,
+    });
+    const updated = {
+      ...existing,
+      scheduledStartTime: new Date("2026-06-11T09:00:00.000Z"),
+    };
+    const findFirst = jest.fn().mockResolvedValue(existing);
+    const update = jest.fn().mockResolvedValue(updated);
+    const prisma = {
+      $transaction: (fn: (t: unknown) => unknown) =>
+        fn({
+          session: { findFirst, update },
+          sessionEvent: { create: jest.fn().mockResolvedValue({ id: 1n }) },
+        }),
+    };
+    const series = fakeSeries();
+    const schedulingFeedback = fakeSchedulingFeedback();
+    const service = makeService(prisma as never, series, schedulingFeedback);
+
+    await service.update(
+      "task-1",
+      { scheduledStartTime: "2026-06-11T09:00:00.000Z" },
+      user,
+    );
+
+    expect(schedulingFeedback.onFirstMove).toHaveBeenCalledWith(
+      user.id,
+      "task-1",
+      1n,
+      60,
+    );
+    expect(schedulingFeedback.reinforcePreferenceMatrix).toHaveBeenCalledWith(
+      user.id,
+      oldStart.getTime(),
+      user.timezone,
+      -1,
+    );
+  });
+
+  it("a SECOND move of an already-moved TASK does not reinforce the matrix (only the first move counts)", async () => {
+    const existing = session({
+      id: "task-1",
+      type: "TASK",
+      source: "USER",
+      lastMovedAt: new Date("2026-06-10T00:00:00.000Z"),
+      scheduledStartTime: new Date("2026-06-11T08:00:00.000Z"),
+    });
+    const updated = {
+      ...existing,
+      scheduledStartTime: new Date("2026-06-11T09:00:00.000Z"),
+    };
+    const findFirst = jest.fn().mockResolvedValue(existing);
+    const update = jest.fn().mockResolvedValue(updated);
+    const prisma = {
+      $transaction: (fn: (t: unknown) => unknown) =>
+        fn({
+          session: { findFirst, update },
+          sessionEvent: { create: jest.fn().mockResolvedValue({ id: 1n }) },
+        }),
+    };
+    const schedulingFeedback = fakeSchedulingFeedback();
+    const service = makeService(
+      prisma as never,
+      fakeSeries(),
+      schedulingFeedback,
+    );
+
+    await service.update(
+      "task-1",
+      { scheduledStartTime: "2026-06-11T09:00:00.000Z" },
+      user,
+    );
+
+    expect(schedulingFeedback.onFirstMove).not.toHaveBeenCalled();
+    expect(schedulingFeedback.reinforcePreferenceMatrix).not.toHaveBeenCalled();
+  });
+
+  it("a title-only diff (no move) never reinforces the matrix", async () => {
+    const existing = session({ id: "session-1", title: "Old", type: "TASK" });
+    const updated = session({ id: "session-1", title: "New", type: "TASK" });
+    const findFirst = jest.fn().mockResolvedValue(existing);
+    const update = jest.fn().mockResolvedValue(updated);
+    const prisma = {
+      $transaction: (fn: (t: unknown) => unknown) =>
+        fn({
+          session: { findFirst, update },
+          sessionEvent: { create: jest.fn() },
+        }),
+    };
+    const schedulingFeedback = fakeSchedulingFeedback();
+    const service = makeService(
+      prisma as never,
+      fakeSeries(),
+      schedulingFeedback,
+    );
+
+    await service.update("session-1", { title: "New" }, user);
+
+    expect(schedulingFeedback.reinforcePreferenceMatrix).not.toHaveBeenCalled();
   });
 });
 

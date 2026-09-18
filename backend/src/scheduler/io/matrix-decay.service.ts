@@ -4,6 +4,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { runCronJob } from "../../observability/cron";
 import { PREFERENCE_MATRIX_LENGTH } from "@zenflow/shared";
 import { decayMatrix, MATRIX_HALF_LIFE_DAYS } from "../core/matrix-decay";
+import { withLockedPreferenceMatrix } from "./preference-matrix-lock";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -28,6 +29,14 @@ const DECAY_BATCH_SIZE = 200;
  *
  * Skips rows that have no full elapsed day or no matrix yet (just stamps the
  * time on first sight), so re-running the cron within a day is a no-op.
+ *
+ * The initial `findMany` batch is only used to decide WHICH rows are worth
+ * revisiting (cheap, no lock held); the actual read-modify-write for each
+ * row re-reads fresh state under a `SELECT ... FOR UPDATE` row lock
+ * (`withLockedPreferenceMatrix`) so this cron's write can never lose a race
+ * against a concurrent per-event reinforcement write
+ * (`SchedulingFeedbackService.reinforcePreferenceMatrix`, Item 3B3) to the
+ * same whole-array `preferenceMatrix` column.
  */
 @Injectable()
 export class MatrixDecayService {
@@ -71,12 +80,12 @@ export class MatrixDecayService {
       cursor = users[users.length - 1].id;
 
       for (const u of users) {
-        const last = u.preferenceMatrixDecayedAt;
-        const hasMatrix =
-          u.preferenceMatrix.length === PREFERENCE_MATRIX_LENGTH;
-
-        // First sight or empty matrix: stamp the time, nothing to decay.
-        if (!last || !hasMatrix) {
+        // The batch read above is only a cheap candidate filter; re-check
+        // (and decay) under a row lock against the FRESH row so a
+        // concurrent reinforcement write can't be lost.
+        if (!u.preferenceMatrixDecayedAt) {
+          // First sight: stamp the time, nothing to decay yet. No lock
+          // needed — this never touches `preferenceMatrix` itself.
           await this.prisma.user.update({
             where: { id: u.id },
             data: { preferenceMatrixDecayedAt: now },
@@ -84,22 +93,41 @@ export class MatrixDecayService {
           continue;
         }
 
-        const deltaDays = (now.getTime() - last.getTime()) / MS_PER_DAY;
-        if (deltaDays <= 0) continue; // already decayed today
+        const decayedOne = await withLockedPreferenceMatrix(
+          this.prisma,
+          u.id,
+          async (row, tx) => {
+            const hasMatrix =
+              row.preferenceMatrix.length === PREFERENCE_MATRIX_LENGTH;
+            if (!row.preferenceMatrixDecayedAt || !hasMatrix) {
+              await tx.user.update({
+                where: { id: u.id },
+                data: { preferenceMatrixDecayedAt: now },
+              });
+              return false;
+            }
 
-        const decayed = decayMatrix(
-          u.preferenceMatrix,
-          deltaDays,
-          MATRIX_HALF_LIFE_DAYS,
-        );
-        await this.prisma.user.update({
-          where: { id: u.id },
-          data: {
-            preferenceMatrix: decayed,
-            preferenceMatrixDecayedAt: now,
+            const deltaDays =
+              (now.getTime() - row.preferenceMatrixDecayedAt.getTime()) /
+              MS_PER_DAY;
+            if (deltaDays <= 0) return false; // already decayed today
+
+            const decayed = decayMatrix(
+              row.preferenceMatrix,
+              deltaDays,
+              MATRIX_HALF_LIFE_DAYS,
+            );
+            await tx.user.update({
+              where: { id: u.id },
+              data: {
+                preferenceMatrix: decayed,
+                preferenceMatrixDecayedAt: now,
+              },
+            });
+            return true;
           },
-        });
-        processed += 1;
+        );
+        if (decayedOne) processed += 1;
       }
 
       if (users.length < DECAY_BATCH_SIZE) break;
