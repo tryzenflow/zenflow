@@ -27,6 +27,10 @@ export const MAX_SERIES_PER_DAY = 1;
  */
 export const PREFERENCE_LEARNING_RATE = 0.1;
 
+/** Weight of a kept (`RETAINED`) placement on the preference matrix — a soft
+ * reward against the graded, up-to-full penalty of a move. */
+export const PREFERENCE_RETAINED_WEIGHT = 0.25;
+
 export const MIN = 60_000;
 
 /**

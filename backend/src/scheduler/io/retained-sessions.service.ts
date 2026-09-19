@@ -8,7 +8,10 @@ import {
 } from "../../../generated/prisma";
 import { PrismaService } from "../../prisma/prisma.service";
 import { RETAINED_BATCH_SIZE, RETAINED_GRACE_MS } from "../../common/constants";
-import { SESSION_RETAINED_REWARD } from "../constants";
+import {
+  PREFERENCE_RETAINED_WEIGHT,
+  SESSION_RETAINED_REWARD,
+} from "../constants";
 import { SchedulingFeedbackService } from "./scheduling-feedback.service";
 import { runCronJob } from "../../observability/cron";
 
@@ -47,8 +50,9 @@ type RewardedSession = {
  * {@link SchedulingFeedbackService.applyDelayedReward} — the same shared path
  * the first-`MOVE` signal uses (ADR-0001 §9). Independently of that gate, the
  * sweep ALSO reinforces the user's shared preference matrix (Item 3B3) via
- * {@link SchedulingFeedbackService.reinforcePreferenceMatrix} — `+1` on the
- * hour bucket containing the session's kept start — regardless of whether the
+ * {@link SchedulingFeedbackService.reinforcePreferenceMatrix} — weighted
+ * `PREFERENCE_RETAINED_WEIGHT` on the hour bucket containing the session's
+ * kept start — regardless of whether the
  * placement was heuristic or LinUCB.
  */
 @Injectable()
@@ -190,7 +194,7 @@ export class RetainedSessionsService {
         r.userId,
         r.scheduledStartMs,
         r.timezone,
-        1,
+        PREFERENCE_RETAINED_WEIGHT,
       );
     }
   }

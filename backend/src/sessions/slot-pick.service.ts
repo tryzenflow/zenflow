@@ -175,6 +175,13 @@ export class SlotPickService {
         moveEvent.id,
         dragDistanceMinutes,
       );
+      await this.schedulingFeedback.reinforcePreferenceMove(
+        user.id,
+        existing.scheduledStartTime.getTime(),
+        newStart.getTime(),
+        user.timezone,
+        dragDistanceMinutes,
+      );
     }
     return toSessionDto(row);
   }

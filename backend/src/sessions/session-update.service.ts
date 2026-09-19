@@ -41,12 +41,12 @@ function isRescheduleChange(dto: UpdateSessionDto): boolean {
  * delayed LinUCB reward (when applicable) and the unconditional
  * preference-matrix reinforcement (Item 3B3), surfaced out of the
  * field-diff transaction. `oldStartMs` is the start that was actually placed
- * and then rejected — the hour to reinforce with `delta = -1`, not the new
- * (user-chosen) destination. */
+ * and then rejected; `newStartMs` is the user-chosen destination. */
 interface FirstMove {
   eventId: bigint;
   dragDistanceMinutes: number;
   oldStartMs: number;
+  newStartMs: number;
 }
 
 /** Everything the rest of `update()` needs out of the plain-field-diff
@@ -115,13 +115,12 @@ export class SessionUpdateService {
           firstMove.eventId,
           firstMove.dragDistanceMinutes,
         );
-        // Item 3B3: reinforce the shared preference matrix unconditionally on
-        // policy — `-1` on the OLD (rejected) hour, not the new destination.
-        await this.schedulingFeedback.reinforcePreferenceMatrix(
+        await this.schedulingFeedback.reinforcePreferenceMove(
           user.id,
           firstMove.oldStartMs,
+          firstMove.newStartMs,
           user.timezone,
-          -1,
+          firstMove.dragDistanceMinutes,
         );
       }
 
@@ -317,9 +316,6 @@ export class SessionUpdateService {
       if (dto.note !== undefined) data.note = dto.note;
       if (dto.location !== undefined) data.location = dto.location;
 
-      const durationChanged =
-        dto.durationMinutes !== undefined &&
-        dto.durationMinutes !== existing.durationMinutes;
       if (dto.durationMinutes !== undefined)
         data.durationMinutes = dto.durationMinutes;
 
@@ -365,12 +361,7 @@ export class SessionUpdateService {
         now,
       );
 
-      const move = this.buildMoveEventData(
-        existing,
-        nextStart,
-        startChanged,
-        durationChanged,
-      );
+      const move = this.buildMoveEventData(existing, nextStart, startChanged);
       let firstMove: FirstMove | null = null;
       if (move) {
         const event = await tx.sessionEvent.create({
@@ -391,6 +382,7 @@ export class SessionUpdateService {
             eventId: event.id,
             dragDistanceMinutes: move.dragDistanceMinutes,
             oldStartMs: (existing.scheduledStartTime as Date).getTime(),
+            newStartMs: move.movedTo.getTime(),
           };
         }
         data.lastMovedAt = now;
@@ -471,32 +463,22 @@ export class SessionUpdateService {
     return null;
   }
 
-  /** `MOVE` signal shape for a user drag/resize of a scheduled `TASK` — `null`
-   * when this PATCH isn't one. `eventId` is filled in by the caller once the
-   * event row is created (needed inside the same transaction). */
+  /** `MOVE` signal for a user drag (or start-side resize) of a scheduled
+   * `TASK`; `null` otherwise. An end-side resize leaves the start unchanged, so
+   * it is not a move. */
   private buildMoveEventData(
     existing: SessionRow,
     nextStart: Date | null | undefined,
     startChanged: boolean,
-    durationChanged: boolean,
   ): { movedTo: Date; dragDistanceMinutes: number } | null {
     const isUserTask = existing.type === "TASK" && existing.source === "USER";
-    if (
-      !isUserTask ||
-      !existing.scheduledStartTime ||
-      !(startChanged || durationChanged)
-    ) {
+    if (!isUserTask || !existing.scheduledStartTime || !startChanged) {
       return null;
     }
-    const movedTo =
-      nextStart === undefined
-        ? existing.scheduledStartTime
-        : (nextStart ?? existing.scheduledStartTime);
-    const dragDistanceMinutes = startChanged
-      ? Math.round(
-          (movedTo.getTime() - existing.scheduledStartTime.getTime()) / 60_000,
-        )
-      : 0;
+    const movedTo = nextStart ?? existing.scheduledStartTime;
+    const dragDistanceMinutes = Math.round(
+      (movedTo.getTime() - existing.scheduledStartTime.getTime()) / 60_000,
+    );
     return { movedTo, dragDistanceMinutes };
   }
 

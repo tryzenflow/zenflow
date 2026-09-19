@@ -8,7 +8,10 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { BanditArmStateRepository } from "../../bandit/bandit-arm-state.repository";
 import { BanditService } from "../../bandit/bandit.service";
 import { dragDistanceReward } from "../core/reward";
-import { reinforcePreferenceCell } from "../core/preference";
+import {
+  reinforcePreferenceCell,
+  reinforcePreferenceMove,
+} from "../core/preference";
 import { withLockedPreferenceMatrix } from "./preference-matrix-lock";
 
 /** The one `SlotProposal` fields this service ever reads/writes. */
@@ -135,35 +138,51 @@ export class SchedulingFeedbackService {
   }
 
   /**
-   * Additive preference-matrix reinforcement (Item 3B3) — `+1` for a kept
-   * (`RETAINED`) placement, `-1` for a session's first `MOVE` away from one.
-   * Unlike {@link applyDelayedReward} (gated behind "was there a LinUCB
-   * `SlotProposal`"), this runs UNCONDITIONALLY on which policy placed the
-   * session: `User.preferenceMatrix` is read by both the heuristic
-   * (`bestFreeSlot`, full weight) and LinUCB's post-hoc rerank nudge
-   * (`PREFERENCE_NUDGE_WEIGHT`), so both policies' outcomes should feed it.
-   * Read-modify-write is row-locked (`withLockedPreferenceMatrix`) against
-   * the nightly `MatrixDecayService` cron's own read-modify-write of the same
-   * whole-array column. Never throws — best-effort, like every other
-   * feedback path here.
+   * Preference-matrix reinforcement (Item 3B3) of one hour cell, used for
+   * `RETAINED`. Runs regardless of which policy placed the session (both read
+   * the matrix). Row-locked against the decay cron; never throws.
    */
   async reinforcePreferenceMatrix(
     userId: string,
     atMs: number,
     timezone: string,
-    delta: 1 | -1,
+    delta: number,
+  ): Promise<void> {
+    await this.writePreferenceMatrix(userId, (matrix) =>
+      reinforcePreferenceCell(matrix, atMs, timezone, delta),
+    );
+  }
+
+  /** Graded matrix reinforcement for a session's first move (drag, start-side
+   * resize, or slot pick): old hour down, new hour up. */
+  async reinforcePreferenceMove(
+    userId: string,
+    oldStartMs: number,
+    newStartMs: number,
+    timezone: string,
+    dragDistanceMinutes: number,
+  ): Promise<void> {
+    if (dragDistanceMinutes === 0) return;
+    await this.writePreferenceMatrix(userId, (matrix) =>
+      reinforcePreferenceMove(
+        matrix,
+        oldStartMs,
+        newStartMs,
+        timezone,
+        dragDistanceMinutes,
+      ),
+    );
+  }
+
+  private async writePreferenceMatrix(
+    userId: string,
+    transform: (matrix: number[]) => number[],
   ): Promise<void> {
     try {
       await withLockedPreferenceMatrix(this.prisma, userId, async (row, tx) => {
-        const next = reinforcePreferenceCell(
-          row.preferenceMatrix,
-          atMs,
-          timezone,
-          delta,
-        );
         await tx.user.update({
           where: { id: userId },
-          data: { preferenceMatrix: next },
+          data: { preferenceMatrix: transform(row.preferenceMatrix) },
         });
       });
     } catch (err) {

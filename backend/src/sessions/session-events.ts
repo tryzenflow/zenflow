@@ -24,8 +24,7 @@ export function createEventData(
   };
 }
 
-/** A `MOVE` event for a user drag/resize of a scheduled TASK. `dragDistanceMinutes`
- * is `0` for a resize-only change. */
+/** A `MOVE` event for a user drag (or start-side resize) of a scheduled TASK. */
 export function moveEventData(args: {
   sessionId: string;
   userId: string;

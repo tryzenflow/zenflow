@@ -115,6 +115,7 @@ function fakeSchedulingFeedback() {
   return {
     onFirstMove: jest.fn().mockResolvedValue(undefined),
     reinforcePreferenceMatrix: jest.fn().mockResolvedValue(undefined),
+    reinforcePreferenceMove: jest.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -965,7 +966,7 @@ describe("SessionsService.update", () => {
     expect(update.mock.calls[0][0].data.lastMovedAt).toBeInstanceOf(Date);
   });
 
-  it("resizing a scheduled TASK (duration only) writes a MOVE event with zero drag distance", async () => {
+  it("resizing a scheduled TASK's end (duration only) emits no MOVE event and leaves lastMovedAt unset", async () => {
     const existing = session({
       id: "session-1",
       durationMinutes: 60,
@@ -988,9 +989,8 @@ describe("SessionsService.update", () => {
 
     await service.update("session-1", { durationMinutes: 90 }, user);
 
-    const ev = eventCreate.mock.calls[0][0].data;
-    expect(ev.eventType).toBe("MOVE");
-    expect(ev.dragDistanceMinutes).toBe(0);
+    expect(eventCreate).not.toHaveBeenCalled();
+    expect(update.mock.calls[0][0].data.lastMovedAt).toBeUndefined();
   });
 
   it("moving a DND block emits no event", async () => {

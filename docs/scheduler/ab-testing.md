@@ -211,5 +211,6 @@ records are used for **offline evaluation only** — they do **not** update LinU
 the preference matrix. The only writers of learned state are:
 
 - LinUCB `(A, b)` ← the `MOVE` / `RETAINED` reward via `/update` (ADR-0001 §9);
-- `preferenceMatrix` ← the nightly decay cron today (a move/keep acquisition writer is a
-  later phase — see [`heuristic.md`](./heuristic.md)).
+- `preferenceMatrix` ← the per-event move/keep reinforcement (graded move: old hour down,
+  new hour up; RETAINED at half weight) and the nightly decay cron — see
+  [`heuristic.md`](./heuristic.md). It is shared by both policies.

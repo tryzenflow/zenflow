@@ -4,6 +4,7 @@ import {
 } from "@zenflow/shared";
 import { clamp, utcToMinutes } from "../../common/utils";
 import { PREFERENCE_LEARNING_RATE } from "../constants";
+import { dragDistanceReward } from "./reward";
 import { isoWeekday, localDateStr } from "./slot";
 
 /**
@@ -57,41 +58,55 @@ export function preferenceScoreAt(
   return matrix[matrixIndex(wd, hour)] ?? 0;
 }
 
+/** Flat matrix index of the local hour bucket containing `atMs`. */
+function cellIndexAt(atMs: number, timezone: string): number {
+  return matrixIndex(
+    isoWeekday(localDateStr(new Date(atMs), timezone)),
+    Math.floor(utcToMinutes(new Date(atMs), timezone) / 60),
+  );
+}
+
 /**
- * One additive reinforcement step for a single hour-bucket cell (Item 3B3):
- *
- *   matrix[idx] = clamp(matrix[idx] + PREFERENCE_LEARNING_RATE · delta, -1, 1)
- *
- * `delta` is `+1` for a kept placement (`RETAINED`), `-1` for a first move
- * away from one (`MOVE`) — never the raw drag-distance-graded reward; B3
- * reinforces the MATRIX (a coarse per-hour like/dislike signal shared by
- * both policies), not LinUCB's own graded reward (that's `dragDistanceReward`,
- * unrelated). At `η = 0.1` (the existing `PREFERENCE_LEARNING_RATE`), ten
- * consecutive same-direction events on one bucket converge to the ±1
- * ceiling — matching the constant's own doc comment. Only `idx`, the ONE
- * hour bucket containing `atMs`'s local start instant, is touched — not an
- * overlap-weighted spread across every hour a session's duration touches
- * (`slotPreferenceScore`'s convention for SCORING an extended interval).
- * Reinforcement credits a single concrete decision point (the hour a user
- * did or didn't reject), so it reuses `preferenceScoreAt`'s existing
- * single-hour-bucket indexing convention instead.
- *
- * Returns a NEW array (matrix is not mutated) — same convention as
- * `decayMatrix`.
+ * Nudges the ONE hour bucket containing `atMs` by `PREFERENCE_LEARNING_RATE ·
+ * delta` (`delta` in `[-1, 1]`), clamped to `[-1, 1]`. Returns a NEW array.
  */
 export function reinforcePreferenceCell(
   matrix: number[],
   atMs: number,
   timezone: string,
-  delta: 1 | -1,
+  delta: number,
   rate: number = PREFERENCE_LEARNING_RATE,
 ): number[] {
-  const effective = effectivePreferenceMatrix(matrix);
-  const idx = matrixIndex(
-    isoWeekday(localDateStr(new Date(atMs), timezone)),
-    Math.floor(utcToMinutes(new Date(atMs), timezone) / 60),
-  );
-  const next = [...effective];
+  const next = [...effectivePreferenceMatrix(matrix)];
+  const idx = cellIndexAt(atMs, timezone);
   next[idx] = clamp(next[idx] + rate * delta, -1, 1);
   return next;
+}
+
+/**
+ * First move of a placed session: lowers the old hour and raises the new hour
+ * by `η·g`, `g = -dragDistanceReward(drag)` in `[0, 1]`. No-op for a zero-distance
+ * move or one inside a single hour bucket. Returns a NEW array.
+ */
+export function reinforcePreferenceMove(
+  matrix: number[],
+  oldStartMs: number,
+  newStartMs: number,
+  timezone: string,
+  dragDistanceMinutes: number,
+  rate: number = PREFERENCE_LEARNING_RATE,
+): number[] {
+  const grade = -dragDistanceReward(dragDistanceMinutes);
+  const sameCell =
+    cellIndexAt(oldStartMs, timezone) === cellIndexAt(newStartMs, timezone);
+  if (grade === 0 || sameCell) return [...effectivePreferenceMatrix(matrix)];
+
+  const lowered = reinforcePreferenceCell(
+    matrix,
+    oldStartMs,
+    timezone,
+    -grade,
+    rate,
+  );
+  return reinforcePreferenceCell(lowered, newStartMs, timezone, grade, rate);
 }
