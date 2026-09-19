@@ -98,7 +98,7 @@ export function SlotPickDialog({
         if (!o) keepPrimary();
       }}
     >
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="gap-5 sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Two good times for this</DialogTitle>
           <DialogDescription>
@@ -106,27 +106,37 @@ export function SlotPickDialog({
             whichever suits you.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-2">
+        <div role="radiogroup" className="space-y-2.5">
           {options.map(({ side, label, iso }) => {
             const isSelected = selected === side;
             return (
               <button
                 key={side}
                 type="button"
+                role="radio"
+                aria-checked={isSelected}
+                disabled={loading}
                 onClick={() => setSelected(side)}
                 className={cn(
-                  "flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors",
+                  "flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
                   isSelected
                     ? "border-primary bg-primary/10"
                     : "border-border bg-card hover:bg-muted",
                 )}
               >
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted">
-                  {isSelected && <Check className="size-4 text-primary" />}
+                <span
+                  className={cn(
+                    "flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors",
+                    isSelected
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-muted-foreground/40",
+                  )}
+                >
+                  {isSelected && <Check className="size-3" strokeWidth={3} />}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-semibold">{label}</span>
-                  <span className="block text-xs text-muted-foreground">
+                  <span className="block text-sm text-muted-foreground">
                     {fmt(iso)}
                   </span>
                 </span>
@@ -134,25 +144,19 @@ export function SlotPickDialog({
             );
           })}
         </div>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs leading-relaxed text-muted-foreground">
           Your pick helps Zenflow learn which times actually work for you —
           it never moves anything else on your calendar.
         </p>
         <DialogFooter>
           <Button
-            variant="outline"
-            className="w-full sm:w-auto"
+            className="w-full"
             disabled={loading}
-            onClick={keepPrimary}
+            onClick={selected === "primary" ? keepPrimary : switchToAlternative}
           >
-            Keep {fmt(primarySlot)}
-          </Button>
-          <Button
-            className="w-full sm:w-auto"
-            disabled={loading}
-            onClick={switchToAlternative}
-          >
-            Switch to {fmt(alternativeSlot)}
+            {selected === "primary"
+              ? `Keep ${fmt(primarySlot)}`
+              : `Switch to ${fmt(alternativeSlot)}`}
           </Button>
         </DialogFooter>
       </DialogContent>
