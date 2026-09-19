@@ -7,10 +7,11 @@ import { SlotPickService } from "./slot-pick.service";
 import { SessionsController } from "./sessions.controller";
 import { PrismaModule } from "../prisma/prisma.module";
 import { TagsModule } from "src/tags/tags.module";
+import { RemindersModule } from "../reminders/reminders.module";
 import { SchedulerModule } from "../scheduler/scheduler.module";
 
 @Module({
-  imports: [PrismaModule, TagsModule, SchedulerModule],
+  imports: [PrismaModule, TagsModule, SchedulerModule, RemindersModule],
   controllers: [SessionsController],
   providers: [
     SessionsService,

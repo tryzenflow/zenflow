@@ -19,6 +19,7 @@ import { SessionCrudService } from "./session-crud.service";
 import { SeriesService } from "./series.service";
 import { SessionUpdateService } from "./session-update.service";
 import { SlotPickService } from "./slot-pick.service";
+import { RemindersService } from "../reminders/reminders.service";
 
 /**
  * Thin facade the controller calls — its 10 methods delegate to the collaborator
@@ -37,10 +38,26 @@ export class SessionsService {
     private readonly series: SeriesService,
     private readonly updates: SessionUpdateService,
     private readonly slotPickService: SlotPickService,
+    private readonly reminders: RemindersService,
   ) {}
 
-  create(dto: CreateSessionDto, user: User): Promise<CreateSessionResponse> {
-    return this.crud.create(dto, user);
+  /**
+   * Reminders are persisted right after the row(s) exist (default: one at 60
+   * min for non-DND; explicit list/[] honoured) and the response is stamped
+   * with them. Validation runs first so a bad request inserts nothing.
+   */
+  async create(
+    dto: CreateSessionDto,
+    user: User,
+  ): Promise<CreateSessionResponse> {
+    const minutes = this.reminders.resolveForCreate(dto.type, dto.reminders);
+    const res = await this.crud.create(dto, user);
+    const ids = res.sessions?.length ? res.sessions.map((s) => s.id) : [res.id];
+    await this.reminders.replace(ids, minutes);
+    res.reminders = minutes;
+    res.sessions?.forEach((s) => (s.reminders = minutes));
+    await this.reminders.syncUser(user.id);
+    return res;
   }
 
   list(dto: ListSessionsDto, user: User): Promise<SessionsListResponse> {
@@ -58,46 +75,72 @@ export class SessionsService {
     return this.crud.findById(id, user);
   }
 
-  update(
+  async update(
     id: string,
     dto: UpdateSessionDto,
     user: User,
   ): Promise<UpdateSessionResponse> {
-    return this.updates.update(id, dto, user);
+    const target =
+      dto.reminders !== undefined
+        ? await this.reminders.resolveUpdateTargets(id, dto.reminders, user)
+        : null;
+    const res = await this.updates.update(id, dto, user);
+    if (target) {
+      await this.reminders.replace(target.sessionIds, target.minutes);
+      res.reminders = target.minutes;
+      res.sessions?.forEach((s) => {
+        if (target.sessionIds.includes(s.id)) s.reminders = target.minutes;
+      });
+    } else if (dto.sessionCount !== undefined && res.seriesId) {
+      // New sittings of a grown series inherit the series' reminders.
+      await this.reminders.propagateSeries(res.seriesId);
+    }
+    await this.reminders.syncUser(user.id);
+    return res;
   }
 
-  remove(id: string, user: User): Promise<RemoveSessionResponse> {
-    return this.crud.remove(id, user);
+  async remove(id: string, user: User): Promise<RemoveSessionResponse> {
+    const res = await this.crud.remove(id, user);
+    await this.reminders.syncUser(user.id);
+    return res;
   }
 
-  slotPick(
+  async slotPick(
     id: string,
     dto: SlotPickDto,
     user: User,
   ): Promise<SlotPickResponse> {
-    return this.slotPickService.recordPick(id, dto, user);
+    const res = await this.slotPickService.recordPick(id, dto, user);
+    await this.reminders.syncUser(user.id); // a pick can move the session
+    return res;
   }
 
-  truncateSeriesFrom(
+  async truncateSeriesFrom(
     seriesId: string,
     fromStartISO: string,
     user: User,
   ): Promise<RemoveSessionSeriesResponse> {
-    return this.series.truncateFrom(seriesId, fromStartISO, user);
+    const res = await this.series.truncateFrom(seriesId, fromStartISO, user);
+    await this.reminders.syncUser(user.id);
+    return res;
   }
 
-  removeSeries(
+  async removeSeries(
     seriesId: string,
     user: User,
   ): Promise<RemoveSessionSeriesResponse> {
-    return this.series.removeSeries(seriesId, user);
+    const res = await this.series.removeSeries(seriesId, user);
+    await this.reminders.syncUser(user.id);
+    return res;
   }
 
-  removeSeriesFrom(
+  async removeSeriesFrom(
     seriesId: string,
     sessionId: string,
     user: User,
   ): Promise<RemoveSessionSeriesResponse> {
-    return this.series.removeFrom(seriesId, sessionId, user);
+    const res = await this.series.removeFrom(seriesId, sessionId, user);
+    await this.reminders.syncUser(user.id);
+    return res;
   }
 }

@@ -5,8 +5,7 @@ import { useSessionForm } from "@/hooks/use-task-form";
 import { format } from "date-fns";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { isAxiosError } from "axios";
-import { errorToast } from "@/lib/toast";
+import { apiErrorMessage, errorToast } from "@/lib/toast";
 import { postData } from "@/api";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useHighlightStore } from "@/hooks/use-highlight-store";
@@ -98,6 +97,7 @@ export function EditSessionDialog({
       type: task.type,
       title: task.title,
       tags: task.tags,
+      reminders: task.reminders ?? [],
       note: task.note ?? "",
       location: task.location ?? "",
     };
@@ -132,7 +132,9 @@ export function EditSessionDialog({
       setDate(zonedDate(session.scheduledStartTime, tz));
     }
     onSaved();
-    toast.success("Session updated");
+    toast.success("Changes saved", {
+      description: "Your session was updated on the calendar.",
+    });
     setOpen(false);
   }
 
@@ -146,6 +148,7 @@ export function EditSessionDialog({
         location: values.location || null,
         tags: values.tags,
       };
+      if (values.type !== "DND") patch.reminders = values.reminders ?? [];
       if (values.type === "TASK") {
         // Duration (resize) is owned by the calendar now — the edit form only
         // touches a TASK's deadline and, now, its session count (grow/shrink
@@ -174,10 +177,12 @@ export function EditSessionDialog({
         finishUpdateSuccess(updated);
       }
     } catch (error) {
-      errorToast(
-        (isAxiosError(error) && error.response?.data?.message) ||
-          "Failed to update session",
-      );
+      errorToast("Couldn't save your changes", {
+        description: apiErrorMessage(
+          error,
+          "Nothing was changed. Check the details and try again.",
+        ),
+      });
     } finally {
       setLoading(false);
     }
@@ -207,13 +212,20 @@ export function EditSessionDialog({
         await deleteSession(task.id);
       }
       onSaved();
-      toast.success(scope === "series" ? "Series deleted" : "Session deleted");
+      toast.success(scope === "series" ? "Series deleted" : "Session deleted", {
+        description:
+          scope === "series"
+            ? "Every session in the series was removed from your calendar."
+            : "It was removed from your calendar.",
+      });
       setOpen(false);
     } catch (error) {
-      errorToast(
-        (isAxiosError(error) && error.response?.data?.message) ||
-          "Failed to delete session",
-      );
+      errorToast("Couldn't delete the session", {
+        description: apiErrorMessage(
+          error,
+          "It's still on your calendar. Try again in a moment.",
+        ),
+      });
     } finally {
       setLoading(false);
     }

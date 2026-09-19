@@ -25,6 +25,7 @@ import { LMSModule } from "./lms/lms.module";
 import { PortalAPIModule } from "./portal/portal-api.module";
 import { IngestionModule } from "./ingestion/ingestion.module";
 import { NotificationsModule } from "./notifications/notifications.module";
+import { RemindersModule } from "./reminders/reminders.module";
 import { DevicesModule } from "./devices/devices.module";
 import { ObservabilityModule } from "./observability/observability.module";
 
@@ -222,6 +223,8 @@ import { ObservabilityModule } from "./observability/observability.module";
     // (like the SSE stream), plus POST/DELETE /devices. Self-disables per
     // provider when its FCM_*/APNS_* env is unset; see devices.module.ts.
     DevicesModule,
+    // Per-session reminders: SchedulerRegistry one-shot timers -> notifications.
+    RemindersModule,
   ],
   providers: [AppService, MailService],
   controllers: [AppController],

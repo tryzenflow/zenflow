@@ -1,5 +1,11 @@
 import * as z from "zod";
-import { DAILY_HORIZON, SLOT_MINUTES, type Session } from "@zenflow/shared";
+import {
+  DAILY_HORIZON,
+  MAX_REMINDERS_PER_SESSION,
+  MAX_REMINDER_MINUTES,
+  SLOT_MINUTES,
+  type Session,
+} from "@zenflow/shared";
 
 /**
  * Session validation schema — the single source of truth for the create/edit
@@ -77,6 +83,15 @@ export const sessionSchema = z
      * actual enforcement, for a direct API call bypassing the form.
      */
     sessionCount: z.int().min(1, { error: "At least 1 session" }).optional(),
+
+    /**
+     * Minutes-before-start reminders (max `MAX_REMINDERS_PER_SESSION`). Omitted
+     * = server default (one hour before, non-DND). Never sent for DND.
+     */
+    reminders: z
+      .array(z.int().min(1).max(MAX_REMINDER_MINUTES))
+      .max(MAX_REMINDERS_PER_SESSION)
+      .optional(),
 
     // Fixed / DND
     date: z.string().optional(),

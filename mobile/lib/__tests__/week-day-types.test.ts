@@ -15,6 +15,7 @@ function session(overrides: Partial<Session>): Session {
     type: "TASK",
     source: "USER",
     tags: [],
+    reminders: [],
     scheduledStartTime: "2026-09-07T09:00:00.000Z",
     seriesId: null,
     rrule: null,

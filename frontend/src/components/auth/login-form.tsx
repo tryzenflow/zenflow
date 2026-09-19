@@ -77,7 +77,9 @@ export function LoginForm({
     try {
       await requestOtp(data.email);
 
-      toast.info("Email sent successfully");
+      toast.info("Check your inbox", {
+        description: `We sent a sign-in code to ${data.email}. It expires shortly.`,
+      });
       setStage("otp");
       clearErrors();
 
@@ -110,7 +112,9 @@ export function LoginForm({
 
       const result = await verifyOtp(emailForApi, data.otp);
 
-      toast.success("Login successfully");
+      toast.success("Welcome back", {
+        description: "You're signed in. Your calendar is loading.",
+      });
       setUser(result.data);
       // No onboarding step — every login lands straight in the app.
       navigate("/");

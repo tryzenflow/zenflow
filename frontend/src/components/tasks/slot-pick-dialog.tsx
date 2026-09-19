@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { isAxiosError } from "axios";
 import {
   Dialog,
   DialogContent,
@@ -11,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { errorToast } from "@/lib/toast";
+import { apiErrorMessage, errorToast } from "@/lib/toast";
 import { zonedDate } from "@/utils/tz";
 import { slotPick } from "@/api/tasks";
 import type { Session } from "@zenflow/shared";
@@ -77,16 +76,18 @@ export function SlotPickDialog({
         slotProposalId,
         chose: "alternative",
       });
-      toast.success(
-        `Moved to ${fmt(alternativeSlot)} — thanks, noted for next time`,
-      );
+      toast.success("Moved to the new time", {
+        description: `Now at ${fmt(alternativeSlot)}. Thanks, we'll remember your preference.`,
+      });
       reset();
       onResolved(session);
     } catch (error) {
-      errorToast(
-        (isAxiosError(error) && error.response?.data?.message) ||
-          "Couldn't switch the time",
-      );
+      errorToast("Couldn't switch the time", {
+        description: apiErrorMessage(
+          error,
+          "The slot may have been taken. Keep the original time or try again.",
+        ),
+      });
       setLoading(false);
     }
   }

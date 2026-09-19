@@ -3,7 +3,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { errorToast } from "@/lib/toast";
+import { apiErrorMessage, errorToast } from "@/lib/toast";
 import { postData } from "@/api";
 import { useFilesTracker } from "@/hooks/use-files-tracker";
 import { useUserStore } from "@/hooks/use-user-store";
@@ -20,13 +20,13 @@ import { SessionTypeTabs } from "./form/session-type-tabs";
 import { Plus } from "lucide-react";
 import { createSession } from "@/api/tasks";
 import { format } from "date-fns";
-import { isAxiosError } from "axios";
 import { zonedDate } from "@/utils/tz";
-import type {
-  CreateSessionInput,
-  CreateSessionResponse,
-  Session,
-  ViewMode,
+import {
+  DEFAULT_REMINDER_MINUTES,
+  type CreateSessionInput,
+  type CreateSessionResponse,
+  type Session,
+  type ViewMode,
 } from "@zenflow/shared";
 import { SlotPickDialog } from "./slot-pick-dialog";
 
@@ -41,6 +41,7 @@ const EMPTY_DEFAULTS: SessionFormValues = {
   note: "",
   location: "",
   deadline: "",
+  reminders: [DEFAULT_REMINDER_MINUTES],
 };
 
 /** Form values → the `CreateSessionInput` union the API expects. */
@@ -53,6 +54,8 @@ function toCreateInput(
     note: values.note || null,
     location: values.location || null,
     tags: values.tags,
+    // DND blocks carry no reminders.
+    ...(values.type === "DND" ? {} : { reminders: values.reminders ?? [] }),
   };
 
   if (values.type === "TASK") {
@@ -138,6 +141,7 @@ export function CreateSessionDialog({
       note: form.getValues("note"),
       location: form.getValues("location"),
       tags: form.getValues("tags"),
+      reminders: form.getValues("reminders"),
     };
     form.reset(
       next === "TASK"
@@ -170,16 +174,21 @@ export function CreateSessionDialog({
     setOpen(false);
 
     if (seriesCount > 1) {
-      toast.success(`Created a ${seriesCount}-session series`);
+      toast.success(`${seriesCount}-session series created`, {
+        description: "Each sitting is placed on its own. Drag any to adjust.",
+      });
     } else if (session.scheduledStartTime) {
       const qualifier = placementQualifier(session, user);
       const suffix =
         qualifier === "pastDeadline" ? " — past its deadline" : "";
-      toast.success(`Scheduled for ${fmt(session.scheduledStartTime)}${suffix}`);
+      toast.success("Task scheduled", {
+        description: `${fmt(session.scheduledStartTime)}${suffix}. Drag it if another time suits you better.`,
+      });
     } else {
-      toast.success(
-        "Session created — drag it onto the calendar to schedule it",
-      );
+      toast.success("Session created", {
+        description:
+          "It has no time yet. Drag it onto the calendar to place it.",
+      });
     }
   }
 
@@ -195,10 +204,12 @@ export function CreateSessionDialog({
         finishCreateSuccess(session, session.sessions?.length ?? 0);
       }
     } catch (error) {
-      errorToast(
-        (isAxiosError(error) && error.response?.data?.message) ||
-          "Something went wrong when creating the session",
-      );
+      errorToast("Couldn't create the session", {
+        description: apiErrorMessage(
+          error,
+          "Something went wrong on our end. Check your details and try again.",
+        ),
+      });
     } finally {
       setLoading(false);
     }
@@ -212,10 +223,12 @@ export function CreateSessionDialog({
       if (removed.length > 0) await postData("/files/remove", { ids: removed });
       await finalizeCreate(values);
     } catch (error) {
-      errorToast(
-        (isAxiosError(error) && error.response?.data?.message) ||
-          "Something went wrong when creating the session",
-      );
+      errorToast("Couldn't create the session", {
+        description: apiErrorMessage(
+          error,
+          "Something went wrong on our end. Check your details and try again.",
+        ),
+      });
       setLoading(false);
     }
   }
@@ -229,10 +242,12 @@ export function CreateSessionDialog({
       form.reset(EMPTY_DEFAULTS);
       setOpen(false);
     } catch (error) {
-      errorToast(
-        (isAxiosError(error) && error.response?.data?.message) ||
-          "Something went wrong when cancelling",
-      );
+      errorToast("Couldn't discard your changes", {
+        description: apiErrorMessage(
+          error,
+          "Some uploaded files couldn't be cleaned up. Try closing again.",
+        ),
+      });
     } finally {
       setLoading(false);
     }

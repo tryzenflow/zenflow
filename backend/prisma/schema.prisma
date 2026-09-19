@@ -247,10 +247,17 @@ model SessionSeries {
   @@index([userId])
 }
 
-// exclaude DND, at most twice per session
+// Excludes DND; at most twice per session (enforced in DTO + RemindersService).
+// Armed as an in-memory SchedulerRegistry timeout keyed by `reminder:<id>`
+// (see src/reminders/). For a recurring fixed series the row hangs off the
+// representative session and applies to every occurrence.
 model SessionReminder {
   id                  String @id @default(uuid())
   remindBeforeMinutes Int    @default(15)
+  // Start instant of the occurrence this reminder last fired for — dedupes
+  // firing across restarts / re-arms and lets a recurring series fire once
+  // per occurrence. Null until first fired.
+  firedForStart       DateTime?
 
   sessionId String
   session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)

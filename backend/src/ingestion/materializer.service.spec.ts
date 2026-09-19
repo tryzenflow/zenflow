@@ -70,6 +70,7 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 function makePrismaDouble() {
   const sessions: SessionRow[] = [];
   const notifications: NotificationRow[] = [];
+  const reminders: { sessionId: string; remindBeforeMinutes: number }[] = [];
   const events: Record<string, unknown>[] = [];
   const tags: { id: string; userId: string; name: string }[] = [];
 
@@ -212,11 +213,19 @@ function makePrismaDouble() {
           ) ?? null,
         ),
     },
+    sessionReminder: {
+      create: (args: {
+        data: { sessionId: string; remindBeforeMinutes: number };
+      }) => {
+        reminders.push(args.data);
+        return Promise.resolve(args.data);
+      },
+    },
     $transaction: <T>(fn: (tx: unknown) => Promise<T>): Promise<T> =>
       fn(client),
   };
 
-  return { client, sessions, notifications, events, tags };
+  return { client, sessions, notifications, events, tags, reminders };
 }
 
 // ── fixtures (deliberately fictional — never real DLU data) ────────────────
@@ -430,6 +439,26 @@ describe("MaterializerService", () => {
       expect(db.sessions).toHaveLength(1);
       expect(db.notifications).toHaveLength(1);
       expect(db.events).toHaveLength(1);
+      expect(db.reminders).toHaveLength(1);
+    });
+  });
+
+  describe("default reminder", () => {
+    it("gives every newly ingested item a 1-hour reminder", async () => {
+      const { db, service } = await makeService();
+      await service.materialize(
+        USER,
+        [
+          block(),
+          block({ externalKey: "portal:exam:1", type: "EXAM" }),
+          block({ externalKey: "portal:tt:1", type: "LECTURE" }),
+        ],
+        "LMS",
+      );
+      expect(db.reminders).toHaveLength(3);
+      expect(db.reminders.every((r) => r.remindBeforeMinutes === 60)).toBe(
+        true,
+      );
     });
   });
 

@@ -59,9 +59,18 @@ export interface Session {
   sessionIndex: number | null;
   /** Total session count of this session's `TASK` series (`null` otherwise). */
   sessionTotal: number | null;
+  /** Minutes before start at which the user is reminded (max 2; always `[]` for DND). */
+  reminders: number[];
   createdAt: string;
   updatedAt: string;
 }
+
+/** Max reminders per session. */
+export const MAX_REMINDERS_PER_SESSION = 2;
+/** Max lead time of a reminder (7 days), minutes. */
+export const MAX_REMINDER_MINUTES = 10080;
+/** Reminder created when `reminders` is omitted (non-DND). */
+export const DEFAULT_REMINDER_MINUTES = 60;
 
 /** Create a flexible study task — engine-scheduled, deadline-driven. */
 export interface CreateTaskInput {
@@ -82,6 +91,13 @@ export interface CreateTaskInput {
    */
   sessionCount?: number;
   tags?: string[];
+  /**
+   * Minutes-before-start reminders (max MAX_REMINDERS_PER_SESSION, each a
+   * positive integer <= MAX_REMINDER_MINUTES); not allowed for `DND`.
+   * Omitted on create -> one default reminder 60 min before start (non-DND);
+   * `[]` -> none. On update: omit to keep, an array replaces.
+   */
+  reminders?: number[];
 }
 
 /** Create a fixed-time event the engine does not move. */
@@ -102,6 +118,13 @@ export interface CreateFixedSessionInput {
    */
   rrule?: string | null;
   tags?: string[];
+  /**
+   * Minutes-before-start reminders (max MAX_REMINDERS_PER_SESSION, each a
+   * positive integer <= MAX_REMINDER_MINUTES); not allowed for `DND`.
+   * Omitted on create -> one default reminder 60 min before start (non-DND);
+   * `[]` -> none. On update: omit to keep, an array replaces.
+   */
+  reminders?: number[];
 }
 
 /** Create a do-not-disturb block, optionally recurring. */
@@ -116,6 +139,13 @@ export interface CreateDndInput {
   /** RFC 5545 RRULE; omit for a one-off block. */
   rrule?: string | null;
   tags?: string[];
+  /**
+   * Minutes-before-start reminders (max MAX_REMINDERS_PER_SESSION, each a
+   * positive integer <= MAX_REMINDER_MINUTES); not allowed for `DND`.
+   * Omitted on create -> one default reminder 60 min before start (non-DND);
+   * `[]` -> none. On update: omit to keep, an array replaces.
+   */
+  reminders?: number[];
 }
 
 export type CreateSessionInput =
@@ -158,6 +188,13 @@ export interface UpdateSessionInput {
    */
   sessionCount?: number;
   tags?: string[];
+  /**
+   * Minutes-before-start reminders (max MAX_REMINDERS_PER_SESSION, each a
+   * positive integer <= MAX_REMINDER_MINUTES); not allowed for `DND`.
+   * Omitted on create -> one default reminder 60 min before start (non-DND);
+   * `[]` -> none. On update: omit to keep, an array replaces.
+   */
+  reminders?: number[];
   scheduledStartTime?: string | null;
   /**
    * RFC 5545 RRULE — for a recurring fixed session (`DND` / `ASSIGNMENT` /

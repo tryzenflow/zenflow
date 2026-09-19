@@ -26,7 +26,7 @@
         <code>edit-task-dialog.tsx</code> + <code>use-task-form.ts</code>;
         fields match the zod schema in
         <code>frontend/src/utils/tasks.ts</code> (title · duration 15-min steps
-        · deadline · tags · note). Duration uses a thumb-friendly stepper/slider
+        · deadline · <b>reminders</b> · tags · note). Duration uses a thumb-friendly stepper/slider
         instead of the web's drag handles; placement is fully automatic, and an
         unplaceable task surfaces as a non-blocking conflict toast, not a
         blocking decision sheet. Description drops the web's docked toolbar for
@@ -44,6 +44,16 @@
         and the deadline, at most three on any one day — and the
         <b>"Managing a multi-session plan"</b> section below covers undoing that
         set, deleting part of it, and what happens when the deadline moves.
+      </p>
+      <p>
+        <b>Reminder</b> (issue #43): up to <b>2 reminders per task</b>, each as a
+        removable chip ("1 day before", "1 hour before"…) plus an
+        <b>Add reminder</b> chip that opens a preset picker (15 min · 1 hour ·
+        1 day · custom). New tasks start with one reminder,
+        <b>1 hour before</b>, so it works out of the box. Reminders fire
+        relative to the session start; if that moment has already passed they
+        are skipped. Delivered in-app over SSE, or as a native push when the
+        app is closed.
       </p>
       <div class="crumbs"><a href="index.html">← All mobile mockups</a></div>
     </div>
@@ -303,6 +313,14 @@
                     >
                       Due whenever there's room — no rush.
                     </div>
+                  </div>
+                  <div class="mb-[18px]">
+                    <label class="block text-[13.5px] font-semibold mb-2 text-foreground">Reminder</label>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span class="inline-flex items-center gap-[5px] rounded-full border border-primary/45 bg-primary/15 pl-3 pr-[7px] py-1.5 text-[13px] font-medium text-primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="size-3.5"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>1 hour before<span class="inline-flex size-4 items-center justify-center rounded-full bg-current/15 [&_svg]:size-2.5"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg></span></span>
+                      <button type="button" class="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-3 py-1.5 text-[13px] font-medium text-muted-foreground"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="size-3.5"><path d="M5 12h14" /><path d="M12 5v14" /></svg>Add reminder</button>
+                    </div>
+                    <div class="text-[12.5px] text-muted-foreground mt-[7px] leading-snug">Defaults to 1 hour before it starts. Up to 2 reminders per task.</div>
                   </div>
                   <div class="mb-[18px] relative">
                     <label
@@ -662,6 +680,14 @@
                       Due Fri, Jul 4 · 5:00 PM
                     </div>
                   </div>
+                  <div class="mb-[18px]">
+                    <label class="block text-[13.5px] font-semibold mb-2 text-foreground">Reminder</label>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span class="inline-flex items-center gap-[5px] rounded-full border border-primary/45 bg-primary/15 pl-3 pr-[7px] py-1.5 text-[13px] font-medium text-primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="size-3.5"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>1 day before<span class="inline-flex size-4 items-center justify-center rounded-full bg-current/15 [&_svg]:size-2.5"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg></span></span><span class="inline-flex items-center gap-[5px] rounded-full border border-primary/45 bg-primary/15 pl-3 pr-[7px] py-1.5 text-[13px] font-medium text-primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="size-3.5"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>1 hour before<span class="inline-flex size-4 items-center justify-center rounded-full bg-current/15 [&_svg]:size-2.5"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg></span></span>
+                      
+                    </div>
+                    <div class="text-[12.5px] text-muted-foreground mt-[7px] leading-snug">2 of 2 reminders set — remove one to add another.</div>
+                  </div>
                   <div class="mb-[18px] relative">
                     <label
                       class="block text-[13.5px] font-semibold mb-2 text-foreground"
@@ -1020,6 +1046,14 @@
                     >
                       Every session due before Fri, Jul 11.
                     </div>
+                  </div>
+                  <div class="mb-[18px]">
+                    <label class="block text-[13.5px] font-semibold mb-2 text-foreground">Reminder</label>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span class="inline-flex items-center gap-[5px] rounded-full border border-primary/45 bg-primary/15 pl-3 pr-[7px] py-1.5 text-[13px] font-medium text-primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="size-3.5"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>1 hour before<span class="inline-flex size-4 items-center justify-center rounded-full bg-current/15 [&_svg]:size-2.5"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg></span></span>
+                      <button type="button" class="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-3 py-1.5 text-[13px] font-medium text-muted-foreground"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="size-3.5"><path d="M5 12h14" /><path d="M12 5v14" /></svg>Add reminder</button>
+                    </div>
+                    <div class="text-[12.5px] text-muted-foreground mt-[7px] leading-snug">Defaults to 1 hour before it starts. Up to 2 reminders per task.</div>
                   </div>
                   <div class="mb-[18px] relative">
                     <label

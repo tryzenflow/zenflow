@@ -1,4 +1,6 @@
 import {
+  ArrayMaxSize,
+  ArrayUnique,
   IsArray,
   IsBoolean,
   IsDivisibleBy,
@@ -16,6 +18,10 @@ import type { UpdateScope, UpdateSessionInput } from "@zenflow/shared";
 import { TIME_GRANULARITY } from "../../common/constants";
 import { IsRRule } from "../../common/validators/rrule.decorator";
 import { MAX_SESSION_COUNT } from "./create-session.dto";
+import {
+  MAX_REMINDER_MINUTES,
+  MAX_REMINDERS_PER_SESSION,
+} from "@zenflow/shared";
 
 /**
  * Generic metadata / reschedule / resize update — one `PATCH /sessions/:id`
@@ -94,4 +100,17 @@ export class UpdateSessionDto implements UpdateSessionInput {
   @IsOptional()
   @IsBoolean()
   skipConflicting?: boolean;
+
+  /**
+   * Minutes before start to remind the user (max 2, not for DND). Omit on
+   * create for the default (60 min, non-DND); `[]` for none.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_REMINDERS_PER_SESSION)
+  @ArrayUnique()
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @Max(MAX_REMINDER_MINUTES, { each: true })
+  reminders?: number[];
 }
