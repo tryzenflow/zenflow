@@ -2,12 +2,15 @@
 import { SeriesPlacer } from "./series-placer.service";
 
 /**
- * `SeriesPlacer` with fake placers + experiment plumbing. The per-slot scoring
- * and day-scan math live in `core/*.spec.ts` / `heuristic-placer.service.spec.ts`
- * (the non-overlapping day-window partition itself is `series-spread.spec.ts`);
- * here we prove the wiring — one 50/50 pick per member, each member's window
- * from `seriesDayWindows`, per-member `recordProposal`, sibling accumulation,
- * and that an unplaceable member doesn't block the rest.
+ * `SeriesPlacer` with fake placers + a fake `SchedulingExperimentCoordinator`.
+ * The per-slot scoring and day-scan math live in `core/*.spec.ts` /
+ * `heuristic-placer.service.spec.ts` (the non-overlapping day-window
+ * partition itself is `series-spread.spec.ts`); the A/B assignment + bandit
+ * routing itself is `scheduling-experiment-coordinator.service.spec.ts`.
+ * Here we prove the wiring — one coordinator run per member, each member's
+ * window from `seriesDayWindows`, sibling accumulation, that an unplaceable
+ * member doesn't block the rest, and that a dry run skips the coordinator
+ * entirely.
  */
 
 const TZ = "UTC";
@@ -23,22 +26,50 @@ function members(n: number, durationMinutes = 60) {
   }));
 }
 
-function makeExperiment(
-  policy: "HEURISTIC" | "LINUCB" | ((i: number) => string),
+/** A fake coordinator: `policy` decides (per call, 0-indexed) whether the
+ * member is routed to the bandit; when it is, `input.runBandit()` is
+ * actually invoked so bandit-wiring assertions still work. */
+function makeCoordinator(
+  policy: "HEURISTIC" | "LINUCB" | ((i: number) => "HEURISTIC" | "LINUCB"),
 ) {
   let call = 0;
-  return {
-    assignPolicy: jest.fn(() => ({
-      primaryPolicy: typeof policy === "function" ? policy(call++) : policy,
-      randomizationSeed: "seed",
-    })),
-    recordProposal: jest.fn().mockResolvedValue(undefined),
-  };
+  const run = jest.fn(
+    async (input: {
+      heuristicStart: Date | null;
+      runBandit: () => Promise<{
+        scheduledStartTime: Date;
+        selectedArm: string;
+        featureVector: number[];
+      } | null>;
+    }) => {
+      const primaryPolicy =
+        typeof policy === "function" ? policy(call++) : policy;
+      const banditPick =
+        primaryPolicy === "LINUCB" ? await input.runBandit() : null;
+      return {
+        appliedStart: banditPick
+          ? banditPick.scheduledStartTime
+          : input.heuristicStart,
+        appliedPolicy: banditPick
+          ? "LINUCB"
+          : input.heuristicStart
+            ? "HEURISTIC"
+            : "NONE",
+        assignedPolicy: primaryPolicy,
+        banditAttempted: primaryPolicy === "LINUCB",
+        banditPick,
+        slotProposalId: null,
+        alternativeSlot: null,
+        divergent: false,
+      };
+    },
+  );
+  return { run };
 }
 
 describe("SeriesPlacer.placeSeries", () => {
-  it("places each member via the heuristic and records one proposal per member", async () => {
-    const experiment = makeExperiment("HEURISTIC");
+  it("places each member via the heuristic and runs the coordinator once per member", async () => {
+    const coordinator = makeCoordinator("HEURISTIC");
     const heuristic = {
       placeInWindow: jest.fn((_u: unknown, task: { id: string }) =>
         Promise.resolve({
@@ -49,7 +80,7 @@ describe("SeriesPlacer.placeSeries", () => {
     };
     const bandit = { placeInWindow: jest.fn() };
     const svc = new SeriesPlacer(
-      experiment as never,
+      coordinator as never,
       heuristic as never,
       bandit as never,
     );
@@ -69,12 +100,11 @@ describe("SeriesPlacer.placeSeries", () => {
       true,
     ]);
     expect(bandit.placeInWindow).not.toHaveBeenCalled();
-    expect(experiment.recordProposal).toHaveBeenCalledTimes(3);
-    expect(experiment.assignPolicy).toHaveBeenCalledTimes(3);
+    expect(coordinator.run).toHaveBeenCalledTimes(3);
   });
 
   it("routes a LINUCB-assigned member through the bandit placer", async () => {
-    const experiment = makeExperiment((i) =>
+    const coordinator = makeCoordinator((i) =>
       i === 1 ? "LINUCB" : "HEURISTIC",
     );
     const heuristic = {
@@ -87,11 +117,11 @@ describe("SeriesPlacer.placeSeries", () => {
       placeInWindow: jest.fn().mockResolvedValue({
         scheduledStartTime: new Date("2026-06-16T20:00:00.000Z"),
         selectedArm: "NIGHT",
-        featureVector: new Array<number>(46).fill(0),
+        featureVector: new Array<number>(22).fill(0),
       }),
     };
     const svc = new SeriesPlacer(
-      experiment as never,
+      coordinator as never,
       heuristic as never,
       bandit as never,
     );
@@ -110,14 +140,10 @@ describe("SeriesPlacer.placeSeries", () => {
     expect(rows[1].scheduledStartTime?.toISOString()).toBe(
       "2026-06-16T20:00:00.000Z",
     );
-    const linucbProposal = experiment.recordProposal.mock.calls.find(
-      (c) => c[0].selectedArm === "NIGHT",
-    );
-    expect(linucbProposal).toBeTruthy();
   });
 
   it("gives each member its own non-overlapping day-window (seriesDayWindows)", async () => {
-    const experiment = makeExperiment("HEURISTIC");
+    const coordinator = makeCoordinator("HEURISTIC");
     const heuristic = {
       placeInWindow: jest.fn().mockResolvedValue({
         start: new Date("2026-06-10T08:00:00.000Z"),
@@ -126,7 +152,7 @@ describe("SeriesPlacer.placeSeries", () => {
     };
     const bandit = { placeInWindow: jest.fn() };
     const svc = new SeriesPlacer(
-      experiment as never,
+      coordinator as never,
       heuristic as never,
       bandit as never,
     );
@@ -155,7 +181,7 @@ describe("SeriesPlacer.placeSeries", () => {
   });
 
   it("feeds each placed sibling forward as an extra hard block", async () => {
-    const experiment = makeExperiment("HEURISTIC");
+    const coordinator = makeCoordinator("HEURISTIC");
     const starts = [
       new Date("2026-06-05T08:00:00.000Z"),
       new Date("2026-06-15T08:00:00.000Z"),
@@ -168,7 +194,7 @@ describe("SeriesPlacer.placeSeries", () => {
     };
     const bandit = { placeInWindow: jest.fn() };
     const svc = new SeriesPlacer(
-      experiment as never,
+      coordinator as never,
       heuristic as never,
       bandit as never,
     );
@@ -190,7 +216,7 @@ describe("SeriesPlacer.placeSeries", () => {
   });
 
   it("leaves an unplaceable member null without blocking the others", async () => {
-    const experiment = makeExperiment("HEURISTIC");
+    const coordinator = makeCoordinator("HEURISTIC");
     const heuristic = {
       placeInWindow: jest.fn(() => {
         const call = heuristic.placeInWindow.mock.calls.length - 1;
@@ -203,7 +229,7 @@ describe("SeriesPlacer.placeSeries", () => {
     };
     const bandit = { placeInWindow: jest.fn() };
     const svc = new SeriesPlacer(
-      experiment as never,
+      coordinator as never,
       heuristic as never,
       bandit as never,
     );
@@ -222,11 +248,11 @@ describe("SeriesPlacer.placeSeries", () => {
       false,
       true,
     ]);
-    expect(experiment.recordProposal).toHaveBeenCalledTimes(3);
+    expect(coordinator.run).toHaveBeenCalledTimes(3);
   });
 
-  it("dryRun places via the heuristic only, and writes nothing (no policy assignment, no proposal, no bandit)", async () => {
-    const experiment = makeExperiment("LINUCB"); // would route to the bandit if not for dryRun
+  it("dryRun places via the heuristic only, and never calls the coordinator", async () => {
+    const coordinator = makeCoordinator("LINUCB"); // would route to the bandit if not for dryRun
     const heuristic = {
       placeInWindow: jest.fn().mockResolvedValue({
         start: new Date("2026-06-10T08:00:00.000Z"),
@@ -235,7 +261,7 @@ describe("SeriesPlacer.placeSeries", () => {
     };
     const bandit = { placeInWindow: jest.fn() };
     const svc = new SeriesPlacer(
-      experiment as never,
+      coordinator as never,
       heuristic as never,
       bandit as never,
     );
@@ -255,7 +281,6 @@ describe("SeriesPlacer.placeSeries", () => {
       true,
     ]);
     expect(bandit.placeInWindow).not.toHaveBeenCalled();
-    expect(experiment.assignPolicy).not.toHaveBeenCalled();
-    expect(experiment.recordProposal).not.toHaveBeenCalled();
+    expect(coordinator.run).not.toHaveBeenCalled();
   });
 });

@@ -8,6 +8,7 @@ import { HeuristicPlacer } from "./io/heuristic-placer.service";
 import { BanditPlacer } from "./io/bandit-placer.service";
 import { SeriesPlacer } from "./io/series-placer.service";
 import { TaskPlacementService } from "./io/task-placement.service";
+import { SchedulingExperimentCoordinator } from "./io/scheduling-experiment-coordinator.service";
 import { SchedulingFeedbackService } from "./io/scheduling-feedback.service";
 
 /**
@@ -29,6 +30,7 @@ import { SchedulingFeedbackService } from "./io/scheduling-feedback.service";
     HeuristicPlacer,
     BanditPlacer,
     SeriesPlacer,
+    SchedulingExperimentCoordinator,
     TaskPlacementService,
     SchedulingFeedbackService,
   ],

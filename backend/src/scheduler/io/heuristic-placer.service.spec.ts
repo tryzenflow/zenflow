@@ -115,6 +115,22 @@ describe("HeuristicPlacer.scheduleTask", () => {
     expect(start?.toISOString()).toBe("2026-06-15T09:00:00.000Z");
   });
 
+  it("nudges the placed slot toward the session's last manually-set start when preference ties flat (stability wiring)", async () => {
+    const svc = new HeuristicPlacer(makePrisma() as never);
+    const flatMatrix = new Array<number>(168).fill(0);
+    const flatTask = {
+      id: "t1",
+      durationMinutes: 60,
+      deadline: new Date("2026-06-15T18:00:00.000Z"),
+      prevStartMs: new Date("2026-06-15T14:00:00.000Z").getTime(),
+    };
+    // Preference is flat (0 everywhere), so without the stability wiring the
+    // earliest slot (00:00) would win. With `task.prevStartMs` threaded
+    // through to `bestFreeSlot`, the slot right at 14:00 must win instead.
+    const start = await svc.placeTask("u1", flatTask, TZ, flatMatrix, now);
+    expect(start?.toISOString()).toBe("2026-06-15T14:00:00.000Z");
+  });
+
   it("places a task straddling midnight when that is the only room before a small-hours deadline", async () => {
     // Monday is booked solid until 23:00; the deadline is 01:00 Tuesday, so the
     // only 90-minute slot anywhere is 23:00 Mon → 00:30 Tue.

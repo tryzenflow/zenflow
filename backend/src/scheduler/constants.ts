@@ -27,7 +27,70 @@ export const MAX_SERIES_PER_DAY = 1;
  */
 export const PREFERENCE_LEARNING_RATE = 0.1;
 
+/** Weight of a kept (`RETAINED`) placement on the preference matrix — a soft
+ * reward against the graded, up-to-full penalty of a move. */
+export const PREFERENCE_RETAINED_WEIGHT = 0.25;
+
 export const MIN = 60_000;
+
+/**
+ * Weight and saturation point for the slot-scoring "stability" nudge
+ * (`core/slot-score.ts`'s `stabilityScore`, used by both `bestFreeSlot` and
+ * `linucb-best-slot.ts`'s `bestMinuteInArm`): a light penalty for moving a
+ * session away from the start time the user last set manually, so it isn't
+ * churned without good reason.
+ *
+ * `STABILITY_WEIGHT` caps the term's maximum contribution to the total
+ * score. It has to stay well under the scale of the terms it sits beside:
+ * LinUCB's own arm-score term is a weighted blend of `/predict` outputs
+ * whose inputs (context features, rewards) are all clamped to `[-1, 1]`
+ * (`docs/adr/0001-linucb-model-design.md` §4/§5), plus a bounded UCB
+ * exploration bonus (`BANDIT_ALPHA · √(xᵀA⁻¹x)`) — so it typically lands in
+ * the low single digits. The preference-matrix term (`slotPreferenceScore`)
+ * sums per-hour cells that are themselves clamped to `[-1, 1]`. At
+ * `STABILITY_WEIGHT = 0.1`, the stability term can contribute at most ±0.1
+ * — an order of magnitude below either, so it can only break near-ties
+ * between otherwise-similar candidates, never outweigh real personalization.
+ *
+ * `STABILITY_SATURATION_HOURS` is the distance at which the penalty maxes
+ * out: beyond this many hours from the previous manually-set start, moving
+ * even further away costs no more. Without a cap, a rescheduling window
+ * spanning the full `MAX_SCAN_DAYS` horizon would let raw hour-distance grow
+ * into the hundreds and swamp every other term — the same saturating-distance
+ * shape already used for the `MOVE` reward (`MOVE_REWARD_SCALE_MINUTES`).
+ */
+export const STABILITY_WEIGHT = 0.1;
+export const STABILITY_SATURATION_HOURS = 4;
+
+/**
+ * Weight of the fixed, post-hoc preference-matrix nudge used ONLY to rank
+ * exact minutes within LinUCB's already-chosen arm (Item 3B1/B2) — never to
+ * choose the arm itself (B2 picks the arm from LinUCB's own per-arm scores
+ * alone), and never fed into LinUCB's context vector at all (the preference
+ * matrix was dropped from `context-vector.ts` entirely — it's no longer even
+ * a reserved/zeroed slot).
+ *
+ * LinUCB's own arm score (`θ̂ᵀx + α·√(xᵀA⁻¹x)`) is fit against rewards in
+ * `[-1, 1]` (`SESSION_RETAINED_REWARD` / `SESSION_MOVE_REWARD` /
+ * `dragDistanceReward`'s range — ADR-0001 §7), so a trained arm's score is
+ * itself O(1) in typical magnitude, with the `α·√(...)` exploration term
+ * adding at most roughly another unit early on (bounded by `α·√FEATURE_DIM ≈
+ * 0.15·√22 ≈ 0.7` for a single early observation under the `λ = 1` ridge
+ * prior, per ADR-0001 §6/§10) before shrinking as more data arrives.
+ * `slotPreferenceScore` is duration-scaled (a sum over every clock-hour the
+ * slot touches, so an N-hour slot's raw value is up to `N`, not `O(1)`) —
+ * dividing by the slot's own duration-in-hours before applying this weight
+ * (see `linucb-best-slot.ts`'s `bestMinuteInArm`) normalizes it back to the
+ * same `[-1, 1]`-ish per-hour scale as a single arm score, so this weight is
+ * directly comparable to "what fraction of one arm-score's typical
+ * magnitude."
+ * `0.1` caps the nudge at ±10% of that scale — enough to break near-ties
+ * between minutes/days LinUCB itself can't yet distinguish and to soften
+ * cold start (arm score `0.0` before an arm has any data — see
+ * `services/bandit/README.md`'s `/predict` contract), never enough to read
+ * as a second competing signal.
+ */
+export const PREFERENCE_NUDGE_WEIGHT = 0.1;
 
 /**
  * Reward written on the `SessionEvent` for each outcome of the move-or-keep
@@ -56,7 +119,17 @@ export const BANDIT_RIDGE = 1.0;
 export const MOVE_REWARD_SCALE_MINUTES = 240;
 
 /** Stamped on `SlotProposal.modelVersion` for LinUCB proposals. */
-export const BANDIT_MODEL_VERSION = "linucb-d46-v1";
+export const BANDIT_MODEL_VERSION = "linucb-d22-v1";
 
 /** `SlotProposal.experimentId` for the heuristic-vs-LinUCB A/B experiment. */
 export const BANDIT_EXPERIMENT_ID = "linucb-heuristic-v1";
+
+/**
+ * Fraction of `TASK` create / deadline-change events (and, independently,
+ * series members) that run **both** `HeuristicPlacer` and `BanditPlacer` and
+ * get `SlotProposal.pairwiseShown = true` (`docs/scheduler/ab-testing.md`
+ * §3). Every other event runs exactly one algorithm — the existing 50/50
+ * `primaryPolicy` pick — same as before this existed. Independent draw from
+ * `primaryPolicy`'s own 50/50 roll.
+ */
+export const PAIRWISE_SAMPLE_RATE = 0.2;

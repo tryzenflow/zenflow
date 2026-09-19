@@ -1,5 +1,11 @@
 import type { Prisma } from "../../generated/prisma";
-import type { Session as SharedSession } from "@zenflow/shared";
+import type {
+  CreateSessionResponse,
+  Session as SharedSession,
+  SlotProposalFields,
+  UpdateSessionResponse,
+} from "@zenflow/shared";
+import type { PlacementResult } from "../scheduler/types/placement.types";
 import type { SessionRow } from "./types/session-row";
 
 /** Sort tag names for stable wire output. */
@@ -28,6 +34,41 @@ export function toSessionDto(row: SessionRow): SharedSession {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+/** No `SlotProposal` behind this placement (a fixed session, a series member,
+ * or the fallback for `toCreateSessionResponse`/`toUpdateSessionResponse`). */
+export const NO_SLOT_PROPOSAL: SlotProposalFields = {
+  slotProposalId: null,
+  primarySlot: null,
+  alternativeSlot: null,
+  divergent: false,
+};
+
+/** {@link PlacementResult} → the wire-shape `SlotProposalFields`. */
+export function slotProposalFieldsOf(
+  placement: PlacementResult,
+): SlotProposalFields {
+  return {
+    slotProposalId: placement.slotProposalId,
+    primarySlot: placement.scheduledStartTime?.toISOString() ?? null,
+    alternativeSlot: placement.alternativeSlot?.toISOString() ?? null,
+    divergent: placement.divergent,
+  };
+}
+
+export function toCreateSessionResponse(
+  row: SessionRow,
+  slotProposal: SlotProposalFields = NO_SLOT_PROPOSAL,
+): CreateSessionResponse {
+  return { ...toSessionDto(row), ...slotProposal };
+}
+
+export function toUpdateSessionResponse(
+  row: SessionRow,
+  slotProposal: SlotProposalFields = NO_SLOT_PROPOSAL,
+): UpdateSessionResponse {
+  return { ...toSessionDto(row), ...slotProposal };
 }
 
 /** The `{ scheduledStartTime, durationMinutes, type, tags }` snapshot stored on a

@@ -9,6 +9,7 @@ import { SessionsService } from "./sessions.service";
 import { SessionCrudService } from "./session-crud.service";
 import { SeriesService } from "./series.service";
 import { SessionUpdateService } from "./session-update.service";
+import { SlotPickService } from "./slot-pick.service";
 import type { Tag, Session, SessionSeries, User } from "../../generated/prisma";
 import type { CreateSessionDto } from "./dto/create-session.dto";
 import type { UpdateSessionDto } from "./dto/update-session.dto";
@@ -88,26 +89,34 @@ function fakeTagsService() {
  * by default. Every heuristic / LinUCB / SlotProposal detail lives behind it
  * and is covered by `scheduler/io/*.spec.ts`.
  */
+const NO_PLACEMENT_OUTCOME = {
+  scheduledStartTime: null,
+  appliedPolicy: "NONE",
+  slotProposalId: null,
+  alternativeSlot: null,
+  divergent: false,
+};
+
 function fakeTaskPlacement() {
   return {
     // Pre-flight feasibility — "feasible" by default so the existing
     // create-success assertions below don't have to opt in.
     canPlaceTask: jest.fn().mockResolvedValue(true),
     canPlaceSeries: jest.fn().mockResolvedValue(true),
-    placeOnCreate: jest
-      .fn()
-      .mockResolvedValue({ scheduledStartTime: null, appliedPolicy: "NONE" }),
-    placeOnDeadlineChange: jest
-      .fn()
-      .mockResolvedValue({ scheduledStartTime: null, appliedPolicy: "NONE" }),
+    placeOnCreate: jest.fn().mockResolvedValue(NO_PLACEMENT_OUTCOME),
+    placeOnDeadlineChange: jest.fn().mockResolvedValue(NO_PLACEMENT_OUTCOME),
     placeSeriesOnCreate: jest.fn().mockResolvedValue([]),
     redistributeSeries: jest.fn().mockResolvedValue([]),
   };
 }
 
-/** The delayed first-move LinUCB reward writer. */
+/** The delayed first-move LinUCB reward writer + preference-matrix reinforcement. */
 function fakeSchedulingFeedback() {
-  return { onFirstMove: jest.fn().mockResolvedValue(undefined) };
+  return {
+    onFirstMove: jest.fn().mockResolvedValue(undefined),
+    reinforcePreferenceMatrix: jest.fn().mockResolvedValue(undefined),
+    reinforcePreferenceMove: jest.fn().mockResolvedValue(undefined),
+  };
 }
 
 /**
@@ -128,6 +137,7 @@ async function makeService(
       SessionCrudService,
       SeriesService,
       SessionUpdateService,
+      SlotPickService,
       { provide: PrismaService, useValue: prisma },
       { provide: TagsService, useValue: tags },
       { provide: TaskPlacementService, useValue: placement },
@@ -217,6 +227,10 @@ describe("SessionsService.create", () => {
       sessionTotal: null,
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
+      slotProposalId: null,
+      primarySlot: null,
+      alternativeSlot: null,
+      divergent: false,
     });
   });
 
@@ -952,7 +966,7 @@ describe("SessionsService.update", () => {
     expect(update.mock.calls[0][0].data.lastMovedAt).toBeInstanceOf(Date);
   });
 
-  it("resizing a scheduled TASK (duration only) writes a MOVE event with zero drag distance", async () => {
+  it("resizing a scheduled TASK's end (duration only) emits no MOVE event and leaves lastMovedAt unset", async () => {
     const existing = session({
       id: "session-1",
       durationMinutes: 60,
@@ -975,9 +989,8 @@ describe("SessionsService.update", () => {
 
     await service.update("session-1", { durationMinutes: 90 }, user);
 
-    const ev = eventCreate.mock.calls[0][0].data;
-    expect(ev.eventType).toBe("MOVE");
-    expect(ev.dragDistanceMinutes).toBe(0);
+    expect(eventCreate).not.toHaveBeenCalled();
+    expect(update.mock.calls[0][0].data.lastMovedAt).toBeUndefined();
   });
 
   it("moving a DND block emits no event", async () => {

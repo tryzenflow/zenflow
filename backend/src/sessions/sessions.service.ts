@@ -6,6 +6,7 @@ import type {
   SessionDetailResponse,
   SessionSuggestionsResponse,
   SessionsListResponse,
+  SlotPickResponse,
   UpdateSessionResponse,
 } from "@zenflow/shared";
 import { type User } from "../../generated/prisma";
@@ -13,16 +14,19 @@ import { CreateSessionDto } from "./dto/create-session.dto";
 import { ListSessionSuggestionsDto } from "./dto/list-session-suggestions.dto";
 import { ListSessionsDto } from "./dto/list-sessions.dto";
 import { UpdateSessionDto } from "./dto/update-session.dto";
+import { SlotPickDto } from "./dto/slot-pick.dto";
 import { SessionCrudService } from "./session-crud.service";
 import { SeriesService } from "./series.service";
 import { SessionUpdateService } from "./session-update.service";
+import { SlotPickService } from "./slot-pick.service";
 
 /**
- * Thin facade the controller calls — its 9 methods delegate to the collaborator
+ * Thin facade the controller calls — its 10 methods delegate to the collaborator
  * services, one concern each:
  *  - {@link SessionCrudService}   create / list / suggestions / findById / remove
  *  - {@link SessionUpdateService} `PATCH /sessions/:id`
  *  - {@link SeriesService}        every `SessionSeries` lifecycle op
+ *  - {@link SlotPickService}      `POST /sessions/:id/slot-pick`
  *
  * The wire contract is unchanged — see `sessions.controller.ts`.
  */
@@ -32,6 +36,7 @@ export class SessionsService {
     private readonly crud: SessionCrudService,
     private readonly series: SeriesService,
     private readonly updates: SessionUpdateService,
+    private readonly slotPickService: SlotPickService,
   ) {}
 
   create(dto: CreateSessionDto, user: User): Promise<CreateSessionResponse> {
@@ -63,6 +68,14 @@ export class SessionsService {
 
   remove(id: string, user: User): Promise<RemoveSessionResponse> {
     return this.crud.remove(id, user);
+  }
+
+  slotPick(
+    id: string,
+    dto: SlotPickDto,
+    user: User,
+  ): Promise<SlotPickResponse> {
+    return this.slotPickService.recordPick(id, dto, user);
   }
 
   truncateSeriesFrom(

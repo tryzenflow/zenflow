@@ -77,18 +77,25 @@ function fakeTaskPlacement() {
 }
 
 function fakeSchedulingFeedback() {
-  return { onFirstMove: jest.fn().mockResolvedValue(undefined) };
+  return {
+    onFirstMove: jest.fn().mockResolvedValue(undefined),
+    reinforcePreferenceMatrix: jest.fn().mockResolvedValue(undefined),
+    reinforcePreferenceMove: jest.fn().mockResolvedValue(undefined),
+  };
 }
 
 function makeService(
   prisma: never,
   series: ReturnType<typeof fakeSeries> = fakeSeries(),
+  schedulingFeedback: ReturnType<
+    typeof fakeSchedulingFeedback
+  > = fakeSchedulingFeedback(),
 ) {
   return new SessionUpdateService(
     prisma,
     fakeTagsService() as never,
     fakeTaskPlacement() as never,
-    fakeSchedulingFeedback() as never,
+    schedulingFeedback as never,
     series as never,
   );
 }
@@ -152,6 +159,206 @@ describe("SessionUpdateService — no scope (regression: byte-for-byte unchanged
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: "sit-2" } }),
     );
+  });
+});
+
+describe("SessionUpdateService — preference-matrix reinforcement (Item 3B3)", () => {
+  it("a first drag/resize of a user TASK reinforces the preference matrix: old (rejected) hour down, new (chosen) hour up, graded by distance", async () => {
+    const oldStart = new Date("2026-06-11T08:00:00.000Z");
+    const existing = session({
+      id: "task-1",
+      type: "TASK",
+      source: "USER",
+      lastMovedAt: null,
+      scheduledStartTime: oldStart,
+    });
+    const updated = {
+      ...existing,
+      scheduledStartTime: new Date("2026-06-11T09:00:00.000Z"),
+    };
+    const findFirst = jest.fn().mockResolvedValue(existing);
+    const update = jest.fn().mockResolvedValue(updated);
+    const prisma = {
+      $transaction: (fn: (t: unknown) => unknown) =>
+        fn({
+          session: { findFirst, update },
+          sessionEvent: { create: jest.fn().mockResolvedValue({ id: 1n }) },
+        }),
+    };
+    const series = fakeSeries();
+    const schedulingFeedback = fakeSchedulingFeedback();
+    const service = makeService(prisma as never, series, schedulingFeedback);
+
+    await service.update(
+      "task-1",
+      { scheduledStartTime: "2026-06-11T09:00:00.000Z" },
+      user,
+    );
+
+    expect(schedulingFeedback.onFirstMove).toHaveBeenCalledWith(
+      user.id,
+      "task-1",
+      1n,
+      60,
+    );
+    expect(schedulingFeedback.reinforcePreferenceMove).toHaveBeenCalledWith(
+      user.id,
+      oldStart.getTime(),
+      new Date("2026-06-11T09:00:00.000Z").getTime(),
+      user.timezone,
+      60,
+    );
+  });
+
+  it("a SECOND move of an already-moved TASK does not reinforce the matrix (only the first move counts)", async () => {
+    const existing = session({
+      id: "task-1",
+      type: "TASK",
+      source: "USER",
+      lastMovedAt: new Date("2026-06-10T00:00:00.000Z"),
+      scheduledStartTime: new Date("2026-06-11T08:00:00.000Z"),
+    });
+    const updated = {
+      ...existing,
+      scheduledStartTime: new Date("2026-06-11T09:00:00.000Z"),
+    };
+    const findFirst = jest.fn().mockResolvedValue(existing);
+    const update = jest.fn().mockResolvedValue(updated);
+    const prisma = {
+      $transaction: (fn: (t: unknown) => unknown) =>
+        fn({
+          session: { findFirst, update },
+          sessionEvent: { create: jest.fn().mockResolvedValue({ id: 1n }) },
+        }),
+    };
+    const schedulingFeedback = fakeSchedulingFeedback();
+    const service = makeService(
+      prisma as never,
+      fakeSeries(),
+      schedulingFeedback,
+    );
+
+    await service.update(
+      "task-1",
+      { scheduledStartTime: "2026-06-11T09:00:00.000Z" },
+      user,
+    );
+
+    expect(schedulingFeedback.onFirstMove).not.toHaveBeenCalled();
+    expect(schedulingFeedback.reinforcePreferenceMove).not.toHaveBeenCalled();
+  });
+
+  it("an end-side resize (duration only, start unchanged) is not a move: no MOVE event, no first-move, no reinforcement", async () => {
+    const existing = session({
+      id: "task-1",
+      type: "TASK",
+      source: "USER",
+      lastMovedAt: null,
+      scheduledStartTime: new Date("2026-06-11T08:00:00.000Z"),
+      durationMinutes: 60,
+    });
+    const findFirst = jest.fn().mockResolvedValue(existing);
+    const update = jest
+      .fn()
+      .mockResolvedValue({ ...existing, durationMinutes: 90 });
+    const eventCreate = jest.fn();
+    const prisma = {
+      $transaction: (fn: (t: unknown) => unknown) =>
+        fn({
+          session: { findFirst, update },
+          sessionEvent: { create: eventCreate },
+        }),
+    };
+    const schedulingFeedback = fakeSchedulingFeedback();
+    const service = makeService(
+      prisma as never,
+      fakeSeries(),
+      schedulingFeedback,
+    );
+
+    await service.update("task-1", { durationMinutes: 90 }, user);
+
+    expect(eventCreate).not.toHaveBeenCalled();
+    expect(schedulingFeedback.onFirstMove).not.toHaveBeenCalled();
+    expect(schedulingFeedback.reinforcePreferenceMove).not.toHaveBeenCalled();
+    const [args] = update.mock.calls[0] as [{ data: Record<string, unknown> }];
+    expect(args.data.lastMovedAt).toBeUndefined();
+  });
+
+  it("a start-side resize (start and duration both change) counts as the first move", async () => {
+    const oldStart = new Date("2026-06-11T08:00:00.000Z");
+    const newStart = new Date("2026-06-11T07:00:00.000Z");
+    const existing = session({
+      id: "task-1",
+      type: "TASK",
+      source: "USER",
+      lastMovedAt: null,
+      scheduledStartTime: oldStart,
+      durationMinutes: 60,
+    });
+    const findFirst = jest.fn().mockResolvedValue(existing);
+    const update = jest.fn().mockResolvedValue({
+      ...existing,
+      scheduledStartTime: newStart,
+      durationMinutes: 120,
+    });
+    const prisma = {
+      $transaction: (fn: (t: unknown) => unknown) =>
+        fn({
+          session: { findFirst, update },
+          sessionEvent: { create: jest.fn().mockResolvedValue({ id: 1n }) },
+        }),
+    };
+    const schedulingFeedback = fakeSchedulingFeedback();
+    const service = makeService(
+      prisma as never,
+      fakeSeries(),
+      schedulingFeedback,
+    );
+
+    await service.update(
+      "task-1",
+      { scheduledStartTime: newStart.toISOString(), durationMinutes: 120 },
+      user,
+    );
+
+    expect(schedulingFeedback.onFirstMove).toHaveBeenCalledWith(
+      user.id,
+      "task-1",
+      1n,
+      -60,
+    );
+    expect(schedulingFeedback.reinforcePreferenceMove).toHaveBeenCalledWith(
+      user.id,
+      oldStart.getTime(),
+      newStart.getTime(),
+      user.timezone,
+      -60,
+    );
+  });
+
+  it("a title-only diff (no move) never reinforces the matrix", async () => {
+    const existing = session({ id: "session-1", title: "Old", type: "TASK" });
+    const updated = session({ id: "session-1", title: "New", type: "TASK" });
+    const findFirst = jest.fn().mockResolvedValue(existing);
+    const update = jest.fn().mockResolvedValue(updated);
+    const prisma = {
+      $transaction: (fn: (t: unknown) => unknown) =>
+        fn({
+          session: { findFirst, update },
+          sessionEvent: { create: jest.fn() },
+        }),
+    };
+    const schedulingFeedback = fakeSchedulingFeedback();
+    const service = makeService(
+      prisma as never,
+      fakeSeries(),
+      schedulingFeedback,
+    );
+
+    await service.update("session-1", { title: "New" }, user);
+
+    expect(schedulingFeedback.reinforcePreferenceMove).not.toHaveBeenCalled();
   });
 });
 

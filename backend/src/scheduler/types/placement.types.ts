@@ -36,6 +36,12 @@ export type AppliedPolicy = "HEURISTIC" | "LINUCB" | "NONE";
 export interface PlacementResult {
   scheduledStartTime: Date | null;
   appliedPolicy: AppliedPolicy;
+  /** `null` unless this event's `SlotProposal` write succeeded. */
+  slotProposalId: string | null;
+  /** The other algorithm's raw pick, only when the pairwise sample ran and it differs from what was applied. */
+  alternativeSlot: Date | null;
+  /** `true` iff `alternativeSlot` is set. */
+  divergent: boolean;
 }
 
 /** One member of a `TASK` series to place. */

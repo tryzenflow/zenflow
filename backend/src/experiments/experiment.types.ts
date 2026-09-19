@@ -10,6 +10,9 @@ export const EVENT_MAP: Record<ExperimentTrigger, SlotProposalEvent> = {
   "deadline-change": SlotProposalEvent.DEADLINE_CHANGE,
 };
 
+/** Which side of a pairwise comparison the primary policy's slot was shown on. */
+export type PairwisePosition = "first" | "second";
+
 export interface RecordProposalArgs {
   userId: string;
   sessionId: string;
@@ -29,4 +32,8 @@ export interface RecordProposalArgs {
   featureVector: number[];
   /** The arm behind `modelProposal` (null otherwise). */
   selectedArm: SchedulingArm | null;
+  /** Whether this event ran BOTH placers purely for comparison (`PAIRWISE_SAMPLE_RATE`). */
+  pairwiseShown: boolean;
+  /** Set only when `pairwiseShown` — which side the primary policy's slot was shown on. */
+  pairwisePositions: { primaryPosition: PairwisePosition } | null;
 }

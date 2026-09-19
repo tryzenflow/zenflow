@@ -22,7 +22,7 @@ export type SchedulingArm = (typeof SCHEDULING_ARMS)[number];
  * stored widths of `BanditArmState.A` (d·d), `BanditArmState.b` (d) and
  * `SlotProposal.featureVector` (d). Changing it is a migration.
  */
-export const FEATURE_DIM = 46;
+export const FEATURE_DIM = 22;
 
 /**
  * A single arm's persisted LinUCB state. `A` is row-major `d·d`, `b` is length

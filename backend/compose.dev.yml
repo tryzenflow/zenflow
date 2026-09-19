@@ -53,7 +53,6 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     networks:
       - bandit
-      - obs
 
 networks:
   db:
@@ -64,9 +63,6 @@ networks:
     driver: bridge
   bandit:
     driver: bridge
-  obs:
-    external: true
-    name: zenflow-obs
 
 volumes:
   postgres_data:

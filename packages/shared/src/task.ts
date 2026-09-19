@@ -192,6 +192,30 @@ export interface SessionSuggestionsResponse {
 }
 
 /**
+ * The heuristic-vs-LinUCB `SlotProposal` this placement recorded, present
+ * only for a single (non-series) `TASK` create / deadline-change — a
+ * `sessionCount > 1` series response leaves these `null`/`false` even though
+ * each member is individually sampled and proposed behind the scenes (the
+ * pairwise picker's series surface is designed in #41).
+ *
+ * On most events only one algorithm ran (today's random 50/50) and
+ * `alternativeSlot` is `null`. On the `PAIRWISE_SAMPLE_RATE` fraction of
+ * events both `HeuristicPlacer` and `BanditPlacer` ran — `alternativeSlot` is
+ * the *other* one's raw proposal (not applied), and `POST
+ * /sessions/:id/slot-pick` can switch to it.
+ */
+export interface SlotProposalFields {
+  /** `null` unless this event's `SlotProposal` write succeeded. */
+  slotProposalId: string | null;
+  /** ISO-8601 instant actually applied to the session. */
+  primarySlot: string | null;
+  /** The other algorithm's raw pick, only when it ran and differs — else `null`. */
+  alternativeSlot: string | null;
+  /** `true` iff `alternativeSlot` is set and its start differs from `primarySlot`. */
+  divergent: boolean;
+}
+
+/**
  * Creating a `TASK` places it into its single best empty slot between now and
  * its deadline (`docs/scheduler/heuristic.md`) — no other session is moved.
  * When `sessionCount > 1` the response also carries every session in
@@ -199,7 +223,7 @@ export interface SessionSuggestionsResponse {
  * The shared `seriesId` on those rows groups the sessions' `CREATE` events;
  * reverting the batch = `DELETE /sessions/series/:seriesId`.
  */
-export interface CreateSessionResponse extends Session {
+export interface CreateSessionResponse extends Session, SlotProposalFields {
   /** Present only for a `TASK` series create — all N sessions, `sessionIndex` order. */
   sessions?: Session[];
 }
@@ -209,13 +233,32 @@ export interface CreateSessionResponse extends Session {
  * member, redistributes the series' still-upcoming sessions across the new
  * `now … deadline` window). No other session is moved.
  */
-export interface UpdateSessionResponse extends Session {
+export interface UpdateSessionResponse extends Session, SlotProposalFields {
   /** Present only when a `TASK` series was redistributed — its members in `sessionIndex` order. */
   sessions?: Session[];
   /** Ids left untouched by a `skipConflicting` update because their new landing slot conflicted. */
   skippedSessionIds?: string[];
 }
 export type SessionDetailResponse = Session;
+
+/**
+ * `POST /sessions/:id/slot-pick` — records which side of a shown pairwise
+ * comparison the user picked (`SlotProposal.pairwiseShown` events only).
+ * `"alternative"` applies that slot as a `MOVE`; `"primary"` (or the caller
+ * never posting at all) just records "kept". Idempotent — a proposal that
+ * already has `chosenByUser` set is a no-op.
+ */
+export interface SlotPickRequest {
+  slotProposalId: string;
+  chose: "primary" | "alternative";
+}
+
+export interface SlotPickResponse {
+  /** The session as it stands after applying the pick (unchanged for `"primary"`). */
+  session: Session;
+  /** Echoes what was actually recorded — `null` if the proposal had no pick to record. */
+  chosenByUser: "primary" | "alternative" | null;
+}
 
 /**
  * Result of `DELETE /sessions/:id`. `id` echoes what was deleted: a real row

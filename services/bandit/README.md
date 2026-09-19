@@ -28,10 +28,10 @@ Experiment: [`docs/scheduler/ab-testing.md`](../../docs/scheduler/ab-testing.md)
 - **Canonical arms** (`SchedulingArm` in `@zenflow/shared`), half-open, lower-inclusive:
   `EARLY_MORNING [00:00,06:00)`, `MORNING [06:00,11:00)`, `AFTERNOON [11:00,17:00)`,
   `EVENING [17:00,20:00)`, `NIGHT [20:00,24:00)`.
-- **Context vector** `d = 46` — session (`remaining_days_until_deadline`, `duration`),
-  user (`day_preference_profile[24]`), candidate day (`day_of_week[7]`,
-  `candidate_days_from_now`, `workload_by_type[10]`, `semester_phase`), bias. Full table
-  and normalization: ADR-0001 §5.
+- **Context vector** `d = 22` — session (`remaining_days_until_deadline`, `duration`),
+  candidate day (`day_of_week[7]`, `candidate_days_from_now`, `workload_by_type[10]`,
+  `semester_phase`), bias. No preference-matrix input. Full table and normalization:
+  ADR-0001 §5.
 - **Stateless service.** This service holds **no per-user state**. The NestJS backend owns
   `(A, b)` persistence (Postgres table `BanditArmState`, ADR-0001 §6.1) and passes the 5
   arms' `(A, b)` in every request; `/update` returns the new `(A, b)` for the backend to

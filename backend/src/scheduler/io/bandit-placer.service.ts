@@ -16,7 +16,7 @@ import type {
   PlaceableTask,
   PlacementWindow,
 } from "../types/placement.types";
-import { linucbSlotScore } from "../core/linucb-slot-score";
+import { bestLinucbSlot } from "../core/linucb-best-slot";
 import {
   addDaysStr,
   ceilToSlot,
@@ -25,7 +25,6 @@ import {
   isoWeekday,
   localDateStr,
   MS_PER_MINUTE,
-  overlapsAny,
   SLOT_MS,
   type Interval,
 } from "../core/slot";
@@ -35,10 +34,12 @@ import type { PlaceInWindowOpts } from "./heuristic-placer.service";
 /**
  * Policy B — places one `TASK` with the Disjoint-LinUCB policy
  * (`docs/adr/0001-linucb-model-design.md` §8, `docs/scheduler/reranking.md`):
- * a per-candidate-day `/predict`, then a single-pass score over the empty,
- * hard-constraint-feasible 15-minute slots —
- * `Σ_arm overlapRate·predicted + slotPreferenceScore` (D4) — earliest-start
- * tie-break. A slot may run past local midnight up to the deadline (D5).
+ * a per-candidate-day `/predict`, then a two-step arm-then-minute pick
+ * (Item 3B2, `core/linucb-best-slot.ts`) — rank the 5 `SchedulingArm`s by
+ * LinUCB's own score alone, then search only within the top-ranked arm's
+ * time window (scored by the small preference nudge + stability term),
+ * falling through to the next-ranked arm when the current one has zero
+ * feasible slots. A slot may run past local midnight up to the deadline (D5).
  *
  * Returns `null` on any reason to fall back to the heuristic — the bandit
  * service is unreachable/disabled, `/predict` failed, or no slot survives.
@@ -105,12 +106,56 @@ export class BanditPlacer {
     // midnight, bounded only by the deadline (D5) — the widest that post-
     // midnight overhang can be is `duration − one slot`.
     const overhangMs = durationMs - SLOT_MS;
-    const extraOccupied: Interval[] = opts.extraOccupied ?? [];
-    const todayStr = localDateStr(now, timezone);
 
-    // --- per-day context vectors -----------------------------------------
+    const days = await this.loadCandidateContext(
+      userId,
+      task,
+      timezone,
+      now,
+      window,
+      opts,
+      overhangMs,
+    );
+    if (days.length === 0) return null;
+
+    const scores = await this.fetchBanditPredictions(userId, days);
+    if (!scores) return null;
+
+    const best = this.pickBestSlot({
+      days,
+      scores,
+      task,
+      timezone,
+      preferenceMatrix,
+      next15Ms,
+      deadlineMs,
+      extraOccupied: opts.extraOccupied ?? [],
+    });
+    if (!best) return null;
+
+    return {
+      scheduledStartTime: new Date(best.startMs),
+      selectedArm: best.arm,
+      featureVector: best.vector,
+    };
+  }
+
+  /** The only Prisma I/O in this class: one day-load + pure context-vector
+   * build per scanned day. */
+  private async loadCandidateContext(
+    userId: string,
+    task: PlaceableTask,
+    timezone: string,
+    now: Date,
+    window: PlacementWindow,
+    opts: PlaceInWindowOpts,
+    overhangMs: number,
+  ): Promise<CandidateDay[]> {
+    const deadlineMs = task.deadline.getTime();
+    const todayStr = localDateStr(now, timezone);
     const days: CandidateDay[] = [];
     let scanned = 0;
+
     for (
       let dayStr = window.firstDayStr;
       dayStr <= window.lastDayStr && scanned < MAX_SCAN_DAYS;
@@ -141,7 +186,6 @@ export class BanditPlacer {
           Math.floor((deadlineMs - now.getTime()) / DAY_MS),
         ),
         durationMinutes: task.durationMinutes,
-        preferenceMatrix,
         candidateIsoWeekday: isoWeekday(dayStr),
         candidateDaysFromNow: Math.max(0, dayDiffStr(todayStr, dayStr)),
         workloadByType,
@@ -150,71 +194,69 @@ export class BanditPlacer {
 
       days.push({ dayStr, dayStartMs, dayEndMs, occupied, vector });
     }
-    if (days.length === 0) return null;
+    return days;
+  }
 
-    // --- one /predict for all days -------------------------------------------
+  /** One `/predict` HTTP call scoring every candidate day's arms. `null` on
+   * any bandit failure — the caller falls back to the heuristic. */
+  private async fetchBanditPredictions(
+    userId: string,
+    days: CandidateDay[],
+  ): Promise<Record<string, Record<SchedulingArm, number>> | null> {
     const loaded = await this.armStates.loadAll(userId);
     const wireState = {} as Record<SchedulingArm, BanditArmStateWire>;
     for (const arm of SCHEDULING_ARMS) {
       wireState[arm] = { A: loaded[arm].A, b: loaded[arm].b };
     }
-
-    const scores = await this.bandit.predict(
+    return this.bandit.predict(
       days.map((d) => ({ day: d.dayStr, x: d.vector })),
       wireState,
     );
-    if (!scores) return null;
+  }
 
-    // --- single-pass slot scoring (reranking.md §3 + D4 cold-start blend) ---
-    let best: {
-      startMs: number;
-      score: number;
-      arm: SchedulingArm;
-      vector: number[];
-    } | null = null;
+  /** Two-step arm-then-minute slot pick (Item 3B2) — pure math over the
+   * already-loaded days/scores, no I/O. Delegates to the pure core scan
+   * ({@link bestLinucbSlot}) shared with anything else that needs to
+   * reproduce this exact "arm scores → concrete slot" search (e.g. the
+   * offline simulator's TS bridge, `backend/scripts/simulation-bridge.ts`). */
+  private pickBestSlot(args: {
+    days: CandidateDay[];
+    scores: Record<string, Record<SchedulingArm, number>>;
+    task: PlaceableTask;
+    timezone: string;
+    preferenceMatrix: number[];
+    next15Ms: number;
+    deadlineMs: number;
+    extraOccupied: Interval[];
+  }): {
+    startMs: number;
+    score: number;
+    arm: SchedulingArm;
+    vector: number[];
+  } | null {
+    const {
+      days,
+      scores,
+      task,
+      timezone,
+      preferenceMatrix,
+      next15Ms,
+      deadlineMs,
+      extraOccupied,
+    } = args;
 
-    for (const day of days) {
-      const dayScores = scores[day.dayStr] ?? ({} as Record<string, number>);
-      const lowerMs = Math.max(ceilToSlot(day.dayStartMs), next15Ms);
-      // A start owned by this day may run past midnight up to the deadline (D5).
-      const upperMs = Math.min(day.dayEndMs + overhangMs, deadlineMs);
-      const occupied =
-        extraOccupied.length > 0
-          ? [...day.occupied, ...extraOccupied]
-          : day.occupied;
-
-      for (
-        let startMs = lowerMs;
-        startMs + durationMs <= upperMs;
-        startMs += SLOT_MS
-      ) {
-        const endMs = startMs + durationMs;
-        if (overlapsAny(occupied, startMs, endMs)) continue;
-
-        const { score: slotScore, topArm } = linucbSlotScore({
-          startMs,
-          endMs,
-          timezone,
-          armScores: dayScores,
-          prefMatrix: preferenceMatrix,
-          prevStartMs: task.prevStartMs,
-        });
-
-        if (
-          best === null ||
-          slotScore > best.score ||
-          (slotScore === best.score && startMs < best.startMs)
-        ) {
-          best = { startMs, score: slotScore, arm: topArm, vector: day.vector };
-        }
-      }
-    }
-
-    if (!best) return null;
-    return {
-      scheduledStartTime: new Date(best.startMs),
-      selectedArm: best.arm,
-      featureVector: best.vector,
-    };
+    return bestLinucbSlot({
+      days: days.map((day) => ({
+        ...day,
+        armScores: scores[day.dayStr] ?? {},
+      })),
+      durationMinutes: task.durationMinutes,
+      timezone,
+      prefMatrix: preferenceMatrix,
+      nextMs: next15Ms,
+      deadlineMs,
+      extraOccupied,
+      prevStartMs: task.prevStartMs,
+    });
   }
 }

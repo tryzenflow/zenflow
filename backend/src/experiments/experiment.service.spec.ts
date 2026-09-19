@@ -6,7 +6,7 @@ const HEURISTIC_RESULT = {
 };
 
 function make(overrides: Record<string, unknown> = {}) {
-  const create = jest.fn().mockResolvedValue({});
+  const create = jest.fn().mockResolvedValue({ id: "p1" });
   const count = jest.fn().mockResolvedValue(7);
   const prisma = {
     slotProposal: { create },
@@ -30,14 +30,22 @@ describe("ExperimentService.assignPolicy", () => {
     expect(a.randomizationSeed).toMatch(/^[0-9a-f]{32}$/);
     expect(a.randomizationSeed).not.toBe(b.randomizationSeed);
   });
+
+  it("rolls pairwiseShown independently against PAIRWISE_SAMPLE_RATE (0.2)", () => {
+    const { service } = make();
+    const shown = service.assignPolicy(() => 0.1);
+    const notShown = service.assignPolicy(() => 0.5);
+    expect(shown.pairwiseShown).toBe(true);
+    expect(notShown.pairwiseShown).toBe(false);
+  });
 });
 
 describe("ExperimentService.recordProposal", () => {
-  it("writes a LinUCB proposal with the model fields populated", async () => {
+  it("writes a LinUCB proposal with the model fields populated and returns its id", async () => {
     const { service, create } = make();
     const start = new Date("2026-06-15T20:00:00.000Z");
 
-    await service.recordProposal({
+    const id = await service.recordProposal({
       userId: "u1",
       sessionId: "s1",
       trigger: "create",
@@ -48,13 +56,16 @@ describe("ExperimentService.recordProposal", () => {
       modelProposal: { scheduledStartTime: start, selectedArm: "NIGHT" },
       featureVector: [0.1, 0.2],
       selectedArm: "NIGHT",
+      pairwiseShown: false,
+      pairwisePositions: null,
     });
 
+    expect(id).toBe("p1");
     const { data } = create.mock.calls[0][0];
     expect(data.event).toBe("CREATE");
     expect(data.primaryPolicy).toBe("LINUCB");
     expect(data.observationCount).toBe(7);
-    expect(data.modelVersion).toBe("linucb-d46-v1");
+    expect(data.modelVersion).toBe("linucb-d22-v1");
     expect(data.selectedArm).toBe("NIGHT");
     expect(data.featureVector).toEqual([0.1, 0.2]);
     expect(data.modelProposal).toEqual({
@@ -62,6 +73,7 @@ describe("ExperimentService.recordProposal", () => {
       selectedArm: "NIGHT",
     });
     expect(data.proposedStartTime).toBe(start);
+    expect(data.pairwiseShown).toBe(false);
   });
 
   it("writes a heuristic proposal with null model fields and no modelVersion", async () => {
@@ -77,6 +89,8 @@ describe("ExperimentService.recordProposal", () => {
       modelProposal: null,
       featureVector: [],
       selectedArm: null,
+      pairwiseShown: false,
+      pairwisePositions: null,
     });
 
     const { data } = create.mock.calls[0][0];
@@ -85,7 +99,29 @@ describe("ExperimentService.recordProposal", () => {
     expect(data.selectedArm).toBeNull();
   });
 
-  it("never throws when the insert fails", async () => {
+  it("writes the pairwise position when the event was pairwise-sampled", async () => {
+    const { service, create } = make();
+    await service.recordProposal({
+      userId: "u1",
+      sessionId: "s1",
+      trigger: "create",
+      primaryPolicy: "HEURISTIC",
+      randomizationSeed: "seed",
+      heuristicProposal: HEURISTIC_RESULT,
+      proposedStartTime: null,
+      modelProposal: null,
+      featureVector: [],
+      selectedArm: null,
+      pairwiseShown: true,
+      pairwisePositions: { primaryPosition: "second" },
+    });
+
+    const { data } = create.mock.calls[0][0];
+    expect(data.pairwiseShown).toBe(true);
+    expect(data.pairwisePositions).toEqual({ primaryPosition: "second" });
+  });
+
+  it("never throws when the insert fails, and resolves null", async () => {
     const create = jest.fn().mockRejectedValue(new Error("db down"));
     const { service } = make({
       slotProposal: { create },
@@ -104,7 +140,9 @@ describe("ExperimentService.recordProposal", () => {
         modelProposal: null,
         featureVector: [],
         selectedArm: null,
+        pairwiseShown: false,
+        pairwisePositions: null,
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toBeNull();
   });
 });

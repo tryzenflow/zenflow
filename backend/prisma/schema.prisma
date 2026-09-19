@@ -60,7 +60,7 @@ enum SchedulingArm {
 
 /**
  * Per-(user, arm) LinUCB state. `A` is the row-major `d·d` design matrix, `b`
- * the length-`d` response vector (`d = 46`, `FEATURE_DIM` in `@zenflow/shared`).
+ * the length-`d` response vector (`d = 22`, `FEATURE_DIM` in `@zenflow/shared`).
  * The Python bandit service is stateless: the backend loads these, passes them
  * in each `/predict` / `/update` payload and persists what comes back. Rows are
  * lazily created at the ridge prior (`A = λI`, `b = 0`) on first use; `version`

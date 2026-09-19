@@ -2,7 +2,9 @@ import {
   PREFERENCE_MATRIX_LENGTH,
   PREFERENCE_SLOTS_PER_DAY,
 } from "@zenflow/shared";
-import { utcToMinutes } from "../../common/utils";
+import { clamp, utcToMinutes } from "../../common/utils";
+import { PREFERENCE_LEARNING_RATE } from "../constants";
+import { dragDistanceReward } from "./reward";
 import { isoWeekday, localDateStr } from "./slot";
 
 /**
@@ -54,4 +56,57 @@ export function preferenceScoreAt(
   const wd = isoWeekday(dateStr);
   const hour = Math.floor(utcToMinutes(instant, timezone) / 60);
   return matrix[matrixIndex(wd, hour)] ?? 0;
+}
+
+/** Flat matrix index of the local hour bucket containing `atMs`. */
+function cellIndexAt(atMs: number, timezone: string): number {
+  return matrixIndex(
+    isoWeekday(localDateStr(new Date(atMs), timezone)),
+    Math.floor(utcToMinutes(new Date(atMs), timezone) / 60),
+  );
+}
+
+/**
+ * Nudges the ONE hour bucket containing `atMs` by `PREFERENCE_LEARNING_RATE ·
+ * delta` (`delta` in `[-1, 1]`), clamped to `[-1, 1]`. Returns a NEW array.
+ */
+export function reinforcePreferenceCell(
+  matrix: number[],
+  atMs: number,
+  timezone: string,
+  delta: number,
+  rate: number = PREFERENCE_LEARNING_RATE,
+): number[] {
+  const next = [...effectivePreferenceMatrix(matrix)];
+  const idx = cellIndexAt(atMs, timezone);
+  next[idx] = clamp(next[idx] + rate * delta, -1, 1);
+  return next;
+}
+
+/**
+ * First move of a placed session: lowers the old hour and raises the new hour
+ * by `η·g`, `g = -dragDistanceReward(drag)` in `[0, 1]`. No-op for a zero-distance
+ * move or one inside a single hour bucket. Returns a NEW array.
+ */
+export function reinforcePreferenceMove(
+  matrix: number[],
+  oldStartMs: number,
+  newStartMs: number,
+  timezone: string,
+  dragDistanceMinutes: number,
+  rate: number = PREFERENCE_LEARNING_RATE,
+): number[] {
+  const grade = -dragDistanceReward(dragDistanceMinutes);
+  const sameCell =
+    cellIndexAt(oldStartMs, timezone) === cellIndexAt(newStartMs, timezone);
+  if (grade === 0 || sameCell) return [...effectivePreferenceMatrix(matrix)];
+
+  const lowered = reinforcePreferenceCell(
+    matrix,
+    oldStartMs,
+    timezone,
+    -grade,
+    rate,
+  );
+  return reinforcePreferenceCell(lowered, newStartMs, timezone, grade, rate);
 }

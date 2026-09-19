@@ -43,8 +43,16 @@ Signed floats. Cold-start fill (`defaultPreferenceMatrix`): weekday 08–11h →
 Nightly, `MatrixDecayService` multiplies every cell by `2^(-Δdays / 21)` (≈3-week half-life)
 and stamps `preferenceMatrixDecayedAt`.
 
-There is **no acquisition writer yet** — nothing increments/decrements cells from user
-moves/keeps. `PREFERENCE_LEARNING_RATE` is reserved for that future phase.
+Cells are also reinforced per event (`η = PREFERENCE_LEARNING_RATE = 0.1`), for both
+policies, and clamp to `[-1, 1]`:
+
+- **First move** of a placed session (drag, start-side resize, or slot pick —
+  `reinforcePreferenceMove`): old hour `−η·g`, new hour `+η·g`, with
+  `g = -dragDistanceReward(dragMinutes) ∈ [0, 1]` (saturates at `MOVE_REWARD_SCALE_MINUTES = 240`).
+  Resizing only the end doesn't move the start, so it is not a move.
+- **RETAINED**: kept hour `+η·PREFERENCE_RETAINED_WEIGHT` (`0.25`).
+
+LinUCB's own reward is separate: `dragDistanceReward` on MOVE, `+1` on RETAINED.
 
 ## The algorithm
 

@@ -2,7 +2,14 @@ import {
   defaultPreferenceMatrix,
   effectivePreferenceMatrix,
   matrixIndex,
+  reinforcePreferenceCell,
+  reinforcePreferenceMove,
 } from "./preference";
+import {
+  MOVE_REWARD_SCALE_MINUTES,
+  PREFERENCE_LEARNING_RATE,
+  PREFERENCE_RETAINED_WEIGHT,
+} from "../constants";
 
 describe("matrixIndex", () => {
   it("is row-major by ISO weekday over 24 one-hour buckets", () => {
@@ -50,5 +57,144 @@ describe("default preference-matrix fallback", () => {
       expect(matrix[matrixIndex(wd, 12)]).toBe(0);
     }
     expect(matrix).toHaveLength(168);
+  });
+});
+
+describe("reinforcePreferenceCell", () => {
+  const TZ = "UTC";
+  const ZERO = new Array<number>(168).fill(0);
+  const MON_09 = new Date("2026-06-15T09:30:00.000Z").getTime(); // Monday 09:xx UTC
+
+  it("nudges only the ONE hour bucket containing atMs, by +rate·delta", () => {
+    const idx = matrixIndex(1, 9); // Monday, hour 9
+    const next = reinforcePreferenceCell(ZERO, MON_09, TZ, 1);
+    expect(next[idx]).toBeCloseTo(PREFERENCE_LEARNING_RATE);
+    // every other cell is untouched
+    next.forEach((cell, i) => {
+      if (i !== idx) expect(cell).toBe(0);
+    });
+  });
+
+  it("delta = -1 moves the cell down instead of up", () => {
+    const idx = matrixIndex(1, 9);
+    const next = reinforcePreferenceCell(ZERO, MON_09, TZ, -1);
+    expect(next[idx]).toBeCloseTo(-PREFERENCE_LEARNING_RATE);
+  });
+
+  it("clamps to [-1, 1] — ten consecutive same-direction events converge to the ceiling, never past it", () => {
+    let matrix = ZERO;
+    for (let i = 0; i < 10; i++) {
+      matrix = reinforcePreferenceCell(matrix, MON_09, TZ, 1);
+    }
+    const idx = matrixIndex(1, 9);
+    expect(matrix[idx]).toBeCloseTo(1);
+
+    // an 11th event doesn't push it past the ceiling.
+    matrix = reinforcePreferenceCell(matrix, MON_09, TZ, 1);
+    expect(matrix[idx]).toBe(1);
+  });
+
+  it("accumulates additively on top of an existing non-zero cell value", () => {
+    const idx = matrixIndex(1, 9);
+    const seeded = [...ZERO];
+    seeded[idx] = 0.5;
+    const next = reinforcePreferenceCell(seeded, MON_09, TZ, 1);
+    expect(next[idx]).toBeCloseTo(0.6);
+  });
+
+  it("falls back to the cold-start default matrix when the stored matrix is malformed", () => {
+    // Monday 05:00 UTC — outside every cold-start default window (0 by
+    // default), so the +delta is directly observable on top of it.
+    const mon05 = new Date("2026-06-15T05:30:00.000Z").getTime();
+    const idx = matrixIndex(1, 5);
+    expect(defaultPreferenceMatrix()[idx]).toBe(0);
+    const next = reinforcePreferenceCell([], mon05, TZ, 1);
+    expect(next[idx]).toBeCloseTo(
+      defaultPreferenceMatrix()[idx] + PREFERENCE_LEARNING_RATE,
+    );
+  });
+
+  it("does not mutate the input matrix", () => {
+    const original = [...ZERO];
+    reinforcePreferenceCell(original, MON_09, TZ, 1);
+    expect(original).toEqual(ZERO);
+  });
+
+  it("respects a custom rate override", () => {
+    const idx = matrixIndex(1, 9);
+    const next = reinforcePreferenceCell(ZERO, MON_09, TZ, 1, 0.25);
+    expect(next[idx]).toBeCloseTo(0.25);
+  });
+
+  it("accepts a fractional delta (e.g. the RETAINED weight)", () => {
+    const idx = matrixIndex(1, 9);
+    const next = reinforcePreferenceCell(
+      ZERO,
+      MON_09,
+      TZ,
+      PREFERENCE_RETAINED_WEIGHT,
+    );
+    expect(next[idx]).toBeCloseTo(
+      PREFERENCE_LEARNING_RATE * PREFERENCE_RETAINED_WEIGHT,
+    );
+  });
+});
+
+describe("reinforcePreferenceMove", () => {
+  const TZ = "UTC";
+  const ZERO = new Array<number>(168).fill(0);
+  const MON_09 = new Date("2026-06-15T09:30:00.000Z").getTime();
+  const MON_10 = new Date("2026-06-15T10:30:00.000Z").getTime();
+  const MON_15 = new Date("2026-06-15T15:30:00.000Z").getTime();
+  const OLD = matrixIndex(1, 9);
+
+  it("lowers the old hour and raises the new hour by η·g, g = |dragDistanceReward|", () => {
+    // 60 min of a 240-min scale → g = 0.25.
+    const next = reinforcePreferenceMove(ZERO, MON_09, MON_10, TZ, 60);
+    const g = 60 / MOVE_REWARD_SCALE_MINUTES;
+    expect(next[OLD]).toBeCloseTo(-PREFERENCE_LEARNING_RATE * g);
+    expect(next[matrixIndex(1, 10)]).toBeCloseTo(PREFERENCE_LEARNING_RATE * g);
+    next.forEach((cell, i) => {
+      if (i !== OLD && i !== matrixIndex(1, 10)) expect(cell).toBe(0);
+    });
+  });
+
+  it("grades by distance: a 6-hour move saturates at a full η", () => {
+    const next = reinforcePreferenceMove(ZERO, MON_09, MON_15, TZ, 360);
+    expect(next[OLD]).toBeCloseTo(-PREFERENCE_LEARNING_RATE);
+    expect(next[matrixIndex(1, 15)]).toBeCloseTo(PREFERENCE_LEARNING_RATE);
+  });
+
+  it("a negative drag (moved earlier) grades the same as its magnitude", () => {
+    const next = reinforcePreferenceMove(ZERO, MON_10, MON_09, TZ, -60);
+    const g = 60 / MOVE_REWARD_SCALE_MINUTES;
+    expect(next[matrixIndex(1, 10)]).toBeCloseTo(-PREFERENCE_LEARNING_RATE * g);
+    expect(next[OLD]).toBeCloseTo(PREFERENCE_LEARNING_RATE * g);
+  });
+
+  it("is a no-op for a zero-distance move (an end-side resize)", () => {
+    expect(reinforcePreferenceMove(ZERO, MON_09, MON_09, TZ, 0)).toEqual(ZERO);
+  });
+
+  it("is a no-op when the move stays inside one hour bucket", () => {
+    const sameHour = new Date("2026-06-15T09:50:00.000Z").getTime();
+    expect(reinforcePreferenceMove(ZERO, MON_09, sameHour, TZ, 20)).toEqual(
+      ZERO,
+    );
+  });
+
+  it("clamps each cell to [-1, 1]", () => {
+    const seeded = [...ZERO];
+    seeded[OLD] = -1;
+    seeded[matrixIndex(1, 15)] = 1;
+    const next = reinforcePreferenceMove(seeded, MON_09, MON_15, TZ, 360);
+    expect(next[OLD]).toBe(-1);
+    expect(next[matrixIndex(1, 15)]).toBe(1);
+  });
+
+  it("does not mutate the input matrix", () => {
+    const original = [...ZERO];
+    reinforcePreferenceMove(original, MON_09, MON_15, TZ, 360);
+    expect(original).toEqual(ZERO);
   });
 });

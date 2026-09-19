@@ -3,7 +3,11 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { minutesToUtc } from "../../common/utils";
 import { MAX_SCAN_DAYS } from "../constants";
 import { loadDayLoad } from "./day-load";
-import { bestFreeSlot, slotPreferenceScore } from "../core/slot-score";
+import {
+  bestFreeSlot,
+  slotPreferenceScore,
+  stabilityScore,
+} from "../core/slot-score";
 import type {
   PlaceableTask,
   PlacementWindow,
@@ -126,7 +130,7 @@ export class HeuristicPlacer {
   private async bestSlotOnDay(
     userId: string,
     dayStr: string,
-    task: { durationMinutes: number; deadline: Date },
+    task: { durationMinutes: number; deadline: Date; prevStartMs?: number },
     timezone: string,
     preferenceMatrix: number[],
     now: Date,
@@ -166,15 +170,23 @@ export class HeuristicPlacer {
       preferenceMatrix,
       timezone,
       fitCeil,
+      task.prevStartMs,
     );
     if (!slot) return null;
 
-    const score = slotPreferenceScore(
-      preferenceMatrix,
-      slot.getTime(),
-      slot.getTime() + task.durationMinutes * MS_PER_MINUTE,
-      timezone,
-    );
+    // Mirrors the total `bestFreeSlot` scored the winning slot on internally
+    // (preference + stability), so cross-day comparison in `placeInWindow`
+    // stays consistent with the within-day pick.
+    const score =
+      slotPreferenceScore(
+        preferenceMatrix,
+        slot.getTime(),
+        slot.getTime() + task.durationMinutes * MS_PER_MINUTE,
+        timezone,
+      ) +
+      (task.prevStartMs !== undefined
+        ? stabilityScore(task.prevStartMs, slot.getTime())
+        : 0);
     return { start: slot, score };
   }
 }

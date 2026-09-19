@@ -1,3 +1,4 @@
+import { FEATURE_DIM } from "@zenflow/shared";
 import { BanditPlacer } from "./bandit-placer.service";
 
 /**
@@ -89,7 +90,7 @@ describe("BanditPlacer.scheduleTask", () => {
     expect(pick!.scheduledStartTime.toISOString()).toBe(
       "2026-06-15T20:00:00.000Z",
     );
-    expect(pick!.featureVector).toHaveLength(46);
+    expect(pick!.featureVector).toHaveLength(FEATURE_DIM);
     expect(bandit.predict).toHaveBeenCalledTimes(1);
   });
 
