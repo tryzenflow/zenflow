@@ -46,6 +46,7 @@ backend/
 │   │   ├── prisma-error.ts      # P2025 → 404 / else 500 mapper for update/remove
 │   │   ├── types/session-row.ts # SessionRow (tags + series) + WITH_TAGS_AND_SERIES
 │   │   └── ...
+│   ├── reminders/              # per-session reminders: SchedulerRegistry timers → NotificationsService (see "Session reminders")
 │   ├── scheduler/              # places ONE TASK / series — see "Scheduler architecture" below
 │   │   ├── core/                # PURE algorithm — no Prisma, no clock, no randomness
 │   │   │   ├── preference.ts        # matrixIndex / default+effective matrix / preferenceScoreAt
@@ -155,6 +156,15 @@ places across the full 24h grid, every day. See [Scheduler architecture](#schedu
 
 Indexes: `[userId, deadline]`, `[userId, scheduledStartTime]`,
 `[userId, seriesId, createdAt asc]`; unique `[userId, externalKey]`.
+
+### `SessionReminder`
+
+| Field                 | Type      | Notes                                                                                                   |
+| --------------------- | --------- | ------------------------------------------------------------------------------------------------------- |
+| `id`                  | uuid      | PK; the timer is named `reminder:<id>` in `SchedulerRegistry`.                                          |
+| `remindBeforeMinutes` | int       | 1…10080 (`MAX_REMINDER_MINUTES`).                                                                       |
+| `firedForStart`       | DateTime? | start of the occurrence last fired for — dedupes across restarts/re-arms; per-occurrence for a series. |
+| `sessionId`           | uuid      | FK → `Session`, cascade. At most 2 per session (`MAX_REMINDERS_PER_SESSION`); never on `DND`.          |
 
 ### `SessionEvent` (append-only audit trail — the ML fuel)
 
@@ -405,6 +415,13 @@ so the scheduler avoids them from day one. Best-effort — a failure is logged a
 `@Controller("sessions")` — no `/tasks` route. Drag, resize and reschedule are all one
 `PATCH /sessions/:id` (recorded as a `MOVE` signal). No status/completion, `/reschedule`,
 `/resize`, `/optimize` or `/undo`.
+
+`POST` and `PATCH` accept `reminders?: number[]` (minutes before start, max 2 distinct ints in
+1…10080, not for `DND`); every `Session` response carries `reminders: number[]` (descending;
+`[]` for DND). On create, omitted → one default reminder at 60 min (non-DND), `[]` → none. On
+PATCH, omitted → unchanged, an array replaces. On a materialized `TASK` series the list applies
+to every sitting; on a recurring fixed occurrence id it edits the series' representative (so
+all occurrences). Violations → 400.
 
 | Method | Path                                         | Purpose                                                                                                                                                                                                                                                                                                                                                                                                          |
 | ------ | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -837,6 +854,33 @@ sequenceDiagram
   end
   SR-->>S: every member, sessionIndex order
 ```
+
+### Session reminders
+
+`reminders/RemindersService` (I/O) + `scheduler/core/reminder.ts` (pure: fire time, lead-time
+formatting, notification copy — takes `now`, covered by `reminder.spec.ts`).
+
+- Each reminder is a one-shot `SchedulerRegistry.addTimeout` named `reminder:<id>`. Timers are
+  in-memory, so `sweep()` runs on `OnApplicationBootstrap` and every 5 min (`@Cron`), arming only
+  reminders firing within 24 h (`ARM_HORIZON_MS`) — this is the `setTimeout` 32-bit-overflow
+  guard — and cancelling timers whose reminder vanished. `SessionsService` calls `syncUser()`
+  after every create / update / slot-pick / delete so a move or delete re-arms/cancels at once.
+- On fire the service re-reads the DB and only delivers if the plan is unchanged (a stale timer
+  re-arms instead), then claims the occurrence via `firedForStart` (idempotent).
+- Fire policy: `startsAt - remindBeforeMinutes`; if that is already past but the session has not
+  started, fire now (title shows the real time left); a session that already started is skipped.
+  A session moved to a new start fires again for the new start.
+- Delivery reuses `NotificationsService.create` (topic `REMINDER`, kind `NEW`, title like
+  "Standup starts in 1 hour", content "Standup starts at Sat, 20 Sep, 14:00 at Room A1.") and emits
+  `NEW_SESSION`, so it reaches the SSE stream and `PushService` unchanged.
+- Ingested lectures/assignments/exams get the same 60-minute default (`MaterializerService.create`
+  inserts the `SessionReminder`; the next sweep arms it) with type-specific copy — "Exam in 1 hour:
+  <title>", "Due in 1 hour: <title>", "Class in 1 hour: <title>". Sessions ingested before this
+  change have no reminder.
+- Recurring fixed series: reminders live on the representative row and fire once per upcoming
+  occurrence (exdates respected). Notification `sessionId` is the representative row id.
+- Limitations: single-process timers (multi-instance would double-arm; the `firedForStart` claim
+  keeps sends idempotent); a `TASK` series grown later copies the existing sittings' reminders.
 
 ### Slot scoring — the overlap-weighted preference score
 

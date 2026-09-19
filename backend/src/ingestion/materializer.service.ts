@@ -1,7 +1,11 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { fromZonedTime } from "date-fns-tz";
-import type { NotificationKind, NotificationTopic } from "@zenflow/shared";
+import {
+  DEFAULT_REMINDER_MINUTES,
+  type NotificationKind,
+  type NotificationTopic,
+} from "@zenflow/shared";
 import {
   Prisma,
   type Notification,
@@ -434,6 +438,16 @@ export class MaterializerService {
           externalKey: block.externalKey,
         });
         newId = row.id;
+
+        // Ingested lectures/assignments/exams get the same default reminder as
+        // a task created in the app; `RemindersService` picks it up on its
+        // next sweep and arms the timer.
+        await tx.sessionReminder.create({
+          data: {
+            sessionId: row.id,
+            remindBeforeMinutes: DEFAULT_REMINDER_MINUTES,
+          },
+        });
 
         if (block.type !== "LECTURE") {
           await this.raise(

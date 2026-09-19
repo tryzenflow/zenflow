@@ -1,4 +1,6 @@
 import {
+  ArrayMaxSize,
+  ArrayUnique,
   IsArray,
   IsDivisibleBy,
   IsIn,
@@ -15,7 +17,11 @@ import { TIME_GRANULARITY } from "../../common/constants";
 import { MAX_SCAN_DAYS, MAX_SERIES_PER_DAY } from "../../scheduler/constants";
 import { IsRRule } from "../../common/validators/rrule.decorator";
 import { IsFeasibleTaskWindow } from "../../common/validators/feasible-task-window.decorator";
-import type { SessionType } from "@zenflow/shared";
+import {
+  MAX_REMINDER_MINUTES,
+  MAX_REMINDERS_PER_SESSION,
+  type SessionType,
+} from "@zenflow/shared";
 
 export const SESSION_TYPES: SessionType[] = [
   "TASK",
@@ -104,4 +110,17 @@ export class CreateSessionDto {
   @IsArray()
   @IsString({ each: true })
   tags?: string[];
+
+  /**
+   * Minutes before start to remind the user (max 2, not for DND). Omit on
+   * create for the default (60 min, non-DND); `[]` for none.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_REMINDERS_PER_SESSION)
+  @ArrayUnique()
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @Max(MAX_REMINDER_MINUTES, { each: true })
+  reminders?: number[];
 }

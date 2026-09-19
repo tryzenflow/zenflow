@@ -31,6 +31,9 @@ export function toSessionDto(row: SessionRow): SharedSession {
     rrule: row.series?.rrule ?? null,
     sessionIndex: row.sessionIndex,
     sessionTotal: row.sessionTotal,
+    reminders: (row.reminders ?? [])
+      .map((r) => r.remindBeforeMinutes)
+      .sort((a, b) => b - a),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

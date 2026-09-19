@@ -10,6 +10,7 @@ import { SessionCrudService } from "./session-crud.service";
 import { SeriesService } from "./series.service";
 import { SessionUpdateService } from "./session-update.service";
 import { SlotPickService } from "./slot-pick.service";
+import { RemindersService } from "../reminders/reminders.service";
 import type { Tag, Session, SessionSeries, User } from "../../generated/prisma";
 import type { CreateSessionDto } from "./dto/create-session.dto";
 import type { UpdateSessionDto } from "./dto/update-session.dto";
@@ -119,6 +120,19 @@ function fakeSchedulingFeedback() {
   };
 }
 
+/** Reminder persistence/timers are covered in `reminders.service.spec.ts`. */
+function fakeReminders() {
+  return {
+    resolveForCreate: jest.fn(
+      (type: string, req?: number[]) => req ?? (type === "DND" ? [] : [60]),
+    ),
+    resolveUpdateTargets: jest.fn(),
+    replace: jest.fn().mockResolvedValue(undefined),
+    propagateSeries: jest.fn().mockResolvedValue(undefined),
+    syncUser: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
 /**
  * Wire the facade to real collaborators (they're thin) via Nest's DI
  * container — mirroring `SessionsModule`'s real provider wiring — over the
@@ -142,6 +156,7 @@ async function makeService(
       { provide: TagsService, useValue: tags },
       { provide: TaskPlacementService, useValue: placement },
       { provide: SchedulingFeedbackService, useValue: feedback },
+      { provide: RemindersService, useValue: fakeReminders() },
     ],
   }).compile();
   return module.get<SessionsService>(SessionsService);
@@ -225,6 +240,7 @@ describe("SessionsService.create", () => {
       rrule: null,
       sessionIndex: null,
       sessionTotal: null,
+      reminders: [60],
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
       slotProposalId: null,
