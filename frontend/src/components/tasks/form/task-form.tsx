@@ -25,6 +25,7 @@ import { DeadlineChipField } from "./deadline-chip-field";
 import { FixedTimeField } from "./fixed-time-field";
 import { RecurrenceField } from "./recurrence-field";
 import { SessionCountField } from "./session-count-field";
+import { ReminderField } from "./reminder-field";
 import { useUserStore } from "@/hooks/use-user-store";
 import { zonedDate, zonedNow, zonedWallClockToUtc } from "@/utils/tz";
 
@@ -158,10 +159,13 @@ export function SessionForm({
           // (e.g. fixed-time fields while in TASK mode), so submit never
           // silently no-ops.
           const first = Object.values(errors)[0];
-          if (first?.message)
-            toast.error("Check the form", {
-              description: String(first.message),
+          if (first?.message) {
+            // Core messages may be "title\ndescription" — split for the toast.
+            const [title, ...rest] = String(first.message).split("\n");
+            toast.error(rest.length ? title : "Check the form", {
+              description: rest.length ? rest.join(" ") : title,
             });
+          }
         })}
         className="flex min-h-0 flex-1 flex-col"
       >
@@ -362,6 +366,27 @@ export function SessionForm({
                   <FormLabel className="text-xs font-semibold">Repeat</FormLabel>
                   <RecurrenceField
                     value={field.value}
+                    onChange={field.onChange}
+                    disabled={loading}
+                  />
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+
+          {/* Reminders — every type except DND (a block, not an event) */}
+          {type !== "DND" && (
+            <FormField
+              control={form.control}
+              name="reminders"
+              render={({ field }) => (
+                <FormItem className="space-y-1.5">
+                  <FormLabel className="text-xs font-semibold">
+                    Reminder
+                  </FormLabel>
+                  <ReminderField
+                    value={field.value ?? []}
                     onChange={field.onChange}
                     disabled={loading}
                   />

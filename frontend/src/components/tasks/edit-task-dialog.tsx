@@ -97,6 +97,7 @@ export function EditSessionDialog({
       type: task.type,
       title: task.title,
       tags: task.tags,
+      reminders: task.reminders ?? [],
       note: task.note ?? "",
       location: task.location ?? "",
     };
@@ -147,6 +148,7 @@ export function EditSessionDialog({
         location: values.location || null,
         tags: values.tags,
       };
+      if (values.type !== "DND") patch.reminders = values.reminders ?? [];
       if (values.type === "TASK") {
         // Duration (resize) is owned by the calendar now — the edit form only
         // touches a TASK's deadline and, now, its session count (grow/shrink
