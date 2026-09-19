@@ -22,7 +22,13 @@ import { createSession } from "@/api/tasks";
 import { format } from "date-fns";
 import { isAxiosError } from "axios";
 import { zonedDate } from "@/utils/tz";
-import type { CreateSessionInput, ViewMode } from "@zenflow/shared";
+import type {
+  CreateSessionInput,
+  CreateSessionResponse,
+  Session,
+  ViewMode,
+} from "@zenflow/shared";
+import { SlotPickDialog } from "./slot-pick-dialog";
 
 const DEFAULT_DURATION = 60;
 
@@ -107,6 +113,9 @@ export function CreateSessionDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [pendingPick, setPendingPick] = useState<CreateSessionResponse | null>(
+    null,
+  );
   const user = useUserStore((state) => state.user);
   const tz = user?.timezone || "UTC";
   const setHighlight = useHighlightStore((s) => s.setHighlight);
@@ -150,32 +159,40 @@ export function CreateSessionDialog({
     );
   }
 
+  function finishCreateSuccess(session: Session, seriesCount: number) {
+    if (!user) return;
+    if (session.scheduledStartTime) {
+      setHighlight(session.id);
+      setDate(zonedDate(session.scheduledStartTime, tz));
+    }
+    onCreated();
+    form.reset(EMPTY_DEFAULTS);
+    setOpen(false);
+
+    if (seriesCount > 1) {
+      toast.success(`Created a ${seriesCount}-session series`);
+    } else if (session.scheduledStartTime) {
+      const qualifier = placementQualifier(session, user);
+      const suffix =
+        qualifier === "pastDeadline" ? " — past its deadline" : "";
+      toast.success(`Scheduled for ${fmt(session.scheduledStartTime)}${suffix}`);
+    } else {
+      toast.success(
+        "Session created — drag it onto the calendar to schedule it",
+      );
+    }
+  }
+
   async function finalizeCreate(values: SessionFormValues) {
     if (!user) return;
     setLoading(true);
     try {
       const session = await createSession(toCreateInput(values, tz));
 
-      if (session.scheduledStartTime) {
-        setHighlight(session.id);
-        setDate(zonedDate(session.scheduledStartTime, tz));
-      }
-      onCreated();
-      form.reset(EMPTY_DEFAULTS);
-      setOpen(false);
-
-      const seriesCount = session.sessions?.length ?? 0;
-      if (seriesCount > 1) {
-        toast.success(`Created a ${seriesCount}-session series`);
-      } else if (session.scheduledStartTime) {
-        const qualifier = placementQualifier(session, user);
-        const suffix =
-          qualifier === "pastDeadline" ? " — past its deadline" : "";
-        toast.success(`Scheduled for ${fmt(session.scheduledStartTime)}${suffix}`);
+      if (session.divergent && session.slotProposalId && session.alternativeSlot) {
+        setPendingPick(session);
       } else {
-        toast.success(
-          "Session created — drag it onto the calendar to schedule it",
-        );
+        finishCreateSuccess(session, session.sessions?.length ?? 0);
       }
     } catch (error) {
       errorToast(
@@ -256,6 +273,26 @@ export function CreateSessionDialog({
           }
         />
       </SheetContent>
+      {pendingPick && pendingPick.slotProposalId && pendingPick.alternativeSlot && (
+        <SlotPickDialog
+          open
+          sessionId={pendingPick.id}
+          slotProposalId={pendingPick.slotProposalId}
+          primarySlot={pendingPick.primarySlot ?? pendingPick.scheduledStartTime ?? ""}
+          alternativeSlot={pendingPick.alternativeSlot}
+          title={pendingPick.title}
+          tz={tz}
+          onResolved={(session) => {
+            setPendingPick(null);
+            finishCreateSuccess(session, 0);
+          }}
+          onDismiss={() => {
+            const session = pendingPick;
+            setPendingPick(null);
+            finishCreateSuccess(session, session.sessions?.length ?? 0);
+          }}
+        />
+      )}
     </Sheet>
   );
 }

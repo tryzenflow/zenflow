@@ -7,6 +7,8 @@ import type {
   Session,
   SessionDetailResponse,
   SessionsListResponse,
+  SlotPickRequest,
+  SlotPickResponse,
   UpdateSessionInput,
   UpdateSessionResponse,
   ViewMode,
@@ -73,6 +75,22 @@ export async function updateSession(
   const { data } = await api.patch(
     `/sessions/${encodeURIComponent(id)}`,
     input,
+  );
+  return data.data;
+}
+
+/**
+ * Records which side of a shown pairwise slot proposal the user picked — only
+ * call this on an affirmative choice; a "keep current" dismissal can just
+ * close the UI without hitting this endpoint.
+ */
+export async function slotPick(
+  sessionId: string,
+  body: SlotPickRequest,
+): Promise<SlotPickResponse> {
+  const { data } = await api.post(
+    `/sessions/${encodeURIComponent(sessionId)}/slot-pick`,
+    body,
   );
   return data.data;
 }

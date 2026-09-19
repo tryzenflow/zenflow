@@ -345,6 +345,7 @@ export function CalendarLayout() {
           setOpen={(o) => !o && setEditId(null)}
           taskId={editId}
           onSaved={refetch}
+          setDate={setDate}
         />
       )}
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />

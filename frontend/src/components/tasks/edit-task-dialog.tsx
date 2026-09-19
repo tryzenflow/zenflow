@@ -9,8 +9,9 @@ import { isAxiosError } from "axios";
 import { errorToast } from "@/lib/toast";
 import { postData } from "@/api";
 import { useUserStore } from "@/hooks/use-user-store";
+import { useHighlightStore } from "@/hooks/use-highlight-store";
 import type { Session } from "@/types/tasks";
-import type { UpdateSessionInput } from "@zenflow/shared";
+import type { UpdateSessionInput, UpdateSessionResponse } from "@zenflow/shared";
 import { EditSessionFormValues, deleteSession } from "@/utils/tasks";
 import { getSeriesKind, hhmmToMinutes } from "@zenflow/core";
 import { zonedDate, zonedWallClockToUtc } from "@/utils/tz";
@@ -19,6 +20,7 @@ import {
   DeleteRecurringDialog,
   type DeleteRecurringScope,
 } from "./delete-recurring-dialog";
+import { SlotPickDialog } from "./slot-pick-dialog";
 import { SESSION_TYPE_META } from "@zenflow/core";
 import { sessionTypeIcon } from "@/components/calendar/session-type-badge";
 import {
@@ -36,6 +38,8 @@ interface EditSessionDialogProps {
   setOpen: (open: boolean) => void;
   taskId: string;
   onSaved: () => void;
+  /** Navigate the calendar cursor date — used to jump to a re-placed session. */
+  setDate: (d: Date) => void;
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -45,12 +49,17 @@ export function EditSessionDialog({
   setOpen,
   taskId,
   onSaved,
+  setDate,
 }: EditSessionDialogProps) {
   const [loading, setLoading] = useState(false);
   const [task, setSession] = useState<Session | null>(null);
   const [scopeOpen, setScopeOpen] = useState(false);
+  const [pendingPick, setPendingPick] = useState<UpdateSessionResponse | null>(
+    null,
+  );
   const user = useUserStore((s) => s.user);
   const tz = user?.timezone || "UTC";
+  const setHighlight = useHighlightStore((s) => s.setHighlight);
   const { newUploadsRef } = useFilesTracker();
 
   const seriesKind = task ? getSeriesKind(task) : "none";
@@ -117,6 +126,16 @@ export function EditSessionDialog({
     }
   }, [task, form, tz]);
 
+  function finishUpdateSuccess(session: Session) {
+    if (session.scheduledStartTime) {
+      setHighlight(session.id);
+      setDate(zonedDate(session.scheduledStartTime, tz));
+    }
+    onSaved();
+    toast.success("Session updated");
+    setOpen(false);
+  }
+
   async function onSubmit(values: EditSessionFormValues) {
     if (!user || !task) return;
     setLoading(true);
@@ -148,10 +167,12 @@ export function EditSessionDialog({
         patch.rrule = values.rrule || null;
       }
 
-      await updateSession(task.id, patch);
-      onSaved();
-      toast.success("Session updated");
-      setOpen(false);
+      const updated = await updateSession(task.id, patch);
+      if (updated.divergent && updated.slotProposalId && updated.alternativeSlot) {
+        setPendingPick(updated);
+      } else {
+        finishUpdateSuccess(updated);
+      }
     } catch (error) {
       errorToast(
         (isAxiosError(error) && error.response?.data?.message) ||
@@ -324,6 +345,26 @@ export function EditSessionDialog({
           />
         )}
       </SheetContent>
+      {pendingPick && pendingPick.slotProposalId && pendingPick.alternativeSlot && (
+        <SlotPickDialog
+          open
+          sessionId={pendingPick.id}
+          slotProposalId={pendingPick.slotProposalId}
+          primarySlot={pendingPick.primarySlot ?? pendingPick.scheduledStartTime ?? ""}
+          alternativeSlot={pendingPick.alternativeSlot}
+          title={pendingPick.title}
+          tz={tz}
+          onResolved={(session) => {
+            setPendingPick(null);
+            finishUpdateSuccess(session);
+          }}
+          onDismiss={() => {
+            const session = pendingPick;
+            setPendingPick(null);
+            finishUpdateSuccess(session);
+          }}
+        />
+      )}
     </Sheet>
   );
 }
