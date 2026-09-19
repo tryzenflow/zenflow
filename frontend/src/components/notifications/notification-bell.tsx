@@ -240,16 +240,16 @@ export function NotificationBell() {
     // 4. Handle errors and connection state
     eventSource.onerror = (error) => {
       // show a user-friendly error message or handle reconnection logic here
-      errorToast(
-        "Failed to receive notifications. Please check your connection. Retrying...",
-      );
+      errorToast("Failed to receive notifications", {
+        description:
+          "The connection to the server was lost. Notifications may be delayed.",
+      });
       console.error("SSE error:", error);
     };
 
     // 5. Cleanup: Close the connection when the component unmounts
     return () => {
       eventSource.close();
-      console.log("SSE connection closed");
     };
   }, []); // Empty dependency array ensures this runs once on mount
 
