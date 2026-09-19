@@ -158,7 +158,10 @@ export function SessionForm({
           // (e.g. fixed-time fields while in TASK mode), so submit never
           // silently no-ops.
           const first = Object.values(errors)[0];
-          if (first?.message) toast.error(String(first.message));
+          if (first?.message)
+            toast.error("Check the form", {
+              description: String(first.message),
+            });
         })}
         className="flex min-h-0 flex-1 flex-col"
       >

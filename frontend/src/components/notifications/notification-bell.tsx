@@ -233,7 +233,7 @@ export function NotificationBell() {
             }}
           />
         ),
-        { duration: 8000 },
+        { duration: 5000 },
       );
     };
 
@@ -441,7 +441,10 @@ function NotificationToast({
   onOpen: () => void;
 }) {
   const { Icon, tint } = topicVisual(n.topic);
-  const when = eventTimeLabel(n, tz);
+  // A reminder's copy already states the start time, and it isn't an item that
+  // "landed on the calendar" — no repeated time line, no attention mark.
+  const isReminder = n.topic === "REMINDER";
+  const when = isReminder ? null : eventTimeLabel(n, tz);
   const navigable = Boolean(n.sessionId);
 
   return (
@@ -450,13 +453,14 @@ function NotificationToast({
       onClick={onOpen}
       disabled={!navigable}
       className={cn(
-        "flex w-[22rem] items-center gap-3 rounded-2xl border border-border bg-popover px-4 py-3.5 text-left shadow-[0_14px_30px_-10px_rgba(0,0,0,0.35)]",
-        navigable && "transition hover:bg-muted",
+        "glass-notice flex w-[22rem] items-center gap-3 rounded-2xl px-4 py-3.5 text-left",
+        navigable && "transition hover:brightness-[0.98]",
       )}
     >
       <span
         className={cn(
-          "flex size-9 shrink-0 items-center justify-center rounded-xl",
+          // Soft tinted disc, no outline (the tint's own border is dropped).
+          "flex size-9 shrink-0 items-center justify-center rounded-full !border-0",
           tint,
         )}
       >
@@ -466,16 +470,16 @@ function NotificationToast({
         <span className="block truncate text-[13.5px] font-semibold text-foreground">
           {n.title}
         </span>
-        <span className="mt-0.5 block truncate text-[12px] text-muted-foreground">
+        <span className="mt-0.5 block truncate text-[12px] font-normal text-muted-foreground">
           {n.content}
         </span>
         {when && (
-          <span className="mt-0.5 block text-[12px] capitalize text-muted-foreground">
+          <span className="mt-0.5 block text-[12px] font-normal capitalize text-muted-foreground">
             {when}
           </span>
         )}
       </span>
-      {n.kind === "NEW" ? (
+      {n.kind === "NEW" && !isReminder ? (
         <CircleAlert
           className="size-4 shrink-0 text-destructive"
           aria-label="Needs your attention"

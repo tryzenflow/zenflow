@@ -5,69 +5,129 @@ import {
   OctagonXIcon,
   TriangleAlertIcon,
 } from "lucide-react";
-import { useTheme } from "next-themes";
+import { useEffect, useState } from "react";
 import { Toaster as Sonner, ToasterProps } from "sonner";
+import { cn } from "@/lib/utils";
+
+/** Small colored glyph in a soft tinted disc — the only color a toast carries. */
+function ToastIcon({
+  className,
+  children,
+}: {
+  className: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      className={cn(
+        "flex size-6 items-center justify-center rounded-full",
+        className,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+const TOASTER = "[data-sonner-toaster]";
+
+/**
+ * iOS-style notification stack: toasts pile up collapsed (only the newest is
+ * fully visible) and fan out when the pile is *clicked* — not on hover, which
+ * is sonner's default. Sonner has no controlled "expanded" state, so we drive
+ * its `expand` prop ourselves: a click inside the toaster reveals the stack, a
+ * click anywhere else folds it back, and hover events inside the toaster are
+ * swallowed before sonner's hover-to-expand handler can see them.
+ */
+function useClickToExpand() {
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    const inToaster = (e: Event) =>
+      e.target instanceof Element && e.target.closest(TOASTER) !== null;
+    const onClick = (e: MouseEvent) => setExpanded(inToaster(e));
+    const blockHover = (e: Event) => {
+      if (inToaster(e)) e.stopPropagation();
+    };
+    document.addEventListener("click", onClick);
+    const hover = ["mouseover", "mouseout", "mousemove"] as const;
+    for (const t of hover) window.addEventListener(t, blockHover, true);
+    return () => {
+      document.removeEventListener("click", onClick);
+      for (const t of hover) window.removeEventListener(t, blockHover, true);
+    };
+  }, []);
+
+  return expanded;
+}
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme();
+  // The app has no next-themes provider (dark mode is just the `.dark` class),
+  // so `useTheme()` would fall back to "system" and sonner would go dark with
+  // the OS while the page stays light — black toast, unreadable dark title.
+  // Follow the page's own class instead.
+  const theme = document.documentElement.classList.contains("dark")
+    ? "dark"
+    : "light";
+  const expanded = useClickToExpand();
 
   return (
     <Sonner
-      theme={theme as ToasterProps["theme"]}
+      theme={theme}
       position="bottom-right"
       className="toaster group"
-      // Always render toasts at full height/position instead of sonner's
-      // default collapsed-stack-until-hover look — that default causes a
-      // visible downward shift the instant the cursor enters the stack.
-      expand
-      // Tint each toast by type: green success, red error, yellow warning,
-      // blue info. The per-type CSS variables below feed sonner's rich colors.
-      richColors
+      // Collapsed stack until clicked (see `useClickToExpand`).
+      expand={expanded}
+      // Auto-dismiss after a few seconds (sonner's default is 4s; pinned here).
+      duration={4000}
+      // iOS-notification look: one neutral glass surface (`.glass-notice` in
+      // index.css); type is signalled only by the small tinted icon.
       icons={{
-        success: <CircleCheckIcon className="size-4" />,
-        info: <InfoIcon className="size-4" />,
-        warning: <TriangleAlertIcon className="size-4" />,
-        error: <OctagonXIcon className="size-4" />,
-        loading: <Loader2Icon className="size-4 animate-spin" />,
+        success: (
+          <ToastIcon className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+            <CircleCheckIcon className="size-4" />
+          </ToastIcon>
+        ),
+        info: (
+          <ToastIcon className="bg-sky-500/15 text-sky-600 dark:text-sky-400">
+            <InfoIcon className="size-4" />
+          </ToastIcon>
+        ),
+        warning: (
+          <ToastIcon className="bg-amber-500/15 text-amber-600 dark:text-amber-400">
+            <TriangleAlertIcon className="size-4" />
+          </ToastIcon>
+        ),
+        error: (
+          <ToastIcon className="bg-rose-500/15 text-rose-600 dark:text-rose-400">
+            <OctagonXIcon className="size-4" />
+          </ToastIcon>
+        ),
+        loading: (
+          <ToastIcon className="bg-muted text-muted-foreground">
+            <Loader2Icon className="size-4 animate-spin" />
+          </ToastIcon>
+        ),
+      }}
+      toastOptions={{
+        classNames: {
+          toast: "glass-notice group/toast",
+          title: "!text-[13.5px] !font-semibold !text-foreground",
+          description: "!text-[12.5px] !leading-snug !text-muted-foreground",
+          icon: "!m-0 !size-6",
+          actionButton: "!bg-primary !text-primary-foreground !rounded-lg",
+          cancelButton: "!bg-muted !text-muted-foreground !rounded-lg",
+        },
       }}
       style={
         {
-          "--normal-bg": "var(--popover)",
+          // Sonner hard-codes a system font stack on the toaster; pin it to the
+          // app's Geist so title + description inherit it.
+          // (`--font-sans` lives in `@theme inline`, so it isn't a runtime var.)
+          fontFamily: '"Geist", "Geist Fallback", system-ui, sans-serif',
           "--normal-text": "var(--foreground)",
-          "--normal-border": "var(--border)",
-          "--border-radius": "var(--radius)",
-
-          // Literal oklch values from Tailwind's palette so they resolve
-          // regardless of which color utilities the build happens to emit.
-          // Each type gets a soft tint on --popover plus a stronger border/text.
-
-          // Success — emerald
-          "--success-bg":
-            "color-mix(in oklab, oklch(0.696 0.17 162.48) 12%, var(--popover))",
-          "--success-text": "oklch(0.596 0.145 163.225)",
-          "--success-border":
-            "color-mix(in oklab, oklch(0.696 0.17 162.48) 35%, var(--border))",
-
-          // Error — rose
-          "--error-bg":
-            "color-mix(in oklab, oklch(0.645 0.246 16.439) 12%, var(--popover))",
-          "--error-text": "oklch(0.586 0.222 17.585)",
-          "--error-border":
-            "color-mix(in oklab, oklch(0.645 0.246 16.439) 35%, var(--border))",
-
-          // Warning — amber
-          "--warning-bg":
-            "color-mix(in oklab, oklch(0.769 0.188 70.08) 14%, var(--popover))",
-          "--warning-text": "oklch(0.666 0.179 58.318)",
-          "--warning-border":
-            "color-mix(in oklab, oklch(0.769 0.188 70.08) 38%, var(--border))",
-
-          // Info — blue
-          "--info-bg":
-            "color-mix(in oklab, oklch(0.623 0.214 259.815) 12%, var(--popover))",
-          "--info-text": "oklch(0.546 0.245 262.881)",
-          "--info-border":
-            "color-mix(in oklab, oklch(0.623 0.214 259.815) 35%, var(--border))",
+          "--border-radius": "1rem", // rounded-2xl
+          "--width": "22rem",
         } as React.CSSProperties
       }
       {...props}

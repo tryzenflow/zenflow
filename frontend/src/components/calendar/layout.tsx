@@ -104,7 +104,11 @@ export function CalendarLayout() {
       return await load;
     } catch (error) {
       if (isAxiosError(error))
-        errorToast(error.response?.data?.message || "Failed to load sessions");
+        errorToast("Couldn't load your calendar", {
+          description:
+            error.response?.data?.message ||
+            "Check your connection, then change the view to retry.",
+        });
       return [];
     } finally {
       if (inFlight.current === load) inFlight.current = null;
@@ -182,16 +186,20 @@ export function CalendarLayout() {
         ...(scope ? { scope, skipConflicting } : {}),
       });
       if (res.skippedSessionIds?.length) {
-        errorToast(
-          `${res.skippedSessionIds.length} session(s) left in place — the new slot conflicted`,
-        );
+        errorToast("Some sessions weren't moved", {
+          description: `${res.skippedSessionIds.length} session(s) stayed put because the new slot conflicted.`,
+        });
       }
       window.dispatchEvent(
         new CustomEvent("zenflow:task-updated", { detail: taskId }),
       );
     } catch (error) {
       if (isAxiosError(error))
-        errorToast(error.response?.data?.message || "Failed to reschedule");
+        errorToast("Couldn't reschedule", {
+          description:
+            error.response?.data?.message ||
+            "The session is back where it was. Try a different time.",
+        });
     } finally {
       await refetch();
     }

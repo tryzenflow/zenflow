@@ -46,7 +46,7 @@ frontend/
 │   │   ├── tasks/             # create/edit dialogs, delete-recurring-dialog
 │   │   │   └── form/          # task-form + title / deadline-chip / tag /
 │   │   │                      #   session-type-tabs / recurrence / fixed-time /
-│   │   │                      #   session-count fields
+│   │   │                      #   session-count / reminder fields
 │   │   ├── notifications/     # notification-bell (header inbox popover)
 │   │   ├── settings/          # settings-dialog + preferences (heatmap) + integrations
 │   │   ├── common/            # date-range-select, TipTap editor + toolbar
@@ -105,6 +105,7 @@ sidebar footer via a `zenflow:open-settings` window event. Three tabs:
 | Title | all | combobox in create mode — `GET /sessions/suggestions` autocompletes duration / tags / note / a forward-shifted deadline |
 | Location | all | free text (room / building / link), optional |
 | Description | all | TipTap rich text with file uploads |
+| Reminder | all except `DND` | `form/reminder-field.tsx` — up to 2 removable chips ("1 hour before") + an "Add reminder" preset picker (15 min · 30 min · 1 hour · 2 hours · 1 day · 1 week · custom amount + shadcn `Select` unit); new tasks default to `[60]`; sent as `reminders: number[]` (minutes before start) |
 | Tags | all | name array; unknown names are upserted server-side |
 | Duration + Sessions | `TASK`, create only | `form/session-count-field.tsx` — `Sessions > 1` requests a multi-sitting series spread across `now … deadline` |
 | Deadline | `TASK` | quick-action chips (`form/deadline-chip-field.tsx`) — Today / Tomorrow / This week / Next week / This month / No rush / Custom, prefetched from `GET /sessions/deadline-options` |
@@ -152,6 +153,12 @@ icon/tint, a `kind` badge (New / Change / Drop), a spelled-out relative time and
 assignment/exam/lecture, its `eventEndsAt` as a `due`/clock label. Unread rows get a red
 dot + bold meta; a `NEW` row also gets a red alert mark. The hover ✕ dismisses
 (`DELETE /notifications/:id`) — the web counterpart of mobile's swipe.
+
+**Toasts** (`components/ui/sonner.tsx`) are glass (`.glass-notice` in `index.css`), use Geist and a
+small tinted icon per type, and pile up as an **iPhone-style collapsed stack**: only the newest is
+fully visible; clicking the pile fans it out, clicking elsewhere folds it back (hover does
+nothing — sonner's `expand` is driven by `useClickToExpand`). Every call site passes a short title plus a `description`; use
+`errorToast(title, { description })` / `apiErrorMessage(error, fallback)` from `lib/toast.ts`.
 
 ## Timezone model (important)
 

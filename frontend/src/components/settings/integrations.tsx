@@ -65,20 +65,27 @@ function ProviderCard({
     try {
       if (connected) {
         await updateIntegration(provider.id, { username, password });
-        toast.success(`${provider.label} credentials updated`);
+        toast.success(`${provider.label} credentials updated`, {
+          description: "We'll use the new login on the next sync.",
+        });
       } else {
         await connectIntegration({
           provider: provider.id,
           username,
           password,
         });
-        toast.success(`${provider.label} connected`);
+        toast.success(`${provider.label} connected`, {
+          description:
+            "We'll pull your assignments, exams and classes in shortly.",
+        });
       }
       setUsername("");
       setPassword("");
       onChanged();
     } catch (error) {
-      errorToast(messageFor(error));
+      errorToast(`Couldn't update ${provider.label}`, {
+        description: messageFor(error),
+      });
     } finally {
       setBusy(null);
     }
@@ -88,10 +95,14 @@ function ProviderCard({
     setBusy("sync");
     try {
       await syncIntegration(provider.id);
-      toast.success(`${provider.label} synced`);
+      toast.success(`${provider.label} synced`, {
+        description: "Anything new is in your notifications and on your calendar.",
+      });
       onChanged();
     } catch (error) {
-      errorToast(messageFor(error));
+      errorToast(`Couldn't update ${provider.label}`, {
+        description: messageFor(error),
+      });
     } finally {
       setBusy(null);
     }
@@ -101,10 +112,14 @@ function ProviderCard({
     setBusy("disconnect");
     try {
       await disconnectIntegration(provider.id);
-      toast.success(`${provider.label} disconnected`);
+      toast.success(`${provider.label} disconnected`, {
+        description: "Items already on your calendar stay put. Reconnect anytime.",
+      });
       onChanged();
     } catch (error) {
-      errorToast(messageFor(error));
+      errorToast(`Couldn't update ${provider.label}`, {
+        description: messageFor(error),
+      });
     } finally {
       setBusy(null);
     }
