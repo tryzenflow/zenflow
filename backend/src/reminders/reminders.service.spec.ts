@@ -91,7 +91,7 @@ describe("RemindersService", () => {
       expect(() => service.assertValid("DND", [15])).toThrow(
         BadRequestException,
       );
-      expect(() => service.assertValid("TASK", [0])).toThrow(
+      expect(() => service.assertValid("TASK", [-1])).toThrow(
         BadRequestException,
       );
       expect(() => service.assertValid("TASK", [10081])).toThrow(
@@ -101,6 +101,7 @@ describe("RemindersService", () => {
         BadRequestException,
       );
       expect(() => service.assertValid("DND", [])).not.toThrow();
+      expect(() => service.assertValid("TASK", [0, 60])).not.toThrow();
     });
   });
 

@@ -110,7 +110,7 @@ export class UpdateSessionDto implements UpdateSessionInput {
   @ArrayMaxSize(MAX_REMINDERS_PER_SESSION)
   @ArrayUnique()
   @IsInt({ each: true })
-  @Min(1, { each: true })
+  @Min(0, { each: true })
   @Max(MAX_REMINDER_MINUTES, { each: true })
   reminders?: number[];
 }

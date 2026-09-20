@@ -99,11 +99,11 @@ export class RemindersService implements OnApplicationBootstrap {
     }
     if (
       minutes.some(
-        (m) => !Number.isInteger(m) || m < 1 || m > MAX_REMINDER_MINUTES,
+        (m) => !Number.isInteger(m) || m < 0 || m > MAX_REMINDER_MINUTES,
       )
     ) {
       throw new BadRequestException(
-        `Reminders must be whole minutes between 1 and ${MAX_REMINDER_MINUTES}.`,
+        `Reminders must be whole minutes between 0 (at start) and ${MAX_REMINDER_MINUTES}.`,
       );
     }
     if (type === "DND" && minutes.length > 0) {
