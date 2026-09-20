@@ -1,4 +1,5 @@
 import { slotPick, updateSession } from "@/api/tasks";
+import { showAlternativePickToast } from "@/lib/task-toasts";
 import type { TimelineState } from "@/components/calendar/day-timeline";
 import {
   RescheduleSheet,
@@ -38,6 +39,7 @@ import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { View, useWindowDimensions } from "react-native";
 import { useSharedValue } from "react-native-reanimated";
+import { useToast } from "@/components/ui/toast";
 
 /**
  * Calendar screen (the app's home tab) — the week view. Day view was folded
@@ -53,6 +55,7 @@ export default function WeekScreen() {
   const router = useRouter();
   const user = useUserStore((s) => s.user);
   const tz = user?.timezone || "UTC";
+  const { toast } = useToast();
   const { date: dateParam, flash: flashParam } = useLocalSearchParams<{
     date?: string;
     flash?: string;
@@ -279,11 +282,15 @@ export default function WeekScreen() {
           // We need to determine which slot was chosen for the flash
           const chosenSlot = chose === "alternative" ? alternativeSlot : primarySlot;
           armFlash(session.id);
+          // Show success toast if alternative was picked (matches mockup)
+          if (chose === "alternative") {
+            showAlternativePickToast(toast, alternativeSlot, tz);
+          }
         },
         () => {},
       );
     },
-    [tz, armFlash],
+    [tz, armFlash, toast],
   );
 
   // …and once it lands: if it moved off the focused day, teleport there; then
