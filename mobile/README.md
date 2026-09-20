@@ -117,3 +117,4 @@ The backend (`backend/src/devices/` and `backend/src/notifications/`) drives dir
 
 Biome (`pnpm --filter mobile format`), 2-space indent, Conventional Commits. See the
 repo-wide [CONTRIBUTING.md](../CONTRIBUTING.md).
+- **Reminders:** `components/tasks/form/reminder-field.tsx` — chips (tap to edit in place, × to remove) + a bottom sheet of presets (At start · 15 min … 1 week) and a custom amount/unit; logic (labels, no-duplicate rule) is shared from `@zenflow/core`'s `reminders.ts`. Not shown for `DND`.
