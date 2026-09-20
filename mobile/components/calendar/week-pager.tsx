@@ -127,6 +127,14 @@ interface WeekPagerProps {
       } | null,
     ) => void,
   ) => void;
+  /** Divergent slot pick callback — forwarded to the active `DayTimeline`. */
+  onRequestSlotPick?: (
+    session: Session,
+    primarySlot: string,
+    alternativeSlot: string,
+    slotProposalId: string,
+    onPick: (chose: "primary" | "alternative") => void,
+  ) => void;
   /** Session id to pulse on the focused day — a teleport target. Forwarded to
    * the active `DayTimeline` only. */
   flashSessionId?: string | null;
@@ -188,6 +196,7 @@ function WeekPagerImpl(
     onRequestReschedule,
     onRequestBlockMenu,
     onRequestScopedUpdate,
+    onRequestSlotPick,
     flashSessionId = null,
   }: WeekPagerProps,
   ref: ForwardedRef<WeekPagerHandle>,
@@ -983,6 +992,7 @@ function WeekPagerImpl(
                   onRequestReschedule={onRequestReschedule}
                   onRequestBlockMenu={onRequestBlockMenu}
                   onRequestScopedUpdate={onRequestScopedUpdate}
+                  onRequestSlotPick={onRequestSlotPick}
                   onPeekChange={handlePeekChange}
                   rightInset={PEEK_STRIP_W}
                   onStateChange={active ? onActiveStateChange : undefined}

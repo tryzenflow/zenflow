@@ -1,9 +1,10 @@
-import { updateSession } from "@/api/tasks";
+import { slotPick, updateSession } from "@/api/tasks";
 import type { TimelineState } from "@/components/calendar/day-timeline";
 import {
   RescheduleSheet,
   type RescheduleSheetHandle,
 } from "@/components/calendar/reschedule-sheet";
+import { SlotPickSheet, type SlotPickSheetHandle } from "@/components/calendar/slot-pick-sheet";
 import {
   type PendingSessionUpdate,
   type UpdateRecurringScope,
@@ -115,6 +116,7 @@ export default function WeekScreen() {
   const rescheduleSheetRef = useRef<RescheduleSheetHandle>(null);
   const updateScopeSheetRef = useRef<UpdateRecurringSheetHandle>(null);
   const blockActionsSheetRef = useRef<BlockActionsSheetHandle>(null);
+  const slotPickSheetRef = useRef<SlotPickSheetHandle>(null);
 
   const handleWeekDragBegin = useCallback(() => {
     pagerRef.current?.beginHeaderWeekDrag();
@@ -248,6 +250,42 @@ export default function WeekScreen() {
     [],
   );
 
+  // Handle divergent slot pick from drag reschedule — show picker for primary vs alternative
+  const handleRequestSlotPick = useCallback(
+    (
+      session: Session,
+      primarySlot: string,
+      alternativeSlot: string,
+      slotProposalId: string,
+      onPick: (chose: "primary" | "alternative") => void,
+    ) => {
+      slotPickSheetRef.current?.open(
+        session,
+        primarySlot,
+        alternativeSlot,
+        slotProposalId,
+        tz,
+        async (chose) => {
+          try {
+            await slotPick(session.id, { slotProposalId, chose });
+          } catch (error) {
+            // Non-blocking — parent handles toast
+            console.warn("slotPick failed:", error);
+          }
+          onPick(chose);
+          // After pick, refetch all days and pulse the session at its new time
+          setFocusTick((t) => t + 1);
+          // The session will be at the chosen slot after refetch
+          // We need to determine which slot was chosen for the flash
+          const chosenSlot = chose === "alternative" ? alternativeSlot : primarySlot;
+          armFlash(session.id);
+        },
+        () => {},
+      );
+    },
+    [tz, armFlash],
+  );
+
   // …and once it lands: if it moved off the focused day, teleport there; then
   // force every mounted day to revalidate (so the block shows in its new place
   // and clears from the old) and pulse it. This is the body the old cross-day
@@ -297,6 +335,7 @@ export default function WeekScreen() {
           onRequestReschedule={handleRequestReschedule}
           onRequestBlockMenu={handleRequestBlockMenu}
           onRequestScopedUpdate={handleRequestScopedUpdate}
+          onRequestSlotPick={handleRequestSlotPick}
           flashSessionId={flashId}
         />
       </View>
@@ -321,6 +360,7 @@ export default function WeekScreen() {
         onRequestScopedUpdate={handleRequestScopedUpdate}
       />
       <UpdateRecurringSheet ref={updateScopeSheetRef} />
+      <SlotPickSheet ref={slotPickSheetRef} tz={tz} />
     </View>
   );
 }
