@@ -20,7 +20,7 @@ function ToastIcon({
   return (
     <span
       className={cn(
-        "flex size-6 items-center justify-center rounded-full",
+        "flex size-8 items-center justify-center rounded-full",
         className,
       )}
     >
@@ -113,8 +113,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
         classNames: {
           toast: "glass-notice group/toast",
           title: "!text-[13.5px] !font-semibold !text-foreground",
-          description: "!text-[12.5px] !leading-snug !text-muted-foreground",
-          icon: "!m-0 !size-6",
+          description:
+            "!text-[12.5px] !leading-snug line-clamp-none !text-muted-foreground",
+          icon: "!ml-0 !mr-0 !size-8 !rounded-full !p-0",
           actionButton: "!bg-primary !text-primary-foreground !rounded-lg",
           cancelButton: "!bg-muted !text-muted-foreground !rounded-lg",
         },
@@ -127,7 +128,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
           fontFamily: '"Geist", "Geist Fallback", system-ui, sans-serif',
           "--normal-text": "var(--foreground)",
           "--border-radius": "1rem", // rounded-2xl
-          "--width": "22rem",
+          "--width": "28rem",
         } as React.CSSProperties
       }
       {...props}
