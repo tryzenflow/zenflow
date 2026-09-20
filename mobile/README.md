@@ -117,3 +117,41 @@ The backend (`backend/src/devices/` and `backend/src/notifications/`) drives dir
 
 Biome (`pnpm --filter mobile format`), 2-space indent, Conventional Commits. See the
 repo-wide [CONTRIBUTING.md](../CONTRIBUTING.md).
+
+## Divergent slot picker (issue #41)
+
+When the scheduling engine's two placement algorithms (heuristic and LinUCB) propose
+**different** slots for a task create or reschedule, the backend returns a
+`divergent: true` response with `primarySlot` and `alternativeSlot`. The mobile
+app surfaces a bottom sheet (`SlotPickSheet` in `components/calendar/slot-pick-sheet.tsx`)
+letting the student choose between the two times — model identities are hidden.
+
+**Flow:**
+
+1. **Create** (`app/task/new.tsx`) or **edit** (`app/task/[id]/edit.tsx`) calls
+   `createSession` / `updateSession`. If `response.divergent` is true, the
+   `SlotPickSheet` opens before any toast/navigation.
+2. **Drag reschedule** (`components/calendar/day-timeline.tsx`): when a drag-drop
+   results in a divergent response, `onRequestSlotPick` is called, which opens
+   the same sheet from the Week screen (`app/(app)/index.tsx`).
+3. The sheet shows two cards — "Currently scheduled" (primary) and "Also fits
+   before the deadline" (alternative) — with radio-style selection. Dismissing
+   the sheet or tapping "Keep [time]" records `chose: "primary"`. Tapping
+   "Switch to [time]" or the alternative card records `chose: "alternative"`.
+4. The choice is sent via `POST /sessions/:id/slot-pick` (`api/tasks.ts` →
+   `slotPick`). **Failures are non-blocking** — a toast error is shown but the
+   task stays at the primary or chosen slot.
+5. If `chose: "alternative"`, a success toast appears: "Moved to [time]" +
+   "Thanks — noted for next time" (matching `mockups/week-view.html`).
+
+**Key files:**
+
+| File | Role |
+|------|------|
+| `api/tasks.ts` | `slotPick` client for `POST /sessions/:id/slot-pick` |
+| `components/calendar/slot-pick-sheet.tsx` | Bottom sheet UI (two cards, primary/secondary actions) |
+| `app/task/new.tsx` | Create flow integration |
+| `app/task/[id]/edit.tsx` | Edit flow integration |
+| `components/calendar/day-timeline.tsx` | Drag reschedule hook (`onRequestSlotPick`) |
+| `app/(app)/index.tsx` | Week screen wires sheet, handles pick, shows toast |
+| `lib/task-toasts.ts` | `showAlternativePickToast` for success feedback |
