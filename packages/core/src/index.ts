@@ -9,3 +9,4 @@ export * from "./recurrence";
 export * from "./session-count";
 export * from "./session-time";
 export * from "./session-type";
+export * from "./reminders";

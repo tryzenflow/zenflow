@@ -92,8 +92,8 @@ export interface CreateTaskInput {
   sessionCount?: number;
   tags?: string[];
   /**
-   * Minutes-before-start reminders (max MAX_REMINDERS_PER_SESSION, each a
-   * positive integer <= MAX_REMINDER_MINUTES); not allowed for `DND`.
+   * Minutes-before-start reminders (max MAX_REMINDERS_PER_SESSION, each an
+   * integer 0 (at start) to MAX_REMINDER_MINUTES); not allowed for `DND`.
    * Omitted on create -> one default reminder 60 min before start (non-DND);
    * `[]` -> none. On update: omit to keep, an array replaces.
    */
@@ -119,8 +119,8 @@ export interface CreateFixedSessionInput {
   rrule?: string | null;
   tags?: string[];
   /**
-   * Minutes-before-start reminders (max MAX_REMINDERS_PER_SESSION, each a
-   * positive integer <= MAX_REMINDER_MINUTES); not allowed for `DND`.
+   * Minutes-before-start reminders (max MAX_REMINDERS_PER_SESSION, each an
+   * integer 0 (at start) to MAX_REMINDER_MINUTES); not allowed for `DND`.
    * Omitted on create -> one default reminder 60 min before start (non-DND);
    * `[]` -> none. On update: omit to keep, an array replaces.
    */
@@ -140,8 +140,8 @@ export interface CreateDndInput {
   rrule?: string | null;
   tags?: string[];
   /**
-   * Minutes-before-start reminders (max MAX_REMINDERS_PER_SESSION, each a
-   * positive integer <= MAX_REMINDER_MINUTES); not allowed for `DND`.
+   * Minutes-before-start reminders (max MAX_REMINDERS_PER_SESSION, each an
+   * integer 0 (at start) to MAX_REMINDER_MINUTES); not allowed for `DND`.
    * Omitted on create -> one default reminder 60 min before start (non-DND);
    * `[]` -> none. On update: omit to keep, an array replaces.
    */
@@ -189,8 +189,8 @@ export interface UpdateSessionInput {
   sessionCount?: number;
   tags?: string[];
   /**
-   * Minutes-before-start reminders (max MAX_REMINDERS_PER_SESSION, each a
-   * positive integer <= MAX_REMINDER_MINUTES); not allowed for `DND`.
+   * Minutes-before-start reminders (max MAX_REMINDERS_PER_SESSION, each an
+   * integer 0 (at start) to MAX_REMINDER_MINUTES); not allowed for `DND`.
    * Omitted on create -> one default reminder 60 min before start (non-DND);
    * `[]` -> none. On update: omit to keep, an array replaces.
    */

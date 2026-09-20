@@ -15,6 +15,7 @@ import { DescriptionField } from "./form/description-field";
 import { DurationStepper } from "./form/duration-stepper";
 import { FixedTimeField } from "./form/fixed-time-field";
 import { RecurrenceField } from "./form/recurrence-field";
+import { ReminderField } from "./form/reminder-field";
 import { SessionCountField } from "./form/session-count-field";
 import { TagAutocomplete } from "./form/tag-autocomplete";
 
@@ -234,6 +235,23 @@ export function SessionSheetFields({
             )}
           />
         </Field>
+      )}
+
+      {/* Every type except DND (a block, not an event) */}
+      {type !== "DND" && (
+        <Controller
+          control={form.control}
+          name="reminders"
+          render={({ field }) => (
+            <Field label="Reminder">
+              <ReminderField
+                value={field.value ?? []}
+                onChange={field.onChange}
+                disabled={disabled}
+              />
+            </Field>
+          )}
+        />
       )}
 
       <Controller

@@ -89,7 +89,7 @@ export const sessionSchema = z
      * = server default (one hour before, non-DND). Never sent for DND.
      */
     reminders: z
-      .array(z.int().min(1).max(MAX_REMINDER_MINUTES))
+      .array(z.int().min(0).max(MAX_REMINDER_MINUTES))
       .max(MAX_REMINDERS_PER_SESSION)
       .optional(),
 

@@ -23,7 +23,10 @@ import {
   splitZoned,
   zonedDate,
 } from "@zenflow/core";
-import type { CreateSessionInput } from "@zenflow/shared";
+import {
+  type CreateSessionInput,
+  DEFAULT_REMINDER_MINUTES,
+} from "@zenflow/shared";
 import { format } from "date-fns";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo } from "react";
@@ -40,6 +43,7 @@ const EMPTY_DEFAULTS: SessionFormValues = {
   note: "",
   location: "",
   deadline: "",
+  reminders: [DEFAULT_REMINDER_MINUTES],
 };
 
 function toCreateInput(
@@ -51,6 +55,8 @@ function toCreateInput(
     note: values.note || null,
     location: values.location || null,
     tags: values.tags,
+    // DND blocks carry no reminders.
+    ...(values.type === "DND" ? {} : { reminders: values.reminders ?? [] }),
   };
   if (values.type === "TASK") {
     return {
@@ -157,6 +163,7 @@ export default function NewSessionScreen() {
       note: form.getValues("note"),
       location: form.getValues("location"),
       tags: form.getValues("tags"),
+      reminders: form.getValues("reminders"),
     };
     form.reset(
       next === "TASK"

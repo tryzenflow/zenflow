@@ -105,7 +105,7 @@ sidebar footer via a `zenflow:open-settings` window event. Three tabs:
 | Title | all | combobox in create mode — `GET /sessions/suggestions` autocompletes duration / tags / note / a forward-shifted deadline |
 | Location | all | free text (room / building / link), optional |
 | Description | all | TipTap rich text with file uploads |
-| Reminder | all except `DND` | `form/reminder-field.tsx` — up to 2 removable chips ("1 hour before") + an "Add reminder" preset picker (15 min · 30 min · 1 hour · 2 hours · 1 day · 1 week · custom amount + shadcn `Select` unit); new tasks default to `[60]`; sent as `reminders: number[]` (minutes before start) |
+| Reminder | all except `DND` | `form/reminder-field.tsx` — up to 2 chips ("1 hour before") — tap one to change it in place, × to remove — + an "Add reminder" preset picker (At start · 15 min · 30 min · 1 hour · 2 hours · 1 day · 2 days · 3 days · 1 week · custom amount + shadcn `Select` unit); new tasks default to `[60]`; sent as `reminders: number[]` (minutes before start) |
 | Tags | all | name array; unknown names are upserted server-side |
 | Duration + Sessions | `TASK`, create only | `form/session-count-field.tsx` — `Sessions > 1` requests a multi-sitting series spread across `now … deadline` |
 | Deadline | `TASK` | quick-action chips (`form/deadline-chip-field.tsx`) — Today / Tomorrow / This week / Next week / This month / No rush / Custom, prefetched from `GET /sessions/deadline-options` |

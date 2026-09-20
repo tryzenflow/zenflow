@@ -162,7 +162,7 @@ Indexes: `[userId, deadline]`, `[userId, scheduledStartTime]`,
 | Field                 | Type      | Notes                                                                                                   |
 | --------------------- | --------- | ------------------------------------------------------------------------------------------------------- |
 | `id`                  | uuid      | PK; the timer is named `reminder:<id>` in `SchedulerRegistry`.                                          |
-| `remindBeforeMinutes` | int       | 1…10080 (`MAX_REMINDER_MINUTES`).                                                                       |
+| `remindBeforeMinutes` | int       | 0…10080 (0 = at start) (`MAX_REMINDER_MINUTES`).                                                                       |
 | `firedForStart`       | DateTime? | start of the occurrence last fired for — dedupes across restarts/re-arms; per-occurrence for a series. |
 | `sessionId`           | uuid      | FK → `Session`, cascade. At most 2 per session (`MAX_REMINDERS_PER_SESSION`); never on `DND`.          |
 
@@ -417,7 +417,7 @@ so the scheduler avoids them from day one. Best-effort — a failure is logged a
 `/resize`, `/optimize` or `/undo`.
 
 `POST` and `PATCH` accept `reminders?: number[]` (minutes before start, max 2 distinct ints in
-1…10080, not for `DND`); every `Session` response carries `reminders: number[]` (descending;
+0…10080 (0 = at start), not for `DND`); every `Session` response carries `reminders: number[]` (descending;
 `[]` for DND). On create, omitted → one default reminder at 60 min (non-DND), `[]` → none. On
 PATCH, omitted → unchanged, an array replaces. On a materialized `TASK` series the list applies
 to every sitting; on a recurring fixed occurrence id it edits the series' representative (so

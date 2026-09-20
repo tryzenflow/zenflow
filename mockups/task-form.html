@@ -48,10 +48,10 @@
       <p>
         <b>Reminder</b> (issue #43): up to <b>2 reminders per task</b>, each as a
         removable chip ("1 day before", "1 hour before"…) plus an
-        <b>Add reminder</b> chip that opens a preset picker (15 min · 1 hour ·
+        <b>Add reminder</b> chip that opens a preset picker (<b>At start</b> · 15 min · 1 hour ·
         1 day · custom). New tasks start with one reminder,
         <b>1 hour before</b>, so it works out of the box. Reminders fire
-        relative to the session start; if that moment has already passed they
+        relative to the session start (<b>At start</b> = the moment it begins); a session can't have two reminders at the same time; if that moment has already passed they
         are skipped. Delivered in-app over SSE, or as a native push when the
         app is closed.
       </p>
@@ -314,13 +314,22 @@
                       Due whenever there's room — no rush.
                     </div>
                   </div>
-                  <div class="mb-[18px]">
+                  <div class="mb-[18px] relative">
                     <label class="block text-[13.5px] font-semibold mb-2 text-foreground">Reminder</label>
                     <div class="flex flex-wrap items-center gap-2">
                       <span class="inline-flex items-center gap-[5px] rounded-full border border-primary/45 bg-primary/15 pl-3 pr-[7px] py-1.5 text-[13px] font-medium text-primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="size-3.5"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>1 hour before<span class="inline-flex size-4 items-center justify-center rounded-full bg-current/15 [&_svg]:size-2.5"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg></span></span>
                       <button type="button" class="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-3 py-1.5 text-[13px] font-medium text-muted-foreground"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="size-3.5"><path d="M5 12h14" /><path d="M12 5v14" /></svg>Add reminder</button>
                     </div>
-                    <div class="text-[12.5px] text-muted-foreground mt-[7px] leading-snug">Defaults to 1 hour before it starts. Up to 2 reminders per task.</div>
+                    <div class="text-[12.5px] text-muted-foreground mt-[7px] leading-snug">Defaults to 1 hour before it starts. Up to 2 reminders per task.                    <div class="absolute left-0 top-full mt-1.5 z-[5] w-72 space-y-3 rounded-[13px] border border-border bg-popover p-3 shadow-[0_14px_30px_-10px_rgba(0,0,0,0.3)]">
+                      <div class="grid grid-cols-3 gap-1.5"><span class="h-8 rounded-md border border-border bg-muted text-xs font-semibold text-muted-foreground inline-flex items-center justify-center">At start</span><span class="h-8 rounded-md border border-border bg-muted text-xs font-semibold text-muted-foreground inline-flex items-center justify-center">15 min</span><span class="h-8 rounded-md border border-border bg-muted text-xs font-semibold text-muted-foreground inline-flex items-center justify-center">30 min</span><span class="h-8 rounded-md border border-border bg-muted text-xs font-semibold text-muted-foreground inline-flex items-center justify-center opacity-40">1 hour</span><span class="h-8 rounded-md border border-border bg-muted text-xs font-semibold text-muted-foreground inline-flex items-center justify-center">2 hours</span><span class="h-8 rounded-md border border-border bg-muted text-xs font-semibold text-muted-foreground inline-flex items-center justify-center">1 day</span><span class="h-8 rounded-md border border-border bg-muted text-xs font-semibold text-muted-foreground inline-flex items-center justify-center">2 days</span><span class="h-8 rounded-md border border-border bg-muted text-xs font-semibold text-muted-foreground inline-flex items-center justify-center">3 days</span><span class="h-8 rounded-md border border-border bg-muted text-xs font-semibold text-muted-foreground inline-flex items-center justify-center">1 week</span></div>
+                      <div class="flex items-center gap-2"><div class="h-px flex-1 bg-border"></div><span class="text-[10px] text-muted-foreground">or custom</span><div class="h-px flex-1 bg-border"></div></div>
+                      <div class="flex items-center gap-1.5">
+                        <span class="h-8 w-20 rounded-md border border-border bg-background px-2 text-xs leading-8 text-muted-foreground">e.g. 2</span>
+                        <span class="h-8 flex-1 rounded-md border border-border bg-background px-2 text-xs leading-8">hours</span>
+                        <span class="h-8 rounded-md bg-primary px-3 text-xs font-semibold leading-8 text-primary-foreground">Add</span>
+                      </div>
+                    </div>
+                  </div>
                   </div>
                   <div class="mb-[18px] relative">
                     <label
@@ -3415,6 +3424,81 @@
           </div>
         </div>
       </div>
+
+    <!-- ============ REMINDER SHEET ============ -->
+    <div class="state-section">
+      <h2>Reminder sheet</h2>
+      <p>
+        On mobile the reminder picker is a bottom sheet: presets (<b>At start</b>
+        · 15 min · 30 min · 1 hour · 2 hours · 1 day · 2 days · 3 days · 1 week) plus a custom
+        amount and unit. The same sheet <b>edits</b> a reminder in place — tap
+        its chip, the current value is highlighted, pick another to replace it
+        (no remove-and-add). A lead time already used by another reminder is
+        disabled, so two reminders can never fire at the same time.
+      </p>
+    </div>
+    <div class="gallery">
+      <div class="frame">
+        <div class="caption"><span class="tag">Reminder · add</span><div class="sub">Tap "Add reminder" → bottom sheet</div></div>
+        <div class="device">
+          <div class="island"></div>
+          <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
+            <div class="flex h-[54px] shrink-0 items-end px-[30px] pb-2 text-[15px] font-semibold tabular-nums">9:41</div>
+            <div class="flex-1 overflow-hidden px-5 pt-3">
+              <div class="mb-1 text-[22px] font-bold tracking-tight">New session</div>
+              <div class="mb-5 text-[13px] text-muted-foreground">Fields above collapsed</div>
+              <label class="block text-[13.5px] font-semibold mb-2 text-foreground">Reminder</label>
+              <div class="flex flex-wrap items-center gap-2"><span class="inline-flex items-center gap-[5px] rounded-full border border-primary/45 bg-primary/15 pl-3 pr-[7px] py-1.5 text-[13px] font-medium text-primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="size-3.5"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>1 hour before<span class="inline-flex size-4 items-center justify-center rounded-full bg-current/15 [&_svg]:size-2.5"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg></span></span><span class="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-3 py-1.5 text-[13px] font-medium text-muted-foreground"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="size-3.5"><path d="M5 12h14" /><path d="M12 5v14" /></svg>Add reminder</span></div>
+              <div class="text-[12.5px] text-muted-foreground mt-[7px] leading-snug">Defaults to 1 hour before it starts. Tap a reminder to change it. Up to 2 per task.</div>
+            </div>
+            <div class="absolute inset-0 z-[55] bg-black/40"></div>
+              <div class="absolute inset-x-0 bottom-0 z-[60] rounded-t-[26px] border border-b-0 border-border bg-background px-5 pt-2.5 pb-8 shadow-[0_-14px_40px_-10px_rgba(0,0,0,0.4)]">
+                <div class="mx-auto mb-3.5 h-[5px] w-[38px] rounded-full bg-border"></div>
+                <div class="text-[19px] font-bold tracking-tight">Add reminder</div>
+                <div class="mt-0.5 text-[13px] text-muted-foreground">How long before it starts?</div>
+                <div class="mt-4 flex flex-wrap gap-2"><span class="h-10 min-w-[30%] flex-1 inline-flex items-center justify-center rounded-xl border px-3 text-[13px] font-semibold border-border bg-muted text-muted-foreground">At start</span><span class="h-10 min-w-[30%] flex-1 inline-flex items-center justify-center rounded-xl border px-3 text-[13px] font-semibold border-border bg-muted text-muted-foreground">15 min</span><span class="h-10 min-w-[30%] flex-1 inline-flex items-center justify-center rounded-xl border px-3 text-[13px] font-semibold border-border bg-muted text-muted-foreground">30 min</span><span class="h-10 min-w-[30%] flex-1 inline-flex items-center justify-center rounded-xl border px-3 text-[13px] font-semibold border-border bg-muted text-muted-foreground opacity-40">1 hour</span><span class="h-10 min-w-[30%] flex-1 inline-flex items-center justify-center rounded-xl border px-3 text-[13px] font-semibold border-border bg-muted text-muted-foreground">2 hours</span><span class="h-10 min-w-[30%] flex-1 inline-flex items-center justify-center rounded-xl border px-3 text-[13px] font-semibold border-border bg-muted text-muted-foreground">1 day</span><span class="h-10 min-w-[30%] flex-1 inline-flex items-center justify-center rounded-xl border px-3 text-[13px] font-semibold border-border bg-muted text-muted-foreground">2 days</span><span class="h-10 min-w-[30%] flex-1 inline-flex items-center justify-center rounded-xl border px-3 text-[13px] font-semibold border-border bg-muted text-muted-foreground">3 days</span><span class="h-10 min-w-[30%] flex-1 inline-flex items-center justify-center rounded-xl border px-3 text-[13px] font-semibold border-border bg-muted text-muted-foreground">1 week</span></div>
+                <div class="mt-4 flex items-center gap-2"><div class="h-px flex-1 bg-border"></div><span class="text-[11px] text-muted-foreground">or custom</span><div class="h-px flex-1 bg-border"></div></div>
+                <div class="mt-3 flex items-center gap-2">
+                  <span class="h-10 w-20 rounded-md border border-input bg-background px-3 text-base leading-10 text-muted-foreground">e.g. 2</span>
+                  <div class="flex flex-1 gap-1"><span class="h-10 flex-1 inline-flex items-center justify-center rounded-lg border text-[12px] font-semibold border-border bg-muted text-muted-foreground">min</span><span class="h-10 flex-1 inline-flex items-center justify-center rounded-lg border text-[12px] font-semibold border-primary/50 bg-primary/15 text-primary">hour</span><span class="h-10 flex-1 inline-flex items-center justify-center rounded-lg border text-[12px] font-semibold border-border bg-muted text-muted-foreground">day</span><span class="h-10 flex-1 inline-flex items-center justify-center rounded-lg border text-[12px] font-semibold border-border bg-muted text-muted-foreground">week</span></div>
+                </div>
+                <div class="pt-4"><span class="flex h-12 w-full items-center justify-center rounded-md bg-primary text-base font-semibold text-primary-foreground opacity-60">Add custom reminder</span></div>
+              </div>
+            <div class="home-indicator"></div>
+          </div>
+        </div>
+      </div>
+      <div class="frame">
+        <div class="caption"><span class="tag">Reminder · edit in place</span><div class="sub">Tap a chip → same sheet, current value highlighted</div></div>
+        <div class="device">
+          <div class="island"></div>
+          <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
+            <div class="flex h-[54px] shrink-0 items-end px-[30px] pb-2 text-[15px] font-semibold tabular-nums">9:41</div>
+            <div class="flex-1 overflow-hidden px-5 pt-3">
+              <div class="mb-1 text-[22px] font-bold tracking-tight">New session</div>
+              <div class="mb-5 text-[13px] text-muted-foreground">Fields above collapsed</div>
+              <label class="block text-[13.5px] font-semibold mb-2 text-foreground">Reminder</label>
+              <div class="flex flex-wrap items-center gap-2"><span class="inline-flex items-center gap-[5px] rounded-full border border-primary/45 bg-primary/15 pl-3 pr-[7px] py-1.5 text-[13px] font-medium text-primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="size-3.5"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>1 day before<span class="inline-flex size-4 items-center justify-center rounded-full bg-current/15 [&_svg]:size-2.5"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg></span></span><span class="inline-flex items-center gap-[5px] rounded-full border border-primary/45 bg-primary/15 pl-3 pr-[7px] py-1.5 text-[13px] font-medium text-primary ring-2 ring-primary/40"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="size-3.5"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>1 hour before<span class="inline-flex size-4 items-center justify-center rounded-full bg-current/15 [&_svg]:size-2.5"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg></span></span></div>
+              <div class="text-[12.5px] text-muted-foreground mt-[7px] leading-snug">2 of 2 reminders set — tap one to change it.</div>
+            </div>
+            <div class="absolute inset-0 z-[55] bg-black/40"></div>
+              <div class="absolute inset-x-0 bottom-0 z-[60] rounded-t-[26px] border border-b-0 border-border bg-background px-5 pt-2.5 pb-8 shadow-[0_-14px_40px_-10px_rgba(0,0,0,0.4)]">
+                <div class="mx-auto mb-3.5 h-[5px] w-[38px] rounded-full bg-border"></div>
+                <div class="text-[19px] font-bold tracking-tight">Change reminder</div>
+                <div class="mt-0.5 text-[13px] text-muted-foreground">How long before it starts?</div>
+                <div class="mt-4 flex flex-wrap gap-2"><span class="h-10 min-w-[30%] flex-1 inline-flex items-center justify-center rounded-xl border px-3 text-[13px] font-semibold border-border bg-muted text-muted-foreground">At start</span><span class="h-10 min-w-[30%] flex-1 inline-flex items-center justify-center rounded-xl border px-3 text-[13px] font-semibold border-border bg-muted text-muted-foreground">15 min</span><span class="h-10 min-w-[30%] flex-1 inline-flex items-center justify-center rounded-xl border px-3 text-[13px] font-semibold border-border bg-muted text-muted-foreground">30 min</span><span class="h-10 min-w-[30%] flex-1 inline-flex items-center justify-center rounded-xl border px-3 text-[13px] font-semibold border-primary/50 bg-primary/15 text-primary">1 hour</span><span class="h-10 min-w-[30%] flex-1 inline-flex items-center justify-center rounded-xl border px-3 text-[13px] font-semibold border-border bg-muted text-muted-foreground">2 hours</span><span class="h-10 min-w-[30%] flex-1 inline-flex items-center justify-center rounded-xl border px-3 text-[13px] font-semibold border-border bg-muted text-muted-foreground opacity-40">1 day</span><span class="h-10 min-w-[30%] flex-1 inline-flex items-center justify-center rounded-xl border px-3 text-[13px] font-semibold border-border bg-muted text-muted-foreground">2 days</span><span class="h-10 min-w-[30%] flex-1 inline-flex items-center justify-center rounded-xl border px-3 text-[13px] font-semibold border-border bg-muted text-muted-foreground">3 days</span><span class="h-10 min-w-[30%] flex-1 inline-flex items-center justify-center rounded-xl border px-3 text-[13px] font-semibold border-border bg-muted text-muted-foreground">1 week</span></div>
+                <div class="mt-4 flex items-center gap-2"><div class="h-px flex-1 bg-border"></div><span class="text-[11px] text-muted-foreground">or custom</span><div class="h-px flex-1 bg-border"></div></div>
+                <div class="mt-3 flex items-center gap-2">
+                  <span class="h-10 w-20 rounded-md border border-input bg-background px-3 text-base leading-10 text-muted-foreground">e.g. 2</span>
+                  <div class="flex flex-1 gap-1"><span class="h-10 flex-1 inline-flex items-center justify-center rounded-lg border text-[12px] font-semibold border-border bg-muted text-muted-foreground">min</span><span class="h-10 flex-1 inline-flex items-center justify-center rounded-lg border text-[12px] font-semibold border-primary/50 bg-primary/15 text-primary">hour</span><span class="h-10 flex-1 inline-flex items-center justify-center rounded-lg border text-[12px] font-semibold border-border bg-muted text-muted-foreground">day</span><span class="h-10 flex-1 inline-flex items-center justify-center rounded-lg border text-[12px] font-semibold border-border bg-muted text-muted-foreground">week</span></div>
+                </div>
+                <div class="pt-4"><span class="flex h-12 w-full items-center justify-center rounded-md bg-primary text-base font-semibold text-primary-foreground opacity-60">Save</span></div>
+              </div>
+            <div class="home-indicator"></div>
+          </div>
+        </div>
+      </div>
+    </div>
     </div>
   </body>
 </html>

@@ -1,110 +1,30 @@
 import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type MouseEvent,
-} from "react";
-import { formatDistanceToNow } from "date-fns";
-import { formatInTimeZone } from "date-fns-tz";
-import {
-  Bell,
-  Check,
-  ChevronRight,
-  CircleAlert,
-  X,
-  type LucideIcon,
-} from "lucide-react";
-import { SESSION_TYPE_META } from "@zenflow/core";
-import type {
-  NotificationDto,
-  NotificationKind,
-  NotificationTopic,
-  SessionType,
-} from "@zenflow/shared";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Button } from "@/components/ui/button";
-import { sessionTypeIcon } from "@/components/calendar/session-type-badge";
-import { cn } from "@/lib/utils";
-import { useUserStore } from "@/hooks/use-user-store";
-import {
   dismissNotification,
   listNotifications,
   markNotificationActionTaken,
   markNotificationRead,
 } from "@/api/notifications";
 import { getSessionDetails } from "@/api/tasks";
+import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { useUserStore } from "@/hooks/use-user-store";
 import { errorToast } from "@/lib/toast";
+import type { NotificationDto } from "@zenflow/shared";
+import { Bell, Check, CircleAlert } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+} from "react";
 import { toast } from "sonner";
-
-/** Which session type a topic put on the calendar — `REMINDER` puts nothing. */
-const TOPIC_TYPE: Record<NotificationTopic, SessionType | null> = {
-  ASSIGNMENT: "ASSIGNMENT",
-  EXAM: "EXAM",
-  TIMETABLE: "LECTURE",
-  REMINDER: null,
-};
-
-/**
- * Icon + tile tint for a topic — the calendar session block's own icon and
- * type accent (assignment teal, exam rose, lecture sky), so an inbox row reads
- * as the thing it put on the calendar. `REMINDER` has no session type, so it
- * rides the brand primary with the bell.
- */
-function topicVisual(topic: NotificationTopic): {
-  Icon: LucideIcon;
-  tint: string;
-} {
-  const type = TOPIC_TYPE[topic];
-  if (!type)
-    return { Icon: Bell, tint: "border-primary/40 bg-primary/15 text-primary" };
-  const meta = SESSION_TYPE_META[type];
-  return {
-    Icon: sessionTypeIcon(type),
-    tint: cn("border", meta.badgeClass, meta.textClass),
-  };
-}
-
-/**
- * The event-category badge. The materializer stamps every row's `kind`:
- * `NEW` (something landed on the calendar), `CHANGE` (an upstream edit to an
- * item already there) or `DROP` (an item pulled upstream).
- */
-const KIND_BADGE: Record<
-  NotificationKind,
-  { label: string; className: string }
-> = {
-  NEW: {
-    label: "New",
-    className: "border-primary/30 bg-primary/10 text-primary",
-  },
-  CHANGE: {
-    label: "Change",
-    className:
-      "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-  },
-  DROP: {
-    label: "Drop",
-    className: "border-border bg-muted text-muted-foreground",
-  },
-};
-
-/**
- * The fixed "due" / "at" label for a row, off the linked session's end instant
- * (`eventEndsAt`). An assignment reads `due Jul 8`; an exam or lecture, which
- * has a clock time, reads `Jul 5, 9:00 AM`. Null for grouped rows and drops.
- */
-function eventTimeLabel(n: NotificationDto, tz: string): string | null {
-  if (!n.eventEndsAt) return null;
-  const at = new Date(n.eventEndsAt);
-  const date = formatInTimeZone(at, tz, "MMM d");
-  if (n.topic === "ASSIGNMENT") return `due ${date}`;
-  return `${date}, ${formatInTimeZone(at, tz, "h:mm a")}`;
-}
+import { NotificationToast } from "./notification-toast";
+import { NotificationRow } from "./notification-row";
 
 /**
  * The ingestion inbox — a header bell with an unread-count badge that opens a
@@ -311,184 +231,5 @@ export function NotificationBell() {
         )}
       </PopoverContent>
     </Popover>
-  );
-}
-
-function NotificationRow({
-  n,
-  tz,
-  onOpen,
-  onDismiss,
-}: {
-  n: NotificationDto;
-  tz: string;
-  onOpen: () => void;
-  onDismiss: (e: MouseEvent) => void;
-}) {
-  const { Icon, tint } = topicVisual(n.topic);
-  const badge = KIND_BADGE[n.kind];
-  const unread = !n.readAt;
-  const navigable = Boolean(n.sessionId);
-  const relative = formatDistanceToNow(new Date(n.sentAt), { addSuffix: true });
-  const when = eventTimeLabel(n, tz);
-
-  return (
-    <div
-      className={cn(
-        "group relative flex w-full items-stretch",
-        unread && "bg-primary/[0.04]",
-      )}
-    >
-      <button
-        type="button"
-        onClick={onOpen}
-        disabled={!navigable}
-        title={n.content}
-        className={cn(
-          "flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 pr-10 text-left",
-          navigable && "hover:bg-muted",
-        )}
-      >
-        <span
-          className={cn(
-            "flex size-9 shrink-0 items-center justify-center rounded-xl",
-            tint,
-          )}
-        >
-          <Icon className="size-[18px]" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-1.5">
-            {unread && (
-              <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
-            )}
-            <span
-              className={cn(
-                "truncate text-[13px]",
-                unread ? "font-semibold" : "font-medium",
-              )}
-            >
-              {n.title}
-            </span>
-          </span>
-          <span
-            className={cn(
-              "mt-1 flex items-center gap-1.5 text-[11px]",
-              unread
-                ? "font-medium text-foreground/80"
-                : "text-muted-foreground",
-            )}
-          >
-            <span
-              className={cn(
-                "shrink-0 rounded border px-1 py-px text-[9px] font-semibold uppercase leading-none tracking-wide",
-                badge.className,
-              )}
-            >
-              {badge.label}
-            </span>
-            <span className="text-muted-foreground">·</span>
-            <span className="shrink-0">{relative}</span>
-            {when && (
-              <>
-                <span className="text-muted-foreground">·</span>
-                <span className="truncate">{when}</span>
-              </>
-            )}
-          </span>
-        </span>
-      </button>
-      {/* Right-side indicator, vertically centred against the row. It's swapped
-          out for the dismiss button on hover so the ✕ lands in the exact same
-          spot as the alert / chevron (right-3 for a size-4 icon and right-2 for
-          the size-6 button both centre 20px from the edge). */}
-      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition group-hover:opacity-0">
-        {n.kind === "NEW" ? (
-          <CircleAlert
-            className="size-4 text-destructive"
-            aria-label="Needs your attention"
-          />
-        ) : (
-          navigable && <ChevronRight className="size-4 text-muted-foreground" />
-        )}
-      </span>
-      <button
-        type="button"
-        onClick={onDismiss}
-        aria-label="Dismiss"
-        className="absolute right-2 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground opacity-0 transition hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
-      >
-        <X className="size-3.5" />
-      </button>
-    </div>
-  );
-}
-
-/**
- * The tap-to-act toast for a notification that arrives over SSE while the app
- * is open — the web counterpart of mobile's foreground push. Same chrome as an
- * inbox row: the calendar type's icon + tint on the left, the title/detail
- * stacked, and a red `!` (a `NEW` item) or a chevron on the right. Clicking it
- * jumps to the session; sonner auto-dismisses it after its duration.
- */
-function NotificationToast({
-  n,
-  tz,
-  onOpen,
-}: {
-  n: NotificationDto;
-  tz: string;
-  onOpen: () => void;
-}) {
-  const { Icon, tint } = topicVisual(n.topic);
-  // A reminder's copy already states the start time, and it isn't an item that
-  // "landed on the calendar" — no repeated time line, no attention mark.
-  const isReminder = n.topic === "REMINDER";
-  const when = isReminder ? null : eventTimeLabel(n, tz);
-  const navigable = Boolean(n.sessionId);
-
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      disabled={!navigable}
-      className={cn(
-        "glass-notice flex w-[22rem] items-center gap-3 rounded-2xl px-4 py-3.5 text-left",
-        navigable && "transition hover:brightness-[0.98]",
-      )}
-    >
-      <span
-        className={cn(
-          // Soft tinted disc, no outline (the tint's own border is dropped).
-          "flex size-9 shrink-0 items-center justify-center rounded-full !border-0",
-          tint,
-        )}
-      >
-        <Icon className="size-[18px]" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13.5px] font-semibold text-foreground">
-          {n.title}
-        </span>
-        <span className="mt-0.5 block truncate text-[12px] font-normal text-muted-foreground">
-          {n.content}
-        </span>
-        {when && (
-          <span className="mt-0.5 block text-[12px] font-normal capitalize text-muted-foreground">
-            {when}
-          </span>
-        )}
-      </span>
-      {n.kind === "NEW" && !isReminder ? (
-        <CircleAlert
-          className="size-4 shrink-0 text-destructive"
-          aria-label="Needs your attention"
-        />
-      ) : (
-        navigable && (
-          <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-        )
-      )}
-    </button>
   );
 }

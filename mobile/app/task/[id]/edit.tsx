@@ -93,6 +93,7 @@ export default function EditSessionScreen() {
           type: res.type as SessionFormType,
           title: res.title,
           tags: res.tags,
+          reminders: res.reminders ?? [],
           note: res.note ?? "",
           location: res.location ?? "",
         };
@@ -137,6 +138,7 @@ export default function EditSessionScreen() {
       location: values.location || null,
       tags: values.tags,
     };
+    if (values.type !== "DND") patch.reminders = values.reminders ?? [];
     if (values.type === "TASK") {
       // Duration (resize) is owned by the calendar's "Move to…" sheet now —
       // the edit form only touches a TASK's deadline and, now, its session
