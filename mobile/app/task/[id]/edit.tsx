@@ -3,9 +3,11 @@ import {
   removeSeriesFrom,
   removeSession,
   removeSessionSeries,
+  slotPick,
   truncateSessionSeries,
   updateSession,
 } from "@/api/tasks";
+import { SlotPickSheet, type SlotPickSheetHandle } from "@/components/calendar/slot-pick-sheet";
 import { Trash2 } from "@/components/Icons";
 import {
   type DeleteRecurringScope,
@@ -34,7 +36,7 @@ import {
   zonedDate,
   zonedWallClockToUtc,
 } from "@zenflow/core";
-import type { Session, UpdateSessionInput } from "@zenflow/shared";
+import type { Session, UpdateSessionInput, UpdateSessionResponse } from "@zenflow/shared";
 import { format } from "date-fns";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
@@ -67,6 +69,12 @@ export default function EditSessionScreen() {
   const [task, setSession] = useState<Session | null>(null);
   const [deleting, setDeleting] = useState(false);
   const deleteScopeSheet = useRef<DeleteRecurringSheetHandle>(null);
+
+  const slotPickSheetRef = useRef<SlotPickSheetHandle>(null);
+  const [pendingPick, setPendingPick] = useState<{
+    response: UpdateSessionResponse;
+    resolve: () => void;
+  } | null>(null);
 
   const form = useSessionForm({ defaultValues: EMPTY_DEFAULTS });
   const loading = !task || form.formState.isSubmitting || deleting;
@@ -162,6 +170,53 @@ export default function EditSessionScreen() {
 
     try {
       const updated = await updateSession(task.id, patch);
+
+      // Handle divergent response — show picker for primary vs alternative slot
+      if (
+        updated.divergent &&
+        updated.slotProposalId &&
+        updated.primarySlot &&
+        updated.alternativeSlot
+      ) {
+        setPendingPick({
+          response: updated,
+          resolve: () => {},
+        });
+        slotPickSheetRef.current?.open(
+          updated,
+          updated.primarySlot,
+          updated.alternativeSlot,
+          updated.slotProposalId,
+          tz,
+          async (chose) => {
+            try {
+              await slotPick(updated.id, { slotProposalId: updated.slotProposalId!, chose });
+            } catch (error) {
+              // Non-blocking — surface as toast but continue with placement
+              showErrorToast(toast, error, "Couldn't record preference");
+            }
+            if (chose === "alternative" && updated.alternativeSlot) {
+              router.replace({
+                pathname: "/",
+                params: { date: updated.alternativeSlot, flash: updated.id },
+              } as Href);
+            } else if (updated.scheduledStartTime) {
+              router.replace({
+                pathname: "/",
+                params: { date: updated.scheduledStartTime, flash: updated.id },
+              } as Href);
+            } else {
+              router.back();
+            }
+            setPendingPick(null);
+          },
+          () => {
+            setPendingPick(null);
+          },
+        );
+        return;
+      }
+
       toast("Session updated", "success");
       if (isSessionPastDeadline(updated)) {
         toast(
@@ -255,69 +310,72 @@ export default function EditSessionScreen() {
   }
 
   return (
-    <SessionFormScreen
-      title="Edit session"
-      subtitle={
-        task
-          ? `Created ${format(new Date(task.createdAt), "MMM d")}`
-          : undefined
-      }
-      headerRight={
-        <Pressable
-          disabled={loading}
-          onPress={onDelete}
-          className="flex-row items-center gap-1.5"
-          accessibilityLabel="Delete session"
-        >
-          <Trash2 size={15} className="text-destructive" />
-          <Text className="text-[13px] font-semibold text-destructive">
-            Delete
-          </Text>
-        </Pressable>
-      }
-      footer={
-        <Button
-          className="h-[52px] w-full"
-          disabled={loading}
-          onPress={form.handleSubmit(onSubmit, onInvalid)}
-        >
-          <Text className="text-base font-semibold text-foreground">
-            {loading ? "Saving…" : "Save changes"}
-          </Text>
-        </Button>
-      }
-    >
-      {task ? (
-        <SessionSheetFields
-          initialValue={task.note || ""}
-          form={form}
-          tz={tz}
-          disabled={loading}
-          editing
-          deadlineWarning={
-            deadlinePastStart
-              ? "Earlier than this session's scheduled start — it'll be marked late."
-              : undefined
-          }
-          editingInstance={{
-            scheduledStartTime: task.scheduledStartTime,
-            durationMinutes: task.durationMinutes,
-          }}
-        />
-      ) : (
-        <View className="items-center py-16">
-          <ActivityIndicator />
-          <Text className="mt-3 text-sm text-muted-foreground">
-            Loading session…
-          </Text>
-        </View>
-      )}
+    <>
+      <SessionFormScreen
+        title="Edit session"
+        subtitle={
+          task
+            ? `Created ${format(new Date(task.createdAt), "MMM d")}`
+            : undefined
+        }
+        headerRight={
+          <Pressable
+            disabled={loading}
+            onPress={onDelete}
+            className="flex-row items-center gap-1.5"
+            accessibilityLabel="Delete session"
+          >
+            <Trash2 size={15} className="text-destructive" />
+            <Text className="text-[13px] font-semibold text-destructive">
+              Delete
+            </Text>
+          </Pressable>
+        }
+        footer={
+          <Button
+            className="h-[52px] w-full"
+            disabled={loading}
+            onPress={form.handleSubmit(onSubmit, onInvalid)}
+          >
+            <Text className="text-base font-semibold text-foreground">
+              {loading ? "Saving…" : "Save changes"}
+            </Text>
+          </Button>
+        }
+      >
+        {task ? (
+          <SessionSheetFields
+            initialValue={task.note || ""}
+            form={form}
+            tz={tz}
+            disabled={loading}
+            editing
+            deadlineWarning={
+              deadlinePastStart
+                ? "Earlier than this session's scheduled start — it'll be marked late."
+                : undefined
+            }
+            editingInstance={{
+              scheduledStartTime: task.scheduledStartTime,
+              durationMinutes: task.durationMinutes,
+            }}
+          />
+        ) : (
+          <View className="items-center py-16">
+            <ActivityIndicator />
+            <Text className="mt-3 text-sm text-muted-foreground">
+              Loading session…
+            </Text>
+          </View>
+        )}
 
-      <DeleteRecurringSheet
-        ref={deleteScopeSheet}
-        kind={task && getSeriesKind(task) === "task" ? "task" : "recurring"}
-        onChoose={runDelete}
-      />
-    </SessionFormScreen>
+        <DeleteRecurringSheet
+          ref={deleteScopeSheet}
+          kind={task && getSeriesKind(task) === "task" ? "task" : "recurring"}
+          onChoose={runDelete}
+        />
+      </SessionFormScreen>
+      <SlotPickSheet ref={slotPickSheetRef} tz={tz} />
+    </>
   );
 }
