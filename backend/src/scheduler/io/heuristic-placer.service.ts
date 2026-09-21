@@ -33,6 +33,9 @@ export interface PlaceInWindowOpts {
 }
 
 /**
+ * FROZEN FALLBACK (ADR-0003): bug fixes only; behaviour changes belong in
+ * services/bandit. (Still also the legacy-mode heuristic until phase 6.)
+ *
  * Policy A — the preference-matrix placer, restricted to placing **only the
  * session in hand**: it never repacks a day or moves another session
  * (`docs/scheduler/reranking.md`, `docs/scheduler/heuristic.md`). It is the

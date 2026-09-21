@@ -142,3 +142,23 @@ export function statusClass(status: number): string {
 }
 
 export type MetricAttrs = Attributes;
+
+// --- Python-authoritative placement (ADR-0003) ------------------------------
+export const schedulerPlacementSource = meter.createCounter(
+  "scheduler.placement_source",
+  {
+    description:
+      "Placements by {source=python|ts_fallback} and degraded {reason}",
+  },
+);
+export const schedulerBreakerState = meter.createGauge(
+  "scheduler.breaker_state",
+  { description: "Placement circuit breaker: 0 closed, 1 half-open, 2 open" },
+);
+export const schedulerPlacementShadowMismatch = meter.createCounter(
+  "scheduler.placement_shadow_mismatch",
+  {
+    description:
+      "Shadow mode: Python /v1/place disagreed with the legacy TS pick, by kind",
+  },
+);

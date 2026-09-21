@@ -1,6 +1,6 @@
 {
   "name": "single-heuristic-placed",
-  "description": "One 60 min TASK on Mon 2026-09-21 UTC. Only Mon 14:00-15:00 has preference +1 (all else 0). 14:00-14:30 is occupied, so the best free start is 14:30 covering half of the hot hour: score 0.5. Earlier zero-score starts lose; 13:15 etc. overlap the block.",
+  "description": "One 60 min TASK on Mon 2026-09-21 UTC. Only Mon 14:00-15:00 has preference +1 (all else 0). 14:00-14:30 is occupied, so the best free start is 14:30 covering half of the hot hour: score 0.5. Earlier zero-score starts lose; 13:15 etc. overlap the block. The occupied block is a DND, so workloadByType.DND = {hours 0.5, count 1} (what Nest derives; the heuristic ignores it).",
   "ignore": [
     "paramsVersion",
     "timingsMs"
@@ -51,8 +51,8 @@
             "count": 0
           },
           "DND": {
-            "hours": 0,
-            "count": 0
+            "hours": 0.5,
+            "count": 1
           }
         }
       }

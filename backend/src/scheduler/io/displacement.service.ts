@@ -30,7 +30,7 @@ export interface AppliedMove {
 }
 
 /** Only standalone scheduled TASK rows are movable; everything else is fixed. */
-const isFlexible = (it: ScheduleItem): boolean =>
+export const isFlexible = (it: ScheduleItem): boolean =>
   !it.recurring &&
   it.type === "TASK" &&
   it.seriesId === null &&
