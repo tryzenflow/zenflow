@@ -1,6 +1,7 @@
 import { isDateString } from "class-validator";
 import { DAILY_HORIZON, TIME_REGEX } from "../constants";
-import { fromZonedTime, toZonedTime } from "date-fns-tz";
+import { fromZonedTime } from "date-fns-tz";
+import { localMinutesOfDay } from "../../scheduler/core/slot";
 import { BadRequestException } from "@nestjs/common";
 
 export const minuteToTime = (minute: number) => {
@@ -27,8 +28,7 @@ export function utcToMinutes(
   date: Date, // stored UTC date
   timezone: string, // e.g. "Europe/Paris"
 ): number {
-  const local = toZonedTime(date, timezone);
-  return local.getHours() * 60 + local.getMinutes();
+  return localMinutesOfDay(date, timezone);
 }
 
 export function minutesToUtc(

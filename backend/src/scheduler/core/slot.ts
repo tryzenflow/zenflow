@@ -12,13 +12,52 @@ export interface Interval {
 
 /** 'YYYY-MM-DD' for the given instant in the user's timezone. */
 export function localDateStr(date: Date, timezone: string): string {
-  // en-CA yields ISO-style YYYY-MM-DD; honours the IANA zone.
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
+  return dateFormatter(timezone).format(date);
+}
+
+const FORMATTER_CACHE_MAX = 64;
+const dateFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/** Memoized per-timezone formatter (constructing one is very expensive). */
+function dateFormatter(timezone: string): Intl.DateTimeFormat {
+  let f = dateFormatters.get(timezone);
+  if (!f) {
+    // en-CA yields ISO-style YYYY-MM-DD; honours the IANA zone.
+    // Throws RangeError for an invalid zone (nothing is cached then).
+    f = new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    if (dateFormatters.size >= FORMATTER_CACHE_MAX) dateFormatters.clear();
+    dateFormatters.set(timezone, f);
+  }
+  return f;
+}
+
+const minuteFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/** Wall-clock minutes since local midnight (0..1439) in `timezone`. */
+export function localMinutesOfDay(date: Date, timezone: string): number {
+  let f = minuteFormatters.get(timezone);
+  if (!f) {
+    f = new Intl.DateTimeFormat("en-GB", {
+      timeZone: timezone,
+      hourCycle: "h23",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    if (minuteFormatters.size >= FORMATTER_CACHE_MAX) minuteFormatters.clear();
+    minuteFormatters.set(timezone, f);
+  }
+  let h = 0;
+  let m = 0;
+  for (const p of f.formatToParts(date)) {
+    if (p.type === "hour") h = Number(p.value);
+    else if (p.type === "minute") m = Number(p.value);
+  }
+  return (h % 24) * 60 + m;
 }
 
 /**
