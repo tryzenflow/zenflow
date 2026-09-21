@@ -42,3 +42,31 @@ def overlap_rate(start_ms: int, end_ms: int, arm: str, timezone: str) -> float:
         overlap += max(0.0, min(seg_end_min, b_end) - max(seg_start_min, b_start))
         cursor = seg_end
     return overlap / total
+
+
+# Exact-tie order between candidate slots (MORNING first, never EARLY_MORNING first).
+TIE_BREAK_ARM_ORDER: tuple[str, ...] = (
+    "MORNING",
+    "AFTERNOON",
+    "EVENING",
+    "EARLY_MORNING",
+    "NIGHT",
+)
+
+
+def arm_overlap_rates_from_minute(
+    start_minute: float, duration_minutes: float
+) -> list[float]:
+    """Per-arm overlap rates (``ARM_BANDS`` order) of a slot starting at local
+    ``start_minute``; wall-clock arithmetic, no timezone lookups."""
+    end = start_minute + duration_minutes
+    rates: list[float] = []
+    for _, b_start, b_end in ARM_BANDS:
+        overlap = 0.0
+        day = 0
+        while day * 1440 < end:
+            lo, hi = b_start + day * 1440, b_end + day * 1440
+            overlap += max(0.0, min(end, hi) - max(start_minute, lo))
+            day += 1
+        rates.append(overlap / duration_minutes)
+    return rates

@@ -48,9 +48,7 @@ def _ctx(a: dict[str, Any]) -> Any:
 def _bfs(*a: Any) -> Any:
     fit = a[6] if len(a) > 6 else None
     prev = a[7] if len(a) > 7 else None
-    return best_free_slot(
-        a[0], _occ(a[1]), a[2], a[3], _matrix(a[4]), a[5], fit, prev
-    )
+    return best_free_slot(a[0], _occ(a[1]), a[2], a[3], _matrix(a[4]), a[5], fit, prev)
 
 
 DISPATCH: dict[str, Any] = {

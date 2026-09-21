@@ -1,6 +1,6 @@
 """1000-placement benchmark of the vectorized slot scan (issue #60).
 
-    uv run python -m scripts.bench_slot_scan
+uv run python -m scripts.bench_slot_scan
 """
 
 from __future__ import annotations
@@ -27,7 +27,8 @@ def main() -> None:
         occ = [
             (NOW + int(a) * SLOT_MS, NOW + int(a) * SLOT_MS + int(b) * SLOT_MS)
             for a, b in zip(
-                rng.integers(0, MAX_SCAN_DAYS * 96, 40), rng.integers(2, 16, 40),
+                rng.integers(0, MAX_SCAN_DAYS * 96, 40),
+                rng.integers(2, 16, 40),
                 strict=True,
             )
         ]
@@ -45,10 +46,14 @@ def main() -> None:
         _scalar_best(dur, occ, NOW, we, m, TZ)
     sca = (time.perf_counter() - t0) / k * N
 
-    print(f"{N} placements over a {MAX_SCAN_DAYS}-day window ({MAX_SCAN_DAYS*96} slots)")
-    print(f"vectorized: {vec:.3f}s total, {vec/N*1000:.3f} ms/placement")
-    print(f"scalar ref: ~{sca:.1f}s total (extrapolated from {k}), "
-          f"{sca/N*1000:.1f} ms/placement, speedup ~{sca/vec:.0f}x")
+    print(
+        f"{N} placements over a {MAX_SCAN_DAYS}-day window ({MAX_SCAN_DAYS * 96} slots)"
+    )
+    print(f"vectorized: {vec:.3f}s total, {vec / N * 1000:.3f} ms/placement")
+    print(
+        f"scalar ref: ~{sca:.1f}s total (extrapolated from {k}), "
+        f"{sca / N * 1000:.1f} ms/placement, speedup ~{sca / vec:.0f}x"
+    )
 
 
 if __name__ == "__main__":

@@ -31,7 +31,7 @@ def stability_scores(
 ) -> NDArray[np.float64]:
     dist_h = np.abs(starts_ms - prev_start_ms) / HOUR_MS
     sat = np.minimum(dist_h, STABILITY_SATURATION_HOURS) / STABILITY_SATURATION_HOURS
-    return -STABILITY_WEIGHT * sat
+    return np.asarray(-STABILITY_WEIGHT * sat, dtype=np.float64)
 
 
 def slot_preference_scores(
@@ -54,7 +54,7 @@ def slot_preference_scores(
     piece = matrix[local_cells(first, span, timezone)] * 0.25
     cs = np.concatenate(([0.0], np.cumsum(piece)))
     idx = (starts_ms // SLOT_MS - first).astype(np.int64)
-    return cs[idx + n] - cs[idx]
+    return np.asarray(cs[idx + n] - cs[idx], dtype=np.float64)
 
 
 def slot_preference_score(
@@ -85,7 +85,7 @@ def free_start_mask(
         if lo < hi:
             diff[lo] += 1
             diff[hi] -= 1
-    return np.cumsum(diff[:n]) == 0
+    return np.asarray(np.cumsum(diff[:n]) == 0, dtype=np.bool_)
 
 
 def best_free_slot(

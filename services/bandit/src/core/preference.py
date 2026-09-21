@@ -88,4 +88,4 @@ def decay_matrix(
     arr = np.asarray(matrix, dtype=np.float64)
     if not delta_days > 0 or not half_life_days > 0:
         return arr.copy()
-    return arr * 2.0 ** (-delta_days / half_life_days)
+    return np.asarray(arr * 2.0 ** (-delta_days / half_life_days), dtype=np.float64)

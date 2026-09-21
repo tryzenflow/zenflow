@@ -85,3 +85,70 @@ def test_weekday_cells_match_helpers() -> None:
             utc_to_minutes(t, "Asia/Kolkata") // 60,
         )
         assert cells[i] == want
+
+
+def test_linucb_vectorized_matches_scalar() -> None:
+    from src.core.adaptive_weights import adaptive_weights
+    from src.core.arms import (
+        ARM_BANDS,
+        TIE_BREAK_ARM_ORDER,
+        arm_overlap_rates_from_minute,
+    )
+    from src.core.linucb_best_slot import LinucbCandidateDay, best_linucb_slot
+    from src.core.slot_score import slot_preference_score
+
+    rng = np.random.default_rng(3)
+    day0 = 1_767_571_200_000
+    names = [b[0] for b in ARM_BANDS]
+    for obs in (0, 12, 500):
+        m = rng.uniform(-1, 1, 168)
+        days = []
+        for d in range(3):
+            s = day0 + d * 86_400_000
+            occ = [
+                (s + int(a) * 900_000, s + int(a) * 900_000 + 4 * 900_000)
+                for a in rng.integers(0, 96, 25)
+            ]
+            days.append(
+                LinucbCandidateDay(
+                    "d",
+                    s,
+                    s + 86_400_000,
+                    occ,
+                    [0.0],
+                    {a: float(rng.uniform(-1, 1)) for a in names},
+                )
+            )
+        dur, deadline = 90, day0 + 3 * 86_400_000 + 3_600_000
+        got = best_linucb_slot(
+            days, dur, "UTC", m, day0 + 8 * 900_000, deadline, observation_count=obs
+        )
+        w = adaptive_weights(obs)
+        best = None
+        for day in days:
+            st = max(day.day_start_ms, day0 + 8 * 900_000)
+            while st + dur * 60_000 <= min(
+                day.day_end_ms + (dur - 15) * 60_000, deadline
+            ):
+                if not overlaps_any(day.occupied, st, st + dur * 60_000):
+                    r = arm_overlap_rates_from_minute(
+                        (st - day.day_start_ms) / 60_000, dur
+                    )
+                    lin = sum(
+                        x * day.arm_scores[a] for x, a in zip(r, names, strict=True)
+                    )
+                    sc = w.wL * lin + w.wP * slot_preference_score(
+                        m, st, st + dur * 60_000, "UTC"
+                    ) / (dur / 60)
+                    arm = names[
+                        [
+                            b[1] <= ((st - day.day_start_ms) // 60_000) % 1440 < b[2]
+                            for b in ARM_BANDS
+                        ].index(True)
+                    ]
+                    key = (-round(sc, 9), TIE_BREAK_ARM_ORDER.index(arm), st)
+                    if best is None or key < best:
+                        best = key
+                st += 900_000
+        assert got is not None and best is not None
+        assert got.start_ms == best[2]

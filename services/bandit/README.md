@@ -100,19 +100,23 @@ Pure numpy port of `backend/src/scheduler/core/*` (the TS core is the source of 
 `slot`, `arms`, `context_vector`, `reward`, `series_spread`, `preference` (cell/move
 reinforcement + `decay_matrix`) and `slot_score` (`best_free_slot`, vectorized). No I/O, no
 clock, no randomness; instants are epoch-ms ints and `now`-style values are parameters.
-The 7x24 matrix is 168 floats. Not yet ported: `linucb_best_slot` (waiting on the issue #62
-per-slot rewrite of `linucb-best-slot.ts`, so the stale arm-then-minute version is not copied).
+Also ported: `adaptive_weights`, `linucb_best_slot` (slot-first scoring, issue #62 A: every
+feasible 15-min start across all days scored `wL*armTerm + wP*pref/hours + stability`, ties by
+`TIE_BREAK_ARM_ORDER` then earlier start), `displacement` (`plan_displacement`,
+`pick_min_conflict_slot`, `pick_late_slot`) and `sync_conflicts`. The 7x24 matrix is 168 floats.
 
 The scan is vectorized: per-slot local (weekday, hour) cells come from cached per-tz UTC
 offset chunks (DST and fractional offsets such as Asia/Kolkata handled), window scores are
 one prefix-sum over 15-min pieces, occupancy is a difference-array mask, and ties use
 `argmax` on scores rounded to 1e-9 (earliest start wins, like the TS loop).
 
-Parity: `tests/test_core_parity.py` loads `tests/fixtures/golden/*.json`
-(`{function, cases:[{name, fn, args, expected}]}`, camelCase TS names, epoch ms). Current
-fixtures are hand-checked; the backend exporter should overwrite them. `tests/test_core_scan.py`
-checks the vectorized scan against a literal scalar transcription of `bestFreeSlot`
-(UTC, Kolkata, and both DST transitions).
+Parity: `tests/test_golden_ts.py` runs every case of the TS-exported
+`backend/test/golden/scheduler-core.golden.json` (regenerate with
+`pnpm --filter backend golden:export`; the TS core is the source of truth).
+`tests/test_core_parity.py` keeps a few hand-checked fixtures (`tests/fixtures/golden/`) for
+slot/calendar, preference reinforcement, decay, series spread and context-vector coverage the
+export lacks. `tests/test_core_scan.py` checks the vectorized scans (heuristic and LinUCB)
+against scalar transcriptions (UTC, Kolkata, both DST transitions).
 
 Benchmark (`python -m scripts.bench_slot_scan`; 1000 placements, 60-day window = 5760
 slots, 40 occupied intervals each, Europe/Paris, seeded; 16-thread Intel CPU, Python 3.12,
@@ -120,10 +124,10 @@ single process, warm tz cache):
 
 | implementation | total | per placement |
 | -------------- | ----- | ------------- |
-| vectorized `best_free_slot` | 0.51 s | 0.51 ms |
-| scalar TS-style loop (extrapolated from 20) | ~111 s | ~111 ms |
+| vectorized `best_free_slot` | 0.17-0.51 s (run to run) | 0.17-0.51 ms |
+| scalar TS-style loop (extrapolated from 20) | ~38-111 s | ~38-111 ms |
 
-About 200x speedup. (The simulator, metrics, alpha sweep and multiprocessing/cache from #60
+About 200x speedup on the same run. (The simulator, metrics, alpha sweep and multiprocessing/cache from #60
 are out of scope for this change.)
 
 Container: `docker compose -f backend/compose.dev.yml up bandit` — published on the host at
