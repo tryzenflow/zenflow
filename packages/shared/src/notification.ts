@@ -28,7 +28,10 @@ export type NotificationTopic =
   | "ASSIGNMENT"
   | "EXAM"
   | "TIMETABLE"
-  | "REMINDER";
+  | "REMINDER"
+  | "ASSIGNMENT_CONFLICT"
+  | "EXAM_CONFLICT"
+  | "TIMETABLE_CONFLICT";
 
 /**
  * How the row is categorised, for its inbox badge:
@@ -67,6 +70,28 @@ export interface NotificationDto {
    * wrote — or null for notifications with no session behind them.
    */
   sessionId: string | null;
+  /**
+   * For the `*_CONFLICT` topics: ids of the user's own flexible tasks that a
+   * sync landed on top of ("Reschedule them all?" —
+   * `POST /notifications/:id/reschedule-conflicts`). Empty otherwise.
+   */
+  conflictSessionIds: string[];
+}
+
+/** `data` payload for `POST /notifications/:id/reschedule-conflicts`. */
+export interface RescheduleConflictsResponse {
+  /** Tasks successfully re-placed (each recorded as a `SYSTEM_MOVE`). */
+  rescheduled: DisplacedSessionRef[];
+  /** Tasks that could not be re-placed conflict-free (still conflicting). */
+  failedSessionIds: string[];
+}
+
+export interface DisplacedSessionRef {
+  id: string;
+  /** ISO-8601 previous start. */
+  from: string;
+  /** ISO-8601 new start. */
+  to: string;
 }
 
 /** `data` payload for `GET /notifications`. */

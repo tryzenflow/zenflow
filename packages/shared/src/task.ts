@@ -61,8 +61,54 @@ export interface Session {
   sessionTotal: number | null;
   /** Minutes before start at which the user is reminded (max 2; always `[]` for DND). */
   reminders: number[];
+  /**
+   * `true` when a scheduled `TASK` ends after its `deadline` (the user chose
+   * "accept late deadline" — see {@link InfeasiblePolicy}). Clients render it
+   * with the red "late" block style. Always `false` for the fixed types and
+   * for unscheduled tasks.
+   */
+  late: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * What the user chose when a new/edited `TASK` cannot be placed before its
+ * deadline even after the engine repacked flexible tasks
+ * (`docs/scheduler/heuristic.md` -> "Displacement"). Sent as
+ * `infeasiblePolicy` on `POST /sessions` / `PATCH /sessions/:id`.
+ *
+ * - `ACCEPT_CONFLICTS` — meet the deadline: place the task in the best slot
+ *   before it even if that overlaps other sessions (fixed blocks never move).
+ * - `ACCEPT_LATE_DEADLINE` — keep everything clear of conflicts: place the
+ *   task in the first free slot after the deadline (`late: true`).
+ */
+export type InfeasiblePolicy = "ACCEPT_CONFLICTS" | "ACCEPT_LATE_DEADLINE";
+
+/** `code` of the 409 {@link ScheduleInfeasibleError} the engine answers with. */
+export const SCHEDULE_INFEASIBLE_CODE = "SCHEDULE_INFEASIBLE";
+
+/**
+ * 409 body when a `TASK` create/edit has no conflict-free slot before its
+ * deadline, even after displacing flexible tasks, and the request carried no
+ * `infeasiblePolicy`. Nothing was persisted. Show a toast with the two
+ * `options` and retry the same request with the chosen `infeasiblePolicy`.
+ */
+export interface ScheduleInfeasibleError {
+  success: false;
+  statusCode: 409;
+  message: string;
+  code: typeof SCHEDULE_INFEASIBLE_CODE;
+  options: InfeasiblePolicy[];
+}
+
+/** One flexible task the engine moved to make room (scheduler-initiated, `SYSTEM_MOVE`). */
+export interface DisplacedSession {
+  id: string;
+  /** ISO-8601 previous start. */
+  from: string;
+  /** ISO-8601 new start. */
+  to: string;
 }
 
 /** Max reminders per session. */
@@ -98,6 +144,8 @@ export interface CreateTaskInput {
    * `[]` -> none. On update: omit to keep, an array replaces.
    */
   reminders?: number[];
+  /** Answer to a prior 409 {@link ScheduleInfeasibleError}; omit on the first attempt. */
+  infeasiblePolicy?: InfeasiblePolicy;
 }
 
 /** Create a fixed-time event the engine does not move. */
@@ -210,6 +258,8 @@ export interface UpdateSessionInput {
    * it there. Ignored otherwise.
    */
   skipConflicting?: boolean;
+  /** TASK deadline/duration edits only: answer to a prior 409 {@link ScheduleInfeasibleError}. */
+  infeasiblePolicy?: InfeasiblePolicy;
 }
 
 export interface SessionsListResponse {
@@ -250,6 +300,8 @@ export interface SlotProposalFields {
   alternativeSlot: string | null;
   /** `true` iff `alternativeSlot` is set and its start differs from `primarySlot`. */
   divergent: boolean;
+  /** Flexible tasks moved to make room for this placement (empty when none). */
+  displacedSessions: DisplacedSession[];
 }
 
 /**
