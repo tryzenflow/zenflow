@@ -1,17 +1,15 @@
 """Authoritative placement for ``POST /v1/place`` (ADR-0003).
 
 Pure orchestration over :mod:`src.core`: no I/O, no clock (``nowMs`` is a request
-field), no randomness. Ports the decisions of the TS ``heuristic-placer`` /
-``bandit-placer`` / ``series-placer`` / ``displacement.service`` (``5763a29``):
+field), no randomness. Ports the TS heuristic / bandit / series placers and
+displacement service (``5763a29``):
 
 * one request = one placement event (a single task, or one materialized series);
 * each member scans its own local-day window, skipping days already holding
-  ``MAX_SERIES_PER_DAY`` siblings and never overlapping a sibling's interval;
-* HEURISTIC = best per-day preference slot, best score across days (the earlier
-  day wins ties); LINUCB = slot-first scan over all days with arm scores
-  computed in-process from the supplied ``(A, b)`` state;
-* no free slot for a single member -> ``NEEDS_INFEASIBLE_CONTEXT`` (phase 1) or,
-  when ``infeasible`` is supplied, EDF displacement then the user's fallback.
+  ``MAX_SERIES_PER_DAY`` siblings and never overlapping a sibling;
+* HEURISTIC = best per-day preference slot; LINUCB = slot-first scan over all days;
+* no free slot for a single member -> ``NEEDS_INFEASIBLE_CONTEXT``, then (with
+  ``infeasible``) EDF displacement and the user's fallback.
 """
 
 from __future__ import annotations

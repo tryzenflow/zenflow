@@ -51,61 +51,54 @@ Experiment: [`docs/scheduler/ab-testing.md`](../../docs/scheduler/ab-testing.md)
 | `POST /predict` | Body: `alpha`, `ridge`, `state` (all 5 arms' `(A, b)`, `[]` = cold ridge prior), `contexts` (`[{day, x}]`). Returns `{scores: {day: {arm: score}}}` — all 5 arms for every day. A cold arm scores `0.0` (no exploration bonus until it has data). |
 | `POST /update`  | Body: `ridge`, `arm`, `x`, `reward`, `state` (that arm's `(A, b)`, `[]` = cold). Returns the new `{A, b}` (`A` is `d*d` row-major). |
 
-### `POST /v1/place` (ADR-0003, phase 2 - not yet called by Nest until phase 3)
+### `POST /v1/place` (ADR-0003, phase 2; Nest calls it from phase 3)
 
-One request = one placement event (a single `TASK`, or one materialized series). The
-service builds the context vector and the 5 arm scores **in-process** from the supplied
-`(A, b)` (no `/predict` hop), then runs the heuristic and, when `primaryPolicy`/`computeBoth`
-needs it, the slot-first LinUCB scan. Contract types: `packages/shared/src/placement.ts`
-(mirrored by `src/schemas_place.py`, `extra="forbid"`, camelCase, epoch-ms ints,
-`contractVersion: 1`); example pairs: `packages/shared/contract/place/*.json`.
+One request = one placement event (a single `TASK`, or one materialized series). Arm scores are
+computed in-process from the supplied `(A, b)`, so there is no `/predict` hop.
 
-- **Per member** (`src/place.py`): scan window = local days `[start, deadline]` (single,
-  capped by `maxScanDays`) or the series' non-overlapping window from `series_day_windows`
-  (`daySpan = min(floor((deadline - next15)/1d), 59)`); days already holding
-  `MAX_SERIES_PER_DAY` (=1) siblings are skipped and siblings' intervals are hard blocks
-  (sibling ledger). HEURISTIC = best per-day preference slot, best score across days (earlier
-  day wins ties). LINUCB = slot-first scan over all days with the adaptive wL/wP blend. A
-  LINUCB primary without bandit state / with a singular matrix / no surviving slot falls back
-  to the heuristic pick (`appliedPolicy: "HEURISTIC"`).
-- **Response fields** `heuristic` / `linucb` are present iff requested (primary or
-  `computeBoth`; heuristic also when it is the LINUCB fallback); `startMs` is the applied
-  policy's pick and feeds the ledger. `mode: "PREFLIGHT"` runs the heuristic only.
-- **No free slot, single member**: call 1 -> `NEEDS_INFEASIBLE_CONTEXT`; call 2 (with
-  `infeasible`) -> EDF displacement over the deadline day (widening to +/-1 day) ->
-  `DISPLACED` with `moves`; otherwise the user's policy: `ACCEPT_CONFLICTS` ->
-  `ACCEPTED_CONFLICTS` (min-overlap start; `conflicting` is true iff it really overlaps
-  `horizonOccupied`), `ACCEPT_LATE_DEADLINE` -> `ACCEPTED_LATE` (`late: true`); else
-  `INFEASIBLE`. A series member with no slot is reported `INFEASIBLE` (no displacement,
-  siblings still placed - TS series parity).
-- **Errors**: `422` validation (FastAPI `detail` list); `422 {"code":"CONTRACT_VERSION",
-  "supported":1,"got":n}` for a foreign `contractVersion`; `413` > 2 MB; `401` bad/missing
-  bearer token.
-- **Auth**: set `BANDIT_SERVICE_TOKEN` to require `Authorization: Bearer <token>` on
-  `/v1/place`, `/predict`, `/update` (`hmac.compare_digest`; `BANDIT_SERVICE_TOKEN_PREVIOUS`
-  is also accepted for rotation). Unset -> open (dev/tests). `/health` and `/ready` are exempt.
-- **Observability**: every response carries `x-request-id` (echoing the inbound header, else
-  `req-<n>`); each place call logs `request_id=<body requestId> ... outcomes=... total_ms=`.
-  `paramsVersion` = `py-` + sha256 of all core constants (+ contract version), stored by Nest as
-  `SlotProposal.modelVersion`. `timingsMs = {decode, context, predict, scan, displace, total}`
-  (decode = body parse/validation; total includes it).
-- **Deterministic**: no randomness, no clock (`nowMs` is a field); same body -> same picks.
+- Contract: `packages/shared/src/placement.ts`, mirrored by `src/schemas_place.py`
+  (`extra="forbid"`, camelCase, epoch-ms ints, `contractVersion: 1`). Examples:
+  `packages/shared/contract/place/*.json`.
+- **Scan window** (`src/place.py`): local days `[start, deadline]`, capped by `maxScanDays`. For a
+  series, the member's window from `series_day_windows` (`min(floor((deadline - next15)/1d), 59)` days).
+  Days already holding `MAX_SERIES_PER_DAY` (1) siblings are skipped; siblings' intervals are hard blocks.
+- **Policies**: HEURISTIC = best preference slot per day, best score across days (earlier day wins
+  ties). LINUCB = slot-first scan over all days with the adaptive wL/wP blend. LINUCB falls back to the
+  heuristic (`appliedPolicy: "HEURISTIC"`) on no bandit state, a singular matrix or no surviving slot.
+- **Response**: `heuristic` / `linucb` appear only if requested (primary or `computeBoth`; heuristic
+  also on fallback). `startMs` is the applied pick. `mode: "PREFLIGHT"` runs the heuristic only.
+- **No free slot (single member)**:
+  1. First call returns `NEEDS_INFEASIBLE_CONTEXT`.
+  2. Second call (with `infeasible`) tries EDF displacement over the deadline day (widening to +/-1
+     day) -> `DISPLACED` with `moves`.
+  3. Otherwise the user's policy: `ACCEPT_CONFLICTS` -> `ACCEPTED_CONFLICTS` (min-overlap start;
+     `conflicting` is true only if it really overlaps `horizonOccupied`), `ACCEPT_LATE_DEADLINE` ->
+     `ACCEPTED_LATE` (`late: true`), else `INFEASIBLE`.
+  4. A series member with no slot is `INFEASIBLE` (no displacement; siblings still placed).
+- **Errors**: `422` validation (FastAPI `detail` list); `422 {"code":"CONTRACT_VERSION","supported":1,"got":n}`;
+  `413` body > 2 MB; `401` bad or missing bearer token.
+- **Auth**: set `BANDIT_SERVICE_TOKEN` to require `Authorization: Bearer <token>` on `/v1/place`,
+  `/predict`, `/update`. `BANDIT_SERVICE_TOKEN_PREVIOUS` is also accepted for rotation. Unset = open
+  (dev/tests). `/health` and `/ready` are exempt.
+- **Observability**: each response has `x-request-id` (echoes the inbound header, else `req-<n>`).
+  `paramsVersion` = `py-` + sha256 of the core constants and contract version; Nest stores it as
+  `SlotProposal.modelVersion`. `timingsMs = {decode, context, predict, scan, displace, total}`.
+- **Deterministic**: no randomness, no clock (`nowMs` is a field); same body, same picks.
 
-**Latency** (`uv run python -m scripts.bench_place`; Windows dev box, single process,
-`TestClient` round trip = JSON + validation + handler, no network; one 90 min task, 30-day
-scan, Europe/Paris, 6-14 occupied blocks/day, 200 runs, ADR target p99 < 400 ms):
+**Latency** (`uv run python -m scripts.bench_place`): Windows dev box, single process, `TestClient`
+round trip (no network). One 90 min task, 30-day scan, Europe/Paris, 6-14 occupied blocks/day, 200
+runs. ADR target: p99 < 400 ms.
 
-| Case                              | Payload | Round trip p50 / p95 / p99 | Handler total p50 / p95 | Scan p50 / p95 |
-| --------------------------------- | ------- | -------------------------- | ----------------------- | -------------- |
-| HEURISTIC primary                 | 70 KB   | 7.0 / 14.3 / 29.3 ms       | 4.6 / 11.8 ms           | 1.9 / 2.2 ms   |
-| LINUCB primary (warm state)       | 70 KB   | 8.6 / 16.7 / 19.4 ms       | 5.9 / 14.0 ms           | 2.8 / 3.1 ms   |
-| computeBoth (LINUCB primary)      | 70 KB   | 10.7 / 16.6 / 29.9 ms      | 7.9 / 14.1 ms           | 4.6 / 5.0 ms   |
-| computeBoth, dense (14 blocks/day)| 83 KB   | 12.1 / 19.3 / 37.0 ms      | 8.7 / 15.2 ms           | 4.9 / 5.7 ms   |
+| Case                               | Payload | Round trip p50 / p95 / p99 | Handler p50 / p95 | Scan p50 / p95 |
+| ---------------------------------- | ------- | -------------------------- | ----------------- | -------------- |
+| HEURISTIC primary                  | 70 KB   | 7.0 / 14.3 / 29.3 ms       | 4.6 / 11.8 ms     | 1.9 / 2.2 ms   |
+| LINUCB primary (warm state)        | 70 KB   | 8.6 / 16.7 / 19.4 ms       | 5.9 / 14.0 ms     | 2.8 / 3.1 ms   |
+| computeBoth (LINUCB primary)       | 70 KB   | 10.7 / 16.6 / 29.9 ms      | 7.9 / 14.1 ms     | 4.6 / 5.0 ms   |
+| computeBoth, dense (14 blocks/day) | 83 KB   | 12.1 / 19.3 / 37.0 ms      | 8.7 / 15.2 ms     | 4.9 / 5.7 ms   |
 
-`scripts/gen_place_fixtures.py` regenerates the Python-owned contract fixtures (LinUCB,
-pairwise, cold bandit, displacement, accepted-conflicts/late); review their diff like a golden
-update. `tests/test_place.py` (behaviour/auth/errors), `tests/test_place_contract.py` (every
-fixture + golden TS `bestFreeSlot`/`bestLinucbSlot` through `/v1/place`).
+Tests: `tests/test_place.py` (behaviour, auth, errors) and `tests/test_place_contract.py` (every
+fixture plus golden TS `bestFreeSlot`/`bestLinucbSlot`). `scripts/gen_place_fixtures.py` regenerates
+the Python-owned fixtures; review the diff like a golden update.
 
 `d` is inferred from the length of `x` and validated (all `x` equal; each non-empty `A` is
 `d*d`, each non-empty `b` is `d`); bad shapes / non-finite values / `alpha < 0` /
@@ -156,39 +149,34 @@ services/bandit/
 
 ### Scheduler core port (`src/core/`, issue #60)
 
-Pure numpy port of `backend/src/scheduler/core/*` (the TS core is the source of truth):
-`slot`, `arms`, `context_vector`, `reward`, `series_spread`, `preference` (cell/move
-reinforcement + `decay_matrix`) and `slot_score` (`best_free_slot`, vectorized). No I/O, no
-clock, no randomness; instants are epoch-ms ints and `now`-style values are parameters.
-Also ported: `adaptive_weights`, `linucb_best_slot` (slot-first scoring, issue #62 A: every
-feasible 15-min start across all days scored `wL*armTerm + wP*pref/hours + stability`, ties by
-`TIE_BREAK_ARM_ORDER` then earlier start), `displacement` (`plan_displacement`,
-`pick_min_conflict_slot`, `pick_late_slot`) and `sync_conflicts`. The 7x24 matrix is 168 floats.
+Pure numpy port of `backend/src/scheduler/core/*` (the TS core is the source of truth): `slot`,
+`arms`, `context_vector`, `reward`, `series_spread`, `preference` (+ `decay_matrix`), `slot_score`
+(`best_free_slot`), `adaptive_weights`, `linucb_best_slot`, `displacement` and `sync_conflicts`.
+No I/O, clock or randomness; instants are epoch-ms ints. The 7x24 matrix is 168 floats.
 
-The scan is vectorized: per-slot local (weekday, hour) cells come from cached per-tz UTC
-offset chunks (DST and fractional offsets such as Asia/Kolkata handled), window scores are
-one prefix-sum over 15-min pieces, occupancy is a difference-array mask, and ties use
-`argmax` on scores rounded to 1e-9 (earliest start wins, like the TS loop).
+- `linucb_best_slot` (issue #62 A): scores every feasible 15-min start on all days as
+  `wL*armTerm + wP*pref/hours + stability`. Ties go to `TIE_BREAK_ARM_ORDER`, then the earlier start.
+- The scan is vectorized: per-tz UTC offset chunks (DST and fractional offsets like Asia/Kolkata),
+  a prefix-sum for window scores, a difference-array occupancy mask, and `argmax` on scores rounded to
+  1e-9 (earliest start wins, like the TS loop).
 
-Parity: `tests/test_golden_ts.py` runs every case of the TS-exported
-`backend/test/golden/scheduler-core.golden.json` (regenerate with
-`pnpm --filter backend golden:export`; the TS core is the source of truth).
-`tests/test_core_parity.py` keeps a few hand-checked fixtures (`tests/fixtures/golden/`) for
-slot/calendar, preference reinforcement, decay, series spread and context-vector coverage the
-export lacks. `tests/test_core_scan.py` checks the vectorized scans (heuristic and LinUCB)
-against scalar transcriptions (UTC, Kolkata, both DST transitions).
+Parity tests:
 
-Benchmark (`python -m scripts.bench_slot_scan`; 1000 placements, 60-day window = 5760
-slots, 40 occupied intervals each, Europe/Paris, seeded; 16-thread Intel CPU, Python 3.12,
-single process, warm tz cache):
+- `tests/test_golden_ts.py` runs every case of `backend/test/golden/scheduler-core.golden.json`
+  (regenerate: `pnpm --filter backend golden:export`).
+- `tests/test_core_parity.py` has hand-checked fixtures (`tests/fixtures/golden/`) the export lacks.
+- `tests/test_core_scan.py` checks the vectorized scans against scalar versions (UTC, Kolkata, both
+  DST transitions).
+
+Benchmark (`python -m scripts.bench_slot_scan`): 1000 placements, 60-day window (5760 slots), 40
+occupied intervals, Europe/Paris, seeded, single process, warm tz cache.
 
 | implementation | total | per placement |
 | -------------- | ----- | ------------- |
-| vectorized `best_free_slot` | 0.17-0.51 s (run to run) | 0.17-0.51 ms |
+| vectorized `best_free_slot` | 0.17-0.51 s | 0.17-0.51 ms |
 | scalar TS-style loop (extrapolated from 20) | ~38-111 s | ~38-111 ms |
 
-About 200x speedup on the same run. (The simulator, metrics, alpha sweep and multiprocessing/cache from #60
-are out of scope for this change.)
+About 200x faster. The simulator, metrics, alpha sweep and multiprocessing/cache from #60 are out of scope.
 
 Container: `docker compose -f backend/compose.dev.yml up bandit` — published on the host at
 `http://localhost:8100` (`BANDIT_SERVICE_URL` for backend dev, which runs on the host).
