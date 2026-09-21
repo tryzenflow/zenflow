@@ -1,0 +1,77 @@
+# Load-test stack for ONE variant at a time. Every service runs in a container with explicit,
+# identical resource limits for all variants (see README "Resource limits"). Variant-specific bits
+# come from the environment (tools/orchestrate.js sets them):
+#   COMPOSE_PROJECT_NAME  zf-lt-<A|B|C>
+#   API_IMAGE, BANDIT_IMAGE, PLACEMENT_MODE, BENCH_TIMING
+# Ports are the same for every variant because only one variant is ever up at a time.
+x-log: &log
+  logging: { driver: json-file, options: { max-size: "20m", max-file: "2" } }
+services:
+  postgres:
+    image: postgres:18.4-alpine
+    <<: *log
+    cpus: 2
+    mem_limit: 2g
+    memswap_limit: 2g
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=all", "-c", "pg_stat_statements.max=10000"]
+    ports: ["5541:5432"]
+    environment: { POSTGRES_USER: admin, POSTGRES_PASSWORD: admin, POSTGRES_DB: zenflow-test }
+  redis:
+    image: redis:8.8.0-alpine
+    <<: *log
+    cpus: 0.5
+    mem_limit: 256m
+    memswap_limit: 256m
+  redis-ratelimit:
+    image: redis:8.8.0-alpine
+    <<: *log
+    cpus: 0.5
+    mem_limit: 256m
+    memswap_limit: 256m
+  mail:
+    image: mailhog/mailhog:v1.0.1
+    <<: *log
+    cpus: 0.5
+    mem_limit: 512m
+    ports: ["8541:8025"]
+  bandit:
+    image: ${BANDIT_IMAGE}
+    <<: *log
+    cpus: 2
+    mem_limit: 1g
+    memswap_limit: 1g
+    restart: "no"
+    ports: ["8641:8000"]
+  api:
+    image: ${API_IMAGE}
+    <<: *log
+    cpus: 2
+    mem_limit: 2g
+    memswap_limit: 2g
+    restart: "no"          # a crash must stay visible: the supervisor invalidates the scenario
+    depends_on: [postgres, redis, redis-ratelimit, mail, bandit]
+    ports: ["5641:5000"]
+    environment:
+      NODE_ENV: production
+      PORT: "5000"
+      DATABASE_URL: postgres://admin:admin@postgres:5432/zenflow-test?sslmode=disable&schema=public
+      CACHE_URL: redis://redis:6379
+      RATE_LIMIT_CACHE_URL: redis://redis-ratelimit:6379
+      MAIL_TRANSPORT: smtp://mail:1025
+      MAIL_FROM: zenflow@example.com
+      SESSION_SECRET: loadtest
+      CORS_ORIGIN: http://localhost:5173
+      COOKIE_SECURE: "false"
+      MASTER_LMS_ENCRYPTION_KEY_V1: 65a8fe6953c0e6cbd8fe74ea254d57f0be098f85bf4c79a0ab81330896759ff7
+      MASTER_PORTAL_ENCRYPTION_KEY_V1: 191171d8481639929cb6ec18f973540298c14379ee3ed7a9f71434c853ef8227
+      PORTAL_API_KEY: loadtest
+      INGESTION_ENABLED: "false"
+      OTEL_SDK_DISABLED: "true"
+      LOG_LEVEL: warn
+      OTP_REQUEST_IP_LIMIT: "1000000"
+      OTP_REQUEST_EMAIL_LIMIT: "1000000"
+      OTP_VERIFY_IP_LIMIT: "1000000"
+      OTP_VERIFY_EMAIL_LIMIT: "1000000"
+      BANDIT_SERVICE_URL: ${BANDIT_URL:-http://bandit:8000}
+      SCHEDULER_PLACEMENT_MODE: ${PLACEMENT_MODE:-legacy}
+      BENCH_TIMING: ${BENCH_TIMING:-0}
