@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import type { InfeasiblePolicy } from "@zenflow/shared";
 import { SchedulingModel, type User } from "../../../generated/prisma";
 import type { Span } from "@opentelemetry/api";
@@ -12,6 +13,8 @@ import { HeuristicPlacer } from "./heuristic-placer.service";
 import { BanditPlacer } from "./bandit-placer.service";
 import { SeriesPlacer } from "./series-placer.service";
 import { DisplacementService, type AppliedMove } from "./displacement.service";
+import { PythonPlacer } from "./python-placer.service";
+import { parsePlacementMode, type PlacementMode } from "./placement-mode";
 import { ScheduleInfeasibleException } from "../schedule-infeasible.exception";
 import { ceilToSlot, MS_PER_MINUTE } from "../core/slot";
 import {
@@ -53,7 +56,16 @@ export class TaskPlacementService {
     private readonly bandit: BanditPlacer,
     private readonly seriesPlacer: SeriesPlacer,
     private readonly displacement: DisplacementService,
+    private readonly python: PythonPlacer,
+    private readonly config: ConfigService,
   ) {}
+
+  /** `SCHEDULER_PLACEMENT_MODE` (default `legacy`), read per call. */
+  private get mode(): PlacementMode {
+    return parsePlacementMode(
+      this.config.get<string>("SCHEDULER_PLACEMENT_MODE"),
+    );
+  }
 
   /** Place a freshly-created single `TASK`. */
   placeOnCreate(args: {
@@ -114,6 +126,9 @@ export class TaskPlacementService {
     now: Date,
     policy?: InfeasiblePolicy,
   ): Promise<PlacementResult> {
+    if (this.mode === "python") {
+      return this.python.placeSingle(user, task, trigger, now, policy);
+    }
     const heuristicStart = await this.computeHeuristicStart(user, task, now);
     await this.applyStart(task.id, heuristicStart);
 
@@ -139,6 +154,20 @@ export class TaskPlacementService {
 
     this.logPlacement(trigger, task.id, heuristicStart, outcome);
     this.emitPlacementTelemetry(span, trigger, heuristicStart, outcome);
+    if (this.mode === "shadow") {
+      // Fire-and-forget: never adds latency or fails the legacy placement.
+      void this.python
+        .shadowCompareSingle({
+          user,
+          task,
+          now,
+          legacyHeuristicStart: heuristicStart,
+          legacyLinucbStart: outcome?.banditPick?.scheduledStartTime ?? null,
+        })
+        .catch((err: Error) =>
+          this.logger.warn(`shadow compare failed: ${err.message}`),
+        );
+    }
 
     const start = outcome?.appliedStart ?? heuristicStart ?? fallbackStart;
     return {
@@ -223,6 +252,17 @@ export class TaskPlacementService {
       );
     }
     if (args.arithmeticOnly) return;
+    if (this.mode === "python") {
+      await this.python.preflightSingle({
+        user,
+        taskId: args.taskId,
+        durationMinutes,
+        deadline,
+        now,
+        policy: args.policy,
+      });
+      return;
+    }
     const id = args.taskId ?? PREFLIGHT_TASK_ID;
     const task: PlaceableTask = { id, durationMinutes, deadline };
     const start = await this.heuristic.placeTask(
@@ -378,6 +418,15 @@ export class TaskPlacementService {
     deadline: Date;
     now: Date;
   }): Promise<boolean> {
+    if (this.mode === "python") {
+      try {
+        await this.python.preflightSingle(args);
+        return true;
+      } catch (err) {
+        if (err instanceof ScheduleInfeasibleException) return false;
+        throw err;
+      }
+    }
     const start = await this.heuristic.placeTask(
       args.user.id,
       {
@@ -408,6 +457,7 @@ export class TaskPlacementService {
     deadline: Date;
     now: Date;
   }): Promise<boolean> {
+    if (this.mode === "python") return this.python.canPlaceSeries(args);
     const members: SeriesMemberInput[] = Array.from(
       { length: args.sessionCount },
       (_, i) => ({
@@ -435,14 +485,23 @@ export class TaskPlacementService {
   }): Promise<SeriesPlacementRow[]> {
     const { user, seriesId, members, deadline, now } = args;
 
-    const placements = await this.seriesPlacer.placeSeries(
-      user.id,
-      { members, deadline },
-      user.timezone,
-      user.preferenceMatrix,
-      now,
-      { trigger: "create" },
-    );
+    const placements =
+      this.mode === "python"
+        ? await this.python.placeSeries({
+            user,
+            members,
+            deadline,
+            now,
+            trigger: "create",
+          })
+        : await this.seriesPlacer.placeSeries(
+            user.id,
+            { members, deadline },
+            user.timezone,
+            user.preferenceMatrix,
+            now,
+            { trigger: "create" },
+          );
 
     const placed = placements.filter((p) => p.scheduledStartTime).length;
     this.logger.log(
@@ -482,21 +541,32 @@ export class TaskPlacementService {
         (m.scheduledStartTime as Date).getTime() + m.durationMinutes * 60_000,
     }));
 
-    const placements = await this.seriesPlacer.placeSeries(
-      user.id,
-      {
-        members: upcoming.map((m) => ({
-          id: m.id,
-          durationMinutes: m.durationMinutes,
-        })),
-        deadline: newDeadline,
-        fixedOccupied,
-      },
-      user.timezone,
-      user.preferenceMatrix,
-      now,
-      { trigger: "deadline-change" },
-    );
+    const upcomingMembers = upcoming.map((m) => ({
+      id: m.id,
+      durationMinutes: m.durationMinutes,
+    }));
+    const placements =
+      this.mode === "python"
+        ? await this.python.placeSeries({
+            user,
+            members: upcomingMembers,
+            deadline: newDeadline,
+            now,
+            trigger: "deadline-change",
+            fixedOccupied,
+          })
+        : await this.seriesPlacer.placeSeries(
+            user.id,
+            {
+              members: upcomingMembers,
+              deadline: newDeadline,
+              fixedOccupied,
+            },
+            user.timezone,
+            user.preferenceMatrix,
+            now,
+            { trigger: "deadline-change" },
+          );
     const startById = new Map(
       placements.map((p) => [p.id, p.scheduledStartTime]),
     );
@@ -518,11 +588,13 @@ export class TaskPlacementService {
       ),
     ]);
 
+    const degraded = placements.some((p) => p.degraded);
     return members.map((m) => ({
       id: m.id,
       scheduledStartTime: isPast(m)
         ? m.scheduledStartTime
         : (startById.get(m.id) ?? null),
+      ...(degraded ? { degraded: true } : {}),
     }));
   }
 

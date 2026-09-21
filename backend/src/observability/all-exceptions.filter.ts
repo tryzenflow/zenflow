@@ -31,7 +31,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const res = http.getResponse<Response>();
     const req = http.getRequest<Request>();
 
-    const { status, message, errors } = this.normalize(exception);
+    const { status, message, errors, extra } = this.normalize(exception);
 
     if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
       const err = exception as Error & { code?: string };
@@ -55,15 +55,19 @@ export class AllExceptionsFilter implements ExceptionFilter {
       );
     }
 
-    res
-      .status(status)
-      .json({ success: false, message, ...(errors ? { errors } : {}) });
+    res.status(status).json({
+      success: false,
+      message,
+      ...(errors ? { errors } : {}),
+      ...extra,
+    });
   }
 
   private normalize(exception: unknown): {
     status: number;
     message: string;
     errors?: string[];
+    extra?: { code?: string; options?: unknown };
   } {
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
@@ -77,7 +81,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
           errors: asObj.message,
         };
       }
-      return { status, message: asObj.message ?? exception.message };
+      // Machine-readable `code` (+ `options`) of deliberate business errors
+      // (409 SCHEDULE_INFEASIBLE, 503 SCHEDULER_DEGRADED) must reach clients.
+      const { code, options } = body as { code?: unknown; options?: unknown };
+      const extra =
+        typeof code === "string"
+          ? { code, ...(options !== undefined ? { options } : {}) }
+          : undefined;
+      return {
+        status,
+        message: asObj.message ?? exception.message,
+        ...(extra ? { extra } : {}),
+      };
     }
 
     if (exception instanceof Prisma.PrismaClientKnownRequestError) {

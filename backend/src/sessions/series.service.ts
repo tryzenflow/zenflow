@@ -124,7 +124,14 @@ export class SeriesService {
     const sessions = rows.map((r) =>
       toSessionDto({ ...r, scheduledStartTime: startById.get(r.id) ?? null }),
     );
-    return { ...sessions[0], ...NO_SLOT_PROPOSAL, sessions };
+    return {
+      ...sessions[0],
+      ...NO_SLOT_PROPOSAL,
+      sessions,
+      ...(placements.some((p) => p.degraded)
+        ? { schedulingDegraded: true }
+        : {}),
+    };
   }
 
   /**
@@ -139,13 +146,13 @@ export class SeriesService {
     user: User,
     newDeadline: Date,
     now: Date,
-  ): Promise<SharedSession[]> {
+  ): Promise<{ sessions: SharedSession[]; degraded: boolean }> {
     const members = await this.prisma.session.findMany({
       where: { seriesId, userId: user.id },
       include: WITH_TAGS_AND_SERIES,
       orderBy: [{ sessionIndex: "asc" }, { createdAt: "asc" }],
     });
-    if (members.length === 0) return [];
+    if (members.length === 0) return { sessions: [], degraded: false };
 
     const placed = await this.taskPlacement.redistributeSeries({
       user,
@@ -160,13 +167,16 @@ export class SeriesService {
     });
     const startById = new Map(placed.map((p) => [p.id, p.scheduledStartTime]));
 
-    return members.map((m) =>
-      toSessionDto({
-        ...m,
-        deadline: newDeadline,
-        scheduledStartTime: startById.get(m.id) ?? null,
-      }),
-    );
+    return {
+      sessions: members.map((m) =>
+        toSessionDto({
+          ...m,
+          deadline: newDeadline,
+          scheduledStartTime: startById.get(m.id) ?? null,
+        }),
+      ),
+      degraded: placed.some((p) => p.degraded),
+    };
   }
 
   /**

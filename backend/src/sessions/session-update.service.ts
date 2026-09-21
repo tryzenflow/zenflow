@@ -579,15 +579,21 @@ export class SessionUpdateService {
     if (!newDeadline || updated.type !== "TASK") return null;
 
     if (updated.seriesId && updated.series?.type === "TASK") {
-      const seriesSessions = await this.series.redistribute(
-        updated.seriesId,
-        user,
-        newDeadline,
-        now,
-      );
+      const { sessions: seriesSessions, degraded } =
+        await this.series.redistribute(
+          updated.seriesId,
+          user,
+          newDeadline,
+          now,
+        );
       const rep =
         seriesSessions.find((s) => s.id === updated.id) ?? seriesSessions[0];
-      return { ...rep, ...NO_SLOT_PROPOSAL, sessions: seriesSessions };
+      return {
+        ...rep,
+        ...NO_SLOT_PROPOSAL,
+        sessions: seriesSessions,
+        ...(degraded ? { schedulingDegraded: true } : {}),
+      };
     }
 
     const placement = await this.taskPlacement.placeOnDeadlineChange({

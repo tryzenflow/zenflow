@@ -75,6 +75,7 @@ export function slotProposalFieldsOf(
       from: d.from.toISOString(),
       to: d.to.toISOString(),
     })),
+    ...(placement.degraded ? { schedulingDegraded: true } : {}),
   };
 }
 

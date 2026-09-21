@@ -7,6 +7,22 @@ import { BanditPlacer } from "./bandit-placer.service";
 import { SeriesPlacer } from "./series-placer.service";
 import { TaskPlacementService } from "./task-placement.service";
 import { DisplacementService } from "./displacement.service";
+import { ConfigService } from "@nestjs/config";
+import { PythonPlacer } from "./python-placer.service";
+
+/** Mutable per-test config + Python placer stub (mode switching, ADR-0003). */
+const cfg: Record<string, string | undefined> = {};
+const python = {
+  placeSingle: jest.fn(),
+  preflightSingle: jest.fn(),
+  canPlaceSeries: jest.fn(),
+  placeSeries: jest.fn(),
+  shadowCompareSingle: jest.fn().mockResolvedValue(undefined),
+};
+beforeEach(() => {
+  delete cfg.SCHEDULER_PLACEMENT_MODE;
+  Object.values(python).forEach((m) => m.mockClear());
+});
 
 /**
  * `TaskPlacementService.placeOnCreate` / `placeOnDeadlineChange` — the single-TASK
@@ -50,6 +66,11 @@ async function makeTaskPlacementService(
       { provide: BanditPlacer, useValue: bandit },
       { provide: SeriesPlacer, useValue: seriesPlacer },
       { provide: DisplacementService, useValue: displacement },
+      { provide: PythonPlacer, useValue: python },
+      {
+        provide: ConfigService,
+        useValue: { get: (k: string) => cfg[k] },
+      },
     ],
   }).compile();
   return module.get<TaskPlacementService>(TaskPlacementService);
@@ -428,5 +449,117 @@ describe("TaskPlacementService displacement + infeasible policies (#62 B)", () =
         now,
       }),
     ).rejects.toMatchObject({ status: 400 });
+  });
+});
+
+describe("TaskPlacementService placement mode (ADR-0003)", () => {
+  it("legacy (default) never touches the Python placer", async () => {
+    const { svc } = await makeDeps({
+      heuristicStart: new Date("2026-06-08T09:00:00.000Z"),
+    });
+    await svc.placeOnCreate({ user, task, now });
+    expect(python.placeSingle).not.toHaveBeenCalled();
+    expect(python.shadowCompareSingle).not.toHaveBeenCalled();
+  });
+
+  it("an unknown mode value falls back to legacy", async () => {
+    cfg.SCHEDULER_PLACEMENT_MODE = "bogus";
+    const { svc, heuristic } = await makeDeps({
+      heuristicStart: new Date("2026-06-08T09:00:00.000Z"),
+    });
+    await svc.placeOnCreate({ user, task, now });
+    expect(heuristic.placeTask).toHaveBeenCalled();
+    expect(python.placeSingle).not.toHaveBeenCalled();
+  });
+
+  it("shadow: legacy answers, Python is compared with the legacy picks, result unchanged", async () => {
+    cfg.SCHEDULER_PLACEMENT_MODE = "shadow";
+    const start = new Date("2026-06-08T09:00:00.000Z");
+    const { svc, heuristic, sessionUpdate } = await makeDeps({
+      heuristicStart: start,
+    });
+    const res = await svc.placeOnCreate({ user, task, now });
+    expect(res.scheduledStartTime).toEqual(start);
+    expect(heuristic.placeTask).toHaveBeenCalled();
+    expect(sessionUpdate).toHaveBeenCalled();
+    expect(python.placeSingle).not.toHaveBeenCalled();
+    expect(python.shadowCompareSingle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        task,
+        legacyHeuristicStart: start,
+        legacyLinucbStart: null,
+      }),
+    );
+  });
+
+  it("shadow: a failing Python comparison cannot fail the placement", async () => {
+    cfg.SCHEDULER_PLACEMENT_MODE = "shadow";
+    python.shadowCompareSingle.mockRejectedValueOnce(new Error("boom"));
+    const { svc } = await makeDeps({
+      heuristicStart: new Date("2026-06-08T09:00:00.000Z"),
+    });
+    await expect(svc.placeOnCreate({ user, task, now })).resolves.toBeDefined();
+  });
+
+  it("python: delegates single placement and skips the legacy heuristic", async () => {
+    cfg.SCHEDULER_PLACEMENT_MODE = "python";
+    const result = {
+      scheduledStartTime: new Date("2026-06-08T10:00:00.000Z"),
+      appliedPolicy: "HEURISTIC",
+      slotProposalId: "sp",
+      alternativeSlot: null,
+      divergent: false,
+      degraded: true,
+    };
+    python.placeSingle.mockResolvedValue(result);
+    const { svc, heuristic } = await makeDeps({ heuristicStart: null });
+    const res = await svc.placeOnCreate({
+      user,
+      task,
+      now,
+      infeasiblePolicy: "ACCEPT_CONFLICTS",
+    });
+    expect(res).toBe(result);
+    expect(python.placeSingle).toHaveBeenCalledWith(
+      user,
+      task,
+      "create",
+      now,
+      "ACCEPT_CONFLICTS",
+    );
+    expect(heuristic.placeTask).not.toHaveBeenCalled();
+  });
+
+  it("python: pre-flights and series checks route to Python; the arithmetic guard still runs first", async () => {
+    cfg.SCHEDULER_PLACEMENT_MODE = "python";
+    const { svc, heuristic } = await makeDeps({ heuristicStart: null });
+    await svc.preflightTask({
+      user,
+      durationMinutes: 60,
+      deadline: task.deadline,
+      now,
+    });
+    expect(python.preflightSingle).toHaveBeenCalledTimes(1);
+    expect(heuristic.placeTask).not.toHaveBeenCalled();
+
+    await expect(
+      svc.preflightTask({
+        user,
+        durationMinutes: 60,
+        deadline: new Date(now.getTime() + 60_000),
+        now,
+      }),
+    ).rejects.toThrow("Won't fit before the deadline");
+    expect(python.preflightSingle).toHaveBeenCalledTimes(1);
+
+    python.canPlaceSeries.mockResolvedValue(true);
+    await svc.canPlaceSeries({
+      user,
+      durationMinutes: 60,
+      sessionCount: 2,
+      deadline: task.deadline,
+      now,
+    });
+    expect(python.canPlaceSeries).toHaveBeenCalledTimes(1);
   });
 });

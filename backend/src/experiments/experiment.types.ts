@@ -1,5 +1,9 @@
 import type { SchedulingArm } from "@zenflow/shared";
-import { SchedulingModel, SlotProposalEvent } from "../../generated/prisma";
+import {
+  PlacementSource,
+  SchedulingModel,
+  SlotProposalEvent,
+} from "../../generated/prisma";
 
 /** What triggered a scheduling event that gets an A/B `SlotProposal` row. */
 export type ExperimentTrigger = "create" | "deadline-change";
@@ -38,4 +42,10 @@ export interface RecordProposalArgs {
   pairwiseShown: boolean;
   /** Set only when `pairwiseShown` — which side the primary policy's slot was shown on. */
   pairwisePositions: { primaryPosition: PairwisePosition } | null;
+  /** Which implementation produced the placement (ADR-0003); default `PYTHON`. */
+  placementSource?: PlacementSource;
+  /** Why the frozen TS fallback answered (`timeout`, `breaker_open`, ...); null otherwise. */
+  degradedReason?: string | null;
+  /** Overrides the stamped `modelVersion` (Python `paramsVersion`; `null` for the fallback). */
+  modelVersion?: string | null;
 }

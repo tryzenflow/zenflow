@@ -44,6 +44,8 @@ export interface PlacementResult {
   divergent: boolean;
   /** Flexible tasks moved to make room (scheduler-initiated); absent/empty when none. */
   displaced?: { id: string; from: Date; to: Date }[];
+  /** `true` when the frozen TS fallback placed this (placement service unavailable, ADR-0003). */
+  degraded?: boolean;
 }
 
 /** One member of a `TASK` series to place. */
@@ -56,6 +58,8 @@ export interface SeriesMemberInput {
 export interface SeriesPlacementRow {
   id: string;
   scheduledStartTime: Date | null;
+  /** `true` when the frozen TS fallback placed the series (ADR-0003). */
+  degraded?: boolean;
 }
 
 /** The concrete placement LinUCB proposes for one `TASK`. */

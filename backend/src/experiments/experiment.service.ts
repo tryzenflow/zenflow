@@ -106,7 +106,18 @@ export class ExperimentService {
             selectedArm: args.modelProposal.selectedArm,
           }
         : Prisma.JsonNull,
-      modelVersion: isLinucb ? BANDIT_MODEL_VERSION : null,
+      modelVersion:
+        args.modelVersion !== undefined
+          ? args.modelVersion
+          : isLinucb
+            ? BANDIT_MODEL_VERSION
+            : null,
+      ...(args.placementSource
+        ? {
+            placementSource: args.placementSource,
+            degradedReason: args.degradedReason ?? null,
+          }
+        : {}),
       proposedStartTime: args.proposedStartTime,
       featureVector: args.featureVector,
       selectedArm: args.selectedArm,

@@ -9,6 +9,10 @@ import { RetainedSessionsService } from "./io/retained-sessions.service";
 import { HeuristicPlacer } from "./io/heuristic-placer.service";
 import { BanditPlacer } from "./io/bandit-placer.service";
 import { SeriesPlacer } from "./io/series-placer.service";
+import { PlacementClient } from "./io/placement-client.service";
+import { PlacementGateway } from "./io/placement-gateway.service";
+import { FallbackPlacer } from "./io/fallback-placer.service";
+import { PythonPlacer } from "./io/python-placer.service";
 import { TaskPlacementService } from "./io/task-placement.service";
 import { SchedulingExperimentCoordinator } from "./io/scheduling-experiment-coordinator.service";
 import { SchedulingFeedbackService } from "./io/scheduling-feedback.service";
@@ -32,6 +36,10 @@ import { SchedulingFeedbackService } from "./io/scheduling-feedback.service";
     HeuristicPlacer,
     BanditPlacer,
     SeriesPlacer,
+    PlacementClient,
+    PlacementGateway,
+    FallbackPlacer,
+    PythonPlacer,
     SchedulingExperimentCoordinator,
     TaskPlacementService,
     SchedulingFeedbackService,

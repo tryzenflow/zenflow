@@ -599,7 +599,12 @@ constant; `0` in `.env.test`). `PORTAL_API_KEY` stays required with no default.
 
 `BANDIT_SERVICE_URL` (optional, dev `http://localhost:8100`) points at the stateless Python
 bandit service (`services/bandit/`). When unset, LinUCB scheduling is disabled and every
-scheduling event falls back to the heuristic.
+scheduling event falls back to the heuristic. **`BANDIT_SERVICE_URL` is required when
+`NODE_ENV=production`** (config validation fails boot). Placement flags (ADR-0003, see
+[Python-authoritative placement](#python-authoritative-placement-adr-0003)):
+`SCHEDULER_PLACEMENT_MODE` (`legacy` default | `shadow` | `python`), optional
+`BANDIT_SERVICE_TOKEN` (bearer secret for `POST /v1/place`), `PLACE_TIMEOUT_MS` (2500),
+`BENCH_TIMING=1` (test env: emit a `Server-Timing` header).
 
 Native push config (all optional, each provider self-disables when its vars are unset —
 same pattern as `BANDIT_SERVICE_URL`; unset in `.env.test`): `FCM_SERVICE_ACCOUNT` (base64
@@ -659,6 +664,56 @@ first-modification call also stamps `SlotProposal.firstModifiedAt` /
 `firstModificationType` / `acceptedWithoutModification` (a `"primary"`/blank slot-pick sets
 `acceptedWithoutModification = true` instead). Every part is best-effort — a bandit failure
 never breaks session create/update.
+
+## Python-authoritative placement (ADR-0003)
+
+[ADR-0003](../docs/adr/0003-python-authoritative-placement.md) moves all placement ranking to
+the Python `POST /v1/place`; Nest gathers, calls, applies and persists. It is rolled out behind
+`SCHEDULER_PLACEMENT_MODE` so `master` is always releasable:
+
+| Mode | Behaviour |
+| --- | --- |
+| `legacy` (default) | Today's TS ranking (`HeuristicPlacer` / `BanditPlacer` / `SeriesPlacer` / `DisplacementService`). Nothing calls `/v1/place`. |
+| `shadow` | `legacy` answers the request. For a single `TASK` create / deadline edit a **fire-and-forget** `/v1/place` call is compared with the legacy heuristic (and LinUCB, when it ran) start; any difference logs `shadow mismatch ...` and bumps `scheduler.placement_shadow_mismatch{kind}`. Never writes, never fails the request. Series placement is not shadowed yet. |
+| `python` | `PythonPlacer`: one `PlaceRequest` per placement event (single `TASK` or whole series), a second call only for the rare infeasible case (`NEEDS_INFEASIBLE_CONTEXT`). Displacement moves are applied as `SYSTEM_MOVE`; `SlotProposal` gets `placementSource = PYTHON` and `modelVersion = paramsVersion`. Pre-flights become `mode: "PREFLIGHT"` calls. |
+
+Pieces (`scheduler/io/`): `PlacementClient` (bearer token, 2.5 s total timeout, at most one retry
+on connect-refused/reset/502-504 that failed within 300 ms, never on a timeout or 4xx; the
+300 ms connect timeout is not separately enforced because `fetch` has no per-phase timeout),
+`circuit-breaker.ts` (5 consecutive failures or >=50% of >=10 calls in 10 s open it for 15 s,
+one half-open probe, open time doubles to a 60 s cap; 4xx/contract errors fall back but do
+not trip it), `PlacementGateway` (builds the `PlaceRequest` from `loadDayLoads` + observation
+count + bandit `(A, b)`, the two-phase infeasible call, spans/timings), `PythonPlacer`
+(apply + persist + `SlotProposal`), `FallbackPlacer` (the frozen pre-#62 heuristic; `slot.ts`,
+`slot-score.ts`, `preference.ts` are byte-identical to `bc6636d^`).
+
+**Degraded behaviour** (Python down, breaker open, `BANDIT_SERVICE_URL` unset, contract
+mismatch), in `python` mode only: a free slot is placed by the frozen heuristic, the primary
+A/B policy is still rolled and recorded but the proposal is `placementSource = TS_FALLBACK`
+with `degradedReason` (`timeout | breaker_open | connect | http_5xx | http_4xx | version |
+invalid_response | disabled`), `modelProposal = null`; the response carries
+`schedulingDegraded: true` (create/update/reschedule responses). **No displacement, no
+accept-conflicts/late**: with no free slot before the deadline the request fails
+`503 SCHEDULER_DEGRADED` (`{ success: false, message, code }`, retryable, raised by the
+pre-flight before anything is written). `infeasiblePolicy` is ignored while degraded. Series are
+all-or-nothing (a member without a slot => 503). One known edge: if Python dies *between* the
+pre-flight and the placement call, a single `TASK` insert can already exist unplaced when the
+fallback finds no slot (503); the retry re-creates it.
+
+The global exception filter now passes a `HttpException` body's machine-readable `code` (and
+`options`) through, which is how `409 SCHEDULE_INFEASIBLE` and `503 SCHEDULER_DEGRADED` reach
+clients. Metrics: `scheduler.placement_source{source,reason}`, `scheduler.breaker_state`
+(0 closed / 1 half-open / 2 open), `scheduler.placement_shadow_mismatch{kind}`,
+`bandit.client.request.duration{operation=place}`. Spans: `placement.http` (with
+`placement.python.{decode,context,predict,scan,displace,total}_ms`). With `BENCH_TIMING=1` the
+`Server-Timing` header carries `dayload`, `http`, `scan`, `predict`, `db_apply`.
+Contract fixtures live in `packages/shared/contract/place/*.json` (see its README).
+
+> **Pending (phase 6):** the CLAUDE.md invariant 2 rewrite ("Ranking lives in Python; Nest is
+> thin") and deleting the dead TS ranking code (`linucb-best-slot`, `adaptive-weights`,
+> `displacement` planning, `arms`, `context-vector`, `normalize`, `BanditPlacer`, the
+> `legacy`/`shadow` modes) are deliberately deferred until after a soak in `python` mode. Until
+> then the sections below still describe the (authoritative-in-`legacy`) TS core.
 
 ## Scheduler architecture
 
