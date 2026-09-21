@@ -84,6 +84,8 @@ export interface RescheduleConflictsResponse {
   rescheduled: DisplacedSessionRef[];
   /** Tasks that could not be re-placed conflict-free (still conflicting). */
   failedSessionIds: string[];
+  /** `true` when any task was re-placed by the basic fallback (placement service unavailable). */
+  schedulingDegraded?: boolean;
 }
 
 export interface DisplacedSessionRef {

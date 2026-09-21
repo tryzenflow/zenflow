@@ -102,6 +102,22 @@ export interface ScheduleInfeasibleError {
   options: InfeasiblePolicy[];
 }
 
+/** `code` of the 503 {@link SchedulerDegradedError} (ADR-0003 section 2.4). */
+export const SCHEDULER_DEGRADED_CODE = "SCHEDULER_DEGRADED";
+
+/**
+ * 503 body when the placement service is unavailable (timeout / breaker open /
+ * disabled) AND the basic fallback found no free slot before the deadline. The
+ * degraded path never displaces tasks or accepts conflicts/late, so nothing was
+ * persisted. Retryable: show a toast with a retry that re-sends the same request.
+ */
+export interface SchedulerDegradedError {
+  success: false;
+  statusCode: 503;
+  message: string;
+  code: typeof SCHEDULER_DEGRADED_CODE;
+}
+
 /** One flexible task the engine moved to make room (scheduler-initiated, `SYSTEM_MOVE`). */
 export interface DisplacedSession {
   id: string;
@@ -302,6 +318,12 @@ export interface SlotProposalFields {
   divergent: boolean;
   /** Flexible tasks moved to make room for this placement (empty when none). */
   displacedSessions: DisplacedSession[];
+  /**
+   * `true` when the placement service was unavailable and the basic fallback
+   * placed the task (show a quiet "placed with basic scheduling" note). Absent
+   * when placement ran normally.
+   */
+  schedulingDegraded?: boolean;
 }
 
 /**

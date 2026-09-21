@@ -285,6 +285,11 @@ enum SlotProposalFeedback {
 // (`docs/scheduler/ab-testing.md`). Columns only for now — nothing writes this
 // table yet; the ExperimentService / randomizer / pairwise + feedback UI are a
 // later phase.
+enum PlacementSource {
+  PYTHON
+  TS_FALLBACK
+}
+
 model SlotProposal {
   id                String            @id @default(uuid())
   experimentId      String
@@ -309,6 +314,11 @@ model SlotProposal {
   // primary policy was the pref-only heuristic (keeps the A/B distinct).
   linucbWeight     Float?
   preferenceWeight Float?
+
+  // Provenance (ADR-0003): which implementation produced the placement, so A/B
+  // analysis can exclude degraded (frozen-TS-fallback) events.
+  placementSource PlacementSource @default(PYTHON)
+  degradedReason  String? // "timeout" | "breaker_open" | "connect" | "http_5xx" | "version" | "disabled"
 
   sessionEvents SessionEvent[]
 
