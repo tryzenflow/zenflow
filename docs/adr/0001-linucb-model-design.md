@@ -1,7 +1,7 @@
 # ADR-0001: Disjoint LinUCB Model Design for Zenflow Scheduling
 
 **Status:** Accepted
-**Date:** 2026-08-29 · **Last updated:** 2026-09-18
+**Date:** 2026-08-29 · **Last updated:** 2026-09-21
 **Decision:** Use per-student Disjoint LinUCB with reusable time-of-day arms.
 
 Related: [`docs/scheduler/reranking.md`](../scheduler/reranking.md) (arm → timestamp
@@ -302,3 +302,52 @@ The design prioritizes simple state, reusable arms, fast personalization, schedu
 stability, and a focused evaluation. Pure scoring math lives in
 `backend/src/scheduler/core/*`; the `/predict` / `/update` calls, `SlotProposal` writes and
 `BanditArmState` persistence live in `backend/src/scheduler/io/*` and `backend/src/bandit/*`.
+
+---
+
+## 13. Addendum (2026-09-21, issue #62): slot-first scoring and adaptive weights
+
+**Supersedes §8's "arm, then minute" pick (Item 3B2).** There is no separate ADR for #62;
+this addendum is the decision record.
+
+**Problem.** With an untrained bandit every arm scores 0, and the tiny preference nudge
+(`PREFERENCE_NUDGE_WEIGHT = 0.1`) only ranked minutes *inside* an arm chosen by ARM_BANDS
+declaration order — so a brand-new user was proposed 00:00 (EARLY_MORNING first). Making the
+nudge large enough to matter would have made LinUCB irrelevant.
+
+**Decision.**
+
+1. `core/linucb-best-slot.ts` scores **every feasible 15-min start on every candidate day**
+   (including 23:45 starts that overhang midnight; the deadline is a hard ceiling on the
+   *end* and need not be slot-aligned) and ranks across days:
+
+   ```text
+   score = wL · Σ_arm overlapRate(slot, arm) · armScore[day][arm]
+         + wP · slotPreferenceScore(slot) / durationHours
+         + STABILITY_WEIGHT · stabilityScore(prevStart, slot)
+   ```
+
+   `armScore[day]` is the `/predict` output for the day the slot *starts* on. The slot's
+   `selectedArm` (what a delayed `/update` reward is credited to) stays the arm containing
+   its start. Arm/hour overlap uses per-day wall-clock offsets instead of a per-slot Intl
+   lookup (exact on 24h days; DST days fall back to the Intl `overlapRate`).
+2. **Adaptive weights** `(wL, wP) = adaptiveWeights(observationCount)`
+   (`core/adaptive-weights.ts`, constants in `constants.ts`): cold `wP = 1, wL = 0.3`, moving
+   linearly to warm `wP = 0.1, wL = 1` over `WEIGHT_WARMUP_OBSERVATIONS = 40` reward events
+   (user `MOVE` + `RETAINED`; `SYSTEM_MOVE` never counts). Monotonic. The applied weights are
+   stored on `SlotProposal.linucbWeight` / `.preferenceWeight`; the heuristic stays
+   preference-only (no arm term) so the A/B keeps two distinct policies.
+3. **Exact-tie order** is `TIE_BREAK_ARM_ORDER` (MORNING, AFTERNOON, EVENING, EARLY_MORNING,
+   NIGHT) on the start's arm, then earlier start — deterministic, never favouring 00:00.
+4. `PREFERENCE_NUDGE_WEIGHT` is no longer used by the scan (kept exported for history).
+   The `/predict` / `/update` contract with the bandit service is unchanged.
+5. `MAX_SCAN_DAYS` stays 60 (it normalizes the context vector); single-task placement scans
+   at most `SCAN_CAP_DAYS = 30` days, and all day loads for a scan come from one range query.
+
+**Displacement (issue #62 B).** The "no displacement" stance in §11 is relaxed only when a
+`TASK` has *no* free slot before its deadline: `core/displacement.ts` repacks standalone
+flexible tasks on the deadline day (widening to +/-1 day) in earliest-deadline-first order,
+capped at `MAX_DISPLACED_TASKS`, minimizing moves; fixed blocks and series sittings never
+move. Scheduler moves are `SYSTEM_MOVE` events (reward 0; no bandit update, no preference
+change). If still infeasible the API answers `409 SCHEDULE_INFEASIBLE` and the client retries
+with `infeasiblePolicy: "ACCEPT_CONFLICTS" | "ACCEPT_LATE_DEADLINE"`.

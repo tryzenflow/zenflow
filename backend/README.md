@@ -171,7 +171,7 @@ Indexes: `[userId, deadline]`, `[userId, scheduledStartTime]`,
 | Field                         | Type               | Notes                                                         |
 | ----------------------------- | ------------------ | ------------------------------------------------------------- |
 | `id`                          | BigInt             | autoincrement (serialized as decimal string over the wire)    |
-| `eventType`                   | `SessionEventType` | `CREATE` \| `MOVE` \| `RESIZE` \| `RETAINED`                  |
+| `eventType`                   | `SessionEventType` | `CREATE` \| `MOVE` \| `RESIZE` \| `RETAINED` \| `SYSTEM_MOVE` (scheduler-initiated, reward 0) |
 | `oldSnapshot` / `newSnapshot` | Json               | `{ scheduledStartTime, durationMinutes, tags }`               |
 | `rewardScore`                 | float              | LinUCB reward signal (default 1.0)                            |
 | `occurredAt`                  | DateTime           | indexed desc per user                                         |
@@ -416,6 +416,16 @@ so the scheduler avoids them from day one. Best-effort — a failure is logged a
 `PATCH /sessions/:id` (recorded as a `MOVE` signal). No status/completion, `/reschedule`,
 `/resize`, `/optimize` or `/undo`.
 
+**Displacement / infeasible deadline (issue #62 B).** When a single `TASK` create or deadline edit
+has no free slot, `TaskPlacementService.preflightTask` first tries an EDF repack of flexible
+tasks on the deadline day (+/-1 day if needed; fixed blocks and series sittings never move; moved
+rows come back in `displacedSessions[]` and are stored as `SYSTEM_MOVE` events with reward 0). If
+that is infeasible too the API answers **`409`** `{ success:false, code:"SCHEDULE_INFEASIBLE",
+options:["ACCEPT_CONFLICTS","ACCEPT_LATE_DEADLINE"] }` and persists nothing; the client retries the
+same request with `infeasiblePolicy` (`POST`/`PATCH` bodies). `ACCEPT_LATE_DEADLINE` places the task
+after the deadline and the session comes back with `late: true`. `now + duration > deadline` is a
+`400` on create and on a deadline edit. Every `Session` carries `late: boolean`.
+
 `POST` and `PATCH` accept `reminders?: number[]` (minutes before start, max 2 distinct ints in
 0…10080 (0 = at start), not for `DND`); every `Session` response carries `reminders: number[]` (descending;
 `[]` for DND). On create, omitted → one default reminder at 60 min (non-DND), `[]` → none. On
@@ -425,7 +435,7 @@ all occurrences). Violations → 400.
 
 | Method | Path                                         | Purpose                                                                                                                                                                                                                                                                                                                                                                                                          |
 | ------ | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| POST   | `/sessions`                                  | Create. A `TASK` → its best free slot (or, `sessionCount > 1`, a materialized series across `now…deadline`); a fixed/`DND` session at the given `scheduledStartTime` + optional `rrule`. Never displaces. |
+| POST   | `/sessions`                                  | Create. A `TASK` → its best free slot (or, `sessionCount > 1`, a materialized series across `now…deadline`); a fixed/`DND` session at the given `scheduledStartTime` + optional `rrule`. Only when a `TASK` has no free slot before its deadline are flexible tasks repacked (see *Displacement* below). |
 | GET    | `/sessions?view=&date=`                      | List the `day`/`week`/`month` window + unplaced. Recurring series fanned to virtual rows. |
 | GET    | `/sessions/suggestions?q=&limit=`            | Title autocomplete (newest first, deduped by normalized title — a series' sittings, or a re-created title, collapse to the most recent). `limit` 1–50, default 10. |
 | GET    | `/sessions/deadline-options?anchor=`         | The six deadline quick-chip instants relative to `anchor`.        |
@@ -467,7 +477,10 @@ only connection status. Types in `@zenflow/shared` (`ConnectIntegrationInput`,
 
 The ingestion inbox — written by the materializer, never a client (no create route).
 `CookieAuthGuard` per route, own rows only. Types: `NotificationTopic`, `NotificationKind`,
-`NotificationDto`, `NotificationsListResponse`. Each row has a `kind` (`NEW`/`CHANGE`/`DROP`)
+`NotificationDto`, `NotificationsListResponse`. Topics include the sync-conflict trio `TIMETABLE_CONFLICT` / `EXAM_CONFLICT` /
+`ASSIGNMENT_CONFLICT` (raised by `ingestion/sync-conflicts.service.ts` after each source's sync;
+`conflictSessionIds` lists the user's clashing tasks; no calendar session is created for them).
+Each row has a `kind` (`NEW`/`CHANGE`/`DROP`)
 and, for a per-item assignment/exam/lecture, an `eventEndsAt` (the "due"/"at" time; null for
 grouped rows and drops).
 
@@ -477,6 +490,7 @@ grouped rows and drops).
 | PATCH  | `/notifications/:id/read`         | Stamp `readAt`. Idempotent; `404` if not the caller's.   |
 | PATCH  | `/notifications/:id/action-taken` | Stamp `actionTakenAt` (distinct from read). Idempotent.  |
 | DELETE | `/notifications/:id`              | Dismiss (hard delete, caller-scoped).                    |
+| POST   | `/notifications/:id/reschedule-conflicts` | `*_CONFLICT` rows only (`404` otherwise): re-places every listed task that still overlaps (EDF, `SYSTEM_MOVE` events), stamps `actionTakenAt`. Idempotent. Returns `{ rescheduled[{id,from,to}], failedSessionIds[] }`. |
 | POST   | `/notifications/dev/raise`        | **Dev only** (`404` when `NODE_ENV=production`), no guard. Body `{ userId, count? }` — raises fake rows in-process so the SSE stream + push fire. Driven by `scripts/send-test-notification.ts`. |
 
 The live channel is SSE — see [Live notifications](#live-notifications-sse).
@@ -608,13 +622,14 @@ session via `HeuristicPlacer.placeTask`, then hands the A/B decision to
   never runs; record a `SlotProposal` with `modelProposal` null, `pairwiseShown` false.
 - **LINUCB** — `BanditPlacer.placeTask()` builds one `d=22` context vector per candidate day
   (`core/context-vector.ts` — the preference matrix isn't an input feature at all), calls
-  the bandit service `/predict` once, then picks a slot in two steps
-  (`core/linucb-best-slot.ts`, Item 3B2):
-  `rankArmsByScore` ranks the 5 `SchedulingArm`s by LinUCB's own per-arm score alone (no
-  preference/stability influence), then `bestMinuteInArm` searches only the minutes whose
-  local time falls in the top-ranked arm's band, scored by a small duration-normalized
-  preference nudge (`PREFERENCE_NUDGE_WEIGHT`) plus the stability term — falling through to
-  the next-ranked arm when the current one has zero feasible slots. A slot may run past local
+  the bandit service `/predict` once (all day loads come from a single range query), then
+  scores **every** feasible 15-min start across all days and ranks them (`core/linucb-best-slot.ts`,
+  issue #62 A, ADR-0001 section 13): `wL * sum overlapRate(slot,arm) * armScore[day][arm] +
+  wP * pref/duration + stability`, with `(wL, wP)` from `adaptiveWeights(observationCount)` - cold
+  `wP=1, wL=0.3` shifting to `wP=0.1, wL=1` over 40 MOVE/RETAINED events. Exact ties prefer MORNING
+  (never 00:00), then the earlier start. The applied weights are stored on
+  `SlotProposal.linucbWeight` / `.preferenceWeight`; the heuristic stays preference-only. A slot may
+  run past local
   midnight up to the deadline. If it produces a pick, THIS session's `scheduledStartTime` is
   overridden (no other session moves); otherwise the heuristic placement stands.
 - **sampled for pairwise** (independent of `primaryPolicy`) — the bandit runs too, even when
@@ -900,36 +915,45 @@ is split at local midnight and each side scored against its own day's weekday ro
 matrix is **168 signed floats** — 7 ISO weekdays × 24 one-hour buckets, row-major
 (`matrixIndex(isoWeekday, hour) = (isoWeekday−1)·24 + hour`).
 
-### LinUCB slot selection — arm choice, then minute choice (Item 3B1/B2)
+### LinUCB slot selection — slot-first scoring (issue #62 A)
 
-`core/linucb-best-slot.ts` splits arm selection from minute selection so the preference
-matrix can never bleed a placement into an arm LinUCB's own scores didn't actually favor:
+`core/linucb-best-slot.ts` scores every feasible 15-minute start on every candidate day and
+ranks across days (it replaced the old arm-then-minute pick):
 
 ```text
-rankArmsByScore(days)   — ranks the 5 SchedulingArms by max(/predict score) over any
-                           candidate day; no preference or stability influence at all.
+score(slot) = wL * SUM_arm overlapRate(slot, arm) * armScore[day][arm]
+            + wP * slotPreferenceScore(slot) / durationHours
+            + STABILITY_WEIGHT * stabilityScore(prevStart, slot)
 
-bestMinuteInArm(arm, …) — scans only the 15-min starts whose local minute-of-day falls in
-                           `arm`'s ARM_BANDS window (armOfMinute), scored by:
-                             (slotPreferenceScore(slot) / durationHours) · PREFERENCE_NUDGE_WEIGHT
-                             + STABILITY_WEIGHT · stabilityScore(prevStart, slot)
-                           — no arm term, since the arm is already fixed. `null` when this
-                           arm has zero feasible slots anywhere in the horizon.
-
-bestLinucbSlot(input)   — tries each ranked arm in turn via bestMinuteInArm, falling through
-                           to the next arm on `null`; returns `null` only once every arm is
-                           exhausted (same "nothing survives" contract as before).
+(wL, wP) = adaptiveWeights(observationCount)          # core/adaptive-weights.ts
+           cold (0 obs)  -> wP = 1,   wL = 0.3
+           warm (>= 40)  -> wP = 0.1, wL = 1            # linear in between, constants.ts
 ```
 
-`PREFERENCE_NUDGE_WEIGHT` (`constants.ts`, `0.1`) keeps the preference-matrix rerank small
-enough to only break near-ties LinUCB itself can't yet distinguish — it's a post-hoc nudge
-on the already-chosen arm's minute, never a second competing signal, and never fed into
-LinUCB's own context vector at all (`context-vector.ts` has no preference-matrix input —
-the reserved, always-zero slots from Item 3B1 were dropped outright, `d`: 46 → 22). The
-preference matrix itself is reinforced by real outcomes — `+1` on a `RETAINED` session,
-`-1` on a session's first `MOVE` — via `preference.ts`'s `reinforcePreferenceCell`, called
-from both `RetainedSessionsService` and `SessionUpdateService`'s first-move path
-unconditionally on which policy placed the session (Item 3B3).
+`observationCount` = the user's MOVE + RETAINED events (`io/observation-count.ts`;
+`SYSTEM_MOVE` excluded). Candidate starts include 23:45 with the session overhanging local
+midnight; the deadline is a hard ceiling on the end (need not be slot-aligned). Exact score
+ties resolve by `TIE_BREAK_ARM_ORDER` (MORNING first) then earliest start. Per-day wall-clock
+offsets replace a per-slot Intl lookup (`armOverlapRatesFromMinute`; DST days use the exact
+`overlapRate`). `PREFERENCE_NUDGE_WEIGHT` is no longer read here. The scan returns
+`null` only when nothing is feasible - the heuristic then places the task.
+
+### Displacement and sync conflicts (issue #62 B / D)
+
+| Concern                                                           | File                                            |
+| ----------------------------------------------------------------- | ----------------------------------------------- |
+| pure EDF repack + accept-conflicts / accept-late slot pickers     | `scheduler/core/displacement.ts`                |
+| load window, persist `SYSTEM_MOVE`s, fallback start              | `scheduler/io/displacement.service.ts`          |
+| pre-flight (400 / 409) + placement fallback                       | `scheduler/io/task-placement.service.ts`        |
+| pure conflict detection                                           | `scheduler/core/sync-conflicts.ts`              |
+| per-source sync-conflict notification                             | `ingestion/sync-conflicts.service.ts`           |
+| "reschedule all" (`POST /notifications/:id/reschedule-conflicts`) | `scheduler/io/conflict-reschedule.service.ts`   |
+| batched day loads (`loadDayLoads`, 2 queries for N days)          | `scheduler/io/day-load.ts`                      |
+
+Golden fixtures for the Python port (#60): `backend/scripts/export-golden-fixtures.ts`
+(`pnpm --filter backend golden:export`) writes `backend/test/golden/scheduler-core.golden.json`;
+`src/scheduler/golden/golden-fixtures.spec.ts` fails when the core changes without regenerated
+fixtures. Rule: core change => spec + Python port + fixtures.
 
 ### Series bounded window
 

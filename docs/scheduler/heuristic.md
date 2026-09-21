@@ -57,7 +57,8 @@ LinUCB's own reward is separate: `dragDistanceReward` on MOVE, `+1` on RETAINED.
 ## The algorithm
 
 The scheduler places **only the session in hand** — it never repacks a day or moves an
-existing session (`reranking.md`). `SessionsService` calls
+existing session (`reranking.md`) — except in the last-resort *Displacement* case below, when a
+`TASK` has no free slot before its deadline. `SessionsService` calls
 `HeuristicScheduleService.scheduleTask` after a `TASK` is created and after a `TASK`
 deadline changes. Adding a fixed / DND session schedules nothing (they are user-pinned).
 
@@ -98,6 +99,51 @@ straddle, but nothing forbids it.
 
 No telemetry is written here; the A/B `SlotProposal` row (when the experiment runs) is the
 only record.
+
+Since issue #62 the day loads for a scan come from **one** range query
+(`loadDayLoads` — `loadScheduleItems` + pure `dayLoadFromItems`), and single-task placement
+scans at most `SCAN_CAP_DAYS` (30) days; `MAX_SCAN_DAYS` (60) is unchanged because it also
+normalizes the LinUCB context vector, and series placement still spans it.
+
+## Displacement of flexible tasks (issue #62 B)
+
+Everything above places into *empty* slots. When that finds nothing before the deadline
+(`TaskPlacementService`), the engine tries, in order:
+
+1. **Repack** (`core/displacement.ts` `planDisplacement`, I/O in `DisplacementService`).
+   Standalone `TASK` rows that have not started are *flexible*; everything else — DND /
+   ASSIGNMENT / EXAM / LECTURE, recurring occurrences, `TASK`-series sittings — is *fixed* and
+   never moves. On the deadline's local day (widening to +/-1 day only if infeasible) it
+   evaluates the top `DISPLACEMENT_CANDIDATES` preference-ranked slots for the new task, and for
+   each simulates an earliest-deadline-first cascade: a flexible task stays put if it no longer
+   collides, else it is re-placed with `bestFreeSlot` inside its own deadline and the window.
+   Cascades are capped at `MAX_DISPLACED_TASKS` moves; the candidate with the fewest moves
+   (then best preference) wins. A slot at an uncomfortable hour is accepted — comfort is only a
+   score, feasibility is not.
+2. **User's choice** if still infeasible. The create/edit is rejected with
+   `409 { code: "SCHEDULE_INFEASIBLE", options: [...] }` (nothing persisted); the client retries
+   with `infeasiblePolicy`:
+   - `ACCEPT_CONFLICTS` — `pickMinConflictSlot`: the pre-deadline start overlapping the least
+     calendar time.
+   - `ACCEPT_LATE_DEADLINE` — `pickLateSlot`: the first conflict-free start whose end passes the
+     deadline (`Session.late = true`, red block in the UIs).
+
+`now + duration > deadline` is always a plain `400` (no policy can help), on create and on a
+deadline edit. A series member's deadline edit only gets that arithmetic guard.
+
+Scheduler-initiated moves are recorded as **`SYSTEM_MOVE`** `SessionEvent`s (`rewardScore = 0`).
+They never write a `MOVE`, never call `/update`, never reinforce the preference matrix, and do
+not count toward `observationCount`.
+
+## Sync conflicts (issue #62 D)
+
+After a timetable / exam / LMS sync writes fixed blocks, `SyncConflictsService` finds the
+user's own scheduled `TASK`s now overlapping them (`core/sync-conflicts.ts`) and raises one
+notification per source (`TIMETABLE_CONFLICT`, `EXAM_CONFLICT`, `ASSIGNMENT_CONFLICT`):
+"After syncing with ..., we detected X conflicts with your own tasks. Reschedule them all?".
+It is a no-op with zero conflicts and deduped while an identical un-acted notification is
+open. `POST /notifications/:id/reschedule-conflicts` re-places each still-conflicting task
+through the normal placement path (earliest deadline first) as `SYSTEM_MOVE`s.
 
 ## Session series (`sessionCount > 1`)
 
@@ -160,6 +206,8 @@ ordinary, independently editable/movable/deletable `Session` row.
   `RetainedSessionsService` writes a `RETAINED` `SessionEvent` (`rewardScore = +1`) +
   `Session.retainedAt`.
 - `CREATE` events carry `rewardScore = 0`.
+- Scheduler-initiated moves (displacement, "reschedule all") are `SYSTEM_MOVE` events with
+  `rewardScore = 0` — no user signal, no preference update.
 
 DND blocks and fixed types never emit move/keep signals.
 
@@ -171,6 +219,8 @@ else moved — so it is already on equal footing with the LinUCB policy, which a
 places the current session (`reranking.md`). LinUCB, when it is the assigned primary policy
 and produces a pick, overrides the heuristic placement for that one session. The shared
 slot realization — the overlap-weighted `slotPreferenceScore`, earliest-start tie-break —
-lives in `core/slot-score.ts`. `TASK`-series members go through the same 50/50 pick as a
+lives in `core/slot-score.ts`. The heuristic stays **preference-only**: it never uses the
+adaptive `wL`/`wP` blend or any arm score (those apply only to LinUCB, ADR-0001 §13), which is
+what keeps the two policies distinct. `TASK`-series members go through the same 50/50 pick as a
 single task, each within a `± floor(X/N)`-day window (`SeriesPlacer`).
 

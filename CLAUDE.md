@@ -47,6 +47,12 @@ frontend `dev | build | typecheck | lint | test:e2e`.
    Any change to a pure function must update its `*.spec.ts` in the same change. See
    [backend/README.md](backend/README.md) → "Scheduler architecture".
 
+   **Core change => spec + Python port + fixtures.** Any behaviour change in
+   `scheduler/core/*` needs (1) its `*.spec.ts`, (2) the matching change in the Python
+   scheduler-core port (`services/bandit`, issue #60), and (3) regenerated golden fixtures —
+   `pnpm --filter backend golden:export` writes `backend/test/golden/scheduler-core.golden.json`,
+   and `golden-fixtures.spec.ts` fails on drift.
+
 3. **Durations are always positive multiples of 15** (minutes). Slots are 15-minute;
    `DAILY_HORIZON` = 1440. Don't introduce off-grid times.
 
