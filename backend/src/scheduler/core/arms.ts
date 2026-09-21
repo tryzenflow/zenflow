@@ -112,7 +112,10 @@ export function armOverlapRatesFromMinute(
     for (let day = 0; day * MINUTES_PER_DAY < endMinute; day++) {
       const lo = band.start + day * MINUTES_PER_DAY;
       const hi = band.end + day * MINUTES_PER_DAY;
-      overlap += Math.max(0, Math.min(endMinute, hi) - Math.max(startMinute, lo));
+      overlap += Math.max(
+        0,
+        Math.min(endMinute, hi) - Math.max(startMinute, lo),
+      );
     }
     return overlap / durationMinutes;
   });

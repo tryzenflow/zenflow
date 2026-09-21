@@ -389,7 +389,9 @@ describe("SessionsService.create", () => {
       sessionEvent: { create: eventCreate },
     });
     const placement = fakeTaskPlacement();
-    placement.preflightTask.mockRejectedValue(new ScheduleInfeasibleException());
+    placement.preflightTask.mockRejectedValue(
+      new ScheduleInfeasibleException(),
+    );
     const service = await makeService(
       prisma,
       fakeTagsService(),
@@ -1552,7 +1554,9 @@ describe("SessionsService.update — deadline edit feasibility guard (#62 E)", (
     const { service, placement, update } = await setup(
       session({ id: "t1", deadline: new Date("2026-06-10T12:00:00.000Z") }),
     );
-    placement.preflightTask.mockRejectedValue(new ScheduleInfeasibleException());
+    placement.preflightTask.mockRejectedValue(
+      new ScheduleInfeasibleException(),
+    );
     await expect(
       service.update("t1", { deadline: "2026-06-11T00:00:00.000Z" }, user),
     ).rejects.toMatchObject({ status: 409 });

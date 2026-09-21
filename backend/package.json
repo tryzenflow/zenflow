@@ -15,6 +15,7 @@
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "jest",
+    "golden:export": "ts-node scripts/export-golden-fixtures.ts",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:dev:migrate": "dotenv -e .env.dev -- npx prisma migrate dev",
     "prisma:dev:studio": "dotenv -e .env.dev -- npx prisma studio",

@@ -96,7 +96,13 @@ describe("BanditPlacer.scheduleTask", () => {
       makeBandit(NIGHT_WINS) as never,
       armStates as never,
     );
-    await svc.placeTask("u1", { ...task, deadline: new Date("2026-08-01T00:00:00Z") }, TZ, MATRIX, now);
+    await svc.placeTask(
+      "u1",
+      { ...task, deadline: new Date("2026-08-01T00:00:00Z") },
+      TZ,
+      MATRIX,
+      now,
+    );
     expect(prisma.session.findMany).toHaveBeenCalledTimes(1);
     expect(prisma.sessionSeries.findMany).toHaveBeenCalledTimes(1);
   });

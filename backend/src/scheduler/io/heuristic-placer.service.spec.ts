@@ -74,6 +74,24 @@ describe("HeuristicPlacer.scheduleTask", () => {
     deadline: new Date("2026-06-18T00:00:00.000Z"),
   };
 
+  it("scans many days with a single batched session query and series query", async () => {
+    const prisma = makePrisma();
+    const svc = new HeuristicPlacer(prisma as never);
+    await svc.placeTask(
+      "u1",
+      {
+        id: "t1",
+        durationMinutes: 60,
+        deadline: new Date("2026-08-15T00:00:00.000Z"),
+      },
+      TZ,
+      MATRIX,
+      now,
+    );
+    expect(prisma.session.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.sessionSeries.findMany).toHaveBeenCalledTimes(1);
+  });
+
   it("places an empty-calendar task at the earliest highest-preference slot", async () => {
     const svc = new HeuristicPlacer(makePrisma() as never);
     const start = await svc.placeTask("u1", task, TZ, MATRIX, now);

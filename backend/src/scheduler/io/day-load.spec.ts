@@ -1,4 +1,4 @@
-import { loadDayLoad } from "./day-load";
+import { loadDayLoad, loadDayLoads } from "./day-load";
 
 /**
  * `loadDayLoad` with an in-memory Prisma double that actually honours the
@@ -368,5 +368,94 @@ describe("loadDayLoad", () => {
     });
 
     expect(occupied).toHaveLength(1);
+  });
+});
+
+describe("loadDayLoads (batched range read, #62 C)", () => {
+  const DAY = 86_400_000;
+  const start0 = Date.parse("2026-06-15T00:00:00.000Z");
+  const days = Array.from({ length: 30 }, (_, i) => ({
+    dayStartMs: start0 + i * DAY,
+    dayEndMs: start0 + (i + 1) * DAY,
+  }));
+  const sessions: FakeSession[] = [
+    {
+      id: "a",
+      userId: "u1",
+      seriesId: null,
+      seriesRrule: null,
+      scheduledStartTime: new Date("2026-06-15T23:00:00.000Z"),
+      durationMinutes: 120, // spills into the 16th
+      type: "ASSIGNMENT",
+    },
+    {
+      id: "b",
+      userId: "u1",
+      seriesId: null,
+      seriesRrule: null,
+      scheduledStartTime: new Date("2026-06-20T10:00:00.000Z"),
+      durationMinutes: 60,
+      type: "EXAM",
+    },
+  ];
+  const series: FakeSeries[] = [
+    {
+      id: "s",
+      userId: "u1",
+      type: "DND",
+      rrule: "FREQ=DAILY;COUNT=10",
+      rep: {
+        scheduledStartTime: new Date("2026-06-15T22:00:00.000Z"),
+        durationMinutes: 60,
+      },
+    },
+  ];
+
+  it("issues exactly one session query and one series query for N days", async () => {
+    const prisma = makeFakePrisma(sessions, series);
+    await loadDayLoads(prisma as never, { userId: "u1", days, timezone: TZ });
+    expect(prisma.session.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.sessionSeries.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("matches per-day loadDayLoad for occupancy and workload (incl. lookahead)", async () => {
+    const lookahead = 45 * 60_000;
+    const batched = await loadDayLoads(
+      makeFakePrisma(sessions, series) as never,
+      {
+        userId: "u1",
+        days,
+        timezone: TZ,
+        occupiedLookaheadMs: lookahead,
+      },
+    );
+    for (let i = 0; i < days.length; i++) {
+      const single = await loadDayLoad(
+        makeFakePrisma(sessions, series) as never,
+        {
+          userId: "u1",
+          dayStart: new Date(days[i].dayStartMs),
+          dayEnd: new Date(days[i].dayEndMs),
+          timezone: TZ,
+          occupiedLookaheadMs: lookahead,
+        },
+      );
+      const norm = (o: { start: number; end: number }[]) =>
+        [...o].sort((x, y) => x.start - y.start || x.end - y.end);
+      expect(norm(batched[i].occupied)).toEqual(norm(single.occupied));
+      expect(batched[i].workloadByType).toEqual(single.workloadByType);
+    }
+  });
+
+  it("returns [] without querying for an empty day list", async () => {
+    const prisma = makeFakePrisma(sessions, series);
+    expect(
+      await loadDayLoads(prisma as never, {
+        userId: "u1",
+        days: [],
+        timezone: TZ,
+      }),
+    ).toEqual([]);
+    expect(prisma.session.findMany).not.toHaveBeenCalled();
   });
 });

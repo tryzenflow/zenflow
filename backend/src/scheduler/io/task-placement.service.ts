@@ -143,8 +143,7 @@ export class TaskPlacementService {
     const start = outcome?.appliedStart ?? heuristicStart ?? fallbackStart;
     return {
       scheduledStartTime: start,
-      appliedPolicy:
-        outcome?.appliedPolicy ?? (start ? "HEURISTIC" : "NONE"),
+      appliedPolicy: outcome?.appliedPolicy ?? (start ? "HEURISTIC" : "NONE"),
       slotProposalId: outcome?.slotProposalId ?? null,
       alternativeSlot: outcome?.alternativeSlot ?? null,
       divergent: outcome?.divergent ?? false,

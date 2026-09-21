@@ -1,11 +1,5 @@
-import {
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
-import type {
-  InfeasiblePolicy,
-  UpdateSessionResponse,
-} from "@zenflow/shared";
+import { Injectable, NotFoundException } from "@nestjs/common";
+import type { InfeasiblePolicy, UpdateSessionResponse } from "@zenflow/shared";
 import { Prisma, type User } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
 import { TagsService } from "../tags/tags.service";
@@ -179,7 +173,12 @@ export class SessionUpdateService {
     if (dto.deadline === undefined) return;
     const existing = await this.prisma.session.findFirst({
       where: { id, userId: user.id },
-      select: { type: true, durationMinutes: true, seriesId: true, deadline: true },
+      select: {
+        type: true,
+        durationMinutes: true,
+        seriesId: true,
+        deadline: true,
+      },
     });
     if (!existing || existing.type !== "TASK") return;
     const deadline = new Date(dto.deadline);

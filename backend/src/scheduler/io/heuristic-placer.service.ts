@@ -107,7 +107,8 @@ export class HeuristicPlacer {
     const dayStrs: string[] = [];
     for (
       let dayStr = window.firstDayStr;
-      dayStr <= window.lastDayStr && dayStrs.length < (opts.maxScanDays ?? MAX_SCAN_DAYS);
+      dayStr <= window.lastDayStr &&
+      dayStrs.length < (opts.maxScanDays ?? MAX_SCAN_DAYS);
       dayStr = addDaysStr(dayStr, 1)
     ) {
       if (!opts.skipDay?.(dayStr)) dayStrs.push(dayStr);

@@ -294,7 +294,9 @@ describe("TaskPlacementService displacement + infeasible policies (#62 B)", () =
         divergent: false,
       }),
     };
-    const heuristic = { placeTask: jest.fn().mockResolvedValue(heuristicStart) };
+    const heuristic = {
+      placeTask: jest.fn().mockResolvedValue(heuristicStart),
+    };
     const svc = await makeTaskPlacementService(
       prisma,
       coordinator,
@@ -314,9 +316,11 @@ describe("TaskPlacementService displacement + infeasible policies (#62 B)", () =
         startMs: from,
         moves: [{ id: "f1", fromMs: from, toMs: from + 3_600_000 }],
       }),
-      applyMoves: jest.fn().mockResolvedValue([
-        { id: "f1", from: new Date(from), to: new Date(from + 3_600_000) },
-      ]),
+      applyMoves: jest
+        .fn()
+        .mockResolvedValue([
+          { id: "f1", from: new Date(from), to: new Date(from + 3_600_000) },
+        ]),
     });
     const { svc, sessionUpdate } = await build(null, disp);
     const res = await svc.placeOnCreate({ user, task, now });
@@ -342,7 +346,9 @@ describe("TaskPlacementService displacement + infeasible policies (#62 B)", () =
 
   it("ACCEPT_LATE_DEADLINE places at the fallback start", async () => {
     const late = new Date("2026-06-10T02:00:00Z");
-    const disp = displacement({ fallbackStart: jest.fn().mockResolvedValue(late) });
+    const disp = displacement({
+      fallbackStart: jest.fn().mockResolvedValue(late),
+    });
     const { svc } = await build(null, disp);
     const res = await svc.placeOnCreate({
       user,
@@ -361,7 +367,9 @@ describe("TaskPlacementService displacement + infeasible policies (#62 B)", () =
 
   it("ACCEPT_CONFLICTS places at the min-conflict start", async () => {
     const s = new Date("2026-06-09T10:00:00Z");
-    const disp = displacement({ fallbackStart: jest.fn().mockResolvedValue(s) });
+    const disp = displacement({
+      fallbackStart: jest.fn().mockResolvedValue(s),
+    });
     const { svc } = await build(null, disp);
     const res = await svc.placeOnCreate({
       user,
@@ -394,7 +402,9 @@ describe("TaskPlacementService displacement + infeasible policies (#62 B)", () =
     const { svc: svc2 } = await build(
       null,
       displacement({
-        plan: jest.fn().mockResolvedValue({ kind: "placed", startMs: 0, moves: [] }),
+        plan: jest
+          .fn()
+          .mockResolvedValue({ kind: "placed", startMs: 0, moves: [] }),
       }),
     );
     await expect(

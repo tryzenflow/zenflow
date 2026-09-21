@@ -236,14 +236,13 @@ export async function loadScheduleItems(
     const start = o.scheduledStartTime.getTime();
     items.push({
       id: (o as { id?: string }).id ?? null,
-      type: String((o as { type?: unknown }).type ?? ""),
+      type: (o as { type?: string }).type ?? "",
       seriesId: (o as { seriesId?: string | null }).seriesId ?? null,
       recurring: false,
       start,
       end: start + o.durationMinutes * 60_000,
       durationMinutes: o.durationMinutes,
-      deadlineMs:
-        (o as { deadline?: Date | null }).deadline?.getTime() ?? null,
+      deadlineMs: (o as { deadline?: Date | null }).deadline?.getTime() ?? null,
     });
   }
   for (const series of recurringSeries) {
@@ -259,7 +258,7 @@ export async function loadScheduleItems(
       const start = occStart.getTime();
       items.push({
         id: null,
-        type: String(series.type),
+        type: series.type as string,
         seriesId: series.id,
         recurring: true,
         start,

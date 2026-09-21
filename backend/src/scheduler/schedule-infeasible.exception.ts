@@ -20,7 +20,10 @@ export class ScheduleInfeasibleException extends ConflictException {
       statusCode: 409,
       message: INFEASIBLE_MESSAGE,
       code: SCHEDULE_INFEASIBLE_CODE,
-      options: ["ACCEPT_CONFLICTS", "ACCEPT_LATE_DEADLINE"] as InfeasiblePolicy[],
+      options: [
+        "ACCEPT_CONFLICTS",
+        "ACCEPT_LATE_DEADLINE",
+      ] as InfeasiblePolicy[],
     };
     super(body);
   }
