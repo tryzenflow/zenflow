@@ -46,8 +46,66 @@ Experiment: [`docs/scheduler/ab-testing.md`](../../docs/scheduler/ab-testing.md)
 | Route           | Purpose                                                                                  |
 | --------------- | -------------------------------------------------------------------------------------- |
 | `GET /health`   | Liveness probe → `{"status":"ok"}`.                                                      |
+| `GET /ready`    | Readiness: numpy import, tz offset-cache warm-up and a self-test placement → `200 {"status":"ready"}` or `503`. Compose healthcheck target. |
+| `POST /v1/place` | **Authoritative placement** (ADR-0003) — see below. |
 | `POST /predict` | Body: `alpha`, `ridge`, `state` (all 5 arms' `(A, b)`, `[]` = cold ridge prior), `contexts` (`[{day, x}]`). Returns `{scores: {day: {arm: score}}}` — all 5 arms for every day. A cold arm scores `0.0` (no exploration bonus until it has data). |
 | `POST /update`  | Body: `ridge`, `arm`, `x`, `reward`, `state` (that arm's `(A, b)`, `[]` = cold). Returns the new `{A, b}` (`A` is `d*d` row-major). |
+
+### `POST /v1/place` (ADR-0003, phase 2 - not yet called by Nest until phase 3)
+
+One request = one placement event (a single `TASK`, or one materialized series). The
+service builds the context vector and the 5 arm scores **in-process** from the supplied
+`(A, b)` (no `/predict` hop), then runs the heuristic and, when `primaryPolicy`/`computeBoth`
+needs it, the slot-first LinUCB scan. Contract types: `packages/shared/src/placement.ts`
+(mirrored by `src/schemas_place.py`, `extra="forbid"`, camelCase, epoch-ms ints,
+`contractVersion: 1`); example pairs: `packages/shared/contract/place/*.json`.
+
+- **Per member** (`src/place.py`): scan window = local days `[start, deadline]` (single,
+  capped by `maxScanDays`) or the series' non-overlapping window from `series_day_windows`
+  (`daySpan = min(floor((deadline - next15)/1d), 59)`); days already holding
+  `MAX_SERIES_PER_DAY` (=1) siblings are skipped and siblings' intervals are hard blocks
+  (sibling ledger). HEURISTIC = best per-day preference slot, best score across days (earlier
+  day wins ties). LINUCB = slot-first scan over all days with the adaptive wL/wP blend. A
+  LINUCB primary without bandit state / with a singular matrix / no surviving slot falls back
+  to the heuristic pick (`appliedPolicy: "HEURISTIC"`).
+- **Response fields** `heuristic` / `linucb` are present iff requested (primary or
+  `computeBoth`; heuristic also when it is the LINUCB fallback); `startMs` is the applied
+  policy's pick and feeds the ledger. `mode: "PREFLIGHT"` runs the heuristic only.
+- **No free slot, single member**: call 1 -> `NEEDS_INFEASIBLE_CONTEXT`; call 2 (with
+  `infeasible`) -> EDF displacement over the deadline day (widening to +/-1 day) ->
+  `DISPLACED` with `moves`; otherwise the user's policy: `ACCEPT_CONFLICTS` ->
+  `ACCEPTED_CONFLICTS` (min-overlap start; `conflicting` is true iff it really overlaps
+  `horizonOccupied`), `ACCEPT_LATE_DEADLINE` -> `ACCEPTED_LATE` (`late: true`); else
+  `INFEASIBLE`. A series member with no slot is reported `INFEASIBLE` (no displacement,
+  siblings still placed - TS series parity).
+- **Errors**: `422` validation (FastAPI `detail` list); `422 {"code":"CONTRACT_VERSION",
+  "supported":1,"got":n}` for a foreign `contractVersion`; `413` > 2 MB; `401` bad/missing
+  bearer token.
+- **Auth**: set `BANDIT_SERVICE_TOKEN` to require `Authorization: Bearer <token>` on
+  `/v1/place`, `/predict`, `/update` (`hmac.compare_digest`; `BANDIT_SERVICE_TOKEN_PREVIOUS`
+  is also accepted for rotation). Unset -> open (dev/tests). `/health` and `/ready` are exempt.
+- **Observability**: every response carries `x-request-id` (echoing the inbound header, else
+  `req-<n>`); each place call logs `request_id=<body requestId> ... outcomes=... total_ms=`.
+  `paramsVersion` = `py-` + sha256 of all core constants (+ contract version), stored by Nest as
+  `SlotProposal.modelVersion`. `timingsMs = {decode, context, predict, scan, displace, total}`
+  (decode = body parse/validation; total includes it).
+- **Deterministic**: no randomness, no clock (`nowMs` is a field); same body -> same picks.
+
+**Latency** (`uv run python -m scripts.bench_place`; Windows dev box, single process,
+`TestClient` round trip = JSON + validation + handler, no network; one 90 min task, 30-day
+scan, Europe/Paris, 6-14 occupied blocks/day, 200 runs, ADR target p99 < 400 ms):
+
+| Case                              | Payload | Round trip p50 / p95 / p99 | Handler total p50 / p95 | Scan p50 / p95 |
+| --------------------------------- | ------- | -------------------------- | ----------------------- | -------------- |
+| HEURISTIC primary                 | 70 KB   | 7.0 / 14.3 / 29.3 ms       | 4.6 / 11.8 ms           | 1.9 / 2.2 ms   |
+| LINUCB primary (warm state)       | 70 KB   | 8.6 / 16.7 / 19.4 ms       | 5.9 / 14.0 ms           | 2.8 / 3.1 ms   |
+| computeBoth (LINUCB primary)      | 70 KB   | 10.7 / 16.6 / 29.9 ms      | 7.9 / 14.1 ms           | 4.6 / 5.0 ms   |
+| computeBoth, dense (14 blocks/day)| 83 KB   | 12.1 / 19.3 / 37.0 ms      | 8.7 / 15.2 ms           | 4.9 / 5.7 ms   |
+
+`scripts/gen_place_fixtures.py` regenerates the Python-owned contract fixtures (LinUCB,
+pairwise, cold bandit, displacement, accepted-conflicts/late); review their diff like a golden
+update. `tests/test_place.py` (behaviour/auth/errors), `tests/test_place_contract.py` (every
+fixture + golden TS `bestFreeSlot`/`bestLinucbSlot` through `/v1/place`).
 
 `d` is inferred from the length of `x` and validated (all `x` equal; each non-empty `A` is
 `d*d`, each non-empty `b` is `d`); bad shapes / non-finite values / `alpha < 0` /
@@ -80,7 +138,9 @@ Python is **4-space** indented (PEP 8 / Ruff), which the root
 services/bandit/
 ├── Dockerfile                      # python:3.12-slim + uv; runs uvicorn src.api:app on :8000
 ├── src/
-│   ├── api.py                      # FastAPI app + the 3 route handlers (/health, /predict, /update)
+│   ├── api.py                      # FastAPI app + routes (/health, /ready, /v1/place, /predict, /update), bearer auth, request-id
+│   ├── place.py                    # /v1/place orchestration (series ledger, heuristic + LinUCB, displacement, fallbacks)
+│   ├── schemas_place.py            # /v1/place Pydantic wire models (mirror packages/shared/src/placement.ts)
 │   ├── schemas.py                  # Pydantic request/response models + ArmId / ARM_IDS
 │   ├── serialization.py            # numpy glue + 422 guards (hydrate, all_finite, require_422)
 │   ├── main.py                     # replay-evaluation demo

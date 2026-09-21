@@ -33,3 +33,8 @@ WEIGHT_WARMUP_OBSERVATIONS = 40
 # Displacement (issue #62 B).
 MAX_DISPLACED_TASKS = 6
 DISPLACEMENT_CANDIDATES = 8
+
+# Placement scan scope (ADR-0003; owned by Python, echoed via ``paramsVersion``).
+SCAN_CAP_DAYS = 30
+MAX_SERIES_PER_DAY = 1
+INFEASIBLE_HORIZON_DAYS = 30

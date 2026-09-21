@@ -29,6 +29,13 @@ def deadline_day_str(deadline_ms: int, timezone: str) -> str:
     return local_date_str(deadline_ms - 1, timezone)
 
 
+def local_midnight_ms(date_str: str, timezone: str) -> int:
+    """UTC epoch ms of local 00:00 on ``date_str`` (first occurrence if ambiguous)."""
+    d = date.fromisoformat(date_str)
+    dt = datetime(d.year, d.month, d.day, tzinfo=_zone(timezone))
+    return int(dt.timestamp()) * 1000
+
+
 def add_days_str(date_str: str, n: int) -> str:
     return (date.fromisoformat(date_str) + timedelta(days=n)).isoformat()
 
