@@ -68,6 +68,40 @@ describe("PlacementGateway.buildRequest", () => {
     excludeSessionIds: ["t1"],
   };
 
+  it.each<[string, number[]]>([
+    ["empty", []],
+    ["wrong length", [1, 2, 3]],
+    ["non-finite", new Array(168).fill(NaN)],
+  ])("sends the 168-float default for a %s matrix", async (_n, matrix) => {
+    const { gw } = make(jest.fn());
+    const req = await gw.buildRequest({
+      ...base,
+      user: { ...user, preferenceMatrix: matrix },
+      members: [member()],
+    });
+    const m = req.user.preferenceMatrix;
+    // Same as Python schemas_place (len 168, finite) and default_preference_matrix.
+    expect(m).toHaveLength(168);
+    expect(m.every(Number.isFinite)).toBe(true);
+    for (let wd = 0; wd < 7; wd++) {
+      expect(m[wd * 24 + 8]).toBe(1);
+      expect(m[wd * 24 + 14]).toBe(0.5);
+      expect(m[wd * 24 + 19]).toBe(0.2);
+      expect(m[wd * 24 + 3]).toBe(0);
+    }
+  });
+
+  it("passes a well-formed matrix through unchanged", async () => {
+    const { gw } = make(jest.fn());
+    const own = Array.from({ length: 168 }, (_, i) => i / 168);
+    const req = await gw.buildRequest({
+      ...base,
+      user: { ...user, preferenceMatrix: own },
+      members: [member()],
+    });
+    expect(req.user.preferenceMatrix).toEqual(own);
+  });
+
   it("buckets days, sends the observation count, and omits bandit state for heuristic-only", async () => {
     const { gw, loadAll } = make(jest.fn());
     const req = await gw.buildRequest({ ...base, members: [member()] });

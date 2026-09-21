@@ -28,6 +28,7 @@ import {
   type Interval,
 } from "../core/slot";
 import type { PlaceableTask } from "../types/placement.types";
+import { effectivePreferenceMatrix } from "../core/preference";
 import { isFlexible } from "./displacement.service";
 import { loadDayLoads, loadScheduleItems } from "./day-load";
 import { loadObservationCount } from "./observation-count";
@@ -45,6 +46,12 @@ export interface GatewayRequestArgs {
   excludeSessionIds: string[];
   fixedOccupied?: Interval[];
 }
+
+/** Stored matrix if 168 finite numbers, else the shared cold-start default. */
+const wireMatrix = (m: number[] | null | undefined): number[] => {
+  const eff = effectivePreferenceMatrix(m ?? []);
+  return eff.every(Number.isFinite) ? eff : effectivePreferenceMatrix([]);
+};
 
 const toMs = (i: Interval): IntervalMs => ({ startMs: i.start, endMs: i.end });
 
@@ -138,7 +145,8 @@ export class PlacementGateway {
         workloadByType: loads[i].workloadByType,
       })),
       user: {
-        preferenceMatrix: user.preferenceMatrix,
+        // Python requires exactly 168 finite floats (else 422); a new user has [].
+        preferenceMatrix: wireMatrix(user.preferenceMatrix),
         observationCount,
       },
       ...(bandit ? { bandit } : {}),

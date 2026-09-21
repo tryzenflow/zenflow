@@ -157,6 +157,26 @@ describe("PlacementClient", () => {
     expect(client.breaker.state).toBe("closed");
   });
 
+  it("many 422s from one user's bad request never trip the breaker for others", async () => {
+    let bad = true;
+    const f = jest
+      .fn()
+      .mockImplementation(() =>
+        bad ? json(422, { detail: "bad matrix" }) : json(200, okBody),
+      );
+    const { client } = make(f);
+    for (let i = 0; i < 50; i++) {
+      expect(await client.place(req)).toEqual({
+        ok: false,
+        reason: "http_4xx",
+      });
+    }
+    expect(client.breaker.state).toBe("closed");
+    bad = false;
+    expect((await client.place(req)).ok).toBe(true);
+    expect(f).toHaveBeenCalledTimes(51);
+  });
+
   it("rejects a wrong contractVersion as invalid_response", async () => {
     const f = jest
       .fn()
