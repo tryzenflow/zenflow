@@ -680,7 +680,7 @@ the Python `POST /v1/place`; Nest gathers, calls, applies and persists. It is ro
 Pieces (`scheduler/io/`): `PlacementClient` (bearer token, 2.5 s total timeout, at most one retry
 on connect-refused/reset/502-504 that failed within 300 ms, never on a timeout or 4xx; the
 300 ms connect timeout is not separately enforced because `fetch` has no per-phase timeout),
-`circuit-breaker.ts` (5 consecutive failures or >=50% of >=10 calls in 10 s open it for 15 s,
+`circuit-breaker.ts` (5 consecutive failures open it for 15 s,
 one half-open probe, open time doubles to a 60 s cap; 4xx/contract errors fall back but do
 not trip it), `PlacementGateway` (builds the `PlaceRequest` from `loadDayLoads` + observation
 count + bandit `(A, b)`, the two-phase infeasible call, spans/timings), `PythonPlacer`

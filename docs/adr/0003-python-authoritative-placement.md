@@ -266,8 +266,8 @@ the scan (cheap relative to loading); it returns `DISPLACED | ACCEPTED_* | INFEA
   with 50 ms jitter, only on connect-refused / reset / 502-504 that returned within 300 ms.
   Never retry a timeout (doubles user-visible latency) or a 4xx.
 - **Circuit breaker** (per Nest process, small in-repo class, injected clock; `opossum` is an
-  acceptable substitute): CLOSED -> OPEN after 5 consecutive failures or >= 50% failures over
-  >= 10 calls in a 10 s window; OPEN for 15 s (every call goes straight to the fallback with
+  acceptable substitute): CLOSED -> OPEN after 5 consecutive failures (no failure-ratio window: it needs
+  per-call history and is not worth the memory at scale); OPEN for 15 s (every call goes straight to the fallback with
   `reason=breaker_open`); then HALF_OPEN admits one probe; success closes, failure re-opens
   (backoff doubles to a 60 s cap). State exported as a gauge.
 
@@ -615,7 +615,7 @@ sequenceDiagram
   participant PY as Python
   API->>CB: call
   CB->>PY: request
-  PY--xCB: failures (5 in a row / 50% of 10)
+  PY--xCB: failures (5 in a row)
   Note over CB: OPEN 15 s: calls go to FallbackPlacer
   CB-->>API: fail fast (breaker_open)
   Note over CB: HALF_OPEN after 15 s

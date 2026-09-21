@@ -3,8 +3,8 @@
  * (ADR-0003 section 3.4). Per Nest process; the clock is injected so tests can
  * drive every transition.
  *
- * CLOSED -> OPEN after `consecutiveFailures` failures in a row, or after
- * `failureRatio` failures over at least `minCalls` calls inside `windowMs`.
+ * CLOSED -> OPEN after `consecutiveFailures` failures in a row (O(1) state; no
+ * per-call history is kept).
  * OPEN for `openMs` (every call short-circuits), then HALF_OPEN admits exactly
  * one probe: success closes, failure re-opens with the open time doubled up to
  * `maxOpenMs`.
@@ -13,18 +13,12 @@ export type BreakerState = "closed" | "open" | "half_open";
 
 export interface CircuitBreakerOptions {
   consecutiveFailures: number;
-  failureRatio: number;
-  minCalls: number;
-  windowMs: number;
   openMs: number;
   maxOpenMs: number;
 }
 
 export const DEFAULT_BREAKER_OPTIONS: CircuitBreakerOptions = {
   consecutiveFailures: 5,
-  failureRatio: 0.5,
-  minCalls: 10,
-  windowMs: 10_000,
   openMs: 15_000,
   maxOpenMs: 60_000,
 };
@@ -32,7 +26,6 @@ export const DEFAULT_BREAKER_OPTIONS: CircuitBreakerOptions = {
 export class CircuitBreaker {
   private current: BreakerState = "closed";
   private consecutive = 0;
-  private calls: { at: number; ok: boolean }[] = [];
   private openedAt = 0;
   private currentOpenMs: number;
   private probeInFlight = false;
@@ -66,7 +59,6 @@ export class CircuitBreaker {
       return;
     }
     this.consecutive = 0;
-    this.record(true);
   }
 
   onFailure(): void {
@@ -79,11 +71,7 @@ export class CircuitBreaker {
       return;
     }
     this.consecutive += 1;
-    this.record(false);
-    if (
-      this.consecutive >= this.opts.consecutiveFailures ||
-      this.ratioTripped()
-    ) {
+    if (this.consecutive >= this.opts.consecutiveFailures) {
       this.open();
     }
   }
@@ -91,18 +79,6 @@ export class CircuitBreaker {
   /** Release a HALF_OPEN probe slot without a verdict (e.g. a non-transient 4xx). */
   onNeutral(): void {
     if (this.current === "half_open") this.probeInFlight = false;
-  }
-
-  private record(ok: boolean): void {
-    const t = this.now();
-    this.calls.push({ at: t, ok });
-    this.calls = this.calls.filter((c) => t - c.at <= this.opts.windowMs);
-  }
-
-  private ratioTripped(): boolean {
-    if (this.calls.length < this.opts.minCalls) return false;
-    const failed = this.calls.filter((c) => !c.ok).length;
-    return failed / this.calls.length >= this.opts.failureRatio;
   }
 
   private maybeHalfOpen(): void {
@@ -119,13 +95,11 @@ export class CircuitBreaker {
     this.current = "open";
     this.openedAt = this.now();
     this.probeInFlight = false;
-    this.calls = [];
   }
 
   private close(): void {
     this.current = "closed";
     this.consecutive = 0;
-    this.calls = [];
     this.probeInFlight = false;
     this.currentOpenMs = this.opts.openMs;
   }
