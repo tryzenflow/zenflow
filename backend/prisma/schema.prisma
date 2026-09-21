@@ -305,6 +305,10 @@ model SlotProposal {
   // Empty / null when the primary policy was the heuristic.
   featureVector Float[]        @default([])
   selectedArm   SchedulingArm?
+  // Applied slot-score weights (`core/adaptive-weights.ts`); null when the
+  // primary policy was the pref-only heuristic (keeps the A/B distinct).
+  linucbWeight     Float?
+  preferenceWeight Float?
 
   sessionEvents SessionEvent[]
 
@@ -335,6 +339,7 @@ enum SessionEventType {
   CREATE
   MOVE // user drag or resize of a scheduled TASK (negative signal)
   RETAINED // session elapsed without ever being moved (positive signal)
+  SYSTEM_MOVE // scheduler-initiated move (displacement / conflict reschedule): reward 0, no preference update
 }
 
 model SessionEvent {
@@ -423,6 +428,9 @@ enum NotificationTopic {
   EXAM
   TIMETABLE
   REMINDER
+  ASSIGNMENT_CONFLICT
+  EXAM_CONFLICT
+  TIMETABLE_CONFLICT
 }
 
 // How the inbox row is categorised for its badge: something new on the
@@ -446,6 +454,8 @@ model Notification {
   // an ASSIGNMENT/EXAM/LECTURE is always scheduled, so this is the "due" / "at"
   // time the inbox shows. Null for grouped rows and for drops (no one session).
   eventEndsAt   DateTime?
+  // `*_CONFLICT` topics: the user's flexible tasks the sync landed on top of.
+  conflictSessionIds String[] @default([])
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)

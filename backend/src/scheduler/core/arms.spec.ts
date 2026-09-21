@@ -1,4 +1,9 @@
-import { armOfMinute, ARM_BANDS, overlapRate } from "./arms";
+import {
+  armOfMinute,
+  armOverlapRatesFromMinute,
+  ARM_BANDS,
+  overlapRate,
+} from "./arms";
 
 describe("armOfMinute", () => {
   it("maps band boundaries half-open, lower-inclusive", () => {
@@ -76,5 +81,26 @@ describe("overlapRate", () => {
   it("returns 0 for a non-positive interval", () => {
     const t = at("2026-06-15T13:00:00.000Z");
     expect(overlapRate(t, t, "AFTERNOON", TZ)).toBe(0);
+  });
+});
+
+describe("armOverlapRatesFromMinute", () => {
+  it("matches overlapRate for a UTC slot, including across midnight", () => {
+    const base = Date.parse("2026-06-15T00:00:00.000Z");
+    for (const [startMin, dur] of [
+      [990, 60],
+      [1425, 60],
+      [0, 15],
+      [1380, 180],
+    ]) {
+      const rates = armOverlapRatesFromMinute(startMin, dur);
+      ARM_BANDS.forEach((b, i) => {
+        const s = base + startMin * 60_000;
+        expect(rates[i]).toBeCloseTo(
+          overlapRate(s, s + dur * 60_000, b.arm, "UTC"),
+        );
+      });
+      expect(rates.reduce((a, b) => a + b, 0)).toBeCloseTo(1);
+    }
   });
 });

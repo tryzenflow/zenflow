@@ -181,6 +181,7 @@ export class SchedulingExperimentCoordinator {
         : null,
       featureVector: banditPick?.featureVector ?? [],
       selectedArm: banditPick?.selectedArm ?? null,
+      weights: banditPick?.weights ?? null,
       pairwiseShown: divergence.effectivePairwiseShown,
       pairwisePositions: divergence.effectivePairwiseShown
         ? this.randomizePairwisePositions(rng)

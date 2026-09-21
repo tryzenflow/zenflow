@@ -1,7 +1,13 @@
 import type { SchedulingArm } from "@zenflow/shared";
-import { ARM_BANDS, armOfMinute } from "./arms";
+import {
+  ARM_BANDS,
+  TIE_BREAK_ARM_ORDER,
+  armOfMinute,
+  armOverlapRatesFromMinute,
+  overlapRate,
+} from "./arms";
+import { adaptiveWeights, type SlotScoreWeights } from "./adaptive-weights";
 import { slotPreferenceScore, stabilityScore } from "./slot-score";
-import { PREFERENCE_NUDGE_WEIGHT, STABILITY_WEIGHT } from "../constants";
 import { utcToMinutes } from "../../common/utils";
 import {
   ceilToSlot,
@@ -12,21 +18,30 @@ import {
 } from "./slot";
 
 const HOUR_MS = 60 * MS_PER_MINUTE;
+const MINUTES_PER_DAY = 1440;
 
 /**
- * Two-step LinUCB slot search over a pre-scored set of candidate days — pure,
- * no I/O, no clock, no randomness (CLAUDE.md invariant 2). Extracted from
- * `BanditPlacer`'s own scan (`io/bandit-placer.service.ts`) so the same "arm
- * scores → concrete best slot" math has exactly one implementation, reachable
- * by both the real placer and anything else that needs to reproduce it (e.g.
- * the offline simulator's TS bridge, `backend/scripts/simulation-bridge.ts`).
+ * Slot-first LinUCB search over a pre-scored set of candidate days — pure,
+ * no I/O, no clock, no randomness (CLAUDE.md invariant 2). Shared by the real
+ * placer (`io/bandit-placer.service.ts`) and anything that must reproduce the
+ * "arm scores -> concrete best slot" math (offline simulator, Python port #60,
+ * golden fixtures `backend/scripts/export-golden-fixtures.ts`).
  *
- * Item 3B2: arm choice and minute choice are now separate steps —
- * {@link rankArmsByScore} picks the arm from LinUCB's own per-arm scores
- * alone, then {@link bestMinuteInArm} searches only within that arm's time
- * window, scored by the Item 3B1 preference nudge + Item 4's stability term.
- * `bestLinucbSlot` orchestrates the two, falling through to the next-ranked
- * arm when the current one has zero feasible slots anywhere in the horizon.
+ * Issue #62 A (ADR-0001 addendum) replaces the old arm-then-minute pick
+ * (3B2): EVERY feasible 15-min start on EVERY candidate day is scored
+ *
+ *   score = wL * SUM_arm overlapRate(slot, arm) * armScore[day][arm]
+ *         + wP * slotPreferenceScore(slot) / durationHours
+ *         + stability
+ *
+ * and ranked across days. `(wL, wP)` come from {@link adaptiveWeights} (pref-
+ * heavy while the user has no observations). A start may be as late as 23:45
+ * with the session overhanging local midnight; `deadlineMs` is a hard ceiling
+ * on the END (deadline need not be slot-aligned).
+ *
+ * Exact ties resolve deterministically: arm hosting the start in
+ * {@link TIE_BREAK_ARM_ORDER} (MORNING first, never EARLY_MORNING), then the
+ * earlier start.
  */
 
 export interface LinucbCandidateDay {
@@ -52,132 +67,64 @@ export interface BestLinucbSlotInput {
   /** Extra hard blocks on top of each day's own occupancy (series siblings). */
   extraOccupied?: Interval[];
   prevStartMs?: number;
+  /**
+   * The user's MOVE + RETAINED event count — drives {@link adaptiveWeights}.
+   * Omitted = 0 (cold start).
+   */
+  observationCount?: number;
 }
 
 export interface BestLinucbSlot {
   startMs: number;
   score: number;
+  /** Arm hosting the slot's START (what `/update` is later credited to). */
   arm: SchedulingArm;
   vector: number[];
+  /** The weights applied — recorded on `SlotProposal`. */
+  weights: SlotScoreWeights;
 }
 
-/**
- * Ranks every `SchedulingArm` by LinUCB's own score alone — no preference or
- * stability influence (Item 3B2 step 1). An arm's potential is the best
- * (max) `/predict` score it reaches on ANY candidate day — matching the
- * existing "always take the single best point reachable, never an average"
- * philosophy `bestFreeSlot`/the old `bestLinucbSlot` already use (earliest
- * start, highest score, no averaging). This does NOT commit to that day —
- * step 2 searches every day within the chosen arm, so a day that happens to
- * be fully booked in this arm's band doesn't wrongly evict the arm; only
- * "every day exhausted" does (see {@link bestMinuteInArm}).
- *
- * Deterministic tie-break: exact score ties fall back to `ARM_BANDS`'
- * declared order (EARLY_MORNING → NIGHT) — arbitrary but fixed, matching the
- * no-randomness invariant (CLAUDE.md). `Array.prototype.sort` is stable in
- * Node/V8, so a `0`-returning comparator on ties preserves the `ARM_BANDS`-
- * order input — no separate tiebreak key needed, but spelled out here since
- * it's easy to "fix" into a bug later.
- */
-export function rankArmsByScore(days: LinucbCandidateDay[]): SchedulingArm[] {
-  const potential = new Map<SchedulingArm, number>();
-  for (const band of ARM_BANDS) {
-    let best = -Infinity;
-    for (const day of days) {
-      const s = day.armScores[band.arm] ?? 0;
-      if (s > best) best = s;
-    }
-    potential.set(band.arm, best);
-  }
-  return ARM_BANDS.map((b) => b.arm)
-    .slice()
-    .sort((a, b) => potential.get(b)! - potential.get(a)! || 0);
-}
+const TIE_RANK = new Map<SchedulingArm, number>(
+  TIE_BREAK_ARM_ORDER.map((a, i) => [a, i]),
+);
 
-export interface ArmMinutePick {
-  startMs: number;
-  dayStr: string;
-  score: number;
-}
-
-/**
- * Scans every 15-minute-aligned start, across every day in `days`, whose
- * local minute-of-day falls inside `arm`'s own band (`armOfMinute`) — Item
- * 3B2 step 2. Feasible candidates (not `occupied`, within `[nextMs,
- * deadlineMs)`) are scored by the B1 preference nudge + Item 4's corrected
- * stability term ONLY — no arm term, because the arm is already fixed.
- * Highest score wins; earliest start breaks ties (existing convention).
- * `null` when this arm has zero feasible slots anywhere in the horizon — the
- * caller falls through to the next-ranked arm.
- *
- * A session's **end** may still run past the arm's own band boundary or past
- * local midnight exactly as today (D5) — only the **start** is constrained
- * to the chosen arm. This is also, by definition, now the sole and
- * authoritative rule for "which arm hosts this session" — no more post-hoc
- * inference from overlap contribution.
- */
-export function bestMinuteInArm(
-  arm: SchedulingArm,
-  days: LinucbCandidateDay[],
+/** Per-arm overlap rates (ARM_BANDS order) for a slot on `day`. Fast
+ * wall-clock arithmetic on 24h days; exact Intl-based fallback on DST days. */
+function ratesForSlot(
+  day: LinucbCandidateDay,
+  startMs: number,
   durationMinutes: number,
   timezone: string,
-  prefMatrix: number[],
-  nextMs: number,
-  deadlineMs: number,
-  extraOccupied: Interval[],
-  prevStartMs?: number,
-): ArmMinutePick | null {
-  const durationMs = durationMinutes * MS_PER_MINUTE;
-  const overhangMs = durationMs - SLOT_MS;
-  let best: ArmMinutePick | null = null;
-
-  for (const day of days) {
-    const lowerMs = Math.max(ceilToSlot(day.dayStartMs), nextMs);
-    const upperMs = Math.min(day.dayEndMs + overhangMs, deadlineMs);
-    const occupied = extraOccupied.length
-      ? [...day.occupied, ...extraOccupied]
-      : day.occupied;
-
-    for (
-      let startMs = lowerMs;
-      startMs + durationMs <= upperMs;
-      startMs += SLOT_MS
-    ) {
-      if (armOfMinute(utcToMinutes(new Date(startMs), timezone)) !== arm)
-        continue;
-      const endMs = startMs + durationMs;
-      if (overlapsAny(occupied, startMs, endMs)) continue;
-
-      const durationHours = durationMs / HOUR_MS;
-      const nudge =
-        (slotPreferenceScore(prefMatrix, startMs, endMs, timezone) /
-          durationHours) *
-        PREFERENCE_NUDGE_WEIGHT;
-      const stability = prevStartMs
-        ? STABILITY_WEIGHT * stabilityScore(prevStartMs, startMs) // Item 4's corrected sign
-        : 0;
-      const score = nudge + stability;
-
-      if (
-        best === null ||
-        score > best.score ||
-        (score === best.score && startMs < best.startMs)
-      ) {
-        best = { startMs, dayStr: day.dayStr, score };
-      }
-    }
+): number[] {
+  if (day.dayEndMs - day.dayStartMs === MINUTES_PER_DAY * MS_PER_MINUTE) {
+    return armOverlapRatesFromMinute(
+      (startMs - day.dayStartMs) / MS_PER_MINUTE,
+      durationMinutes,
+    );
   }
-  return best;
+  const endMs = startMs + durationMinutes * MS_PER_MINUTE;
+  return ARM_BANDS.map((b) => overlapRate(startMs, endMs, b.arm, timezone));
+}
+
+function startArm(
+  day: LinucbCandidateDay,
+  startMs: number,
+  timezone: string,
+): SchedulingArm {
+  const isPlainDay =
+    day.dayEndMs - day.dayStartMs === MINUTES_PER_DAY * MS_PER_MINUTE;
+  return armOfMinute(
+    isPlainDay
+      ? (startMs - day.dayStartMs) / MS_PER_MINUTE
+      : utcToMinutes(new Date(startMs), timezone),
+  );
 }
 
 /**
- * Ranks arms purely by LinUCB (step 1), then tries each in ranked order,
- * searching only within that arm's time window (step 2) — falling through to
- * the next-ranked arm when the current one has zero feasible slots anywhere
- * in the horizon. `null` only once every arm has been exhausted — the same
- * "nothing survives at all" contract callers already handle
- * (`BanditPlacer.placeInWindow` returns `null`, and `TaskPlacementService`
- * falls back to `HeuristicPlacer`). No new fallback plumbing needed.
+ * Scores every feasible start (15-min aligned, not overlapping `occupied`,
+ * end <= `deadlineMs`, start >= `nextMs`) across all `days` and returns the
+ * best, or `null` when nothing is feasible (caller falls back to the
+ * heuristic — same contract as before).
  */
 export function bestLinucbSlot(
   input: BestLinucbSlotInput,
@@ -191,30 +138,68 @@ export function bestLinucbSlot(
     deadlineMs,
     extraOccupied = [],
     prevStartMs,
+    observationCount = 0,
   } = input;
 
-  const rankedArms = rankArmsByScore(days);
-  for (const arm of rankedArms) {
-    const pick = bestMinuteInArm(
-      arm,
-      days,
-      durationMinutes,
-      timezone,
-      prefMatrix,
-      nextMs,
-      deadlineMs,
-      extraOccupied,
-      prevStartMs,
-    );
-    if (pick) {
-      const day = days.find((d) => d.dayStr === pick.dayStr)!;
-      return {
-        startMs: pick.startMs,
-        score: pick.score,
-        arm,
-        vector: day.vector,
-      };
+  const weights = adaptiveWeights(observationCount);
+  const durationMs = durationMinutes * MS_PER_MINUTE;
+  const durationHours = durationMs / HOUR_MS;
+  const overhangMs = durationMs - SLOT_MS;
+
+  let best: {
+    startMs: number;
+    score: number;
+    arm: SchedulingArm;
+    day: LinucbCandidateDay;
+  } | null = null;
+
+  for (const day of days) {
+    const lowerMs = Math.max(ceilToSlot(day.dayStartMs), nextMs);
+    const upperMs = Math.min(day.dayEndMs + overhangMs, deadlineMs);
+    const occupied = extraOccupied.length
+      ? [...day.occupied, ...extraOccupied]
+      : day.occupied;
+
+    for (
+      let startMs = lowerMs;
+      startMs + durationMs <= upperMs;
+      startMs += SLOT_MS
+    ) {
+      const endMs = startMs + durationMs;
+      if (overlapsAny(occupied, startMs, endMs)) continue;
+
+      const rates = ratesForSlot(day, startMs, durationMinutes, timezone);
+      let linucb = 0;
+      for (let i = 0; i < ARM_BANDS.length; i++) {
+        linucb += rates[i] * (day.armScores[ARM_BANDS[i].arm] ?? 0);
+      }
+      const pref =
+        slotPreferenceScore(prefMatrix, startMs, endMs, timezone) /
+        durationHours;
+      const stability =
+        prevStartMs !== undefined ? stabilityScore(prevStartMs, startMs) : 0;
+      const score = weights.wL * linucb + weights.wP * pref + stability;
+
+      const arm = startArm(day, startMs, timezone);
+      if (
+        best === null ||
+        score > best.score ||
+        (score === best.score &&
+          (TIE_RANK.get(arm)! < TIE_RANK.get(best.arm)! ||
+            (TIE_RANK.get(arm) === TIE_RANK.get(best.arm) &&
+              startMs < best.startMs)))
+      ) {
+        best = { startMs, score, arm, day };
+      }
     }
   }
-  return null;
+
+  if (!best) return null;
+  return {
+    startMs: best.startMs,
+    score: best.score,
+    arm: best.arm,
+    vector: best.day.vector,
+    weights,
+  };
 }

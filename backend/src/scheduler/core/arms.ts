@@ -78,3 +78,42 @@ export function overlapRate(
 
   return overlapMinutes / totalMinutes;
 }
+
+/**
+ * Deterministic order used ONLY to break exact score ties between candidate
+ * slots (`linucb-best-slot.ts`): the arm hosting the slot's start decides.
+ * MORNING first so a tie (e.g. all-zero cold start) never lands on the
+ * 00:00 slot that `ARM_BANDS`' declared order would favour. Fixed, no
+ * randomness (CLAUDE.md invariant 2).
+ */
+export const TIE_BREAK_ARM_ORDER: readonly SchedulingArm[] = [
+  "MORNING",
+  "AFTERNOON",
+  "EVENING",
+  "EARLY_MORNING",
+  "NIGHT",
+];
+
+/**
+ * Wall-clock-arithmetic twin of {@link overlapRate} for a slot that starts at
+ * local `startMinute` (minute-of-day) and lasts `durationMinutes`, with no
+ * Intl/timezone lookups — callers derive `startMinute` from a precomputed
+ * per-day offset. Exact whenever no DST transition falls inside the slot.
+ * Returns one rate (0…1) per arm in {@link ARM_BANDS} order; rates sum to 1.
+ */
+export function armOverlapRatesFromMinute(
+  startMinute: number,
+  durationMinutes: number,
+): number[] {
+  const endMinute = startMinute + durationMinutes;
+  return ARM_BANDS.map((band) => {
+    let overlap = 0;
+    // The slot spans at most a handful of local days; band repeats daily.
+    for (let day = 0; day * MINUTES_PER_DAY < endMinute; day++) {
+      const lo = band.start + day * MINUTES_PER_DAY;
+      const hi = band.end + day * MINUTES_PER_DAY;
+      overlap += Math.max(0, Math.min(endMinute, hi) - Math.max(startMinute, lo));
+    }
+    return overlap / durationMinutes;
+  });
+}

@@ -1,270 +1,265 @@
 import {
   bestLinucbSlot,
-  bestMinuteInArm,
-  rankArmsByScore,
+  type BestLinucbSlotInput,
   type LinucbCandidateDay,
 } from "./linucb-best-slot";
 import { matrixIndex } from "./preference";
+import { adaptiveWeights } from "./adaptive-weights";
 
-const TZ = "UTC";
-const ZERO = new Array<number>(168).fill(0);
 const ms = (iso: string) => new Date(iso).getTime();
+const iso = (n: number) => new Date(n).toISOString();
+const ZERO = new Array<number>(168).fill(0);
+const DAY = 86_400_000;
 
-function day(over: Partial<LinucbCandidateDay> = {}): LinucbCandidateDay {
+function day(
+  dayStr = "2026-06-15",
+  over: Partial<LinucbCandidateDay> = {},
+): LinucbCandidateDay {
+  const start = ms(`${dayStr}T00:00:00.000Z`);
   return {
-    dayStr: "2026-06-15",
-    dayStartMs: ms("2026-06-15T00:00:00.000Z"),
-    dayEndMs: ms("2026-06-16T00:00:00.000Z"),
+    dayStr,
+    dayStartMs: start,
+    dayEndMs: start + DAY,
     occupied: [],
-    vector: [],
+    vector: [1],
     armScores: {},
     ...over,
   };
 }
 
-describe("rankArmsByScore", () => {
-  it("ranks arms by the max per-arm score over any candidate day, highest first", () => {
-    const days = [
-      day({ armScores: { MORNING: 1, EVENING: 5 } }),
-      day({ dayStr: "2026-06-16", armScores: { MORNING: 9, AFTERNOON: 3 } }),
-    ];
-    const ranked = rankArmsByScore(days);
-    // MORNING's best (9, day 2) > EVENING's best (5) > AFTERNOON's best (3)
-    // > the two unscored arms (0 each, ARM_BANDS order breaks the tie).
-    expect(ranked.slice(0, 3)).toEqual(["MORNING", "EVENING", "AFTERNOON"]);
+function input(over: Partial<BestLinucbSlotInput> = {}): BestLinucbSlotInput {
+  return {
+    days: [day()],
+    durationMinutes: 60,
+    timezone: "UTC",
+    prefMatrix: ZERO,
+    nextMs: ms("2026-06-15T00:00:00.000Z"),
+    deadlineMs: ms("2026-06-16T00:00:00.000Z"),
+    ...over,
+  };
+}
+
+/** Preference matrix that likes `hours` on every weekday. */
+function likes(hours: number[]): number[] {
+  const m = [...ZERO];
+  for (let wd = 1; wd <= 7; wd++)
+    for (const h of hours) m[matrixIndex(wd, h)] = 1;
+  return m;
+}
+
+describe("adaptiveWeights", () => {
+  it("is pref-heavy cold and shifts monotonically toward LinUCB", () => {
+    expect(adaptiveWeights(0)).toEqual({ wL: 0.3, wP: 1 });
+    let prev = adaptiveWeights(0);
+    for (let n = 1; n <= 80; n++) {
+      const w = adaptiveWeights(n);
+      expect(w.wL).toBeGreaterThanOrEqual(prev.wL);
+      expect(w.wP).toBeLessThanOrEqual(prev.wP);
+      prev = w;
+    }
+    expect(adaptiveWeights(10_000)).toEqual({ wL: 1, wP: 0.1 });
   });
 
-  it("breaks exact ties by ARM_BANDS' declared order (EARLY_MORNING → NIGHT)", () => {
-    const ranked = rankArmsByScore([day({ armScores: {} })]); // every arm scores 0
-    expect(ranked).toEqual([
-      "EARLY_MORNING",
-      "MORNING",
-      "AFTERNOON",
-      "EVENING",
-      "NIGHT",
-    ]);
-  });
-});
-
-describe("bestMinuteInArm", () => {
-  it("only considers starts whose local minute-of-day falls in the arm's own band", () => {
-    const pick = bestMinuteInArm(
-      "MORNING",
-      [day()],
-      60,
-      TZ,
-      ZERO,
-      ms("2026-06-15T00:00:00.000Z"),
-      ms("2026-06-16T00:00:00.000Z"),
-      [],
-    );
-    expect(pick).not.toBeNull();
-    const startHour = new Date(pick!.startMs).getUTCHours();
-    expect(startHour).toBeGreaterThanOrEqual(6); // MORNING = [360, 660) → 06:00–11:00
-    expect(startHour).toBeLessThan(11);
-  });
-
-  it("returns null when the arm has zero feasible slots anywhere in the horizon", () => {
-    // NIGHT = [1200, 1440) → 20:00–24:00, fully occupied on the only day.
-    const pick = bestMinuteInArm(
-      "NIGHT",
-      [
-        day({
-          occupied: [
-            {
-              start: ms("2026-06-15T20:00:00.000Z"),
-              end: ms("2026-06-16T00:00:00.000Z"),
-            },
-          ],
-        }),
-      ],
-      60,
-      TZ,
-      ZERO,
-      ms("2026-06-15T00:00:00.000Z"),
-      ms("2026-06-16T00:00:00.000Z"),
-      [],
-    );
-    expect(pick).toBeNull();
-  });
-
-  it("scores candidates by the duration-normalized preference nudge + stability only", () => {
-    const pref = [...ZERO];
-    pref[matrixIndex(1, 9)] = 5; // Monday 09:00 strongly preferred
-    const pick = bestMinuteInArm(
-      "MORNING",
-      [day()],
-      60,
-      TZ,
-      pref,
-      ms("2026-06-15T00:00:00.000Z"),
-      ms("2026-06-16T00:00:00.000Z"),
-      [],
-    );
-    expect(new Date(pick!.startMs).toISOString()).toBe(
-      "2026-06-15T09:00:00.000Z",
-    );
-  });
-
-  it("earliest start breaks a score tie", () => {
-    const pick = bestMinuteInArm(
-      "EARLY_MORNING",
-      [day()],
-      60,
-      TZ,
-      ZERO,
-      ms("2026-06-15T00:00:00.000Z"),
-      ms("2026-06-16T00:00:00.000Z"),
-      [],
-    );
-    expect(new Date(pick!.startMs).toISOString()).toBe(
-      "2026-06-15T00:00:00.000Z",
-    );
+  it("treats negative / NaN counts as cold", () => {
+    expect(adaptiveWeights(-5)).toEqual(adaptiveWeights(0));
+    expect(adaptiveWeights(NaN)).toEqual(adaptiveWeights(0));
   });
 });
 
 describe("bestLinucbSlot", () => {
-  it("picks the top-ranked arm's band, earliest feasible day/minute first (no per-day preference to break the tie)", () => {
-    const days = [
-      day({ vector: [1] }),
-      day({
-        dayStr: "2026-06-16",
-        dayStartMs: ms("2026-06-16T00:00:00.000Z"),
-        dayEndMs: ms("2026-06-17T00:00:00.000Z"),
-        vector: [2],
-        armScores: { AFTERNOON: 10 },
-      }),
-    ];
-    const best = bestLinucbSlot({
-      days,
-      durationMinutes: 60,
-      timezone: TZ,
-      prefMatrix: ZERO,
-      nextMs: ms("2026-06-15T00:00:00.000Z"),
-      deadlineMs: ms("2026-06-17T00:00:00.000Z"),
-    });
-    // AFTERNOON is the only scored (hence top-ranked) arm; step 2 has no
-    // preference/stability signal to prefer day 2 over day 1's own AFTERNOON
-    // band, so the earliest feasible start (day 1, 11:00) wins.
-    expect(best?.arm).toBe("AFTERNOON");
-    expect(best?.vector).toEqual([1]);
-    expect(new Date(best!.startMs).toISOString()).toBe(
-      "2026-06-15T11:00:00.000Z", // AFTERNOON starts at 11:00
-    );
+  it("cold start with a morning preference picks the morning, not 00:00", () => {
+    const pick = bestLinucbSlot(
+      input({ prefMatrix: likes([9, 10]), observationCount: 0 }),
+    )!;
+    expect(new Date(pick.startMs).getUTCHours()).toBe(9);
+    expect(pick.arm).toBe("MORNING");
+    expect(pick.weights).toEqual({ wL: 0.3, wP: 1 });
   });
 
-  it("never returns a slot that overlaps `occupied` or `extraOccupied`", () => {
-    const best = bestLinucbSlot({
-      days: [
-        day({
-          armScores: { NIGHT: 100 }, // 20:00-24:00, strongly preferred
-          occupied: [
-            {
-              start: ms("2026-06-15T20:00:00.000Z"),
-              end: ms("2026-06-15T21:00:00.000Z"),
-            },
-          ],
-        }),
-      ],
-      durationMinutes: 60,
-      timezone: TZ,
-      prefMatrix: ZERO,
-      nextMs: ms("2026-06-15T20:00:00.000Z"),
-      deadlineMs: ms("2026-06-16T00:00:00.000Z"),
-      extraOccupied: [
+  it("exact ties go to MORNING (never EARLY_MORNING), deterministically", () => {
+    const a = bestLinucbSlot(input())!;
+    const b = bestLinucbSlot(input())!;
+    expect(a).toEqual(b);
+    expect(a.arm).toBe("MORNING");
+    expect(iso(a.startMs)).toBe("2026-06-15T06:00:00.000Z");
+  });
+
+  it("a warm user follows LinUCB's arm scores over a weak preference", () => {
+    const pick = bestLinucbSlot(
+      input({
+        prefMatrix: likes([9]),
+        observationCount: 1000,
+        days: [day("2026-06-15", { armScores: { EVENING: 3 } })],
+      }),
+    )!;
+    expect(pick.arm).toBe("EVENING");
+  });
+
+  it("ranks across days (best arm score wins on the later day)", () => {
+    const pick = bestLinucbSlot(
+      input({
+        observationCount: 1000,
+        days: [
+          day("2026-06-15", { armScores: { AFTERNOON: 1 } }),
+          day("2026-06-16", { armScores: { AFTERNOON: 2 } }),
+        ],
+        deadlineMs: ms("2026-06-17T00:00:00.000Z"),
+      }),
+    )!;
+    expect(iso(pick.startMs).slice(0, 10)).toBe("2026-06-16");
+  });
+
+  it("overlap-weights arm scores across a band boundary", () => {
+    // 16:30-17:30 = half AFTERNOON (score 2) + half EVENING (score 0) -> 1.
+    const pick = bestLinucbSlot(
+      input({
+        observationCount: 1000,
+        days: [day("2026-06-15", { armScores: { AFTERNOON: 2, EVENING: 0 } })],
+        nextMs: ms("2026-06-15T16:30:00.000Z"),
+        deadlineMs: ms("2026-06-15T17:30:00.000Z"),
+      }),
+    )!;
+    expect(pick.score).toBeCloseTo(1);
+  });
+
+  it("considers a 23:45 start overhanging midnight when nothing else is free", () => {
+    const d = day("2026-06-15", {
+      occupied: [
         {
-          start: ms("2026-06-15T21:00:00.000Z"),
-          end: ms("2026-06-15T23:00:00.000Z"),
+          start: ms("2026-06-15T00:00:00.000Z"),
+          end: ms("2026-06-15T23:45:00.000Z"),
         },
       ],
     });
-    expect(best?.arm).toBe("NIGHT");
-    expect(new Date(best!.startMs).toISOString()).toBe(
-      "2026-06-15T23:00:00.000Z",
-    );
+    const pick = bestLinucbSlot(
+      input({
+        days: [d],
+        deadlineMs: ms("2026-06-16T01:00:00.000Z"),
+      }),
+    )!;
+    expect(iso(pick.startMs)).toBe("2026-06-15T23:45:00.000Z");
   });
 
-  it("lets a slot start before midnight and run past it, bounded by deadlineMs (D5)", () => {
-    const best = bestLinucbSlot({
-      days: [day({ armScores: { NIGHT: 100 } })],
-      durationMinutes: 60,
-      timezone: TZ,
-      prefMatrix: ZERO,
-      nextMs: ms("2026-06-15T23:45:00.000Z"),
-      deadlineMs: ms("2026-06-16T01:00:00.000Z"),
-    });
-    expect(new Date(best!.startMs).toISOString()).toBe(
-      "2026-06-15T23:45:00.000Z",
-    );
-    expect(new Date(best!.startMs + 60 * 60_000).toISOString()).toBe(
-      "2026-06-16T00:45:00.000Z",
-    );
+  it("scores a midnight-crossing slot on both sides (NIGHT + EARLY_MORNING)", () => {
+    const pick = bestLinucbSlot(
+      input({
+        observationCount: 1000,
+        durationMinutes: 120,
+        nextMs: ms("2026-06-15T23:00:00.000Z"),
+        deadlineMs: ms("2026-06-16T01:00:00.000Z"),
+        days: [
+          day("2026-06-15", { armScores: { NIGHT: 4, EARLY_MORNING: 2 } }),
+        ],
+      }),
+    )!;
+    expect(pick.score).toBeCloseTo(3);
   });
 
-  it("feasibility fallback: falls through to the second-ranked arm when the top arm is fully booked, and attributes the reward to that arm", () => {
-    // EVENING [1020,1200) = 17:00-20:00 scores highest but is fully booked;
-    // MORNING [360,660) = 06:00-11:00 scores second and is free.
-    const best = bestLinucbSlot({
-      days: [
-        day({
-          armScores: { EVENING: 100, MORNING: 50 },
-          occupied: [
-            {
-              start: ms("2026-06-15T17:00:00.000Z"),
-              end: ms("2026-06-15T20:00:00.000Z"),
-            },
-          ],
-        }),
+  it("deadline is a hard ceiling on the END and need not be slot-aligned", () => {
+    const deadlineMs = ms("2026-06-15T10:10:00.000Z");
+    const pick = bestLinucbSlot(
+      input({ nextMs: ms("2026-06-15T09:00:00.000Z"), deadlineMs }),
+    )!;
+    expect(pick.startMs + 3_600_000).toBeLessThanOrEqual(deadlineMs);
+    expect(iso(pick.startMs)).toBe("2026-06-15T09:00:00.000Z");
+  });
+
+  it("returns null for a full day with the deadline today", () => {
+    const d = day("2026-06-15", {
+      occupied: [
+        {
+          start: ms("2026-06-15T00:00:00.000Z"),
+          end: ms("2026-06-16T00:00:00.000Z"),
+        },
       ],
-      durationMinutes: 60,
-      timezone: TZ,
-      prefMatrix: ZERO,
-      nextMs: ms("2026-06-15T00:00:00.000Z"),
-      deadlineMs: ms("2026-06-16T00:00:00.000Z"),
     });
-    expect(best).not.toBeNull();
-    // The picked arm is the one actually used — MORNING, not the fully-booked
-    // top-ranked EVENING — so reward attribution (`SlotProposal.selectedArm`)
-    // points at whichever arm really hosted the session.
-    expect(best?.arm).toBe("MORNING");
-    const startHour = new Date(best!.startMs).getUTCHours();
-    expect(startHour).toBeGreaterThanOrEqual(6);
-    expect(startHour).toBeLessThan(11);
+    expect(
+      bestLinucbSlot(
+        input({
+          days: [d],
+          nextMs: ms("2026-06-15T08:00:00.000Z"),
+          deadlineMs: ms("2026-06-15T20:00:00.000Z"),
+        }),
+      ),
+    ).toBeNull();
   });
 
-  it("falls all the way through to a cold (unscored) arm when every scored arm is fully booked", () => {
-    const fullDayBlock = {
-      start: ms("2026-06-15T00:00:00.000Z"),
-      end: ms("2026-06-15T20:00:00.000Z"), // blocks every arm except NIGHT
+  it("returns null when now + duration > deadline", () => {
+    expect(
+      bestLinucbSlot(
+        input({
+          nextMs: ms("2026-06-15T09:00:00.000Z"),
+          deadlineMs: ms("2026-06-15T09:30:00.000Z"),
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it("stability pulls a near-tie toward the previous start", () => {
+    const pick = bestLinucbSlot(
+      input({ prevStartMs: ms("2026-06-15T15:00:00.000Z") }),
+    )!;
+    expect(iso(pick.startMs)).toBe("2026-06-15T15:00:00.000Z");
+  });
+
+  it("handles fractional-offset tz days (+05:45)", () => {
+    const start = ms("2026-06-14T18:15:00.000Z"); // local midnight, Asia/Kathmandu
+    const d: LinucbCandidateDay = {
+      dayStr: "2026-06-15",
+      dayStartMs: start,
+      dayEndMs: start + DAY,
+      occupied: [],
+      vector: [],
+      armScores: {},
     };
-    const best = bestLinucbSlot({
-      days: [
-        day({
-          armScores: { MORNING: 100, AFTERNOON: 50 },
-          occupied: [fullDayBlock],
-        }),
-      ],
-      durationMinutes: 60,
-      timezone: TZ,
-      prefMatrix: ZERO,
-      nextMs: ms("2026-06-15T00:00:00.000Z"),
-      deadlineMs: ms("2026-06-16T00:00:00.000Z"),
-    });
-    expect(best?.arm).toBe("NIGHT");
-    expect(new Date(best!.startMs).toISOString()).toBe(
-      "2026-06-15T20:00:00.000Z",
-    );
+    const pick = bestLinucbSlot(
+      input({
+        days: [d],
+        timezone: "Asia/Kathmandu",
+        nextMs: start,
+        deadlineMs: start + DAY,
+      }),
+    )!;
+    // Tie -> earliest MORNING-start slot = 06:00 local = 00:15Z.
+    expect(iso(pick.startMs)).toBe("2026-06-15T00:15:00.000Z");
   });
 
-  it("returns null when every arm is exhausted (nothing free fits before the deadline)", () => {
-    const best = bestLinucbSlot({
-      days: [day()],
-      durationMinutes: 60,
-      timezone: TZ,
-      prefMatrix: ZERO,
-      nextMs: ms("2026-06-15T23:30:00.000Z"),
-      deadlineMs: ms("2026-06-15T23:45:00.000Z"),
-    });
-    expect(best).toBeNull();
+  it("stays exact on a DST fall-back day (25h)", () => {
+    const start = ms("2026-11-01T04:00:00.000Z"); // local midnight EDT
+    const end = ms("2026-11-02T05:00:00.000Z"); // next local midnight EST
+    const d: LinucbCandidateDay = {
+      dayStr: "2026-11-01",
+      dayStartMs: start,
+      dayEndMs: end,
+      occupied: [],
+      vector: [],
+      armScores: {},
+    };
+    const pick = bestLinucbSlot(
+      input({
+        days: [d],
+        timezone: "America/New_York",
+        nextMs: start,
+        deadlineMs: end,
+      }),
+    )!;
+    // 06:00 local after the transition (EST) = 11:00Z.
+    expect(pick.arm).toBe("MORNING");
+    expect(iso(pick.startMs)).toBe("2026-11-01T11:00:00.000Z");
+  });
+
+  it("respects extraOccupied blocks", () => {
+    const pick = bestLinucbSlot(
+      input({
+        extraOccupied: [
+          {
+            start: ms("2026-06-15T06:00:00.000Z"),
+            end: ms("2026-06-15T12:00:00.000Z"),
+          },
+        ],
+      }),
+    )!;
+    // Next tie-order arm after MORNING is AFTERNOON, earliest = 12:00.
+    expect(iso(pick.startMs)).toBe("2026-06-15T12:00:00.000Z");
   });
 });

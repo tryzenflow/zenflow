@@ -118,6 +118,7 @@ function toNotificationDto(row: Notification): NotificationDto {
     actionTakenAt: row.actionTakenAt ? row.actionTakenAt.toISOString() : null,
     eventEndsAt: row.eventEndsAt ? row.eventEndsAt.toISOString() : null,
     sessionId: row.sessionId,
+    conflictSessionIds: row.conflictSessionIds ?? [],
   };
 }
 

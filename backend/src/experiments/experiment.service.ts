@@ -110,6 +110,8 @@ export class ExperimentService {
       proposedStartTime: args.proposedStartTime,
       featureVector: args.featureVector,
       selectedArm: args.selectedArm,
+      linucbWeight: isLinucb ? (args.weights?.wL ?? null) : null,
+      preferenceWeight: isLinucb ? (args.weights?.wP ?? null) : null,
       pairwiseShown: args.pairwiseShown,
       pairwisePositions: args.pairwisePositions
         ? args.pairwisePositions

@@ -133,3 +133,20 @@ export const BANDIT_EXPERIMENT_ID = "linucb-heuristic-v1";
  * `primaryPolicy`'s own 50/50 roll.
  */
 export const PAIRWISE_SAMPLE_RATE = 0.2;
+
+/**
+ * Adaptive LinUCB-vs-preference blend (`core/adaptive-weights.ts`, issue #62 A).
+ * Cold users (no observations) lean on the preference matrix
+ * (`wP=1, wL=0.3`) because untrained arms all score ~0 and would otherwise
+ * pin every task to 00:00; after `WEIGHT_WARMUP_OBSERVATIONS` MOVE/RETAINED
+ * events the weights have linearly shifted to the warm values.
+ */
+export const LINUCB_WEIGHT_COLD = 0.3;
+export const PREFERENCE_WEIGHT_COLD = 1;
+export const LINUCB_WEIGHT_WARM = 1;
+export const PREFERENCE_WEIGHT_WARM = 0.1;
+export const WEIGHT_WARMUP_OBSERVATIONS = 40;
+
+/** Latest local start a scan considers (cap on days scanned, ~30d); does NOT
+ * replace `MAX_SCAN_DAYS`, which still normalizes the context vector. */
+export const SCAN_CAP_DAYS = 30;

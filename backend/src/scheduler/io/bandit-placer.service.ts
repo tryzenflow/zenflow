@@ -16,7 +16,8 @@ import type {
   PlaceableTask,
   PlacementWindow,
 } from "../types/placement.types";
-import { bestLinucbSlot } from "../core/linucb-best-slot";
+import { loadObservationCount } from "./observation-count";
+import { bestLinucbSlot, type BestLinucbSlot } from "../core/linucb-best-slot";
 import {
   addDaysStr,
   ceilToSlot,
@@ -34,12 +35,10 @@ import type { PlaceInWindowOpts } from "./heuristic-placer.service";
 /**
  * Policy B — places one `TASK` with the Disjoint-LinUCB policy
  * (`docs/adr/0001-linucb-model-design.md` §8, `docs/scheduler/reranking.md`):
- * a per-candidate-day `/predict`, then a two-step arm-then-minute pick
- * (Item 3B2, `core/linucb-best-slot.ts`) — rank the 5 `SchedulingArm`s by
- * LinUCB's own score alone, then search only within the top-ranked arm's
- * time window (scored by the small preference nudge + stability term),
- * falling through to the next-ranked arm when the current one has zero
- * feasible slots. A slot may run past local midnight up to the deadline (D5).
+ * a per-candidate-day `/predict`, then a slot-first pick
+ * (issue #62 A, `core/linucb-best-slot.ts`) — every feasible 15-min start on
+ * every day is scored by the adaptive blend of the overlap-weighted arm score
+ * and the preference matrix, plus stability, then ranked across days. A slot may run past local midnight up to the deadline (D5).
  *
  * Returns `null` on any reason to fall back to the heuristic — the bandit
  * service is unreachable/disabled, `/predict` failed, or no slot survives.
@@ -118,7 +117,10 @@ export class BanditPlacer {
     );
     if (days.length === 0) return null;
 
-    const scores = await this.fetchBanditPredictions(userId, days);
+    const [scores, observationCount] = await Promise.all([
+      this.fetchBanditPredictions(userId, days),
+      loadObservationCount(this.prisma, userId),
+    ]);
     if (!scores) return null;
 
     const best = this.pickBestSlot({
@@ -130,6 +132,7 @@ export class BanditPlacer {
       next15Ms,
       deadlineMs,
       extraOccupied: opts.extraOccupied ?? [],
+      observationCount,
     });
     if (!best) return null;
 
@@ -137,6 +140,7 @@ export class BanditPlacer {
       scheduledStartTime: new Date(best.startMs),
       selectedArm: best.arm,
       featureVector: best.vector,
+      weights: best.weights,
     };
   }
 
@@ -228,12 +232,8 @@ export class BanditPlacer {
     next15Ms: number;
     deadlineMs: number;
     extraOccupied: Interval[];
-  }): {
-    startMs: number;
-    score: number;
-    arm: SchedulingArm;
-    vector: number[];
-  } | null {
+    observationCount: number;
+  }): BestLinucbSlot | null {
     const {
       days,
       scores,
@@ -243,6 +243,7 @@ export class BanditPlacer {
       next15Ms,
       deadlineMs,
       extraOccupied,
+      observationCount,
     } = args;
 
     return bestLinucbSlot({
@@ -257,6 +258,7 @@ export class BanditPlacer {
       deadlineMs,
       extraOccupied,
       prevStartMs: task.prevStartMs,
+      observationCount,
     });
   }
 }

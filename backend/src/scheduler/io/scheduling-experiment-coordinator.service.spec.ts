@@ -15,6 +15,7 @@ const BANDIT_PICK: BanditPick = {
   scheduledStartTime: new Date("2026-06-09T20:00:00.000Z"),
   selectedArm: "NIGHT",
   featureVector: [0.1, 0.2],
+  weights: { wL: 0.3, wP: 1 },
 };
 
 function makeExperiment(over: {
