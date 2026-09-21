@@ -417,15 +417,15 @@ so the scheduler avoids them from day one. Best-effort — a failure is logged a
 `/resize`, `/optimize` or `/undo`.
 
 **Displacement / infeasible deadline (issue #62 B).** When a single `TASK` create or deadline edit
-has no free slot, `TaskPlacementService.preflightTask` first tries an EDF repack of flexible
-tasks on the deadline day (+/-1 day if needed; fixed blocks and series sittings never move; moved
-rows come back in `displacedSessions[]` and are stored as `SYSTEM_MOVE` events with reward 0). If
-that is infeasible too the API answers **`409`** `{ success:false, code:"SCHEDULE_INFEASIBLE",
-options:["ACCEPT_CONFLICTS","ACCEPT_LATE_DEADLINE"] }` and persists nothing; the client retries the
-same request with `infeasiblePolicy` (`POST`/`PATCH` bodies). `ACCEPT_LATE_DEADLINE` places the task
-after the deadline and the session comes back with `late: true`. `now + duration > deadline` is a
-`400` on create and on a deadline edit. Every `Session` carries `late: boolean`.
+has no free slot, `TaskPlacementService.preflightTask` first repacks flexible tasks (EDF) on the
+deadline day (+/-1 day if needed). Fixed blocks and series sittings never move. Moved rows come back
+in `displacedSessions[]` as `SYSTEM_MOVE` events (reward 0).
 
+If that fails too: `409 { success:false, code:"SCHEDULE_INFEASIBLE",
+options:["ACCEPT_CONFLICTS","ACCEPT_LATE_DEADLINE"] }`, nothing persisted. The client retries with
+`infeasiblePolicy` (`POST`/`PATCH` bodies). `ACCEPT_LATE_DEADLINE` places the task after the
+deadline and returns `late: true`. `now + duration > deadline` is a `400` on create and on a
+deadline edit. Every `Session` carries `late: boolean`.
 `POST` and `PATCH` accept `reminders?: number[]` (minutes before start, max 2 distinct ints in
 0…10080 (0 = at start), not for `DND`); every `Session` response carries `reminders: number[]` (descending;
 `[]` for DND). On create, omitted → one default reminder at 60 min (non-DND), `[]` → none. On
@@ -477,10 +477,10 @@ only connection status. Types in `@zenflow/shared` (`ConnectIntegrationInput`,
 
 The ingestion inbox — written by the materializer, never a client (no create route).
 `CookieAuthGuard` per route, own rows only. Types: `NotificationTopic`, `NotificationKind`,
-`NotificationDto`, `NotificationsListResponse`. Topics include the sync-conflict trio `TIMETABLE_CONFLICT` / `EXAM_CONFLICT` /
-`ASSIGNMENT_CONFLICT` (raised by `ingestion/sync-conflicts.service.ts` after each source's sync;
-`conflictSessionIds` lists the user's clashing tasks; no calendar session is created for them).
-Each row has a `kind` (`NEW`/`CHANGE`/`DROP`)
+`NotificationDto`, `NotificationsListResponse`. Topics include the sync-conflict trio
+`TIMETABLE_CONFLICT` / `EXAM_CONFLICT` / `ASSIGNMENT_CONFLICT`, raised by
+`ingestion/sync-conflicts.service.ts` after each source's sync. `conflictSessionIds` lists the
+user's clashing tasks; no calendar session is created. Each row has a `kind` (`NEW`/`CHANGE`/`DROP`)
 and, for a per-item assignment/exam/lecture, an `eventEndsAt` (the "due"/"at" time; null for
 grouped rows and drops).
 
@@ -599,12 +599,14 @@ constant; `0` in `.env.test`). `PORTAL_API_KEY` stays required with no default.
 
 `BANDIT_SERVICE_URL` (optional, dev `http://localhost:8100`) points at the stateless Python
 bandit service (`services/bandit/`). When unset, LinUCB scheduling is disabled and every
-scheduling event falls back to the heuristic. **`BANDIT_SERVICE_URL` is required when
-`NODE_ENV=production`** (config validation fails boot). Placement flags (ADR-0003, see
+scheduling event falls back to the heuristic. **Required when `NODE_ENV=production`** (config
+validation fails boot). Placement flags (ADR-0003, see
 [Python-authoritative placement](#python-authoritative-placement-adr-0003)):
-`SCHEDULER_PLACEMENT_MODE` (`legacy` default | `shadow` | `python`), optional
-`BANDIT_SERVICE_TOKEN` (bearer secret for `POST /v1/place`), `PLACE_TIMEOUT_MS` (2500),
-`BENCH_TIMING=1` (test env: emit a `Server-Timing` header).
+
+- `SCHEDULER_PLACEMENT_MODE`: `legacy` (default) | `shadow` | `python`
+- `BANDIT_SERVICE_TOKEN` (optional): bearer secret for `POST /v1/place`
+- `PLACE_TIMEOUT_MS`: default 2500
+- `BENCH_TIMING=1`: test env, emits a `Server-Timing` header
 
 Native push config (all optional, each provider self-disables when its vars are unset —
 same pattern as `BANDIT_SERVICE_URL`; unset in `.env.test`): `FCM_SERVICE_ACCOUNT` (base64
@@ -627,16 +629,13 @@ session via `HeuristicPlacer.placeTask`, then hands the A/B decision to
   never runs; record a `SlotProposal` with `modelProposal` null, `pairwiseShown` false.
 - **LINUCB** — `BanditPlacer.placeTask()` builds one `d=22` context vector per candidate day
   (`core/context-vector.ts` — the preference matrix isn't an input feature at all), calls
-  the bandit service `/predict` once (all day loads come from a single range query), then
-  scores **every** feasible 15-min start across all days and ranks them (`core/linucb-best-slot.ts`,
-  issue #62 A, ADR-0001 section 13): `wL * sum overlapRate(slot,arm) * armScore[day][arm] +
-  wP * pref/duration + stability`, with `(wL, wP)` from `adaptiveWeights(observationCount)` - cold
-  `wP=1, wL=0.3` shifting to `wP=0.1, wL=1` over 40 MOVE/RETAINED events. Exact ties prefer MORNING
-  (never 00:00), then the earlier start. The applied weights are stored on
-  `SlotProposal.linucbWeight` / `.preferenceWeight`; the heuristic stays preference-only. A slot may
-  run past local
-  midnight up to the deadline. If it produces a pick, THIS session's `scheduledStartTime` is
-  overridden (no other session moves); otherwise the heuristic placement stands.
+  the bandit service `/predict` once (day loads come from one range query), then scores **every**
+  feasible 15-min start across all days (`core/linucb-best-slot.ts`, issue #62 A, ADR-0001 section 13):
+  `wL * sum overlapRate(slot,arm) * armScore[day][arm] + wP * pref/duration + stability`.
+  `(wL, wP) = adaptiveWeights(observationCount)`: cold `wP=1, wL=0.3`, warm `wP=0.1, wL=1` after
+  40 MOVE/RETAINED events. Ties prefer MORNING (never 00:00), then the earlier start. Applied weights
+  go on `SlotProposal.linucbWeight` / `.preferenceWeight`; the heuristic stays preference-only. A slot
+  may run past local midnight up to the deadline.
 - **sampled for pairwise** (independent of `primaryPolicy`) — the bandit runs too, even when
   HEURISTIC is primary, purely for comparison: nothing about which slot gets applied changes,
   but the `SlotProposal` gets `pairwiseShown = true` plus both proposals, so
@@ -667,53 +666,54 @@ never breaks session create/update.
 
 ## Python-authoritative placement (ADR-0003)
 
-[ADR-0003](../docs/adr/0003-python-authoritative-placement.md) moves all placement ranking to
-the Python `POST /v1/place`; Nest gathers, calls, applies and persists. It is rolled out behind
-`SCHEDULER_PLACEMENT_MODE` so `master` is always releasable:
+[ADR-0003](../docs/adr/0003-python-authoritative-placement.md) moves placement ranking to the
+Python `POST /v1/place`. Nest gathers, calls, applies and persists. `SCHEDULER_PLACEMENT_MODE`
+gates the rollout so `master` stays releasable.
 
 | Mode | Behaviour |
 | --- | --- |
-| `legacy` (default) | Today's TS ranking (`HeuristicPlacer` / `BanditPlacer` / `SeriesPlacer` / `DisplacementService`). Nothing calls `/v1/place`. |
-| `shadow` | `legacy` answers the request. For a single `TASK` create / deadline edit a **fire-and-forget** `/v1/place` call is compared with the legacy heuristic (and LinUCB, when it ran) start; any difference logs `shadow mismatch ...` and bumps `scheduler.placement_shadow_mismatch{kind}`. Never writes, never fails the request. Series placement is not shadowed yet. |
-| `python` | `PythonPlacer`: one `PlaceRequest` per placement event (single `TASK` or whole series), a second call only for the rare infeasible case (`NEEDS_INFEASIBLE_CONTEXT`). Displacement moves are applied as `SYSTEM_MOVE`; `SlotProposal` gets `placementSource = PYTHON` and `modelVersion = paramsVersion`. Pre-flights become `mode: "PREFLIGHT"` calls. |
+| `legacy` (default) | TS ranking (`HeuristicPlacer` / `BanditPlacer` / `SeriesPlacer` / `DisplacementService`). `/v1/place` is never called. |
+| `shadow` | `legacy` answers. For a single `TASK` create / deadline edit, a fire-and-forget `/v1/place` call is compared with the legacy start. A difference logs `shadow mismatch ...` and bumps `scheduler.placement_shadow_mismatch{kind}`. Never writes or fails the request. Series are not shadowed. |
+| `python` | `PythonPlacer`: one `PlaceRequest` per placement event (single `TASK` or whole series). A second call only when infeasible (`NEEDS_INFEASIBLE_CONTEXT`). Displacement moves are stored as `SYSTEM_MOVE`. `SlotProposal` gets `placementSource = PYTHON` and `modelVersion = paramsVersion`. Pre-flights are `mode: "PREFLIGHT"` calls. |
 
-Pieces (`scheduler/io/`): `PlacementClient` (bearer token, 2.5 s total timeout, at most one retry
-on connect-refused/reset/502-504 that failed within 300 ms, never on a timeout or 4xx; the
-300 ms connect timeout is not separately enforced because `fetch` has no per-phase timeout),
-`circuit-breaker.ts` (5 consecutive failures open it for 15 s,
-one half-open probe, open time doubles to a 60 s cap; 4xx/contract errors fall back but do
-not trip it), `PlacementGateway` (builds the `PlaceRequest` from `loadDayLoads` + observation
-count + bandit `(A, b)`, the two-phase infeasible call, spans/timings), `PythonPlacer`
-(apply + persist + `SlotProposal`), `FallbackPlacer` (the frozen pre-#62 heuristic; `slot.ts`,
-`slot-score.ts`, `preference.ts` are byte-identical to `bc6636d^`).
+Pieces (`scheduler/io/`):
 
-**Degraded behaviour** (Python down, breaker open, `BANDIT_SERVICE_URL` unset, contract
-mismatch), in `python` mode only: a free slot is placed by the frozen heuristic, the primary
-A/B policy is still rolled and recorded but the proposal is `placementSource = TS_FALLBACK`
-with `degradedReason` (`timeout | breaker_open | connect | http_5xx | http_4xx | version |
-invalid_response | disabled`), `modelProposal = null`; the response carries
-`schedulingDegraded: true` (create/update/reschedule responses). **No displacement, no
-accept-conflicts/late**: with no free slot before the deadline the request fails
-`503 SCHEDULER_DEGRADED` (`{ success: false, message, code }`, retryable, raised by the
-pre-flight before anything is written). `infeasiblePolicy` is ignored while degraded. Series are
-all-or-nothing (a member without a slot => 503). One known edge: if Python dies *between* the
-pre-flight and the placement call, a single `TASK` insert can already exist unplaced when the
-fallback finds no slot (503); the retry re-creates it.
+- `PlacementClient`: bearer token, 2.5 s total timeout (no separate connect timeout; `fetch` has none).
+  One retry on connect-refused/reset/502-504 that failed within 300 ms; never on a timeout or 4xx.
+- `circuit-breaker.ts`: opens after 5 consecutive failures, for 15 s. Then one half-open probe;
+  a failed probe doubles the open time (cap 60 s). 4xx/contract errors fall back without tripping it.
+- `PlacementGateway`: builds the `PlaceRequest` (`loadDayLoads`, observation count, bandit `(A, b)`),
+  runs the two-phase infeasible call, records spans/timings.
+- `PythonPlacer`: applies, persists, writes the `SlotProposal`.
+- `FallbackPlacer`: the frozen pre-#62 heuristic (`slot.ts`, `slot-score.ts`, `preference.ts` are byte-identical to `bc6636d^`).
 
-The global exception filter now passes a `HttpException` body's machine-readable `code` (and
-`options`) through, which is how `409 SCHEDULE_INFEASIBLE` and `503 SCHEDULER_DEGRADED` reach
-clients. Metrics: `scheduler.placement_source{source,reason}`, `scheduler.breaker_state`
-(0 closed / 1 half-open / 2 open), `scheduler.placement_shadow_mismatch{kind}`,
-`bandit.client.request.duration{operation=place}`. Spans: `placement.http` (with
-`placement.python.{decode,context,predict,scan,displace,total}_ms`). With `BENCH_TIMING=1` the
-`Server-Timing` header carries `dayload`, `http`, `scan`, `predict`, `db_apply`.
-Contract fixtures live in `packages/shared/contract/place/*.json` (see its README).
+**Degraded mode** (`python` mode only; Python down, breaker open, `BANDIT_SERVICE_URL` unset,
+contract mismatch):
 
-> **Pending (phase 6):** the CLAUDE.md invariant 2 rewrite ("Ranking lives in Python; Nest is
-> thin") and deleting the dead TS ranking code (`linucb-best-slot`, `adaptive-weights`,
-> `displacement` planning, `arms`, `context-vector`, `normalize`, `BanditPlacer`, the
-> `legacy`/`shadow` modes) are deliberately deferred until after a soak in `python` mode. Until
-> then the sections below still describe the (authoritative-in-`legacy`) TS core.
+- A free slot is placed by the frozen heuristic. The A/B policy is still rolled and recorded, but the
+  proposal has `placementSource = TS_FALLBACK`, `modelProposal = null` and a `degradedReason`
+  (`timeout | breaker_open | connect | http_5xx | http_4xx | version | invalid_response | disabled`).
+- Create/update/reschedule responses carry `schedulingDegraded: true`.
+- No displacement, no accept-conflicts/late. With no free slot before the deadline the pre-flight
+  fails `503 SCHEDULER_DEGRADED` (`{ success: false, message, code }`, retryable) before anything is written.
+- `infeasiblePolicy` is ignored. Series are all-or-nothing (a member without a slot => 503).
+- Known edge: if Python dies between pre-flight and placement, a single `TASK` row can exist
+  unplaced when the fallback finds no slot (503). The retry re-creates it.
+
+The global exception filter passes a `HttpException` body's `code` (and `options`) through, so
+clients see `409 SCHEDULE_INFEASIBLE` and `503 SCHEDULER_DEGRADED`.
+
+- Metrics: `scheduler.placement_source{source,reason}`, `scheduler.breaker_state` (0 closed / 1 half-open / 2 open),
+  `scheduler.placement_shadow_mismatch{kind}`, `bandit.client.request.duration{operation=place}`.
+- Spans: `placement.http`, with `placement.python.{decode,context,predict,scan,displace,total}_ms`.
+- `BENCH_TIMING=1`: `Server-Timing` carries `dayload`, `http`, `scan`, `predict`, `db_apply`.
+- Contract fixtures: `packages/shared/contract/place/*.json`.
+
+> **Pending (phase 6):** rewriting CLAUDE.md invariant 2 ("Ranking lives in Python; Nest is thin")
+> and deleting the dead TS ranking code (`linucb-best-slot`, `adaptive-weights`, `displacement`
+> planning, `arms`, `context-vector`, `normalize`, `BanditPlacer`, `legacy`/`shadow`) wait for a
+> soak in `python` mode. Until then the sections below describe the TS core, which is still
+> authoritative in `legacy`.
 
 ## Scheduler architecture
 
@@ -985,13 +985,12 @@ score(slot) = wL * SUM_arm overlapRate(slot, arm) * armScore[day][arm]
            warm (>= 40)  -> wP = 0.1, wL = 1            # linear in between, constants.ts
 ```
 
-`observationCount` = the user's MOVE + RETAINED events (`io/observation-count.ts`;
-`SYSTEM_MOVE` excluded). Candidate starts include 23:45 with the session overhanging local
-midnight; the deadline is a hard ceiling on the end (need not be slot-aligned). Exact score
-ties resolve by `TIE_BREAK_ARM_ORDER` (MORNING first) then earliest start. Per-day wall-clock
-offsets replace a per-slot Intl lookup (`armOverlapRatesFromMinute`; DST days use the exact
-`overlapRate`). `PREFERENCE_NUDGE_WEIGHT` is no longer read here. The scan returns
-`null` only when nothing is feasible - the heuristic then places the task.
+- `observationCount` = the user's MOVE + RETAINED events (`io/observation-count.ts`); `SYSTEM_MOVE` is excluded.
+- Starts include 23:45 (running past local midnight). The deadline caps the end and need not be slot-aligned.
+- Exact ties: `TIE_BREAK_ARM_ORDER` (MORNING first), then earliest start.
+- Per-day wall-clock offsets replace a per-slot Intl lookup (`armOverlapRatesFromMinute`); DST days use `overlapRate`.
+- `PREFERENCE_NUDGE_WEIGHT` is no longer read here.
+- Returns `null` only when nothing is feasible; the heuristic then places the task.
 
 ### Displacement and sync conflicts (issue #62 B / D)
 
@@ -1005,10 +1004,9 @@ offsets replace a per-slot Intl lookup (`armOverlapRatesFromMinute`; DST days us
 | "reschedule all" (`POST /notifications/:id/reschedule-conflicts`) | `scheduler/io/conflict-reschedule.service.ts`   |
 | batched day loads (`loadDayLoads`, 2 queries for N days)          | `scheduler/io/day-load.ts`                      |
 
-Golden fixtures for the Python port (#60): `backend/scripts/export-golden-fixtures.ts`
-(`pnpm --filter backend golden:export`) writes `backend/test/golden/scheduler-core.golden.json`;
-`src/scheduler/golden/golden-fixtures.spec.ts` fails when the core changes without regenerated
-fixtures. Rule: core change => spec + Python port + fixtures.
+Golden fixtures for the Python port (#60): `pnpm --filter backend golden:export` writes
+`test/golden/scheduler-core.golden.json`; `golden-fixtures.spec.ts` fails on drift.
+Rule: core change => spec + Python port + fixtures.
 
 ### Series bounded window
 
