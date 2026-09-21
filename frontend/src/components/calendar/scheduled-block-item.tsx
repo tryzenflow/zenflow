@@ -17,6 +17,7 @@ import { toZonedTime } from "date-fns-tz";
 import { CornerDownRight, MapPin } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { SessionTypeBadge } from "./session-type-badge";
+import { LATE_CARD_CLASSES, useIsLate } from "./late-context";
 
 function minutesOfDay(iso: string, tz: string) {
   const d = toZonedTime(new Date(iso), tz);
@@ -325,6 +326,7 @@ export function ScheduledBlockItem({
   // session renders in exactly its normal type colour. The clash is still
   // resolved *spatially* (side-by-side columns via `layout`), just not tinted.
   const state = block.state;
+  const late = useIsLate(block.taskId);
   const width = 100 / layout.columns;
 
   return (
@@ -447,6 +449,7 @@ export function ScheduledBlockItem({
               block.continued &&
                 "rounded-t-none border-t-0 border-l-4 border-dashed",
               TASK_CARD_CLASSES[state],
+              late && LATE_CARD_CLASSES,
               // Ring-glow pulse that fires once after the task is created so the
               // user's eye is drawn to where it landed on the grid.
               isHighlighted && "animate-block-highlight",
@@ -531,6 +534,7 @@ export function ScheduledBlockItem({
               className={cn(
                 "h-2.5 w-2.5 shrink-0 translate-y-1 rounded-full border-l-4",
                 TASK_CARD_CLASSES[state],
+                late && LATE_CARD_CLASSES,
               )}
               aria-hidden
             />

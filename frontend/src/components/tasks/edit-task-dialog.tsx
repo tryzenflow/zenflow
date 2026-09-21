@@ -5,7 +5,12 @@ import { useSessionForm } from "@/hooks/use-task-form";
 import { format } from "date-fns";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { apiErrorMessage, errorToast } from "@/lib/toast";
+import {
+  apiErrorMessage,
+  errorToast,
+  notifyDisplaced,
+  withInfeasibleRetry,
+} from "@/lib/toast";
 import { postData } from "@/api";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useHighlightStore } from "@/hooks/use-highlight-store";
@@ -170,7 +175,14 @@ export function EditSessionDialog({
         patch.rrule = values.rrule || null;
       }
 
-      const updated = await updateSession(task.id, patch);
+      const updated = await withInfeasibleRetry((infeasiblePolicy) =>
+        updateSession(
+          task.id,
+          infeasiblePolicy ? { ...patch, infeasiblePolicy } : patch,
+        ),
+      );
+      if (!updated) return; // user dismissed the infeasible prompt
+      notifyDisplaced(updated);
       if (updated.divergent && updated.slotProposalId && updated.alternativeSlot) {
         setPendingPick(updated);
       } else {

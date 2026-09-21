@@ -5,7 +5,7 @@ import {
   SessionType,
 } from "@zenflow/shared";
 import { formatInTimeZone } from "date-fns-tz";
-import { Bell, LucideIcon } from "lucide-react";
+import { Bell, LucideIcon, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sessionTypeIcon } from "@/components/calendar/session-type-badge";
 
@@ -15,6 +15,9 @@ const TOPIC_TYPE: Record<NotificationTopic, SessionType | null> = {
   EXAM: "EXAM",
   TIMETABLE: "LECTURE",
   REMINDER: null,
+  ASSIGNMENT_CONFLICT: "ASSIGNMENT",
+  EXAM_CONFLICT: "EXAM",
+  TIMETABLE_CONFLICT: "LECTURE",
 };
 
 /**
@@ -27,6 +30,11 @@ export function topicVisual(topic: NotificationTopic): {
   Icon: LucideIcon;
   tint: string;
 } {
+  if (isConflictTopic(topic))
+    return {
+      Icon: TriangleAlert,
+      tint: "border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300",
+    };
   const type = TOPIC_TYPE[topic];
   if (!type)
     return { Icon: Bell, tint: "border-primary/40 bg-primary/15 text-primary" };
@@ -48,4 +56,20 @@ export function eventTimeLabel(n: NotificationDto, tz: string): string | null {
   const date = formatInTimeZone(at, tz, "MMM d");
   if (n.topic === "ASSIGNMENT") return `due ${date}`;
   return `${date}, ${formatInTimeZone(at, tz, "h:mm a")}`;
+}
+
+const CONFLICT_COPY: Partial<Record<NotificationTopic, string>> = {
+  ASSIGNMENT_CONFLICT: "An assignment now overlaps your tasks",
+  EXAM_CONFLICT: "An exam now overlaps your tasks",
+  TIMETABLE_CONFLICT: "A class now overlaps your tasks",
+};
+
+/** True for the sync-conflict topics (#62). */
+export function isConflictTopic(topic: NotificationTopic): boolean {
+  return topic in CONFLICT_COPY;
+}
+
+/** Short inbox headline for a conflict topic, or null for other topics. */
+export function conflictCopy(topic: NotificationTopic): string | null {
+  return CONFLICT_COPY[topic] ?? null;
 }

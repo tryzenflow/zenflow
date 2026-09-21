@@ -1,6 +1,7 @@
 import type {
   NotificationDto,
   NotificationsListResponse,
+  RescheduleConflictsResponse,
 } from "@zenflow/shared";
 import { api } from "./base";
 
@@ -32,5 +33,17 @@ export async function markNotificationActionTaken(
 /** Dismiss (hard-delete) one notification. 404 if it is not the caller's. */
 export async function dismissNotification(id: string): Promise<{ id: string }> {
   const { data } = await api.delete(`/notifications/${id}`);
+  return data.data;
+}
+
+/**
+ * Re-run the scheduler over every flexible task the conflict notification
+ * lists (`conflictSessionIds`). Partial success is normal — the ids that
+ * couldn't be placed come back in `failedSessionIds`.
+ */
+export async function rescheduleConflicts(
+  id: string,
+): Promise<RescheduleConflictsResponse> {
+  const { data } = await api.post(`/notifications/${id}/reschedule-conflicts`);
   return data.data;
 }

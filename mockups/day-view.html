@@ -34,7 +34,7 @@
         the same way now. Session states mirror
         <code>packages/core/src/task-card.ts</code> — one colour per type
         (fluid task · assignment · exam · lecture · DND) plus a client-side
-        <code>conflict</code> overlay; there is no <code>overdue</code> or
+        <code>conflict</code> overlay; a server-flagged <code>late</code> task (placed past its deadline, #62) renders red; there is no <code>overdue</code> or
         <code>completed</code> state. Tasks under 30 minutes render as a single compact row (title
         left, time right via <code>justify-between</code>) instead of the
         stacked two-line layout, mirroring
@@ -2936,6 +2936,22 @@
                         class="shrink-0 font-mono text-[9px] text-muted-foreground leading-none"
                         >9:00 – 9:30</span
                       >
+                    </div>
+
+                    <!-- late (#62): server flagged the task as placed past its deadline -->
+                    <div
+                      class="absolute left-1.5 right-1.5 flex flex-col gap-0.5 overflow-hidden rounded-[10px] border border-l-4 px-2.5 py-1.5 text-[13px] shadow-sm bg-red-50/60 dark:bg-red-950/25 border-l-red-500 text-red-900 dark:text-red-100"
+                      style="top: 800px; height: 60px"
+                      data-late="true"
+                    >
+                      <span
+                        class="inline-flex w-fit items-center justify-center gap-1 rounded-md border border-transparent bg-red-500/15 px-2 py-0.5 text-xs font-medium text-red-700 dark:text-red-300"
+                        >Late</span
+                      >
+                      <div class="truncate text-xs font-semibold">
+                        Lab report (past deadline)
+                      </div>
+                      <div class="font-mono text-[10px]">13:20 – 14:20</div>
                     </div>
 
                     <!-- overlap: two columns split 50/50 across the track width -->

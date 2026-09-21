@@ -3,6 +3,7 @@ import {
   listNotifications,
   markNotificationActionTaken,
   markNotificationRead,
+  rescheduleConflicts,
 } from "@/api/notifications";
 import { getSessionDetails } from "@/api/tasks";
 import { Button } from "@/components/ui/button";
@@ -105,6 +106,35 @@ export function NotificationBell() {
         ),
       );
       markNotificationActionTaken(n.id).catch(() => {});
+    }
+  };
+
+  const rescheduleAll = async (n: NotificationDto) => {
+    try {
+      const res = await rescheduleConflicts(n.id);
+      const failed = res.failedSessionIds.length;
+      if (failed === 0) {
+        toast.success(
+          `Rescheduled ${res.rescheduled.length} task${res.rescheduled.length === 1 ? "" : "s"}`,
+        );
+      } else {
+        errorToast(
+          `${failed} task${failed === 1 ? "" : "s"} couldn't be moved`,
+          {
+            description: `${res.rescheduled.length} rescheduled. No conflict-free slot for the rest.`,
+          },
+        );
+      }
+      window.dispatchEvent(new CustomEvent("zenflow:calendar-refresh"));
+      if (failed === 0) {
+        dismissed.current.add(n.id);
+        setItems((prev) => prev.filter((x) => x.id !== n.id));
+        dismissNotification(n.id).catch(() => {});
+      }
+    } catch {
+      errorToast("Couldn't reschedule those tasks", {
+        description: "Nothing was changed. Try again in a moment.",
+      });
     }
   };
 
@@ -224,6 +254,7 @@ export function NotificationBell() {
                   tz={tz}
                   onOpen={() => jumpToSession(n)}
                   onDismiss={(e) => dismiss(n, e)}
+                  onRescheduleAll={() => rescheduleAll(n)}
                 />
               ))}
             </div>

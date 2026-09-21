@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { LATE_CARD_CLASSES, useIsLate } from "./late-context";
 import { Event } from "@zenflow/shared";
 import { TASK_CARD_CLASSES } from "@zenflow/core";
 import {
@@ -109,6 +110,7 @@ export function MonthCell({
 }
 
 function MonthEventItem({ ev }: { ev: Event }) {
+  const late = useIsLate(ev.taskId);
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: ev.id,
   });
@@ -134,6 +136,7 @@ function MonthEventItem({ ev }: { ev: Event }) {
         "relative z-30 mt-0 h-auto w-full justify-start gap-x-1 rounded border border-l-2 px-1.5 py-0.5 text-[10px] font-medium",
         transform && "cursor-grabbing shadow-lg",
         TASK_CARD_CLASSES[ev.state],
+        late && LATE_CARD_CLASSES,
       )}
     >
       <span className="truncate">{ev.title}</span>
