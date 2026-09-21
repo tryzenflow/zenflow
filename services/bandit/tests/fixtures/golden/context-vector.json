@@ -1,0 +1,49 @@
+{
+  "function": "context-vector",
+  "source": "hand-checked",
+  "cases": [
+    {
+      "name": "neutral",
+      "fn": "buildContextVector",
+      "args": [
+        {
+          "remainingDaysUntilDeadline": 30,
+          "durationMinutes": 240,
+          "candidateIsoWeekday": 3,
+          "candidateDaysFromNow": 0,
+          "workloadByType": {
+            "TASK": {
+              "hours": 6,
+              "count": 4
+            }
+          },
+          "semesterPhase": null
+        }
+      ],
+      "expected": [
+        0.0,
+        0.0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        -1.0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0.5,
+        0.5,
+        0,
+        0,
+        0.0,
+        1
+      ]
+    }
+  ]
+}

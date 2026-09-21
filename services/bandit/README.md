@@ -84,6 +84,7 @@ services/bandit/
 │   ├── schemas.py                  # Pydantic request/response models + ArmId / ARM_IDS
 │   ├── serialization.py            # numpy glue + 422 guards (hydrate, all_finite, require_422)
 │   ├── main.py                     # replay-evaluation demo
+│   ├── core/                       # pure numpy port of backend/src/scheduler/core (see below)
 │   ├── models/
 │   │   └── linucb.py               # disjoint LinUCB + stateless score()/update() helpers
 │   └── evaluators/
@@ -92,6 +93,38 @@ services/bandit/
 │       └── policy_evaluator.py     # unbiased replay evaluation (Alg. 3)
 └── tests/                          # pytest suite mirroring src/ (test_api.py routes, test_schemas.py models)
 ```
+
+### Scheduler core port (`src/core/`, issue #60)
+
+Pure numpy port of `backend/src/scheduler/core/*` (the TS core is the source of truth):
+`slot`, `arms`, `context_vector`, `reward`, `series_spread`, `preference` (cell/move
+reinforcement + `decay_matrix`) and `slot_score` (`best_free_slot`, vectorized). No I/O, no
+clock, no randomness; instants are epoch-ms ints and `now`-style values are parameters.
+The 7x24 matrix is 168 floats. Not yet ported: `linucb_best_slot` (waiting on the issue #62
+per-slot rewrite of `linucb-best-slot.ts`, so the stale arm-then-minute version is not copied).
+
+The scan is vectorized: per-slot local (weekday, hour) cells come from cached per-tz UTC
+offset chunks (DST and fractional offsets such as Asia/Kolkata handled), window scores are
+one prefix-sum over 15-min pieces, occupancy is a difference-array mask, and ties use
+`argmax` on scores rounded to 1e-9 (earliest start wins, like the TS loop).
+
+Parity: `tests/test_core_parity.py` loads `tests/fixtures/golden/*.json`
+(`{function, cases:[{name, fn, args, expected}]}`, camelCase TS names, epoch ms). Current
+fixtures are hand-checked; the backend exporter should overwrite them. `tests/test_core_scan.py`
+checks the vectorized scan against a literal scalar transcription of `bestFreeSlot`
+(UTC, Kolkata, and both DST transitions).
+
+Benchmark (`python -m scripts.bench_slot_scan`; 1000 placements, 60-day window = 5760
+slots, 40 occupied intervals each, Europe/Paris, seeded; 16-thread Intel CPU, Python 3.12,
+single process, warm tz cache):
+
+| implementation | total | per placement |
+| -------------- | ----- | ------------- |
+| vectorized `best_free_slot` | 0.51 s | 0.51 ms |
+| scalar TS-style loop (extrapolated from 20) | ~111 s | ~111 ms |
+
+About 200x speedup. (The simulator, metrics, alpha sweep and multiprocessing/cache from #60
+are out of scope for this change.)
 
 Container: `docker compose -f backend/compose.dev.yml up bandit` — published on the host at
 `http://localhost:8100` (`BANDIT_SERVICE_URL` for backend dev, which runs on the host).

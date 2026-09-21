@@ -1,0 +1,63 @@
+{
+  "function": "arms",
+  "source": "hand-checked",
+  "cases": [
+    {
+      "name": "evening boundary",
+      "fn": "armOfMinute",
+      "args": [
+        1020
+      ],
+      "expected": "EVENING"
+    },
+    {
+      "name": "early",
+      "fn": "armOfMinute",
+      "args": [
+        359
+      ],
+      "expected": "EARLY_MORNING"
+    },
+    {
+      "name": "wrap",
+      "fn": "armOfMinute",
+      "args": [
+        -1
+      ],
+      "expected": "NIGHT"
+    },
+    {
+      "name": "midnight split night",
+      "fn": "overlapRate",
+      "args": [
+        1767654000000,
+        1767661200000,
+        "NIGHT",
+        "UTC"
+      ],
+      "expected": 0.5
+    },
+    {
+      "name": "midnight split early",
+      "fn": "overlapRate",
+      "args": [
+        1767654000000,
+        1767661200000,
+        "EARLY_MORNING",
+        "UTC"
+      ],
+      "expected": 0.5
+    },
+    {
+      "name": "fully inside",
+      "fn": "overlapRate",
+      "args": [
+        1767603600000,
+        1767607200000,
+        "MORNING",
+        "UTC"
+      ],
+      "expected": 1.0
+    }
+  ]
+}

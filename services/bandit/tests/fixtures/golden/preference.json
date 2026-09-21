@@ -1,0 +1,77 @@
+{
+  "function": "preference",
+  "source": "hand-checked",
+  "cases": [
+    {
+      "name": "cell clamp at 1",
+      "fn": "reinforcePreferenceCell",
+      "args": [
+        "DEFAULT",
+        1767603600000,
+        "UTC",
+        1
+      ],
+      "expected_cell": [
+        9,
+        1.0
+      ]
+    },
+    {
+      "name": "cell lowers neutral",
+      "fn": "reinforcePreferenceCell",
+      "args": [
+        "DEFAULT",
+        1767614400000,
+        "UTC",
+        -1
+      ],
+      "expected_cell": [
+        12,
+        -0.1
+      ]
+    },
+    {
+      "name": "cell local tz (Mon 20:30Z = Tue 03:30 ICT)",
+      "fn": "reinforcePreferenceCell",
+      "args": [
+        "DEFAULT",
+        1767645000000,
+        "Asia/Ho_Chi_Minh",
+        1
+      ],
+      "expected_cell": [
+        27,
+        0.1
+      ]
+    },
+    {
+      "name": "move 09->14 drag 120",
+      "fn": "reinforcePreferenceMove",
+      "args": [
+        "DEFAULT",
+        1767603600000,
+        1767621600000,
+        "UTC",
+        120
+      ],
+      "expected_cells": {
+        "9": 0.95,
+        "14": 0.55
+      }
+    },
+    {
+      "name": "same hour no-op",
+      "fn": "reinforcePreferenceMove",
+      "args": [
+        "DEFAULT",
+        1767603600000,
+        1767605400000,
+        "UTC",
+        30
+      ],
+      "expected_cells": {
+        "9": 1.0
+      }
+    }
+  ]
+}
