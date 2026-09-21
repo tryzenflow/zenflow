@@ -1,3 +1,4 @@
+import { ConflictRescheduleService } from "./io/conflict-reschedule.service";
 import { DisplacementService } from "./io/displacement.service";
 import { Module } from "@nestjs/common";
 import { PrismaModule } from "../prisma/prisma.module";
@@ -35,7 +36,13 @@ import { SchedulingFeedbackService } from "./io/scheduling-feedback.service";
     TaskPlacementService,
     SchedulingFeedbackService,
     DisplacementService,
+    ConflictRescheduleService,
   ],
-  exports: [TaskPlacementService, SchedulingFeedbackService, DisplacementService],
+  exports: [
+    TaskPlacementService,
+    SchedulingFeedbackService,
+    DisplacementService,
+    ConflictRescheduleService,
+  ],
 })
 export class SchedulerModule {}

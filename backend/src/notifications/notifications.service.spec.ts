@@ -199,6 +199,7 @@ describe("NotificationsService", () => {
         actionTakenAt: null,
         eventEndsAt: null,
         sessionId: null,
+        conflictSessionIds: [],
       });
     });
   });

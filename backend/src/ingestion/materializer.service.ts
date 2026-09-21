@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { fromZonedTime } from "date-fns-tz";
 import {
@@ -27,6 +27,7 @@ import {
   ingestionReconcileDeleted,
 } from "../observability/metrics";
 import { NotificationEvent } from "../notifications/types";
+import { SyncConflictsService } from "./sync-conflicts.service";
 
 /** Which DLU system a batch of blocks came from. */
 export type IngestedSource = Extract<SessionSource, "LMS" | "PORTAL">;
@@ -192,6 +193,7 @@ export class MaterializerService {
     private readonly tagsService: TagsService,
     private readonly notifications: NotificationsService,
     config: ConfigService,
+    @Optional() private readonly syncConflicts?: SyncConflictsService,
   ) {
     this.dluTz = config.get<string>("DLU_TZ") ?? "Asia/Ho_Chi_Minh";
   }
@@ -212,6 +214,7 @@ export class MaterializerService {
     source: IngestedSource,
     now: Date = new Date(),
   ): Promise<MaterializeOutcome> {
+    const runStart = new Date();
     const outcome: MaterializeOutcome = {
       created: 0,
       updated: 0,
@@ -288,7 +291,38 @@ export class MaterializerService {
       if (n > 0) ingestionBlocks.add(n, { source, outcome: label });
     }
 
+    await this.notifySyncConflicts(userId, source, blocks, outcome, runStart);
+
     return outcome;
+  }
+
+  /**
+   * After a run that wrote/moved fixed blocks, tell the student which of their
+   * own tasks now clash (one notification per block type: timetable / exam /
+   * LMS — issue #62 D). Best-effort; never fails the sync.
+   */
+  private async notifySyncConflicts(
+    userId: string,
+    source: IngestedSource,
+    blocks: readonly ParsedBlock[],
+    outcome: MaterializeOutcome,
+    since: Date,
+  ): Promise<void> {
+    if (!this.syncConflicts || outcome.created + outcome.updated === 0) return;
+    for (const type of new Set(blocks.map((b) => b.type))) {
+      try {
+        await this.syncConflicts.detectAndNotify({
+          userId,
+          source,
+          type,
+          since,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `sync-conflict detection failed: ${(err as Error).message}`,
+        );
+      }
+    }
   }
 
   /**

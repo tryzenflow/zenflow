@@ -307,6 +307,51 @@ export class NotificationsService {
   }
 
   /**
+   * A sync-conflict row (`*_CONFLICT` topics, issue #62 D). Unlike
+   * {@link create} it never materializes a calendar session - it points at the
+   * user's own conflicting tasks via `conflictSessionIds`. The caller emits.
+   */
+  raiseConflict(
+    userId: string,
+    dto: {
+      topic: NotificationTopic;
+      title: string;
+      content: string;
+      conflictSessionIds: string[];
+    },
+  ): Promise<Notification> {
+    return this.prisma.notification.create({
+      data: {
+        userId,
+        topic: dto.topic,
+        kind: "CHANGE",
+        title: dto.title,
+        content: dto.content,
+        conflictSessionIds: dto.conflictSessionIds,
+        sessionId: null,
+        eventEndsAt: null,
+      },
+    });
+  }
+
+  /** The caller's own `*_CONFLICT` row, or 404. */
+  async findConflict(user: User, id: string): Promise<Notification> {
+    const row = await this.prisma.notification.findFirst({
+      where: {
+        id,
+        userId: user.id,
+        topic: {
+          in: ["ASSIGNMENT_CONFLICT", "EXAM_CONFLICT", "TIMETABLE_CONFLICT"],
+        },
+      },
+    });
+    if (!row) {
+      throw new NotFoundException(`Cannot find conflict notification ${id}`);
+    }
+    return row;
+  }
+
+  /**
    * `DELETE /notifications/:id` — dismiss a row for good.
    *
    * Scoped to the caller (`userId` in the `where`), so another student's row is
