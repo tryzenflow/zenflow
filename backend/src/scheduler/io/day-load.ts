@@ -148,3 +148,189 @@ export async function loadDayLoad(
 
   return { occupied, workloadByType };
 }
+
+/** One row of the user's calendar as the placers see it (raw, un-bucketed). */
+export interface ScheduleItem {
+  /** Real row id; `null` for a virtual recurring occurrence. */
+  id: string | null;
+  type: string;
+  seriesId: string | null;
+  /** `true` for an expanded recurring occurrence (always fixed). */
+  recurring: boolean;
+  start: number;
+  end: number;
+  durationMinutes: number;
+  /** The row's TASK deadline, if any. */
+  deadlineMs: number | null;
+}
+
+/**
+ * ONE range read of everything scheduled in `[rangeStartMs - 1 day,
+ * rangeEndMs + lookaheadMs]` — plain rows plus expanded recurring occurrences.
+ * {@link dayLoadFromItems} then buckets it per day in memory, so scanning N
+ * candidate days costs 2 queries instead of 2N (issue #62 C).
+ */
+export async function loadScheduleItems(
+  prisma: Pick<PrismaService, "session" | "sessionSeries">,
+  args: {
+    userId: string;
+    rangeStartMs: number;
+    rangeEndMs: number;
+    timezone: string;
+    excludeSessionIds?: string[];
+    lookaheadMs?: number;
+    excludeSeriesId?: string;
+  },
+): Promise<ScheduleItem[]> {
+  const {
+    userId,
+    rangeStartMs,
+    rangeEndMs,
+    timezone,
+    excludeSessionIds = [],
+    lookaheadMs = 0,
+    excludeSeriesId,
+  } = args;
+  const scanEnd = new Date(rangeEndMs + lookaheadMs);
+  const scanStart = new Date(rangeStartMs - DAY_MS);
+
+  const [others, recurringSeries] = await Promise.all([
+    prisma.session.findMany({
+      where: {
+        userId,
+        ...(excludeSessionIds.length
+          ? { id: { notIn: excludeSessionIds } }
+          : {}),
+        OR: [{ seriesId: null }, { series: { is: { rrule: null } } }],
+        ...(excludeSeriesId ? { NOT: { seriesId: excludeSeriesId } } : {}),
+        scheduledStartTime: { gte: scanStart, lte: scanEnd },
+      },
+      select: {
+        id: true,
+        seriesId: true,
+        scheduledStartTime: true,
+        durationMinutes: true,
+        deadline: true,
+        type: true,
+      },
+    }),
+    prisma.sessionSeries.findMany({
+      where: {
+        userId,
+        rrule: { not: null },
+        ...(excludeSeriesId ? { id: { not: excludeSeriesId } } : {}),
+      },
+      include: {
+        sessions: {
+          select: { scheduledStartTime: true, durationMinutes: true },
+          orderBy: { createdAt: "asc" },
+          take: 1,
+        },
+      },
+    }),
+  ]);
+
+  const items: ScheduleItem[] = [];
+  for (const o of others) {
+    if (!o.scheduledStartTime) continue;
+    const start = o.scheduledStartTime.getTime();
+    items.push({
+      id: (o as { id?: string }).id ?? null,
+      type: String((o as { type?: unknown }).type ?? ""),
+      seriesId: (o as { seriesId?: string | null }).seriesId ?? null,
+      recurring: false,
+      start,
+      end: start + o.durationMinutes * 60_000,
+      durationMinutes: o.durationMinutes,
+      deadlineMs:
+        (o as { deadline?: Date | null }).deadline?.getTime() ?? null,
+    });
+  }
+  for (const series of recurringSeries) {
+    const rep = series.sessions[0];
+    if (!series.rrule || !rep?.scheduledStartTime) continue;
+    for (const occStart of expandRrule(
+      series.rrule,
+      rep.scheduledStartTime,
+      scanStart,
+      scanEnd,
+      timezone,
+    )) {
+      const start = occStart.getTime();
+      items.push({
+        id: null,
+        type: String(series.type),
+        seriesId: series.id,
+        recurring: true,
+        start,
+        end: start + rep.durationMinutes * 60_000,
+        durationMinutes: rep.durationMinutes,
+        deadlineMs: null,
+      });
+    }
+  }
+  return items;
+}
+
+/**
+ * Pure per-day bucketing of {@link loadScheduleItems}' output with exactly
+ * {@link loadDayLoad}'s semantics: an item counts toward `occupied` if it
+ * starts in `[dayStart - 1d, dayEnd + lookahead]` and ends after `dayStart`;
+ * toward the workload only if it STARTS on the day.
+ */
+export function dayLoadFromItems(
+  items: ScheduleItem[],
+  dayStartMs: number,
+  dayEndMs: number,
+  lookaheadMs = 0,
+): DayLoad {
+  const occupied: Interval[] = [];
+  const workloadByType = emptyWorkloadByType();
+  const lo = dayStartMs - DAY_MS;
+  const hi = dayEndMs + lookaheadMs;
+  for (const it of items) {
+    if (it.start < lo || it.start > hi || it.end <= dayStartMs) continue;
+    occupied.push({ start: it.start, end: it.end });
+    if (
+      it.start >= dayStartMs &&
+      it.start < dayEndMs &&
+      (WORKLOAD_TYPES as readonly string[]).includes(it.type)
+    ) {
+      const w = workloadByType[it.type as WorkloadType];
+      w.hours += it.durationMinutes / 60;
+      w.count += 1;
+    }
+  }
+  return { occupied, workloadByType };
+}
+
+/**
+ * Batched {@link loadDayLoad}: the day loads of many candidate days from a
+ * single range read (2 queries total, whatever `days.length`).
+ */
+export async function loadDayLoads(
+  prisma: Pick<PrismaService, "session" | "sessionSeries">,
+  args: {
+    userId: string;
+    days: { dayStartMs: number; dayEndMs: number }[];
+    timezone: string;
+    excludeSessionIds?: string[];
+    occupiedLookaheadMs?: number;
+    excludeSeriesId?: string;
+  },
+): Promise<DayLoad[]> {
+  const { days, occupiedLookaheadMs = 0 } = args;
+  if (days.length === 0) return [];
+  const items = await loadScheduleItems(prisma, {
+    userId: args.userId,
+    rangeStartMs: Math.min(...days.map((d) => d.dayStartMs)),
+    rangeEndMs: Math.max(...days.map((d) => d.dayEndMs)),
+    timezone: args.timezone,
+    excludeSessionIds: args.excludeSessionIds,
+    lookaheadMs: occupiedLookaheadMs,
+    excludeSeriesId: args.excludeSeriesId,
+  });
+  return days.map((d) =>
+    dayLoadFromItems(items, d.dayStartMs, d.dayEndMs, occupiedLookaheadMs),
+  );
+}

@@ -1,8 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { minutesToUtc } from "../../common/utils";
-import { MAX_SCAN_DAYS } from "../constants";
-import { loadDayLoad } from "./day-load";
+import { MAX_SCAN_DAYS, SCAN_CAP_DAYS } from "../constants";
+import { loadDayLoads } from "./day-load";
 import {
   bestFreeSlot,
   slotPreferenceScore,
@@ -28,6 +28,8 @@ export interface PlaceInWindowOpts {
   extraOccupied?: Interval[];
   /** Return `true` to skip a candidate day entirely (e.g. a per-day series cap). */
   skipDay?: (dayStr: string) => boolean;
+  /** Max days scanned (default `MAX_SCAN_DAYS`; single-task placement passes `SCAN_CAP_DAYS`). */
+  maxScanDays?: number;
 }
 
 /**
@@ -78,7 +80,7 @@ export class HeuristicPlacer {
       preferenceMatrix,
       now,
       window,
-      { extraOccupied },
+      { extraOccupied, maxScanDays: SCAN_CAP_DAYS },
     );
     return best?.start ?? null;
   }
@@ -86,7 +88,7 @@ export class HeuristicPlacer {
   /**
    * Scan a bounded local-day range and return the single best-scored free slot
    * (earliest start breaks ties), or `null`. `window` is already clamped by the
-   * caller — this method scans at most {@link MAX_SCAN_DAYS} days from
+   * caller — this method scans at most `opts.maxScanDays` days from
    * `firstDayStr` and never past `lastDayStr`. Used directly by the series
    * placer, which clamps each member's window and vetoes full days via
    * `opts.skipDay`.
@@ -101,44 +103,60 @@ export class HeuristicPlacer {
     opts: PlaceInWindowOpts = {},
   ): Promise<ScoredSlot | null> {
     const extraOccupied = opts.extraOccupied ?? [];
-    let best: ScoredSlot | null = null;
-    let scanned = 0;
+
+    const dayStrs: string[] = [];
     for (
       let dayStr = window.firstDayStr;
-      dayStr <= window.lastDayStr && scanned < MAX_SCAN_DAYS;
-      dayStr = addDaysStr(dayStr, 1), scanned++
+      dayStr <= window.lastDayStr && dayStrs.length < (opts.maxScanDays ?? MAX_SCAN_DAYS);
+      dayStr = addDaysStr(dayStr, 1)
     ) {
-      if (opts.skipDay?.(dayStr)) continue;
-      const slot = await this.bestSlotOnDay(
-        userId,
-        dayStr,
+      if (!opts.skipDay?.(dayStr)) dayStrs.push(dayStr);
+    }
+    const bounds = dayStrs.map((dayStr) => ({
+      dayStartMs: minutesToUtc(dayStr, 0, timezone).getTime(),
+      dayEndMs: minutesToUtc(addDaysStr(dayStr, 1), 0, timezone).getTime(),
+    }));
+    // The task may overhang midnight by up to `duration - one slot`; one
+    // batched range read covers every scanned day (issue #62 C).
+    const overhangMs = task.durationMinutes * MS_PER_MINUTE - SLOT_MS;
+    const loads = await loadDayLoads(this.prisma, {
+      userId,
+      days: bounds,
+      timezone,
+      excludeSessionIds: [task.id],
+      occupiedLookaheadMs: overhangMs,
+    });
+
+    let best: ScoredSlot | null = null;
+    dayStrs.forEach((_, i) => {
+      const slot = this.bestSlotOnDay(
+        bounds[i],
+        loads[i].occupied,
         task,
         timezone,
         preferenceMatrix,
         now,
-        [task.id],
         extraOccupied,
       );
       if (slot && (best === null || slot.score > best.score)) {
         best = slot;
       }
-    }
+    });
     return best;
   }
 
-  /** Best free slot on one local day, with its preference score, or `null`. */
-  private async bestSlotOnDay(
-    userId: string,
-    dayStr: string,
+  /** Best free slot on one local day (pure over the pre-loaded occupancy), or `null`. */
+  private bestSlotOnDay(
+    day: { dayStartMs: number; dayEndMs: number },
+    occupied: Interval[],
     task: { durationMinutes: number; deadline: Date; prevStartMs?: number },
     timezone: string,
     preferenceMatrix: number[],
     now: Date,
-    excludeSessionIds: string[],
     extraOccupied: Interval[],
-  ): Promise<ScoredSlot | null> {
-    const dayStart = minutesToUtc(dayStr, 0, timezone);
-    const dayEnd = minutesToUtc(addDaysStr(dayStr, 1), 0, timezone);
+  ): ScoredSlot | null {
+    const dayStart = new Date(day.dayStartMs);
+    const dayEnd = new Date(day.dayEndMs);
 
     // A task may START as late as 23:45 on this day and run its full length
     // past midnight — its own deadline is the only ceiling on the end. The
@@ -149,16 +167,6 @@ export class HeuristicPlacer {
     const fitCeil = new Date(
       Math.min(deadlineMs, dayEnd.getTime() + overhangMs),
     );
-
-    const { occupied } = await loadDayLoad(this.prisma, {
-      userId,
-      dayStart,
-      dayEnd,
-      timezone,
-      excludeSessionIds,
-      // See the post-midnight blocks a straddling placement must clear.
-      occupiedLookaheadMs: overhangMs,
-    });
 
     const windowStart = now.getTime() > dayStart.getTime() ? now : dayStart;
 

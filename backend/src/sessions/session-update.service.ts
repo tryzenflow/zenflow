@@ -1,5 +1,11 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import type { UpdateSessionResponse } from "@zenflow/shared";
+import {
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import type {
+  InfeasiblePolicy,
+  UpdateSessionResponse,
+} from "@zenflow/shared";
 import { Prisma, type User } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
 import { TagsService } from "../tags/tags.service";
@@ -105,6 +111,8 @@ export class SessionUpdateService {
         : await this.handleMaterializedSiblingScope(id, dto, user);
       if (siblingScope) return siblingScope;
 
+      if (!occ) await this.guardDeadlineEdit(id, dto, user, now);
+
       const { updated, firstMove, newDeadline } =
         await this.runFieldDiffTransaction(id, dto, user, now);
 
@@ -137,6 +145,7 @@ export class SessionUpdateService {
         updated,
         user,
         now,
+        dto.infeasiblePolicy,
       );
       if (redistribution) return redistribution;
 
@@ -152,6 +161,40 @@ export class SessionUpdateService {
     } catch (error) {
       mapSessionPrismaError(error, id, "update");
     }
+  }
+
+  /**
+   * Pre-flight for a TASK deadline edit, BEFORE the field-diff transaction
+   * writes anything (issue #62 E): rejects `now + duration > deadline` (400);
+   * for a standalone TASK also runs the same slot / repack / accept-policy
+   * check a create does (409 `SCHEDULE_INFEASIBLE`). A series member only gets
+   * the arithmetic guard — its siblings' own slots make a dry-run ambiguous.
+   */
+  private async guardDeadlineEdit(
+    id: string,
+    dto: UpdateSessionDto,
+    user: User,
+    now: Date,
+  ): Promise<void> {
+    if (dto.deadline === undefined) return;
+    const existing = await this.prisma.session.findFirst({
+      where: { id, userId: user.id },
+      select: { type: true, durationMinutes: true, seriesId: true, deadline: true },
+    });
+    if (!existing || existing.type !== "TASK") return;
+    const deadline = new Date(dto.deadline);
+    if (existing.deadline?.getTime() === deadline.getTime()) return;
+    const durationMinutes = dto.durationMinutes ?? existing.durationMinutes;
+
+    await this.taskPlacement.preflightTask({
+      user,
+      taskId: id,
+      durationMinutes,
+      deadline,
+      now,
+      policy: dto.infeasiblePolicy,
+      arithmeticOnly: existing.seriesId !== null,
+    });
   }
 
   /**
@@ -532,6 +575,7 @@ export class SessionUpdateService {
     updated: SessionRow,
     user: User,
     now: Date,
+    infeasiblePolicy?: InfeasiblePolicy,
   ): Promise<UpdateSessionResponse | null> {
     if (!newDeadline || updated.type !== "TASK") return null;
 
@@ -556,6 +600,7 @@ export class SessionUpdateService {
         prevStartMs: updated.scheduledStartTime?.getTime(),
       },
       now,
+      infeasiblePolicy,
     });
     return toUpdateSessionResponse(
       {

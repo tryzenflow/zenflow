@@ -6,6 +6,7 @@ import { HeuristicPlacer } from "./heuristic-placer.service";
 import { BanditPlacer } from "./bandit-placer.service";
 import { SeriesPlacer } from "./series-placer.service";
 import { TaskPlacementService } from "./task-placement.service";
+import { DisplacementService } from "./displacement.service";
 
 /**
  * `TaskPlacementService.placeOnCreate` / `placeOnDeadlineChange` — the single-TASK
@@ -34,6 +35,11 @@ async function makeTaskPlacementService(
   heuristic: unknown,
   bandit: unknown,
   seriesPlacer: unknown,
+  displacement: unknown = {
+    plan: jest.fn().mockResolvedValue({ kind: "infeasible" }),
+    applyMoves: jest.fn(),
+    fallbackStart: jest.fn(),
+  },
 ): Promise<TaskPlacementService> {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -43,6 +49,7 @@ async function makeTaskPlacementService(
       { provide: HeuristicPlacer, useValue: heuristic },
       { provide: BanditPlacer, useValue: bandit },
       { provide: SeriesPlacer, useValue: seriesPlacer },
+      { provide: DisplacementService, useValue: displacement },
     ],
   }).compile();
   return module.get<TaskPlacementService>(TaskPlacementService);
@@ -119,6 +126,7 @@ describe("TaskPlacementService.placeOnCreate", () => {
       slotProposalId: null,
       alternativeSlot: null,
       divergent: false,
+      displaced: undefined,
     });
     expect(sessionUpdate).toHaveBeenCalledWith({
       where: { id: "t1" },
@@ -149,6 +157,7 @@ describe("TaskPlacementService.placeOnCreate", () => {
       slotProposalId: "p1",
       alternativeSlot: null,
       divergent: false,
+      displaced: undefined,
     });
     // heuristic write then LinUCB override write.
     expect(sessionUpdate).toHaveBeenCalledTimes(2);
@@ -170,6 +179,7 @@ describe("TaskPlacementService.placeOnCreate", () => {
       slotProposalId: null,
       alternativeSlot: null,
       divergent: false,
+      displaced: undefined,
     });
     // Only the heuristic write happened — no override write followed the throw.
     expect(sessionUpdate).toHaveBeenCalledTimes(1);
@@ -187,6 +197,7 @@ describe("TaskPlacementService.placeOnCreate", () => {
       slotProposalId: null,
       alternativeSlot: null,
       divergent: false,
+      displaced: undefined,
     });
   });
 });
@@ -251,5 +262,161 @@ describe("TaskPlacementService.canPlaceTask / canPlaceSeries", () => {
       now,
       { trigger: "create", dryRun: true },
     );
+  });
+});
+
+describe("TaskPlacementService displacement + infeasible policies (#62 B)", () => {
+  const displacement = (over: Record<string, unknown> = {}) => ({
+    plan: jest.fn().mockResolvedValue({ kind: "infeasible" }),
+    applyMoves: jest.fn().mockResolvedValue([]),
+    fallbackStart: jest.fn().mockResolvedValue(null),
+    ...over,
+  });
+  const build = async (heuristicStart: Date | null, disp: unknown) => {
+    const sessionUpdate = jest.fn().mockResolvedValue({});
+    const prisma = {
+      session: {
+        update: sessionUpdate,
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ id: "f1", durationMinutes: 30 }]),
+      },
+    };
+    const coordinator = {
+      run: jest.fn().mockResolvedValue({
+        appliedStart: heuristicStart,
+        appliedPolicy: heuristicStart ? "HEURISTIC" : "NONE",
+        assignedPolicy: "HEURISTIC",
+        banditAttempted: false,
+        banditPick: null,
+        slotProposalId: null,
+        alternativeSlot: null,
+        divergent: false,
+      }),
+    };
+    const heuristic = { placeTask: jest.fn().mockResolvedValue(heuristicStart) };
+    const svc = await makeTaskPlacementService(
+      prisma,
+      coordinator,
+      heuristic,
+      { placeTask: jest.fn() },
+      { placeSeries: jest.fn() },
+      disp,
+    );
+    return { svc, sessionUpdate };
+  };
+
+  it("repacks flexible tasks when nothing is free and reports the displaced ones", async () => {
+    const from = Date.parse("2026-06-09T09:00:00Z");
+    const disp = displacement({
+      plan: jest.fn().mockResolvedValue({
+        kind: "placed",
+        startMs: from,
+        moves: [{ id: "f1", fromMs: from, toMs: from + 3_600_000 }],
+      }),
+      applyMoves: jest.fn().mockResolvedValue([
+        { id: "f1", from: new Date(from), to: new Date(from + 3_600_000) },
+      ]),
+    });
+    const { svc, sessionUpdate } = await build(null, disp);
+    const res = await svc.placeOnCreate({ user, task, now });
+    expect(res.scheduledStartTime).toEqual(new Date(from));
+    expect(res.displaced).toHaveLength(1);
+    expect(disp.applyMoves).toHaveBeenCalledWith(
+      "u1",
+      expect.any(Array),
+      expect.any(Function),
+    );
+    expect(sessionUpdate).toHaveBeenCalledWith({
+      where: { id: "t1" },
+      data: { scheduledStartTime: new Date(from) },
+    });
+  });
+
+  it("does not touch the calendar when a free slot exists", async () => {
+    const disp = displacement();
+    const { svc } = await build(new Date("2026-06-09T09:00:00Z"), disp);
+    await svc.placeOnCreate({ user, task, now });
+    expect(disp.plan).not.toHaveBeenCalled();
+  });
+
+  it("ACCEPT_LATE_DEADLINE places at the fallback start", async () => {
+    const late = new Date("2026-06-10T02:00:00Z");
+    const disp = displacement({ fallbackStart: jest.fn().mockResolvedValue(late) });
+    const { svc } = await build(null, disp);
+    const res = await svc.placeOnCreate({
+      user,
+      task,
+      now,
+      infeasiblePolicy: "ACCEPT_LATE_DEADLINE",
+    });
+    expect(res.scheduledStartTime).toEqual(late);
+    expect(disp.fallbackStart).toHaveBeenCalledWith(
+      user,
+      task,
+      now,
+      "ACCEPT_LATE_DEADLINE",
+    );
+  });
+
+  it("ACCEPT_CONFLICTS places at the min-conflict start", async () => {
+    const s = new Date("2026-06-09T10:00:00Z");
+    const disp = displacement({ fallbackStart: jest.fn().mockResolvedValue(s) });
+    const { svc } = await build(null, disp);
+    const res = await svc.placeOnCreate({
+      user,
+      task,
+      now,
+      infeasiblePolicy: "ACCEPT_CONFLICTS",
+    });
+    expect(res.scheduledStartTime).toEqual(s);
+  });
+
+  it("preflightTask: 409 when infeasible and no policy; passes with a policy or a plan", async () => {
+    const { svc } = await build(null, displacement());
+    await expect(
+      svc.preflightTask({
+        user,
+        durationMinutes: 60,
+        deadline: task.deadline,
+        now,
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      svc.preflightTask({
+        user,
+        durationMinutes: 60,
+        deadline: task.deadline,
+        now,
+        policy: "ACCEPT_LATE_DEADLINE",
+      }),
+    ).resolves.toBeUndefined();
+    const { svc: svc2 } = await build(
+      null,
+      displacement({
+        plan: jest.fn().mockResolvedValue({ kind: "placed", startMs: 0, moves: [] }),
+      }),
+    );
+    await expect(
+      svc2.preflightTask({
+        user,
+        durationMinutes: 60,
+        deadline: task.deadline,
+        now,
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("preflightTask: 400 when now + duration > deadline (create/edit guard)", async () => {
+    const { svc } = await build(new Date(), displacement());
+    await expect(
+      svc.preflightTask({
+        user,
+        taskId: "t1",
+        durationMinutes: 180,
+        deadline: new Date(now.getTime() + 60 * 60_000),
+        now,
+      }),
+    ).rejects.toMatchObject({ status: 400 });
   });
 });

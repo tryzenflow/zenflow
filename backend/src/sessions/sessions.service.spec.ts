@@ -5,6 +5,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { TagsService } from "../tags/tags.service";
 import { TaskPlacementService } from "../scheduler/io/task-placement.service";
 import { SchedulingFeedbackService } from "../scheduler/io/scheduling-feedback.service";
+import { ScheduleInfeasibleException } from "../scheduler/schedule-infeasible.exception";
 import { SessionsService } from "./sessions.service";
 import { SessionCrudService } from "./session-crud.service";
 import { SeriesService } from "./series.service";
@@ -104,6 +105,7 @@ function fakeTaskPlacement() {
     // create-success assertions below don't have to opt in.
     canPlaceTask: jest.fn().mockResolvedValue(true),
     canPlaceSeries: jest.fn().mockResolvedValue(true),
+    preflightTask: jest.fn().mockResolvedValue(undefined),
     placeOnCreate: jest.fn().mockResolvedValue(NO_PLACEMENT_OUTCOME),
     placeOnDeadlineChange: jest.fn().mockResolvedValue(NO_PLACEMENT_OUTCOME),
     placeSeriesOnCreate: jest.fn().mockResolvedValue([]),
@@ -165,6 +167,7 @@ async function makeService(
 /** Build a prisma double whose `$transaction` runs against the given tx double. */
 function prismaWithTx(tx: Record<string, unknown>) {
   return {
+    ...tx, // the deadline-edit pre-flight reads outside the transaction
     $transaction: (fn: (t: unknown) => unknown) => fn(tx),
   };
 }
@@ -240,6 +243,8 @@ describe("SessionsService.create", () => {
       rrule: null,
       sessionIndex: null,
       sessionTotal: null,
+      late: false,
+      displacedSessions: [],
       reminders: [60],
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
@@ -384,7 +389,7 @@ describe("SessionsService.create", () => {
       sessionEvent: { create: eventCreate },
     });
     const placement = fakeTaskPlacement();
-    placement.canPlaceTask.mockResolvedValue(false);
+    placement.preflightTask.mockRejectedValue(new ScheduleInfeasibleException());
     const service = await makeService(
       prisma,
       fakeTagsService(),
@@ -399,9 +404,10 @@ describe("SessionsService.create", () => {
       deadline: "2026-06-10T17:00:00.000Z",
     };
 
-    await expect(service.create(dto, user)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(service.create(dto, user)).rejects.toMatchObject({
+      status: 409,
+      response: { code: "SCHEDULE_INFEASIBLE" },
+    });
     expect(sessionCreate).not.toHaveBeenCalled();
     expect(eventCreate).not.toHaveBeenCalled();
     expect(placement.placeOnCreate).not.toHaveBeenCalled();
@@ -1145,7 +1151,7 @@ describe("SessionsService.update", () => {
               sessionEvent: { create: jest.fn().mockResolvedValue({}) },
             })
           : Promise.all(arg as Promise<unknown>[]),
-      session: { findMany },
+      session: { findMany, findFirst },
     };
     const placement = fakeTaskPlacement();
     placement.redistributeSeries.mockResolvedValue([
@@ -1496,5 +1502,76 @@ describe("SessionsService.removeSeriesFrom", () => {
     await expect(
       service.removeSeriesFrom("series-1", "not-mine", user),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe("SessionsService.update — deadline edit feasibility guard (#62 E)", () => {
+  async function setup(existing: SessionRow) {
+    const findFirst = jest.fn().mockResolvedValue(existing);
+    const update = jest.fn().mockResolvedValue(existing);
+    const prisma = prismaWithTx({
+      session: { findFirst, update },
+      sessionEvent: { create: jest.fn().mockResolvedValue({}) },
+    });
+    const placement = fakeTaskPlacement();
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      placement,
+      fakeSchedulingFeedback(),
+    );
+    return { service, placement, update };
+  }
+
+  it("pre-flights a standalone TASK deadline edit (excluding itself) and passes the policy", async () => {
+    const { service, placement } = await setup(
+      session({ id: "t1", deadline: new Date("2026-06-10T12:00:00.000Z") }),
+    );
+    await service.update(
+      "t1",
+      {
+        deadline: "2026-06-12T15:30:00.000Z",
+        infeasiblePolicy: "ACCEPT_LATE_DEADLINE",
+      },
+      user,
+    );
+    expect(placement.preflightTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: "t1",
+        durationMinutes: 60,
+        policy: "ACCEPT_LATE_DEADLINE",
+        arithmeticOnly: false,
+      }),
+    );
+    expect(placement.placeOnDeadlineChange).toHaveBeenCalledWith(
+      expect.objectContaining({ infeasiblePolicy: "ACCEPT_LATE_DEADLINE" }),
+    );
+  });
+
+  it("a rejected pre-flight (409) writes nothing", async () => {
+    const { service, placement, update } = await setup(
+      session({ id: "t1", deadline: new Date("2026-06-10T12:00:00.000Z") }),
+    );
+    placement.preflightTask.mockRejectedValue(new ScheduleInfeasibleException());
+    await expect(
+      service.update("t1", { deadline: "2026-06-11T00:00:00.000Z" }, user),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("a series member only gets the arithmetic guard", async () => {
+    const { service, placement } = await setup(
+      session({
+        id: "s1",
+        seriesId: "series-1",
+        deadline: new Date("2026-06-10T12:00:00.000Z"),
+      }),
+    );
+    await service
+      .update("s1", { deadline: "2026-06-12T00:00:00.000Z" }, user)
+      .catch(() => undefined);
+    expect(placement.preflightTask).toHaveBeenCalledWith(
+      expect.objectContaining({ arithmeticOnly: true }),
+    );
   });
 });

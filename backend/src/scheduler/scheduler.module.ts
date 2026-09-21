@@ -1,3 +1,4 @@
+import { DisplacementService } from "./io/displacement.service";
 import { Module } from "@nestjs/common";
 import { PrismaModule } from "../prisma/prisma.module";
 import { BanditModule } from "../bandit/bandit.module";
@@ -33,7 +34,8 @@ import { SchedulingFeedbackService } from "./io/scheduling-feedback.service";
     SchedulingExperimentCoordinator,
     TaskPlacementService,
     SchedulingFeedbackService,
+    DisplacementService,
   ],
-  exports: [TaskPlacementService, SchedulingFeedbackService],
+  exports: [TaskPlacementService, SchedulingFeedbackService, DisplacementService],
 })
 export class SchedulerModule {}

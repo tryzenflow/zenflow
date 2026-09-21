@@ -147,6 +147,13 @@ export const LINUCB_WEIGHT_WARM = 1;
 export const PREFERENCE_WEIGHT_WARM = 0.1;
 export const WEIGHT_WARMUP_OBSERVATIONS = 40;
 
+/** Most flexible tasks one displacement may move (capped cascade, issue #62 B). */
+export const MAX_DISPLACED_TASKS = 6;
+/** New-task candidate slots simulated per displacement window (min-displacement search). */
+export const DISPLACEMENT_CANDIDATES = 8;
+/** Reward stamped on scheduler-initiated `SYSTEM_MOVE` events (never a user signal). */
+export const SESSION_SYSTEM_MOVE_REWARD = 0;
+
 /** Latest local start a scan considers (cap on days scanned, ~30d); does NOT
  * replace `MAX_SCAN_DAYS`, which still normalizes the context vector. */
 export const SCAN_CAP_DAYS = 30;

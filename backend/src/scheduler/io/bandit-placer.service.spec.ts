@@ -12,6 +12,7 @@ const MATRIX: number[] = [];
 
 function makePrisma(
   occupied: { start: string; durationMinutes: number }[] = [],
+  observationCount = 1000, // warm by default: LinUCB dominates the blend
 ) {
   return {
     session: {
@@ -24,6 +25,7 @@ function makePrisma(
       ),
     },
     sessionSeries: { findMany: jest.fn().mockResolvedValue([]) },
+    sessionEvent: { count: jest.fn().mockResolvedValue(observationCount) },
   };
 }
 
@@ -73,6 +75,31 @@ describe("BanditPlacer.scheduleTask", () => {
     deadline: new Date("2026-06-18T00:00:00.000Z"),
   };
   const now = new Date("2026-06-15T00:00:00.000Z");
+
+  it("cold start (no observations) leans on the preference matrix and records the weights", async () => {
+    const bandit = makeBandit(NIGHT_WINS);
+    const svc = new BanditPlacer(
+      makePrisma([], 0) as never,
+      bandit as never,
+      armStates as never,
+    );
+    const pick = await svc.placeTask("u1", task, TZ, MATRIX, now);
+    // Default (cold) preference matrix likes 08-11h; NIGHT's 0.3 * 1 loses.
+    expect(pick!.selectedArm).toBe("MORNING");
+    expect(pick!.weights).toEqual({ wL: 0.3, wP: 1 });
+  });
+
+  it("issues exactly one session query and one series query regardless of days scanned", async () => {
+    const prisma = makePrisma();
+    const svc = new BanditPlacer(
+      prisma as never,
+      makeBandit(NIGHT_WINS) as never,
+      armStates as never,
+    );
+    await svc.placeTask("u1", { ...task, deadline: new Date("2026-08-01T00:00:00Z") }, TZ, MATRIX, now);
+    expect(prisma.session.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.sessionSeries.findMany).toHaveBeenCalledTimes(1);
+  });
 
   it("places an empty-calendar task in the highest-scored arm's band, earliest start", async () => {
     const bandit = makeBandit(NIGHT_WINS);

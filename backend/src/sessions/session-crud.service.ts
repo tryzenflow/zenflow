@@ -71,22 +71,26 @@ export class SessionCrudService {
       // Pre-flight feasibility — BEFORE any row is inserted, so an
       // infeasible request never leaves an unplaced task/series behind (no
       // rollback needed; see NO_FEASIBLE_SLOT_MESSAGE).
-      const feasible =
-        sessionCount > 1
-          ? await this.taskPlacement.canPlaceSeries({
-              user,
-              durationMinutes: dto.durationMinutes,
-              sessionCount,
-              deadline,
-              now,
-            })
-          : await this.taskPlacement.canPlaceTask({
-              user,
-              durationMinutes: dto.durationMinutes,
-              deadline,
-              now,
-            });
-      if (!feasible) throw new BadRequestException(NO_FEASIBLE_SLOT_MESSAGE);
+      if (sessionCount > 1) {
+        const feasible = await this.taskPlacement.canPlaceSeries({
+          user,
+          durationMinutes: dto.durationMinutes,
+          sessionCount,
+          deadline,
+          now,
+        });
+        if (!feasible) throw new BadRequestException(NO_FEASIBLE_SLOT_MESSAGE);
+      } else {
+        // Single TASK: a free slot, or a flexible-task repack, or the user's
+        // accept-conflicts / accept-late choice — else 409 (issue #62 B).
+        await this.taskPlacement.preflightTask({
+          user,
+          durationMinutes: dto.durationMinutes,
+          deadline,
+          now,
+          policy: dto.infeasiblePolicy,
+        });
+      }
 
       if (sessionCount > 1) {
         return this.series.createTaskSeries(
@@ -148,6 +152,7 @@ export class SessionCrudService {
         deadline,
       },
       now,
+      infeasiblePolicy: dto.infeasiblePolicy,
     });
     return toCreateSessionResponse(
       { ...created, scheduledStartTime: placement.scheduledStartTime },

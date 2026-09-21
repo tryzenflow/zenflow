@@ -1,4 +1,5 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import type { InfeasiblePolicy } from "@zenflow/shared";
 import { SchedulingModel, type User } from "../../../generated/prisma";
 import type { Span } from "@opentelemetry/api";
 import { withSpan } from "../../observability/otel";
@@ -10,6 +11,9 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { HeuristicPlacer } from "./heuristic-placer.service";
 import { BanditPlacer } from "./bandit-placer.service";
 import { SeriesPlacer } from "./series-placer.service";
+import { DisplacementService, type AppliedMove } from "./displacement.service";
+import { ScheduleInfeasibleException } from "../schedule-infeasible.exception";
+import { ceilToSlot, MS_PER_MINUTE } from "../core/slot";
 import {
   SchedulingExperimentCoordinator,
   type ExperimentPlacementOutcome,
@@ -48,6 +52,7 @@ export class TaskPlacementService {
     private readonly heuristic: HeuristicPlacer,
     private readonly bandit: BanditPlacer,
     private readonly seriesPlacer: SeriesPlacer,
+    private readonly displacement: DisplacementService,
   ) {}
 
   /** Place a freshly-created single `TASK`. */
@@ -55,8 +60,15 @@ export class TaskPlacementService {
     user: User;
     task: PlaceableTask;
     now: Date;
+    infeasiblePolicy?: InfeasiblePolicy;
   }): Promise<PlacementResult> {
-    return this.placeSingle(args.user, args.task, "create", args.now);
+    return this.placeSingle(
+      args.user,
+      args.task,
+      "create",
+      args.now,
+      args.infeasiblePolicy,
+    );
   }
 
   /** Re-place a single `TASK` after its deadline changed. */
@@ -64,8 +76,15 @@ export class TaskPlacementService {
     user: User;
     task: PlaceableTask;
     now: Date;
+    infeasiblePolicy?: InfeasiblePolicy;
   }): Promise<PlacementResult> {
-    return this.placeSingle(args.user, args.task, "deadline-change", args.now);
+    return this.placeSingle(
+      args.user,
+      args.task,
+      "deadline-change",
+      args.now,
+      args.infeasiblePolicy,
+    );
   }
 
   /**
@@ -78,10 +97,11 @@ export class TaskPlacementService {
     task: PlaceableTask,
     trigger: Trigger,
     now: Date,
+    policy?: InfeasiblePolicy,
   ): Promise<PlacementResult> {
     return withSpan(
       "scheduler.placeSingle",
-      (span) => this.placeSingleInner(span, user, task, trigger, now),
+      (span) => this.placeSingleInner(span, user, task, trigger, now, policy),
       { "scheduling.trigger": trigger, "session.id": task.id },
     );
   }
@@ -92,6 +112,7 @@ export class TaskPlacementService {
     task: PlaceableTask,
     trigger: Trigger,
     now: Date,
+    policy?: InfeasiblePolicy,
   ): Promise<PlacementResult> {
     const heuristicStart = await this.computeHeuristicStart(user, task, now);
     await this.applyStart(task.id, heuristicStart);
@@ -105,17 +126,117 @@ export class TaskPlacementService {
     );
     await this.applyWinningSlotIfDifferent(task.id, heuristicStart, outcome);
 
+    // Nothing free before the deadline: repack flexible tasks (issue #62 B),
+    // then honour the user's accept-conflicts / accept-late choice.
+    let displaced: AppliedMove[] = [];
+    let fallbackStart: Date | null = null;
+    if (!(outcome?.appliedStart ?? heuristicStart)) {
+      const resolved = await this.resolveInfeasible(user, task, now, policy);
+      displaced = resolved.displaced;
+      fallbackStart = resolved.start;
+      await this.applyStart(task.id, fallbackStart);
+    }
+
     this.logPlacement(trigger, task.id, heuristicStart, outcome);
     this.emitPlacementTelemetry(span, trigger, heuristicStart, outcome);
 
+    const start = outcome?.appliedStart ?? heuristicStart ?? fallbackStart;
     return {
-      scheduledStartTime: outcome?.appliedStart ?? heuristicStart,
+      scheduledStartTime: start,
       appliedPolicy:
-        outcome?.appliedPolicy ?? (heuristicStart ? "HEURISTIC" : "NONE"),
+        outcome?.appliedPolicy ?? (start ? "HEURISTIC" : "NONE"),
       slotProposalId: outcome?.slotProposalId ?? null,
       alternativeSlot: outcome?.alternativeSlot ?? null,
       divergent: outcome?.divergent ?? false,
+      displaced: displaced.length ? displaced : undefined,
     };
+  }
+
+  /**
+   * B: plan an EDF repack of flexible tasks; on success persist the moves
+   * (`SYSTEM_MOVE`, reward 0). Otherwise fall back to the user's chosen
+   * policy; with none, the task stays unplaced (the pre-flight
+   * {@link preflightTask} rejects that case before anything is written).
+   */
+  private async resolveInfeasible(
+    user: User,
+    task: PlaceableTask,
+    now: Date,
+    policy?: InfeasiblePolicy,
+  ): Promise<{ start: Date | null; displaced: AppliedMove[] }> {
+    try {
+      const plan = await this.displacement.plan(user, task, now);
+      if (plan.kind === "placed") {
+        const durations = await this.durationsOf(plan.moves.map((m) => m.id));
+        const displaced = await this.displacement.applyMoves(
+          user.id,
+          plan.moves,
+          (id) => durations.get(id) ?? 15,
+        );
+        return { start: new Date(plan.startMs), displaced };
+      }
+      if (policy) {
+        return {
+          start: await this.displacement.fallbackStart(user, task, now, policy),
+          displaced: [],
+        };
+      }
+    } catch (err) {
+      this.logger.warn(
+        `displacement failed for session ${task.id}: ${(err as Error).message}`,
+      );
+    }
+    return { start: null, displaced: [] };
+  }
+
+  private async durationsOf(ids: string[]): Promise<Map<string, number>> {
+    const rows = await this.prisma.session.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, durationMinutes: true },
+    });
+    return new Map(rows.map((r) => [r.id, r.durationMinutes]));
+  }
+
+  /**
+   * Read-only guard for a single `TASK` create / deadline edit, run BEFORE
+   * anything is written: rejects a deadline too close for the duration (400),
+   * and — when no slot exists even after repacking flexible tasks — throws the
+   * 409 {@link ScheduleInfeasibleException} unless the request already carries
+   * an `infeasiblePolicy`. `taskId` (edit path) excludes the task itself.
+   */
+  async preflightTask(args: {
+    user: User;
+    taskId?: string;
+    durationMinutes: number;
+    deadline: Date;
+    now: Date;
+    policy?: InfeasiblePolicy;
+    /** Series member edit: only the `now + duration > deadline` arithmetic guard. */
+    arithmeticOnly?: boolean;
+  }): Promise<void> {
+    const { user, durationMinutes, deadline, now } = args;
+    if (
+      ceilToSlot(now.getTime()) + durationMinutes * MS_PER_MINUTE >
+      deadline.getTime()
+    ) {
+      throw new BadRequestException(
+        "Won't fit before the deadline\nPick a later deadline.",
+      );
+    }
+    if (args.arithmeticOnly) return;
+    const id = args.taskId ?? PREFLIGHT_TASK_ID;
+    const task: PlaceableTask = { id, durationMinutes, deadline };
+    const start = await this.heuristic.placeTask(
+      user.id,
+      task,
+      user.timezone,
+      user.preferenceMatrix,
+      now,
+    );
+    if (start) return;
+    const plan = await this.displacement.plan(user, task, now);
+    if (plan.kind === "placed" || args.policy) return;
+    throw new ScheduleInfeasibleException();
   }
 
   private computeHeuristicStart(

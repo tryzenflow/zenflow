@@ -14,10 +14,14 @@ import {
   Min,
   ValidateIf,
 } from "class-validator";
-import type { UpdateScope, UpdateSessionInput } from "@zenflow/shared";
+import type {
+  InfeasiblePolicy,
+  UpdateScope,
+  UpdateSessionInput,
+} from "@zenflow/shared";
 import { TIME_GRANULARITY } from "../../common/constants";
 import { IsRRule } from "../../common/validators/rrule.decorator";
-import { MAX_SESSION_COUNT } from "./create-session.dto";
+import { INFEASIBLE_POLICIES, MAX_SESSION_COUNT } from "./create-session.dto";
 import {
   MAX_REMINDER_MINUTES,
   MAX_REMINDERS_PER_SESSION,
@@ -100,6 +104,16 @@ export class UpdateSessionDto implements UpdateSessionInput {
   @IsOptional()
   @IsBoolean()
   skipConflicting?: boolean;
+
+  /**
+   * Answer to a prior 409 `SCHEDULE_INFEASIBLE`: `ACCEPT_CONFLICTS` places the
+   * task before its deadline even overlapping other sessions;
+   * `ACCEPT_LATE_DEADLINE` places it conflict-free after the deadline. Omit on
+   * the first attempt.
+   */
+  @IsOptional()
+  @IsIn(INFEASIBLE_POLICIES)
+  infeasiblePolicy?: InfeasiblePolicy;
 
   /**
    * Minutes before start to remind the user (max 2, not for DND). Omit on

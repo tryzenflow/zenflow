@@ -7,9 +7,9 @@ import {
 import { PrismaService } from "../../prisma/prisma.service";
 import { BanditArmStateRepository } from "../../bandit/bandit-arm-state.repository";
 import { BanditService } from "../../bandit/bandit.service";
-import { MAX_SCAN_DAYS } from "../constants";
+import { MAX_SCAN_DAYS, SCAN_CAP_DAYS } from "../constants";
 import { buildContextVector } from "../core/context-vector";
-import { loadDayLoad } from "./day-load";
+import { loadDayLoads } from "./day-load";
 import type {
   BanditPick,
   CandidateDay,
@@ -77,13 +77,14 @@ export class BanditPlacer {
       preferenceMatrix,
       now,
       window,
+      { maxScanDays: SCAN_CAP_DAYS },
     );
   }
 
   /**
    * Place one `TASK` within a bounded local-day range (used by the series
    * placer, which clamps each member's window and vetoes full days). `window`
-   * is already clamped; at most {@link MAX_SCAN_DAYS} days are scanned.
+   * is already clamped; at most `opts.maxScanDays` days are scanned.
    */
   async placeInWindow(
     userId: string,
@@ -144,8 +145,8 @@ export class BanditPlacer {
     };
   }
 
-  /** The only Prisma I/O in this class: one day-load + pure context-vector
-   * build per scanned day. */
+  /** The only Prisma I/O in this class: one batched range read for every
+   * scanned day + a pure context-vector build per day. */
   private async loadCandidateContext(
     userId: string,
     task: PlaceableTask,
@@ -157,47 +158,47 @@ export class BanditPlacer {
   ): Promise<CandidateDay[]> {
     const deadlineMs = task.deadline.getTime();
     const todayStr = localDateStr(now, timezone);
-    const days: CandidateDay[] = [];
-    let scanned = 0;
 
+    const bounds: { dayStr: string; dayStartMs: number; dayEndMs: number }[] =
+      [];
     for (
       let dayStr = window.firstDayStr;
-      dayStr <= window.lastDayStr && scanned < MAX_SCAN_DAYS;
-      dayStr = addDaysStr(dayStr, 1), scanned++
+      dayStr <= window.lastDayStr && bounds.length < (opts.maxScanDays ?? MAX_SCAN_DAYS);
+      dayStr = addDaysStr(dayStr, 1)
     ) {
       if (opts.skipDay?.(dayStr)) continue;
-
-      const dayStartMs = minutesToUtc(dayStr, 0, timezone).getTime();
-      const dayEndMs = minutesToUtc(
-        addDaysStr(dayStr, 1),
-        0,
-        timezone,
-      ).getTime();
-
-      const { occupied, workloadByType } = await loadDayLoad(this.prisma, {
-        userId,
-        dayStart: new Date(dayStartMs),
-        dayEnd: new Date(dayEndMs),
-        timezone,
-        excludeSessionIds: [task.id],
-        // See the post-midnight blocks a straddling placement must clear (D5).
-        occupiedLookaheadMs: overhangMs,
+      bounds.push({
+        dayStr,
+        dayStartMs: minutesToUtc(dayStr, 0, timezone).getTime(),
+        dayEndMs: minutesToUtc(addDaysStr(dayStr, 1), 0, timezone).getTime(),
       });
+    }
 
+    // One range read for every scanned day (issue #62 C), then pure bucketing.
+    const loads = await loadDayLoads(this.prisma, {
+      userId,
+      days: bounds,
+      timezone,
+      excludeSessionIds: [task.id],
+      // See the post-midnight blocks a straddling placement must clear (D5).
+      occupiedLookaheadMs: overhangMs,
+    });
+
+    const days: CandidateDay[] = bounds.map((b, i) => {
+      const { occupied, workloadByType } = loads[i];
       const vector = buildContextVector({
         remainingDaysUntilDeadline: Math.max(
           0,
           Math.floor((deadlineMs - now.getTime()) / DAY_MS),
         ),
         durationMinutes: task.durationMinutes,
-        candidateIsoWeekday: isoWeekday(dayStr),
-        candidateDaysFromNow: Math.max(0, dayDiffStr(todayStr, dayStr)),
+        candidateIsoWeekday: isoWeekday(b.dayStr),
+        candidateDaysFromNow: Math.max(0, dayDiffStr(todayStr, b.dayStr)),
         workloadByType,
         semesterPhase: null,
       });
-
-      days.push({ dayStr, dayStartMs, dayEndMs, occupied, vector });
-    }
+      return { ...b, occupied, vector };
+    });
     return days;
   }
 
