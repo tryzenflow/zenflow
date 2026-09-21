@@ -352,6 +352,12 @@ export function DayTimeline({
     return map;
   }, [tasks]);
 
+  const lateSessionIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of tasks) if (t.late) set.add(t.id);
+    return set;
+  }, [tasks]);
+
   const scrollToNow = useCallback(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({
@@ -859,6 +865,7 @@ export function DayTimeline({
                       leftOffset={leftOffsetPx}
                       blockWidth={blockWidthPx}
                       deadline={deadlineBySession.get(segment.taskId) ?? null}
+                      late={lateSessionIds.has(segment.taskId)}
                       onReschedule={handleReschedule}
                       onDragStateChange={handleDragStateChange}
                       onPress={onSessionPress}

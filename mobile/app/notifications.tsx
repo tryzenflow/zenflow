@@ -1,5 +1,6 @@
 import {
   AlertCircle,
+  AlertTriangle,
   Bell,
   Calendar,
   Check,
@@ -9,11 +10,13 @@ import {
   GraduationCap,
   type LucideIcon,
   Notebook,
+  RefreshCw,
   Sliders,
   Trash2,
   X,
 } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
+import { rescheduleConflicts } from "@/api/notifications";
 import { useToast } from "@/components/ui/toast";
 import {
   jumpToSession,
@@ -72,6 +75,20 @@ function topicVisual(topic: NotificationTopic): {
         label: "Timetable",
         tint: "border-sky-500/40 bg-sky-500/15",
         iconColor: "#0369a1",
+      };
+    case "ASSIGNMENT_CONFLICT":
+    case "EXAM_CONFLICT":
+    case "TIMETABLE_CONFLICT":
+      return {
+        Icon: AlertTriangle,
+        label:
+          topic === "ASSIGNMENT_CONFLICT"
+            ? "Assignment conflict"
+            : topic === "EXAM_CONFLICT"
+              ? "Exam conflict"
+              : "Timetable conflict",
+        tint: "border-red-500/40 bg-red-500/15",
+        iconColor: "#dc2626",
       };
     case "REMINDER":
     default:
@@ -132,6 +149,7 @@ export default function NotificationsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { toast } = useToast();
+  const [rescheduling, setRescheduling] = useState(false);
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
 
   const [selectedNotification, setSelectedNotification] =
@@ -396,6 +414,28 @@ export default function NotificationsScreen() {
               await jumpToSession(sid, router, toast, nid, true);
             }
           }}
+          rescheduling={rescheduling}
+          onRescheduleAll={async () => {
+            const nid = selectedNotification.id;
+            setRescheduling(true);
+            try {
+              const res = await rescheduleConflicts(nid);
+              const ok = res.rescheduled.length;
+              const failed = res.failedSessionIds.length;
+              toast(
+                failed
+                  ? `Rescheduled ${ok}; ${failed} still conflict`
+                  : `Rescheduled ${ok} task${ok === 1 ? "" : "s"}`,
+                failed ? "warning" : "success",
+              );
+              setSelectedNotification(null);
+              void fetchNotifications("refresh");
+            } catch {
+              toast("Couldn't reschedule the conflicting tasks.", "destructive");
+            } finally {
+              setRescheduling(false);
+            }
+          }}
           onViewOnCalendar={async () => {
             const sid = selectedNotification.sessionId;
             const nid = selectedNotification.id;
@@ -620,6 +660,8 @@ function NotificationDetailModal({
   onDismiss,
   onEdit,
   onViewOnCalendar,
+  onRescheduleAll,
+  rescheduling,
 }: {
   n: NotificationDto;
   tz?: string;
@@ -627,6 +669,8 @@ function NotificationDetailModal({
   onDismiss: () => void;
   onEdit: () => void;
   onViewOnCalendar: () => void;
+  onRescheduleAll: () => void;
+  rescheduling: boolean;
 }) {
   const { Icon, label: topicLabel, tint, iconColor } = topicVisual(n.topic);
   const badge = KIND_BADGE[n.kind];
@@ -690,6 +734,25 @@ function NotificationDetailModal({
 
           {/* Action buttons: View on Calendar & Edit Session */}
           <View className="gap-2.5 pt-3 border-t border-border/50">
+            {n.conflictSessionIds?.length > 0 ? (
+              <Pressable
+                onPress={onRescheduleAll}
+                disabled={rescheduling}
+                className="h-12 w-full flex-row items-center justify-center gap-2.5 rounded-2xl bg-red-600 active:opacity-90 disabled:opacity-60"
+              >
+                {rescheduling ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <RefreshCw size={18} color="#ffffff" />
+                )}
+                <Text
+                  style={{ color: "#ffffff" }}
+                  className="text-[14.5px] font-bold text-white tracking-wide"
+                >
+                  Reschedule them all
+                </Text>
+              </Pressable>
+            ) : null}
             {n.sessionId ? (
               <View className="gap-2.5">
                 {/* Button 1: View on calendar */}

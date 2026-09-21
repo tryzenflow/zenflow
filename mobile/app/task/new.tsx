@@ -11,8 +11,10 @@ import {
   RESCHEDULE_HINT,
   placementToastMessage,
   showErrorToast,
+  showDisplacedToast,
   showSplitToast,
   shouldSurfaceRescheduleHint,
+  withInfeasibleRetry,
 } from "@/lib/task-toasts";
 import {
   type SessionFormType,
@@ -188,8 +190,10 @@ export default function NewSessionScreen() {
 
   async function onSubmit(values: SessionFormValues) {
     if (!user) return;
-    try {
-      const response = await createSession(toCreateInput(values, tz));
+    const handleCreated = (
+      response: Awaited<ReturnType<typeof createSession>>,
+    ) => {
+      showDisplacedToast(toast, response.displacedSessions);
       const { message, variant } = placementToastMessage(response, user);
       showSplitToast(toast, message, variant);
       if (shouldSurfaceRescheduleHint()) {
@@ -211,13 +215,22 @@ export default function NewSessionScreen() {
       } else {
         router.back();
       }
-    } catch (error) {
-      showErrorToast(
-        toast,
-        error,
-        "Something went wrong when creating the session",
-      );
-    }
+    };
+    await withInfeasibleRetry(
+      toast,
+      (infeasiblePolicy) =>
+        createSession({
+          ...toCreateInput(values, tz),
+          ...(infeasiblePolicy ? { infeasiblePolicy } : {}),
+        } as Parameters<typeof createSession>[0]),
+      handleCreated,
+      (error) =>
+        showErrorToast(
+          toast,
+          error,
+          "Something went wrong when creating the session",
+        ),
+    );
   }
 
   function onInvalid(errors: Record<string, { message?: string } | undefined>) {

@@ -1,7 +1,9 @@
 import type {
   NotificationDto,
   NotificationsListResponse,
+  RescheduleConflictsResponse,
 } from "@zenflow/shared";
+import { notifySessionsMutated } from "@/lib/session-cache";
 import { api } from "./base";
 
 /**
@@ -105,4 +107,13 @@ export function subscribeNotificationsStream(
       console.warn("[notifications-sse] Error closing EventSource:", err);
     }
   };
+}
+
+/** Re-place every session listed in a conflict notification's `conflictSessionIds`. */
+export async function rescheduleConflicts(
+  id: string,
+): Promise<RescheduleConflictsResponse> {
+  const { data } = await api.post(`/notifications/${id}/reschedule-conflicts`);
+  notifySessionsMutated();
+  return data.data;
 }

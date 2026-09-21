@@ -1,6 +1,12 @@
 import type { useToast } from "@/components/ui/toast";
 import { placementQualifier, zonedDate } from "@zenflow/core";
-import type { Session } from "@zenflow/shared";
+import {
+  type DisplacedSession,
+  type InfeasiblePolicy,
+  SCHEDULE_INFEASIBLE_CODE,
+  type ScheduleInfeasibleError,
+  type Session,
+} from "@zenflow/shared";
 import { isAxiosError } from "axios";
 import { format } from "date-fns";
 
@@ -124,4 +130,71 @@ export function placementToastMessage(
     "EEE MMM d, HH:mm",
   );
   return { message: `Scheduled for ${when}${suffix}`, variant: "success" };
+}
+
+const POLICY_LABEL: Record<InfeasiblePolicy, string> = {
+  ACCEPT_CONFLICTS: "Accept conflicts",
+  ACCEPT_LATE_DEADLINE: "Accept late deadline",
+};
+
+/** The 409 SCHEDULE_INFEASIBLE body when `error` is one, else null. */
+export function getInfeasibleError(
+  error: unknown,
+): ScheduleInfeasibleError | null {
+  if (!isAxiosError(error) || error.response?.status !== 409) return null;
+  const body = error.response.data as Partial<ScheduleInfeasibleError>;
+  return body?.code === SCHEDULE_INFEASIBLE_CODE
+    ? (body as ScheduleInfeasibleError)
+    : null;
+}
+
+/**
+ * Run `attempt`; on a 409 SCHEDULE_INFEASIBLE show a toast with one action per
+ * offered policy, each retrying via `attempt(policy)`. Results go to
+ * `onSuccess`; any other failure (or a failed retry) goes to `onError`.
+ */
+export async function withInfeasibleRetry<T>(
+  toast: ToastFn,
+  attempt: (policy?: InfeasiblePolicy) => Promise<T>,
+  onSuccess: (result: T) => void,
+  onError: (error: unknown) => void,
+): Promise<void> {
+  const retry = async (policy: InfeasiblePolicy) => {
+    try {
+      onSuccess(await attempt(policy));
+    } catch (e) {
+      onError(e);
+    }
+  };
+  let result: T;
+  try {
+    result = await attempt();
+  } catch (error) {
+    const infeasible = getInfeasibleError(error);
+    if (!infeasible) return onError(error);
+    const { title, description } = splitToastMessage(infeasible.message);
+    for (const policy of infeasible.options) {
+      toast(
+        title,
+        "warning",
+        12000,
+        "bottom",
+        false,
+        { label: POLICY_LABEL[policy], onPress: () => void retry(policy) },
+        { description },
+      );
+    }
+    return;
+  }
+  onSuccess(result);
+}
+
+/** Info toast when the engine moved flexible tasks to make room. */
+export function showDisplacedToast(
+  toast: ToastFn,
+  displaced: DisplacedSession[] | undefined,
+): void {
+  if (!displaced?.length) return;
+  const n = displaced.length;
+  toast(`Moved ${n} flexible task${n === 1 ? "" : "s"} to make room`, "default", 4000);
 }

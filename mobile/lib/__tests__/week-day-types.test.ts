@@ -12,6 +12,7 @@ function session(overrides: Partial<Session>): Session {
     location: null,
     durationMinutes: 60,
     deadline: null,
+    late: false,
     type: "TASK",
     source: "USER",
     tags: [],

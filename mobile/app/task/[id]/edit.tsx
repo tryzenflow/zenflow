@@ -23,8 +23,10 @@ import { isSessionPastDeadline } from "@/lib/overdue";
 import {
   RESCHEDULE_HINT,
   shouldSurfaceRescheduleHint,
+  showDisplacedToast,
   showErrorToast,
   showSplitToast,
+  withInfeasibleRetry,
 } from "@/lib/task-toasts";
 import {
   type EditSessionFormValues,
@@ -162,8 +164,10 @@ export default function EditSessionScreen() {
       patch.rrule = values.rrule || null;
     }
 
-    try {
-      const updated = await updateSession(task.id, patch);
+    const handleUpdated = (
+      updated: Awaited<ReturnType<typeof updateSession>>,
+    ) => {
+      showDisplacedToast(toast, updated.displacedSessions);
       toast("Session updated", "success");
       if (isSessionPastDeadline(updated)) {
         toast(
@@ -185,9 +189,17 @@ export default function EditSessionScreen() {
       } else {
         router.back();
       }
-    } catch (error) {
-      showErrorToast(toast, error, "Failed to update the session");
-    }
+    };
+    await withInfeasibleRetry(
+      toast,
+      (infeasiblePolicy) =>
+        updateSession(
+          task.id,
+          infeasiblePolicy ? { ...patch, infeasiblePolicy } : patch,
+        ),
+      handleUpdated,
+      (error) => showErrorToast(toast, error, "Failed to update the session"),
+    );
   }
 
   function onInvalid(errors: Record<string, { message?: string } | undefined>) {

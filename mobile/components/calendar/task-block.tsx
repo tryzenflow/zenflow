@@ -146,6 +146,8 @@ interface SessionBlockProps {
   leftOffset: number;
   blockWidth: number;
   deadline?: string | null;
+  /** `Session.late` — placed past its deadline ("accept late deadline"). */
+  late?: boolean;
   onReschedule?: (taskId: string, startISO: string) => void;
   onDragStateChange?: (snap: DragSnap | null) => void;
   onDragEnd?: (snap: DragSnap | null) => void;
@@ -194,6 +196,7 @@ function SessionBlockImpl({
   leftOffset,
   blockWidth,
   deadline,
+  late = false,
   onReschedule,
   onDragStateChange,
   onDragEnd,
@@ -654,7 +657,9 @@ function SessionBlockImpl({
     ? "rgb(148,163,184)" // slate-400
     : "rgb(100,116,139)"; // slate-500
   const stateClasses =
-    state === "dnd"
+    late && state !== "dnd"
+      ? "border border-l-red-500 border-red-500/60 bg-red-500/15 dark:bg-red-500/20"
+      : state === "dnd"
       ? `${borderChrome} border-l-slate-400 [border-left-style:dashed] bg-slate-500/[0.07] dark:bg-slate-400/10`
       : state === "assignment"
         ? `${borderChrome} border-l-teal-500 bg-teal-50/50 dark:bg-teal-950/20`
