@@ -55,6 +55,15 @@ export interface Session {
   seriesId: string | null;
   /** The recurrence rule of this session's series, if any (RFC 5545 RRULE, bare — no `DTSTART`). */
   rrule: string | null;
+  /**
+   * The portal's course-section id (`ScheduleStudyUnitID`) for a
+   * portal-ingested `LECTURE` meeting — the grouping key behind the
+   * `DELETE /sessions/timetable-group/:sessionId[/from]` routes
+   * ({@link RemoveTimetableGroupResponse}). `null` for every other session,
+   * including a user-created recurring `LECTURE` (those use `seriesId`
+   * instead).
+   */
+  timetableGroupId: string | null;
   /** 1-based position within a `TASK` series (`null` outside a session-count series). */
   sessionIndex: number | null;
   /** Total session count of this session's `TASK` series (`null` otherwise). */

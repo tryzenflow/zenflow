@@ -40,6 +40,7 @@ export function toSessionDto(row: SessionRow): SharedSession {
       : null,
     seriesId: row.seriesId,
     rrule: row.series?.rrule ?? null,
+    timetableGroupId: row.scheduleStudyUnitId,
     sessionIndex: row.sessionIndex,
     sessionTotal: row.sessionTotal,
     reminders: (row.reminders ?? [])

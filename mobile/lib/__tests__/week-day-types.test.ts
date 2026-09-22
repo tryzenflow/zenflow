@@ -20,6 +20,7 @@ function session(overrides: Partial<Session>): Session {
     scheduledStartTime: "2026-09-07T09:00:00.000Z",
     seriesId: null,
     rrule: null,
+    timetableGroupId: null,
     sessionIndex: null,
     sessionTotal: null,
     createdAt: "2026-09-01T00:00:00.000Z",

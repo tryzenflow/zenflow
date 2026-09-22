@@ -243,6 +243,7 @@ describe("SessionsService.create", () => {
       scheduledStartTime: null,
       seriesId: null,
       rrule: null,
+      timetableGroupId: null,
       sessionIndex: null,
       sessionTotal: null,
       late: false,
