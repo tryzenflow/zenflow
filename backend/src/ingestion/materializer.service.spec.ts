@@ -36,7 +36,6 @@ interface NotificationRow {
   userId: string;
   sessionId: string | null;
   topic: string;
-  kind: string;
   title: string;
   content: string;
   eventEndsAt: Date | null;
@@ -198,7 +197,6 @@ function makePrismaDouble() {
           userId: args.data.userId as string,
           sessionId: (args.data.sessionId as string | null) ?? null,
           topic: args.data.topic as string,
-          kind: (args.data.kind as string) ?? "NEW",
           title: args.data.title as string,
           content: args.data.content as string,
           eventEndsAt: (args.data.eventEndsAt as Date | null) ?? null,
@@ -544,9 +542,9 @@ describe("MaterializerService", () => {
       expect(db.notifications).toHaveLength(2);
       expect(db.notifications[1]).toMatchObject({
         topic: "ASSIGNMENT",
-        kind: "CHANGE",
         sessionId: db.sessions[0].id,
       });
+      expect(db.notifications[1].title).toContain("Updated:");
     });
 
     it("silently keeps a hand-moved session's position — no reversion, no notification", async () => {
@@ -598,7 +596,7 @@ describe("MaterializerService", () => {
       expect(db.sessions).toHaveLength(1);
       expect(db.sessions[0].deleted).toBe(true);
       const drop = db.notifications.at(-1)!;
-      expect(drop.kind).toBe("DROP");
+      expect(drop.sessionId).toBeNull();
       expect(drop.title).toContain("Gone now");
     });
 
@@ -654,7 +652,6 @@ describe("MaterializerService", () => {
       expect(db.notifications).toHaveLength(1);
       expect(db.notifications[0]).toMatchObject({
         topic: "TIMETABLE",
-        kind: "NEW",
         title: "Timetable for semester 1 is available",
         // Points at the earliest meeting, for the calendar to land on.
         sessionId: db.sessions[0].id,
@@ -730,7 +727,6 @@ describe("MaterializerService", () => {
         true,
       );
       // A per-item row carries the session's fixed end instant for its badge.
-      expect(db.notifications[0].kind).toBe("NEW");
       expect(db.notifications[0].eventEndsAt).toBeInstanceOf(Date);
     });
   });
@@ -771,7 +767,6 @@ describe("MaterializerService", () => {
       expect(kept.deleted).toBe(false);
       const removal = db.notifications.at(-1)!;
       expect(removal.topic).toBe("TIMETABLE");
-      expect(removal.kind).toBe("DROP");
       expect(removal.title).toContain("Gone");
       expect(removal.sessionId).toBeNull();
     });

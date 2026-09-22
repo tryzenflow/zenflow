@@ -25,11 +25,7 @@ import {
 } from "@/hooks/use-notifications";
 import { useUserStore } from "@/hooks/use-user-store";
 import { cn } from "@/lib/utils";
-import type {
-  NotificationDto,
-  NotificationKind,
-  NotificationTopic,
-} from "@zenflow/shared";
+import type { NotificationDto, NotificationTopic } from "@zenflow/shared";
 import { formatDistanceToNow } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
 import * as Haptics from "expo-haptics";
@@ -101,34 +97,9 @@ function topicVisual(topic: NotificationTopic): {
   }
 }
 
-/** Badge formatting for notification kind */
-const KIND_BADGE: Record<
-  NotificationKind,
-  { label: string; containerClass: string; textClass: string; desc: string }
-> = {
-  NEW: {
-    label: "New",
-    containerClass: "border-primary/30 bg-primary/10",
-    textClass: "text-primary",
-    desc: "Added directly onto your calendar",
-  },
-  CHANGE: {
-    label: "Change",
-    containerClass: "border-amber-500/30 bg-amber-500/10",
-    textClass: "text-amber-700 dark:text-amber-300",
-    desc: "Schedule or location updated upstream",
-  },
-  DROP: {
-    label: "Drop",
-    containerClass: "border-border bg-muted",
-    textClass: "text-muted-foreground",
-    desc: "Removed from your timetable",
-  },
-};
-
 /** Spelled out "due" or "at" label off eventEndsAt */
 function eventTimeLabel(n: NotificationDto, tz: string): string | null {
-  if (!n.eventEndsAt || n.kind === "DROP") return null;
+  if (!n.eventEndsAt) return null;
   try {
     const at = new Date(n.eventEndsAt);
     const date = formatInTimeZone(at, tz, "MMM d");
@@ -505,7 +476,6 @@ function NotificationRowItem({
 }) {
   const swipeableRef = useRef<Swipeable>(null);
   const { Icon, tint, iconColor } = topicVisual(n.topic);
-  const badge = KIND_BADGE[n.kind];
   const unread = !n.readAt;
   const relative = formatDistanceToNow(new Date(n.sentAt), { addSuffix: true });
   const when = eventTimeLabel(n, tz);
@@ -587,23 +557,6 @@ function NotificationRowItem({
 
           {/* Meta line */}
           <View className="mt-1 flex-row items-center gap-1.5">
-            <View
-              className={cn(
-                "shrink-0 rounded-md border px-1.5 py-0.5",
-                badge.containerClass,
-              )}
-            >
-              <Text
-                className={cn(
-                  "text-[9px] font-bold uppercase leading-none tracking-wide",
-                  badge.textClass,
-                )}
-              >
-                {badge.label}
-              </Text>
-            </View>
-
-            <Text className="text-[11px] text-muted-foreground/60">·</Text>
             <Text
               className={cn(
                 "shrink-0 text-[11px]",
@@ -637,14 +590,7 @@ function NotificationRowItem({
         {/* Right indicator */}
         {!isSelecting && (
           <View className="shrink-0 pl-1 pr-0.5 items-center justify-center">
-            {n.kind === "NEW" ? (
-              <AlertCircle size={17} color="#ef4444" />
-            ) : (
-              <ChevronRight
-                size={16}
-                className="text-muted-foreground/40"
-              />
-            )}
+            <ChevronRight size={16} className="text-muted-foreground/40" />
           </View>
         )}
       </Pressable>
@@ -673,7 +619,6 @@ function NotificationDetailModal({
   rescheduling: boolean;
 }) {
   const { Icon, label: topicLabel, tint, iconColor } = topicVisual(n.topic);
-  const badge = KIND_BADGE[n.kind];
 
   return (
     <Modal visible={true} transparent animationType="fade" onRequestClose={onClose}>
@@ -694,21 +639,6 @@ function NotificationDetailModal({
                 <Text className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
                   {topicLabel}
                 </Text>
-                <View
-                  className={cn(
-                    "mt-1 self-start rounded-md border px-1.5 py-0.5",
-                    badge.containerClass,
-                  )}
-                >
-                  <Text
-                    className={cn(
-                      "text-[9.5px] font-bold uppercase leading-none tracking-wide",
-                      badge.textClass,
-                    )}
-                  >
-                    {badge.label}
-                  </Text>
-                </View>
               </View>
             </View>
             <Pressable

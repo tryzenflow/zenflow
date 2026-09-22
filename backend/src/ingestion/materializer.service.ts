@@ -3,7 +3,6 @@ import { ConfigService } from "@nestjs/config";
 import { fromZonedTime } from "date-fns-tz";
 import {
   DEFAULT_REMINDER_MINUTES,
-  type NotificationKind,
   type NotificationTopic,
 } from "@zenflow/shared";
 import {
@@ -508,7 +507,6 @@ export class MaterializerService {
             {
               sessionId: row.id,
               topic: topicOf(block.type),
-              kind: "NEW",
               title: this.createdTitle(block),
               content: this.createdContent(block),
               eventEndsAt: blockEndsAt(block),
@@ -565,7 +563,6 @@ export class MaterializerService {
           {
             sessionId,
             topic: topicOf(block.type),
-            kind: "CHANGE",
             title: `Updated: ${block.title}`,
             content:
               "DLU changed this item, so your calendar has been updated to match.",
@@ -621,7 +618,6 @@ export class MaterializerService {
       await this.raise(userId, {
         sessionId: earliest.sessionId,
         topic: "TIMETABLE",
-        kind: "NEW",
         title: groupedTitle,
         content:
           `Your ${termLabel(term.semester)} class timetable is on your ` +
@@ -634,7 +630,6 @@ export class MaterializerService {
     await this.raise(userId, {
       sessionId: earliest.sessionId,
       topic: "TIMETABLE",
-      kind: allNew ? "NEW" : "CHANGE",
       title: `${allNew ? "New" : "Updated"} lectures: ${humanList(
         changes.map((c) => c.block.title),
       )}`,
@@ -663,11 +658,11 @@ export class MaterializerService {
       await this.raise(userId, {
         sessionId: null,
         topic: topicOf(item.type),
-        kind: "DROP",
         title: `Removed from DLU: ${item.title}`,
         content:
           `This ${item.type === "EXAM" ? "exam" : "assignment"} was taken ` +
           "off DLU, so it is no longer on your calendar.",
+        materializeSession: false,
       });
     }
 
@@ -678,11 +673,11 @@ export class MaterializerService {
       await this.raise(userId, {
         sessionId: null,
         topic: "TIMETABLE",
-        kind: "DROP",
         title: `Your ${termLabel(term.semester)} timetable changed`,
         content:
           `${lectures.length} classes were removed from your ` +
           `${termLabel(term.semester)} timetable.`,
+        materializeSession: false,
       });
       return;
     }
@@ -690,9 +685,9 @@ export class MaterializerService {
     await this.raise(userId, {
       sessionId: null,
       topic: "TIMETABLE",
-      kind: "DROP",
       title: `Lectures removed: ${humanList(lectures.map((l) => l.title))}`,
       content: "These classes were taken off your DLU timetable.",
+      materializeSession: false,
     });
   }
 
@@ -702,10 +697,10 @@ export class MaterializerService {
     dto: {
       sessionId: string | null;
       topic: NotificationTopic;
-      kind: NotificationKind;
       title: string;
       content: string;
       eventEndsAt?: Date | null;
+      materializeSession?: boolean;
     },
     tx?: Prisma.TransactionClient,
   ): Promise<Notification> {

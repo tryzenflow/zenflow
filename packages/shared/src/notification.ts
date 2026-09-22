@@ -33,19 +33,10 @@ export type NotificationTopic =
   | "EXAM_CONFLICT"
   | "TIMETABLE_CONFLICT";
 
-/**
- * How the row is categorised, for its inbox badge:
- * - `NEW` — something new landed on the calendar
- * - `CHANGE` — an upstream change to an item already on the calendar
- * - `DROP` — an item was removed upstream
- */
-export type NotificationKind = "NEW" | "CHANGE" | "DROP";
-
 /** One notification as returned by the notifications endpoints. */
 export interface NotificationDto {
   id: string;
   topic: NotificationTopic;
-  kind: NotificationKind;
   title: string;
   content: string;
   /**

@@ -1,5 +1,5 @@
 import { NotificationDto } from "@zenflow/shared";
-import { CircleAlert, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { eventTimeLabel, topicVisual } from "./utils";
 
@@ -7,8 +7,8 @@ import { eventTimeLabel, topicVisual } from "./utils";
  * The tap-to-act toast for a notification that arrives over SSE while the app
  * is open — the web counterpart of mobile's foreground push. Same chrome as an
  * inbox row: the calendar type's icon + tint on the left, the title/detail
- * stacked, and a red `!` (a `NEW` item) or a chevron on the right. Clicking it
- * jumps to the session; sonner auto-dismisses it after its duration.
+ * stacked, and a chevron on the right. Clicking it jumps to the session;
+ * sonner auto-dismisses it after its duration.
  */
 export function NotificationToast({
   n,
@@ -58,15 +58,8 @@ export function NotificationToast({
           </span>
         )}
       </span>
-      {n.kind === "NEW" && !isReminder ? (
-        <CircleAlert
-          className="size-4 shrink-0 text-destructive"
-          aria-label="Needs your attention"
-        />
-      ) : (
-        navigable && (
-          <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-        )
+      {navigable && (
+        <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
       )}
     </button>
   );

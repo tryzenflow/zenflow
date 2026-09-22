@@ -26,7 +26,6 @@ export function toStringMap(data: PushDataPayload): Record<string, string> {
   return {
     notificationId: data.notificationId,
     topic: data.topic,
-    kind: data.kind,
     sessionId: data.sessionId,
     url: data.url,
   };

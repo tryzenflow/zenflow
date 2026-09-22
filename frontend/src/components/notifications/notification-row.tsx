@@ -1,5 +1,5 @@
 import type { MouseEvent } from "react";
-import { NotificationDto, NotificationKind } from "@zenflow/shared";
+import { NotificationDto } from "@zenflow/shared";
 import {
   conflictCopy,
   eventTimeLabel,
@@ -8,32 +8,8 @@ import {
 } from "./utils";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
-import { ChevronRight, CircleAlert, X } from "lucide-react";
+import { ChevronRight, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-/**
- * The event-category badge. The materializer stamps every row's `kind`:
- * `NEW` (something landed on the calendar), `CHANGE` (an upstream edit to an
- * item already there) or `DROP` (an item pulled upstream).
- */
-const KIND_BADGE: Record<
-  NotificationKind,
-  { label: string; className: string }
-> = {
-  NEW: {
-    label: "New",
-    className: "border-primary/30 bg-primary/10 text-primary",
-  },
-  CHANGE: {
-    label: "Change",
-    className:
-      "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-  },
-  DROP: {
-    label: "Drop",
-    className: "border-border bg-muted text-muted-foreground",
-  },
-};
 
 export function NotificationRow({
   n,
@@ -49,7 +25,6 @@ export function NotificationRow({
   onRescheduleAll?: () => void;
 }) {
   const { Icon, tint } = topicVisual(n.topic);
-  const badge = KIND_BADGE[n.kind];
   const unread = !n.readAt;
   const navigable = Boolean(n.sessionId);
   const relative = formatDistanceToNow(new Date(n.sentAt), { addSuffix: true });
@@ -98,15 +73,6 @@ export function NotificationRow({
                   : "text-muted-foreground",
               )}
             >
-              <span
-                className={cn(
-                  "shrink-0 rounded border px-1 py-px text-[9px] font-semibold uppercase leading-none tracking-wide",
-                  badge.className,
-                )}
-              >
-                {badge.label}
-              </span>
-              <span className="text-muted-foreground">·</span>
               <span className="shrink-0">{relative}</span>
               {when && (
                 <>
@@ -122,15 +88,8 @@ export function NotificationRow({
           spot as the alert / chevron (right-3 for a size-4 icon and right-2 for
           the size-6 button both centre 20px from the edge). */}
         <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 transition group-hover:opacity-0">
-          {n.kind === "NEW" ? (
-            <CircleAlert
-              className="size-4 text-destructive"
-              aria-label="Needs your attention"
-            />
-          ) : (
-            navigable && (
-              <ChevronRight className="size-4 text-muted-foreground" />
-            )
+          {navigable && (
+            <ChevronRight className="size-4 text-muted-foreground" />
           )}
         </span>
         <Button

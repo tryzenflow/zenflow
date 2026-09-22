@@ -1,7 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import type {
   NotificationDto,
-  NotificationKind,
   NotificationsListResponse,
   NotificationTopic,
 } from "@zenflow/shared";
@@ -25,7 +24,6 @@ import { EventEmitter2 } from "@nestjs/event-emitter";
 const DEV_SAMPLES: CreateNotificationInput[] = [
   {
     topic: "ASSIGNMENT",
-    kind: "NEW",
     title: "New assignment: Sorting Algorithms",
     content: "Added from your LMS. Plan the work that leads up to it.",
     sessionId: null,
@@ -33,7 +31,6 @@ const DEV_SAMPLES: CreateNotificationInput[] = [
   },
   {
     topic: "EXAM",
-    kind: "NEW",
     title: "New exam: Midterm — Room A305",
     content: "Added from your portal. Plan revision sessions before it.",
     sessionId: null,
@@ -41,7 +38,6 @@ const DEV_SAMPLES: CreateNotificationInput[] = [
   },
   {
     topic: "TIMETABLE",
-    kind: "NEW",
     title: "Timetable for semester 1 is available",
     content: "12 classes were added to your calendar.",
     sessionId: null,
@@ -49,7 +45,6 @@ const DEV_SAMPLES: CreateNotificationInput[] = [
   },
   {
     topic: "TIMETABLE",
-    kind: "CHANGE",
     title: "Updated: Databases — Room B210",
     content: "The portal moved this class.",
     sessionId: null,
@@ -57,11 +52,12 @@ const DEV_SAMPLES: CreateNotificationInput[] = [
   },
   {
     topic: "TIMETABLE",
-    kind: "DROP",
     title: "Lectures removed: Data Structures Lab",
     content: "These classes were taken off your DLU timetable.",
     sessionId: null,
     eventEndsAt: null,
+    // A removal has nothing to attach to; don't synthesize a placeholder session.
+    materializeSession: false,
   },
 ];
 
@@ -69,11 +65,17 @@ const DEV_SAMPLES: CreateNotificationInput[] = [
 export interface CreateNotificationInput {
   title: string;
   topic: NotificationTopic;
-  kind: NotificationKind;
   sessionId: string | null;
   content: string;
   /** Fixed end instant of the session behind the row, or null (groups/drops). */
   eventEndsAt: Date | null;
+  /**
+   * Whether {@link NotificationsService.create} may synthesize a placeholder
+   * calendar session when the caller doesn't attach one (`sessionId: null`).
+   * Defaults to `true`; callers raising a removal set this `false` since there
+   * is nothing left to attach a session to.
+   */
+  materializeSession?: boolean;
 }
 
 /**
@@ -110,7 +112,6 @@ function toNotificationDto(row: Notification): NotificationDto {
   return {
     id: row.id,
     topic: row.topic,
-    kind: row.kind,
     title: row.title,
     content: row.content,
     sentAt: row.sentAt.toISOString(),
@@ -150,11 +151,13 @@ export class NotificationsService {
     tx?: Prisma.TransactionClient,
   ): Promise<Notification> {
     const db = tx ?? this.prisma;
+    const { materializeSession, ...notificationFields } = dto;
     let sessionId = dto.sessionId;
     let eventEndsAt = dto.eventEndsAt;
 
-    // Automatically create a calendar session/task if none is attached and kind is not DROP
-    if (!sessionId && dto.kind !== "DROP" && db?.session) {
+    // Automatically create a calendar session/task if none is attached and the
+    // caller hasn't opted out (removals have nothing left to attach one to).
+    if (!sessionId && materializeSession !== false && db?.session) {
       try {
         const { type, source, durationMinutes } = resolveSessionDefaults(
           dto.topic,
@@ -211,7 +214,7 @@ export class NotificationsService {
 
     const newNotification = await db.notification.create({
       data: {
-        ...dto,
+        ...notificationFields,
         sessionId,
         eventEndsAt,
         userId,
@@ -246,7 +249,7 @@ export class NotificationsService {
       let sessionId: string | null = null;
       let eventEndsAt: Date | null = null;
 
-      if (sample.kind !== "DROP") {
+      if (sample.materializeSession !== false) {
         const { type, source, durationMinutes } = resolveSessionDefaults(
           sample.topic,
         );
@@ -324,7 +327,6 @@ export class NotificationsService {
       data: {
         userId,
         topic: dto.topic,
-        kind: "CHANGE",
         title: dto.title,
         content: dto.content,
         conflictSessionIds: dto.conflictSessionIds,

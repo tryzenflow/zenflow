@@ -210,7 +210,7 @@ registration upserts on `pushToken`. See `devices/` and `POST /devices`.
 | `PortalSection`                     | One student-portal course section — curriculum unit × term × group × teacher × room. Deduped on `scheduleStudyUnitId`; indexed `[yearStudy, termId]`, the access path for a whole-term refresh.                                                                                                                                      |
 | `LmsSyncJob` / `LmsSyncJobItem`     | Per-run tracking for the LMS watcher; one item per request (`url`, `attempt`, `statusCode`, `responseBody` kept for diagnosis).                                                                                                                                                                                                       |
 | `PortalAPIJob` / `PortalAPIJobItem` | Same shape for the portal poller.                                                                                                                                                                                                                                                                                                   |
-| `Notification`                      | Raised by the materializer for a new/changed/removed ingested item. `kind` (`NEW`\|`CHANGE`\|`DROP`), `eventEndsAt` (due/at time; null for grouped rows and drops), `sessionId` (target session). Topics `ASSIGNMENT`\|`EXAM`\|`TIMETABLE`\|`REMINDER`; a term of lectures is one `TIMETABLE` row. |
+| `Notification`                      | Raised by the materializer for a new/changed/removed ingested item. No structured category column — the title/content text alone conveys what happened. `eventEndsAt` (due/at time; null for grouped rows and removals), `sessionId` (target session). Topics `ASSIGNMENT`\|`EXAM`\|`TIMETABLE`\|`REMINDER`; a term of lectures is one `TIMETABLE` row. |
 
 `LmsCourse` and `PortalSection` are deliberately never joined — no shared identifier, and
 each ingestion path uses only its own system's data.
@@ -359,12 +359,13 @@ is "plan work around this", not "confirm this item" — it already exists upstre
   of resurrecting it on the next re-fetch.
 - **A quiet re-run is quiet**: notifications are raised only for genuinely new, changed or
   removed items.
-- **Every row is categorised and time-stamped.** `raise()` stamps a `kind` (`NEW` for a
-  fresh calendar item, `CHANGE` for an upstream edit, `DROP` for a removal — the inbox
-  badge) and, for a per-item assignment/exam/lecture, an `eventEndsAt` (its
-  `scheduledStartTime + durationMinutes`, the "due"/"at" time the inbox shows). Grouped and
-  dropped rows leave `eventEndsAt` null. User-facing copy says **"semester 1/2/3"**
-  (`termLabel`), never the portal's `HK0x`.
+- **Every row's wording carries what happened, not a separate field.** There is no
+  structured category on the row — the title/content text alone says whether something is
+  new, changed or removed (`raise()` picks the wording; e.g. `announceLectureChanges` titles
+  "New lectures: …" vs "Updated lectures: …"). Each per-item assignment/exam/lecture row also
+  gets an `eventEndsAt` (its `scheduledStartTime + durationMinutes`, the "due"/"at" time the
+  inbox shows); grouped and removal rows leave it null. User-facing copy says
+  **"semester 1/2/3"** (`termLabel`), never the portal's `HK0x`.
 - **A term's timetable is one notification.** Lecture creates/updates are held back and
   folded into a single per-term row: once ≥ 10 lectures are on the calendar for the term it
   is `"Timetable for semester 1 is available"` (raised once, then deduplicated on its title
@@ -479,13 +480,14 @@ only connection status. Types in `@zenflow/shared` (`ConnectIntegrationInput`,
 ### Notifications (`/notifications`)
 
 The ingestion inbox — written by the materializer, never a client (no create route).
-`CookieAuthGuard` per route, own rows only. Types: `NotificationTopic`, `NotificationKind`,
+`CookieAuthGuard` per route, own rows only. Types: `NotificationTopic`,
 `NotificationDto`, `NotificationsListResponse`. Topics include the sync-conflict trio
 `TIMETABLE_CONFLICT` / `EXAM_CONFLICT` / `ASSIGNMENT_CONFLICT`, raised by
 `ingestion/sync-conflicts.service.ts` after each source's sync. `conflictSessionIds` lists the
-user's clashing tasks; no calendar session is created. Each row has a `kind` (`NEW`/`CHANGE`/`DROP`)
-and, for a per-item assignment/exam/lecture, an `eventEndsAt` (the "due"/"at" time; null for
-grouped rows and drops).
+user's clashing tasks; no calendar session is created. There is no structured category on a
+row — the title/content wording alone says what happened (new/changed/removed) — and, for a
+per-item assignment/exam/lecture, an `eventEndsAt` (the "due"/"at" time; null for grouped
+rows and removals).
 
 | Method | Path                              | Purpose                                                     |
 | ------ | --------------------------------- | --------------------------------------------------------- |
@@ -943,7 +945,7 @@ formatting, notification copy — takes `now`, covered by `reminder.spec.ts`).
 - Fire policy: `startsAt - remindBeforeMinutes`; if that is already past but the session has not
   started, fire now (title shows the real time left); a session that already started is skipped.
   A session moved to a new start fires again for the new start.
-- Delivery reuses `NotificationsService.create` (topic `REMINDER`, kind `NEW`, title like
+- Delivery reuses `NotificationsService.create` (topic `REMINDER`, title like
   "Standup starts in 1 hour", content "Standup starts at Sat, 20 Sep, 14:00 at Room A1.") and emits
   `NEW_SESSION`, so it reaches the SSE stream and `PushService` unchanged.
 - Ingested lectures/assignments/exams get the same 60-minute default (`MaterializerService.create`

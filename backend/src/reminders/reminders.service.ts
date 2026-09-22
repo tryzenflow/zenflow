@@ -348,7 +348,6 @@ export class RemindersService implements OnApplicationBootstrap {
       });
       const notification = await this.notifications.create(s.userId, {
         topic: "REMINDER",
-        kind: "NEW",
         title: text.title,
         content: text.content,
         sessionId: s.id,

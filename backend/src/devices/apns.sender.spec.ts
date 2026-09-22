@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import { ApnsSender } from "./apns.sender";
 import type { PushMessage } from "./types";
 
@@ -24,7 +24,6 @@ const MSG: PushMessage = {
   data: {
     notificationId: "n1",
     topic: "EXAM",
-    kind: "NEW",
     sessionId: "s1",
     url: "/calendar?session=s1",
   },
@@ -89,7 +88,6 @@ describe("ApnsSender", () => {
     expect(note.payload).toEqual({
       notificationId: "n1",
       topic: "EXAM",
-      kind: "NEW",
       sessionId: "s1",
       url: "/calendar?session=s1",
     });

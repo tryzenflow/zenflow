@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import { cert, deleteApp, initializeApp } from "firebase-admin/app";
 import { getMessaging } from "firebase-admin/messaging";
 import { FcmSender } from "./fcm.sender";
@@ -21,7 +21,6 @@ const MSG: PushMessage = {
   data: {
     notificationId: "n1",
     topic: "EXAM",
-    kind: "NEW",
     sessionId: "s1",
     url: "/calendar?session=s1",
   },
@@ -84,7 +83,6 @@ describe("FcmSender", () => {
     expect(arg.data).toEqual({
       notificationId: "n1",
       topic: "EXAM",
-      kind: "NEW",
       sessionId: "s1",
       url: "/calendar?session=s1",
     });
