@@ -10,6 +10,19 @@ export interface Interval {
   end: number;
 }
 
+/**
+ * A session at the minimum grantable duration (`TIME_GRANULARITY` = 15
+ * minutes, the floor enforced by `@Min(TIME_GRANULARITY)` on
+ * `durationMinutes`) is treated as a placeholder sliver, not a real
+ * occupant: it must NOT block placement of another session on top of it, for
+ * any session type (including fixed/recurring DND, EXAM, LECTURE,
+ * ASSIGNMENT). It still counts toward workload accounting — this only gates
+ * whether a row is added to an `occupied`/conflict interval list.
+ */
+export function blocksPlacement(durationMinutes: number): boolean {
+  return durationMinutes > TIME_GRANULARITY;
+}
+
 /** 'YYYY-MM-DD' for the given instant in the user's timezone. */
 export function localDateStr(date: Date, timezone: string): string {
   return dateFormatter(timezone).format(date);

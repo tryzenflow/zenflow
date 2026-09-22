@@ -14,6 +14,7 @@ import {
 } from "../core/displacement";
 import {
   addDaysStr,
+  blocksPlacement,
   DAY_MS,
   localDateStr,
   MS_PER_MINUTE,
@@ -74,7 +75,7 @@ export class DisplacementService {
       startMs: it.start,
     }));
     const fixed: Interval[] = items
-      .filter((it) => !isFlexible(it))
+      .filter((it) => !isFlexible(it) && blocksPlacement(it.durationMinutes))
       .map((it) => ({ start: it.start, end: it.end }));
 
     return planDisplacement({
@@ -156,7 +157,9 @@ export class DisplacementService {
       timezone: user.timezone,
       excludeSessionIds: [task.id],
     });
-    const occupied = items.map((it) => ({ start: it.start, end: it.end }));
+    const occupied = items
+      .filter((it) => blocksPlacement(it.durationMinutes))
+      .map((it) => ({ start: it.start, end: it.end }));
     const args = {
       durationMinutes: task.durationMinutes,
       nowMs: now.getTime(),

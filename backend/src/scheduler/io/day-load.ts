@@ -6,7 +6,7 @@ import {
 } from "../types/context-vector.types";
 import type { DayLoad } from "../types/day-load.types";
 import { expandRrule } from "../core/recurrence";
-import { DAY_MS, type Interval } from "../core/slot";
+import { blocksPlacement, DAY_MS, type Interval } from "../core/slot";
 
 /**
  * Loads, for ONE local calendar day, everything a placer must schedule around
@@ -36,6 +36,12 @@ import { DAY_MS, type Interval } from "../core/slot";
  * `wouldConflict` check for a series' own new landing doesn't treat that
  * series' other members/occurrences as a conflict with itself. Default
  * `undefined` (no-op; every existing caller is unaffected).
+ *
+ * A row at the minimum grantable duration (`durationMinutes <=
+ * TIME_GRANULARITY`, currently 15) never enters `occupied` — see
+ * {@link blocksPlacement} — for ANY session type, fixed/recurring included, so
+ * the placer is willing to stack another session on top of it. It still
+ * counts toward `workloadByType`.
  *
  * This is the only I/O in the pure-core split (CLAUDE.md invariant 2); the math
  * lives in `heuristic.ts` / `context-vector.ts` / `arms.ts`. The `DayLoad`
@@ -101,7 +107,10 @@ export async function loadDayLoad(
     const start = o.scheduledStartTime.getTime();
     const end = start + o.durationMinutes * 60_000;
     if (end <= dayStartMs) continue; // ended before this day — a stale left-neighbour
-    occupied.push({ start, end });
+    // A minimum-duration (<=15min) session is a placeholder sliver, not a
+    // real occupant — it must not block placement, but still counts toward
+    // workload below.
+    if (blocksPlacement(o.durationMinutes)) occupied.push({ start, end });
     // Workload is "what this calendar day carries" — key it by the start day so
     // the lookahead sliver and the previous night's spillover don't inflate it.
     if (start >= dayStartMs && start < dayEndMs) {
@@ -140,7 +149,7 @@ export async function loadDayLoad(
       const start = occStart.getTime();
       const end = start + rep.durationMinutes * 60_000;
       if (end <= dayStartMs) continue;
-      occupied.push({ start, end });
+      if (blocksPlacement(rep.durationMinutes)) occupied.push({ start, end });
       if (start < dayStartMs || start >= dayEndMs) continue;
       addWorkload(series.type, rep.durationMinutes);
     }
@@ -258,7 +267,7 @@ export async function loadScheduleItems(
       const start = occStart.getTime();
       items.push({
         id: null,
-        type: series.type as string,
+        type: series.type,
         seriesId: series.id,
         recurring: true,
         start,
@@ -289,7 +298,9 @@ export function dayLoadFromItems(
   const hi = dayEndMs + lookaheadMs;
   for (const it of items) {
     if (it.start < lo || it.start > hi || it.end <= dayStartMs) continue;
-    occupied.push({ start: it.start, end: it.end });
+    if (blocksPlacement(it.durationMinutes)) {
+      occupied.push({ start: it.start, end: it.end });
+    }
     if (
       it.start >= dayStartMs &&
       it.start < dayEndMs &&

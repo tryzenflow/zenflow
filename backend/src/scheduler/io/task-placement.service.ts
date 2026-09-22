@@ -16,7 +16,7 @@ import { DisplacementService, type AppliedMove } from "./displacement.service";
 import { PythonPlacer } from "./python-placer.service";
 import { parsePlacementMode, type PlacementMode } from "./placement-mode";
 import { ScheduleInfeasibleException } from "../schedule-infeasible.exception";
-import { ceilToSlot, MS_PER_MINUTE } from "../core/slot";
+import { blocksPlacement, ceilToSlot, MS_PER_MINUTE } from "../core/slot";
 import {
   SchedulingExperimentCoordinator,
   type ExperimentPlacementOutcome,
@@ -535,11 +535,13 @@ export class TaskPlacementService {
       s.scheduledStartTime != null &&
       s.scheduledStartTime.getTime() < now.getTime();
     const upcoming = members.filter((m) => !isPast(m));
-    const fixedOccupied = members.filter(isPast).map((m) => ({
-      start: (m.scheduledStartTime as Date).getTime(),
-      end:
-        (m.scheduledStartTime as Date).getTime() + m.durationMinutes * 60_000,
-    }));
+    const fixedOccupied = members
+      .filter((m) => isPast(m) && blocksPlacement(m.durationMinutes))
+      .map((m) => ({
+        start: (m.scheduledStartTime as Date).getTime(),
+        end:
+          (m.scheduledStartTime as Date).getTime() + m.durationMinutes * 60_000,
+      }));
 
     const upcomingMembers = upcoming.map((m) => ({
       id: m.id,

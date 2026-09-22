@@ -344,6 +344,103 @@ describe("loadDayLoad", () => {
     ).toBe(false);
   });
 
+  it("does not block placement on a 15-minute (minimum-duration) session, but still counts its workload", async () => {
+    const prisma = makeFakePrisma(
+      [
+        {
+          id: "short-1",
+          userId: "u1",
+          seriesId: null,
+          seriesRrule: null,
+          scheduledStartTime: new Date("2026-06-15T09:00:00.000Z"),
+          durationMinutes: 15,
+          type: "TASK",
+        },
+      ],
+      [],
+    );
+
+    const { occupied, workloadByType } = await loadDayLoad(prisma as never, {
+      userId: "u1",
+      dayStart,
+      dayEnd,
+      timezone: TZ,
+    });
+
+    expect(occupied).toEqual([]);
+    expect(workloadByType.TASK).toEqual({ hours: 0.25, count: 1 });
+  });
+
+  it("still blocks placement on a 20-minute (above-minimum) session", async () => {
+    const prisma = makeFakePrisma(
+      [
+        {
+          id: "medium-1",
+          userId: "u1",
+          seriesId: null,
+          seriesRrule: null,
+          scheduledStartTime: new Date("2026-06-15T09:00:00.000Z"),
+          durationMinutes: 20,
+          type: "TASK",
+        },
+      ],
+      [],
+    );
+
+    const { occupied, workloadByType } = await loadDayLoad(prisma as never, {
+      userId: "u1",
+      dayStart,
+      dayEnd,
+      timezone: TZ,
+    });
+
+    expect(occupied).toEqual([
+      {
+        start: new Date("2026-06-15T09:00:00.000Z").getTime(),
+        end: new Date("2026-06-15T09:20:00.000Z").getTime(),
+      },
+    ]);
+    expect(workloadByType.TASK).toEqual({ hours: 20 / 60, count: 1 });
+  });
+
+  it("does not block placement on a 15-minute recurring (fixed) occurrence of any type, but still counts its workload", async () => {
+    const prisma = makeFakePrisma(
+      [
+        {
+          id: "dnd-rep-short",
+          userId: "u1",
+          seriesId: "dnd-series-short",
+          seriesRrule: "FREQ=DAILY",
+          scheduledStartTime: new Date("2026-06-14T22:00:00.000Z"),
+          durationMinutes: 15,
+          type: "DND",
+        },
+      ],
+      [
+        {
+          id: "dnd-series-short",
+          userId: "u1",
+          type: "DND",
+          rrule: "FREQ=DAILY",
+          rep: {
+            scheduledStartTime: new Date("2026-06-14T22:00:00.000Z"),
+            durationMinutes: 15,
+          },
+        },
+      ],
+    );
+
+    const { occupied, workloadByType } = await loadDayLoad(prisma as never, {
+      userId: "u1",
+      dayStart,
+      dayEnd,
+      timezone: TZ,
+    });
+
+    expect(occupied).toEqual([]);
+    expect(workloadByType.DND).toEqual({ hours: 0.25, count: 1 });
+  });
+
   it("defaults excludeSeriesId to a no-op, leaving existing callers unaffected", async () => {
     const prisma = makeFakePrisma(
       [
@@ -457,5 +554,25 @@ describe("loadDayLoads (batched range read, #62 C)", () => {
       }),
     ).toEqual([]);
     expect(prisma.session.findMany).not.toHaveBeenCalled();
+  });
+
+  it("excludes a 15-minute session from occupancy but still counts its workload (matches loadDayLoad)", async () => {
+    const shortSession: FakeSession[] = [
+      {
+        id: "short-1",
+        userId: "u1",
+        seriesId: null,
+        seriesRrule: null,
+        scheduledStartTime: new Date("2026-06-15T09:00:00.000Z"),
+        durationMinutes: 15,
+        type: "TASK",
+      },
+    ];
+    const batched = await loadDayLoads(
+      makeFakePrisma(shortSession, []) as never,
+      { userId: "u1", days: [days[0]], timezone: TZ },
+    );
+    expect(batched[0].occupied).toEqual([]);
+    expect(batched[0].workloadByType.TASK).toEqual({ hours: 0.25, count: 1 });
   });
 });
