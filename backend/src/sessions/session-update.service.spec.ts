@@ -285,6 +285,40 @@ describe("SessionUpdateService — preference-matrix reinforcement (Item 3B3)", 
     expect(args.data.lastMovedAt).toBeUndefined();
   });
 
+  it("manually rescheduling a fixed-type session (ASSIGNMENT/EXAM/LECTURE/DND) stamps lastMovedAt, even though it never raises a MOVE event", async () => {
+    const existing = session({
+      id: "assignment-1",
+      type: "ASSIGNMENT",
+      source: "LMS",
+      lastMovedAt: null,
+      scheduledStartTime: new Date("2026-06-11T08:00:00.000Z"),
+    });
+    const findFirst = jest.fn().mockResolvedValue(existing);
+    const update = jest.fn().mockResolvedValue({
+      ...existing,
+      scheduledStartTime: new Date("2026-06-12T10:00:00.000Z"),
+    });
+    const eventCreate = jest.fn();
+    const prisma = {
+      $transaction: (fn: (t: unknown) => unknown) =>
+        fn({
+          session: { findFirst, update },
+          sessionEvent: { create: eventCreate },
+        }),
+    };
+    const service = makeService(prisma as never, fakeSeries());
+
+    await service.update(
+      "assignment-1",
+      { scheduledStartTime: "2026-06-12T10:00:00.000Z" },
+      user,
+    );
+
+    expect(eventCreate).not.toHaveBeenCalled();
+    const [args] = update.mock.calls[0] as [{ data: Record<string, unknown> }];
+    expect(args.data.lastMovedAt).toBeInstanceOf(Date);
+  });
+
   it("a start-side resize (start and duration both change) counts as the first move", async () => {
     const oldStart = new Date("2026-06-11T08:00:00.000Z");
     const newStart = new Date("2026-06-11T07:00:00.000Z");

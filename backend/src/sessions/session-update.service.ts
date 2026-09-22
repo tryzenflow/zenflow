@@ -403,6 +403,15 @@ export class SessionUpdateService {
         now,
       );
 
+      if (startChanged) {
+        // Any manual reschedule — not just a scheduler-tracked TASK move —
+        // must be remembered here, for every session type, so the ingestion
+        // watchers' anti-clobber check (materializer.service.ts) warns
+        // instead of silently reverting a hand-moved EXAM/LECTURE/ASSIGNMENT
+        // back to its upstream (LMS/portal) position on their next sync.
+        data.lastMovedAt = now;
+      }
+
       const move = this.buildMoveEventData(existing, nextStart, startChanged);
       let firstMove: FirstMove | null = null;
       if (move) {
@@ -427,7 +436,6 @@ export class SessionUpdateService {
             newStartMs: move.movedTo.getTime(),
           };
         }
-        data.lastMovedAt = now;
       }
 
       const row = await tx.session.update({
