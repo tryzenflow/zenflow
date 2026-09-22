@@ -221,14 +221,22 @@ export function placementQualifier(
  *   set instead) — real rows; scope choices are "this sitting" / delete it and
  *   later sittings by `sessionIndex` / delete the series.
  *
+ * A portal-ingested `LECTURE` meeting instead carries `timetableGroupId` (no
+ * `seriesId`/`rrule` of its own) — the grouping key behind the
+ * `DELETE /sessions/timetable-group/:sessionId[/from]` routes. Scope choices
+ * there are delete-only ("this meeting" / "this and later" / the whole
+ * section); there's no group-wide reschedule endpoint, so this kind is only
+ * meaningful for the delete-scope dialog.
+ *
  * `"none"` covers a one-off fixed session or a single-sitting TASK — no scope
  * choice needed, delete is always just that one row.
  */
-export type SeriesKind = "none" | "recurring" | "task";
+export type SeriesKind = "none" | "recurring" | "task" | "timetable";
 
 export function getSeriesKind(
-  session: Pick<Session, "seriesId" | "rrule">,
+  session: Pick<Session, "seriesId" | "rrule" | "timetableGroupId">,
 ): SeriesKind {
+  if (!session.seriesId && session.timetableGroupId) return "timetable";
   if (!session.seriesId) return "none";
   return session.rrule ? "recurring" : "task";
 }

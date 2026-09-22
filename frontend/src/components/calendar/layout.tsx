@@ -180,7 +180,12 @@ export function CalendarLayout() {
     }
 
     const session = sessionsById.current.get(taskId);
-    const kind = session ? getSeriesKind(session) : "none";
+    const fullKind = session ? getSeriesKind(session) : "none";
+    // A portal-ingested timetable lecture has no series scope for reschedule
+    // (the backend only exposes a delete-by-group route, not a
+    // reschedule-by-group one) — a drag/resize on it is a plain per-row PATCH,
+    // same as a one-off session.
+    const kind = fullKind === "timetable" ? "none" : fullKind;
     let scope: UpdateScope | undefined;
     let skipConflicting: boolean | undefined;
     if (kind !== "none") {

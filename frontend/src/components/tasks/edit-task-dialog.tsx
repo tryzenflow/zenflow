@@ -31,6 +31,8 @@ import {
   getSessionDetails,
   removeSeriesFrom,
   removeSessionSeries,
+  removeTimetableGroup,
+  removeTimetableGroupFrom,
   truncateSessionSeries,
   updateSession,
 } from "@/api/tasks";
@@ -204,7 +206,11 @@ export function EditSessionDialog({
     if (!task) return;
     setLoading(true);
     try {
-      if (scope === "series" && task.seriesId) {
+      if (scope === "series" && seriesKind === "timetable") {
+        await removeTimetableGroup(task.id);
+      } else if (scope === "following" && seriesKind === "timetable") {
+        await removeTimetableGroupFrom(task.id);
+      } else if (scope === "series" && task.seriesId) {
         await removeSessionSeries(task.seriesId);
       } else if (
         scope === "following" &&
@@ -220,16 +226,23 @@ export function EditSessionDialog({
       ) {
         await removeSeriesFrom(task.seriesId, task.id);
       } else {
-        // "occurrence": a recurring occurrence id, a TASK sitting, or a one-off.
+        // "occurrence": a recurring occurrence id, a TASK sitting, a single
+        // timetable meeting, or a one-off.
         await deleteSession(task.id);
       }
       onSaved();
-      toast.success(scope === "series" ? "Series deleted" : "Session deleted", {
-        description:
-          scope === "series"
-            ? "Every session in the series was removed from your calendar."
-            : "It was removed from your calendar.",
-      });
+      const seriesLabel = seriesKind === "timetable" ? "Class" : "Series";
+      toast.success(
+        scope === "series" ? `${seriesLabel} deleted` : "Session deleted",
+        {
+          description:
+            scope === "series"
+              ? seriesKind === "timetable"
+                ? "Every meeting of this class was removed from your calendar."
+                : "Every session in the series was removed from your calendar."
+              : "It was removed from your calendar.",
+        },
+      );
       setOpen(false);
     } catch (error) {
       errorToast("Couldn't delete the session", {
