@@ -251,6 +251,7 @@ export class SessionCrudService {
     const rows = await this.prisma.session.findMany({
       where: {
         userId: user.id,
+        deleted: false,
         OR: [
           { scheduledStartTime: null },
           // A day back so a plain session that started the previous evening
@@ -319,7 +320,10 @@ export class SessionCrudService {
     const limit = dto.limit ?? 10;
     const q = dto.q?.trim();
 
-    const where: Prisma.SessionWhereInput = { userId: user.id };
+    const where: Prisma.SessionWhereInput = {
+      userId: user.id,
+      deleted: false,
+    };
     if (q) where.title = { contains: q, mode: "insensitive" };
 
     // Overfetch before deduping — a chatty multi-sitting TASK series can eat
@@ -359,7 +363,7 @@ export class SessionCrudService {
     const occ = parseOccurrenceId(id);
     if (occ) {
       const rep = await this.prisma.session.findFirst({
-        where: { seriesId: occ.seriesId, userId: user.id },
+        where: { seriesId: occ.seriesId, userId: user.id, deleted: false },
         include: WITH_TAGS_AND_SERIES,
       });
       if (!rep)
@@ -367,8 +371,8 @@ export class SessionCrudService {
       return { ...toSessionDto(rep), id, scheduledStartTime: occ.startISO };
     }
 
-    const session = await this.prisma.session.findUnique({
-      where: { id, userId: user.id },
+    const session = await this.prisma.session.findFirst({
+      where: { id, userId: user.id, deleted: false },
       include: WITH_TAGS_AND_SERIES,
     });
     if (!session)
@@ -391,11 +395,17 @@ export class SessionCrudService {
 
       return await this.prisma.$transaction(async (tx) => {
         const existing = await tx.session.findFirst({
-          where: { id, userId: user.id },
+          where: { id, userId: user.id, deleted: false },
         });
         if (!existing)
           throw new NotFoundException(`Cannot find session with id ${id}`);
-        await tx.session.delete({ where: { id, userId: user.id } });
+        // Soft-delete: an ingested item's externalKey stays unique, so the
+        // materializer recognizes this row on the next re-fetch and leaves
+        // it alone instead of recreating it.
+        await tx.session.update({
+          where: { id, userId: user.id },
+          data: { deleted: true },
+        });
         return { id };
       });
     } catch (error) {

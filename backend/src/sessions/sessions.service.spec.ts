@@ -57,6 +57,7 @@ function session(overrides: Partial<SessionRow> & { id: string }): SessionRow {
     scheduledStartTime: null,
     lastMovedAt: null,
     retainedAt: null,
+    deleted: false,
     userId: user.id,
     seriesId: null,
     sessionIndex: null,
@@ -891,8 +892,8 @@ describe("SessionsService.suggestions", () => {
 describe("SessionsService.findById", () => {
   it("returns the mapped session when found", async () => {
     const row = session({ id: "session-1" });
-    const findUnique = jest.fn().mockResolvedValue(row);
-    const prisma = { session: { findUnique } };
+    const findFirst = jest.fn().mockResolvedValue(row);
+    const prisma = { session: { findFirst } };
     const service = await makeService(
       prisma,
       fakeTagsService(),
@@ -905,8 +906,8 @@ describe("SessionsService.findById", () => {
   });
 
   it("throws NotFoundException when missing", async () => {
-    const findUnique = jest.fn().mockResolvedValue(null);
-    const prisma = { session: { findUnique } };
+    const findFirst = jest.fn().mockResolvedValue(null);
+    const prisma = { session: { findFirst } };
     const service = await makeService(
       prisma,
       fakeTagsService(),
@@ -1207,12 +1208,13 @@ describe("SessionsService.update", () => {
 });
 
 describe("SessionsService.remove", () => {
-  it("deletes the session and returns just its id", async () => {
+  it("soft-deletes the session and returns just its id", async () => {
     const existing = session({ id: "session-1" });
     const findFirst = jest.fn().mockResolvedValue(existing);
-    const del = jest.fn().mockResolvedValue(existing);
+    const update = jest.fn().mockResolvedValue({ ...existing, deleted: true });
+    const del = jest.fn();
     const prisma = prismaWithTx({
-      session: { findFirst, delete: del },
+      session: { findFirst, update, delete: del },
     });
     const service = await makeService(
       prisma,
@@ -1223,16 +1225,18 @@ describe("SessionsService.remove", () => {
 
     const result = await service.remove("session-1", user);
 
-    expect(del).toHaveBeenCalledWith({
+    expect(update).toHaveBeenCalledWith({
       where: { id: "session-1", userId: user.id },
+      data: { deleted: true },
     });
+    expect(del).not.toHaveBeenCalled();
     expect(result).toEqual({ id: "session-1" });
   });
 
   it("throws NotFoundException when the session doesn't exist", async () => {
     const findFirst = jest.fn().mockResolvedValue(null);
     const prisma = prismaWithTx({
-      session: { findFirst, delete: jest.fn() },
+      session: { findFirst, delete: jest.fn(), update: jest.fn() },
     });
     const service = await makeService(
       prisma,

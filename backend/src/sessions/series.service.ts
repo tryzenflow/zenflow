@@ -148,7 +148,7 @@ export class SeriesService {
     now: Date,
   ): Promise<{ sessions: SharedSession[]; degraded: boolean }> {
     const members = await this.prisma.session.findMany({
-      where: { seriesId, userId: user.id },
+      where: { seriesId, userId: user.id, deleted: false },
       include: WITH_TAGS_AND_SERIES,
       orderBy: [{ sessionIndex: "asc" }, { createdAt: "asc" }],
     });
@@ -222,7 +222,7 @@ export class SeriesService {
       throw new NotFoundException(`Cannot find TASK series ${seriesId}`);
 
     const members = await this.prisma.session.findMany({
-      where: { seriesId, userId: user.id },
+      where: { seriesId, userId: user.id, deleted: false },
       include: WITH_TAGS_AND_SERIES,
       orderBy: [{ sessionIndex: "asc" }, { createdAt: "asc" }],
     });
@@ -484,7 +484,7 @@ export class SeriesService {
   ): Promise<{ sessions: SharedSession[]; skippedSessionIds: string[] }> {
     return this.prisma.$transaction(async (tx) => {
       const members = await tx.session.findMany({
-        where: { seriesId, userId: user.id },
+        where: { seriesId, userId: user.id, deleted: false },
         include: WITH_TAGS_AND_SERIES,
         orderBy: [{ sessionIndex: "asc" }, { createdAt: "asc" }],
       });

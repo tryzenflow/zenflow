@@ -107,7 +107,7 @@ export class TimetableWatcherService {
 
     let created = 0;
     let updated = 0;
-    let guarded = 0;
+    let skippedDeleted = 0;
     let deleted = 0;
     let first = true;
     // Every meeting key the run saw, plus whether every week came back — the
@@ -142,7 +142,7 @@ export class TimetableWatcherService {
         );
         created += outcome.created;
         updated += outcome.updated;
-        guarded += outcome.guarded;
+        skippedDeleted += outcome.skippedDeleted;
         for (const item of parsed.items) seenKeys.add(item.externalKey);
 
         await this.jobs.completeItem("PORTAL", itemId, {
@@ -188,11 +188,11 @@ export class TimetableWatcherService {
 
     await this.jobs.finishJob("PORTAL", jobId, "COMPLETED");
 
-    if (created + updated + guarded + deleted > 0) {
+    if (created + updated + skippedDeleted + deleted > 0) {
       this.logger.log(
         `Timetable sync for integration ${target.integrationId}: ` +
-          `${created} new, ${updated} updated, ${guarded} kept as edited, ` +
-          `${deleted} removed`,
+          `${created} new, ${updated} updated, ` +
+          `${skippedDeleted} skipped (student-deleted), ${deleted} removed`,
       );
     }
   }

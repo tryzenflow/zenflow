@@ -172,7 +172,7 @@ export class SessionUpdateService {
   ): Promise<void> {
     if (dto.deadline === undefined) return;
     const existing = await this.prisma.session.findFirst({
-      where: { id, userId: user.id },
+      where: { id, userId: user.id, deleted: false },
       select: {
         type: true,
         durationMinutes: true,
@@ -212,7 +212,7 @@ export class SessionUpdateService {
       return null;
     }
     const rep = await this.prisma.session.findFirst({
-      where: { seriesId: occ.seriesId, userId: user.id },
+      where: { seriesId: occ.seriesId, userId: user.id, deleted: false },
       select: { scheduledStartTime: true, durationMinutes: true },
     });
     if (!rep || !rep.scheduledStartTime)
@@ -257,7 +257,7 @@ export class SessionUpdateService {
     if (!occ) return id;
 
     const rep = await this.prisma.session.findFirst({
-      where: { seriesId: occ.seriesId, userId: user.id },
+      where: { seriesId: occ.seriesId, userId: user.id, deleted: false },
       select: { id: true, scheduledStartTime: true },
     });
     if (!rep) throw new NotFoundException(`Cannot find session with id ${id}`);
@@ -294,7 +294,7 @@ export class SessionUpdateService {
     }
 
     const existingForScope = await this.prisma.session.findFirst({
-      where: { id, userId: user.id },
+      where: { id, userId: user.id, deleted: false },
       select: {
         seriesId: true,
         scheduledStartTime: true,
@@ -346,7 +346,7 @@ export class SessionUpdateService {
   ): Promise<FieldDiffResult> {
     return this.prisma.$transaction(async (tx): Promise<FieldDiffResult> => {
       const existing = await tx.session.findFirst({
-        where: { id, userId: user.id },
+        where: { id, userId: user.id, deleted: false },
         include: WITH_TAGS_AND_SERIES,
       });
       if (!existing)

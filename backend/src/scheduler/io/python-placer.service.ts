@@ -527,7 +527,7 @@ export class PythonPlacer {
     moves: { id: string; fromMs: number; toMs: number }[],
   ): Promise<AppliedMove[]> {
     const rows = await this.prisma.session.findMany({
-      where: { id: { in: moves.map((m) => m.id) } },
+      where: { id: { in: moves.map((m) => m.id) }, deleted: false },
       select: { id: true, durationMinutes: true },
     });
     const dur = new Map(rows.map((r) => [r.id, r.durationMinutes]));

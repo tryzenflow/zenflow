@@ -39,6 +39,7 @@ export class ConflictRescheduleService {
         type: "TASK",
         deadline: { not: null },
         scheduledStartTime: { not: null },
+        deleted: false,
       },
       select: {
         id: true,

@@ -75,6 +75,7 @@ export async function loadDayLoad(
   const others = await prisma.session.findMany({
     where: {
       userId,
+      deleted: false,
       ...(excludeSessionIds.length ? { id: { notIn: excludeSessionIds } } : {}),
       // A standalone session, or a materialized-series member (a multi-sitting
       // TASK's sittings) — anything whose series has no rrule, since each such
@@ -207,6 +208,7 @@ export async function loadScheduleItems(
     prisma.session.findMany({
       where: {
         userId,
+        deleted: false,
         ...(excludeSessionIds.length
           ? { id: { notIn: excludeSessionIds } }
           : {}),

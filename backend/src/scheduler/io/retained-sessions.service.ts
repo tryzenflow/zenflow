@@ -108,6 +108,7 @@ export class RetainedSessionsService {
         source: SessionSource.USER,
         retainedAt: null,
         lastMovedAt: null,
+        deleted: false,
         scheduledStartTime: { not: null, lte: now },
         ...(userId ? { userId } : {}),
       },

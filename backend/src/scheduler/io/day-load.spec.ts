@@ -24,6 +24,7 @@ interface FakeSession {
   scheduledStartTime: Date;
   durationMinutes: number;
   type: string;
+  deleted?: boolean;
 }
 
 interface FakeSeries {
@@ -47,11 +48,13 @@ function makeFakePrisma(sessions: FakeSession[], seriesList: FakeSeries[]) {
               { seriesId: null } | { series: { is: { rrule: null } } }
             >;
             scheduledStartTime?: { gte?: Date; lte?: Date };
+            deleted?: boolean;
           };
         }) => {
           const { where } = args;
           const rows = sessions.filter((s) => {
             if (s.userId !== where.userId) return false;
+            if (where.deleted === false && s.deleted) return false;
             if (where.id?.notIn.includes(s.id)) return false;
             if (where.NOT && s.seriesId === where.NOT.seriesId) return false;
             if (where.OR) {
@@ -439,6 +442,34 @@ describe("loadDayLoad", () => {
 
     expect(occupied).toEqual([]);
     expect(workloadByType.DND).toEqual({ hours: 0.25, count: 1 });
+  });
+
+  it("excludes a soft-deleted session from occupancy and workload", async () => {
+    const prisma = makeFakePrisma(
+      [
+        {
+          id: "deleted-1",
+          userId: "u1",
+          seriesId: null,
+          seriesRrule: null,
+          scheduledStartTime: new Date("2026-06-15T09:00:00.000Z"),
+          durationMinutes: 60,
+          type: "LECTURE",
+          deleted: true,
+        },
+      ],
+      [],
+    );
+
+    const { occupied, workloadByType } = await loadDayLoad(prisma as never, {
+      userId: "u1",
+      dayStart,
+      dayEnd,
+      timezone: TZ,
+    });
+
+    expect(occupied).toEqual([]);
+    expect(workloadByType.LECTURE).toEqual({ hours: 0, count: 0 });
   });
 
   it("defaults excludeSeriesId to a no-op, leaving existing callers unaffected", async () => {

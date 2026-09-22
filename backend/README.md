@@ -147,6 +147,7 @@ places across the full 24h grid, every day. See [Scheduler architecture](#schedu
 | `type`                          | `SessionType`   | `TASK` (engine-placed) \| `ASSIGNMENT` \| `EXAM` \| `LECTURE` \| `DND` (user-pinned). |
 | `source`                        | `SessionSource` | `USER` \| `LMS` \| `PORTAL`.                                      |
 | `conflict`                      | bool            | overlaps another interval, or unplaced. Overlap is accepted — nothing auto-relocates. |
+| `deleted`                       | bool            | soft-delete flag, default `false`. A user-initiated delete sets this instead of removing the row (see `DELETE /sessions/:id` below); every read that feeds scheduling or calendar display filters `deleted: false`. The materializer's own `[userId, externalKey]` lookup is the deliberate exception — it must see a soft-deleted row so it can skip re-creating it. |
 | `scheduledStartTime`            | DateTime?       | engine placement (`TASK`) / client instant (fixed); null while unplaced. |
 | `lastMovedAt` / `retainedAt`    | DateTime?       | move-or-keep bookkeeping (ADR-0002 §2.1).                         |
 | `userId`                        | uuid            | FK → `User`, cascade.                                             |
@@ -345,15 +346,17 @@ is "plan work around this", not "confirm this item" — it already exists upstre
   is dropped on parse).
 - **Idempotent** on `[userId, externalKey]`, so an hourly re-run of the same window is a
   no-op; `P2002` is the race signal for two runs overlapping on one item.
-- **Never clobbers a student's edit.** If the row has `lastMovedAt != null`, an upstream
-  change does not overwrite it — the session is left exactly as they left it and a
-  `TIMETABLE` notification says the two now disagree (#30's open question, resolved in the
-  student's favour). That warning is deduplicated on its content, which embeds the upstream
-  instant, because unlike a normal change this disagreement never resolves itself; a
-  _further_ upstream move still speaks up.
-- **Follows** an upstream change on a session the student never touched — without writing a
-  `SessionEvent` and without setting `lastMovedAt`. Both mean "the user did this", and
+- **Plain sync, upstream wins.** Upstream is authoritative: a change is always applied
+  (`applyUpstreamChange`, raising a `CHANGE` notification) and a removal always
+  soft-deletes the row (`deleted: true`, raising a `DROP` notification) — regardless of
+  whether the student had since moved it by hand. `applyUpstreamChange` writes no
+  `SessionEvent` and never sets `lastMovedAt`; both mean "the user did this", and
   fabricating one would feed the LinUCB reward signal a move nobody made.
+- **Respects a student's own deletion.** The one exception to "upstream wins" is a row the
+  student has themselves soft-deleted (`SessionCrudService.remove`, or a series-wide
+  delete): the still-unique `externalKey` lets `materialize()`'s `userId_externalKey`
+  lookup see the soft-deleted row and skip it entirely (`outcome.skippedDeleted`) instead
+  of resurrecting it on the next re-fetch.
 - **A quiet re-run is quiet**: notifications are raised only for genuinely new, changed or
   removed items.
 - **Every row is categorised and time-stamped.** `raise()` stamps a `kind` (`NEW` for a
@@ -374,10 +377,10 @@ is "plan work around this", not "confirm this item" — it already exists upstre
   them here; any ingested `(source, type)` session that starts inside the run's forward
   window (term end for the portal, the last fetched month for the LMS) but is not in that
   set has been dropped upstream — a cancelled class, a withdrawn exam, a deleted assignment
-  — and is deleted (no `SessionEvent`; the `Notification` FK is `SetNull`). The removal
+  — and is soft-deleted (`deleted: true`, no `SessionEvent`; the `Notification` FK is
+  `SetNull`), regardless of whether the student had since hand-moved it. The removal
   notification groups exactly like a creation does for lectures, one-per-item for
-  assignments/exams. A session the student had hand-moved is kept (invariant #2) with a
-  single deduplicated "removed at DLU" warning instead.
+  assignments/exams.
 
 ## API endpoints
 
@@ -441,7 +444,7 @@ all occurrences). Violations → 400.
 | GET    | `/sessions/deadline-options?anchor=`         | The six deadline quick-chip instants relative to `anchor`.        |
 | GET    | `/sessions/:id`                              | Detail. Recurring occurrence id: `"<seriesId>::<startISO>"` (URL-encoded). |
 | PATCH  | `/sessions/:id`                              | `UpdateSessionDto` — metadata, drag/resize, `rrule`, `sessionCount`. `scope` + `skipConflicting` narrow a series change; `sessionCount` grows/shrinks a `TASK` series (or promotes a plain `TASK` into one); may return `sessions[]` + `skippedSessionIds`. |
-| DELETE | `/sessions/:id`                              | Delete one; on an occurrence id, add the date to `exdates`. Returns `{ id }`. |
+| DELETE | `/sessions/:id`                              | Soft-delete one (`deleted: true`, row kept so an ingested item's `externalKey` isn't recreated on the next DLU sync); on an occurrence id, add the date to `exdates` instead. Returns `{ id }`. |
 | DELETE | `/sessions/series/:seriesId`                 | Delete the whole series.                                          |
 | DELETE | `/sessions/series/:seriesId/truncate?from=`  | Recurring series only — pull the rrule's `UNTIL` back to just before `from` ("this and following").                                                                                                                                                                                                                                                                                                              |
 | DELETE | `/sessions/series/:seriesId/from/:sessionId` | Materialized `TASK` series only — delete that sitting and every later one by `sessionIndex`; earlier sittings kept.                                                                                                                                                                                                                                                                                              |

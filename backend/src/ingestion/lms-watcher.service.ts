@@ -109,7 +109,7 @@ export class LmsWatcherService {
 
     let created = 0;
     let updated = 0;
-    let guarded = 0;
+    let skippedDeleted = 0;
     let deleted = 0;
     let first = true;
     // Every externalKey any month of this run saw, and whether every fetch
@@ -145,7 +145,7 @@ export class LmsWatcherService {
         );
         created += outcome.created;
         updated += outcome.updated;
-        guarded += outcome.guarded;
+        skippedDeleted += outcome.skippedDeleted;
         for (const item of parsed.items) seenKeys.add(item.externalKey);
 
         await this.jobs.completeItem("LMS", itemId, {
@@ -193,11 +193,11 @@ export class LmsWatcherService {
 
     await this.jobs.finishJob("LMS", jobId, "COMPLETED");
 
-    if (created + updated + guarded + deleted > 0) {
+    if (created + updated + skippedDeleted + deleted > 0) {
       this.logger.log(
         `LMS sync for integration ${target.integrationId}: ` +
-          `${created} new, ${updated} updated, ${guarded} kept as edited, ` +
-          `${deleted} removed`,
+          `${created} new, ${updated} updated, ` +
+          `${skippedDeleted} skipped (student-deleted), ${deleted} removed`,
       );
     }
   }

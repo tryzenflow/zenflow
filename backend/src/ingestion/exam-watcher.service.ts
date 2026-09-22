@@ -120,13 +120,16 @@ export class ExamWatcherService {
       ingestionLastSuccess.record(now.getTime() / 1000, { provider: "PORTAL" });
 
       if (
-        outcome.created + outcome.updated + outcome.guarded + recon.deleted >
+        outcome.created +
+          outcome.updated +
+          outcome.skippedDeleted +
+          recon.deleted >
         0
       ) {
         this.logger.log(
           `Exam sync for integration ${target.integrationId}: ` +
             `${outcome.created} new, ${outcome.updated} updated, ` +
-            `${outcome.guarded} kept as edited, ${recon.deleted} removed`,
+            `${outcome.skippedDeleted} skipped (student-deleted), ${recon.deleted} removed`,
         );
       }
     } catch (error) {

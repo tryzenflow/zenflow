@@ -147,8 +147,8 @@ export class RemindersService implements OnApplicationBootstrap {
     const occ = parseOccurrenceId(id);
     const row = await this.prisma.session.findFirst({
       where: occ
-        ? { seriesId: occ.seriesId, userId: user.id }
-        : { id, userId: user.id },
+        ? { seriesId: occ.seriesId, userId: user.id, deleted: false }
+        : { id, userId: user.id, deleted: false },
       include: { series: true },
     });
     if (!row) throw new NotFoundException(`Cannot find session with id ${id}`);
@@ -157,7 +157,7 @@ export class RemindersService implements OnApplicationBootstrap {
     const isTaskSeries = row.seriesId && !row.series?.rrule;
     const members = isTaskSeries
       ? await this.prisma.session.findMany({
-          where: { seriesId: row.seriesId, userId: user.id },
+          where: { seriesId: row.seriesId, userId: user.id, deleted: false },
           select: { id: true },
         })
       : [{ id: row.id }];
@@ -174,7 +174,7 @@ export class RemindersService implements OnApplicationBootstrap {
    */
   async propagateSeries(seriesId: string): Promise<void> {
     const members = await this.prisma.session.findMany({
-      where: { seriesId },
+      where: { seriesId, deleted: false },
       orderBy: { sessionIndex: "asc" },
       include: { reminders: true },
     });

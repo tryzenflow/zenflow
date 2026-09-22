@@ -42,6 +42,7 @@ function session(overrides: Partial<SessionRow> & { id: string }): SessionRow {
     scheduledStartTime: null,
     lastMovedAt: null,
     retainedAt: null,
+    deleted: false,
     userId: user.id,
     seriesId: null,
     sessionIndex: null,

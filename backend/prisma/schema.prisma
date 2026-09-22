@@ -176,6 +176,15 @@ model Session {
 
   conflict Boolean @default(false)
 
+  // Soft-delete flag. A user-initiated delete sets this instead of removing
+  // the row, so an ingested item's still-unique `externalKey` lets the
+  // materializer recognize "the student deleted this" on the next re-fetch
+  // and skip recreating it, rather than the row disappearing and silently
+  // coming back. Every read that feeds scheduling or calendar display filters
+  // `deleted: false`; the materializer's own `userId_externalKey` lookup is
+  // the deliberate exception (it must see a soft-deleted row on purpose).
+  deleted Boolean @default(false)
+
   scheduledStartTime DateTime? // fixed types (ASSIGNMENT/EXAM/LECTURE/DND) are always scheduled; TASK is placed by the engine
   userId             String
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)

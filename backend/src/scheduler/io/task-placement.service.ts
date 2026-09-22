@@ -219,7 +219,7 @@ export class TaskPlacementService {
 
   private async durationsOf(ids: string[]): Promise<Map<string, number>> {
     const rows = await this.prisma.session.findMany({
-      where: { id: { in: ids } },
+      where: { id: { in: ids }, deleted: false },
       select: { id: true, durationMinutes: true },
     });
     return new Map(rows.map((r) => [r.id, r.durationMinutes]));

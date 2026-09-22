@@ -63,6 +63,7 @@ export class SyncConflictsService {
         userId,
         source,
         type,
+        deleted: false,
         updatedAt: { gte: since },
         scheduledStartTime: {
           gte: now,
@@ -87,6 +88,7 @@ export class SyncConflictsService {
         userId,
         type: "TASK",
         source: "USER",
+        deleted: false,
         scheduledStartTime: { gte: new Date(lo), lte: new Date(hi) },
       },
       select: { id: true, scheduledStartTime: true, durationMinutes: true },
