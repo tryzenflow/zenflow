@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { fromZonedTime } from "date-fns-tz";
 import {
   DEFAULT_REMINDER_MINUTES,
+  type NotificationEventType,
   type NotificationTopic,
 } from "@zenflow/shared";
 import {
@@ -49,9 +50,20 @@ const LMS_RECONCILE_MONTHS = 2;
 
 /** What one {@link MaterializerService.materialize} call did. */
 export interface MaterializeOutcome {
-  /** New sessions written (each with its notification). */
+  /**
+   * New sessions written on their first sighting. It is on the calendar
+   * immediately, but `syncConfirmedAt` is left null and no notification is
+   * raised yet — see {@link MaterializerService.confirmPending}.
+   */
   created: number;
-  /** Existing sessions whose upstream time/title/note/location moved and were rewritten. */
+  /**
+   * A pending session (first-sighting `created`, above) seen for a second
+   * time: its fields are refreshed to the latest upstream data,
+   * `syncConfirmedAt` is stamped, and this is where its "new item"
+   * notification is finally raised.
+   */
+  confirmed: number;
+  /** Existing, confirmed sessions whose upstream time/title/note/location moved and were rewritten. */
   updated: number;
   /** Already on the calendar, identical — the common case on a re-run. */
   unchanged: number;
@@ -69,13 +81,29 @@ export interface MaterializeOutcome {
 
 /** What one {@link MaterializerService.reconcileDeleted} call did. */
 export interface ReconcileOutcome {
-  /** Ingested sessions removed because upstream dropped them. */
+  /**
+   * Confirmed ingested sessions soft-deleted because upstream dropped them on
+   * two consecutive runs in a row (the second consecutive miss).
+   */
   deleted: number;
   /**
    * Upstream dropped an item the student had already hand-moved — kept on
    * the calendar (their move wins), silently, no notification.
    */
   keptMoved: number;
+  /**
+   * A confirmed session missing from upstream for the first time this run —
+   * `syncMissedAt` stamped, left exactly as-is on the calendar, no
+   * notification. Only a *second* consecutive miss (next run) removes it.
+   */
+  missedOnce: number;
+  /**
+   * A still-pending session (never confirmed by a second sighting — see
+   * {@link MaterializeOutcome.created}) that vanished before it ever was:
+   * hard-deleted outright rather than soft-deleted, since it was never a
+   * real, user-facing item. No notification.
+   */
+  hardDeletedUnconfirmed: number;
 }
 
 /** One lecture create/update, held back for the batch's grouped announcement. */
@@ -182,6 +210,15 @@ function isUniqueViolation(error: unknown): boolean {
  *    ({@link TIMETABLE_GROUP_THRESHOLD}); smaller additions list the class
  *    names. Assignments and exams stay one notification each — those are
  *    individually actionable.
+ * 5. **A single-run blip proves nothing.** A brand-new item is written to the
+ *    calendar on first sighting (so it's visible right away) but its
+ *    `syncConfirmedAt` stays null and its notification is held back; only a
+ *    *second* consecutive sighting confirms it and raises the notification
+ *    (see {@link create} / {@link confirmPending}). Symmetrically, a confirmed
+ *    item missing from one run is just stamped `syncMissedAt` and left alone;
+ *    only a second consecutive miss soft-deletes it (see
+ *    {@link reconcileDeleted}). A pending item that vanishes before it is ever
+ *    confirmed is hard-deleted outright — it was never a real, user-facing item.
  *
  * Writes go through {@link insertFixedSession}, the same insert
  * `SessionCrudService` uses, so an ingested row is part of the same
@@ -226,6 +263,7 @@ export class MaterializerService {
     const runStart = new Date();
     const outcome: MaterializeOutcome = {
       created: 0,
+      confirmed: 0,
       updated: 0,
       unchanged: 0,
       skippedDeleted: 0,
@@ -233,7 +271,8 @@ export class MaterializerService {
     };
 
     // Lecture creates/updates are announced once for the whole batch, not one
-    // row per meeting — see rule #4.
+    // row per meeting — see rule #4. A first sighting never lands here (its
+    // notification is held back until it's confirmed).
     const lectureChanges: LectureChange[] = [];
 
     for (const block of blocks) {
@@ -250,6 +289,8 @@ export class MaterializerService {
           scheduledStartTime: true,
           deleted: true,
           lastMovedAt: true,
+          syncConfirmedAt: true,
+          syncMissedAt: true,
         },
       });
 
@@ -261,20 +302,38 @@ export class MaterializerService {
       }
 
       if (!existing) {
+        // First sighting: on the calendar immediately, but `syncConfirmedAt`
+        // stays null and no notification is raised yet — that happens on the
+        // second sighting, once the item has survived a re-run (see
+        // `confirmPending`). A single-run blip must never notify.
         const createdId = await this.create(userId, block, source);
-        if (createdId) {
-          outcome.created += 1;
-          if (block.type === "LECTURE") {
-            lectureChanges.push({
-              sessionId: createdId,
-              block,
-              kind: "created",
-            });
-          }
-        } else {
-          outcome.unchanged += 1;
+        outcome[createdId ? "created" : "unchanged"] += 1;
+        continue;
+      }
+
+      if (existing.syncConfirmedAt === null) {
+        // Second sighting of a still-pending item: apply the latest fields
+        // (upstream may have refined the data between the two sightings),
+        // confirm it, and raise its "new item" notification now.
+        await this.confirmPending(userId, existing.id, block, now);
+        outcome.confirmed += 1;
+        if (block.type === "LECTURE") {
+          lectureChanges.push({
+            sessionId: existing.id,
+            block,
+            kind: "created",
+          });
         }
         continue;
+      }
+
+      if (existing.syncMissedAt !== null) {
+        // Reappeared after one miss: the miss streak broke. This happens
+        // regardless of whether anything else about the row also changed.
+        await this.prisma.session.update({
+          where: { id: existing.id },
+          data: { syncMissedAt: null },
+        });
       }
 
       if (!differsFromUpstream(existing, block)) {
@@ -387,16 +446,47 @@ export class MaterializerService {
         type: true,
         scheduledStartTime: true,
         lastMovedAt: true,
+        syncConfirmedAt: true,
+        syncMissedAt: true,
       },
     });
 
     const gone = candidates.filter(
       (s) => s.externalKey !== null && !seenExternalKeys.has(s.externalKey),
     );
-    if (gone.length === 0) return { deleted: 0, keptMoved: 0 };
+    const empty: ReconcileOutcome = {
+      deleted: 0,
+      keptMoved: 0,
+      missedOnce: 0,
+      hardDeletedUnconfirmed: 0,
+    };
+    if (gone.length === 0) return empty;
 
-    const kept = gone.filter((s) => s.lastMovedAt !== null);
-    const removable = gone.filter((s) => s.lastMovedAt === null);
+    // A pending item (never confirmed by a second sighting) that vanishes
+    // before ever being confirmed was never a real, user-facing item — hard
+    // delete it outright rather than soft-deleting, no notification.
+    const pendingGone = gone.filter((s) => s.syncConfirmedAt === null);
+    const confirmedGone = gone.filter((s) => s.syncConfirmedAt !== null);
+
+    const kept = confirmedGone.filter((s) => s.lastMovedAt !== null);
+    const eligible = confirmedGone.filter((s) => s.lastMovedAt === null);
+
+    // First miss: stamp `syncMissedAt` and leave the row exactly as-is — no
+    // soft-delete, no notification. Only a *second* consecutive miss (the
+    // item still missing on the next run, `syncMissedAt` already set) retires it.
+    const missedOnce = eligible.filter((s) => s.syncMissedAt === null);
+    const removable = eligible.filter((s) => s.syncMissedAt !== null);
+
+    for (const session of pendingGone) {
+      await this.prisma.session.delete({ where: { id: session.id } });
+    }
+
+    for (const session of missedOnce) {
+      await this.prisma.session.update({
+        where: { id: session.id },
+        data: { syncMissedAt: now },
+      });
+    }
 
     for (const session of removable) {
       // Soft-delete, mirroring SessionCrudService.remove: the row stays
@@ -422,17 +512,27 @@ export class MaterializerService {
       now,
     );
 
-    if (removable.length + kept.length > 0) {
+    if (
+      removable.length + kept.length + missedOnce.length + pendingGone.length >
+      0
+    ) {
       this.logger.log(
         `Reconciled ${source} deletions for ${userId}: ` +
-          `${removable.length} removed, ${kept.length} kept (hand-moved)`,
+          `${removable.length} removed, ${kept.length} kept (hand-moved), ` +
+          `${missedOnce.length} missed once, ` +
+          `${pendingGone.length} hard-deleted (never confirmed)`,
       );
     }
     if (removable.length > 0) {
       ingestionReconcileDeleted.add(removable.length, { source });
     }
 
-    return { deleted: removable.length, keptMoved: kept.length };
+    return {
+      deleted: removable.length,
+      keptMoved: kept.length,
+      missedOnce: missedOnce.length,
+      hardDeletedUnconfirmed: pendingGone.length,
+    };
   }
 
   /** The forward span a run of `source` covers — its deletion horizon. */
@@ -457,13 +557,14 @@ export class MaterializerService {
   }
 
   /**
-   * Insert the session. Returns the new session id, or `null` when a
-   * concurrent run won the race for the same `externalKey` (`P2002`), which is
-   * a no-op, not an error — the item is on the calendar either way.
+   * Insert the session on its first sighting. Returns the new session id, or
+   * `null` when a concurrent run won the race for the same `externalKey`
+   * (`P2002`), which is a no-op, not an error — the item is on the calendar
+   * either way.
    *
-   * Assignment/exam creates raise their own notification inside the same
-   * transaction; a lecture create does not — the caller folds it into the
-   * batch's grouped announcement.
+   * Raises no notification: `syncConfirmedAt` is left null, and the row's
+   * "new item" notification is held back until {@link confirmPending} sees it
+   * survive a second run — a single-run blip must not notify.
    */
   private async create(
     userId: string,
@@ -503,20 +604,6 @@ export class MaterializerService {
             remindBeforeMinutes: DEFAULT_REMINDER_MINUTES,
           },
         });
-
-        if (block.type !== "LECTURE") {
-          await this.raise(
-            userId,
-            {
-              sessionId: row.id,
-              topic: topicOf(block.type),
-              title: this.createdTitle(block),
-              content: this.createdContent(block),
-              eventEndsAt: blockEndsAt(block),
-            },
-            tx,
-          );
-        }
       });
       return newId;
     } catch (error) {
@@ -570,6 +657,53 @@ export class MaterializerService {
             content:
               "DLU changed this item, so your calendar has been updated to match.",
             eventEndsAt: blockEndsAt(block),
+            eventType: "UPDATED",
+            eventName: this.updatedEventName(block),
+          },
+          tx,
+        );
+      }
+    });
+  }
+
+  /**
+   * Second sighting of a still-pending item (`syncConfirmedAt === null`):
+   * apply the latest upstream fields — upstream may have refined the data
+   * between the two sightings — stamp `syncConfirmedAt`, and only now raise
+   * the "new item" notification the caller held back on the first sighting.
+   *
+   * Like {@link create}, a lecture raises no notification here — the caller
+   * folds it into the batch's grouped announcement instead.
+   */
+  private async confirmPending(
+    userId: string,
+    sessionId: string,
+    block: ParsedBlock,
+    now: Date,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.session.update({
+        where: { id: sessionId },
+        data: {
+          title: block.title,
+          note: block.note,
+          location: block.location,
+          durationMinutes: block.durationMinutes,
+          scheduledStartTime: block.scheduledStartTime,
+          syncConfirmedAt: now,
+        },
+      });
+      if (block.type !== "LECTURE") {
+        await this.raise(
+          userId,
+          {
+            sessionId,
+            topic: topicOf(block.type),
+            title: this.createdTitle(block),
+            content: this.createdContent(block),
+            eventEndsAt: blockEndsAt(block),
+            eventType: "CREATED",
+            eventName: this.createdEventName(block),
           },
           tx,
         );
@@ -617,6 +751,8 @@ export class MaterializerService {
       },
     });
 
+    const allNew = changes.every((c) => c.kind === "created");
+
     if (termLectureCount >= TIMETABLE_GROUP_THRESHOLD) {
       await this.raise(userId, {
         sessionId: earliest.sessionId,
@@ -625,11 +761,14 @@ export class MaterializerService {
         content:
           `Your ${termLabel(term.semester)} class timetable is on your ` +
           "calendar. Plan study sessions around it.",
+        eventType: allNew ? "CREATED" : "UPDATED",
+        eventName: allNew
+          ? "timetable.group_created"
+          : "timetable.group_updated",
       });
       return;
     }
 
-    const allNew = changes.every((c) => c.kind === "created");
     await this.raise(userId, {
       sessionId: earliest.sessionId,
       topic: "TIMETABLE",
@@ -637,6 +776,8 @@ export class MaterializerService {
         changes.map((c) => c.block.title),
       )}`,
       content: "Added to your calendar from your DLU timetable.",
+      eventType: allNew ? "CREATED" : "UPDATED",
+      eventName: allNew ? "lecture.created" : "lecture.updated",
     });
   }
 
@@ -666,6 +807,8 @@ export class MaterializerService {
           `This ${item.type === "EXAM" ? "exam" : "assignment"} was taken ` +
           "off DLU, so it is no longer on your calendar.",
         materializeSession: false,
+        eventType: "REMOVED",
+        eventName: `${item.type.toLowerCase()}.removed`,
       });
     }
 
@@ -681,6 +824,8 @@ export class MaterializerService {
           `${lectures.length} classes were removed from your ` +
           `${termLabel(term.semester)} timetable.`,
         materializeSession: false,
+        eventType: "REMOVED",
+        eventName: "timetable.group_removed",
       });
       return;
     }
@@ -691,6 +836,8 @@ export class MaterializerService {
       title: `Lectures removed: ${humanList(lectures.map((l) => l.title))}`,
       content: "These classes were taken off your DLU timetable.",
       materializeSession: false,
+      eventType: "REMOVED",
+      eventName: "lecture.removed",
     });
   }
 
@@ -704,6 +851,8 @@ export class MaterializerService {
       content: string;
       eventEndsAt?: Date | null;
       materializeSession?: boolean;
+      eventType: NotificationEventType;
+      eventName: string;
     },
     tx?: Prisma.TransactionClient,
   ): Promise<Notification> {
@@ -730,5 +879,15 @@ export class MaterializerService {
       return "Added to your calendar from DLU. Plan revision sessions before it.";
     }
     return "Added to your calendar from your DLU timetable.";
+  }
+
+  /** Slug for a per-item "new item" notification — `<type>.created`. */
+  private createdEventName(block: ParsedBlock): string {
+    return `${block.type.toLowerCase()}.created`;
+  }
+
+  /** Slug for a per-item "changed" notification — `<type>.updated`. */
+  private updatedEventName(block: ParsedBlock): string {
+    return `${block.type.toLowerCase()}.updated`;
   }
 }

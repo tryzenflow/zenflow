@@ -10,6 +10,8 @@ interface Row {
   userId: string;
   sessionId: string | null;
   topic: string;
+  eventType: string;
+  eventName: string;
   title: string;
   content: string;
   sentAt: Date;
@@ -108,6 +110,8 @@ function row(over: Partial<Row> & { id: string }): Row {
     userId: "u1",
     sessionId: "s1",
     topic: "ASSIGNMENT",
+    eventType: "CREATED",
+    eventName: "assignment.created",
     title: "New assignment: Môn học Mẫu Một",
     content: "Added to your calendar from DLU.",
     sentAt: new Date("2026-09-01T00:00:00.000Z"),
@@ -189,6 +193,8 @@ describe("NotificationsService", () => {
       expect(dto).toEqual({
         id: "n1",
         topic: "ASSIGNMENT",
+        eventType: "CREATED",
+        eventName: "assignment.created",
         title: "New assignment: Môn học Mẫu Một",
         content: "Added to your calendar from DLU.",
         sentAt: "2026-09-01T00:00:00.000Z",
@@ -293,6 +299,8 @@ describe("NotificationsService", () => {
 
       await service.create("u1", {
         topic: "TIMETABLE",
+        eventType: "UPDATED",
+        eventName: "timetable.group_updated",
         title: "Timetable for Semester 2 Update",
         content: "Room B12 schedule change.",
         sessionId: null,
@@ -308,6 +316,8 @@ describe("NotificationsService", () => {
 
       const row = await service.create("u1", {
         topic: "TIMETABLE",
+        eventType: "REMOVED",
+        eventName: "lecture.removed",
         title: "Removed from DLU: Data Structures Lab",
         content: "These classes were taken off your DLU timetable.",
         sessionId: null,

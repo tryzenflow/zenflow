@@ -29,6 +29,9 @@ interface SessionRow {
   scheduledStartTime: Date | null;
   lastMovedAt: Date | null;
   deleted: boolean;
+  // Two-consecutive-run confirmation gate (see materializer.service.ts).
+  syncConfirmedAt: Date | null;
+  syncMissedAt: Date | null;
   scheduleStudyUnitId: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -41,6 +44,8 @@ interface NotificationRow {
   userId: string;
   sessionId: string | null;
   topic: string;
+  eventType: string;
+  eventName: string;
   title: string;
   content: string;
   eventEndsAt: Date | null;
@@ -151,6 +156,9 @@ function makePrismaDouble() {
           scheduledStartTime: (data.scheduledStartTime as Date) ?? null,
           lastMovedAt: null,
           deleted: false,
+          // A first sighting is never confirmed — see the confirm gate.
+          syncConfirmedAt: null,
+          syncMissedAt: null,
           scheduleStudyUnitId:
             (data.scheduleStudyUnitId as string | null) ?? null,
           createdAt: new Date(),
@@ -204,6 +212,8 @@ function makePrismaDouble() {
           userId: args.data.userId as string,
           sessionId: (args.data.sessionId as string | null) ?? null,
           topic: args.data.topic as string,
+          eventType: args.data.eventType as string,
+          eventName: args.data.eventName as string,
           title: args.data.title as string,
           content: args.data.content as string,
           eventEndsAt: (args.data.eventEndsAt as Date | null) ?? null,
@@ -289,15 +299,33 @@ function lecture(over: Partial<ParsedBlock> = {}): ParsedBlock {
 /** An instant inside HK01 of the 2026–2027 DLU academic year. */
 const IN_TERM = new Date("2026-09-08T00:00:00.000Z");
 
+/**
+ * Materializes `items` twice with the same data — the first sighting (writes
+ * the rows, unconfirmed, silent) and the second (confirms them and raises
+ * their notifications) — so tests that exercise the *post*-confirmation
+ * behaviour (upstream changes, hand-moves, removals) can start from a normal,
+ * settled, confirmed state without re-deriving the confirm gate every time.
+ */
+async function seedConfirmed(
+  service: MaterializerService,
+  items: readonly ParsedBlock[],
+  source: "LMS" | "PORTAL",
+  now?: Date,
+) {
+  await service.materialize(USER, items, source, now);
+  return service.materialize(USER, items, source, now);
+}
+
 describe("MaterializerService", () => {
   describe("create", () => {
-    it("writes the session, its CREATE event and one notification", async () => {
+    it("writes the session and its CREATE event on first sighting, but holds the notification back", async () => {
       const { db, service } = await makeService();
 
       const outcome = await service.materialize(USER, [block()], "LMS");
 
       expect(outcome).toEqual({
         created: 1,
+        confirmed: 0,
         updated: 0,
         unchanged: 0,
         skippedDeleted: 0,
@@ -310,14 +338,37 @@ describe("MaterializerService", () => {
         type: "ASSIGNMENT",
         externalKey: "lms:assign:800001",
         durationMinutes: 15,
+        // Not confirmed yet — a single sighting proves nothing.
+        syncConfirmedAt: null,
       });
       // Ingested rows join the same audit trail as user-pinned ones.
       expect(db.events).toHaveLength(1);
       expect(db.events[0]).toMatchObject({ eventType: "CREATE" });
 
+      // A single-run blip must not notify.
+      expect(db.notifications).toHaveLength(0);
+    });
+
+    it("confirms and raises the notification on the second sighting", async () => {
+      const { db, service } = await makeService();
+      await service.materialize(USER, [block()], "LMS");
+
+      const outcome = await service.materialize(USER, [block()], "LMS");
+
+      expect(outcome).toEqual({
+        created: 0,
+        confirmed: 1,
+        updated: 0,
+        unchanged: 0,
+        skippedDeleted: 0,
+        skippedMoved: 0,
+      });
+      expect(db.sessions[0].syncConfirmedAt).toBeInstanceOf(Date);
       expect(db.notifications).toHaveLength(1);
       expect(db.notifications[0]).toMatchObject({
         topic: "ASSIGNMENT",
+        eventType: "CREATED",
+        eventName: "assignment.created",
         sessionId: db.sessions[0].id,
       });
     });
@@ -376,17 +427,14 @@ describe("MaterializerService", () => {
       expect(db.sessions[0].note).toBeNull();
     });
 
-    it("maps EXAM and LECTURE onto their notification topics", async () => {
+    it("maps EXAM and LECTURE onto their notification topics once confirmed", async () => {
       const { db, service } = await makeService();
+      const items = [
+        block({ externalKey: "portal:exam:500001", type: "EXAM" }),
+        block({ externalKey: "portal:meeting:600001", type: "LECTURE" }),
+      ];
 
-      await service.materialize(
-        USER,
-        [
-          block({ externalKey: "portal:exam:500001", type: "EXAM" }),
-          block({ externalKey: "portal:meeting:600001", type: "LECTURE" }),
-        ],
-        "PORTAL",
-      );
+      await seedConfirmed(service, items, "PORTAL");
 
       expect(db.notifications.map((n) => n.topic)).toEqual([
         "EXAM",
@@ -439,6 +487,8 @@ describe("MaterializerService", () => {
         scheduledStartTime: new Date("2026-09-10T03:00:00.000Z"),
         lastMovedAt: null,
         deleted: false,
+        syncConfirmedAt: null,
+        syncMissedAt: null,
         scheduleStudyUnitId: null,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -459,17 +509,148 @@ describe("MaterializerService", () => {
     });
   });
 
+  describe("confirm gate — a single-run blip must not notify or delete", () => {
+    it("hard-deletes a still-pending item that vanishes before ever being confirmed, no notification", async () => {
+      const { db, service } = await makeService();
+      await service.materialize(
+        USER,
+        [lecture({ externalKey: "portal:meeting:90001" })],
+        "PORTAL",
+        IN_TERM,
+      );
+      expect(db.sessions).toHaveLength(1);
+      expect(db.sessions[0].syncConfirmedAt).toBeNull();
+
+      const recon = await service.reconcileDeleted(
+        USER,
+        "PORTAL",
+        ["LECTURE"],
+        new Set<string>(),
+        IN_TERM,
+      );
+
+      expect(recon).toEqual({
+        deleted: 0,
+        keptMoved: 0,
+        missedOnce: 0,
+        hardDeletedUnconfirmed: 1,
+      });
+      // Hard-deleted, not soft-deleted — it was never a real, user-facing item.
+      expect(db.sessions).toHaveLength(0);
+      expect(db.notifications).toHaveLength(0);
+    });
+
+    it("a first miss on a confirmed item leaves it exactly as-is: no delete, no notification", async () => {
+      const { db, service } = await makeService();
+      await seedConfirmed(
+        service,
+        [lecture({ externalKey: "portal:meeting:90002" })],
+        "PORTAL",
+        IN_TERM,
+      );
+      const notificationsBefore = db.notifications.length;
+
+      const recon = await service.reconcileDeleted(
+        USER,
+        "PORTAL",
+        ["LECTURE"],
+        new Set<string>(),
+        IN_TERM,
+      );
+
+      expect(recon).toEqual({
+        deleted: 0,
+        keptMoved: 0,
+        missedOnce: 1,
+        hardDeletedUnconfirmed: 0,
+      });
+      expect(db.sessions[0].deleted).toBe(false);
+      expect(db.sessions[0].syncMissedAt).toBeInstanceOf(Date);
+      expect(db.notifications).toHaveLength(notificationsBefore);
+    });
+
+    it("a second consecutive miss soft-deletes and notifies (today's removal behaviour, delayed by one run)", async () => {
+      const { db, service } = await makeService();
+      await seedConfirmed(
+        service,
+        [lecture({ externalKey: "portal:meeting:90003", title: "Gone soon" })],
+        "PORTAL",
+        IN_TERM,
+      );
+      await service.reconcileDeleted(
+        USER,
+        "PORTAL",
+        ["LECTURE"],
+        new Set<string>(),
+        IN_TERM,
+      );
+
+      const recon = await service.reconcileDeleted(
+        USER,
+        "PORTAL",
+        ["LECTURE"],
+        new Set<string>(),
+        IN_TERM,
+      );
+
+      expect(recon).toEqual({
+        deleted: 1,
+        keptMoved: 0,
+        missedOnce: 0,
+        hardDeletedUnconfirmed: 0,
+      });
+      expect(db.sessions[0].deleted).toBe(true);
+      const removal = db.notifications.at(-1)!;
+      expect(removal.eventType).toBe("REMOVED");
+      expect(removal.title).toContain("Gone soon");
+    });
+
+    it("clears the miss streak the moment a confirmed item reappears, regardless of anything else changing", async () => {
+      const { db, service } = await makeService();
+      await seedConfirmed(service, [block()], "LMS");
+      // Simulate one prior miss (as `reconcileDeleted` would have stamped it)
+      // and resend the same item on `materialize()` — the streak must reset.
+      db.sessions[0].syncMissedAt = new Date("2026-09-09T00:00:00.000Z");
+
+      const outcome = await service.materialize(USER, [block()], "LMS");
+
+      expect(outcome.unchanged).toBe(1);
+      expect(db.sessions[0].syncMissedAt).toBeNull();
+    });
+
+    it("resets a miss streak even when the reappearing item also changed", async () => {
+      const { db, service } = await makeService();
+      await seedConfirmed(service, [block()], "LMS");
+      db.sessions[0].syncMissedAt = new Date("2026-09-09T00:00:00.000Z");
+      const notificationsBefore = db.notifications.length;
+
+      const outcome = await service.materialize(
+        USER,
+        [block({ title: "Renamed after reappearing" })],
+        "LMS",
+      );
+
+      expect(outcome.updated).toBe(1);
+      expect(db.sessions[0].syncMissedAt).toBeNull();
+      expect(db.sessions[0].title).toBe("Renamed after reappearing");
+      expect(db.notifications).toHaveLength(notificationsBefore + 1);
+    });
+  });
+
   describe("idempotency", () => {
-    it("is a no-op on a re-run: one session, one notification", async () => {
+    it("confirms on the second run, then stays quiet from the third run on", async () => {
       const { db, service } = await makeService();
       const items = [block()];
 
       const first = await service.materialize(USER, items, "LMS");
       const second = await service.materialize(USER, items, "LMS");
+      const third = await service.materialize(USER, items, "LMS");
 
-      expect(first.created).toBe(1);
-      expect(second).toEqual({
+      expect(first).toMatchObject({ created: 1, confirmed: 0 });
+      expect(second).toMatchObject({ created: 0, confirmed: 1 });
+      expect(third).toEqual({
         created: 0,
+        confirmed: 0,
         updated: 0,
         unchanged: 1,
         skippedDeleted: 0,
@@ -502,9 +683,9 @@ describe("MaterializerService", () => {
   });
 
   describe("upstream change", () => {
-    it("follows a move on a session the student has never touched", async () => {
+    it("follows a move on a confirmed session the student has never touched", async () => {
       const { db, service } = await makeService();
-      await service.materialize(USER, [block()], "LMS");
+      await seedConfirmed(service, [block()], "LMS");
 
       const moved = block({
         scheduledStartTime: new Date("2026-09-11T03:00:00.000Z"),
@@ -515,8 +696,13 @@ describe("MaterializerService", () => {
       expect(db.sessions[0].scheduledStartTime).toEqual(
         new Date("2026-09-11T03:00:00.000Z"),
       );
+      // One CREATED notification from confirmation, one UPDATED from the move.
       expect(db.notifications).toHaveLength(2);
       expect(db.notifications[1].title).toContain("Updated:");
+      expect(db.notifications[1]).toMatchObject({
+        eventType: "UPDATED",
+        eventName: "assignment.updated",
+      });
       // Not a user action, so it must not enter the ML event trail...
       expect(db.events).toHaveLength(1);
       // ...nor claim the student moved it.
@@ -525,21 +711,21 @@ describe("MaterializerService", () => {
 
     it("settles down: the run after an upstream change is unchanged again", async () => {
       const { db, service } = await makeService();
-      await service.materialize(USER, [block()], "LMS");
+      await seedConfirmed(service, [block()], "LMS");
       const moved = block({
         scheduledStartTime: new Date("2026-09-11T03:00:00.000Z"),
       });
       await service.materialize(USER, [moved], "LMS");
 
-      const third = await service.materialize(USER, [moved], "LMS");
+      const settled = await service.materialize(USER, [moved], "LMS");
 
-      expect(third.unchanged).toBe(1);
+      expect(settled.unchanged).toBe(1);
       expect(db.notifications).toHaveLength(2);
     });
 
-    it("notices a title-only change", async () => {
+    it("notices a title-only change on a confirmed session", async () => {
       const { db, service } = await makeService();
-      await service.materialize(USER, [block()], "LMS");
+      await seedConfirmed(service, [block()], "LMS");
 
       const outcome = await service.materialize(
         USER,
@@ -555,9 +741,9 @@ describe("MaterializerService", () => {
   });
 
   describe("plain sync — upstream wins, unless the student already moved it", () => {
-    it("applies an upstream change to a session the student never touched, with a normal CHANGE notification", async () => {
+    it("applies an upstream change to a confirmed session the student never touched, with a normal UPDATED notification", async () => {
       const { db, service } = await makeService();
-      await service.materialize(USER, [block()], "LMS");
+      await seedConfirmed(service, [block()], "LMS");
 
       const outcome = await service.materialize(
         USER,
@@ -567,6 +753,7 @@ describe("MaterializerService", () => {
 
       expect(outcome).toEqual({
         created: 0,
+        confirmed: 0,
         updated: 1,
         unchanged: 0,
         skippedDeleted: 0,
@@ -578,14 +765,15 @@ describe("MaterializerService", () => {
       expect(db.notifications).toHaveLength(2);
       expect(db.notifications[1]).toMatchObject({
         topic: "ASSIGNMENT",
+        eventType: "UPDATED",
         sessionId: db.sessions[0].id,
       });
       expect(db.notifications[1].title).toContain("Updated:");
     });
 
-    it("silently keeps a hand-moved session's position — no reversion, no notification", async () => {
+    it("silently keeps a hand-moved confirmed session's position — no reversion, no notification", async () => {
       const { db, service } = await makeService();
-      await service.materialize(USER, [block()], "LMS");
+      await seedConfirmed(service, [block()], "LMS");
       // The student dragged it, so the row carries their fingerprint.
       db.sessions[0].lastMovedAt = new Date("2026-09-08T12:00:00.000Z");
       db.sessions[0].scheduledStartTime = new Date("2026-09-09T01:00:00.000Z");
@@ -599,6 +787,7 @@ describe("MaterializerService", () => {
 
       expect(outcome).toEqual({
         created: 0,
+        confirmed: 0,
         updated: 0,
         unchanged: 0,
         skippedDeleted: 0,
@@ -611,15 +800,22 @@ describe("MaterializerService", () => {
       expect(db.notifications).toHaveLength(notificationsBefore);
     });
 
-    it("soft-deletes a session upstream removes when the student never moved it, with a normal DROP notification", async () => {
+    it("soft-deletes a confirmed session upstream removes on the second consecutive miss, with a normal REMOVED notification", async () => {
       const { db, service } = await makeService();
-      await service.materialize(
-        USER,
+      await seedConfirmed(
+        service,
         [lecture({ externalKey: "portal:meeting:81001", title: "Gone now" })],
         "PORTAL",
         IN_TERM,
       );
 
+      await service.reconcileDeleted(
+        USER,
+        "PORTAL",
+        ["LECTURE"],
+        new Set<string>(),
+        IN_TERM,
+      );
       const recon = await service.reconcileDeleted(
         USER,
         "PORTAL",
@@ -628,18 +824,24 @@ describe("MaterializerService", () => {
         IN_TERM,
       );
 
-      expect(recon).toEqual({ deleted: 1, keptMoved: 0 });
+      expect(recon).toEqual({
+        deleted: 1,
+        keptMoved: 0,
+        missedOnce: 0,
+        hardDeletedUnconfirmed: 0,
+      });
       expect(db.sessions).toHaveLength(1);
       expect(db.sessions[0].deleted).toBe(true);
       const drop = db.notifications.at(-1)!;
       expect(drop.sessionId).toBeNull();
+      expect(drop.eventType).toBe("REMOVED");
       expect(drop.title).toContain("Gone now");
     });
 
-    it("silently keeps a hand-moved session upstream removes — no deletion, no notification", async () => {
+    it("silently keeps a hand-moved confirmed session upstream removes — no deletion, no notification", async () => {
       const { db, service } = await makeService();
-      await service.materialize(
-        USER,
+      await seedConfirmed(
+        service,
         [lecture({ externalKey: "portal:meeting:81001", title: "Mine now" })],
         "PORTAL",
         IN_TERM,
@@ -655,7 +857,12 @@ describe("MaterializerService", () => {
         IN_TERM,
       );
 
-      expect(recon).toEqual({ deleted: 0, keptMoved: 1 });
+      expect(recon).toEqual({
+        deleted: 0,
+        keptMoved: 1,
+        missedOnce: 0,
+        hardDeletedUnconfirmed: 0,
+      });
       expect(db.sessions).toHaveLength(1);
       expect(db.sessions[0].deleted).toBe(false);
       expect(db.notifications).toHaveLength(notificationsBefore);
@@ -672,22 +879,24 @@ describe("MaterializerService", () => {
         }),
       );
 
-    it("folds a whole term's lectures into one 'timetable is available' row", async () => {
+    it("folds a whole term's lectures into one 'timetable is available' row, once confirmed", async () => {
       const { db, service } = await makeService();
+      const items = many(12);
 
-      const outcome = await service.materialize(
-        USER,
-        many(12),
-        "PORTAL",
-        IN_TERM,
-      );
+      const first = await service.materialize(USER, items, "PORTAL", IN_TERM);
+      expect(first.created).toBe(12);
+      expect(db.notifications).toHaveLength(0);
 
-      expect(outcome.created).toBe(12);
+      const second = await service.materialize(USER, items, "PORTAL", IN_TERM);
+
+      expect(second.confirmed).toBe(12);
       expect(db.sessions).toHaveLength(12);
       // One notification, not twelve.
       expect(db.notifications).toHaveLength(1);
       expect(db.notifications[0]).toMatchObject({
         topic: "TIMETABLE",
+        eventType: "CREATED",
+        eventName: "timetable.group_created",
         title: "Timetable for semester 1 is available",
         // Points at the earliest meeting, for the calendar to land on.
         sessionId: db.sessions[0].id,
@@ -696,38 +905,28 @@ describe("MaterializerService", () => {
       });
     });
 
-    it("lists the class names for a small mid-term addition", async () => {
+    it("lists the class names for a small mid-term addition, once confirmed", async () => {
       const { db, service } = await makeService();
+      const items = [
+        lecture({ externalKey: "portal:meeting:72001", title: "Đại số" }),
+        lecture({ externalKey: "portal:meeting:72002", title: "Giải tích" }),
+      ];
 
-      await service.materialize(
-        USER,
-        [
-          lecture({ externalKey: "portal:meeting:72001", title: "Đại số" }),
-          lecture({ externalKey: "portal:meeting:72002", title: "Giải tích" }),
-        ],
-        "PORTAL",
-        IN_TERM,
-      );
+      await seedConfirmed(service, items, "PORTAL", IN_TERM);
 
       expect(db.notifications).toHaveLength(1);
       expect(db.notifications[0].title).toBe("New lectures: Đại số, Giải tích");
       expect(db.notifications[0].topic).toBe("TIMETABLE");
+      expect(db.notifications[0].eventName).toBe("lecture.created");
     });
 
-    it("announces the term only once across the run's many weekly batches", async () => {
+    it("announces the term only once, even though confirmation itself takes two runs", async () => {
       const { db, service } = await makeService();
+      const items = many(10);
 
-      // Week one crosses the threshold; later weeks must stay quiet.
-      await service.materialize(USER, many(10), "PORTAL", IN_TERM);
-      await service.materialize(
-        USER,
-        many(10).map((b, i) => ({
-          ...b,
-          externalKey: `portal:meeting:7300${i}`,
-        })),
-        "PORTAL",
-        IN_TERM,
-      );
+      await service.materialize(USER, items, "PORTAL", IN_TERM); // first sighting, silent
+      await service.materialize(USER, items, "PORTAL", IN_TERM); // confirms, crosses threshold, notifies
+      await service.materialize(USER, items, "PORTAL", IN_TERM); // settled, quiet
 
       const grouped = db.notifications.filter(
         (n) => n.title === "Timetable for semester 1 is available",
@@ -735,28 +934,25 @@ describe("MaterializerService", () => {
       expect(grouped).toHaveLength(1);
     });
 
-    it("stays quiet on a re-run of the same batch", async () => {
+    it("raises the grouped notification once, then stays quiet on further re-runs", async () => {
       const { db, service } = await makeService();
       const items = many(12);
 
+      await service.materialize(USER, items, "PORTAL", IN_TERM);
       await service.materialize(USER, items, "PORTAL", IN_TERM);
       await service.materialize(USER, items, "PORTAL", IN_TERM);
 
       expect(db.notifications).toHaveLength(1);
     });
 
-    it("still raises one notification per assignment (those are actionable)", async () => {
+    it("still raises one notification per assignment (those are actionable), once confirmed", async () => {
       const { db, service } = await makeService();
+      const items = [
+        block({ externalKey: "lms:assign:1" }),
+        block({ externalKey: "lms:assign:2" }),
+      ];
 
-      await service.materialize(
-        USER,
-        [
-          block({ externalKey: "lms:assign:1" }),
-          block({ externalKey: "lms:assign:2" }),
-        ],
-        "LMS",
-        IN_TERM,
-      );
+      await seedConfirmed(service, items, "LMS", IN_TERM);
 
       expect(db.notifications).toHaveLength(2);
       expect(db.notifications.every((n) => n.topic === "ASSIGNMENT")).toBe(
@@ -768,10 +964,10 @@ describe("MaterializerService", () => {
   });
 
   describe("upstream deletion", () => {
-    it("soft-deletes an ingested session upstream no longer lists", async () => {
+    it("soft-deletes a confirmed ingested session upstream no longer lists, on the second consecutive miss", async () => {
       const { db, service } = await makeService();
-      await service.materialize(
-        USER,
+      await seedConfirmed(
+        service,
         [
           lecture({ externalKey: "portal:meeting:80001", title: "Kept" }),
           lecture({ externalKey: "portal:meeting:80002", title: "Gone" }),
@@ -781,6 +977,22 @@ describe("MaterializerService", () => {
       );
       expect(db.sessions).toHaveLength(2);
 
+      // First miss: stamped, left alone, no notification.
+      const firstMiss = await service.reconcileDeleted(
+        USER,
+        "PORTAL",
+        ["LECTURE"],
+        new Set(["portal:meeting:80001"]),
+        IN_TERM,
+      );
+      expect(firstMiss).toEqual({
+        deleted: 0,
+        keptMoved: 0,
+        missedOnce: 1,
+        hardDeletedUnconfirmed: 0,
+      });
+
+      // Second consecutive miss: today's removal behaviour.
       const recon = await service.reconcileDeleted(
         USER,
         "PORTAL",
@@ -789,7 +1001,12 @@ describe("MaterializerService", () => {
         IN_TERM,
       );
 
-      expect(recon).toEqual({ deleted: 1, keptMoved: 0 });
+      expect(recon).toEqual({
+        deleted: 1,
+        keptMoved: 0,
+        missedOnce: 0,
+        hardDeletedUnconfirmed: 0,
+      });
       // The row survives (soft-deleted), not hard-removed, so a future
       // re-fetch that lists this externalKey again is recognized and skipped.
       expect(db.sessions).toHaveLength(2);
@@ -803,19 +1020,27 @@ describe("MaterializerService", () => {
       expect(kept.deleted).toBe(false);
       const removal = db.notifications.at(-1)!;
       expect(removal.topic).toBe("TIMETABLE");
+      expect(removal.eventType).toBe("REMOVED");
       expect(removal.title).toContain("Gone");
       expect(removal.sessionId).toBeNull();
     });
 
     it("is a no-op on a settled re-run", async () => {
       const { db, service } = await makeService();
-      await service.materialize(
-        USER,
+      await seedConfirmed(
+        service,
         [lecture({ externalKey: "portal:meeting:82001" })],
         "PORTAL",
         IN_TERM,
       );
 
+      await service.reconcileDeleted(
+        USER,
+        "PORTAL",
+        ["LECTURE"],
+        new Set<string>(),
+        IN_TERM,
+      );
       await service.reconcileDeleted(
         USER,
         "PORTAL",
@@ -832,7 +1057,12 @@ describe("MaterializerService", () => {
         IN_TERM,
       );
 
-      expect(again).toEqual({ deleted: 0, keptMoved: 0 });
+      expect(again).toEqual({
+        deleted: 0,
+        keptMoved: 0,
+        missedOnce: 0,
+        hardDeletedUnconfirmed: 0,
+      });
       expect(db.notifications).toHaveLength(before);
     });
 
@@ -863,7 +1093,7 @@ describe("MaterializerService", () => {
       expect(db.sessions).toHaveLength(1);
     });
 
-    it("groups a bulk timetable removal", async () => {
+    it("groups a bulk timetable removal on the second consecutive miss", async () => {
       const { db, service } = await makeService();
       const items = Array.from({ length: 11 }, (_, i) =>
         lecture({
@@ -872,9 +1102,16 @@ describe("MaterializerService", () => {
           scheduledStartTime: new Date(Date.UTC(2026, 8, 12 + i, 2, 0, 0)),
         }),
       );
-      await service.materialize(USER, items, "PORTAL", IN_TERM);
+      await seedConfirmed(service, items, "PORTAL", IN_TERM);
       const before = db.notifications.length;
 
+      await service.reconcileDeleted(
+        USER,
+        "PORTAL",
+        ["LECTURE"],
+        new Set<string>(),
+        IN_TERM,
+      );
       const recon = await service.reconcileDeleted(
         USER,
         "PORTAL",
@@ -890,6 +1127,7 @@ describe("MaterializerService", () => {
       expect(db.notifications.at(-1)!.title).toBe(
         "Your semester 1 timetable changed",
       );
+      expect(db.notifications.at(-1)!.eventType).toBe("REMOVED");
       expect(db.notifications.at(-1)!.content).toContain("11 classes");
     });
   });
@@ -905,6 +1143,7 @@ describe("MaterializerService", () => {
 
       expect(outcome).toEqual({
         created: 0,
+        confirmed: 0,
         updated: 0,
         unchanged: 0,
         skippedDeleted: 1,

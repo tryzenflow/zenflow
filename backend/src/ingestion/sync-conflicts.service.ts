@@ -118,6 +118,8 @@ export class SyncConflictsService {
     try {
       const row = await this.notifications.raiseConflict(userId, {
         topic: kind.topic,
+        eventType: "CONFLICT",
+        eventName: `sync_conflict.${type.toLowerCase()}`,
         title: `Schedule conflicts after syncing ${kind.label}`,
         content:
           `After syncing with ${kind.label}, we detected ` +

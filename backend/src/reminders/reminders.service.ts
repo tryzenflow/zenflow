@@ -348,6 +348,8 @@ export class RemindersService implements OnApplicationBootstrap {
       });
       const notification = await this.notifications.create(s.userId, {
         topic: "REMINDER",
+        eventType: "CREATED",
+        eventName: "reminder.fired",
         title: text.title,
         content: text.content,
         sessionId: s.id,

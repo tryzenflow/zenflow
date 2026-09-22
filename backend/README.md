@@ -150,6 +150,7 @@ places across the full 24h grid, every day. See [Scheduler architecture](#schedu
 | `deleted`                       | bool            | soft-delete flag, default `false`. A user-initiated delete sets this instead of removing the row (see `DELETE /sessions/:id` below); every read that feeds scheduling or calendar display filters `deleted: false`. The materializer's own `[userId, externalKey]` lookup is the deliberate exception — it must see a soft-deleted row so it can skip re-creating it. |
 | `scheduledStartTime`            | DateTime?       | engine placement (`TASK`) / client instant (fixed); null while unplaced. |
 | `lastMovedAt` / `retainedAt`    | DateTime?       | move-or-keep bookkeeping (ADR-0002 §2.1).                         |
+| `syncConfirmedAt` / `syncMissedAt` | DateTime?    | two-consecutive-run confirmation gate for an ingested row (issue #60/#62): `syncConfirmedAt` null means "created but not yet confirmed by a second watcher run" (on the calendar, but its notification is held back); `syncMissedAt` set means "missing on the last run, one miss so far" — a second consecutive miss is what actually soft-deletes it. Always null for a user-created session. See "Write-back" below. |
 | `userId`                        | uuid            | FK → `User`, cascade.                                             |
 | `seriesId`                      | uuid?           | FK → `SessionSeries`, cascade. Set for a recurring fixed representative and every sitting of a `sessionCount > 1` `TASK` series. |
 | `sessionIndex` / `sessionTotal` | int?            | 1-based position / total within a `TASK` series (denormalized).   |
@@ -212,7 +213,7 @@ registration upserts on `pushToken`. See `devices/` and `POST /devices`.
 | `PortalSection`                     | One student-portal course section — curriculum unit × term × group × teacher × room. Deduped on `scheduleStudyUnitId`; indexed `[yearStudy, termId]`, the access path for a whole-term refresh.                                                                                                                                      |
 | `LmsSyncJob` / `LmsSyncJobItem`     | Per-run tracking for the LMS watcher; one item per request (`url`, `attempt`, `statusCode`, `responseBody` kept for diagnosis).                                                                                                                                                                                                       |
 | `PortalAPIJob` / `PortalAPIJobItem` | Same shape for the portal poller.                                                                                                                                                                                                                                                                                                   |
-| `Notification`                      | Raised by the materializer for a new/changed/removed ingested item. No structured category column — the title/content text alone conveys what happened. `eventEndsAt` (due/at time; null for grouped rows and removals), `sessionId` (target session). Topics `ASSIGNMENT`\|`EXAM`\|`TIMETABLE`\|`REMINDER`; a term of lectures is one `TIMETABLE` row. |
+| `Notification`                      | Raised by the materializer for a new/changed/removed ingested item. `eventType` (`NotificationEventType`: `CREATED`\|`UPDATED`\|`REMOVED`\|`CONFLICT`) and `eventName` (a stable slug like `"assignment.created"`, `"lecture.removed"`, `"sync_conflict.exam"`) are the machine-readable classification; `title`/`content` remain free text for display only. `eventEndsAt` (due/at time; null for grouped rows and removals), `sessionId` (target session). Topics `ASSIGNMENT`\|`EXAM`\|`TIMETABLE`\|`REMINDER`; a term of lectures is one `TIMETABLE` row. |
 
 `LmsCourse` and `PortalSection` are deliberately never joined — no shared identifier, and
 each ingestion path uses only its own system's data.
@@ -361,13 +362,30 @@ is "plan work around this", not "confirm this item" — it already exists upstre
   of resurrecting it on the next re-fetch.
 - **A quiet re-run is quiet**: notifications are raised only for genuinely new, changed or
   removed items.
-- **Every row's wording carries what happened, not a separate field.** There is no
-  structured category on the row — the title/content text alone says whether something is
-  new, changed or removed (`raise()` picks the wording; e.g. `announceLectureChanges` titles
-  "New lectures: …" vs "Updated lectures: …"). Each per-item assignment/exam/lecture row also
-  gets an `eventEndsAt` (its `scheduledStartTime + durationMinutes`, the "due"/"at" time the
-  inbox shows); grouped and removal rows leave it null. User-facing copy says
+- **`eventType`/`eventName` classify the event; `title`/`content` are display-only.** Every
+  `raise()` call sets `eventType` (`CREATED`\|`UPDATED`\|`REMOVED`\|`CONFLICT`) and a stable
+  slug `eventName` (`"assignment.created"`, `"lecture.removed"`, `"timetable.group_created"`,
+  `"sync_conflict.exam"`, …) so a client can switch on it instead of pattern-matching the
+  free-text title/content (e.g. `announceLectureChanges` titles "New lectures: …" vs
+  "Updated lectures: …"). Each per-item assignment/exam/lecture row also gets an
+  `eventEndsAt` (its `scheduledStartTime + durationMinutes`, the "due"/"at" time the inbox
+  shows); grouped and removal rows leave it null. User-facing copy says
   **"semester 1/2/3"** (`termLabel`), never the portal's `HK0x`.
+- **A single-run blip must not notify or delete (the confirm gate, issue #60/#62).** A
+  first sighting of an upstream item writes the `Session` row immediately (visible on the
+  calendar right away) but leaves `syncConfirmedAt` null and raises **no** notification —
+  `create()`'s caller in `materialize()`'s main loop skips straight past `raise()`. Only once
+  the *same* `externalKey` survives a second consecutive run does `confirmPending()` stamp
+  `syncConfirmedAt` (re-applying the block's latest fields, since upstream may have refined
+  them between the two sightings) and finally raise the "new item" notification. Symmetrically
+  in `reconcileDeleted`: a *confirmed* item missing from one run just gets `syncMissedAt`
+  stamped and is otherwise left exactly as-is — no soft-delete, no notification — and only a
+  *second* consecutive miss (the row still has `syncMissedAt` set) soft-deletes it and raises
+  the removal notification, same as before. The moment a confirmed item reappears,
+  `syncMissedAt` is cleared back to null regardless of anything else about the row also having
+  changed. A still-pending item (never confirmed) that vanishes before its second sighting is
+  **hard**-deleted (`prisma.session.delete`, not soft) since it was never a real, user-facing
+  item — no `Notification` FK to worry about, no notification either.
 - **A term's timetable is one notification.** Lecture creates/updates are held back and
   folded into a single per-term row: once ≥ 10 lectures are on the calendar for the term it
   is `"Timetable for semester 1 is available"` (raised once, then deduplicated on its title
@@ -379,11 +397,14 @@ is "plan work around this", not "confirm this item" — it already exists upstre
   `externalKey` it saw across its whole run and, **only if every fetch succeeded**, hands
   them here; any ingested `(source, type)` session that starts inside the run's forward
   window (term end for the portal, the last fetched month for the LMS) but is not in that
-  set has been dropped upstream — a cancelled class, a withdrawn exam, a deleted assignment
-  — and is soft-deleted (`deleted: true`, no `SessionEvent`; the `Notification` FK is
-  `SetNull`), regardless of whether the student had since hand-moved it. The removal
-  notification groups exactly like a creation does for lectures, one-per-item for
-  assignments/exams.
+  set has been dropped upstream — a cancelled class, a withdrawn exam, a deleted assignment.
+  A *confirmed* session gets exactly one free miss (`syncMissedAt` stamped, left alone); its
+  second consecutive miss soft-deletes it (`deleted: true`, no `SessionEvent`; the
+  `Notification` FK is `SetNull`) and raises the removal notification, regardless of whether
+  the student had since hand-moved it (hand-moved rows are kept from the first miss on,
+  never touched). A still-*pending* session is hard-deleted outright on its first miss — see
+  the confirm gate above. The removal notification groups exactly like a creation does for
+  lectures, one-per-item for assignments/exams.
 
 ## API endpoints
 
@@ -488,10 +509,12 @@ The ingestion inbox — written by the materializer, never a client (no create r
 `NotificationDto`, `NotificationsListResponse`. Topics include the sync-conflict trio
 `TIMETABLE_CONFLICT` / `EXAM_CONFLICT` / `ASSIGNMENT_CONFLICT`, raised by
 `ingestion/sync-conflicts.service.ts` after each source's sync. `conflictSessionIds` lists the
-user's clashing tasks; no calendar session is created. There is no structured category on a
-row — the title/content wording alone says what happened (new/changed/removed) — and, for a
-per-item assignment/exam/lecture, an `eventEndsAt` (the "due"/"at" time; null for grouped
-rows and removals).
+user's clashing tasks; no calendar session is created. `eventType`
+(`NotificationEventType`: `CREATED`\|`UPDATED`\|`REMOVED`\|`CONFLICT`) and `eventName` (a
+stable slug, e.g. `"assignment.created"`, `"lecture.removed"`, `"sync_conflict.exam"`) are
+the machine-readable classification, safe to switch on; `title`/`content` remain free text
+for display. For a per-item assignment/exam/lecture, there's also an `eventEndsAt` (the
+"due"/"at" time; null for grouped rows and removals).
 
 | Method | Path                              | Purpose                                                     |
 | ------ | --------------------------------- | --------------------------------------------------------- |

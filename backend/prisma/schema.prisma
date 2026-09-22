@@ -196,6 +196,23 @@ model Session {
   // unmoved and its RETAINED SessionEvent has been written.
   retainedAt  DateTime?
 
+  // Two-consecutive-run confirmation gate for ingested rows (materializer.service.ts).
+  // Null means "created but not yet confirmed by a second watcher run" — the
+  // item is already on the calendar, but its "new item" notification is held
+  // back and a run that stops seeing it hard-deletes the row outright rather
+  // than soft-deleting it, since it was never a real, user-facing item. Set to
+  // the confirming run's `now` the first time a second run also sees it; from
+  // then on the row is a normal ingested session eligible for update/removal
+  // notifications. Always null for a user-created (non-ingested) session.
+  syncConfirmedAt DateTime?
+  // Set to a run's `now` the first time a *confirmed* item is missing from
+  // that run's upstream listing — one miss so far, not yet a removal. Cleared
+  // back to null the moment the item reappears (the miss streak broke, no
+  // notification either way). A second consecutive miss (still set on the next
+  // run) is what actually soft-deletes the row and raises the removal
+  // notification. Always null for a user-created (non-ingested) session.
+  syncMissedAt    DateTime?
+
   // Per-user labels (implicit many-to-many).
   tags Tag[]
 
@@ -463,12 +480,29 @@ enum NotificationTopic {
   TIMETABLE_CONFLICT
 }
 
+// Machine-readable classification of what a notification is reporting,
+// distinct from `topic` (which inbox section it lives under). Every call site
+// that raises a notification must set this explicitly — there is no default —
+// so nothing is silently mis-tagged.
+enum NotificationEventType {
+  CREATED
+  UPDATED
+  REMOVED
+  CONFLICT
+}
+
 model Notification {
-  id            String            @id @default(uuid())
-  sentAt        DateTime          @default(now())
+  id            String                @id @default(uuid())
+  sentAt        DateTime              @default(now())
   readAt        DateTime?
   actionTakenAt DateTime?
   topic         NotificationTopic
+  // What kind of event this row reports — see `NotificationEventType`.
+  eventType     NotificationEventType
+  // Stable machine-readable slug ("assignment.created", "lecture.removed",
+  // "sync_conflict.exam", …) a client can switch on without pattern-matching
+  // the free-text `title`/`content` below, which are for display only.
+  eventName     String
   title         String
   content       String
   // The fixed end instant of the session behind this row (start + duration) —

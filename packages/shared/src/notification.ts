@@ -33,10 +33,25 @@ export type NotificationTopic =
   | "EXAM_CONFLICT"
   | "TIMETABLE_CONFLICT";
 
+/**
+ * Machine-readable classification of what a notification reports — distinct
+ * from {@link NotificationTopic} (which inbox section it lives under). A
+ * client can switch on this instead of pattern-matching the free-text
+ * `title`/`content`.
+ */
+export type NotificationEventType = "CREATED" | "UPDATED" | "REMOVED" | "CONFLICT";
+
 /** One notification as returned by the notifications endpoints. */
 export interface NotificationDto {
   id: string;
   topic: NotificationTopic;
+  /** See {@link NotificationEventType}. */
+  eventType: NotificationEventType;
+  /**
+   * Stable machine-readable slug ("assignment.created", "lecture.removed",
+   * "sync_conflict.exam", …) — safe to switch on, unlike `title`/`content`.
+   */
+  eventName: string;
   title: string;
   content: string;
   /**

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import type {
   NotificationDto,
+  NotificationEventType,
   NotificationsListResponse,
   NotificationTopic,
 } from "@zenflow/shared";
@@ -24,6 +25,8 @@ import { EventEmitter2 } from "@nestjs/event-emitter";
 const DEV_SAMPLES: CreateNotificationInput[] = [
   {
     topic: "ASSIGNMENT",
+    eventType: "CREATED",
+    eventName: "assignment.created",
     title: "New assignment: Sorting Algorithms",
     content: "Added from your LMS. Plan the work that leads up to it.",
     sessionId: null,
@@ -31,6 +34,8 @@ const DEV_SAMPLES: CreateNotificationInput[] = [
   },
   {
     topic: "EXAM",
+    eventType: "CREATED",
+    eventName: "exam.created",
     title: "New exam: Midterm — Room A305",
     content: "Added from your portal. Plan revision sessions before it.",
     sessionId: null,
@@ -38,6 +43,8 @@ const DEV_SAMPLES: CreateNotificationInput[] = [
   },
   {
     topic: "TIMETABLE",
+    eventType: "CREATED",
+    eventName: "timetable.group_created",
     title: "Timetable for semester 1 is available",
     content: "12 classes were added to your calendar.",
     sessionId: null,
@@ -45,6 +52,8 @@ const DEV_SAMPLES: CreateNotificationInput[] = [
   },
   {
     topic: "TIMETABLE",
+    eventType: "UPDATED",
+    eventName: "lecture.updated",
     title: "Updated: Databases — Room B210",
     content: "The portal moved this class.",
     sessionId: null,
@@ -52,6 +61,8 @@ const DEV_SAMPLES: CreateNotificationInput[] = [
   },
   {
     topic: "TIMETABLE",
+    eventType: "REMOVED",
+    eventName: "lecture.removed",
     title: "Lectures removed: Data Structures Lab",
     content: "These classes were taken off your DLU timetable.",
     sessionId: null,
@@ -65,6 +76,13 @@ const DEV_SAMPLES: CreateNotificationInput[] = [
 export interface CreateNotificationInput {
   title: string;
   topic: NotificationTopic;
+  /**
+   * Machine-readable classification of the event — required, not optional, so
+   * a caller can never silently mis-tag (or forget to tag) a row.
+   */
+  eventType: NotificationEventType;
+  /** Stable slug ("assignment.created", "lecture.removed", …); see {@link NotificationDto.eventName}. */
+  eventName: string;
   sessionId: string | null;
   content: string;
   /** Fixed end instant of the session behind the row, or null (groups/drops). */
@@ -112,6 +130,8 @@ function toNotificationDto(row: Notification): NotificationDto {
   return {
     id: row.id,
     topic: row.topic,
+    eventType: row.eventType,
+    eventName: row.eventName,
     title: row.title,
     content: row.content,
     sentAt: row.sentAt.toISOString(),
@@ -318,6 +338,9 @@ export class NotificationsService {
     userId: string,
     dto: {
       topic: NotificationTopic;
+      /** Always `"CONFLICT"` in practice; kept as an input so the caller states it explicitly. */
+      eventType: NotificationEventType;
+      eventName: string;
       title: string;
       content: string;
       conflictSessionIds: string[];
@@ -327,6 +350,8 @@ export class NotificationsService {
       data: {
         userId,
         topic: dto.topic,
+        eventType: dto.eventType,
+        eventName: dto.eventName,
         title: dto.title,
         content: dto.content,
         conflictSessionIds: dto.conflictSessionIds,
