@@ -16,7 +16,7 @@ import { useDndMonitor, useDraggable, type DragEndEvent } from "@dnd-kit/core";
 import { toZonedTime } from "date-fns-tz";
 import { CornerDownRight, MapPin } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { SessionTypeBadge } from "./session-type-badge";
+import { OverdueBadge, SessionTypeBadge } from "./session-type-badge";
 import { LATE_CARD_CLASSES, useIsLate } from "./late-context";
 
 function minutesOfDay(iso: string, tz: string) {
@@ -328,6 +328,12 @@ export function ScheduledBlockItem({
   const state = block.state;
   const late = useIsLate(block.taskId);
   const width = 100 / layout.columns;
+  const leftPct = layout.column * width;
+  // A short session fully contained inside another block's time range renders
+  // stacked on top of it — full (container) width, inset down-and-right —
+  // instead of splitting both into unreadably-narrow side-by-side columns.
+  const isNested = Boolean(layout.nested);
+  const nestOffsetPx = isNested ? 6 + (layout.nestIndex ?? 0) * 6 : 0;
 
   return (
     <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
@@ -335,6 +341,9 @@ export function ScheduledBlockItem({
         <div
           className={cn(
             "group absolute z-10 px-0.5",
+            // A nested (fully time-contained) block stacks on top of its
+            // container, so it needs to win the paint order.
+            isNested && "z-20",
             // Animate position/size changes that come from data (server-confirmed
             // reschedules, other clients, scheduler re-runs) so blocks glide to
             // their new slot instead of popping there. Suppressed while the user
@@ -359,9 +368,13 @@ export function ScheduledBlockItem({
               : "Drag to reschedule · click for details"
           }
           style={{
-            top: `${(dispStart / DAILY_HORIZON) * 100}%`,
-            left: `${layout.column * width}%`,
-            width: `${width}%`,
+            top: isNested
+              ? `calc(${(dispStart / DAILY_HORIZON) * 100}% + ${nestOffsetPx}px)`
+              : `${(dispStart / DAILY_HORIZON) * 100}%`,
+            left: isNested
+              ? `calc(${leftPct}% + ${nestOffsetPx}px)`
+              : `${leftPct}%`,
+            width: isNested ? `calc(${width}% - ${nestOffsetPx}px)` : `${width}%`,
             height: `${((dispEnd - dispStart) / DAILY_HORIZON) * 100}%`,
             transform: CSS.Translate.toString(transform),
           }}
@@ -438,6 +451,9 @@ export function ScheduledBlockItem({
               // While shrinking, outline the block in rose so the removed extent
               // reads distinctly from a normal resize.
               preview && deltaMinutes < 0 && "ring-1 ring-rose-400/60",
+              // A nested (stacked) block gets a firmer outline + shadow so it
+              // reads as a card peeking out from behind its container.
+              isNested && "shadow-md ring-1 ring-background",
               isInteractive
                 ? "cursor-grab active:cursor-grabbing"
                 : "cursor-pointer",
@@ -465,6 +481,7 @@ export function ScheduledBlockItem({
                   <span className="truncate text-[10px] font-semibold leading-none">
                     {block.title}
                   </span>
+                  {late && <OverdueBadge iconOnly />}
                 </div>
                 <span className="shrink-0 font-mono text-[9px] leading-none">
                   {block.continued
@@ -489,11 +506,12 @@ export function ScheduledBlockItem({
                       ? `${fmt(block.taskStart, tz)} → next day`
                       : `${fmt(block.taskStart, tz)} – ${fmt(block.taskEnd, tz)}`}
                 </span>
-                {(block.type !== "TASK" || block.location) && (
+                {(block.type !== "TASK" || block.location || late) && (
                   <div className="mt-0.5 flex flex-wrap items-center gap-1 overflow-hidden">
                     {block.type !== "TASK" && (
                       <SessionTypeBadge type={block.type} />
                     )}
+                    {late && <OverdueBadge />}
                     {block.location && (
                       <span className="inline-flex items-center gap-0.5 text-[9px] text-muted-foreground">
                         <MapPin className="h-2.5 w-2.5" />
