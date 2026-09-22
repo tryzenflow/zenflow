@@ -5,7 +5,11 @@ import { PrismaService } from "../prisma/prisma.service";
 import { MaterializerService } from "./materializer.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { TagsService } from "../tags/tags.service";
-import type { ParsedBlock, ParsedLmsItem } from "./core/types";
+import type {
+  ParsedBlock,
+  ParsedLmsItem,
+  ParsedPortalItem,
+} from "./core/types";
 
 // ── in-memory Prisma double ────────────────────────────────────────────────
 // Same idiom as integrations.service.spec.ts: a real object graph rather than
@@ -25,6 +29,7 @@ interface SessionRow {
   scheduledStartTime: Date | null;
   lastMovedAt: Date | null;
   deleted: boolean;
+  scheduleStudyUnitId: string | null;
   createdAt: Date;
   updatedAt: Date;
   tags: { name: string }[];
@@ -146,6 +151,8 @@ function makePrismaDouble() {
           scheduledStartTime: (data.scheduledStartTime as Date) ?? null,
           lastMovedAt: null,
           deleted: false,
+          scheduleStudyUnitId:
+            (data.scheduleStudyUnitId as string | null) ?? null,
           createdAt: new Date(),
           updatedAt: new Date(),
           tags: (
@@ -387,6 +394,34 @@ describe("MaterializerService", () => {
       ]);
     });
 
+    it("persists a portal-ingested lecture's scheduleStudyUnitId (the grouping key for bulk delete)", async () => {
+      const { db, service } = await makeService();
+
+      const portalItem: ParsedPortalItem = {
+        ...block({
+          externalKey: "portal:meeting:600002",
+          type: "LECTURE",
+          location: "X01.01",
+        }),
+        scheduleStudyUnitId: "99910AB100101",
+      };
+
+      await service.materialize(USER, [portalItem], "PORTAL");
+
+      expect(db.sessions[0]).toMatchObject({
+        type: "LECTURE",
+        scheduleStudyUnitId: "99910AB100101",
+      });
+    });
+
+    it("leaves scheduleStudyUnitId null for an LMS item (no portal section)", async () => {
+      const { db, service } = await makeService();
+
+      await service.materialize(USER, [block()], "LMS");
+
+      expect(db.sessions[0].scheduleStudyUnitId).toBeNull();
+    });
+
     it("treats a P2002 race as a no-op rather than an error", async () => {
       const { db, service } = await makeService();
       // Pretend a concurrent run inserted the row between our findUnique and
@@ -404,6 +439,7 @@ describe("MaterializerService", () => {
         scheduledStartTime: new Date("2026-09-10T03:00:00.000Z"),
         lastMovedAt: null,
         deleted: false,
+        scheduleStudyUnitId: null,
         createdAt: new Date(),
         updatedAt: new Date(),
         tags: [],

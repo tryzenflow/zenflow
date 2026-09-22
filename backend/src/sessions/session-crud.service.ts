@@ -6,6 +6,7 @@ import {
 import type {
   CreateSessionResponse,
   RemoveSessionResponse,
+  RemoveTimetableGroupResponse,
   Session as SharedSession,
   SessionDetailResponse,
   SessionSuggestionsResponse,
@@ -411,5 +412,96 @@ export class SessionCrudService {
     } catch (error) {
       mapSessionPrismaError(error, id, "remove");
     }
+  }
+
+  /**
+   * Timetable-group delete (backend-only scope for the frontend's
+   * three-way delete choice on a portal-ingested `LECTURE`): soft-delete
+   * `sessionId` and every later meeting sharing its
+   * `(userId, scheduleStudyUnitId)` group ("this and following"). A
+   * portal-ingested `LECTURE` has no `SessionSeries`/`seriesId` — one flat
+   * `Session` row per meeting — so `scheduleStudyUnitId` (the portal's own
+   * course-section id) is the only grouping key. 404 when the session isn't
+   * the caller's, doesn't exist, or isn't groupable (no
+   * `scheduleStudyUnitId` — not a portal-ingested lecture).
+   */
+  async removeTimetableGroupFrom(
+    sessionId: string,
+    user: User,
+  ): Promise<RemoveTimetableGroupResponse> {
+    const anchor = await this.prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        userId: user.id,
+        deleted: false,
+        scheduleStudyUnitId: { not: null },
+      },
+      select: { scheduleStudyUnitId: true, scheduledStartTime: true },
+    });
+    if (!anchor)
+      throw new NotFoundException(
+        `Cannot find groupable timetable session ${sessionId}`,
+      );
+
+    const targets = await this.prisma.session.findMany({
+      where: {
+        userId: user.id,
+        deleted: false,
+        scheduleStudyUnitId: anchor.scheduleStudyUnitId,
+        scheduledStartTime: { gte: anchor.scheduledStartTime ?? undefined },
+      },
+      select: { id: true },
+    });
+    const removedSessionIds = targets.map((t) => t.id);
+
+    await this.prisma.session.updateMany({
+      where: { id: { in: removedSessionIds }, userId: user.id },
+      data: { deleted: true },
+    });
+
+    return { removedSessionIds };
+  }
+
+  /**
+   * Timetable-group delete, unconditional on time ("all occurrences") —
+   * soft-deletes every meeting in `sessionId`'s
+   * `(userId, scheduleStudyUnitId)` group, matching {@link removeSeries}'s
+   * "delete everything" semantics. Same 404 conditions as
+   * {@link removeTimetableGroupFrom}.
+   */
+  async removeTimetableGroup(
+    sessionId: string,
+    user: User,
+  ): Promise<RemoveTimetableGroupResponse> {
+    const anchor = await this.prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        userId: user.id,
+        deleted: false,
+        scheduleStudyUnitId: { not: null },
+      },
+      select: { scheduleStudyUnitId: true },
+    });
+    if (!anchor)
+      throw new NotFoundException(
+        `Cannot find groupable timetable session ${sessionId}`,
+      );
+
+    const targets = await this.prisma.session.findMany({
+      where: {
+        userId: user.id,
+        deleted: false,
+        scheduleStudyUnitId: anchor.scheduleStudyUnitId,
+      },
+      select: { id: true },
+    });
+    const removedSessionIds = targets.map((t) => t.id);
+
+    await this.prisma.session.updateMany({
+      where: { id: { in: removedSessionIds }, userId: user.id },
+      data: { deleted: true },
+    });
+
+    return { removedSessionIds };
   }
 }

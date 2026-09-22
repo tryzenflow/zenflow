@@ -399,6 +399,19 @@ export interface RemoveSessionSeriesResponse {
 }
 
 /**
+ * Result of a timetable-group-scoped delete — the three-way delete choice for
+ * a portal-ingested `LECTURE` (no `SessionSeries`/`seriesId`; grouped instead
+ * by `Session.scheduleStudyUnitId`, the portal's own course-section id):
+ * - `DELETE /sessions/timetable-group/:sessionId` — every meeting in the
+ *   section, regardless of time ("all occurrences");
+ * - `DELETE /sessions/timetable-group/:sessionId/from` — that meeting and
+ *   every later one in the section ("this and following").
+ */
+export interface RemoveTimetableGroupResponse {
+  removedSessionIds: string[];
+}
+
+/**
  * Response for `GET /sessions/deadline-options`: the six deadline quick-action
  * chip values (see `docs/scheduler/heuristic.md`), each an ISO-8601 instant
  * derived from `horizon.ts`'s `endOfPeriod` ceiling math relative to the

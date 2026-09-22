@@ -19,6 +19,7 @@ import type {
   IngestedSessionType,
   ParsedBlock,
   ParsedLmsItem,
+  ParsedPortalItem,
 } from "./core/types";
 import { NotificationsService } from "../notifications/notifications.service";
 import {
@@ -488,6 +489,8 @@ export class MaterializerService {
           scheduledStartTime: block.scheduledStartTime,
           tagIds,
           externalKey: block.externalKey,
+          scheduleStudyUnitId: (block as Partial<ParsedPortalItem>)
+            .scheduleStudyUnitId,
         });
         newId = row.id;
 

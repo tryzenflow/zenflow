@@ -154,9 +154,11 @@ places across the full 24h grid, every day. See [Scheduler architecture](#schedu
 | `seriesId`                      | uuid?           | FK → `SessionSeries`, cascade. Set for a recurring fixed representative and every sitting of a `sessionCount > 1` `TASK` series. |
 | `sessionIndex` / `sessionTotal` | int?            | 1-based position / total within a `TASK` series (denormalized).   |
 | `externalKey`                   | string?         | upstream DLU item id (`"<source>:<kind>:<id>"`); null for user sessions. Unique per `[userId, externalKey]` — the ingestion idempotency guard. |
+| `scheduleStudyUnitId`            | string?         | portal `ScheduleStudyUnitID` — set only on a portal-ingested `LECTURE`, shared by every meeting of that class across the term (there is no `SessionSeries` for these — one flat row per meeting). Null everywhere else, including a user-created recurring `LECTURE`. The grouping key for `DELETE /sessions/timetable-group/:sessionId[/from]`. |
 
 Indexes: `[userId, deadline]`, `[userId, scheduledStartTime]`,
-`[userId, seriesId, createdAt asc]`; unique `[userId, externalKey]`.
+`[userId, seriesId, createdAt asc]`, `[userId, scheduleStudyUnitId]`;
+unique `[userId, externalKey]`.
 
 ### `SessionReminder`
 
@@ -449,6 +451,8 @@ all occurrences). Violations → 400.
 | DELETE | `/sessions/series/:seriesId`                 | Delete the whole series.                                          |
 | DELETE | `/sessions/series/:seriesId/truncate?from=`  | Recurring series only — pull the rrule's `UNTIL` back to just before `from` ("this and following").                                                                                                                                                                                                                                                                                                              |
 | DELETE | `/sessions/series/:seriesId/from/:sessionId` | Materialized `TASK` series only — delete that sitting and every later one by `sessionIndex`; earlier sittings kept.                                                                                                                                                                                                                                                                                              |
+| DELETE | `/sessions/timetable-group/:sessionId/from`  | Portal-ingested `LECTURE`s only (no `SessionSeries`) — soft-delete that meeting and every later one sharing its `scheduleStudyUnitId` (the portal course-section id). 404 if not the caller's or not groupable (no `scheduleStudyUnitId`). Returns `RemoveTimetableGroupResponse` (`{ removedSessionIds }`). |
+| DELETE | `/sessions/timetable-group/:sessionId`       | Same grouping, unconditional on time — soft-deletes every meeting in the section. Same 404s/response shape.                                                                                                                                                                                                                                                                                                     |
 | POST   | `/sessions/:id/slot-pick`                    | `{ slotProposalId, chose: "primary" \| "alternative" }` — records which side of a pairwise-sampled `SlotProposal` the user picked (`pairwiseShown` events only); `"alternative"` applies that start as an ordinary `MOVE`. Idempotent, best-effort — never blocks the flow. See [LinUCB scheduling](#linucb-scheduling-ab-experiment). |
 
 ### Tags (`/tags`)

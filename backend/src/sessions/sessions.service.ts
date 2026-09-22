@@ -3,6 +3,7 @@ import type {
   CreateSessionResponse,
   RemoveSessionResponse,
   RemoveSessionSeriesResponse,
+  RemoveTimetableGroupResponse,
   SessionDetailResponse,
   SessionSuggestionsResponse,
   SessionsListResponse,
@@ -140,6 +141,24 @@ export class SessionsService {
     user: User,
   ): Promise<RemoveSessionSeriesResponse> {
     const res = await this.series.removeFrom(seriesId, sessionId, user);
+    await this.reminders.syncUser(user.id);
+    return res;
+  }
+
+  async removeTimetableGroupFrom(
+    sessionId: string,
+    user: User,
+  ): Promise<RemoveTimetableGroupResponse> {
+    const res = await this.crud.removeTimetableGroupFrom(sessionId, user);
+    await this.reminders.syncUser(user.id);
+    return res;
+  }
+
+  async removeTimetableGroup(
+    sessionId: string,
+    user: User,
+  ): Promise<RemoveTimetableGroupResponse> {
+    const res = await this.crud.removeTimetableGroup(sessionId, user);
     await this.reminders.syncUser(user.id);
     return res;
   }

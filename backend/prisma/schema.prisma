@@ -227,6 +227,16 @@ model Session {
   // duplicate the student's whole calendar.
   externalKey String?
 
+  // The portal's ScheduleStudyUnitID for a portal-ingested LECTURE — one
+  // meeting's course section, shared by every meeting of that class across
+  // the term. Null for anything that isn't a portal-ingested LECTURE
+  // (including a user-created recurring LECTURE via rrule). There is no
+  // SessionSeries linking these rows (each meeting is its own flat Session),
+  // so this is the grouping key for bulk delete/scope operations on a
+  // timetable class ("this and following" / "all occurrences" —
+  // `DELETE /sessions/timetable-group/:sessionId[/from]`).
+  scheduleStudyUnitId String?
+
   reminders     SessionReminder[]
   notifications Notification[]
   slotProposals SlotProposal[]
@@ -238,6 +248,7 @@ model Session {
   @@index([userId, deadline])
   @@index([userId, scheduledStartTime])
   @@index([userId, seriesId, createdAt(sort: Asc)])
+  @@index([userId, scheduleStudyUnitId])
 }
 
 model SessionSeries {
