@@ -60,12 +60,22 @@ export interface MaterializeOutcome {
    * but we leave it alone rather than recreating it.
    */
   skippedDeleted: number;
+  /**
+   * The student had already moved this item by hand (`lastMovedAt` set);
+   * upstream disagrees, but their move wins — silently, no notification.
+   */
+  skippedMoved: number;
 }
 
 /** What one {@link MaterializerService.reconcileDeleted} call did. */
 export interface ReconcileOutcome {
   /** Ingested sessions removed because upstream dropped them. */
   deleted: number;
+  /**
+   * Upstream dropped an item the student had already hand-moved — kept on
+   * the calendar (their move wins), silently, no notification.
+   */
+  keptMoved: number;
 }
 
 /** One lecture create/update, held back for the batch's grouped announcement. */
@@ -154,14 +164,15 @@ function isUniqueViolation(error: unknown): boolean {
  *    same window on every tick, so without this the calendar would grow a
  *    duplicate of every assignment every hour. The unique index is the guard;
  *    `P2002` is the race signal for two runs overlapping on the same item.
- * 2. **Plain sync, upstream wins.** Upstream (the university's own record) is
- *    authoritative for an ingested item: a change is always applied and
- *    raises a `CHANGE` notification, a removal always soft-deletes the row
- *    and raises a `DROP` notification — regardless of whether the student had
- *    since moved it by hand. The one exception is a row the student has
- *    themselves deleted (soft-deleted): {@link materialize} recognizes it by
- *    its still-unique `externalKey` and leaves it alone forever rather than
- *    recreating it.
+ * 2. **Plain sync, upstream wins — unless the student already moved it.**
+ *    Upstream (the university's own record) is authoritative for an ingested
+ *    item: a change is applied and raises a `CHANGE` notification, a removal
+ *    soft-deletes the row and raises a `DROP` notification. Two exceptions,
+ *    both silent (no notification, no reversion — the student's action just
+ *    wins): a row the student has themselves moved (`lastMovedAt` set) keeps
+ *    their position/duration even when upstream disagrees, and a row the
+ *    student has themselves deleted (soft-deleted) is recognized by its
+ *    still-unique `externalKey` and left alone forever rather than recreated.
  * 3. **A quiet re-run is quiet.** Notifications are raised only for genuinely
  *    new, changed or removed items, so an unchanged item never produces a
  *    second one.
@@ -218,6 +229,7 @@ export class MaterializerService {
       updated: 0,
       unchanged: 0,
       skippedDeleted: 0,
+      skippedMoved: 0,
     };
 
     // Lecture creates/updates are announced once for the whole batch, not one
@@ -237,6 +249,7 @@ export class MaterializerService {
           durationMinutes: true,
           scheduledStartTime: true,
           deleted: true,
+          lastMovedAt: true,
         },
       });
 
@@ -266,6 +279,13 @@ export class MaterializerService {
 
       if (!differsFromUpstream(existing, block)) {
         outcome.unchanged += 1;
+        continue;
+      }
+
+      if (existing.lastMovedAt) {
+        // The student moved this by hand; their move wins over upstream,
+        // silently — no notification, no reversion.
+        outcome.skippedMoved += 1;
         continue;
       }
 
@@ -366,13 +386,17 @@ export class MaterializerService {
         title: true,
         type: true,
         scheduledStartTime: true,
+        lastMovedAt: true,
       },
     });
 
-    const removable = candidates.filter(
+    const gone = candidates.filter(
       (s) => s.externalKey !== null && !seenExternalKeys.has(s.externalKey),
     );
-    if (removable.length === 0) return { deleted: 0 };
+    if (gone.length === 0) return { deleted: 0, keptMoved: 0 };
+
+    const kept = gone.filter((s) => s.lastMovedAt !== null);
+    const removable = gone.filter((s) => s.lastMovedAt === null);
 
     for (const session of removable) {
       // Soft-delete, mirroring SessionCrudService.remove: the row stays
@@ -398,12 +422,17 @@ export class MaterializerService {
       now,
     );
 
-    this.logger.log(
-      `Reconciled ${source} deletions for ${userId}: ${removable.length} removed`,
-    );
-    ingestionReconcileDeleted.add(removable.length, { source });
+    if (removable.length + kept.length > 0) {
+      this.logger.log(
+        `Reconciled ${source} deletions for ${userId}: ` +
+          `${removable.length} removed, ${kept.length} kept (hand-moved)`,
+      );
+    }
+    if (removable.length > 0) {
+      ingestionReconcileDeleted.add(removable.length, { source });
+    }
 
-    return { deleted: removable.length };
+    return { deleted: removable.length, keptMoved: kept.length };
   }
 
   /** The forward span a run of `source` covers — its deletion horizon. */
@@ -501,8 +530,9 @@ export class MaterializerService {
   }
 
   /**
-   * Upstream changed an item: follow it, unconditionally (rule #2) — even if
-   * the student had since moved it themselves.
+   * Upstream changed an item the student has never touched: follow it. The
+   * caller only reaches here once `lastMovedAt` has already been checked
+   * (rule #2) — a hand-moved row never gets here.
    *
    * No `SessionEvent` is written. The event trail records *user* behaviour and
    * the LinUCB reward signal reads it — a `MOVE` the student did not make would

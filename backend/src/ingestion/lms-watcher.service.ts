@@ -110,7 +110,9 @@ export class LmsWatcherService {
     let created = 0;
     let updated = 0;
     let skippedDeleted = 0;
+    let skippedMoved = 0;
     let deleted = 0;
+    let keptMoved = 0;
     let first = true;
     // Every externalKey any month of this run saw, and whether every fetch
     // succeeded — deletion reconciliation needs both (a missing month must not
@@ -146,6 +148,7 @@ export class LmsWatcherService {
         created += outcome.created;
         updated += outcome.updated;
         skippedDeleted += outcome.skippedDeleted;
+        skippedMoved += outcome.skippedMoved;
         for (const item of parsed.items) seenKeys.add(item.externalKey);
 
         await this.jobs.completeItem("LMS", itemId, {
@@ -188,15 +191,20 @@ export class LmsWatcherService {
         now,
       );
       deleted = recon.deleted;
+      keptMoved = recon.keptMoved;
       ingestionLastSuccess.record(now.getTime() / 1000, { provider: "LMS" });
     }
 
     await this.jobs.finishJob("LMS", jobId, "COMPLETED");
 
-    if (created + updated + skippedDeleted + deleted > 0) {
+    if (
+      created + updated + skippedDeleted + skippedMoved + deleted + keptMoved >
+      0
+    ) {
       this.logger.log(
         `LMS sync for integration ${target.integrationId}: ` +
           `${created} new, ${updated} updated, ` +
+          `${skippedMoved + keptMoved} kept (student-moved), ` +
           `${skippedDeleted} skipped (student-deleted), ${deleted} removed`,
       );
     }

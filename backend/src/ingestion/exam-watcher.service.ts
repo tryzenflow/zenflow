@@ -123,13 +123,17 @@ export class ExamWatcherService {
         outcome.created +
           outcome.updated +
           outcome.skippedDeleted +
-          recon.deleted >
+          outcome.skippedMoved +
+          recon.deleted +
+          recon.keptMoved >
         0
       ) {
         this.logger.log(
           `Exam sync for integration ${target.integrationId}: ` +
             `${outcome.created} new, ${outcome.updated} updated, ` +
-            `${outcome.skippedDeleted} skipped (student-deleted), ${recon.deleted} removed`,
+            `${outcome.skippedDeleted} skipped (student-deleted), ` +
+            `${outcome.skippedMoved} kept (student-moved), ${recon.deleted} removed, ` +
+            `${recon.keptMoved} kept (student-moved)`,
         );
       }
     } catch (error) {

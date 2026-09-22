@@ -296,6 +296,7 @@ describe("MaterializerService", () => {
         updated: 0,
         unchanged: 0,
         skippedDeleted: 0,
+        skippedMoved: 0,
       });
       expect(db.sessions).toHaveLength(1);
       expect(db.sessions[0]).toMatchObject({
@@ -438,6 +439,7 @@ describe("MaterializerService", () => {
         updated: 0,
         unchanged: 1,
         skippedDeleted: 0,
+        skippedMoved: 0,
       });
       expect(db.sessions).toHaveLength(1);
       expect(db.notifications).toHaveLength(1);
@@ -518,13 +520,10 @@ describe("MaterializerService", () => {
     });
   });
 
-  describe("plain sync — upstream always wins", () => {
-    it("applies an upstream change even to a session the student hand-moved, with a normal CHANGE notification", async () => {
+  describe("plain sync — upstream wins, unless the student already moved it", () => {
+    it("applies an upstream change to a session the student never touched, with a normal CHANGE notification", async () => {
       const { db, service } = await makeService();
       await service.materialize(USER, [block()], "LMS");
-      // The student dragged it, so the row carries their fingerprint.
-      db.sessions[0].lastMovedAt = new Date("2026-09-08T12:00:00.000Z");
-      db.sessions[0].scheduledStartTime = new Date("2026-09-09T01:00:00.000Z");
 
       const outcome = await service.materialize(
         USER,
@@ -537,8 +536,8 @@ describe("MaterializerService", () => {
         updated: 1,
         unchanged: 0,
         skippedDeleted: 0,
+        skippedMoved: 0,
       });
-      // Upstream wins — the hand-moved placement is overwritten.
       expect(db.sessions[0].scheduledStartTime).toEqual(
         new Date("2026-09-11T03:00:00.000Z"),
       );
@@ -550,15 +549,42 @@ describe("MaterializerService", () => {
       });
     });
 
-    it("soft-deletes a hand-moved session upstream removes, with a normal DROP notification", async () => {
+    it("silently keeps a hand-moved session's position — no reversion, no notification", async () => {
+      const { db, service } = await makeService();
+      await service.materialize(USER, [block()], "LMS");
+      // The student dragged it, so the row carries their fingerprint.
+      db.sessions[0].lastMovedAt = new Date("2026-09-08T12:00:00.000Z");
+      db.sessions[0].scheduledStartTime = new Date("2026-09-09T01:00:00.000Z");
+      const notificationsBefore = db.notifications.length;
+
+      const outcome = await service.materialize(
+        USER,
+        [block({ scheduledStartTime: new Date("2026-09-11T03:00:00.000Z") })],
+        "LMS",
+      );
+
+      expect(outcome).toEqual({
+        created: 0,
+        updated: 0,
+        unchanged: 0,
+        skippedDeleted: 0,
+        skippedMoved: 1,
+      });
+      // The student's move wins — upstream's position never applies.
+      expect(db.sessions[0].scheduledStartTime).toEqual(
+        new Date("2026-09-09T01:00:00.000Z"),
+      );
+      expect(db.notifications).toHaveLength(notificationsBefore);
+    });
+
+    it("soft-deletes a session upstream removes when the student never moved it, with a normal DROP notification", async () => {
       const { db, service } = await makeService();
       await service.materialize(
         USER,
-        [lecture({ externalKey: "portal:meeting:81001", title: "Mine now" })],
+        [lecture({ externalKey: "portal:meeting:81001", title: "Gone now" })],
         "PORTAL",
         IN_TERM,
       );
-      db.sessions[0].lastMovedAt = new Date("2026-09-07T00:00:00.000Z");
 
       const recon = await service.reconcileDeleted(
         USER,
@@ -568,12 +594,37 @@ describe("MaterializerService", () => {
         IN_TERM,
       );
 
-      expect(recon).toEqual({ deleted: 1 });
+      expect(recon).toEqual({ deleted: 1, keptMoved: 0 });
       expect(db.sessions).toHaveLength(1);
       expect(db.sessions[0].deleted).toBe(true);
       const drop = db.notifications.at(-1)!;
       expect(drop.kind).toBe("DROP");
-      expect(drop.title).toContain("Mine now");
+      expect(drop.title).toContain("Gone now");
+    });
+
+    it("silently keeps a hand-moved session upstream removes — no deletion, no notification", async () => {
+      const { db, service } = await makeService();
+      await service.materialize(
+        USER,
+        [lecture({ externalKey: "portal:meeting:81001", title: "Mine now" })],
+        "PORTAL",
+        IN_TERM,
+      );
+      db.sessions[0].lastMovedAt = new Date("2026-09-07T00:00:00.000Z");
+      const notificationsBefore = db.notifications.length;
+
+      const recon = await service.reconcileDeleted(
+        USER,
+        "PORTAL",
+        ["LECTURE"],
+        new Set<string>(),
+        IN_TERM,
+      );
+
+      expect(recon).toEqual({ deleted: 0, keptMoved: 1 });
+      expect(db.sessions).toHaveLength(1);
+      expect(db.sessions[0].deleted).toBe(false);
+      expect(db.notifications).toHaveLength(notificationsBefore);
     });
   });
 
@@ -706,7 +757,7 @@ describe("MaterializerService", () => {
         IN_TERM,
       );
 
-      expect(recon).toEqual({ deleted: 1 });
+      expect(recon).toEqual({ deleted: 1, keptMoved: 0 });
       // The row survives (soft-deleted), not hard-removed, so a future
       // re-fetch that lists this externalKey again is recognized and skipped.
       expect(db.sessions).toHaveLength(2);
@@ -750,7 +801,7 @@ describe("MaterializerService", () => {
         IN_TERM,
       );
 
-      expect(again).toEqual({ deleted: 0 });
+      expect(again).toEqual({ deleted: 0, keptMoved: 0 });
       expect(db.notifications).toHaveLength(before);
     });
 
@@ -826,6 +877,7 @@ describe("MaterializerService", () => {
         updated: 0,
         unchanged: 0,
         skippedDeleted: 1,
+        skippedMoved: 0,
       });
       expect(db.sessions).toHaveLength(1);
       expect(db.sessions[0].deleted).toBe(true);
