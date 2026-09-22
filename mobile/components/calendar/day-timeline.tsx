@@ -14,6 +14,7 @@ import {
   isDayCacheFresh,
   sameSessions,
   setCachedDaySessions,
+  subscribeToSessionMutations,
 } from "@/lib/session-cache";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import {
@@ -200,6 +201,15 @@ export function DayTimeline({
   );
   const [error, setError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // Bumped by `subscribeToSessionMutations` so a mutation that lands while
+  // this day is already mounted and foregrounded (e.g. a background sync's
+  // create/update/remove reported over the notifications SSE stream)
+  // revalidates immediately instead of waiting for the next focus-driven
+  // `refreshKey` bump.
+  const [mutationTick, setMutationTick] = useState(0);
+  useEffect(() => {
+    return subscribeToSessionMutations(() => setMutationTick((t) => t + 1));
+  }, []);
   const [dragSnap, setDragSnap] = useState<{ startMin: number } | null>(null);
   // Only a create / reschedule / teleport (the screen-level `flashSessionId`)
   // plays the "just landed" flash — a within-day drag drop no longer flashes
@@ -274,7 +284,7 @@ export function DayTimeline({
     return () => {
       cancelled = true;
     };
-  }, [dayKey, refreshKey]);
+  }, [dayKey, refreshKey, mutationTick]);
 
   useEffect(() => {
     onStateChange?.(loading ? "loading" : error ? "error" : "ready");

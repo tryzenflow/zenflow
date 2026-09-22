@@ -8,6 +8,7 @@ import {
 import { getSessionDetails } from "@/api/tasks";
 import { useToast } from "@/components/ui/toast";
 import { useUserStore } from "@/hooks/use-user-store";
+import { notifySessionsMutated } from "@/lib/session-cache";
 import type { NotificationDto } from "@zenflow/shared";
 import * as Notifications from "expo-notifications";
 import { type Href, useRouter } from "expo-router";
@@ -250,6 +251,23 @@ export function useNotificationsSubscription(): void {
     const unsubscribe = subscribeNotificationsStream({
       onNotification: (n) => {
         addNotification(n);
+
+        // A sync watcher wrote/removed a session behind this notification —
+        // the calendar needs to resync. Mirrors the web app's precedent
+        // (`frontend/src/components/notifications/notification-bell.tsx`):
+        // `CONFLICT` rows carry no session change of their own (they just
+        // flag the user's own tasks against a session that already raised
+        // its own CREATED/UPDATED elsewhere, and the actual fix-up action —
+        // `rescheduleConflicts` in `api/notifications.ts` — already calls
+        // `notifySessionsMutated()` itself), so skip invalidation here for
+        // that case.
+        if (
+          n.eventType === "CREATED" ||
+          n.eventType === "UPDATED" ||
+          n.eventType === "REMOVED"
+        ) {
+          notifySessionsMutated();
+        }
 
         const cleanTitle = (n.title || "").replace(/^\[.*?\]\s*/, "").trim();
 

@@ -55,22 +55,52 @@ export function getSessionMutationEpoch(): number {
   return mutationEpoch;
 }
 
+/** Listeners registered via {@link subscribeToSessionMutations}, fired by
+ * `notifySessionsMutated`. This is the RN equivalent of the web app's
+ * `window.dispatchEvent(new CustomEvent("zenflow:calendar-refresh"))` /
+ * `addEventListener` pair (`frontend/src/components/notifications/notification-bell.tsx`
+ * + `frontend/src/components/calendar/layout.tsx`) — there's no `window` to
+ * hang a `CustomEvent` off on native, so this is a minimal in-module pub/sub
+ * instead. Expiring `fetchedAt` alone only takes effect the next time a
+ * screen re-checks freshness, which today only happens on mount or on the
+ * focus-driven `refreshKey`/`reloadToken` bump (see `day-timeline.tsx` /
+ * `month-page.tsx`) — a screen the user is already sitting on, foregrounded,
+ * would not otherwise notice a mutation (e.g. a background sync's
+ * create/update/remove) until they navigate away and back. Calendar screens
+ * subscribe here to force an immediate revalidation instead.
+ */
+const mutationListeners = new Set<() => void>();
+
+export function subscribeToSessionMutations(listener: () => void): () => void {
+  mutationListeners.add(listener);
+  return () => {
+    mutationListeners.delete(listener);
+  };
+}
+
 /**
  * Call after any successful session create/update/delete (wired once, in
- * `api/tasks.ts`, so every mutation call site gets this for free). Expires
- * every cached day's freshness — NOT its content — so the next time each day
- * is actually viewed it quietly revalidates in the background instead of
- * serving up to `DAY_CACHE_TTL_MS` of stale data. Keeping the stale payload
- * (instead of deleting it, like `clearDaySessionCache`) matters: a day whose
- * cache entry was deleted reads as "never fetched" and flashes the loading
- * skeleton on next view, even though nothing about that particular day
- * changed. Also bumps `mutationEpoch` for `month-page.tsx`'s equivalent
- * check.
+ * `api/tasks.ts`, so every mutation call site gets this for free — and from
+ * the notifications SSE handler when a sync watcher's `CREATED`/`UPDATED`/
+ * `REMOVED` event lands, `hooks/use-notifications.ts`). Expires every cached
+ * day's freshness — NOT its content — so the next time each day is actually
+ * viewed it quietly revalidates in the background instead of serving up to
+ * `DAY_CACHE_TTL_MS` of stale data. Keeping the stale payload (instead of
+ * deleting it, like `clearDaySessionCache`) matters: a day whose cache entry
+ * was deleted reads as "never fetched" and flashes the loading skeleton on
+ * next view, even though nothing about that particular day changed. Also
+ * bumps `mutationEpoch` for `month-page.tsx`'s equivalent check, and fires
+ * every listener registered via `subscribeToSessionMutations` so a
+ * currently-foregrounded calendar screen revalidates right away instead of
+ * waiting for its next focus.
  */
 export function notifySessionsMutated(): void {
   mutationEpoch++;
   for (const entry of cache.values()) {
     entry.fetchedAt = 0;
+  }
+  for (const listener of mutationListeners) {
+    listener();
   }
 }
 

@@ -11,6 +11,7 @@ import {
   DAY_CACHE_TTL_MS,
   getSessionMutationEpoch,
   sameSessions,
+  subscribeToSessionMutations,
 } from "@/lib/session-cache";
 import {
   MONTH_PILL_CLASSES,
@@ -211,6 +212,18 @@ export function MonthPage({
     if (fresh) return;
     refetch();
   }, [refetch, reloadToken]);
+
+  // Mirrors the effect above, but fired immediately by
+  // `subscribeToSessionMutations` instead of waiting for the next
+  // focus-driven `reloadToken` bump — so this month refetches right away if
+  // it's already mounted and foregrounded when a mutation lands (e.g. a
+  // background sync's create/update/remove reported over the notifications
+  // SSE stream), not just the next time the user re-focuses the screen.
+  useEffect(() => {
+    return subscribeToSessionMutations(() => {
+      refetch();
+    });
+  }, [refetch]);
 
   const tasksByDate = useMemo(
     () => groupSessionsByDate(sessions ?? [], tz),
