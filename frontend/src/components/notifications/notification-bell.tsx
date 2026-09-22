@@ -168,6 +168,18 @@ export function NotificationBell() {
       const newData = JSON.parse(event.data) as NotificationDto;
       setItems((newItems) => [newData, ...newItems]);
       setUnread((prevUnread) => prevUnread + 1);
+      // A sync watcher wrote/removed a session behind this notification — the
+      // calendar needs to resync. `CONFLICT` rows carry no session change of
+      // their own (they just flag the user's own tasks against a session that
+      // already raised its own CREATED/UPDATED elsewhere), so skip the refetch
+      // there.
+      if (
+        newData.eventType === "CREATED" ||
+        newData.eventType === "UPDATED" ||
+        newData.eventType === "REMOVED"
+      ) {
+        window.dispatchEvent(new CustomEvent("zenflow:calendar-refresh"));
+      }
       // Tap-to-act toast (bottom-right) — mirrors mobile's foreground push and
       // the `detected-items.html` mockup: the calendar type's icon + tint, then
       // tap to jump to the session it landed on.
