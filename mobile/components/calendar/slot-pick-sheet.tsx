@@ -1,8 +1,4 @@
-import {
-  Check,
-  ChevronDown,
-  X,
-} from "@/components/Icons";
+import { Check, ChevronDown, X } from "@/components/Icons";
 import {
   BottomSheet,
   BottomSheetContent,
@@ -60,9 +56,9 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
     const [selected, setSelected] = useState<"primary" | "alternative" | null>(
       null,
     );
-    const onPickRef = useRef<((chose: "primary" | "alternative") => void) | null>(
-      null,
-    );
+    const onPickRef = useRef<
+      ((chose: "primary" | "alternative") => void) | null
+    >(null);
     const onDismissRef = useRef<(() => void) | null>(null);
 
     useImperativeHandle(
@@ -102,7 +98,9 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
             },
           ]);
           setSelected(null);
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(
+            () => {},
+          );
           sheet.open();
         },
       }),
@@ -153,21 +151,33 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
               {options.map((option, index) => (
                 <Pressable
                   key={option.isPrimary ? "primary" : "alternative"}
-                  onPress={() => handlePick(option.isPrimary ? "primary" : "alternative")}
+                  onPress={() =>
+                    handlePick(option.isPrimary ? "primary" : "alternative")
+                  }
                   className={`
-                    text-left rounded-2xl border-2 px-4 py-3.5 flex items-center gap-3
-                    ${selected === (option.isPrimary ? "primary" : "alternative")
-                      ? "border-primary bg-primary/[0.08]"
-                      : "border-border bg-card"}
+                    flex flex-row text-left rounded-2xl border-2 px-4 py-3.5 flex items-center gap-3
+                    ${
+                      selected ===
+                      (option.isPrimary ? "primary" : "alternative")
+                        ? "border-primary bg-primary/[0.08]"
+                        : "border-border bg-card"
+                    }
                   `}
                 >
                   <View className="shrink-0 size-5 rounded-full border-2 flex items-center justify-center">
-                    {selected === (option.isPrimary ? "primary" : "alternative") && (
-                      <Check size={3} className="text-primary" strokeWidth={3} />
+                    {selected ===
+                      (option.isPrimary ? "primary" : "alternative") && (
+                      <Check
+                        size={3}
+                        className="text-primary"
+                        strokeWidth={3}
+                      />
                     )}
                   </View>
                   <View className="min-w-0 flex-1">
-                    <Text className="text-[15px] font-semibold">{option.label}</Text>
+                    <Text className="text-[15px] font-semibold">
+                      {option.label}
+                    </Text>
                     <Text className="text-[12px] text-muted-foreground mt-0.5">
                       {option.hint}
                     </Text>
@@ -176,9 +186,9 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
               ))}
             </View>
 
-            <Text className="text-[11.5px] text-muted-foreground mt-3.5 leading-snug">
-              Your pick helps Zenflow learn which times actually work for you — it never
-              moves anything else on your calendar.
+            <Text className="text-[13px] text-muted-foreground mt-3.5 leading-snug">
+              Your pick helps Zenflow learn which times actually work for you —
+              it never moves anything else on your calendar.
             </Text>
 
             <View className="flex-none pt-4 flex flex-col gap-2">
@@ -186,7 +196,9 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
                 className="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl h-[52px] px-5 text-base font-semibold shrink-0"
                 onPress={() => handlePick("alternative")}
               >
-                <Text className="font-bold">Switch to {options[1]?.time ?? ""}</Text>
+                <Text className="font-bold">
+                  Switch to {options[1]?.time ?? ""}
+                </Text>
               </Button>
               <Button
                 variant="ghost"
