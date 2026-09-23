@@ -159,6 +159,7 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
             <View className="mt-4 flex flex-col gap-2.5">
               {options.map((option, index) => (
                 <View
+                  key={option.isPrimary ? "primary" : "alternative"}
                   style={[
                     selected === (option.isPrimary ? "primary" : "alternative")
                       ? selectedShadowStyle.shadow
@@ -166,7 +167,6 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
                   ]}
                 >
                   <Pressable
-                    key={option.isPrimary ? "primary" : "alternative"}
                     onPress={() => {
                       const chose = option.isPrimary
                         ? "primary"
