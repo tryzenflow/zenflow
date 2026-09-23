@@ -128,8 +128,8 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
     return (
       <BottomSheet>
         <BottomSheetContent ref={sheet.ref} onDismiss={handleDismiss}>
-          <BottomSheetView hadHeader={false} className="gap-4 pt-2">
-            <View className="flex-row items-start justify-between gap-3">
+          <BottomSheetView hadHeader={false} className="gap-4 pt-2 mb-28">
+            <View className="flex-row items-start justify-between gap-3 ">
               <View className="min-w-0 flex-1">
                 <Text className="text-[18.5px] font-bold tracking-[-0.01em] leading-tight">
                   Two good times for this
@@ -151,11 +151,17 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
               {options.map((option, index) => (
                 <Pressable
                   key={option.isPrimary ? "primary" : "alternative"}
-                  onPress={() =>
-                    handlePick(option.isPrimary ? "primary" : "alternative")
-                  }
+                  onPress={() => {
+                    const chose = option.isPrimary ? "primary" : "alternative";
+                    if (selected === chose) {
+                      handlePick(chose);
+                    } else {
+                      setSelected(chose);
+                      Haptics.selectionAsync().catch(() => {});
+                    }
+                  }}
                   className={`
-                    flex flex-row text-left rounded-2xl border-2 px-4 py-3.5 flex items-center gap-3
+                    text-left rounded-2xl border-2 px-4 py-5 flex flex-row items-center gap-3 my-0.5
                     ${
                       selected ===
                       (option.isPrimary ? "primary" : "alternative")
