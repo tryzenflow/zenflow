@@ -10,6 +10,7 @@ import { BanditService } from "../../bandit/bandit.service";
 import { MAX_SCAN_DAYS, SCAN_CAP_DAYS } from "../constants";
 import { buildContextVector } from "../core/context-vector";
 import { loadDayLoads } from "./day-load";
+import { emptyWorkloadByType } from "../types/context-vector.types";
 import type {
   BanditPick,
   CandidateDay,
@@ -119,7 +120,10 @@ export class BanditPlacer {
     if (days.length === 0) return null;
 
     const [scores, observationCount] = await Promise.all([
-      this.fetchBanditPredictions(userId, days),
+      this.fetchBanditPredictions(
+        userId,
+        days.map((d) => ({ day: d.dayStr, x: d.vector })),
+      ),
       loadObservationCount(this.prisma, userId),
     ]);
     if (!scores) return null;
@@ -175,15 +179,26 @@ export class BanditPlacer {
       });
     }
 
-    // One range read for every scanned day (issue #62 C), then pure bucketing.
-    const loads = await loadDayLoads(this.prisma, {
-      userId,
-      days: bounds,
-      timezone,
-      excludeSessionIds: [task.id],
-      // See the post-midnight blocks a straddling placement must clear (D5).
-      occupiedLookaheadMs: overhangMs,
-    });
+    // One range read for every scanned day (issue #62 C), then pure bucketing
+    // — unless the caller already fetched the union across every series
+    // member's window (issue "batch series-member scoring"), in which case
+    // we reuse that instead of reading again.
+    const loads = opts.preloadedDayLoads
+      ? bounds.map(
+          (b) =>
+            opts.preloadedDayLoads!.get(b.dayStr) ?? {
+              occupied: [],
+              workloadByType: emptyWorkloadByType(),
+            },
+        )
+      : await loadDayLoads(this.prisma, {
+          userId,
+          days: bounds,
+          timezone,
+          excludeSessionIds: [task.id],
+          // See the post-midnight blocks a straddling placement must clear (D5).
+          occupiedLookaheadMs: overhangMs,
+        });
 
     const days: CandidateDay[] = bounds.map((b, i) => {
       const { occupied, workloadByType } = loads[i];
@@ -203,21 +218,136 @@ export class BanditPlacer {
     return days;
   }
 
-  /** One `/predict` HTTP call scoring every candidate day's arms. `null` on
-   * any bandit failure — the caller falls back to the heuristic. */
+  /** One `/predict` HTTP call scoring every given `{day, x}` context. `null`
+   * on any bandit failure — the caller falls back to the heuristic. Shared
+   * by both the single-task path (one member's own candidate days) and
+   * {@link placeSeriesMembers} (every disjoint series member's candidate
+   * days at once, `day` keys prefixed per-member to avoid collisions). */
   private async fetchBanditPredictions(
     userId: string,
-    days: CandidateDay[],
+    contexts: { day: string; x: number[] }[],
   ): Promise<Record<string, Record<SchedulingArm, number>> | null> {
     const loaded = await this.armStates.loadAll(userId);
     const wireState = {} as Record<SchedulingArm, BanditArmStateWire>;
     for (const arm of SCHEDULING_ARMS) {
       wireState[arm] = { A: loaded[arm].A, b: loaded[arm].b };
     }
-    return this.bandit.predict(
-      days.map((d) => ({ day: d.dayStr, x: d.vector })),
-      wireState,
-    );
+    return this.bandit.predict(contexts, wireState);
+  }
+
+  /**
+   * Tier 1 (issue "batch series-member scoring"): places every given
+   * DISJOINT-window series member with ONE shared `/predict` round-trip
+   * instead of one call per member. Callers must guarantee the members'
+   * candidate-day windows never overlap (the same invariant
+   * {@link seriesWindowsAreDisjoint} guards in `SeriesPlacer`) — this method
+   * does not itself re-check that, it only guarantees no wire-key collision
+   * regardless (each context is keyed `${task.id}::${dayStr}`).
+   *
+   * Builds every member's candidate-day context vectors (still one pure
+   * pass per member, reusing `opts.preloadedDayLoads` when the caller
+   * already fetched the day-load union), sends them all to
+   * `services/bandit` together, then slices the scores back per member by
+   * its own `${task.id}::${dayStr}` keys before running the same
+   * {@link pickBestSlot} arm-then-minute search used by the single-task
+   * path. A member with no feasible candidate day, or the whole batch on
+   * any bandit failure, maps to `null` (falls back to the heuristic).
+   */
+  async placeSeriesMembers(
+    userId: string,
+    timezone: string,
+    preferenceMatrix: number[],
+    now: Date,
+    members: {
+      task: PlaceableTask;
+      window: PlacementWindow;
+      opts: PlaceInWindowOpts;
+    }[],
+  ): Promise<Map<string, BanditPick | null>> {
+    const result = new Map<string, BanditPick | null>();
+    if (!this.bandit.enabled) {
+      for (const m of members) result.set(m.task.id, null);
+      return result;
+    }
+
+    const next15Ms = ceilToSlot(now.getTime());
+    const perMember: { task: PlaceableTask; days: CandidateDay[] }[] = [];
+    for (const m of members) {
+      const deadlineMs = m.task.deadline.getTime();
+      const durationMs = m.task.durationMinutes * MS_PER_MINUTE;
+      if (next15Ms + durationMs > deadlineMs) {
+        perMember.push({ task: m.task, days: [] });
+        continue;
+      }
+      const overhangMs = durationMs - SLOT_MS;
+      const days = await this.loadCandidateContext(
+        userId,
+        m.task,
+        timezone,
+        now,
+        m.window,
+        m.opts,
+        overhangMs,
+      );
+      perMember.push({ task: m.task, days });
+    }
+
+    const contexts: { day: string; x: number[] }[] = [];
+    for (const { task, days } of perMember) {
+      for (const d of days) {
+        contexts.push({ day: `${task.id}::${d.dayStr}`, x: d.vector });
+      }
+    }
+    if (contexts.length === 0) {
+      for (const m of members) result.set(m.task.id, null);
+      return result;
+    }
+
+    const [scores, observationCount] = await Promise.all([
+      this.fetchBanditPredictions(userId, contexts),
+      loadObservationCount(this.prisma, userId),
+    ]);
+    if (!scores) {
+      for (const m of members) result.set(m.task.id, null);
+      return result;
+    }
+
+    const optsByTaskId = new Map(members.map((m) => [m.task.id, m.opts]));
+    for (const { task, days } of perMember) {
+      if (days.length === 0) {
+        result.set(task.id, null);
+        continue;
+      }
+      const memberScores: Record<string, Record<SchedulingArm, number>> = {};
+      for (const d of days) {
+        const wire = scores[`${task.id}::${d.dayStr}`];
+        if (wire) memberScores[d.dayStr] = wire;
+      }
+      const best = this.pickBestSlot({
+        days,
+        scores: memberScores,
+        task,
+        timezone,
+        preferenceMatrix,
+        next15Ms,
+        deadlineMs: task.deadline.getTime(),
+        extraOccupied: optsByTaskId.get(task.id)?.extraOccupied ?? [],
+        observationCount,
+      });
+      result.set(
+        task.id,
+        best
+          ? {
+              scheduledStartTime: new Date(best.startMs),
+              selectedArm: best.arm,
+              featureVector: best.vector,
+              weights: best.weights,
+            }
+          : null,
+      );
+    }
+
+    return result;
   }
 
   /** Two-step arm-then-minute slot pick (Item 3B2) — pure math over the

@@ -55,3 +55,27 @@ export function seriesDayWindows(
   }
   return windows;
 }
+
+/**
+ * `true` when {@link seriesDayWindows} would hand every member its own
+ * exclusive day-window — i.e. `count` members fit one-per-day-or-fewer
+ * across the `daySpan + 1` available days (`count <= daySpan + 1`). This is
+ * the common case, and the only one in which member placement has no
+ * cross-member data dependency: two members can never land on the same day,
+ * so their day-load reads and slot scoring may run concurrently
+ * (`SeriesPlacer.placeSeries`, issue "batch series-member scoring").
+ *
+ * `false` is the dense edge case (`count > daySpan + 1`, more sessions than
+ * days): {@link seriesDayWindows} then collapses several members into a
+ * shared day-window, and {@link MAX_SERIES_PER_DAY} / sibling-overlap
+ * bookkeeping genuinely depends on earlier members' placements — that case
+ * must stay strictly sequential.
+ */
+export function seriesWindowsAreDisjoint(
+  daySpan: number,
+  count: number,
+): boolean {
+  const span = Math.max(0, Math.floor(daySpan));
+  const n = Math.max(1, Math.floor(count));
+  return n <= span + 1;
+}

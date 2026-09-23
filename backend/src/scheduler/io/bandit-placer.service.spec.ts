@@ -190,3 +190,136 @@ describe("BanditPlacer.scheduleTask", () => {
     expect(bandit.predict).not.toHaveBeenCalled();
   });
 });
+
+describe("BanditPlacer.placeSeriesMembers (Tier 1 — batched series scoring)", () => {
+  const now = new Date("2026-06-15T00:00:00.000Z");
+  const memberA = {
+    id: "m1",
+    durationMinutes: 60,
+    deadline: new Date("2026-06-18T00:00:00.000Z"),
+  };
+  const memberB = {
+    id: "m2",
+    durationMinutes: 60,
+    deadline: new Date("2026-06-25T00:00:00.000Z"),
+  };
+
+  it("issues exactly one /predict call for an N-member series instead of N", async () => {
+    const bandit = makeBandit(NIGHT_WINS);
+    const svc = new BanditPlacer(
+      makePrisma() as never,
+      bandit as never,
+      armStates as never,
+    );
+
+    const result = await svc.placeSeriesMembers("u1", TZ, MATRIX, now, [
+      {
+        task: memberA,
+        window: { firstDayStr: "2026-06-15", lastDayStr: "2026-06-17" },
+        opts: {},
+      },
+      {
+        task: memberB,
+        window: { firstDayStr: "2026-06-18", lastDayStr: "2026-06-24" },
+        opts: {},
+      },
+    ]);
+
+    expect(bandit.predict).toHaveBeenCalledTimes(1);
+    expect(result.get("m1")).not.toBeNull();
+    expect(result.get("m2")).not.toBeNull();
+  });
+
+  it("slices the shared response back to the right member/day even when both members' windows share a calendar day", async () => {
+    // A deliberately non-disjoint pair of windows (callers must only invoke
+    // this on disjoint members — this proves the composite `${id}::${day}`
+    // wire key still prevents any cross-member misattribution regardless).
+    const bandit = makeBandit((contexts) => {
+      const out: Record<string, Record<string, number>> = {};
+      for (const c of contexts) {
+        // Score NIGHT differently per member so a mix-up is observable.
+        const isMemberA = c.day.startsWith("m1::");
+        out[c.day] = {
+          EARLY_MORNING: 0,
+          MORNING: 0,
+          AFTERNOON: 0,
+          EVENING: 0,
+          NIGHT: isMemberA ? 1 : 0.5,
+        };
+      }
+      return out;
+    });
+    const svc = new BanditPlacer(
+      makePrisma() as never,
+      bandit as never,
+      armStates as never,
+    );
+
+    const sharedWindow = {
+      firstDayStr: "2026-06-15",
+      lastDayStr: "2026-06-15",
+    };
+    const result = await svc.placeSeriesMembers("u1", TZ, MATRIX, now, [
+      { task: memberA, window: sharedWindow, opts: {} },
+      { task: { ...memberB, id: "m2" }, window: sharedWindow, opts: {} },
+    ]);
+
+    // Both still resolve to NIGHT (their best-scoring arm), on the shared
+    // day — proving each member's slice came from its own composite key,
+    // not a collision on the plain "2026-06-15" day string.
+    expect(result.get("m1")!.selectedArm).toBe("NIGHT");
+    expect(result.get("m2")!.selectedArm).toBe("NIGHT");
+    expect(bandit.predict).toHaveBeenCalledTimes(1);
+    const sentDays = (bandit.predict.mock.calls[0][0] as { day: string }[]).map(
+      (c) => c.day,
+    );
+    expect(sentDays).toEqual(
+      expect.arrayContaining(["m1::2026-06-15", "m2::2026-06-15"]),
+    );
+  });
+
+  it("returns null for every member when /predict fails", async () => {
+    const bandit = makeBandit(() => null);
+    const svc = new BanditPlacer(
+      makePrisma() as never,
+      bandit as never,
+      armStates as never,
+    );
+
+    const result = await svc.placeSeriesMembers("u1", TZ, MATRIX, now, [
+      {
+        task: memberA,
+        window: { firstDayStr: "2026-06-15", lastDayStr: "2026-06-17" },
+        opts: {},
+      },
+      {
+        task: memberB,
+        window: { firstDayStr: "2026-06-18", lastDayStr: "2026-06-24" },
+        opts: {},
+      },
+    ]);
+
+    expect(result.get("m1")).toBeNull();
+    expect(result.get("m2")).toBeNull();
+  });
+
+  it("returns null immediately for every member when disabled, without calling predict", async () => {
+    const bandit = { ...makeBandit(NIGHT_WINS), enabled: false };
+    const svc = new BanditPlacer(
+      makePrisma() as never,
+      bandit as never,
+      armStates as never,
+    );
+
+    const result = await svc.placeSeriesMembers("u1", TZ, MATRIX, now, [
+      {
+        task: memberA,
+        window: { firstDayStr: "2026-06-15", lastDayStr: "2026-06-17" },
+        opts: {},
+      },
+    ]);
+
+    expect(result.get("m1")).toBeNull();
+    expect(bandit.predict).not.toHaveBeenCalled();
+  });
+});

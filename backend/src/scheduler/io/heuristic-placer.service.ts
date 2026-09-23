@@ -8,6 +8,8 @@ import {
   slotPreferenceScore,
   stabilityScore,
 } from "../core/slot-score";
+import { emptyWorkloadByType } from "../types/context-vector.types";
+import type { DayLoad } from "../types/day-load.types";
 import type {
   PlaceableTask,
   PlacementWindow,
@@ -30,6 +32,17 @@ export interface PlaceInWindowOpts {
   skipDay?: (dayStr: string) => boolean;
   /** Max days scanned (default `MAX_SCAN_DAYS`; single-task placement passes `SCAN_CAP_DAYS`). */
   maxScanDays?: number;
+  /**
+   * Pre-fetched day loads keyed by local `dayStr`, covering every day this
+   * call might scan. When given, the internal {@link loadDayLoads} read is
+   * skipped entirely — used by `SeriesPlacer`, which fetches the union of
+   * every series member's day range in one query up front (issue "batch
+   * series-member scoring"). A `dayStr` missing from the map falls back to
+   * an empty day (no occupancy) — callers must cover every day in the
+   * scanned window. Additive/optional — single-task `placeTask` callers are
+   * unaffected.
+   */
+  preloadedDayLoads?: Map<string, DayLoad>;
 }
 
 /**
@@ -117,19 +130,30 @@ export class HeuristicPlacer {
       if (!opts.skipDay?.(dayStr)) dayStrs.push(dayStr);
     }
     const bounds = dayStrs.map((dayStr) => ({
+      dayStr,
       dayStartMs: minutesToUtc(dayStr, 0, timezone).getTime(),
       dayEndMs: minutesToUtc(addDaysStr(dayStr, 1), 0, timezone).getTime(),
     }));
     // The task may overhang midnight by up to `duration - one slot`; one
-    // batched range read covers every scanned day (issue #62 C).
+    // batched range read covers every scanned day (issue #62 C) — unless the
+    // caller already fetched the union across every series member's window
+    // (issue "batch series-member scoring"), in which case we reuse that.
     const overhangMs = task.durationMinutes * MS_PER_MINUTE - SLOT_MS;
-    const loads = await loadDayLoads(this.prisma, {
-      userId,
-      days: bounds,
-      timezone,
-      excludeSessionIds: [task.id],
-      occupiedLookaheadMs: overhangMs,
-    });
+    const loads = opts.preloadedDayLoads
+      ? bounds.map(
+          (b): DayLoad =>
+            opts.preloadedDayLoads!.get(b.dayStr) ?? {
+              occupied: [],
+              workloadByType: emptyWorkloadByType(),
+            },
+        )
+      : await loadDayLoads(this.prisma, {
+          userId,
+          days: bounds,
+          timezone,
+          excludeSessionIds: [task.id],
+          occupiedLookaheadMs: overhangMs,
+        });
 
     let best: ScoredSlot | null = null;
     dayStrs.forEach((_, i) => {
