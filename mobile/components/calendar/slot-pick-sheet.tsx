@@ -191,14 +191,17 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
                     }
                   `}
                 >
-                  <View className="shrink-0 size-5 rounded-full border-2 flex items-center justify-center">
+                  <View className={`
+                    shrink-0 size-5 rounded-full border-2 flex items-center justify-center
+                    ${
+                      selected === (option.isPrimary ? "primary" : "alternative")
+                        ? "bg-primary border-primary"
+                        : "border-border bg-transparent"
+                    }
+                  `}>
                     {selected ===
                       (option.isPrimary ? "primary" : "alternative") && (
-                      <Check
-                        size={5}
-                        className="text-primary"
-                        strokeWidth={4}
-                      />
+                      <Check size={5} className="text-white" strokeWidth={4} />
                     )}
                   </View>
                   <View className="min-w-0 flex-1">
