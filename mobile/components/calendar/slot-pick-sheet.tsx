@@ -127,17 +127,17 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
     const selectedShadowStyle = StyleSheet.create({
       shadow: {
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.2,
-        shadowRadius: 16,
-        elevation: 8,
+        shadowOffset: { width: 0, height: 12 },
+        shadowOpacity: 0.3,
+        shadowRadius: 20,
+        elevation: 12,
       },
     });
 
     return (
       <BottomSheet>
         <BottomSheetContent ref={sheet.ref} onDismiss={handleDismiss}>
-          <BottomSheetView hadHeader={false} className="gap-4 pt-2 mb-28">
+          <BottomSheetView hadHeader={false} className="gap-4 pt-2">
             <View className="flex-row items-start justify-between gap-3 ">
               <View className="min-w-0 flex-1">
                 <Text className="text-[18.5px] font-bold tracking-[-0.01em] leading-tight">
@@ -170,16 +170,9 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
                     }
                   }}
                   style={[
-                    {
-                      shadowColor: "#000",
-                      shadowOffset: { width: 0, height: 8 },
-                      shadowOpacity: 0.2,
-                      shadowRadius: 16,
-                      elevation: 8,
-                    },
                     selected === (option.isPrimary ? "primary" : "alternative")
                       ? selectedShadowStyle.shadow
-                      : null,
+                      : {},
                   ]}
                   className={`
                     text-left rounded-2xl border-2 px-4 py-5 flex flex-row items-center gap-3 my-0.5
@@ -191,17 +184,24 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
                     }
                   `}
                 >
-                  <View className={`
+                  <View
+                    className={`
                     shrink-0 size-5 rounded-full border-2 flex items-center justify-center
                     ${
-                      selected === (option.isPrimary ? "primary" : "alternative")
+                      selected ===
+                      (option.isPrimary ? "primary" : "alternative")
                         ? "bg-primary border-primary"
                         : "border-border bg-transparent"
                     }
-                  `}>
+                  `}
+                  >
                     {selected ===
                       (option.isPrimary ? "primary" : "alternative") && (
-                      <Check size={5} className="text-primary-foreground" strokeWidth={4} />
+                      <Check
+                        size={5}
+                        className="text-primary-foreground"
+                        strokeWidth={4}
+                      />
                     )}
                   </View>
                   <View className="min-w-0 flex-1">
@@ -221,7 +221,7 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
               it never moves anything else on your calendar.
             </Text>
 
-            <View className="flex-none pt-4 flex flex-col gap-2">
+            <View className="flex-none pt-4 flex flex-col gap-2 mb-3">
               <Button
                 className="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl h-[52px] px-5 text-base font-semibold shrink-0"
                 onPress={() => handlePick("alternative")}
