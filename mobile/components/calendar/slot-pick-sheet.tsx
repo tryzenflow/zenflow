@@ -195,9 +195,9 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
                     {selected ===
                       (option.isPrimary ? "primary" : "alternative") && (
                       <Check
-                        size={3}
+                        size={5}
                         className="text-primary"
-                        strokeWidth={3}
+                        strokeWidth={4}
                       />
                     )}
                   </View>
