@@ -10,8 +10,12 @@ from .constants import (
     HOUR_MS,
     MS_PER_MINUTE,
     SLOT_MS,
+    STABILITY_FAR_HOURS,
+    STABILITY_NEAR_HOURS,
     STABILITY_SATURATION_HOURS,
     STABILITY_WEIGHT,
+    STABILITY_WEIGHT_FAR,
+    STABILITY_WEIGHT_NEAR,
     TIME_GRANULARITY,
 )
 from .preference import effective_preference_matrix
@@ -32,6 +36,27 @@ def stability_scores(
     dist_h = np.abs(starts_ms - prev_start_ms) / HOUR_MS
     sat = np.minimum(dist_h, STABILITY_SATURATION_HOURS) / STABILITY_SATURATION_HOURS
     return np.asarray(-STABILITY_WEIGHT * sat, dtype=np.float64)
+
+
+def stability_weight(prev_start_ms: float, now_ms: float) -> float:
+    """Stability weight for a task whose current start is ``prev_start_ms``:
+    ``NEAR`` while it is <= ``NEAR_HOURS`` away (or already past), fading
+    linearly to ``FAR`` at ``FAR_HOURS``."""
+    lead_h = max(0.0, prev_start_ms - now_ms) / HOUR_MS
+    t = (lead_h - STABILITY_NEAR_HOURS) / (STABILITY_FAR_HOURS - STABILITY_NEAR_HOURS)
+    t = min(1.0, max(0.0, t))
+    return STABILITY_WEIGHT_NEAR + (STABILITY_WEIGHT_FAR - STABILITY_WEIGHT_NEAR) * t
+
+
+def proximity_stability_scores(
+    prev_start_ms: float, starts_ms: NDArray[np.int64], now_ms: float
+) -> NDArray[np.float64]:
+    """:func:`stability_scores` shape (saturating at ``SATURATION_HOURS``),
+    scaled by :func:`stability_weight` instead of the fixed heuristic weight."""
+    dist_h = np.abs(starts_ms - prev_start_ms) / HOUR_MS
+    sat = np.minimum(dist_h, STABILITY_SATURATION_HOURS) / STABILITY_SATURATION_HOURS
+    w = stability_weight(prev_start_ms, now_ms)
+    return np.asarray(-w * sat, dtype=np.float64)
 
 
 def slot_preference_scores(

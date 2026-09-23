@@ -28,6 +28,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from src.core import constants as consts
+from src.core.arms import seeded_tie_break_order
 from src.core.constants import DAY_MS, FEATURE_DIM, MS_PER_MINUTE
 from src.core.context_vector import build_context_vector
 from src.core.preference import default_preference_matrix
@@ -211,7 +212,7 @@ def _old_run(req: PlaceRequest) -> list[PlacedMember]:
             extra,
             placer.next15,
             req.deadline_ms,
-            req.user.observation_count,
+            seeded_tie_break_order(f"{req.request_id}|{m.id}"),
         )
 
     def old_place_member(

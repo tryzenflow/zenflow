@@ -447,7 +447,9 @@ so the scheduler avoids them from day one. Best-effort — a failure is logged a
 
 **Displacement / infeasible deadline (issue #62 B).** When a single `TASK` create or deadline edit
 has no free slot, `TaskPlacementService.preflightTask` first repacks flexible tasks (EDF) on the
-deadline day (+/-1 day if needed). Fixed blocks and series sittings never move. Moved rows come back
+deadline day (+/-1 day if needed): earliest feasible start for the new task, then displaced tasks
+in deadline order, each to the free slot nearest its old start on any day before its own deadline.
+Fixed blocks and series sittings never move. Moved rows come back
 in `displacedSessions[]` as `SYSTEM_MOVE` events (reward 0).
 
 If that fails too: `409 { success:false, code:"SCHEDULE_INFEASIBLE",
@@ -720,8 +722,8 @@ clients see `409 SCHEDULE_INFEASIBLE` and `503 SCHEDULER_DEGRADED`.
 both policies' picks whenever `computeBoth` is set on the request (primary is LINUCB, or this
 event was sampled) and Nest records one `SlotProposal` per placement with both proposals when
 sampled, so `POST /sessions/:id/slot-pick` (`docs/scheduler/ab-testing.md` §3) has something to
-offer. Applied weights (`wL`, `wP` — adaptive cold/warm blend) come back on the response and
-land on `SlotProposal.linucbWeight` / `.preferenceWeight`.
+offer. Applied weights (`wL` = 1, `wS` = proximity-scaled stability) come back on the response and
+land on `SlotProposal.linucbWeight` / `.stabilityWeight`.
 
 Delayed reward (ADR-0001 §9): the first user `MOVE` of a LinUCB-placed session — including a
 `POST /sessions/:id/slot-pick` pick of the alternative, which applies exactly like a drag —
@@ -999,7 +1001,7 @@ matrix is **168 signed floats** — 7 ISO weekdays × 24 one-hour buckets, row-m
 highest-scoring free slot in a window (plus `stabilityScore`, a light nudge toward the
 previous manually-set start).
 
-LinUCB slot-first scoring (context vector, arm scoring, adaptive weights, tie-break order) is
+LinUCB slot-first scoring (context vector, arm scoring, stability weight, seeded tie-break) is
 Python's — `services/bandit/src/core/linucb_best_slot.py` and friends. It is **not**
 golden-fixture-tested against TS any more (ADR-0003 phase 6): there is no TS implementation to
 compare against. See `docs/scheduler/heuristic.md` and `services/bandit/README.md`.

@@ -171,7 +171,7 @@ class Weights(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     wL: float = Field(alias="wL")  # noqa: N815
-    wP: float = Field(alias="wP")  # noqa: N815
+    wS: float = Field(alias="wS")  # noqa: N815
 
 
 class LinucbPick(_Resp):

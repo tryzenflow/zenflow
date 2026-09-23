@@ -256,7 +256,7 @@
   "response": {
     "contractVersion": 1,
     "requestId": "00000000-0000-4000-8000-000000000002-2",
-    "paramsVersion": "py-88d5c3f68433",
+    "paramsVersion": "py-786391b0cef5",
     "results": [
       {
         "id": "t1",
@@ -269,12 +269,7 @@
           {
             "id": "f1",
             "fromMs": 1789977600000,
-            "toMs": 1789981200000
-          },
-          {
-            "id": "f2",
-            "fromMs": 1789984800000,
-            "toMs": 1789999200000
+            "toMs": 1789992000000
           }
         ],
         "late": false,
@@ -282,12 +277,12 @@
       }
     ],
     "timingsMs": {
-      "decode": 0.108,
+      "decode": 0.084,
       "context": 0.0,
       "predict": 0.0,
-      "scan": 0.067,
-      "displace": 0.919,
-      "total": 1.151
+      "scan": 0.039,
+      "displace": 0.153,
+      "total": 0.343
     }
   }
 }

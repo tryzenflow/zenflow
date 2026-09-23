@@ -347,10 +347,11 @@ model SlotProposal {
   // Empty / null when the primary policy was the heuristic.
   featureVector    Float[]        @default([])
   selectedArm      SchedulingArm?
-  // Applied slot-score weights (`core/adaptive-weights.ts`); null when the
-  // primary policy was the pref-only heuristic (keeps the A/B distinct).
+  // Applied LinUCB slot-score weights (`wL` = 1, `wS` = proximity-scaled
+  // stability, `services/bandit/src/core/slot_score.py::stability_weight`);
+  // null when the primary policy was the pref-only heuristic.
   linucbWeight     Float?
-  preferenceWeight Float?
+  stabilityWeight  Float?
 
   // Provenance (ADR-0003): which implementation produced the placement, so A/B
   // analysis can exclude degraded (frozen-TS-fallback) events.

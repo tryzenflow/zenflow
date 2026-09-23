@@ -463,7 +463,7 @@ erDiagram
     float_array featureVector
     enum selectedArm
     float linucbWeight
-    float preferenceWeight
+    float stabilityWeight
     enum placementSource "NEW PYTHON or TS_FALLBACK"
     string degradedReason "NEW nullable"
   }

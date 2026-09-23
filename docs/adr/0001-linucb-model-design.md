@@ -332,7 +332,7 @@ new user was proposed 00:00 (EARLY_MORNING first). A bigger nudge would make Lin
 2. **Adaptive weights** `(wL, wP) = adaptiveWeights(observationCount)` (`core/adaptive-weights.ts`,
    constants in `constants.ts`). Cold: `wP = 1, wL = 0.3`. Warm: `wP = 0.1, wL = 1`. Linear over
    `WEIGHT_WARMUP_OBSERVATIONS = 40` reward events (user `MOVE` + `RETAINED`; `SYSTEM_MOVE` never
-   counts). Applied weights are stored on `SlotProposal.linucbWeight` / `.preferenceWeight`. The
+   counts). Applied weights are stored on `SlotProposal.linucbWeight` / `.stabilityWeight` (was `.preferenceWeight` before the pref term was dropped). The
    heuristic stays preference-only (no arm term), so the A/B keeps two distinct policies.
 3. **Exact ties**: `TIE_BREAK_ARM_ORDER` (MORNING, AFTERNOON, EVENING, EARLY_MORNING, NIGHT) on the
    start's arm, then earlier start. Deterministic, never favours 00:00.

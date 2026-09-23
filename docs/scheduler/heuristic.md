@@ -135,10 +135,10 @@ degraded result (contrast with Python's authoritative path, which is per-member;
   [`backend/README.md`](../../backend/README.md#python-authoritative-placement-adr-0003).
   `backend/src/scheduler/io/displacement.service.ts` only *persists* Python's already-computed
   moves (`applyMoves`) — it doesn't plan them any more.
-- **LinUCB slot-first scoring** (context vector, arm scoring, adaptive `wL`/`wP` blend, tie-break
-  order) — `services/bandit/src/core/linucb_best_slot.py` and friends. There is no TS LinUCB
+- **LinUCB slot-first scoring** (context vector, arm scoring, proximity-scaled stability `wS`,
+  seeded tie-break order) — `services/bandit/src/core/linucb_best_slot.py` and friends. There is no TS LinUCB
   implementation left at all (ADR-0003 phase 6 deleted `linucb-best-slot.ts`, `context-vector.ts`,
-  `arms.ts`, `adaptive-weights.ts`, `normalize.ts`).
+  `arms.ts`, `adaptive-weights.ts`, `normalize.ts`; the adaptive blend itself is gone).
 - **Series orchestration on the authoritative path** — per-member day windows, the sibling
   ledger, `MAX_SERIES_PER_DAY` — Python's `place.py`. `FallbackPlacer`'s series loop above is
   the only TS series placement left, and only for degraded mode.

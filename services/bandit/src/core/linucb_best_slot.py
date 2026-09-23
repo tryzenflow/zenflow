@@ -2,12 +2,14 @@
 
 Every feasible 15-min start on every candidate day is scored
 
-    score = wL * sum_arm overlapRate(slot, arm) * armScore[day][arm]
-          + wP * slotPreferenceScore(slot) / durationHours
-          + stability
+    score = sum_arm overlapRate(slot, arm) * armScore[day][arm]
+          + wS * stability(prevStart, slot)
 
-and ranked across days; exact ties (within 1e-9) go to the arm hosting the
-start in ``TIE_BREAK_ARM_ORDER``, then the earlier start. Vectorized per day.
+where ``wS`` = :func:`~.slot_score.stability_weight` (strong for a task about
+to start, fading for distant ones). Ranked across days; exact ties (within
+1e-9 -- e.g. every arm cold) go to the arm hosting the start in the given
+``tie_break_order`` (seeded per request by the caller), then the earlier
+start. Vectorized per day.
 """
 
 from __future__ import annotations
@@ -17,18 +19,15 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
-from numpy.typing import ArrayLike, NDArray
+from numpy.typing import NDArray
 
-from .adaptive_weights import SlotScoreWeights, adaptive_weights
 from .arms import ARM_BANDS, TIE_BREAK_ARM_ORDER, arm_of_minute, overlap_rate
-from .constants import HOUR_MS, MS_PER_MINUTE, SLOT_MS
+from .constants import MS_PER_MINUTE, SLOT_MS
 from .slot import Intervals, ceil_to_slot, utc_to_minutes
-from .slot_score import free_start_mask, slot_preference_scores, stability_scores
+from .slot_score import free_start_mask, proximity_stability_scores, stability_weight
 
 _TIE_DECIMALS = 9
 _ARM_NAMES = [b[0] for b in ARM_BANDS]
-_TIE_RANK = {a: i for i, a in enumerate(TIE_BREAK_ARM_ORDER)}
-_RANK_BY_BAND = np.array([_TIE_RANK[a] for a in _ARM_NAMES], dtype=np.int64)
 _BAND_STARTS = np.array([b[1] for b in ARM_BANDS], dtype=np.int64)
 
 
@@ -48,7 +47,7 @@ class BestLinucbSlot:
     score: float
     arm: str
     vector: list[float]
-    weights: SlotScoreWeights
+    stability_weight: float  # wS actually applied (0 without a prev start)
 
 
 def _rates_plain(start_min: NDArray[np.float64], duration: int) -> NDArray[np.float64]:
@@ -69,16 +68,16 @@ def best_linucb_slot(
     days: Sequence[LinucbCandidateDay],
     duration_minutes: int,
     timezone: str,
-    pref_matrix: ArrayLike,
     next_ms: int,
     deadline_ms: int,
     extra_occupied: Intervals | None = None,
     prev_start_ms: int | None = None,
-    observation_count: float = 0,
+    tie_break_order: Sequence[str] = TIE_BREAK_ARM_ORDER,
 ) -> BestLinucbSlot | None:
-    weights = adaptive_weights(observation_count)
+    tie_rank = {a: i for i, a in enumerate(tie_break_order)}
+    rank_by_band = np.array([tie_rank[a] for a in _ARM_NAMES], dtype=np.int64)
+    w_s = stability_weight(prev_start_ms, next_ms) if prev_start_ms is not None else 0.0
     duration_ms = duration_minutes * MS_PER_MINUTE
-    duration_hours = duration_ms / HOUR_MS
     overhang = duration_ms - SLOT_MS
     extra = extra_occupied or []
 
@@ -125,16 +124,11 @@ def best_linucb_slot(
                 ],
                 dtype=np.int64,
             )
-        linucb = rates @ arm_vec
-        pref = (
-            slot_preference_scores(pref_matrix, starts, duration_minutes, timezone)
-            / duration_hours
-        )
-        total = weights.wL * linucb + weights.wP * pref
+        total = rates @ arm_vec
         if prev_start_ms is not None:
-            total = total + stability_scores(prev_start_ms, starts)
+            total = total + proximity_stability_scores(prev_start_ms, starts, next_ms)
         scores.append(total)
-        ranks.append(_RANK_BY_BAND[band])
+        ranks.append(rank_by_band[band])
         starts_all.append(starts)
         day_idx.append(np.full(starts.size, di, dtype=np.int64))
 
@@ -149,9 +143,9 @@ def best_linucb_slot(
     return BestLinucbSlot(
         start_ms=int(st[i]),
         score=float(sc[i]),
-        arm=TIE_BREAK_ARM_ORDER[int(rk[i])],
+        arm=tie_break_order[int(rk[i])],
         vector=list(days[int(di_all[i])].vector),
-        weights=weights,
+        stability_weight=w_s,
     )
 
 

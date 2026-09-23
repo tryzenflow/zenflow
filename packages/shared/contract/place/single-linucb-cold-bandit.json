@@ -339,7 +339,7 @@
   "response": {
     "contractVersion": 1,
     "requestId": "00000000-0000-4000-8000-000000000002",
-    "paramsVersion": "py-88d5c3f68433",
+    "paramsVersion": "py-786391b0cef5",
     "results": [
       {
         "id": "t1",
@@ -348,7 +348,7 @@
         "heuristic": null,
         "linucb": {
           "startMs": 1789977600000,
-          "score": 1.0,
+          "score": 0.0,
           "selectedArm": "MORNING",
           "featureVector": [
             -0.9,
@@ -375,8 +375,8 @@
             1.0
           ],
           "weights": {
-            "wL": 0.3,
-            "wP": 1.0
+            "wL": 1.0,
+            "wS": 0.0
           }
         },
         "startMs": 1789977600000,
@@ -386,12 +386,12 @@
       }
     ],
     "timingsMs": {
-      "decode": 2.605,
-      "context": 0.061,
-      "predict": 0.039,
-      "scan": 1.049,
+      "decode": 2.274,
+      "context": 0.059,
+      "predict": 0.028,
+      "scan": 0.508,
       "displace": 0.0,
-      "total": 3.897
+      "total": 3.026
     }
   }
 }

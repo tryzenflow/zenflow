@@ -11,7 +11,13 @@ from fastapi.testclient import TestClient
 
 from src.api import app
 from src.core import displacement
-from src.core.constants import DAY_MS, FEATURE_DIM, MS_PER_MINUTE
+from src.core.arms import seeded_tie_break_order
+from src.core.constants import (
+    DAY_MS,
+    FEATURE_DIM,
+    INFEASIBLE_HORIZON_DAYS,
+    MS_PER_MINUTE,
+)
 from src.core.linucb_best_slot import best_linucb_slot, days_from_dicts
 from src.core.preference import default_preference_matrix
 from src.core.slot import add_days_str, local_date_str, local_midnight_ms
@@ -172,8 +178,7 @@ def test_linucb_primary_cold_has_pick_and_no_heuristic() -> None:
     assert r["appliedPolicy"] == "LINUCB" and r["heuristic"] is None
     lin = r["linucb"]
     assert len(lin["featureVector"]) == FEATURE_DIM
-    assert lin["selectedArm"] in {"MORNING", "AFTERNOON", "EVENING"}
-    assert lin["weights"] == {"wL": 0.3, "wP": 1.0}  # observationCount 0
+    assert lin["weights"] == {"wL": 1.0, "wS": 0.0}  # no prevStartMs
     assert r["startMs"] == lin["startMs"]
 
 
@@ -246,12 +251,11 @@ def test_in_process_arm_scores_match_predict_endpoint() -> None:
         ),
         90,
         "UTC",
-        body["user"]["preferenceMatrix"],
         NOW,
         body["deadlineMs"],
         None,
         None,
-        25,
+        seeded_tie_break_order(f"{body['requestId']}|t1"),
     )
     assert core is not None
     assert core.start_ms == start and core.arm == r["linucb"]["selectedArm"]
@@ -344,8 +348,8 @@ def test_two_phase_displacement_matches_core_planner() -> None:
         [],
         NOW,
         [(day_start, day_start + DAY_MS), (day_start - DAY_MS, day_start + 2 * DAY_MS)],
-        body["user"]["preferenceMatrix"],
-        "UTC",
+        [],
+        body["deadlineMs"] + INFEASIBLE_HORIZON_DAYS * DAY_MS,
     )
     assert plan.kind == "placed"
     assert r["startMs"] == plan.start_ms

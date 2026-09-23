@@ -28,7 +28,7 @@ def _scalar_score(m: np.ndarray, s: int, e: int, tz: str) -> float:
     return total
 
 
-def _scalar_best(dur, occ, ws, we, m, tz, fit=None, prev=None):  # type: ignore[no-untyped-def]
+def _scalar_best(dur, occ, ws, we, m, tz, fit=None, prev=None):
     dur_ms = dur * MS_PER_MINUTE
     sc, fc = floor_to_slot(we), floor_to_slot(we if fit is None else fit)
     best: tuple[int, float] | None = None
@@ -88,20 +88,27 @@ def test_weekday_cells_match_helpers() -> None:
 
 
 def test_linucb_vectorized_matches_scalar() -> None:
-    from src.core.adaptive_weights import adaptive_weights
     from src.core.arms import (
         ARM_BANDS,
-        TIE_BREAK_ARM_ORDER,
         arm_overlap_rates_from_minute,
+        seeded_tie_break_order,
     )
     from src.core.linucb_best_slot import LinucbCandidateDay, best_linucb_slot
-    from src.core.slot_score import slot_preference_score
+    from src.core.slot_score import stability_weight
 
     rng = np.random.default_rng(3)
     day0 = 1_767_571_200_000
+    now = day0 + 8 * 900_000
     names = [b[0] for b in ARM_BANDS]
-    for obs in (0, 12, 500):
-        m = rng.uniform(-1, 1, 168)
+    cases = [
+        (None, "a", False),
+        (now + 2 * 3_600_000, "b", False),  # near: stability dominates
+        (now + 60 * 3_600_000, "c", False),  # mid fade
+        (None, "d", True),  # all arms tied -> seeded bucket order decides
+        (now + 30 * 3_600_000, "e", True),
+    ]
+    for prev, seed, cold in cases:
+        order = seeded_tie_break_order(seed)
         days = []
         for d in range(3):
             s = day0 + d * 86_400_000
@@ -116,17 +123,17 @@ def test_linucb_vectorized_matches_scalar() -> None:
                     s + 86_400_000,
                     occ,
                     [0.0],
-                    {a: float(rng.uniform(-1, 1)) for a in names},
+                    {a: 0.0 if cold else float(rng.uniform(-1, 1)) for a in names},
                 )
             )
         dur, deadline = 90, day0 + 3 * 86_400_000 + 3_600_000
         got = best_linucb_slot(
-            days, dur, "UTC", m, day0 + 8 * 900_000, deadline, observation_count=obs
+            days, dur, "UTC", now, deadline, prev_start_ms=prev, tie_break_order=order
         )
-        w = adaptive_weights(obs)
+        w_s = 0.0 if prev is None else stability_weight(prev, now)
         best = None
         for day in days:
-            st = max(day.day_start_ms, day0 + 8 * 900_000)
+            st = max(day.day_start_ms, now)
             while st + dur * 60_000 <= min(
                 day.day_end_ms + (dur - 15) * 60_000, deadline
             ):
@@ -134,21 +141,21 @@ def test_linucb_vectorized_matches_scalar() -> None:
                     r = arm_overlap_rates_from_minute(
                         (st - day.day_start_ms) / 60_000, dur
                     )
-                    lin = sum(
+                    sc = sum(
                         x * day.arm_scores[a] for x, a in zip(r, names, strict=True)
                     )
-                    sc = w.wL * lin + w.wP * slot_preference_score(
-                        m, st, st + dur * 60_000, "UTC"
-                    ) / (dur / 60)
+                    if prev is not None:
+                        sc -= w_s * min(abs(st - prev) / 3_600_000, 4) / 4
                     arm = names[
                         [
                             b[1] <= ((st - day.day_start_ms) // 60_000) % 1440 < b[2]
                             for b in ARM_BANDS
                         ].index(True)
                     ]
-                    key = (-round(sc, 9), TIE_BREAK_ARM_ORDER.index(arm), st)
+                    key = (-round(sc, 9), order.index(arm), st)
                     if best is None or key < best:
                         best = key
                 st += 900_000
         assert got is not None and best is not None
         assert got.start_ms == best[2]
+        assert got.stability_weight == w_s

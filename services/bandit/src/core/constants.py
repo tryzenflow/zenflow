@@ -23,16 +23,16 @@ WORKLOAD_HOURS_DIVISOR = 12
 WORKLOAD_COUNT_DIVISOR = 8
 WORKLOAD_TYPES = ("LECTURE", "ASSIGNMENT", "EXAM", "TASK", "DND")
 
-# Adaptive LinUCB-vs-preference blend (issue #62 A).
-LINUCB_WEIGHT_COLD = 0.3
-PREFERENCE_WEIGHT_COLD = 1.0
-LINUCB_WEIGHT_WARM = 1.0
-PREFERENCE_WEIGHT_WARM = 0.1
-WEIGHT_WARMUP_OBSERVATIONS = 40
+# LinUCB slot score = linucb + proximity-scaled stability. The stability weight
+# is full for a task whose old start is <= NEAR hours away and fades linearly to
+# FAR at FAR_HOURS: upcoming tasks barely move, distant ones follow LinUCB.
+STABILITY_WEIGHT_NEAR = 1.0
+STABILITY_WEIGHT_FAR = 0.05
+STABILITY_NEAR_HOURS = 24
+STABILITY_FAR_HOURS = 168
 
 # Displacement (issue #62 B).
 MAX_DISPLACED_TASKS = 6
-DISPLACEMENT_CANDIDATES = 8
 
 # Placement scan scope (ADR-0003; owned by Python, echoed via ``paramsVersion``).
 SCAN_CAP_DAYS = 30

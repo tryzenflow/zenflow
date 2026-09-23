@@ -63,7 +63,7 @@ computed in-process from the supplied `(A, b)`, so there is no `/predict` hop.
   series, the member's window from `series_day_windows` (`min(floor((deadline - next15)/1d), 59)` days).
   Days already holding `MAX_SERIES_PER_DAY` (1) siblings are skipped; siblings' intervals are hard blocks.
 - **Policies**: HEURISTIC = best preference slot per day, best score across days (earlier day wins
-  ties). LINUCB = slot-first scan over all days with the adaptive wL/wP blend. LINUCB falls back to the
+  ties). LINUCB = slot-first scan over all days scoring arm term + proximity-scaled stability. LINUCB falls back to the
   heuristic (`appliedPolicy: "HEURISTIC"`) on no bandit state, a singular matrix or no surviving slot.
 - **Series batching**: every member's LinUCB context vectors + arm scores are built once per request
   as a single `(M, N, D)` tensor (`M` = member count, always — `M=1` for a lone task; `N` = the max
@@ -79,7 +79,10 @@ computed in-process from the supplied `(A, b)`, so there is no `/predict` hop.
 - **No free slot (single member)**:
   1. First call returns `NEEDS_INFEASIBLE_CONTEXT`.
   2. Second call (with `infeasible`) tries EDF displacement over the deadline day (widening to +/-1
-     day) -> `DISPLACED` with `moves`.
+     day) -> `DISPLACED` with `moves`. The new task takes the earliest start (clear of fixed blocks)
+     whose cascade succeeds; colliding flexible tasks are settled in deadline order, each moving to
+     the free start nearest its old one -- on **any day** up to its own deadline (within
+     `horizonOccupied`), never onto a fixed block or an equal-deadline peer (no ripple shifts).
   3. Otherwise the user's policy: `ACCEPT_CONFLICTS` -> `ACCEPTED_CONFLICTS` (min-overlap start;
      `conflicting` is true only if it really overlaps `horizonOccupied`), `ACCEPT_LATE_DEADLINE` ->
      `ACCEPTED_LATE` (`late: true`), else `INFEASIBLE`.
@@ -167,20 +170,24 @@ services/bandit/
 ### Scheduler core (`src/core/`, authoritative since ADR-0003)
 
 Pure numpy: `slot`, `arms`, `context_vector`, `reward`, `series_spread`, `preference`
-(+ `decay_matrix`), `slot_score` (`best_free_slot`), `adaptive_weights`, `linucb_best_slot`,
+(+ `decay_matrix`), `slot_score` (`best_free_slot`, `stability_weight`), `linucb_best_slot`,
 `displacement` and `sync_conflicts`. No I/O, clock or randomness; instants are epoch-ms ints.
 The 7x24 matrix is 168 floats.
 
 Originally ported from `backend/src/scheduler/core/*` (issue #60, when the TS core was the
 source of truth). **ADR-0003 phase 6 reversed that**: Python is now the sole ranking
-implementation — `linucb_best_slot`, `context_vector`, `arms`, `adaptive_weights` and
+implementation — `linucb_best_slot`, `context_vector`, `arms` and
 `displacement` no longer have a TS counterpart at all (that code was deleted from `backend/`).
 A behaviour change to any of those goes in this package's `src/core/*` with pytest coverage
 and updated `packages/shared/contract/place/*.json` fixtures — not a TS port, per the rewritten
 CLAUDE.md invariant 2.
 
 - `linucb_best_slot` (issue #62 A): scores every feasible 15-min start on all days as
-  `wL*armTerm + wP*pref/hours + stability`. Ties go to `TIE_BREAK_ARM_ORDER`, then the earlier start.
+  `armTerm + wS*stability` -- no preference-matrix term. `wS = stability_weight(prevStart, now)` is
+  1.0 while the task's old start is <=24h away and fades linearly to 0.05 at 7 days, so upcoming
+  tasks stay put and distant ones follow LinUCB. Exact ties (e.g. every arm cold) go to a per-request
+  seeded arm order (`seeded_tie_break_order(requestId|memberId)`), then the earlier start -- cold
+  start explores across the whole day instead of always MORNING, and stays reproducible.
 - The scan is vectorized: per-tz UTC offset chunks (DST and fractional offsets like Asia/Kolkata),
   a prefix-sum for window scores, a difference-array occupancy mask, and `argmax` on scores rounded to
   1e-9 (earliest start wins, like the original TS loop this was ported from).

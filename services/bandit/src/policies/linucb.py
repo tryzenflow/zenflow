@@ -33,10 +33,7 @@ class LinucbPolicy:
     scored through :func:`src.models.linucb.score`.
     """
 
-    def __init__(
-        self, bandit: BanditWire | None, matrix: Sequence[float], timezone: str
-    ) -> None:
-        self.matrix = matrix
+    def __init__(self, bandit: BanditWire | None, timezone: str) -> None:
         self.tz = timezone
         self.alpha = bandit.alpha if bandit is not None else 0.0
         self._arms = (
@@ -96,7 +93,7 @@ class LinucbPolicy:
         extra: Intervals,
         next_ms: int,
         deadline_ms: int,
-        observation_count: float,
+        tie_break_order: Sequence[str],
     ) -> LinucbPick | None:
         if not self.enabled or not days:
             return None
@@ -107,7 +104,7 @@ class LinucbPolicy:
                 day_end_ms=d.day_end_ms,
                 occupied=occupied_by_day[d.day_str],
                 vector=vectors_by_day[d.day_str].tolist(),
-                arm_scores=arm_scores[d.day_str],
+                arm_scores={str(a): v for a, v in arm_scores[d.day_str].items()},
             )
             for d in days
         ]
@@ -115,12 +112,11 @@ class LinucbPolicy:
             cand,
             member.duration_minutes,
             self.tz,
-            self.matrix,
             next_ms,
             deadline_ms,
             extra,
             member.prev_start_ms,
-            observation_count,
+            tie_break_order,
         )
         if best is None or not math.isfinite(best.score):
             return None
@@ -130,5 +126,5 @@ class LinucbPolicy:
             score=best.score,
             selected_arm=arm,
             feature_vector=best.vector,
-            weights=Weights(wL=best.weights.wL, wP=best.weights.wP),
+            weights=Weights(wL=1.0, wS=best.stability_weight),
         )

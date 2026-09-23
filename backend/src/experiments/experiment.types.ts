@@ -36,8 +36,8 @@ export interface RecordProposalArgs {
   featureVector: number[];
   /** The arm behind `modelProposal` (null otherwise). */
   selectedArm: SchedulingArm | null;
-  /** Applied slot-score weights (`wL`/`wP`) of the LinUCB pick; null for heuristic. */
-  weights?: { wL: number; wP: number } | null;
+  /** Applied slot-score weights (`wL`/`wS`) of the LinUCB pick; null for heuristic. */
+  weights?: { wL: number; wS: number } | null;
   /** Whether this event ran BOTH placers purely for comparison (`PAIRWISE_SAMPLE_RATE`). */
   pairwiseShown: boolean;
   /** Set only when `pairwiseShown` — which side the primary policy's slot was shown on. */

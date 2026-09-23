@@ -27,6 +27,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from src.core import constants as consts
+from src.core.arms import seeded_tie_break_order
 from src.core.context_vector import build_context_vector
 from src.core.displacement import (
     flexible_from_dicts,
@@ -131,7 +132,7 @@ class _Placer:
             d.day_str: _ivals(d.occupied) for d in req.days
         }
         self.heuristic_policy = HeuristicPolicy(self.matrix, self.tz)
-        self.linucb_policy = LinucbPolicy(req.bandit, self.matrix, self.tz)
+        self.linucb_policy = LinucbPolicy(req.bandit, self.tz)
 
     # ---- helpers ---------------------------------------------------------
     def _select_days(
@@ -273,7 +274,7 @@ class _Placer:
             extra,
             self.next15,
             self.req.deadline_ms,
-            self.req.user.observation_count,
+            seeded_tie_break_order(f"{self.req.request_id}|{m.id}"),
         )
         self.t.scan += time.perf_counter() - t0
         return pick
@@ -377,8 +378,8 @@ class _Placer:
             _ivals(ctx.fixed),
             req.now_ms,
             [(ds, de), (ds - consts.DAY_MS, de + consts.DAY_MS)],
-            self.matrix,
-            self.tz,
+            _ivals(ctx.horizon_occupied),
+            req.deadline_ms + consts.INFEASIBLE_HORIZON_DAYS * consts.DAY_MS,
         )
         if plan.kind == "placed" and plan.start_ms is not None:
             return base.model_copy(

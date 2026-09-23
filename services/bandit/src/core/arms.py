@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
 
 from .slot import utc_to_minutes
@@ -52,6 +53,21 @@ TIE_BREAK_ARM_ORDER: tuple[str, ...] = (
     "EARLY_MORNING",
     "NIGHT",
 )
+
+
+def seeded_tie_break_order(seed: str) -> tuple[str, ...]:
+    """Deterministic pseudo-random permutation of the arms for ``seed``.
+
+    Cold start (every arm tied) would otherwise always land in MORNING; a
+    per-request permutation spreads that exploration across the whole day
+    while keeping placement a pure function of the request (ADR-0003).
+    """
+    return tuple(
+        sorted(
+            TIE_BREAK_ARM_ORDER,
+            key=lambda a: hashlib.sha256(f"{seed}|{a}".encode()).digest(),
+        )
+    )
 
 
 def arm_overlap_rates_from_minute(

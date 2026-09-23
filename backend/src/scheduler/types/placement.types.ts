@@ -68,8 +68,8 @@ export interface BanditPick {
   selectedArm: SchedulingArm;
   /** The length-`d` context vector for the chosen day. */
   featureVector: number[];
-  /** Applied `wL`/`wP` slot-score weights (`core/adaptive-weights.ts`). */
-  weights: { wL: number; wP: number };
+  /** Applied `wL` (LinUCB) / `wS` (proximity-scaled stability) weights. */
+  weights: { wL: number; wS: number };
 }
 
 /** One scanned candidate day: its bounds, what occupies it, and its context vector. */

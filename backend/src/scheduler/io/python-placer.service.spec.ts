@@ -146,7 +146,7 @@ describe("PythonPlacer.placeSingle (python answers)", () => {
         score: 2,
         selectedArm: "MORNING",
         featureVector: [0.1],
-        weights: { wL: 0.3, wP: 1 },
+        weights: { wL: 1, wS: 0 },
       },
     });
     const { placer, experiment } = make({
@@ -161,7 +161,7 @@ describe("PythonPlacer.placeSingle (python answers)", () => {
       expect.objectContaining({
         selectedArm: "MORNING",
         featureVector: [0.1],
-        weights: { wL: 0.3, wP: 1 },
+        weights: { wL: 1, wS: 0 },
         pairwiseShown: true,
       }),
     );

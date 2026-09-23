@@ -118,7 +118,9 @@ export interface LinucbPick extends HeuristicPick {
   selectedArm: SchedulingArm;
   /** Length FEATURE_DIM (22), stored on `SlotProposal`. */
   featureVector: number[];
-  weights: { wL: number; wP: number };
+  /** Applied slot-score weights: LinUCB (`wL`, always 1) and the
+   *  proximity-scaled stability weight (`wS`, 0 without `prevStartMs`). */
+  weights: { wL: number; wS: number };
 }
 
 export interface PlacedMember {

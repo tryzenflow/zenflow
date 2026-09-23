@@ -2879,7 +2879,7 @@
   "response": {
     "contractVersion": 1,
     "requestId": "00000000-0000-4000-8000-000000000002",
-    "paramsVersion": "py-88d5c3f68433",
+    "paramsVersion": "py-786391b0cef5",
     "results": [
       {
         "id": "t1",
@@ -2890,8 +2890,8 @@
           "score": 1.0
         },
         "linucb": {
-          "startMs": 1789999200000,
-          "score": 0.46601406282112195,
+          "startMs": 1789988400000,
+          "score": 0.41601406282112197,
           "selectedArm": "AFTERNOON",
           "featureVector": [
             -0.9,
@@ -2919,22 +2919,22 @@
           ],
           "weights": {
             "wL": 1.0,
-            "wP": 0.1
+            "wS": 0.0
           }
         },
-        "startMs": 1789999200000,
+        "startMs": 1789988400000,
         "moves": [],
         "late": false,
         "conflicting": false
       }
     ],
     "timingsMs": {
-      "decode": 0.347,
-      "context": 0.044,
-      "predict": 0.113,
-      "scan": 0.786,
+      "decode": 0.309,
+      "context": 0.049,
+      "predict": 0.277,
+      "scan": 0.968,
       "displace": 0.0,
-      "total": 6.997
+      "total": 1.806
     }
   }
 }
