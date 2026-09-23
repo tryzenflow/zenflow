@@ -186,7 +186,7 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
                 className="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl h-[52px] px-5 text-base font-semibold shrink-0"
                 onPress={() => handlePick("alternative")}
               >
-                <Text>Switch to {options[1]?.time ?? ""}</Text>
+                <Text className="font-bold">Switch to {options[1]?.time ?? ""}</Text>
               </Button>
               <Button
                 variant="ghost"
