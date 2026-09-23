@@ -1,0 +1,397 @@
+{
+  "name": "single-linucb-cold-bandit",
+  "description": "One 60 min task, LINUCB primary, all five arms cold (score 0), observationCount 0 so the blend is wL=0.3 / wP=1.0: the preference matrix dominates and the earliest 08:00 hot hour is chosen; arm tie -> MORNING.",
+  "ignore": [
+    "paramsVersion",
+    "timingsMs"
+  ],
+  "request": {
+    "contractVersion": 1,
+    "requestId": "00000000-0000-4000-8000-000000000002",
+    "mode": "PLACE",
+    "nowMs": 1789977600000,
+    "timezone": "UTC",
+    "maxScanDays": 30,
+    "fixedOccupied": [],
+    "deadlineMs": 1790236800000,
+    "members": [
+      {
+        "id": "t1",
+        "durationMinutes": 60,
+        "primaryPolicy": "LINUCB",
+        "computeBoth": false
+      }
+    ],
+    "days": [
+      {
+        "dayStr": "2026-09-21",
+        "dayStartMs": 1789948800000,
+        "dayEndMs": 1790035200000,
+        "occupied": [],
+        "workloadByType": {
+          "LECTURE": {
+            "hours": 0,
+            "count": 0
+          },
+          "ASSIGNMENT": {
+            "hours": 0,
+            "count": 0
+          },
+          "EXAM": {
+            "hours": 0,
+            "count": 0
+          },
+          "TASK": {
+            "hours": 0,
+            "count": 0
+          },
+          "DND": {
+            "hours": 0,
+            "count": 0
+          }
+        }
+      },
+      {
+        "dayStr": "2026-09-22",
+        "dayStartMs": 1790035200000,
+        "dayEndMs": 1790121600000,
+        "occupied": [],
+        "workloadByType": {
+          "LECTURE": {
+            "hours": 0,
+            "count": 0
+          },
+          "ASSIGNMENT": {
+            "hours": 0,
+            "count": 0
+          },
+          "EXAM": {
+            "hours": 0,
+            "count": 0
+          },
+          "TASK": {
+            "hours": 0,
+            "count": 0
+          },
+          "DND": {
+            "hours": 0,
+            "count": 0
+          }
+        }
+      },
+      {
+        "dayStr": "2026-09-23",
+        "dayStartMs": 1790121600000,
+        "dayEndMs": 1790208000000,
+        "occupied": [],
+        "workloadByType": {
+          "LECTURE": {
+            "hours": 0,
+            "count": 0
+          },
+          "ASSIGNMENT": {
+            "hours": 0,
+            "count": 0
+          },
+          "EXAM": {
+            "hours": 0,
+            "count": 0
+          },
+          "TASK": {
+            "hours": 0,
+            "count": 0
+          },
+          "DND": {
+            "hours": 0,
+            "count": 0
+          }
+        }
+      },
+      {
+        "dayStr": "2026-09-24",
+        "dayStartMs": 1790208000000,
+        "dayEndMs": 1790294400000,
+        "occupied": [],
+        "workloadByType": {
+          "LECTURE": {
+            "hours": 0,
+            "count": 0
+          },
+          "ASSIGNMENT": {
+            "hours": 0,
+            "count": 0
+          },
+          "EXAM": {
+            "hours": 0,
+            "count": 0
+          },
+          "TASK": {
+            "hours": 0,
+            "count": 0
+          },
+          "DND": {
+            "hours": 0,
+            "count": 0
+          }
+        }
+      }
+    ],
+    "user": {
+      "preferenceMatrix": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.5,
+        0.5,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.5,
+        0.5,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.5,
+        0.5,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.5,
+        0.5,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.5,
+        0.5,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.5,
+        0.5,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.5,
+        0.5,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "observationCount": 0
+    },
+    "bandit": {
+      "alpha": 0.15,
+      "ridge": 1.0,
+      "state": {
+        "EARLY_MORNING": {
+          "A": [],
+          "b": []
+        },
+        "MORNING": {
+          "A": [],
+          "b": []
+        },
+        "AFTERNOON": {
+          "A": [],
+          "b": []
+        },
+        "EVENING": {
+          "A": [],
+          "b": []
+        },
+        "NIGHT": {
+          "A": [],
+          "b": []
+        }
+      }
+    }
+  },
+  "response": {
+    "contractVersion": 1,
+    "requestId": "00000000-0000-4000-8000-000000000002",
+    "paramsVersion": "py-88d5c3f68433",
+    "results": [
+      {
+        "id": "t1",
+        "outcome": "PLACED",
+        "appliedPolicy": "LINUCB",
+        "heuristic": null,
+        "linucb": {
+          "startMs": 1789977600000,
+          "score": 1.0,
+          "selectedArm": "MORNING",
+          "featureVector": [
+            -0.9,
+            -0.75,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "weights": {
+            "wL": 0.3,
+            "wP": 1.0
+          }
+        },
+        "startMs": 1789977600000,
+        "moves": [],
+        "late": false,
+        "conflicting": false
+      }
+    ],
+    "timingsMs": {
+      "decode": 2.605,
+      "context": 0.061,
+      "predict": 0.039,
+      "scan": 1.049,
+      "displace": 0.0,
+      "total": 3.897
+    }
+  }
+}

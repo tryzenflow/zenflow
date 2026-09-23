@@ -9,7 +9,7 @@ Arm → timestamp mapping: [`docs/scheduler/reranking.md`](../../docs/scheduler/
 Experiment: [`docs/scheduler/ab-testing.md`](../../docs/scheduler/ab-testing.md).
 
 > **Status: wired end to end.** The model core, offline replay evaluator and FastAPI
-> surface (`src/api.py`: `GET /health`, `POST /predict`, `POST /update`) are implemented
+> surface (`src/api.py`: `GET /health`, `POST /predict`, `POST /v1/update`) are implemented
 > and tested; the NestJS backend calls this service as **Policy B** in a 50/50 A/B against
 > the preference heuristic (Policy A). `BanditPlacer` (`backend/src/scheduler/io/bandit-placer.service.ts`)
 > builds the context and picks the slot; `BanditService` + `BanditArmStateRepository`
@@ -34,7 +34,7 @@ Experiment: [`docs/scheduler/ab-testing.md`](../../docs/scheduler/ab-testing.md)
   ADR-0001 §5.
 - **Stateless service.** This service holds **no per-user state**. The NestJS backend owns
   `(A, b)` persistence (Postgres table `BanditArmState`, ADR-0001 §6.1) and passes the 5
-  arms' `(A, b)` in every request; `/update` returns the new `(A, b)` for the backend to
+  arms' `(A, b)` in every request; `/v1/update` returns the new `(A, b)` for the backend to
   persist. This keeps all durable state in one database and makes the "fall back to the
   heuristic when the service is down" path trivial.
 - **Reproducible.** The only randomness is uniform tie-breaking from an injected
@@ -49,7 +49,7 @@ Experiment: [`docs/scheduler/ab-testing.md`](../../docs/scheduler/ab-testing.md)
 | `GET /ready`    | Readiness: numpy import, tz offset-cache warm-up and a self-test placement → `200 {"status":"ready"}` or `503`. Compose healthcheck target. |
 | `POST /v1/place` | **Authoritative placement** (ADR-0003) — see below. |
 | `POST /predict` | Body: `alpha`, `ridge`, `state` (all 5 arms' `(A, b)`, `[]` = cold ridge prior), `contexts` (`[{day, x}]`). Returns `{scores: {day: {arm: score}}}` — all 5 arms for every day. A cold arm scores `0.0` (no exploration bonus until it has data). |
-| `POST /update`  | Body: `ridge`, `arm`, `x`, `reward`, `state` (that arm's `(A, b)`, `[]` = cold). Returns the new `{A, b}` (`A` is `d*d` row-major). |
+| `POST /v1/update`  | Body: `ridge`, `arm`, `x`, `reward`, `state` (that arm's `(A, b)`, `[]` = cold). Returns the new `{A, b}` (`A` is `d*d` row-major). |
 
 ### `POST /v1/place` (ADR-0003, phase 2; Nest calls it from phase 3)
 
@@ -78,7 +78,7 @@ computed in-process from the supplied `(A, b)`, so there is no `/predict` hop.
 - **Errors**: `422` validation (FastAPI `detail` list); `422 {"code":"CONTRACT_VERSION","supported":1,"got":n}`;
   `413` body > 2 MB; `401` bad or missing bearer token.
 - **Auth**: set `BANDIT_SERVICE_TOKEN` to require `Authorization: Bearer <token>` on `/v1/place`,
-  `/predict`, `/update`. `BANDIT_SERVICE_TOKEN_PREVIOUS` is also accepted for rotation. Unset = open
+  `/predict`, `/v1/update`. `BANDIT_SERVICE_TOKEN_PREVIOUS` is also accepted for rotation. Unset = open
   (dev/tests). `/health` and `/ready` are exempt.
 - **Observability**: each response has `x-request-id` (echoes the inbound header, else `req-<n>`).
   `paramsVersion` = `py-` + sha256 of the core constants and contract version; Nest stores it as
@@ -131,15 +131,20 @@ Python is **4-space** indented (PEP 8 / Ruff), which the root
 services/bandit/
 ├── Dockerfile                      # python:3.12-slim + uv; runs uvicorn src.api:app on :8000
 ├── src/
-│   ├── api.py                      # FastAPI app + routes (/health, /ready, /v1/place, /predict, /update), bearer auth, request-id
-│   ├── place.py                    # /v1/place orchestration (series ledger, heuristic + LinUCB, displacement, fallbacks)
+│   ├── api.py                      # FastAPI app + routes (/health, /ready, /v1/place, /predict, /v1/update), bearer auth, request-id
+│   ├── place.py                    # /v1/place orchestration (series ledger, day/duration caching, displacement, fallbacks)
+│   ├── policies/                   # one class per /v1/place placement policy
+│   │   ├── heuristic.py            # HeuristicPolicy: best per-day preference slot
+│   │   ├── linucb.py               # LinucbPolicy: slot-first scan wired to models/linucb.py
+│   │   └── selector.py             # PolicySelector: HEURISTIC vs LINUCB A/B split
 │   ├── schemas_place.py            # /v1/place Pydantic wire models (mirror packages/shared/src/placement.ts)
 │   ├── schemas.py                  # Pydantic request/response models + ArmId / ARM_IDS
-│   ├── serialization.py            # numpy glue + 422 guards (hydrate, all_finite, require_422)
+│   ├── serialization.py            # numpy glue + 422 guards (hydrate, hydrate_arms, all_finite, require_422)
 │   ├── main.py                     # replay-evaluation demo
 │   ├── core/                       # pure numpy port of backend/src/scheduler/core (see below)
 │   ├── models/
-│   │   └── linucb.py               # disjoint LinUCB + stateless score()/update() helpers
+│   │   ├── schemas.py              # ArmParams: mutable per-arm ridge-regression state
+│   │   └── linucb.py               # stateful LinUCB bandit (evaluators) + stateless score()/update()
 │   └── evaluators/
 │       ├── event.py                # one logged interaction (x, arm, payoff)
 │       ├── policy.py               # Policy ABC + RandomPolicy, LinUCBPolicy
@@ -197,7 +202,7 @@ data).
 calls `/predict` via `BanditService` (`backend/src/bandit/`, timeout + heuristic fallback);
 `ExperimentService` (`backend/src/experiments/`) is the 50/50 randomizer that writes
 `SlotProposal`. `SchedulingFeedbackService` (first `MOVE`) and `RetainedSessionsService`
-(`RETAINED`) compute the reward, call `/update`, and persist the returned `(A, b)` on
+(`RETAINED`) compute the reward, call `/v1/update`, and persist the returned `(A, b)` on
 `BanditArmState`. Shared types live in `@zenflow/shared` (`SchedulingArm`, predict/update
 request+response).
 

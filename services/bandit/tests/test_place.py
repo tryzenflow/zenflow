@@ -464,7 +464,7 @@ def test_bearer_auth(monkeypatch: pytest.MonkeyPatch) -> None:
     assert post(body, headers={"authorization": "Bearer old"}).status_code == 200
     # every model route is protected, probes are not
     assert client.post("/predict", json={}).status_code == 401
-    assert client.post("/update", json={}).status_code == 401
+    assert client.post("/v1/update", json={}).status_code == 401
     assert client.get("/health").status_code == 200
     assert client.get("/ready").status_code == 200
 

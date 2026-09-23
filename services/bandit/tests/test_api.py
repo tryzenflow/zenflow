@@ -24,7 +24,7 @@ def cold_state() -> dict[str, dict[str, list[float]]]:
 def hydrate(arm: str, x: list[float], reward: float) -> dict[str, list[float]]:
     """Run one /update from the ridge prior and return the arm's new (A, b)."""
     resp = client.post(
-        "/update",
+        "/v1/update",
         json={
             "ridge": 1.0,
             "arm": arm,
@@ -89,7 +89,7 @@ def test_predict_hydrated_arm_scores_nonzero_others_stay_zero():
 
 def test_update_returns_a_of_length_d_squared_and_b_of_length_d():
     resp = client.post(
-        "/update",
+        "/v1/update",
         json={
             "ridge": 1.0,
             "arm": "EVENING",
@@ -121,7 +121,7 @@ def test_update_accepts_previously_hydrated_state():
     x = [0.4, 0.5, 0.6]
     first = hydrate("NIGHT", x, 1.0)
     resp = client.post(
-        "/update",
+        "/v1/update",
         json={
             "ridge": 1.0,
             "arm": "NIGHT",
@@ -260,7 +260,7 @@ def test_predict_rejects_a_non_finite_context_value():
     ],
 )
 def test_update_route_rejects_malformed_bodies(body):
-    assert client.post("/update", json=body).status_code == 422
+    assert client.post("/v1/update", json=body).status_code == 422
 
 
 def test_update_rejects_a_non_finite_reward():
@@ -269,6 +269,6 @@ def test_update_rejects_a_non_finite_reward():
         '"reward": 1e400, "state": {"A": [], "b": []}}'
     )
     resp = client.post(
-        "/update", content=raw, headers={"content-type": "application/json"}
+        "/v1/update", content=raw, headers={"content-type": "application/json"}
     )
     assert resp.status_code == 422

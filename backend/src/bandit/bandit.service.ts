@@ -79,7 +79,7 @@ export class BanditService {
       state,
     };
 
-    return this.post<BanditUpdateResponse>("/update", body);
+    return this.post<BanditUpdateResponse>("/v1/update", body);
   }
 
   private async post<T>(path: string, body: unknown): Promise<T | null> {

@@ -1,13 +1,16 @@
 """Authoritative placement for ``POST /v1/place`` (ADR-0003).
 
-Pure orchestration over :mod:`src.core`: no I/O, no clock (``nowMs`` is a request
-field), no randomness. Ports the TS heuristic / bandit / series placers and
-displacement service (``5763a29``):
+Pure orchestration over :mod:`src.core` and :mod:`src.policies`: no I/O, no
+clock (``nowMs`` is a request field), no randomness. Ports the TS heuristic /
+bandit / series placers and displacement service (``5763a29``):
 
 * one request = one placement event (a single task, or one materialized series);
 * each member scans its own local-day window, skipping days already holding
   ``MAX_SERIES_PER_DAY`` siblings and never overlapping a sibling;
-* HEURISTIC = best per-day preference slot; LINUCB = slot-first scan over all days;
+* :class:`~src.policies.heuristic.HeuristicPolicy` /
+  :class:`~src.policies.linucb.LinucbPolicy` compute a pick each;
+  :class:`~src.policies.selector.PolicySelector` is the A/B split deciding
+  which one is applied (see ``place_member`` below);
 * no free slot for a single member -> ``NEEDS_INFEASIBLE_CONTEXT``, then (with
   ``infeasible``) EDF displacement and the user's fallback.
 """
@@ -31,7 +34,6 @@ from src.core.displacement import (
     pick_min_conflict_slot,
     plan_displacement,
 )
-from src.core.linucb_best_slot import LinucbCandidateDay, best_linucb_slot
 from src.core.series_spread import series_day_windows
 from src.core.slot import (
     Intervals,
@@ -43,8 +45,10 @@ from src.core.slot import (
     local_date_str,
     local_midnight_ms,
 )
-from src.core.slot_score import best_free_slot, slot_preference_score, stability_score
-from src.schemas import ARM_IDS, ArmId
+from src.policies.heuristic import HeuristicPolicy
+from src.policies.linucb import LinucbPolicy
+from src.policies.selector import PolicySelector
+from src.schemas import ArmId
 from src.schemas_place import (
     PLACEMENT_CONTRACT_VERSION,
     HeuristicPick,
@@ -58,7 +62,6 @@ from src.schemas_place import (
     PlaceRequest,
     PlaceResponse,
     Timings,
-    Weights,
 )
 
 
@@ -95,44 +98,6 @@ class _Ledger:
     count_by_day: dict[str, int] = field(default_factory=dict)
 
 
-class _Model:
-    """In-process arm scoring from the supplied ``(A, b)`` (no /predict hop)."""
-
-    def __init__(self, req: PlaceRequest) -> None:
-        self.alpha = req.bandit.alpha if req.bandit else 0.0
-        self._inv: dict[ArmId, tuple[NDArray[np.float64], NDArray[np.float64]] | None]
-        self._inv = {}
-        if req.bandit is None:
-            return
-        d, ridge = consts.FEATURE_DIM, req.bandit.ridge
-        for arm in ARM_IDS:
-            st = req.bandit.state.get(arm)
-            if st is None or (not st.A and not st.b):
-                self._inv[arm] = None  # cold arm -> fixed 0.0
-                continue
-            a = (
-                np.asarray(st.A, dtype=np.float64).reshape(d, d)
-                if st.A
-                else ridge * np.identity(d)
-            )
-            b = np.asarray(st.b, dtype=np.float64) if st.b else np.zeros(d)
-            a_inv = np.linalg.inv(a)
-            self._inv[arm] = (a_inv, a_inv @ b)
-
-    def scores(self, x: NDArray[np.float64]) -> dict[ArmId, NDArray[np.float64]]:
-        """``theta.x + alpha*sqrt(x A^-1 x)`` per arm for every row of ``x``."""
-        out: dict[ArmId, NDArray[np.float64]] = {}
-        for arm in ARM_IDS:
-            hit = self._inv.get(arm)
-            if hit is None:
-                out[arm] = np.zeros(x.shape[0])
-                continue
-            a_inv, theta = hit
-            unc = np.sqrt(np.maximum(((x @ a_inv) * x).sum(axis=1), 0.0))
-            out[arm] = x @ theta + self.alpha * unc
-        return out
-
-
 class _Placer:
     def __init__(self, req: PlaceRequest, timer: _Timer) -> None:
         self.req = req
@@ -145,9 +110,10 @@ class _Placer:
         self.occ: dict[str, Intervals] = {
             d.day_str: _ivals(d.occupied) for d in req.days
         }
-        self.model = _Model(req)
+        self.heuristic_policy = HeuristicPolicy(self.matrix, self.tz)
+        self.linucb_policy = LinucbPolicy(req.bandit, self.matrix, self.tz)
         self._vec_cache: dict[int, dict[str, NDArray[np.float64]]] = {}
-        self._score_cache: dict[int, dict[str, dict[str, float]]] = {}
+        self._score_cache: dict[int, dict[str, dict[ArmId, float]]] = {}
 
     # ---- helpers ---------------------------------------------------------
     def _select_days(
@@ -188,22 +154,13 @@ class _Placer:
         self.t.context += time.perf_counter() - t0
         return vecs
 
-    def _arm_scores(self, duration: int) -> dict[str, dict[str, float]]:
+    def _arm_scores(self, duration: int) -> dict[str, dict[ArmId, float]]:
         hit = self._score_cache.get(duration)
         if hit is not None:
             return hit
         vecs = self._vectors(duration)
         t0 = time.perf_counter()
-        keys = list(vecs)
-        x = (
-            np.stack([vecs[k] for k in keys])
-            if keys
-            else np.empty((0, consts.FEATURE_DIM))
-        )
-        per_arm = self.model.scores(x)
-        out: dict[str, dict[str, float]] = {
-            k: {a: float(per_arm[a][i]) for a in ARM_IDS} for i, k in enumerate(keys)
-        }
+        out = self.linucb_policy.arm_scores(vecs)
         self._score_cache[duration] = out
         self.t.predict += time.perf_counter() - t0
         return out
@@ -213,78 +170,36 @@ class _Placer:
         self, m: PlacementMember, days: list[PlacementDay], extra: Intervals
     ) -> HeuristicPick | None:
         t0 = time.perf_counter()
-        req = self.req
-        dur_ms = m.duration_minutes * consts.MS_PER_MINUTE
-        overhang = dur_ms - consts.SLOT_MS
-        best: HeuristicPick | None = None
-        for d in days:
-            start_ceil = min(req.deadline_ms, d.day_end_ms)
-            fit_ceil = min(req.deadline_ms, d.day_end_ms + overhang)
-            window_start = max(req.now_ms, d.day_start_ms)
-            slot = best_free_slot(
-                m.duration_minutes,
-                [*self.occ[d.day_str], *extra],
-                window_start,
-                start_ceil,
-                self.matrix,
-                self.tz,
-                fit_ceil,
-                m.prev_start_ms,
-            )
-            if slot is None:
-                continue
-            score = slot_preference_score(self.matrix, slot, slot + dur_ms, self.tz)
-            if m.prev_start_ms is not None:
-                score += stability_score(m.prev_start_ms, slot)
-            if best is None or score > best.score:
-                best = HeuristicPick(start_ms=slot, score=score)
+        pick = self.heuristic_policy.best_slot(
+            m, days, self.occ, extra, self.req.now_ms, self.req.deadline_ms
+        )
         self.t.scan += time.perf_counter() - t0
-        return best
+        return pick
 
     def linucb(
         self, m: PlacementMember, days: list[PlacementDay], extra: Intervals
     ) -> LinucbPick | None:
-        if self.req.bandit is None or not days:
+        if not self.linucb_policy.enabled or not days:
             return None
         try:
             scores = self._arm_scores(m.duration_minutes)
         except np.linalg.LinAlgError:
             return None
         vecs = self._vectors(m.duration_minutes)
-        cand = [
-            LinucbCandidateDay(
-                day_str=d.day_str,
-                day_start_ms=d.day_start_ms,
-                day_end_ms=d.day_end_ms,
-                occupied=self.occ[d.day_str],
-                vector=vecs[d.day_str].tolist(),
-                arm_scores=scores[d.day_str],
-            )
-            for d in days
-        ]
         t0 = time.perf_counter()
-        best = best_linucb_slot(
-            cand,
-            m.duration_minutes,
-            self.tz,
-            self.matrix,
+        pick = self.linucb_policy.best_slot(
+            m,
+            days,
+            self.occ,
+            vecs,
+            scores,
+            extra,
             self.next15,
             self.req.deadline_ms,
-            extra,
-            m.prev_start_ms,
             self.req.user.observation_count,
         )
         self.t.scan += time.perf_counter() - t0
-        if best is None or not math.isfinite(best.score):
-            return None
-        arm: ArmId = next(a for a in ARM_IDS if a == best.arm)
-        return LinucbPick(
-            start_ms=best.start_ms,
-            score=best.score,
-            selected_arm=arm,
-            feature_vector=best.vector,
-            weights=Weights(wL=best.weights.wL, wP=best.weights.wP),
-        )
+        return pick
 
     # ---- one member ------------------------------------------------------
     def place_member(
@@ -308,36 +223,28 @@ class _Placer:
 
         days = self._select_days(first, last, ledger)
         extra = list(ledger.siblings)
-        preflight = req.mode == "PREFLIGHT"
-        want_lin = not preflight and (m.primary_policy == "LINUCB" or m.compute_both)
-        lin = self.linucb(m, days, extra) if want_lin else None
-        need_heur = (
-            preflight
-            or m.primary_policy == "HEURISTIC"
-            or m.compute_both
-            or lin is None
+        lin = (
+            self.linucb(m, days, extra)
+            if PolicySelector.should_try_linucb(req.mode, m)
+            else None
         )
-        heur = self.heuristic(m, days, extra) if need_heur else None
+        heur = (
+            self.heuristic(m, days, extra)
+            if PolicySelector.should_try_heuristic(req.mode, m, lin)
+            else None
+        )
 
-        if not preflight and m.primary_policy == "LINUCB" and lin is not None:
-            return base.model_copy(
-                update={
-                    "outcome": "PLACED",
-                    "applied_policy": "LINUCB",
-                    "heuristic": heur,
-                    "linucb": lin,
-                    "start_ms": lin.start_ms,
-                }
-            )
-        if heur is None:
+        decision = PolicySelector.resolve(req.mode, m, heur, lin)
+        if decision is None:
             return self._no_slot(m, base)
+        policy, start_ms = decision
         return base.model_copy(
             update={
                 "outcome": "PLACED",
-                "applied_policy": "HEURISTIC",
+                "applied_policy": policy,
                 "heuristic": heur,
                 "linucb": lin,
-                "start_ms": heur.start_ms,
+                "start_ms": start_ms,
             }
         )
 

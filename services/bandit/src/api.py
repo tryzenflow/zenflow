@@ -1,7 +1,7 @@
 """FastAPI HTTP surface over the disjoint LinUCB model (:mod:`src.models.linucb`).
 
 The service is **stateless**: every request carries the per-arm ridge-regression
-state ``(A, b)``; ``POST /update`` returns the new state for the NestJS backend
+state ``(A, b)``; ``POST /v1/update`` returns the new state for the NestJS backend
 to persist (ADR-0001 §6.1). All scoring / update math is delegated to
 :func:`src.models.linucb.score` and :func:`src.models.linucb.update`, which
 mirror the model core exactly (Li et al., 2010, Algorithm 1):
@@ -44,7 +44,7 @@ from src.schemas import (
     UpdateResponse,
 )
 from src.schemas_place import PLACEMENT_CONTRACT_VERSION, PlaceRequest, PlaceResponse
-from src.serialization import all_finite, hydrate, require_422
+from src.serialization import all_finite, hydrate, hydrate_arms, require_422
 from src.telemetry import (
     cold_arms,
     predict_duration,
@@ -255,6 +255,13 @@ async def place(request: Request) -> PlaceResponse:
 
 @app.post("/predict", dependencies=[Depends(require_token)])
 def predict(request: PredictRequest) -> PredictResponse:
+    """Score every arm for every requested day (offline preview, not authoritative).
+
+    Cold-hydrates each arm's ``(A, b)`` once via :func:`hydrate_arms` — a
+    fully empty state stays fixed at ``0.0`` by contract, everything else is
+    seeded at the ridge prior (``A = ridge * I``) — then scores every
+    ``context`` against it with :func:`src.models.linucb.score`.
+    """
     require_422(
         math.isfinite(request.alpha) and request.alpha >= 0.0, "alpha must be >= 0"
     )
@@ -271,18 +278,8 @@ def predict(request: PredictRequest) -> PredictResponse:
 
     d = len(request.contexts[0].x)
     started = time.perf_counter()
-
-    # Hydrate each arm once. A fully-empty state is "cold" -> fixed 0.0 score.
-    is_cold: dict[ArmId, bool] = {}
-    hydrated: dict[ArmId, tuple[np.ndarray, np.ndarray]] = {}
-    for arm in ARM_IDS:
-        st = request.state[arm]
-        cold = not st.A and not st.b
-        is_cold[arm] = cold
-        if not cold:
-            hydrated[arm] = hydrate(st, d, request.ridge)
-
-    cold_count = sum(is_cold.values())
+    arms = hydrate_arms(request.state, d, request.ridge)
+    cold_count = sum(params is None for params in arms.values())
 
     with tracer.start_as_current_span(
         "linucb.score_all",
@@ -297,15 +294,15 @@ def predict(request: PredictRequest) -> PredictResponse:
             x: np.ndarray = np.asarray(ctx.x, dtype=np.float64)
             row: dict[ArmId, float] = {}
             for arm in ARM_IDS:
-                if is_cold[arm]:
+                params = arms[arm]
+                if params is None:
                     row[arm] = 0.0
-                else:
-                    a, b = hydrated[arm]
-                    try:
-                        row[arm] = score(a, b, x, request.alpha)
-                    except np.linalg.LinAlgError:
-                        singular_matrix.add(1, {"op": "predict"})
-                        raise
+                    continue
+                try:
+                    row[arm] = float(score(params.A, params.b, x, request.alpha))
+                except np.linalg.LinAlgError:
+                    singular_matrix.add(1, {"op": "predict"})
+                    raise
             scores[ctx.day] = row
 
     predict_duration.record(time.perf_counter() - started)
@@ -313,8 +310,15 @@ def predict(request: PredictRequest) -> PredictResponse:
     return PredictResponse(scores=scores)
 
 
-@app.post("/update", dependencies=[Depends(require_token)])
+@app.post("/v1/update", dependencies=[Depends(require_token)])
 def update_arm(request: UpdateRequest) -> UpdateResponse:
+    """Fold one ``(context, reward)`` observation into an arm and return the new state.
+
+    An empty ``state.A``/``state.b`` (first-ever observation for this arm)
+    is seeded at the ridge prior — ``A = ridge * I`` — by :func:`hydrate`
+    before the update, so the identity-seeded matrix is what comes back for
+    the backend to persist, not an empty one.
+    """
     require_422(
         math.isfinite(request.ridge) and request.ridge > 0.0, "ridge must be > 0"
     )
