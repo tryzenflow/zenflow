@@ -143,9 +143,9 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
               <Pressable
                 onPress={handleDismiss}
                 accessibilityLabel="Dismiss — keeps the current time"
-                className="inline-flex size-8 items-center justify-center rounded-full bg-muted text-muted-foreground shrink-0 mt-0.5"
+                className="inline-flex size-8 items-center justify-center rounded-full bg-muted shrink-0 mt-0.5"
               >
-                <X size={15} />
+                <X size={15} className="text-muted-foreground" />
               </Pressable>
             </View>
 
