@@ -29,6 +29,10 @@ import { NotificationBell } from "@/components/notification-bell";
 import { CreateSessionFab } from "@/components/tasks/create-task-fab";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useWeekDayTypes } from "@/hooks/use-week-day-types";
+import {
+  type PendingSlotPick,
+  takePendingSlotPick,
+} from "@/lib/pending-slot-pick";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { dateKey } from "@/lib/week-date-math";
 import { useFocusEffect } from "@react-navigation/native";
@@ -121,6 +125,93 @@ export default function WeekScreen() {
   const blockActionsSheetRef = useRef<BlockActionsSheetHandle>(null);
   const slotPickSheetRef = useRef<SlotPickSheetHandle>(null);
 
+  // Shared tail of a divergent pick (reschedule or create/edit hand-off):
+  // re-seed onto the chosen slot's day, force every mounted day to revalidate
+  // (so the block shows in its new place and clears from the old), and pulse
+  // it. Jumping to the chosen day also fixes a pre-existing case where the
+  // alternative sat off the focused day and the flash pulsed off-screen.
+  const applySlotPickChoice = useCallback(
+    (
+      session: Session,
+      primarySlot: string,
+      alternativeSlot: string,
+      chose: "primary" | "alternative",
+    ) => {
+      const chosenSlot = chose === "alternative" ? alternativeSlot : primarySlot;
+      commitFocusedDate(zonedDate(chosenSlot, tz));
+      setFocusTick((t) => t + 1);
+      armFlash(session.id);
+      if (chose === "alternative") {
+        showAlternativePickToast(toast, alternativeSlot, tz);
+      }
+    },
+    [tz, commitFocusedDate, armFlash, toast],
+  );
+
+  // Handle divergent slot pick from drag reschedule — show picker for primary vs alternative
+  const handleRequestSlotPick = useCallback(
+    (
+      session: Session,
+      primarySlot: string,
+      alternativeSlot: string,
+      slotProposalId: string,
+      onPick: (chose: "primary" | "alternative") => void,
+    ) => {
+      slotPickSheetRef.current?.open(
+        session,
+        primarySlot,
+        alternativeSlot,
+        slotProposalId,
+        tz,
+        async (chose) => {
+          try {
+            await slotPick(session.id, { slotProposalId, chose });
+          } catch (error) {
+            // Non-blocking — parent handles toast
+            console.warn("slotPick failed:", error);
+          }
+          onPick(chose);
+          applySlotPickChoice(session, primarySlot, alternativeSlot, chose);
+        },
+        () => {},
+      );
+    },
+    [applySlotPickChoice],
+  );
+
+  // A divergent create/edit landed on the week view (`?date=`/`?flash=` params
+  // already focused it and pulsed the block) — present the same sheet over it.
+  const handlePendingSlotPick = useCallback(
+    (pending: PendingSlotPick) => {
+      slotPickSheetRef.current?.open(
+        pending.session,
+        pending.primarySlot,
+        pending.alternativeSlot,
+        pending.slotProposalId,
+        pending.tz,
+        async (chose) => {
+          try {
+            await slotPick(pending.session.id, {
+              slotProposalId: pending.slotProposalId,
+              chose,
+            });
+          } catch (error) {
+            // Non-blocking — keep the placement, surface via the toast path
+            console.warn("slotPick failed:", error);
+          }
+          applySlotPickChoice(
+            pending.session,
+            pending.primarySlot,
+            pending.alternativeSlot,
+            chose,
+          );
+        },
+        () => {},
+      );
+    },
+    [applySlotPickChoice],
+  );
+
   const handleWeekDragBegin = useCallback(() => {
     pagerRef.current?.beginHeaderWeekDrag();
   }, []);
@@ -146,7 +237,12 @@ export default function WeekScreen() {
   useFocusEffect(
     useCallback(() => {
       setFocusTick((t) => t + 1);
-    }, []),
+      // A divergent create/edit handed off its primary-vs-alternative pick
+      // (`setPendingSlotPick` in task/new|edit) — consume it here so the
+      // sheet is presented over the week view, never the modal form.
+      const pending = takePendingSlotPick();
+      if (pending) handlePendingSlotPick(pending);
+    }, [handlePendingSlotPick]),
   );
 
   // A fresh deep-link (`date` param changed) re-seeds the focus.
@@ -251,46 +347,6 @@ export default function WeekScreen() {
       updateScopeSheetRef.current?.open(session, pending, onResolve);
     },
     [],
-  );
-
-  // Handle divergent slot pick from drag reschedule — show picker for primary vs alternative
-  const handleRequestSlotPick = useCallback(
-    (
-      session: Session,
-      primarySlot: string,
-      alternativeSlot: string,
-      slotProposalId: string,
-      onPick: (chose: "primary" | "alternative") => void,
-    ) => {
-      slotPickSheetRef.current?.open(
-        session,
-        primarySlot,
-        alternativeSlot,
-        slotProposalId,
-        tz,
-        async (chose) => {
-          try {
-            await slotPick(session.id, { slotProposalId, chose });
-          } catch (error) {
-            // Non-blocking — parent handles toast
-            console.warn("slotPick failed:", error);
-          }
-          onPick(chose);
-          // After pick, refetch all days and pulse the session at its new time
-          setFocusTick((t) => t + 1);
-          // The session will be at the chosen slot after refetch
-          // We need to determine which slot was chosen for the flash
-          const chosenSlot = chose === "alternative" ? alternativeSlot : primarySlot;
-          armFlash(session.id);
-          // Show success toast if alternative was picked (matches mockup)
-          if (chose === "alternative") {
-            showAlternativePickToast(toast, alternativeSlot, tz);
-          }
-        },
-        () => {},
-      );
-    },
-    [tz, armFlash, toast],
   );
 
   // …and once it lands: if it moved off the focused day, teleport there; then

@@ -3,11 +3,9 @@ import {
   removeSeriesFrom,
   removeSession,
   removeSessionSeries,
-  slotPick,
   truncateSessionSeries,
   updateSession,
 } from "@/api/tasks";
-import { SlotPickSheet, type SlotPickSheetHandle } from "@/components/calendar/slot-pick-sheet";
 import { Trash2 } from "@/components/Icons";
 import {
   type DeleteRecurringScope,
@@ -21,6 +19,7 @@ import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
+import { setPendingSlotPick } from "@/lib/pending-slot-pick";
 import { isSessionPastDeadline } from "@/lib/overdue";
 import {
   RESCHEDULE_HINT,
@@ -36,7 +35,7 @@ import {
   zonedDate,
   zonedWallClockToUtc,
 } from "@zenflow/core";
-import type { Session, UpdateSessionInput, UpdateSessionResponse } from "@zenflow/shared";
+import type { Session, UpdateSessionInput } from "@zenflow/shared";
 import { format } from "date-fns";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
@@ -69,12 +68,6 @@ export default function EditSessionScreen() {
   const [task, setSession] = useState<Session | null>(null);
   const [deleting, setDeleting] = useState(false);
   const deleteScopeSheet = useRef<DeleteRecurringSheetHandle>(null);
-
-  const slotPickSheetRef = useRef<SlotPickSheetHandle>(null);
-  const [pendingPick, setPendingPick] = useState<{
-    response: UpdateSessionResponse;
-    resolve: () => void;
-  } | null>(null);
 
   const form = useSessionForm({ defaultValues: EMPTY_DEFAULTS });
   const loading = !task || form.formState.isSubmitting || deleting;
@@ -171,49 +164,26 @@ export default function EditSessionScreen() {
     try {
       const updated = await updateSession(task.id, patch);
 
-      // Handle divergent response — show picker for primary vs alternative slot
+      // Handle divergent response — hand the primary-vs-alternative pick off
+      // to the week view, which owns the SlotPickSheet and presents it over
+      // the calendar (`useFocusEffect`, app/(app)/index.tsx).
       if (
         updated.divergent &&
         updated.slotProposalId &&
         updated.primarySlot &&
         updated.alternativeSlot
       ) {
-        setPendingPick({
-          response: updated,
-          resolve: () => {},
-        });
-        slotPickSheetRef.current?.open(
-          updated,
-          updated.primarySlot,
-          updated.alternativeSlot,
-          updated.slotProposalId,
+        setPendingSlotPick({
+          session: updated,
+          primarySlot: updated.primarySlot,
+          alternativeSlot: updated.alternativeSlot,
+          slotProposalId: updated.slotProposalId,
           tz,
-          async (chose) => {
-            try {
-              await slotPick(updated.id, { slotProposalId: updated.slotProposalId!, chose });
-            } catch (error) {
-              // Non-blocking — surface as toast but continue with placement
-              showErrorToast(toast, error, "Couldn't record preference");
-            }
-            if (chose === "alternative" && updated.alternativeSlot) {
-              router.replace({
-                pathname: "/",
-                params: { date: updated.alternativeSlot, flash: updated.id },
-              } as Href);
-            } else if (updated.scheduledStartTime) {
-              router.replace({
-                pathname: "/",
-                params: { date: updated.scheduledStartTime, flash: updated.id },
-              } as Href);
-            } else {
-              router.back();
-            }
-            setPendingPick(null);
-          },
-          () => {
-            setPendingPick(null);
-          },
-        );
+        });
+        router.replace({
+          pathname: "/",
+          params: { date: updated.primarySlot, flash: updated.id },
+        } as Href);
         return;
       }
 
@@ -375,7 +345,6 @@ export default function EditSessionScreen() {
           onChoose={runDelete}
         />
       </SessionFormScreen>
-      <SlotPickSheet ref={slotPickSheetRef} tz={tz} />
     </>
   );
 }

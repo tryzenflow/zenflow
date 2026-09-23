@@ -126,8 +126,8 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
     return (
       <BottomSheet>
         <BottomSheetContent ref={sheet.ref} onDismiss={handleDismiss}>
-          <BottomSheetView hadHeader={false} className="gap-2 pt-2">
-            <View className="flex-row items-start justify-between gap-3 ">
+          <BottomSheetView hadHeader={false} className="gap-2 pt-2 px-3">
+            <View className="flex-row items-start justify-between gap-3  px-3">
               <View className="min-w-0 flex-1">
                 <Text className="text-[18.5px] font-bold tracking-[-0.01em] leading-tight">
                   Two good times for this
@@ -150,9 +150,7 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
                 <Pressable
                   key={option.isPrimary ? "primary" : "alternative"}
                   onPress={() => {
-                    const chose = option.isPrimary
-                      ? "primary"
-                      : "alternative";
+                    const chose = option.isPrimary ? "primary" : "alternative";
                     if (selected === chose) {
                       handlePick(chose);
                     } else {
@@ -170,8 +168,8 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
                       }
                     `}
                 >
-                    <View
-                      className={`
+                  <View
+                    className={`
                     shrink-0 size-5 rounded-full border-2 flex items-center justify-center
                     ${
                       selected ===
@@ -180,25 +178,25 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
                         : "border-border bg-transparent"
                     }
                   `}
-                    >
-                      {selected ===
-                        (option.isPrimary ? "primary" : "alternative") && (
-                        <Check
-                          size={12}
-                          className="text-primary-foreground"
-                          strokeWidth={4}
-                        />
-                      )}
-                    </View>
-                    <View className="min-w-0 flex-1">
-                      <Text className="text-[15px] font-semibold">
-                        {option.label}
-                      </Text>
-                      <Text className="text-[12px] text-muted-foreground mt-0.5">
-                        {option.hint}
-                      </Text>
-                    </View>
-                  </Pressable>
+                  >
+                    {selected ===
+                      (option.isPrimary ? "primary" : "alternative") && (
+                      <Check
+                        size={12}
+                        className="text-primary-foreground"
+                        strokeWidth={4}
+                      />
+                    )}
+                  </View>
+                  <View className="min-w-0 flex-1">
+                    <Text className="text-[15px] font-semibold">
+                      {option.label}
+                    </Text>
+                    <Text className="text-[12px] text-muted-foreground mt-0.5">
+                      {option.hint}
+                    </Text>
+                  </View>
+                </Pressable>
               ))}
             </View>
 
@@ -213,14 +211,18 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
                 className="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl h-[52px] px-5 text-base font-semibold shrink-0"
                 onPress={() => handlePick("alternative")}
               >
-                <Text className="font-bold">Switch to {options[1]?.time ?? ""}</Text>
+                <Text className="font-bold">
+                  Switch to {options[1]?.time ?? ""}
+                </Text>
               </Button>
               <Button
                 variant="ghost"
                 className="inline-flex w-full items-center justify-center rounded-xl h-[42px] px-5 text-[13.5px] font-semibold text-muted-foreground"
                 onPress={() => handlePick("primary")}
               >
-                <Text>Keep {options[0]?.time ?? ""}</Text>
+                <Text className="font-semibold">
+                  Keep {options[0]?.time ?? ""}
+                </Text>
               </Button>
             </View>
           </BottomSheetView>

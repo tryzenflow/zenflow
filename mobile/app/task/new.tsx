@@ -1,5 +1,4 @@
-import { createSession, slotPick } from "@/api/tasks";
-import { SlotPickSheet, type SlotPickSheetHandle } from "@/components/calendar/slot-pick-sheet";
+import { createSession } from "@/api/tasks";
 import { SessionTypeTabs } from "@/components/tasks/form/session-type-tabs";
 import { SessionFormScreen } from "@/components/tasks/task-form-screen";
 import { SessionSheetFields } from "@/components/tasks/task-sheet-fields";
@@ -8,6 +7,7 @@ import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
+import { setPendingSlotPick } from "@/lib/pending-slot-pick";
 import {
   RESCHEDULE_HINT,
   placementToastMessage,
@@ -24,10 +24,10 @@ import {
   splitZoned,
   zonedDate,
 } from "@zenflow/core";
-import type { CreateSessionInput, CreateSessionResponse } from "@zenflow/shared";
+import type { CreateSessionInput } from "@zenflow/shared";
 import { format } from "date-fns";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 
 const DEFAULT_DURATION = 60;
 const DEFAULT_SESSION_COUNT = 1;
@@ -118,12 +118,6 @@ export default function NewSessionScreen() {
   const tz = user?.timezone || "UTC";
   const { toast } = useToast();
 
-  const slotPickSheetRef = useRef<SlotPickSheetHandle>(null);
-  const [pendingPick, setPendingPick] = useState<{
-    response: CreateSessionResponse;
-    resolve: () => void;
-  } | null>(null);
-
   // `start` is a real UTC instant — both producers (`create-task-fab.tsx`'s
   // `createSessionAtNowHref` and `day-timeline.tsx`'s grid long-press) emit
   // `zonedWallClockToUtc(...).toISOString()`. `new Date(start)` alone would let
@@ -191,50 +185,27 @@ export default function NewSessionScreen() {
     try {
       const response = await createSession(toCreateInput(values, tz));
 
-      // Handle divergent response — show picker for primary vs alternative slot
+      // Handle divergent response — present a primary-vs-alternative pick.
+      // The week view owns the SlotPickSheet, so hand the payload off and
+      // land there first; `useFocusEffect` (app/(app)/index.tsx) opens the
+      // sheet over the week view and the new block is already behind it.
       if (
         response.divergent &&
         response.slotProposalId &&
         response.primarySlot &&
         response.alternativeSlot
       ) {
-        setPendingPick({
-          response,
-          resolve: () => {},
-        });
-        slotPickSheetRef.current?.open(
-          response,
-          response.primarySlot,
-          response.alternativeSlot,
-          response.slotProposalId,
+        setPendingSlotPick({
+          session: response,
+          primarySlot: response.primarySlot,
+          alternativeSlot: response.alternativeSlot,
+          slotProposalId: response.slotProposalId,
           tz,
-          async (chose) => {
-            try {
-              await slotPick(response.id, { slotProposalId: response.slotProposalId!, chose });
-            } catch (error) {
-              // Non-blocking — surface as toast but continue with placement
-              showErrorToast(toast, error, "Couldn't record preference");
-            }
-            if (chose === "alternative" && response.alternativeSlot) {
-              // Navigate to the alternative slot
-              router.replace({
-                pathname: "/",
-                params: { date: response.alternativeSlot, flash: response.id },
-              } as Href);
-            } else if (response.scheduledStartTime) {
-              router.replace({
-                pathname: "/",
-                params: { date: response.scheduledStartTime, flash: response.id },
-              } as Href);
-            } else {
-              router.back();
-            }
-            setPendingPick(null);
-          },
-          () => {
-            setPendingPick(null);
-          },
-        );
+        });
+        router.replace({
+          pathname: "/",
+          params: { date: response.primarySlot, flash: response.id },
+        } as Href);
         return;
       }
 
@@ -314,7 +285,6 @@ export default function NewSessionScreen() {
           }
         />
       </SessionFormScreen>
-      <SlotPickSheet ref={slotPickSheetRef} tz={tz} />
     </>
   );
 }
