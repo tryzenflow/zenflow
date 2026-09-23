@@ -149,6 +149,15 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
               {options.map((option, index) => (
                 <View
                   key={option.isPrimary ? "primary" : "alternative"}
+                  className={`
+                    rounded-2xl px-4 py-5 flex flex-row items-center gap-3 my-0.5
+                    ${
+                      selected ===
+                      (option.isPrimary ? "primary" : "alternative")
+                        ? "border-primary bg-primary/[0.08]"
+                        : "border-border bg-card"
+                    }
+                  `}
                   style={
                     selected === (option.isPrimary ? "primary" : "alternative")
                       ? {
@@ -174,15 +183,7 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
                         Haptics.selectionAsync().catch(() => {});
                       }
                     }}
-                    className={`
-                        text-left rounded-2xl border-2 px-4 py-5 flex flex-row items-center gap-3 my-0.5
-                        ${
-                          selected ===
-                          (option.isPrimary ? "primary" : "alternative")
-                            ? "border-primary bg-primary/[0.08]"
-                            : "border-border bg-card"
-                        }
-                      `}
+                    className="w-full h-full"
                   >
                     <View
                       className={`
