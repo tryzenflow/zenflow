@@ -50,40 +50,41 @@ class LinucbPolicy:
         """``True`` iff the request carried bandit state at all."""
         return bool(self._arms)
 
-    def arm_scores(
-        self, vectors_by_day: dict[str, NDArray[np.float64]]
-    ) -> dict[str, dict[ArmId, float]]:
-        """Score every arm against every day's context vector.
+    def arm_scores_batch(
+        self, x: NDArray[np.float64]
+    ) -> dict[ArmId, NDArray[np.float64]]:
+        """Score every arm against a batched ``(M, N, D)`` context tensor.
+
+        ``M`` candidate-series-members by ``N`` candidate days (padded, per
+        :func:`src.place._Placer._build_batch`) by ``D = FEATURE_DIM``
+        features. Flattens to ``(M*N, D)`` so each arm's ``A`` is inverted
+        once regardless of member/day count, then reshapes back — replaces
+        the old per-``dayStr`` dict-of-dicts scoring, which was called once
+        per distinct ``duration_minutes`` instead of once per request.
 
         Parameters
         ----------
-        vectors_by_day : dict[str, ndarray of shape (d,)]
-            One context vector per candidate ``dayStr``.
+        x : ndarray of shape (M, N, D)
 
         Returns
         -------
-        dict[str, dict[ArmId, float]]
-            ``{day_str: {arm: score}}`` — always all 5 arms, per contract.
+        dict[ArmId, ndarray of shape (M, N)]
+            All 5 arms, per contract. A cold arm (no ``A``/``b``) scores
+            ``0.0`` everywhere, matching the un-batched contract.
         """
-        keys = list(vectors_by_day)
-        x = (
-            np.stack([vectors_by_day[k] for k in keys])
-            if keys
-            else np.empty((0, consts.FEATURE_DIM))
-        )
-        per_arm: dict[ArmId, NDArray[np.float64]] = {}
+        m, n, d = x.shape
+        flat = x.reshape(m * n, d) if m * n else np.empty((0, d))
+        out: dict[ArmId, NDArray[np.float64]] = {}
         for arm in ARM_IDS:
             params = self._arms.get(arm)
             if params is None:
-                per_arm[arm] = np.zeros(x.shape[0])
+                out[arm] = np.zeros((m, n))
                 continue
-            # x is always 2-D here (a stacked batch), so this is always an array.
-            per_arm[arm] = np.asarray(
-                linucb_score(params.A, params.b, x, self.alpha), dtype=np.float64
+            scored = np.asarray(
+                linucb_score(params.A, params.b, flat, self.alpha), dtype=np.float64
             )
-        return {
-            k: {a: float(per_arm[a][i]) for a in ARM_IDS} for i, k in enumerate(keys)
-        }
+            out[arm] = scored.reshape(m, n)
+        return out
 
     def best_slot(
         self,

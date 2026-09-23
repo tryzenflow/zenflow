@@ -65,6 +65,15 @@ computed in-process from the supplied `(A, b)`, so there is no `/predict` hop.
 - **Policies**: HEURISTIC = best preference slot per day, best score across days (earlier day wins
   ties). LINUCB = slot-first scan over all days with the adaptive wL/wP blend. LINUCB falls back to the
   heuristic (`appliedPolicy: "HEURISTIC"`) on no bandit state, a singular matrix or no surviving slot.
+- **Series batching**: every member's LinUCB context vectors + arm scores are built once per request
+  as a single `(M, N, D)` tensor (`M` = member count, always — `M=1` for a lone task; `N` = the max
+  candidate-day count across members, padded with a validity mask; `D` = `FEATURE_DIM`, 22) —
+  `_Placer._build_batch` in `src/place.py`. Arm scoring flattens to `(M*N, D)` and calls
+  `LinucbPolicy.arm_scores_batch` once per arm (5 calls total, each inverting that arm's `A` once
+  regardless of member/day count), instead of the old per-`duration_minutes` dict cache that rebuilt
+  vectors from scratch per distinct duration. The per-member slot pick (`best_linucb_slot`, day/DST
+  scan, sibling threading for `MAX_SERIES_PER_DAY`) is unchanged — only cheap array indexing into the
+  precomputed tensor per member, not a 4th (slot) tensor axis.
 - **Response**: `heuristic` / `linucb` appear only if requested (primary or `computeBoth`; heuristic
   also on fallback). `startMs` is the applied pick. `mode: "PREFLIGHT"` runs the heuristic only.
 - **No free slot (single member)**:
@@ -96,9 +105,12 @@ runs. ADR target: p99 < 400 ms.
 | computeBoth (LINUCB primary)       | 70 KB   | 10.7 / 16.6 / 29.9 ms      | 7.9 / 14.1 ms     | 4.6 / 5.0 ms   |
 | computeBoth, dense (14 blocks/day) | 83 KB   | 12.1 / 19.3 / 37.0 ms      | 8.7 / 15.2 ms     | 4.9 / 5.7 ms   |
 
-Tests: `tests/test_place.py` (behaviour, auth, errors) and `tests/test_place_contract.py` (every
-fixture plus golden TS `bestFreeSlot`/`bestLinucbSlot`). `scripts/gen_place_fixtures.py` regenerates
-the Python-owned fixtures; review the diff like a golden update.
+Tests: `tests/test_place.py` (behaviour, auth, errors), `tests/test_place_contract.py` (every
+fixture plus golden TS `bestFreeSlot`), and `tests/test_place_batch.py` (output-equivalence between
+`_build_batch`'s batched `(M, N, D)` tensor path and a reconstructed pre-batch sequential oracle, across
+`M=1`, disjoint/dense series windows, all-cold arms, and a DST-boundary candidate day).
+`scripts/gen_place_fixtures.py` regenerates the Python-owned fixtures; review the diff like a golden
+update.
 
 `d` is inferred from the length of `x` and validated (all `x` equal; each non-empty `A` is
 `d*d`, each non-empty `b` is `d`); bad shapes / non-finite values / `alpha < 0` /
@@ -132,7 +144,7 @@ services/bandit/
 ├── Dockerfile                      # python:3.12-slim + uv; runs uvicorn src.api:app on :8000
 ├── src/
 │   ├── api.py                      # FastAPI app + routes (/health, /ready, /v1/place, /predict, /v1/update), bearer auth, request-id
-│   ├── place.py                    # /v1/place orchestration (series ledger, day/duration caching, displacement, fallbacks)
+│   ├── place.py                    # /v1/place orchestration (series ledger, batched (M,N,D) context/arm-score tensor, displacement, fallbacks)
 │   ├── policies/                   # one class per /v1/place placement policy
 │   │   ├── heuristic.py            # HeuristicPolicy: best per-day preference slot
 │   │   ├── linucb.py               # LinucbPolicy: slot-first scan wired to models/linucb.py

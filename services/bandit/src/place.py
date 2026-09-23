@@ -48,7 +48,7 @@ from src.core.slot import (
 from src.policies.heuristic import HeuristicPolicy
 from src.policies.linucb import LinucbPolicy
 from src.policies.selector import PolicySelector
-from src.schemas import ArmId
+from src.schemas import ARM_IDS, ArmId
 from src.schemas_place import (
     PLACEMENT_CONTRACT_VERSION,
     HeuristicPick,
@@ -98,6 +98,26 @@ class _Ledger:
     count_by_day: dict[str, int] = field(default_factory=dict)
 
 
+@dataclass
+class _ScoreBatch:
+    """One request's worth of precomputed LinUCB context/arm-score tensors.
+
+    Built once per request (:meth:`_Placer._build_batch`), covering every
+    member (``M``, always -- ``M=1`` for a lone task) and the union of
+    candidate days any member could ever select (``N``, padded to the max
+    across members). Replaces the old per-``duration_minutes`` dict caches
+    (``_vec_cache``/``_score_cache``), which recomputed vectors/arm-scores
+    from scratch on every distinct duration seen across the request.
+    """
+
+    per_member_days: list[list[PlacementDay]]
+    day_index: list[dict[str, int]]  # per member: dayStr -> column j
+    valid: NDArray[np.bool_]  # (M, N) -- False on padding
+    vectors: NDArray[np.float64]  # (M, N, D)
+    arm_scores: dict[ArmId, NDArray[np.float64]]  # each (M, N)
+    ok: bool = True  # False if LinUCB's A matrices were singular for this request
+
+
 class _Placer:
     def __init__(self, req: PlaceRequest, timer: _Timer) -> None:
         self.req = req
@@ -112,8 +132,6 @@ class _Placer:
         }
         self.heuristic_policy = HeuristicPolicy(self.matrix, self.tz)
         self.linucb_policy = LinucbPolicy(req.bandit, self.matrix, self.tz)
-        self._vec_cache: dict[int, dict[str, NDArray[np.float64]]] = {}
-        self._score_cache: dict[int, dict[str, dict[ArmId, float]]] = {}
 
     # ---- helpers ---------------------------------------------------------
     def _select_days(
@@ -129,41 +147,92 @@ class _Placer:
             day = add_days_str(day, 1)
         return out
 
-    def _vectors(self, duration: int) -> dict[str, NDArray[np.float64]]:
-        hit = self._vec_cache.get(duration)
-        if hit is not None:
-            return hit
-        t0 = time.perf_counter()
-        req = self.req
-        remaining = max(0, math.floor((req.deadline_ms - req.now_ms) / consts.DAY_MS))
-        vecs: dict[str, NDArray[np.float64]] = {}
-        for d in req.days:
-            wl: dict[str, dict[str, float]] = {
-                k: {"hours": v.hours, "count": v.count}
-                for k, v in d.workload_by_type.items()
-            }
-            vecs[d.day_str] = build_context_vector(
-                remaining_days_until_deadline=remaining,
-                duration_minutes=duration,
-                candidate_iso_weekday=iso_weekday(d.day_str),
-                candidate_days_from_now=max(0, day_diff_str(self.today, d.day_str)),
-                workload_by_type=wl,
-                semester_phase=None,
-            )
-        self._vec_cache[duration] = vecs
-        self.t.context += time.perf_counter() - t0
-        return vecs
+    def _build_batch(
+        self,
+        members: list[PlacementMember],
+        windows_days: list[tuple[str, str]],
+        ledger: _Ledger,
+    ) -> _ScoreBatch:
+        """Batch every member's candidate-day context vectors + arm scores.
 
-    def _arm_scores(self, duration: int) -> dict[str, dict[ArmId, float]]:
-        hit = self._score_cache.get(duration)
-        if hit is not None:
-            return hit
-        vecs = self._vectors(duration)
-        t0 = time.perf_counter()
-        out = self.linucb_policy.arm_scores(vecs)
-        self._score_cache[duration] = out
-        self.t.predict += time.perf_counter() - t0
-        return out
+        Builds one ``(M, N, D)`` tensor across all of ``members`` (``M=1``
+        for a lone task, no special-casing) and scores all 5 arms against it
+        in one broadcast pass -- replacing the old ``_vectors``/
+        ``_arm_scores`` dict caches keyed by ``duration_minutes``, which
+        rebuilt vectors from scratch per distinct duration and looped over
+        arms per member.
+
+        Per-member day lists come from ``self._select_days(first, last,
+        ledger)`` called independently for each member, against ``ledger``
+        *as it stands right now* -- i.e. before :meth:`run` has placed
+        anyone in this request. ``_select_days``'s only ledger-dependent
+        input is ``count_by_day``, which starts empty and only grows as
+        members get placed later in :meth:`run`'s loop -- so this is always
+        a superset of whatever a live (in-loop, post-placement) call to
+        ``_select_days`` for the same window will select. ``place_member``
+        asserts that invariant against the real, live call.
+        """
+        req = self.req
+        m_count = len(members)
+        d_dim = consts.FEATURE_DIM
+        remaining = max(0, math.floor((req.deadline_ms - req.now_ms) / consts.DAY_MS))
+
+        per_member_days: list[list[PlacementDay]] = [
+            self._select_days(first, last, ledger) for first, last in windows_days
+        ]
+        n_cols = max((len(days) for days in per_member_days), default=0)
+
+        valid = np.zeros((m_count, n_cols), dtype=bool)
+        day_index: list[dict[str, int]] = [{} for _ in range(m_count)]
+        for i, days in enumerate(per_member_days):
+            for j, d in enumerate(days):
+                valid[i, j] = True
+                day_index[i][d.day_str] = j
+
+        x = np.zeros((m_count, n_cols, d_dim), dtype=np.float64)
+        if self.linucb_policy.enabled and n_cols:
+            t0 = time.perf_counter()
+            for i, (m, days) in enumerate(zip(members, per_member_days, strict=True)):
+                for j, d in enumerate(days):
+                    wl: dict[str, dict[str, float]] = {
+                        k: {"hours": v.hours, "count": v.count}
+                        for k, v in d.workload_by_type.items()
+                    }
+                    x[i, j] = build_context_vector(
+                        remaining_days_until_deadline=remaining,
+                        duration_minutes=m.duration_minutes,
+                        candidate_iso_weekday=iso_weekday(d.day_str),
+                        candidate_days_from_now=max(
+                            0, day_diff_str(self.today, d.day_str)
+                        ),
+                        workload_by_type=wl,
+                        semester_phase=None,
+                    )
+            self.t.context += time.perf_counter() - t0
+
+            t1 = time.perf_counter()
+            ok = True
+            try:
+                arm_scores = self.linucb_policy.arm_scores_batch(x)
+            except np.linalg.LinAlgError:
+                ok = False
+                arm_scores = {arm: np.zeros((m_count, n_cols)) for arm in ARM_IDS}
+            else:
+                for arr in arm_scores.values():
+                    arr[~valid] = 0.0
+            self.t.predict += time.perf_counter() - t1
+        else:
+            ok = True
+            arm_scores = {arm: np.zeros((m_count, n_cols)) for arm in ARM_IDS}
+
+        return _ScoreBatch(
+            per_member_days=per_member_days,
+            day_index=day_index,
+            valid=valid,
+            vectors=x,
+            arm_scores=arm_scores,
+            ok=ok,
+        )
 
     # ---- policies --------------------------------------------------------
     def heuristic(
@@ -177,15 +246,23 @@ class _Placer:
         return pick
 
     def linucb(
-        self, m: PlacementMember, days: list[PlacementDay], extra: Intervals
+        self,
+        m: PlacementMember,
+        days: list[PlacementDay],
+        extra: Intervals,
+        batch: _ScoreBatch,
+        i: int,
     ) -> LinucbPick | None:
-        if not self.linucb_policy.enabled or not days:
+        if not self.linucb_policy.enabled or not days or not batch.ok:
             return None
-        try:
-            scores = self._arm_scores(m.duration_minutes)
-        except np.linalg.LinAlgError:
-            return None
-        vecs = self._vectors(m.duration_minutes)
+        idx = batch.day_index[i]
+        vecs = {d.day_str: batch.vectors[i, idx[d.day_str]] for d in days}
+        scores = {
+            d.day_str: {
+                arm: float(batch.arm_scores[arm][i, idx[d.day_str]]) for arm in ARM_IDS
+            }
+            for d in days
+        }
         t0 = time.perf_counter()
         pick = self.linucb_policy.best_slot(
             m,
@@ -203,7 +280,13 @@ class _Placer:
 
     # ---- one member ------------------------------------------------------
     def place_member(
-        self, m: PlacementMember, first: str, last: str, ledger: _Ledger
+        self,
+        m: PlacementMember,
+        first: str,
+        last: str,
+        ledger: _Ledger,
+        batch: _ScoreBatch,
+        i: int,
     ) -> PlacedMember:
         req = self.req
         base = PlacedMember(
@@ -222,9 +305,17 @@ class _Placer:
             return self._no_slot(m, base)
 
         days = self._select_days(first, last, ledger)
+        # B.4 correctness invariant: every day this *live* (post-placement)
+        # call selects must already be a column in the batch built upfront
+        # for this member -- see `_build_batch`'s docstring for why that's
+        # guaranteed (count_by_day only grows after batch-build time).
+        assert all(d.day_str in batch.day_index[i] for d in days), (
+            f"member {m.id!r}: live _select_days picked a day outside the "
+            "batch's upfront candidate set"
+        )
         extra = list(ledger.siblings)
         lin = (
-            self.linucb(m, days, extra)
+            self.linucb(m, days, extra, batch, i)
             if PolicySelector.should_try_linucb(req.mode, m)
             else None
         )
@@ -354,34 +445,44 @@ class _Placer:
         if len(members) == 1:
             first = local_date_str(self.next15, self.tz)
             last = local_date_str(req.deadline_ms - 1, self.tz)
-            return [self.place_member(members[0], first, last, ledger)]
-
-        if self.next15 >= req.deadline_ms:
-            return [
-                PlacedMember(
-                    id=m.id,
-                    outcome="INFEASIBLE",
-                    applied_policy="NONE",
-                    heuristic=None,
-                    linucb=None,
-                    start_ms=None,
-                    moves=[],
-                    late=False,
-                    conflicting=False,
-                )
-                for m in members
-            ]
-        span = min(
-            math.floor((req.deadline_ms - self.next15) / consts.DAY_MS),
-            consts.MAX_SCAN_DAYS - 1,
-        )
-        windows = series_day_windows(span, len(members))
-        start_day = local_date_str(self.next15, self.tz)
-        results: list[PlacedMember] = []
-        for m, (lo, hi) in zip(members, windows, strict=True):
-            r = self.place_member(
-                m, add_days_str(start_day, lo), add_days_str(start_day, hi), ledger
+            windows_days = [(first, last)]
+        else:
+            if self.next15 >= req.deadline_ms:
+                return [
+                    PlacedMember(
+                        id=m.id,
+                        outcome="INFEASIBLE",
+                        applied_policy="NONE",
+                        heuristic=None,
+                        linucb=None,
+                        start_ms=None,
+                        moves=[],
+                        late=False,
+                        conflicting=False,
+                    )
+                    for m in members
+                ]
+            span = min(
+                math.floor((req.deadline_ms - self.next15) / consts.DAY_MS),
+                consts.MAX_SCAN_DAYS - 1,
             )
+            windows = series_day_windows(span, len(members))
+            start_day = local_date_str(self.next15, self.tz)
+            windows_days = [
+                (add_days_str(start_day, lo), add_days_str(start_day, hi))
+                for lo, hi in windows
+            ]
+
+        # Single upfront batched (M, N, D) tensor build -- M=1 for a lone
+        # task, no special-casing -- then one cheap per-member loop (as
+        # today) that only threads `ledger.siblings`/`count_by_day` forward
+        # for series with overlapping windows; it no longer rebuilds any
+        # vectors/arm-scores per iteration.
+        batch = self._build_batch(members, windows_days, ledger)
+
+        results: list[PlacedMember] = []
+        for i, (m, (first, last)) in enumerate(zip(members, windows_days, strict=True)):
+            r = self.place_member(m, first, last, ledger, batch, i)
             results.append(r)
             if r.start_ms is not None:
                 ledger.siblings.append(
