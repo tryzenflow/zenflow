@@ -19,7 +19,6 @@ import {
   useState,
 } from "react";
 import { Pressable, View, StyleSheet } from "react-native";
-import Animated, { useAnimatedStyle } from "react-native-reanimated";
 
 export interface SlotPickSheetHandle {
   open: (
@@ -124,15 +123,15 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
       onDismissRef.current = null;
     }
 
-    // Animated shadow for selected option
-    const selectedShadow = useAnimatedStyle(() => {
-      return {
+    // Static shadow style for selected option (avoid useAnimatedStyle in Portal)
+    const selectedShadowStyle = StyleSheet.create({
+      shadow: {
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.2,
         shadowRadius: 16,
         elevation: 8,
-      };
+      },
     });
 
     return (
@@ -179,7 +178,7 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
                       elevation: 8,
                     },
                     selected === (option.isPrimary ? "primary" : "alternative")
-                      ? selectedShadow
+                      ? selectedShadowStyle.shadow
                       : null,
                   ]}
                   className={`
