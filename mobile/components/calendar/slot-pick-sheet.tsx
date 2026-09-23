@@ -18,7 +18,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { Pressable, View } from "react-native";
+import { Pressable, View, StyleSheet } from "react-native";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
 
 export interface SlotPickSheetHandle {
   open: (
@@ -123,6 +124,17 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
       onDismissRef.current = null;
     }
 
+    // Animated shadow for selected option
+    const selectedShadow = useAnimatedStyle(() => {
+      return {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.2,
+        shadowRadius: 16,
+        elevation: 8,
+      };
+    });
+
     return (
       <BottomSheet>
         <BottomSheetContent ref={sheet.ref} onDismiss={handleDismiss}>
@@ -158,12 +170,24 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
                       Haptics.selectionAsync().catch(() => {});
                     }
                   }}
+                  style={[
+                    {
+                      shadowColor: "#000",
+                      shadowOffset: { width: 0, height: 8 },
+                      shadowOpacity: 0.2,
+                      shadowRadius: 16,
+                      elevation: 8,
+                    },
+                    selected === (option.isPrimary ? "primary" : "alternative")
+                      ? selectedShadow
+                      : null,
+                  ]}
                   className={`
                     text-left rounded-2xl border-2 px-4 py-5 flex flex-row items-center gap-3 my-0.5
                     ${
                       selected ===
                       (option.isPrimary ? "primary" : "alternative")
-                        ? "border-primary bg-primary/[0.08] shadow-lg shadow-primary/20"
+                        ? "border-primary bg-primary/[0.08]"
                         : "border-border bg-card"
                     }
                   `}
