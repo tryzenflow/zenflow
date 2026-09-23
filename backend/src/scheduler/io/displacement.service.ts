@@ -1,33 +1,22 @@
 import { Injectable } from "@nestjs/common";
-import type { InfeasiblePolicy } from "@zenflow/shared";
-import { SessionEventType, type User } from "../../../generated/prisma";
+import { SessionEventType } from "../../../generated/prisma";
 import { PrismaService } from "../../prisma/prisma.service";
-import { minutesToUtc } from "../../common/utils";
 import { SESSION_SYSTEM_MOVE_REWARD } from "../constants";
-import {
-  pickLateSlot,
-  pickMinConflictSlot,
-  planDisplacement,
-  type DisplacementMove,
-  type DisplacementPlan,
-  type FlexibleTask,
-} from "../core/displacement";
-import {
-  addDaysStr,
-  blocksPlacement,
-  DAY_MS,
-  localDateStr,
-  MS_PER_MINUTE,
-  type Interval,
-} from "../core/slot";
-import { loadScheduleItems, type ScheduleItem } from "./day-load";
-import type { PlaceableTask } from "../types/placement.types";
+import { MS_PER_MINUTE } from "../core/slot";
+import type { ScheduleItem } from "./day-load";
 
 /** A moved flexible task, ready for the wire / a `SYSTEM_MOVE` event. */
 export interface AppliedMove {
   id: string;
   from: Date;
   to: Date;
+}
+
+/** A displacement move as produced by Python's `/v1/place` response. */
+export interface DisplacementMove {
+  id: string;
+  fromMs: number;
+  toMs: number;
 }
 
 /** Only standalone scheduled TASK rows are movable; everything else is fixed. */
@@ -39,62 +28,16 @@ export const isFlexible = (it: ScheduleItem): boolean =>
   it.deadlineMs !== null;
 
 /**
- * I/O half of displacement (issue #62 B): loads the deadline-day window,
- * asks the pure {@link planDisplacement} for a repack, persists the moves as
- * scheduler-initiated `SYSTEM_MOVE` events (reward 0, no preference update —
- * a user `MOVE` reward/penalty is never generated for these), and resolves the
- * user's "accept conflicts" / "accept late deadline" fallbacks.
+ * I/O half of displacement (issue #62 B): persists a plan's moves — computed
+ * by Python's `/v1/place` (ADR-0003; displacement planning itself lives in
+ * `services/bandit/src/core`) — as scheduler-initiated `SYSTEM_MOVE` events
+ * (reward 0, no preference update — a user `MOVE` reward/penalty is never
+ * generated for these). Used by `PythonPlacer` and
+ * `ConflictRescheduleService`.
  */
 @Injectable()
 export class DisplacementService {
   constructor(private readonly prisma: PrismaService) {}
-
-  /** Read-only plan for placing `task` by repacking flexible tasks. */
-  async plan(
-    user: User,
-    task: PlaceableTask,
-    now: Date,
-  ): Promise<DisplacementPlan> {
-    const tz = user.timezone;
-    const deadlineDay = localDateStr(new Date(task.deadline.getTime() - 1), tz);
-    const dayStart = minutesToUtc(deadlineDay, 0, tz).getTime();
-    const dayEnd = minutesToUtc(addDaysStr(deadlineDay, 1), 0, tz).getTime();
-
-    const items = await loadScheduleItems(this.prisma, {
-      userId: user.id,
-      rangeStartMs: dayStart - DAY_MS,
-      rangeEndMs: dayEnd + DAY_MS,
-      timezone: tz,
-      excludeSessionIds: [task.id],
-    });
-
-    const flexible: FlexibleTask[] = items.filter(isFlexible).map((it) => ({
-      id: it.id as string,
-      durationMinutes: it.durationMinutes,
-      deadlineMs: it.deadlineMs as number,
-      startMs: it.start,
-    }));
-    const fixed: Interval[] = items
-      .filter((it) => !isFlexible(it) && blocksPlacement(it.durationMinutes))
-      .map((it) => ({ start: it.start, end: it.end }));
-
-    return planDisplacement({
-      task: {
-        durationMinutes: task.durationMinutes,
-        deadlineMs: task.deadline.getTime(),
-      },
-      flexible,
-      fixed,
-      nowMs: now.getTime(),
-      // Deadline day first; widen to +/-1 day only if that is infeasible.
-      windows: [
-        { startMs: dayStart, endMs: dayEnd },
-        { startMs: dayStart - DAY_MS, endMs: dayEnd + DAY_MS },
-      ],
-      prefMatrix: user.preferenceMatrix,
-      timezone: tz,
-    });
-  }
 
   /**
    * Persists a plan's moves: one `SYSTEM_MOVE` event per moved task (reward 0)
@@ -139,40 +82,5 @@ export class DisplacementService {
       from: new Date(m.fromMs),
       to: new Date(m.toMs),
     }));
-  }
-
-  /** The start for the user's chosen fallback, or `null`. */
-  async fallbackStart(
-    user: User,
-    task: PlaceableTask,
-    now: Date,
-    policy: InfeasiblePolicy,
-  ): Promise<Date | null> {
-    const deadlineMs = task.deadline.getTime();
-    const horizonEndMs = deadlineMs + 30 * DAY_MS;
-    const items = await loadScheduleItems(this.prisma, {
-      userId: user.id,
-      rangeStartMs: now.getTime(),
-      rangeEndMs: horizonEndMs,
-      timezone: user.timezone,
-      excludeSessionIds: [task.id],
-    });
-    const occupied = items
-      .filter((it) => blocksPlacement(it.durationMinutes))
-      .map((it) => ({ start: it.start, end: it.end }));
-    const args = {
-      durationMinutes: task.durationMinutes,
-      nowMs: now.getTime(),
-      deadlineMs,
-      occupied,
-      prefMatrix: user.preferenceMatrix,
-      timezone: user.timezone,
-      horizonEndMs,
-    };
-    const ms =
-      policy === "ACCEPT_CONFLICTS"
-        ? pickMinConflictSlot(args)
-        : pickLateSlot(args);
-    return ms === null ? null : new Date(ms);
   }
 }

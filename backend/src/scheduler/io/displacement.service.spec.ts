@@ -1,4 +1,4 @@
-import { DisplacementService } from "./displacement.service";
+import { DisplacementService, isFlexible } from "./displacement.service";
 import { ConflictRescheduleService } from "./conflict-reschedule.service";
 
 const user = {
@@ -57,135 +57,26 @@ describe("DisplacementService", () => {
     expect(await svc.applyMoves("u1", [], () => 60)).toEqual([]);
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
+});
 
-  it("plan(): fixed rows never move; a standalone TASK on the deadline day is repacked", async () => {
-    const deadline = new Date("2026-06-15T12:00:00.000Z");
-    const rows = [
-      // fixed block 06:00-09:00 and 10:00-12:00 leave one hole, held by a flexible task
-      {
-        id: "x1",
-        type: "LECTURE",
-        seriesId: null,
-        scheduledStartTime: new Date("2026-06-15T06:00:00Z"),
-        durationMinutes: 180,
-        deadline: null,
-      },
-      {
-        id: "x2",
-        type: "EXAM",
-        seriesId: null,
-        scheduledStartTime: new Date("2026-06-15T10:00:00Z"),
-        durationMinutes: 120,
-        deadline: null,
-      },
-      {
-        id: "f1",
-        type: "TASK",
-        seriesId: null,
-        scheduledStartTime: new Date("2026-06-15T09:00:00Z"),
-        durationMinutes: 60,
-        deadline: new Date("2026-06-15T23:00:00Z"),
-      },
-    ];
-    const { prisma } = makePrisma(rows);
-    const svc = new DisplacementService(prisma as never);
-    const plan = await svc.plan(
-      user,
-      { id: "new", durationMinutes: 60, deadline },
-      new Date("2026-06-15T06:00:00Z"),
-    );
-    expect(plan.kind).toBe("placed");
-    if (plan.kind === "placed") {
-      expect(plan.startMs).toBe(ms("2026-06-15T09:00:00Z"));
-      expect(plan.moves.map((m) => m.id)).toEqual(["f1"]);
-    }
+describe("isFlexible", () => {
+  const base = {
+    recurring: false,
+    type: "TASK" as const,
+    seriesId: null,
+    id: "x1",
+    deadlineMs: 1,
+  };
+
+  it("true for a standalone, non-recurring TASK with a deadline", () => {
+    expect(isFlexible(base as never)).toBe(true);
   });
 
-  it("plan(): a series sitting is treated as fixed", async () => {
-    const rows = [
-      {
-        id: "x1",
-        type: "LECTURE",
-        seriesId: null,
-        scheduledStartTime: new Date("2026-06-15T06:00:00Z"),
-        durationMinutes: 180,
-        deadline: null,
-      },
-      {
-        id: "s1",
-        type: "TASK",
-        seriesId: "series",
-        scheduledStartTime: new Date("2026-06-15T09:00:00Z"),
-        durationMinutes: 180,
-        deadline: new Date("2026-06-15T23:00:00Z"),
-      },
-    ];
-    const { prisma } = makePrisma(rows);
-    const svc = new DisplacementService(prisma as never);
-    const plan = await svc.plan(
-      user,
-      {
-        id: "new",
-        durationMinutes: 60,
-        deadline: new Date("2026-06-15T12:00:00Z"),
-      },
-      new Date("2026-06-15T06:00:00Z"),
-    );
-    expect(plan.kind).toBe("infeasible");
-  });
-
-  it("fallbackStart: ACCEPT_LATE_DEADLINE returns a conflict-free start after the deadline", async () => {
-    const rows = [
-      {
-        id: "x1",
-        type: "LECTURE",
-        seriesId: null,
-        scheduledStartTime: new Date("2026-06-15T06:00:00Z"),
-        durationMinutes: 360,
-        deadline: null,
-      },
-    ];
-    const { prisma } = makePrisma(rows);
-    const svc = new DisplacementService(prisma as never);
-    const start = await svc.fallbackStart(
-      user,
-      {
-        id: "new",
-        durationMinutes: 60,
-        deadline: new Date("2026-06-15T12:00:00Z"),
-      },
-      new Date("2026-06-15T06:00:00Z"),
-      "ACCEPT_LATE_DEADLINE",
-    );
-    expect(start!.toISOString()).toBe("2026-06-15T12:00:00.000Z");
-  });
-
-  it("fallbackStart: ACCEPT_CONFLICTS returns a slot ending by the deadline", async () => {
-    const rows = [
-      {
-        id: "x1",
-        type: "LECTURE",
-        seriesId: null,
-        scheduledStartTime: new Date("2026-06-15T06:00:00Z"),
-        durationMinutes: 360,
-        deadline: null,
-      },
-    ];
-    const { prisma } = makePrisma(rows);
-    const svc = new DisplacementService(prisma as never);
-    const start = await svc.fallbackStart(
-      user,
-      {
-        id: "new",
-        durationMinutes: 60,
-        deadline: new Date("2026-06-15T12:00:00Z"),
-      },
-      new Date("2026-06-15T06:00:00Z"),
-      "ACCEPT_CONFLICTS",
-    );
-    expect(start!.getTime() + 3_600_000).toBeLessThanOrEqual(
-      ms("2026-06-15T12:00:00Z"),
-    );
+  it("false when recurring, not a TASK, part of a series, or deadline-less", () => {
+    expect(isFlexible({ ...base, recurring: true } as never)).toBe(false);
+    expect(isFlexible({ ...base, type: "LECTURE" } as never)).toBe(false);
+    expect(isFlexible({ ...base, seriesId: "s1" } as never)).toBe(false);
+    expect(isFlexible({ ...base, deadlineMs: null } as never)).toBe(false);
   });
 });
 

@@ -7,12 +7,13 @@ import {
 } from "./golden-fixtures-io";
 
 /**
- * Drift guard (issue #60): the committed golden fixtures must equal what the
- * current TypeScript core produces. When this fails you changed
- * `scheduler/core/*` behaviour — regenerate with
- * `pnpm --filter backend golden:export`, and port the change to the Python
- * scheduler core so its golden-fixture tests pass too (CLAUDE.md: core change
- * => spec + Python port + fixtures).
+ * Drift guard (ADR-0003 phase 6): the committed golden fixtures must equal
+ * what the current TypeScript frozen fallback (`slot-score.ts`,
+ * `sync-conflicts.ts`) produces. When this fails you changed one of those
+ * files' behaviour — regenerate with `pnpm --filter backend golden:export`
+ * and update `services/bandit/tests/test_golden_ts.py`'s assertions (a fix
+ * to the frozen fallback must keep the golden test green; the fallback
+ * otherwise never changes behaviour, per CLAUDE.md invariant 2).
  */
 describe("scheduler-core golden fixtures", () => {
   const path = resolve(__dirname, "../../..", GOLDEN_FIXTURES_PATH);
@@ -37,14 +38,11 @@ describe("scheduler-core golden fixtures", () => {
     );
   });
 
-  it("cover the critical scenarios (cold start, overhang, DST, displacement)", () => {
+  it("cover the critical scenarios (preference, stability, occupied, deadline)", () => {
     const f = buildGoldenFixtures();
-    expect(f.bestLinucbSlot.length).toBeGreaterThanOrEqual(8);
-    expect(f.planDisplacement.some((c) => c.output.kind === "infeasible")).toBe(
-      true,
-    );
-    expect(f.planDisplacement.some((c) => c.output.kind === "placed")).toBe(
-      true,
-    );
+    expect(f.bestFreeSlot.length).toBeGreaterThanOrEqual(3);
+    expect(f.slotPreferenceScore.length).toBeGreaterThanOrEqual(3);
+    expect(f.stabilityScore.length).toBeGreaterThanOrEqual(3);
+    expect(f.findConflictingTaskIds.length).toBeGreaterThanOrEqual(1);
   });
 });

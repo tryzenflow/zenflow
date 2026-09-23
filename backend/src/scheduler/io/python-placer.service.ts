@@ -18,7 +18,6 @@ import {
 import type { ExperimentTrigger } from "../../experiments/experiment.types";
 import {
   schedulerAppliedPolicy,
-  schedulerPlacementShadowMismatch,
   schedulerPlacementSource,
 } from "../../observability/metrics";
 import { recordPhase } from "../../observability/phase-timings";
@@ -432,71 +431,6 @@ export class PythonPlacer {
       });
     }
     return rows;
-  }
-
-  // ---- shadow (legacy answers, Python is only compared) -------------------
-
-  /**
-   * Shadow mode: call `/v1/place` for the same single-task input the legacy
-   * path just placed and log/count any disagreement. Never throws, never
-   * writes. HEURISTIC picks are expected to match exactly; a LINUCB
-   * difference beyond float noise is worth investigating.
-   */
-  async shadowCompareSingle(args: {
-    user: User;
-    task: PlaceableTask;
-    now: Date;
-    legacyHeuristicStart: Date | null;
-    legacyLinucbStart: Date | null;
-  }): Promise<void> {
-    try {
-      const { user, task, now } = args;
-      const req = await this.gateway.buildRequest({
-        user,
-        members: [this.memberOf(task, "HEURISTIC", true)],
-        deadline: task.deadline,
-        now,
-        mode: "PLACE",
-        maxScanDays: SCAN_CAP_DAYS,
-        excludeSessionIds: [task.id],
-      });
-      const res = await this.gateway.place(req);
-      if (!res.ok) {
-        this.logger.debug(`shadow ${task.id}: skipped (${res.reason})`);
-        return;
-      }
-      const r = res.response.results[0];
-      this.compare(
-        task.id,
-        "heuristic",
-        args.legacyHeuristicStart,
-        r.heuristic,
-      );
-      if (args.legacyLinucbStart) {
-        this.compare(task.id, "linucb", args.legacyLinucbStart, r.linucb);
-      }
-    } catch (err) {
-      this.logger.warn(
-        `shadow ${args.task.id} failed: ${(err as Error).message}`,
-      );
-    }
-  }
-
-  private compare(
-    id: string,
-    kind: "heuristic" | "linucb",
-    legacy: Date | null,
-    py: { startMs: number } | null,
-  ): void {
-    const legacyMs = legacy?.getTime() ?? null;
-    const pyMs = py?.startMs ?? null;
-    if (legacyMs === pyMs) return;
-    schedulerPlacementShadowMismatch.add(1, { kind });
-    this.logger.warn(
-      `shadow mismatch ${kind} session=${id} legacy=${
-        legacyMs !== null ? new Date(legacyMs).toISOString() : "none"
-      } python=${pyMs !== null ? new Date(pyMs).toISOString() : "none"}`,
-    );
   }
 
   // ---- helpers -----------------------------------------------------------

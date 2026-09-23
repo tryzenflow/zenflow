@@ -1,47 +1,67 @@
-# Zenflow Scheduling Heuristic
+# Zenflow scheduling heuristic — frozen TS fallback
 
-The live scheduler. A pure, deterministic rank-then-best-fit placer with a per-user
-preference matrix. No global optimization, no randomness, no I/O in the core.
-
-> Historical note: this file consolidates the algorithm notes that used to live in
-> `notes.md` / a since-removed `docs/heuristic.md`. The phased "EDF → Phase 2 heuristics →
-> Phase 3 LinUCB" roadmap those older docs described is superseded — Phase 1's EDF engine
-> was deleted (commit `6d3f42b`) and Phase 2's re-ranker was never built. What ships today
-> is only what is below. LinUCB design lives in
+> **ADR-0003 superseded this document's original scope.** Until phase 6, this file described
+> the TS heuristic as the **primary** placement algorithm (Policy A of the LinUCB A/B
+> experiment). That is no longer true: `POST /v1/place` in `services/bandit` is now the sole
+> authoritative placement path — heuristic best-free-slot, LinUCB slot-first scoring, series
+> spreading, and displacement all run there (pure numpy, `services/bandit/src/core/*`). What
+> remains in `backend/src/scheduler/core/*` is a **frozen** copy of the pre-#62 TS heuristic,
+> used only as `FallbackPlacer` — the degraded-mode driver when `/v1/place` is unreachable
+> (timeout, breaker open, `BANDIT_SERVICE_URL` unset, contract-version mismatch). This document
+> now describes that frozen fallback only. For the live, authoritative algorithm see
+> [`services/bandit/README.md`](../../services/bandit/README.md) and
+> [`docs/adr/0003-python-authoritative-placement.md`](../adr/0003-python-authoritative-placement.md).
+> LinUCB design history lives in
 > [`docs/adr/0001-linucb-model-design.md`](../adr/0001-linucb-model-design.md) and
-> [`docs/scheduler/reranking.md`](./reranking.md); the move-or-keep signal model is
-> [`docs/adr/0002-scheduling-simplification.md`](../adr/0002-scheduling-simplification.md).
+> [`docs/scheduler/reranking.md`](./reranking.md) (superseded the same way — describes the
+> A/B experiment as it ran while TS was authoritative; the experiment's shape —
+> `ExperimentService.assignPolicy`, `SlotProposal`, pairwise sampling — is unchanged, only
+> which side does the ranking moved).
 
-## Pieces
+## When this code runs
 
-> **Reorg note.** The scheduler was split into a pure `scheduler/core/*` and an I/O
-> `scheduler/io/*` layer — see [`backend/README.md` → "Scheduler architecture"](../../backend/README.md#scheduler-architecture)
-> for the current file map, diagrams, and a source-trace table. Three behavior changes
-> landed with the split: `slotPreferenceScore` is now **overlap-weighted** (see below);
-> the LinUCB slot score adds `slotPreferenceScore` as a cold-start blend
-> ([`reranking.md`](./reranking.md) §3); and `TASK`-series members now go through the
-> per-member 50/50 A/B pick within a `± floor(X/N)`-day window (`dayVisitOrder` is gone).
+`FallbackPlacer` (`backend/src/scheduler/io/fallback-placer.service.ts`), built on
+`HeuristicPlacer` (`backend/src/scheduler/io/heuristic-placer.service.ts`), is invoked by
+`PythonPlacer` only when `PlacementClient` reports a failure: connect/timeout, 5xx, circuit
+breaker open, or `BANDIT_SERVICE_URL` unset/disabled. It:
+
+- Never displaces another session, never accepts conflicts or a late deadline, never rolls the
+  A/B policy — a caller that finds no slot here gets `503 SCHEDULER_DEGRADED` (retryable, nothing
+  written).
+- Is preference-only: no adaptive LinUCB blend, no arm score, no context vector. Comfort is a
+  score, feasibility is a hard yes/no.
+- Places **only the session in hand** — it never repacks a day or moves an existing session.
+
+File header convention: `FROZEN FALLBACK (ADR-0003): bug fixes only; behaviour changes belong
+in services/bandit`. A change here must keep
+`backend/test/golden/scheduler-core.golden.json` (`pnpm --filter backend golden:export`) and
+`services/bandit/tests/test_golden_ts.py` green — see
+[`backend/README.md` → "Scheduler architecture"](../../backend/README.md#scheduler-architecture)
+for the current file map, diagrams, and source-trace table.
 
 | File | Role |
 | --- | --- |
-| `backend/src/scheduler/core/slot-score.ts` | pure core — `bestFreeSlot`, `slotPreferenceScore` (overlap-weighted) |
-| `backend/src/scheduler/core/preference.ts` | pure — `matrixIndex`, default/effective matrix, `preferenceScoreAt` |
+| `backend/src/scheduler/core/slot-score.ts` | **frozen** — `bestFreeSlot`, `slotPreferenceScore` (overlap-weighted), `stabilityScore` |
+| `backend/src/scheduler/core/preference.ts` | `matrixIndex`, default/effective matrix, `preferenceScoreAt` (reinforcement stays live — see below) |
 | `backend/src/scheduler/io/heuristic-placer.service.ts` | Prisma layer — loads each candidate day's `occupied`, picks one slot (`placeTask` / `placeInWindow`) |
-| `backend/src/scheduler/io/series-placer.service.ts` | `SeriesPlacer` — per-member bounded 50/50 placement of a `sessionCount` series |
-| `backend/src/scheduler/core/series-spread.ts` | pure — `seriesDayWindows` (non-overlapping per-member day buckets) |
-| `backend/src/scheduler/io/matrix-decay.service.ts` | nightly exponential decay of every user's `preferenceMatrix` |
-| `backend/src/scheduler/io/retained-sessions.service.ts` | half-hourly RETAINED sweep (the "keep" signal) |
-| `backend/src/scheduler/core/recurrence.ts` | `expandRrule` — any recurring series (`DND` or a recurring `ASSIGNMENT`/`EXAM`/`LECTURE`) → occurrence instants |
+| `backend/src/scheduler/io/fallback-placer.service.ts` | `FallbackPlacer` — degraded-mode driver; `placeSingle` / `placeSeries`, all-or-nothing |
+| `backend/src/scheduler/core/series-spread.ts` | **frozen** — `seriesDayWindows` (non-overlapping per-member day buckets) |
+| `backend/src/scheduler/io/matrix-decay.service.ts` | nightly exponential decay of every user's `preferenceMatrix` (mode-independent) |
+| `backend/src/scheduler/io/retained-sessions.service.ts` | half-hourly RETAINED sweep (the "keep" signal, mode-independent) |
+| `backend/src/scheduler/core/recurrence.ts` | `expandRrule` — any recurring series (`DND` or a recurring `ASSIGNMENT`/`EXAM`/`LECTURE`) → occurrence instants (mode-independent) |
 
 ## The preference matrix
 
 `User.preferenceMatrix` is a flat `Float[]` of length **168** — 7 ISO weekdays × 24
 one-hour buckets, row-major by weekday (`matrixIndex(isoWeekday, hour) = (isoWeekday-1)*24 + hour`).
 Signed floats. Cold-start fill (`defaultPreferenceMatrix`): weekday 08–11h → `1`,
-14–17h → `0.5`, 19–22h → `0.2`, everything else `0` (never negative).
+14–17h → `0.5`, 19–22h → `0.2`, everything else `0` (never negative). This matrix is sent to
+Python as part of every `PlaceRequest` — Python's heuristic/LinUCB scoring reads the same
+matrix the frozen fallback does, so degraded mode isn't scoring against stale personalization.
 
 Nightly, `MatrixDecayService` multiplies every cell by `2^(-Δdays / 21)` (≈3-week half-life)
-and stamps `preferenceMatrixDecayedAt`.
+and stamps `preferenceMatrixDecayedAt`. This is mode-independent — it runs regardless of
+whether the last placement was served by Python or the fallback.
 
 Cells are also reinforced per event (`η = PREFERENCE_LEARNING_RATE = 0.1`), for both
 policies, and clamp to `[-1, 1]`:
@@ -52,24 +72,20 @@ policies, and clamp to `[-1, 1]`:
   Resizing only the end doesn't move the start, so it is not a move.
 - **RETAINED**: kept hour `+η·PREFERENCE_RETAINED_WEIGHT` (`0.25`).
 
-LinUCB's own reward is separate: `dragDistanceReward` on MOVE, `+1` on RETAINED.
+LinUCB's own reward is separate: `dragDistanceReward` on MOVE, `+1` on RETAINED — sent to
+Python's `/update` (`BanditService`), regardless of which policy placed the session.
 
-## The algorithm
+## The frozen algorithm
 
-The scheduler places **only the session in hand** — it never repacks a day or moves an
-existing session (`reranking.md`) — except in the last-resort *Displacement* case below, when a
-`TASK` has no free slot before its deadline. `SessionsService` calls
-`HeuristicScheduleService.scheduleTask` after a `TASK` is created and after a `TASK`
-deadline changes. Adding a fixed / DND session schedules nothing (they are user-pinned).
-
-`scheduleTask(user, { id, durationMinutes, deadline }, tz, preferenceMatrix, now)`:
+`HeuristicPlacer.placeTask(user, { id, durationMinutes, deadline }, tz, preferenceMatrix, now)`
+— called only from `FallbackPlacer`:
 
 1. For every local calendar day from `next_15min(now)` through the deadline (capped at
-   `MAX_SCAN_DAYS`), load that day's `occupied` intervals — via `loadDayLoad`, excluding
-   this task's own row: standalone fixed sessions, other placed/materialized `TASK`
-   sittings (including another series' members), and every occurrence of every recurring
-   series (`DND`, or a recurring `ASSIGNMENT`/`EXAM`/`LECTURE`), expanded from its
-   representative row.
+   `SCAN_CAP_DAYS` for a single task, `MAX_SCAN_DAYS` for a series), load that day's `occupied`
+   intervals — via `loadDayLoad`/`loadDayLoads`, excluding this task's own row: standalone
+   fixed sessions, other placed/materialized `TASK` sittings (including another series'
+   members), and every occurrence of every recurring series (`DND`, or a recurring
+   `ASSIGNMENT`/`EXAM`/`LECTURE`), expanded from its representative row.
    `loadDayLoad` looks a day back and a task-length forward of the nominal `[00:00, 24:00)`
    so a session that started the previous evening and runs past midnight — or one this
    scan might place across the *next* midnight — is visible for collision checks.
@@ -77,126 +93,69 @@ deadline changes. Adding a fixed / DND session schedules nothing (they are user-
    `[max(now, dayStart), min(deadline, nextMidnight))`, skips any that overlap `occupied`,
    and scores each free slot with `slotPreferenceScore` — the **overlap-weighted** sum over
    every clock-hour block `[h, h+1)` the `[start, start+duration)` interval touches of
-   `overlapFraction · pref[weekday(h)][h]`. A partially-covered hour contributes
+   `overlapFraction · pref[weekday(h)][h]`, plus `stabilityScore` (a light nudge toward the
+   previous manually-set start, on an edit). A partially-covered hour contributes
    fractionally: a 09:15–11:00 slot scores `0.75·pref[..][9] + 1.0·pref[..][10]`. A
    midnight-spanning slot is split at local midnight and each side scored against its own
    weekday row.
    **Cross-midnight:** a slot may *start* before that day's `nextMidnight` and *finish*
    after it, up to `min(deadline, nextMidnight + duration − one slot)` — so a task can be
    placed at e.g. 23:00 and run to 01:30. The post-midnight hours are ordinary candidate
-   time; the preference matrix decides whether they're ever chosen (a day-person's matrix
-   scores 00:00–06:00 ≈ 0, so those slots only win when nothing better fits). The two
-   ceilings are `bestFreeSlot`'s `windowEnd` (latest start) and `fitWindowEnd` (latest
-   end); `loadDayLoad`'s `occupiedLookaheadMs` widens only the collision scan, not the
-   day's workload accounting.
+   time; the preference matrix decides whether they're ever chosen. The two ceilings are
+   `bestFreeSlot`'s `windowEnd` (latest start) and `fitWindowEnd` (latest end); `loadDayLoad`'s
+   `occupiedLookaheadMs` widens only the collision scan, not the day's workload accounting.
 3. The single highest-scoring slot across **all** days wins; earliest start breaks ties.
-   `null` when nothing free fits before the deadline — the task stays unscheduled.
+   `null` when nothing free fits before the deadline — `FallbackPlacer.placeSingle` reports
+   that as "nothing free," and the caller (`PythonPlacer`) answers `503 SCHEDULER_DEGRADED`.
 
-Both the single-`TASK` heuristic and the LinUCB path now allow a slot to run past local
-midnight up to the deadline (`overlapRate` splits a straddling slot at midnight rather than
-rejecting it). Series members are placed one day-window at a time and rarely need to
-straddle, but nothing forbids it.
+No telemetry is written by the frozen fallback itself — `PythonPlacer` records the
+`SlotProposal` (`placementSource = TS_FALLBACK`, `modelProposal = null`, a `degradedReason`)
+around it.
 
-No telemetry is written here; the A/B `SlotProposal` row (when the experiment runs) is the
-only record.
+## Series (degraded mode only)
 
-Since issue #62, day loads for a scan come from one range query (`loadDayLoads`). Single-task
-placement scans at most `SCAN_CAP_DAYS` (30) days. `MAX_SCAN_DAYS` (60) is unchanged: it also
-normalizes the LinUCB context vector, and series placement still spans it.
+`FallbackPlacer.placeSeries` places every member of a `sessionCount > 1` series through the
+frozen loop, all-or-nothing: `seriesDayWindows(daySpan, N)` (`core/series-spread.ts`,
+**frozen**) partitions the `daySpan + 1` days into `N` contiguous, non-overlapping buckets —
+`base = floor(totalDays / N)` days each, with the LAST `totalDays % N` buckets getting one
+extra day. Member `i`'s window is exactly its bucket: no two members' windows can ever overlap.
+Each member is placed by the same `HeuristicPlacer.placeInWindow` scan restricted to its
+window; a day already holding `MAX_SERIES_PER_DAY` sittings of this series is skipped; siblings
+never overlap (each placement is fed forward as a hard block). Any member with nowhere to go
+makes the whole series call fail `503 SCHEDULER_DEGRADED` — there is no partial-series
+degraded result (contrast with Python's authoritative path, which is per-member; see
+`services/bandit/README.md`).
 
-## Displacement of flexible tasks (issue #62 B)
+## What moved to Python (not described here any more)
 
-The steps above place into *empty* slots. If none exists before the deadline
-(`TaskPlacementService`), the engine tries, in order:
+- **Displacement** (EDF repack of flexible `TASK`s) and the two infeasible fallbacks
+  (`ACCEPT_CONFLICTS`/`ACCEPT_LATE_DEADLINE`) — `services/bandit/src/core/displacement.py`,
+  reached via `/v1/place`'s two-phase infeasible flow (ADR-0003 §3.3). The degraded mode has
+  **no** displacement or accept-conflicts/late at all — see the table in
+  [`backend/README.md`](../../backend/README.md#python-authoritative-placement-adr-0003).
+  `backend/src/scheduler/io/displacement.service.ts` only *persists* Python's already-computed
+  moves (`applyMoves`) — it doesn't plan them any more.
+- **LinUCB slot-first scoring** (context vector, arm scoring, adaptive `wL`/`wP` blend, tie-break
+  order) — `services/bandit/src/core/linucb_best_slot.py` and friends. There is no TS LinUCB
+  implementation left at all (ADR-0003 phase 6 deleted `linucb-best-slot.ts`, `context-vector.ts`,
+  `arms.ts`, `adaptive-weights.ts`, `normalize.ts`).
+- **Series orchestration on the authoritative path** — per-member day windows, the sibling
+  ledger, `MAX_SERIES_PER_DAY` — Python's `place.py`. `FallbackPlacer`'s series loop above is
+  the only TS series placement left, and only for degraded mode.
 
-1. **Repack** (`core/displacement.ts` `planDisplacement`; I/O in `DisplacementService`).
-   - *Flexible*: standalone `TASK` rows that have not started. Everything else (DND / ASSIGNMENT /
-     EXAM / LECTURE, recurring occurrences, `TASK`-series sittings) is *fixed* and never moves.
-   - Window: the deadline's local day, widened to +/-1 day only if infeasible.
-   - For each of the top `DISPLACEMENT_CANDIDATES` preference-ranked slots, simulate an
-     earliest-deadline-first cascade. A flexible task stays if it no longer collides; otherwise
-     `bestFreeSlot` re-places it within its own deadline and the window.
-   - Cascades are capped at `MAX_DISPLACED_TASKS` moves. Fewest moves wins, then best preference.
-   - An uncomfortable hour is accepted: comfort is a score, feasibility is not.
-2. **User's choice**, if still infeasible. The request fails with
-   `409 { code: "SCHEDULE_INFEASIBLE", options: [...] }` (nothing persisted). The client retries
-   with `infeasiblePolicy`:
-   - `ACCEPT_CONFLICTS`: `pickMinConflictSlot`, the pre-deadline start overlapping the least
-     calendar time.
-   - `ACCEPT_LATE_DEADLINE`: `pickLateSlot`, the first conflict-free start ending after the
-     deadline (`Session.late = true`, red block in the UIs).
-
-`now + duration > deadline` is always a plain `400` (on create and on a deadline edit). A series
-member's deadline edit only gets that check.
-
-Scheduler-initiated moves are `SYSTEM_MOVE` `SessionEvent`s (`rewardScore = 0`). They never write a
-`MOVE`, never call `/update`, never touch the preference matrix, and do not count toward
-`observationCount`.
-
-## Sync conflicts (issue #62 D)
+## Sync conflicts (issue #62 D, unchanged by ADR-0003)
 
 After a timetable / exam / LMS sync writes fixed blocks, `SyncConflictsService` finds the user's
-own scheduled `TASK`s that now overlap them (`core/sync-conflicts.ts`). It raises one notification
-per source: `TIMETABLE_CONFLICT`, `EXAM_CONFLICT` or `ASSIGNMENT_CONFLICT`.
+own scheduled `TASK`s that now overlap them (`core/sync-conflicts.ts` — pure, mode-independent,
+still golden-tested). It raises one notification per source: `TIMETABLE_CONFLICT`,
+`EXAM_CONFLICT` or `ASSIGNMENT_CONFLICT`.
 
 - No-op with zero conflicts; deduped while an identical un-acted notification is open.
 - `POST /notifications/:id/reschedule-conflicts` re-places each still-conflicting task through
-  normal placement (earliest deadline first) as `SYSTEM_MOVE`s.
+  normal placement (`TaskPlacementService` → `PythonPlacer`, earliest deadline first) and
+  persists each move as a `SYSTEM_MOVE` via `DisplacementService.applyMoves`.
 
-## Session series (`sessionCount > 1`)
-
-Creating a `TASK` with `sessionCount: N` (N > 1) makes one `SessionSeries` (`type: TASK`,
-shared `deadline`, no `rrule`) and N linked `Session` rows (`sessionIndex` 1..N,
-`sessionTotal` N), then hands the batch to `SeriesPlacer.placeSeries`:
-
-- **Non-overlapping windows.** `seriesDayWindows(daySpan, N)` partitions the `daySpan + 1`
-  days into `N` contiguous buckets — `base = floor(totalDays / N)` days each, with the LAST
-  `totalDays % N` buckets getting one extra day. Member `i`'s window is exactly its bucket:
-  no two members' windows can ever overlap, unlike the earlier "even-spread target ± a
-  symmetric clamp" scheme, whose overlapping windows could let two sessions cluster onto one
-  day while a neighboring day sat empty. The member is then placed **through the same 50/50
-  heuristic-or-LinUCB pick as a single task**, restricted to that window; a day already
-  holding `MAX_SERIES_PER_DAY` (= 3) sittings of this series is skipped.
-- Siblings never overlap (each placement is fed forward as a hard block). A member with
-  nowhere to go comes back unscheduled without blocking the others. One `SlotProposal` is
-  recorded per member.
-
-Editing any series member's **deadline** pushes the new deadline onto the series row and
-every member, then re-runs the same per-member bounded placement for the sittings that have
-not started yet — a shorter window tightens the spacing, a longer one relaxes it. Past
-sittings keep their slot. Editing one member's deadline is the whole-series deadline edit;
-there is no per-member deadline.
-
-### Editing `sessionCount` (`SeriesService.resizeSessionCount`)
-
-`PATCH /sessions/:id` with `sessionCount` resizes an existing `TASK` series post-creation —
-the edit-mode counterpart of the create-time session-count slider:
-
-- **Grow** (`sessionCount` > current member count) — a pre-flight feasibility check
-  (`TaskPlacementService.canPlaceSeries`, over just the *added* sittings) rejects the whole
-  resize up front if they have nowhere to fit; otherwise `targetCount − memberCount` new rows
-  are cloned from the representative member (title/note/location/tags/duration/deadline),
-  `sessionIndex` continuing from the current max, and placed via
-  `TaskPlacementService.placeSeriesOnCreate` — since the existing members are already
-  persisted rows, the normal day-load occupancy scan schedules around them without moving
-  them. `sessionTotal` is rewritten onto every member, old and new, and each new row gets its
-  own `CREATE` `SessionEvent`.
-- **Shrink** (`sessionCount` < current member count) — always drops the highest-`sessionIndex`
-  (most recently added) sittings first; rejected outright, with nothing written, if any of
-  those has already started (`scheduledStartTime ≤ now`). `sessionTotal` is rewritten onto the
-  survivors.
-- **Promotion** — a plain single `TASK` (no series yet) patched with `sessionCount > 1` is
-  first promoted into a 1-member `SessionSeries` (`SeriesService.promoteToSeries`), then grown
-  exactly like the series case above — symmetric with create-mode's "raise the count to make
-  a series."
-
-The N `CREATE` events share a `batchId` (echoed on `CreateSessionResponse.batchId`).
-Reverting a batch, or clearing a series outright, is `DELETE /sessions/series/:seriesId`;
-`DELETE /sessions/series/:seriesId/from/:sessionId` drops that session and every later one
-(`sessionIndex` order) and keeps the earlier ones. Each surviving session stays an
-ordinary, independently editable/movable/deletable `Session` row.
-
-## Move-or-keep signal
+## Move-or-keep signal (unchanged by ADR-0003)
 
 - User drag/resize of a scheduled `TASK` → `PATCH /sessions/:id` → a `MOVE` `SessionEvent`
   (`rewardScore = -1`, `dragDistanceMinutes` signed) + `Session.lastMovedAt`.
@@ -207,18 +166,6 @@ ordinary, independently editable/movable/deletable `Session` row.
 - Scheduler-initiated moves (displacement, "reschedule all") are `SYSTEM_MOVE` events with
   `rewardScore = 0`: no preference update.
 
-DND blocks and fixed types never emit move/keep signals.
-
-## Relationship to the A/B experiment
-
-In the LinUCB A/B test ([`ab-testing.md`](./ab-testing.md)), "Policy A" **is** the
-algorithm above (`HeuristicPlacer.placeTask`) — single-session, empty-slot-only, nothing
-else moved — so it is already on equal footing with the LinUCB policy, which also only ever
-places the current session (`reranking.md`). LinUCB, when it is the assigned primary policy
-and produces a pick, overrides the heuristic placement for that one session. The shared
-slot realization — the overlap-weighted `slotPreferenceScore`, earliest-start tie-break —
-lives in `core/slot-score.ts`. The heuristic stays **preference-only**: no adaptive `wL`/`wP` blend,
-no arm score (those are LinUCB-only, ADR-0001 §13). That keeps the two policies distinct.
-`TASK`-series members go through the same 50/50 pick as a
-single task, each within a `± floor(X/N)`-day window (`SeriesPlacer`).
-
+DND blocks and fixed types never emit move/keep signals. This whole signal path is
+mode-independent — it feeds `/update` regardless of whether the placement that's being
+rewarded came from Python or the frozen fallback.

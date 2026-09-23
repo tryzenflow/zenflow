@@ -140,11 +140,6 @@ import { ObservabilityModule } from "./observability/observability.module";
         // Optional shared bearer secret sent as `Authorization: Bearer` on
         // /v1/place (the Python side verifies it; /health and /ready exempt).
         BANDIT_SERVICE_TOKEN: Joi.string().optional(),
-        // legacy (default) | shadow | python — see backend/README.md
-        // "Placement mode". Stay on `legacy` until shadow diffs are proven.
-        SCHEDULER_PLACEMENT_MODE: Joi.string()
-          .valid("legacy", "shadow", "python")
-          .default("legacy"),
         // Total per-call budget for POST /v1/place, ms (ADR-0003: 2500).
         PLACE_TIMEOUT_MS: Joi.number().integer().min(100).default(2500),
         // "1" => emit a `Server-Timing` header on responses (bench/test env).

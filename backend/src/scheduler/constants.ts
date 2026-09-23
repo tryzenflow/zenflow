@@ -35,10 +35,10 @@ export const MIN = 60_000;
 
 /**
  * Weight and saturation point for the slot-scoring "stability" nudge
- * (`core/slot-score.ts`'s `stabilityScore`, used by both `bestFreeSlot` and
- * `linucb-best-slot.ts`'s `bestMinuteInArm`): a light penalty for moving a
- * session away from the start time the user last set manually, so it isn't
- * churned without good reason.
+ * (`core/slot-score.ts`'s `stabilityScore`, used by `bestFreeSlot` here and
+ * mirrored by `services/bandit`'s LinUCB slot scoring): a light penalty for
+ * moving a session away from the start time the user last set manually, so
+ * it isn't churned without good reason.
  *
  * `STABILITY_WEIGHT` caps the term's maximum contribution to the total
  * score. It has to stay well under the scale of the terms it sits beside:
@@ -67,8 +67,9 @@ export const STABILITY_SATURATION_HOURS = 4;
  * exact minutes within LinUCB's already-chosen arm (Item 3B1/B2) — never to
  * choose the arm itself (B2 picks the arm from LinUCB's own per-arm scores
  * alone), and never fed into LinUCB's context vector at all (the preference
- * matrix was dropped from `context-vector.ts` entirely — it's no longer even
- * a reserved/zeroed slot).
+ * matrix was dropped from the context vector entirely — it's no longer even
+ * a reserved/zeroed slot; `services/bandit/src/core/context_vector.py` owns
+ * it now, ADR-0003).
  *
  * LinUCB's own arm score (`θ̂ᵀx + α·√(xᵀA⁻¹x)`) is fit against rewards in
  * `[-1, 1]` (`SESSION_RETAINED_REWARD` / `SESSION_MOVE_REWARD` /
@@ -126,8 +127,9 @@ export const BANDIT_EXPERIMENT_ID = "linucb-heuristic-v1";
 
 /**
  * Fraction of `TASK` create / deadline-change events (and, independently,
- * series members) that run **both** `HeuristicPlacer` and `BanditPlacer` and
- * get `SlotProposal.pairwiseShown = true` (`docs/scheduler/ab-testing.md`
+ * series members) that get both policies computed (`computeBoth` on the
+ * `/v1/place` request) and `SlotProposal.pairwiseShown = true`
+ * (`docs/scheduler/ab-testing.md`
  * §3). Every other event runs exactly one algorithm — the existing 50/50
  * `primaryPolicy` pick — same as before this existed. Independent draw from
  * `primaryPolicy`'s own 50/50 roll.

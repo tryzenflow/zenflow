@@ -62,8 +62,12 @@ export function seriesDayWindows(
  * across the `daySpan + 1` available days (`count <= daySpan + 1`). This is
  * the common case, and the only one in which member placement has no
  * cross-member data dependency: two members can never land on the same day,
- * so their day-load reads and slot scoring may run concurrently
- * (`SeriesPlacer.placeSeries`, issue "batch series-member scoring").
+ * so their day-load reads and slot scoring may run concurrently. Historical
+ * note: this powered the now-deleted TS `BanditPlacer`'s series-member
+ * batching (ADR-0003 phase 6 deleted that path; `services/bandit`'s
+ * `place.py` owns series-member batching now). No production caller remains
+ * — kept for its spec coverage of the disjoint-window boundary math, shared
+ * with {@link seriesDayWindows} which `FallbackPlacer` still uses.
  *
  * `false` is the dense edge case (`count > daySpan + 1`, more sessions than
  * days): {@link seriesDayWindows} then collapses several members into a

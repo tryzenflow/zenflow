@@ -35,9 +35,10 @@ export interface PlaceInWindowOpts {
   /**
    * Pre-fetched day loads keyed by local `dayStr`, covering every day this
    * call might scan. When given, the internal {@link loadDayLoads} read is
-   * skipped entirely — used by `SeriesPlacer`, which fetches the union of
-   * every series member's day range in one query up front (issue "batch
-   * series-member scoring"). A `dayStr` missing from the map falls back to
+   * skipped entirely — for a caller that fetches the union of every series
+   * member's day range in one query up front. Unused by `FallbackPlacer`
+   * today (its series loop stays sequential — a rare degraded path, not the
+   * hot loop); kept for any future caller that wants the batched read. A `dayStr` missing from the map falls back to
    * an empty day (no occupancy) — callers must cover every day in the
    * scanned window. Additive/optional — single-task `placeTask` callers are
    * unaffected.

@@ -164,23 +164,38 @@ services/bandit/
 └── tests/                          # pytest suite mirroring src/ (test_api.py routes, test_schemas.py models)
 ```
 
-### Scheduler core port (`src/core/`, issue #60)
+### Scheduler core (`src/core/`, authoritative since ADR-0003)
 
-Pure numpy port of `backend/src/scheduler/core/*` (the TS core is the source of truth): `slot`,
-`arms`, `context_vector`, `reward`, `series_spread`, `preference` (+ `decay_matrix`), `slot_score`
-(`best_free_slot`), `adaptive_weights`, `linucb_best_slot`, `displacement` and `sync_conflicts`.
-No I/O, clock or randomness; instants are epoch-ms ints. The 7x24 matrix is 168 floats.
+Pure numpy: `slot`, `arms`, `context_vector`, `reward`, `series_spread`, `preference`
+(+ `decay_matrix`), `slot_score` (`best_free_slot`), `adaptive_weights`, `linucb_best_slot`,
+`displacement` and `sync_conflicts`. No I/O, clock or randomness; instants are epoch-ms ints.
+The 7x24 matrix is 168 floats.
+
+Originally ported from `backend/src/scheduler/core/*` (issue #60, when the TS core was the
+source of truth). **ADR-0003 phase 6 reversed that**: Python is now the sole ranking
+implementation — `linucb_best_slot`, `context_vector`, `arms`, `adaptive_weights` and
+`displacement` no longer have a TS counterpart at all (that code was deleted from `backend/`).
+A behaviour change to any of those goes in this package's `src/core/*` with pytest coverage
+and updated `packages/shared/contract/place/*.json` fixtures — not a TS port, per the rewritten
+CLAUDE.md invariant 2.
 
 - `linucb_best_slot` (issue #62 A): scores every feasible 15-min start on all days as
   `wL*armTerm + wP*pref/hours + stability`. Ties go to `TIE_BREAK_ARM_ORDER`, then the earlier start.
 - The scan is vectorized: per-tz UTC offset chunks (DST and fractional offsets like Asia/Kolkata),
   a prefix-sum for window scores, a difference-array occupancy mask, and `argmax` on scores rounded to
-  1e-9 (earliest start wins, like the TS loop).
+  1e-9 (earliest start wins, like the original TS loop this was ported from).
 
-Parity tests:
+**Golden parity, narrowed (ADR-0003 phase 6):** `backend/src/scheduler/core/*` now only keeps
+the **frozen TS fallback** (`slot-score.ts`, `preference.ts`, `series-spread.ts`,
+`sync-conflicts.ts` — used solely by `FallbackPlacer` when `/v1/place` is unreachable), so the
+golden fixtures only cover that narrow surface, not LinUCB/arms/displacement (those are
+Python-only now, verified by this package's own tests, not a TS golden file):
 
-- `tests/test_golden_ts.py` runs every case of `backend/test/golden/scheduler-core.golden.json`
-  (regenerate: `pnpm --filter backend golden:export`).
+- `tests/test_golden_ts.py` runs every case of the narrowed
+  `backend/test/golden/scheduler-core.golden.json` (`slotPreferenceScore`, `stabilityScore`,
+  `bestFreeSlot`, `findConflictingTaskIds`) against `slot_score`/`sync_conflicts`
+  (regenerate the JSON: `pnpm --filter backend golden:export`). A fix to the frozen TS
+  fallback must keep this green; it is otherwise not expected to change.
 - `tests/test_core_parity.py` has hand-checked fixtures (`tests/fixtures/golden/`) the export lacks.
 - `tests/test_core_scan.py` checks the vectorized scans against scalar versions (UTC, Kolkata, both
   DST transitions).

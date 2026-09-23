@@ -1,6 +1,7 @@
 # ADR-0003: Python-Authoritative Placement (thin Nest API, frozen TS heuristic fallback)
 
-**Status:** Proposed
+**Status:** Accepted — phase 6 executed out of sequence, phases 4/5's soak/validation gates
+skipped by explicit product decision; see [§12](#12-phase-6-executed-out-of-sequence).
 **Date:** 2026-09-21
 **Issue:** none; builds on #60 (numpy core port, golden parity) and #62 (slot-first LinUCB,
 displacement, batched loads). Replaces #60's "TS core is the source of truth" stance and the
@@ -549,3 +550,58 @@ sequenceDiagram
   narrowed golden parity.
 - **FE/mobile:** degraded notice and 503 retry.
 - **Ops:** compose (private network, no prod port, `/ready` healthcheck, secrets), alerts.
+
+## 12. Phase 6 executed (out of sequence)
+
+Phase 6 ("Delete dead TS") landed directly, skipping phases 4/5's cut-over gate as originally
+specified in §7: no environment had ever run `SCHEDULER_PLACEMENT_MODE=python` in production
+(`.env.dev/.staging/.prod/.test` and every docker-compose config omitted the flag; the Joi
+default was `legacy`), and no shadow-mode soak evidence exists showing Python's picks matched
+legacy's within tolerance before this landed. This is a real, accepted reduction in safety
+margin — the user was told explicitly and chose "full deletion now" over waiting for a soak.
+Rationale: `legacy`/`shadow` mode were a rollback path that had never actually been exercised
+in anger, so the cost of keeping them (double-maintained ranking code, `TaskPlacementService`
+staying mode-branched, a soon-to-be-orphaned golden-fixture surface) outweighed the value of a
+rollback nobody had validated.
+
+**What was deleted:** `SCHEDULER_PLACEMENT_MODE`/`PlacementMode`/`parsePlacementMode` (kept
+`DegradedReason`); the `legacy`/`shadow` branches of `TaskPlacementService` (now a thin
+pass-through to `PythonPlacer`) and its `coordinator`/`heuristic`/`bandit`/`seriesPlacer`
+dependencies; `SeriesPlacer`, `BanditPlacer`, `SchedulingExperimentCoordinator` (+ specs);
+`core/linucb-best-slot.ts`, `core/arms.ts`, `core/adaptive-weights.ts`, `core/normalize.ts`,
+`core/context-vector.ts` (the math file — `types/context-vector.types.ts` is a separate,
+types-only file, kept, still used by `day-load.ts`/`heuristic-placer.service.ts`), and
+`core/displacement.ts` (+ all specs). `DisplacementService.plan()`/`.fallbackStart()` were
+deleted; `.applyMoves()`/`isFlexible`/`AppliedMove` were kept (used by
+`python-placer.service.ts` and `conflict-reschedule.service.ts`). The golden fixture set
+(`backend/test/golden/scheduler-core.golden.json`) was narrowed to `slotPreferenceScore`,
+`stabilityScore`, `bestFreeSlot`, and `findConflictingTaskIds` — the frozen-fallback surface
+plus mode-independent `sync-conflicts.ts` — matched by a trimmed
+`services/bandit/tests/test_golden_ts.py`.
+
+**What stayed, and why it isn't "legacy mode":** `HeuristicPlacer` and `FallbackPlacer` are
+Python's own degraded-mode driver, not a parallel TS ranking implementation — they only run
+when `PlacementClient` reports a failure (timeout, 5xx, connect error, breaker open, contract
+mismatch, or `BANDIT_SERVICE_URL` unset/disabled). The existing 5xx/timeout/breaker-triggers-
+fallback logic in `PlacementClient`/`PythonPlacer` was verified unchanged by this deletion — no
+new code was needed for "fall back to heuristic TS on a bandit 503," since `PythonPlacer`
+already routed every `PlacementClient` failure to `FallbackPlacer` before this change.
+
+**Remaining mitigations, given the skipped soak (§8 "Costs" already named the general risk;
+this is the specific instance)**:
+
+1. No fallback to a parallel TS implementation exists any more if `PythonPlacer`/
+   `FallbackPlacer` has an undiscovered bug — only git history (`5763a29`) has the deleted
+   code, not a live rollback flag.
+2. `FallbackPlacer` + `PlacementClient`'s breaker/retry/timeout are the degraded-mode safety
+   net — see [§2.4](#24-degraded-behavior-python-down-breaker-open-or-contract-version-mismatch).
+3. Contract fixtures (`packages/shared/contract/place/*.json`) and `test_golden_ts.py`'s
+   narrowed parity check remain as the drift guards on the surfaces that still have two
+   implementations (the fallback) or a documented contract (the wire types).
+4. Golden-fixture narrowing removes TS↔Python parity coverage for LinUCB/arm/displacement math
+   entirely (expected — that logic no longer exists in TS) — no test besides Python's own
+   (`services/bandit`) catches a Python-side regression in that code going forward.
+
+If a production issue surfaces that the missing shadow-soak would have caught, the mitigation
+is a forward fix in `services/bandit` (or, in the worst case, reverting to the commit before
+this ADR's phase 6 landed), not restoring `legacy` mode — that code is gone.

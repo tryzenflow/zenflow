@@ -50,23 +50,23 @@ backend/
 │   ├── scheduler/              # places ONE TASK / series — see "Scheduler architecture" below
 │   │   ├── core/                # PURE algorithm — no Prisma, no clock, no randomness
 │   │   │   ├── preference.ts        # matrixIndex / default+effective matrix / preferenceScoreAt
-│   │   │   ├── slot-score.ts        # slotPreferenceScore (overlap-weighted) + bestFreeSlot
-│   │   │   ├── linucb-best-slot.ts  # rankArmsByScore (LinUCB-only) + bestMinuteInArm (B1 nudge + stability) + fallback
-│   │   │   ├── context-vector.ts    # buildContextVector() — the LinUCB d=22 feature vector (no preference-matrix input)
-│   │   │   ├── arms.ts              # 5 time-of-day arm bands, armOfMinute / overlapRate
-│   │   │   ├── series-spread.ts     # seriesDayWindows — non-overlapping per-member day buckets
-│   │   │   ├── normalize.ts         # minMaxSigned + feature divisors
+│   │   │   ├── slot-score.ts        # FROZEN FALLBACK: slotPreferenceScore (overlap-weighted) + bestFreeSlot
+│   │   │   ├── series-spread.ts     # FROZEN FALLBACK: seriesDayWindows — non-overlapping per-member day buckets
 │   │   │   ├── recurrence.ts        # rrule expand / occurrence-id helpers
 │   │   │   ├── matrix-decay.ts      # exponential preference-matrix decay
+│   │   │   ├── sync-conflicts.ts    # pure conflict detection
 │   │   │   ├── slot.ts              # 15-min slot grid math, isoWeekday, overlap check
 │   │   │   └── horizon.ts           # calendar math (period ceilings, calendar minutes)
 │   │   ├── types/               # placement.types.ts, day-load.types.ts, context-vector.types.ts
 │   │   └── io/                  # the ONLY Prisma / bandit-HTTP layer
 │   │       ├── day-load.ts              # one day's occupied intervals + workload
-│   │       ├── heuristic-placer.service.ts # HeuristicPlacer — placeTask / placeInWindow
-│   │       ├── bandit-placer.service.ts    # BanditPlacer — per-day /predict + slot pick
-│   │       ├── series-placer.service.ts    # SeriesPlacer — per-member bounded 50/50
-│   │       ├── task-placement.service.ts   # TaskPlacementService — the facade sessions/ calls
+│   │       ├── heuristic-placer.service.ts # HeuristicPlacer — placeTask / placeInWindow (frozen-fallback driver)
+│   │       ├── fallback-placer.service.ts  # FallbackPlacer — Python-down degraded driver, built on HeuristicPlacer
+│   │       ├── placement-client.service.ts # PlacementClient — timeout/retry/circuit-breaker HTTP to /v1/place
+│   │       ├── placement-gateway.service.ts# PlacementGateway — builds PlaceRequest, two-phase infeasible call
+│   │       ├── python-placer.service.ts    # PythonPlacer — gather/call/apply/persist, falls back on failure
+│   │       ├── task-placement.service.ts   # TaskPlacementService — thin pass-through sessions/ calls
+│   │       ├── displacement.service.ts     # applyMoves/isFlexible — persists Python's displacement plan
 │   │       ├── scheduling-feedback.service.ts # delayed LinUCB MOVE reward
 │   │       ├── retained-sessions.service.ts   # @Cron: RETAINED sweep (+ delayed LinUCB +1 reward)
 │   │       └── matrix-decay.service.ts        # @Cron: daily preference-matrix decay
@@ -634,12 +634,13 @@ requests — the entirety of the baseline's politeness policy, so it is config r
 constant; `0` in `.env.test`). `PORTAL_API_KEY` stays required with no default.
 
 `BANDIT_SERVICE_URL` (optional, dev `http://localhost:8100`) points at the stateless Python
-bandit service (`services/bandit/`). When unset, LinUCB scheduling is disabled and every
-scheduling event falls back to the heuristic. **Required when `NODE_ENV=production`** (config
-validation fails boot). Placement flags (ADR-0003, see
-[Python-authoritative placement](#python-authoritative-placement-adr-0003)):
+bandit service (`services/bandit/`), which owns ALL placement ranking (ADR-0003). When unset
+(or unreachable), every placement is served by the frozen TS `FallbackPlacer` instead — degraded
+but functional. **`BANDIT_SERVICE_URL` is required when `NODE_ENV=production`** (config
+validation fails boot). See
+[Python-authoritative placement](#python-authoritative-placement-adr-0003). Other placement
+flags:
 
-- `SCHEDULER_PLACEMENT_MODE`: `legacy` (default) | `shadow` | `python`
 - `BANDIT_SERVICE_TOKEN` (optional): bearer secret for `POST /v1/place`
 - `PLACE_TIMEOUT_MS`: default 2500
 - `BENCH_TIMING=1`: test env, emits a `Server-Timing` header
@@ -652,41 +653,75 @@ auth key) + `APNS_KEY_ID` + `APNS_TEAM_ID` + `APNS_BUNDLE_ID` (+ `APNS_PRODUCTIO
 either credential just forces the mobile app to re-register, it is not a decrypt-old-rows
 concern.
 
-## LinUCB scheduling (A/B experiment)
+## Python-authoritative placement (ADR-0003)
 
-`docs/adr/0001-linucb-model-design.md` + `docs/scheduler/{reranking,ab-testing}.md`, and
-the [Scheduler architecture](#scheduler-architecture) walkthrough below. On `POST /sessions`
-(a single `TASK`) and a `TASK` deadline change, `TaskPlacementService` places the one
-session via `HeuristicPlacer.placeTask`, then hands the A/B decision to
-`SchedulingExperimentCoordinator`, which calls `ExperimentService.assignPolicy()` for a 50/50
-`primaryPolicy` **and** an independent `PAIRWISE_SAMPLE_RATE` (20%) pairwise-sample draw:
+[ADR-0003](../docs/adr/0003-python-authoritative-placement.md): Python (`services/bandit`,
+`POST /v1/place`) is the **sole** placement-ranking path — heuristic best-free-slot, LinUCB
+slot-first scoring, series spreading, displacement (EDF repack), and the two infeasible
+fallbacks (`ACCEPT_CONFLICTS`, `ACCEPT_LATE_DEADLINE`) all live there now
+(`services/bandit/src/core/*`, pure numpy). Nest's job is thin: gather inputs, call, apply,
+persist. Phase 6 (deleting the legacy/shadow TS ranking code and the
+`SCHEDULER_PLACEMENT_MODE` flag that gated the earlier rollout) has landed — see the ADR's
+"Phase 6 executed (out of sequence)" note for the accepted risk of skipping the shadow-soak
+gate.
 
-- **HEURISTIC, not sampled** (the common case) — keep the heuristic placement; the bandit
-  never runs; record a `SlotProposal` with `modelProposal` null, `pairwiseShown` false.
-- **LINUCB** — `BanditPlacer.placeTask()` builds one `d=22` context vector per candidate day
-  (`core/context-vector.ts` — the preference matrix isn't an input feature at all), calls
-  the bandit service `/predict` once (day loads come from one range query), then scores **every**
-  feasible 15-min start across all days (`core/linucb-best-slot.ts`, issue #62 A, ADR-0001 section 13):
-  `wL * sum overlapRate(slot,arm) * armScore[day][arm] + wP * pref/duration + stability`.
-  `(wL, wP) = adaptiveWeights(observationCount)`: cold `wP=1, wL=0.3`, warm `wP=0.1, wL=1` after
-  40 MOVE/RETAINED events. Ties prefer MORNING (never 00:00), then the earlier start. Applied weights
-  go on `SlotProposal.linucbWeight` / `.preferenceWeight`; the heuristic stays preference-only. A slot
-  may run past local midnight up to the deadline.
-- **sampled for pairwise** (independent of `primaryPolicy`) — the bandit runs too, even when
-  HEURISTIC is primary, purely for comparison: nothing about which slot gets applied changes,
-  but the `SlotProposal` gets `pairwiseShown = true` plus both proposals, so
-  `POST /sessions/:id/slot-pick` (`docs/scheduler/ab-testing.md` §3) has something to offer. A
-  bandit failure here degrades to the non-sampled case — `pairwiseShown` is only ever true
-  when a real bandit pick exists.
+`TaskPlacementService` (`scheduler/io/task-placement.service.ts`) is a pass-through: it owns
+only the `now + duration > deadline` arithmetic pre-check and the series-deadline-change
+transaction, and otherwise delegates straight to `PythonPlacer`.
 
-A `sessionCount > 1` series is placed by `SeriesPlacer`, going through the **same
-coordinator per member**, with each member's candidate-day window clamped to
-`± max(1, floor(X/N))` days around its even-spread target day (`X` = whole days to the
-deadline, `N` = member count). Members never overlap, at most `MAX_SERIES_PER_DAY` (1) per
-calendar day, and one `SlotProposal` is recorded per member. A deadline edit re-runs the same
-path over the still-upcoming sittings. (Per-member divergence isn't surfaced on the series
-response yet — the pairwise picker's series surface is designed in #41 — but the sampling and
-`SlotProposal` writes happen identically to the single-task path.)
+Pieces (`scheduler/io/`):
+
+- `PlacementClient`: bearer token, 2.5 s total timeout (no separate connect timeout; `fetch` has none).
+  One retry on connect-refused/reset/502-504 that failed within 300 ms; never on a timeout or 4xx.
+- `circuit-breaker.ts`: opens after 5 consecutive failures, for 15 s. Then one half-open probe;
+  a failed probe doubles the open time (cap 60 s). 4xx/contract errors fall back without tripping it.
+- `PlacementGateway`: builds the `PlaceRequest` (`loadDayLoads`, observation count, bandit `(A, b)`),
+  runs the two-phase infeasible call, records spans/timings.
+- `PythonPlacer`: sends the request, applies the response, persists, writes the `SlotProposal`,
+  and — on any `PlacementClient` failure (timeout, 5xx, connect error, breaker open, contract
+  version mismatch, or `BANDIT_SERVICE_URL` unset) — falls back to `FallbackPlacer`.
+- `FallbackPlacer`: **not legacy mode** — Python's own degraded-mode driver, the frozen
+  pre-#62 TS heuristic (`core/slot.ts`, `core/slot-score.ts`, `core/preference.ts`,
+  `core/series-spread.ts`, byte-identical to `bc6636d^`), built on `HeuristicPlacer`. Header
+  `FROZEN FALLBACK (ADR-0003): bug fixes only; behaviour changes belong in services/bandit`.
+  This is the **only** ranking code left in TS, and only runs when Python is unreachable.
+
+**Degraded mode** (Python down, breaker open, `BANDIT_SERVICE_URL` unset, contract mismatch):
+
+- A free slot is placed by the frozen heuristic. The A/B policy is still rolled and recorded, but the
+  proposal has `placementSource = TS_FALLBACK`, `modelProposal = null` and a `degradedReason`
+  (`timeout | breaker_open | connect | http_5xx | http_4xx | version | invalid_response | disabled`).
+- Create/update/reschedule responses carry `schedulingDegraded: true`.
+- No displacement, no accept-conflicts/late. With no free slot before the deadline the pre-flight
+  fails `503 SCHEDULER_DEGRADED` (`{ success: false, message, code }`, retryable) before anything is written.
+- `infeasiblePolicy` is ignored. Series are all-or-nothing (a member without a slot => 503).
+- Known edge: if Python dies between pre-flight and placement, a single `TASK` row can exist
+  unplaced when the fallback finds no slot (503). The retry re-creates it.
+- **Risk (ADR-0003 phase 6 note):** there is no longer a parallel full TS ranking implementation
+  to fall back to if `PythonPlacer`/`FallbackPlacer` itself has an undiscovered bug — only git
+  history (`5763a29`) has it. Mitigations: `FallbackPlacer` + `PlacementClient`'s
+  breaker/retry/timeout, and the contract fixtures (`packages/shared/contract/place/*.json`).
+
+The global exception filter passes a `HttpException` body's `code` (and `options`) through, so
+clients see `409 SCHEDULE_INFEASIBLE` and `503 SCHEDULER_DEGRADED`.
+
+- Metrics: `scheduler.placement_source{source,reason}`, `scheduler.breaker_state` (0 closed / 1 half-open / 2 open),
+  `bandit.client.request.duration{operation=place}`.
+- Spans: `placement.http`, with `placement.python.{decode,context,predict,scan,displace,total}_ms`.
+- `BENCH_TIMING=1`: `Server-Timing` carries `dayload`, `http`, `scan`, `predict`, `db_apply`.
+- Contract fixtures: `packages/shared/contract/place/*.json`.
+
+### Delayed reward and the A/B experiment
+
+`docs/adr/0001-linucb-model-design.md` + `docs/scheduler/{reranking,ab-testing}.md`.
+`ExperimentService.assignPolicy()` (the only RNG left in the placement path) rolls a 50/50
+`primaryPolicy` **and** an independent `PAIRWISE_SAMPLE_RATE` (20%) pairwise-sample draw per
+`TASK` create / deadline-change event (and, independently, per series member); Python computes
+both policies' picks whenever `computeBoth` is set on the request (primary is LINUCB, or this
+event was sampled) and Nest records one `SlotProposal` per placement with both proposals when
+sampled, so `POST /sessions/:id/slot-pick` (`docs/scheduler/ab-testing.md` §3) has something to
+offer. Applied weights (`wL`, `wP` — adaptive cold/warm blend) come back on the response and
+land on `SlotProposal.linucbWeight` / `.preferenceWeight`.
 
 Delayed reward (ADR-0001 §9): the first user `MOVE` of a LinUCB-placed session — including a
 `POST /sessions/:id/slot-pick` pick of the alternative, which applies exactly like a drag —
@@ -700,68 +735,18 @@ first-modification call also stamps `SlotProposal.firstModifiedAt` /
 `acceptedWithoutModification = true` instead). Every part is best-effort — a bandit failure
 never breaks session create/update.
 
-## Python-authoritative placement (ADR-0003)
-
-[ADR-0003](../docs/adr/0003-python-authoritative-placement.md) moves placement ranking to the
-Python `POST /v1/place`. Nest gathers, calls, applies and persists. `SCHEDULER_PLACEMENT_MODE`
-gates the rollout so `master` stays releasable.
-
-| Mode | Behaviour |
-| --- | --- |
-| `legacy` (default) | TS ranking (`HeuristicPlacer` / `BanditPlacer` / `SeriesPlacer` / `DisplacementService`). `/v1/place` is never called. |
-| `shadow` | `legacy` answers. For a single `TASK` create / deadline edit, a fire-and-forget `/v1/place` call is compared with the legacy start. A difference logs `shadow mismatch ...` and bumps `scheduler.placement_shadow_mismatch{kind}`. Never writes or fails the request. Series are not shadowed. |
-| `python` | `PythonPlacer`: one `PlaceRequest` per placement event (single `TASK` or whole series). A second call only when infeasible (`NEEDS_INFEASIBLE_CONTEXT`). Displacement moves are stored as `SYSTEM_MOVE`. `SlotProposal` gets `placementSource = PYTHON` and `modelVersion = paramsVersion`. Pre-flights are `mode: "PREFLIGHT"` calls. |
-
-Pieces (`scheduler/io/`):
-
-- `PlacementClient`: bearer token, 2.5 s total timeout (no separate connect timeout; `fetch` has none).
-  One retry on connect-refused/reset/502-504 that failed within 300 ms; never on a timeout or 4xx.
-- `circuit-breaker.ts`: opens after 5 consecutive failures, for 15 s. Then one half-open probe;
-  a failed probe doubles the open time (cap 60 s). 4xx/contract errors fall back without tripping it.
-- `PlacementGateway`: builds the `PlaceRequest` (`loadDayLoads`, observation count, bandit `(A, b)`),
-  runs the two-phase infeasible call, records spans/timings.
-- `PythonPlacer`: applies, persists, writes the `SlotProposal`.
-- `FallbackPlacer`: the frozen pre-#62 heuristic (`slot.ts`, `slot-score.ts`, `preference.ts` are byte-identical to `bc6636d^`).
-
-**Degraded mode** (`python` mode only; Python down, breaker open, `BANDIT_SERVICE_URL` unset,
-contract mismatch):
-
-- A free slot is placed by the frozen heuristic. The A/B policy is still rolled and recorded, but the
-  proposal has `placementSource = TS_FALLBACK`, `modelProposal = null` and a `degradedReason`
-  (`timeout | breaker_open | connect | http_5xx | http_4xx | version | invalid_response | disabled`).
-- Create/update/reschedule responses carry `schedulingDegraded: true`.
-- No displacement, no accept-conflicts/late. With no free slot before the deadline the pre-flight
-  fails `503 SCHEDULER_DEGRADED` (`{ success: false, message, code }`, retryable) before anything is written.
-- `infeasiblePolicy` is ignored. Series are all-or-nothing (a member without a slot => 503).
-- Known edge: if Python dies between pre-flight and placement, a single `TASK` row can exist
-  unplaced when the fallback finds no slot (503). The retry re-creates it.
-
-The global exception filter passes a `HttpException` body's `code` (and `options`) through, so
-clients see `409 SCHEDULE_INFEASIBLE` and `503 SCHEDULER_DEGRADED`.
-
-- Metrics: `scheduler.placement_source{source,reason}`, `scheduler.breaker_state` (0 closed / 1 half-open / 2 open),
-  `scheduler.placement_shadow_mismatch{kind}`, `bandit.client.request.duration{operation=place}`.
-- Spans: `placement.http`, with `placement.python.{decode,context,predict,scan,displace,total}_ms`.
-- `BENCH_TIMING=1`: `Server-Timing` carries `dayload`, `http`, `scan`, `predict`, `db_apply`.
-- Contract fixtures: `packages/shared/contract/place/*.json`.
-
-> **Pending (phase 6):** rewriting CLAUDE.md invariant 2 ("Ranking lives in Python; Nest is thin")
-> and deleting the dead TS ranking code (`linucb-best-slot`, `adaptive-weights`, `displacement`
-> planning, `arms`, `context-vector`, `normalize`, `BanditPlacer`, `legacy`/`shadow`) wait for a
-> soak in `python` mode. Until then the sections below describe the TS core, which is still
-> authoritative in `legacy`.
-
 ## Scheduler architecture
 
 The scheduler places **one `TASK`** (or the members of one `TASK` series) into an empty
 15-minute slot and never moves anything else. An existing `TASK` series' sitting count can
 also be resized after creation (`PATCH /sessions/:id` with `sessionCount` — grow/shrink/promote
 a plain `TASK` into a series, `SeriesService.resizeSessionCount`/`promoteToSeries`) — see Flow
-5. It is split into a **pure core**
-(`scheduler/core/*` — scoring, ranking, arm bands, series math, the LinUCB feature vector,
-recurrence, decay; no Prisma, no `new Date()`, no `Math.random()`) and an **I/O layer**
-(`scheduler/io/*` — the placers, the one occupancy query, the A/B facade, the delayed-reward
-writer, and the two crons). `sessions/` talks to exactly two of them.
+5. All ranking now lives in `services/bandit` (Python, ADR-0003); Nest is split into a **pure
+core** (`scheduler/core/*` — calendar/recurrence/preference-write helpers, plus the frozen
+heuristic fallback; no Prisma, no `new Date()`, no `Math.random()`) and an **I/O layer**
+(`scheduler/io/*` — `PythonPlacer`/`FallbackPlacer`, the one occupancy query, the delayed-reward
+writer, and the two crons). `sessions/` talks to `TaskPlacementService` and
+`SchedulingFeedbackService`.
 
 ### Module map
 
@@ -772,19 +757,17 @@ flowchart LR
   end
 
   subgraph facade["scheduler/io — facade"]
-    TPS[TaskPlacementService]
+    TPS[TaskPlacementService\npass-through to PythonPlacer]
     SFS[SchedulingFeedbackService]
     SPS[SlotPickService\nsessions/]
   end
 
-  subgraph coord["scheduler/io — A/B decision"]
-    SEC[SchedulingExperimentCoordinator\nassign policy + pairwise sample\n→ maybe bandit → record proposal]
-  end
-
-  subgraph placers["scheduler/io — placers"]
+  subgraph placement["scheduler/io — placement"]
+    PG[PlacementGateway\nbuilds PlaceRequest]
+    PC[PlacementClient\ntimeout/retry/breaker]
+    PP[PythonPlacer\napplies + persists + SlotProposal]
+    FB[FallbackPlacer\nPython-down degraded driver]
     HP[HeuristicPlacer]
-    BP[BanditPlacer]
-    SP[SeriesPlacer]
     DL[day-load.ts\nthe only occupancy query]
   end
 
@@ -794,34 +777,33 @@ flowchart LR
   end
 
   subgraph core["scheduler/core — pure"]
-    SC[slot-score.ts\nslotPreferenceScore + bestFreeSlot]
-    LBS[linucb-best-slot.ts\nrankArmsByScore + bestMinuteInArm]
-    CV[context-vector.ts]
-    ARMS[arms.ts]
-    SPREAD[series-spread.ts]
+    SC[slot-score.ts\nfrozen: slotPreferenceScore + bestFreeSlot]
+    SPREAD[series-spread.ts\nfrozen]
     PREF[preference.ts]
     REC[recurrence.ts]
     MD[matrix-decay.ts]
   end
 
+  subgraph py["services/bandit — Python, authoritative"]
+    PLACE["POST /v1/place\nheuristic + LinUCB + displacement"]
+  end
+
   EXP[ExperimentService\nprimaryPolicy 50/50 + pairwise sample\n+ SlotProposal write]
-  BANDIT[BanditService + BanditArmStateRepository\n→ services/bandit /predict /update]
 
   SS --> TPS
   SS --> SFS
   SS --> SPS
-  TPS --> HP & SP
-  TPS --> SEC
-  SP --> HP & SEC
-  SEC --> EXP & BP
-  SPS --> SFS
+  TPS --> PP
+  PP --> PG & EXP
+  PG --> DL & PC
+  PC --> PLACE
+  PC -. down/breaker open .-> FB
+  FB --> HP
   HP --> DL & SC
-  BP --> DL & CV & LBS & BANDIT
-  LBS --> ARMS & SC
-  SP --> SPREAD
+  FB --> SPREAD
   SC --> PREF
   DL --> REC
-  SFS --> BANDIT
+  SFS --> PP
   RSS --> SFS
   MDS --> MD
 ```
@@ -833,30 +815,39 @@ sequenceDiagram
   participant C as SessionsController
   participant S as SessionsService
   participant T as TaskPlacementService
-  participant H as HeuristicPlacer
-  participant X as SchedulingExperimentCoordinator
-  participant E as ExperimentService
-  participant B as BanditPlacer
+  participant P as PythonPlacer
+  participant G as PlacementGateway
+  participant PC as PlacementClient
+  participant PY as services/bandit /v1/place
+  participant FB as FallbackPlacer
   C->>S: create(dto)
   S->>S: resolveTagIds + $tx( session.create + CREATE event )
   S->>T: placeOnCreate({ user, task, now })
-  T->>H: placeTask → placeInWindow (per day: loadDayLoad + bestFreeSlot)
-  H-->>T: heuristic start (or null)
-  T->>T: session.update scheduledStartTime (baseline)
-  T->>X: run({ heuristicStart, runBandit })
-  X->>E: assignPolicy()  (primaryPolicy 50/50 + independent pairwise-sample draw)
-  alt primaryPolicy LINUCB, or sampled for pairwise
-    X->>B: placeTask (per day: loadDayLoad + buildContextVector → /predict → rankArmsByScore → bestMinuteInArm)
-    B-->>X: BanditPick (or null → heuristic stands / not effectively sampled)
+  T->>P: placeSingle(user, task, "create", now, policy?)
+  P->>P: assignPolicy() (primaryPolicy 50/50 + pairwise-sample draw)
+  P->>G: buildRequest (day loads, pref matrix, obs count, bandit A/b)
+  G->>PC: place(request)
+  alt Python healthy
+    PC->>PY: POST /v1/place
+    PY-->>PC: PlaceResponse (picks, moves, timingsMs)
+    opt outcome NEEDS_INFEASIBLE_CONTEXT
+      G->>G: load deadline+/-1 day + 30d horizon, retry with infeasible context
+    end
+    PC-->>P: results
+    P->>P: apply moves, session.update scheduledStartTime, recordProposal (placementSource=PYTHON)
+  else timeout/5xx/breaker open/disabled
+    PC-->>P: failure(reason)
+    P->>FB: placeSingle (frozen heuristic)
+    alt free slot exists
+      FB-->>P: start
+      P->>P: session.update, recordProposal (placementSource=TS_FALLBACK, degradedReason)
+    else no free slot
+      P-->>T: throw SchedulerDegradedException (503)
+    end
   end
-  X->>X: pick winner (LINUCB only if primary AND a pick exists) + divergence
-  X->>E: recordProposal(primaryPolicy, pairwiseShown, both proposals when sampled)
-  X-->>T: { appliedStart, appliedPolicy, slotProposalId, alternativeSlot, divergent }
-  opt winner differs from the baseline
-    T->>T: session.update scheduledStartTime (override)
-  end
+  P-->>T: PlacementResult
   T-->>S: PlacementResult
-  S-->>C: CreateSessionResponse (+ slotProposalId/primarySlot/alternativeSlot/divergent)
+  S-->>C: CreateSessionResponse (+ slotProposalId/alternativeSlot/divergent/schedulingDegraded?)
 ```
 
 A pairwise-sampled event's `alternativeSlot`/`divergent` let the client offer a pick via
@@ -871,22 +862,22 @@ A pairwise-sampled event's `alternativeSlot`/`divergent` let the client offer a 
 sequenceDiagram
   participant S as SessionsService.createTaskSeries
   participant T as TaskPlacementService
-  participant SP as SeriesPlacer
-  participant X as SchedulingExperimentCoordinator
-  participant H as HeuristicPlacer
-  participant B as BanditPlacer
+  participant P as PythonPlacer
+  participant PY as services/bandit /v1/place
+  participant FB as FallbackPlacer
   S->>S: $tx( sessionSeries.create + N× session.create + N× CREATE event )
   S->>T: placeSeriesOnCreate({ seriesId, members, deadline })
-  T->>SP: placeSeries(trigger "create")
-  Note over SP: seriesDayWindows → per member: its own non-overlapping day bucket
-  loop each member
-    SP->>H: placeInWindow(window, extraOccupied = siblings, skipDay = ≤1/day cap)
-    SP->>X: run({ heuristicStart, runBandit: placeInWindow(...) })
-    Note over X: same assign + maybe-bandit + record as Flow 1 — one SlotProposal per member
-    X-->>SP: appliedStart
-    SP->>SP: accumulate sibling interval
+  T->>P: placeSeries({ members, deadline, trigger: "create" })
+  P->>P: assignPolicy() per member
+  P->>PY: POST /v1/place (members.length > 1 = one materialized series, sibling ledger server-side)
+  alt Python healthy
+    PY-->>P: one PlacedMember per member
+    P->>P: recordProposal per member (placementSource=PYTHON)
+  else degraded
+    P->>FB: placeSeries (all-or-nothing frozen loop — seriesDayWindows, siblings, day cap)
+    FB-->>P: rows[] (any null start => 503 SCHEDULER_DEGRADED)
   end
-  SP-->>T: rows[]
+  P-->>T: rows[]
   T->>T: $tx( session.update scheduledStartTime for placed rows )
   T-->>S: rows[]
 ```
@@ -897,15 +888,15 @@ sequenceDiagram
 sequenceDiagram
   participant S as SessionsService.update
   participant T as TaskPlacementService
-  participant SP as SeriesPlacer
+  participant P as PythonPlacer
   S->>S: $tx( applyFieldDiff detects newDeadline → session.update )
   alt standalone TASK
     S->>T: placeOnDeadlineChange({ task, now })
-    Note over T: identical to Flow 1 step 2, trigger "deadline-change"
+    Note over T: identical to Flow 1, trigger "deadline-change"
   else TASK series member
     S->>T: redistributeSeries({ seriesId, members, newDeadline })
     T->>T: partition past / upcoming;  past → fixedOccupied
-    T->>SP: placeSeries(upcoming, fixedOccupied, trigger "deadline-change")
+    T->>P: placeSeries(upcoming, fixedOccupied, trigger "deadline-change")
     T->>T: $tx( sessionSeries.deadline + session.updateMany deadline + upcoming starts )
   end
 ```
@@ -938,7 +929,7 @@ sequenceDiagram
   participant S as SessionUpdateService.update
   participant SR as SeriesService
   participant T as TaskPlacementService
-  participant SP as SeriesPlacer
+  participant P as PythonPlacer
   Note over S: PATCH /sessions/:id with sessionCount
   alt no existing seriesId AND sessionCount > 1
     S->>SR: promoteToSeries(sessionId, deadline, user)
@@ -950,9 +941,9 @@ sequenceDiagram
     T-->>SR: feasible?
     SR->>SR: $tx( session.updateMany sessionTotal + N× session.create + N× CREATE event )
     SR->>T: placeSeriesOnCreate({ seriesId, members: newMembers, deadline })
-    T->>SP: placeSeries(trigger "create")
-    Note over SP: day-load naturally schedules around the already-persisted existing members
-    SP-->>T: rows[]
+    T->>P: placeSeries(trigger "create")
+    Note over P: day-load naturally schedules around the already-persisted existing members
+    P-->>T: rows[]
     T->>T: $tx( session.update scheduledStartTime for placed rows )
   else shrink (targetCount < memberCount)
     Note over SR: candidates = highest-sessionIndex members;<br/>any already started (scheduledStartTime ≤ now) → reject, write nothing
@@ -988,11 +979,11 @@ formatting, notification copy — takes `now`, covered by `reminder.spec.ts`).
 - Limitations: single-process timers (multi-instance would double-arm; the `firedForStart` claim
   keeps sends idempotent); a `TASK` series grown later copies the existing sittings' reminders.
 
-### Slot scoring — the overlap-weighted preference score
+### Slot scoring — the frozen fallback's overlap-weighted preference score
 
-`slotPreferenceScore` (`core/slot-score.ts`) scores a concrete interval by how much of it
-falls in each local **clock-hour block** it touches, weighted by that block's preference
-value:
+`slotPreferenceScore` (`core/slot-score.ts`, **frozen** — ADR-0003, `FallbackPlacer` only)
+scores a concrete interval by how much of it falls in each local **clock-hour block** it
+touches, weighted by that block's preference value:
 
 ```text
 score(slot) = Σ over each hour block [h, h+1) the slot touches:
@@ -1004,51 +995,44 @@ A slot that only partially covers an hour contributes that hour fractionally —
 half-open, so the block starting exactly at `end` is never scored. A midnight-spanning slot
 is split at local midnight and each side scored against its own day's weekday row. The
 matrix is **168 signed floats** — 7 ISO weekdays × 24 one-hour buckets, row-major
-(`matrixIndex(isoWeekday, hour) = (isoWeekday−1)·24 + hour`).
+(`matrixIndex(isoWeekday, hour) = (isoWeekday−1)·24 + hour`). `bestFreeSlot` picks the
+highest-scoring free slot in a window (plus `stabilityScore`, a light nudge toward the
+previous manually-set start).
 
-### LinUCB slot selection — slot-first scoring (issue #62 A)
-
-`core/linucb-best-slot.ts` scores every feasible 15-minute start on every candidate day and
-ranks across days (it replaced the old arm-then-minute pick):
-
-```text
-score(slot) = wL * SUM_arm overlapRate(slot, arm) * armScore[day][arm]
-            + wP * slotPreferenceScore(slot) / durationHours
-            + STABILITY_WEIGHT * stabilityScore(prevStart, slot)
-
-(wL, wP) = adaptiveWeights(observationCount)          # core/adaptive-weights.ts
-           cold (0 obs)  -> wP = 1,   wL = 0.3
-           warm (>= 40)  -> wP = 0.1, wL = 1            # linear in between, constants.ts
-```
-
-- `observationCount` = the user's MOVE + RETAINED events (`io/observation-count.ts`); `SYSTEM_MOVE` is excluded.
-- Starts include 23:45 (running past local midnight). The deadline caps the end and need not be slot-aligned.
-- Exact ties: `TIE_BREAK_ARM_ORDER` (MORNING first), then earliest start.
-- Per-day wall-clock offsets replace a per-slot Intl lookup (`armOverlapRatesFromMinute`); DST days use `overlapRate`.
-- `PREFERENCE_NUDGE_WEIGHT` is no longer read here.
-- Returns `null` only when nothing is feasible; the heuristic then places the task.
+LinUCB slot-first scoring (context vector, arm scoring, adaptive weights, tie-break order) is
+Python's — `services/bandit/src/core/linucb_best_slot.py` and friends. It is **not**
+golden-fixture-tested against TS any more (ADR-0003 phase 6): there is no TS implementation to
+compare against. See `docs/scheduler/heuristic.md` and `services/bandit/README.md`.
 
 ### Displacement and sync conflicts (issue #62 B / D)
 
+Displacement planning (EDF repack) and the two infeasible fallbacks
+(`ACCEPT_CONFLICTS`/`ACCEPT_LATE_DEADLINE`) are Python's
+(`services/bandit/src/core/displacement.py`), reached via the two-phase `/v1/place` infeasible
+flow (ADR-0003 §3.3). Nest's role is applying the response:
+
 | Concern                                                           | File                                            |
 | ----------------------------------------------------------------- | ----------------------------------------------- |
-| pure EDF repack + accept-conflicts / accept-late slot pickers     | `scheduler/core/displacement.ts`                |
-| load window, persist `SYSTEM_MOVE`s, fallback start              | `scheduler/io/displacement.service.ts`          |
-| pre-flight (400 / 409) + placement fallback                       | `scheduler/io/task-placement.service.ts`        |
+| persist moves as `SYSTEM_MOVE`s (`applyMoves`/`isFlexible`)       | `scheduler/io/displacement.service.ts`          |
+| pre-flight (400 / 409) + delegate to `PythonPlacer`               | `scheduler/io/task-placement.service.ts`        |
 | pure conflict detection                                           | `scheduler/core/sync-conflicts.ts`              |
 | per-source sync-conflict notification                             | `ingestion/sync-conflicts.service.ts`           |
 | "reschedule all" (`POST /notifications/:id/reschedule-conflicts`) | `scheduler/io/conflict-reschedule.service.ts`   |
 | batched day loads (`loadDayLoads`, 2 queries for N days)          | `scheduler/io/day-load.ts`                      |
 
-Golden fixtures for the Python port (#60): `pnpm --filter backend golden:export` writes
-`test/golden/scheduler-core.golden.json`; `golden-fixtures.spec.ts` fails on drift.
-Rule: core change => spec + Python port + fixtures.
+Golden fixtures, narrowed to the frozen fallback (ADR-0003 phase 6):
+`pnpm --filter backend golden:export` writes `test/golden/scheduler-core.golden.json`
+(`slotPreferenceScore`, `stabilityScore`, `bestFreeSlot`, `findConflictingTaskIds` —
+`golden-fixtures.spec.ts` fails on drift); `services/bandit/tests/test_golden_ts.py` asserts
+Python's frozen-heuristic port matches. Rule: a fallback bug fix needs spec + golden update +
+`test_golden_ts.py` staying green — behaviour changes never happen here, they go in
+`services/bandit`.
 
 ### Series bounded window
 
-For a `sessionCount > 1` `TASK` series, `seriesDayWindows(daySpan, N)` partitions the
-`daySpan + 1` days into `N` contiguous, **non-overlapping** buckets — no two members' windows
-can ever touch:
+For a `sessionCount > 1` `TASK` series, `seriesDayWindows(daySpan, N)` (`core/series-spread.ts`,
+**frozen**, used by both `FallbackPlacer` and — ported — Python) partitions the `daySpan + 1`
+days into `N` contiguous, **non-overlapping** buckets — no two members' windows can ever touch:
 
 ```text
 totalDays = daySpan + 1
@@ -1058,47 +1042,40 @@ remainder = totalDays % N                    // the LAST `remainder` members get
 
 Member `i`'s window is exactly its bucket: `base` days each, except the last `remainder`
 members get `base + 1` (so the series still starts on day 0 and the slack lands closest to the
-deadline). This replaced an earlier "even-spread target ± a symmetric clamp" scheme whose
-windows could overlap between adjacent members — letting two sessions cluster onto the same
-day while a neighboring day the series was supposed to use sat empty.
-
-`daySpan` = whole days from the next 15-min boundary to the deadline day, capped at
-`MAX_SCAN_DAYS − 1`. Each member is then placed by the same 50/50 pick as a single task
-inside its window; already-placed siblings are fed forward as hard blocks so members never
-overlap, and a day already holding `MAX_SERIES_PER_DAY` (1) sitting of this series is
-skipped. A member that finds nowhere comes back unplaced without blocking the rest. `N` can
-exceed `totalDays` (more sessions than days) — buckets then collapse toward the tail, several
-members sharing one day's window; that's an unavoidable overlap the day cap and the series
-pre-flight (`TaskPlacementService.canPlaceSeries`) keep safe, not this partition.
+deadline). `daySpan` = whole days from the next 15-min boundary to the deadline day, capped at
+`MAX_SCAN_DAYS − 1`. Already-placed siblings are fed forward as hard blocks so members never
+overlap, and a day already holding `MAX_SERIES_PER_DAY` (1) sitting of this series is skipped.
+A member that finds nowhere comes back unplaced without blocking the rest. `N` can exceed
+`totalDays` (more sessions than days) — buckets then collapse toward the tail, several members
+sharing one day's window; that's an unavoidable overlap the day cap and the series pre-flight
+(`TaskPlacementService.canPlaceSeries`) keep safe, not this partition.
 
 ### Trace it in the source
 
 | Concept                                                                             | File                                          |
 | ----------------------------------------------------------------------------------- | --------------------------------------------- |
 | preference matrix helpers (`matrixIndex`, default/effective, `preferenceScoreAt`)   | `scheduler/core/preference.ts`                |
-| overlap-weighted slot score + best-free-slot search                                 | `scheduler/core/slot-score.ts`                |
-| LinUCB two-step slot selection (`rankArmsByScore` + `bestMinuteInArm`)              | `scheduler/core/linucb-best-slot.ts`          |
+| **frozen fallback**: overlap-weighted slot score + best-free-slot search            | `scheduler/core/slot-score.ts`                |
 | preference-matrix reinforcement (`reinforcePreferenceCell`)                         | `scheduler/core/preference.ts`                |
-| the `d = 22` LinUCB context vector                                                  | `scheduler/core/context-vector.ts`            |
-| 5 time-of-day arm bands + `overlapRate` (splits at midnight)                        | `scheduler/core/arms.ts`                      |
-| series even spread + `± X/N` window                                                 | `scheduler/core/series-spread.ts`             |
-| feature normalization (`minMaxSigned`, divisors)                                    | `scheduler/core/normalize.ts`                 |
+| **frozen fallback**: series even spread + non-overlapping day buckets               | `scheduler/core/series-spread.ts`             |
 | rrule expansion + occurrence-id helpers                                             | `scheduler/core/recurrence.ts`                |
 | exponential preference-matrix decay                                                 | `scheduler/core/matrix-decay.ts`              |
 | pure delayed-reward math (`dragDistanceReward`)                                     | `scheduler/core/reward.ts`                    |
+| pure conflict detection                                                             | `scheduler/core/sync-conflicts.ts`            |
 | one day's occupied intervals + workload (the only occupancy query)                  | `scheduler/io/day-load.ts`                    |
-| Policy A placer — `placeTask` / `placeInWindow`                                     | `scheduler/io/heuristic-placer.service.ts`    |
-| Policy B placer — per-day `/predict` + slot pick                                    | `scheduler/io/bandit-placer.service.ts`       |
-| per-member series placement (delegates the A/B decision to the coordinator)         | `scheduler/io/series-placer.service.ts`       |
-| the facade `sessions/` calls (heuristic baseline + persist)                         | `scheduler/io/task-placement.service.ts`      |
-| the A/B + pairwise-sample decision, shared by single-task and series placement      | `scheduler/io/scheduling-experiment-coordinator.service.ts` |
+| **frozen fallback driver** — `placeSingle` / `placeSeries` on `HeuristicPlacer`      | `scheduler/io/heuristic-placer.service.ts`, `scheduler/io/fallback-placer.service.ts` |
+| the thin pass-through `sessions/` calls (arithmetic guard + persist)                | `scheduler/io/task-placement.service.ts`      |
+| gather -> `POST /v1/place` -> apply -> persist -> `SlotProposal`; degraded fallback  | `scheduler/io/python-placer.service.ts`       |
+| `PlaceRequest` builder + two-phase infeasible call                                  | `scheduler/io/placement-gateway.service.ts`   |
+| timeout/retry/circuit-breaker HTTP client for `/v1/place`                          | `scheduler/io/placement-client.service.ts`, `scheduler/io/circuit-breaker.ts` |
 | `TASK` series lifecycle — create, deadline redistribute, edit-mode `sessionCount` resize/promote | `sessions/series.service.ts`       |
 | delayed reward (first-`MOVE` + `RETAINED`) + `SlotProposal` acceptance columns       | `scheduler/io/scheduling-feedback.service.ts` |
 | `RETAINED` sweep — finds + marks elapsed sessions, delegates reward to the above     | `scheduler/io/retained-sessions.service.ts`   |
 | `POST /sessions/:id/slot-pick`                                                       | `sessions/slot-pick.service.ts`               |
 | nightly matrix decay cron                                                           | `scheduler/io/matrix-decay.service.ts`        |
 | `primaryPolicy` 50/50 + pairwise-sample draw + `SlotProposal` write                  | `experiments/experiment.service.ts`           |
-| tuning constants (`MAX_SCAN_DAYS`, `MAX_SERIES_PER_DAY`, `BANDIT_*`, `PAIRWISE_SAMPLE_RATE`, reward scales) | `scheduler/constants.ts`      |
+| tuning constants (`MAX_SCAN_DAYS`, `MAX_SERIES_PER_DAY`, `BANDIT_*`, `PAIRWISE_SAMPLE_RATE`, reward scales — Python's own copies own ranking behaviour, these are the fallback's) | `scheduler/constants.ts` |
+| Python's authoritative ranking core (heuristic, LinUCB, series, displacement)        | `services/bandit/src/core/*`                  |
 
 ## Observability
 
