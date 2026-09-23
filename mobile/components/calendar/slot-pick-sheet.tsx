@@ -18,7 +18,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Pressable, View, StyleSheet } from "react-native";
+import { Pressable, View } from "react-native";
 
 export interface SlotPickSheetHandle {
   open: (
@@ -123,21 +123,10 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
       onDismissRef.current = null;
     }
 
-    // Static shadow style for selected option (avoid useAnimatedStyle in Portal)
-    const selectedShadowStyle = StyleSheet.create({
-      shadow: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 12 },
-        shadowOpacity: 0.3,
-        shadowRadius: 20,
-        elevation: 12,
-      },
-    });
-
     return (
       <BottomSheet>
         <BottomSheetContent ref={sheet.ref} onDismiss={handleDismiss}>
-          <BottomSheetView hadHeader={false} className="gap-4 pt-2">
+          <BottomSheetView hadHeader={false} className="gap-2 pt-2">
             <View className="flex-row items-start justify-between gap-3 ">
               <View className="min-w-0 flex-1">
                 <Text className="text-[18.5px] font-bold tracking-[-0.01em] leading-tight">
@@ -150,7 +139,7 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
               <Pressable
                 onPress={handleDismiss}
                 accessibilityLabel="Dismiss — keeps the current time"
-                className="inline-flex size-8 items-center justify-center rounded-full bg-muted shrink-0 mt-0.5"
+                className="inline-flex size-8 items-center justify-center rounded-full bg-muted shrink-0 "
               >
                 <X size={15} className="text-muted-foreground" />
               </Pressable>
@@ -160,11 +149,18 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
               {options.map((option, index) => (
                 <View
                   key={option.isPrimary ? "primary" : "alternative"}
-                  style={[
+                  style={
                     selected === (option.isPrimary ? "primary" : "alternative")
-                      ? selectedShadowStyle.shadow
-                      : {},
-                  ]}
+                      ? {
+                          shadowColor: "#000",
+                          shadowOffset: { width: 0, height: 12 },
+                          shadowOpacity: 0.35,
+                          shadowRadius: 24,
+                          elevation: 14,
+                          overflow: "visible",
+                        }
+                      : {}
+                  }
                 >
                   <Pressable
                     onPress={() => {
@@ -202,7 +198,7 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
                       {selected ===
                         (option.isPrimary ? "primary" : "alternative") && (
                         <Check
-                          size={5}
+                          size={12}
                           className="text-primary-foreground"
                           strokeWidth={4}
                         />
