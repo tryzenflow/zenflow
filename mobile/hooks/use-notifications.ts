@@ -9,7 +9,7 @@ import { getSessionDetails } from "@/api/tasks";
 import { useToast } from "@/components/ui/toast";
 import { useUserStore } from "@/hooks/use-user-store";
 import { notifySessionsMutated } from "@/lib/session-cache";
-import type { NotificationDto } from "@zenflow/shared";
+import { notificationEventKind, type NotificationDto } from "@zenflow/shared";
 import * as Notifications from "expo-notifications";
 import { type Href, useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
@@ -261,11 +261,7 @@ export function useNotificationsSubscription(): void {
         // `rescheduleConflicts` in `api/notifications.ts` — already calls
         // `notifySessionsMutated()` itself), so skip invalidation here for
         // that case.
-        if (
-          n.eventType === "CREATED" ||
-          n.eventType === "UPDATED" ||
-          n.eventType === "REMOVED"
-        ) {
+        if (notificationEventKind(n.eventName) !== "CONFLICT") {
           notifySessionsMutated();
         }
 

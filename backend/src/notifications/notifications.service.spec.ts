@@ -9,8 +9,6 @@ interface Row {
   id: string;
   userId: string;
   sessionId: string | null;
-  topic: string;
-  eventType: string;
   eventName: string;
   title: string;
   content: string;
@@ -109,8 +107,6 @@ function row(over: Partial<Row> & { id: string }): Row {
   return {
     userId: "u1",
     sessionId: "s1",
-    topic: "ASSIGNMENT",
-    eventType: "CREATED",
     eventName: "assignment.created",
     title: "New assignment: Môn học Mẫu Một",
     content: "Added to your calendar from DLU.",
@@ -192,8 +188,6 @@ describe("NotificationsService", () => {
 
       expect(dto).toEqual({
         id: "n1",
-        topic: "ASSIGNMENT",
-        eventType: "CREATED",
         eventName: "assignment.created",
         title: "New assignment: Môn học Mẫu Một",
         content: "Added to your calendar from DLU.",
@@ -298,9 +292,7 @@ describe("NotificationsService", () => {
       const { db, service } = makeService([]);
 
       await service.create("u1", {
-        topic: "TIMETABLE",
-        eventType: "UPDATED",
-        eventName: "timetable.group_updated",
+        eventName: "lecture.group_updated",
         title: "Timetable for Semester 2 Update",
         content: "Room B12 schedule change.",
         sessionId: null,
@@ -315,8 +307,6 @@ describe("NotificationsService", () => {
       const { db, service } = makeService([]);
 
       const row = await service.create("u1", {
-        topic: "TIMETABLE",
-        eventType: "REMOVED",
         eventName: "lecture.removed",
         title: "Removed from DLU: Data Structures Lab",
         content: "These classes were taken off your DLU timetable.",

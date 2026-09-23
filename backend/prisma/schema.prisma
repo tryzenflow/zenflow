@@ -289,8 +289,8 @@ model SessionSeries {
 // (see src/reminders/). For a recurring fixed series the row hangs off the
 // representative session and applies to every occurrence.
 model SessionReminder {
-  id                  String @id @default(uuid())
-  remindBeforeMinutes Int    @default(15)
+  id                  String    @id @default(uuid())
+  remindBeforeMinutes Int       @default(15)
   // Start instant of the occurrence this reminder last fired for — dedupes
   // firing across restarts / re-arms and lets a recurring series fire once
   // per occurrence. Null until first fired.
@@ -345,8 +345,8 @@ model SlotProposal {
   // behind the chosen slot, kept so a delayed MOVE / RETAINED reward can call
   // `/update` for the right arm (`docs/adr/0001-linucb-model-design.md` §9).
   // Empty / null when the primary policy was the heuristic.
-  featureVector Float[]        @default([])
-  selectedArm   SchedulingArm?
+  featureVector    Float[]        @default([])
+  selectedArm      SchedulingArm?
   // Applied slot-score weights (`core/adaptive-weights.ts`); null when the
   // primary policy was the pref-only heuristic (keeps the A/B distinct).
   linucbWeight     Float?
@@ -470,47 +470,28 @@ model Integration {
   @@index([encryptionVersion(sort: Desc)])
 }
 
-enum NotificationTopic {
-  ASSIGNMENT
-  EXAM
-  TIMETABLE
-  REMINDER
-  ASSIGNMENT_CONFLICT
-  EXAM_CONFLICT
-  TIMETABLE_CONFLICT
-}
-
-// Machine-readable classification of what a notification is reporting,
-// distinct from `topic` (which inbox section it lives under). Every call site
-// that raises a notification must set this explicitly — there is no default —
-// so nothing is silently mis-tagged.
-enum NotificationEventType {
-  CREATED
-  UPDATED
-  REMOVED
-  CONFLICT
-}
-
 model Notification {
-  id            String                @id @default(uuid())
-  sentAt        DateTime              @default(now())
-  readAt        DateTime?
-  actionTakenAt DateTime?
-  topic         NotificationTopic
-  // What kind of event this row reports — see `NotificationEventType`.
-  eventType     NotificationEventType
+  id                 String    @id @default(uuid())
+  sentAt             DateTime  @default(now())
+  readAt             DateTime?
+  actionTakenAt      DateTime?
   // Stable machine-readable slug ("assignment.created", "lecture.removed",
   // "sync_conflict.exam", …) a client can switch on without pattern-matching
   // the free-text `title`/`content` below, which are for display only.
-  eventName     String
-  title         String
-  content       String
+  // Encodes both the created/updated/removed/conflict classification and the
+  // assignment/exam/lecture/reminder category (see `notificationEventKind` /
+  // `notificationCategory` in @zenflow/shared) — no separate `topic`/
+  // `eventType` columns for those, so there is one field to keep in sync.
+  eventName          String
+  title              String
+  content            String
   // The fixed end instant of the session behind this row (start + duration) —
   // an ASSIGNMENT/EXAM/LECTURE is always scheduled, so this is the "due" / "at"
   // time the inbox shows. Null for grouped rows and for drops (no one session).
-  eventEndsAt   DateTime?
-  // `*_CONFLICT` topics: the user's flexible tasks the sync landed on top of.
-  conflictSessionIds String[] @default([])
+  eventEndsAt        DateTime?
+  // A CONFLICT row's (see `notificationEventKind`) user's flexible tasks the
+  // sync landed on top of.
+  conflictSessionIds String[]  @default([])
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)

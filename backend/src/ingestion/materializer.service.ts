@@ -1,11 +1,7 @@
 import { Injectable, Logger, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { fromZonedTime } from "date-fns-tz";
-import {
-  DEFAULT_REMINDER_MINUTES,
-  type NotificationEventType,
-  type NotificationTopic,
-} from "@zenflow/shared";
+import { DEFAULT_REMINDER_MINUTES } from "@zenflow/shared";
 import {
   Prisma,
   type Notification,
@@ -111,13 +107,6 @@ interface LectureChange {
   sessionId: string;
   block: ParsedBlock;
   kind: "created" | "updated";
-}
-
-/** Which inbox topic an ingested block belongs under. */
-function topicOf(type: IngestedSessionType): NotificationTopic {
-  if (type === "ASSIGNMENT") return "ASSIGNMENT";
-  if (type === "EXAM") return "EXAM";
-  return "TIMETABLE";
 }
 
 /**
@@ -652,12 +641,10 @@ export class MaterializerService {
           userId,
           {
             sessionId,
-            topic: topicOf(block.type),
             title: `Updated: ${block.title}`,
             content:
               "DLU changed this item, so your calendar has been updated to match.",
             eventEndsAt: blockEndsAt(block),
-            eventType: "UPDATED",
             eventName: this.updatedEventName(block),
           },
           tx,
@@ -698,11 +685,9 @@ export class MaterializerService {
           userId,
           {
             sessionId,
-            topic: topicOf(block.type),
             title: this.createdTitle(block),
             content: this.createdContent(block),
             eventEndsAt: blockEndsAt(block),
-            eventType: "CREATED",
             eventName: this.createdEventName(block),
           },
           tx,
@@ -737,7 +722,7 @@ export class MaterializerService {
     )[0];
 
     const alreadyAnnounced = await this.prisma.notification.findFirst({
-      where: { userId, topic: "TIMETABLE", title: groupedTitle },
+      where: { userId, title: groupedTitle },
       select: { id: true },
     });
     if (alreadyAnnounced) return;
@@ -756,27 +741,21 @@ export class MaterializerService {
     if (termLectureCount >= TIMETABLE_GROUP_THRESHOLD) {
       await this.raise(userId, {
         sessionId: earliest.sessionId,
-        topic: "TIMETABLE",
         title: groupedTitle,
         content:
           `Your ${termLabel(term.semester)} class timetable is on your ` +
           "calendar. Plan study sessions around it.",
-        eventType: allNew ? "CREATED" : "UPDATED",
-        eventName: allNew
-          ? "timetable.group_created"
-          : "timetable.group_updated",
+        eventName: allNew ? "lecture.group_created" : "lecture.group_updated",
       });
       return;
     }
 
     await this.raise(userId, {
       sessionId: earliest.sessionId,
-      topic: "TIMETABLE",
       title: `${allNew ? "New" : "Updated"} lectures: ${humanList(
         changes.map((c) => c.block.title),
       )}`,
       content: "Added to your calendar from your DLU timetable.",
-      eventType: allNew ? "CREATED" : "UPDATED",
       eventName: allNew ? "lecture.created" : "lecture.updated",
     });
   }
@@ -801,13 +780,11 @@ export class MaterializerService {
     for (const item of others) {
       await this.raise(userId, {
         sessionId: null,
-        topic: topicOf(item.type),
         title: `Removed from DLU: ${item.title}`,
         content:
           `This ${item.type === "EXAM" ? "exam" : "assignment"} was taken ` +
           "off DLU, so it is no longer on your calendar.",
         materializeSession: false,
-        eventType: "REMOVED",
         eventName: `${item.type.toLowerCase()}.removed`,
       });
     }
@@ -818,25 +795,21 @@ export class MaterializerService {
     if (lectures.length >= TIMETABLE_GROUP_THRESHOLD) {
       await this.raise(userId, {
         sessionId: null,
-        topic: "TIMETABLE",
         title: `Your ${termLabel(term.semester)} timetable changed`,
         content:
           `${lectures.length} classes were removed from your ` +
           `${termLabel(term.semester)} timetable.`,
         materializeSession: false,
-        eventType: "REMOVED",
-        eventName: "timetable.group_removed",
+        eventName: "lecture.group_removed",
       });
       return;
     }
 
     await this.raise(userId, {
       sessionId: null,
-      topic: "TIMETABLE",
       title: `Lectures removed: ${humanList(lectures.map((l) => l.title))}`,
       content: "These classes were taken off your DLU timetable.",
       materializeSession: false,
-      eventType: "REMOVED",
       eventName: "lecture.removed",
     });
   }
@@ -846,12 +819,10 @@ export class MaterializerService {
     userId: string,
     dto: {
       sessionId: string | null;
-      topic: NotificationTopic;
       title: string;
       content: string;
       eventEndsAt?: Date | null;
       materializeSession?: boolean;
-      eventType: NotificationEventType;
       eventName: string;
     },
     tx?: Prisma.TransactionClient,

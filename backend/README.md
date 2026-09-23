@@ -213,7 +213,7 @@ registration upserts on `pushToken`. See `devices/` and `POST /devices`.
 | `PortalSection`                     | One student-portal course section — curriculum unit × term × group × teacher × room. Deduped on `scheduleStudyUnitId`; indexed `[yearStudy, termId]`, the access path for a whole-term refresh.                                                                                                                                      |
 | `LmsSyncJob` / `LmsSyncJobItem`     | Per-run tracking for the LMS watcher; one item per request (`url`, `attempt`, `statusCode`, `responseBody` kept for diagnosis).                                                                                                                                                                                                       |
 | `PortalAPIJob` / `PortalAPIJobItem` | Same shape for the portal poller.                                                                                                                                                                                                                                                                                                   |
-| `Notification`                      | Raised by the materializer for a new/changed/removed ingested item. `eventType` (`NotificationEventType`: `CREATED`\|`UPDATED`\|`REMOVED`\|`CONFLICT`) and `eventName` (a stable slug like `"assignment.created"`, `"lecture.removed"`, `"sync_conflict.exam"`) are the machine-readable classification; `title`/`content` remain free text for display only. `eventEndsAt` (due/at time; null for grouped rows and removals), `sessionId` (target session). Topics `ASSIGNMENT`\|`EXAM`\|`TIMETABLE`\|`REMINDER`; a term of lectures is one `TIMETABLE` row. |
+| `Notification`                      | Raised by the materializer for a new/changed/removed ingested item. `eventName` (a stable slug like `"assignment.created"`, `"lecture.removed"`, `"sync_conflict.exam"`) is the sole machine-readable classification — clients derive `CREATED`\|`UPDATED`\|`REMOVED`\|`CONFLICT` via `notificationEventKind()` and `ASSIGNMENT`\|`EXAM`\|`LECTURE`\|`REMINDER` via `notificationCategory()` (both `@zenflow/shared`) from it rather than separate `eventType`/`topic` columns; `title`/`content` remain free text for display only. `eventEndsAt` (due/at time; null for grouped rows and removals), `sessionId` (target session); a term of lectures is one grouped `lecture.group_*` row. |
 
 `LmsCourse` and `PortalSection` are deliberately never joined — no shared identifier, and
 each ingestion path uses only its own system's data.
@@ -362,11 +362,13 @@ is "plan work around this", not "confirm this item" — it already exists upstre
   of resurrecting it on the next re-fetch.
 - **A quiet re-run is quiet**: notifications are raised only for genuinely new, changed or
   removed items.
-- **`eventType`/`eventName` classify the event; `title`/`content` are display-only.** Every
-  `raise()` call sets `eventType` (`CREATED`\|`UPDATED`\|`REMOVED`\|`CONFLICT`) and a stable
-  slug `eventName` (`"assignment.created"`, `"lecture.removed"`, `"timetable.group_created"`,
-  `"sync_conflict.exam"`, …) so a client can switch on it instead of pattern-matching the
-  free-text title/content (e.g. `announceLectureChanges` titles "New lectures: …" vs
+- **`eventName` classifies the event; `title`/`content` are display-only.** Every
+  `raise()` call sets a stable slug `eventName` (`"assignment.created"`, `"lecture.removed"`,
+  `"timetable.group_created"`, `"sync_conflict.exam"`, …) so a client can switch on it
+  instead of pattern-matching the free-text title/content. It also encodes the coarse
+  `CREATED`\|`UPDATED`\|`REMOVED`\|`CONFLICT` classification — `notificationEventKind()`
+  (`@zenflow/shared`) derives it from the slug rather than a separate column, so there is
+  one field to keep in sync, not two (e.g. `announceLectureChanges` titles "New lectures: …" vs
   "Updated lectures: …"). Each per-item assignment/exam/lecture row also gets an
   `eventEndsAt` (its `scheduledStartTime + durationMinutes`, the "due"/"at" time the inbox
   shows); grouped and removal rows leave it null. User-facing copy says
@@ -505,15 +507,17 @@ only connection status. Types in `@zenflow/shared` (`ConnectIntegrationInput`,
 ### Notifications (`/notifications`)
 
 The ingestion inbox — written by the materializer, never a client (no create route).
-`CookieAuthGuard` per route, own rows only. Types: `NotificationTopic`,
-`NotificationDto`, `NotificationsListResponse`. Topics include the sync-conflict trio
-`TIMETABLE_CONFLICT` / `EXAM_CONFLICT` / `ASSIGNMENT_CONFLICT`, raised by
+`CookieAuthGuard` per route, own rows only. Types: `NotificationDto`,
+`NotificationsListResponse`. `eventName` (a stable slug, e.g. `"assignment.created"`,
+`"lecture.removed"`, `"sync_conflict.exam"`) is the sole machine-readable classification,
+safe to switch on — `notificationEventKind()` derives the coarse `CREATED`\|`UPDATED`\|
+`REMOVED`\|`CONFLICT` kind from it, and `notificationCategory()` derives
+`ASSIGNMENT`\|`EXAM`\|`LECTURE`\|`REMINDER` (both `@zenflow/shared`); there is no separate
+`eventType`/`topic` column for either. Sync-conflict rows use a `sync_conflict.<category>`
+`eventName` (`sync_conflict.lecture` / `.exam` / `.assignment`), raised by
 `ingestion/sync-conflicts.service.ts` after each source's sync. `conflictSessionIds` lists the
-user's clashing tasks; no calendar session is created. `eventType`
-(`NotificationEventType`: `CREATED`\|`UPDATED`\|`REMOVED`\|`CONFLICT`) and `eventName` (a
-stable slug, e.g. `"assignment.created"`, `"lecture.removed"`, `"sync_conflict.exam"`) are
-the machine-readable classification, safe to switch on; `title`/`content` remain free text
-for display. For a per-item assignment/exam/lecture, there's also an `eventEndsAt` (the
+user's clashing tasks; no calendar session is created. `title`/`content` remain free text for
+display. For a per-item assignment/exam/lecture, there's also an `eventEndsAt` (the
 "due"/"at" time; null for grouped rows and removals).
 
 | Method | Path                              | Purpose                                                     |
@@ -972,7 +976,7 @@ formatting, notification copy — takes `now`, covered by `reminder.spec.ts`).
 - Fire policy: `startsAt - remindBeforeMinutes`; if that is already past but the session has not
   started, fire now (title shows the real time left); a session that already started is skipped.
   A session moved to a new start fires again for the new start.
-- Delivery reuses `NotificationsService.create` (topic `REMINDER`, title like
+- Delivery reuses `NotificationsService.create` (`eventName: "reminder.fired"`, title like
   "Standup starts in 1 hour", content "Standup starts at Sat, 20 Sep, 14:00 at Room A1.") and emits
   `NEW_SESSION`, so it reaches the SSE stream and `PushService` unchanged.
 - Ingested lectures/assignments/exams get the same 60-minute default (`MaterializerService.create`

@@ -115,7 +115,7 @@ export class PushService implements OnModuleInit {
   private dataFor(row: Notification): PushDataPayload {
     return {
       notificationId: row.id,
-      topic: row.topic,
+      eventName: row.eventName,
       sessionId: row.sessionId ?? "",
       url: row.sessionId
         ? `/calendar?session=${row.sessionId}`

@@ -23,7 +23,7 @@ const MSG: PushMessage = {
   body: "Added to your calendar from DLU.",
   data: {
     notificationId: "n1",
-    topic: "EXAM",
+    eventName: "exam.created",
     sessionId: "s1",
     url: "/calendar?session=s1",
   },
@@ -87,7 +87,7 @@ describe("ApnsSender", () => {
     expect(note.alert).toEqual({ title: MSG.title, body: MSG.body });
     expect(note.payload).toEqual({
       notificationId: "n1",
-      topic: "EXAM",
+      eventName: "exam.created",
       sessionId: "s1",
       url: "/calendar?session=s1",
     });

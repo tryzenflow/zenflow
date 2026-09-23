@@ -25,7 +25,12 @@ import {
 } from "@/hooks/use-notifications";
 import { useUserStore } from "@/hooks/use-user-store";
 import { cn } from "@/lib/utils";
-import type { NotificationDto, NotificationTopic } from "@zenflow/shared";
+import {
+  notificationCategory,
+  notificationEventKind,
+  type NotificationCategory,
+  type NotificationDto,
+} from "@zenflow/shared";
 import { formatDistanceToNow } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
 import * as Haptics from "expo-haptics";
@@ -43,54 +48,56 @@ import {
 import Swipeable from "react-native-gesture-handler/Swipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-/** Visual configuration for notification topics matching mockups/detected-items.html */
-function topicVisual(topic: NotificationTopic): {
+const CATEGORY_LABEL: Record<NotificationCategory, string> = {
+  ASSIGNMENT: "LMS Assignment",
+  EXAM: "Exam",
+  LECTURE: "Timetable",
+  REMINDER: "Reminder",
+};
+
+/** Visual configuration for a notification's eventName, matching mockups/detected-items.html */
+function notificationVisual(eventName: string): {
   Icon: LucideIcon;
   label: string;
   tint: string;
   iconColor: string;
 } {
-  switch (topic) {
+  const category = notificationCategory(eventName);
+  if (notificationEventKind(eventName) === "CONFLICT") {
+    return {
+      Icon: AlertTriangle,
+      label: `${CATEGORY_LABEL[category]} conflict`,
+      tint: "border-red-500/40 bg-red-500/15",
+      iconColor: "#dc2626",
+    };
+  }
+  switch (category) {
     case "ASSIGNMENT":
       return {
         Icon: ClipboardList,
-        label: "LMS Assignment",
+        label: CATEGORY_LABEL.ASSIGNMENT,
         tint: "border-teal-500/40 bg-teal-500/15",
         iconColor: "#0f766e",
       };
     case "EXAM":
       return {
         Icon: Notebook,
-        label: "Exam",
+        label: CATEGORY_LABEL.EXAM,
         tint: "border-rose-500/40 bg-rose-500/15",
         iconColor: "#e11d48",
       };
-    case "TIMETABLE":
+    case "LECTURE":
       return {
         Icon: GraduationCap,
-        label: "Timetable",
+        label: CATEGORY_LABEL.LECTURE,
         tint: "border-sky-500/40 bg-sky-500/15",
         iconColor: "#0369a1",
-      };
-    case "ASSIGNMENT_CONFLICT":
-    case "EXAM_CONFLICT":
-    case "TIMETABLE_CONFLICT":
-      return {
-        Icon: AlertTriangle,
-        label:
-          topic === "ASSIGNMENT_CONFLICT"
-            ? "Assignment conflict"
-            : topic === "EXAM_CONFLICT"
-              ? "Exam conflict"
-              : "Timetable conflict",
-        tint: "border-red-500/40 bg-red-500/15",
-        iconColor: "#dc2626",
       };
     case "REMINDER":
     default:
       return {
         Icon: Bell,
-        label: "Reminder",
+        label: CATEGORY_LABEL.REMINDER,
         tint: "border-primary/40 bg-primary/15",
         iconColor: "#f97316",
       };
@@ -103,7 +110,8 @@ function eventTimeLabel(n: NotificationDto, tz: string): string | null {
   try {
     const at = new Date(n.eventEndsAt);
     const date = formatInTimeZone(at, tz, "MMM d");
-    if (n.topic === "ASSIGNMENT") return `due ${date}`;
+    if (notificationCategory(n.eventName) === "ASSIGNMENT")
+      return `due ${date}`;
     return `${date}, ${formatInTimeZone(at, tz, "h:mm a")}`;
   } catch {
     return null;
@@ -475,7 +483,7 @@ function NotificationRowItem({
   onDismiss: () => void;
 }) {
   const swipeableRef = useRef<Swipeable>(null);
-  const { Icon, tint, iconColor } = topicVisual(n.topic);
+  const { Icon, tint, iconColor } = notificationVisual(n.eventName);
   const unread = !n.readAt;
   const relative = formatDistanceToNow(new Date(n.sentAt), { addSuffix: true });
   const when = eventTimeLabel(n, tz);
@@ -618,7 +626,12 @@ function NotificationDetailModal({
   onRescheduleAll: () => void;
   rescheduling: boolean;
 }) {
-  const { Icon, label: topicLabel, tint, iconColor } = topicVisual(n.topic);
+  const {
+    Icon,
+    label: categoryLabel,
+    tint,
+    iconColor,
+  } = notificationVisual(n.eventName);
 
   return (
     <Modal visible={true} transparent animationType="fade" onRequestClose={onClose}>
@@ -637,7 +650,7 @@ function NotificationDetailModal({
               </View>
               <View>
                 <Text className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                  {topicLabel}
+                  {categoryLabel}
                 </Text>
               </View>
             </View>

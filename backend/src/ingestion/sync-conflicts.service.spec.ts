@@ -76,11 +76,11 @@ describe("SyncConflictsService.detectAndNotify", () => {
     const { svc, notifications } = make({ fixed: [lecture], tasks: [clash] });
     expect(await run(svc, "LECTURE")).toBe(1);
     const dto = notifications.raiseConflict.mock.calls[0][1] as {
-      topic: string;
+      eventName: string;
       content: string;
       conflictSessionIds: string[];
     };
-    expect(dto.topic).toBe("TIMETABLE_CONFLICT");
+    expect(dto.eventName).toBe("sync_conflict.lecture");
     expect(dto.content).toContain("1 conflict with your own tasks");
     expect(dto.content).toContain("Reschedule them all?");
     expect(dto.conflictSessionIds).toEqual(["t1"]);
@@ -88,14 +88,18 @@ describe("SyncConflictsService.detectAndNotify", () => {
   });
 
   it.each([
-    ["EXAM", "EXAM_CONFLICT"],
-    ["ASSIGNMENT", "ASSIGNMENT_CONFLICT"],
-  ] as const)("uses the %s topic", async (type, topic) => {
+    ["EXAM", "sync_conflict.exam"],
+    ["ASSIGNMENT", "sync_conflict.assignment"],
+  ] as const)("uses the %s eventName", async (type, eventName) => {
     const { svc, notifications } = make({ fixed: [lecture], tasks: [clash] });
     await run(svc, type);
     expect(
-      (notifications.raiseConflict.mock.calls[0][1] as { topic: string }).topic,
-    ).toBe(topic);
+      (
+        notifications.raiseConflict.mock.calls[0][1] as {
+          eventName: string;
+        }
+      ).eventName,
+    ).toBe(eventName);
   });
 
   it("is a no-op when nothing conflicts", async () => {

@@ -8,7 +8,7 @@ const USER = { id: "u1" } as User;
 
 const DTO = {
   id: "n1",
-  topic: "ASSIGNMENT" as const,
+  eventName: "assignment.created",
   title: "New assignment: Môn học Mẫu Một",
   content: "Added to your calendar from DLU.",
   sentAt: "2026-09-01T00:00:00.000Z",

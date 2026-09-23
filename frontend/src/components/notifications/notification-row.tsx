@@ -3,8 +3,8 @@ import { NotificationDto } from "@zenflow/shared";
 import {
   conflictCopy,
   eventTimeLabel,
-  isConflictTopic,
-  topicVisual,
+  isConflict,
+  notificationVisual,
 } from "./utils";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -24,7 +24,7 @@ export function NotificationRow({
   onDismiss: (e: MouseEvent) => void;
   onRescheduleAll?: () => void;
 }) {
-  const { Icon, tint } = topicVisual(n.topic);
+  const { Icon, tint } = notificationVisual(n.eventName);
   const unread = !n.readAt;
   const navigable = Boolean(n.sessionId);
   const relative = formatDistanceToNow(new Date(n.sentAt), { addSuffix: true });
@@ -103,10 +103,10 @@ export function NotificationRow({
           <X className="size-3.5" />
         </Button>
       </div>
-      {isConflictTopic(n.topic) && (
+      {isConflict(n.eventName) && (
         <div className="flex items-center gap-3 pb-3 pl-16 pr-4">
           <span className="min-w-0 flex-1 text-[11px] leading-snug text-muted-foreground">
-            {conflictCopy(n.topic)}
+            {conflictCopy(n.eventName)}
             {n.conflictSessionIds.length > 0 &&
               ` (${n.conflictSessionIds.length})`}
           </span>

@@ -1,5 +1,4 @@
 import { Injectable, Logger } from "@nestjs/common";
-import type { NotificationTopic } from "@zenflow/shared";
 import type { SessionSource } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -11,14 +10,11 @@ import {
 import { DAY_MS } from "../scheduler/core/slot";
 import type { IngestedSessionType } from "./core/types";
 
-/** Sync-conflict topic + copy per ingested block type (timetable / exam / LMS). */
-const CONFLICT_KINDS: Record<
-  IngestedSessionType,
-  { topic: NotificationTopic; label: string }
-> = {
-  LECTURE: { topic: "TIMETABLE_CONFLICT", label: "your timetable" },
-  EXAM: { topic: "EXAM_CONFLICT", label: "your exam schedule" },
-  ASSIGNMENT: { topic: "ASSIGNMENT_CONFLICT", label: "LMS" },
+/** Sync-conflict copy per ingested block type (timetable / exam / LMS). */
+const CONFLICT_KINDS: Record<IngestedSessionType, { label: string }> = {
+  LECTURE: { label: "your timetable" },
+  EXAM: { label: "your exam schedule" },
+  ASSIGNMENT: { label: "LMS" },
 };
 
 /** How far ahead of a sync a conflict is worth telling the user about. */
@@ -57,6 +53,7 @@ export class SyncConflictsService {
     const { userId, source, type, since } = args;
     const now = args.now ?? new Date();
     const kind = CONFLICT_KINDS[type];
+    const eventName = `sync_conflict.${type.toLowerCase()}`;
 
     const fixedRows = await this.prisma.session.findMany({
       where: {
@@ -107,7 +104,7 @@ export class SyncConflictsService {
 
     // Dedupe: an identical, still-open notification already covers this set.
     const open = await this.prisma.notification.findMany({
-      where: { userId, topic: kind.topic, actionTakenAt: null },
+      where: { userId, eventName, actionTakenAt: null },
       select: { conflictSessionIds: true },
     });
     const key = ids.join(",");
@@ -117,9 +114,7 @@ export class SyncConflictsService {
 
     try {
       const row = await this.notifications.raiseConflict(userId, {
-        topic: kind.topic,
-        eventType: "CONFLICT",
-        eventName: `sync_conflict.${type.toLowerCase()}`,
+        eventName,
         title: `Schedule conflicts after syncing ${kind.label}`,
         content:
           `After syncing with ${kind.label}, we detected ` +

@@ -1,9 +1,8 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import type {
-  NotificationDto,
-  NotificationEventType,
-  NotificationsListResponse,
-  NotificationTopic,
+import {
+  notificationCategory,
+  type NotificationDto,
+  type NotificationsListResponse,
 } from "@zenflow/shared";
 import {
   Prisma,
@@ -24,8 +23,6 @@ import { EventEmitter2 } from "@nestjs/event-emitter";
  */
 const DEV_SAMPLES: CreateNotificationInput[] = [
   {
-    topic: "ASSIGNMENT",
-    eventType: "CREATED",
     eventName: "assignment.created",
     title: "New assignment: Sorting Algorithms",
     content: "Added from your LMS. Plan the work that leads up to it.",
@@ -33,8 +30,6 @@ const DEV_SAMPLES: CreateNotificationInput[] = [
     eventEndsAt: null,
   },
   {
-    topic: "EXAM",
-    eventType: "CREATED",
     eventName: "exam.created",
     title: "New exam: Midterm — Room A305",
     content: "Added from your portal. Plan revision sessions before it.",
@@ -42,17 +37,13 @@ const DEV_SAMPLES: CreateNotificationInput[] = [
     eventEndsAt: null,
   },
   {
-    topic: "TIMETABLE",
-    eventType: "CREATED",
-    eventName: "timetable.group_created",
+    eventName: "lecture.group_created",
     title: "Timetable for semester 1 is available",
     content: "12 classes were added to your calendar.",
     sessionId: null,
     eventEndsAt: null,
   },
   {
-    topic: "TIMETABLE",
-    eventType: "UPDATED",
     eventName: "lecture.updated",
     title: "Updated: Databases — Room B210",
     content: "The portal moved this class.",
@@ -60,8 +51,6 @@ const DEV_SAMPLES: CreateNotificationInput[] = [
     eventEndsAt: null,
   },
   {
-    topic: "TIMETABLE",
-    eventType: "REMOVED",
     eventName: "lecture.removed",
     title: "Lectures removed: Data Structures Lab",
     content: "These classes were taken off your DLU timetable.",
@@ -75,13 +64,11 @@ const DEV_SAMPLES: CreateNotificationInput[] = [
 /** What the materializer passes to {@link NotificationsService.create}. */
 export interface CreateNotificationInput {
   title: string;
-  topic: NotificationTopic;
   /**
-   * Machine-readable classification of the event — required, not optional, so
-   * a caller can never silently mis-tag (or forget to tag) a row.
+   * Stable slug ("assignment.created", "lecture.removed", …); see
+   * {@link NotificationDto.eventName}. Required, not optional, so a caller
+   * can never silently mis-tag (or forget to tag) a row.
    */
-  eventType: NotificationEventType;
-  /** Stable slug ("assignment.created", "lecture.removed", …); see {@link NotificationDto.eventName}. */
   eventName: string;
   sessionId: string | null;
   content: string;
@@ -97,21 +84,22 @@ export interface CreateNotificationInput {
 }
 
 /**
- * Topic → (session type, source, default duration) used whenever a notification
- * auto-materializes a calendar session, in both {@link NotificationsService.create}
- * and {@link NotificationsService.raiseSamples}.
+ * `eventName`'s category → (session type, source, default duration) used
+ * whenever a notification auto-materializes a calendar session, in both
+ * {@link NotificationsService.create} and {@link NotificationsService.raiseSamples}.
  */
-function resolveSessionDefaults(topic: NotificationTopic): {
+function resolveSessionDefaults(eventName: string): {
   type: SessionType;
   source: SessionSource;
   durationMinutes: number;
 } {
-  switch (topic) {
+  switch (notificationCategory(eventName)) {
     case "EXAM":
       return { type: "EXAM", source: "PORTAL", durationMinutes: 120 };
-    case "TIMETABLE":
+    case "LECTURE":
       return { type: "LECTURE", source: "PORTAL", durationMinutes: 90 };
     case "ASSIGNMENT":
+    case "REMINDER":
     default:
       return { type: "TASK", source: "LMS", durationMinutes: 90 };
   }
@@ -129,8 +117,6 @@ function cleanNotificationTitle(title: string): string {
 function toNotificationDto(row: Notification): NotificationDto {
   return {
     id: row.id,
-    topic: row.topic,
-    eventType: row.eventType,
     eventName: row.eventName,
     title: row.title,
     content: row.content,
@@ -180,7 +166,7 @@ export class NotificationsService {
     if (!sessionId && materializeSession !== false && db?.session) {
       try {
         const { type, source, durationMinutes } = resolveSessionDefaults(
-          dto.topic,
+          dto.eventName,
         );
         const cleanTitle = cleanNotificationTitle(dto.title);
 
@@ -271,7 +257,7 @@ export class NotificationsService {
 
       if (sample.materializeSession !== false) {
         const { type, source, durationMinutes } = resolveSessionDefaults(
-          sample.topic,
+          sample.eventName,
         );
         let title = cleanNotificationTitle(sample.title).replace(
           / \(#\d+\)$/,
@@ -280,14 +266,15 @@ export class NotificationsService {
         let location: string | null = null;
         let deadline: Date | null = null;
 
-        if (sample.topic === "ASSIGNMENT") {
+        const category = notificationCategory(sample.eventName);
+        if (category === "ASSIGNMENT") {
           deadline = new Date(sessionStart.getTime() + 4 * 60 * 60 * 1000);
           eventEndsAt = deadline;
-        } else if (sample.topic === "EXAM") {
+        } else if (category === "EXAM") {
           location = "Room A305";
           deadline = new Date(sessionStart.getTime() + durationMinutes * 60000);
           eventEndsAt = deadline;
-        } else if (sample.topic === "TIMETABLE") {
+        } else if (category === "LECTURE") {
           if (sample.title.toLowerCase().includes("semester 1")) {
             title = "Computer Architecture";
             location = "Room C201";
@@ -330,16 +317,14 @@ export class NotificationsService {
   }
 
   /**
-   * A sync-conflict row (`*_CONFLICT` topics, issue #62 D). Unlike
+   * A sync-conflict row (a `sync_conflict.*` `eventName`, issue #62 D). Unlike
    * {@link create} it never materializes a calendar session - it points at the
    * user's own conflicting tasks via `conflictSessionIds`. The caller emits.
    */
   raiseConflict(
     userId: string,
     dto: {
-      topic: NotificationTopic;
-      /** Always `"CONFLICT"` in practice; kept as an input so the caller states it explicitly. */
-      eventType: NotificationEventType;
+      /** Always `"sync_conflict.<category>"` — see {@link notificationEventKind}. */
       eventName: string;
       title: string;
       content: string;
@@ -349,8 +334,6 @@ export class NotificationsService {
     return this.prisma.notification.create({
       data: {
         userId,
-        topic: dto.topic,
-        eventType: dto.eventType,
         eventName: dto.eventName,
         title: dto.title,
         content: dto.content,
@@ -361,15 +344,13 @@ export class NotificationsService {
     });
   }
 
-  /** The caller's own `*_CONFLICT` row, or 404. */
+  /** The caller's own `sync_conflict.*` row, or 404. */
   async findConflict(user: User, id: string): Promise<Notification> {
     const row = await this.prisma.notification.findFirst({
       where: {
         id,
         userId: user.id,
-        topic: {
-          in: ["ASSIGNMENT_CONFLICT", "EXAM_CONFLICT", "TIMETABLE_CONFLICT"],
-        },
+        eventName: { startsWith: "sync_conflict." },
       },
     });
     if (!row) {

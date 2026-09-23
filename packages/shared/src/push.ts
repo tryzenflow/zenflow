@@ -10,7 +10,6 @@
  * optional property, and everything that crosses the wire is a plain string.
  */
 
-import type { NotificationTopic } from "./notification";
 
 /** Which push provider a device token belongs to. Mirrors the Prisma enum. */
 export type DevicePlatform = "IOS" | "ANDROID";
@@ -39,7 +38,8 @@ export interface RegisterDeviceResponse {
  */
 export interface PushDataPayload {
   notificationId: string;
-  topic: NotificationTopic;
+  /** The notification's `eventName` slug, for the app to classify without a round-trip. */
+  eventName: string;
   sessionId: string;
   /** In-app path to open — `"/calendar?session=<id>"` or `"/notifications"`. */
   url: string;

@@ -43,8 +43,6 @@ interface NotificationRow {
   id: string;
   userId: string;
   sessionId: string | null;
-  topic: string;
-  eventType: string;
   eventName: string;
   title: string;
   content: string;
@@ -211,8 +209,6 @@ function makePrismaDouble() {
           id: `n${notifications.length + 1}`,
           userId: args.data.userId as string,
           sessionId: (args.data.sessionId as string | null) ?? null,
-          topic: args.data.topic as string,
-          eventType: args.data.eventType as string,
           eventName: args.data.eventName as string,
           title: args.data.title as string,
           content: args.data.content as string,
@@ -366,8 +362,6 @@ describe("MaterializerService", () => {
       expect(db.sessions[0].syncConfirmedAt).toBeInstanceOf(Date);
       expect(db.notifications).toHaveLength(1);
       expect(db.notifications[0]).toMatchObject({
-        topic: "ASSIGNMENT",
-        eventType: "CREATED",
         eventName: "assignment.created",
         sessionId: db.sessions[0].id,
       });
@@ -427,7 +421,7 @@ describe("MaterializerService", () => {
       expect(db.sessions[0].note).toBeNull();
     });
 
-    it("maps EXAM and LECTURE onto their notification topics once confirmed", async () => {
+    it("maps EXAM and LECTURE onto their notification event categories once confirmed", async () => {
       const { db, service } = await makeService();
       const items = [
         block({ externalKey: "portal:exam:500001", type: "EXAM" }),
@@ -436,9 +430,9 @@ describe("MaterializerService", () => {
 
       await seedConfirmed(service, items, "PORTAL");
 
-      expect(db.notifications.map((n) => n.topic)).toEqual([
-        "EXAM",
-        "TIMETABLE",
+      expect(db.notifications.map((n) => n.eventName)).toEqual([
+        "exam.created",
+        "lecture.created",
       ]);
     });
 
@@ -601,7 +595,6 @@ describe("MaterializerService", () => {
       });
       expect(db.sessions[0].deleted).toBe(true);
       const removal = db.notifications.at(-1)!;
-      expect(removal.eventType).toBe("REMOVED");
       expect(removal.title).toContain("Gone soon");
     });
 
@@ -700,7 +693,6 @@ describe("MaterializerService", () => {
       expect(db.notifications).toHaveLength(2);
       expect(db.notifications[1].title).toContain("Updated:");
       expect(db.notifications[1]).toMatchObject({
-        eventType: "UPDATED",
         eventName: "assignment.updated",
       });
       // Not a user action, so it must not enter the ML event trail...
@@ -764,8 +756,7 @@ describe("MaterializerService", () => {
       );
       expect(db.notifications).toHaveLength(2);
       expect(db.notifications[1]).toMatchObject({
-        topic: "ASSIGNMENT",
-        eventType: "UPDATED",
+        eventName: "assignment.updated",
         sessionId: db.sessions[0].id,
       });
       expect(db.notifications[1].title).toContain("Updated:");
@@ -834,7 +825,6 @@ describe("MaterializerService", () => {
       expect(db.sessions[0].deleted).toBe(true);
       const drop = db.notifications.at(-1)!;
       expect(drop.sessionId).toBeNull();
-      expect(drop.eventType).toBe("REMOVED");
       expect(drop.title).toContain("Gone now");
     });
 
@@ -894,9 +884,7 @@ describe("MaterializerService", () => {
       // One notification, not twelve.
       expect(db.notifications).toHaveLength(1);
       expect(db.notifications[0]).toMatchObject({
-        topic: "TIMETABLE",
-        eventType: "CREATED",
-        eventName: "timetable.group_created",
+        eventName: "lecture.group_created",
         title: "Timetable for semester 1 is available",
         // Points at the earliest meeting, for the calendar to land on.
         sessionId: db.sessions[0].id,
@@ -916,7 +904,6 @@ describe("MaterializerService", () => {
 
       expect(db.notifications).toHaveLength(1);
       expect(db.notifications[0].title).toBe("New lectures: Đại số, Giải tích");
-      expect(db.notifications[0].topic).toBe("TIMETABLE");
       expect(db.notifications[0].eventName).toBe("lecture.created");
     });
 
@@ -955,9 +942,9 @@ describe("MaterializerService", () => {
       await seedConfirmed(service, items, "LMS", IN_TERM);
 
       expect(db.notifications).toHaveLength(2);
-      expect(db.notifications.every((n) => n.topic === "ASSIGNMENT")).toBe(
-        true,
-      );
+      expect(
+        db.notifications.every((n) => n.eventName === "assignment.created"),
+      ).toBe(true);
       // A per-item row carries the session's fixed end instant for its badge.
       expect(db.notifications[0].eventEndsAt).toBeInstanceOf(Date);
     });
@@ -1019,8 +1006,7 @@ describe("MaterializerService", () => {
       )!;
       expect(kept.deleted).toBe(false);
       const removal = db.notifications.at(-1)!;
-      expect(removal.topic).toBe("TIMETABLE");
-      expect(removal.eventType).toBe("REMOVED");
+      expect(removal.eventName).toBe("lecture.removed");
       expect(removal.title).toContain("Gone");
       expect(removal.sessionId).toBeNull();
     });
@@ -1127,7 +1113,6 @@ describe("MaterializerService", () => {
       expect(db.notifications.at(-1)!.title).toBe(
         "Your semester 1 timetable changed",
       );
-      expect(db.notifications.at(-1)!.eventType).toBe("REMOVED");
       expect(db.notifications.at(-1)!.content).toContain("11 classes");
     });
   });

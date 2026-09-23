@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/popover";
 import { useUserStore } from "@/hooks/use-user-store";
 import { errorToast } from "@/lib/toast";
-import type { NotificationDto } from "@zenflow/shared";
+import { notificationEventKind, type NotificationDto } from "@zenflow/shared";
 import { Bell, Check, CircleAlert } from "lucide-react";
 import {
   useCallback,
@@ -173,11 +173,7 @@ export function NotificationBell() {
       // their own (they just flag the user's own tasks against a session that
       // already raised its own CREATED/UPDATED elsewhere), so skip the refetch
       // there.
-      if (
-        newData.eventType === "CREATED" ||
-        newData.eventType === "UPDATED" ||
-        newData.eventType === "REMOVED"
-      ) {
+      if (notificationEventKind(newData.eventName) !== "CONFLICT") {
         window.dispatchEvent(new CustomEvent("zenflow:calendar-refresh"));
       }
       // Tap-to-act toast (bottom-right) — mirrors mobile's foreground push and

@@ -17,39 +17,67 @@
  */
 
 /**
- * What a notification is about.
- *
- * `ASSIGNMENT` / `EXAM` are raised when a watcher creates the matching calendar
- * session. `TIMETABLE` covers class-schedule changes — including the "upstream
- * moved, but you had already edited this session, so we did not overwrite it"
- * case. `REMINDER` is the non-ingestion, user-facing nudge.
+ * Machine-readable classification of what a notification reports.
+ * Derived from {@link NotificationDto.eventName} by {@link notificationEventKind}
+ * rather than stored separately, so there is exactly one field to keep in sync.
  */
-export type NotificationTopic =
-  | "ASSIGNMENT"
-  | "EXAM"
-  | "TIMETABLE"
-  | "REMINDER"
-  | "ASSIGNMENT_CONFLICT"
-  | "EXAM_CONFLICT"
-  | "TIMETABLE_CONFLICT";
+export type NotificationEventKind = "CREATED" | "UPDATED" | "REMOVED" | "CONFLICT";
 
 /**
- * Machine-readable classification of what a notification reports — distinct
- * from {@link NotificationTopic} (which inbox section it lives under). A
- * client can switch on this instead of pattern-matching the free-text
- * `title`/`content`.
+ * Classify a notification's {@link NotificationDto.eventName} without
+ * pattern-matching the free-text `title`/`content`. Every event name is
+ * either `"sync_conflict.<thing>"` (a conflict) or `"<thing>.<created|
+ * updated|removed>"` / `"<thing>.group_<created|updated|removed>"`.
  */
-export type NotificationEventType = "CREATED" | "UPDATED" | "REMOVED" | "CONFLICT";
+export function notificationEventKind(eventName: string): NotificationEventKind {
+  if (eventName.startsWith("sync_conflict.")) return "CONFLICT";
+  if (eventName.endsWith("created")) return "CREATED";
+  if (eventName.endsWith("updated")) return "UPDATED";
+  if (eventName.endsWith("removed")) return "REMOVED";
+  throw new Error(`Unrecognized notification eventName: "${eventName}"`);
+}
+
+/**
+ * What a notification is about — which inbox section/icon it takes, and
+ * (for `ASSIGNMENT`/`EXAM`/`LECTURE`) which calendar session type it tracks.
+ * `REMINDER` is the non-ingestion, user-facing nudge; it has no session type
+ * of its own. Derived from {@link NotificationDto.eventName}'s `<thing>`
+ * segment by {@link notificationCategory}, same reasoning as
+ * {@link notificationEventKind}.
+ */
+export type NotificationCategory = "ASSIGNMENT" | "EXAM" | "LECTURE" | "REMINDER";
+
+/**
+ * The `<thing>` a notification's {@link NotificationDto.eventName} is about —
+ * `"assignment.created"` / `"lecture.group_updated"` → the part before the
+ * first `.`; `"sync_conflict.lecture"` → the part after it.
+ */
+export function notificationCategory(eventName: string): NotificationCategory {
+  const thing = eventName.startsWith("sync_conflict.")
+    ? eventName.slice("sync_conflict.".length)
+    : eventName.split(".")[0];
+  switch (thing) {
+    case "assignment":
+      return "ASSIGNMENT";
+    case "exam":
+      return "EXAM";
+    case "lecture":
+      return "LECTURE";
+    case "reminder":
+      return "REMINDER";
+    default:
+      throw new Error(`Unrecognized notification eventName: "${eventName}"`);
+  }
+}
 
 /** One notification as returned by the notifications endpoints. */
 export interface NotificationDto {
   id: string;
-  topic: NotificationTopic;
-  /** See {@link NotificationEventType}. */
-  eventType: NotificationEventType;
   /**
    * Stable machine-readable slug ("assignment.created", "lecture.removed",
    * "sync_conflict.exam", …) — safe to switch on, unlike `title`/`content`.
+   * See {@link notificationEventKind} and {@link notificationCategory} for
+   * the classifications derived from this.
    */
   eventName: string;
   title: string;
@@ -77,9 +105,9 @@ export interface NotificationDto {
    */
   sessionId: string | null;
   /**
-   * For the `*_CONFLICT` topics: ids of the user's own flexible tasks that a
-   * sync landed on top of ("Reschedule them all?" —
-   * `POST /notifications/:id/reschedule-conflicts`). Empty otherwise.
+   * For a `CONFLICT` row (see {@link notificationEventKind}): ids of the
+   * user's own flexible tasks that a sync landed on top of ("Reschedule them
+   * all?" — `POST /notifications/:id/reschedule-conflicts`). Empty otherwise.
    */
   conflictSessionIds: string[];
 }

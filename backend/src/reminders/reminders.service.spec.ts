@@ -171,7 +171,7 @@ describe("RemindersService", () => {
       expect(notifications.create).toHaveBeenCalledWith(
         "u1",
         expect.objectContaining({
-          topic: "REMINDER",
+          eventName: "reminder.fired",
           sessionId: "s1",
           title: "Class in 1 hour: Standup",
           content: expect.stringContaining("Standup begins at"),

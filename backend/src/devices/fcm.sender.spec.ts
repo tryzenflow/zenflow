@@ -20,7 +20,7 @@ const MSG: PushMessage = {
   body: "Added to your calendar from DLU.",
   data: {
     notificationId: "n1",
-    topic: "EXAM",
+    eventName: "exam.created",
     sessionId: "s1",
     url: "/calendar?session=s1",
   },
@@ -82,7 +82,7 @@ describe("FcmSender", () => {
     expect(arg.notification).toEqual({ title: MSG.title, body: MSG.body });
     expect(arg.data).toEqual({
       notificationId: "n1",
-      topic: "EXAM",
+      eventName: "exam.created",
       sessionId: "s1",
       url: "/calendar?session=s1",
     });

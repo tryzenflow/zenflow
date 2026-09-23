@@ -1,7 +1,7 @@
-import { NotificationDto } from "@zenflow/shared";
+import { notificationCategory, NotificationDto } from "@zenflow/shared";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { eventTimeLabel, topicVisual } from "./utils";
+import { eventTimeLabel, notificationVisual } from "./utils";
 
 /**
  * The tap-to-act toast for a notification that arrives over SSE while the app
@@ -19,10 +19,10 @@ export function NotificationToast({
   tz: string;
   onOpen: () => void;
 }) {
-  const { Icon, tint } = topicVisual(n.topic);
+  const { Icon, tint } = notificationVisual(n.eventName);
   // A reminder's copy already states the start time, and it isn't an item that
   // "landed on the calendar" — no repeated time line, no attention mark.
-  const isReminder = n.topic === "REMINDER";
+  const isReminder = notificationCategory(n.eventName) === "REMINDER";
   const when = isReminder ? null : eventTimeLabel(n, tz);
   const navigable = Boolean(n.sessionId);
 
