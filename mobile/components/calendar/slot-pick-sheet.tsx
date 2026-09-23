@@ -7,7 +7,6 @@ import {
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
-import { useToast } from "@/components/ui/toast";
 import { zonedDate } from "@zenflow/core";
 import type { Session } from "@zenflow/shared";
 import { format } from "date-fns";
@@ -47,7 +46,6 @@ interface Option {
 const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
   ({ tz }, ref) => {
     const sheet = useBottomSheet();
-    const { toast } = useToast();
     const [session, setSession] = useState<Session | null>(null);
     const [primarySlot, setPrimarySlot] = useState("");
     const [alternativeSlot, setAlternativeSlot] = useState("");
