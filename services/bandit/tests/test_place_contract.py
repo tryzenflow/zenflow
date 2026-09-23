@@ -3,8 +3,11 @@ end-to-end checks for ``POST /v1/place``.
 
 * Every fixture: POST ``request`` -> must equal ``response`` (minus ``ignore``).
 * Golden ``bestFreeSlot`` cases: run as one-day HEURISTIC placements.
-* Golden ``bestLinucbSlot`` cases: run through the handler's LinUCB path with the
-  golden arm scores / vectors injected (the wire carries ``(A, b)``, not scores).
+
+LinUCB has no golden-fixture parity check (ADR-0003 phase 6): the TS
+implementation it used to compare against was deleted, and LinUCB is now
+Python-only, covered by ``services/bandit/tests`` unit/equivalence tests
+instead (e.g. ``test_place_batch.py``).
 """
 
 from __future__ import annotations
@@ -16,7 +19,6 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-import src.place as place_mod
 from src.api import app
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -109,67 +111,3 @@ def test_golden_best_free_slot_via_place(case: dict[str, Any]) -> None:
         assert r["outcome"] == "PLACED" and r["startMs"] == case["output"]
 
 
-@pytest.mark.parametrize("case", GOLDEN["bestLinucbSlot"], ids=lambda c: c["name"])
-def test_golden_best_linucb_slot_via_place(
-    case: dict[str, Any], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    i = case["input"]
-    days = i["days"]
-    vectors = {d["dayStr"]: __import__("numpy").asarray(d["vector"]) for d in days}
-    scores = {d["dayStr"]: d["armScores"] for d in days}
-    monkeypatch.setattr(place_mod._Placer, "_vectors", lambda self, dur: vectors)
-    monkeypatch.setattr(place_mod._Placer, "_arm_scores", lambda self, dur: scores)
-
-    cold: dict[str, Any] = {a: {"A": [], "b": []} for a in scores[days[0]["dayStr"]]}
-    body = {
-        "contractVersion": 1,
-        "requestId": "golden",
-        "mode": "PLACE",
-        "nowMs": i["nextMs"],
-        "timezone": i["timezone"],
-        "deadlineMs": i["deadlineMs"],
-        "maxScanDays": 30,
-        "members": [
-            {
-                "id": "g",
-                "durationMinutes": i["durationMinutes"],
-                "primaryPolicy": "LINUCB",
-                "computeBoth": False,
-                **({"prevStartMs": i["prevStartMs"]} if "prevStartMs" in i else {}),
-            }
-        ],
-        "fixedOccupied": [
-            {"startMs": o["start"], "endMs": o["end"]}
-            for o in i.get("extraOccupied", [])
-        ],
-        "days": [
-            {
-                "dayStr": d["dayStr"],
-                "dayStartMs": d["dayStartMs"],
-                "dayEndMs": d["dayEndMs"],
-                "occupied": [
-                    {"startMs": o["start"], "endMs": o["end"]} for o in d["occupied"]
-                ],
-                "workloadByType": {},
-            }
-            for d in days
-        ],
-        "user": {
-            "preferenceMatrix": i["prefMatrix"],
-            "observationCount": i.get("observationCount", 0),
-        },
-        "bandit": {"alpha": 0.15, "ridge": 1.0, "state": cold},
-    }
-    res = client.post("/v1/place", json=body)
-    assert res.status_code == 200, res.text
-    r = res.json()["results"][0]
-    exp = case["output"]
-    if exp is None:
-        assert r["linucb"] is None
-        return
-    lin = r["linucb"]
-    assert lin is not None and lin["startMs"] == exp["startMs"]
-    assert lin["selectedArm"] == exp["arm"]
-    assert lin["score"] == pytest.approx(exp["score"], abs=1e-9)
-    assert lin["weights"] == pytest.approx(exp["weights"])
-    assert lin["featureVector"] == pytest.approx(exp["vector"])
