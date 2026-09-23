@@ -97,7 +97,7 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
               isPrimary: false,
             },
           ]);
-          setSelected(null);
+          setSelected("alternative");
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(
             () => {},
           );
