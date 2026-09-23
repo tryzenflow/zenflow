@@ -147,44 +147,29 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
 
             <View className="mt-4 flex flex-col gap-2.5">
               {options.map((option, index) => (
-                <View
+                <Pressable
                   key={option.isPrimary ? "primary" : "alternative"}
-                  className={`
-                    rounded-2xl px-4 py-5 flex flex-row items-center gap-3 my-0.5
-                    ${
-                      selected ===
-                      (option.isPrimary ? "primary" : "alternative")
-                        ? "border-primary bg-primary/[0.08]"
-                        : "border-border bg-card"
+                  onPress={() => {
+                    const chose = option.isPrimary
+                      ? "primary"
+                      : "alternative";
+                    if (selected === chose) {
+                      handlePick(chose);
+                    } else {
+                      setSelected(chose);
+                      Haptics.selectionAsync().catch(() => {});
                     }
-                  `}
-                  style={
-                    selected === (option.isPrimary ? "primary" : "alternative")
-                      ? {
-                          shadowColor: "#000",
-                          shadowOffset: { width: 0, height: 12 },
-                          shadowOpacity: 0.35,
-                          shadowRadius: 24,
-                          elevation: 14,
-                          overflow: "visible",
-                        }
-                      : {}
-                  }
-                >
-                  <Pressable
-                    onPress={() => {
-                      const chose = option.isPrimary
-                        ? "primary"
-                        : "alternative";
-                      if (selected === chose) {
-                        handlePick(chose);
-                      } else {
-                        setSelected(chose);
-                        Haptics.selectionAsync().catch(() => {});
+                  }}
+                  className={`
+                      text-left rounded-2xl border-2 px-4 py-5 flex flex-row items-center gap-3 my-0.5
+                      ${
+                        selected ===
+                        (option.isPrimary ? "primary" : "alternative")
+                          ? "border-primary bg-primary/[0.08]"
+                          : "border-border bg-card"
                       }
-                    }}
-                    className="w-full h-full"
-                  >
+                    `}
+                >
                     <View
                       className={`
                     shrink-0 size-5 rounded-full border-2 flex items-center justify-center
@@ -214,7 +199,6 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
                       </Text>
                     </View>
                   </Pressable>
-                </View>
               ))}
             </View>
 
