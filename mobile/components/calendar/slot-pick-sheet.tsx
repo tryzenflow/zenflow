@@ -54,7 +54,7 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
     const [slotProposalId, setSlotProposalId] = useState("");
     const [options, setOptions] = useState<Option[]>([]);
     const [selected, setSelected] = useState<"primary" | "alternative" | null>(
-      null,
+      "alternative",
     );
     const onPickRef = useRef<
       ((chose: "primary" | "alternative") => void) | null
@@ -119,7 +119,7 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
     function handleDismiss() {
       if (selected !== null) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-      onPickRef.current?.("primary");
+      onPickRef.current?.("alternative");
       onPickRef.current = null;
       onDismissRef.current?.();
       onDismissRef.current = null;
