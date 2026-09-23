@@ -165,7 +165,7 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
                     ${
                       selected ===
                       (option.isPrimary ? "primary" : "alternative")
-                        ? "border-primary bg-primary/[0.08]"
+                        ? "border-primary bg-primary/[0.08] shadow-lg shadow-primary/20"
                         : "border-border bg-card"
                     }
                   `}
