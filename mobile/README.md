@@ -129,8 +129,10 @@ letting the student choose between the two times — model identities are hidden
 **Flow:**
 
 1. **Create** (`app/task/new.tsx`) or **edit** (`app/task/[id]/edit.tsx`) calls
-   `createSession` / `updateSession`. If `response.divergent` is true, the
-   `SlotPickSheet` opens before any toast/navigation.
+   `createSession` / `updateSession`. If `response.divergent` is true, the form
+   stores the proposal via `lib/pending-slot-pick.ts` and hands off to the Week
+   screen (`router.replace("/(app)")` with `date`/`flash` params) instead of
+   showing the sheet over the modal form — the Week screen owns the sheet.
 2. **Drag reschedule** (`components/calendar/day-timeline.tsx`): when a drag-drop
    results in a divergent response, `onRequestSlotPick` is called, which opens
    the same sheet from the Week screen (`app/(app)/index.tsx`).
@@ -149,6 +151,7 @@ letting the student choose between the two times — model identities are hidden
 | File | Role |
 |------|------|
 | `api/tasks.ts` | `slotPick` client for `POST /sessions/:id/slot-pick` |
+| `lib/pending-slot-pick.ts` | Consume-once hand-off store (`setPendingSlotPick`/`takePendingSlotPick`) |
 | `components/calendar/slot-pick-sheet.tsx` | Bottom sheet UI (two cards, primary/secondary actions) |
 | `app/task/new.tsx` | Create flow integration |
 | `app/task/[id]/edit.tsx` | Edit flow integration |
