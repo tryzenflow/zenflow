@@ -118,20 +118,8 @@
 
     { "id": 30, "type": "row", "title": "Bandit service (Python / LinUCB)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 44 } },
     {
-      "id": 31, "type": "timeseries", "title": "/predict latency quantiles",
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 45 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
-      "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.50, sum(rate(bandit_predict_duration_seconds_bucket[$__rate_interval])) by (le))", "legendFormat": "p50" },
-        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.95, sum(rate(bandit_predict_duration_seconds_bucket[$__rate_interval])) by (le))", "legendFormat": "p95" },
-        { "refId": "C", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.99, sum(rate(bandit_predict_duration_seconds_bucket[$__rate_interval])) by (le))", "legendFormat": "p99" }
-      ]
-    },
-    {
       "id": 32, "type": "timeseries", "title": "/update latency p95",
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 45 },
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 45 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
@@ -146,12 +134,12 @@
       "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(increase(bandit_singular_matrix_total[$__range]))" } ]
     },
     {
-      "id": 34, "type": "timeseries", "title": "Cold arms per /predict (avg)",
+      "id": 34, "type": "timeseries", "title": "Cold arms per LinUCB placement (avg)",
       "gridPos": { "h": 8, "w": 4, "x": 20, "y": 45 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "short", "min": 0, "max": 5, "custom": { "drawStyle": "line", "fillOpacity": 20 } }, "overrides": [] },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0, "max": 6, "custom": { "drawStyle": "line", "fillOpacity": 20 } }, "overrides": [] },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(rate(bandit_predict_cold_arms_sum[$__rate_interval])) / clamp_min(sum(rate(bandit_predict_cold_arms_count[$__rate_interval])), 0.001)", "legendFormat": "cold arms" } ]
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(rate(bandit_linucb_cold_arms_sum[$__rate_interval])) / clamp_min(sum(rate(bandit_linucb_cold_arms_count[$__rate_interval])), 0.001)", "legendFormat": "cold arms" } ]
     },
     {
       "id": 35, "type": "timeseries", "title": "Bandit client (API → service) rate & p95",

@@ -20,7 +20,8 @@ from src.schemas_place import (
     PlacementMember,
     Weights,
 )
-from src.serialization import hydrate_arms
+from src.serialization import hydrate_arms, is_cold
+from src.telemetry import cold_arms
 
 
 class LinucbPolicy:
@@ -41,6 +42,8 @@ class LinucbPolicy:
             if bandit is not None
             else {}
         )
+        if bandit is not None:
+            cold_arms.record(sum(is_cold(bandit.state.get(a)) for a in ARM_IDS))
 
     @property
     def enabled(self) -> bool:

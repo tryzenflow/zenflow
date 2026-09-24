@@ -32,14 +32,10 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from src.core.slot import utc_offsets_ms
-from src.models.linucb import score, update
+from src.models.linucb import update
 from src.otel import setup_otel
 from src.place import place as run_place
 from src.schemas import (
-    ARM_IDS,
-    ArmId,
-    PredictRequest,
-    PredictResponse,
     UpdateRequest,
     UpdateResponse,
 )
@@ -47,15 +43,9 @@ from src.schemas_place import PLACEMENT_CONTRACT_VERSION, PlaceRequest, PlaceRes
 from src.serialization import (
     all_finite,
     hydrate,
-    hydrate_arms,
-    is_cold,
     require_422,
 )
 from src.telemetry import (
-    cold_arms,
-    predict_duration,
-    singular_matrix,
-    tracer,
     update_duration,
 )
 
@@ -257,60 +247,6 @@ async def place(request: Request) -> PlaceResponse:
         res.timings_ms.total,
     )
     return res
-
-
-@app.post("/predict", dependencies=[Depends(require_token)])
-def predict(request: PredictRequest) -> PredictResponse:
-    """Score every arm for every requested day (offline preview, not authoritative).
-
-    Hydrates each arm's ``(A, b)`` once via :func:`hydrate_arms` — a fully
-    empty state is the ridge prior (``A = ridge * I, b = 0``) and scores its
-    exploration bonus — then scores every ``context`` against it with
-    :func:`src.models.linucb.score`.
-    """
-    require_422(
-        math.isfinite(request.alpha) and request.alpha >= 0.0, "alpha must be >= 0"
-    )
-    require_422(
-        math.isfinite(request.ridge) and request.ridge > 0.0, "ridge must be > 0"
-    )
-    for ctx in request.contexts:
-        require_422(all_finite(ctx.x), f"context x for {ctx.day!r} must be finite")
-    for arm in ARM_IDS:
-        st = request.state[arm]
-        require_422(
-            all_finite(st.A) and all_finite(st.b), f"state for {arm} must be finite"
-        )
-
-    d = len(request.contexts[0].x)
-    started = time.perf_counter()
-    arms = hydrate_arms(request.state, d, request.ridge)
-    cold_count = sum(is_cold(request.state.get(arm)) for arm in ARM_IDS)
-
-    with tracer.start_as_current_span(
-        "linucb.score_all",
-        attributes={
-            "linucb.days": len(request.contexts),
-            "linucb.dim": d,
-            "linucb.cold_arms": cold_count,
-        },
-    ):
-        scores: dict[str, dict[ArmId, float]] = {}
-        for ctx in request.contexts:
-            x: np.ndarray = np.asarray(ctx.x, dtype=np.float64)
-            row: dict[ArmId, float] = {}
-            for arm in ARM_IDS:
-                params = arms[arm]
-                try:
-                    row[arm] = float(score(params.A, params.b, x, request.alpha))
-                except np.linalg.LinAlgError:
-                    singular_matrix.add(1, {"op": "predict"})
-                    raise
-            scores[ctx.day] = row
-
-    predict_duration.record(time.perf_counter() - started)
-    cold_arms.record(cold_count)
-    return PredictResponse(scores=scores)
 
 
 @app.post("/v1/update", dependencies=[Depends(require_token)])

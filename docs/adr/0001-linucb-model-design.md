@@ -144,7 +144,7 @@ model BanditArmState {
 ```
 
 The Python bandit service (`services/bandit/`) is **stateless**: the NestJS backend loads
-the 6 arms' `(A, b)` from this table, passes them in each `/predict` / `/update` payload,
+the 6 arms' `(A, b)` from this table, passes them in each `/v1/place` / `/v1/update` payload,
 and persists the `(A, b)` the service returns. Rows are lazily created at the ridge prior
 on first use.
 
@@ -181,8 +181,8 @@ penalty.
 LinUCB is queried **once per candidate day**, not per 15-minute slot. For a `TASK` with
 deadline `dl`:
 
-1. For each candidate day `d ∈ [next_15min(now), dl]`, build `x` (§5) and call `/predict`
-   → `score(d, arm)` for all 6 arms.
+1. For each candidate day `d ∈ [next_15min(now), dl]`, build `x` (§5) and score all 6 arms
+   in-process (`/v1/place`, ADR-0003) → `score(d, arm)`.
 2. Generate 15-minute-aligned candidate start times, filter to those that are **fully
    empty** and satisfy the hard constraints (§8.1).
 3. Score each surviving slot in a single pass:
@@ -281,7 +281,7 @@ delayed reward: MOVE (graded, first move only) / RETAINED (+1) → /update → B
 
 The design prioritizes simple state, reusable arms, fast personalization, schedule
 stability, and a focused evaluation. Pure scoring math lives in
-`backend/src/scheduler/core/*`; the `/predict` / `/update` calls, `SlotProposal` writes and
+`backend/src/scheduler/core/*`; the `/v1/place` / `/v1/update` calls, `SlotProposal` writes and
 `BanditArmState` persistence live in `backend/src/scheduler/io/*` and `backend/src/bandit/*`.
 
 ---
@@ -307,7 +307,7 @@ new user was proposed 00:00 (EARLY_MORNING first). A bigger nudge would make Lin
          + STABILITY_WEIGHT * stabilityScore(prevStart, slot)
    ```
 
-   - `armScore[day]` is the `/predict` output for the day the slot starts on.
+   - `armScore[day]` is the arm's LinUCB score for the day the slot starts on.
    - `selectedArm` (the arm a delayed `/update` reward is credited to) stays the arm containing the start.
    - Arm/hour overlap uses per-day wall-clock offsets (exact on 24h days; DST days use the Intl `overlapRate`).
 
@@ -318,7 +318,7 @@ new user was proposed 00:00 (EARLY_MORNING first). A bigger nudge would make Lin
    heuristic stays preference-only (no arm term), so the A/B keeps two distinct policies.
 3. **Exact ties**: `TIE_BREAK_ARM_ORDER` (MORNING, AFTERNOON, EVENING, EARLY_MORNING, NIGHT) on the
    start's arm, then earlier start. Deterministic, never favours 00:00.
-4. `PREFERENCE_NUDGE_WEIGHT` is unused by the scan (deleted 2026-09-23). The `/predict` / `/update`
+4. `PREFERENCE_NUDGE_WEIGHT` is unused by the scan (deleted 2026-09-23). The `/update`
    contract is unchanged.
 5. `MAX_SCAN_DAYS` stays 60 (it normalizes the context vector). Single-task placement scans at most
    `SCAN_CAP_DAYS = 30` days. One range query loads all day loads for a scan.

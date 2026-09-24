@@ -21,7 +21,9 @@ from src.core.constants import (
 from src.core.linucb_best_slot import best_linucb_slot, days_from_dicts
 from src.core.preference import default_preference_matrix
 from src.core.slot import add_days_str, local_date_str, local_midnight_ms
-from src.schemas import ARM_IDS
+from src.models.linucb import score as linucb_score
+from src.schemas import ARM_IDS, ArmState
+from src.serialization import hydrate_arms
 
 client = TestClient(app)
 
@@ -206,9 +208,9 @@ def test_linucb_without_bandit_state_falls_back_to_heuristic() -> None:
     assert r["heuristic"] is not None and r["outcome"] == "PLACED"
 
 
-def test_in_process_arm_scores_match_predict_endpoint() -> None:
-    """The slot picked by /v1/place equals best_linucb_slot over the scores the
-    separate /predict endpoint returns for the same context vectors."""
+def test_in_process_arm_scores_match_the_core() -> None:
+    """The slot picked by /v1/place equals best_linucb_slot over arm scores
+    computed directly from the model core for the same context vector."""
     state = warm_state()
     body = make_req(
         members=[member(policy="LINUCB", dur=90)],
@@ -220,18 +222,10 @@ def test_in_process_arm_scores_match_predict_endpoint() -> None:
     )
     r = ok(body)["results"][0]
     vec = r["linucb"]["featureVector"]
-    # every day gets its own vector; rebuild them via the same builder through the
-    # response of the first day is not possible, so use the picked day's vector
-    # and check its scores against /predict.
-    pred = client.post(
-        "/predict",
-        json={
-            "alpha": 0.15,
-            "ridge": 1.0,
-            "state": state,
-            "contexts": [{"day": "picked", "x": vec}],
-        },
-    ).json()["scores"]["picked"]
+    arms = hydrate_arms({a: ArmState(**state[a]) for a in ARM_IDS}, FEATURE_DIM, 1.0)
+    pred = {
+        a: float(linucb_score(p.A, p.b, np.asarray(vec), 0.15)) for a, p in arms.items()
+    }
     # Recompute the pick with the core: days lacking the picked day's vector are
     # not needed, restrict to the picked day only.
     start = r["linucb"]["startMs"]
@@ -468,21 +462,21 @@ def test_bearer_auth(monkeypatch: pytest.MonkeyPatch) -> None:
     assert post(body, headers={"authorization": "Bearer s3cret"}).status_code == 200
     assert post(body, headers={"authorization": "Bearer old"}).status_code == 200
     # every model route is protected, probes are not
-    assert client.post("/predict", json={}).status_code == 401
     assert client.post("/v1/update", json={}).status_code == 401
     assert client.get("/health").status_code == 200
     assert client.get("/ready").status_code == 200
 
 
-def test_predict_and_update_unchanged_without_token() -> None:
+def test_update_open_without_token() -> None:
     r = client.post(
-        "/predict",
+        "/v1/update",
         json={
-            "alpha": 0.15,
             "ridge": 1.0,
-            "state": {a: {"A": [], "b": []} for a in warm_state()},
-            "contexts": [{"day": "d", "x": [0.0] * 4}],
+            "arm": "MORNING",
+            "x": [0.0] * FEATURE_DIM,
+            "reward": 1.0,
+            "state": {"A": [], "b": []},
         },
     )
     assert r.status_code == 200
-    assert r.json()["scores"]["d"]["MORNING"] == 0.0
+    assert len(r.json()["A"]) == FEATURE_DIM * FEATURE_DIM

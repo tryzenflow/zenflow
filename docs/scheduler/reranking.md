@@ -48,8 +48,8 @@ For every candidate day `d` from the next 15-minute boundary through the deadlin
 d ∈ [next_15min(now), dl_s]
 ```
 
-build the LinUCB context vector for `(s, d)` (ADR-0001 §5, `d = 7`) and call `/predict`
-to score all six arms:
+build the LinUCB context vector for `(s, d)` (ADR-0001 §5, `d = 7`) and score all six arms
+(in-process, `/v1/place`):
 
 ```text
 EARLY_MORNING = [00:00, 06:00)

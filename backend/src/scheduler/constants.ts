@@ -42,7 +42,7 @@ export const MIN = 60_000;
  *
  * `STABILITY_WEIGHT` caps the term's maximum contribution to the total
  * score. It has to stay well under the scale of the terms it sits beside:
- * LinUCB's own arm-score term is a weighted blend of `/predict` outputs
+ * LinUCB's own arm-score term is a weighted blend of per-arm scores
  * whose inputs (context features, rewards) are all clamped to `[-1, 1]`
  * (`docs/adr/0001-linucb-model-design.md` §4/§5), plus a bounded UCB
  * exploration bonus (`BANDIT_ALPHA · √(xᵀA⁻¹x)`) — so it typically lands in
@@ -76,7 +76,7 @@ export const SESSION_RETAINED_REWARD = 1.0;
  * (`docs/adr/0001-linucb-model-design.md` §10). `BANDIT_ALPHA` is the
  * exploration coefficient on `α·√(xᵀA⁻¹x)`; `BANDIT_RIDGE` is the ridge `λ`
  * (`A = λI` at cold start). Both are sent to the Python bandit service in every
- * `/predict` / `/update` payload.
+ * `/v1/place` / `/v1/update` payload.
  */
 export const BANDIT_ALPHA = 0.15;
 export const BANDIT_RIDGE = 1.0;
@@ -90,7 +90,6 @@ export const MOVE_REWARD_SCALE_MINUTES = 240;
 
 /** Stamped on `SlotProposal.modelVersion` for LinUCB proposals. */
 export const BANDIT_MODEL_VERSION = "linucb-d7-v0";
-
 
 /** `SlotProposal.experimentId` for the heuristic-vs-LinUCB A/B experiment. */
 export const BANDIT_EXPERIMENT_ID = "linucb-heuristic-v1";

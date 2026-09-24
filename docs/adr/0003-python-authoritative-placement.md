@@ -49,8 +49,7 @@ placement wire types).
   copies the fallback needs. The response returns `paramsVersion` (hash of the constants),
   stored in `SlotProposal.modelVersion`.
 
-`/update` is unchanged. `/predict` stays for the offline evaluator during rollout, then is
-deprecated (not deleted) after phase 6.
+`/update` is unchanged. `/predict` was removed on 2026-09-24 (unused since phase 6).
 
 ### 2.2 Stays in Nest
 
@@ -369,7 +368,7 @@ one versioned model (`paramsVersion`) for the A/B experiment.
 - The frozen fallback can drift from the Python heuristic (accepted; the golden pins the freeze).
 
 **Follow-ups:** move matrix reinforcement/decay to Python if the matrix becomes learned;
-deprecate `/predict`; breaker state is per-process (fine at current scale).
+breaker state is per-process (fine at current scale).
 
 ## 9. Benchmark plan (not built now)
 
