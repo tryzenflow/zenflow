@@ -23,7 +23,10 @@ const logger = new Logger("RedisModule");
  * so no session middleware ever touches `REDIS_CLIENT` either), keeping
  * unit/e2e tests Docker-free.
  */
-function createRedisClient(configService: ConfigService, urlKey: string): Redis {
+function createRedisClient(
+  configService: ConfigService,
+  urlKey: string,
+): Redis {
   const isTest = configService.get<string>("NODE_ENV") === "test";
   const client = new Redis(configService.get<string>(urlKey)!, {
     lazyConnect: isTest,
