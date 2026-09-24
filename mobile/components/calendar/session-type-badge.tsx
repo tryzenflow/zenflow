@@ -67,7 +67,7 @@ export function SessionTypeBadge({
       {showLabel && (
         <Text
           className={cn(
-            "text-[10px] font-semibold leading-none",
+            "text-[10px] font-semibold leading-[13px]",
             meta.textClass,
           )}
         >

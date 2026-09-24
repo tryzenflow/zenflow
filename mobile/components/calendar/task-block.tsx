@@ -1,5 +1,6 @@
 import { AlertTriangle, Clock, MapPin } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
+import { NAV_THEME } from "@/lib/constants";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
 import { differenceInCalendarDays } from "date-fns";
@@ -18,7 +19,7 @@ import * as Haptics from "expo-haptics";
 import { memo, useCallback, useEffect, useState } from "react";
 import { View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Svg, { Defs, Path, Pattern, Rect } from "react-native-svg";
+import Svg, { Path } from "react-native-svg";
 import Animated, {
   Easing,
   useAnimatedReaction,
@@ -32,6 +33,18 @@ import Animated, {
   type SharedValue,
 } from "react-native-reanimated";
 import { SessionTypeBadge, sessionTypeIcon } from "./session-type-badge";
+
+/** Gap (px) between the DND hatch's diagonal lines. */
+const HATCH_SPACING = 7;
+
+/** One SVG path of parallel 45° lines covering a `width`×`height` box. */
+function hatchPath(width: number, height: number, spacing: number): string {
+  const parts: string[] = [];
+  for (let x = -height; x < width; x += spacing) {
+    parts.push(`M${x},${height}L${x + height},0`);
+  }
+  return parts.join("");
+}
 
 const TAGS_MIN_DURATION = 45;
 
@@ -143,6 +156,8 @@ interface SessionBlockProps {
   layout: BlockLayout;
   tz: string;
   totalHeight: number;
+  /** Left edge (px) within the day column — `DayTimeline` cascades
+   * overlapping blocks by shifting later columns right. */
   leftOffset: number;
   blockWidth: number;
   deadline?: string | null;
@@ -210,7 +225,7 @@ function SessionBlockImpl({
   bottomInset = 0,
   flash = false,
 }: SessionBlockProps) {
-  const { height: screenHeight } = useWindowDimensions();
+  const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const { isDarkColorScheme } = useColorScheme();
   const startMin = minutesOfDayLocal(segment.start, tz);
   const rawEndMin = minutesOfDayLocal(segment.end, tz);
@@ -238,7 +253,7 @@ function SessionBlockImpl({
   const typeBadgeIconOnly = duration <= TAGS_MIN_DURATION;
 
   // Overlapping blocks render in their normal type colour — no conflict state,
-  // no annotation. `layout` still lays them out side-by-side in columns.
+  // no annotation. `layout` still cascades them (see `DayTimeline`).
   const state = segment.state;
   const isSplit = Boolean(segment.continued);
   // Any whole (non-split) block can be dragged/long-pressed into "Move
@@ -404,12 +419,20 @@ function SessionBlockImpl({
     }),
   }));
 
+  // A session nested inside another block's range stacks on top of it,
+  // inset down-and-right (mirrors the web's `scheduled-block-item.tsx`).
+  const isNested = Boolean(layout.nested);
+  const nestOffset = isNested ? 6 + (layout.nestIndex ?? 0) * 6 : 0;
+  // Drawn over another block: needs an opaque backing + shadow.
+  const cascadeLayer = Math.min(layout.column, 9);
+  const isStacked = isNested || cascadeLayer > 0;
+
   const wrapperStyle = useAnimatedStyle(() => {
     const effectiveStart =
       pinnedStartMin.value != null ? pinnedStartMin.value : startMin;
     return {
-      top: (effectiveStart / DAILY_HORIZON) * totalHeight,
-      zIndex: isDragging.value ? 30 : 10,
+      top: (effectiveStart / DAILY_HORIZON) * totalHeight + nestOffset,
+      zIndex: isDragging.value ? 40 : isNested ? 30 : 10 + cascadeLayer,
     };
   });
 
@@ -647,12 +670,10 @@ function SessionBlockImpl({
     // teleport.
     flashing ? "ring-2 ring-amber-400" : "ring-1 ring-amber-500/40",
   );
-  // Diagonal hatch fill for DND blocks (mirrors `.hatch-dnd` in
-  // mockups/day-view.html). SVG `<Pattern>` id must be unique per block or a
-  // second DND block on screen re-uses the first's (empty) def — and it has to
-  // be a clean token, since `segmentId` can carry `::`/`:` from a recurring
-  // occurrence id, which breaks a `url(#…)` reference.
-  const dndHatchId = `dnd-hatch-${segment.segmentId.replace(/[^a-zA-Z0-9]/g, "")}`;
+  // DND diagonal hatch (`.hatch-dnd` in mockups/day-view.html). Explicit line
+  // segments: an SVG `<Pattern>` clipped its 1px stroke at the tile edge.
+  const dndHatchPath =
+    state === "dnd" ? hatchPath(screenWidth, height, HATCH_SPACING) : "";
   const dndHatchStroke = isDarkColorScheme
     ? "rgb(148,163,184)" // slate-400
     : "rgb(100,116,139)"; // slate-500
@@ -660,25 +681,38 @@ function SessionBlockImpl({
     late && state !== "dnd"
       ? "border border-l-red-500 border-red-500/60 bg-red-500/15 dark:bg-red-500/20"
       : state === "dnd"
-      ? `${borderChrome} border-l-slate-400 [border-left-style:dashed] bg-slate-500/[0.07] dark:bg-slate-400/10`
-      : state === "assignment"
-        ? `${borderChrome} border-l-teal-500 bg-teal-50/50 dark:bg-teal-950/20`
-        : state === "exam"
-          ? `${borderChrome} border-l-rose-500 bg-rose-50/50 dark:bg-rose-950/20`
-          : state === "lecture"
-            ? `${borderChrome} border-l-sky-500 bg-sky-50/50 dark:bg-sky-950/20`
-            : `${borderChrome} border-l-primary glass-task`;
+        ? `${borderChrome} border-l-slate-400 [border-left-style:dashed] bg-slate-500/[0.07] dark:bg-slate-400/10`
+        : state === "assignment"
+          ? `${borderChrome} border-l-teal-500 bg-teal-50/50 dark:bg-teal-950/20`
+          : state === "exam"
+            ? `${borderChrome} border-l-rose-500 bg-rose-50/50 dark:bg-rose-950/20`
+            : state === "lecture"
+              ? `${borderChrome} border-l-sky-500 bg-sky-50/50 dark:bg-sky-950/20`
+              : `${borderChrome} border-l-primary glass-task`;
 
-  const isMultiColumn = layout.columns > 1;
+  const horizontal = {
+    left: leftOffset + nestOffset,
+    width: blockWidth - nestOffset,
+  };
 
   return (
     <Animated.View
-      className={cn("absolute", !isMultiColumn && "left-1.5 right-1.5")}
+      className="absolute"
       style={[
         wrapperStyle,
-        isMultiColumn
-          ? { left: leftOffset, width: blockWidth, height }
-          : { height },
+        { ...horizontal, height },
+        isStacked && {
+          borderRadius: 10,
+          backgroundColor: (isDarkColorScheme
+            ? NAV_THEME.dark
+            : NAV_THEME.light
+          ).background,
+          shadowColor: "#000",
+          shadowOpacity: isDarkColorScheme ? 0.5 : 0.18,
+          shadowRadius: 6,
+          shadowOffset: { width: 0, height: 3 },
+          elevation: 6,
+        },
       ]}
     >
       {isDraggingJS && (
@@ -718,28 +752,11 @@ function SessionBlockImpl({
           {state === "dnd" && (
             <View pointerEvents="none" className="absolute inset-0">
               <Svg width="100%" height="100%">
-                <Defs>
-                  <Pattern
-                    id={dndHatchId}
-                    patternUnits="userSpaceOnUse"
-                    width={7}
-                    height={7}
-                    patternTransform="rotate(45)"
-                  >
-                    <Path
-                      d="M0,0 V7"
-                      stroke={dndHatchStroke}
-                      strokeWidth={1}
-                      strokeOpacity={0.3}
-                    />
-                  </Pattern>
-                </Defs>
-                <Rect
-                  x={0}
-                  y={0}
-                  width="100%"
-                  height="100%"
-                  fill={`url(#${dndHatchId})`}
+                <Path
+                  d={dndHatchPath}
+                  stroke={dndHatchStroke}
+                  strokeWidth={1}
+                  strokeOpacity={isDarkColorScheme ? 0.26 : 0.22}
                 />
               </Svg>
             </View>
@@ -791,7 +808,7 @@ function SessionBlockImpl({
                   />
                 )}
                 <Text
-                  className="min-w-0 flex-1 text-sm font-semibold leading-none"
+                  className="min-w-0 flex-1 text-[12px] font-semibold leading-5"
                   numberOfLines={1}
                   ellipsizeMode="tail"
                 >
@@ -799,7 +816,7 @@ function SessionBlockImpl({
                 </Text>
               </View>
               <View className="flex-row flex-wrap items-center gap-1">
-                <Text className="text-[10px] text-muted-foreground leading-none">
+                <Text className="text-[10px] leading-[12px] text-muted-foreground">
                   {segment.continued
                     ? `cont. → ${fmt(segment.taskEnd, tz)}`
                     : segment.continues && !drawsThrough

@@ -144,7 +144,7 @@ export function MonthPage({
 
   const pageRef = useRef<View>(null);
   const gridRef = useRef<View>(null);
-  const gridRectRef = useRef({ x: 0, y: 0, width: 0, rows: 0 });
+  const gridRectRef = useRef({ x: 0, y: 0, width: 0, height: 0, rows: 0 });
   const lastHighlightRef = useRef<string | null>(null);
   // The dragged pill's origin day key, read inside the pan callbacks — a ref
   // rather than `dragging.fromKey` so `onUpdate` can't observe a stale
@@ -252,8 +252,14 @@ export function MonthPage({
       pageOffX.value = x;
       pageOffY.value = y;
     });
-    gridRef.current?.measureInWindow((x, y, width) => {
-      gridRectRef.current = { x, y, width, rows: Math.ceil(days.length / 7) };
+    gridRef.current?.measureInWindow((x, y, width, height) => {
+      gridRectRef.current = {
+        x,
+        y,
+        width,
+        height,
+        rows: Math.ceil(days.length / 7),
+      };
     });
   }, [days.length, pageOffX, pageOffY]);
 
@@ -286,11 +292,14 @@ export function MonthPage({
     absoluteX: number,
     absoluteY: number,
   ): Date | null {
-    const { x, y, width, rows } = gridRectRef.current;
-    if (width === 0) return null;
+    const { x, y, width, height, rows } = gridRectRef.current;
+    if (width === 0 || rows === 0) return null;
     const cellWidth = width / 7;
+    // Rows shrink to fit small screens, so use the measured height, not
+    // `CELL_HEIGHT`.
+    const rowHeight = height > 0 ? height / rows : CELL_HEIGHT;
     const col = Math.floor((absoluteX - x) / cellWidth);
-    const row = Math.floor((absoluteY - y) / CELL_HEIGHT);
+    const row = Math.floor((absoluteY - y) / rowHeight);
     if (col < 0 || col > 6 || row < 0 || row >= rows) return null;
     return days[row * 7 + col] ?? null;
   }

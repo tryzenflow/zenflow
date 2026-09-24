@@ -184,9 +184,8 @@ export default function MonthScreen() {
         </View>
       </View>
 
-      {/* The grid's rows are a fixed `CELL_HEIGHT`, so anything the tab bar
-          eats comes off the last week rather than shrinking the cells —
-          pad by exactly the bar's opaque height and no more. */}
+      {/* Pad by exactly the bar's height: the grid's rows shrink to fit what's
+          left (see `CELL_HEIGHT`), so every week stays above the bar. */}
       <View className="flex-1" style={{ paddingBottom: tabBarOverlay }}>
         <MonthPager
           monthDate={monthDate}

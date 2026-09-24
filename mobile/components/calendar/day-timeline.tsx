@@ -38,7 +38,6 @@ import {
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
-  RefreshControl,
   ScrollView,
   View,
   useWindowDimensions,
@@ -57,6 +56,13 @@ import type {
   PendingSessionUpdate,
   UpdateRecurringScope,
 } from "./update-recurring-sheet";
+
+/** Inset (px) of every block from the day column's edges. */
+const BLOCK_GUTTER = 4;
+/** Each overlapping (cascaded) block shifts right by this share of the day
+ * column's width, capped at {@link CASCADE_MAX_STEP} px. */
+const CASCADE_STEP_RATIO = 0.14;
+const CASCADE_MAX_STEP = 44;
 
 const GUTTER_WIDTH = 64;
 const HOUR_HEIGHT_DEFAULT = 64;
@@ -200,7 +206,6 @@ export function DayTimeline({
     () => getCachedDaySessions(dayKey) == null,
   );
   const [error, setError] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   // Bumped by `subscribeToSessionMutations` so a mutation that lands while
   // this day is already mounted and foregrounded (e.g. a background sync's
   // create/update/remove reported over the notifications SSE stream)
@@ -236,7 +241,7 @@ export function DayTimeline({
     // cached for this day. A warm day (screen focus, implicit day-reschedule
     // after a create/edit, paging back to a visited day) updates `tasks` in
     // place — the timeline stays mounted so derived rendering doesn't flicker
-    // off. Pull-to-refresh has its own `RefreshControl` signal.
+    // off.
     const cached = getCachedDaySessions(dayKey);
     if (cached == null) setLoading(true);
 
@@ -315,15 +320,6 @@ export function DayTimeline({
       setError(true);
     }
   }, [date]);
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      await refetch();
-    } finally {
-      setRefreshing(false);
-    }
-  }, [refetch]);
 
   const segments = useMemo(() => {
     const blocks = tasksToBlocks(tasks);
@@ -759,9 +755,9 @@ export function DayTimeline({
         onLayout={handleTimelineLayout}
         onScroll={handleScroll}
         scrollEventThrottle={16}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
+        // No pull-to-refresh: on Android its native wrapper pushed the grid
+        // ~6px below the Week header, and the screen already refetches on
+        // every focus.
         contentContainerClassName={
           error ? "flex-1 items-center justify-center px-8" : undefined
         }
@@ -862,8 +858,19 @@ export function DayTimeline({
                     columns: 1,
                     conflict: false,
                   };
-                  const blockWidthPx = contentWidth / blockLayout.columns;
-                  const leftOffsetPx = blockLayout.column * blockWidthPx;
+                  // Overlapping sessions cascade instead of splitting into
+                  // narrow side-by-side columns: each later column is drawn
+                  // on top, full width minus a left offset, so every card
+                  // keeps a readable width and the ones beneath still peek
+                  // out on the left. 6px gutters match `left-1.5 right-1.5`.
+                  const cascadeStep = Math.min(
+                    CASCADE_MAX_STEP,
+                    contentWidth * CASCADE_STEP_RATIO,
+                  );
+                  const leftOffsetPx =
+                    BLOCK_GUTTER + blockLayout.column * cascadeStep;
+                  const blockWidthPx =
+                    contentWidth - BLOCK_GUTTER - leftOffsetPx;
 
                   return (
                     <SessionBlock
@@ -881,9 +888,7 @@ export function DayTimeline({
                       onPress={onSessionPress}
                       onRequestReschedule={handleRequestReschedule}
                       onLongPressMenu={
-                        onRequestBlockMenu
-                          ? handleRequestBlockMenu
-                          : undefined
+                        onRequestBlockMenu ? handleRequestBlockMenu : undefined
                       }
                       autoScrollDeltaSV={
                         !segment.continued ? autoScrollDeltaSV : undefined
