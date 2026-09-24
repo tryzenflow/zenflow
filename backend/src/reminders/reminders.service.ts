@@ -116,21 +116,34 @@ export class RemindersService implements OnApplicationBootstrap {
     }
   }
 
-  /** Replace the reminders of every session in `sessionIds` with `minutes`. */
+  /**
+   * Set the reminders of every session in `sessionIds` to `minutes` as a
+   * diff, keeping unchanged rows (and their `firedForStart`).
+   */
   async replace(sessionIds: string[], minutes: number[]): Promise<void> {
     if (sessionIds.length === 0) return;
+    const wanted = new Set(minutes);
+    const existing = await this.prisma.sessionReminder.findMany({
+      where: { sessionId: { in: sessionIds } },
+      select: { id: true, sessionId: true, remindBeforeMinutes: true },
+    });
+    const stale = existing.filter((r) => !wanted.has(r.remindBeforeMinutes));
+    const kept = new Set(
+      existing
+        .filter((r) => wanted.has(r.remindBeforeMinutes))
+        .map((r) => `${r.sessionId}:${r.remindBeforeMinutes}`),
+    );
+    const missing = sessionIds.flatMap((sessionId) =>
+      minutes
+        .filter((m) => !kept.has(`${sessionId}:${m}`))
+        .map((remindBeforeMinutes) => ({ sessionId, remindBeforeMinutes })),
+    );
+    if (stale.length === 0 && missing.length === 0) return;
     await this.prisma.$transaction([
       this.prisma.sessionReminder.deleteMany({
-        where: { sessionId: { in: sessionIds } },
+        where: { id: { in: stale.map((r) => r.id) } },
       }),
-      this.prisma.sessionReminder.createMany({
-        data: sessionIds.flatMap((sessionId) =>
-          minutes.map((remindBeforeMinutes) => ({
-            sessionId,
-            remindBeforeMinutes,
-          })),
-        ),
-      }),
+      this.prisma.sessionReminder.createMany({ data: missing }),
     ]);
   }
 

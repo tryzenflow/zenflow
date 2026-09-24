@@ -21,16 +21,24 @@
  * Derived from {@link NotificationDto.eventName} by {@link notificationEventKind}
  * rather than stored separately, so there is exactly one field to keep in sync.
  */
-export type NotificationEventKind = "CREATED" | "UPDATED" | "REMOVED" | "CONFLICT";
+export type NotificationEventKind =
+  | "CREATED"
+  | "UPDATED"
+  | "REMOVED"
+  | "CONFLICT"
+  | "REMINDER";
 
 /**
  * Classify a notification's {@link NotificationDto.eventName} without
  * pattern-matching the free-text `title`/`content`. Every event name is
- * either `"sync_conflict.<thing>"` (a conflict) or `"<thing>.<created|
- * updated|removed>"` / `"<thing>.group_<created|updated|removed>"`.
+ * `"sync_conflict.<thing>"` (a conflict), `"reminder.<…>"` (a reminder
+ * nudge), or `"<thing>.<created|updated|removed>"` /
+ * `"<thing>.group_<created|updated|removed>"`.
  */
 export function notificationEventKind(eventName: string): NotificationEventKind {
   if (eventName.startsWith("sync_conflict.")) return "CONFLICT";
+  // A reminder nudge ("reminder.fired") reports no change to any session.
+  if (eventName.startsWith("reminder.")) return "REMINDER";
   if (eventName.endsWith("created")) return "CREATED";
   if (eventName.endsWith("updated")) return "UPDATED";
   if (eventName.endsWith("removed")) return "REMOVED";
