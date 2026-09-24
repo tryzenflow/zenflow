@@ -27,7 +27,7 @@ contexts for a `TASK` — including each member of a `sessionCount > 1` `TASK` s
 
 ## 2. Decision
 
-Use **Disjoint LinUCB** with one model per student, five time-of-day arms, a context vector
+Use **Disjoint LinUCB** with one model per student, six time-of-day arms, a context vector
 shared across arms, ridge regularization (`λ = 1.0`), and online updates from the ADR-0002
 move-or-keep signal.
 
@@ -35,12 +35,13 @@ move-or-keep signal.
 | --------------- | ----------------------------- |
 | `EARLY_MORNING` | `[00:00, 06:00)`              |
 | `MORNING`       | `[06:00, 11:00)`              |
-| `AFTERNOON`     | `[11:00, 17:00)`              |
+| `MIDDAY`        | `[11:00, 14:00)`              |
+| `AFTERNOON`     | `[14:00, 17:00)`              |
 | `EVENING`       | `[17:00, 20:00)`              |
 | `NIGHT`         | `[20:00, 24:00)`              |
 
 Boundaries are **half-open, lower-inclusive**: a session starting exactly at 17:00 is
-`EVENING`. These five strings are the canonical arm identifiers for the API contract
+`EVENING`. These six strings are the canonical arm identifiers for the API contract
 (`SchedulingArm` in `@zenflow/shared`).
 
 LinUCB scores each `(candidate_day, arm)` pair; the scheduler then maps the scores to a
@@ -61,8 +62,8 @@ identically.
 ## 4. Why not timestamp or 35-arm models?
 
 ISO timestamps are too specific and create a large arm space. A day-of-week × time-of-day
-model would create 35 arms and spread limited observations too thin. The design uses **5
-time-of-day arms + day of week as context** for faster learning and better cold-start
+model would create 35 arms and spread limited observations too thin. The design uses **6
+time-of-day arms + weekend as context** for faster learning and better cold-start
 behavior. Finer granularity can be added later if evaluation justifies it.
 
 ---
@@ -70,10 +71,10 @@ behavior. Finer granularity can be added later if evaluation justifies it.
 ## 5. Context and feature vector
 
 For each candidate day between `next_15min(now)` and the task deadline, Zenflow builds one
-context vector `x` and scores it against each of the 5 arms:
+context vector `x` and scores it against each of the 6 arms:
 
 ```text
-(task, candidate_day) → x  →  LinUCB scores all 5 arms  →  reranking.md maps to a timestamp
+(task, candidate_day) → x  →  LinUCB scores all 6 arms  →  reranking.md maps to a timestamp
 ```
 
 The arm is **not** duplicated in the context (disjoint LinUCB keeps a separate model per
@@ -118,6 +119,7 @@ student's arm models are updated independently.
 student
 ├── EARLY_MORNING → A, b
 ├── MORNING       → A, b
+├── MIDDAY        → A, b
 ├── AFTERNOON     → A, b
 ├── EVENING       → A, b
 └── NIGHT         → A, b
@@ -142,7 +144,7 @@ model BanditArmState {
 ```
 
 The Python bandit service (`services/bandit/`) is **stateless**: the NestJS backend loads
-the 5 arms' `(A, b)` from this table, passes them in each `/predict` / `/update` payload,
+the 6 arms' `(A, b)` from this table, passes them in each `/predict` / `/update` payload,
 and persists the `(A, b)` the service returns. Rows are lazily created at the ridge prior
 on first use.
 
@@ -180,7 +182,7 @@ LinUCB is queried **once per candidate day**, not per 15-minute slot. For a `TAS
 deadline `dl`:
 
 1. For each candidate day `d ∈ [next_15min(now), dl]`, build `x` (§5) and call `/predict`
-   → `score(d, arm)` for all 5 arms.
+   → `score(d, arm)` for all 6 arms.
 2. Generate 15-minute-aligned candidate start times, filter to those that are **fully
    empty** and satisfy the hard constraints (§8.1).
 3. Score each surviving slot in a single pass:
@@ -198,7 +200,7 @@ session (or the one series member being placed).
 
 ### 8.1 Hard constraints
 
-Applied only in step 2 (arm → concrete slot). LinUCB itself scores all 5 arms
+Applied only in step 2 (arm → concrete slot). LinUCB itself scores all 6 arms
 unconstrained.
 
 1. `start ≥ next_15min(now)`
@@ -345,13 +347,15 @@ Replaces §5.1's d = 22, the "cold arm scores 0" rule, and the preference-matrix
   - Dropped: `semester_phase` (always 0), the weekday one-hots (collinear with the bias), and
     per-type hours and counts (overlapping, mostly 0).
   - Stored d = 22 arm state must be cleared before deploy (`BANDIT_MODEL_VERSION = "linucb-d7-v0"`).
-  - Delayed rewards for d = 22 proposals are dropped (`BANDIT_FEATURE_DIM`).
+  - Delayed rewards for d = 22 proposals are dropped (`FEATURE_DIM` in `@zenflow/shared`).
 - **No preference matrix in LinUCB.** Inside the winning band, the start closest to the band's
   centre wins: a fixed rule that learns nothing. This keeps the A/B as pure LinUCB vs the pure
   heuristic.
 - **Evidence:** `services/bandit/tests/test_learning.py` runs the real place → reward → update loop
   against simulated users.
-  - A fixed band is found in ≤ 4 placements and then held.
+  - A fixed band is found in ≤ 5 placements and then held.
   - A weekday/weekend split is learned by the 3rd weekend.
-- **Deferred until prod data points to them:** hybrid LinUCB, a matrix-seeded prior, splitting
-  AFTERNOON.
+- **AFTERNOON [11:00, 17:00) split into MIDDAY [11:00, 14:00) + AFTERNOON [14:00, 17:00).**
+  Each task goes to its band's centre, so a 6 h band could only offer 13:30. The split adds one
+  exploration step for a new user (a fixed band is now found in ≤ 5 placements).
+- **Deferred until prod data points to them:** hybrid LinUCB, a matrix-seeded prior.

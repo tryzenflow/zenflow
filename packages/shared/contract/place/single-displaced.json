@@ -277,12 +277,12 @@
       }
     ],
     "timingsMs": {
-      "decode": 0.082,
+      "decode": 0.206,
       "context": 0.0,
       "predict": 0.0,
-      "scan": 0.039,
-      "displace": 0.147,
-      "total": 0.328
+      "scan": 0.079,
+      "displace": 0.297,
+      "total": 0.713
     }
   }
 }

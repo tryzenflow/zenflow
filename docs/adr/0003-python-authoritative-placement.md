@@ -453,7 +453,7 @@ erDiagram
   Session ||--o{ SlotProposal : "proposed for"
   Session ||--o{ SessionEvent : logs
   SlotProposal ||--o{ SessionEvent : "credited by"
-  User ||--o{ BanditArmState : "5 arms"
+  User ||--o{ BanditArmState : "6 arms"
   SlotProposal {
     string id PK
     enum primaryPolicy "HEURISTIC or LINUCB"

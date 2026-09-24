@@ -21,6 +21,7 @@ from src.core.constants import (
 from src.core.linucb_best_slot import best_linucb_slot, days_from_dicts
 from src.core.preference import default_preference_matrix
 from src.core.slot import add_days_str, local_date_str, local_midnight_ms
+from src.schemas import ARM_IDS
 
 client = TestClient(app)
 
@@ -98,7 +99,7 @@ def make_req(**kw: Any) -> dict[str, Any]:
 def warm_state(seed: int = 3) -> dict[str, dict[str, list[float]]]:
     rng = np.random.default_rng(seed)
     state: dict[str, dict[str, list[float]]] = {}
-    for arm in ("EARLY_MORNING", "MORNING", "AFTERNOON", "EVENING", "NIGHT"):
+    for arm in ARM_IDS:
         x = rng.normal(size=(40, FEATURE_DIM))
         a = np.eye(FEATURE_DIM) + x.T @ x / 10
         b = rng.normal(size=FEATURE_DIM) * 0.5

@@ -321,6 +321,10 @@
           "A": [],
           "b": []
         },
+        "MIDDAY": {
+          "A": [],
+          "b": []
+        },
         "AFTERNOON": {
           "A": [],
           "b": []
@@ -371,12 +375,12 @@
       }
     ],
     "timingsMs": {
-      "decode": 2.395,
-      "context": 0.053,
-      "predict": 0.255,
-      "scan": 0.468,
+      "decode": 4.948,
+      "context": 0.097,
+      "predict": 0.548,
+      "scan": 1.118,
       "displace": 0.0,
-      "total": 3.424
+      "total": 7.226
     }
   }
 }

@@ -123,7 +123,7 @@ def _hit(log: list[tuple[str, str, float]]) -> list[bool]:
     return [reward == 1.0 for *_, reward in log]
 
 
-@pytest.mark.parametrize("band", ["MORNING", "AFTERNOON", "EVENING", "NIGHT"])
+@pytest.mark.parametrize("band", ["MORNING", "MIDDAY", "AFTERNOON", "EVENING", "NIGHT"])
 def test_learns_a_fixed_preferred_band_fast(band: str) -> None:
     """A user who always wants ``band``: LinUCB must explore, then lock on
     within a handful of events and stay there."""
@@ -132,10 +132,10 @@ def test_learns_a_fixed_preferred_band_fast(band: str) -> None:
     hits = _hit(log)
 
     first_hit = hits.index(True)
-    assert first_hit <= 3, "4 waking bands -> found within 4 placements"
+    assert first_hit <= 4, "5 waking bands -> found within 5 placements"
     assert all(hits[first_hit:]), "once found, a kept band must keep winning"
     # EARLY_MORNING (00:00-06:00) is last in every seeded tie order, so it is
-    # only explored once all 4 waking bands have been rejected.
+    # only explored once all 5 waking bands have been rejected.
     assert "EARLY_MORNING" not in {arm for _, arm, _ in log}
 
 
@@ -144,9 +144,9 @@ def test_a_mild_move_still_pushes_exploration_elsewhere() -> None:
     by an hour (MOVE, reward -0.25) must see each waking band tried in turn.
     With cold arms pinned at 0.0 the first moved arm kept winning on its own
     exploration bonus (score +0.075 > 0) and no other band ever got data."""
-    log = simulate(lambda _wd: "EVENING", episodes=4, fixed_reward=-0.25)
+    log = simulate(lambda _wd: "EVENING", episodes=5, fixed_reward=-0.25)
     tried = [arm for _, arm, _ in log]
-    assert sorted(tried) == ["AFTERNOON", "EVENING", "MORNING", "NIGHT"]
+    assert sorted(tried) == ["AFTERNOON", "EVENING", "MIDDAY", "MORNING", "NIGHT"]
 
 
 def test_learns_a_weekday_vs_weekend_split() -> None:

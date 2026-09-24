@@ -238,7 +238,8 @@ def test_preference_matrix_never_changes_the_linucb_pick() -> None:
     ("arm", "dur", "want_start_min"),
     [
         ("MORNING", 60, 8 * 60),  # [06:00, 11:00) centre 08:30 -> 08:00-09:00
-        ("AFTERNOON", 60, 13 * 60 + 30),  # [11:00, 17:00) centre 14:00
+        ("MIDDAY", 60, 12 * 60),  # [11:00, 14:00) centre 12:30
+        ("AFTERNOON", 60, 15 * 60),  # [14:00, 17:00) centre 15:30
         ("EVENING", 90, 17 * 60 + 45),  # [17:00, 20:00) centre 18:30
         ("NIGHT", 120, 21 * 60),  # [20:00, 24:00) centre 22:00
     ],
@@ -280,4 +281,4 @@ def test_cold_tie_break_is_deterministic_and_spreads_over_waking_bands() -> None
         assert (picks[0].start_ms, picks[0].arm) == (picks[1].start_ms, picks[1].arm)
         assert picks[0].arm == order[0]
         arms.add(picks[0].arm)
-    assert arms == {"MORNING", "AFTERNOON", "EVENING", "NIGHT"}
+    assert arms == {"MORNING", "MIDDAY", "AFTERNOON", "EVENING", "NIGHT"}

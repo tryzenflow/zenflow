@@ -265,12 +265,12 @@
       }
     ],
     "timingsMs": {
-      "decode": 0.069,
+      "decode": 0.16,
       "context": 0.0,
       "predict": 0.0,
-      "scan": 0.026,
-      "displace": 0.155,
-      "total": 0.314
+      "scan": 0.055,
+      "displace": 0.301,
+      "total": 0.62
     }
   }
 }

@@ -12,12 +12,13 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 #: Canonical time-of-day arms (``SchedulingArm`` in ``@zenflow/shared``),
-#: half-open and lower-inclusive: 00-06 / 06-11 / 11-17 / 17-20 / 20-24.
-ArmId = Literal["EARLY_MORNING", "MORNING", "AFTERNOON", "EVENING", "NIGHT"]
+#: half-open and lower-inclusive: 00-06 / 06-11 / 11-14 / 14-17 / 17-20 / 20-24.
+ArmId = Literal["EARLY_MORNING", "MORNING", "MIDDAY", "AFTERNOON", "EVENING", "NIGHT"]
 
 ARM_IDS: tuple[ArmId, ...] = (
     "EARLY_MORNING",
     "MORNING",
+    "MIDDAY",
     "AFTERNOON",
     "EVENING",
     "NIGHT",
@@ -96,7 +97,7 @@ class UpdateRequest(BaseModel):
 
 
 class PredictResponse(BaseModel):
-    #: ``{ day: { arm: score } }`` — always all 5 arms for every requested day.
+    #: ``{ day: { arm: score } }`` — always all 6 arms for every requested day.
     scores: dict[str, dict[ArmId, float]]
 
 

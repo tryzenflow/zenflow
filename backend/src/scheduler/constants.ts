@@ -91,14 +91,6 @@ export const MOVE_REWARD_SCALE_MINUTES = 240;
 /** Stamped on `SlotProposal.modelVersion` for LinUCB proposals. */
 export const BANDIT_MODEL_VERSION = "linucb-d7-v0";
 
-/**
- * Length of the LinUCB context vector (`FEATURE_DIM` in
- * `services/bandit/src/core/constants.py`, which owns the features). Only used
- * to drop delayed rewards for proposals made under an older vector layout
- * (d = 22 before 2026-09-23) — a stale vector folded into a reset (cold) arm
- * would re-create that arm at the old dimension.
- */
-export const BANDIT_FEATURE_DIM = 7;
 
 /** `SlotProposal.experimentId` for the heuristic-vs-LinUCB A/B experiment. */
 export const BANDIT_EXPERIMENT_ID = "linucb-heuristic-v1";

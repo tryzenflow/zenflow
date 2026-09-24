@@ -37,9 +37,14 @@ function make(place: jest.Mock) {
     .fn()
     .mockResolvedValue(
       Object.fromEntries(
-        ["EARLY_MORNING", "MORNING", "AFTERNOON", "EVENING", "NIGHT"].map(
-          (a) => [a, { A: [], b: [], version: 0 }],
-        ),
+        [
+          "EARLY_MORNING",
+          "MORNING",
+          "MIDDAY",
+          "AFTERNOON",
+          "EVENING",
+          "NIGHT",
+        ].map((a) => [a, { A: [], b: [], version: 0 }]),
       ),
     );
   const gw = new PlacementGateway(
@@ -121,7 +126,14 @@ describe("PlacementGateway.buildRequest", () => {
     });
     expect(loadAll).toHaveBeenCalledWith("u1");
     expect(Object.keys(req.bandit?.state ?? {}).sort()).toEqual(
-      ["AFTERNOON", "EARLY_MORNING", "EVENING", "MORNING", "NIGHT"].sort(),
+      [
+        "AFTERNOON",
+        "EARLY_MORNING",
+        "EVENING",
+        "MIDDAY",
+        "MORNING",
+        "NIGHT",
+      ].sort(),
     );
     expect(req.bandit?.alpha).toBeGreaterThan(0);
   });

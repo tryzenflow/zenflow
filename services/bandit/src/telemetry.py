@@ -28,5 +28,5 @@ singular_matrix = _meter.create_counter(
 )
 cold_arms = _meter.create_histogram(
     "bandit.predict.cold_arms",
-    description="How many of the 5 arms were cold (fixed 0.0) on a /predict",
+    description="How many of the 6 arms were cold (ridge prior) on a /predict",
 )

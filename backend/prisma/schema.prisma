@@ -48,11 +48,13 @@ model User {
  * Time-of-day arms for the Disjoint LinUCB scheduler
  * (`docs/adr/0001-linucb-model-design.md` §2). Half-open, lower-inclusive
  * local-wall-clock bands: EARLY_MORNING [00:00,06:00), MORNING [06:00,11:00),
- * AFTERNOON [11:00,17:00), EVENING [17:00,20:00), NIGHT [20:00,24:00).
+ * MIDDAY [11:00,14:00), AFTERNOON [14:00,17:00), EVENING [17:00,20:00),
+ * NIGHT [20:00,24:00).
  */
 enum SchedulingArm {
   EARLY_MORNING
   MORNING
+  MIDDAY
   AFTERNOON
   EVENING
   NIGHT

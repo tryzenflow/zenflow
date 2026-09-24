@@ -13,7 +13,7 @@ import {
   reinforcePreferenceMove,
 } from "../core/preference";
 import { withLockedPreferenceMatrix } from "./preference-matrix-lock";
-import { BANDIT_FEATURE_DIM } from "../constants";
+import { FEATURE_DIM } from "@zenflow/shared";
 
 /** The one `SlotProposal` fields this service ever reads/writes. */
 type LinucbProposal = {
@@ -85,7 +85,7 @@ export class SchedulingFeedbackService {
       if (!proposal?.selectedArm) return;
       // Placed under an older context-vector layout: its vector no longer
       // matches the arm state's dimension, so the reward is dropped.
-      if (proposal.featureVector.length !== BANDIT_FEATURE_DIM) return;
+      if (proposal.featureVector.length !== FEATURE_DIM) return;
 
       await this.pushBanditUpdate(
         userId,

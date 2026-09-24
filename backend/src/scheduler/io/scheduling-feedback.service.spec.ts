@@ -11,7 +11,7 @@ import { SchedulingFeedbackService } from "./scheduling-feedback.service";
  * `sessions.service.spec.ts` used to assert about `applyBanditMoveFeedback`.
  */
 
-const X = [0.1, 0.2, 0.3, -1, 0, 0.25, 1]; // length BANDIT_FEATURE_DIM
+const X = [0.1, 0.2, 0.3, -1, 0, 0.25, 1]; // length FEATURE_DIM
 
 async function makeSvc(over: { proposal?: unknown; updateResult?: unknown }) {
   const slotFindFirst = jest.fn().mockResolvedValue(

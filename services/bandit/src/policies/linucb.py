@@ -66,7 +66,7 @@ class LinucbPolicy:
         Returns
         -------
         dict[ArmId, ndarray of shape (M, N)]
-            All 5 arms, per contract.
+            All 6 arms, per contract.
         """
         m, n, d = x.shape
         flat = x.reshape(m * n, d) if m * n else np.empty((0, d))

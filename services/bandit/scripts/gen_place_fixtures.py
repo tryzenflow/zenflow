@@ -28,7 +28,7 @@ H = 3_600_000
 DAY = 24 * H
 TYPES = ("LECTURE", "ASSIGNMENT", "EXAM", "TASK", "DND")
 ZERO = {t: {"hours": 0, "count": 0} for t in TYPES}
-ARMS = ("EARLY_MORNING", "MORNING", "AFTERNOON", "EVENING", "NIGHT")
+ARMS = ("EARLY_MORNING", "MORNING", "MIDDAY", "AFTERNOON", "EVENING", "NIGHT")
 REQ_ID = "00000000-0000-4000-8000-000000000002"
 
 
@@ -88,7 +88,7 @@ def warm_state() -> dict[str, Any]:
         for i in range(FEATURE_DIM):
             a[i * FEATURE_DIM + i] = 2.0 + 0.1 * i
         b = [0.0] * FEATURE_DIM
-        b[-1] = [0.0, 0.2, 0.9, 0.6, -0.3][k]
+        b[-1] = [0.0, 0.2, 0.7, 0.9, 0.6, -0.3][k]
         out[arm] = {"A": a, "b": b}
     return out
 

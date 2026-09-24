@@ -19,14 +19,15 @@ Experiment: [`docs/scheduler/ab-testing.md`](../../docs/scheduler/ab-testing.md)
 
 ## Design
 
-- **Disjoint LinUCB.** Each of the 5 time-of-day arms keeps its own ridge regression
+- **Disjoint LinUCB.** Each of the 6 time-of-day arms keeps its own ridge regression
   `A = λI + Σ xxᵀ`, `b = Σ r·x` over a context vector shared across arms, scored by
   `θ̂ᵀx + α·√(xᵀA⁻¹x)`. `λ = 1.0`, `α = 0.15` (ADR-0001 §10). `A⁻¹` is cached per arm and
   invalidated on update. The `LinUCB` class is arm-agnostic — arms are created lazily by
   string key at the ridge prior — so the same code serves 3 arms (the offline demo) or 5
   (production).
 - **Canonical arms** (`SchedulingArm` in `@zenflow/shared`), half-open, lower-inclusive:
-  `EARLY_MORNING [00:00,06:00)`, `MORNING [06:00,11:00)`, `AFTERNOON [11:00,17:00)`,
+  `EARLY_MORNING [00:00,06:00)`, `MORNING [06:00,11:00)`, `MIDDAY [11:00,14:00)`,
+  `AFTERNOON [14:00,17:00)`,
   `EVENING [17:00,20:00)`, `NIGHT [20:00,24:00)`.
 - **Context vector, `d = 7`:**
   - deadline days, duration, days from now;
@@ -53,7 +54,7 @@ Experiment: [`docs/scheduler/ab-testing.md`](../../docs/scheduler/ab-testing.md)
 | `GET /health`   | Liveness probe → `{"status":"ok"}`.                                                      |
 | `GET /ready`    | Readiness: numpy import, tz offset-cache warm-up and a self-test placement → `200 {"status":"ready"}` or `503`. Compose healthcheck target. |
 | `POST /v1/place` | **Authoritative placement** (ADR-0003) — see below. |
-| `POST /predict` | Body: `alpha`, `ridge`, `state` (all 5 arms' `(A, b)`, `[]` = cold ridge prior), `contexts` (`[{day, x}]`). Returns `{scores: {day: {arm: score}}}` — all 5 arms for every day. A cold arm scores `α·√(xᵀx/λ)`. |
+| `POST /predict` | Body: `alpha`, `ridge`, `state` (all 6 arms' `(A, b)`, `[]` = cold ridge prior), `contexts` (`[{day, x}]`). Returns `{scores: {day: {arm: score}}}` — all 6 arms for every day. A cold arm scores `α·√(xᵀx/λ)`. |
 | `POST /v1/update`  | Body: `ridge`, `arm`, `x`, `reward`, `state` (that arm's `(A, b)`, `[]` = cold). Returns the new `{A, b}` (`A` is `d*d` row-major). |
 
 ### `POST /v1/place` (ADR-0003, phase 2; Nest calls it from phase 3)
@@ -74,7 +75,7 @@ computed in-process from the supplied `(A, b)`, so there is no `/predict` hop.
   as a single `(M, N, D)` tensor (`M` = member count, always — `M=1` for a lone task; `N` = the max
   candidate-day count across members, padded with a validity mask; `D` = `FEATURE_DIM`, 7) —
   `_Placer._build_batch` in `src/place.py`. Arm scoring flattens to `(M*N, D)` and calls
-  `LinucbPolicy.arm_scores_batch` once per arm (5 calls total, each inverting that arm's `A` once
+  `LinucbPolicy.arm_scores_batch` once per arm (6 calls total, each inverting that arm's `A` once
   regardless of member/day count), instead of the old per-`duration_minutes` dict cache that rebuilt
   vectors from scratch per distinct duration. The per-member slot pick (`best_linucb_slot`, day/DST
   scan, sibling threading for `MAX_SERIES_PER_DAY`) is unchanged — only cheap array indexing into the

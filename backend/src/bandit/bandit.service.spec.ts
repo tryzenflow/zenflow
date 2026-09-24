@@ -9,6 +9,7 @@ function make(url: string | undefined) {
 const COLD = {
   EARLY_MORNING: { A: [], b: [] },
   MORNING: { A: [], b: [] },
+  MIDDAY: { A: [], b: [] },
   AFTERNOON: { A: [], b: [] },
   EVENING: { A: [], b: [] },
   NIGHT: { A: [], b: [] },

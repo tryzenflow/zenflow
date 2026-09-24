@@ -10,7 +10,8 @@ from .slot import utc_to_minutes
 ARM_BANDS: tuple[tuple[str, int, int], ...] = (
     ("EARLY_MORNING", 0, 360),
     ("MORNING", 360, 660),
-    ("AFTERNOON", 660, 1020),
+    ("MIDDAY", 660, 840),
+    ("AFTERNOON", 840, 1020),
     ("EVENING", 1020, 1200),
     ("NIGHT", 1200, 1440),
 )
@@ -48,6 +49,7 @@ def overlap_rate(start_ms: int, end_ms: int, arm: str, timezone: str) -> float:
 # Exact-tie order between candidate slots (MORNING first, never EARLY_MORNING first).
 TIE_BREAK_ARM_ORDER: tuple[str, ...] = (
     "MORNING",
+    "MIDDAY",
     "AFTERNOON",
     "EVENING",
     "EARLY_MORNING",

@@ -157,7 +157,7 @@ class _Placer:
         """Batch every member's candidate-day context vectors + arm scores.
 
         Builds one ``(M, N, D)`` tensor across all of ``members`` (``M=1``
-        for a lone task, no special-casing) and scores all 5 arms against it
+        for a lone task, no special-casing) and scores all 6 arms against it
         in one broadcast pass -- replacing the old ``_vectors``/
         ``_arm_scores`` dict caches keyed by ``duration_minutes``, which
         rebuilt vectors from scratch per distinct duration and looped over

@@ -6,10 +6,11 @@
  * (`BanditArmState`). See `docs/adr/0001-linucb-model-design.md`.
  */
 
-/** The five canonical time-of-day arms (`docs/adr/0001-linucb-model-design.md` §2). */
+/** The six canonical time-of-day arms (`docs/adr/0001-linucb-model-design.md` §2). */
 export const SCHEDULING_ARMS = [
   "EARLY_MORNING",
   "MORNING",
+  "MIDDAY",
   "AFTERNOON",
   "EVENING",
   "NIGHT",
@@ -22,7 +23,7 @@ export type SchedulingArm = (typeof SCHEDULING_ARMS)[number];
  * stored widths of `BanditArmState.A` (d·d), `BanditArmState.b` (d) and
  * `SlotProposal.featureVector` (d). Changing it is a migration.
  */
-export const FEATURE_DIM = 22;
+export const FEATURE_DIM = 7;
 
 /**
  * A single arm's persisted LinUCB state. `A` is row-major `d·d`, `b` is length

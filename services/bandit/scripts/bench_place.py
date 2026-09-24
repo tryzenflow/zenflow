@@ -56,7 +56,7 @@ def build(policy: str, both: bool, blocks_per_day: int) -> dict[str, Any]:
             }
         )
     state = {}
-    for arm in ("EARLY_MORNING", "MORNING", "AFTERNOON", "EVENING", "NIGHT"):
+    for arm in ("EARLY_MORNING", "MORNING", "MIDDAY", "AFTERNOON", "EVENING", "NIGHT"):
         x = rng.normal(size=(60, FEATURE_DIM))
         a = np.eye(FEATURE_DIM) + x.T @ x / 10
         state[arm] = {

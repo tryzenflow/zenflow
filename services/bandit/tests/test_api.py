@@ -250,7 +250,8 @@ def test_predict_rejects_a_non_finite_context_value():
     raw = (
         '{"alpha": 0.15, "ridge": 1.0,'
         '"state": {"EARLY_MORNING": {"A": [], "b": []},'
-        '"MORNING": {"A": [], "b": []}, "AFTERNOON": {"A": [], "b": []},'
+        '"MORNING": {"A": [], "b": []}, "MIDDAY": {"A": [], "b": []},'
+        '"AFTERNOON": {"A": [], "b": []},'
         '"EVENING": {"A": [], "b": []}, "NIGHT": {"A": [], "b": []}},'
         '"contexts": [{"day": "a", "x": [0.1, 1e400, 0.3]}]}'
     )
