@@ -207,7 +207,6 @@ class _Placer:
                             0, day_diff_str(self.today, d.day_str)
                         ),
                         workload_by_type=wl,
-                        semester_phase=None,
                     )
             self.t.context += time.perf_counter() - t0
 

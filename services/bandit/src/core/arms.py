@@ -56,18 +56,19 @@ TIE_BREAK_ARM_ORDER: tuple[str, ...] = (
 
 
 def seeded_tie_break_order(seed: str) -> tuple[str, ...]:
-    """Deterministic pseudo-random permutation of the arms for ``seed``.
+    """Deterministic pseudo-random tie order of the arms for ``seed``.
 
     Cold start (every arm tied) would otherwise always land in MORNING; a
-    per-request permutation spreads that exploration across the whole day
-    while keeping placement a pure function of the request (ADR-0003).
+    per-request shuffle of the waking bands (MORNING..NIGHT) spreads that
+    exploration across the day while keeping placement a pure function of
+    the request (ADR-0003). EARLY_MORNING (00:00-06:00) is always last, so a
+    tie never lands a task in the small hours.
     """
-    return tuple(
-        sorted(
-            TIE_BREAK_ARM_ORDER,
-            key=lambda a: hashlib.sha256(f"{seed}|{a}".encode()).digest(),
-        )
+    waking = [a for a in TIE_BREAK_ARM_ORDER if a != "EARLY_MORNING"]
+    shuffled = sorted(
+        waking, key=lambda a: hashlib.sha256(f"{seed}|{a}".encode()).digest()
     )
+    return (*shuffled, "EARLY_MORNING")
 
 
 def arm_overlap_rates_from_minute(

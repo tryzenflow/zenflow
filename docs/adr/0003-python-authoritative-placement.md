@@ -8,7 +8,7 @@ displacement, batched loads). Replaces #60's "TS core is the source of truth" st
 "core change => spec + Python port + fixtures" rule in CLAUDE.md invariant 2.
 Related: [ADR-0001](0001-linucb-model-design.md) (+ section 13),
 [ADR-0002](0002-scheduling-simplification.md),
-[`docs/scheduler/heuristic.md`](../scheduler/heuristic.md),
+[`services/bandit/README.md`](../../services/bandit/README.md),
 [`services/bandit/README.md`](../../services/bandit/README.md).
 
 ---
@@ -349,7 +349,7 @@ until phase 4) keeps `master` releasable.
 6. **Delete dead TS (BE):** after a full release in mode `python` with no rollbacks, remove
    `legacy`/`shadow`, the code in 2.3 and trimmed golden cases. Rewrite CLAUDE.md invariant 2
    and the core-change rule, `backend/README.md` (scheduler architecture, golden section),
-   `services/bandit/README.md`, `docs/scheduler/heuristic.md`; add a pointer from ADR-0001
+   `services/bandit/README.md`; add a pointer from ADR-0001
    section 13.
 7. **Benchmark (section 9):** not a cut-over gate, but run right after phase 4 so BEFORE/AFTER
    numbers exist before phase 6 deletes the baseline.

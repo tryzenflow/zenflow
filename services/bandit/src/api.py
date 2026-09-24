@@ -44,7 +44,13 @@ from src.schemas import (
     UpdateResponse,
 )
 from src.schemas_place import PLACEMENT_CONTRACT_VERSION, PlaceRequest, PlaceResponse
-from src.serialization import all_finite, hydrate, hydrate_arms, require_422
+from src.serialization import (
+    all_finite,
+    hydrate,
+    hydrate_arms,
+    is_cold,
+    require_422,
+)
 from src.telemetry import (
     cold_arms,
     predict_duration,
@@ -257,10 +263,10 @@ async def place(request: Request) -> PlaceResponse:
 def predict(request: PredictRequest) -> PredictResponse:
     """Score every arm for every requested day (offline preview, not authoritative).
 
-    Cold-hydrates each arm's ``(A, b)`` once via :func:`hydrate_arms` — a
-    fully empty state stays fixed at ``0.0`` by contract, everything else is
-    seeded at the ridge prior (``A = ridge * I``) — then scores every
-    ``context`` against it with :func:`src.models.linucb.score`.
+    Hydrates each arm's ``(A, b)`` once via :func:`hydrate_arms` — a fully
+    empty state is the ridge prior (``A = ridge * I, b = 0``) and scores its
+    exploration bonus — then scores every ``context`` against it with
+    :func:`src.models.linucb.score`.
     """
     require_422(
         math.isfinite(request.alpha) and request.alpha >= 0.0, "alpha must be >= 0"
@@ -279,7 +285,7 @@ def predict(request: PredictRequest) -> PredictResponse:
     d = len(request.contexts[0].x)
     started = time.perf_counter()
     arms = hydrate_arms(request.state, d, request.ridge)
-    cold_count = sum(params is None for params in arms.values())
+    cold_count = sum(is_cold(request.state.get(arm)) for arm in ARM_IDS)
 
     with tracer.start_as_current_span(
         "linucb.score_all",
@@ -295,9 +301,6 @@ def predict(request: PredictRequest) -> PredictResponse:
             row: dict[ArmId, float] = {}
             for arm in ARM_IDS:
                 params = arms[arm]
-                if params is None:
-                    row[arm] = 0.0
-                    continue
                 try:
                     row[arm] = float(score(params.A, params.b, x, request.alpha))
                 except np.linalg.LinAlgError:

@@ -10,7 +10,7 @@ deadline, scored by a per-user time-of-day preference. Fixed sessions stay where
 them. When you drag or resize a placed task, that edit is recorded as a `SessionEvent`
 (move-or-keep) — the fuel for the personalization roadmap: a preference heuristic today,
 a per-student contextual bandit (LinUCB) running as a live A/B experiment, collaborative
-cold-start later. See [`docs/scheduler/heuristic.md`](docs/scheduler/heuristic.md) and
+cold-start later. See [`services/bandit/README.md`](services/bandit/README.md) and
 [`docs/adr/`](docs/adr/).
 
 Students can also connect their university's **Moodle LMS** and **student portal** so
@@ -100,7 +100,7 @@ Two policies run a live 50/50 A/B, both shipped:
 Planned next: a move-or-keep learning writer for the preference matrix, and collaborative
 cold-start (archetype-seeded weights for new users).
 
-Design docs: [`docs/scheduler/heuristic.md`](docs/scheduler/heuristic.md),
+Design docs: [`services/bandit/README.md`](services/bandit/README.md),
 [`docs/adr/0001-linucb-model-design.md`](docs/adr/0001-linucb-model-design.md),
 [`docs/adr/0002-scheduling-simplification.md`](docs/adr/0002-scheduling-simplification.md).
 

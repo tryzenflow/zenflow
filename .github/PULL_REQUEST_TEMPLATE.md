@@ -34,7 +34,7 @@ Closes #
 - [ ] `pnpm shared:build && pnpm -r typecheck` passes (rebuilt shared types if I changed them)
 - [ ] Added/updated tests — new behavior has a test, a bug fix has a regression test; scheduler changes update the matching `*.spec.ts`
 - [ ] Ran the relevant tests (`pnpm --filter backend test` / `test:e2e`, `pnpm --filter frontend test:e2e`)
-- [ ] Updated the matching README / `docs/heuristic.md` if I changed schema, endpoints, the scheduler, screens, conventions, or the ML roadmap
+- [ ] Updated the matching README / ADR if I changed schema, endpoints, the scheduler, screens, conventions, or the ML roadmap
 - [ ] Respected the critical invariants in [CLAUDE.md](../CLAUDE.md) (pure scheduler, shared types as the contract, 15-min slot grid, response envelope, TZ wall-clock rule)
 
 ## Breaking changes

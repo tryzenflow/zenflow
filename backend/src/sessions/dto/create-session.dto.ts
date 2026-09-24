@@ -103,7 +103,7 @@ export class CreateSessionDto {
   /**
    * Number of study sessions (`TASK` only). Omitted or `1` → one ordinary
    * task; `> 1` → a `TASK` series of N linked sessions spread across
-   * `now … deadline` (see `docs/scheduler/heuristic.md`).
+   * `now … deadline` (see `services/bandit/README.md`).
    */
   @IsOptional()
   @ValidateIf((o: CreateSessionDto) => o.type === "TASK")

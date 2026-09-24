@@ -63,37 +63,6 @@ export const STABILITY_WEIGHT = 0.1;
 export const STABILITY_SATURATION_HOURS = 4;
 
 /**
- * Weight of the fixed, post-hoc preference-matrix nudge used ONLY to rank
- * exact minutes within LinUCB's already-chosen arm (Item 3B1/B2) — never to
- * choose the arm itself (B2 picks the arm from LinUCB's own per-arm scores
- * alone), and never fed into LinUCB's context vector at all (the preference
- * matrix was dropped from the context vector entirely — it's no longer even
- * a reserved/zeroed slot; `services/bandit/src/core/context_vector.py` owns
- * it now, ADR-0003).
- *
- * LinUCB's own arm score (`θ̂ᵀx + α·√(xᵀA⁻¹x)`) is fit against rewards in
- * `[-1, 1]` (`SESSION_RETAINED_REWARD` / `SESSION_MOVE_REWARD` /
- * `dragDistanceReward`'s range — ADR-0001 §7), so a trained arm's score is
- * itself O(1) in typical magnitude, with the `α·√(...)` exploration term
- * adding at most roughly another unit early on (bounded by `α·√FEATURE_DIM ≈
- * 0.15·√22 ≈ 0.7` for a single early observation under the `λ = 1` ridge
- * prior, per ADR-0001 §6/§10) before shrinking as more data arrives.
- * `slotPreferenceScore` is duration-scaled (a sum over every clock-hour the
- * slot touches, so an N-hour slot's raw value is up to `N`, not `O(1)`) —
- * dividing by the slot's own duration-in-hours before applying this weight
- * (see `linucb-best-slot.ts`'s `bestMinuteInArm`) normalizes it back to the
- * same `[-1, 1]`-ish per-hour scale as a single arm score, so this weight is
- * directly comparable to "what fraction of one arm-score's typical
- * magnitude."
- * `0.1` caps the nudge at ±10% of that scale — enough to break near-ties
- * between minutes/days LinUCB itself can't yet distinguish and to soften
- * cold start (arm score `0.0` before an arm has any data — see
- * `services/bandit/README.md`'s `/predict` contract), never enough to read
- * as a second competing signal.
- */
-export const PREFERENCE_NUDGE_WEIGHT = 0.1;
-
-/**
  * Reward written on the `SessionEvent` for each outcome of the move-or-keep
  * model. A user drag/resize of a scheduled TASK is a negative signal; a TASK
  * that elapses unmoved (detected by the RETAINED sweep) is a positive one.
@@ -120,7 +89,16 @@ export const BANDIT_RIDGE = 1.0;
 export const MOVE_REWARD_SCALE_MINUTES = 240;
 
 /** Stamped on `SlotProposal.modelVersion` for LinUCB proposals. */
-export const BANDIT_MODEL_VERSION = "linucb-d22-v1";
+export const BANDIT_MODEL_VERSION = "linucb-d7-v0";
+
+/**
+ * Length of the LinUCB context vector (`FEATURE_DIM` in
+ * `services/bandit/src/core/constants.py`, which owns the features). Only used
+ * to drop delayed rewards for proposals made under an older vector layout
+ * (d = 22 before 2026-09-23) — a stale vector folded into a reset (cold) arm
+ * would re-create that arm at the old dimension.
+ */
+export const BANDIT_FEATURE_DIM = 7;
 
 /** `SlotProposal.experimentId` for the heuristic-vs-LinUCB A/B experiment. */
 export const BANDIT_EXPERIMENT_ID = "linucb-heuristic-v1";

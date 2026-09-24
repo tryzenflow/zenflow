@@ -28,10 +28,15 @@ Experiment: [`docs/scheduler/ab-testing.md`](../../docs/scheduler/ab-testing.md)
 - **Canonical arms** (`SchedulingArm` in `@zenflow/shared`), half-open, lower-inclusive:
   `EARLY_MORNING [00:00,06:00)`, `MORNING [06:00,11:00)`, `AFTERNOON [11:00,17:00)`,
   `EVENING [17:00,20:00)`, `NIGHT [20:00,24:00)`.
-- **Context vector** `d = 22` — session (`remaining_days_until_deadline`, `duration`),
-  candidate day (`day_of_week[7]`, `candidate_days_from_now`, `workload_by_type[10]`,
-  `semester_phase`), bias. No preference-matrix input. Full table and normalization:
-  ADR-0001 §5.
+- **Context vector, `d = 7`:**
+  - deadline days, duration, days from now;
+  - `is_weekend` (±1);
+  - fixed-load hours and flexible-load hours;
+  - bias.
+
+  Details: ADR-0001 §5.1.
+- **Cold arm** = ridge prior. It scores `α·√(xᵀx/λ)`, not `0`.
+- **Learning check:** `uv run pytest tests/test_learning.py -s` prints simulated learning curves.
 - **Stateless service.** This service holds **no per-user state**. The NestJS backend owns
   `(A, b)` persistence (Postgres table `BanditArmState`, ADR-0001 §6.1) and passes the 5
   arms' `(A, b)` in every request; `/v1/update` returns the new `(A, b)` for the backend to
@@ -48,7 +53,7 @@ Experiment: [`docs/scheduler/ab-testing.md`](../../docs/scheduler/ab-testing.md)
 | `GET /health`   | Liveness probe → `{"status":"ok"}`.                                                      |
 | `GET /ready`    | Readiness: numpy import, tz offset-cache warm-up and a self-test placement → `200 {"status":"ready"}` or `503`. Compose healthcheck target. |
 | `POST /v1/place` | **Authoritative placement** (ADR-0003) — see below. |
-| `POST /predict` | Body: `alpha`, `ridge`, `state` (all 5 arms' `(A, b)`, `[]` = cold ridge prior), `contexts` (`[{day, x}]`). Returns `{scores: {day: {arm: score}}}` — all 5 arms for every day. A cold arm scores `0.0` (no exploration bonus until it has data). |
+| `POST /predict` | Body: `alpha`, `ridge`, `state` (all 5 arms' `(A, b)`, `[]` = cold ridge prior), `contexts` (`[{day, x}]`). Returns `{scores: {day: {arm: score}}}` — all 5 arms for every day. A cold arm scores `α·√(xᵀx/λ)`. |
 | `POST /v1/update`  | Body: `ridge`, `arm`, `x`, `reward`, `state` (that arm's `(A, b)`, `[]` = cold). Returns the new `{A, b}` (`A` is `d*d` row-major). |
 
 ### `POST /v1/place` (ADR-0003, phase 2; Nest calls it from phase 3)
@@ -67,7 +72,7 @@ computed in-process from the supplied `(A, b)`, so there is no `/predict` hop.
   heuristic (`appliedPolicy: "HEURISTIC"`) on no bandit state, a singular matrix or no surviving slot.
 - **Series batching**: every member's LinUCB context vectors + arm scores are built once per request
   as a single `(M, N, D)` tensor (`M` = member count, always — `M=1` for a lone task; `N` = the max
-  candidate-day count across members, padded with a validity mask; `D` = `FEATURE_DIM`, 22) —
+  candidate-day count across members, padded with a validity mask; `D` = `FEATURE_DIM`, 7) —
   `_Placer._build_batch` in `src/place.py`. Arm scoring flattens to `(M*N, D)` and calls
   `LinucbPolicy.arm_scores_batch` once per arm (5 calls total, each inverting that arm's `A` once
   regardless of member/day count), instead of the old per-`duration_minutes` dict cache that rebuilt
@@ -185,9 +190,12 @@ CLAUDE.md invariant 2.
 - `linucb_best_slot` (issue #62 A): scores every feasible 15-min start on all days as
   `armTerm + wS*stability` -- no preference-matrix term. `wS = stability_weight(prevStart, now)` is
   1.0 while the task's old start is <=24h away and fades linearly to 0.05 at 7 days, so upcoming
-  tasks stay put and distant ones follow LinUCB. Exact ties (e.g. every arm cold) go to a per-request
-  seeded arm order (`seeded_tie_break_order(requestId|memberId)`), then the earlier start -- cold
-  start explores across the whole day instead of always MORNING, and stays reproducible.
+  tasks stay put and distant ones follow LinUCB. Exact ties are broken in this order:
+  1. a seeded band order per request (`seeded_tie_break_order`, with EARLY_MORNING last);
+  2. distance from the band's centre;
+  3. the earlier start.
+
+  LinUCB never reads the preference matrix.
 - The scan is vectorized: per-tz UTC offset chunks (DST and fractional offsets like Asia/Kolkata),
   a prefix-sum for window scores, a difference-array occupancy mask, and `argmax` on scores rounded to
   1e-9 (earliest start wins, like the original TS loop this was ported from).

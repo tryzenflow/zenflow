@@ -16,12 +16,14 @@ MATRIX_HALF_LIFE_DAYS = 21
 
 PREFERENCE_SLOTS_PER_DAY = 24
 PREFERENCE_MATRIX_LENGTH = 7 * PREFERENCE_SLOTS_PER_DAY
-FEATURE_DIM = 22
+FEATURE_DIM = 7
 
 DURATION_DIVISOR = 480
 WORKLOAD_HOURS_DIVISOR = 12
-WORKLOAD_COUNT_DIVISOR = 8
-WORKLOAD_TYPES = ("LECTURE", "ASSIGNMENT", "EXAM", "TASK", "DND")
+# Day load is two grouped features: fixed blocks the user can't move, and
+# flexible work the scheduler places (hours each, / WORKLOAD_HOURS_DIVISOR).
+FIXED_LOAD_TYPES = ("LECTURE", "EXAM", "DND")
+FLEX_LOAD_TYPES = ("TASK", "ASSIGNMENT")
 
 # LinUCB slot score = linucb + proximity-scaled stability. The stability weight
 # is full for a task whose old start is <= NEAR hours away and fades linearly to

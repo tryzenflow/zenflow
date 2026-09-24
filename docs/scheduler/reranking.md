@@ -20,7 +20,7 @@ The live scheduler today is the deterministic heuristic —
 [`backend/src/scheduler/heuristic.ts`](../../backend/src/scheduler/heuristic.ts) (pure
 core) + [`heuristic-schedule.service.ts`](../../backend/src/scheduler/heuristic-schedule.service.ts)
 (the only Prisma layer — `scheduleTask` / `scheduleSeries`, single-session, no repack).
-See [`heuristic.md`](./heuristic.md). LinUCB scheduling adds a
+See [`services/bandit/README.md`](../../services/bandit/README.md). LinUCB scheduling adds a
 sibling path: a per-day call to the bandit service
 (`BANDIT_SERVICE_URL`, see `services/bandit/README.md`), then the mapping below. The
 `optimize()` slot-scoring and overlap-rate helpers are pure functions in

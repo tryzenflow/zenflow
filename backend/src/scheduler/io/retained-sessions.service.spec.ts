@@ -179,7 +179,7 @@ describe("RetainedSessionsService.sweep", () => {
         proposal: {
           id: "prop-1",
           selectedArm: "MORNING",
-          featureVector: [0.1, 0.2],
+          featureVector: [0.1, 0.2, 0.3, -1, 0, 0.25, 1],
         },
       },
     );
@@ -191,7 +191,7 @@ describe("RetainedSessionsService.sweep", () => {
     expect(banditUpdate).toHaveBeenCalledTimes(1);
     const [arm, x, reward] = banditUpdate.mock.calls[0];
     expect(arm).toBe("MORNING");
-    expect(x).toEqual([0.1, 0.2]);
+    expect(x).toEqual([0.1, 0.2, 0.3, -1, 0, 0.25, 1]);
     expect(reward).toBe(1);
     expect(armSave).toHaveBeenCalledWith(
       "user-1",

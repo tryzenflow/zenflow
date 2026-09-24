@@ -163,7 +163,6 @@ def _old_run(req: PlaceRequest) -> list[PlacedMember]:
                 candidate_iso_weekday=iso_weekday(d.day_str),
                 candidate_days_from_now=max(0, day_diff_str(placer.today, d.day_str)),
                 workload_by_type=wl,
-                semester_phase=None,
             )
         vec_cache[duration] = vecs
         return vecs
@@ -174,17 +173,10 @@ def _old_run(req: PlaceRequest) -> list[PlacedMember]:
             return hit
         vecs = vectors(duration)
         keys = list(vecs)
-        x = (
-            np.stack([vecs[k] for k in keys])
-            if keys
-            else np.empty((0, FEATURE_DIM))
-        )
+        x = np.stack([vecs[k] for k in keys]) if keys else np.empty((0, FEATURE_DIM))
         per_arm: dict[ArmId, NDArray[np.float64]] = {}
         for arm in ARM_IDS:
-            params = placer.linucb_policy._arms.get(arm)
-            if params is None:
-                per_arm[arm] = np.zeros(x.shape[0])
-                continue
+            params = placer.linucb_policy._arms[arm]
             per_arm[arm] = np.asarray(
                 linucb_score(params.A, params.b, x, placer.linucb_policy.alpha),
                 dtype=np.float64,
@@ -364,8 +356,9 @@ def test_dense_overlapping_series_threads_siblings_correctly() -> None:
 
 
 def test_all_cold_arms_matches_oracle() -> None:
-    """Every arm cold (no A/b) -> arm scores are 0.0 everywhere by contract
-    (the batch tensor's arm-score slices, not just the final pick)."""
+    """Every arm cold (no A/b) -> every arm scores the same ridge-prior bonus
+    (the batch tensor's arm-score slices, not just the final pick), so the
+    seeded tie-break order decides the band."""
     req = make_req(
         members=[member(dur=60), member("t2", dur=60)],
         deadlineMs=NOW + 3 * DAY_MS,
@@ -382,8 +375,10 @@ def test_all_cold_arms_matches_oracle() -> None:
     last = local_date_str(req.deadline_ms - 1, placer.tz)
     windows_days = [(first, last), (first, last)]
     batch = placer._build_batch(req.members, windows_days, ledger)
+    first_arr = next(iter(batch.arm_scores.values()))
+    assert (first_arr[batch.valid] > 0.0).all()
     for arr in batch.arm_scores.values():
-        assert (arr[batch.valid] == 0.0).all()
+        np.testing.assert_allclose(arr[batch.valid], first_arr[batch.valid])
 
 
 def test_dst_boundary_day_matches_oracle() -> None:

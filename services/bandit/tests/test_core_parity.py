@@ -41,7 +41,6 @@ def _ctx(a: dict[str, Any]) -> Any:
         candidate_iso_weekday=a["candidateIsoWeekday"],
         candidate_days_from_now=a["candidateDaysFromNow"],
         workload_by_type=a.get("workloadByType"),
-        semester_phase=a.get("semesterPhase"),
     )
 
 

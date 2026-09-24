@@ -128,7 +128,13 @@ def test_linucb_vectorized_matches_scalar() -> None:
             )
         dur, deadline = 90, day0 + 3 * 86_400_000 + 3_600_000
         got = best_linucb_slot(
-            days, dur, "UTC", now, deadline, prev_start_ms=prev, tie_break_order=order
+            days,
+            dur,
+            "UTC",
+            now,
+            deadline,
+            prev_start_ms=prev,
+            tie_break_order=order,
         )
         w_s = 0.0 if prev is None else stability_weight(prev, now)
         best = None
@@ -146,16 +152,13 @@ def test_linucb_vectorized_matches_scalar() -> None:
                     )
                     if prev is not None:
                         sc -= w_s * min(abs(st - prev) / 3_600_000, 4) / 4
-                    arm = names[
-                        [
-                            b[1] <= ((st - day.day_start_ms) // 60_000) % 1440 < b[2]
-                            for b in ARM_BANDS
-                        ].index(True)
-                    ]
-                    key = (-round(sc, 9), order.index(arm), st)
+                    local = ((st - day.day_start_ms) // 60_000) % 1440
+                    band = next(b for b in ARM_BANDS if b[1] <= local < b[2])
+                    centre = abs(local + dur / 2 - (band[1] + band[2]) / 2)
+                    key = (-round(sc, 9), order.index(band[0]), centre, st)
                     if best is None or key < best:
                         best = key
                 st += 900_000
         assert got is not None and best is not None
-        assert got.start_ms == best[2]
+        assert got.start_ms == best[-1]
         assert got.stability_weight == w_s

@@ -15,7 +15,7 @@ analyze the request and open a single GitHub issue.
 ## Provide the subagent
 - The full feature request (verbatim).
 - Instruction to ground the issue in `README.md`, `CLAUDE.md`, `backend/README.md`,
-  `frontend/README.md`, `docs/heuristic.md`.
+  `frontend/README.md`, `services/bandit/README.md`.
 - Requirements for the issue: title, problem/motivation, user stories, **scope + affected
   areas (backend / frontend / ML)**, testable **acceptance criteria**, out-of-scope/open
   questions, and labels (`feature` + area labels).

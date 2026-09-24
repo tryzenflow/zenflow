@@ -84,7 +84,7 @@ export interface Session {
 /**
  * What the user chose when a new/edited `TASK` cannot be placed before its
  * deadline even after the engine repacked flexible tasks
- * (`docs/scheduler/heuristic.md` -> "Displacement"). Sent as
+ * (`services/bandit/README.md` -> "Displacement"). Sent as
  * `infeasiblePolicy` on `POST /sessions` / `PATCH /sessions/:id`.
  *
  * - `ACCEPT_CONFLICTS` — meet the deadline: place the task in the best slot
@@ -158,7 +158,7 @@ export interface CreateTaskInput {
    * Number of study sessions. Omitted or `1` → one ordinary task. `> 1` →
    * a `TASK` series: N linked `Session` rows sharing one `seriesId` and
    * `deadline`, each placed independently and spaced roughly evenly across
-   * `now … deadline` (see `docs/scheduler/heuristic.md`).
+   * `now … deadline` (see `services/bandit/README.md`).
    */
   sessionCount?: number;
   tags?: string[];
@@ -337,7 +337,7 @@ export interface SlotProposalFields {
 
 /**
  * Creating a `TASK` places it into its single best empty slot between now and
- * its deadline (`docs/scheduler/heuristic.md`) — no other session is moved.
+ * its deadline (`services/bandit/README.md`) — no other session is moved.
  * When `sessionCount > 1` the response also carries every session in
  * `sessions` (index order), with the top-level fields mirroring `sessions[0]`.
  * The shared `seriesId` on those rows groups the sessions' `CREATE` events;
@@ -422,7 +422,7 @@ export interface RemoveTimetableGroupResponse {
 
 /**
  * Response for `GET /sessions/deadline-options`: the six deadline quick-action
- * chip values (see `docs/scheduler/heuristic.md`), each an ISO-8601 instant
+ * chip values (see `services/bandit/README.md`), each an ISO-8601 instant
  * derived from `horizon.ts`'s `endOfPeriod` ceiling math relative to the
  * request's `anchor`.
  */

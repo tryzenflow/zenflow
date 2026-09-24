@@ -66,10 +66,21 @@ def hydrate(st: ArmState, d: int, ridge: float) -> tuple[np.ndarray, np.ndarray]
     return a, b
 
 
+def is_cold(st: ArmState | None) -> bool:
+    """``True`` for an arm with no observations yet (no ``A`` and no ``b``)."""
+    return st is None or (not st.A and not st.b)
+
+
 def hydrate_arms(
     state: Mapping[ArmId, ArmState], d: int, ridge: float
-) -> dict[ArmId, ArmParams | None]:
+) -> dict[ArmId, ArmParams]:
     """Hydrate every one of the 5 canonical arms into :class:`ArmParams`.
+
+    A cold arm (missing, or no ``A`` and no ``b``) is seeded at the ridge prior
+    ``A = ridge * I, b = 0``, so it scores its full exploration bonus
+    ``alpha * sqrt(xᵀx / ridge)`` -- standard LinUCB optimism. (It used to be
+    pinned at ``0.0``, which let the first rewarded arm win forever: a warm arm's
+    bonus kept it above 0 even after the user moved its placements.)
 
     Parameters
     ----------
@@ -78,22 +89,19 @@ def hydrate_arms(
     d : int
         Feature dimension.
     ridge : float
-        Regularization ``lambda``, passed through to :func:`hydrate` for an
-        arm that is not fully cold.
+        Regularization ``lambda``.
 
     Returns
     -------
-    dict[ArmId, ArmParams | None]
-        ``None`` for an arm with a fully empty state (no ``A`` and no ``b``)
-        — that arm is cold and fixed at score ``0.0`` by contract, never
-        hydrated to the ridge prior.
+    dict[ArmId, ArmParams]
     """
-    out: dict[ArmId, ArmParams | None] = {}
+    out: dict[ArmId, ArmParams] = {}
     for arm in ARM_IDS:
         st = state.get(arm)
-        if st is None or (not st.A and not st.b):
-            out[arm] = None
+        if is_cold(st):
+            out[arm] = ArmParams.cold(d, ridge)
             continue
+        assert st is not None
         a, b = hydrate(st, d, ridge)
         out[arm] = ArmParams(a, b)
     return out

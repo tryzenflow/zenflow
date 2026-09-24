@@ -6,10 +6,18 @@ Every feasible 15-min start on every candidate day is scored
           + wS * stability(prevStart, slot)
 
 where ``wS`` = :func:`~.slot_score.stability_weight` (strong for a task about
-to start, fading for distant ones). Ranked across days; exact ties (within
-1e-9 -- e.g. every arm cold) go to the arm hosting the start in the given
-``tie_break_order`` (seeded per request by the caller), then the earlier
-start. Vectorized per day.
+to start, fading for distant ones), and ranked across days. LinUCB alone
+decides *which band*; exact ties (within 1e-9) are broken by, in order:
+
+1. the band hosting the start, in ``tie_break_order`` (seeded per request by
+   the caller) -- decides the band when every arm ties (cold start);
+2. the slot's distance from the band's centre -- picks the hour *inside* the
+   band, where the arm term is flat, with a fixed rule that learns nothing
+   (e.g. 08:00-09:00 for a 60 min MORNING task, not 06:00). The preference
+   matrix is deliberately not used, so LinUCB is A/B-tested on its own;
+3. the earlier start.
+
+Vectorized per day.
 """
 
 from __future__ import annotations
@@ -21,14 +29,19 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
-from .arms import ARM_BANDS, TIE_BREAK_ARM_ORDER, arm_of_minute, overlap_rate
+from .arms import ARM_BANDS, TIE_BREAK_ARM_ORDER, overlap_rate
 from .constants import MS_PER_MINUTE, SLOT_MS
 from .slot import Intervals, ceil_to_slot, utc_to_minutes
-from .slot_score import free_start_mask, proximity_stability_scores, stability_weight
+from .slot_score import (
+    free_start_mask,
+    proximity_stability_scores,
+    stability_weight,
+)
 
 _TIE_DECIMALS = 9
 _ARM_NAMES = [b[0] for b in ARM_BANDS]
 _BAND_STARTS = np.array([b[1] for b in ARM_BANDS], dtype=np.int64)
+_BAND_MIDS = np.array([(b[1] + b[2]) / 2 for b in ARM_BANDS], dtype=np.float64)
 
 
 @dataclass(frozen=True)
@@ -83,6 +96,7 @@ def best_linucb_slot(
 
     scores: list[NDArray[np.float64]] = []
     ranks: list[NDArray[np.int64]] = []
+    centre_dists: list[NDArray[np.float64]] = []
     starts_all: list[NDArray[np.int64]] = []
     day_idx: list[NDArray[np.int64]] = []
 
@@ -101,12 +115,7 @@ def best_linucb_slot(
         if day.day_end_ms - day.day_start_ms == 1440 * MS_PER_MINUTE:
             smin = (starts - day.day_start_ms) / MS_PER_MINUTE
             rates = _rates_plain(smin, duration_minutes)
-            band = (
-                np.searchsorted(
-                    _BAND_STARTS, np.floor(smin).astype(np.int64) % 1440, "right"
-                )
-                - 1
-            )
+            local_min = np.floor(smin) % 1440
         else:  # DST day: exact timezone-aware path, scalar
             rates = np.array(
                 [
@@ -117,18 +126,16 @@ def best_linucb_slot(
                     for s in starts
                 ]
             )
-            band = np.array(
-                [
-                    _ARM_NAMES.index(arm_of_minute(utc_to_minutes(int(s), timezone)))
-                    for s in starts
-                ],
-                dtype=np.int64,
+            local_min = np.array(
+                [utc_to_minutes(int(s), timezone) for s in starts], dtype=np.float64
             )
+        band = np.searchsorted(_BAND_STARTS, local_min.astype(np.int64), "right") - 1
         total = rates @ arm_vec
         if prev_start_ms is not None:
             total = total + proximity_stability_scores(prev_start_ms, starts, next_ms)
         scores.append(total)
         ranks.append(rank_by_band[band])
+        centre_dists.append(np.abs(local_min + duration_minutes / 2 - _BAND_MIDS[band]))
         starts_all.append(starts)
         day_idx.append(np.full(starts.size, di, dtype=np.int64))
 
@@ -138,7 +145,8 @@ def best_linucb_slot(
     rk = np.concatenate(ranks)
     st = np.concatenate(starts_all)
     di_all = np.concatenate(day_idx)
-    order = np.lexsort((st, rk, -np.round(sc, _TIE_DECIMALS)))
+    cd = np.concatenate(centre_dists)
+    order = np.lexsort((st, cd, rk, -np.round(sc, _TIE_DECIMALS)))
     i = int(order[0])
     return BestLinucbSlot(
         start_ms=int(st[i]),

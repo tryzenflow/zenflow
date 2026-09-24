@@ -109,5 +109,3 @@ def test_golden_best_free_slot_via_place(case: dict[str, Any]) -> None:
         assert r["outcome"] == "NEEDS_INFEASIBLE_CONTEXT"
     else:
         assert r["outcome"] == "PLACED" and r["startMs"] == case["output"]
-
-

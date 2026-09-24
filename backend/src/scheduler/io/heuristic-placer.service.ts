@@ -52,7 +52,7 @@ export interface PlaceInWindowOpts {
  *
  * Policy A — the preference-matrix placer, restricted to placing **only the
  * session in hand**: it never repacks a day or moves another session
- * (`docs/scheduler/reranking.md`, `docs/scheduler/heuristic.md`). It is the
+ * (`docs/scheduler/reranking.md`, `services/bandit/README.md`). It is the
  * heuristic half of the LinUCB A/B experiment and the default placement path.
  *
  * The only Prisma I/O here is loading each candidate day's `occupied`

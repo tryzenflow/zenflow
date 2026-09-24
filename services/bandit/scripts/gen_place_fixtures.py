@@ -127,15 +127,16 @@ def blocked(policy: str) -> dict[str, Any]:
 CASES: list[tuple[str, str, dict[str, Any]]] = [
     (
         "single-linucb-cold-bandit",
-        "One 60 min task, LINUCB primary, all five arms cold (score 0), "
-        "observationCount 0 so the blend is wL=0.3 / wP=1.0: the preference matrix "
-        "dominates and the earliest 08:00 hot hour is chosen; arm tie -> MORNING.",
+        "One 60 min task, LINUCB primary, all five arms cold (ridge prior: every "
+        "arm scores the same exploration bonus). The seeded tie-break order picks "
+        "the band and the task is centred in it; the preference matrix is ignored.",
         base(bandit={"alpha": 0.15, "ridge": 1.0, "state": cold_state()}),
     ),
     (
         "single-linucb-warm-pairwise",
-        "computeBoth on a warm user (observationCount 100 -> wL=1, wP=0.1): the "
-        "response carries both picks; primary is LINUCB so startMs follows it.",
+        "computeBoth on a warm user: the response carries both picks (heuristic "
+        "from the matrix, LinUCB from the arms alone); primary is LINUCB so "
+        "startMs follows it.",
         base(
             members=[member("LINUCB", both=True)],
             user={"preferenceMatrix": matrix(), "observationCount": 100},

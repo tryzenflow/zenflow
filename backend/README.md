@@ -1004,7 +1004,7 @@ previous manually-set start).
 LinUCB slot-first scoring (context vector, arm scoring, stability weight, seeded tie-break) is
 Python's — `services/bandit/src/core/linucb_best_slot.py` and friends. It is **not**
 golden-fixture-tested against TS any more (ADR-0003 phase 6): there is no TS implementation to
-compare against. See `docs/scheduler/heuristic.md` and `services/bandit/README.md`.
+compare against. See `services/bandit/README.md`.
 
 ### Displacement and sync conflicts (issue #62 B / D)
 

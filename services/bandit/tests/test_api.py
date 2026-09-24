@@ -44,7 +44,7 @@ def test_health():
     assert resp.json() == {"status": "ok"}
 
 
-def test_predict_all_cold_returns_five_arms_all_zero():
+def test_predict_all_cold_scores_every_arm_at_its_exploration_bonus():
     body = {
         "alpha": 0.15,
         "ridge": 1.0,
@@ -62,10 +62,15 @@ def test_predict_all_cold_returns_five_arms_all_zero():
     assert set(scores) == {"2026-09-01", "2026-09-02", "2026-09-03"}
     for day in scores.values():
         assert set(day) == set(ARM_IDS)
-        assert all(value == 0.0 for value in day.values())
+    # Cold arm = ridge prior: θ̂ = 0, score = α·√(xᵀx/λ), equal across arms.
+    for ctx in body["contexts"]:  # type: ignore[attr-defined]
+        x = np.asarray(ctx["x"])
+        bonus = 0.15 * float(np.sqrt(x @ x))
+        for value in scores[ctx["day"]].values():
+            assert value == pytest.approx(bonus)
 
 
-def test_predict_hydrated_arm_scores_nonzero_others_stay_zero():
+def test_predict_hydrated_arm_differs_cold_arms_keep_the_prior_bonus():
     x = [1.0, 0.0, 0.0]
     state = cold_state()
     state["EVENING"] = hydrate("EVENING", x, 1.0)
@@ -82,9 +87,9 @@ def test_predict_hydrated_arm_scores_nonzero_others_stay_zero():
     assert resp.status_code == 200
 
     day = resp.json()["scores"]["2026-09-01"]
-    assert day["EVENING"] != 0.0
-    assert day["MORNING"] == 0.0
-    assert day["EARLY_MORNING"] == 0.0
+    assert day["MORNING"] == pytest.approx(0.15)
+    assert day["EARLY_MORNING"] == pytest.approx(0.15)
+    assert day["EVENING"] != pytest.approx(0.15)
 
 
 def test_update_returns_a_of_length_d_squared_and_b_of_length_d():
@@ -156,8 +161,28 @@ def test_update_then_predict_ranks_the_rewarded_arm_above_a_cold_arm():
     assert resp.status_code == 200
 
     day = resp.json()["scores"]["2026-09-01"]
-    assert day["EARLY_MORNING"] == 0.0
     assert day["EVENING"] > day["EARLY_MORNING"]
+
+
+def test_a_moved_warm_arm_ranks_below_a_cold_arm():
+    """Regression: a warm arm whose placement was moved must lose to an
+    unexplored arm. With cold arms pinned at 0.0, the warm arm's exploration
+    bonus kept it on top and the other arms were never tried."""
+    x = [0.5, 0.5, 0.5]
+    state = cold_state()
+    state["EVENING"] = hydrate("EVENING", x, -0.25)  # a 60-min drag
+
+    resp = client.post(
+        "/predict",
+        json={
+            "alpha": 0.15,
+            "ridge": 1.0,
+            "state": state,
+            "contexts": [{"day": "2026-09-01", "x": x}],
+        },
+    )
+    day = resp.json()["scores"]["2026-09-01"]
+    assert day["EVENING"] < day["MORNING"] == day["AFTERNOON"]
 
 
 def test_predict_infers_d_from_a_larger_context():
@@ -176,7 +201,8 @@ def test_predict_infers_d_from_a_larger_context():
         },
     )
     assert resp.status_code == 200
-    assert resp.json()["scores"]["2026-09-01"]["MORNING"] != 0.0
+    day = resp.json()["scores"]["2026-09-01"]
+    assert day["MORNING"] != pytest.approx(day["EVENING"])
 
 
 @pytest.mark.parametrize(

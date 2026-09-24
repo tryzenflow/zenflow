@@ -206,7 +206,12 @@ def test_near_task_stays_far_task_follows_linucb() -> None:
     assert far.stability_weight == pytest.approx(0.05)
 
 
-def test_linucb_pick_ignores_the_preference_matrix() -> None:
+def test_preference_matrix_never_changes_the_linucb_pick() -> None:
+    """LinUCB ignores the preference matrix entirely (independent A/B arm):
+    flipping it changes neither the band, the score nor the start."""
+    cold: dict[str, dict[str, list[float]]] = {
+        a: {"A": [], "b": []} for a, *_ in ARM_BANDS
+    }
     base = make_req(
         members=[
             {
@@ -216,46 +221,63 @@ def test_linucb_pick_ignores_the_preference_matrix() -> None:
                 "computeBoth": False,
             }
         ],
-        bandit={
-            "alpha": 0.15,
-            "ridge": 1.0,
-            "state": {a: {"A": [], "b": []} for a, *_ in ARM_BANDS},
-        },
+        bandit={"alpha": 0.15, "ridge": 1.0, "state": cold},
     )
     flipped = make_req(**{k: v for k, v in base.items() if k != "user"})
     flipped["user"] = {"preferenceMatrix": [-1.0] * 168, "observationCount": 0}
     a = ok(base)["results"][0]["linucb"]
     b = ok(flipped)["results"][0]["linucb"]
-    assert (a["startMs"], a["score"]) == (b["startMs"], b["score"])
+    assert (a["selectedArm"], a["score"], a["startMs"]) == (
+        b["selectedArm"],
+        b["score"],
+        b["startMs"],
+    )
+
+
+@pytest.mark.parametrize(
+    ("arm", "dur", "want_start_min"),
+    [
+        ("MORNING", 60, 8 * 60),  # [06:00, 11:00) centre 08:30 -> 08:00-09:00
+        ("AFTERNOON", 60, 13 * 60 + 30),  # [11:00, 17:00) centre 14:00
+        ("EVENING", 90, 17 * 60 + 45),  # [17:00, 20:00) centre 18:30
+        ("NIGHT", 120, 21 * 60),  # [20:00, 24:00) centre 22:00
+    ],
+)
+def test_winning_band_places_the_task_at_its_centre(
+    arm: str, dur: int, want_start_min: int
+) -> None:
+    """Inside the winning band the arm term is flat; the fixed tie-break centres
+    the task in the band instead of its first minute (e.g. 06:00)."""
+    scores = {a: 0.0 for a, *_ in ARM_BANDS} | {arm: 0.5}
+    day = MIDNIGHT + DAY_MS
+    pick = best_linucb_slot([_one_day(day, scores)], dur, "UTC", NOW, day + DAY_MS)
+    assert pick is not None and pick.arm == arm
+    assert pick.start_ms == day + want_start_min * 60_000
 
 
 # ---- cold-start tie-break -----------------------------------------------
 
 
-def test_cold_tie_break_is_deterministic_and_covers_every_bucket() -> None:
+def test_cold_tie_break_is_deterministic_and_spreads_over_waking_bands() -> None:
     cold = {a: 0.0 for a, *_ in ARM_BANDS}
     day = MIDNIGHT + DAY_MS
     arms = set()
     for i in range(200):
         order = seeded_tie_break_order(f"req-{i}|t1")
-        pick = best_linucb_slot(
-            [_one_day(day, cold)],
-            60,
-            "UTC",
-            NOW,
-            day + DAY_MS,
-            tie_break_order=order,
-        )
-        again = best_linucb_slot(
-            [_one_day(day, cold)],
-            60,
-            "UTC",
-            NOW,
-            day + DAY_MS,
-            tie_break_order=seeded_tie_break_order(f"req-{i}|t1"),
-        )
-        assert pick is not None and again is not None
-        assert (pick.start_ms, pick.arm) == (again.start_ms, again.arm)
-        assert pick.arm == order[0]
-        arms.add(pick.arm)
-    assert arms == {a for a, *_ in ARM_BANDS}
+        assert order[-1] == "EARLY_MORNING"
+        picks = [
+            best_linucb_slot(
+                [_one_day(day, cold)],
+                60,
+                "UTC",
+                NOW,
+                day + DAY_MS,
+                tie_break_order=seeded_tie_break_order(f"req-{i}|t1"),
+            )
+            for _ in range(2)
+        ]
+        assert picks[0] is not None and picks[1] is not None
+        assert (picks[0].start_ms, picks[0].arm) == (picks[1].start_ms, picks[1].arm)
+        assert picks[0].arm == order[0]
+        arms.add(picks[0].arm)
+    assert arms == {"MORNING", "AFTERNOON", "EVENING", "NIGHT"}

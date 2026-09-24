@@ -27,10 +27,10 @@ class LinucbPolicy:
     """Slot-first LinUCB search (issue #62 A) over one request's bandit state.
 
     Hydrates every arm's ``(A, b)`` once per request via
-    :func:`src.serialization.hydrate_arms` — an arm with a fully empty state
-    (no ``A`` and no ``b``) is "cold" and fixed at score ``0.0`` by contract;
-    every other arm is seeded at the ridge prior (``A = ridge * I``) and
-    scored through :func:`src.models.linucb.score`.
+    :func:`src.serialization.hydrate_arms`; a cold arm is the ridge prior
+    (``A = ridge * I, b = 0``) and scores its full exploration bonus. The
+    preference matrix is deliberately NOT an input: the A/B compares pure
+    LinUCB against the pure preference heuristic.
     """
 
     def __init__(self, bandit: BanditWire | None, timezone: str) -> None:
@@ -66,17 +66,13 @@ class LinucbPolicy:
         Returns
         -------
         dict[ArmId, ndarray of shape (M, N)]
-            All 5 arms, per contract. A cold arm (no ``A``/``b``) scores
-            ``0.0`` everywhere, matching the un-batched contract.
+            All 5 arms, per contract.
         """
         m, n, d = x.shape
         flat = x.reshape(m * n, d) if m * n else np.empty((0, d))
         out: dict[ArmId, NDArray[np.float64]] = {}
         for arm in ARM_IDS:
-            params = self._arms.get(arm)
-            if params is None:
-                out[arm] = np.zeros((m, n))
-                continue
+            params = self._arms[arm]
             scored = np.asarray(
                 linucb_score(params.A, params.b, flat, self.alpha), dtype=np.float64
             )

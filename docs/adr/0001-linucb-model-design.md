@@ -6,7 +6,7 @@
 
 Related: [`docs/scheduler/reranking.md`](../scheduler/reranking.md) (arm → timestamp
 mapping), [`docs/scheduler/ab-testing.md`](../scheduler/ab-testing.md) (experiment),
-[`docs/scheduler/heuristic.md`](../scheduler/heuristic.md) (the baseline scheduler,
+[`services/bandit/README.md`](../../services/bandit/README.md) (the baseline scheduler,
 Policy A), [ADR-0002](0002-scheduling-simplification.md) (the move-or-keep signal).
 
 ---
@@ -79,47 +79,25 @@ context vector `x` and scores it against each of the 5 arms:
 The arm is **not** duplicated in the context (disjoint LinUCB keeps a separate model per
 arm). The vector is deliberately small — behavioral data is limited.
 
-### 5.1 Feature vector (d = 22)
+### 5.1 Feature vector (d = 7)
 
-| Group         | Feature                        | Dims | Encoding / source                                                              |
-| ------------- | ------------------------------ | ---- | ----------------------------------------------------------------------------- |
-| session       | `remaining_days_until_deadline`| 1    | continuous, normalized (§5.2)                                                 |
-| session       | `duration`                     | 1    | minutes (positive multiple of 15), normalized (§5.2)                         |
-| candidate day | `day_of_week`                  | 7    | one-hot, ISO weekday (Mon = index 0)                                          |
-| candidate day | `candidate_days_from_now`      | 1    | whole days from today, normalized (§5.2)                                      |
-| candidate day | `workload_by_type`             | 10   | for each `SessionType` {LECTURE, ASSIGNMENT, EXAM, TASK, DND}: (scheduled hours, session count) already placed on that day, normalized (§5.2) |
-| candidate day | `semester_phase`               | 1    | fraction through the academic term from the DLU term calendar, `(now − term_start) / (term_end − term_start)` clamped to `[0, 1]`, then `·2 − 1`; `0` if no term calendar is available |
-| —             | bias term                      | 1    | constant `1`                                                                 |
+| # | Feature                         | Encoding                                  |
+| - | ------------------------------- | ----------------------------------------- |
+| 0 | `remaining_days_until_deadline` | `clamp(x / 60, 0, 1) · 2 − 1`             |
+| 1 | `duration` (minutes)            | `clamp(x / 480, 0, 1) · 2 − 1`            |
+| 2 | `candidate_days_from_now`       | `clamp(x / 60, 0, 1) · 2 − 1`             |
+| 3 | `is_weekend` (ISO 6/7)          | `+1` / `−1`                               |
+| 4 | fixed load: LECTURE + EXAM + DND hours on the day | `clamp(h / 12, 0, 1)`   |
+| 5 | flexible load: TASK + ASSIGNMENT hours on the day | `clamp(h / 12, 0, 1)`   |
+| 6 | bias                            | `1`                                       |
 
-**Total `d = 22`.** This fixes the width of every stored vector: `BanditArmState.A`
-(22 × 22), `BanditArmState.b` (22), `SlotProposal.featureVector` (22). Changing `d` is
-normally a migration; `day_preference_profile[24]` (Item 3B1's reserved, always-zero
-slots — never fed from `User.preferenceMatrix`, never read by LinUCB) was dropped
-outright instead of kept, since no stored `A`/`b`/`featureVector` had accumulated any
-real signal there. `BANDIT_MODEL_VERSION` was bumped (`linucb-d46-v1` →
-`linucb-d22-v1`) to mark the boundary. `User.preferenceMatrix` still influences LinUCB's
-slot choice, just never as a context-vector feature — a fixed, duration-normalized
-post-hoc nudge (`PREFERENCE_NUDGE_WEIGHT` in `constants.ts`) breaks ties between
-minutes/days within LinUCB's already-chosen arm (`linucb-best-slot.ts`'s
-`bestMinuteInArm`), same as before this change.
-
-Deliberately excluded: tags (per-user, no global vocabulary — `Tag @@unique([userId, name])`);
-a session `type` one-hot (constant — TASK-only scheduling); a separate exam / grade-risk
-weight (no such field; the `workload_by_type` exam counts carry the exam signal for the
-day); titles / notes (text dimensionality).
-
-### 5.2 Normalization
-
-All continuous features use **fixed-divisor min-max scaling to `[-1, 1]`, clamped** — no
-running mean/variance, so the transform is stateless and reproducible.
-
-| Feature                                              | Transform                                                       |
-| --------------------------------------------------- | -------------------------------------------------------------- |
-| `remaining_days_until_deadline`, `candidate_days_from_now` | `clamp(x / MAX_SCAN_DAYS, 0, 1) · 2 − 1`  (`MAX_SCAN_DAYS = 60`) |
-| `duration`                                          | `clamp(minutes / 480, 0, 1) · 2 − 1`                            |
-| `workload_by_type` hours / count (per entry)       | `clamp(hours / 12, 0, 1)`, `clamp(count / 8, 0, 1)`             |
-| `semester_phase`                                    | already `[0, 1]` → `· 2 − 1`                                    |
-| one-hot groups, bias                                | not normalized                                                  |
+- Fixed divisors, no running stats: stateless and reproducible. `60` = `MAX_SCAN_DAYS`.
+- `is_weekend` is signed so `‖x‖`, and with it the exploration bonus, is the same on every day.
+- `d` fixes the width of `BanditArmState.A` (d×d), `.b` and `SlotProposal.featureVector`.
+  Changing it means resetting arm state and bumping `BANDIT_MODEL_VERSION`.
+- The preference matrix is never an input.
+- Excluded: tags (per-user vocabulary), session type (always TASK), titles/notes.
+- History: d = 46 → 22 (dropped the unused preference slots). 22 → 7 on 2026-09-23 (§14).
 
 ---
 
@@ -132,7 +110,8 @@ A = λI      (λ = 1.0)
 b = 0
 ```
 
-The uncertainty term `α·√(xᵀA⁻¹x)` encourages early exploration. As feedback arrives, each
+A cold arm scores its exploration bonus `α·√(xᵀx/λ)`, never a fixed `0`, so an arm whose
+placements get moved falls below the untried ones. As feedback arrives, each
 student's arm models are updated independently.
 
 ```text
@@ -153,7 +132,7 @@ database** — not pgvector, not a separate instance (`(A, b)` is never queried 
 model BanditArmState {
   userId    String
   arm       SchedulingArm
-  A         Float[]        // d·d row-major, d = 22
+  A         Float[]        // d·d row-major, d = 7
   b         Float[]        // d
   version   Int            @default(0)  // optimistic-concurrency guard
   updatedAt DateTime       @updatedAt
@@ -175,16 +154,16 @@ The reward is the ADR-0002 move-or-keep signal, against
 `SessionEventType = CREATE | MOVE | RETAINED` (a resize is a `MOVE` with
 `dragDistanceMinutes == 0`):
 
-| Event      | Reward                                                                                          |
-| ---------- | --------------------------------------------------------------------------------------------- |
-| `RETAINED` | `+1` — the session's interval elapsed and it was never moved                                  |
-| `MOVE`     | `−clamp(|dragDistanceMinutes| / D_SCALE, 0, 1)`  with `D_SCALE = 240` (min)                    |
-| `MOVE`, resize only (`dragDistanceMinutes == 0`) | `0`                                                     |
-| `CREATE`   | `0` — not an update; logged only                                                              |
+| Event                          | Reward                                          |
+| ------------------------------ | ----------------------------------------------- |
+| `RETAINED`                     | `+1`: elapsed and never moved                   |
+| `MOVE`                         | `−min(1, abs(dragDistanceMinutes) / D_SCALE)`   |
+| `MOVE`, resize only (drag = 0) | `0`                                             |
+| `CREATE`                       | `0`: logged only, no update                     |
 
 The `MOVE` penalty is a linear ramp from `0` (no displacement) to `−1` (displaced ≥ 4 h),
 clamped. `dragDistanceMinutes` is signed `(new − old start)`; the reward uses its magnitude,
-measured from the model's *originally proposed* start
+measured from the model's _originally proposed_ start
 (`SlotProposal.proposedStartTime`, equal to `oldSnapshot.scheduledStartTime` on the first
 move). Only the **first** `MOVE` after a proposal produces a bandit update; subsequent
 moves are logged but not re-applied, so nudging a session repeatedly does not compound the
@@ -209,7 +188,7 @@ deadline `dl`:
    `overlap_rate` is the fraction of `[c, c + duration)` inside that arm's band (a slot
    straddling local midnight is split there and each part scored against its own day). The
    `slotPreferenceScore` addend is the same overlap-weighted preference score Policy A uses
-   (`docs/scheduler/heuristic.md`); it keeps slots meaningfully ordered before any arm has
+   (`services/bandit/README.md`); it keeps slots meaningfully ordered before any arm has
    accumulated reward — a bandit arm with no data scores `0`.
 4. Pick the highest `slot_score`; earliest start breaks ties.
 
@@ -254,12 +233,12 @@ stamps the proposal consumed (`observationCount++`).
 
 ## 10. Parameters
 
-| Parameter          | Value  | Notes                                                                                     |
-| ------------------ | ------ | --------------------------------------------------------------------------------------- |
-| ridge `λ`          | `1.0`  | `A = λI` at cold start; matches `services/bandit/src/models/linucb.py` default           |
-| exploration `α`    | `0.15` | shipped default — stability over exploration; env-configurable; tune via offline replay |
-| `D_SCALE`          | `240`  | minutes; `MOVE` penalty saturates at ≥ 4 h displacement                                  |
-| `MAX_SCAN_DAYS`    | `60`   | candidate-day horizon and the deadline/day normalization divisor (`scheduler/constants.ts`); it feeds every stored feature vector, so changing it is a migration |
+| Parameter       | Value  | Notes                                                                                                                                                            |
+| --------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ridge `λ`       | `1.0`  | `A = λI` at cold start; matches `services/bandit/src/models/linucb.py` default                                                                                   |
+| exploration `α` | `0.15` | shipped default — stability over exploration; env-configurable; tune via offline replay                                                                          |
+| `D_SCALE`       | `240`  | minutes; `MOVE` penalty saturates at ≥ 4 h displacement                                                                                                          |
+| `MAX_SCAN_DAYS` | `60`   | candidate-day horizon and the deadline/day normalization divisor (`scheduler/constants.ts`); it feeds every stored feature vector, so changing it is a migration |
 
 Optional stability follow-up (not shipped): warm-start `θ` for each arm from the user's
 `preferenceMatrix` band means instead of `b = 0`, so a brand-new user does not explore
@@ -284,7 +263,7 @@ per member. See [`ab-testing.md`](../scheduler/ab-testing.md).
 ## 12. Decision summary
 
 ```text
-context vector x (user × task × candidate day), d = 22
+context vector x (user × task × candidate day), d = 7
     ↓
 5 half-open time-of-day arms, Disjoint LinUCB (λ = 1.0, α = 0.15)
     ↓
@@ -317,7 +296,7 @@ new user was proposed 00:00 (EARLY_MORNING first). A bigger nudge would make Lin
 **Decision.**
 
 1. `core/linucb-best-slot.ts` scores every feasible 15-min start on every candidate day and ranks
-   across days. Starts include 23:45 overhanging midnight; the deadline caps the *end* and need not
+   across days. Starts include 23:45 overhanging midnight; the deadline caps the _end_ and need not
    be slot-aligned.
 
    ```text
@@ -329,6 +308,7 @@ new user was proposed 00:00 (EARLY_MORNING first). A bigger nudge would make Lin
    - `armScore[day]` is the `/predict` output for the day the slot starts on.
    - `selectedArm` (the arm a delayed `/update` reward is credited to) stays the arm containing the start.
    - Arm/hour overlap uses per-day wall-clock offsets (exact on 24h days; DST days use the Intl `overlapRate`).
+
 2. **Adaptive weights** `(wL, wP) = adaptiveWeights(observationCount)` (`core/adaptive-weights.ts`,
    constants in `constants.ts`). Cold: `wP = 1, wL = 0.3`. Warm: `wP = 0.1, wL = 1`. Linear over
    `WEIGHT_WARMUP_OBSERVATIONS = 40` reward events (user `MOVE` + `RETAINED`; `SYSTEM_MOVE` never
@@ -336,7 +316,7 @@ new user was proposed 00:00 (EARLY_MORNING first). A bigger nudge would make Lin
    heuristic stays preference-only (no arm term), so the A/B keeps two distinct policies.
 3. **Exact ties**: `TIE_BREAK_ARM_ORDER` (MORNING, AFTERNOON, EVENING, EARLY_MORNING, NIGHT) on the
    start's arm, then earlier start. Deterministic, never favours 00:00.
-4. `PREFERENCE_NUDGE_WEIGHT` is unused by the scan (still exported). The `/predict` / `/update`
+4. `PREFERENCE_NUDGE_WEIGHT` is unused by the scan (deleted 2026-09-23). The `/predict` / `/update`
    contract is unchanged.
 5. `MAX_SCAN_DAYS` stays 60 (it normalizes the context vector). Single-task placement scans at most
    `SCAN_CAP_DAYS = 30` days. One range query loads all day loads for a scan.
@@ -350,3 +330,28 @@ free slot before its deadline.
 - Scheduler moves are `SYSTEM_MOVE` events (reward 0): no bandit update, no preference change.
 - If still infeasible the API returns `409 SCHEDULE_INFEASIBLE`. The client retries with
   `infeasiblePolicy: "ACCEPT_CONFLICTS" | "ACCEPT_LATE_DEADLINE"`.
+
+---
+
+## 14. Addendum (2026-09-23): fast learning for MVP verification
+
+Replaces §5.1's d = 22, the "cold arm scores 0" rule, and the preference-matrix in-band tie-break.
+
+- **Cold arm = ridge prior.** Every untried arm scores `α·√(xᵀx/λ)`.
+  - Before: a cold arm was pinned at `0`. The first arm to be rewarded won forever, even when its
+    placements were moved.
+  - At full cold start the seeded band order still breaks the tie, with EARLY_MORNING last.
+- **d = 22 → 7** (§5.1).
+  - Dropped: `semester_phase` (always 0), the weekday one-hots (collinear with the bias), and
+    per-type hours and counts (overlapping, mostly 0).
+  - Stored d = 22 arm state must be cleared before deploy (`BANDIT_MODEL_VERSION = "linucb-d7-v0"`).
+  - Delayed rewards for d = 22 proposals are dropped (`BANDIT_FEATURE_DIM`).
+- **No preference matrix in LinUCB.** Inside the winning band, the start closest to the band's
+  centre wins: a fixed rule that learns nothing. This keeps the A/B as pure LinUCB vs the pure
+  heuristic.
+- **Evidence:** `services/bandit/tests/test_learning.py` runs the real place → reward → update loop
+  against simulated users.
+  - A fixed band is found in ≤ 4 placements and then held.
+  - A weekday/weekend split is learned by the 3rd weekend.
+- **Deferred until prod data points to them:** hybrid LinUCB, a matrix-seeded prior, splitting
+  AFTERNOON.
