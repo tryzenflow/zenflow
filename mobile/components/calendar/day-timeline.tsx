@@ -29,8 +29,9 @@ import {
   getSeriesKind,
   tasksToBlocks,
   zonedNow,
+  type BlockLayout,
 } from "@zenflow/core";
-import type { Session } from "@zenflow/shared";
+import type { DaySegment, Session } from "@zenflow/shared";
 import { format } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -58,11 +59,58 @@ import type {
 } from "./update-recurring-sheet";
 
 /** Inset (px) of every block from the day column's edges. */
-const BLOCK_GUTTER = 4;
+const BLOCK_GUTTER = 2;
 /** Each overlapping (cascaded) block shifts right by this share of the day
  * column's width, capped at {@link CASCADE_MAX_STEP} px. */
 const CASCADE_STEP_RATIO = 0.14;
 const CASCADE_MAX_STEP = 44;
+/** Room (px) a stacked block leaves above it so the title of the block
+ * beneath stays visible, e.g. when both start at the same time. */
+const TITLE_PEEK = 22;
+
+/**
+ * Downward shift (px) per segment: a block drawn over an overlapping one whose
+ * top is within {@link TITLE_PEEK} of its own moves below that block's title.
+ */
+function stackShifts(
+  segments: readonly DaySegment[],
+  layout: Map<string, BlockLayout>,
+  pxPerMs: number,
+): Map<string, number> {
+  const items = segments.map((s) => {
+    const l = layout.get(s.segmentId);
+    const startMs = new Date(s.start).getTime();
+    return {
+      id: s.segmentId,
+      startMs,
+      endMs: new Date(s.end).getTime(),
+      top: startMs * pxPerMs,
+      // Paint order: cascade columns left to right, nested blocks on top.
+      z: (l?.nested ? 1000 : 0) + (l?.column ?? 0) * 10 + (l?.nestIndex ?? 0),
+      shift: 0,
+    };
+  });
+  items.sort((a, b) => a.z - b.z || a.startMs - b.startMs);
+  const shifts = new Map<string, number>();
+  items.forEach((item, i) => {
+    const beneath = items
+      .slice(0, i)
+      .filter(
+        (p) =>
+          p.z < item.z && p.startMs < item.endMs && item.startMs < p.endMs,
+      )
+      .sort((a, b) => a.top + a.shift - (b.top + b.shift));
+    for (const p of beneath) {
+      const pTop = p.top + p.shift;
+      const top = item.top + item.shift;
+      if (top >= pTop && top < pTop + TITLE_PEEK) {
+        item.shift = pTop + TITLE_PEEK - item.top;
+      }
+    }
+    shifts.set(item.id, item.shift);
+  });
+  return shifts;
+}
 
 const GUTTER_WIDTH = 64;
 const HOUR_HEIGHT_DEFAULT = 64;
@@ -327,6 +375,10 @@ export function DayTimeline({
   }, [tasks, date, tz]);
 
   const layout = useMemo(() => getOverlapLayout(segments), [segments]);
+  const topShifts = useMemo(
+    () => stackShifts(segments, layout, totalHeight / (DAILY_HORIZON * 60_000)),
+    [segments, layout, totalHeight],
+  );
 
   // A task clamped at the midnight line (its flat bottom edge + "→ next day"
   // label, task-block.tsx) gets the dashed boundary marker under it — the
@@ -858,11 +910,7 @@ export function DayTimeline({
                     columns: 1,
                     conflict: false,
                   };
-                  // Overlapping sessions cascade instead of splitting into
-                  // narrow side-by-side columns: each later column is drawn
-                  // on top, full width minus a left offset, so every card
-                  // keeps a readable width and the ones beneath still peek
-                  // out on the left. 6px gutters match `left-1.5 right-1.5`.
+                  // Overlaps cascade: later columns draw on top, offset left.
                   const cascadeStep = Math.min(
                     CASCADE_MAX_STEP,
                     contentWidth * CASCADE_STEP_RATIO,
@@ -880,6 +928,7 @@ export function DayTimeline({
                       tz={tz}
                       totalHeight={totalHeight}
                       leftOffset={leftOffsetPx}
+                      topShift={topShifts.get(segment.segmentId) ?? 0}
                       blockWidth={blockWidthPx}
                       deadline={deadlineBySession.get(segment.taskId) ?? null}
                       late={lateSessionIds.has(segment.taskId)}

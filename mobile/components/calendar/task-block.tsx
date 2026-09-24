@@ -159,6 +159,8 @@ interface SessionBlockProps {
   /** Left edge (px) within the day column — `DayTimeline` cascades
    * overlapping blocks by shifting later columns right. */
   leftOffset: number;
+  /** Downward shift (px) that keeps the title of the block beneath visible. */
+  topShift?: number;
   blockWidth: number;
   deadline?: string | null;
   /** `Session.late` — placed past its deadline ("accept late deadline"). */
@@ -209,6 +211,7 @@ function SessionBlockImpl({
   tz,
   totalHeight,
   leftOffset,
+  topShift = 0,
   blockWidth,
   deadline,
   late = false,
@@ -423,6 +426,7 @@ function SessionBlockImpl({
   // inset down-and-right (mirrors the web's `scheduled-block-item.tsx`).
   const isNested = Boolean(layout.nested);
   const nestOffset = isNested ? 6 + (layout.nestIndex ?? 0) * 6 : 0;
+  const topOffset = Math.max(nestOffset, topShift);
   // Drawn over another block: needs an opaque backing + shadow.
   const cascadeLayer = Math.min(layout.column, 9);
   const isStacked = isNested || cascadeLayer > 0;
@@ -431,7 +435,7 @@ function SessionBlockImpl({
     const effectiveStart =
       pinnedStartMin.value != null ? pinnedStartMin.value : startMin;
     return {
-      top: (effectiveStart / DAILY_HORIZON) * totalHeight + nestOffset,
+      top: (effectiveStart / DAILY_HORIZON) * totalHeight + topOffset,
       zIndex: isDragging.value ? 40 : isNested ? 30 : 10 + cascadeLayer,
     };
   });
