@@ -38,8 +38,8 @@ const DEV_SAMPLES: CreateNotificationInput[] = [
   },
   {
     eventName: "lecture.group_created",
-    title: "Timetable for semester 1 is available",
-    content: "12 classes were added to your calendar.",
+    title: "You have 12 new lectures",
+    content: "Synced from DLU. Tap to see the next one on your calendar.",
     sessionId: null,
     eventEndsAt: null,
   },
