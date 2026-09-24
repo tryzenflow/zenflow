@@ -73,7 +73,7 @@ backend/
 │   ├── bandit/                 # BanditService (HTTP client for services/bandit/) +
 │   │                           #   BanditArmStateRepository (per-user (A,b) load/save)
 │   ├── experiments/            # ExperimentService — 50/50 policy assignment + SlotProposal
-│   ├── ingestion/             # DLU LMS/portal ingestion (issues #27/#29/#30)
+│   ├── ingestion/             # LMS/portal ingestion (issues #27/#29/#30)
 │   │   ├── core/               # PURE parsers — no Prisma, no clock, no randomness
 │   │   │   ├── semester.ts         # resolveSemester / isoWeek(sBetween) / monthsFrom — the portal's (academicYear, semester, tuan)
 │   │   │   ├── period-map.ts       # teaching periods ("tiết") → wall-clock minutes
@@ -121,41 +121,41 @@ Defined in [`prisma/schema.prisma`](prisma/schema.prisma)
 
 ### `User`
 
-| Field                       | Type       | Notes                                                                                                                                                                                                                                                                                                                                                                              |
-| --------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`                        | uuid       | PK                                                                                                                                                                                                                                                                                                                                                                                 |
-| `name`, `email`             | string     | `email` unique                                                                                                                                                                                                                                                                                                                                                                     |
-| `timezone`                  | string     | IANA, default `"UTC"`                                                                                                                                                                                                                                                                                                                                                              |
-| `lang`                      | `Language` | `VI_VN` \| `EN_US`, default `EN_US`. Not yet read by any endpoint.                                                                                                                                                                                                                                                                                                                 |
+| Field                       | Type       | Notes                                                                                                                                                                          |
+| --------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `id`                        | uuid       | PK                                                                                                                                                                             |
+| `name`, `email`             | string     | `email` unique                                                                                                                                                                 |
+| `timezone`                  | string     | IANA, default `"UTC"`                                                                                                                                                          |
+| `lang`                      | `Language` | `VI_VN` \| `EN_US`, default `EN_US`. Not yet read by any endpoint.                                                                                                             |
 | `preferenceMatrix`          | float[]    | flat 168 signed floats (7 weekdays × 24 hours, row-major). +/−/0 = preferred/disliked/neutral. Read by the engine; decayed nightly; seeded lazily from the cold-start default. |
-| `preferenceMatrixDecayedAt` | DateTime?  | last decay-cron pass; null until the first.                        |
-| `onboardingComplete`        | bool       | always `true`; no onboarding flow. Unused.                         |
+| `preferenceMatrixDecayedAt` | DateTime?  | last decay-cron pass; null until the first.                                                                                                                                    |
+| `onboardingComplete`        | bool       | always `true`; no onboarding flow. Unused.                                                                                                                                     |
 
 Per-user working-hours (`workStart`/`workEnd`/`workDays`) were dropped — the scheduler
 places across the full 24h grid, every day. See [Scheduler architecture](#scheduler-architecture).
 
 ### `Session`
 
-| Field                           | Type            | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| ------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`                            | uuid            | PK                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `title`, `note`                 | string          | `note` is rich text (TipTap)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `location`                      | string?         | free-text room/building; DLU watchers write the upstream room here. Not read by the scheduler. |
-| `durationMinutes`               | int             | always a positive multiple of 15.                                 |
-| `deadline`                      | DateTime?       | set for `TASK`, null for fixed types. Placement ordering key.     |
-| `tags`                          | `Tag[]`         | implicit m2m (per-user labels).                                   |
-| `type`                          | `SessionType`   | `TASK` (engine-placed) \| `ASSIGNMENT` \| `EXAM` \| `LECTURE` \| `DND` (user-pinned). |
-| `source`                        | `SessionSource` | `USER` \| `LMS` \| `PORTAL`.                                      |
-| `conflict`                      | bool            | overlaps another interval, or unplaced. Overlap is accepted — nothing auto-relocates. |
-| `deleted`                       | bool            | soft-delete flag, default `false`. A user-initiated delete sets this instead of removing the row (see `DELETE /sessions/:id` below); every read that feeds scheduling or calendar display filters `deleted: false`. The materializer's own `[userId, externalKey]` lookup is the deliberate exception — it must see a soft-deleted row so it can skip re-creating it. |
-| `scheduledStartTime`            | DateTime?       | engine placement (`TASK`) / client instant (fixed); null while unplaced. |
-| `lastMovedAt` / `retainedAt`    | DateTime?       | move-or-keep bookkeeping (ADR-0002 §2.1).                         |
-| `syncConfirmedAt` / `syncMissedAt` | DateTime?    | two-consecutive-run confirmation gate for an ingested row (issue #60/#62): `syncConfirmedAt` null means "created but not yet confirmed by a second watcher run" (on the calendar, but its notification is held back); `syncMissedAt` set means "missing on the last run, one miss so far" — a second consecutive miss is what actually soft-deletes it. Always null for a user-created session. See "Write-back" below. |
-| `userId`                        | uuid            | FK → `User`, cascade.                                             |
-| `seriesId`                      | uuid?           | FK → `SessionSeries`, cascade. Set for a recurring fixed representative and every sitting of a `sessionCount > 1` `TASK` series. |
-| `sessionIndex` / `sessionTotal` | int?            | 1-based position / total within a `TASK` series (denormalized).   |
-| `externalKey`                   | string?         | upstream DLU item id (`"<source>:<kind>:<id>"`); null for user sessions. Unique per `[userId, externalKey]` — the ingestion idempotency guard. |
-| `scheduleStudyUnitId`            | string?         | portal `ScheduleStudyUnitID` — set only on a portal-ingested `LECTURE`, shared by every meeting of that class across the term (there is no `SessionSeries` for these — one flat row per meeting). Null everywhere else, including a user-created recurring `LECTURE`. The grouping key for `DELETE /sessions/timetable-group/:sessionId[/from]`. |
+| Field                              | Type            | Notes                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ---------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                               | uuid            | PK                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `title`, `note`                    | string          | `note` is rich text (TipTap)                                                                                                                                                                                                                                                                                                                                                                                            |
+| `location`                         | string?         | free-text room/building; DLU watchers write the upstream room here. Not read by the scheduler.                                                                                                                                                                                                                                                                                                                          |
+| `durationMinutes`                  | int             | always a positive multiple of 15.                                                                                                                                                                                                                                                                                                                                                                                       |
+| `deadline`                         | DateTime?       | set for `TASK`, null for fixed types. Placement ordering key.                                                                                                                                                                                                                                                                                                                                                           |
+| `tags`                             | `Tag[]`         | implicit m2m (per-user labels).                                                                                                                                                                                                                                                                                                                                                                                         |
+| `type`                             | `SessionType`   | `TASK` (engine-placed) \| `ASSIGNMENT` \| `EXAM` \| `LECTURE` \| `DND` (user-pinned).                                                                                                                                                                                                                                                                                                                                   |
+| `source`                           | `SessionSource` | `USER` \| `LMS` \| `PORTAL`.                                                                                                                                                                                                                                                                                                                                                                                            |
+| `conflict`                         | bool            | overlaps another interval, or unplaced. Overlap is accepted — nothing auto-relocates.                                                                                                                                                                                                                                                                                                                                   |
+| `deleted`                          | bool            | soft-delete flag, default `false`. A user-initiated delete sets this instead of removing the row (see `DELETE /sessions/:id` below); every read that feeds scheduling or calendar display filters `deleted: false`. The materializer's own `[userId, externalKey]` lookup is the deliberate exception — it must see a soft-deleted row so it can skip re-creating it.                                                   |
+| `scheduledStartTime`               | DateTime?       | engine placement (`TASK`) / client instant (fixed); null while unplaced.                                                                                                                                                                                                                                                                                                                                                |
+| `lastMovedAt` / `retainedAt`       | DateTime?       | move-or-keep bookkeeping (ADR-0002 §2.1).                                                                                                                                                                                                                                                                                                                                                                               |
+| `syncConfirmedAt` / `syncMissedAt` | DateTime?       | two-consecutive-run confirmation gate for an ingested row (issue #60/#62): `syncConfirmedAt` null means "created but not yet confirmed by a second watcher run" (on the calendar, but its notification is held back); `syncMissedAt` set means "missing on the last run, one miss so far" — a second consecutive miss is what actually soft-deletes it. Always null for a user-created session. See "Write-back" below. |
+| `userId`                           | uuid            | FK → `User`, cascade.                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `seriesId`                         | uuid?           | FK → `SessionSeries`, cascade. Set for a recurring fixed representative and every sitting of a `sessionCount > 1` `TASK` series.                                                                                                                                                                                                                                                                                        |
+| `sessionIndex` / `sessionTotal`    | int?            | 1-based position / total within a `TASK` series (denormalized).                                                                                                                                                                                                                                                                                                                                                         |
+| `externalKey`                      | string?         | upstream DLU item id (`"<source>:<kind>:<id>"`); null for user sessions. Unique per `[userId, externalKey]` — the ingestion idempotency guard.                                                                                                                                                                                                                                                                          |
+| `scheduleStudyUnitId`              | string?         | portal `ScheduleStudyUnitID` — set only on a portal-ingested `LECTURE`, shared by every meeting of that class across the term (there is no `SessionSeries` for these — one flat row per meeting). Null everywhere else, including a user-created recurring `LECTURE`. The grouping key for `DELETE /sessions/timetable-group/:sessionId[/from]`.                                                                        |
 
 Indexes: `[userId, deadline]`, `[userId, scheduledStartTime]`,
 `[userId, seriesId, createdAt asc]`, `[userId, scheduleStudyUnitId]`;
@@ -163,23 +163,23 @@ unique `[userId, externalKey]`.
 
 ### `SessionReminder`
 
-| Field                 | Type      | Notes                                                                                                   |
-| --------------------- | --------- | ------------------------------------------------------------------------------------------------------- |
-| `id`                  | uuid      | PK; the timer is named `reminder:<id>` in `SchedulerRegistry`.                                          |
-| `remindBeforeMinutes` | int       | 0…10080 (0 = at start) (`MAX_REMINDER_MINUTES`).                                                                       |
+| Field                 | Type      | Notes                                                                                                  |
+| --------------------- | --------- | ------------------------------------------------------------------------------------------------------ |
+| `id`                  | uuid      | PK; the timer is named `reminder:<id>` in `SchedulerRegistry`.                                         |
+| `remindBeforeMinutes` | int       | 0…10080 (0 = at start) (`MAX_REMINDER_MINUTES`).                                                       |
 | `firedForStart`       | DateTime? | start of the occurrence last fired for — dedupes across restarts/re-arms; per-occurrence for a series. |
 | `sessionId`           | uuid      | FK → `Session`, cascade. At most 2 per session (`MAX_REMINDERS_PER_SESSION`); never on `DND`.          |
 
 ### `SessionEvent` (append-only audit trail — the ML fuel)
 
-| Field                         | Type               | Notes                                                         |
-| ----------------------------- | ------------------ | ------------------------------------------------------------- |
-| `id`                          | BigInt             | autoincrement (serialized as decimal string over the wire)    |
+| Field                         | Type               | Notes                                                                                         |
+| ----------------------------- | ------------------ | --------------------------------------------------------------------------------------------- |
+| `id`                          | BigInt             | autoincrement (serialized as decimal string over the wire)                                    |
 | `eventType`                   | `SessionEventType` | `CREATE` \| `MOVE` \| `RESIZE` \| `RETAINED` \| `SYSTEM_MOVE` (scheduler-initiated, reward 0) |
-| `oldSnapshot` / `newSnapshot` | Json               | `{ scheduledStartTime, durationMinutes, tags }`               |
-| `rewardScore`                 | float              | LinUCB reward signal (default 1.0)                            |
-| `occurredAt`                  | DateTime           | indexed desc per user                                         |
-| `sessionId` / `userId`        | uuid               | FKs, cascade delete (`userId` denormalized for range queries) |
+| `oldSnapshot` / `newSnapshot` | Json               | `{ scheduledStartTime, durationMinutes, tags }`                                               |
+| `rewardScore`                 | float              | LinUCB reward signal (default 1.0)                                                            |
+| `occurredAt`                  | DateTime           | indexed desc per user                                                                         |
+| `sessionId` / `userId`        | uuid               | FKs, cascade delete (`userId` denormalized for range queries)                                 |
 
 ### `Tag`
 
@@ -207,12 +207,12 @@ registration upserts on `pushToken`. See `devices/` and `POST /devices`.
 
 ### DLU ingestion tables
 
-| Table                               | Purpose                                                                                                                                                                                                                                                                                                                              |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `LmsCourse`                         | A Moodle course from the LMS calendar response's `course` block. Deduped on `lmsCourseId` (Moodle `course.id`).                                                                                                                                                                                                                      |
-| `PortalSection`                     | One student-portal course section — curriculum unit × term × group × teacher × room. Deduped on `scheduleStudyUnitId`; indexed `[yearStudy, termId]`, the access path for a whole-term refresh.                                                                                                                                      |
-| `LmsSyncJob` / `LmsSyncJobItem`     | Per-run tracking for the LMS watcher; one item per request (`url`, `attempt`, `statusCode`, `responseBody` kept for diagnosis).                                                                                                                                                                                                       |
-| `PortalAPIJob` / `PortalAPIJobItem` | Same shape for the portal poller.                                                                                                                                                                                                                                                                                                   |
+| Table                               | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LmsCourse`                         | A Moodle course from the LMS calendar response's `course` block. Deduped on `lmsCourseId` (Moodle `course.id`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `PortalSection`                     | One student-portal course section — curriculum unit × term × group × teacher × room. Deduped on `scheduleStudyUnitId`; indexed `[yearStudy, termId]`, the access path for a whole-term refresh.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `LmsSyncJob` / `LmsSyncJobItem`     | Per-run tracking for the LMS watcher; one item per request (`url`, `attempt`, `statusCode`, `responseBody` kept for diagnosis).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `PortalAPIJob` / `PortalAPIJobItem` | Same shape for the portal poller.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `Notification`                      | Raised by the materializer for a new/changed/removed ingested item. `eventName` (a stable slug like `"assignment.created"`, `"lecture.removed"`, `"sync_conflict.exam"`) is the sole machine-readable classification — clients derive `CREATED`\|`UPDATED`\|`REMOVED`\|`CONFLICT` via `notificationEventKind()` and `ASSIGNMENT`\|`EXAM`\|`LECTURE`\|`REMINDER` via `notificationCategory()` (both `@zenflow/shared`) from it rather than separate `eventType`/`topic` columns; `title`/`content` remain free text for display only. `eventEndsAt` (due/at time; null for grouped rows and removals), `sessionId` (target session); a term of lectures is one grouped `lecture.group_*` row. |
 
 `LmsCourse` and `PortalSection` are deliberately never joined — no shared identifier, and
@@ -368,43 +368,41 @@ is "plan work around this", not "confirm this item" — it already exists upstre
   instead of pattern-matching the free-text title/content. It also encodes the coarse
   `CREATED`\|`UPDATED`\|`REMOVED`\|`CONFLICT` classification — `notificationEventKind()`
   (`@zenflow/shared`) derives it from the slug rather than a separate column, so there is
-  one field to keep in sync, not two (e.g. `announceLectureChanges` titles "New lectures: …" vs
-  "Updated lectures: …"). Each per-item assignment/exam/lecture row also gets an
+  one field to keep in sync, not two (e.g. a digest row's `lecture.group_created` vs
+  `lecture.group_updated`). Each per-item assignment/exam/lecture row also gets an
   `eventEndsAt` (its `scheduledStartTime + durationMinutes`, the "due"/"at" time the inbox
-  shows); grouped and removal rows leave it null. User-facing copy says
-  **"semester 1/2/3"** (`termLabel`), never the portal's `HK0x`.
+  shows); grouped and removal rows leave it null.
 - **A single-run blip must not notify or delete (the confirm gate, issue #60/#62).** A
   first sighting of an upstream item writes the `Session` row immediately (visible on the
   calendar right away) but leaves `syncConfirmedAt` null and raises **no** notification —
   `create()`'s caller in `materialize()`'s main loop skips straight past `raise()`. Only once
-  the *same* `externalKey` survives a second consecutive run does `confirmPending()` stamp
+  the _same_ `externalKey` survives a second consecutive run does `confirmPending()` stamp
   `syncConfirmedAt` (re-applying the block's latest fields, since upstream may have refined
   them between the two sightings) and finally raise the "new item" notification. Symmetrically
-  in `reconcileDeleted`: a *confirmed* item missing from one run just gets `syncMissedAt`
+  in `reconcileDeleted`: a _confirmed_ item missing from one run just gets `syncMissedAt`
   stamped and is otherwise left exactly as-is — no soft-delete, no notification — and only a
-  *second* consecutive miss (the row still has `syncMissedAt` set) soft-deletes it and raises
+  _second_ consecutive miss (the row still has `syncMissedAt` set) soft-deletes it and raises
   the removal notification, same as before. The moment a confirmed item reappears,
   `syncMissedAt` is cleared back to null regardless of anything else about the row also having
   changed. A still-pending item (never confirmed) that vanishes before its second sighting is
   **hard**-deleted (`prisma.session.delete`, not soft) since it was never a real, user-facing
   item — no `Notification` FK to worry about, no notification either.
-- **A term's timetable is one notification.** Lecture creates/updates are held back and
-  folded into a single per-term row: once ≥ 10 lectures are on the calendar for the term it
-  is `"Timetable for semester 1 is available"` (raised once, then deduplicated on its title
-  so the ~20 weekly batches of a first-of-term sync do not each mint one), and its
-  `sessionId` is the earliest meeting so the row still lands the calendar on the term.
-  Below the threshold it lists the class names (`"New lectures: A, B, C +2 more"`).
-  Assignments and exams stay one notification each — those are individually actionable.
+- **One notification per item type per sync run** (`core/sync-digest.ts`). Each watcher
+  passes one `SyncDigest` through its run; `flushDigest()` then raises at most one row per
+  type (exams → assignments → lectures), e.g. `"You have 3 new lectures, 2 changes to your
+lectures, 1 lecture removed"`. `eventName` is `<type>.group_<kind>` (most significant
+  kind); `sessionId` is the soonest upcoming live session. Then **one sync-conflict check
+  per (source, type)** written.
 - **Handles upstream deletion** (`reconcileDeleted`). Each watcher accumulates every
   `externalKey` it saw across its whole run and, **only if every fetch succeeded**, hands
   them here; any ingested `(source, type)` session that starts inside the run's forward
   window (term end for the portal, the last fetched month for the LMS) but is not in that
   set has been dropped upstream — a cancelled class, a withdrawn exam, a deleted assignment.
-  A *confirmed* session gets exactly one free miss (`syncMissedAt` stamped, left alone); its
+  A _confirmed_ session gets exactly one free miss (`syncMissedAt` stamped, left alone); its
   second consecutive miss soft-deletes it (`deleted: true`, no `SessionEvent`; the
   `Notification` FK is `SetNull`) and raises the removal notification, regardless of whether
   the student had since hand-moved it (hand-moved rows are kept from the first miss on,
-  never touched). A still-*pending* session is hard-deleted outright on its first miss — see
+  never touched). A still-_pending_ session is hard-deleted outright on its first miss — see
   the confirm gate above. The removal notification groups exactly like a creation does for
   lectures, one-per-item for assignments/exams.
 
@@ -417,19 +415,19 @@ Global prefix `**/api/v1**`. All routes except `POST /auth/otp/*` require
 
 ### Auth (`/auth`)
 
-| Method | Path                | Purpose                                                                                                               |
-| ------ | ------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| POST   | `/auth/otp/request` | email a 6-digit OTP (no guard; rate-limited)                       |
+| Method | Path                | Purpose                                                                                         |
+| ------ | ------------------- | ----------------------------------------------------------------------------------------------- |
+| POST   | `/auth/otp/request` | email a 6-digit OTP (no guard; rate-limited)                                                    |
 | POST   | `/auth/otp/verify`  | verify, create user if new, start session. Reads `x-timezone`. (`LocalAuthGuard`; rate-limited) |
-| GET    | `/auth/me`          | current user                                                       |
-| POST   | `/auth/logout`      | destroy session                                                    |
+| GET    | `/auth/me`          | current user                                                                                    |
+| POST   | `/auth/logout`      | destroy session                                                                                 |
 
 ### Users (`/users`)
 
-| Method | Path                          | Purpose                                                                                                                                            |
-| ------ | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/users/me`                   | profile                                                            |
-| PATCH  | `/users/update/basic-info`    | update name/email                                                  |
+| Method | Path                          | Purpose                                                                                |
+| ------ | ----------------------------- | -------------------------------------------------------------------------------------- |
+| GET    | `/users/me`                   | profile                                                                                |
+| PATCH  | `/users/update/basic-info`    | update name/email                                                                      |
 | GET    | `/users/me/preference-matrix` | the 168-float preference matrix for the Insights heatmap (`PreferenceMatrixResponse`). |
 
 No onboarding or preferences-update endpoint. `timezone` is captured once at OTP signup
@@ -464,20 +462,20 @@ PATCH, omitted → unchanged, an array replaces. On a materialized `TASK` series
 to every sitting; on a recurring fixed occurrence id it edits the series' representative (so
 all occurrences). Violations → 400.
 
-| Method | Path                                         | Purpose                                                                                                                                                                                                                                                                                                                                                                                                          |
-| ------ | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| POST   | `/sessions`                                  | Create. A `TASK` → its best free slot (or, `sessionCount > 1`, a materialized series across `now…deadline`); a fixed/`DND` session at the given `scheduledStartTime` + optional `rrule`. Only when a `TASK` has no free slot before its deadline are flexible tasks repacked (see *Displacement* below). |
-| GET    | `/sessions?view=&date=`                      | List the `day`/`week`/`month` window + unplaced. Recurring series fanned to virtual rows. |
-| GET    | `/sessions/suggestions?q=&limit=`            | Title autocomplete (newest first, deduped by normalized title — a series' sittings, or a re-created title, collapse to the most recent). `limit` 1–50, default 10. |
-| GET    | `/sessions/deadline-options?anchor=`         | The six deadline quick-chip instants relative to `anchor`.        |
-| GET    | `/sessions/:id`                              | Detail. Recurring occurrence id: `"<seriesId>::<startISO>"` (URL-encoded). |
-| PATCH  | `/sessions/:id`                              | `UpdateSessionDto` — metadata, drag/resize, `rrule`, `sessionCount`. `scope` + `skipConflicting` narrow a series change; `sessionCount` grows/shrinks a `TASK` series (or promotes a plain `TASK` into one); may return `sessions[]` + `skippedSessionIds`. |
-| DELETE | `/sessions/:id`                              | Soft-delete one (`deleted: true`, row kept so an ingested item's `externalKey` isn't recreated on the next DLU sync); on an occurrence id, add the date to `exdates` instead. Returns `{ id }`. |
-| DELETE | `/sessions/series/:seriesId`                 | Delete the whole series.                                          |
-| DELETE | `/sessions/series/:seriesId/truncate?from=`  | Recurring series only — pull the rrule's `UNTIL` back to just before `from` ("this and following").                                                                                                                                                                                                                                                                                                              |
-| DELETE | `/sessions/series/:seriesId/from/:sessionId` | Materialized `TASK` series only — delete that sitting and every later one by `sessionIndex`; earlier sittings kept.                                                                                                                                                                                                                                                                                              |
-| DELETE | `/sessions/timetable-group/:sessionId/from`  | Portal-ingested `LECTURE`s only (no `SessionSeries`) — soft-delete that meeting and every later one sharing its `scheduleStudyUnitId` (the portal course-section id). 404 if not the caller's or not groupable (no `scheduleStudyUnitId`). Returns `RemoveTimetableGroupResponse` (`{ removedSessionIds }`). |
-| DELETE | `/sessions/timetable-group/:sessionId`       | Same grouping, unconditional on time — soft-deletes every meeting in the section. Same 404s/response shape.                                                                                                                                                                                                                                                                                                     |
+| Method | Path                                         | Purpose                                                                                                                                                                                                                                                                                                                                |
+| ------ | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/sessions`                                  | Create. A `TASK` → its best free slot (or, `sessionCount > 1`, a materialized series across `now…deadline`); a fixed/`DND` session at the given `scheduledStartTime` + optional `rrule`. Only when a `TASK` has no free slot before its deadline are flexible tasks repacked (see _Displacement_ below).                               |
+| GET    | `/sessions?view=&date=`                      | List the `day`/`week`/`month` window + unplaced. Recurring series fanned to virtual rows.                                                                                                                                                                                                                                              |
+| GET    | `/sessions/suggestions?q=&limit=`            | Title autocomplete (newest first, deduped by normalized title — a series' sittings, or a re-created title, collapse to the most recent). `limit` 1–50, default 10.                                                                                                                                                                     |
+| GET    | `/sessions/deadline-options?anchor=`         | The six deadline quick-chip instants relative to `anchor`.                                                                                                                                                                                                                                                                             |
+| GET    | `/sessions/:id`                              | Detail. Recurring occurrence id: `"<seriesId>::<startISO>"` (URL-encoded).                                                                                                                                                                                                                                                             |
+| PATCH  | `/sessions/:id`                              | `UpdateSessionDto` — metadata, drag/resize, `rrule`, `sessionCount`. `scope` + `skipConflicting` narrow a series change; `sessionCount` grows/shrinks a `TASK` series (or promotes a plain `TASK` into one); may return `sessions[]` + `skippedSessionIds`.                                                                            |
+| DELETE | `/sessions/:id`                              | Soft-delete one (`deleted: true`, row kept so an ingested item's `externalKey` isn't recreated on the next DLU sync); on an occurrence id, add the date to `exdates` instead. Returns `{ id }`.                                                                                                                                        |
+| DELETE | `/sessions/series/:seriesId`                 | Delete the whole series.                                                                                                                                                                                                                                                                                                               |
+| DELETE | `/sessions/series/:seriesId/truncate?from=`  | Recurring series only — pull the rrule's `UNTIL` back to just before `from` ("this and following").                                                                                                                                                                                                                                    |
+| DELETE | `/sessions/series/:seriesId/from/:sessionId` | Materialized `TASK` series only — delete that sitting and every later one by `sessionIndex`; earlier sittings kept.                                                                                                                                                                                                                    |
+| DELETE | `/sessions/timetable-group/:sessionId/from`  | Portal-ingested `LECTURE`s only (no `SessionSeries`) — soft-delete that meeting and every later one sharing its `scheduleStudyUnitId` (the portal course-section id). 404 if not the caller's or not groupable (no `scheduleStudyUnitId`). Returns `RemoveTimetableGroupResponse` (`{ removedSessionIds }`).                           |
+| DELETE | `/sessions/timetable-group/:sessionId`       | Same grouping, unconditional on time — soft-deletes every meeting in the section. Same 404s/response shape.                                                                                                                                                                                                                            |
 | POST   | `/sessions/:id/slot-pick`                    | `{ slotProposalId, chose: "primary" \| "alternative" }` — records which side of a pairwise-sampled `SlotProposal` the user picked (`pairwiseShown` events only); `"alternative"` applies that start as an ordinary `MOVE`. Idempotent, best-effort — never blocks the flow. See [LinUCB scheduling](#linucb-scheduling-ab-experiment). |
 
 ### Tags (`/tags`)
@@ -493,18 +491,18 @@ all occurrences). Violations → 400.
 
 ### Integrations (`/integrations`)
 
-Stores a student's DLU LMS / student-portal login for the ingestion watcher.
+Stores a student's LMS / student-portal login for the ingestion watcher.
 `CookieAuthGuard` + `@CurrentUser()`, own rows only. Credentials are never returned —
 only connection status. Types in `@zenflow/shared` (`ConnectIntegrationInput`,
 `IntegrationStatus`, `IntegrationStatusListResponse`).
 
-| Method | Path                           | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ------ | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Method | Path                           | Purpose                                                                                                                                         |
+| ------ | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | POST   | `/integrations`                | Connect. Body `{ provider, username, password }`. Live-login probe first (`400` rejected / `503` unreachable, no write), then encrypt + upsert. |
-| GET    | `/integrations`                | `[{ provider, connected, lastVerifiedAt, lastSyncedAt, lastSyncStatus }]` — the sync pair comes from the newest job row. |
-| PATCH  | `/integrations/:provider`      | Update credentials. Body `{ username?, password? }`. Same probe-then-write. |
-| DELETE | `/integrations/:provider`      | Disconnect. Idempotent; keeps the `UserEncryptionKey`.              |
-| POST   | `/integrations/:provider/sync` | Run this student's watchers now. `404` if not connected. Returns that provider's `IntegrationStatus`. |
+| GET    | `/integrations`                | `[{ provider, connected, lastVerifiedAt, lastSyncedAt, lastSyncStatus }]` — the sync pair comes from the newest job row.                        |
+| PATCH  | `/integrations/:provider`      | Update credentials. Body `{ username?, password? }`. Same probe-then-write.                                                                     |
+| DELETE | `/integrations/:provider`      | Disconnect. Idempotent; keeps the `UserEncryptionKey`.                                                                                          |
+| POST   | `/integrations/:provider/sync` | Run this student's watchers now. `404` if not connected. Returns that provider's `IntegrationStatus`.                                           |
 
 ### Notifications (`/notifications`)
 
@@ -522,14 +520,14 @@ user's clashing tasks; no calendar session is created. `title`/`content` remain 
 display. For a per-item assignment/exam/lecture, there's also an `eventEndsAt` (the
 "due"/"at" time; null for grouped rows and removals).
 
-| Method | Path                              | Purpose                                                     |
-| ------ | --------------------------------- | --------------------------------------------------------- |
-| GET    | `/notifications?limit=&offset=`   | One page, newest first. `unreadCount` counts the whole inbox. |
-| PATCH  | `/notifications/:id/read`         | Stamp `readAt`. Idempotent; `404` if not the caller's.   |
-| PATCH  | `/notifications/:id/action-taken` | Stamp `actionTakenAt` (distinct from read). Idempotent.  |
-| DELETE | `/notifications/:id`              | Dismiss (hard delete, caller-scoped).                    |
+| Method | Path                                      | Purpose                                                                                                                                                                                                                 |
+| ------ | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/notifications?limit=&offset=`           | One page, newest first. `unreadCount` counts the whole inbox.                                                                                                                                                           |
+| PATCH  | `/notifications/:id/read`                 | Stamp `readAt`. Idempotent; `404` if not the caller's.                                                                                                                                                                  |
+| PATCH  | `/notifications/:id/action-taken`         | Stamp `actionTakenAt` (distinct from read). Idempotent.                                                                                                                                                                 |
+| DELETE | `/notifications/:id`                      | Dismiss (hard delete, caller-scoped).                                                                                                                                                                                   |
 | POST   | `/notifications/:id/reschedule-conflicts` | `*_CONFLICT` rows only (`404` otherwise): re-places every listed task that still overlaps (EDF, `SYSTEM_MOVE` events), stamps `actionTakenAt`. Idempotent. Returns `{ rescheduled[{id,from,to}], failedSessionIds[] }`. |
-| POST   | `/notifications/dev/raise`        | **Dev only** (`404` when `NODE_ENV=production`), no guard. Body `{ userId, count? }` — raises fake rows in-process so the SSE stream + push fire. Driven by `scripts/send-test-notification.ts`. |
+| POST   | `/notifications/dev/raise`                | **Dev only** (`404` when `NODE_ENV=production`), no guard. Body `{ userId, count? }` — raises fake rows in-process so the SSE stream + push fire. Driven by `scripts/send-test-notification.ts`.                        |
 
 The live channel is SSE — see [Live notifications](#live-notifications-sse).
 
@@ -538,10 +536,10 @@ The live channel is SSE — see [Live notifications](#live-notifications-sse).
 Native-push device registry. `CookieAuthGuard`; no list route. Types: `RegisterDeviceInput`,
 `UnregisterDeviceInput`, `PushDataPayload`.
 
-| Method | Path       | Purpose                                                                          |
-| ------ | ---------- | ------------------------------------------------------------------------------- |
+| Method | Path       | Purpose                                                                                |
+| ------ | ---------- | -------------------------------------------------------------------------------------- |
 | POST   | `/devices` | Register/refresh. Body `{ platform, pushToken }`. Upserts on `pushToken` (idempotent). |
-| DELETE | `/devices` | Unregister by token. Body `{ pushToken }`. Idempotent, caller-scoped.          |
+| DELETE | `/devices` | Unregister by token. Body `{ pushToken }`. Idempotent, caller-scoped.                  |
 
 `PushService` subscribes to `NotificationsService.notificationEmitter` (alongside the SSE
 stream) and fans each notification out via `FcmSender` (Android) / `ApnsSender` (iOS). Both
@@ -694,18 +692,16 @@ Pieces (`scheduler/io/`):
   proposal has `placementSource = TS_FALLBACK`, `modelProposal = null` and a `degradedReason`
   (`timeout | breaker_open | connect | http_5xx | http_4xx | version | invalid_response | disabled`).
 - Create/update/reschedule responses carry `schedulingDegraded: true`.
-- No displacement, no accept-conflicts/late. With no free slot before the deadline the pre-flight
-  fails `503 SCHEDULER_DEGRADED` (`{ success: false, message, code }`, retryable) before anything is written.
-- `infeasiblePolicy` is ignored. Series are all-or-nothing (a member without a slot => 503).
-- Known edge: if Python dies between pre-flight and placement, a single `TASK` row can exist
-  unplaced when the fallback finds no slot (503). The retry re-creates it.
+- No displacement, never a 503: a miss answers like Python (`409 SCHEDULE_INFEASIBLE`, an
+  unplaced task, or `null` series rows). `infeasiblePolicy` = best free slot up to 30 days late.
+- Series: own day-window first, then the whole range (one per day, then uncapped).
 - **Risk (ADR-0003 phase 6 note):** there is no longer a parallel full TS ranking implementation
   to fall back to if `PythonPlacer`/`FallbackPlacer` itself has an undiscovered bug — only git
   history (`5763a29`) has it. Mitigations: `FallbackPlacer` + `PlacementClient`'s
   breaker/retry/timeout, and the contract fixtures (`packages/shared/contract/place/*.json`).
 
 The global exception filter passes a `HttpException` body's `code` (and `options`) through, so
-clients see `409 SCHEDULE_INFEASIBLE` and `503 SCHEDULER_DEGRADED`.
+clients see `409 SCHEDULE_INFEASIBLE`.
 
 - Metrics: `scheduler.placement_source{source,reason}`, `scheduler.breaker_state` (0 closed / 1 half-open / 2 open),
   `bandit.client.request.duration{operation=place}`.
@@ -742,8 +738,7 @@ never breaks session create/update.
 The scheduler places **one `TASK`** (or the members of one `TASK` series) into an empty
 15-minute slot and never moves anything else. An existing `TASK` series' sitting count can
 also be resized after creation (`PATCH /sessions/:id` with `sessionCount` — grow/shrink/promote
-a plain `TASK` into a series, `SeriesService.resizeSessionCount`/`promoteToSeries`) — see Flow
-5. All ranking now lives in `services/bandit` (Python, ADR-0003); Nest is split into a **pure
+a plain `TASK` into a series, `SeriesService.resizeSessionCount`/`promoteToSeries`) — see Flow 5. All ranking now lives in `services/bandit` (Python, ADR-0003); Nest is split into a **pure
 core** (`scheduler/core/*` — calendar/recurrence/preference-write helpers, plus the frozen
 heuristic fallback; no Prisma, no `new Date()`, no `Math.random()`) and an **I/O layer**
 (`scheduler/io/*` — `PythonPlacer`/`FallbackPlacer`, the one occupancy query, the delayed-reward
@@ -844,7 +839,7 @@ sequenceDiagram
       FB-->>P: start
       P->>P: session.update, recordProposal (placementSource=TS_FALLBACK, degradedReason)
     else no free slot
-      P-->>T: throw SchedulerDegradedException (503)
+      P-->>T: unplaced (scheduledStartTime null), like a Python INFEASIBLE
     end
   end
   P-->>T: PlacementResult
@@ -876,8 +871,8 @@ sequenceDiagram
     PY-->>P: one PlacedMember per member
     P->>P: recordProposal per member (placementSource=PYTHON)
   else degraded
-    P->>FB: placeSeries (all-or-nothing frozen loop — seriesDayWindows, siblings, day cap)
-    FB-->>P: rows[] (any null start => 503 SCHEDULER_DEGRADED)
+    P->>FB: placeSeries (frozen loop — seriesDayWindows, then spillover; siblings, day cap)
+    FB-->>P: rows[] (null start = no slot anywhere, same as Python)
   end
   P-->>T: rows[]
   T->>T: $tx( session.update scheduledStartTime for placed rows )
@@ -1013,14 +1008,14 @@ Displacement planning (EDF repack) and the two infeasible fallbacks
 (`services/bandit/src/core/displacement.py`), reached via the two-phase `/v1/place` infeasible
 flow (ADR-0003 §3.3). Nest's role is applying the response:
 
-| Concern                                                           | File                                            |
-| ----------------------------------------------------------------- | ----------------------------------------------- |
-| persist moves as `SYSTEM_MOVE`s (`applyMoves`/`isFlexible`)       | `scheduler/io/displacement.service.ts`          |
-| pre-flight (400 / 409) + delegate to `PythonPlacer`               | `scheduler/io/task-placement.service.ts`        |
-| pure conflict detection                                           | `scheduler/core/sync-conflicts.ts`              |
-| per-source sync-conflict notification                             | `ingestion/sync-conflicts.service.ts`           |
-| "reschedule all" (`POST /notifications/:id/reschedule-conflicts`) | `scheduler/io/conflict-reschedule.service.ts`   |
-| batched day loads (`loadDayLoads`, 2 queries for N days)          | `scheduler/io/day-load.ts`                      |
+| Concern                                                           | File                                          |
+| ----------------------------------------------------------------- | --------------------------------------------- |
+| persist moves as `SYSTEM_MOVE`s (`applyMoves`/`isFlexible`)       | `scheduler/io/displacement.service.ts`        |
+| pre-flight (400 / 409) + delegate to `PythonPlacer`               | `scheduler/io/task-placement.service.ts`      |
+| pure conflict detection                                           | `scheduler/core/sync-conflicts.ts`            |
+| per-source sync-conflict notification                             | `ingestion/sync-conflicts.service.ts`         |
+| "reschedule all" (`POST /notifications/:id/reschedule-conflicts`) | `scheduler/io/conflict-reschedule.service.ts` |
+| batched day loads (`loadDayLoads`, 2 queries for N days)          | `scheduler/io/day-load.ts`                    |
 
 Golden fixtures, narrowed to the frozen fallback (ADR-0003 phase 6):
 `pnpm --filter backend golden:export` writes `test/golden/scheduler-core.golden.json`
@@ -1054,30 +1049,30 @@ sharing one day's window; that's an unavoidable overlap the day cap and the seri
 
 ### Trace it in the source
 
-| Concept                                                                             | File                                          |
-| ----------------------------------------------------------------------------------- | --------------------------------------------- |
-| preference matrix helpers (`matrixIndex`, default/effective, `preferenceScoreAt`)   | `scheduler/core/preference.ts`                |
-| **frozen fallback**: overlap-weighted slot score + best-free-slot search            | `scheduler/core/slot-score.ts`                |
-| preference-matrix reinforcement (`reinforcePreferenceCell`)                         | `scheduler/core/preference.ts`                |
-| **frozen fallback**: series even spread + non-overlapping day buckets               | `scheduler/core/series-spread.ts`             |
-| rrule expansion + occurrence-id helpers                                             | `scheduler/core/recurrence.ts`                |
-| exponential preference-matrix decay                                                 | `scheduler/core/matrix-decay.ts`              |
-| pure delayed-reward math (`dragDistanceReward`)                                     | `scheduler/core/reward.ts`                    |
-| pure conflict detection                                                             | `scheduler/core/sync-conflicts.ts`            |
-| one day's occupied intervals + workload (the only occupancy query)                  | `scheduler/io/day-load.ts`                    |
-| **frozen fallback driver** — `placeSingle` / `placeSeries` on `HeuristicPlacer`      | `scheduler/io/heuristic-placer.service.ts`, `scheduler/io/fallback-placer.service.ts` |
-| the thin pass-through `sessions/` calls (arithmetic guard + persist)                | `scheduler/io/task-placement.service.ts`      |
-| gather -> `POST /v1/place` -> apply -> persist -> `SlotProposal`; degraded fallback  | `scheduler/io/python-placer.service.ts`       |
-| `PlaceRequest` builder + two-phase infeasible call                                  | `scheduler/io/placement-gateway.service.ts`   |
-| timeout/retry/circuit-breaker HTTP client for `/v1/place`                          | `scheduler/io/placement-client.service.ts`, `scheduler/io/circuit-breaker.ts` |
-| `TASK` series lifecycle — create, deadline redistribute, edit-mode `sessionCount` resize/promote | `sessions/series.service.ts`       |
-| delayed reward (first-`MOVE` + `RETAINED`) + `SlotProposal` acceptance columns       | `scheduler/io/scheduling-feedback.service.ts` |
-| `RETAINED` sweep — finds + marks elapsed sessions, delegates reward to the above     | `scheduler/io/retained-sessions.service.ts`   |
-| `POST /sessions/:id/slot-pick`                                                       | `sessions/slot-pick.service.ts`               |
-| nightly matrix decay cron                                                           | `scheduler/io/matrix-decay.service.ts`        |
-| `primaryPolicy` 50/50 + pairwise-sample draw + `SlotProposal` write                  | `experiments/experiment.service.ts`           |
-| tuning constants (`MAX_SCAN_DAYS`, `MAX_SERIES_PER_DAY`, `BANDIT_*`, `PAIRWISE_SAMPLE_RATE`, reward scales — Python's own copies own ranking behaviour, these are the fallback's) | `scheduler/constants.ts` |
-| Python's authoritative ranking core (heuristic, LinUCB, series, displacement)        | `services/bandit/src/core/*`                  |
+| Concept                                                                                                                                                                           | File                                                                                  |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| preference matrix helpers (`matrixIndex`, default/effective, `preferenceScoreAt`)                                                                                                 | `scheduler/core/preference.ts`                                                        |
+| **frozen fallback**: overlap-weighted slot score + best-free-slot search                                                                                                          | `scheduler/core/slot-score.ts`                                                        |
+| preference-matrix reinforcement (`reinforcePreferenceCell`)                                                                                                                       | `scheduler/core/preference.ts`                                                        |
+| **frozen fallback**: series even spread + non-overlapping day buckets                                                                                                             | `scheduler/core/series-spread.ts`                                                     |
+| rrule expansion + occurrence-id helpers                                                                                                                                           | `scheduler/core/recurrence.ts`                                                        |
+| exponential preference-matrix decay                                                                                                                                               | `scheduler/core/matrix-decay.ts`                                                      |
+| pure delayed-reward math (`dragDistanceReward`)                                                                                                                                   | `scheduler/core/reward.ts`                                                            |
+| pure conflict detection                                                                                                                                                           | `scheduler/core/sync-conflicts.ts`                                                    |
+| one day's occupied intervals + workload (the only occupancy query)                                                                                                                | `scheduler/io/day-load.ts`                                                            |
+| **frozen fallback driver** — `placeSingle` / `placeSeries` on `HeuristicPlacer`                                                                                                   | `scheduler/io/heuristic-placer.service.ts`, `scheduler/io/fallback-placer.service.ts` |
+| the thin pass-through `sessions/` calls (arithmetic guard + persist)                                                                                                              | `scheduler/io/task-placement.service.ts`                                              |
+| gather -> `POST /v1/place` -> apply -> persist -> `SlotProposal`; degraded fallback                                                                                               | `scheduler/io/python-placer.service.ts`                                               |
+| `PlaceRequest` builder + two-phase infeasible call                                                                                                                                | `scheduler/io/placement-gateway.service.ts`                                           |
+| timeout/retry/circuit-breaker HTTP client for `/v1/place`                                                                                                                         | `scheduler/io/placement-client.service.ts`, `scheduler/io/circuit-breaker.ts`         |
+| `TASK` series lifecycle — create, deadline redistribute, edit-mode `sessionCount` resize/promote                                                                                  | `sessions/series.service.ts`                                                          |
+| delayed reward (first-`MOVE` + `RETAINED`) + `SlotProposal` acceptance columns                                                                                                    | `scheduler/io/scheduling-feedback.service.ts`                                         |
+| `RETAINED` sweep — finds + marks elapsed sessions, delegates reward to the above                                                                                                  | `scheduler/io/retained-sessions.service.ts`                                           |
+| `POST /sessions/:id/slot-pick`                                                                                                                                                    | `sessions/slot-pick.service.ts`                                                       |
+| nightly matrix decay cron                                                                                                                                                         | `scheduler/io/matrix-decay.service.ts`                                                |
+| `primaryPolicy` 50/50 + pairwise-sample draw + `SlotProposal` write                                                                                                               | `experiments/experiment.service.ts`                                                   |
+| tuning constants (`MAX_SCAN_DAYS`, `MAX_SERIES_PER_DAY`, `BANDIT_*`, `PAIRWISE_SAMPLE_RATE`, reward scales — Python's own copies own ranking behaviour, these are the fallback's) | `scheduler/constants.ts`                                                              |
+| Python's authoritative ranking core (heuristic, LinUCB, series, displacement)                                                                                                     | `services/bandit/src/core/*`                                                          |
 
 ## Observability
 
@@ -1086,16 +1081,16 @@ Traces, metrics and logs (issue #53). App-side instrumentation lives in
 in `start:prod`); it is a no-op unless `OTEL_SDK_DISABLED=false`. All of it stays in
 `scheduler/io/*` and above — the `core/*` pure functions take no tracer (CLAUDE.md #2).
 
-| Signal      | Emitted by                                                              | Path to Grafana                                            |
-| ----------- | --------------------------------------------------------------------- | --------------------------------------------------------- |
-| **Traces**  | auto-instrumentations (http/express/nest/undici/pg/redis) + `withSpan()` seams (`otel.ts`) + Prisma | OTLP → OTel Collector → **Tempo**                          |
+| Signal      | Emitted by                                                                                                            | Path to Grafana                                                |
+| ----------- | --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| **Traces**  | auto-instrumentations (http/express/nest/undici/pg/redis) + `withSpan()` seams (`otel.ts`) + Prisma                   | OTLP → OTel Collector → **Tempo**                              |
 | **Metrics** | OTel Meter instruments in `observability/metrics.ts` (HTTP RED, outbound RED, ingestion, scheduler/bandit, push, SSE) | OTLP → Collector `prometheus` exporter ← **Prometheus** scrape |
-| **Logs**    | `nestjs-pino` JSON (one line, `message` key, `traceId`/`correlationId`/`userId` mixin) | container stdout → **Alloy** → **Loki**                    |
+| **Logs**    | `nestjs-pino` JSON (one line, `message` key, `traceId`/`correlationId`/`userId` mixin)                                | container stdout → **Alloy** → **Loki**                        |
 
 The Grafana stack (Collector, Tempo, Loki, Alloy, Prometheus, node-exporter, cAdvisor,
 Grafana) is defined in **`compose.prod.yml`** and, for local use, the standalone
 **`compose.observability.yml`**. Config + provisioned datasources + three dashboards
-(*API Overview*, *Scheduler & Bandit*, *Ingestion & Watchers*) live in
+(_API Overview_, _Scheduler & Bandit_, _Ingestion & Watchers_) live in
 [`observability/`](observability/README.md) — start there.
 
 ```bash
