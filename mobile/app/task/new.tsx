@@ -105,9 +105,9 @@ function toCreateInput(
 }
 
 /**
- * "New session" — full screen. A 3-way `SessionTypeTabs` selector sits just
- * below the Title field and switches between a flexible Task, a fixed
- * Assignment/Exam/Lecture, and a Do-Not-Disturb block. Reached via
+ * "New session" — full screen. A Task | Fixed `SessionTypeTabs` selector sits
+ * just below the Title field and switches between a flexible Task and a fixed
+ * Assignment / Exam / Lecture / Do-Not-Disturb block. Reached via
  * `router.push` with an optional `start` query param (a true UTC instant — see
  * `initialStart` / `initialDefaults` below).
  */

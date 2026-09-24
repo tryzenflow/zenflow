@@ -73,20 +73,6 @@ export default function EditSessionScreen() {
   const form = useSessionForm({ defaultValues: EMPTY_DEFAULTS });
   const loading = !task || form.formState.isSubmitting || deleting;
 
-  // Warn when the deadline being picked falls *before* where the engine has
-  // already scheduled this TASK — saving it would leave the session starting
-  // past its own due time (the edit-form mirror of the calendar's
-  // "schedule after the deadline?" drag guard). Recomputed as the user picks
-  // chips via `form.watch`.
-  const pendingDeadline = form.watch("deadline");
-  const deadlinePastStart =
-    !!task &&
-    task.type === "TASK" &&
-    isSessionPastDeadline({
-      scheduledStartTime: task.scheduledStartTime,
-      deadline: pendingDeadline,
-    });
-
   useEffect(() => {
     getSessionDetails(id)
       .then((res) => {
@@ -308,11 +294,6 @@ export default function EditSessionScreen() {
           tz={tz}
           disabled={loading}
           editing
-          deadlineWarning={
-            deadlinePastStart
-              ? "Earlier than this session's scheduled start — it'll be marked late."
-              : undefined
-          }
           editingInstance={{
             scheduledStartTime: task.scheduledStartTime,
             durationMinutes: task.durationMinutes,

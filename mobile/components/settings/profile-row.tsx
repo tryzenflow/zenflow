@@ -3,12 +3,12 @@ import { ChevronRight, Lock } from "@/components/Icons";
 import {
   BottomSheet,
   BottomSheetContent,
+  BottomSheetInput,
   BottomSheetOpenTrigger,
   BottomSheetView,
   useBottomSheet,
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { useColorScheme } from "@/lib/useColorScheme";
@@ -129,7 +129,7 @@ export function ProfileRow({
           <View className="mt-4 gap-[18px] px-5">
             <View>
               <Text className="mb-2 text-[14px] font-semibold">Name</Text>
-              <Input
+              <BottomSheetInput
                 value={name}
                 onChangeText={setName}
                 autoCapitalize="words"

@@ -124,9 +124,7 @@ export const sessionSchema = z
       // the deadline — mirrors the backend's `@IsFeasibleTaskWindow` (a
       // necessary, not sufficient, check; the placer's own pre-flight still
       // catches "the arithmetic fits but every day is already full"). The
-      // `"\n"` splits a short title from its description: rendered as two
-      // lines inline (React Native `Text` breaks on `\n`), and as a toast
-      // title + description via mobile's `splitToastMessage`.
+      // `"\n"` splits toast title from description (`splitToastMessage`).
       if (durationOk && deadlineOk) {
         const sessionCount = Math.max(1, Math.trunc(v.sessionCount ?? 1));
         const neededMs = (v.duration as number) * sessionCount * 60_000;
@@ -135,8 +133,8 @@ export const sessionSchema = z
             code: "custom",
             message:
               sessionCount > 1
-                ? `Can't fit ${sessionCount} sessions before the deadline\nLoosen the deadline or reduce the number of sessions.`
-                : "Won't fit before the deadline\nPick a later deadline.",
+                ? `Not enough time for ${sessionCount} sessions before this deadline\nChoose a later deadline or fewer sessions.`
+                : "Not enough time left before this deadline\nChoose a later deadline to leave room for this session.",
             path: ["deadline"],
           });
         }
