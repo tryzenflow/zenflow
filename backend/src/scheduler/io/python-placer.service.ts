@@ -23,9 +23,8 @@ import {
 import { recordPhase } from "../../observability/phase-timings";
 import { PrismaService } from "../../prisma/prisma.service";
 import { MAX_SCAN_DAYS, SCAN_CAP_DAYS } from "../constants";
-import { ceilToSlot, type Interval } from "../core/slot";
+import { ceilToSlot, DAY_MS, type Interval } from "../core/slot";
 import { ScheduleInfeasibleException } from "../schedule-infeasible.exception";
-import { SchedulerDegradedException } from "../schedule-degraded.exception";
 import type {
   PlaceableTask,
   PlacementResult,
@@ -53,9 +52,8 @@ const placed = (o: PlacedMember["outcome"]): boolean =>
  * apply -> persist. The A/B policy roll (`ExperimentService.assignPolicy`, the
  * only RNG) and every write stay here; all ranking is Python's. When the
  * service is unavailable the request is answered by the frozen heuristic
- * ({@link FallbackPlacer}) with the degraded rules of ADR-0003 2.4: no
- * displacement / accept-conflicts / accept-late, `SchedulerDegradedException`
- * (503) when no free slot exists, series all-or-nothing.
+ * ({@link FallbackPlacer}): no displacement, `infeasiblePolicy` = best free
+ * slot up to 30 days late, and a miss is treated as `INFEASIBLE` (never 503).
  */
 @Injectable()
 export class PythonPlacer {
@@ -72,7 +70,7 @@ export class PythonPlacer {
 
   // ---- pre-flights (read-only, run BEFORE anything is written) ----------
 
-  /** Single `TASK` pre-flight: 409 when infeasible w/o policy, 503 when degraded and no slot. */
+  /** Single `TASK` pre-flight: 409 when infeasible w/o policy (Python or fallback). */
   async preflightSingle(args: {
     user: User;
     taskId?: string;
@@ -106,15 +104,15 @@ export class PythonPlacer {
         user.preferenceMatrix,
         now,
       );
-      if (start) return;
-      throw new SchedulerDegradedException();
+      if (start || policy) return;
+      throw new ScheduleInfeasibleException();
     }
     this.noteSource("python");
     if (placed(res.response.results[0].outcome) || policy) return;
     throw new ScheduleInfeasibleException();
   }
 
-  /** `true` iff every member of a would-be series fits. Degraded and infeasible => 503. */
+  /** `true` iff every member of a would-be series fits (Python or fallback). */
   async canPlaceSeries(args: {
     user: User;
     durationMinutes: number;
@@ -152,8 +150,7 @@ export class PythonPlacer {
       user.preferenceMatrix,
       now,
     );
-    if (rows.every((r) => r.scheduledStartTime !== null)) return true;
-    throw new SchedulerDegradedException();
+    return rows.every((r) => r.scheduledStartTime !== null);
   }
 
   // ---- single TASK -------------------------------------------------------
@@ -190,6 +187,7 @@ export class PythonPlacer {
         now,
         assignment,
         res.reason,
+        policy,
       );
     }
     this.noteSource("python");
@@ -282,16 +280,40 @@ export class PythonPlacer {
     now: Date,
     assignment: PolicyAssignment,
     reason: DegradedReason,
+    policy?: InfeasiblePolicy,
   ): Promise<PlacementResult> {
     this.noteFallback(reason);
-    const start = await this.fallback.placeSingle(
+    let start = await this.fallback.placeSingle(
       user.id,
       task,
       user.timezone,
       user.preferenceMatrix,
       now,
     );
-    if (!start) throw new SchedulerDegradedException();
+    // Infeasible accepted: best free slot up to 30 days late.
+    if (!start && policy) {
+      start = await this.fallback.placeSingle(
+        user.id,
+        { ...task, deadline: new Date(task.deadline.getTime() + 30 * DAY_MS) },
+        user.timezone,
+        user.preferenceMatrix,
+        now,
+      );
+    }
+    if (!start) {
+      // As with `INFEASIBLE`: stays unscheduled.
+      this.logger.warn(
+        `schedule[${trigger}] source=ts_fallback reason=${reason} session=${task.id} start=none`,
+      );
+      return {
+        scheduledStartTime: null,
+        appliedPolicy: "NONE",
+        slotProposalId: null,
+        alternativeSlot: null,
+        divergent: false,
+        degraded: true,
+      };
+    }
     await this.prisma.session.update({
       where: { id: task.id },
       data: { scheduledStartTime: start },
@@ -322,7 +344,7 @@ export class PythonPlacer {
   /**
    * Place every member of a `TASK` series in one call. Returns one row per
    * member (`null` start = Python found nothing); persisting the starts is the
-   * caller's job. Degraded => all-or-nothing frozen loop, 503 on any miss.
+   * caller's job. Degraded => frozen loop, same `null`-row contract.
    */
   async placeSeries(args: {
     user: User;
@@ -370,19 +392,18 @@ export class PythonPlacer {
         user.preferenceMatrix,
         now,
       );
-      if (rows.some((r) => r.scheduledStartTime === null)) {
-        throw new SchedulerDegradedException();
-      }
       await Promise.all(
         rows.map((row, i) =>
-          this.recordFallbackProposal(
-            user.id,
-            row.id,
-            trigger,
-            assignments[i],
-            row.scheduledStartTime as Date,
-            res.reason,
-          ),
+          row.scheduledStartTime
+            ? this.recordFallbackProposal(
+                user.id,
+                row.id,
+                trigger,
+                assignments[i],
+                row.scheduledStartTime,
+                res.reason,
+              )
+            : Promise.resolve(null),
         ),
       );
       return rows.map((r) => ({ ...r, degraded: true }));

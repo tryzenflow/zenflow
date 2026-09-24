@@ -67,11 +67,75 @@ describe("FallbackPlacer (frozen heuristic, ADR-0003)", () => {
     expect(opts1.skipDay("2026-06-08")).toBe(true); // MAX_SERIES_PER_DAY = 1
   });
 
-  it("series: a member with no slot comes back null (caller enforces all-or-nothing)", async () => {
+  it("series: a member whose window is full spills over the whole range (still one per day)", async () => {
     const place = jest
       .fn()
       .mockResolvedValueOnce(slotAt("2026-06-08T09:00:00.000Z"))
-      .mockResolvedValueOnce(null);
+      .mockResolvedValueOnce(null) // b's own window: full
+      .mockResolvedValueOnce(slotAt("2026-06-10T09:00:00.000Z"));
+    const { fb } = make(place);
+    const rows = await fb.placeSeries(
+      "u",
+      {
+        members: [
+          { id: "a", durationMinutes: 60 },
+          { id: "b", durationMinutes: 60 },
+        ],
+        deadline,
+      },
+      tz,
+      [],
+      now,
+    );
+    expect(rows[1].scheduledStartTime?.toISOString()).toBe(
+      "2026-06-10T09:00:00.000Z",
+    );
+    const calls = place.mock.calls as unknown[][];
+    expect(calls[2][5]).toEqual({
+      firstDayStr: "2026-06-08",
+      lastDayStr: "2026-06-10",
+    });
+    const spill = calls[2][6] as { skipDay: (d: string) => boolean };
+    expect(spill.skipDay("2026-06-08")).toBe(true); // a's day stays capped
+  });
+
+  it("series: with no room one-per-day, the last pass drops the per-day cap", async () => {
+    const place = jest
+      .fn()
+      .mockResolvedValueOnce(slotAt("2026-06-08T09:00:00.000Z"))
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(slotAt("2026-06-08T11:00:00.000Z"));
+    const { fb } = make(place);
+    const rows = await fb.placeSeries(
+      "u",
+      {
+        members: [
+          { id: "a", durationMinutes: 60 },
+          { id: "b", durationMinutes: 60 },
+        ],
+        deadline,
+      },
+      tz,
+      [],
+      now,
+    );
+    expect(rows[1].scheduledStartTime?.toISOString()).toBe(
+      "2026-06-08T11:00:00.000Z",
+    );
+    const last = (place.mock.calls as unknown[][])[3][6] as {
+      skipDay?: unknown;
+      extraOccupied: unknown[];
+    };
+    expect(last.skipDay).toBeUndefined();
+    expect(last.extraOccupied).toHaveLength(1); // still never overlaps a
+  });
+
+  it("series: a member with no free slot anywhere comes back null", async () => {
+    const place = jest
+      .fn()
+      .mockResolvedValueOnce(slotAt("2026-06-08T09:00:00.000Z"))
+      .mockResolvedValue(null);
     const { fb } = make(place);
     const rows = await fb.placeSeries(
       "u",

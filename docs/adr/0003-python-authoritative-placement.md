@@ -95,12 +95,15 @@ The fallback uses the frozen heuristic and never invents policy:
 | Situation | Behavior |
 | --- | --- |
 | Single/series, free slot exists | Heuristic slot, `appliedPolicy: "HEURISTIC"`. Saved with `placementSource = TS_FALLBACK`, `modelProposal = null` (excluded from A/B analysis) |
-| No free slot before deadline | No displacement, no accept-conflicts/late. Reject with `503 SCHEDULER_DEGRADED` (retryable) before anything is written, so no partial state |
-| `infeasiblePolicy` in a degraded request | Ignored. Same 503 if infeasible, otherwise normal heuristic placement |
-| Series | All-or-nothing pre-flight with the frozen loop; any member with no slot => 503 |
+| No free slot before deadline | No displacement. Answered like a Python `INFEASIBLE`: pre-flight `409 SCHEDULE_INFEASIBLE` without a policy; placement leaves the task unplaced. Never a 503 (see addendum) |
+| `infeasiblePolicy` in a degraded request | Honoured as "best free slot up to 30 days past the deadline" (no conflicts accepted) |
+| Series | Frozen loop, each member in its own day-window first, then spilling over the whole range (one per day, then uncapped). A member with no slot anywhere comes back `null`, like Python |
 | Response | Success carries `schedulingDegraded: true` (client shows a quiet "placed with basic scheduling" note); absent otherwise |
 | `/update` rewards | Best-effort, skipped when down |
-| Reschedule-all / sync-conflict reschedule | Same rules per task |
+| Reschedule-all / sync-conflict reschedule | Same rules; series sittings are re-spread as a series. A task that cannot move lands in `failedSessionIds` |
+
+**Addendum (2026-09-24):** degraded mode no longer returns `503 SCHEDULER_DEGRADED`; a
+fallback miss is answered like Python (409 / unplaced / `null` rows).
 
 ### 2.5 Alternatives rejected
 

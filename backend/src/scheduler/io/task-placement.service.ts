@@ -158,13 +158,30 @@ export class TaskPlacementService {
     now: Date;
   }): Promise<SeriesPlacementRow[]> {
     const { user, members, deadline, now } = args;
-    return this.python.placeSeries({
+    const placements = await this.python.placeSeries({
       user,
       members,
       deadline,
       now,
       trigger: "create",
     });
+    // `placeSeries` only computes starts; persist them here.
+    await this.persistPlaced(placements);
+    return placements;
+  }
+
+  /** Write each placed member's start; unplaced (`null`) rows stay as-is. */
+  private async persistPlaced(rows: SeriesPlacementRow[]): Promise<void> {
+    const placed = rows.filter((p) => p.scheduledStartTime);
+    if (placed.length === 0) return;
+    await this.prisma.$transaction(
+      placed.map((p) =>
+        this.prisma.session.update({
+          where: { id: p.id },
+          data: { scheduledStartTime: p.scheduledStartTime },
+        }),
+      ),
+    );
   }
 
   /**
@@ -186,30 +203,12 @@ export class TaskPlacementService {
   }): Promise<SeriesPlacementRow[]> {
     const { user, seriesId, members, newDeadline, now } = args;
 
-    const isPast = (s: { scheduledStartTime: Date | null }) =>
-      s.scheduledStartTime != null &&
-      s.scheduledStartTime.getTime() < now.getTime();
-    const upcoming = members.filter((m) => !isPast(m));
-    const fixedOccupied = members
-      .filter((m) => isPast(m) && blocksPlacement(m.durationMinutes))
-      .map((m) => ({
-        start: (m.scheduledStartTime as Date).getTime(),
-        end:
-          (m.scheduledStartTime as Date).getTime() + m.durationMinutes * 60_000,
-      }));
-
-    const upcomingMembers = upcoming.map((m) => ({
-      id: m.id,
-      durationMinutes: m.durationMinutes,
-    }));
-    const placements = await this.python.placeSeries({
+    const { isPast, upcoming, placements } = await this.placeUpcoming(
       user,
-      members: upcomingMembers,
-      deadline: newDeadline,
+      members,
+      newDeadline,
       now,
-      trigger: "deadline-change",
-      fixedOccupied,
-    });
+    );
     const startById = new Map(
       placements.map((p) => [p.id, p.scheduledStartTime]),
     );
@@ -239,5 +238,73 @@ export class TaskPlacementService {
         : (startById.get(m.id) ?? null),
       ...(degraded ? { degraded: true } : {}),
     }));
+  }
+
+  /**
+   * Re-spread a `TASK` series' upcoming sittings without persisting (sync
+   * conflict "Reschedule them all"). Returns `{ id, from, to }` per sitting
+   * (`to` null = no slot).
+   */
+  async planSeriesRespread(args: {
+    user: User;
+    seriesId: string;
+    deadline: Date;
+    now: Date;
+  }): Promise<{ id: string; from: Date | null; to: Date | null }[]> {
+    const { user, seriesId, deadline, now } = args;
+    const members = await this.prisma.session.findMany({
+      where: { seriesId, userId: user.id, type: "TASK", deleted: false },
+      select: { id: true, durationMinutes: true, scheduledStartTime: true },
+      orderBy: { scheduledStartTime: "asc" },
+    });
+    const { upcoming, placements } = await this.placeUpcoming(
+      user,
+      members,
+      deadline,
+      now,
+    );
+    const toById = new Map(placements.map((p) => [p.id, p.scheduledStartTime]));
+    return upcoming.map((m) => ({
+      id: m.id,
+      from: m.scheduledStartTime,
+      to: toById.get(m.id) ?? null,
+    }));
+  }
+
+  /**
+   * Started sittings keep their slot (as `fixedOccupied`); the rest are
+   * placed together via `placeSeries`.
+   */
+  private async placeUpcoming<
+    M extends {
+      id: string;
+      durationMinutes: number;
+      scheduledStartTime: Date | null;
+    },
+  >(user: User, members: M[], deadline: Date, now: Date) {
+    const isPast = (s: { scheduledStartTime: Date | null }) =>
+      s.scheduledStartTime != null &&
+      s.scheduledStartTime.getTime() < now.getTime();
+    const upcoming = members.filter((m) => !isPast(m));
+    const fixedOccupied = members
+      .filter((m) => isPast(m) && blocksPlacement(m.durationMinutes))
+      .map((m) => ({
+        start: (m.scheduledStartTime as Date).getTime(),
+        end:
+          (m.scheduledStartTime as Date).getTime() + m.durationMinutes * 60_000,
+      }));
+
+    const placements = await this.python.placeSeries({
+      user,
+      members: upcoming.map((m) => ({
+        id: m.id,
+        durationMinutes: m.durationMinutes,
+      })),
+      deadline,
+      now,
+      trigger: "deadline-change",
+      fixedOccupied,
+    });
+    return { isPast, upcoming, placements };
   }
 }

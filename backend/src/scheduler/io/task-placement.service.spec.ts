@@ -207,10 +207,17 @@ describe("TaskPlacementService.canPlaceTask / canPlaceSeries", () => {
 });
 
 describe("TaskPlacementService.placeSeriesOnCreate", () => {
+  function prismaMock() {
+    return {
+      session: { update: jest.fn().mockReturnValue("update-one") },
+      $transaction: jest.fn().mockResolvedValue(undefined),
+    };
+  }
+
   it("delegates to Python with the create trigger", async () => {
     const rows = [{ id: "m1", scheduledStartTime: new Date(now) }];
     python.placeSeries.mockResolvedValue(rows);
-    const svc = await makeService();
+    const svc = await makeService(prismaMock());
     const res = await svc.placeSeriesOnCreate({
       user,
       seriesId: "s1",
@@ -226,6 +233,45 @@ describe("TaskPlacementService.placeSeriesOnCreate", () => {
       now,
       trigger: "create",
     });
+  });
+
+  // Regression: series members must be persisted with their starts.
+  it("persists every placed member's start and skips unplaced ones", async () => {
+    const start1 = new Date("2026-06-08T09:00:00.000Z");
+    const start2 = new Date("2026-06-09T09:00:00.000Z");
+    python.placeSeries.mockResolvedValue([
+      { id: "m1", scheduledStartTime: start1 },
+      { id: "m2", scheduledStartTime: null },
+      { id: "m3", scheduledStartTime: start2 },
+    ]);
+    const prisma = prismaMock();
+    const svc = await makeService(prisma);
+
+    await svc.placeSeriesOnCreate({
+      user,
+      seriesId: "s1",
+      members: [
+        { id: "m1", durationMinutes: 60 },
+        { id: "m2", durationMinutes: 60 },
+        { id: "m3", durationMinutes: 60 },
+      ],
+      deadline: task.deadline,
+      now,
+    });
+
+    expect(prisma.session.update).toHaveBeenCalledTimes(2);
+    expect(prisma.session.update).toHaveBeenCalledWith({
+      where: { id: "m1" },
+      data: { scheduledStartTime: start1 },
+    });
+    expect(prisma.session.update).toHaveBeenCalledWith({
+      where: { id: "m3" },
+      data: { scheduledStartTime: start2 },
+    });
+    expect(prisma.$transaction).toHaveBeenCalledWith([
+      "update-one",
+      "update-one",
+    ]);
   });
 });
 
@@ -284,5 +330,70 @@ describe("TaskPlacementService.redistributeSeries", () => {
       { id: "past", scheduledStartTime: past.scheduledStartTime },
       { id: "future", scheduledStartTime: newStart },
     ]);
+  });
+});
+
+describe("TaskPlacementService.planSeriesRespread", () => {
+  it("re-places the series' upcoming sittings together and writes nothing", async () => {
+    const past = {
+      id: "past",
+      durationMinutes: 60,
+      scheduledStartTime: new Date("2026-06-07T00:00:00.000Z"),
+    };
+    const a = {
+      id: "a",
+      durationMinutes: 60,
+      scheduledStartTime: new Date("2026-06-09T09:00:00.000Z"),
+    };
+    const b = {
+      id: "b",
+      durationMinutes: 60,
+      scheduledStartTime: new Date("2026-06-09T10:00:00.000Z"),
+    };
+    const aTo = new Date("2026-06-09T09:00:00.000Z");
+    const bTo = new Date("2026-06-11T09:00:00.000Z");
+    python.placeSeries.mockResolvedValue([
+      { id: "a", scheduledStartTime: aTo },
+      { id: "b", scheduledStartTime: bTo },
+    ]);
+    const prisma = {
+      session: {
+        findMany: jest.fn().mockResolvedValue([past, a, b]),
+        update: jest.fn(),
+      },
+      $transaction: jest.fn(),
+    };
+    const svc = await makeService(prisma);
+    const deadline = new Date("2026-06-20T00:00:00.000Z");
+
+    const plan = await svc.planSeriesRespread({
+      user,
+      seriesId: "s1",
+      deadline,
+      now,
+    });
+
+    expect(python.placeSeries).toHaveBeenCalledWith(
+      expect.objectContaining({
+        members: [
+          { id: "a", durationMinutes: 60 },
+          { id: "b", durationMinutes: 60 },
+        ],
+        deadline,
+        trigger: "deadline-change",
+        fixedOccupied: [
+          {
+            start: past.scheduledStartTime.getTime(),
+            end: past.scheduledStartTime.getTime() + 60 * 60_000,
+          },
+        ],
+      }),
+    );
+    expect(plan).toEqual([
+      { id: "a", from: a.scheduledStartTime, to: aTo },
+      { id: "b", from: b.scheduledStartTime, to: bTo },
+    ]);
+    expect(prisma.session.update).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });

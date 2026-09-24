@@ -215,17 +215,47 @@ describe("PythonPlacer.placeSingle (degraded, ADR-0003 2.4)", () => {
     );
   });
 
-  it("no free slot: 503 SCHEDULER_DEGRADED, nothing written, policy ignored", async () => {
+  it("no free slot, no policy: unplaced like a Python INFEASIBLE (never a 503)", async () => {
     const { placer, prisma, experiment, fallback } = make({
       place: down("timeout"),
       fallbackSingle: null,
     });
-    await expect(
-      placer.placeSingle(user, task, "create", now, "ACCEPT_CONFLICTS"),
-    ).rejects.toBeInstanceOf(SchedulerDegradedException);
+    const res = await placer.placeSingle(user, task, "create", now);
+    expect(res).toMatchObject({
+      scheduledStartTime: null,
+      appliedPolicy: "NONE",
+      degraded: true,
+    });
     expect(fallback.placeSingle).toHaveBeenCalledTimes(1);
     expect(prisma.session.update).not.toHaveBeenCalled();
     expect(experiment.recordProposal).not.toHaveBeenCalled();
+  });
+
+  it("no free slot + policy: best slot up to 30 days past the deadline", async () => {
+    const late = new Date(deadline.getTime() + 3_600_000);
+    const { placer, prisma, fallback } = make({ place: down("breaker_open") });
+    fallback.placeSingle
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(late);
+    const res = await placer.placeSingle(
+      user,
+      task,
+      "create",
+      now,
+      "ACCEPT_LATE_DEADLINE",
+    );
+    expect(res.scheduledStartTime).toEqual(late);
+    const widened = fallback.placeSingle.mock.calls[1] as [
+      string,
+      { deadline: Date },
+    ];
+    expect(widened[1].deadline).toEqual(
+      new Date(deadline.getTime() + 30 * 86_400_000),
+    );
+    expect(prisma.session.update).toHaveBeenCalledWith({
+      where: { id: "t1" },
+      data: { scheduledStartTime: late },
+    });
   });
 
   it("the exception body carries the shared 503 code", () => {
@@ -265,7 +295,7 @@ describe("PythonPlacer.preflightSingle", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("degraded: free slot passes, none => 503 (never 409)", async () => {
+  it("degraded: free slot passes; none => 409 w/o policy, allowed with one", async () => {
     await expect(
       make({
         place: down("connect"),
@@ -276,11 +306,17 @@ describe("PythonPlacer.preflightSingle", () => {
       make({
         place: down("connect"),
         fallbackSingle: null,
+      }).placer.preflightSingle(args),
+    ).rejects.toBeInstanceOf(ScheduleInfeasibleException);
+    await expect(
+      make({
+        place: down("connect"),
+        fallbackSingle: null,
       }).placer.preflightSingle({
         ...args,
         policy: "ACCEPT_LATE_DEADLINE",
       }),
-    ).rejects.toBeInstanceOf(SchedulerDegradedException);
+    ).resolves.toBeUndefined();
   });
 });
 
@@ -344,7 +380,7 @@ describe("PythonPlacer series", () => {
     );
   });
 
-  it("degraded: ANY member without a slot => 503, nothing recorded (all-or-nothing)", async () => {
+  it("degraded: a member without a slot comes back null, like Python (never a 503)", async () => {
     const { placer, experiment } = make({
       place: down("breaker_open"),
       fallbackSeries: [
@@ -352,13 +388,15 @@ describe("PythonPlacer series", () => {
         { id: "b", scheduledStartTime: null },
       ],
     });
-    await expect(placer.placeSeries(seriesArgs)).rejects.toBeInstanceOf(
-      SchedulerDegradedException,
-    );
-    expect(experiment.recordProposal).not.toHaveBeenCalled();
+    const rows = await placer.placeSeries(seriesArgs);
+    expect(rows.map((r) => r.scheduledStartTime)).toEqual([
+      new Date(START),
+      null,
+    ]);
+    expect(experiment.recordProposal).toHaveBeenCalledTimes(1);
   });
 
-  it("canPlaceSeries: python true only when every member is PLACED; degraded miss => 503", async () => {
+  it("canPlaceSeries: python true only when every member is PLACED; degraded miss => false", async () => {
     const good = ok([member({ id: "a" }), member({ id: "b" })]);
     const bad = ok([
       member({ id: "a" }),
@@ -375,6 +413,6 @@ describe("PythonPlacer series", () => {
           { id: "y", scheduledStartTime: null },
         ],
       }).placer.canPlaceSeries(a),
-    ).rejects.toBeInstanceOf(SchedulerDegradedException);
+    ).resolves.toBe(false);
   });
 });

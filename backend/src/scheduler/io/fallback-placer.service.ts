@@ -25,8 +25,8 @@ import { HeuristicPlacer } from "./heuristic-placer.service";
  * only - overlap-weighted preference-matrix best-free-slot via
  * {@link HeuristicPlacer} and the frozen `core/slot.ts` / `slot-score.ts` /
  * `preference.ts` / `series-spread.ts`. It never displaces tasks, never
- * accepts conflicts or a late deadline, and never rolls the A/B policy: a
- * caller that finds no slot here answers `503 SCHEDULER_DEGRADED`.
+ * accepts conflicts, and never rolls the A/B policy. A miss is treated like a
+ * Python `INFEASIBLE` (never a 503).
  */
 @Injectable()
 export class FallbackPlacer {
@@ -50,11 +50,9 @@ export class FallbackPlacer {
   }
 
   /**
-   * Heuristic-only series loop: each member gets its own non-overlapping
-   * day-window, at most `MAX_SERIES_PER_DAY` per day, siblings never overlap.
-   * Returns one row per member; a `null` start means that member found no
-   * slot - callers treat any `null` as the whole series being infeasible
-   * (all-or-nothing, ADR-0003 2.4).
+   * Heuristic-only series loop: one day-window per member, at most
+   * `MAX_SERIES_PER_DAY` per day, siblings never overlap. Returns one row per
+   * member (`null` start = no free slot before the deadline).
    */
   async placeSeries(
     userId: string,
@@ -83,37 +81,55 @@ export class FallbackPlacer {
     const windows = seriesDayWindows(daySpan, members.length);
     const siblings: Interval[] = [...fixedOccupied];
     const countByDay = new Map<string, number>();
+    const capped = (d: string) =>
+      (countByDay.get(d) ?? 0) >= MAX_SERIES_PER_DAY;
+    const fullRange = { lo: 0, hi: daySpan };
 
-    for (let i = 0; i < members.length; i++) {
-      const m = members[i];
-      if (next15Ms + m.durationMinutes * MS_PER_MINUTE > deadline.getTime()) {
-        continue;
+    // Pass 0: own bucket. Pass 1: whole `now … deadline` range, one per day.
+    // Pass 2: no per-day cap.
+    const passes: {
+      range: (i: number) => { lo: number; hi: number };
+      skipDay?: (d: string) => boolean;
+    }[] = [
+      {
+        range: (i) => ({ lo: windows[i][0], hi: windows[i][1] }),
+        skipDay: capped,
+      },
+      { range: () => fullRange, skipDay: capped },
+      { range: () => fullRange },
+    ];
+
+    for (const pass of passes) {
+      for (let i = 0; i < members.length; i++) {
+        if (rows[i].scheduledStartTime) continue;
+        const m = members[i];
+        if (next15Ms + m.durationMinutes * MS_PER_MINUTE > deadline.getTime()) {
+          continue;
+        }
+        const { lo, hi } = pass.range(i);
+        const slot = await this.heuristic.placeInWindow(
+          userId,
+          { id: m.id, durationMinutes: m.durationMinutes, deadline },
+          timezone,
+          preferenceMatrix,
+          now,
+          {
+            firstDayStr: addDaysStr(startDayStr, lo),
+            lastDayStr: addDaysStr(startDayStr, hi),
+          },
+          { extraOccupied: [...siblings], skipDay: pass.skipDay },
+        );
+        if (!slot) continue;
+        rows[i].scheduledStartTime = slot.start;
+        const startMs = slot.start.getTime();
+        siblings.push({
+          start: startMs,
+          end: startMs + m.durationMinutes * MS_PER_MINUTE,
+        });
+        const day = localDateStr(slot.start, timezone);
+        countByDay.set(day, (countByDay.get(day) ?? 0) + 1);
       }
-      const [lo, hi] = windows[i];
-      const slot = await this.heuristic.placeInWindow(
-        userId,
-        { id: m.id, durationMinutes: m.durationMinutes, deadline },
-        timezone,
-        preferenceMatrix,
-        now,
-        {
-          firstDayStr: addDaysStr(startDayStr, lo),
-          lastDayStr: addDaysStr(startDayStr, hi),
-        },
-        {
-          extraOccupied: [...siblings],
-          skipDay: (d) => (countByDay.get(d) ?? 0) >= MAX_SERIES_PER_DAY,
-        },
-      );
-      if (!slot) continue;
-      rows[i].scheduledStartTime = slot.start;
-      const startMs = slot.start.getTime();
-      siblings.push({
-        start: startMs,
-        end: startMs + m.durationMinutes * MS_PER_MINUTE,
-      });
-      const day = localDateStr(slot.start, timezone);
-      countByDay.set(day, (countByDay.get(day) ?? 0) + 1);
+      if (rows.every((r) => r.scheduledStartTime)) break;
     }
     return rows;
   }
