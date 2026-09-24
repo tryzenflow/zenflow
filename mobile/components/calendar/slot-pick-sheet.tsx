@@ -1,4 +1,4 @@
-import { Check, ChevronDown, X } from "@/components/Icons";
+import { Check, X } from "@/components/Icons";
 import {
   BottomSheet,
   BottomSheetContent,
@@ -7,17 +7,11 @@ import {
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
-import { zonedDate } from "@zenflow/core";
+import { isZonedToday, zonedDate, zonedNow } from "@zenflow/core";
 import type { Session } from "@zenflow/shared";
-import { format } from "date-fns";
+import { addDays, addMinutes, format, isSameDay } from "date-fns";
 import * as Haptics from "expo-haptics";
-import {
-  type ComponentType,
-  forwardRef,
-  useImperativeHandle,
-  useRef,
-  useState,
-} from "react";
+import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 
 export interface SlotPickSheetHandle {
@@ -39,9 +33,32 @@ interface SlotPickSheetProps {
 interface Option {
   label: string;
   time: string;
+  /** Lowercased relative day ("today"/"tomorrow") or `EEE MMM d` — used in
+   * the footer buttons ("Switch to 9:00 AM tomorrow"). */
+  day: string;
   hint: string;
   isPrimary: boolean;
 }
+
+/** `7:00 – 8:00 PM` when both ends share a half-day, `11:00 AM – 12:00 PM`
+ * when the range crosses meridiem — matches the week-view mockup blocks. */
+function formatRange(start: Date, end: Date): string {
+  const sameHalf = (start.getHours() < 12) === (end.getHours() < 12);
+  return sameHalf
+    ? `${format(start, "h:mm")} – ${format(end, "h:mm a")}`
+    : `${format(start, "h:mm a")} – ${format(end, "h:mm a")}`;
+}
+
+/** Relative day word in user-tz space (never device clock): "today" /
+ * "tomorrow", else `EEE MMM d` ("Wed Jul 1"). */
+function dayWord(date: Date, tz: string): string {
+  if (isZonedToday(date, tz)) return "today";
+  if (isSameDay(date, addDays(zonedNow(tz), 1))) return "tomorrow";
+  return format(date, "EEE MMM d");
+}
+
+const capitalize = (word: string): string =>
+  word.charAt(0).toUpperCase() + word.slice(1);
 
 const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
   ({ tz }, ref) => {
@@ -80,17 +97,29 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
 
           const primaryDate = zonedDate(nextPrimarySlot, nextTz);
           const alternativeDate = zonedDate(nextAlternativeSlot, nextTz);
+          const duration = nextSession.durationMinutes;
+
+          const primaryDay = dayWord(primaryDate, nextTz);
+          const alternativeDay = dayWord(alternativeDate, nextTz);
 
           setOptions([
             {
-              label: format(primaryDate, "EEEE · h:mm a"),
+              label: `${capitalize(primaryDay)} · ${formatRange(
+                primaryDate,
+                addMinutes(primaryDate, duration),
+              )}`,
               time: format(primaryDate, "h:mm a"),
+              day: primaryDay,
               hint: "Currently scheduled",
               isPrimary: true,
             },
             {
-              label: format(alternativeDate, "EEEE · h:mm a"),
+              label: `${capitalize(alternativeDay)} · ${formatRange(
+                alternativeDate,
+                addMinutes(alternativeDate, duration),
+              )}`,
               time: format(alternativeDate, "h:mm a"),
+              day: alternativeDay,
               hint: "Also fits before the deadline",
               isPrimary: false,
             },
@@ -128,8 +157,8 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
     return (
       <BottomSheet>
         <BottomSheetContent ref={sheet.ref} onDismiss={handleDismiss}>
-          <BottomSheetView hadHeader={false} className="gap-2 pt-2 px-3">
-            <View className="flex-row items-start justify-between gap-3  px-3">
+          <BottomSheetView hadHeader={false} className="gap-2 pt-2 px-5">
+            <View className="flex-row items-start justify-between gap-3">
               <View className="min-w-0 flex-1">
                 <Text className="text-[18.5px] font-bold tracking-[-0.01em] leading-tight">
                   Two good times for this
@@ -214,7 +243,9 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
                 onPress={() => handlePick("alternative")}
               >
                 <Text className="font-bold">
-                  Switch to {options[1]?.time ?? ""}
+                  {options[1]
+                    ? `Switch to ${options[1].time} ${options[1].day}`
+                    : ""}
                 </Text>
               </Button>
               <Button
@@ -223,7 +254,9 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
                 onPress={() => handlePick("primary")}
               >
                 <Text className="font-semibold">
-                  Keep {options[0]?.time ?? ""}
+                  {options[0]
+                    ? `Keep ${options[0].time} ${options[0].day}`
+                    : ""}
                 </Text>
               </Button>
             </View>
