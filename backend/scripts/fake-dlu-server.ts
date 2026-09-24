@@ -1,5 +1,5 @@
 /**
- * Fake DLU LMS (Moodle) + student-portal server, for exercising the ingestion
+ * Fake LMS (Moodle) + student-portal server, for exercising the ingestion
  * watchers (`src/ingestion/*-watcher.service.ts`) without touching the real
  * university systems. One process answers both upstreams, since their paths
  * never collide: Moodle owns `/login/*`, `/my/`, `/lib/ajax/*`; the portal
@@ -479,9 +479,7 @@ const server = createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(
-    `Fake DLU LMS + portal server listening on http://localhost:${PORT}`,
-  );
+  console.log(`Fake LMS + portal server listening on http://localhost:${PORT}`);
   console.log(`  LMS_URL="http://localhost:${PORT}"`);
   console.log(`  PORTAL_API_URL="http://localhost:${PORT}"`);
   console.log(`  PORTAL_API_KEY can be anything — never checked`);

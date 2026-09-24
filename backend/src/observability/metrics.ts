@@ -40,7 +40,7 @@ export const portalClientDuration = outboundHistogram(
 );
 export const lmsClientDuration = outboundHistogram(
   "lms.client.request.duration",
-  "DLU LMS",
+  "LMS",
 );
 export const banditClientDuration = outboundHistogram(
   "bandit.client.request.duration",
