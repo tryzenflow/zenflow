@@ -58,6 +58,9 @@ import {
   LayoutPanelLeft,
   LifeBuoy,
   Link2,
+  KeyRound,
+  MoreHorizontal,
+  Unlink,
   List,
   ListOrdered,
   Loader,
@@ -203,6 +206,9 @@ interopIcon(Lock);
 interopIcon(Tag);
 interopIcon(Highlighter);
 interopIcon(Link2);
+interopIcon(KeyRound);
+interopIcon(MoreHorizontal);
+interopIcon(Unlink);
 interopIcon(List);
 interopIcon(ListOrdered);
 interopIcon(Quote);
@@ -273,6 +279,9 @@ export {
   LayoutPanelLeft,
   LifeBuoy,
   Link2,
+  KeyRound,
+  MoreHorizontal,
+  Unlink,
   List,
   ListOrdered,
   Lock,

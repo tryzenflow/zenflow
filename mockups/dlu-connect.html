@@ -1,237 +1,964 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Zenflow Mobile — Connect DLU account</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/geist@5.2.6/index.css" />
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/geist-mono@5.2.6/index.css" />
-<link rel="stylesheet" href="dist/output.css" />
-<link rel="stylesheet" href="gallery-chrome.css" />
-</head>
-<body>
-  <div class="page-head">
-    <h1><span class="dot"></span> Connect your DLU account</h1>
-    <p>Reached from <a href="settings.html">Settings → Account</a>. Two things Zenflow can watch — the LMS and the student portal — each connected on its own. The screen is a short list, not a form: a row per service, and tapping <b>Connect</b> opens a small sign-in sheet. A saved password is never shown again. Dev notes: <code>docs/thesis-scope.md</code> §3.2, issue #26; LMS and portal are separate logins, so each is its own credential pair with its own connect / disconnect lifecycle.</p>
-    <div class="crumbs"><a href="index.html">← All mobile mockups</a></div>
-  </div>
-
-  <div class="state-section"><h2>Connecting</h2><p>The list, the sign-in sheet, and what a rejected login looks like.</p></div>
-  <div class="gallery">
-
-    <!-- Not connected -->
-    <div class="frame">
-      <div class="caption"><span class="tag">Not connected</span><div class="sub">Nothing linked yet</div></div>
-      <div class="device">
-        <div class="island"></div>
-        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
-          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
-            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
-            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
-          </span></div>
-          <div class="relative z-30 flex items-center gap-3 px-3 pt-1.5 pb-3.5 bg-background/80 backdrop-blur-[18px] backdrop-saturate-[1.4] border-b border-border/70">
-            <button class="inline-flex size-[38px] items-center justify-center rounded-xl bg-transparent text-foreground shrink-0 [&_svg]:size-[19px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>
-            <div class="text-xl font-bold tracking-[-0.02em]">Connect DLU account</div>
-          </div>
-          <div class="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:w-0 px-5">
-            <p class="mt-5 mb-5 text-[13.5px] leading-relaxed text-muted-foreground">Link an account and Zenflow keeps an eye on it for new assignments and timetable changes.</p>
-            <div class="overflow-hidden rounded-2xl border bg-card divide-y divide-border">
-              <div class="flex items-center gap-3.5 px-4 py-4">
-                <span class="inline-flex size-[38px] items-center justify-center rounded-xl bg-muted text-muted-foreground shrink-0 [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg></span>
-                <div class="min-w-0 flex-1"><div class="text-[15px] font-semibold">DLU LMS</div><div class="text-[12.5px] text-muted-foreground mt-0.5">Not connected</div></div>
-                <button class="shrink-0 rounded-lg bg-primary px-3.5 py-1.5 text-[13px] font-semibold text-primary-foreground">Connect</button>
-              </div>
-              <div class="flex items-center gap-3.5 px-4 py-4">
-                <span class="inline-flex size-[38px] items-center justify-center rounded-xl bg-muted text-muted-foreground shrink-0 [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="13" x2="14" y2="13"/></svg></span>
-                <div class="min-w-0 flex-1"><div class="text-[15px] font-semibold">Student portal</div><div class="text-[12.5px] text-muted-foreground mt-0.5">Not connected</div></div>
-                <button class="shrink-0 rounded-lg bg-primary px-3.5 py-1.5 text-[13px] font-semibold text-primary-foreground">Connect</button>
-              </div>
-            </div>
-            <p class="mt-3.5 text-[12px] leading-snug text-muted-foreground">Your login is used only to check DLU on your behalf, and never shown to anyone.</p>
-          </div>
-          <div class="home-indicator"></div>
-        </div>
-      </div>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Zenflow Mobile — Connect DLU account</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@fontsource-variable/geist@5.2.6/index.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@fontsource-variable/geist-mono@5.2.6/index.css"
+    />
+    <link rel="stylesheet" href="dist/output.css" />
+    <link rel="stylesheet" href="gallery-chrome.css" />
+  </head>
+  <body>
+    <div class="page-head">
+      <h1><span class="dot"></span> Connect your DLU account</h1>
+      <p>
+        Reached from <a href="settings.html">Settings → Account</a>. Two things
+        Zenflow can watch — the LMS and the student portal — each connected on
+        its own. The screen is a short list, not a form: a row per service, and
+        tapping <b>Connect</b> opens a small sign-in sheet. A saved password is
+        never shown again. Dev notes: <code>docs/thesis-scope.md</code> §3.2,
+        issue #26; LMS and portal are separate logins, so each is its own
+        credential pair with its own connect / disconnect lifecycle.
+      </p>
+      <div class="crumbs"><a href="index.html">← All mobile mockups</a></div>
     </div>
 
-    <!-- Sign in sheet -->
-    <div class="frame">
-      <div class="caption"><span class="tag">Sign in</span><div class="sub">Tapping Connect · two fields, one button</div></div>
-      <div class="device">
-        <div class="island"></div>
-        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
-          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
-            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
-            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
-          </span></div>
-          <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden">
-            <div class="flex-1 min-h-0 px-5 opacity-40 pointer-events-none">
-              <div class="flex items-center gap-3 px-3 pt-1.5 pb-3.5 -mx-2">
-                <span class="inline-flex size-[38px] items-center justify-center rounded-xl bg-transparent text-foreground [&_svg]:size-[19px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></span>
-                <div class="text-xl font-bold tracking-[-0.02em]">Connect DLU account</div>
-              </div>
-              <p class="mt-3 mb-4 text-[13.5px] leading-relaxed text-muted-foreground">Link an account and Zenflow keeps an eye on it for new assignments and timetable changes.</p>
-              <div class="overflow-hidden rounded-2xl border bg-card divide-y divide-border">
-                <div class="flex items-center gap-3.5 px-4 py-4"><span class="inline-flex size-[38px] items-center justify-center rounded-xl bg-muted text-muted-foreground [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg></span><div class="flex-1"><div class="text-[15px] font-semibold">DLU LMS</div><div class="text-[12.5px] text-muted-foreground mt-0.5">Not connected</div></div><span class="rounded-lg bg-primary px-3.5 py-1.5 text-[13px] font-semibold text-primary-foreground">Connect</span></div>
-                <div class="flex items-center gap-3.5 px-4 py-4"><span class="inline-flex size-[38px] items-center justify-center rounded-xl bg-muted text-muted-foreground [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="13" x2="14" y2="13"/></svg></span><div class="flex-1"><div class="text-[15px] font-semibold">Student portal</div><div class="text-[12.5px] text-muted-foreground mt-0.5">Not connected</div></div><span class="rounded-lg bg-primary px-3.5 py-1.5 text-[13px] font-semibold text-primary-foreground">Connect</span></div>
+    <div class="state-section">
+      <h2>Connecting</h2>
+      <p>The list, the sign-in sheet, and what a rejected login looks like.</p>
+    </div>
+    <div class="gallery">
+      <!-- Not connected -->
+      <div class="frame">
+        <div class="caption">
+          <span class="tag">Not connected</span>
+          <div class="sub">Nothing linked yet</div>
+        </div>
+        <div class="device">
+          <div class="island"></div>
+          <div
+            class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground"
+          >
+            <div
+              class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"
+            >
+              <span class="tabular-nums">9:41</span
+              ><span class="flex items-center gap-[7px]">
+                <svg
+                  width="18"
+                  height="12"
+                  viewBox="0 0 18 12"
+                  fill="currentColor"
+                >
+                  <rect x="0" y="7" width="3" height="5" rx="1" />
+                  <rect x="4.5" y="4.5" width="3" height="7.5" rx="1" />
+                  <rect x="9" y="2" width="3" height="10" rx="1" />
+                  <rect x="13.5" y="0" width="3" height="12" rx="1" />
+                </svg>
+                <svg width="26" height="12" viewBox="0 0 26 12" fill="none">
+                  <rect
+                    x="0.5"
+                    y="0.5"
+                    width="21"
+                    height="11"
+                    rx="3"
+                    stroke="currentColor"
+                  />
+                  <rect
+                    x="2"
+                    y="2"
+                    width="16"
+                    height="8"
+                    rx="1.5"
+                    fill="currentColor"
+                  />
+                  <rect
+                    x="23"
+                    y="3.5"
+                    width="1.6"
+                    height="5"
+                    rx="0.8"
+                    fill="currentColor"
+                  />
+                </svg>
+              </span>
+            </div>
+            <div
+              class="relative z-30 flex items-center gap-3 px-3 pt-1.5 pb-3.5 bg-background/80 backdrop-blur-[18px] backdrop-saturate-[1.4] border-b border-border/70"
+            >
+              <button
+                class="inline-flex size-[38px] items-center justify-center rounded-xl bg-transparent text-foreground shrink-0 [&_svg]:size-[19px]"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+              </button>
+              <div class="text-xl font-bold tracking-[-0.02em]">
+                Connect DLU account
               </div>
             </div>
-            <div class="absolute inset-0 bg-black/40"></div>
-            <div class="absolute inset-x-0 bottom-0 z-[60] rounded-t-3xl border-t border-border bg-popover px-5 pt-2.5 pb-[30px] shadow-[0_-14px_40px_-10px_rgba(0,0,0,0.4)]">
-              <div class="mx-auto mb-4 h-1 w-9 rounded-full bg-muted-foreground/30"></div>
-              <div class="text-[17px] font-bold tracking-[-0.01em]">Sign in to your DLU LMS</div>
-              <p class="text-[12.5px] text-muted-foreground mt-1 mb-4">Same student ID and password you use on the DLU site.</p>
-              <div class="mb-3">
-                <label class="block text-[12.5px] font-semibold mb-1.5 text-muted-foreground">Student ID</label>
-                <input class="h-[48px] w-full rounded-xl border border-input bg-card px-4 text-[15px] text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" placeholder="2112345" />
-              </div>
-              <div class="mb-5">
-                <label class="block text-[12.5px] font-semibold mb-1.5 text-muted-foreground">Password</label>
-                <div class="relative">
-                  <input type="password" class="h-[48px] w-full rounded-xl border border-input bg-card pl-4 pr-[42px] text-[15px] text-foreground outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]" placeholder="••••••••" />
-                  <span class="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground [&_svg]:size-4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></span>
+            <div
+              class="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:w-0 px-5"
+            >
+              <p
+                class="mt-5 mb-5 text-[13.5px] leading-relaxed text-muted-foreground"
+              >
+                Link an account and Zenflow keeps an eye on it for new
+                assignments and timetable changes.
+              </p>
+              <div
+                class="overflow-hidden rounded-2xl border bg-card divide-y divide-border"
+              >
+                <div class="flex items-center gap-3.5 px-4 py-4">
+                  <span
+                    class="inline-flex size-[38px] items-center justify-center rounded-xl bg-muted text-muted-foreground shrink-0 [&_svg]:size-[18px]"
+                    ><svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+                      <path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5" /></svg
+                  ></span>
+                  <div class="min-w-0 flex-1">
+                    <div class="text-[15px] font-semibold">LMS</div>
+                    <div class="text-[12.5px] text-muted-foreground mt-0.5">
+                      Not connected
+                    </div>
+                  </div>
+                  <button
+                    class="shrink-0 rounded-lg bg-primary px-3.5 py-1.5 text-[13px] font-semibold text-primary-foreground"
+                  >
+                    Connect
+                  </button>
+                </div>
+                <div class="flex items-center gap-3.5 px-4 py-4">
+                  <span
+                    class="inline-flex size-[38px] items-center justify-center rounded-xl bg-muted text-muted-foreground shrink-0 [&_svg]:size-[18px]"
+                    ><svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <rect x="3" y="4" width="18" height="16" rx="2" />
+                      <line x1="3" y1="9" x2="21" y2="9" />
+                      <line x1="8" y1="13" x2="14" y2="13" /></svg
+                  ></span>
+                  <div class="min-w-0 flex-1">
+                    <div class="text-[15px] font-semibold">Student portal</div>
+                    <div class="text-[12.5px] text-muted-foreground mt-0.5">
+                      Not connected
+                    </div>
+                  </div>
+                  <button
+                    class="shrink-0 rounded-lg bg-primary px-3.5 py-1.5 text-[13px] font-semibold text-primary-foreground"
+                  >
+                    Connect
+                  </button>
                 </div>
               </div>
-              <button class="w-full rounded-xl h-[50px] text-[15px] font-semibold bg-primary text-primary-foreground">Connect</button>
+              <p class="mt-3.5 text-[12px] leading-snug text-muted-foreground">
+                Your login is used only to check DLU on your behalf, and never
+                shown to anyone.
+              </p>
             </div>
+            <div class="home-indicator"></div>
           </div>
-          <div class="home-indicator"></div>
         </div>
       </div>
-    </div>
 
-    <!-- Wrong details -->
-    <div class="frame">
-      <div class="caption"><span class="tag">Wrong details</span><div class="sub">DLU didn't accept the login</div></div>
-      <div class="device">
-        <div class="island"></div>
-        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
-          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
-            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
-            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
-          </span></div>
-          <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden">
-            <div class="flex-1 min-h-0 px-5 opacity-40 pointer-events-none">
-              <div class="flex items-center gap-3 px-3 pt-1.5 pb-3.5 -mx-2">
-                <span class="inline-flex size-[38px] items-center justify-center rounded-xl text-foreground [&_svg]:size-[19px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></span>
-                <div class="text-xl font-bold tracking-[-0.02em]">Connect DLU account</div>
-              </div>
-              <p class="mt-3 mb-4 text-[13.5px] leading-relaxed text-muted-foreground">Link an account and Zenflow keeps an eye on it for new assignments and timetable changes.</p>
-              <div class="overflow-hidden rounded-2xl border bg-card divide-y divide-border">
-                <div class="flex items-center gap-3.5 px-4 py-4"><span class="inline-flex size-[38px] items-center justify-center rounded-xl bg-muted text-muted-foreground [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg></span><div class="flex-1"><div class="text-[15px] font-semibold">DLU LMS</div><div class="text-[12.5px] text-muted-foreground mt-0.5">Not connected</div></div><span class="rounded-lg bg-primary px-3.5 py-1.5 text-[13px] font-semibold text-primary-foreground">Connect</span></div>
-                <div class="flex items-center gap-3.5 px-4 py-4"><span class="inline-flex size-[38px] items-center justify-center rounded-xl bg-muted text-muted-foreground [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="13" x2="14" y2="13"/></svg></span><div class="flex-1"><div class="text-[15px] font-semibold">Student portal</div><div class="text-[12.5px] text-muted-foreground mt-0.5">Not connected</div></div><span class="rounded-lg bg-primary px-3.5 py-1.5 text-[13px] font-semibold text-primary-foreground">Connect</span></div>
-              </div>
+      <!-- Sign in sheet -->
+      <div class="frame">
+        <div class="caption">
+          <span class="tag">Sign in</span>
+          <div class="sub">Tapping Connect · two fields, one button</div>
+        </div>
+        <div class="device">
+          <div class="island"></div>
+          <div
+            class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground"
+          >
+            <div
+              class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"
+            >
+              <span class="tabular-nums">9:41</span
+              ><span class="flex items-center gap-[7px]">
+                <svg
+                  width="18"
+                  height="12"
+                  viewBox="0 0 18 12"
+                  fill="currentColor"
+                >
+                  <rect x="0" y="7" width="3" height="5" rx="1" />
+                  <rect x="4.5" y="4.5" width="3" height="7.5" rx="1" />
+                  <rect x="9" y="2" width="3" height="10" rx="1" />
+                  <rect x="13.5" y="0" width="3" height="12" rx="1" />
+                </svg>
+                <svg width="26" height="12" viewBox="0 0 26 12" fill="none">
+                  <rect
+                    x="0.5"
+                    y="0.5"
+                    width="21"
+                    height="11"
+                    rx="3"
+                    stroke="currentColor"
+                  />
+                  <rect
+                    x="2"
+                    y="2"
+                    width="16"
+                    height="8"
+                    rx="1.5"
+                    fill="currentColor"
+                  />
+                  <rect
+                    x="23"
+                    y="3.5"
+                    width="1.6"
+                    height="5"
+                    rx="0.8"
+                    fill="currentColor"
+                  />
+                </svg>
+              </span>
             </div>
-            <div class="absolute inset-0 bg-black/40"></div>
-            <div class="absolute inset-x-0 bottom-0 z-[60] rounded-t-3xl border-t border-border bg-popover px-5 pt-2.5 pb-[30px] shadow-[0_-14px_40px_-10px_rgba(0,0,0,0.4)]">
-              <div class="mx-auto mb-4 h-1 w-9 rounded-full bg-muted-foreground/30"></div>
-              <div class="text-[17px] font-bold tracking-[-0.01em]">Sign in to your DLU LMS</div>
-              <div class="mt-3 mb-4 flex items-start gap-2.5 rounded-xl border border-destructive/40 bg-destructive/10 px-3.5 py-3">
-                <span class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-destructive/15 text-destructive [&_svg]:size-3"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
-                <div class="text-[12.5px] leading-snug text-destructive/90">That didn't work. Double-check your student ID and password and try again.</div>
-              </div>
-              <div class="mb-3">
-                <label class="block text-[12.5px] font-semibold mb-1.5 text-muted-foreground">Student ID</label>
-                <input class="h-[48px] w-full rounded-xl border border-input bg-card px-4 text-[15px] text-foreground outline-none" value="2112345" />
-              </div>
-              <div class="mb-5">
-                <label class="block text-[12.5px] font-semibold mb-1.5 text-muted-foreground">Password</label>
-                <div class="relative">
-                  <input type="password" class="h-[48px] w-full rounded-xl border border-destructive bg-card pl-4 pr-[42px] text-[15px] text-foreground outline-none ring-[3px] ring-destructive/15" placeholder="••••••••" />
-                  <span class="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground [&_svg]:size-4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></span>
+            <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden">
+              <div class="flex-1 min-h-0 px-5 opacity-40 pointer-events-none">
+                <div class="flex items-center gap-3 px-3 pt-1.5 pb-3.5 -mx-2">
+                  <span
+                    class="inline-flex size-[38px] items-center justify-center rounded-xl bg-transparent text-foreground [&_svg]:size-[19px]"
+                    ><svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <polyline points="15 18 9 12 15 6" /></svg
+                  ></span>
+                  <div class="text-xl font-bold tracking-[-0.02em]">
+                    Connect DLU account
+                  </div>
+                </div>
+                <p
+                  class="mt-3 mb-4 text-[13.5px] leading-relaxed text-muted-foreground"
+                >
+                  Link an account and Zenflow keeps an eye on it for new
+                  assignments and timetable changes.
+                </p>
+                <div
+                  class="overflow-hidden rounded-2xl border bg-card divide-y divide-border"
+                >
+                  <div class="flex items-center gap-3.5 px-4 py-4">
+                    <span
+                      class="inline-flex size-[38px] items-center justify-center rounded-xl bg-muted text-muted-foreground [&_svg]:size-[18px]"
+                      ><svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+                        <path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5" /></svg
+                    ></span>
+                    <div class="flex-1">
+                      <div class="text-[15px] font-semibold">LMS</div>
+                      <div class="text-[12.5px] text-muted-foreground mt-0.5">
+                        Not connected
+                      </div>
+                    </div>
+                    <span
+                      class="rounded-lg bg-primary px-3.5 py-1.5 text-[13px] font-semibold text-primary-foreground"
+                      >Connect</span
+                    >
+                  </div>
+                  <div class="flex items-center gap-3.5 px-4 py-4">
+                    <span
+                      class="inline-flex size-[38px] items-center justify-center rounded-xl bg-muted text-muted-foreground [&_svg]:size-[18px]"
+                      ><svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <rect x="3" y="4" width="18" height="16" rx="2" />
+                        <line x1="3" y1="9" x2="21" y2="9" />
+                        <line x1="8" y1="13" x2="14" y2="13" /></svg
+                    ></span>
+                    <div class="flex-1">
+                      <div class="text-[15px] font-semibold">
+                        Student portal
+                      </div>
+                      <div class="text-[12.5px] text-muted-foreground mt-0.5">
+                        Not connected
+                      </div>
+                    </div>
+                    <span
+                      class="rounded-lg bg-primary px-3.5 py-1.5 text-[13px] font-semibold text-primary-foreground"
+                      >Connect</span
+                    >
+                  </div>
                 </div>
               </div>
-              <button class="w-full rounded-xl h-[50px] text-[15px] font-semibold bg-primary text-primary-foreground">Try again</button>
+              <div class="absolute inset-0 bg-black/40"></div>
+              <div
+                class="absolute inset-x-0 bottom-0 z-[60] rounded-t-3xl border-t border-border bg-popover px-5 pt-2.5 pb-[30px] shadow-[0_-14px_40px_-10px_rgba(0,0,0,0.4)]"
+              >
+                <div
+                  class="mx-auto mb-4 h-1 w-9 rounded-full bg-muted-foreground/30"
+                ></div>
+                <div class="text-[17px] font-bold tracking-[-0.01em]">
+                  Sign in to your LMS
+                </div>
+                <p class="text-[12.5px] text-muted-foreground mt-1 mb-4">
+                  Same student ID and password you use on the DLU site.
+                </p>
+                <div class="mb-3">
+                  <label
+                    class="block text-[12.5px] font-semibold mb-1.5 text-muted-foreground"
+                    >Student ID</label
+                  >
+                  <input
+                    class="h-[48px] w-full rounded-xl border border-input bg-card px-4 text-[15px] text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                    placeholder="2112345"
+                  />
+                </div>
+                <div class="mb-5">
+                  <label
+                    class="block text-[12.5px] font-semibold mb-1.5 text-muted-foreground"
+                    >Password</label
+                  >
+                  <div class="relative">
+                    <input
+                      type="password"
+                      class="h-[48px] w-full rounded-xl border border-input bg-card pl-4 pr-[42px] text-[15px] text-foreground outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                      placeholder="••••••••"
+                    />
+                    <span
+                      class="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground [&_svg]:size-4"
+                      ><svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path
+                          d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"
+                        />
+                        <circle cx="12" cy="12" r="3" /></svg
+                    ></span>
+                  </div>
+                </div>
+                <button
+                  class="w-full rounded-xl h-[50px] text-[15px] font-semibold bg-primary text-primary-foreground"
+                >
+                  Connect
+                </button>
+              </div>
             </div>
+            <div class="home-indicator"></div>
           </div>
-          <div class="home-indicator"></div>
+        </div>
+      </div>
+
+      <!-- Wrong details -->
+      <div class="frame">
+        <div class="caption">
+          <span class="tag">Wrong details</span>
+          <div class="sub">DLU didn't accept the login</div>
+        </div>
+        <div class="device">
+          <div class="island"></div>
+          <div
+            class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground"
+          >
+            <div
+              class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"
+            >
+              <span class="tabular-nums">9:41</span
+              ><span class="flex items-center gap-[7px]">
+                <svg
+                  width="18"
+                  height="12"
+                  viewBox="0 0 18 12"
+                  fill="currentColor"
+                >
+                  <rect x="0" y="7" width="3" height="5" rx="1" />
+                  <rect x="4.5" y="4.5" width="3" height="7.5" rx="1" />
+                  <rect x="9" y="2" width="3" height="10" rx="1" />
+                  <rect x="13.5" y="0" width="3" height="12" rx="1" />
+                </svg>
+                <svg width="26" height="12" viewBox="0 0 26 12" fill="none">
+                  <rect
+                    x="0.5"
+                    y="0.5"
+                    width="21"
+                    height="11"
+                    rx="3"
+                    stroke="currentColor"
+                  />
+                  <rect
+                    x="2"
+                    y="2"
+                    width="16"
+                    height="8"
+                    rx="1.5"
+                    fill="currentColor"
+                  />
+                  <rect
+                    x="23"
+                    y="3.5"
+                    width="1.6"
+                    height="5"
+                    rx="0.8"
+                    fill="currentColor"
+                  />
+                </svg>
+              </span>
+            </div>
+            <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden">
+              <div class="flex-1 min-h-0 px-5 opacity-40 pointer-events-none">
+                <div class="flex items-center gap-3 px-3 pt-1.5 pb-3.5 -mx-2">
+                  <span
+                    class="inline-flex size-[38px] items-center justify-center rounded-xl text-foreground [&_svg]:size-[19px]"
+                    ><svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <polyline points="15 18 9 12 15 6" /></svg
+                  ></span>
+                  <div class="text-xl font-bold tracking-[-0.02em]">
+                    Connect DLU account
+                  </div>
+                </div>
+                <p
+                  class="mt-3 mb-4 text-[13.5px] leading-relaxed text-muted-foreground"
+                >
+                  Link an account and Zenflow keeps an eye on it for new
+                  assignments and timetable changes.
+                </p>
+                <div
+                  class="overflow-hidden rounded-2xl border bg-card divide-y divide-border"
+                >
+                  <div class="flex items-center gap-3.5 px-4 py-4">
+                    <span
+                      class="inline-flex size-[38px] items-center justify-center rounded-xl bg-muted text-muted-foreground [&_svg]:size-[18px]"
+                      ><svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+                        <path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5" /></svg
+                    ></span>
+                    <div class="flex-1">
+                      <div class="text-[15px] font-semibold">LMS</div>
+                      <div class="text-[12.5px] text-muted-foreground mt-0.5">
+                        Not connected
+                      </div>
+                    </div>
+                    <span
+                      class="rounded-lg bg-primary px-3.5 py-1.5 text-[13px] font-semibold text-primary-foreground"
+                      >Connect</span
+                    >
+                  </div>
+                  <div class="flex items-center gap-3.5 px-4 py-4">
+                    <span
+                      class="inline-flex size-[38px] items-center justify-center rounded-xl bg-muted text-muted-foreground [&_svg]:size-[18px]"
+                      ><svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <rect x="3" y="4" width="18" height="16" rx="2" />
+                        <line x1="3" y1="9" x2="21" y2="9" />
+                        <line x1="8" y1="13" x2="14" y2="13" /></svg
+                    ></span>
+                    <div class="flex-1">
+                      <div class="text-[15px] font-semibold">
+                        Student portal
+                      </div>
+                      <div class="text-[12.5px] text-muted-foreground mt-0.5">
+                        Not connected
+                      </div>
+                    </div>
+                    <span
+                      class="rounded-lg bg-primary px-3.5 py-1.5 text-[13px] font-semibold text-primary-foreground"
+                      >Connect</span
+                    >
+                  </div>
+                </div>
+              </div>
+              <div class="absolute inset-0 bg-black/40"></div>
+              <div
+                class="absolute inset-x-0 bottom-0 z-[60] rounded-t-3xl border-t border-border bg-popover px-5 pt-2.5 pb-[30px] shadow-[0_-14px_40px_-10px_rgba(0,0,0,0.4)]"
+              >
+                <div
+                  class="mx-auto mb-4 h-1 w-9 rounded-full bg-muted-foreground/30"
+                ></div>
+                <div class="text-[17px] font-bold tracking-[-0.01em]">
+                  Sign in to your LMS
+                </div>
+                <div
+                  class="mt-3 mb-4 flex items-start gap-2.5 rounded-xl border border-destructive/40 bg-destructive/10 px-3.5 py-3"
+                >
+                  <span
+                    class="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-destructive/15 text-destructive [&_svg]:size-3"
+                    ><svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="12" />
+                      <line x1="12" y1="16" x2="12.01" y2="16" /></svg
+                  ></span>
+                  <div class="text-[12.5px] leading-snug text-destructive/90">
+                    That didn't work. Double-check your student ID and password
+                    and try again.
+                  </div>
+                </div>
+                <div class="mb-3">
+                  <label
+                    class="block text-[12.5px] font-semibold mb-1.5 text-muted-foreground"
+                    >Student ID</label
+                  >
+                  <input
+                    class="h-[48px] w-full rounded-xl border border-input bg-card px-4 text-[15px] text-foreground outline-none"
+                    value="2112345"
+                  />
+                </div>
+                <div class="mb-5">
+                  <label
+                    class="block text-[12.5px] font-semibold mb-1.5 text-muted-foreground"
+                    >Password</label
+                  >
+                  <div class="relative">
+                    <input
+                      type="password"
+                      class="h-[48px] w-full rounded-xl border border-destructive bg-card pl-4 pr-[42px] text-[15px] text-foreground outline-none ring-[3px] ring-destructive/15"
+                      placeholder="••••••••"
+                    />
+                    <span
+                      class="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground [&_svg]:size-4"
+                      ><svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path
+                          d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"
+                        />
+                        <circle cx="12" cy="12" r="3" /></svg
+                    ></span>
+                  </div>
+                </div>
+                <button
+                  class="w-full rounded-xl h-[50px] text-[15px] font-semibold bg-primary text-primary-foreground"
+                >
+                  Try again
+                </button>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
         </div>
       </div>
     </div>
 
-  </div>
-
-  <div class="state-section"><h2>Once it's linked</h2><p>The list shows what's connected, when it was last checked, and a way to unlink.</p></div>
-  <div class="gallery">
-
-    <!-- Connected -->
-    <div class="frame">
-      <div class="caption"><span class="tag">Connected</span><div class="sub">Both linked · last checked a few minutes ago</div></div>
-      <div class="device">
-        <div class="island"></div>
-        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
-          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
-            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
-            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
-          </span></div>
-          <div class="relative z-30 flex items-center gap-3 px-3 pt-1.5 pb-3.5 bg-background/80 backdrop-blur-[18px] backdrop-saturate-[1.4] border-b border-border/70">
-            <button class="inline-flex size-[38px] items-center justify-center rounded-xl bg-transparent text-foreground shrink-0 [&_svg]:size-[19px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>
-            <div class="text-xl font-bold tracking-[-0.02em]">Connect DLU account</div>
-          </div>
-          <div class="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:w-0 px-5">
-            <div class="mt-5 mb-5 flex items-center gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-3">
-              <span class="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-600 [&_svg]:size-3"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
-              <div class="text-[12.5px] font-medium text-emerald-700">Zenflow is watching both for you.</div>
+    <div class="state-section">
+      <h2>Once it's linked</h2>
+      <p>
+        The list shows what's connected, when it was last checked, and a way to
+        unlink.
+      </p>
+    </div>
+    <div class="gallery">
+      <!-- Connected -->
+      <div class="frame">
+        <div class="caption">
+          <span class="tag">Connected</span>
+          <div class="sub">Both linked · last checked a few minutes ago</div>
+        </div>
+        <div class="device">
+          <div class="island"></div>
+          <div
+            class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground"
+          >
+            <div
+              class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"
+            >
+              <span class="tabular-nums">9:41</span
+              ><span class="flex items-center gap-[7px]">
+                <svg
+                  width="18"
+                  height="12"
+                  viewBox="0 0 18 12"
+                  fill="currentColor"
+                >
+                  <rect x="0" y="7" width="3" height="5" rx="1" />
+                  <rect x="4.5" y="4.5" width="3" height="7.5" rx="1" />
+                  <rect x="9" y="2" width="3" height="10" rx="1" />
+                  <rect x="13.5" y="0" width="3" height="12" rx="1" />
+                </svg>
+                <svg width="26" height="12" viewBox="0 0 26 12" fill="none">
+                  <rect
+                    x="0.5"
+                    y="0.5"
+                    width="21"
+                    height="11"
+                    rx="3"
+                    stroke="currentColor"
+                  />
+                  <rect
+                    x="2"
+                    y="2"
+                    width="16"
+                    height="8"
+                    rx="1.5"
+                    fill="currentColor"
+                  />
+                  <rect
+                    x="23"
+                    y="3.5"
+                    width="1.6"
+                    height="5"
+                    rx="0.8"
+                    fill="currentColor"
+                  />
+                </svg>
+              </span>
             </div>
-            <div class="overflow-hidden rounded-2xl border bg-card divide-y divide-border">
-              <div class="flex items-center gap-3.5 px-4 py-4">
-                <span class="inline-flex size-[38px] items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 shrink-0 [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg></span>
-                <div class="min-w-0 flex-1"><div class="text-[15px] font-semibold">DLU LMS</div><div class="text-[12.5px] text-emerald-600 mt-0.5 font-medium">Connected · checked 4m ago</div></div>
-                <button class="shrink-0 text-[12.5px] font-semibold text-destructive">Disconnect</button>
-              </div>
-              <div class="flex items-center gap-3.5 px-4 py-4">
-                <span class="inline-flex size-[38px] items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 shrink-0 [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="13" x2="14" y2="13"/></svg></span>
-                <div class="min-w-0 flex-1"><div class="text-[15px] font-semibold">Student portal</div><div class="text-[12.5px] text-emerald-600 mt-0.5 font-medium">Connected · checked 4m ago</div></div>
-                <button class="shrink-0 text-[12.5px] font-semibold text-destructive">Disconnect</button>
+            <div
+              class="relative z-30 flex items-center gap-3 px-3 pt-1.5 pb-3.5 bg-background/80 backdrop-blur-[18px] backdrop-saturate-[1.4] border-b border-border/70"
+            >
+              <button
+                class="inline-flex size-[38px] items-center justify-center rounded-xl bg-transparent text-foreground shrink-0 [&_svg]:size-[19px]"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+              </button>
+              <div class="text-xl font-bold tracking-[-0.02em]">
+                Connect DLU account
               </div>
             </div>
+            <div
+              class="flex-1 min-h-0 overflow-y-auto [&::-webkit-scrollbar]:w-0 px-5"
+            >
+              <div
+                class="mt-5 mb-5 flex items-center gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-3"
+              >
+                <span
+                  class="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-600 [&_svg]:size-3"
+                  ><svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="3"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <polyline points="20 6 9 17 4 12" /></svg
+                ></span>
+                <div class="text-[12.5px] font-medium text-emerald-700">
+                  Zenflow is watching both for you.
+                </div>
+              </div>
+              <div
+                class="overflow-hidden rounded-2xl border bg-card divide-y divide-border"
+              >
+                <div class="flex items-center gap-3.5 px-4 py-4">
+                  <span
+                    class="inline-flex size-[38px] items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 shrink-0 [&_svg]:size-[18px]"
+                    ><svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+                      <path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5" /></svg
+                  ></span>
+                  <div class="min-w-0 flex-1">
+                    <div class="text-[15px] font-semibold">LMS</div>
+                    <div
+                      class="text-[12.5px] text-emerald-600 mt-0.5 font-medium"
+                    >
+                      Connected · checked 4m ago
+                    </div>
+                  </div>
+                  <button
+                    class="shrink-0 text-[12.5px] font-semibold text-destructive"
+                  >
+                    Disconnect
+                  </button>
+                </div>
+                <div class="flex items-center gap-3.5 px-4 py-4">
+                  <span
+                    class="inline-flex size-[38px] items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 shrink-0 [&_svg]:size-[18px]"
+                    ><svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <rect x="3" y="4" width="18" height="16" rx="2" />
+                      <line x1="3" y1="9" x2="21" y2="9" />
+                      <line x1="8" y1="13" x2="14" y2="13" /></svg
+                  ></span>
+                  <div class="min-w-0 flex-1">
+                    <div class="text-[15px] font-semibold">Student portal</div>
+                    <div
+                      class="text-[12.5px] text-emerald-600 mt-0.5 font-medium"
+                    >
+                      Connected · checked 4m ago
+                    </div>
+                  </div>
+                  <button
+                    class="shrink-0 text-[12.5px] font-semibold text-destructive"
+                  >
+                    Disconnect
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
           </div>
-          <div class="home-indicator"></div>
+        </div>
+      </div>
+
+      <!-- Disconnect confirm -->
+      <div class="frame">
+        <div class="caption">
+          <span class="tag">Disconnect?</span>
+          <div class="sub">Quick check before unlinking</div>
+        </div>
+        <div class="device">
+          <div class="island"></div>
+          <div
+            class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground"
+          >
+            <div
+              class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"
+            >
+              <span class="tabular-nums">9:41</span
+              ><span class="flex items-center gap-[7px]">
+                <svg
+                  width="18"
+                  height="12"
+                  viewBox="0 0 18 12"
+                  fill="currentColor"
+                >
+                  <rect x="0" y="7" width="3" height="5" rx="1" />
+                  <rect x="4.5" y="4.5" width="3" height="7.5" rx="1" />
+                  <rect x="9" y="2" width="3" height="10" rx="1" />
+                  <rect x="13.5" y="0" width="3" height="12" rx="1" />
+                </svg>
+                <svg width="26" height="12" viewBox="0 0 26 12" fill="none">
+                  <rect
+                    x="0.5"
+                    y="0.5"
+                    width="21"
+                    height="11"
+                    rx="3"
+                    stroke="currentColor"
+                  />
+                  <rect
+                    x="2"
+                    y="2"
+                    width="16"
+                    height="8"
+                    rx="1.5"
+                    fill="currentColor"
+                  />
+                  <rect
+                    x="23"
+                    y="3.5"
+                    width="1.6"
+                    height="5"
+                    rx="0.8"
+                    fill="currentColor"
+                  />
+                </svg>
+              </span>
+            </div>
+            <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden">
+              <div class="flex-1 min-h-0 px-5 opacity-40 pointer-events-none">
+                <div class="flex items-center gap-3 px-3 pt-1.5 pb-3.5 -mx-2">
+                  <span
+                    class="inline-flex size-[38px] items-center justify-center rounded-xl text-foreground [&_svg]:size-[19px]"
+                    ><svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <polyline points="15 18 9 12 15 6" /></svg
+                  ></span>
+                  <div class="text-xl font-bold tracking-[-0.02em]">
+                    Connect DLU account
+                  </div>
+                </div>
+                <div
+                  class="mt-3 mb-4 flex items-center gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-3"
+                >
+                  <span
+                    class="inline-flex size-5 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-600 [&_svg]:size-3"
+                    ><svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="3"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <polyline points="20 6 9 17 4 12" /></svg
+                  ></span>
+                  <div class="text-[12.5px] font-medium text-emerald-700">
+                    Zenflow is watching both for you.
+                  </div>
+                </div>
+                <div
+                  class="overflow-hidden rounded-2xl border bg-card divide-y divide-border"
+                >
+                  <div class="flex items-center gap-3.5 px-4 py-4">
+                    <span
+                      class="inline-flex size-[38px] items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 [&_svg]:size-[18px]"
+                      ><svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+                        <path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5" /></svg
+                    ></span>
+                    <div class="flex-1">
+                      <div class="text-[15px] font-semibold">LMS</div>
+                      <div
+                        class="text-[12.5px] text-emerald-600 mt-0.5 font-medium"
+                      >
+                        Connected · checked 4m ago
+                      </div>
+                    </div>
+                    <span class="text-[12.5px] font-semibold text-destructive"
+                      >Disconnect</span
+                    >
+                  </div>
+                  <div class="flex items-center gap-3.5 px-4 py-4">
+                    <span
+                      class="inline-flex size-[38px] items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 [&_svg]:size-[18px]"
+                      ><svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <rect x="3" y="4" width="18" height="16" rx="2" />
+                        <line x1="3" y1="9" x2="21" y2="9" />
+                        <line x1="8" y1="13" x2="14" y2="13" /></svg
+                    ></span>
+                    <div class="flex-1">
+                      <div class="text-[15px] font-semibold">
+                        Student portal
+                      </div>
+                      <div
+                        class="text-[12.5px] text-emerald-600 mt-0.5 font-medium"
+                      >
+                        Connected · checked 4m ago
+                      </div>
+                    </div>
+                    <span class="text-[12.5px] font-semibold text-destructive"
+                      >Disconnect</span
+                    >
+                  </div>
+                </div>
+              </div>
+              <div class="absolute inset-0 bg-black/40"></div>
+              <div
+                class="absolute inset-x-0 bottom-0 z-[60] rounded-t-3xl border-t border-border bg-popover px-5 pt-2.5 pb-[30px] shadow-[0_-14px_40px_-10px_rgba(0,0,0,0.4)]"
+              >
+                <div
+                  class="mx-auto mb-4 h-1 w-9 rounded-full bg-muted-foreground/30"
+                ></div>
+                <div class="text-[17px] font-bold tracking-[-0.01em]">
+                  Disconnect the LMS?
+                </div>
+                <p
+                  class="text-[13px] text-muted-foreground mt-1.5 mb-5 leading-snug"
+                >
+                  Zenflow will stop checking it for new assignments. You can
+                  reconnect any time.
+                </p>
+                <div class="flex gap-2.5">
+                  <button
+                    class="flex-1 rounded-xl h-[50px] text-[15px] font-semibold border border-input bg-card text-foreground"
+                  >
+                    Keep it
+                  </button>
+                  <button
+                    class="flex-1 rounded-xl h-[50px] text-[15px] font-semibold bg-destructive text-white"
+                  >
+                    Disconnect
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="home-indicator"></div>
+          </div>
         </div>
       </div>
     </div>
-
-    <!-- Disconnect confirm -->
-    <div class="frame">
-      <div class="caption"><span class="tag">Disconnect?</span><div class="sub">Quick check before unlinking</div></div>
-      <div class="device">
-        <div class="island"></div>
-        <div class="absolute inset-0 flex flex-col overflow-hidden bg-background text-foreground">
-          <div class="relative z-40 flex h-[54px] shrink-0 items-end justify-between px-[30px] pb-2 text-[15px] font-semibold tracking-[-0.01em] text-foreground pointer-events-none [&_svg]:block"><span class="tabular-nums">9:41</span><span class="flex items-center gap-[7px]">
-            <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
-            <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x="0.5" y="0.5" width="21" height="11" rx="3" stroke="currentColor"/><rect x="2" y="2" width="16" height="8" rx="1.5" fill="currentColor"/><rect x="23" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor"/></svg>
-          </span></div>
-          <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden">
-            <div class="flex-1 min-h-0 px-5 opacity-40 pointer-events-none">
-              <div class="flex items-center gap-3 px-3 pt-1.5 pb-3.5 -mx-2">
-                <span class="inline-flex size-[38px] items-center justify-center rounded-xl text-foreground [&_svg]:size-[19px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></span>
-                <div class="text-xl font-bold tracking-[-0.02em]">Connect DLU account</div>
-              </div>
-              <div class="mt-3 mb-4 flex items-center gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-3">
-                <span class="inline-flex size-5 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-600 [&_svg]:size-3"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
-                <div class="text-[12.5px] font-medium text-emerald-700">Zenflow is watching both for you.</div>
-              </div>
-              <div class="overflow-hidden rounded-2xl border bg-card divide-y divide-border">
-                <div class="flex items-center gap-3.5 px-4 py-4"><span class="inline-flex size-[38px] items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg></span><div class="flex-1"><div class="text-[15px] font-semibold">DLU LMS</div><div class="text-[12.5px] text-emerald-600 mt-0.5 font-medium">Connected · checked 4m ago</div></div><span class="text-[12.5px] font-semibold text-destructive">Disconnect</span></div>
-                <div class="flex items-center gap-3.5 px-4 py-4"><span class="inline-flex size-[38px] items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 [&_svg]:size-[18px]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="8" y1="13" x2="14" y2="13"/></svg></span><div class="flex-1"><div class="text-[15px] font-semibold">Student portal</div><div class="text-[12.5px] text-emerald-600 mt-0.5 font-medium">Connected · checked 4m ago</div></div><span class="text-[12.5px] font-semibold text-destructive">Disconnect</span></div>
-              </div>
-            </div>
-            <div class="absolute inset-0 bg-black/40"></div>
-            <div class="absolute inset-x-0 bottom-0 z-[60] rounded-t-3xl border-t border-border bg-popover px-5 pt-2.5 pb-[30px] shadow-[0_-14px_40px_-10px_rgba(0,0,0,0.4)]">
-              <div class="mx-auto mb-4 h-1 w-9 rounded-full bg-muted-foreground/30"></div>
-              <div class="text-[17px] font-bold tracking-[-0.01em]">Disconnect the LMS?</div>
-              <p class="text-[13px] text-muted-foreground mt-1.5 mb-5 leading-snug">Zenflow will stop checking it for new assignments. You can reconnect any time.</p>
-              <div class="flex gap-2.5">
-                <button class="flex-1 rounded-xl h-[50px] text-[15px] font-semibold border border-input bg-card text-foreground">Keep it</button>
-                <button class="flex-1 rounded-xl h-[50px] text-[15px] font-semibold bg-destructive text-white">Disconnect</button>
-              </div>
-            </div>
-          </div>
-          <div class="home-indicator"></div>
-        </div>
-      </div>
-    </div>
-
-  </div>
-</body>
+  </body>
 </html>
