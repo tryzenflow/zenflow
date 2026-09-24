@@ -31,12 +31,16 @@ interface NotificationsState {
   markAllRead: () => Promise<void>;
 }
 
-export const useNotificationsStore = create<NotificationsState>((set, get) => ({
+const INITIAL_NOTIFICATIONS_STATE = {
   items: [],
   unreadCount: 0,
   loading: true,
   refreshing: false,
   initialized: false,
+} satisfies Partial<NotificationsState>;
+
+export const useNotificationsStore = create<NotificationsState>((set, get) => ({
+  ...INITIAL_NOTIFICATIONS_STATE,
 
   fetchNotifications: async (mode = "initial") => {
     if (mode === "refresh") set({ refreshing: true });
@@ -245,8 +249,10 @@ export function useNotificationsSubscription(): void {
   }, [userId, fetchNotifications]);
 
   // Live SSE stream connection
+  const streamOpenedRef = useRef(false);
   useEffect(() => {
     if (!userId) return;
+    streamOpenedRef.current = false;
 
     const unsubscribe = subscribeNotificationsStream({
       onNotification: (n) => {
@@ -261,7 +267,9 @@ export function useNotificationsSubscription(): void {
         // `rescheduleConflicts` in `api/notifications.ts` — already calls
         // `notifySessionsMutated()` itself), so skip invalidation here for
         // that case.
-        if (notificationEventKind(n.eventName) !== "CONFLICT") {
+        // A reminder changes no session either — it's just the nudge.
+        const kind = notificationEventKind(n.eventName);
+        if (kind !== "CONFLICT" && kind !== "REMINDER") {
           notifySessionsMutated();
         }
 
@@ -307,10 +315,26 @@ export function useNotificationsSubscription(): void {
       onError: (err) => {
         console.warn("[notifications-sse] Connection error:", err);
       },
+      // On reconnect, refetch the inbox to catch up on the gap (no toasts).
+      onOpen: () => {
+        if (!streamOpenedRef.current) {
+          streamOpenedRef.current = true;
+          return;
+        }
+        void fetchNotifications("refresh");
+        notifySessionsMutated();
+      },
     });
 
     return () => {
       unsubscribe();
     };
-  }, [userId, addNotification]);
+  }, [userId, addNotification, fetchNotifications]);
 }
+
+// Per-user inbox: reset whenever the signed-in user changes.
+useUserStore.subscribe((state, prev) => {
+  if (state.user?.id !== prev.user?.id) {
+    useNotificationsStore.setState(INITIAL_NOTIFICATIONS_STATE);
+  }
+});

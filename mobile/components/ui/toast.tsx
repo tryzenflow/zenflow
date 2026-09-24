@@ -10,9 +10,10 @@ import {
   useRef,
   useState,
 } from "react";
-import { Pressable, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
+  cancelAnimation,
   Extrapolation,
   interpolate,
   runOnJS,
@@ -27,6 +28,7 @@ import {
   Info,
   Lightbulb,
   type LucideIcon,
+  X,
 } from "../Icons";
 import { Text } from "./text";
 
@@ -44,10 +46,10 @@ export interface ToastAction {
  */
 const TOAST_VARIANTS = {
   default: {
-    badge: "bg-foreground/10",
-    icon: "text-foreground",
+    badge: "bg-blue-500/15",
+    icon: "text-blue-600 dark:text-blue-400",
     Icon: Info,
-    confirmBtn: "bg-foreground",
+    confirmBtn: "bg-blue-600",
   },
   destructive: {
     badge: "bg-destructive/15",
@@ -96,7 +98,8 @@ type ToastVariant = keyof typeof TOAST_VARIANTS;
  * pairs the web toast uses.
  */
 const VARIANT_ACCENT: Record<ToastVariant, { light: string; dark: string }> = {
-  default: { light: "#0f0d0a", dark: "#fbfaf8" },
+  // Plain notices read as info — blue, not the foreground ink.
+  default: { light: "#2563eb", dark: "#60a5fa" },
   destructive: { light: "#e7000b", dark: "#ff6467" },
   warning: { light: "#d97706", dark: "#fbbf24" },
   success: { light: "#059669", dark: "#34d399" },
@@ -129,11 +132,14 @@ export interface ToastConfirmOptions extends ToastConfirm {
   variant?: ToastVariant;
 }
 
-// Cap simultaneous full-size toasts so a burst of calls (e.g. dragging a
-// task a few times in a row) can't pile the whole screen with cards — extra
-// toasts queue and appear one at a time as visible ones dismiss, with a
-// "+N more" pill hinting at what's waiting.
-const MAX_VISIBLE_TOASTS = 2;
+// iOS-style stack: newest in front, peeking slivers behind, a pill to expand.
+// Only `success` toasts auto-dismiss.
+const STACK_PEEK_LAYERS = 2;
+/** How far each card behind the front one peeks out below it. */
+const STACK_PEEK_PX = 7;
+/** How much narrower each deeper layer is, per side. */
+const STACK_INSET_PX = 10;
+const EXPANDED_MAX_HEIGHT = 440;
 const SWIPE_DISMISS_THRESHOLD = 72;
 const ENTRANCE_DURATION = 220;
 const EXIT_DURATION = 180;
@@ -162,6 +168,14 @@ interface ToastProps {
   /** Optional second line under the message, rendered muted. When set (and
    * this isn't a confirm toast) the `message` becomes a compact title. */
   description?: string;
+  /** Stop the auto-dismiss clock (the stack is expanded); restarts on resume.
+   * Only a `success` toast has one — every other variant stays up until closed. */
+  paused?: boolean;
+  /** Behind the front card of a collapsed stack: mounted (its timer keeps
+   * running) but not drawn. */
+  hidden?: boolean;
+  /** Gap below the card. */
+  spacing?: number;
 }
 function Toast({
   id,
@@ -173,6 +187,9 @@ function Toast({
   action,
   confirm,
   description,
+  paused = false,
+  hidden = false,
+  spacing = 10,
 }: ToastProps) {
   const opacity = useSharedValue(0);
   const translateX = useSharedValue(0);
@@ -186,6 +203,8 @@ function Toast({
   const accent = (VARIANT_ACCENT[variant] ?? VARIANT_ACCENT.default)[
     isDarkColorScheme ? "dark" : "light"
   ];
+
+  const autoDismiss = !confirm && variant === "success";
 
   const hide = useCallback(() => {
     onHide(id);
@@ -212,21 +231,28 @@ function Toast({
 
   useEffect(() => {
     opacity.value = withTiming(1, { duration: ENTRANCE_DURATION });
-    // A confirm toast never auto-dismisses — it waits for a button (or a
-    // swipe, which counts as cancel).
     if (confirm) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(
         () => {},
       );
-      return;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    // Only success toasts auto-dismiss.
+    if (!autoDismiss) return;
+    cancelAnimation(progress);
+    progress.value = 0;
+    // Paused while expanded; restarts on collapse.
+    if (paused) return;
     progress.value = withTiming(1, {
       duration: Math.max(duration - ENTRANCE_DURATION, 100),
     });
     const timer = setTimeout(() => dismiss(0), duration);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [duration]);
+  }, [duration, paused]);
 
   // Swiping a toast away dismisses it; for a confirm toast that also counts as
   // pressing Cancel.
@@ -283,7 +309,8 @@ function Toast({
             width: "100%",
             maxWidth: TOAST_MAX_WIDTH,
             alignSelf: "center",
-            marginBottom: 10,
+            marginBottom: spacing,
+            display: hidden ? "none" : "flex",
             borderRadius: 18,
             borderWidth: 1,
             borderColor: palette.border,
@@ -339,6 +366,17 @@ function Toast({
               </Text>
             ) : null}
           </Pressable>
+
+          {!confirm && (
+            <Pressable
+              onPress={() => dismiss(0)}
+              hitSlop={10}
+              accessibilityLabel="Dismiss notification"
+              style={{ paddingTop: 2 }}
+            >
+              <X size={16} color={palette.mutedForeground} />
+            </Pressable>
+          )}
         </View>
 
         {action && !confirm && (
@@ -413,7 +451,7 @@ function Toast({
           </View>
         )}
 
-        {showProgress && !confirm && (
+        {showProgress && autoDismiss && (
           <View
             className="mt-2.5 overflow-hidden"
             style={{
@@ -432,6 +470,100 @@ function Toast({
         )}
       </Animated.View>
     </GestureDetector>
+  );
+}
+
+/** A card-shaped sliver behind the front toast — one per hidden toast, up to
+ * {@link STACK_PEEK_LAYERS}. Tapping it expands the stack. */
+function StackLayer({
+  depth,
+  layers,
+  onPress,
+}: {
+  depth: number;
+  /** How many layers are drawn — the container reserves `layers` peeks. */
+  layers: number;
+  onPress: () => void;
+}) {
+  const { isDarkColorScheme } = useColorScheme();
+  const palette = isDarkColorScheme ? NAV_THEME.dark : NAV_THEME.light;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityLabel="Show all notifications"
+      style={{
+        position: "absolute",
+        top: 0,
+        left: STACK_INSET_PX * depth,
+        right: STACK_INSET_PX * depth,
+        // Layer `depth` ends `depth` peeks below the front card.
+        bottom: STACK_PEEK_PX * (layers - depth),
+        borderRadius: 18,
+        borderWidth: 1,
+        borderColor: palette.border,
+        backgroundColor: palette.card,
+        opacity: 1 - 0.3 * depth,
+        // Below the front card's elevation (10) so Android paints it behind.
+        elevation: 10 - 2 * depth,
+        shadowColor: "#000",
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 4 },
+      }}
+    />
+  );
+}
+
+/** "3 notifications ˅ · Clear all" above a stack of two or more. */
+function StackControls({
+  count,
+  expanded,
+  onToggle,
+  onClearAll,
+}: {
+  count: number;
+  expanded: boolean;
+  onToggle: () => void;
+  onClearAll: () => void;
+}) {
+  const { isDarkColorScheme } = useColorScheme();
+  const palette = isDarkColorScheme ? NAV_THEME.dark : NAV_THEME.light;
+  const pill = {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    backgroundColor: palette.card,
+    borderWidth: 1,
+    borderColor: palette.border,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+  } as const;
+  return (
+    <View
+      className="flex-row justify-end"
+      style={{ gap: 8, marginBottom: 8 }}
+      pointerEvents="box-none"
+    >
+      <Pressable onPress={onToggle} hitSlop={6} style={pill}>
+        <Text
+          className="text-[12px] font-semibold"
+          style={{ color: palette.text }}
+        >
+          {expanded ? "Show less" : `${count} notifications`}
+        </Text>
+      </Pressable>
+      <Pressable onPress={onClearAll} hitSlop={6} style={pill}>
+        <Text
+          className="text-[12px] font-semibold"
+          style={{ color: palette.mutedForeground }}
+        >
+          Clear all
+        </Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -522,13 +654,41 @@ function ToastProvider({
     setMessages((prev) => prev.filter((message) => message.id !== id));
   };
 
-  // Confirm toasts jump the queue — a blocking yes/no shouldn't sit behind two
-  // informational toasts (`.sort` is stable, so same-kind order is preserved).
-  const ordered = [...messages].sort(
-    (a, b) => (b.confirm ? 1 : 0) - (a.confirm ? 1 : 0),
+  const [expanded, setExpanded] = useState(false);
+
+  // Newest first; confirms always in front (stable sort).
+  const ordered = [...messages]
+    .reverse()
+    .sort((a, b) => (b.confirm ? 1 : 0) - (a.confirm ? 1 : 0));
+  const count = ordered.length;
+  const peekLayers = Math.min(count - 1, STACK_PEEK_LAYERS);
+
+  // Nothing left to expand — fall back to the collapsed stack.
+  useEffect(() => {
+    if (count <= 1 && expanded) setExpanded(false);
+  }, [count, expanded]);
+
+  // Confirms are decisions, not notices — "Clear all" leaves them up.
+  const clearAll = () =>
+    setMessages((prev) => prev.filter((message) => message.confirm));
+
+  const renderToast = (message: ToastMessage, hidden: boolean) => (
+    <Toast
+      key={message.id}
+      id={message.id}
+      message={message.text}
+      variant={message.variant}
+      duration={message.duration}
+      showProgress={message.showProgress}
+      action={message.action}
+      confirm={message.confirm}
+      description={message.description}
+      onHide={removeToast}
+      paused={expanded}
+      hidden={hidden}
+      spacing={expanded ? 8 : 0}
+    />
   );
-  const visibleMessages = ordered.slice(0, MAX_VISIBLE_TOASTS);
-  const queuedCount = messages.length - visibleMessages.length;
 
   return (
     <ToastContext.Provider value={{ toast, confirm, removeToast }}>
@@ -546,29 +706,45 @@ function ToastProvider({
             : { bottom: TOAST_BOTTOM_INSET }),
         }}
       >
-        {visibleMessages.map((message) => (
-          <Toast
-            key={message.id}
-            id={message.id}
-            message={message.text}
-            variant={message.variant}
-            duration={message.duration}
-            showProgress={message.showProgress}
-            action={message.action}
-            confirm={message.confirm}
-            description={message.description}
-            onHide={removeToast}
-          />
-        ))}
-        {queuedCount > 0 && (
-          <View pointerEvents="none" className="items-center">
-            <View className="rounded-full bg-foreground/80 px-2.5 py-1">
-              <Text className="text-[11px] font-semibold text-background">
-                +{queuedCount} more
-              </Text>
+        <View
+          pointerEvents="box-none"
+          style={{ width: "100%", maxWidth: TOAST_MAX_WIDTH }}
+        >
+          {count > 1 && (
+            <StackControls
+              count={count}
+              expanded={expanded}
+              onToggle={() => setExpanded((e) => !e)}
+              onClearAll={clearAll}
+            />
+          )}
+          {expanded ? (
+            <ScrollView
+              style={{ maxHeight: EXPANDED_MAX_HEIGHT }}
+              showsVerticalScrollIndicator={false}
+            >
+              {ordered.map((message) => renderToast(message, false))}
+            </ScrollView>
+          ) : (
+            <View
+              pointerEvents="box-none"
+              style={{ paddingBottom: STACK_PEEK_PX * peekLayers }}
+            >
+              {/* Deepest layer first, so shallower ones paint over it. */}
+              {Array.from({ length: peekLayers }, (_, i) => peekLayers - i).map(
+                (depth) => (
+                  <StackLayer
+                    key={`layer-${depth}`}
+                    depth={depth}
+                    layers={peekLayers}
+                    onPress={() => setExpanded(true)}
+                  />
+                ),
+              )}
+              {ordered.map((message, index) => renderToast(message, index > 0))}
             </View>
-          </View>
-        )}
+          )}
+        </View>
       </View>
     </ToastContext.Provider>
   );

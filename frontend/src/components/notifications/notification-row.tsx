@@ -104,8 +104,8 @@ export function NotificationRow({
         </Button>
       </div>
       {isConflict(n.eventName) && (
-        <div className="flex items-center gap-3 pb-3 pl-16 pr-4">
-          <span className="min-w-0 flex-1 text-[11px] leading-snug text-muted-foreground">
+        <div className="flex flex-col items-start gap-2 pb-3 pl-16 pr-4">
+          <span className="text-[11px] leading-snug text-muted-foreground">
             {conflictCopy(n.eventName)}
             {n.conflictSessionIds.length > 0 &&
               ` (${n.conflictSessionIds.length})`}

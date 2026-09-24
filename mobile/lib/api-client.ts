@@ -2,6 +2,8 @@ import axios, { isAxiosError } from "axios";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { useUserStore } from "@/hooks/use-user-store";
+import { clearDaySessionCache } from "@/lib/session-cache";
+import { resetTimelineScroll } from "@/lib/timeline-scroll";
 import {
   cacheSessionCookie,
   clearCachedSessionCookie,
@@ -108,6 +110,9 @@ api.interceptors.response.use(
       (error.response?.status === 401 || error.response?.status === 403)
     ) {
       useUserStore.getState().setUser(null);
+      // Same per-user cleanup as Settings sign-out.
+      clearDaySessionCache();
+      resetTimelineScroll();
       await clearCachedSessionUser();
       await clearSession();
     }
