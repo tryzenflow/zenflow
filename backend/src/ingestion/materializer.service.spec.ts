@@ -2,10 +2,16 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { ConfigService } from "@nestjs/config";
 import { Prisma } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
+import { SyncDigest } from "./core/sync-digest";
 import { MaterializerService } from "./materializer.service";
+import { SyncConflictsService } from "./sync-conflicts.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { TagsService } from "../tags/tags.service";
-import type { ParsedBlock, ParsedLmsItem } from "./core/types";
+import type {
+  ParsedBlock,
+  ParsedLmsItem,
+  ParsedPortalItem,
+} from "./core/types";
 
 // ── in-memory Prisma double ────────────────────────────────────────────────
 // Same idiom as integrations.service.spec.ts: a real object graph rather than
@@ -24,6 +30,8 @@ interface SessionRow {
   durationMinutes: number;
   scheduledStartTime: Date | null;
   lastMovedAt: Date | null;
+  deleted: boolean;
+  scheduleStudyUnitId: string | null;
   createdAt: Date;
   updatedAt: Date;
   tags: { name: string }[];
@@ -34,8 +42,7 @@ interface NotificationRow {
   id: string;
   userId: string;
   sessionId: string | null;
-  topic: string;
-  kind: string;
+  eventName: string;
   title: string;
   content: string;
   eventEndsAt: Date | null;
@@ -145,6 +152,9 @@ function makePrismaDouble() {
           durationMinutes: data.durationMinutes as number,
           scheduledStartTime: (data.scheduledStartTime as Date) ?? null,
           lastMovedAt: null,
+          deleted: false,
+          scheduleStudyUnitId:
+            (data.scheduleStudyUnitId as string | null) ?? null,
           createdAt: new Date(),
           updatedAt: new Date(),
           tags: (
@@ -195,8 +205,7 @@ function makePrismaDouble() {
           id: `n${notifications.length + 1}`,
           userId: args.data.userId as string,
           sessionId: (args.data.sessionId as string | null) ?? null,
-          topic: args.data.topic as string,
-          kind: (args.data.kind as string) ?? "NEW",
+          eventName: args.data.eventName as string,
           title: args.data.title as string,
           content: args.data.content as string,
           eventEndsAt: (args.data.eventEndsAt as Date | null) ?? null,
@@ -244,7 +253,9 @@ function block(over: Partial<ParsedBlock> = {}): ParsedBlock {
   };
 }
 
-async function makeService() {
+async function makeService(
+  syncConflicts?: Pick<SyncConflictsService, "detectAndNotify">,
+) {
   const db = makePrismaDouble();
   const prisma = db.client as unknown as PrismaService;
   const config = {
@@ -261,6 +272,9 @@ async function makeService() {
       NotificationsService,
       { provide: PrismaService, useValue: prisma },
       { provide: ConfigService, useValue: config },
+      ...(syncConflicts
+        ? [{ provide: SyncConflictsService, useValue: syncConflicts }]
+        : []),
     ],
   }).compile();
   const service = module.get<MaterializerService>(MaterializerService);
@@ -282,9 +296,21 @@ function lecture(over: Partial<ParsedBlock> = {}): ParsedBlock {
 /** An instant inside HK01 of the 2026–2027 DLU academic year. */
 const IN_TERM = new Date("2026-09-08T00:00:00.000Z");
 
+/**
+ * One materialize run — enough to put an item on the calendar.
+ */
+async function seedExisting(
+  service: MaterializerService,
+  items: readonly ParsedBlock[],
+  source: "LMS" | "PORTAL",
+  now?: Date,
+) {
+  return service.materialize(USER, items, source, now);
+}
+
 describe("MaterializerService", () => {
   describe("create", () => {
-    it("writes the session, its CREATE event and one notification", async () => {
+    it("writes the session, its CREATE event, and the notification on first sighting", async () => {
       const { db, service } = await makeService();
 
       const outcome = await service.materialize(USER, [block()], "LMS");
@@ -293,7 +319,8 @@ describe("MaterializerService", () => {
         created: 1,
         updated: 0,
         unchanged: 0,
-        guarded: 0,
+        skippedDeleted: 0,
+        skippedMoved: 0,
       });
       expect(db.sessions).toHaveLength(1);
       expect(db.sessions[0]).toMatchObject({
@@ -309,9 +336,26 @@ describe("MaterializerService", () => {
 
       expect(db.notifications).toHaveLength(1);
       expect(db.notifications[0]).toMatchObject({
-        topic: "ASSIGNMENT",
+        eventName: "assignment.group_created",
         sessionId: db.sessions[0].id,
       });
+    });
+
+    it("a second identical sighting is a silent no-op", async () => {
+      const { db, service } = await makeService();
+      await service.materialize(USER, [block()], "LMS");
+
+      const outcome = await service.materialize(USER, [block()], "LMS");
+
+      expect(outcome).toEqual({
+        created: 0,
+        updated: 0,
+        unchanged: 1,
+        skippedDeleted: 0,
+        skippedMoved: 0,
+      });
+      // Still just the one notification from the first sighting.
+      expect(db.notifications).toHaveLength(1);
     });
 
     it("tags the session with the LMS course's full name", async () => {
@@ -368,22 +412,47 @@ describe("MaterializerService", () => {
       expect(db.sessions[0].note).toBeNull();
     });
 
-    it("maps EXAM and LECTURE onto their notification topics", async () => {
+    it("maps EXAM and LECTURE onto their notification event categories", async () => {
+      const { db, service } = await makeService();
+      const items = [
+        block({ externalKey: "portal:exam:500001", type: "EXAM" }),
+        block({ externalKey: "portal:meeting:600001", type: "LECTURE" }),
+      ];
+
+      await service.materialize(USER, items, "PORTAL");
+
+      expect(db.notifications.map((n) => n.eventName)).toEqual([
+        "exam.group_created",
+        "lecture.group_created",
+      ]);
+    });
+
+    it("persists a portal-ingested lecture's scheduleStudyUnitId (the grouping key for bulk delete)", async () => {
       const { db, service } = await makeService();
 
-      await service.materialize(
-        USER,
-        [
-          block({ externalKey: "portal:exam:500001", type: "EXAM" }),
-          block({ externalKey: "portal:meeting:600001", type: "LECTURE" }),
-        ],
-        "PORTAL",
-      );
+      const portalItem: ParsedPortalItem = {
+        ...block({
+          externalKey: "portal:meeting:600002",
+          type: "LECTURE",
+          location: "X01.01",
+        }),
+        scheduleStudyUnitId: "99910AB100101",
+      };
 
-      expect(db.notifications.map((n) => n.topic)).toEqual([
-        "EXAM",
-        "TIMETABLE",
-      ]);
+      await service.materialize(USER, [portalItem], "PORTAL");
+
+      expect(db.sessions[0]).toMatchObject({
+        type: "LECTURE",
+        scheduleStudyUnitId: "99910AB100101",
+      });
+    });
+
+    it("leaves scheduleStudyUnitId null for an LMS item (no portal section)", async () => {
+      const { db, service } = await makeService();
+
+      await service.materialize(USER, [block()], "LMS");
+
+      expect(db.sessions[0].scheduleStudyUnitId).toBeNull();
     });
 
     it("treats a P2002 race as a no-op rather than an error", async () => {
@@ -402,6 +471,8 @@ describe("MaterializerService", () => {
         durationMinutes: 15,
         scheduledStartTime: new Date("2026-09-10T03:00:00.000Z"),
         lastMovedAt: null,
+        deleted: false,
+        scheduleStudyUnitId: null,
         createdAt: new Date(),
         updatedAt: new Date(),
         tags: [],
@@ -422,20 +493,23 @@ describe("MaterializerService", () => {
   });
 
   describe("idempotency", () => {
-    it("is a no-op on a re-run: one session, one notification", async () => {
+    it("notifies on the first run, then stays quiet from the second run on", async () => {
       const { db, service } = await makeService();
       const items = [block()];
 
       const first = await service.materialize(USER, items, "LMS");
       const second = await service.materialize(USER, items, "LMS");
+      const third = await service.materialize(USER, items, "LMS");
 
-      expect(first.created).toBe(1);
+      expect(first).toMatchObject({ created: 1, unchanged: 0 });
       expect(second).toEqual({
         created: 0,
         updated: 0,
         unchanged: 1,
-        guarded: 0,
+        skippedDeleted: 0,
+        skippedMoved: 0,
       });
+      expect(third).toEqual(second);
       expect(db.sessions).toHaveLength(1);
       expect(db.notifications).toHaveLength(1);
       expect(db.events).toHaveLength(1);
@@ -465,7 +539,7 @@ describe("MaterializerService", () => {
   describe("upstream change", () => {
     it("follows a move on a session the student has never touched", async () => {
       const { db, service } = await makeService();
-      await service.materialize(USER, [block()], "LMS");
+      await seedExisting(service, [block()], "LMS");
 
       const moved = block({
         scheduledStartTime: new Date("2026-09-11T03:00:00.000Z"),
@@ -476,8 +550,14 @@ describe("MaterializerService", () => {
       expect(db.sessions[0].scheduledStartTime).toEqual(
         new Date("2026-09-11T03:00:00.000Z"),
       );
+      // One CREATED notification from the first sighting, one UPDATED from the move.
       expect(db.notifications).toHaveLength(2);
-      expect(db.notifications[1].title).toContain("Updated:");
+      expect(db.notifications[1].title).toBe(
+        "You have a change to your assignments from LMS",
+      );
+      expect(db.notifications[1]).toMatchObject({
+        eventName: "assignment.group_updated",
+      });
       // Not a user action, so it must not enter the ML event trail...
       expect(db.events).toHaveLength(1);
       // ...nor claim the student moved it.
@@ -486,21 +566,21 @@ describe("MaterializerService", () => {
 
     it("settles down: the run after an upstream change is unchanged again", async () => {
       const { db, service } = await makeService();
-      await service.materialize(USER, [block()], "LMS");
+      await seedExisting(service, [block()], "LMS");
       const moved = block({
         scheduledStartTime: new Date("2026-09-11T03:00:00.000Z"),
       });
       await service.materialize(USER, [moved], "LMS");
 
-      const third = await service.materialize(USER, [moved], "LMS");
+      const settled = await service.materialize(USER, [moved], "LMS");
 
-      expect(third.unchanged).toBe(1);
+      expect(settled.unchanged).toBe(1);
       expect(db.notifications).toHaveLength(2);
     });
 
     it("notices a title-only change", async () => {
       const { db, service } = await makeService();
-      await service.materialize(USER, [block()], "LMS");
+      await seedExisting(service, [block()], "LMS");
 
       const outcome = await service.materialize(
         USER,
@@ -515,13 +595,44 @@ describe("MaterializerService", () => {
     });
   });
 
-  describe("don't clobber a student's edit", () => {
-    it("leaves a moved session alone and raises a TIMETABLE notification", async () => {
+  describe("plain sync — upstream wins, unless the student already moved it", () => {
+    it("applies an upstream change the student never touched, with a normal UPDATED notification", async () => {
       const { db, service } = await makeService();
-      await service.materialize(USER, [block()], "LMS");
+      await seedExisting(service, [block()], "LMS");
+
+      const outcome = await service.materialize(
+        USER,
+        [block({ scheduledStartTime: new Date("2026-09-11T03:00:00.000Z") })],
+        "LMS",
+      );
+
+      expect(outcome).toEqual({
+        created: 0,
+        updated: 1,
+        unchanged: 0,
+        skippedDeleted: 0,
+        skippedMoved: 0,
+      });
+      expect(db.sessions[0].scheduledStartTime).toEqual(
+        new Date("2026-09-11T03:00:00.000Z"),
+      );
+      expect(db.notifications).toHaveLength(2);
+      expect(db.notifications[1]).toMatchObject({
+        eventName: "assignment.group_updated",
+        sessionId: db.sessions[0].id,
+      });
+      expect(db.notifications[1].title).toBe(
+        "You have a change to your assignments from LMS",
+      );
+    });
+
+    it("silently keeps a hand-moved session's position — no reversion, no notification", async () => {
+      const { db, service } = await makeService();
+      await seedExisting(service, [block()], "LMS");
       // The student dragged it, so the row carries their fingerprint.
       db.sessions[0].lastMovedAt = new Date("2026-09-08T12:00:00.000Z");
       db.sessions[0].scheduledStartTime = new Date("2026-09-09T01:00:00.000Z");
+      const notificationsBefore = db.notifications.length;
 
       const outcome = await service.materialize(
         USER,
@@ -533,58 +644,68 @@ describe("MaterializerService", () => {
         created: 0,
         updated: 0,
         unchanged: 0,
-        guarded: 1,
+        skippedDeleted: 0,
+        skippedMoved: 1,
       });
-      // Their placement survived untouched.
+      // The student's move wins — upstream's position never applies.
       expect(db.sessions[0].scheduledStartTime).toEqual(
         new Date("2026-09-09T01:00:00.000Z"),
       );
-      expect(db.notifications).toHaveLength(2);
-      expect(db.notifications[1]).toMatchObject({
-        topic: "TIMETABLE",
-        sessionId: db.sessions[0].id,
-      });
-      expect(db.notifications[1].content).toContain("2026-09-11T03:00:00.000Z");
+      expect(db.notifications).toHaveLength(notificationsBefore);
     });
 
-    it("does not re-raise the same warning on every tick", async () => {
+    it("soft-deletes a session upstream removes, immediately, with a normal REMOVED notification", async () => {
       const { db, service } = await makeService();
-      await service.materialize(USER, [block()], "LMS");
-      db.sessions[0].lastMovedAt = new Date("2026-09-08T12:00:00.000Z");
-      db.sessions[0].scheduledStartTime = new Date("2026-09-09T01:00:00.000Z");
-      const upstream = [
-        block({ scheduledStartTime: new Date("2026-09-11T03:00:00.000Z") }),
-      ];
+      await seedExisting(
+        service,
+        [lecture({ externalKey: "portal:meeting:81001", title: "Gone now" })],
+        "PORTAL",
+        IN_TERM,
+      );
 
-      await service.materialize(USER, upstream, "LMS");
-      await service.materialize(USER, upstream, "LMS");
-      await service.materialize(USER, upstream, "LMS");
+      const recon = await service.reconcileDeleted(
+        USER,
+        "PORTAL",
+        ["LECTURE"],
+        new Set<string>(),
+        IN_TERM,
+      );
 
-      expect(db.notifications).toHaveLength(2);
+      expect(recon).toEqual({ deleted: 1 });
+      expect(db.sessions).toHaveLength(1);
+      expect(db.sessions[0].deleted).toBe(true);
+      const drop = db.notifications.at(-1)!;
+      expect(drop.sessionId).toBeNull();
+      expect(drop.title).toBe("You have a lecture removed from the portal");
     });
 
-    it("does speak up when upstream moves again", async () => {
+    it("removes a hand-moved session upstream drops too — the move only protects position, not existence", async () => {
       const { db, service } = await makeService();
-      await service.materialize(USER, [block()], "LMS");
-      db.sessions[0].lastMovedAt = new Date("2026-09-08T12:00:00.000Z");
-
-      await service.materialize(
-        USER,
-        [block({ scheduledStartTime: new Date("2026-09-11T03:00:00.000Z") })],
-        "LMS",
+      await seedExisting(
+        service,
+        [lecture({ externalKey: "portal:meeting:81001", title: "Mine now" })],
+        "PORTAL",
+        IN_TERM,
       );
-      await service.materialize(
+      db.sessions[0].lastMovedAt = new Date("2026-09-07T00:00:00.000Z");
+
+      const recon = await service.reconcileDeleted(
         USER,
-        [block({ scheduledStartTime: new Date("2026-09-12T03:00:00.000Z") })],
-        "LMS",
+        "PORTAL",
+        ["LECTURE"],
+        new Set<string>(),
+        IN_TERM,
       );
 
-      expect(db.notifications).toHaveLength(3);
-      expect(db.notifications[2].content).toContain("2026-09-12T03:00:00.000Z");
+      expect(recon).toEqual({ deleted: 1 });
+      expect(db.sessions).toHaveLength(1);
+      expect(db.sessions[0].deleted).toBe(true);
+      const drop = db.notifications.at(-1)!;
+      expect(drop.title).toBe("You have a lecture removed from the portal");
     });
   });
 
-  describe("timetable grouping", () => {
+  describe("run digest — one notification per item type per run", () => {
     const many = (n: number): ParsedBlock[] =>
       Array.from({ length: n }, (_, i) =>
         lecture({
@@ -594,108 +715,161 @@ describe("MaterializerService", () => {
         }),
       );
 
-    it("folds a whole term's lectures into one 'timetable is available' row", async () => {
+    it("folds a whole term's lectures into one grouped row, then stays quiet", async () => {
       const { db, service } = await makeService();
+      const items = many(12);
 
-      const outcome = await service.materialize(
-        USER,
-        many(12),
-        "PORTAL",
-        IN_TERM,
-      );
-
-      expect(outcome.created).toBe(12);
-      expect(db.sessions).toHaveLength(12);
-      // One notification, not twelve.
+      const first = await service.materialize(USER, items, "PORTAL", IN_TERM);
+      expect(first.created).toBe(12);
       expect(db.notifications).toHaveLength(1);
       expect(db.notifications[0]).toMatchObject({
-        topic: "TIMETABLE",
-        kind: "NEW",
-        title: "Timetable for semester 1 is available",
-        // Points at the earliest meeting, for the calendar to land on.
+        eventName: "lecture.group_created",
+        title: "You have 12 new lectures from the portal",
+        // The soonest upcoming meeting, for the calendar to land on.
         sessionId: db.sessions[0].id,
         // A group has no single event time.
         eventEndsAt: null,
       });
+
+      const second = await service.materialize(USER, items, "PORTAL", IN_TERM);
+      expect(second.unchanged).toBe(12);
+      expect(db.notifications).toHaveLength(1);
     });
 
-    it("lists the class names for a small mid-term addition", async () => {
+    it("groups regardless of size — two lectures are one row", async () => {
       const { db, service } = await makeService();
+      await service.materialize(USER, many(2), "PORTAL", IN_TERM);
 
+      expect(db.notifications).toHaveLength(1);
+      expect(db.notifications[0].title).toBe(
+        "You have 2 new lectures from the portal",
+      );
+    });
+
+    it('still groups a single change: "You have a new lecture from the portal"', async () => {
+      const { db, service } = await makeService();
       await service.materialize(
         USER,
-        [
-          lecture({ externalKey: "portal:meeting:72001", title: "Đại số" }),
-          lecture({ externalKey: "portal:meeting:72002", title: "Giải tích" }),
-        ],
+        [lecture({ externalKey: "portal:meeting:72001", title: "Đại số" })],
         "PORTAL",
         IN_TERM,
       );
 
       expect(db.notifications).toHaveLength(1);
-      expect(db.notifications[0].title).toBe("New lectures: Đại số, Giải tích");
-      expect(db.notifications[0].topic).toBe("TIMETABLE");
+      expect(db.notifications[0]).toMatchObject({
+        title: "You have a new lecture from the portal",
+        eventName: "lecture.group_created",
+      });
+      // A per-item row carries the session's fixed end instant for its badge.
+      expect(db.notifications[0].eventEndsAt).toBeInstanceOf(Date);
     });
 
-    it("announces the term only once across the run's many weekly batches", async () => {
+    it("groups assignments too, one row per type", async () => {
       const { db, service } = await makeService();
-
-      // Week one crosses the threshold; later weeks must stay quiet.
-      await service.materialize(USER, many(10), "PORTAL", IN_TERM);
-      await service.materialize(
-        USER,
-        many(10).map((b, i) => ({
-          ...b,
-          externalKey: `portal:meeting:7300${i}`,
-        })),
-        "PORTAL",
-        IN_TERM,
-      );
-
-      const grouped = db.notifications.filter(
-        (n) => n.title === "Timetable for semester 1 is available",
-      );
-      expect(grouped).toHaveLength(1);
-    });
-
-    it("stays quiet on a re-run of the same batch", async () => {
-      const { db, service } = await makeService();
-      const items = many(12);
-
-      await service.materialize(USER, items, "PORTAL", IN_TERM);
-      await service.materialize(USER, items, "PORTAL", IN_TERM);
-
-      expect(db.notifications).toHaveLength(1);
-    });
-
-    it("still raises one notification per assignment (those are actionable)", async () => {
-      const { db, service } = await makeService();
-
       await service.materialize(
         USER,
         [
           block({ externalKey: "lms:assign:1" }),
           block({ externalKey: "lms:assign:2" }),
+          block({ externalKey: "lms:exam:3", type: "EXAM" }),
         ],
         "LMS",
         IN_TERM,
       );
 
-      expect(db.notifications).toHaveLength(2);
-      expect(db.notifications.every((n) => n.topic === "ASSIGNMENT")).toBe(
-        true,
+      expect(db.notifications.map((n) => n.eventName)).toEqual([
+        "exam.group_created",
+        "assignment.group_created",
+      ]);
+      expect(db.notifications[1].title).toBe(
+        "You have 2 new assignments from LMS",
       );
-      // A per-item row carries the session's fixed end instant for its badge.
-      expect(db.notifications[0].kind).toBe("NEW");
-      expect(db.notifications[0].eventEndsAt).toBeInstanceOf(Date);
+    });
+
+    it("spans every call that shares a digest, removals included, until flushed", async () => {
+      const { db, service } = await makeService();
+      const old = lecture({ externalKey: "portal:meeting:73000" });
+      await seedExisting(service, [old], "PORTAL", IN_TERM);
+      const before = db.notifications.length;
+      const fresh = many(2);
+
+      const digest = new SyncDigest(IN_TERM);
+      await service.materialize(USER, fresh, "PORTAL", IN_TERM, digest);
+      await service.reconcileDeleted(
+        USER,
+        "PORTAL",
+        ["LECTURE"],
+        new Set(fresh.map((f) => f.externalKey)),
+        IN_TERM,
+        digest,
+      );
+      // Nothing raised mid-run.
+      expect(db.notifications).toHaveLength(before);
+
+      await service.flushDigest(USER, digest, IN_TERM);
+
+      expect(db.notifications).toHaveLength(before + 1);
+      expect(db.notifications.at(-1)).toMatchObject({
+        title: "You have 2 new lectures, 1 lecture removed from the portal",
+        eventName: "lecture.group_created",
+      });
+    });
+  });
+
+  describe("sync conflicts", () => {
+    it("checks once per (source, type) at the end of the run, not per fetch", async () => {
+      const detectAndNotify = jest.fn().mockResolvedValue(0);
+      const { service } = await makeService({ detectAndNotify });
+      const digest = new SyncDigest(IN_TERM);
+
+      // Two weekly fetches of the same run.
+      await service.materialize(
+        USER,
+        [lecture({ externalKey: "portal:meeting:74001" })],
+        "PORTAL",
+        IN_TERM,
+        digest,
+      );
+      await service.materialize(
+        USER,
+        [lecture({ externalKey: "portal:meeting:74002" })],
+        "PORTAL",
+        IN_TERM,
+        digest,
+      );
+      expect(detectAndNotify).not.toHaveBeenCalled();
+
+      await service.flushDigest(USER, digest, IN_TERM);
+
+      expect(detectAndNotify).toHaveBeenCalledTimes(1);
+      expect(detectAndNotify).toHaveBeenCalledWith({
+        userId: USER,
+        source: "PORTAL",
+        type: "LECTURE",
+        // Everything written since the run began counts as just synced.
+        since: IN_TERM,
+      });
+    });
+
+    it("skips the check when the run wrote nothing", async () => {
+      const detectAndNotify = jest.fn().mockResolvedValue(0);
+      const { service } = await makeService({ detectAndNotify });
+      const items = [lecture({ externalKey: "portal:meeting:74003" })];
+      await service.materialize(USER, items, "PORTAL", IN_TERM);
+      detectAndNotify.mockClear();
+
+      // A quiet re-run: unchanged, nothing written, nothing to re-check.
+      await service.materialize(USER, items, "PORTAL", IN_TERM);
+
+      expect(detectAndNotify).not.toHaveBeenCalled();
     });
   });
 
   describe("upstream deletion", () => {
-    it("retires an ingested session upstream no longer lists", async () => {
+    it("soft-deletes a session upstream no longer lists, immediately, keeping the still-seen one", async () => {
       const { db, service } = await makeService();
-      await service.materialize(
-        USER,
+      await seedExisting(
+        service,
         [
           lecture({ externalKey: "portal:meeting:80001", title: "Kept" }),
           lecture({ externalKey: "portal:meeting:80002", title: "Gone" }),
@@ -713,46 +887,28 @@ describe("MaterializerService", () => {
         IN_TERM,
       );
 
-      expect(recon).toEqual({ deleted: 1, keptWithWarning: 0 });
-      expect(db.sessions.map((s) => s.externalKey)).toEqual([
-        "portal:meeting:80001",
-      ]);
+      expect(recon).toEqual({ deleted: 1 });
+      // The row survives (soft-deleted), not hard-removed, so a future
+      // re-fetch that lists this externalKey again is recognized and skipped.
+      expect(db.sessions).toHaveLength(2);
+      const gone = db.sessions.find(
+        (s) => s.externalKey === "portal:meeting:80002",
+      )!;
+      expect(gone.deleted).toBe(true);
+      const kept = db.sessions.find(
+        (s) => s.externalKey === "portal:meeting:80001",
+      )!;
+      expect(kept.deleted).toBe(false);
       const removal = db.notifications.at(-1)!;
-      expect(removal.topic).toBe("TIMETABLE");
-      expect(removal.kind).toBe("DROP");
-      expect(removal.title).toContain("Gone");
+      expect(removal.eventName).toBe("lecture.group_removed");
+      expect(removal.title).toBe("You have a lecture removed from the portal");
       expect(removal.sessionId).toBeNull();
     });
 
-    it("keeps — and warns about — a session the student had hand-moved", async () => {
+    it("is a no-op once the item is already (soft-)deleted", async () => {
       const { db, service } = await makeService();
-      await service.materialize(
-        USER,
-        [lecture({ externalKey: "portal:meeting:81001", title: "Mine now" })],
-        "PORTAL",
-        IN_TERM,
-      );
-      db.sessions[0].lastMovedAt = new Date("2026-09-07T00:00:00.000Z");
-
-      const recon = await service.reconcileDeleted(
-        USER,
-        "PORTAL",
-        ["LECTURE"],
-        new Set<string>(),
-        IN_TERM,
-      );
-
-      expect(recon).toEqual({ deleted: 0, keptWithWarning: 1 });
-      expect(db.sessions).toHaveLength(1);
-      const warn = db.notifications.at(-1)!;
-      expect(warn.title).toContain("removed at DLU");
-      expect(warn.sessionId).toBe(db.sessions[0].id);
-    });
-
-    it("is a no-op on a settled re-run", async () => {
-      const { db, service } = await makeService();
-      await service.materialize(
-        USER,
+      await seedExisting(
+        service,
         [lecture({ externalKey: "portal:meeting:82001" })],
         "PORTAL",
         IN_TERM,
@@ -774,7 +930,7 @@ describe("MaterializerService", () => {
         IN_TERM,
       );
 
-      expect(again).toEqual({ deleted: 0, keptWithWarning: 0 });
+      expect(again).toEqual({ deleted: 0 });
       expect(db.notifications).toHaveLength(before);
     });
 
@@ -805,7 +961,7 @@ describe("MaterializerService", () => {
       expect(db.sessions).toHaveLength(1);
     });
 
-    it("groups a bulk timetable removal", async () => {
+    it("groups a bulk timetable removal into one notification", async () => {
       const { db, service } = await makeService();
       const items = Array.from({ length: 11 }, (_, i) =>
         lecture({
@@ -814,7 +970,7 @@ describe("MaterializerService", () => {
           scheduledStartTime: new Date(Date.UTC(2026, 8, 12 + i, 2, 0, 0)),
         }),
       );
-      await service.materialize(USER, items, "PORTAL", IN_TERM);
+      await seedExisting(service, items, "PORTAL", IN_TERM);
       const before = db.notifications.length;
 
       const recon = await service.reconcileDeleted(
@@ -826,12 +982,53 @@ describe("MaterializerService", () => {
       );
 
       expect(recon.deleted).toBe(11);
-      expect(db.sessions).toHaveLength(0);
+      expect(db.sessions).toHaveLength(11);
+      expect(db.sessions.every((s) => s.deleted)).toBe(true);
       expect(db.notifications).toHaveLength(before + 1);
-      expect(db.notifications.at(-1)!.title).toBe(
-        "Your semester 1 timetable changed",
+      expect(db.notifications.at(-1)).toMatchObject({
+        title: "You have 11 lectures removed from the portal",
+        eventName: "lecture.group_removed",
+        // The sessions are gone — nothing to open.
+        sessionId: null,
+      });
+    });
+  });
+
+  describe("student-deleted rows", () => {
+    it("does not recreate a soft-deleted session on re-ingest", async () => {
+      const { db, service } = await makeService();
+      await service.materialize(USER, [block()], "LMS");
+      db.sessions[0].deleted = true;
+      const notificationsBefore = db.notifications.length;
+
+      const outcome = await service.materialize(USER, [block()], "LMS");
+
+      expect(outcome).toEqual({
+        created: 0,
+        updated: 0,
+        unchanged: 0,
+        skippedDeleted: 1,
+        skippedMoved: 0,
+      });
+      expect(db.sessions).toHaveLength(1);
+      expect(db.sessions[0].deleted).toBe(true);
+      // No new notification for something the student explicitly removed.
+      expect(db.notifications).toHaveLength(notificationsBefore);
+    });
+
+    it("still skips a soft-deleted session even when upstream also changed it", async () => {
+      const { db, service } = await makeService();
+      await service.materialize(USER, [block()], "LMS");
+      db.sessions[0].deleted = true;
+
+      const outcome = await service.materialize(
+        USER,
+        [block({ title: "Renamed upstream" })],
+        "LMS",
       );
-      expect(db.notifications.at(-1)!.content).toContain("11 classes");
+
+      expect(outcome.skippedDeleted).toBe(1);
+      expect(db.sessions[0].title).not.toBe("Renamed upstream");
     });
   });
 });

@@ -11,6 +11,7 @@ import { PortalAPIService } from "../portal/portal-api.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { parseExams } from "./core/parse-portal";
 import { resolveSemester } from "./core/semester";
+import { SyncDigest } from "./core/sync-digest";
 import { IngestionJobsService } from "./ingestion-jobs.service";
 import { MaterializerService } from "./materializer.service";
 import {
@@ -56,7 +57,7 @@ export class ExamWatcherService {
     this.dluTimezone = this.config.get<string>("DLU_TZ") ?? "Asia/Ho_Chi_Minh";
   }
 
-  @Cron(CronExpression.EVERY_WEEK)
+  @Cron(CronExpression.EVERY_WEEKEND)
   async handleCron(): Promise<void> {
     await runCronJob("exam-watcher", async () => {
       const count = await this.run();
@@ -80,6 +81,9 @@ export class ExamWatcherService {
     const token = await this.signIn(target, jobId);
     if (!token) return;
 
+    // Changes are announced once per item type at the end of the run.
+    const digest = new SyncDigest(new Date());
+
     const { academicYear, semester } = resolveSemester(now, this.dluTimezone);
     const url = `${this.endpoint}/api/student/exam?namhoc=${academicYear}&hocky=${semester}`;
     const itemId = await this.jobs.beginItem("PORTAL", jobId, url);
@@ -95,6 +99,7 @@ export class ExamWatcherService {
         parsed.items,
         "PORTAL",
         now,
+        digest,
       );
 
       // The whole term comes back in this one response, so a completed fetch is
@@ -106,6 +111,7 @@ export class ExamWatcherService {
         ["EXAM"],
         seenKeys,
         now,
+        digest,
       );
 
       await this.jobs.completeItem("PORTAL", itemId, {
@@ -120,13 +126,18 @@ export class ExamWatcherService {
       ingestionLastSuccess.record(now.getTime() / 1000, { provider: "PORTAL" });
 
       if (
-        outcome.created + outcome.updated + outcome.guarded + recon.deleted >
+        outcome.created +
+          outcome.updated +
+          outcome.skippedDeleted +
+          outcome.skippedMoved +
+          recon.deleted >
         0
       ) {
         this.logger.log(
           `Exam sync for integration ${target.integrationId}: ` +
             `${outcome.created} new, ${outcome.updated} updated, ` +
-            `${outcome.guarded} kept as edited, ${recon.deleted} removed`,
+            `${outcome.skippedDeleted} skipped (student-deleted), ` +
+            `${outcome.skippedMoved} kept (student-moved), ${recon.deleted} removed`,
         );
       }
     } catch (error) {
@@ -147,6 +158,7 @@ export class ExamWatcherService {
       );
     }
 
+    await this.materializer.flushDigest(target.userId, digest, now);
     await this.jobs.finishJob("PORTAL", jobId, "COMPLETED");
   }
 

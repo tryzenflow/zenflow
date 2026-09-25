@@ -1,0 +1,378 @@
+[
+  {
+    "id": 20001,
+    "fullname": "Information Technology Capstone Project (Nhóm 01) - Section 26120IT30201",
+    "shortname": "TESTCUR-IT-302-26120IT30201",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20002,
+    "fullname": "General Elective: Introductory Psychology (Nhóm 01) - Section 261GEN-EL301",
+    "shortname": "GEN-EL3-261GEN-EL301",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20003,
+    "fullname": "Economics Capstone Project (Nhóm 02) - Section 26120ECO30202",
+    "shortname": "TESTCUR-ECO-302-26120ECO30202",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20004,
+    "fullname": "Tourism Capstone Project (Nhóm 01) - Section 26120TOUR30201",
+    "shortname": "TESTCUR-TOUR-302-26120TOUR30201",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20005,
+    "fullname": "Business Administration Capstone Project (Nhóm 03) - Section 26120BUS30203",
+    "shortname": "TESTCUR-BUS-302-26120BUS30203",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20006,
+    "fullname": "General Elective: Entrepreneurship (Nhóm 01) - Section 261GEN-EL201",
+    "shortname": "GEN-EL2-261GEN-EL201",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20007,
+    "fullname": "Chemistry Capstone Project (Nhóm 03) - Section 26120CHE30203",
+    "shortname": "TESTCUR-CHE-302-26120CHE30203",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20008,
+    "fullname": "Biology Capstone Project (Nhóm 01) - Section 26120BIO30201",
+    "shortname": "TESTCUR-BIO-302-26120BIO30201",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20009,
+    "fullname": "Social Studies Capstone Project (Nhóm 03) - Section 26120SOC30203",
+    "shortname": "TESTCUR-SOC-302-26120SOC30203",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20010,
+    "fullname": "General Elective: Soft Skills (Nhóm 01) - Section 261GEN-EL101",
+    "shortname": "GEN-EL1-261GEN-EL101",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20011,
+    "fullname": "English Language Capstone Project (Nhóm 01) - Section 26120ENG30201",
+    "shortname": "TESTCUR-ENG-302-26120ENG30201",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20012,
+    "fullname": "Linguistics Capstone Project (Nhóm 01) - Section 26120LING30201",
+    "shortname": "TESTCUR-LING-302-26120LING30201",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20013,
+    "fullname": "General Elective: Civic & Legal Studies (Nhóm 01) - Section 261GEN-EL401",
+    "shortname": "GEN-EL4-261GEN-EL401",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20014,
+    "fullname": "Information Technology Capstone Project (Nhóm 02) - Section 26120IT30202",
+    "shortname": "TESTCUR-IT-302-26120IT30202",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20015,
+    "fullname": "Introduction to Biology (Nhóm 01) - Section 26120BIO10101",
+    "shortname": "TESTCUR-BIO-101-26120BIO10101",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20016,
+    "fullname": "Economics Capstone Project (Nhóm 01) - Section 26120ECO30201",
+    "shortname": "TESTCUR-ECO-302-26120ECO30201",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20017,
+    "fullname": "Tourism Capstone Project (Nhóm 02) - Section 26120TOUR30202",
+    "shortname": "TESTCUR-TOUR-302-26120TOUR30202",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20018,
+    "fullname": "Business Administration Capstone Project (Nhóm 01) - Section 26120BUS30201",
+    "shortname": "TESTCUR-BUS-302-26120BUS30201",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20019,
+    "fullname": "Intermediate Chemistry Topics (Nhóm 01) - Section 26120CHE201-RETAKE01",
+    "shortname": "TESTCUR-CHE-201-26120CHE201-RETAKE01",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20020,
+    "fullname": "Biology Capstone Project (Nhóm 03) - Section 26120BIO30203",
+    "shortname": "TESTCUR-BIO-302-26120BIO30203",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20021,
+    "fullname": "Social Studies Capstone Project (Nhóm 02) - Section 26120SOC30202",
+    "shortname": "TESTCUR-SOC-302-26120SOC30202",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20022,
+    "fullname": "English Language Capstone Project (Nhóm 03) - Section 26120ENG30203",
+    "shortname": "TESTCUR-ENG-302-26120ENG30203",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20023,
+    "fullname": "Linguistics Capstone Project (Nhóm 03) - Section 26120LING30203",
+    "shortname": "TESTCUR-LING-302-26120LING30203",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20024,
+    "fullname": "Tourism Capstone Project (Nhóm 03) - Section 26120TOUR30203",
+    "shortname": "TESTCUR-TOUR-302-26120TOUR30203",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20025,
+    "fullname": "Business Administration Capstone Project (Nhóm 02) - Section 26120BUS30202",
+    "shortname": "TESTCUR-BUS-302-26120BUS30202",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20026,
+    "fullname": "Introduction to English Language (Nhóm 01) - Section 26120ENG10101",
+    "shortname": "TESTCUR-ENG-101-26120ENG10101",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20027,
+    "fullname": "Chemistry Capstone Project (Nhóm 02) - Section 26120CHE30202",
+    "shortname": "TESTCUR-CHE-302-26120CHE30202",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20028,
+    "fullname": "Biology Capstone Project (Nhóm 02) - Section 26120BIO30202",
+    "shortname": "TESTCUR-BIO-302-26120BIO30202",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20029,
+    "fullname": "Social Studies Capstone Project (Nhóm 01) - Section 26120SOC30201",
+    "shortname": "TESTCUR-SOC-302-26120SOC30201",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20030,
+    "fullname": "English Language Capstone Project (Nhóm 02) - Section 26120ENG30202",
+    "shortname": "TESTCUR-ENG-302-26120ENG30202",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20031,
+    "fullname": "Intermediate Information Technology Topics (Nhóm 01) - Section 26120IT201-RETAKE01",
+    "shortname": "TESTCUR-IT-201-26120IT201-RETAKE01",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20032,
+    "fullname": "Chemistry Capstone Project (Nhóm 01) - Section 26120CHE30201",
+    "shortname": "TESTCUR-CHE-302-26120CHE30201",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20033,
+    "fullname": "Intermediate Biology Topics (Nhóm 01) - Section 26120BIO201-RETAKE01",
+    "shortname": "TESTCUR-BIO-201-26120BIO201-RETAKE01",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20034,
+    "fullname": "Linguistics Capstone Project (Nhóm 02) - Section 26120LING30202",
+    "shortname": "TESTCUR-LING-302-26120LING30202",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20035,
+    "fullname": "Information Technology Capstone Project (Nhóm 03) - Section 26120IT30203",
+    "shortname": "TESTCUR-IT-302-26120IT30203",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20036,
+    "fullname": "Intermediate Economics Topics (Nhóm 01) - Section 26120ECO201-RETAKE01",
+    "shortname": "TESTCUR-ECO-201-26120ECO201-RETAKE01",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20037,
+    "fullname": "Economics Capstone Project (Nhóm 03) - Section 26120ECO30203",
+    "shortname": "TESTCUR-ECO-302-26120ECO30203",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20038,
+    "fullname": "Introduction to Tourism (Nhóm 01) - Section 26120TOUR10101",
+    "shortname": "TESTCUR-TOUR-101-26120TOUR10101",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20039,
+    "fullname": "Intermediate Social Studies Topics (Nhóm 01) - Section 26120SOC201-RETAKE01",
+    "shortname": "TESTCUR-SOC-201-26120SOC201-RETAKE01",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20040,
+    "fullname": "Introduction to Business Administration (Nhóm 01) - Section 26120BUS10101",
+    "shortname": "TESTCUR-BUS-101-26120BUS10101",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20041,
+    "fullname": "Intermediate Tourism Topics (Nhóm 01) - Section 26120TOUR201-RETAKE01",
+    "shortname": "TESTCUR-TOUR-201-26120TOUR201-RETAKE01",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20042,
+    "fullname": "Introduction to Linguistics (Nhóm 01) - Section 26120LING10101",
+    "shortname": "TESTCUR-LING-101-26120LING10101",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20043,
+    "fullname": "Intermediate English Language Topics (Nhóm 01) - Section 26120ENG201-RETAKE01",
+    "shortname": "TESTCUR-ENG-201-26120ENG201-RETAKE01",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20044,
+    "fullname": "Intermediate Business Administration Topics (Nhóm 01) - Section 26120BUS201-RETAKE01",
+    "shortname": "TESTCUR-BUS-201-26120BUS201-RETAKE01",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20045,
+    "fullname": "Intermediate Linguistics Topics (Nhóm 01) - Section 26120LING201-RETAKE01",
+    "shortname": "TESTCUR-LING-201-26120LING201-RETAKE01",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20046,
+    "fullname": "Introduction to Economics (Nhóm 01) - Section 26120ECO10101",
+    "shortname": "TESTCUR-ECO-101-26120ECO10101",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  },
+  {
+    "id": 20047,
+    "fullname": "Introduction to Chemistry (Nhóm 01) - Section 26120CHE10101",
+    "shortname": "TESTCUR-CHE-101-26120CHE10101",
+    "coursecategory": "Học kỳ 1",
+    "startdate": 1790737200,
+    "hidden": false
+  }
+]

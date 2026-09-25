@@ -4,7 +4,7 @@ import type { ParsedLmsCourse, ParsedLmsItem, SkippedItem } from "./types";
 /**
  * Moodle `core_calendar_get_calendar_monthly_view` → calendar blocks.
  *
- * The DLU LMS is a Moodle whose calendar AJAX endpoint returns a month as a
+ * The LMS is a Moodle whose calendar AJAX endpoint returns a month as a
  * grid of weeks → days → events. Everything we need is in that one response;
  * there is no crawling and no per-activity fetch.
  *

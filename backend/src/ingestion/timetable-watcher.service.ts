@@ -11,6 +11,7 @@ import { PortalAPIService } from "../portal/portal-api.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { parseTimetable } from "./core/parse-portal";
 import { isoWeeksBetween, resolveSemester } from "./core/semester";
+import { SyncDigest } from "./core/sync-digest";
 import type { ParsedPortalSection } from "./core/types";
 import { IngestionJobsService } from "./ingestion-jobs.service";
 import { MaterializerService } from "./materializer.service";
@@ -95,6 +96,9 @@ export class TimetableWatcherService {
     const token = await this.signIn(target, jobId);
     if (!token) return;
 
+    // Changes are announced once per item type at the end of the run.
+    const digest = new SyncDigest(new Date());
+
     // The academic coordinates are a property of the university's calendar, so
     // they are resolved in DLU's timezone, never the student's.
     const { academicYear, semester, startDate, endDate } = resolveSemester(
@@ -107,7 +111,8 @@ export class TimetableWatcherService {
 
     let created = 0;
     let updated = 0;
-    let guarded = 0;
+    let skippedDeleted = 0;
+    let skippedMoved = 0;
     let deleted = 0;
     let first = true;
     // Every meeting key the run saw, plus whether every week came back — the
@@ -139,10 +144,12 @@ export class TimetableWatcherService {
           parsed.items,
           "PORTAL",
           now,
+          digest,
         );
         created += outcome.created;
         updated += outcome.updated;
-        guarded += outcome.guarded;
+        skippedDeleted += outcome.skippedDeleted;
+        skippedMoved += outcome.skippedMoved;
         for (const item of parsed.items) seenKeys.add(item.externalKey);
 
         await this.jobs.completeItem("PORTAL", itemId, {
@@ -181,18 +188,21 @@ export class TimetableWatcherService {
         ["LECTURE"],
         seenKeys,
         now,
+        digest,
       );
       deleted = recon.deleted;
       ingestionLastSuccess.record(now.getTime() / 1000, { provider: "PORTAL" });
     }
 
+    await this.materializer.flushDigest(target.userId, digest, now);
     await this.jobs.finishJob("PORTAL", jobId, "COMPLETED");
 
-    if (created + updated + guarded + deleted > 0) {
+    if (created + updated + skippedDeleted + skippedMoved + deleted > 0) {
       this.logger.log(
         `Timetable sync for integration ${target.integrationId}: ` +
-          `${created} new, ${updated} updated, ${guarded} kept as edited, ` +
-          `${deleted} removed`,
+          `${created} new, ${updated} updated, ` +
+          `${skippedMoved} kept (student-moved), ` +
+          `${skippedDeleted} skipped (student-deleted), ${deleted} removed`,
       );
     }
   }

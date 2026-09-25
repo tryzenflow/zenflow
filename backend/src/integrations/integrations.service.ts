@@ -65,7 +65,7 @@ interface DecryptedDek {
 }
 
 /**
- * DLU LMS / portal credential storage.
+ * LMS / portal credential storage.
  *
  * Two-layer envelope:
  *  1. credentials → AES-256-GCM under the user's per-provider DEK

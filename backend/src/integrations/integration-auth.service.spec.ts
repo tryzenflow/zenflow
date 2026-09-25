@@ -40,10 +40,10 @@ describe("IntegrationAuthService", () => {
   });
 
   it("propagates a genuine LMS outage so it can surface as 503", async () => {
-    login.mockRejectedValue(new Error("DLU LMS is unreachable"));
+    login.mockRejectedValue(new Error("LMS is unreachable"));
 
     await expect(service.verifyCredentials("LMS", "sv", "pw")).rejects.toThrow(
-      "DLU LMS is unreachable",
+      "LMS is unreachable",
     );
   });
 

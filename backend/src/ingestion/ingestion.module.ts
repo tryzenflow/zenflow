@@ -10,6 +10,7 @@ import { IngestionJobsService } from "./ingestion-jobs.service";
 import { IngestionSyncService } from "./ingestion-sync.service";
 import { LmsWatcherService } from "./lms-watcher.service";
 import { MaterializerService } from "./materializer.service";
+import { SyncConflictsService } from "./sync-conflicts.service";
 import { TimetableWatcherService } from "./timetable-watcher.service";
 
 /**
@@ -40,6 +41,7 @@ import { TimetableWatcherService } from "./timetable-watcher.service";
   ],
   providers: [
     IngestionJobsService,
+    SyncConflictsService,
     MaterializerService,
     LmsWatcherService,
     TimetableWatcherService,

@@ -1,0 +1,2045 @@
+{
+  "_comment": "Current-term Moodle calendar events (assign/quiz) per course id, in core_calendar_get_calendar_monthly_view event shape. timestart is Unix epoch seconds (Asia/Ho_Chi_Minh wall clock). One 'core' section's quiz is deliberately split across a month boundary — the case parse-lms.ts exists to stitch back together.",
+  "courses": {
+    "20001": {
+      "id": 20001,
+      "fullname": "Information Technology Capstone Project",
+      "shortname": "TESTCUR-IT-302"
+    },
+    "20002": {
+      "id": 20002,
+      "fullname": "General Elective: Introductory Psychology",
+      "shortname": "GEN-EL3"
+    },
+    "20003": {
+      "id": 20003,
+      "fullname": "Economics Capstone Project",
+      "shortname": "TESTCUR-ECO-302"
+    },
+    "20004": {
+      "id": 20004,
+      "fullname": "Tourism Capstone Project",
+      "shortname": "TESTCUR-TOUR-302"
+    },
+    "20005": {
+      "id": 20005,
+      "fullname": "Business Administration Capstone Project",
+      "shortname": "TESTCUR-BUS-302"
+    },
+    "20006": {
+      "id": 20006,
+      "fullname": "General Elective: Entrepreneurship",
+      "shortname": "GEN-EL2"
+    },
+    "20007": {
+      "id": 20007,
+      "fullname": "Chemistry Capstone Project",
+      "shortname": "TESTCUR-CHE-302"
+    },
+    "20008": {
+      "id": 20008,
+      "fullname": "Biology Capstone Project",
+      "shortname": "TESTCUR-BIO-302"
+    },
+    "20009": {
+      "id": 20009,
+      "fullname": "Social Studies Capstone Project",
+      "shortname": "TESTCUR-SOC-302"
+    },
+    "20010": {
+      "id": 20010,
+      "fullname": "General Elective: Soft Skills",
+      "shortname": "GEN-EL1"
+    },
+    "20011": {
+      "id": 20011,
+      "fullname": "English Language Capstone Project",
+      "shortname": "TESTCUR-ENG-302"
+    },
+    "20012": {
+      "id": 20012,
+      "fullname": "Linguistics Capstone Project",
+      "shortname": "TESTCUR-LING-302"
+    },
+    "20013": {
+      "id": 20013,
+      "fullname": "General Elective: Civic & Legal Studies",
+      "shortname": "GEN-EL4"
+    },
+    "20014": {
+      "id": 20014,
+      "fullname": "Information Technology Capstone Project",
+      "shortname": "TESTCUR-IT-302"
+    },
+    "20015": {
+      "id": 20015,
+      "fullname": "Introduction to Biology",
+      "shortname": "TESTCUR-BIO-101"
+    },
+    "20016": {
+      "id": 20016,
+      "fullname": "Economics Capstone Project",
+      "shortname": "TESTCUR-ECO-302"
+    },
+    "20017": {
+      "id": 20017,
+      "fullname": "Tourism Capstone Project",
+      "shortname": "TESTCUR-TOUR-302"
+    },
+    "20018": {
+      "id": 20018,
+      "fullname": "Business Administration Capstone Project",
+      "shortname": "TESTCUR-BUS-302"
+    },
+    "20019": {
+      "id": 20019,
+      "fullname": "Intermediate Chemistry Topics",
+      "shortname": "TESTCUR-CHE-201"
+    },
+    "20020": {
+      "id": 20020,
+      "fullname": "Biology Capstone Project",
+      "shortname": "TESTCUR-BIO-302"
+    },
+    "20021": {
+      "id": 20021,
+      "fullname": "Social Studies Capstone Project",
+      "shortname": "TESTCUR-SOC-302"
+    },
+    "20022": {
+      "id": 20022,
+      "fullname": "English Language Capstone Project",
+      "shortname": "TESTCUR-ENG-302"
+    },
+    "20023": {
+      "id": 20023,
+      "fullname": "Linguistics Capstone Project",
+      "shortname": "TESTCUR-LING-302"
+    },
+    "20024": {
+      "id": 20024,
+      "fullname": "Tourism Capstone Project",
+      "shortname": "TESTCUR-TOUR-302"
+    },
+    "20025": {
+      "id": 20025,
+      "fullname": "Business Administration Capstone Project",
+      "shortname": "TESTCUR-BUS-302"
+    },
+    "20026": {
+      "id": 20026,
+      "fullname": "Introduction to English Language",
+      "shortname": "TESTCUR-ENG-101"
+    },
+    "20027": {
+      "id": 20027,
+      "fullname": "Chemistry Capstone Project",
+      "shortname": "TESTCUR-CHE-302"
+    },
+    "20028": {
+      "id": 20028,
+      "fullname": "Biology Capstone Project",
+      "shortname": "TESTCUR-BIO-302"
+    },
+    "20029": {
+      "id": 20029,
+      "fullname": "Social Studies Capstone Project",
+      "shortname": "TESTCUR-SOC-302"
+    },
+    "20030": {
+      "id": 20030,
+      "fullname": "English Language Capstone Project",
+      "shortname": "TESTCUR-ENG-302"
+    },
+    "20031": {
+      "id": 20031,
+      "fullname": "Intermediate Information Technology Topics",
+      "shortname": "TESTCUR-IT-201"
+    },
+    "20032": {
+      "id": 20032,
+      "fullname": "Chemistry Capstone Project",
+      "shortname": "TESTCUR-CHE-302"
+    },
+    "20033": {
+      "id": 20033,
+      "fullname": "Intermediate Biology Topics",
+      "shortname": "TESTCUR-BIO-201"
+    },
+    "20034": {
+      "id": 20034,
+      "fullname": "Linguistics Capstone Project",
+      "shortname": "TESTCUR-LING-302"
+    },
+    "20035": {
+      "id": 20035,
+      "fullname": "Information Technology Capstone Project",
+      "shortname": "TESTCUR-IT-302"
+    },
+    "20036": {
+      "id": 20036,
+      "fullname": "Intermediate Economics Topics",
+      "shortname": "TESTCUR-ECO-201"
+    },
+    "20037": {
+      "id": 20037,
+      "fullname": "Economics Capstone Project",
+      "shortname": "TESTCUR-ECO-302"
+    },
+    "20038": {
+      "id": 20038,
+      "fullname": "Introduction to Tourism",
+      "shortname": "TESTCUR-TOUR-101"
+    },
+    "20039": {
+      "id": 20039,
+      "fullname": "Intermediate Social Studies Topics",
+      "shortname": "TESTCUR-SOC-201"
+    },
+    "20040": {
+      "id": 20040,
+      "fullname": "Introduction to Business Administration",
+      "shortname": "TESTCUR-BUS-101"
+    },
+    "20041": {
+      "id": 20041,
+      "fullname": "Intermediate Tourism Topics",
+      "shortname": "TESTCUR-TOUR-201"
+    },
+    "20042": {
+      "id": 20042,
+      "fullname": "Introduction to Linguistics",
+      "shortname": "TESTCUR-LING-101"
+    },
+    "20043": {
+      "id": 20043,
+      "fullname": "Intermediate English Language Topics",
+      "shortname": "TESTCUR-ENG-201"
+    },
+    "20044": {
+      "id": 20044,
+      "fullname": "Intermediate Business Administration Topics",
+      "shortname": "TESTCUR-BUS-201"
+    },
+    "20045": {
+      "id": 20045,
+      "fullname": "Intermediate Linguistics Topics",
+      "shortname": "TESTCUR-LING-201"
+    },
+    "20046": {
+      "id": 20046,
+      "fullname": "Introduction to Economics",
+      "shortname": "TESTCUR-ECO-101"
+    },
+    "20047": {
+      "id": 20047,
+      "fullname": "Introduction to Chemistry",
+      "shortname": "TESTCUR-CHE-101"
+    }
+  },
+  "events": {
+    "20001": [
+      {
+        "id": 1,
+        "name": "Assignment: Information Technology Capstone Project",
+        "modulename": "assign",
+        "instance": 520001,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520001",
+        "description": "<p>Assignment for Information Technology Capstone Project.</p>"
+      },
+      {
+        "id": 2,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820001,
+        "eventtype": "open",
+        "timestart": 1793458800,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820001",
+        "description": ""
+      },
+      {
+        "id": 3,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820001,
+        "eventtype": "close",
+        "timestart": 1793581200,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820001",
+        "description": ""
+      }
+    ],
+    "20002": [
+      {
+        "id": 4,
+        "name": "Assignment: General Elective: Introductory Psychology",
+        "modulename": "assign",
+        "instance": 520002,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520002",
+        "description": "<p>Assignment for General Elective: Introductory Psychology.</p>"
+      }
+    ],
+    "20003": [
+      {
+        "id": 5,
+        "name": "Assignment: Economics Capstone Project",
+        "modulename": "assign",
+        "instance": 520003,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520003",
+        "description": "<p>Assignment for Economics Capstone Project.</p>"
+      },
+      {
+        "id": 6,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820003,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820003",
+        "description": ""
+      },
+      {
+        "id": 7,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820003,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820003",
+        "description": ""
+      }
+    ],
+    "20004": [
+      {
+        "id": 8,
+        "name": "Assignment: Tourism Capstone Project",
+        "modulename": "assign",
+        "instance": 520004,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520004",
+        "description": "<p>Assignment for Tourism Capstone Project.</p>"
+      },
+      {
+        "id": 9,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820004,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820004",
+        "description": ""
+      },
+      {
+        "id": 10,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820004,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820004",
+        "description": ""
+      }
+    ],
+    "20005": [
+      {
+        "id": 11,
+        "name": "Assignment: Business Administration Capstone Project",
+        "modulename": "assign",
+        "instance": 520005,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520005",
+        "description": "<p>Assignment for Business Administration Capstone Project.</p>"
+      },
+      {
+        "id": 12,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820005,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820005",
+        "description": ""
+      },
+      {
+        "id": 13,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820005,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820005",
+        "description": ""
+      }
+    ],
+    "20006": [
+      {
+        "id": 14,
+        "name": "Assignment: General Elective: Entrepreneurship",
+        "modulename": "assign",
+        "instance": 520006,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520006",
+        "description": "<p>Assignment for General Elective: Entrepreneurship.</p>"
+      }
+    ],
+    "20007": [
+      {
+        "id": 15,
+        "name": "Assignment: Chemistry Capstone Project",
+        "modulename": "assign",
+        "instance": 520007,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520007",
+        "description": "<p>Assignment for Chemistry Capstone Project.</p>"
+      },
+      {
+        "id": 16,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820007,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820007",
+        "description": ""
+      },
+      {
+        "id": 17,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820007,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820007",
+        "description": ""
+      }
+    ],
+    "20008": [
+      {
+        "id": 18,
+        "name": "Assignment: Biology Capstone Project",
+        "modulename": "assign",
+        "instance": 520008,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520008",
+        "description": "<p>Assignment for Biology Capstone Project.</p>"
+      },
+      {
+        "id": 19,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820008,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820008",
+        "description": ""
+      },
+      {
+        "id": 20,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820008,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820008",
+        "description": ""
+      }
+    ],
+    "20009": [
+      {
+        "id": 21,
+        "name": "Assignment: Social Studies Capstone Project",
+        "modulename": "assign",
+        "instance": 520009,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520009",
+        "description": "<p>Assignment for Social Studies Capstone Project.</p>"
+      },
+      {
+        "id": 22,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820009,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820009",
+        "description": ""
+      },
+      {
+        "id": 23,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820009,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820009",
+        "description": ""
+      }
+    ],
+    "20010": [
+      {
+        "id": 24,
+        "name": "Assignment: General Elective: Soft Skills",
+        "modulename": "assign",
+        "instance": 520010,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520010",
+        "description": "<p>Assignment for General Elective: Soft Skills.</p>"
+      }
+    ],
+    "20011": [
+      {
+        "id": 25,
+        "name": "Assignment: English Language Capstone Project",
+        "modulename": "assign",
+        "instance": 520011,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520011",
+        "description": "<p>Assignment for English Language Capstone Project.</p>"
+      },
+      {
+        "id": 26,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820011,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820011",
+        "description": ""
+      },
+      {
+        "id": 27,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820011,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820011",
+        "description": ""
+      }
+    ],
+    "20012": [
+      {
+        "id": 28,
+        "name": "Assignment: Linguistics Capstone Project",
+        "modulename": "assign",
+        "instance": 520012,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520012",
+        "description": "<p>Assignment for Linguistics Capstone Project.</p>"
+      },
+      {
+        "id": 29,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820012,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820012",
+        "description": ""
+      },
+      {
+        "id": 30,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820012,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820012",
+        "description": ""
+      }
+    ],
+    "20013": [
+      {
+        "id": 31,
+        "name": "Assignment: General Elective: Civic & Legal Studies",
+        "modulename": "assign",
+        "instance": 520013,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520013",
+        "description": "<p>Assignment for General Elective: Civic & Legal Studies.</p>"
+      }
+    ],
+    "20014": [
+      {
+        "id": 32,
+        "name": "Assignment: Information Technology Capstone Project",
+        "modulename": "assign",
+        "instance": 520014,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520014",
+        "description": "<p>Assignment for Information Technology Capstone Project.</p>"
+      },
+      {
+        "id": 33,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820014,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820014",
+        "description": ""
+      },
+      {
+        "id": 34,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820014,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820014",
+        "description": ""
+      }
+    ],
+    "20015": [
+      {
+        "id": 35,
+        "name": "Assignment: Introduction to Biology",
+        "modulename": "assign",
+        "instance": 520015,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520015",
+        "description": "<p>Assignment for Introduction to Biology.</p>"
+      },
+      {
+        "id": 36,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820015,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820015",
+        "description": ""
+      },
+      {
+        "id": 37,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820015,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820015",
+        "description": ""
+      }
+    ],
+    "20016": [
+      {
+        "id": 38,
+        "name": "Assignment: Economics Capstone Project",
+        "modulename": "assign",
+        "instance": 520016,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520016",
+        "description": "<p>Assignment for Economics Capstone Project.</p>"
+      },
+      {
+        "id": 39,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820016,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820016",
+        "description": ""
+      },
+      {
+        "id": 40,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820016,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820016",
+        "description": ""
+      }
+    ],
+    "20017": [
+      {
+        "id": 41,
+        "name": "Assignment: Tourism Capstone Project",
+        "modulename": "assign",
+        "instance": 520017,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520017",
+        "description": "<p>Assignment for Tourism Capstone Project.</p>"
+      },
+      {
+        "id": 42,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820017,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820017",
+        "description": ""
+      },
+      {
+        "id": 43,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820017,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820017",
+        "description": ""
+      }
+    ],
+    "20018": [
+      {
+        "id": 44,
+        "name": "Assignment: Business Administration Capstone Project",
+        "modulename": "assign",
+        "instance": 520018,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520018",
+        "description": "<p>Assignment for Business Administration Capstone Project.</p>"
+      },
+      {
+        "id": 45,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820018,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820018",
+        "description": ""
+      },
+      {
+        "id": 46,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820018,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820018",
+        "description": ""
+      }
+    ],
+    "20019": [
+      {
+        "id": 47,
+        "name": "Assignment: Intermediate Chemistry Topics",
+        "modulename": "assign",
+        "instance": 520019,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520019",
+        "description": "<p>Assignment for Intermediate Chemistry Topics.</p>"
+      }
+    ],
+    "20020": [
+      {
+        "id": 48,
+        "name": "Assignment: Biology Capstone Project",
+        "modulename": "assign",
+        "instance": 520020,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520020",
+        "description": "<p>Assignment for Biology Capstone Project.</p>"
+      },
+      {
+        "id": 49,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820020,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820020",
+        "description": ""
+      },
+      {
+        "id": 50,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820020,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820020",
+        "description": ""
+      }
+    ],
+    "20021": [
+      {
+        "id": 51,
+        "name": "Assignment: Social Studies Capstone Project",
+        "modulename": "assign",
+        "instance": 520021,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520021",
+        "description": "<p>Assignment for Social Studies Capstone Project.</p>"
+      },
+      {
+        "id": 52,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820021,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820021",
+        "description": ""
+      },
+      {
+        "id": 53,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820021,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820021",
+        "description": ""
+      }
+    ],
+    "20022": [
+      {
+        "id": 54,
+        "name": "Assignment: English Language Capstone Project",
+        "modulename": "assign",
+        "instance": 520022,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520022",
+        "description": "<p>Assignment for English Language Capstone Project.</p>"
+      },
+      {
+        "id": 55,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820022,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820022",
+        "description": ""
+      },
+      {
+        "id": 56,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820022,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820022",
+        "description": ""
+      }
+    ],
+    "20023": [
+      {
+        "id": 57,
+        "name": "Assignment: Linguistics Capstone Project",
+        "modulename": "assign",
+        "instance": 520023,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520023",
+        "description": "<p>Assignment for Linguistics Capstone Project.</p>"
+      },
+      {
+        "id": 58,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820023,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820023",
+        "description": ""
+      },
+      {
+        "id": 59,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820023,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820023",
+        "description": ""
+      }
+    ],
+    "20024": [
+      {
+        "id": 60,
+        "name": "Assignment: Tourism Capstone Project",
+        "modulename": "assign",
+        "instance": 520024,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520024",
+        "description": "<p>Assignment for Tourism Capstone Project.</p>"
+      },
+      {
+        "id": 61,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820024,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820024",
+        "description": ""
+      },
+      {
+        "id": 62,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820024,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820024",
+        "description": ""
+      }
+    ],
+    "20025": [
+      {
+        "id": 63,
+        "name": "Assignment: Business Administration Capstone Project",
+        "modulename": "assign",
+        "instance": 520025,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520025",
+        "description": "<p>Assignment for Business Administration Capstone Project.</p>"
+      },
+      {
+        "id": 64,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820025,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820025",
+        "description": ""
+      },
+      {
+        "id": 65,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820025,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820025",
+        "description": ""
+      }
+    ],
+    "20026": [
+      {
+        "id": 66,
+        "name": "Assignment: Introduction to English Language",
+        "modulename": "assign",
+        "instance": 520026,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520026",
+        "description": "<p>Assignment for Introduction to English Language.</p>"
+      },
+      {
+        "id": 67,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820026,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820026",
+        "description": ""
+      },
+      {
+        "id": 68,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820026,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820026",
+        "description": ""
+      }
+    ],
+    "20027": [
+      {
+        "id": 69,
+        "name": "Assignment: Chemistry Capstone Project",
+        "modulename": "assign",
+        "instance": 520027,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520027",
+        "description": "<p>Assignment for Chemistry Capstone Project.</p>"
+      },
+      {
+        "id": 70,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820027,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820027",
+        "description": ""
+      },
+      {
+        "id": 71,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820027,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820027",
+        "description": ""
+      }
+    ],
+    "20028": [
+      {
+        "id": 72,
+        "name": "Assignment: Biology Capstone Project",
+        "modulename": "assign",
+        "instance": 520028,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520028",
+        "description": "<p>Assignment for Biology Capstone Project.</p>"
+      },
+      {
+        "id": 73,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820028,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820028",
+        "description": ""
+      },
+      {
+        "id": 74,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820028,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820028",
+        "description": ""
+      }
+    ],
+    "20029": [
+      {
+        "id": 75,
+        "name": "Assignment: Social Studies Capstone Project",
+        "modulename": "assign",
+        "instance": 520029,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520029",
+        "description": "<p>Assignment for Social Studies Capstone Project.</p>"
+      },
+      {
+        "id": 76,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820029,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820029",
+        "description": ""
+      },
+      {
+        "id": 77,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820029,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820029",
+        "description": ""
+      }
+    ],
+    "20030": [
+      {
+        "id": 78,
+        "name": "Assignment: English Language Capstone Project",
+        "modulename": "assign",
+        "instance": 520030,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520030",
+        "description": "<p>Assignment for English Language Capstone Project.</p>"
+      },
+      {
+        "id": 79,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820030,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820030",
+        "description": ""
+      },
+      {
+        "id": 80,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820030,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820030",
+        "description": ""
+      }
+    ],
+    "20031": [
+      {
+        "id": 81,
+        "name": "Assignment: Intermediate Information Technology Topics",
+        "modulename": "assign",
+        "instance": 520031,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520031",
+        "description": "<p>Assignment for Intermediate Information Technology Topics.</p>"
+      }
+    ],
+    "20032": [
+      {
+        "id": 82,
+        "name": "Assignment: Chemistry Capstone Project",
+        "modulename": "assign",
+        "instance": 520032,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520032",
+        "description": "<p>Assignment for Chemistry Capstone Project.</p>"
+      },
+      {
+        "id": 83,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820032,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820032",
+        "description": ""
+      },
+      {
+        "id": 84,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820032,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820032",
+        "description": ""
+      }
+    ],
+    "20033": [
+      {
+        "id": 85,
+        "name": "Assignment: Intermediate Biology Topics",
+        "modulename": "assign",
+        "instance": 520033,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520033",
+        "description": "<p>Assignment for Intermediate Biology Topics.</p>"
+      }
+    ],
+    "20034": [
+      {
+        "id": 86,
+        "name": "Assignment: Linguistics Capstone Project",
+        "modulename": "assign",
+        "instance": 520034,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520034",
+        "description": "<p>Assignment for Linguistics Capstone Project.</p>"
+      },
+      {
+        "id": 87,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820034,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820034",
+        "description": ""
+      },
+      {
+        "id": 88,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820034,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820034",
+        "description": ""
+      }
+    ],
+    "20035": [
+      {
+        "id": 89,
+        "name": "Assignment: Information Technology Capstone Project",
+        "modulename": "assign",
+        "instance": 520035,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520035",
+        "description": "<p>Assignment for Information Technology Capstone Project.</p>"
+      },
+      {
+        "id": 90,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820035,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820035",
+        "description": ""
+      },
+      {
+        "id": 91,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820035,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820035",
+        "description": ""
+      }
+    ],
+    "20036": [
+      {
+        "id": 92,
+        "name": "Assignment: Intermediate Economics Topics",
+        "modulename": "assign",
+        "instance": 520036,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520036",
+        "description": "<p>Assignment for Intermediate Economics Topics.</p>"
+      }
+    ],
+    "20037": [
+      {
+        "id": 93,
+        "name": "Assignment: Economics Capstone Project",
+        "modulename": "assign",
+        "instance": 520037,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520037",
+        "description": "<p>Assignment for Economics Capstone Project.</p>"
+      },
+      {
+        "id": 94,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820037,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820037",
+        "description": ""
+      },
+      {
+        "id": 95,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820037,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820037",
+        "description": ""
+      }
+    ],
+    "20038": [
+      {
+        "id": 96,
+        "name": "Assignment: Introduction to Tourism",
+        "modulename": "assign",
+        "instance": 520038,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520038",
+        "description": "<p>Assignment for Introduction to Tourism.</p>"
+      },
+      {
+        "id": 97,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820038,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820038",
+        "description": ""
+      },
+      {
+        "id": 98,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820038,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820038",
+        "description": ""
+      }
+    ],
+    "20039": [
+      {
+        "id": 99,
+        "name": "Assignment: Intermediate Social Studies Topics",
+        "modulename": "assign",
+        "instance": 520039,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520039",
+        "description": "<p>Assignment for Intermediate Social Studies Topics.</p>"
+      }
+    ],
+    "20040": [
+      {
+        "id": 100,
+        "name": "Assignment: Introduction to Business Administration",
+        "modulename": "assign",
+        "instance": 520040,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520040",
+        "description": "<p>Assignment for Introduction to Business Administration.</p>"
+      },
+      {
+        "id": 101,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820040,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820040",
+        "description": ""
+      },
+      {
+        "id": 102,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820040,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820040",
+        "description": ""
+      }
+    ],
+    "20041": [
+      {
+        "id": 103,
+        "name": "Assignment: Intermediate Tourism Topics",
+        "modulename": "assign",
+        "instance": 520041,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520041",
+        "description": "<p>Assignment for Intermediate Tourism Topics.</p>"
+      }
+    ],
+    "20042": [
+      {
+        "id": 104,
+        "name": "Assignment: Introduction to Linguistics",
+        "modulename": "assign",
+        "instance": 520042,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520042",
+        "description": "<p>Assignment for Introduction to Linguistics.</p>"
+      },
+      {
+        "id": 105,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820042,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820042",
+        "description": ""
+      },
+      {
+        "id": 106,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820042,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820042",
+        "description": ""
+      }
+    ],
+    "20043": [
+      {
+        "id": 107,
+        "name": "Assignment: Intermediate English Language Topics",
+        "modulename": "assign",
+        "instance": 520043,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520043",
+        "description": "<p>Assignment for Intermediate English Language Topics.</p>"
+      }
+    ],
+    "20044": [
+      {
+        "id": 108,
+        "name": "Assignment: Intermediate Business Administration Topics",
+        "modulename": "assign",
+        "instance": 520044,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520044",
+        "description": "<p>Assignment for Intermediate Business Administration Topics.</p>"
+      }
+    ],
+    "20045": [
+      {
+        "id": 109,
+        "name": "Assignment: Intermediate Linguistics Topics",
+        "modulename": "assign",
+        "instance": 520045,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520045",
+        "description": "<p>Assignment for Intermediate Linguistics Topics.</p>"
+      }
+    ],
+    "20046": [
+      {
+        "id": 110,
+        "name": "Assignment: Introduction to Economics",
+        "modulename": "assign",
+        "instance": 520046,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520046",
+        "description": "<p>Assignment for Introduction to Economics.</p>"
+      },
+      {
+        "id": 111,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820046,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820046",
+        "description": ""
+      },
+      {
+        "id": 112,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820046,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820046",
+        "description": ""
+      }
+    ],
+    "20047": [
+      {
+        "id": 113,
+        "name": "Assignment: Introduction to Chemistry",
+        "modulename": "assign",
+        "instance": 520047,
+        "eventtype": "due",
+        "timestart": 1792944000,
+        "url": "https://lms.example.test/mod/assign/view.php?id=520047",
+        "description": "<p>Assignment for Introduction to Chemistry.</p>"
+      },
+      {
+        "id": 114,
+        "name": "Quiz opens",
+        "modulename": "quiz",
+        "instance": 820047,
+        "eventtype": "open",
+        "timestart": 1792454400,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820047",
+        "description": ""
+      },
+      {
+        "id": 115,
+        "name": "Quiz closes",
+        "modulename": "quiz",
+        "instance": 820047,
+        "eventtype": "close",
+        "timestart": 1792461600,
+        "url": "https://lms.example.test/mod/quiz/view.php?id=820047",
+        "description": ""
+      }
+    ]
+  },
+  "enrolledCourses": {
+    "TEST00001": [
+      20001,
+      20002
+    ],
+    "TEST00028": [
+      20001,
+      20031
+    ],
+    "TEST00037": [
+      20001,
+      20013
+    ],
+    "TEST00064": [
+      20001,
+      20002
+    ],
+    "TEST00005": [
+      20002,
+      20007
+    ],
+    "TEST00022": [
+      20002,
+      20025,
+      20026
+    ],
+    "TEST00035": [
+      20002,
+      20022
+    ],
+    "TEST00041": [
+      20002,
+      20032
+    ],
+    "TEST00047": [
+      20002,
+      20016
+    ],
+    "TEST00056": [
+      20002,
+      20003,
+      20036
+    ],
+    "TEST00057": [
+      20002,
+      20017
+    ],
+    "TEST00069": [
+      20002,
+      20020
+    ],
+    "TEST00071": [
+      20002,
+      20030
+    ],
+    "TEST00076": [
+      20002,
+      20018
+    ],
+    "TEST00094": [
+      20002,
+      20025
+    ],
+    "TEST00096": [
+      20002,
+      20008
+    ],
+    "TEST00099": [
+      20002,
+      20023
+    ],
+    "TEST00110": [
+      20002,
+      20016
+    ],
+    "TEST00125": [
+      20002,
+      20030
+    ],
+    "TEST00145": [
+      20002,
+      20014
+    ],
+    "TEST00149": [
+      20002,
+      20007
+    ],
+    "TEST00002": [
+      20003
+    ],
+    "TEST00020": [
+      20003
+    ],
+    "TEST00029": [
+      20003,
+      20010
+    ],
+    "TEST00074": [
+      20003
+    ],
+    "TEST00092": [
+      20003
+    ],
+    "TEST00128": [
+      20003
+    ],
+    "TEST00003": [
+      20004
+    ],
+    "TEST00030": [
+      20004
+    ],
+    "TEST00066": [
+      20004,
+      20026
+    ],
+    "TEST00004": [
+      20005,
+      20006
+    ],
+    "TEST00040": [
+      20005,
+      20010
+    ],
+    "TEST00049": [
+      20005,
+      20013
+    ],
+    "TEST00058": [
+      20005,
+      20010
+    ],
+    "TEST00085": [
+      20005,
+      20010
+    ],
+    "TEST00139": [
+      20005
+    ],
+    "TEST00015": [
+      20006,
+      20020
+    ],
+    "TEST00016": [
+      20006,
+      20021
+    ],
+    "TEST00017": [
+      20006,
+      20022
+    ],
+    "TEST00019": [
+      20006,
+      20014
+    ],
+    "TEST00024": [
+      20006,
+      20026,
+      20028
+    ],
+    "TEST00033": [
+      20006,
+      20020
+    ],
+    "TEST00070": [
+      20006,
+      20029,
+      20039
+    ],
+    "TEST00072": [
+      20006,
+      20012
+    ],
+    "TEST00073": [
+      20006,
+      20035
+    ],
+    "TEST00075": [
+      20006,
+      20017
+    ],
+    "TEST00078": [
+      20006,
+      20020
+    ],
+    "TEST00104": [
+      20006,
+      20007
+    ],
+    "TEST00105": [
+      20006,
+      20020
+    ],
+    "TEST00109": [
+      20006,
+      20014
+    ],
+    "TEST00115": [
+      20006,
+      20021
+    ],
+    "TEST00136": [
+      20006,
+      20035
+    ],
+    "TEST00140": [
+      20006,
+      20019,
+      20032
+    ],
+    "TEST00143": [
+      20006,
+      20022
+    ],
+    "TEST00144": [
+      20006,
+      20023
+    ],
+    "TEST00014": [
+      20007,
+      20019
+    ],
+    "TEST00059": [
+      20007,
+      20010
+    ],
+    "TEST00086": [
+      20007
+    ],
+    "TEST00095": [
+      20007
+    ],
+    "TEST00131": [
+      20007,
+      20046
+    ],
+    "TEST00006": [
+      20008
+    ],
+    "TEST00007": [
+      20009,
+      20010
+    ],
+    "TEST00034": [
+      20009
+    ],
+    "TEST00043": [
+      20009
+    ],
+    "TEST00052": [
+      20009,
+      20013
+    ],
+    "TEST00079": [
+      20009,
+      20040
+    ],
+    "TEST00088": [
+      20009,
+      20010
+    ],
+    "TEST00097": [
+      20009,
+      20042
+    ],
+    "TEST00133": [
+      20009
+    ],
+    "TEST00008": [
+      20010,
+      20011
+    ],
+    "TEST00021": [
+      20010,
+      20024
+    ],
+    "TEST00032": [
+      20010,
+      20027
+    ],
+    "TEST00051": [
+      20010,
+      20020
+    ],
+    "TEST00054": [
+      20010,
+      20012
+    ],
+    "TEST00061": [
+      20010,
+      20029
+    ],
+    "TEST00062": [
+      20010,
+      20011
+    ],
+    "TEST00065": [
+      20010,
+      20037
+    ],
+    "TEST00068": [
+      20010,
+      20015,
+      20027
+    ],
+    "TEST00080": [
+      20010,
+      20011
+    ],
+    "TEST00091": [
+      20010,
+      20014
+    ],
+    "TEST00103": [
+      20010,
+      20018
+    ],
+    "TEST00108": [
+      20010,
+      20023
+    ],
+    "TEST00113": [
+      20010,
+      20032
+    ],
+    "TEST00114": [
+      20010,
+      20020
+    ],
+    "TEST00117": [
+      20010,
+      20012,
+      20015
+    ],
+    "TEST00123": [
+      20010,
+      20026,
+      20028
+    ],
+    "TEST00127": [
+      20010,
+      20014
+    ],
+    "TEST00129": [
+      20010,
+      20017
+    ],
+    "TEST00141": [
+      20010,
+      20028
+    ],
+    "TEST00146": [
+      20010,
+      20016
+    ],
+    "TEST00098": [
+      20011,
+      20043
+    ],
+    "TEST00009": [
+      20012,
+      20013
+    ],
+    "TEST00063": [
+      20012,
+      20013
+    ],
+    "TEST00081": [
+      20012
+    ],
+    "TEST00048": [
+      20013,
+      20024
+    ],
+    "TEST00050": [
+      20013,
+      20032
+    ],
+    "TEST00067": [
+      20013,
+      20018,
+      20038
+    ],
+    "TEST00084": [
+      20013,
+      20024,
+      20041
+    ],
+    "TEST00089": [
+      20013,
+      20030
+    ],
+    "TEST00090": [
+      20013,
+      20023
+    ],
+    "TEST00106": [
+      20013,
+      20029
+    ],
+    "TEST00111": [
+      20013,
+      20024,
+      20042
+    ],
+    "TEST00119": [
+      20013,
+      20037
+    ],
+    "TEST00122": [
+      20013,
+      20027
+    ],
+    "TEST00010": [
+      20014,
+      20015
+    ],
+    "TEST00046": [
+      20014
+    ],
+    "TEST00118": [
+      20014
+    ],
+    "TEST00011": [
+      20016
+    ],
+    "TEST00038": [
+      20016
+    ],
+    "TEST00083": [
+      20016
+    ],
+    "TEST00137": [
+      20016,
+      20047
+    ],
+    "TEST00012": [
+      20017
+    ],
+    "TEST00093": [
+      20017
+    ],
+    "TEST00102": [
+      20017
+    ],
+    "TEST00120": [
+      20017
+    ],
+    "TEST00013": [
+      20018
+    ],
+    "TEST00031": [
+      20018
+    ],
+    "TEST00148": [
+      20018
+    ],
+    "TEST00042": [
+      20020,
+      20033
+    ],
+    "TEST00060": [
+      20020
+    ],
+    "TEST00087": [
+      20020
+    ],
+    "TEST00132": [
+      20020
+    ],
+    "TEST00150": [
+      20020
+    ],
+    "TEST00124": [
+      20021
+    ],
+    "TEST00053": [
+      20022
+    ],
+    "TEST00107": [
+      20022
+    ],
+    "TEST00116": [
+      20022
+    ],
+    "TEST00018": [
+      20023
+    ],
+    "TEST00027": [
+      20023
+    ],
+    "TEST00036": [
+      20023
+    ],
+    "TEST00126": [
+      20023,
+      20045
+    ],
+    "TEST00039": [
+      20024
+    ],
+    "TEST00138": [
+      20024
+    ],
+    "TEST00147": [
+      20024,
+      20046
+    ],
+    "TEST00112": [
+      20025,
+      20044
+    ],
+    "TEST00121": [
+      20025
+    ],
+    "TEST00130": [
+      20025
+    ],
+    "TEST00023": [
+      20027
+    ],
+    "TEST00025": [
+      20029
+    ],
+    "TEST00142": [
+      20029
+    ],
+    "TEST00026": [
+      20030
+    ],
+    "TEST00044": [
+      20030
+    ],
+    "TEST00134": [
+      20030
+    ],
+    "TEST00077": [
+      20032
+    ],
+    "TEST00045": [
+      20034
+    ],
+    "TEST00135": [
+      20034
+    ],
+    "TEST00055": [
+      20035
+    ],
+    "TEST00082": [
+      20035
+    ],
+    "TEST00100": [
+      20035,
+      20042
+    ],
+    "TEST00101": [
+      20037
+    ]
+  }
+}

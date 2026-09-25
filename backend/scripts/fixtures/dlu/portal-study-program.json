@@ -1,0 +1,1293 @@
+{
+  "_comment": "studentId -> GET /api/student/getstudyprogram rows. Dual-program students have two rows (Type 1 = primary, Type 2 = secondary).",
+  "TEST00001": [
+    {
+      "StudentID": "TEST00001",
+      "StudyProgramID": "TEST-PROG-IT",
+      "StudyProgramName": "TEST-PROG-IT",
+      "Type": 1
+    }
+  ],
+  "TEST00002": [
+    {
+      "StudentID": "TEST00002",
+      "StudyProgramID": "TEST-PROG-ECO",
+      "StudyProgramName": "TEST-PROG-ECO",
+      "Type": 1
+    }
+  ],
+  "TEST00003": [
+    {
+      "StudentID": "TEST00003",
+      "StudyProgramID": "TEST-PROG-TOUR",
+      "StudyProgramName": "TEST-PROG-TOUR",
+      "Type": 1
+    }
+  ],
+  "TEST00004": [
+    {
+      "StudentID": "TEST00004",
+      "StudyProgramID": "TEST-PROG-BUS",
+      "StudyProgramName": "TEST-PROG-BUS",
+      "Type": 1
+    }
+  ],
+  "TEST00005": [
+    {
+      "StudentID": "TEST00005",
+      "StudyProgramID": "TEST-PROG-CHE",
+      "StudyProgramName": "TEST-PROG-CHE",
+      "Type": 1
+    }
+  ],
+  "TEST00006": [
+    {
+      "StudentID": "TEST00006",
+      "StudyProgramID": "TEST-PROG-BIO",
+      "StudyProgramName": "TEST-PROG-BIO",
+      "Type": 1
+    }
+  ],
+  "TEST00007": [
+    {
+      "StudentID": "TEST00007",
+      "StudyProgramID": "TEST-PROG-SOC",
+      "StudyProgramName": "TEST-PROG-SOC",
+      "Type": 1
+    }
+  ],
+  "TEST00008": [
+    {
+      "StudentID": "TEST00008",
+      "StudyProgramID": "TEST-PROG-ENG",
+      "StudyProgramName": "TEST-PROG-ENG",
+      "Type": 1
+    }
+  ],
+  "TEST00009": [
+    {
+      "StudentID": "TEST00009",
+      "StudyProgramID": "TEST-PROG-LING",
+      "StudyProgramName": "TEST-PROG-LING",
+      "Type": 1
+    }
+  ],
+  "TEST00010": [
+    {
+      "StudentID": "TEST00010",
+      "StudyProgramID": "TEST-PROG-IT",
+      "StudyProgramName": "TEST-PROG-IT",
+      "Type": 1
+    },
+    {
+      "StudentID": "TEST00010",
+      "StudyProgramID": "TEST-PROG-BIO",
+      "StudyProgramName": "TEST-PROG-BIO",
+      "Type": 2
+    }
+  ],
+  "TEST00011": [
+    {
+      "StudentID": "TEST00011",
+      "StudyProgramID": "TEST-PROG-ECO",
+      "StudyProgramName": "TEST-PROG-ECO",
+      "Type": 1
+    }
+  ],
+  "TEST00012": [
+    {
+      "StudentID": "TEST00012",
+      "StudyProgramID": "TEST-PROG-TOUR",
+      "StudyProgramName": "TEST-PROG-TOUR",
+      "Type": 1
+    }
+  ],
+  "TEST00013": [
+    {
+      "StudentID": "TEST00013",
+      "StudyProgramID": "TEST-PROG-BUS",
+      "StudyProgramName": "TEST-PROG-BUS",
+      "Type": 1
+    }
+  ],
+  "TEST00014": [
+    {
+      "StudentID": "TEST00014",
+      "StudyProgramID": "TEST-PROG-CHE",
+      "StudyProgramName": "TEST-PROG-CHE",
+      "Type": 1
+    }
+  ],
+  "TEST00015": [
+    {
+      "StudentID": "TEST00015",
+      "StudyProgramID": "TEST-PROG-BIO",
+      "StudyProgramName": "TEST-PROG-BIO",
+      "Type": 1
+    }
+  ],
+  "TEST00016": [
+    {
+      "StudentID": "TEST00016",
+      "StudyProgramID": "TEST-PROG-SOC",
+      "StudyProgramName": "TEST-PROG-SOC",
+      "Type": 1
+    }
+  ],
+  "TEST00017": [
+    {
+      "StudentID": "TEST00017",
+      "StudyProgramID": "TEST-PROG-ENG",
+      "StudyProgramName": "TEST-PROG-ENG",
+      "Type": 1
+    }
+  ],
+  "TEST00018": [
+    {
+      "StudentID": "TEST00018",
+      "StudyProgramID": "TEST-PROG-LING",
+      "StudyProgramName": "TEST-PROG-LING",
+      "Type": 1
+    }
+  ],
+  "TEST00019": [
+    {
+      "StudentID": "TEST00019",
+      "StudyProgramID": "TEST-PROG-IT",
+      "StudyProgramName": "TEST-PROG-IT",
+      "Type": 1
+    }
+  ],
+  "TEST00020": [
+    {
+      "StudentID": "TEST00020",
+      "StudyProgramID": "TEST-PROG-ECO",
+      "StudyProgramName": "TEST-PROG-ECO",
+      "Type": 1
+    }
+  ],
+  "TEST00021": [
+    {
+      "StudentID": "TEST00021",
+      "StudyProgramID": "TEST-PROG-TOUR",
+      "StudyProgramName": "TEST-PROG-TOUR",
+      "Type": 1
+    }
+  ],
+  "TEST00022": [
+    {
+      "StudentID": "TEST00022",
+      "StudyProgramID": "TEST-PROG-BUS",
+      "StudyProgramName": "TEST-PROG-BUS",
+      "Type": 1
+    },
+    {
+      "StudentID": "TEST00022",
+      "StudyProgramID": "TEST-PROG-ENG",
+      "StudyProgramName": "TEST-PROG-ENG",
+      "Type": 2
+    }
+  ],
+  "TEST00023": [
+    {
+      "StudentID": "TEST00023",
+      "StudyProgramID": "TEST-PROG-CHE",
+      "StudyProgramName": "TEST-PROG-CHE",
+      "Type": 1
+    }
+  ],
+  "TEST00024": [
+    {
+      "StudentID": "TEST00024",
+      "StudyProgramID": "TEST-PROG-BIO",
+      "StudyProgramName": "TEST-PROG-BIO",
+      "Type": 1
+    },
+    {
+      "StudentID": "TEST00024",
+      "StudyProgramID": "TEST-PROG-ENG",
+      "StudyProgramName": "TEST-PROG-ENG",
+      "Type": 2
+    }
+  ],
+  "TEST00025": [
+    {
+      "StudentID": "TEST00025",
+      "StudyProgramID": "TEST-PROG-SOC",
+      "StudyProgramName": "TEST-PROG-SOC",
+      "Type": 1
+    }
+  ],
+  "TEST00026": [
+    {
+      "StudentID": "TEST00026",
+      "StudyProgramID": "TEST-PROG-ENG",
+      "StudyProgramName": "TEST-PROG-ENG",
+      "Type": 1
+    }
+  ],
+  "TEST00027": [
+    {
+      "StudentID": "TEST00027",
+      "StudyProgramID": "TEST-PROG-LING",
+      "StudyProgramName": "TEST-PROG-LING",
+      "Type": 1
+    }
+  ],
+  "TEST00028": [
+    {
+      "StudentID": "TEST00028",
+      "StudyProgramID": "TEST-PROG-IT",
+      "StudyProgramName": "TEST-PROG-IT",
+      "Type": 1
+    }
+  ],
+  "TEST00029": [
+    {
+      "StudentID": "TEST00029",
+      "StudyProgramID": "TEST-PROG-ECO",
+      "StudyProgramName": "TEST-PROG-ECO",
+      "Type": 1
+    }
+  ],
+  "TEST00030": [
+    {
+      "StudentID": "TEST00030",
+      "StudyProgramID": "TEST-PROG-TOUR",
+      "StudyProgramName": "TEST-PROG-TOUR",
+      "Type": 1
+    }
+  ],
+  "TEST00031": [
+    {
+      "StudentID": "TEST00031",
+      "StudyProgramID": "TEST-PROG-BUS",
+      "StudyProgramName": "TEST-PROG-BUS",
+      "Type": 1
+    }
+  ],
+  "TEST00032": [
+    {
+      "StudentID": "TEST00032",
+      "StudyProgramID": "TEST-PROG-CHE",
+      "StudyProgramName": "TEST-PROG-CHE",
+      "Type": 1
+    }
+  ],
+  "TEST00033": [
+    {
+      "StudentID": "TEST00033",
+      "StudyProgramID": "TEST-PROG-BIO",
+      "StudyProgramName": "TEST-PROG-BIO",
+      "Type": 1
+    }
+  ],
+  "TEST00034": [
+    {
+      "StudentID": "TEST00034",
+      "StudyProgramID": "TEST-PROG-SOC",
+      "StudyProgramName": "TEST-PROG-SOC",
+      "Type": 1
+    }
+  ],
+  "TEST00035": [
+    {
+      "StudentID": "TEST00035",
+      "StudyProgramID": "TEST-PROG-ENG",
+      "StudyProgramName": "TEST-PROG-ENG",
+      "Type": 1
+    }
+  ],
+  "TEST00036": [
+    {
+      "StudentID": "TEST00036",
+      "StudyProgramID": "TEST-PROG-LING",
+      "StudyProgramName": "TEST-PROG-LING",
+      "Type": 1
+    }
+  ],
+  "TEST00037": [
+    {
+      "StudentID": "TEST00037",
+      "StudyProgramID": "TEST-PROG-IT",
+      "StudyProgramName": "TEST-PROG-IT",
+      "Type": 1
+    }
+  ],
+  "TEST00038": [
+    {
+      "StudentID": "TEST00038",
+      "StudyProgramID": "TEST-PROG-ECO",
+      "StudyProgramName": "TEST-PROG-ECO",
+      "Type": 1
+    }
+  ],
+  "TEST00039": [
+    {
+      "StudentID": "TEST00039",
+      "StudyProgramID": "TEST-PROG-TOUR",
+      "StudyProgramName": "TEST-PROG-TOUR",
+      "Type": 1
+    }
+  ],
+  "TEST00040": [
+    {
+      "StudentID": "TEST00040",
+      "StudyProgramID": "TEST-PROG-BUS",
+      "StudyProgramName": "TEST-PROG-BUS",
+      "Type": 1
+    }
+  ],
+  "TEST00041": [
+    {
+      "StudentID": "TEST00041",
+      "StudyProgramID": "TEST-PROG-CHE",
+      "StudyProgramName": "TEST-PROG-CHE",
+      "Type": 1
+    }
+  ],
+  "TEST00042": [
+    {
+      "StudentID": "TEST00042",
+      "StudyProgramID": "TEST-PROG-BIO",
+      "StudyProgramName": "TEST-PROG-BIO",
+      "Type": 1
+    }
+  ],
+  "TEST00043": [
+    {
+      "StudentID": "TEST00043",
+      "StudyProgramID": "TEST-PROG-SOC",
+      "StudyProgramName": "TEST-PROG-SOC",
+      "Type": 1
+    }
+  ],
+  "TEST00044": [
+    {
+      "StudentID": "TEST00044",
+      "StudyProgramID": "TEST-PROG-ENG",
+      "StudyProgramName": "TEST-PROG-ENG",
+      "Type": 1
+    }
+  ],
+  "TEST00045": [
+    {
+      "StudentID": "TEST00045",
+      "StudyProgramID": "TEST-PROG-LING",
+      "StudyProgramName": "TEST-PROG-LING",
+      "Type": 1
+    }
+  ],
+  "TEST00046": [
+    {
+      "StudentID": "TEST00046",
+      "StudyProgramID": "TEST-PROG-IT",
+      "StudyProgramName": "TEST-PROG-IT",
+      "Type": 1
+    }
+  ],
+  "TEST00047": [
+    {
+      "StudentID": "TEST00047",
+      "StudyProgramID": "TEST-PROG-ECO",
+      "StudyProgramName": "TEST-PROG-ECO",
+      "Type": 1
+    }
+  ],
+  "TEST00048": [
+    {
+      "StudentID": "TEST00048",
+      "StudyProgramID": "TEST-PROG-TOUR",
+      "StudyProgramName": "TEST-PROG-TOUR",
+      "Type": 1
+    }
+  ],
+  "TEST00049": [
+    {
+      "StudentID": "TEST00049",
+      "StudyProgramID": "TEST-PROG-BUS",
+      "StudyProgramName": "TEST-PROG-BUS",
+      "Type": 1
+    }
+  ],
+  "TEST00050": [
+    {
+      "StudentID": "TEST00050",
+      "StudyProgramID": "TEST-PROG-CHE",
+      "StudyProgramName": "TEST-PROG-CHE",
+      "Type": 1
+    }
+  ],
+  "TEST00051": [
+    {
+      "StudentID": "TEST00051",
+      "StudyProgramID": "TEST-PROG-BIO",
+      "StudyProgramName": "TEST-PROG-BIO",
+      "Type": 1
+    }
+  ],
+  "TEST00052": [
+    {
+      "StudentID": "TEST00052",
+      "StudyProgramID": "TEST-PROG-SOC",
+      "StudyProgramName": "TEST-PROG-SOC",
+      "Type": 1
+    }
+  ],
+  "TEST00053": [
+    {
+      "StudentID": "TEST00053",
+      "StudyProgramID": "TEST-PROG-ENG",
+      "StudyProgramName": "TEST-PROG-ENG",
+      "Type": 1
+    }
+  ],
+  "TEST00054": [
+    {
+      "StudentID": "TEST00054",
+      "StudyProgramID": "TEST-PROG-LING",
+      "StudyProgramName": "TEST-PROG-LING",
+      "Type": 1
+    }
+  ],
+  "TEST00055": [
+    {
+      "StudentID": "TEST00055",
+      "StudyProgramID": "TEST-PROG-IT",
+      "StudyProgramName": "TEST-PROG-IT",
+      "Type": 1
+    }
+  ],
+  "TEST00056": [
+    {
+      "StudentID": "TEST00056",
+      "StudyProgramID": "TEST-PROG-ECO",
+      "StudyProgramName": "TEST-PROG-ECO",
+      "Type": 1
+    }
+  ],
+  "TEST00057": [
+    {
+      "StudentID": "TEST00057",
+      "StudyProgramID": "TEST-PROG-TOUR",
+      "StudyProgramName": "TEST-PROG-TOUR",
+      "Type": 1
+    }
+  ],
+  "TEST00058": [
+    {
+      "StudentID": "TEST00058",
+      "StudyProgramID": "TEST-PROG-BUS",
+      "StudyProgramName": "TEST-PROG-BUS",
+      "Type": 1
+    }
+  ],
+  "TEST00059": [
+    {
+      "StudentID": "TEST00059",
+      "StudyProgramID": "TEST-PROG-CHE",
+      "StudyProgramName": "TEST-PROG-CHE",
+      "Type": 1
+    }
+  ],
+  "TEST00060": [
+    {
+      "StudentID": "TEST00060",
+      "StudyProgramID": "TEST-PROG-BIO",
+      "StudyProgramName": "TEST-PROG-BIO",
+      "Type": 1
+    }
+  ],
+  "TEST00061": [
+    {
+      "StudentID": "TEST00061",
+      "StudyProgramID": "TEST-PROG-SOC",
+      "StudyProgramName": "TEST-PROG-SOC",
+      "Type": 1
+    }
+  ],
+  "TEST00062": [
+    {
+      "StudentID": "TEST00062",
+      "StudyProgramID": "TEST-PROG-ENG",
+      "StudyProgramName": "TEST-PROG-ENG",
+      "Type": 1
+    }
+  ],
+  "TEST00063": [
+    {
+      "StudentID": "TEST00063",
+      "StudyProgramID": "TEST-PROG-LING",
+      "StudyProgramName": "TEST-PROG-LING",
+      "Type": 1
+    }
+  ],
+  "TEST00064": [
+    {
+      "StudentID": "TEST00064",
+      "StudyProgramID": "TEST-PROG-IT",
+      "StudyProgramName": "TEST-PROG-IT",
+      "Type": 1
+    }
+  ],
+  "TEST00065": [
+    {
+      "StudentID": "TEST00065",
+      "StudyProgramID": "TEST-PROG-ECO",
+      "StudyProgramName": "TEST-PROG-ECO",
+      "Type": 1
+    }
+  ],
+  "TEST00066": [
+    {
+      "StudentID": "TEST00066",
+      "StudyProgramID": "TEST-PROG-TOUR",
+      "StudyProgramName": "TEST-PROG-TOUR",
+      "Type": 1
+    },
+    {
+      "StudentID": "TEST00066",
+      "StudyProgramID": "TEST-PROG-ENG",
+      "StudyProgramName": "TEST-PROG-ENG",
+      "Type": 2
+    }
+  ],
+  "TEST00067": [
+    {
+      "StudentID": "TEST00067",
+      "StudyProgramID": "TEST-PROG-BUS",
+      "StudyProgramName": "TEST-PROG-BUS",
+      "Type": 1
+    },
+    {
+      "StudentID": "TEST00067",
+      "StudyProgramID": "TEST-PROG-TOUR",
+      "StudyProgramName": "TEST-PROG-TOUR",
+      "Type": 2
+    }
+  ],
+  "TEST00068": [
+    {
+      "StudentID": "TEST00068",
+      "StudyProgramID": "TEST-PROG-CHE",
+      "StudyProgramName": "TEST-PROG-CHE",
+      "Type": 1
+    },
+    {
+      "StudentID": "TEST00068",
+      "StudyProgramID": "TEST-PROG-BIO",
+      "StudyProgramName": "TEST-PROG-BIO",
+      "Type": 2
+    }
+  ],
+  "TEST00069": [
+    {
+      "StudentID": "TEST00069",
+      "StudyProgramID": "TEST-PROG-BIO",
+      "StudyProgramName": "TEST-PROG-BIO",
+      "Type": 1
+    }
+  ],
+  "TEST00070": [
+    {
+      "StudentID": "TEST00070",
+      "StudyProgramID": "TEST-PROG-SOC",
+      "StudyProgramName": "TEST-PROG-SOC",
+      "Type": 1
+    }
+  ],
+  "TEST00071": [
+    {
+      "StudentID": "TEST00071",
+      "StudyProgramID": "TEST-PROG-ENG",
+      "StudyProgramName": "TEST-PROG-ENG",
+      "Type": 1
+    }
+  ],
+  "TEST00072": [
+    {
+      "StudentID": "TEST00072",
+      "StudyProgramID": "TEST-PROG-LING",
+      "StudyProgramName": "TEST-PROG-LING",
+      "Type": 1
+    }
+  ],
+  "TEST00073": [
+    {
+      "StudentID": "TEST00073",
+      "StudyProgramID": "TEST-PROG-IT",
+      "StudyProgramName": "TEST-PROG-IT",
+      "Type": 1
+    }
+  ],
+  "TEST00074": [
+    {
+      "StudentID": "TEST00074",
+      "StudyProgramID": "TEST-PROG-ECO",
+      "StudyProgramName": "TEST-PROG-ECO",
+      "Type": 1
+    }
+  ],
+  "TEST00075": [
+    {
+      "StudentID": "TEST00075",
+      "StudyProgramID": "TEST-PROG-TOUR",
+      "StudyProgramName": "TEST-PROG-TOUR",
+      "Type": 1
+    }
+  ],
+  "TEST00076": [
+    {
+      "StudentID": "TEST00076",
+      "StudyProgramID": "TEST-PROG-BUS",
+      "StudyProgramName": "TEST-PROG-BUS",
+      "Type": 1
+    }
+  ],
+  "TEST00077": [
+    {
+      "StudentID": "TEST00077",
+      "StudyProgramID": "TEST-PROG-CHE",
+      "StudyProgramName": "TEST-PROG-CHE",
+      "Type": 1
+    }
+  ],
+  "TEST00078": [
+    {
+      "StudentID": "TEST00078",
+      "StudyProgramID": "TEST-PROG-BIO",
+      "StudyProgramName": "TEST-PROG-BIO",
+      "Type": 1
+    }
+  ],
+  "TEST00079": [
+    {
+      "StudentID": "TEST00079",
+      "StudyProgramID": "TEST-PROG-SOC",
+      "StudyProgramName": "TEST-PROG-SOC",
+      "Type": 1
+    },
+    {
+      "StudentID": "TEST00079",
+      "StudyProgramID": "TEST-PROG-BUS",
+      "StudyProgramName": "TEST-PROG-BUS",
+      "Type": 2
+    }
+  ],
+  "TEST00080": [
+    {
+      "StudentID": "TEST00080",
+      "StudyProgramID": "TEST-PROG-ENG",
+      "StudyProgramName": "TEST-PROG-ENG",
+      "Type": 1
+    }
+  ],
+  "TEST00081": [
+    {
+      "StudentID": "TEST00081",
+      "StudyProgramID": "TEST-PROG-LING",
+      "StudyProgramName": "TEST-PROG-LING",
+      "Type": 1
+    }
+  ],
+  "TEST00082": [
+    {
+      "StudentID": "TEST00082",
+      "StudyProgramID": "TEST-PROG-IT",
+      "StudyProgramName": "TEST-PROG-IT",
+      "Type": 1
+    }
+  ],
+  "TEST00083": [
+    {
+      "StudentID": "TEST00083",
+      "StudyProgramID": "TEST-PROG-ECO",
+      "StudyProgramName": "TEST-PROG-ECO",
+      "Type": 1
+    }
+  ],
+  "TEST00084": [
+    {
+      "StudentID": "TEST00084",
+      "StudyProgramID": "TEST-PROG-TOUR",
+      "StudyProgramName": "TEST-PROG-TOUR",
+      "Type": 1
+    }
+  ],
+  "TEST00085": [
+    {
+      "StudentID": "TEST00085",
+      "StudyProgramID": "TEST-PROG-BUS",
+      "StudyProgramName": "TEST-PROG-BUS",
+      "Type": 1
+    }
+  ],
+  "TEST00086": [
+    {
+      "StudentID": "TEST00086",
+      "StudyProgramID": "TEST-PROG-CHE",
+      "StudyProgramName": "TEST-PROG-CHE",
+      "Type": 1
+    }
+  ],
+  "TEST00087": [
+    {
+      "StudentID": "TEST00087",
+      "StudyProgramID": "TEST-PROG-BIO",
+      "StudyProgramName": "TEST-PROG-BIO",
+      "Type": 1
+    }
+  ],
+  "TEST00088": [
+    {
+      "StudentID": "TEST00088",
+      "StudyProgramID": "TEST-PROG-SOC",
+      "StudyProgramName": "TEST-PROG-SOC",
+      "Type": 1
+    }
+  ],
+  "TEST00089": [
+    {
+      "StudentID": "TEST00089",
+      "StudyProgramID": "TEST-PROG-ENG",
+      "StudyProgramName": "TEST-PROG-ENG",
+      "Type": 1
+    }
+  ],
+  "TEST00090": [
+    {
+      "StudentID": "TEST00090",
+      "StudyProgramID": "TEST-PROG-LING",
+      "StudyProgramName": "TEST-PROG-LING",
+      "Type": 1
+    }
+  ],
+  "TEST00091": [
+    {
+      "StudentID": "TEST00091",
+      "StudyProgramID": "TEST-PROG-IT",
+      "StudyProgramName": "TEST-PROG-IT",
+      "Type": 1
+    }
+  ],
+  "TEST00092": [
+    {
+      "StudentID": "TEST00092",
+      "StudyProgramID": "TEST-PROG-ECO",
+      "StudyProgramName": "TEST-PROG-ECO",
+      "Type": 1
+    }
+  ],
+  "TEST00093": [
+    {
+      "StudentID": "TEST00093",
+      "StudyProgramID": "TEST-PROG-TOUR",
+      "StudyProgramName": "TEST-PROG-TOUR",
+      "Type": 1
+    }
+  ],
+  "TEST00094": [
+    {
+      "StudentID": "TEST00094",
+      "StudyProgramID": "TEST-PROG-BUS",
+      "StudyProgramName": "TEST-PROG-BUS",
+      "Type": 1
+    }
+  ],
+  "TEST00095": [
+    {
+      "StudentID": "TEST00095",
+      "StudyProgramID": "TEST-PROG-CHE",
+      "StudyProgramName": "TEST-PROG-CHE",
+      "Type": 1
+    }
+  ],
+  "TEST00096": [
+    {
+      "StudentID": "TEST00096",
+      "StudyProgramID": "TEST-PROG-BIO",
+      "StudyProgramName": "TEST-PROG-BIO",
+      "Type": 1
+    }
+  ],
+  "TEST00097": [
+    {
+      "StudentID": "TEST00097",
+      "StudyProgramID": "TEST-PROG-SOC",
+      "StudyProgramName": "TEST-PROG-SOC",
+      "Type": 1
+    },
+    {
+      "StudentID": "TEST00097",
+      "StudyProgramID": "TEST-PROG-LING",
+      "StudyProgramName": "TEST-PROG-LING",
+      "Type": 2
+    }
+  ],
+  "TEST00098": [
+    {
+      "StudentID": "TEST00098",
+      "StudyProgramID": "TEST-PROG-ENG",
+      "StudyProgramName": "TEST-PROG-ENG",
+      "Type": 1
+    }
+  ],
+  "TEST00099": [
+    {
+      "StudentID": "TEST00099",
+      "StudyProgramID": "TEST-PROG-LING",
+      "StudyProgramName": "TEST-PROG-LING",
+      "Type": 1
+    }
+  ],
+  "TEST00100": [
+    {
+      "StudentID": "TEST00100",
+      "StudyProgramID": "TEST-PROG-IT",
+      "StudyProgramName": "TEST-PROG-IT",
+      "Type": 1
+    },
+    {
+      "StudentID": "TEST00100",
+      "StudyProgramID": "TEST-PROG-LING",
+      "StudyProgramName": "TEST-PROG-LING",
+      "Type": 2
+    }
+  ],
+  "TEST00101": [
+    {
+      "StudentID": "TEST00101",
+      "StudyProgramID": "TEST-PROG-ECO",
+      "StudyProgramName": "TEST-PROG-ECO",
+      "Type": 1
+    }
+  ],
+  "TEST00102": [
+    {
+      "StudentID": "TEST00102",
+      "StudyProgramID": "TEST-PROG-TOUR",
+      "StudyProgramName": "TEST-PROG-TOUR",
+      "Type": 1
+    }
+  ],
+  "TEST00103": [
+    {
+      "StudentID": "TEST00103",
+      "StudyProgramID": "TEST-PROG-BUS",
+      "StudyProgramName": "TEST-PROG-BUS",
+      "Type": 1
+    }
+  ],
+  "TEST00104": [
+    {
+      "StudentID": "TEST00104",
+      "StudyProgramID": "TEST-PROG-CHE",
+      "StudyProgramName": "TEST-PROG-CHE",
+      "Type": 1
+    }
+  ],
+  "TEST00105": [
+    {
+      "StudentID": "TEST00105",
+      "StudyProgramID": "TEST-PROG-BIO",
+      "StudyProgramName": "TEST-PROG-BIO",
+      "Type": 1
+    }
+  ],
+  "TEST00106": [
+    {
+      "StudentID": "TEST00106",
+      "StudyProgramID": "TEST-PROG-SOC",
+      "StudyProgramName": "TEST-PROG-SOC",
+      "Type": 1
+    }
+  ],
+  "TEST00107": [
+    {
+      "StudentID": "TEST00107",
+      "StudyProgramID": "TEST-PROG-ENG",
+      "StudyProgramName": "TEST-PROG-ENG",
+      "Type": 1
+    }
+  ],
+  "TEST00108": [
+    {
+      "StudentID": "TEST00108",
+      "StudyProgramID": "TEST-PROG-LING",
+      "StudyProgramName": "TEST-PROG-LING",
+      "Type": 1
+    }
+  ],
+  "TEST00109": [
+    {
+      "StudentID": "TEST00109",
+      "StudyProgramID": "TEST-PROG-IT",
+      "StudyProgramName": "TEST-PROG-IT",
+      "Type": 1
+    }
+  ],
+  "TEST00110": [
+    {
+      "StudentID": "TEST00110",
+      "StudyProgramID": "TEST-PROG-ECO",
+      "StudyProgramName": "TEST-PROG-ECO",
+      "Type": 1
+    }
+  ],
+  "TEST00111": [
+    {
+      "StudentID": "TEST00111",
+      "StudyProgramID": "TEST-PROG-TOUR",
+      "StudyProgramName": "TEST-PROG-TOUR",
+      "Type": 1
+    },
+    {
+      "StudentID": "TEST00111",
+      "StudyProgramID": "TEST-PROG-LING",
+      "StudyProgramName": "TEST-PROG-LING",
+      "Type": 2
+    }
+  ],
+  "TEST00112": [
+    {
+      "StudentID": "TEST00112",
+      "StudyProgramID": "TEST-PROG-BUS",
+      "StudyProgramName": "TEST-PROG-BUS",
+      "Type": 1
+    }
+  ],
+  "TEST00113": [
+    {
+      "StudentID": "TEST00113",
+      "StudyProgramID": "TEST-PROG-CHE",
+      "StudyProgramName": "TEST-PROG-CHE",
+      "Type": 1
+    }
+  ],
+  "TEST00114": [
+    {
+      "StudentID": "TEST00114",
+      "StudyProgramID": "TEST-PROG-BIO",
+      "StudyProgramName": "TEST-PROG-BIO",
+      "Type": 1
+    }
+  ],
+  "TEST00115": [
+    {
+      "StudentID": "TEST00115",
+      "StudyProgramID": "TEST-PROG-SOC",
+      "StudyProgramName": "TEST-PROG-SOC",
+      "Type": 1
+    }
+  ],
+  "TEST00116": [
+    {
+      "StudentID": "TEST00116",
+      "StudyProgramID": "TEST-PROG-ENG",
+      "StudyProgramName": "TEST-PROG-ENG",
+      "Type": 1
+    }
+  ],
+  "TEST00117": [
+    {
+      "StudentID": "TEST00117",
+      "StudyProgramID": "TEST-PROG-LING",
+      "StudyProgramName": "TEST-PROG-LING",
+      "Type": 1
+    },
+    {
+      "StudentID": "TEST00117",
+      "StudyProgramID": "TEST-PROG-BIO",
+      "StudyProgramName": "TEST-PROG-BIO",
+      "Type": 2
+    }
+  ],
+  "TEST00118": [
+    {
+      "StudentID": "TEST00118",
+      "StudyProgramID": "TEST-PROG-IT",
+      "StudyProgramName": "TEST-PROG-IT",
+      "Type": 1
+    }
+  ],
+  "TEST00119": [
+    {
+      "StudentID": "TEST00119",
+      "StudyProgramID": "TEST-PROG-ECO",
+      "StudyProgramName": "TEST-PROG-ECO",
+      "Type": 1
+    }
+  ],
+  "TEST00120": [
+    {
+      "StudentID": "TEST00120",
+      "StudyProgramID": "TEST-PROG-TOUR",
+      "StudyProgramName": "TEST-PROG-TOUR",
+      "Type": 1
+    }
+  ],
+  "TEST00121": [
+    {
+      "StudentID": "TEST00121",
+      "StudyProgramID": "TEST-PROG-BUS",
+      "StudyProgramName": "TEST-PROG-BUS",
+      "Type": 1
+    }
+  ],
+  "TEST00122": [
+    {
+      "StudentID": "TEST00122",
+      "StudyProgramID": "TEST-PROG-CHE",
+      "StudyProgramName": "TEST-PROG-CHE",
+      "Type": 1
+    }
+  ],
+  "TEST00123": [
+    {
+      "StudentID": "TEST00123",
+      "StudyProgramID": "TEST-PROG-BIO",
+      "StudyProgramName": "TEST-PROG-BIO",
+      "Type": 1
+    },
+    {
+      "StudentID": "TEST00123",
+      "StudyProgramID": "TEST-PROG-ENG",
+      "StudyProgramName": "TEST-PROG-ENG",
+      "Type": 2
+    }
+  ],
+  "TEST00124": [
+    {
+      "StudentID": "TEST00124",
+      "StudyProgramID": "TEST-PROG-SOC",
+      "StudyProgramName": "TEST-PROG-SOC",
+      "Type": 1
+    }
+  ],
+  "TEST00125": [
+    {
+      "StudentID": "TEST00125",
+      "StudyProgramID": "TEST-PROG-ENG",
+      "StudyProgramName": "TEST-PROG-ENG",
+      "Type": 1
+    }
+  ],
+  "TEST00126": [
+    {
+      "StudentID": "TEST00126",
+      "StudyProgramID": "TEST-PROG-LING",
+      "StudyProgramName": "TEST-PROG-LING",
+      "Type": 1
+    }
+  ],
+  "TEST00127": [
+    {
+      "StudentID": "TEST00127",
+      "StudyProgramID": "TEST-PROG-IT",
+      "StudyProgramName": "TEST-PROG-IT",
+      "Type": 1
+    }
+  ],
+  "TEST00128": [
+    {
+      "StudentID": "TEST00128",
+      "StudyProgramID": "TEST-PROG-ECO",
+      "StudyProgramName": "TEST-PROG-ECO",
+      "Type": 1
+    }
+  ],
+  "TEST00129": [
+    {
+      "StudentID": "TEST00129",
+      "StudyProgramID": "TEST-PROG-TOUR",
+      "StudyProgramName": "TEST-PROG-TOUR",
+      "Type": 1
+    }
+  ],
+  "TEST00130": [
+    {
+      "StudentID": "TEST00130",
+      "StudyProgramID": "TEST-PROG-BUS",
+      "StudyProgramName": "TEST-PROG-BUS",
+      "Type": 1
+    }
+  ],
+  "TEST00131": [
+    {
+      "StudentID": "TEST00131",
+      "StudyProgramID": "TEST-PROG-CHE",
+      "StudyProgramName": "TEST-PROG-CHE",
+      "Type": 1
+    },
+    {
+      "StudentID": "TEST00131",
+      "StudyProgramID": "TEST-PROG-ECO",
+      "StudyProgramName": "TEST-PROG-ECO",
+      "Type": 2
+    }
+  ],
+  "TEST00132": [
+    {
+      "StudentID": "TEST00132",
+      "StudyProgramID": "TEST-PROG-BIO",
+      "StudyProgramName": "TEST-PROG-BIO",
+      "Type": 1
+    }
+  ],
+  "TEST00133": [
+    {
+      "StudentID": "TEST00133",
+      "StudyProgramID": "TEST-PROG-SOC",
+      "StudyProgramName": "TEST-PROG-SOC",
+      "Type": 1
+    }
+  ],
+  "TEST00134": [
+    {
+      "StudentID": "TEST00134",
+      "StudyProgramID": "TEST-PROG-ENG",
+      "StudyProgramName": "TEST-PROG-ENG",
+      "Type": 1
+    }
+  ],
+  "TEST00135": [
+    {
+      "StudentID": "TEST00135",
+      "StudyProgramID": "TEST-PROG-LING",
+      "StudyProgramName": "TEST-PROG-LING",
+      "Type": 1
+    }
+  ],
+  "TEST00136": [
+    {
+      "StudentID": "TEST00136",
+      "StudyProgramID": "TEST-PROG-IT",
+      "StudyProgramName": "TEST-PROG-IT",
+      "Type": 1
+    }
+  ],
+  "TEST00137": [
+    {
+      "StudentID": "TEST00137",
+      "StudyProgramID": "TEST-PROG-ECO",
+      "StudyProgramName": "TEST-PROG-ECO",
+      "Type": 1
+    },
+    {
+      "StudentID": "TEST00137",
+      "StudyProgramID": "TEST-PROG-CHE",
+      "StudyProgramName": "TEST-PROG-CHE",
+      "Type": 2
+    }
+  ],
+  "TEST00138": [
+    {
+      "StudentID": "TEST00138",
+      "StudyProgramID": "TEST-PROG-TOUR",
+      "StudyProgramName": "TEST-PROG-TOUR",
+      "Type": 1
+    }
+  ],
+  "TEST00139": [
+    {
+      "StudentID": "TEST00139",
+      "StudyProgramID": "TEST-PROG-BUS",
+      "StudyProgramName": "TEST-PROG-BUS",
+      "Type": 1
+    }
+  ],
+  "TEST00140": [
+    {
+      "StudentID": "TEST00140",
+      "StudyProgramID": "TEST-PROG-CHE",
+      "StudyProgramName": "TEST-PROG-CHE",
+      "Type": 1
+    }
+  ],
+  "TEST00141": [
+    {
+      "StudentID": "TEST00141",
+      "StudyProgramID": "TEST-PROG-BIO",
+      "StudyProgramName": "TEST-PROG-BIO",
+      "Type": 1
+    }
+  ],
+  "TEST00142": [
+    {
+      "StudentID": "TEST00142",
+      "StudyProgramID": "TEST-PROG-SOC",
+      "StudyProgramName": "TEST-PROG-SOC",
+      "Type": 1
+    }
+  ],
+  "TEST00143": [
+    {
+      "StudentID": "TEST00143",
+      "StudyProgramID": "TEST-PROG-ENG",
+      "StudyProgramName": "TEST-PROG-ENG",
+      "Type": 1
+    }
+  ],
+  "TEST00144": [
+    {
+      "StudentID": "TEST00144",
+      "StudyProgramID": "TEST-PROG-LING",
+      "StudyProgramName": "TEST-PROG-LING",
+      "Type": 1
+    }
+  ],
+  "TEST00145": [
+    {
+      "StudentID": "TEST00145",
+      "StudyProgramID": "TEST-PROG-IT",
+      "StudyProgramName": "TEST-PROG-IT",
+      "Type": 1
+    }
+  ],
+  "TEST00146": [
+    {
+      "StudentID": "TEST00146",
+      "StudyProgramID": "TEST-PROG-ECO",
+      "StudyProgramName": "TEST-PROG-ECO",
+      "Type": 1
+    }
+  ],
+  "TEST00147": [
+    {
+      "StudentID": "TEST00147",
+      "StudyProgramID": "TEST-PROG-TOUR",
+      "StudyProgramName": "TEST-PROG-TOUR",
+      "Type": 1
+    },
+    {
+      "StudentID": "TEST00147",
+      "StudyProgramID": "TEST-PROG-ECO",
+      "StudyProgramName": "TEST-PROG-ECO",
+      "Type": 2
+    }
+  ],
+  "TEST00148": [
+    {
+      "StudentID": "TEST00148",
+      "StudyProgramID": "TEST-PROG-BUS",
+      "StudyProgramName": "TEST-PROG-BUS",
+      "Type": 1
+    }
+  ],
+  "TEST00149": [
+    {
+      "StudentID": "TEST00149",
+      "StudyProgramID": "TEST-PROG-CHE",
+      "StudyProgramName": "TEST-PROG-CHE",
+      "Type": 1
+    }
+  ],
+  "TEST00150": [
+    {
+      "StudentID": "TEST00150",
+      "StudyProgramID": "TEST-PROG-BIO",
+      "StudyProgramName": "TEST-PROG-BIO",
+      "Type": 1
+    }
+  ]
+}
