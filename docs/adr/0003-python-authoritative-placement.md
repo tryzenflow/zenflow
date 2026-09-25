@@ -230,6 +230,17 @@ Nest takes `startMs` per member and, when `computeBoth`, the other policy's pick
 `linucb: null` (bad bandit state, no surviving slot), Python falls back to the heuristic pick
 and reports `appliedPolicy: "HEURISTIC"`, same as today.
 
+**Amendment (#58) -- pairwise-sampled series get two complete plans.** For a series whose
+members all send `computeBoth: true` with one shared `primaryPolicy` (one policy roll and one
+pairwise roll per series), Python places the series twice over the same batched context tensor:
+an all-heuristic plan and an all-LinUCB plan (per-member heuristic fallback), each with its own
+sibling ledger (non-overlap, `MAX_SERIES_PER_DAY`) and its own last resort. `startMs` /
+`outcome` / `appliedPolicy` come from the primary plan; `heuristic` / `linucb` are that
+member's picks in the heuristic / LinUCB plan respectively, so the non-primary pick is a sitting
+of a coherent alternative *series* rather than a pick computed against the other policy's
+siblings. Mixed-`primaryPolicy` or partially-`computeBoth` series, single tasks and `PREFLIGHT`
+keep the single shared-ledger pass unchanged. Wire shape and `contractVersion` are unchanged.
+
 ### 3.3 Two-phase infeasible path
 
 1. Call 1 returns `NEEDS_INFEASIBLE_CONTEXT` for a member with no free slot.

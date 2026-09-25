@@ -185,6 +185,34 @@ CASES: list[tuple[str, str, dict[str, Any]]] = [
             ],
         ),
     ),
+    (
+        "series-pairwise-heuristic-primary",
+        "Pairwise-sampled series (#58): three 60 min sittings, every member "
+        "HEURISTIC primary with computeBoth. Python builds two complete plans "
+        "over one batch, each with its own sibling ledger: `heuristic` is the "
+        "sitting's pick in the all-heuristic plan (applied, so startMs follows "
+        "it), `linucb` its pick in the independent all-LinUCB plan.",
+        base(
+            requestId=REQ_ID + "-3",
+            members=[
+                {**member("HEURISTIC", both=True), "id": f"s{i}"} for i in range(3)
+            ],
+            user={"preferenceMatrix": matrix(), "observationCount": 100},
+            bandit={"alpha": 0.15, "ridge": 1.0, "state": warm_state()},
+        ),
+    ),
+    (
+        "series-pairwise-linucb-primary",
+        "Same sampled series with LINUCB primary: startMs / appliedPolicy follow "
+        "the all-LinUCB plan; `heuristic` is still each sitting's pick in the "
+        "independent all-heuristic plan.",
+        base(
+            requestId=REQ_ID + "-3",
+            members=[{**member("LINUCB", both=True), "id": f"s{i}"} for i in range(3)],
+            user={"preferenceMatrix": matrix(), "observationCount": 100},
+            bandit={"alpha": 0.15, "ridge": 1.0, "state": warm_state()},
+        ),
+    ),
 ]
 
 
