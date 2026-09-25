@@ -130,6 +130,12 @@ export function NotificationBell() {
         dismissed.current.add(n.id);
         setItems((prev) => prev.filter((x) => x.id !== n.id));
         dismissNotification(n.id).catch(() => {});
+      } else {
+        // The backend stamped `actionTakenAt`; mirror it so the button hides.
+        const actionTakenAt = new Date().toISOString();
+        setItems((prev) =>
+          prev.map((x) => (x.id === n.id ? { ...x, actionTakenAt } : x)),
+        );
       }
     } catch {
       errorToast("Couldn't reschedule those tasks", {

@@ -446,7 +446,9 @@ function NotificationRowItem({
   const unread = !n.readAt;
   const relative = formatDistanceToNow(new Date(n.sentAt), { addSuffix: true });
   const when = eventTimeLabel(n, tz);
-  const hasConflicts = (n.conflictSessionIds?.length ?? 0) > 0;
+  // Reschedule stamps `actionTakenAt` but keeps `conflictSessionIds`.
+  const hasConflicts =
+    !n.actionTakenAt && (n.conflictSessionIds?.length ?? 0) > 0;
 
   const renderRightActions = () => (
     <Pressable

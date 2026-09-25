@@ -110,7 +110,9 @@ export function NotificationRow({
             {n.conflictSessionIds.length > 0 &&
               ` (${n.conflictSessionIds.length})`}
           </span>
-          {onRescheduleAll && n.conflictSessionIds.length > 0 && (
+          {onRescheduleAll &&
+            !n.actionTakenAt &&
+            n.conflictSessionIds.length > 0 && (
             <Button
               type="button"
               size="sm"
