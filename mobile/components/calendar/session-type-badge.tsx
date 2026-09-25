@@ -1,4 +1,5 @@
 import {
+  AlertCircle,
   CheckSquare,
   ClipboardList,
   GraduationCap,
@@ -8,6 +9,7 @@ import {
 } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
 import { SESSION_TYPE_META } from "@zenflow/core";
+import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
 import type { SessionType } from "@zenflow/shared";
 import { View } from "react-native";
@@ -72,6 +74,45 @@ export function SessionTypeBadge({
           )}
         >
           {meta.label}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+/**
+ * A small tag-like chip flagging a session placed or moved past its deadline —
+ * mirrors the web `OverdueBadge` (`frontend/src/components/calendar/
+ * session-type-badge.tsx`). Additive to the red late card treatment in
+ * `task-block.tsx`, not a replacement. `iconOnly` for the one-line compact
+ * block, where the labelled chip won't fit.
+ */
+export function OverdueBadge({
+  iconOnly = false,
+  className,
+}: {
+  iconOnly?: boolean;
+  className?: string;
+}) {
+  // Explicit colour, not `dark:text-*` classes: the `dark:` variant didn't
+  // reach the label, which rendered near-black on the dark red card.
+  const { isDarkColorScheme } = useColorScheme();
+  const red = isDarkColorScheme ? "#fca5a5" : "#dc2626"; // red-300 / red-600
+  return (
+    <View
+      className={cn(
+        "flex-row items-center gap-1 self-start rounded border border-red-500/40 bg-red-500/15",
+        iconOnly ? "px-0.5 py-0.5" : "px-1.5 py-0.5",
+        className,
+      )}
+    >
+      <AlertCircle size={iconOnly ? 10 : 11} color={red} />
+      {!iconOnly && (
+        <Text
+          className="text-[10px] font-semibold leading-[13px]"
+          style={{ color: red }}
+        >
+          Overdue
         </Text>
       )}
     </View>

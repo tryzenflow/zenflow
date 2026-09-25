@@ -1,4 +1,10 @@
-import { AlertTriangle, Clock, Globe, MapPin } from "@/components/Icons";
+import {
+  AlertCircle,
+  AlertTriangle,
+  Clock,
+  Globe,
+  MapPin,
+} from "@/components/Icons";
 import { Text } from "@/components/ui/text";
 import { NAV_THEME } from "@/lib/constants";
 import { useColorScheme } from "@/lib/useColorScheme";
@@ -33,7 +39,11 @@ import Animated, {
   runOnJS,
   type SharedValue,
 } from "react-native-reanimated";
-import { SessionTypeBadge, sessionTypeIcon } from "./session-type-badge";
+import {
+  OverdueBadge,
+  SessionTypeBadge,
+  sessionTypeIcon,
+} from "./session-type-badge";
 
 /** Gap (px) between the DND hatch's diagonal lines. */
 const HATCH_SPACING = 7;
@@ -48,6 +58,13 @@ function hatchPath(width: number, height: number, spacing: number): string {
 }
 
 const TAGS_MIN_DURATION = 45;
+
+/** Android pads text for ascenders/descenders on top of `lineHeight`, which
+ * pushes a one-line compact row off-centre in a 15-min block. */
+const COMPACT_TEXT_STYLE = {
+  includeFontPadding: false,
+  textAlignVertical: "center",
+} as const;
 
 /** Distance (px) from the top / bottom of the screen a *lifted* block must be
  * dragged into for the timeline to start auto-scrolling under it, so an
@@ -255,7 +272,9 @@ function SessionBlockImpl({
       ? DAILY_HORIZON
       : rawEndMin;
   const duration = endMin - startMin;
-  const isCompact = duration < 30;
+  // ≤30 min: one row with the time inline after the title — a 30-min block is
+  // too short for the stacked title + time + chips layout on a phone.
+  const isCompact = duration <= 30;
   // Bare Lucide icon for the one-line compact layout (the bordered
   // `SessionTypeBadge` chip is itself taller than a 15-min block).
   const CompactTypeIcon = sessionTypeIcon(segment.type);
@@ -296,6 +315,10 @@ function SessionBlockImpl({
       label: formatDeadlineShort(deadline, tz, new Date(segment.taskStart)),
     };
   })();
+  // Overdue = the server flagged it late (placed past its deadline) or it now
+  // starts after its deadline (e.g. dragged there). Drives the red card, the
+  // thick red left border and the Overdue badge — as on web.
+  const overdue = (late || dueChip?.late === true) && state !== "dnd";
 
   const height = Math.max((duration / DAILY_HORIZON) * totalHeight, 16);
   const pxPerMin = totalHeight / DAILY_HORIZON;
@@ -697,8 +720,10 @@ function SessionBlockImpl({
     ? "rgb(148,163,184)" // slate-400
     : "rgb(100,116,139)"; // slate-500
   const stateClasses =
-    late && state !== "dnd"
-      ? "border border-l-red-500 border-red-500/60 bg-red-500/15 dark:bg-red-500/20"
+    // No bare `border` here: `cn` would let it override the base `border-l-4`
+    // and the thick red left edge collapsed to 1px.
+    overdue
+      ? `${borderChrome} border-l-red-500 bg-red-500/15 dark:bg-red-500/20`
       : state === "dnd"
         ? `${borderChrome} border-l-slate-400 [border-left-style:dashed] bg-slate-500/[0.07] dark:bg-slate-400/10`
         : state === "assignment"
@@ -799,14 +824,29 @@ function SessionBlockImpl({
                   )}
                 />
               )}
+              {/* Overdue marker: a bare icon beside the type icon (no chip —
+                  the card is already red). */}
+              {overdue && (
+                <AlertCircle
+                  size={11}
+                  color={isDarkColorScheme ? "#fca5a5" : "#dc2626"}
+                  style={{ flexShrink: 0 }}
+                />
+              )}
+              {/* Explicit px line heights: `leading-none` (lineHeight = font
+                  size) clipped the tops of the glyphs on Android. */}
               <Text
-                className="min-w-0 flex-1 text-[11px] font-semibold leading-none"
+                className="min-w-0 flex-1 text-[11px] font-semibold leading-[14px]"
+                style={COMPACT_TEXT_STYLE}
                 numberOfLines={1}
                 ellipsizeMode="tail"
               >
                 {segment.title}
               </Text>
-              <Text className="shrink-0 text-[9px] leading-none text-muted-foreground">
+              <Text
+                className="shrink-0 text-[9px] leading-[12px] text-muted-foreground"
+                style={COMPACT_TEXT_STYLE}
+              >
                 {segment.continued
                   ? `ends ${fmt(segment.taskEnd, tz)}`
                   : fmt(segment.taskStart, tz)}
@@ -845,7 +885,11 @@ function SessionBlockImpl({
                           fmt(segment.taskEnd, tz),
                         )}
                 </Text>
-                {dueChip && <DueChip {...dueChip} />}
+                {overdue ? (
+                  <OverdueBadge />
+                ) : (
+                  dueChip && <DueChip {...dueChip} />
+                )}
                 {!!segment.location && (
                   <LocationChip location={segment.location} />
                 )}
