@@ -251,8 +251,8 @@ function SessionListRow({
     ? format(zonedDate(task.scheduledStartTime, tz), "H:mm")
     : "—";
   // A continuation row's own `scheduledStartTime` is still yesterday's real
-  // start — the subtitle shows when the tail actually ends today instead.
-  const continuationEndLabel = task.scheduledStartTime
+  // start — its time column starts at 0:00 and ends at the real end.
+  const endLabel = task.scheduledStartTime
     ? format(
         zonedDate(
           new Date(
@@ -319,9 +319,16 @@ function SessionListRow({
         onPress={onPress}
         className="flex-row items-center gap-[13px] px-4 py-3.5"
       >
-        <Text className="w-[54px] flex-none text-right text-[15px] text-muted-foreground">
-          {continuation ? "0:00" : timeLabel}
-        </Text>
+        {/* Start over end, joined by a short rule — reads as a span. */}
+        <View className="w-[54px] flex-none items-center">
+          <Text className="text-[15px] font-medium leading-tight text-foreground">
+            {continuation ? "0:00" : timeLabel}
+          </Text>
+          <View className="my-[3px] h-2.5 w-px bg-border" />
+          <Text className="text-[13px] leading-tight text-muted-foreground">
+            {endLabel}
+          </Text>
+        </View>
         {continuation ? (
           <Text className="w-4 flex-none text-center text-[13px] leading-none text-muted-foreground">
             ↳
@@ -342,8 +349,8 @@ function SessionListRow({
           <View className="mt-0.5 flex-row items-center gap-1.5">
             <Text className="text-[12.5px] text-muted-foreground">
               {continuation
-                ? `Continued from yesterday · ends ${continuationEndLabel}`
-                : `${ROW_STATE_LABELS[state]} · ${task.durationMinutes}m`}
+                ? "Continued from yesterday"
+                : ROW_STATE_LABELS[state]}
             </Text>
             {late && (
               <View className="flex-row items-center gap-0.5">
