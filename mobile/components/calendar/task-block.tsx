@@ -1,4 +1,4 @@
-import { AlertTriangle, Clock, MapPin } from "@/components/Icons";
+import { AlertTriangle, Clock, Globe, MapPin } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
 import { NAV_THEME } from "@/lib/constants";
 import { useColorScheme } from "@/lib/useColorScheme";
@@ -9,6 +9,7 @@ import {
   SESSION_TYPE_META,
   TIME_GRANULARITY,
   formatDeadlineShort,
+  isOnlineLocation,
   zonedDate,
   zonedWallClockToUtc,
 } from "@zenflow/core";
@@ -131,17 +132,20 @@ function DueChip({ late, label }: { late: boolean; label: string }) {
 
 /** Compact room / building marker on the block's meta line. `MapPin` + the
  * session's `location` string, truncated to one line — shown after the time
- * range (and any due chip) whenever the session carries a location. */
+ * range (and any due chip) whenever the session carries a location. A meeting
+ * link reads "Online" with a globe instead of the raw URL. */
 function LocationChip({ location }: { location: string }) {
+  const online = isOnlineLocation(location);
+  const Icon = online ? Globe : MapPin;
   return (
     <View className="min-w-0 flex-row items-center gap-1 rounded bg-muted px-1 py-0.5">
-      <MapPin size={11} className="shrink-0 text-muted-foreground" />
+      <Icon size={11} className="shrink-0 text-muted-foreground" />
       <Text
         className="shrink text-xs font-medium leading-none text-muted-foreground"
         numberOfLines={1}
         ellipsizeMode="tail"
       >
-        {location}
+        {online ? "Online" : location}
       </Text>
     </View>
   );
@@ -203,6 +207,9 @@ interface SessionBlockProps {
    * scale up + a brief amber ring) — set right after this session was created,
    * rescheduled, or the calendar teleported to it. */
   flash?: boolean;
+  /** Bumped by the parent when a drop didn't move the session (save failed,
+   * scope sheet cancelled) — releases the drop pin so the card snaps back. */
+  settleKey?: number;
 }
 
 function SessionBlockImpl({
@@ -227,6 +234,7 @@ function SessionBlockImpl({
   onDragVerticalEdge,
   bottomInset = 0,
   flash = false,
+  settleKey = 0,
 }: SessionBlockProps) {
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const { isDarkColorScheme } = useColorScheme();
@@ -340,7 +348,14 @@ function SessionBlockImpl({
     snapOffsetY.value = 0;
     translateY.value = 0;
     translateX.value = 0;
-  }, [segment.taskStart, pinnedStartMin, snapOffsetY, translateX, translateY]);
+  }, [
+    segment.taskStart,
+    settleKey,
+    pinnedStartMin,
+    snapOffsetY,
+    translateX,
+    translateY,
+  ]);
 
   // Drive the lift chrome once when the drag starts / ends — not per frame.
   const [isDraggingJS, setIsDraggingJS] = useState(false);

@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/toast";
 import { useNow } from "@/hooks/use-now";
 import { useUserStore } from "@/hooks/use-user-store";
 import { isPastDeadlineDrop } from "@/lib/overdue";
+import { showErrorToast } from "@/lib/task-toasts";
 import { type PeekBlock, peekBlocksFromSegments } from "@/lib/peek";
 import {
   fetchDaySessions,
@@ -125,6 +126,9 @@ const LOADING_PLACEHOLDERS = [
   { startMin: 15 * 60, duration: 45 },
 ];
 
+/** How long a teleport target waits for its day to load and come into view. */
+const PENDING_FLASH_TTL_MS = 5000;
+
 function scrollToNowOffset(totalHeight: number, tz: string): number {
   // Wall clock in the user's tz — matches `NowIndicator` (which uses
   // `toZonedTime(now, tz)`); a bare `new Date()` here read the device zone and
@@ -221,7 +225,10 @@ export function DayTimeline({
   flashSessionId = null,
 }: DayTimelineProps) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
-  const { confirm } = useToast();
+  const { confirm, toast } = useToast();
+  // Bumped whenever a drop settles, so a block whose start didn't change
+  // (save failed, sheet cancelled) releases its drop pin and snaps back.
+  const [settleKey, setSettleKey] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   const { width: screenWidth } = useWindowDimensions();
   const now = useNow();
@@ -486,6 +493,60 @@ export function DayTimeline({
     positionScroll();
   }, [positionScroll]);
 
+  // Teleport to a session (`flashSessionId` — notification tap, create/edit,
+  // cross-day move): once this day has it loaded and is the visible page,
+  // smooth-scroll it to the middle of the viewport, then play the flash so it
+  // lands on screen. The target outlives the screen's short-lived
+  // `flashSessionId` so a cold day that loads late still gets it; it expires
+  // so a page that never had the session doesn't jump later.
+  const [flashTarget, setFlashTarget] = useState<string | null>(null);
+  const pendingFlashRef = useRef<{ id: string; at: number } | null>(null);
+  const flashTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => {
+    if (flashSessionId) {
+      pendingFlashRef.current = { id: flashSessionId, at: Date.now() };
+    }
+  }, [flashSessionId]);
+  useEffect(() => {
+    const pending = pendingFlashRef.current;
+    if (!pending || loading || error || !isActive) return;
+    if (Date.now() - pending.at > PENDING_FLASH_TTL_MS) {
+      pendingFlashRef.current = null;
+      return;
+    }
+    const segment = segments.find((s) => s.taskId === pending.id);
+    if (!segment) return;
+    pendingFlashRef.current = null;
+
+    const start = toZonedTime(new Date(segment.start), tz);
+    const end = toZonedTime(new Date(segment.end), tz);
+    const startMin = start.getHours() * 60 + start.getMinutes();
+    const durationMin = Math.max(
+      15,
+      (end.getTime() - start.getTime()) / 60_000,
+    );
+    const top = (startMin / DAILY_HORIZON) * totalHeight;
+    const height = (durationMin / DAILY_HORIZON) * totalHeight;
+    const viewport = viewportHRef.current;
+    const y =
+      height >= viewport - 48 ? top - 24 : top - (viewport - height) / 2;
+    scrollRef.current?.scrollTo({ y: Math.max(0, y), animated: true });
+
+    // Timers live in a ref, not this effect's cleanup: the teleport's own
+    // revalidation re-runs this effect within ms and must not cancel them.
+    for (const t of flashTimersRef.current) clearTimeout(t);
+    flashTimersRef.current = [
+      setTimeout(() => setFlashTarget(pending.id), 350),
+      setTimeout(() => setFlashTarget(null), 1300),
+    ];
+  }, [flashSessionId, segments, loading, error, isActive, totalHeight, tz]);
+  useEffect(
+    () => () => {
+      for (const t of flashTimersRef.current) clearTimeout(t);
+    },
+    [],
+  );
+
   // Off-screen pages follow the focused page's scroll so paging in lands on
   // the same hours. The focused page is the writer and ignores its own echo.
   useEffect(() => {
@@ -599,10 +660,11 @@ export function DayTimeline({
           setSessions((prev) =>
             prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)),
           );
-        } catch {
-          // Swallow the error — the finally below reconciles from the server.
+        } catch (error) {
+          showErrorToast(toast, error, "Couldn't move this session");
         } finally {
           await refetch();
+          setSettleKey((k) => k + 1);
         }
       };
 
@@ -614,7 +676,9 @@ export function DayTimeline({
       const commitWithScope = () => {
         const session = tasks.find((t) => t.id === taskId);
         const seriesKind = session ? getSeriesKind(session) : "none";
-        if (session && seriesKind !== "none" && onRequestScopedUpdate) {
+        // A timetable-grouped lecture moves just that meeting — no scope prompt.
+        const needsScope = seriesKind === "recurring" || seriesKind === "task";
+        if (session && needsScope && onRequestScopedUpdate) {
           onRequestScopedUpdate(
             session,
             {
@@ -623,6 +687,7 @@ export function DayTimeline({
             },
             (choice) => {
               if (!choice) {
+                setSettleKey((k) => k + 1);
                 void refetch();
                 return;
               }
@@ -647,6 +712,7 @@ export function DayTimeline({
             commitWithScope();
           },
           onCancel: () => {
+            setSettleKey((k) => k + 1);
             void refetch();
           },
         });
@@ -655,7 +721,7 @@ export function DayTimeline({
 
       commitWithScope();
     },
-    [confirm, deadlineBySession, refetch, tasks, onRequestScopedUpdate],
+    [confirm, toast, deadlineBySession, refetch, tasks, onRequestScopedUpdate],
   );
 
   const handleDragStateChange = useCallback(
@@ -933,6 +999,7 @@ export function DayTimeline({
                       deadline={deadlineBySession.get(segment.taskId) ?? null}
                       late={lateSessionIds.has(segment.taskId)}
                       onReschedule={handleReschedule}
+                      settleKey={settleKey}
                       onDragStateChange={handleDragStateChange}
                       onPress={onSessionPress}
                       onRequestReschedule={handleRequestReschedule}
@@ -947,7 +1014,7 @@ export function DayTimeline({
                       }
                       onDragVerticalEdge={handleDragVerticalEdge}
                       bottomInset={tabBarOverlay}
-                      flash={segment.taskId === flashSessionId}
+                      flash={segment.taskId === flashTarget}
                     />
                   );
                 })}
