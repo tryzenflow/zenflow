@@ -148,7 +148,7 @@ places across the full 24h grid, every day. See [Scheduler architecture](#schedu
 | `source`                           | `SessionSource` | `USER` \| `LMS` \| `PORTAL`.                                                                                                                                                                                                                                                                                                                                                                                            |
 | `conflict`                         | bool            | overlaps another interval, or unplaced. Overlap is accepted — nothing auto-relocates.                                                                                                                                                                                                                                                                                                                                   |
 | `deleted`                          | bool            | soft-delete flag, default `false`. A user-initiated delete sets this instead of removing the row (see `DELETE /sessions/:id` below); every read that feeds scheduling or calendar display filters `deleted: false`. The materializer's own `[userId, externalKey]` lookup is the deliberate exception — it must see a soft-deleted row so it can skip re-creating it.                                                   |
-| `scheduledStartTime`               | DateTime?       | engine placement (`TASK`) / client instant (fixed); null while unplaced.                                                                                                                                                                                                                                                                                                                                                |
+| `scheduledStartTime`               | DateTime?       | engine placement (`TASK`) / client instant (fixed). **Never null on a live `TASK`** — placement always ends in a start (last resort, see "Never unplaced"); `PATCH` with `null` on a `TASK` is a 400. |
 | `lastMovedAt` / `retainedAt`       | DateTime?       | move-or-keep bookkeeping (ADR-0002 §2.1).                                                                                                                                                                                                                                                                                                                                                                               |
 | `syncConfirmedAt` / `syncMissedAt` | DateTime?       | two-consecutive-run confirmation gate for an ingested row (issue #60/#62): `syncConfirmedAt` null means "created but not yet confirmed by a second watcher run" (on the calendar, but its notification is held back); `syncMissedAt` set means "missing on the last run, one miss so far" — a second consecutive miss is what actually soft-deletes it. Always null for a user-created session. See "Write-back" below. |
 | `userId`                           | uuid            | FK → `User`, cascade.                                                                                                                                                                                                                                                                                                                                                                                                   |
@@ -692,8 +692,29 @@ Pieces (`scheduler/io/`):
   proposal has `placementSource = TS_FALLBACK`, `modelProposal = null` and a `degradedReason`
   (`timeout | breaker_open | connect | http_5xx | http_4xx | version | invalid_response | disabled`).
 - Create/update/reschedule responses carry `schedulingDegraded: true`.
-- No displacement, never a 503: a miss answers like Python (`409 SCHEDULE_INFEASIBLE`, an
-  unplaced task, or `null` series rows). `infeasiblePolicy` = best free slot up to 30 days late.
+- No displacement, never a 503: a pre-flight miss answers like Python (`409 SCHEDULE_INFEASIBLE`).
+  Placement then tries the best free slot up to 30 days late, else pins the task by its deadline
+  (`lastResortStart`) — never an unplaced task or `null` series row.
+
+#### Never unplaced
+
+A `TASK` row is inserted before it is placed, so placement must always end in a start. The
+pre-flights (`preflightTask` / `canPlaceSeries`, Python `PREFLIGHT`) still report a miss so a
+create/edit can be rejected (409 / 400) before anything is written. Once the row exists (Python
+`PLACE`), a miss becomes `ACCEPTED_LAST_RESORT`:
+
+1. least-conflict start before the deadline;
+2. else (single task) the first free start up to 30 days past the deadline;
+3. else the latest on-grid start that ends by the deadline, or the next slot once that has
+   passed (`last_resort_pin` / `lastResortStart`), pushed past already-pinned siblings.
+
+`PythonPlacer` also pins any row Python returned without a start, and the degraded path runs the
+same cascade minus step 1 (no new TS ranking). Results carry `lastResort: true`. If placement
+throws after the insert, `placeOrDiscard` (`sessions/placement-compensation.ts`) hard-deletes the
+just-inserted rows (and a just-created series). Opt-out: conflict "reschedule them all" passes
+`allowLastResort: false` / treats a last-resort respread as "no slot", because those tasks already
+have a start. Rows left over from before this guarantee:
+`pnpm --filter backend backfill:unplaced [--dry-run]`.
 - Series: own day-window first, then the whole range (one per day, then uncapped).
 - **Risk (ADR-0003 phase 6 note):** there is no longer a parallel full TS ranking implementation
   to fall back to if `PythonPlacer`/`FallbackPlacer` itself has an undiscovered bug — only git
@@ -839,7 +860,8 @@ sequenceDiagram
       FB-->>P: start
       P->>P: session.update, recordProposal (placementSource=TS_FALLBACK, degradedReason)
     else no free slot
-      P-->>T: unplaced (scheduledStartTime null), like a Python INFEASIBLE
+      P->>FB: placeSingle (deadline + 30 days)
+      P->>P: else lastResortStart (pinned by the deadline) — never unplaced
     end
   end
   P-->>T: PlacementResult
@@ -872,10 +894,11 @@ sequenceDiagram
     P->>P: recordProposal per member (placementSource=PYTHON)
   else degraded
     P->>FB: placeSeries (frozen loop — seriesDayWindows, then spillover; siblings, day cap)
-    FB-->>P: rows[] (null start = no slot anywhere, same as Python)
+    FB-->>P: rows[] (null start = no slot anywhere)
   end
+  P->>P: pinUnplaced (lastResortStart, back-to-back) — no null rows
   P-->>T: rows[]
-  T->>T: $tx( session.update scheduledStartTime for placed rows )
+  T->>T: $tx( session.update scheduledStartTime for every row )
   T-->>S: rows[]
 ```
 
@@ -1042,7 +1065,7 @@ members get `base + 1` (so the series still starts on day 0 and the slack lands 
 deadline). `daySpan` = whole days from the next 15-min boundary to the deadline day, capped at
 `MAX_SCAN_DAYS − 1`. Already-placed siblings are fed forward as hard blocks so members never
 overlap, and a day already holding `MAX_SERIES_PER_DAY` (1) sitting of this series is skipped.
-A member that finds nowhere comes back unplaced without blocking the rest. `N` can exceed
+A member that finds nowhere gets the last resort (see "Never unplaced") without blocking the rest. `N` can exceed
 `totalDays` (more sessions than days) — buckets then collapse toward the tail, several members
 sharing one day's window; that's an unavoidable overlap the day cap and the series pre-flight
 (`TaskPlacementService.canPlaceSeries`) keep safe, not this partition.

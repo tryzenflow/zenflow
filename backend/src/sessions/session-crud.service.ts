@@ -37,6 +37,7 @@ import {
 import { createEventData } from "./session-events";
 import { insertFixedSession } from "./fixed-session-writer";
 import { mapSessionPrismaError } from "./prisma-error";
+import { placeOrDiscard } from "./placement-compensation";
 import { NO_FEASIBLE_SLOT_MESSAGE, SeriesService } from "./series.service";
 
 /**
@@ -144,17 +145,23 @@ export class SessionCrudService {
       return s;
     });
 
-    // heuristic → 50/50 A/B → optional LinUCB override + SlotProposal.
-    const placement = await this.taskPlacement.placeOnCreate({
-      user,
-      task: {
-        id: created.id,
-        durationMinutes: created.durationMinutes,
-        deadline,
-      },
-      now,
-      infeasiblePolicy: dto.infeasiblePolicy,
-    });
+    // heuristic → 50/50 A/B → optional LinUCB override + SlotProposal. Never
+    // leaves the row unplaced: a miss gets the last resort, a throw discards it.
+    const placement = await placeOrDiscard(
+      this.prisma,
+      { userId: user.id, sessionIds: [created.id] },
+      () =>
+        this.taskPlacement.placeOnCreate({
+          user,
+          task: {
+            id: created.id,
+            durationMinutes: created.durationMinutes,
+            deadline,
+          },
+          now,
+          infeasiblePolicy: dto.infeasiblePolicy,
+        }),
+    );
     return toCreateSessionResponse(
       { ...created, scheduledStartTime: placement.scheduledStartTime },
       slotProposalFieldsOf(placement),

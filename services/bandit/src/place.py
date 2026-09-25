@@ -31,6 +31,7 @@ from src.core.arms import seeded_tie_break_order
 from src.core.context_vector import build_context_vector
 from src.core.displacement import (
     flexible_from_dicts,
+    last_resort_pin,
     pick_late_slot,
     pick_min_conflict_slot,
     plan_displacement,
@@ -302,7 +303,7 @@ class _Placer:
         )
         dur_ms = m.duration_minutes * consts.MS_PER_MINUTE
         if self.next15 + dur_ms > req.deadline_ms:
-            return self._no_slot(m, base)
+            return self._no_slot(m, base, ledger)
 
         days = self._select_days(first, last, ledger)
         # B.4 correctness invariant: every day this *live* (post-placement)
@@ -327,7 +328,7 @@ class _Placer:
 
         decision = PolicySelector.resolve(req.mode, m, heur, lin)
         if decision is None:
-            return self._no_slot(m, base)
+            return self._no_slot(m, base, ledger)
         policy, start_ms = decision
         return base.model_copy(
             update={
@@ -339,10 +340,15 @@ class _Placer:
             }
         )
 
-    def _no_slot(self, m: PlacementMember, base: PlacedMember) -> PlacedMember:
+    def _no_slot(
+        self, m: PlacementMember, base: PlacedMember, ledger: _Ledger
+    ) -> PlacedMember:
         req = self.req
         if len(req.members) > 1:  # series members are never displaced (TS parity)
-            return base
+            known = [iv for day in self.occ.values() for iv in day]
+            return self._last_resort(
+                m, base, [*known, *ledger.siblings], ledger.siblings, late=False
+            )
         if req.infeasible is None:
             return base.model_copy(update={"outcome": "NEEDS_INFEASIBLE_CONTEXT"})
         t0 = time.perf_counter()
@@ -416,7 +422,49 @@ class _Placer:
             )
             if s is not None:
                 return self._accepted(base, "ACCEPTED_LATE", s, late=True)
-        return base
+        return self._last_resort(m, base, horizon, [], late=True)
+
+    def _last_resort(
+        self,
+        m: PlacementMember,
+        base: PlacedMember,
+        occupied: Intervals,
+        avoid: Intervals,
+        late: bool,
+    ) -> PlacedMember:
+        """PLACE only: a TASK row already exists, so it must get *some* start.
+        Least-conflict slot before the deadline, else (``late``) the first free
+        slot within the +30-day horizon, else the pinned latest start. PREFLIGHT
+        keeps answering INFEASIBLE so Nest can still 409 / 400 first."""
+        req = self.req
+        if req.mode != "PLACE":
+            return base
+        s = pick_min_conflict_slot(
+            m.duration_minutes,
+            req.now_ms,
+            req.deadline_ms,
+            occupied,
+            self.matrix,
+            self.tz,
+        )
+        if s is None and late:
+            s = pick_late_slot(
+                m.duration_minutes,
+                req.now_ms,
+                req.deadline_ms,
+                occupied,
+                req.deadline_ms + consts.INFEASIBLE_HORIZON_DAYS * consts.DAY_MS,
+            )
+        if s is None:
+            s = last_resort_pin(m.duration_minutes, req.now_ms, req.deadline_ms, avoid)
+        end = s + m.duration_minutes * consts.MS_PER_MINUTE
+        return self._accepted(
+            base,
+            "ACCEPTED_LAST_RESORT",
+            s,
+            late=end > req.deadline_ms,
+            conflicting=any(s < e and end > b for b, e in occupied),
+        )
 
     @staticmethod
     def _accepted(
@@ -437,6 +485,31 @@ class _Placer:
         )
 
     # ---- whole request ---------------------------------------------------
+    def _past_deadline_series(self, ledger: _Ledger) -> list[PlacedMember]:
+        """Series whose deadline has passed: nothing is scanned. PLACE pins the
+        sittings back-to-back from the next slot (never unplaced); PREFLIGHT
+        answers INFEASIBLE."""
+        out: list[PlacedMember] = []
+        for m in self.req.members:
+            base = PlacedMember(
+                id=m.id,
+                outcome="INFEASIBLE",
+                applied_policy="NONE",
+                heuristic=None,
+                linucb=None,
+                start_ms=None,
+                moves=[],
+                late=False,
+                conflicting=False,
+            )
+            r = self._last_resort(m, base, [], ledger.siblings, late=False)
+            if r.start_ms is not None:
+                ledger.siblings.append(
+                    (r.start_ms, r.start_ms + m.duration_minutes * consts.MS_PER_MINUTE)
+                )
+            out.append(r)
+        return out
+
     def run(self) -> list[PlacedMember]:
         req = self.req
         ledger = _Ledger(siblings=_ivals(req.fixed_occupied))
@@ -448,20 +521,7 @@ class _Placer:
             windows_days = [(first, last)]
         else:
             if self.next15 >= req.deadline_ms:
-                return [
-                    PlacedMember(
-                        id=m.id,
-                        outcome="INFEASIBLE",
-                        applied_policy="NONE",
-                        heuristic=None,
-                        linucb=None,
-                        start_ms=None,
-                        moves=[],
-                        late=False,
-                        conflicting=False,
-                    )
-                    for m in members
-                ]
+                return self._past_deadline_series(ledger)
             span = min(
                 math.floor((req.deadline_ms - self.next15) / consts.DAY_MS),
                 consts.MAX_SCAN_DAYS - 1,

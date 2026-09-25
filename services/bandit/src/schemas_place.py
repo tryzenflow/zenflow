@@ -31,6 +31,7 @@ Outcome = Literal[
     "DISPLACED",
     "ACCEPTED_CONFLICTS",
     "ACCEPTED_LATE",
+    "ACCEPTED_LAST_RESORT",
     "INFEASIBLE",
 ]
 WorkloadType = Literal["LECTURE", "ASSIGNMENT", "EXAM", "TASK", "DND"]

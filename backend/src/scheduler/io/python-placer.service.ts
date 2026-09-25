@@ -23,7 +23,13 @@ import {
 import { recordPhase } from "../../observability/phase-timings";
 import { PrismaService } from "../../prisma/prisma.service";
 import { MAX_SCAN_DAYS, SCAN_CAP_DAYS } from "../constants";
-import { ceilToSlot, DAY_MS, type Interval } from "../core/slot";
+import {
+  ceilToSlot,
+  DAY_MS,
+  lastResortStart,
+  MS_PER_MINUTE,
+  type Interval,
+} from "../core/slot";
 import { ScheduleInfeasibleException } from "../schedule-infeasible.exception";
 import type {
   PlaceableTask,
@@ -45,15 +51,22 @@ const placed = (o: PlacedMember["outcome"]): boolean =>
   o === "PLACED" ||
   o === "DISPLACED" ||
   o === "ACCEPTED_CONFLICTS" ||
-  o === "ACCEPTED_LATE";
+  o === "ACCEPTED_LATE" ||
+  o === "ACCEPTED_LAST_RESORT";
 
 /**
  * `python` placement mode (ADR-0003 phase 4): gather -> `POST /v1/place` ->
  * apply -> persist. The A/B policy roll (`ExperimentService.assignPolicy`, the
  * only RNG) and every write stay here; all ranking is Python's. When the
  * service is unavailable the request is answered by the frozen heuristic
- * ({@link FallbackPlacer}): no displacement, `infeasiblePolicy` = best free
- * slot up to 30 days late, and a miss is treated as `INFEASIBLE` (never 503).
+ * ({@link FallbackPlacer}): no displacement, then the best free slot up to
+ * 30 days late (never 503).
+ *
+ * A placement runs after its `Session` row exists, so it never leaves a `TASK`
+ * unplaced: when nothing real fits, the task gets the last resort (Python's
+ * `ACCEPTED_LAST_RESORT`, or {@link lastResortStart} when Python is
+ * unavailable or answered without a start) and the result carries
+ * `lastResort: true`. Only the read-only pre-flights report a miss.
  */
 @Injectable()
 export class PythonPlacer {
@@ -155,12 +168,18 @@ export class PythonPlacer {
 
   // ---- single TASK -------------------------------------------------------
 
+  /**
+   * `allowLastResort: false` (conflict "reschedule them all") answers a miss
+   * with a `null` start and writes nothing, so a task that already has a
+   * start keeps it instead of being moved onto another conflict.
+   */
   async placeSingle(
     user: User,
     task: PlaceableTask,
     trigger: Trigger,
     now: Date,
     policy?: InfeasiblePolicy,
+    allowLastResort = true,
   ): Promise<PlacementResult> {
     const assignment = this.experiment.assignPolicy();
     const member = this.memberOf(
@@ -188,12 +207,33 @@ export class PythonPlacer {
         assignment,
         res.reason,
         policy,
+        allowLastResort,
       );
     }
     this.noteSource("python");
 
     const r = res.response.results[0];
-    const start = placed(r.outcome) && r.startMs !== null ? r.startMs : null;
+    let lastResort = r.outcome === "ACCEPTED_LAST_RESORT";
+    let start =
+      placed(r.outcome) &&
+      r.startMs !== null &&
+      (allowLastResort || !lastResort)
+        ? r.startMs
+        : null;
+    if (start === null && allowLastResort) {
+      // Python should have answered ACCEPTED_LAST_RESORT; never leave the row
+      // unplaced regardless.
+      start = lastResortStart(
+        task.durationMinutes,
+        now.getTime(),
+        task.deadline.getTime(),
+      );
+      lastResort = true;
+      this.logger.error(
+        `schedule[${trigger}] session=${task.id} python outcome=${r.outcome} had no start; pinned to last resort`,
+      );
+    }
+    lastResort = lastResort && start !== null;
     const tApply = Date.now();
     const displaced: AppliedMove[] = r.moves.length
       ? await this.applyMoves(user.id, r.moves)
@@ -269,6 +309,7 @@ export class PythonPlacer {
         divergent && rawAlternative !== null ? new Date(rawAlternative) : null,
       divergent,
       displaced: displaced.length ? displaced : undefined,
+      ...(lastResort ? { lastResort: true } : {}),
     };
   }
 
@@ -280,7 +321,8 @@ export class PythonPlacer {
     now: Date,
     assignment: PolicyAssignment,
     reason: DegradedReason,
-    policy?: InfeasiblePolicy,
+    policy: InfeasiblePolicy | undefined,
+    allowLastResort: boolean,
   ): Promise<PlacementResult> {
     this.noteFallback(reason);
     let start = await this.fallback.placeSingle(
@@ -290,8 +332,9 @@ export class PythonPlacer {
       user.preferenceMatrix,
       now,
     );
-    // Infeasible accepted: best free slot up to 30 days late.
-    if (!start && policy) {
+    // Infeasible accepted (or the row must not stay unplaced): best free slot
+    // up to 30 days late.
+    if (!start && (policy || allowLastResort)) {
       start = await this.fallback.placeSingle(
         user.id,
         { ...task, deadline: new Date(task.deadline.getTime() + 30 * DAY_MS) },
@@ -300,8 +343,20 @@ export class PythonPlacer {
         now,
       );
     }
+    // Last resort: pinned by the deadline, overlap accepted (no TS ranking).
+    let lastResort = false;
+    if (!start && allowLastResort) {
+      start = new Date(
+        lastResortStart(
+          task.durationMinutes,
+          now.getTime(),
+          task.deadline.getTime(),
+        ),
+      );
+      lastResort = true;
+    }
     if (!start) {
-      // As with `INFEASIBLE`: stays unscheduled.
+      // Only when the caller opted out of the last resort: nothing written.
       this.logger.warn(
         `schedule[${trigger}] source=ts_fallback reason=${reason} session=${task.id} start=none`,
       );
@@ -327,7 +382,9 @@ export class PythonPlacer {
       reason,
     );
     this.logger.warn(
-      `schedule[${trigger}] source=ts_fallback reason=${reason} session=${task.id} start=${start.toISOString()}`,
+      `schedule[${trigger}] source=ts_fallback reason=${reason} session=${task.id} start=${start.toISOString()}${
+        lastResort ? " lastResort" : ""
+      }`,
     );
     return {
       scheduledStartTime: start,
@@ -336,6 +393,7 @@ export class PythonPlacer {
       alternativeSlot: null,
       divergent: false,
       degraded: true,
+      ...(lastResort ? { lastResort: true } : {}),
     };
   }
 
@@ -343,8 +401,9 @@ export class PythonPlacer {
 
   /**
    * Place every member of a `TASK` series in one call. Returns one row per
-   * member (`null` start = Python found nothing); persisting the starts is the
-   * caller's job. Degraded => frozen loop, same `null`-row contract.
+   * member, never with a `null` start: a member with no real slot gets the
+   * last resort (`lastResort: true`). Persisting the starts is the caller's
+   * job. Degraded => frozen loop, then the same last resort.
    */
   async placeSeries(args: {
     user: User;
@@ -360,7 +419,13 @@ export class PythonPlacer {
       members.length === 0 ||
       ceilToSlot(now.getTime()) >= deadline.getTime()
     ) {
-      return members.map((m) => ({ id: m.id, scheduledStartTime: null }));
+      return this.pinUnplaced(
+        members.map((m) => ({ id: m.id, scheduledStartTime: null })),
+        members,
+        deadline,
+        now,
+        fixedOccupied,
+      );
     }
     const assignments = members.map(() => this.experiment.assignPolicy());
     const defs: PlacementMember[] = members.map((m, i) =>
@@ -406,17 +471,25 @@ export class PythonPlacer {
             : Promise.resolve(null),
         ),
       );
-      return rows.map((r) => ({ ...r, degraded: true }));
+      return this.pinUnplaced(
+        rows.map((r) => ({ ...r, degraded: true })),
+        members,
+        deadline,
+        now,
+        fixedOccupied,
+      );
     }
 
     this.noteSource("python");
     const rows: SeriesPlacementRow[] = [];
     for (let i = 0; i < members.length; i++) {
       const r = res.response.results[i];
-      const start = r.outcome === "PLACED" ? r.startMs : null;
+      const lastResort = r.outcome === "ACCEPTED_LAST_RESORT";
+      const start = r.outcome === "PLACED" || lastResort ? r.startMs : null;
       rows.push({
         id: members[i].id,
         scheduledStartTime: start !== null ? new Date(start) : null,
+        ...(lastResort && start !== null ? { lastResort: true } : {}),
       });
       const a = assignments[i];
       const linucb = r.linucb;
@@ -451,10 +524,44 @@ export class PythonPlacer {
         modelVersion: res.response.paramsVersion,
       });
     }
-    return rows;
+    return this.pinUnplaced(rows, members, deadline, now, fixedOccupied);
   }
 
   // ---- helpers -----------------------------------------------------------
+
+  /**
+   * Give every still-unplaced series row the last resort, back-to-back so
+   * pinned sittings never stack on each other or on placed siblings.
+   */
+  private pinUnplaced(
+    rows: SeriesPlacementRow[],
+    members: SeriesMemberInput[],
+    deadline: Date,
+    now: Date,
+    fixedOccupied: Interval[],
+  ): SeriesPlacementRow[] {
+    const avoid: Interval[] = [...fixedOccupied];
+    rows.forEach((row, i) => {
+      if (!row.scheduledStartTime) return;
+      const start = row.scheduledStartTime.getTime();
+      avoid.push({
+        start,
+        end: start + members[i].durationMinutes * MS_PER_MINUTE,
+      });
+    });
+    return rows.map((row, i) => {
+      if (row.scheduledStartTime) return row;
+      const dur = members[i].durationMinutes;
+      const start = lastResortStart(
+        dur,
+        now.getTime(),
+        deadline.getTime(),
+        avoid,
+      );
+      avoid.push({ start, end: start + dur * MS_PER_MINUTE });
+      return { ...row, scheduledStartTime: new Date(start), lastResort: true };
+    });
+  }
 
   /**
    * `computeBoth` is true whenever LinUCB is primary or the event was

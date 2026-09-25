@@ -1,6 +1,6 @@
 {
   "name": "single-infeasible-second-call",
-  "description": "Second call of the two-phase path: no flexible tasks to repack and no policy, so the outcome is INFEASIBLE (Nest maps it to 409 SCHEDULE_INFEASIBLE).",
+  "description": "Second call of the two-phase PREFLIGHT path: no flexible tasks to repack and no policy, so the outcome is INFEASIBLE (Nest maps it to 409 SCHEDULE_INFEASIBLE before writing anything). The same request in PLACE mode never leaves the task unplaced (see single-last-resort).",
   "ignore": [
     "paramsVersion",
     "timingsMs"
@@ -8,7 +8,7 @@
   "request": {
     "contractVersion": 1,
     "requestId": "00000000-0000-4000-8000-000000000001-2",
-    "mode": "PLACE",
+    "mode": "PREFLIGHT",
     "nowMs": 1789977600000,
     "timezone": "UTC",
     "maxScanDays": 30,

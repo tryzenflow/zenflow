@@ -925,7 +925,119 @@ describe("SessionsService.findById", () => {
   });
 });
 
+describe("SessionsService.create never leaves a TASK unplaced", () => {
+  /** tx double for the insert + array-form `$transaction` for the discard. */
+  function prismaForDiscard(tx: Record<string, unknown>) {
+    const discard = {
+      sessionEvent: { deleteMany: jest.fn().mockReturnValue("del-events") },
+      session: { deleteMany: jest.fn().mockReturnValue("del-sessions") },
+      sessionSeries: { deleteMany: jest.fn().mockReturnValue("del-series") },
+    };
+    const batch = jest.fn((ops: unknown[]) => Promise.resolve(ops));
+    const prisma = {
+      ...discard,
+      $transaction: (arg: unknown) =>
+        Array.isArray(arg) ? batch(arg) : (arg as (t: unknown) => unknown)(tx),
+    };
+    return { prisma, discard, batch };
+  }
+
+  it("single TASK: a placement that throws discards the just-inserted row", async () => {
+    const created = session({ id: "session-1" });
+    const { prisma, discard, batch } = prismaForDiscard({
+      session: { create: jest.fn().mockResolvedValue(created) },
+      sessionEvent: { create: jest.fn().mockResolvedValue({}) },
+    });
+    const placement = fakeTaskPlacement();
+    const boom = new Error("placement blew up");
+    placement.placeOnCreate.mockRejectedValue(boom);
+    const service = await makeService(prisma, fakeTagsService(), placement);
+
+    await expect(
+      service.create(
+        {
+          type: "TASK",
+          title: "T",
+          durationMinutes: 60,
+          deadline: "2026-06-10T17:00:00.000Z",
+        },
+        user,
+      ),
+    ).rejects.toBe(boom);
+
+    expect(discard.session.deleteMany).toHaveBeenCalledWith({
+      where: { userId: user.id, id: { in: ["session-1"] } },
+    });
+    expect(discard.sessionEvent.deleteMany).toHaveBeenCalledWith({
+      where: { userId: user.id, sessionId: { in: ["session-1"] } },
+    });
+    expect(discard.sessionSeries.deleteMany).not.toHaveBeenCalled();
+    expect(batch).toHaveBeenCalledWith(["del-events", "del-sessions"]);
+  });
+
+  it("TASK series: a placement that throws discards every member and the series", async () => {
+    const rows = [1, 2].map((i) =>
+      session({ id: `s-${i}`, seriesId: "series-1", sessionIndex: i }),
+    );
+    let n = 0;
+    const { prisma, discard, batch } = prismaForDiscard({
+      sessionSeries: {
+        create: jest.fn().mockResolvedValue({ id: "series-1" }),
+      },
+      session: { create: jest.fn(() => Promise.resolve(rows[n++])) },
+      sessionEvent: { create: jest.fn().mockResolvedValue({}) },
+    });
+    const placement = fakeTaskPlacement();
+    placement.placeSeriesOnCreate.mockRejectedValue(new Error("down"));
+    const service = await makeService(prisma, fakeTagsService(), placement);
+
+    await expect(
+      service.create(
+        {
+          type: "TASK",
+          title: "T",
+          durationMinutes: 60,
+          sessionCount: 2,
+          deadline: "2026-06-12T17:00:00.000Z",
+        },
+        user,
+      ),
+    ).rejects.toThrow("down");
+
+    expect(discard.session.deleteMany).toHaveBeenCalledWith({
+      where: { userId: user.id, id: { in: ["s-1", "s-2"] } },
+    });
+    expect(discard.sessionSeries.deleteMany).toHaveBeenCalledWith({
+      where: { userId: user.id, id: "series-1" },
+    });
+    expect(batch).toHaveBeenCalledWith([
+      "del-events",
+      "del-sessions",
+      "del-series",
+    ]);
+  });
+});
+
 describe("SessionsService.update", () => {
+  it("rejects PATCH scheduledStartTime: null on a TASK (400) and writes nothing", async () => {
+    const existing = session({
+      id: "session-1",
+      scheduledStartTime: new Date("2026-06-11T08:00:00.000Z"),
+    });
+    const update = jest.fn();
+    const prisma = prismaWithTx({
+      session: { findFirst: jest.fn().mockResolvedValue(existing), update },
+      sessionEvent: { create: jest.fn() },
+      slotProposal: { findFirst: () => Promise.resolve(null) },
+    });
+    const service = await makeService(prisma, fakeTagsService());
+
+    await expect(
+      service.update("session-1", { scheduledStartTime: null }, user),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it("applies a title-only diff, emits no event, runs no placer", async () => {
     const existing = session({ id: "session-1", title: "Old title" });
     const updated = session({ id: "session-1", title: "New title" });

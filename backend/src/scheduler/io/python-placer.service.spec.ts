@@ -13,6 +13,8 @@ const now = new Date("2026-06-08T00:00:00.000Z");
 const deadline = new Date("2026-06-10T00:00:00.000Z");
 const task = { id: "t1", durationMinutes: 60, deadline };
 const START = Date.parse("2026-06-08T09:00:00.000Z");
+/** `lastResortStart(60, now, deadline)`: the latest start ending by the deadline. */
+const PINNED = new Date("2026-06-09T23:00:00.000Z");
 
 const member = (over: Partial<PlacedMember> = {}): PlacedMember => ({
   id: "t1",
@@ -167,7 +169,23 @@ describe("PythonPlacer.placeSingle (python answers)", () => {
     );
   });
 
-  it("an INFEASIBLE answer leaves the task unplaced (no write)", async () => {
+  it("an ACCEPTED_LAST_RESORT answer is written and flagged", async () => {
+    const r = member({
+      outcome: "ACCEPTED_LAST_RESORT",
+      heuristic: null,
+      conflicting: true,
+    });
+    const { placer, prisma } = make({ place: ok([r]) });
+    const res = await placer.placeSingle(user, task, "create", now);
+    expect(res.scheduledStartTime?.getTime()).toBe(START);
+    expect(res.lastResort).toBe(true);
+    expect(prisma.session.update).toHaveBeenCalledWith({
+      where: { id: "t1" },
+      data: { scheduledStartTime: new Date(START) },
+    });
+  });
+
+  it("an answer without a start never leaves the task unplaced: pinned by the deadline", async () => {
     const r = member({
       outcome: "INFEASIBLE",
       startMs: null,
@@ -176,8 +194,28 @@ describe("PythonPlacer.placeSingle (python answers)", () => {
     });
     const { placer, prisma } = make({ place: ok([r]) });
     const res = await placer.placeSingle(user, task, "create", now);
+    expect(res.scheduledStartTime).toEqual(PINNED);
+    expect(res.lastResort).toBe(true);
+    expect(prisma.session.update).toHaveBeenCalledWith({
+      where: { id: "t1" },
+      data: { scheduledStartTime: PINNED },
+    });
+  });
+
+  it("allowLastResort=false: a last-resort answer writes nothing (the task keeps its start)", async () => {
+    const r = member({ outcome: "ACCEPTED_LAST_RESORT", heuristic: null });
+    const { placer, prisma } = make({ place: ok([r]) });
+    const res = await placer.placeSingle(
+      user,
+      task,
+      "deadline-change",
+      now,
+      undefined,
+      false,
+    );
     expect(res.scheduledStartTime).toBeNull();
     expect(res.appliedPolicy).toBe("NONE");
+    expect(res.lastResort).toBeUndefined();
     expect(prisma.session.update).not.toHaveBeenCalled();
   });
 });
@@ -215,12 +253,40 @@ describe("PythonPlacer.placeSingle (degraded, ADR-0003 2.4)", () => {
     );
   });
 
-  it("no free slot, no policy: unplaced like a Python INFEASIBLE (never a 503)", async () => {
+  it("no free slot anywhere: pinned by the deadline, never unplaced (never a 503)", async () => {
     const { placer, prisma, experiment, fallback } = make({
       place: down("timeout"),
       fallbackSingle: null,
     });
     const res = await placer.placeSingle(user, task, "create", now);
+    expect(res).toMatchObject({
+      scheduledStartTime: PINNED,
+      appliedPolicy: "HEURISTIC",
+      degraded: true,
+      lastResort: true,
+    });
+    // own window, then up to 30 days late, then the pin
+    expect(fallback.placeSingle).toHaveBeenCalledTimes(2);
+    expect(prisma.session.update).toHaveBeenCalledWith({
+      where: { id: "t1" },
+      data: { scheduledStartTime: PINNED },
+    });
+    expect(experiment.recordProposal).toHaveBeenCalledTimes(1);
+  });
+
+  it("no free slot, allowLastResort=false: nothing written", async () => {
+    const { placer, prisma, fallback } = make({
+      place: down("timeout"),
+      fallbackSingle: null,
+    });
+    const res = await placer.placeSingle(
+      user,
+      task,
+      "deadline-change",
+      now,
+      undefined,
+      false,
+    );
     expect(res).toMatchObject({
       scheduledStartTime: null,
       appliedPolicy: "NONE",
@@ -228,7 +294,6 @@ describe("PythonPlacer.placeSingle (degraded, ADR-0003 2.4)", () => {
     });
     expect(fallback.placeSingle).toHaveBeenCalledTimes(1);
     expect(prisma.session.update).not.toHaveBeenCalled();
-    expect(experiment.recordProposal).not.toHaveBeenCalled();
   });
 
   it("no free slot + policy: best slot up to 30 days past the deadline", async () => {
@@ -348,7 +413,26 @@ describe("PythonPlacer series", () => {
     expect(experiment.recordProposal).toHaveBeenCalledTimes(2);
   });
 
-  it("python: a member without a PLACED outcome comes back null", async () => {
+  it("python: ACCEPTED_LAST_RESORT members keep the start Python picked, flagged", async () => {
+    const results = [
+      member({ id: "a" }),
+      member({
+        id: "b",
+        outcome: "ACCEPTED_LAST_RESORT",
+        startMs: START + 7_200_000,
+      }),
+    ];
+    const { placer } = make({ place: ok(results) });
+    const rows = await placer.placeSeries(seriesArgs);
+    expect(rows[1]).toEqual({
+      id: "b",
+      scheduledStartTime: new Date(START + 7_200_000),
+      lastResort: true,
+    });
+    expect(rows[0].lastResort).toBeUndefined();
+  });
+
+  it("python: a member without a start is never null, pinned by the deadline", async () => {
     const results = [
       member({ id: "a" }),
       member({
@@ -359,7 +443,25 @@ describe("PythonPlacer series", () => {
     ];
     const { placer } = make({ place: ok(results) });
     const rows = await placer.placeSeries(seriesArgs);
-    expect(rows[1].scheduledStartTime).toBeNull();
+    expect(rows[1]).toMatchObject({
+      scheduledStartTime: PINNED,
+      lastResort: true,
+    });
+  });
+
+  it("deadline already passed: sittings pinned back-to-back from the next slot, no Python call", async () => {
+    const { placer, gateway } = make({});
+    const rows = await placer.placeSeries({
+      ...seriesArgs,
+      deadline: new Date(now.getTime() - 3_600_000),
+      now: new Date(now.getTime() + 1),
+    });
+    expect(gateway.place).not.toHaveBeenCalled();
+    expect(rows.map((r) => r.scheduledStartTime?.toISOString())).toEqual([
+      "2026-06-08T00:15:00.000Z",
+      "2026-06-08T01:15:00.000Z",
+    ]);
+    expect(rows.every((r) => r.lastResort)).toBe(true);
   });
 
   it("degraded: all members placed => rows flagged degraded + TS_FALLBACK proposals", async () => {
@@ -380,7 +482,7 @@ describe("PythonPlacer series", () => {
     );
   });
 
-  it("degraded: a member without a slot comes back null, like Python (never a 503)", async () => {
+  it("degraded: a member without a slot gets the last resort (never null, never a 503)", async () => {
     const { placer, experiment } = make({
       place: down("breaker_open"),
       fallbackSeries: [
@@ -391,8 +493,9 @@ describe("PythonPlacer series", () => {
     const rows = await placer.placeSeries(seriesArgs);
     expect(rows.map((r) => r.scheduledStartTime)).toEqual([
       new Date(START),
-      null,
+      PINNED,
     ]);
+    expect(rows[1]).toMatchObject({ degraded: true, lastResort: true });
     expect(experiment.recordProposal).toHaveBeenCalledTimes(1);
   });
 

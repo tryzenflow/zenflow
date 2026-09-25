@@ -278,7 +278,7 @@ def test_series_spreads_members_over_distinct_windows_without_overlap() -> None:
         assert b - a >= 2 * HOUR
 
 
-def test_series_respects_fixed_occupied_and_reports_no_slot_without_blocking() -> None:
+def test_series_member_without_a_window_slot_gets_a_last_resort_start() -> None:
     # 2 members, deadline one day ahead, the second window's day is fully blocked.
     days = make_days(2, occupied={1: [(NOW + 16 * HOUR, NOW + 2 * DAY_MS)]})
     body = make_req(
@@ -289,13 +289,29 @@ def test_series_respects_fixed_occupied_and_reports_no_slot_without_blocking() -
     )
     a, b = ok(body)["results"]
     assert a["outcome"] == "PLACED"
+    # PLACE never leaves a member unplaced: least-conflict start over the whole
+    # range, clear of its sibling.
+    assert b["outcome"] == "ACCEPTED_LAST_RESORT" and b["startMs"] is not None
+    assert b["conflicting"] is False and b["late"] is False
+    assert b["startMs"] + HOUR <= body["deadlineMs"]
+    assert b["startMs"] >= a["startMs"] + HOUR or b["startMs"] + HOUR <= a["startMs"]
+
+    # PREFLIGHT still reports the miss so Nest can reject before writing.
+    body["mode"] = "PREFLIGHT"
+    _, b = ok(body)["results"]
     assert b["outcome"] == "INFEASIBLE" and b["startMs"] is None
 
 
-def test_series_past_deadline_all_infeasible() -> None:
+def test_series_past_deadline_is_pinned_back_to_back() -> None:
     body = make_req(
         members=[member("a"), member("b")], deadlineMs=NOW - HOUR, maxScanDays=60
     )
+    res = ok(body)["results"]
+    assert [r["outcome"] for r in res] == ["ACCEPTED_LAST_RESORT"] * 2
+    assert [r["startMs"] for r in res] == [NOW, NOW + HOUR]
+    assert all(r["late"] for r in res)
+
+    body["mode"] = "PREFLIGHT"
     assert [r["outcome"] for r in ok(body)["results"]] == ["INFEASIBLE"] * 2
 
 
@@ -364,7 +380,12 @@ def test_infeasible_without_policy_and_with_each_policy() -> None:
             "horizonOccupied": [{"startMs": blocked[0], "endMs": blocked[1]}],
         },
     )
-    assert ok(body)["results"][0]["outcome"] == "INFEASIBLE"
+    # No policy: PREFLIGHT reports the miss; PLACE (the row exists) falls back
+    # to the least-conflict start before the deadline.
+    assert ok({**body, "mode": "PREFLIGHT"})["results"][0]["outcome"] == "INFEASIBLE"
+    r = ok(body)["results"][0]
+    assert r["outcome"] == "ACCEPTED_LAST_RESORT" and r["conflicting"] is True
+    assert NOW <= r["startMs"] <= NOW + HOUR and r["late"] is False
 
     body["infeasible"]["policy"] = "ACCEPT_CONFLICTS"
     r = ok(body)["results"][0]
@@ -376,6 +397,46 @@ def test_infeasible_without_policy_and_with_each_policy() -> None:
     assert r["outcome"] == "ACCEPTED_LATE" and r["late"] is True
     assert r["startMs"] + HOUR > body["deadlineMs"]
     assert r["startMs"] >= blocked[1]  # conflict-free
+
+
+def _too_close(horizon_blocked_until: int) -> dict[str, Any]:
+    """A 60 min task due in 30 min: nothing fits before the deadline."""
+    blocked = (NOW - HOUR, horizon_blocked_until)
+    iv = [{"startMs": blocked[0], "endMs": blocked[1]}]
+    return make_req(
+        days=make_days(1, occupied={0: [(NOW - HOUR, NOW + DAY_MS)]}),
+        deadlineMs=NOW + 30 * MS_PER_MINUTE,
+        infeasible={"flexible": [], "fixed": iv, "horizonOccupied": iv},
+    )
+
+
+def test_last_resort_goes_late_to_the_first_free_slot() -> None:
+    body = _too_close(NOW + 3 * HOUR)
+    r = ok(body)["results"][0]
+    assert r["outcome"] == "ACCEPTED_LAST_RESORT"
+    assert r["startMs"] == NOW + 3 * HOUR
+    assert r["late"] is True and r["conflicting"] is False
+
+
+def test_last_resort_pins_when_the_whole_horizon_is_full() -> None:
+    horizon_end = NOW + (INFEASIBLE_HORIZON_DAYS + 2) * DAY_MS
+    r = ok(_too_close(horizon_end))["results"][0]
+    assert r["outcome"] == "ACCEPTED_LAST_RESORT"
+    assert r["startMs"] == NOW  # max(next slot, deadline - duration)
+    assert r["late"] is True and r["conflicting"] is True
+
+
+def test_last_resort_pin_is_on_grid_and_clears_avoided_intervals() -> None:
+    deadline = NOW + 5 * HOUR + 7 * MS_PER_MINUTE
+    assert displacement.last_resort_pin(60, NOW + 1, deadline) == NOW + 4 * HOUR
+    taken = [(NOW + 4 * HOUR, NOW + 5 * HOUR), (NOW + 5 * HOUR, NOW + 5 * HOUR + 1)]
+    assert (
+        displacement.last_resort_pin(60, NOW, deadline, taken)
+        == NOW + 5 * HOUR + 15 * MS_PER_MINUTE
+    )
+    assert displacement.last_resort_pin(60, NOW + 1, NOW - DAY_MS) == NOW + 15 * (
+        MS_PER_MINUTE
+    )
 
 
 def test_series_members_are_never_displaced() -> None:

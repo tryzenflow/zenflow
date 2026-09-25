@@ -15,7 +15,7 @@ from .constants import (
     MS_PER_MINUTE,
     SLOT_MS,
 )
-from .slot import Intervals, ceil_to_slot, overlaps_any
+from .slot import Intervals, ceil_to_slot, floor_to_slot, overlaps_any
 from .slot_score import free_start_mask, slot_preference_scores
 
 _TIE_DECIMALS = 9
@@ -234,6 +234,28 @@ def pick_late_slot(
     n = (horizon - duration_ms - first) // SLOT_MS + 1
     free = np.flatnonzero(free_start_mask(first, n, duration_ms, occupied))
     return int(first + free[0] * SLOT_MS) if free.size else None
+
+
+def last_resort_pin(
+    duration_minutes: int,
+    now_ms: int,
+    deadline_ms: int,
+    avoid: Intervals = (),
+) -> int:
+    """Terminal fallback: the latest on-grid start that still ends by the
+    deadline, or the next slot when that is already past. Pushed later past
+    anything in ``avoid`` (e.g. already-pinned siblings). Always returns a
+    start -- a TASK is never left unplaced."""
+    duration_ms = duration_minutes * MS_PER_MINUTE
+    s = max(ceil_to_slot(now_ms), floor_to_slot(deadline_ms - duration_ms))
+    moved = True
+    while moved:
+        moved = False
+        for o_start, o_end in avoid:
+            if s < o_end and s + duration_ms > o_start:
+                s = ceil_to_slot(o_end)
+                moved = True
+    return s
 
 
 def flexible_from_dicts(raw: Sequence[dict[str, Any]]) -> list[FlexibleTask]:

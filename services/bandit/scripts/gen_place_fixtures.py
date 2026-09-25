@@ -108,19 +108,15 @@ FLEX = [
 ]
 
 
-def blocked(policy: str) -> dict[str, Any]:
+def blocked(policy: str | None) -> dict[str, Any]:
     iv = [{"startMs": NOW - H, "endMs": NOW + DAY}]
+    ctx: dict[str, Any] = {"flexible": [], "fixed": iv, "horizonOccupied": iv}
     return base(
         requestId=REQ_ID + "-2",
         deadlineMs=NOW + 2 * H,
         days=[day(0, [(NOW - H, NOW + DAY)])],
         members=[member("HEURISTIC")],
-        infeasible={
-            "policy": policy,
-            "flexible": [],
-            "fixed": iv,
-            "horizonOccupied": iv,
-        },
+        infeasible={"policy": policy, **ctx} if policy else ctx,
     )
 
 
@@ -166,6 +162,28 @@ CASES: list[tuple[str, str, dict[str, Any]]] = [
         "Same blocked schedule; ACCEPT_LATE_DEADLINE places the first "
         "conflict-free start whose end passes the deadline (late=true).",
         blocked("ACCEPT_LATE_DEADLINE"),
+    ),
+    (
+        "single-last-resort",
+        "Same blocked schedule, no policy, PLACE (the row already exists): the "
+        "task is never left unplaced -- least-conflict start before the deadline "
+        "(ACCEPTED_LAST_RESORT, conflicting=true). PREFLIGHT would answer "
+        "INFEASIBLE (see single-infeasible-second-call).",
+        blocked(None),
+    ),
+    (
+        "series-last-resort-past-deadline",
+        "Two 60 min sittings whose deadline has already passed: nothing is "
+        "scanned; PLACE pins them back-to-back from the next slot "
+        "(ACCEPTED_LAST_RESORT, late=true).",
+        base(
+            deadlineMs=NOW - H,
+            maxScanDays=60,
+            members=[
+                {**member("HEURISTIC"), "id": "a"},
+                {**member("HEURISTIC"), "id": "b"},
+            ],
+        ),
     ),
 ]
 

@@ -177,6 +177,8 @@ export class ConflictRescheduleService {
           prevStartMs: from.getTime(),
         },
         now,
+        // It already has a start; don't move it onto another conflict.
+        allowLastResort: false,
       });
       to = placed.scheduledStartTime;
     } catch (err) {

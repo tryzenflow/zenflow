@@ -27,6 +27,7 @@ import { CreateSessionDto } from "./dto/create-session.dto";
 import { SessionRow, WITH_TAGS_AND_SERIES } from "./types/session-row";
 import { NO_SLOT_PROPOSAL, toSessionDto } from "./session-mapper";
 import { createEventData } from "./session-events";
+import { placeOrDiscard } from "./placement-compensation";
 
 /**
  * Shown when a `TASK` (or series, or a series being grown) has no feasible
@@ -107,16 +108,24 @@ export class SeriesService {
       return created;
     });
 
-    const placements = await this.taskPlacement.placeSeriesOnCreate({
-      user,
-      seriesId: rows[0]?.seriesId as string,
-      members: rows.map((r) => ({
-        id: r.id,
-        durationMinutes: r.durationMinutes,
-      })),
-      deadline,
-      now,
-    });
+    // Every member gets a start (last resort on a miss); a throw discards the
+    // whole just-created series rather than leaving it unplaced.
+    const seriesId = rows[0]?.seriesId as string;
+    const placements = await placeOrDiscard(
+      this.prisma,
+      { userId: user.id, sessionIds: rows.map((r) => r.id), seriesId },
+      () =>
+        this.taskPlacement.placeSeriesOnCreate({
+          user,
+          seriesId,
+          members: rows.map((r) => ({
+            id: r.id,
+            durationMinutes: r.durationMinutes,
+          })),
+          deadline,
+          now,
+        }),
+    );
 
     const startById = new Map(
       placements.map((p) => [p.id, p.scheduledStartTime]),
@@ -307,15 +316,27 @@ export class SeriesService {
       return rows;
     });
 
-    const placements = await this.taskPlacement.placeSeriesOnCreate({
-      user,
-      seriesId: series.id,
-      members: created.map((r) => ({
-        id: r.id,
-        durationMinutes: r.durationMinutes,
-      })),
-      deadline,
-      now,
+    // A throw discards the added sittings and restores `sessionTotal`.
+    const placements = await placeOrDiscard(
+      this.prisma,
+      { userId: user.id, sessionIds: created.map((r) => r.id) },
+      () =>
+        this.taskPlacement.placeSeriesOnCreate({
+          user,
+          seriesId: series.id,
+          members: created.map((r) => ({
+            id: r.id,
+            durationMinutes: r.durationMinutes,
+          })),
+          deadline,
+          now,
+        }),
+    ).catch(async (err: unknown) => {
+      await this.prisma.session.updateMany({
+        where: { seriesId: series.id, userId: user.id },
+        data: { sessionTotal: members.length },
+      });
+      throw err;
     });
     const startById = new Map(
       placements.map((p) => [p.id, p.scheduledStartTime]),

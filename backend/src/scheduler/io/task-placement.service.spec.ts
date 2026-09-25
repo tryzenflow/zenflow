@@ -74,6 +74,7 @@ describe("TaskPlacementService.placeOnCreate / placeOnDeadlineChange", () => {
       "create",
       now,
       "ACCEPT_CONFLICTS",
+      true,
     );
   });
 
@@ -93,6 +94,21 @@ describe("TaskPlacementService.placeOnCreate / placeOnDeadlineChange", () => {
       "deadline-change",
       now,
       undefined,
+      true,
+    );
+    await svc.placeOnDeadlineChange({
+      user,
+      task,
+      now,
+      allowLastResort: false,
+    });
+    expect(python.placeSingle).toHaveBeenLastCalledWith(
+      user,
+      task,
+      "deadline-change",
+      now,
+      undefined,
+      false,
     );
   });
 });
@@ -236,7 +252,7 @@ describe("TaskPlacementService.placeSeriesOnCreate", () => {
   });
 
   // Regression: series members must be persisted with their starts.
-  it("persists every placed member's start and skips unplaced ones", async () => {
+  it("persists every member's start and never writes a null one", async () => {
     const start1 = new Date("2026-06-08T09:00:00.000Z");
     const start2 = new Date("2026-06-09T09:00:00.000Z");
     python.placeSeries.mockResolvedValue([
@@ -333,7 +349,72 @@ describe("TaskPlacementService.redistributeSeries", () => {
   });
 });
 
+describe("TaskPlacementService.redistributeSeries never unschedules", () => {
+  it("a member the placer returned no start for keeps its current start (no null write)", async () => {
+    const upcoming = {
+      id: "future",
+      durationMinutes: 60,
+      scheduledStartTime: new Date("2026-06-09T00:00:00.000Z"),
+    };
+    python.placeSeries.mockResolvedValue([
+      { id: "future", scheduledStartTime: null },
+    ]);
+    const prisma = {
+      sessionSeries: { update: jest.fn().mockReturnValue("update-series") },
+      session: {
+        updateMany: jest.fn().mockReturnValue("update-many"),
+        update: jest.fn().mockReturnValue("update-one"),
+      },
+      $transaction: jest.fn().mockResolvedValue(undefined),
+    };
+    const svc = await makeService(prisma);
+
+    const res = await svc.redistributeSeries({
+      user,
+      seriesId: "s1",
+      members: [upcoming],
+      newDeadline: new Date("2026-06-20T00:00:00.000Z"),
+      now,
+    });
+
+    expect(prisma.session.update).not.toHaveBeenCalled();
+    expect(prisma.$transaction).toHaveBeenCalledWith([
+      "update-series",
+      "update-many",
+    ]);
+    expect(res).toEqual([
+      { id: "future", scheduledStartTime: upcoming.scheduledStartTime },
+    ]);
+  });
+});
+
 describe("TaskPlacementService.planSeriesRespread", () => {
+  it("a last-resort pick counts as no slot (to: null), so the caller moves sittings one by one", async () => {
+    const a = {
+      id: "a",
+      durationMinutes: 60,
+      scheduledStartTime: new Date("2026-06-09T09:00:00.000Z"),
+    };
+    python.placeSeries.mockResolvedValue([
+      {
+        id: "a",
+        scheduledStartTime: new Date("2026-06-09T23:00:00.000Z"),
+        lastResort: true,
+      },
+    ]);
+    const prisma = {
+      session: { findMany: jest.fn().mockResolvedValue([a]) },
+    };
+    const svc = await makeService(prisma);
+    const plan = await svc.planSeriesRespread({
+      user,
+      seriesId: "s1",
+      deadline: new Date("2026-06-10T00:00:00.000Z"),
+      now,
+    });
+    expect(plan).toEqual([{ id: "a", from: a.scheduledStartTime, to: null }]);
+  });
+
   it("re-places the series' upcoming sittings together and writes nothing", async () => {
     const past = {
       id: "past",

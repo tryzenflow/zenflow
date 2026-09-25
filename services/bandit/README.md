@@ -84,8 +84,14 @@ computed in-process from the supplied `(A, b)`.
      `horizonOccupied`), never onto a fixed block or an equal-deadline peer (no ripple shifts).
   3. Otherwise the user's policy: `ACCEPT_CONFLICTS` -> `ACCEPTED_CONFLICTS` (min-overlap start;
      `conflicting` is true only if it really overlaps `horizonOccupied`), `ACCEPT_LATE_DEADLINE` ->
-     `ACCEPTED_LATE` (`late: true`), else `INFEASIBLE`.
-  4. A series member with no slot is `INFEASIBLE` (no displacement; siblings still placed).
+     `ACCEPTED_LATE` (`late: true`), else the last resort below.
+  4. A series member with no slot is never displaced; siblings are still placed.
+  5. **Never unplaced.** In `PLACE` mode the row already exists, so every remaining miss becomes
+     `ACCEPTED_LAST_RESORT` (`late` / `conflicting` describe the pick): the least-conflict start
+     before the deadline, else (single task) the first free start up to 30 days late, else
+     `last_resort_pin` — the latest on-grid start ending by the deadline, or the next slot once
+     that has passed, pushed past siblings. A series whose deadline has passed is pinned
+     back-to-back. `PREFLIGHT` still answers `INFEASIBLE`, so Nest can reject before writing.
 - **Errors**: `422` validation (FastAPI `detail` list); `422 {"code":"CONTRACT_VERSION","supported":1,"got":n}`;
   `413` body > 2 MB; `401` bad or missing bearer token.
 - **Auth**: set `BANDIT_SERVICE_TOKEN` to require `Authorization: Bearer <token>` on `/v1/place`,

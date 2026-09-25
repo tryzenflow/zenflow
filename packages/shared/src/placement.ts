@@ -107,6 +107,13 @@ export type PlacementOutcome =
   | "DISPLACED"
   | "ACCEPTED_CONFLICTS"
   | "ACCEPTED_LATE"
+  /**
+   * PLACE only, after every other option failed: the row already exists, so it
+   * gets the least-conflict start before the deadline, else the first free
+   * start within the +30-day horizon, else the latest start ending by the
+   * deadline (the next slot once that is past). Never returned by PREFLIGHT.
+   */
+  | "ACCEPTED_LAST_RESORT"
   | "INFEASIBLE";
 
 export interface HeuristicPick {
@@ -136,9 +143,9 @@ export interface PlacedMember {
   startMs: number | null;
   /** Displacement, else `[]`. */
   moves: { id: string; fromMs: number; toMs: number }[];
-  /** `ACCEPTED_LATE`. */
+  /** `ACCEPTED_LATE`, or an `ACCEPTED_LAST_RESORT` start ending after the deadline. */
   late: boolean;
-  /** `ACCEPTED_CONFLICTS`. */
+  /** `ACCEPTED_CONFLICTS`, or an `ACCEPTED_LAST_RESORT` start that overlaps. */
   conflicting: boolean;
 }
 

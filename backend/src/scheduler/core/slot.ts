@@ -145,3 +145,30 @@ export function overlapsAny(
   }
   return false;
 }
+
+/**
+ * Terminal "never unplaced" start (mirrors Python `last_resort_pin`): the
+ * latest on-grid start that still ends by `deadlineMs`, or the next slot once
+ * that is past, pushed later past anything in `avoid` (e.g. siblings pinned
+ * before it). Overlap with the rest of the calendar is accepted.
+ */
+export function lastResortStart(
+  durationMinutes: number,
+  nowMs: number,
+  deadlineMs: number,
+  avoid: Interval[] = [],
+): number {
+  const durationMs = durationMinutes * MS_PER_MINUTE;
+  let s = Math.max(ceilToSlot(nowMs), floorToSlot(deadlineMs - durationMs));
+  let moved = true;
+  while (moved) {
+    moved = false;
+    for (const o of avoid) {
+      if (s < o.end && s + durationMs > o.start) {
+        s = ceilToSlot(o.end);
+        moved = true;
+      }
+    }
+  }
+  return s;
+}

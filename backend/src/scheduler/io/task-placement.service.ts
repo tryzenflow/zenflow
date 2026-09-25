@@ -46,12 +46,17 @@ export class TaskPlacementService {
     );
   }
 
-  /** Re-place a single `TASK` after its deadline changed. */
+  /**
+   * Re-place a single `TASK` after its deadline changed. `allowLastResort:
+   * false` returns a `null` start (nothing written) instead of the last
+   * resort — only for callers whose task already has a start to keep.
+   */
   placeOnDeadlineChange(args: {
     user: User;
     task: PlaceableTask;
     now: Date;
     infeasiblePolicy?: InfeasiblePolicy;
+    allowLastResort?: boolean;
   }): Promise<PlacementResult> {
     return this.placeSingle(
       args.user,
@@ -59,6 +64,7 @@ export class TaskPlacementService {
       "deadline-change",
       args.now,
       args.infeasiblePolicy,
+      args.allowLastResort ?? true,
     );
   }
 
@@ -68,10 +74,19 @@ export class TaskPlacementService {
     trigger: Trigger,
     now: Date,
     policy?: InfeasiblePolicy,
+    allowLastResort = true,
   ): Promise<PlacementResult> {
     return withSpan(
       "scheduler.placeSingle",
-      () => this.python.placeSingle(user, task, trigger, now, policy),
+      () =>
+        this.python.placeSingle(
+          user,
+          task,
+          trigger,
+          now,
+          policy,
+          allowLastResort,
+        ),
       { "scheduling.trigger": trigger, "session.id": task.id },
     );
   }
@@ -170,7 +185,7 @@ export class TaskPlacementService {
     return placements;
   }
 
-  /** Write each placed member's start; unplaced (`null`) rows stay as-is. */
+  /** Write each member's start (`placeSeries` never returns a `null` one). */
   private async persistPlaced(rows: SeriesPlacementRow[]): Promise<void> {
     const placed = rows.filter((p) => p.scheduledStartTime);
     if (placed.length === 0) return;
@@ -222,12 +237,18 @@ export class TaskPlacementService {
         where: { seriesId, userId: user.id },
         data: { deadline: newDeadline },
       }),
-      ...upcoming.map((m) =>
-        this.prisma.session.update({
-          where: { id: m.id },
-          data: { scheduledStartTime: startById.get(m.id) ?? null },
-        }),
-      ),
+      // Never writes a `null` start: `placeSeries` gives every member one.
+      ...upcoming.flatMap((m) => {
+        const start = startById.get(m.id);
+        return start
+          ? [
+              this.prisma.session.update({
+                where: { id: m.id },
+                data: { scheduledStartTime: start },
+              }),
+            ]
+          : [];
+      }),
     ]);
 
     const degraded = placements.some((p) => p.degraded);
@@ -235,7 +256,7 @@ export class TaskPlacementService {
       id: m.id,
       scheduledStartTime: isPast(m)
         ? m.scheduledStartTime
-        : (startById.get(m.id) ?? null),
+        : (startById.get(m.id) ?? m.scheduledStartTime),
       ...(degraded ? { degraded: true } : {}),
     }));
   }
@@ -243,7 +264,8 @@ export class TaskPlacementService {
   /**
    * Re-spread a `TASK` series' upcoming sittings without persisting (sync
    * conflict "Reschedule them all"). Returns `{ id, from, to }` per sitting
-   * (`to` null = no slot).
+   * (`to` null = no real slot: a last-resort pick would only trade one
+   * conflict for another, so the caller falls back to one-by-one moves).
    */
   async planSeriesRespread(args: {
     user: User;
@@ -263,7 +285,9 @@ export class TaskPlacementService {
       deadline,
       now,
     );
-    const toById = new Map(placements.map((p) => [p.id, p.scheduledStartTime]));
+    const toById = new Map(
+      placements.map((p) => [p.id, p.lastResort ? null : p.scheduledStartTime]),
+    );
     return upcoming.map((m) => ({
       id: m.id,
       from: m.scheduledStartTime,

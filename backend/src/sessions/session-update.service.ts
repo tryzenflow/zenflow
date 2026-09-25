@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import type { InfeasiblePolicy, UpdateSessionResponse } from "@zenflow/shared";
 import { Prisma, type User } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
@@ -26,6 +30,10 @@ import {
 import { moveEventData } from "./session-events";
 import { mapSessionPrismaError } from "./prisma-error";
 import { SeriesService } from "./series.service";
+
+/** 400 for `PATCH { scheduledStartTime: null }` on a `TASK`. */
+export const TASK_START_REQUIRED_MESSAGE =
+  "Tasks can't be unscheduled\nMove it to another time instead.";
 
 /** The parsed shape of a recurring-occurrence ref ("<seriesId>::<startISO>"). */
 type OccurrenceRef = NonNullable<ReturnType<typeof parseOccurrenceId>>;
@@ -373,6 +381,10 @@ export class SessionUpdateService {
       }
 
       let nextStart: Date | null | undefined;
+      if (dto.scheduledStartTime === null && existing.type === "TASK") {
+        // A live TASK always has a start: it is moved, never unscheduled.
+        throw new BadRequestException(TASK_START_REQUIRED_MESSAGE);
+      }
       if (dto.scheduledStartTime !== undefined) {
         nextStart = dto.scheduledStartTime
           ? new Date(dto.scheduledStartTime)

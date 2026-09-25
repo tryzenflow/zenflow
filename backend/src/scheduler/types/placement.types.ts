@@ -46,6 +46,8 @@ export interface PlacementResult {
   displaced?: { id: string; from: Date; to: Date }[];
   /** `true` when the frozen TS fallback placed this (placement service unavailable, ADR-0003). */
   degraded?: boolean;
+  /** `true` when no real slot existed and the "never unplaced" last resort was applied. */
+  lastResort?: boolean;
 }
 
 /** One member of a `TASK` series to place. */
@@ -54,12 +56,18 @@ export interface SeriesMemberInput {
   durationMinutes: number;
 }
 
-/** Placement outcome for one series member — `null` when nothing free fit. */
+/**
+ * Placement outcome for one series member. `PythonPlacer.placeSeries` never
+ * returns a `null` start (members with no real slot get the last resort,
+ * flagged `lastResort`); `null` only appears in read-only pre-flight scans.
+ */
 export interface SeriesPlacementRow {
   id: string;
   scheduledStartTime: Date | null;
   /** `true` when the frozen TS fallback placed the series (ADR-0003). */
   degraded?: boolean;
+  /** `true` when no real slot existed and the "never unplaced" last resort was applied. */
+  lastResort?: boolean;
 }
 
 /** The concrete placement LinUCB proposes for one `TASK`. */

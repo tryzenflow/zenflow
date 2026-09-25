@@ -105,6 +105,15 @@ The fallback uses the frozen heuristic and never invents policy:
 **Addendum (2026-09-24):** degraded mode no longer returns `503 SCHEDULER_DEGRADED`; a
 fallback miss is answered like Python (409 / unplaced / `null` rows).
 
+**Addendum (2026-09-25): a live `TASK` is never unplaced.** A `null` start is treated as a
+corrupt row. Pre-flights still report a miss (409 / 400, nothing written); once the row exists,
+Python `PLACE` answers a miss with the new outcome `ACCEPTED_LAST_RESORT` (least-conflict start
+before the deadline, else first free start up to 30 days late, else pinned by the deadline), and
+the table rows above that say "unplaced" / "`null`" now mean: best free slot up to 30 days late,
+then `lastResortStart` (pinned by the deadline, overlap accepted; no new TS ranking). Placement
+that throws after the insert discards the inserted rows. Conflict "reschedule them all" opts out
+(its tasks already have a start). See `backend/README.md` -> "Never unplaced".
+
 ### 2.5 Alternatives rejected
 
 - **Keep both authoritative:** dual maintenance, TS scan on the event loop.
