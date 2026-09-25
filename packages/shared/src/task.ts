@@ -111,6 +111,22 @@ export interface ScheduleInfeasibleError {
   options: InfeasiblePolicy[];
 }
 
+/** `code` of the 409 {@link SlotTakenError} `POST /sessions/:id/slot-pick` answers with. */
+export const SLOT_TAKEN_CODE = "SLOT_TAKEN";
+
+/**
+ * 409 body when `POST /sessions/:id/slot-pick` with `chose: "alternative"`
+ * targets a `TASK` series sitting whose alternative now overlaps another
+ * (non-deleted) sitting of the same series (#58). Nothing was moved or
+ * recorded — the pick can still be answered later (e.g. `"primary"`).
+ */
+export interface SlotTakenError {
+  success: false;
+  statusCode: 409;
+  message: string;
+  code: typeof SLOT_TAKEN_CODE;
+}
+
 /** `code` of the 503 {@link SchedulerDegradedError} (ADR-0003 section 2.4). */
 export const SCHEDULER_DEGRADED_CODE = "SCHEDULER_DEGRADED";
 
