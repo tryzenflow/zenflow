@@ -55,14 +55,85 @@ export interface Session {
   seriesId: string | null;
   /** The recurrence rule of this session's series, if any (RFC 5545 RRULE, bare — no `DTSTART`). */
   rrule: string | null;
+  /**
+   * The portal's course-section id (`ScheduleStudyUnitID`) for a
+   * portal-ingested `LECTURE` meeting — the grouping key behind the
+   * `DELETE /sessions/timetable-group/:sessionId[/from]` routes
+   * ({@link RemoveTimetableGroupResponse}). `null` for every other session,
+   * including a user-created recurring `LECTURE` (those use `seriesId`
+   * instead).
+   */
+  timetableGroupId: string | null;
   /** 1-based position within a `TASK` series (`null` outside a session-count series). */
   sessionIndex: number | null;
   /** Total session count of this session's `TASK` series (`null` otherwise). */
   sessionTotal: number | null;
   /** Minutes before start at which the user is reminded (max 2; always `[]` for DND). */
   reminders: number[];
+  /**
+   * `true` when a scheduled `TASK` ends after its `deadline` (the user chose
+   * "accept late deadline" — see {@link InfeasiblePolicy}). Clients render it
+   * with the red "late" block style. Always `false` for the fixed types and
+   * for unscheduled tasks.
+   */
+  late: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * What the user chose when a new/edited `TASK` cannot be placed before its
+ * deadline even after the engine repacked flexible tasks
+ * (`services/bandit/README.md` -> "Displacement"). Sent as
+ * `infeasiblePolicy` on `POST /sessions` / `PATCH /sessions/:id`.
+ *
+ * - `ACCEPT_CONFLICTS` — meet the deadline: place the task in the best slot
+ *   before it even if that overlaps other sessions (fixed blocks never move).
+ * - `ACCEPT_LATE_DEADLINE` — keep everything clear of conflicts: place the
+ *   task in the first free slot after the deadline (`late: true`).
+ */
+export type InfeasiblePolicy = "ACCEPT_CONFLICTS" | "ACCEPT_LATE_DEADLINE";
+
+/** `code` of the 409 {@link ScheduleInfeasibleError} the engine answers with. */
+export const SCHEDULE_INFEASIBLE_CODE = "SCHEDULE_INFEASIBLE";
+
+/**
+ * 409 body when a `TASK` create/edit has no conflict-free slot before its
+ * deadline, even after displacing flexible tasks, and the request carried no
+ * `infeasiblePolicy`. Nothing was persisted. Show a toast with the two
+ * `options` and retry the same request with the chosen `infeasiblePolicy`.
+ */
+export interface ScheduleInfeasibleError {
+  success: false;
+  statusCode: 409;
+  message: string;
+  code: typeof SCHEDULE_INFEASIBLE_CODE;
+  options: InfeasiblePolicy[];
+}
+
+/** `code` of the 503 {@link SchedulerDegradedError} (ADR-0003 section 2.4). */
+export const SCHEDULER_DEGRADED_CODE = "SCHEDULER_DEGRADED";
+
+/**
+ * 503 body when the placement service is unavailable (timeout / breaker open /
+ * disabled) AND the basic fallback found no free slot before the deadline. The
+ * degraded path never displaces tasks or accepts conflicts/late, so nothing was
+ * persisted. Retryable: show a toast with a retry that re-sends the same request.
+ */
+export interface SchedulerDegradedError {
+  success: false;
+  statusCode: 503;
+  message: string;
+  code: typeof SCHEDULER_DEGRADED_CODE;
+}
+
+/** One flexible task the engine moved to make room (scheduler-initiated, `SYSTEM_MOVE`). */
+export interface DisplacedSession {
+  id: string;
+  /** ISO-8601 previous start. */
+  from: string;
+  /** ISO-8601 new start. */
+  to: string;
 }
 
 /** Max reminders per session. */
@@ -87,7 +158,7 @@ export interface CreateTaskInput {
    * Number of study sessions. Omitted or `1` → one ordinary task. `> 1` →
    * a `TASK` series: N linked `Session` rows sharing one `seriesId` and
    * `deadline`, each placed independently and spaced roughly evenly across
-   * `now … deadline` (see `docs/scheduler/heuristic.md`).
+   * `now … deadline` (see `services/bandit/README.md`).
    */
   sessionCount?: number;
   tags?: string[];
@@ -98,6 +169,8 @@ export interface CreateTaskInput {
    * `[]` -> none. On update: omit to keep, an array replaces.
    */
   reminders?: number[];
+  /** Answer to a prior 409 {@link ScheduleInfeasibleError}; omit on the first attempt. */
+  infeasiblePolicy?: InfeasiblePolicy;
 }
 
 /** Create a fixed-time event the engine does not move. */
@@ -210,6 +283,8 @@ export interface UpdateSessionInput {
    * it there. Ignored otherwise.
    */
   skipConflicting?: boolean;
+  /** TASK deadline/duration edits only: answer to a prior 409 {@link ScheduleInfeasibleError}. */
+  infeasiblePolicy?: InfeasiblePolicy;
 }
 
 export interface SessionsListResponse {
@@ -250,11 +325,19 @@ export interface SlotProposalFields {
   alternativeSlot: string | null;
   /** `true` iff `alternativeSlot` is set and its start differs from `primarySlot`. */
   divergent: boolean;
+  /** Flexible tasks moved to make room for this placement (empty when none). */
+  displacedSessions: DisplacedSession[];
+  /**
+   * `true` when the placement service was unavailable and the basic fallback
+   * placed the task (show a quiet "placed with basic scheduling" note). Absent
+   * when placement ran normally.
+   */
+  schedulingDegraded?: boolean;
 }
 
 /**
  * Creating a `TASK` places it into its single best empty slot between now and
- * its deadline (`docs/scheduler/heuristic.md`) — no other session is moved.
+ * its deadline (`services/bandit/README.md`) — no other session is moved.
  * When `sessionCount > 1` the response also carries every session in
  * `sessions` (index order), with the top-level fields mirroring `sessions[0]`.
  * The shared `seriesId` on those rows groups the sessions' `CREATE` events;
@@ -325,8 +408,21 @@ export interface RemoveSessionSeriesResponse {
 }
 
 /**
+ * Result of a timetable-group-scoped delete — the three-way delete choice for
+ * a portal-ingested `LECTURE` (no `SessionSeries`/`seriesId`; grouped instead
+ * by `Session.scheduleStudyUnitId`, the portal's own course-section id):
+ * - `DELETE /sessions/timetable-group/:sessionId` — every meeting in the
+ *   section, regardless of time ("all occurrences");
+ * - `DELETE /sessions/timetable-group/:sessionId/from` — that meeting and
+ *   every later one in the section ("this and following").
+ */
+export interface RemoveTimetableGroupResponse {
+  removedSessionIds: string[];
+}
+
+/**
  * Response for `GET /sessions/deadline-options`: the six deadline quick-action
- * chip values (see `docs/scheduler/heuristic.md`), each an ISO-8601 instant
+ * chip values (see `services/bandit/README.md`), each an ISO-8601 instant
  * derived from `horizon.ts`'s `endOfPeriod` ceiling math relative to the
  * request's `anchor`.
  */
