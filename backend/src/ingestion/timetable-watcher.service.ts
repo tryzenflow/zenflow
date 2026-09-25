@@ -72,10 +72,10 @@ export class TimetableWatcherService {
     );
   }
 
-  @Cron(CronExpression.EVERY_5_MINUTES)
+  @Cron(CronExpression.EVERY_WEEKEND)
   async handleCron(): Promise<void> {
     await runCronJob("timetable-watcher", async () => {
-      const count = await this.run(new Date(2026, 7, 1));
+      const count = await this.run();
       if (count > 0) {
         this.logger.log(`Synced the timetable for ${count} student(s)`);
       }

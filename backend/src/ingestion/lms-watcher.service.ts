@@ -72,10 +72,10 @@ export class LmsWatcherService {
     );
   }
 
-  @Cron(CronExpression.EVERY_5_MINUTES)
+  @Cron(CronExpression.EVERY_30_MINUTES)
   async handleCron(): Promise<void> {
     await runCronJob("lms-watcher", async () => {
-      const count = await this.run(new Date(2026, 4, 1));
+      const count = await this.run();
       if (count > 0) {
         this.logger.log(`Synced the LMS calendar for ${count} student(s)`);
       }

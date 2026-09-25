@@ -57,10 +57,10 @@ export class ExamWatcherService {
     this.dluTimezone = this.config.get<string>("DLU_TZ") ?? "Asia/Ho_Chi_Minh";
   }
 
-  @Cron(CronExpression.EVERY_5_MINUTES)
+  @Cron(CronExpression.EVERY_WEEKEND)
   async handleCron(): Promise<void> {
     await runCronJob("exam-watcher", async () => {
-      const count = await this.run(new Date(2026, 4, 1));
+      const count = await this.run();
       if (count > 0) {
         this.logger.log(`Synced the exam schedule for ${count} student(s)`);
       }
