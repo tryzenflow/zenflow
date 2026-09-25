@@ -25,7 +25,7 @@ function makePrismaDouble(rows: Row[]) {
           Object.assign(existing, args.update);
           return Promise.resolve({ id: existing.id });
         }
-        const created: Row = { id: `d${++seq}`, ...args.create } as Row;
+        const created: Row = { id: `d${++seq}`, ...args.create };
         rows.push(created);
         return Promise.resolve({ id: created.id });
       },

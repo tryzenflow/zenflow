@@ -21,7 +21,8 @@ import { CalendarCheck, Plus } from "lucide-react";
 import { listSessions, updateSession } from "@/api/tasks";
 import { getSeriesKind, tasksToBlocks } from "@zenflow/core";
 import { isAxiosError } from "axios";
-import { errorToast } from "@/lib/toast";
+import { errorToast, notifyDisplaced, withInfeasibleRetry } from "@/lib/toast";
+import { LateSessionsContext } from "./late-context";
 import { useUserStore } from "@/hooks/use-user-store";
 import { zonedDate, zonedNow } from "@/utils/tz";
 import { format, isSameMonth, isValid } from "date-fns";
@@ -68,6 +69,7 @@ export function CalendarLayout() {
   useViewShortcuts(viewMode, setViewMode, setDate);
 
   const [blocks, setBlocks] = useState<Event[]>([]);
+  const [lateIds, setLateIds] = useState<Set<string>>(() => new Set());
   const [editId, setEditId] = useState<string | null>(null);
   const [navOpen, setNavOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -95,6 +97,7 @@ export function CalendarLayout() {
     const load = (async () => {
       const data = await listSessions(viewMode, date);
       sessionsById.current = new Map(data.sessions.map((s) => [s.id, s]));
+      setLateIds(new Set(data.sessions.filter((s) => s.late).map((s) => s.id)));
       const next = tasksToBlocks(data.sessions);
       setBlocks(next);
       return next;
@@ -114,6 +117,16 @@ export function CalendarLayout() {
       if (inFlight.current === load) inFlight.current = null;
     }
   }
+
+  useEffect(() => {
+    const handler = () => {
+      refetch();
+    };
+    window.addEventListener("zenflow:calendar-refresh", handler);
+    return () =>
+      window.removeEventListener("zenflow:calendar-refresh", handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, viewMode]);
 
   useEffect(() => {
     refetch();
@@ -167,7 +180,12 @@ export function CalendarLayout() {
     }
 
     const session = sessionsById.current.get(taskId);
-    const kind = session ? getSeriesKind(session) : "none";
+    const fullKind = session ? getSeriesKind(session) : "none";
+    // A portal-ingested timetable lecture has no series scope for reschedule
+    // (the backend only exposes a delete-by-group route, not a
+    // reschedule-by-group one) — a drag/resize on it is a plain per-row PATCH,
+    // same as a one-off session.
+    const kind = fullKind === "timetable" ? "none" : fullKind;
     let scope: UpdateScope | undefined;
     let skipConflicting: boolean | undefined;
     if (kind !== "none") {
@@ -181,10 +199,18 @@ export function CalendarLayout() {
     }
 
     try {
-      const res = await updateSession(taskId, {
+      const body = {
         ...patch,
         ...(scope ? { scope, skipConflicting } : {}),
-      });
+      };
+      const res = await withInfeasibleRetry((infeasiblePolicy) =>
+        updateSession(
+          taskId,
+          infeasiblePolicy ? { ...body, infeasiblePolicy } : body,
+        ),
+      );
+      if (!res) return; // dismissed; finally{} snaps the block back
+      notifyDisplaced(res);
       if (res.skippedSessionIds?.length) {
         errorToast("Some sessions weren't moved", {
           description: `${res.skippedSessionIds.length} session(s) stayed put because the new slot conflicted.`,
@@ -260,114 +286,116 @@ export function CalendarLayout() {
   }, [blocks, viewMode, date, tz]);
 
   return (
-    <div className="flex h-screen">
-      <CalendarSidebar agenda={agenda} view={viewMode} />
+    <LateSessionsContext.Provider value={lateIds}>
+      <div className="flex h-screen">
+        <CalendarSidebar agenda={agenda} view={viewMode} />
 
-      <Sheet open={navOpen} onOpenChange={setNavOpen}>
-        <SheetContent
-          side="left"
-          className="w-full sm:w-72 bg-sidebar p-0 lg:hidden"
-        >
-          <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <SidebarBody agenda={agenda} view={viewMode} />
-        </SheetContent>
-      </Sheet>
-
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <CalendarHeader
-          date={date}
-          setDate={setDate}
-          currentView={viewMode}
-          setCurrentView={setViewMode}
-          onChanged={refetch}
-          onOpenNav={() => setNavOpen(true)}
-        />
-        <div className="relative min-h-0 flex-1">
-          <Button
-            variant="outline"
-            size="default"
-            onClick={() => setDate(zonedNow(tz))}
-            className={cn(
-              "absolute sm:hidden left-1/2 bottom-8 z-30 -translate-x-1/2",
-              "rounded-full border-border/60 bg-background/80 backdrop-blur-sm shadow-lg",
-            )}
+        <Sheet open={navOpen} onOpenChange={setNavOpen}>
+          <SheetContent
+            side="left"
+            className="w-full sm:w-72 bg-sidebar p-0 lg:hidden"
           >
-            <CalendarCheck className="size-4" />
-            Today
-          </Button>
+            <SheetTitle className="sr-only">Navigation</SheetTitle>
+            <SidebarBody agenda={agenda} view={viewMode} />
+          </SheetContent>
+        </Sheet>
 
-          <CreateSessionDialog
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <CalendarHeader
             date={date}
-            view={viewMode}
-            onCreated={refetch}
             setDate={setDate}
-            trigger={
-              <Button
-                size="icon-lg"
-                aria-label="New session"
-                className={cn(
-                  "sm:hidden glass-header absolute right-4 bottom-8 z-30",
-                  "size-12 rounded-full border border-primary/30 text-primary-foreground shadow-lg",
-                  "hover:bg-primary hover:text-primary-foreground",
-                )}
-              >
-                <Plus className="size-5" />
-              </Button>
-            }
+            currentView={viewMode}
+            setCurrentView={setViewMode}
+            onChanged={refetch}
+            onOpenNav={() => setNavOpen(true)}
           />
+          <div className="relative min-h-0 flex-1">
+            <Button
+              variant="outline"
+              size="default"
+              onClick={() => setDate(zonedNow(tz))}
+              className={cn(
+                "absolute sm:hidden left-1/2 bottom-8 z-30 -translate-x-1/2",
+                "rounded-full border-border/60 bg-background/80 backdrop-blur-sm shadow-lg",
+              )}
+            >
+              <CalendarCheck className="size-4" />
+              Today
+            </Button>
 
-          <div
-            className="h-full overflow-auto"
-            style={{ "--week-cells-height": "64px" } as React.CSSProperties}
-          >
-            {viewMode === "day" && (
-              <DayView
-                events={blocks}
-                date={date}
-                setEvents={setBlocks}
-                onReschedule={onReschedule}
-              />
-            )}
-            {viewMode === "week" && (
-              <WeekView
-                events={blocks}
-                date={date}
-                setEvents={setBlocks}
-                onReschedule={onReschedule}
-              />
-            )}
-            {viewMode === "month" && (
-              <MonthView
-                events={blocks}
-                date={date}
-                setEvents={setBlocks}
-                onReschedule={onReschedule}
-              />
-            )}
+            <CreateSessionDialog
+              date={date}
+              view={viewMode}
+              onCreated={refetch}
+              setDate={setDate}
+              trigger={
+                <Button
+                  size="icon-lg"
+                  aria-label="New session"
+                  className={cn(
+                    "sm:hidden glass-header absolute right-4 bottom-8 z-30",
+                    "size-12 rounded-full border border-primary/30 text-primary-foreground shadow-lg",
+                    "hover:bg-primary hover:text-primary-foreground",
+                  )}
+                >
+                  <Plus className="size-5" />
+                </Button>
+              }
+            />
+
+            <div
+              className="h-full overflow-auto"
+              style={{ "--week-cells-height": "64px" } as React.CSSProperties}
+            >
+              {viewMode === "day" && (
+                <DayView
+                  events={blocks}
+                  date={date}
+                  setEvents={setBlocks}
+                  onReschedule={onReschedule}
+                />
+              )}
+              {viewMode === "week" && (
+                <WeekView
+                  events={blocks}
+                  date={date}
+                  setEvents={setBlocks}
+                  onReschedule={onReschedule}
+                />
+              )}
+              {viewMode === "month" && (
+                <MonthView
+                  events={blocks}
+                  date={date}
+                  setEvents={setBlocks}
+                  onReschedule={onReschedule}
+                />
+              )}
+            </div>
           </div>
         </div>
+        {editId && (
+          <EditSessionDialog
+            open={!!editId}
+            setOpen={(o) => !o && setEditId(null)}
+            taskId={editId}
+            onSaved={refetch}
+            setDate={setDate}
+          />
+        )}
+        <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+        {scopePrompt && (
+          <UpdateRecurringDialog
+            open
+            kind={scopePrompt.kind}
+            onResolve={(choice) => {
+              const { resolve } = scopePrompt;
+              setScopePrompt(null);
+              resolve(choice);
+            }}
+          />
+        )}
       </div>
-      {editId && (
-        <EditSessionDialog
-          open={!!editId}
-          setOpen={(o) => !o && setEditId(null)}
-          taskId={editId}
-          onSaved={refetch}
-          setDate={setDate}
-        />
-      )}
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
-      {scopePrompt && (
-        <UpdateRecurringDialog
-          open
-          kind={scopePrompt.kind}
-          onResolve={(choice) => {
-            const { resolve } = scopePrompt;
-            setScopePrompt(null);
-            resolve(choice);
-          }}
-        />
-      )}
-    </div>
+    </LateSessionsContext.Provider>
   );
 }

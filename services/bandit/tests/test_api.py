@@ -2,7 +2,7 @@
 
 Pure request-model validation (bad shapes, missing arms, mismatched ``d``) lives
 in ``test_schemas.py``; this file exercises the running routes — the in-handler
-finite / range guards, the cold-arm rule, and update-then-predict.
+finite / range guards, update math, and the cold-arm rule.
 """
 
 import numpy as np
@@ -10,21 +10,24 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.api import app
-from src.schemas import ARM_IDS
+from src.models.linucb import score
+from src.schemas import ARM_IDS, ArmId, ArmState
+from src.serialization import hydrate_arms
 
 client = TestClient(app)
 
 D = 3
+ALPHA = 0.15
 
 
-def cold_state() -> dict[str, dict[str, list[float]]]:
+def cold_state() -> dict[ArmId, dict[str, list[float]]]:
     return {arm: {"A": [], "b": []} for arm in ARM_IDS}
 
 
 def hydrate(arm: str, x: list[float], reward: float) -> dict[str, list[float]]:
     """Run one /update from the ridge prior and return the arm's new (A, b)."""
     resp = client.post(
-        "/update",
+        "/v1/update",
         json={
             "ridge": 1.0,
             "arm": arm,
@@ -44,52 +47,48 @@ def test_health():
     assert resp.json() == {"status": "ok"}
 
 
-def test_predict_all_cold_returns_five_arms_all_zero():
-    body = {
-        "alpha": 0.15,
-        "ridge": 1.0,
-        "state": cold_state(),
-        "contexts": [
-            {"day": "2026-09-01", "x": [0.1, 0.2, 0.3]},
-            {"day": "2026-09-02", "x": [0.4, 0.5, 0.6]},
-            {"day": "2026-09-03", "x": [-0.9, 0.0, 0.7]},
-        ],
-    }
-    resp = client.post("/predict", json=body)
-    assert resp.status_code == 200
-
-    scores = resp.json()["scores"]
-    assert set(scores) == {"2026-09-01", "2026-09-02", "2026-09-03"}
-    for day in scores.values():
-        assert set(day) == set(ARM_IDS)
-        assert all(value == 0.0 for value in day.values())
+def _scores(
+    state: dict[ArmId, dict[str, list[float]]], x: list[float]
+) -> dict[ArmId, float]:
+    """Score every arm the way /v1/place does: hydrate_arms + linucb.score."""
+    arms = hydrate_arms(
+        {a: ArmState(**st) for a, st in state.items()}, len(x), ridge=1.0
+    )
+    xv = np.asarray(x)
+    return {a: float(score(p.A, p.b, xv, ALPHA)) for a, p in arms.items()}
 
 
-def test_predict_hydrated_arm_scores_nonzero_others_stay_zero():
-    x = [1.0, 0.0, 0.0]
+def test_cold_arms_score_their_exploration_bonus():
+    """Cold arm = ridge prior: θ̂ = 0, score = α·√(xᵀx/λ), equal across arms."""
+    x = [0.1, 0.2, 0.3]
+    bonus = ALPHA * float(np.sqrt(np.dot(x, x)))
+    scores = _scores(cold_state(), x)
+    assert set(scores) == set(ARM_IDS)
+    assert all(s == pytest.approx(bonus) for s in scores.values())
+
+
+def test_a_rewarded_arm_ranks_above_a_cold_arm():
+    x = [0.5, 0.5, 0.5]
     state = cold_state()
     state["EVENING"] = hydrate("EVENING", x, 1.0)
+    scores = _scores(state, x)
+    assert scores["EVENING"] > scores["EARLY_MORNING"] == scores["MORNING"]
 
-    resp = client.post(
-        "/predict",
-        json={
-            "alpha": 0.15,
-            "ridge": 1.0,
-            "state": state,
-            "contexts": [{"day": "2026-09-01", "x": x}],
-        },
-    )
-    assert resp.status_code == 200
 
-    day = resp.json()["scores"]["2026-09-01"]
-    assert day["EVENING"] != 0.0
-    assert day["MORNING"] == 0.0
-    assert day["EARLY_MORNING"] == 0.0
+def test_a_moved_warm_arm_ranks_below_a_cold_arm():
+    """Regression: a warm arm whose placement was moved must lose to an
+    unexplored arm. With cold arms pinned at 0.0, the warm arm's exploration
+    bonus kept it on top and the other arms were never tried."""
+    x = [0.5, 0.5, 0.5]
+    state = cold_state()
+    state["EVENING"] = hydrate("EVENING", x, -0.25)  # a 60-min drag
+    scores = _scores(state, x)
+    assert scores["EVENING"] < scores["MORNING"] == scores["AFTERNOON"]
 
 
 def test_update_returns_a_of_length_d_squared_and_b_of_length_d():
     resp = client.post(
-        "/update",
+        "/v1/update",
         json={
             "ridge": 1.0,
             "arm": "EVENING",
@@ -121,7 +120,7 @@ def test_update_accepts_previously_hydrated_state():
     x = [0.4, 0.5, 0.6]
     first = hydrate("NIGHT", x, 1.0)
     resp = client.post(
-        "/update",
+        "/v1/update",
         json={
             "ridge": 1.0,
             "arm": "NIGHT",
@@ -137,101 +136,6 @@ def test_update_accepts_previously_hydrated_state():
     expected_a = np.identity(D) + 2.0 * np.outer(xv, xv)
     np.testing.assert_allclose(np.asarray(body["A"]).reshape(D, D), expected_a)
     np.testing.assert_allclose(np.asarray(body["b"]), 2.0 * xv)
-
-
-def test_update_then_predict_ranks_the_rewarded_arm_above_a_cold_arm():
-    x = [0.5, 0.5, 0.5]
-    state = cold_state()
-    state["EVENING"] = hydrate("EVENING", x, 1.0)
-
-    resp = client.post(
-        "/predict",
-        json={
-            "alpha": 0.15,
-            "ridge": 1.0,
-            "state": state,
-            "contexts": [{"day": "2026-09-01", "x": x}],
-        },
-    )
-    assert resp.status_code == 200
-
-    day = resp.json()["scores"]["2026-09-01"]
-    assert day["EARLY_MORNING"] == 0.0
-    assert day["EVENING"] > day["EARLY_MORNING"]
-
-
-def test_predict_infers_d_from_a_larger_context():
-    d = 5
-    x = [0.2] * d
-    state = cold_state()
-    state["MORNING"] = hydrate("MORNING", x, 1.0)
-
-    resp = client.post(
-        "/predict",
-        json={
-            "alpha": 0.1,
-            "ridge": 1.0,
-            "state": state,
-            "contexts": [{"day": "2026-09-01", "x": x}],
-        },
-    )
-    assert resp.status_code == 200
-    assert resp.json()["scores"]["2026-09-01"]["MORNING"] != 0.0
-
-
-@pytest.mark.parametrize(
-    "body",
-    [
-        pytest.param(
-            {
-                "alpha": -0.1,
-                "ridge": 1.0,
-                "state": cold_state(),
-                "contexts": [{"day": "a", "x": [0.1, 0.2, 0.3]}],
-            },
-            id="negative-alpha-handler-guard",
-        ),
-        pytest.param(
-            {
-                "alpha": 0.15,
-                "ridge": 0.0,
-                "state": cold_state(),
-                "contexts": [{"day": "a", "x": [0.1, 0.2, 0.3]}],
-            },
-            id="non-positive-ridge-handler-guard",
-        ),
-        pytest.param(
-            {
-                "alpha": 0.15,
-                "ridge": 1.0,
-                "state": cold_state(),
-                "contexts": [
-                    {"day": "a", "x": [0.1, 0.2, 0.3]},
-                    {"day": "b", "x": [0.1, 0.2]},
-                ],
-            },
-            id="bad-shape-surfaces-as-422-not-500",
-        ),
-    ],
-)
-def test_predict_route_rejects_malformed_bodies(body):
-    assert client.post("/predict", json=body).status_code == 422
-
-
-def test_predict_rejects_a_non_finite_context_value():
-    # sent as raw content: json.dumps refuses to emit inf, but 1e400 is a
-    # syntactically valid JSON number that parses to inf server-side.
-    raw = (
-        '{"alpha": 0.15, "ridge": 1.0,'
-        '"state": {"EARLY_MORNING": {"A": [], "b": []},'
-        '"MORNING": {"A": [], "b": []}, "AFTERNOON": {"A": [], "b": []},'
-        '"EVENING": {"A": [], "b": []}, "NIGHT": {"A": [], "b": []}},'
-        '"contexts": [{"day": "a", "x": [0.1, 1e400, 0.3]}]}'
-    )
-    resp = client.post(
-        "/predict", content=raw, headers={"content-type": "application/json"}
-    )
-    assert resp.status_code == 422
 
 
 @pytest.mark.parametrize(
@@ -260,7 +164,7 @@ def test_predict_rejects_a_non_finite_context_value():
     ],
 )
 def test_update_route_rejects_malformed_bodies(body):
-    assert client.post("/update", json=body).status_code == 422
+    assert client.post("/v1/update", json=body).status_code == 422
 
 
 def test_update_rejects_a_non_finite_reward():
@@ -269,6 +173,6 @@ def test_update_rejects_a_non_finite_reward():
         '"reward": 1e400, "state": {"A": [], "b": []}}'
     )
     resp = client.post(
-        "/update", content=raw, headers={"content-type": "application/json"}
+        "/v1/update", content=raw, headers={"content-type": "application/json"}
     )
     assert resp.status_code == 422

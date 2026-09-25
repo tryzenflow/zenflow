@@ -2,25 +2,22 @@ import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type {
   BanditArmStateWire,
-  BanditPredictRequest,
-  BanditPredictResponse,
   BanditUpdateRequest,
   BanditUpdateResponse,
-  SchedulingArm,
 } from "@zenflow/shared";
-import { BANDIT_ALPHA, BANDIT_RIDGE } from "../scheduler/constants";
+import { BANDIT_RIDGE } from "../scheduler/constants";
 import { banditClientDuration } from "../observability/metrics";
 
 /** Hard ceiling on a single call to the bandit service. */
 const REQUEST_TIMEOUT_MS = 2_000;
 
 /**
- * HTTP client for the stateless Python bandit service
+ * `/v1/update` client for the stateless Python bandit service
  * (`services/bandit/`, `BANDIT_SERVICE_URL`, dev `http://localhost:8100`).
  *
  * Every method is best-effort: on a missing `BANDIT_SERVICE_URL` (feature flag
  * off), a timeout, a network error, or a non-200 it logs a warning and returns
- * `null` so the caller falls back to the heuristic. The service holds no state —
+ * `null` (the reward is dropped). The service holds no state —
  * `(A, b)` travels in every payload and the caller persists what comes back.
  */
 @Injectable()
@@ -36,27 +33,6 @@ export class BanditService {
 
   get enabled(): boolean {
     return Boolean(this.baseUrl);
-  }
-
-  /**
-   * Score all 5 arms for every candidate day. `state` is keyed by arm; an entry
-   * with empty `A`/`b` is the cold prior. Returns `null` on any failure.
-   */
-  async predict(
-    contexts: { day: string; x: number[] }[],
-    state: Record<SchedulingArm, BanditArmStateWire>,
-  ): Promise<Record<string, Record<SchedulingArm, number>> | null> {
-    if (!this.baseUrl) return null;
-
-    const body: BanditPredictRequest = {
-      alpha: BANDIT_ALPHA,
-      ridge: BANDIT_RIDGE,
-      state,
-      contexts,
-    };
-
-    const res = await this.post<BanditPredictResponse>("/predict", body);
-    return res ? res.scores : null;
   }
 
   /**
@@ -79,7 +55,7 @@ export class BanditService {
       state,
     };
 
-    return this.post<BanditUpdateResponse>("/update", body);
+    return this.post<BanditUpdateResponse>("/v1/update", body);
   }
 
   private async post<T>(path: string, body: unknown): Promise<T | null> {

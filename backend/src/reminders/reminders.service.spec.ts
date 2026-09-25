@@ -105,6 +105,53 @@ describe("RemindersService", () => {
     });
   });
 
+  describe("replace (diff, keeps fired state)", () => {
+    const withWrites = () => {
+      const p = prisma as unknown as {
+        sessionReminder: {
+          findMany: jest.Mock;
+          deleteMany: jest.Mock;
+          createMany: jest.Mock;
+        };
+        $transaction: jest.Mock;
+      };
+      p.sessionReminder.deleteMany = jest.fn().mockReturnValue("del");
+      p.sessionReminder.createMany = jest.fn().mockReturnValue("add");
+      p.$transaction = jest.fn().mockResolvedValue(undefined);
+      return p;
+    };
+
+    it("an edit that re-sends the same reminders writes nothing (no re-fire)", async () => {
+      const p = withWrites();
+      p.sessionReminder.findMany.mockResolvedValue([
+        { id: "r1", sessionId: "s1", remindBeforeMinutes: 60 },
+      ]);
+      await service.replace(["s1"], [60]);
+      expect(p.$transaction).not.toHaveBeenCalled();
+      expect(p.sessionReminder.deleteMany).not.toHaveBeenCalled();
+      expect(p.sessionReminder.createMany).not.toHaveBeenCalled();
+    });
+
+    it("keeps unchanged rows, drops removed ones, adds new ones", async () => {
+      const p = withWrites();
+      p.sessionReminder.findMany.mockResolvedValue([
+        { id: "r1", sessionId: "s1", remindBeforeMinutes: 60 },
+        { id: "r2", sessionId: "s1", remindBeforeMinutes: 15 },
+      ]);
+      await service.replace(["s1", "s2"], [60, 1440]);
+      expect(p.sessionReminder.deleteMany).toHaveBeenCalledWith({
+        where: { id: { in: ["r2"] } },
+      });
+      expect(p.sessionReminder.createMany).toHaveBeenCalledWith({
+        data: [
+          { sessionId: "s1", remindBeforeMinutes: 1440 },
+          { sessionId: "s2", remindBeforeMinutes: 60 },
+          { sessionId: "s2", remindBeforeMinutes: 1440 },
+        ],
+      });
+    });
+  });
+
   describe("sweep / arming", () => {
     it("arms a timeout for a reminder inside the horizon", async () => {
       prisma.sessionReminder.findMany.mockResolvedValue([
@@ -171,7 +218,7 @@ describe("RemindersService", () => {
       expect(notifications.create).toHaveBeenCalledWith(
         "u1",
         expect.objectContaining({
-          topic: "REMINDER",
+          eventName: "reminder.fired",
           sessionId: "s1",
           title: "Class in 1 hour: Standup",
           content: expect.stringContaining("Standup begins at"),

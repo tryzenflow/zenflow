@@ -12,11 +12,6 @@ from opentelemetry import metrics, trace
 tracer = trace.get_tracer("zenflow-bandit")
 _meter = metrics.get_meter("zenflow-bandit")
 
-predict_duration = _meter.create_histogram(
-    "bandit.predict.duration",
-    unit="s",
-    description="POST /predict LinUCB scoring wall-clock",
-)
 update_duration = _meter.create_histogram(
     "bandit.update.duration",
     unit="s",
@@ -27,6 +22,6 @@ singular_matrix = _meter.create_counter(
     description="A⁻¹ inversions that failed (singular design matrix), by op",
 )
 cold_arms = _meter.create_histogram(
-    "bandit.predict.cold_arms",
-    description="How many of the 5 arms were cold (fixed 0.0) on a /predict",
+    "bandit.linucb.cold_arms",
+    description="How many of the 6 arms were cold (ridge prior) on a LinUCB /v1/place",
 )

@@ -1,0 +1,3389 @@
+{
+  "_comment": "studentId -> PortalExamRow[] for the current term, one exam per section the student is in (classmates in the same section share the exam row's Examination id).",
+  "rows": {
+    "TEST00001": [
+      {
+        "Examination": 900001,
+        "ScheduleStudyUnitID": "26120IT30201",
+        "CurriculumID": "TESTCUR-IT-302",
+        "CurriculumName": "Information Technology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      },
+      {
+        "Examination": 900002,
+        "ScheduleStudyUnitID": "261GEN-EL301",
+        "CurriculumID": "GEN-EL3",
+        "CurriculumName": "General Elective: Introductory Psychology",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00028": [
+      {
+        "Examination": 900001,
+        "ScheduleStudyUnitID": "26120IT30201",
+        "CurriculumID": "TESTCUR-IT-302",
+        "CurriculumName": "Information Technology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      },
+      {
+        "Examination": 900031,
+        "ScheduleStudyUnitID": "26120IT201-RETAKE01",
+        "CurriculumID": "TESTCUR-IT-201",
+        "CurriculumName": "Intermediate Information Technology Topics",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "60",
+        "PhongThi": "B110",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00037": [
+      {
+        "Examination": 900001,
+        "ScheduleStudyUnitID": "26120IT30201",
+        "CurriculumID": "TESTCUR-IT-302",
+        "CurriculumName": "Information Technology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      },
+      {
+        "Examination": 900013,
+        "ScheduleStudyUnitID": "261GEN-EL401",
+        "CurriculumID": "GEN-EL4",
+        "CurriculumName": "General Elective: Civic & Legal Studies",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "45",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00064": [
+      {
+        "Examination": 900001,
+        "ScheduleStudyUnitID": "26120IT30201",
+        "CurriculumID": "TESTCUR-IT-302",
+        "CurriculumName": "Information Technology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      },
+      {
+        "Examination": 900002,
+        "ScheduleStudyUnitID": "261GEN-EL301",
+        "CurriculumID": "GEN-EL3",
+        "CurriculumName": "General Elective: Introductory Psychology",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00005": [
+      {
+        "Examination": 900002,
+        "ScheduleStudyUnitID": "261GEN-EL301",
+        "CurriculumID": "GEN-EL3",
+        "CurriculumName": "General Elective: Introductory Psychology",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900007,
+        "ScheduleStudyUnitID": "26120CHE30203",
+        "CurriculumID": "TESTCUR-CHE-302",
+        "CurriculumName": "Chemistry Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00022": [
+      {
+        "Examination": 900002,
+        "ScheduleStudyUnitID": "261GEN-EL301",
+        "CurriculumID": "GEN-EL3",
+        "CurriculumName": "General Elective: Introductory Psychology",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900025,
+        "ScheduleStudyUnitID": "26120BUS30202",
+        "CurriculumID": "TESTCUR-BUS-302",
+        "CurriculumName": "Business Administration Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      },
+      {
+        "Examination": 900026,
+        "ScheduleStudyUnitID": "26120ENG10101",
+        "CurriculumID": "TESTCUR-ENG-101",
+        "CurriculumName": "Introduction to English Language",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00035": [
+      {
+        "Examination": 900002,
+        "ScheduleStudyUnitID": "261GEN-EL301",
+        "CurriculumID": "GEN-EL3",
+        "CurriculumName": "General Elective: Introductory Psychology",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900022,
+        "ScheduleStudyUnitID": "26120ENG30203",
+        "CurriculumID": "TESTCUR-ENG-302",
+        "CurriculumName": "English Language Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "60",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00041": [
+      {
+        "Examination": 900002,
+        "ScheduleStudyUnitID": "261GEN-EL301",
+        "CurriculumID": "GEN-EL3",
+        "CurriculumName": "General Elective: Introductory Psychology",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900032,
+        "ScheduleStudyUnitID": "26120CHE30201",
+        "CurriculumID": "TESTCUR-CHE-302",
+        "CurriculumName": "Chemistry Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00047": [
+      {
+        "Examination": 900002,
+        "ScheduleStudyUnitID": "261GEN-EL301",
+        "CurriculumID": "GEN-EL3",
+        "CurriculumName": "General Elective: Introductory Psychology",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900016,
+        "ScheduleStudyUnitID": "26120ECO30201",
+        "CurriculumID": "TESTCUR-ECO-302",
+        "CurriculumName": "Economics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00056": [
+      {
+        "Examination": 900002,
+        "ScheduleStudyUnitID": "261GEN-EL301",
+        "CurriculumID": "GEN-EL3",
+        "CurriculumName": "General Elective: Introductory Psychology",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900003,
+        "ScheduleStudyUnitID": "26120ECO30202",
+        "CurriculumID": "TESTCUR-ECO-302",
+        "CurriculumName": "Economics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900036,
+        "ScheduleStudyUnitID": "26120ECO201-RETAKE01",
+        "CurriculumID": "TESTCUR-ECO-201",
+        "CurriculumName": "Intermediate Economics Topics",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00057": [
+      {
+        "Examination": 900002,
+        "ScheduleStudyUnitID": "261GEN-EL301",
+        "CurriculumID": "GEN-EL3",
+        "CurriculumName": "General Elective: Introductory Psychology",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900017,
+        "ScheduleStudyUnitID": "26120TOUR30202",
+        "CurriculumID": "TESTCUR-TOUR-302",
+        "CurriculumName": "Tourism Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "60",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00069": [
+      {
+        "Examination": 900002,
+        "ScheduleStudyUnitID": "261GEN-EL301",
+        "CurriculumID": "GEN-EL3",
+        "CurriculumName": "General Elective: Introductory Psychology",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900020,
+        "ScheduleStudyUnitID": "26120BIO30203",
+        "CurriculumID": "TESTCUR-BIO-302",
+        "CurriculumName": "Biology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00071": [
+      {
+        "Examination": 900002,
+        "ScheduleStudyUnitID": "261GEN-EL301",
+        "CurriculumID": "GEN-EL3",
+        "CurriculumName": "General Elective: Introductory Psychology",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900030,
+        "ScheduleStudyUnitID": "26120ENG30202",
+        "CurriculumID": "TESTCUR-ENG-302",
+        "CurriculumName": "English Language Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00076": [
+      {
+        "Examination": 900002,
+        "ScheduleStudyUnitID": "261GEN-EL301",
+        "CurriculumID": "GEN-EL3",
+        "CurriculumName": "General Elective: Introductory Psychology",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900018,
+        "ScheduleStudyUnitID": "26120BUS30201",
+        "CurriculumID": "TESTCUR-BUS-302",
+        "CurriculumName": "Business Administration Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00094": [
+      {
+        "Examination": 900002,
+        "ScheduleStudyUnitID": "261GEN-EL301",
+        "CurriculumID": "GEN-EL3",
+        "CurriculumName": "General Elective: Introductory Psychology",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900025,
+        "ScheduleStudyUnitID": "26120BUS30202",
+        "CurriculumID": "TESTCUR-BUS-302",
+        "CurriculumName": "Business Administration Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00096": [
+      {
+        "Examination": 900002,
+        "ScheduleStudyUnitID": "261GEN-EL301",
+        "CurriculumID": "GEN-EL3",
+        "CurriculumName": "General Elective: Introductory Psychology",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900008,
+        "ScheduleStudyUnitID": "26120BIO30201",
+        "CurriculumID": "TESTCUR-BIO-302",
+        "CurriculumName": "Biology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "60",
+        "PhongThi": "T102",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00099": [
+      {
+        "Examination": 900002,
+        "ScheduleStudyUnitID": "261GEN-EL301",
+        "CurriculumID": "GEN-EL3",
+        "CurriculumName": "General Elective: Introductory Psychology",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900023,
+        "ScheduleStudyUnitID": "26120LING30203",
+        "CurriculumID": "TESTCUR-LING-302",
+        "CurriculumName": "Linguistics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "60",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00110": [
+      {
+        "Examination": 900002,
+        "ScheduleStudyUnitID": "261GEN-EL301",
+        "CurriculumID": "GEN-EL3",
+        "CurriculumName": "General Elective: Introductory Psychology",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900016,
+        "ScheduleStudyUnitID": "26120ECO30201",
+        "CurriculumID": "TESTCUR-ECO-302",
+        "CurriculumName": "Economics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00125": [
+      {
+        "Examination": 900002,
+        "ScheduleStudyUnitID": "261GEN-EL301",
+        "CurriculumID": "GEN-EL3",
+        "CurriculumName": "General Elective: Introductory Psychology",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900030,
+        "ScheduleStudyUnitID": "26120ENG30202",
+        "CurriculumID": "TESTCUR-ENG-302",
+        "CurriculumName": "English Language Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00145": [
+      {
+        "Examination": 900002,
+        "ScheduleStudyUnitID": "261GEN-EL301",
+        "CurriculumID": "GEN-EL3",
+        "CurriculumName": "General Elective: Introductory Psychology",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900014,
+        "ScheduleStudyUnitID": "26120IT30202",
+        "CurriculumID": "TESTCUR-IT-302",
+        "CurriculumName": "Information Technology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00149": [
+      {
+        "Examination": 900002,
+        "ScheduleStudyUnitID": "261GEN-EL301",
+        "CurriculumID": "GEN-EL3",
+        "CurriculumName": "General Elective: Introductory Psychology",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900007,
+        "ScheduleStudyUnitID": "26120CHE30203",
+        "CurriculumID": "TESTCUR-CHE-302",
+        "CurriculumName": "Chemistry Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00002": [
+      {
+        "Examination": 900003,
+        "ScheduleStudyUnitID": "26120ECO30202",
+        "CurriculumID": "TESTCUR-ECO-302",
+        "CurriculumName": "Economics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00020": [
+      {
+        "Examination": 900003,
+        "ScheduleStudyUnitID": "26120ECO30202",
+        "CurriculumID": "TESTCUR-ECO-302",
+        "CurriculumName": "Economics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00029": [
+      {
+        "Examination": 900003,
+        "ScheduleStudyUnitID": "26120ECO30202",
+        "CurriculumID": "TESTCUR-ECO-302",
+        "CurriculumName": "Economics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00074": [
+      {
+        "Examination": 900003,
+        "ScheduleStudyUnitID": "26120ECO30202",
+        "CurriculumID": "TESTCUR-ECO-302",
+        "CurriculumName": "Economics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00092": [
+      {
+        "Examination": 900003,
+        "ScheduleStudyUnitID": "26120ECO30202",
+        "CurriculumID": "TESTCUR-ECO-302",
+        "CurriculumName": "Economics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00128": [
+      {
+        "Examination": 900003,
+        "ScheduleStudyUnitID": "26120ECO30202",
+        "CurriculumID": "TESTCUR-ECO-302",
+        "CurriculumName": "Economics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00003": [
+      {
+        "Examination": 900004,
+        "ScheduleStudyUnitID": "26120TOUR30201",
+        "CurriculumID": "TESTCUR-TOUR-302",
+        "CurriculumName": "Tourism Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "T102",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00030": [
+      {
+        "Examination": 900004,
+        "ScheduleStudyUnitID": "26120TOUR30201",
+        "CurriculumID": "TESTCUR-TOUR-302",
+        "CurriculumName": "Tourism Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "T102",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00066": [
+      {
+        "Examination": 900004,
+        "ScheduleStudyUnitID": "26120TOUR30201",
+        "CurriculumID": "TESTCUR-TOUR-302",
+        "CurriculumName": "Tourism Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "T102",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900026,
+        "ScheduleStudyUnitID": "26120ENG10101",
+        "CurriculumID": "TESTCUR-ENG-101",
+        "CurriculumName": "Introduction to English Language",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00004": [
+      {
+        "Examination": 900005,
+        "ScheduleStudyUnitID": "26120BUS30203",
+        "CurriculumID": "TESTCUR-BUS-302",
+        "CurriculumName": "Business Administration Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900006,
+        "ScheduleStudyUnitID": "261GEN-EL201",
+        "CurriculumID": "GEN-EL2",
+        "CurriculumName": "General Elective: Entrepreneurship",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00040": [
+      {
+        "Examination": 900005,
+        "ScheduleStudyUnitID": "26120BUS30203",
+        "CurriculumID": "TESTCUR-BUS-302",
+        "CurriculumName": "Business Administration Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00049": [
+      {
+        "Examination": 900005,
+        "ScheduleStudyUnitID": "26120BUS30203",
+        "CurriculumID": "TESTCUR-BUS-302",
+        "CurriculumName": "Business Administration Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900013,
+        "ScheduleStudyUnitID": "261GEN-EL401",
+        "CurriculumID": "GEN-EL4",
+        "CurriculumName": "General Elective: Civic & Legal Studies",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "45",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00058": [
+      {
+        "Examination": 900005,
+        "ScheduleStudyUnitID": "26120BUS30203",
+        "CurriculumID": "TESTCUR-BUS-302",
+        "CurriculumName": "Business Administration Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00085": [
+      {
+        "Examination": 900005,
+        "ScheduleStudyUnitID": "26120BUS30203",
+        "CurriculumID": "TESTCUR-BUS-302",
+        "CurriculumName": "Business Administration Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00139": [
+      {
+        "Examination": 900005,
+        "ScheduleStudyUnitID": "26120BUS30203",
+        "CurriculumID": "TESTCUR-BUS-302",
+        "CurriculumName": "Business Administration Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00015": [
+      {
+        "Examination": 900006,
+        "ScheduleStudyUnitID": "261GEN-EL201",
+        "CurriculumID": "GEN-EL2",
+        "CurriculumName": "General Elective: Entrepreneurship",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900020,
+        "ScheduleStudyUnitID": "26120BIO30203",
+        "CurriculumID": "TESTCUR-BIO-302",
+        "CurriculumName": "Biology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00016": [
+      {
+        "Examination": 900006,
+        "ScheduleStudyUnitID": "261GEN-EL201",
+        "CurriculumID": "GEN-EL2",
+        "CurriculumName": "General Elective: Entrepreneurship",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900021,
+        "ScheduleStudyUnitID": "26120SOC30202",
+        "CurriculumID": "TESTCUR-SOC-302",
+        "CurriculumName": "Social Studies Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "45",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00017": [
+      {
+        "Examination": 900006,
+        "ScheduleStudyUnitID": "261GEN-EL201",
+        "CurriculumID": "GEN-EL2",
+        "CurriculumName": "General Elective: Entrepreneurship",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900022,
+        "ScheduleStudyUnitID": "26120ENG30203",
+        "CurriculumID": "TESTCUR-ENG-302",
+        "CurriculumName": "English Language Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "60",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00019": [
+      {
+        "Examination": 900006,
+        "ScheduleStudyUnitID": "261GEN-EL201",
+        "CurriculumID": "GEN-EL2",
+        "CurriculumName": "General Elective: Entrepreneurship",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900014,
+        "ScheduleStudyUnitID": "26120IT30202",
+        "CurriculumID": "TESTCUR-IT-302",
+        "CurriculumName": "Information Technology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00024": [
+      {
+        "Examination": 900006,
+        "ScheduleStudyUnitID": "261GEN-EL201",
+        "CurriculumID": "GEN-EL2",
+        "CurriculumName": "General Elective: Entrepreneurship",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900026,
+        "ScheduleStudyUnitID": "26120ENG10101",
+        "CurriculumID": "TESTCUR-ENG-101",
+        "CurriculumName": "Introduction to English Language",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900028,
+        "ScheduleStudyUnitID": "26120BIO30202",
+        "CurriculumID": "TESTCUR-BIO-302",
+        "CurriculumName": "Biology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "60",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00033": [
+      {
+        "Examination": 900006,
+        "ScheduleStudyUnitID": "261GEN-EL201",
+        "CurriculumID": "GEN-EL2",
+        "CurriculumName": "General Elective: Entrepreneurship",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900020,
+        "ScheduleStudyUnitID": "26120BIO30203",
+        "CurriculumID": "TESTCUR-BIO-302",
+        "CurriculumName": "Biology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00070": [
+      {
+        "Examination": 900006,
+        "ScheduleStudyUnitID": "261GEN-EL201",
+        "CurriculumID": "GEN-EL2",
+        "CurriculumName": "General Elective: Entrepreneurship",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900029,
+        "ScheduleStudyUnitID": "26120SOC30201",
+        "CurriculumID": "TESTCUR-SOC-302",
+        "CurriculumName": "Social Studies Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "60",
+        "PhongThi": "T102",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      },
+      {
+        "Examination": 900039,
+        "ScheduleStudyUnitID": "26120SOC201-RETAKE01",
+        "CurriculumID": "TESTCUR-SOC-201",
+        "CurriculumName": "Intermediate Social Studies Topics",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00072": [
+      {
+        "Examination": 900006,
+        "ScheduleStudyUnitID": "261GEN-EL201",
+        "CurriculumID": "GEN-EL2",
+        "CurriculumName": "General Elective: Entrepreneurship",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900012,
+        "ScheduleStudyUnitID": "26120LING30201",
+        "CurriculumID": "TESTCUR-LING-302",
+        "CurriculumName": "Linguistics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "90",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00073": [
+      {
+        "Examination": 900006,
+        "ScheduleStudyUnitID": "261GEN-EL201",
+        "CurriculumID": "GEN-EL2",
+        "CurriculumName": "General Elective: Entrepreneurship",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900035,
+        "ScheduleStudyUnitID": "26120IT30203",
+        "CurriculumID": "TESTCUR-IT-302",
+        "CurriculumName": "Information Technology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00075": [
+      {
+        "Examination": 900006,
+        "ScheduleStudyUnitID": "261GEN-EL201",
+        "CurriculumID": "GEN-EL2",
+        "CurriculumName": "General Elective: Entrepreneurship",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900017,
+        "ScheduleStudyUnitID": "26120TOUR30202",
+        "CurriculumID": "TESTCUR-TOUR-302",
+        "CurriculumName": "Tourism Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "60",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00078": [
+      {
+        "Examination": 900006,
+        "ScheduleStudyUnitID": "261GEN-EL201",
+        "CurriculumID": "GEN-EL2",
+        "CurriculumName": "General Elective: Entrepreneurship",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900020,
+        "ScheduleStudyUnitID": "26120BIO30203",
+        "CurriculumID": "TESTCUR-BIO-302",
+        "CurriculumName": "Biology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00104": [
+      {
+        "Examination": 900006,
+        "ScheduleStudyUnitID": "261GEN-EL201",
+        "CurriculumID": "GEN-EL2",
+        "CurriculumName": "General Elective: Entrepreneurship",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900007,
+        "ScheduleStudyUnitID": "26120CHE30203",
+        "CurriculumID": "TESTCUR-CHE-302",
+        "CurriculumName": "Chemistry Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00105": [
+      {
+        "Examination": 900006,
+        "ScheduleStudyUnitID": "261GEN-EL201",
+        "CurriculumID": "GEN-EL2",
+        "CurriculumName": "General Elective: Entrepreneurship",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900020,
+        "ScheduleStudyUnitID": "26120BIO30203",
+        "CurriculumID": "TESTCUR-BIO-302",
+        "CurriculumName": "Biology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00109": [
+      {
+        "Examination": 900006,
+        "ScheduleStudyUnitID": "261GEN-EL201",
+        "CurriculumID": "GEN-EL2",
+        "CurriculumName": "General Elective: Entrepreneurship",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900014,
+        "ScheduleStudyUnitID": "26120IT30202",
+        "CurriculumID": "TESTCUR-IT-302",
+        "CurriculumName": "Information Technology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00115": [
+      {
+        "Examination": 900006,
+        "ScheduleStudyUnitID": "261GEN-EL201",
+        "CurriculumID": "GEN-EL2",
+        "CurriculumName": "General Elective: Entrepreneurship",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900021,
+        "ScheduleStudyUnitID": "26120SOC30202",
+        "CurriculumID": "TESTCUR-SOC-302",
+        "CurriculumName": "Social Studies Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "45",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00136": [
+      {
+        "Examination": 900006,
+        "ScheduleStudyUnitID": "261GEN-EL201",
+        "CurriculumID": "GEN-EL2",
+        "CurriculumName": "General Elective: Entrepreneurship",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900035,
+        "ScheduleStudyUnitID": "26120IT30203",
+        "CurriculumID": "TESTCUR-IT-302",
+        "CurriculumName": "Information Technology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00140": [
+      {
+        "Examination": 900006,
+        "ScheduleStudyUnitID": "261GEN-EL201",
+        "CurriculumID": "GEN-EL2",
+        "CurriculumName": "General Elective: Entrepreneurship",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900019,
+        "ScheduleStudyUnitID": "26120CHE201-RETAKE01",
+        "CurriculumID": "TESTCUR-CHE-201",
+        "CurriculumName": "Intermediate Chemistry Topics",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      },
+      {
+        "Examination": 900032,
+        "ScheduleStudyUnitID": "26120CHE30201",
+        "CurriculumID": "TESTCUR-CHE-302",
+        "CurriculumName": "Chemistry Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00143": [
+      {
+        "Examination": 900006,
+        "ScheduleStudyUnitID": "261GEN-EL201",
+        "CurriculumID": "GEN-EL2",
+        "CurriculumName": "General Elective: Entrepreneurship",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900022,
+        "ScheduleStudyUnitID": "26120ENG30203",
+        "CurriculumID": "TESTCUR-ENG-302",
+        "CurriculumName": "English Language Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "60",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00144": [
+      {
+        "Examination": 900006,
+        "ScheduleStudyUnitID": "261GEN-EL201",
+        "CurriculumID": "GEN-EL2",
+        "CurriculumName": "General Elective: Entrepreneurship",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900023,
+        "ScheduleStudyUnitID": "26120LING30203",
+        "CurriculumID": "TESTCUR-LING-302",
+        "CurriculumName": "Linguistics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "60",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00014": [
+      {
+        "Examination": 900007,
+        "ScheduleStudyUnitID": "26120CHE30203",
+        "CurriculumID": "TESTCUR-CHE-302",
+        "CurriculumName": "Chemistry Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900019,
+        "ScheduleStudyUnitID": "26120CHE201-RETAKE01",
+        "CurriculumID": "TESTCUR-CHE-201",
+        "CurriculumName": "Intermediate Chemistry Topics",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00059": [
+      {
+        "Examination": 900007,
+        "ScheduleStudyUnitID": "26120CHE30203",
+        "CurriculumID": "TESTCUR-CHE-302",
+        "CurriculumName": "Chemistry Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00086": [
+      {
+        "Examination": 900007,
+        "ScheduleStudyUnitID": "26120CHE30203",
+        "CurriculumID": "TESTCUR-CHE-302",
+        "CurriculumName": "Chemistry Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00095": [
+      {
+        "Examination": 900007,
+        "ScheduleStudyUnitID": "26120CHE30203",
+        "CurriculumID": "TESTCUR-CHE-302",
+        "CurriculumName": "Chemistry Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00131": [
+      {
+        "Examination": 900007,
+        "ScheduleStudyUnitID": "26120CHE30203",
+        "CurriculumID": "TESTCUR-CHE-302",
+        "CurriculumName": "Chemistry Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900046,
+        "ScheduleStudyUnitID": "26120ECO10101",
+        "CurriculumID": "TESTCUR-ECO-101",
+        "CurriculumName": "Introduction to Economics",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00006": [
+      {
+        "Examination": 900008,
+        "ScheduleStudyUnitID": "26120BIO30201",
+        "CurriculumID": "TESTCUR-BIO-302",
+        "CurriculumName": "Biology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "60",
+        "PhongThi": "T102",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00007": [
+      {
+        "Examination": 900009,
+        "ScheduleStudyUnitID": "26120SOC30203",
+        "CurriculumID": "TESTCUR-SOC-302",
+        "CurriculumName": "Social Studies Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      },
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00034": [
+      {
+        "Examination": 900009,
+        "ScheduleStudyUnitID": "26120SOC30203",
+        "CurriculumID": "TESTCUR-SOC-302",
+        "CurriculumName": "Social Studies Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00043": [
+      {
+        "Examination": 900009,
+        "ScheduleStudyUnitID": "26120SOC30203",
+        "CurriculumID": "TESTCUR-SOC-302",
+        "CurriculumName": "Social Studies Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00052": [
+      {
+        "Examination": 900009,
+        "ScheduleStudyUnitID": "26120SOC30203",
+        "CurriculumID": "TESTCUR-SOC-302",
+        "CurriculumName": "Social Studies Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      },
+      {
+        "Examination": 900013,
+        "ScheduleStudyUnitID": "261GEN-EL401",
+        "CurriculumID": "GEN-EL4",
+        "CurriculumName": "General Elective: Civic & Legal Studies",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "45",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00079": [
+      {
+        "Examination": 900009,
+        "ScheduleStudyUnitID": "26120SOC30203",
+        "CurriculumID": "TESTCUR-SOC-302",
+        "CurriculumName": "Social Studies Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      },
+      {
+        "Examination": 900040,
+        "ScheduleStudyUnitID": "26120BUS10101",
+        "CurriculumID": "TESTCUR-BUS-101",
+        "CurriculumName": "Introduction to Business Administration",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "B110",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00088": [
+      {
+        "Examination": 900009,
+        "ScheduleStudyUnitID": "26120SOC30203",
+        "CurriculumID": "TESTCUR-SOC-302",
+        "CurriculumName": "Social Studies Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      },
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00097": [
+      {
+        "Examination": 900009,
+        "ScheduleStudyUnitID": "26120SOC30203",
+        "CurriculumID": "TESTCUR-SOC-302",
+        "CurriculumName": "Social Studies Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      },
+      {
+        "Examination": 900042,
+        "ScheduleStudyUnitID": "26120LING10101",
+        "CurriculumID": "TESTCUR-LING-101",
+        "CurriculumName": "Introduction to Linguistics",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "90",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00133": [
+      {
+        "Examination": 900009,
+        "ScheduleStudyUnitID": "26120SOC30203",
+        "CurriculumID": "TESTCUR-SOC-302",
+        "CurriculumName": "Social Studies Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00008": [
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900011,
+        "ScheduleStudyUnitID": "26120ENG30201",
+        "CurriculumID": "TESTCUR-ENG-302",
+        "CurriculumName": "English Language Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "90",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00021": [
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900024,
+        "ScheduleStudyUnitID": "26120TOUR30203",
+        "CurriculumID": "TESTCUR-TOUR-302",
+        "CurriculumName": "Tourism Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00032": [
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900027,
+        "ScheduleStudyUnitID": "26120CHE30202",
+        "CurriculumID": "TESTCUR-CHE-302",
+        "CurriculumName": "Chemistry Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "B110",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00051": [
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900020,
+        "ScheduleStudyUnitID": "26120BIO30203",
+        "CurriculumID": "TESTCUR-BIO-302",
+        "CurriculumName": "Biology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00054": [
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900012,
+        "ScheduleStudyUnitID": "26120LING30201",
+        "CurriculumID": "TESTCUR-LING-302",
+        "CurriculumName": "Linguistics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "90",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00061": [
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900029,
+        "ScheduleStudyUnitID": "26120SOC30201",
+        "CurriculumID": "TESTCUR-SOC-302",
+        "CurriculumName": "Social Studies Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "60",
+        "PhongThi": "T102",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00062": [
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900011,
+        "ScheduleStudyUnitID": "26120ENG30201",
+        "CurriculumID": "TESTCUR-ENG-302",
+        "CurriculumName": "English Language Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "90",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00065": [
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900037,
+        "ScheduleStudyUnitID": "26120ECO30203",
+        "CurriculumID": "TESTCUR-ECO-302",
+        "CurriculumName": "Economics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00068": [
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900015,
+        "ScheduleStudyUnitID": "26120BIO10101",
+        "CurriculumID": "TESTCUR-BIO-101",
+        "CurriculumName": "Introduction to Biology",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "60",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      },
+      {
+        "Examination": 900027,
+        "ScheduleStudyUnitID": "26120CHE30202",
+        "CurriculumID": "TESTCUR-CHE-302",
+        "CurriculumName": "Chemistry Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "B110",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00080": [
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900011,
+        "ScheduleStudyUnitID": "26120ENG30201",
+        "CurriculumID": "TESTCUR-ENG-302",
+        "CurriculumName": "English Language Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "90",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00091": [
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900014,
+        "ScheduleStudyUnitID": "26120IT30202",
+        "CurriculumID": "TESTCUR-IT-302",
+        "CurriculumName": "Information Technology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00103": [
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900018,
+        "ScheduleStudyUnitID": "26120BUS30201",
+        "CurriculumID": "TESTCUR-BUS-302",
+        "CurriculumName": "Business Administration Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00108": [
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900023,
+        "ScheduleStudyUnitID": "26120LING30203",
+        "CurriculumID": "TESTCUR-LING-302",
+        "CurriculumName": "Linguistics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "60",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00113": [
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900032,
+        "ScheduleStudyUnitID": "26120CHE30201",
+        "CurriculumID": "TESTCUR-CHE-302",
+        "CurriculumName": "Chemistry Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00114": [
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900020,
+        "ScheduleStudyUnitID": "26120BIO30203",
+        "CurriculumID": "TESTCUR-BIO-302",
+        "CurriculumName": "Biology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00117": [
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900012,
+        "ScheduleStudyUnitID": "26120LING30201",
+        "CurriculumID": "TESTCUR-LING-302",
+        "CurriculumName": "Linguistics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "90",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900015,
+        "ScheduleStudyUnitID": "26120BIO10101",
+        "CurriculumID": "TESTCUR-BIO-101",
+        "CurriculumName": "Introduction to Biology",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "60",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00123": [
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900026,
+        "ScheduleStudyUnitID": "26120ENG10101",
+        "CurriculumID": "TESTCUR-ENG-101",
+        "CurriculumName": "Introduction to English Language",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900028,
+        "ScheduleStudyUnitID": "26120BIO30202",
+        "CurriculumID": "TESTCUR-BIO-302",
+        "CurriculumName": "Biology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "60",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00127": [
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900014,
+        "ScheduleStudyUnitID": "26120IT30202",
+        "CurriculumID": "TESTCUR-IT-302",
+        "CurriculumName": "Information Technology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00129": [
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900017,
+        "ScheduleStudyUnitID": "26120TOUR30202",
+        "CurriculumID": "TESTCUR-TOUR-302",
+        "CurriculumName": "Tourism Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "60",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00141": [
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900028,
+        "ScheduleStudyUnitID": "26120BIO30202",
+        "CurriculumID": "TESTCUR-BIO-302",
+        "CurriculumName": "Biology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "60",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00146": [
+      {
+        "Examination": 900010,
+        "ScheduleStudyUnitID": "261GEN-EL101",
+        "CurriculumID": "GEN-EL1",
+        "CurriculumName": "General Elective: Soft Skills",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900016,
+        "ScheduleStudyUnitID": "26120ECO30201",
+        "CurriculumID": "TESTCUR-ECO-302",
+        "CurriculumName": "Economics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00098": [
+      {
+        "Examination": 900011,
+        "ScheduleStudyUnitID": "26120ENG30201",
+        "CurriculumID": "TESTCUR-ENG-302",
+        "CurriculumName": "English Language Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "90",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      },
+      {
+        "Examination": 900043,
+        "ScheduleStudyUnitID": "26120ENG201-RETAKE01",
+        "CurriculumID": "TESTCUR-ENG-201",
+        "CurriculumName": "Intermediate English Language Topics",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "60",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00009": [
+      {
+        "Examination": 900012,
+        "ScheduleStudyUnitID": "26120LING30201",
+        "CurriculumID": "TESTCUR-LING-302",
+        "CurriculumName": "Linguistics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "90",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900013,
+        "ScheduleStudyUnitID": "261GEN-EL401",
+        "CurriculumID": "GEN-EL4",
+        "CurriculumName": "General Elective: Civic & Legal Studies",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "45",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00063": [
+      {
+        "Examination": 900012,
+        "ScheduleStudyUnitID": "26120LING30201",
+        "CurriculumID": "TESTCUR-LING-302",
+        "CurriculumName": "Linguistics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "90",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900013,
+        "ScheduleStudyUnitID": "261GEN-EL401",
+        "CurriculumID": "GEN-EL4",
+        "CurriculumName": "General Elective: Civic & Legal Studies",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "45",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00081": [
+      {
+        "Examination": 900012,
+        "ScheduleStudyUnitID": "26120LING30201",
+        "CurriculumID": "TESTCUR-LING-302",
+        "CurriculumName": "Linguistics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "90",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00048": [
+      {
+        "Examination": 900013,
+        "ScheduleStudyUnitID": "261GEN-EL401",
+        "CurriculumID": "GEN-EL4",
+        "CurriculumName": "General Elective: Civic & Legal Studies",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "45",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900024,
+        "ScheduleStudyUnitID": "26120TOUR30203",
+        "CurriculumID": "TESTCUR-TOUR-302",
+        "CurriculumName": "Tourism Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00050": [
+      {
+        "Examination": 900013,
+        "ScheduleStudyUnitID": "261GEN-EL401",
+        "CurriculumID": "GEN-EL4",
+        "CurriculumName": "General Elective: Civic & Legal Studies",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "45",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900032,
+        "ScheduleStudyUnitID": "26120CHE30201",
+        "CurriculumID": "TESTCUR-CHE-302",
+        "CurriculumName": "Chemistry Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00067": [
+      {
+        "Examination": 900013,
+        "ScheduleStudyUnitID": "261GEN-EL401",
+        "CurriculumID": "GEN-EL4",
+        "CurriculumName": "General Elective: Civic & Legal Studies",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "45",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900018,
+        "ScheduleStudyUnitID": "26120BUS30201",
+        "CurriculumID": "TESTCUR-BUS-302",
+        "CurriculumName": "Business Administration Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900038,
+        "ScheduleStudyUnitID": "26120TOUR10101",
+        "CurriculumID": "TESTCUR-TOUR-101",
+        "CurriculumName": "Introduction to Tourism",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00084": [
+      {
+        "Examination": 900013,
+        "ScheduleStudyUnitID": "261GEN-EL401",
+        "CurriculumID": "GEN-EL4",
+        "CurriculumName": "General Elective: Civic & Legal Studies",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "45",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900024,
+        "ScheduleStudyUnitID": "26120TOUR30203",
+        "CurriculumID": "TESTCUR-TOUR-302",
+        "CurriculumName": "Tourism Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900041,
+        "ScheduleStudyUnitID": "26120TOUR201-RETAKE01",
+        "CurriculumID": "TESTCUR-TOUR-201",
+        "CurriculumName": "Intermediate Tourism Topics",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "B110",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00089": [
+      {
+        "Examination": 900013,
+        "ScheduleStudyUnitID": "261GEN-EL401",
+        "CurriculumID": "GEN-EL4",
+        "CurriculumName": "General Elective: Civic & Legal Studies",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "45",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900030,
+        "ScheduleStudyUnitID": "26120ENG30202",
+        "CurriculumID": "TESTCUR-ENG-302",
+        "CurriculumName": "English Language Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00090": [
+      {
+        "Examination": 900013,
+        "ScheduleStudyUnitID": "261GEN-EL401",
+        "CurriculumID": "GEN-EL4",
+        "CurriculumName": "General Elective: Civic & Legal Studies",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "45",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900023,
+        "ScheduleStudyUnitID": "26120LING30203",
+        "CurriculumID": "TESTCUR-LING-302",
+        "CurriculumName": "Linguistics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "60",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00106": [
+      {
+        "Examination": 900013,
+        "ScheduleStudyUnitID": "261GEN-EL401",
+        "CurriculumID": "GEN-EL4",
+        "CurriculumName": "General Elective: Civic & Legal Studies",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "45",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900029,
+        "ScheduleStudyUnitID": "26120SOC30201",
+        "CurriculumID": "TESTCUR-SOC-302",
+        "CurriculumName": "Social Studies Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "60",
+        "PhongThi": "T102",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00111": [
+      {
+        "Examination": 900013,
+        "ScheduleStudyUnitID": "261GEN-EL401",
+        "CurriculumID": "GEN-EL4",
+        "CurriculumName": "General Elective: Civic & Legal Studies",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "45",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900024,
+        "ScheduleStudyUnitID": "26120TOUR30203",
+        "CurriculumID": "TESTCUR-TOUR-302",
+        "CurriculumName": "Tourism Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900042,
+        "ScheduleStudyUnitID": "26120LING10101",
+        "CurriculumID": "TESTCUR-LING-101",
+        "CurriculumName": "Introduction to Linguistics",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "90",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00119": [
+      {
+        "Examination": 900013,
+        "ScheduleStudyUnitID": "261GEN-EL401",
+        "CurriculumID": "GEN-EL4",
+        "CurriculumName": "General Elective: Civic & Legal Studies",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "45",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900037,
+        "ScheduleStudyUnitID": "26120ECO30203",
+        "CurriculumID": "TESTCUR-ECO-302",
+        "CurriculumName": "Economics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00122": [
+      {
+        "Examination": 900013,
+        "ScheduleStudyUnitID": "261GEN-EL401",
+        "CurriculumID": "GEN-EL4",
+        "CurriculumName": "General Elective: Civic & Legal Studies",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "45",
+        "PhongThi": "B210",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900027,
+        "ScheduleStudyUnitID": "26120CHE30202",
+        "CurriculumID": "TESTCUR-CHE-302",
+        "CurriculumName": "Chemistry Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "B110",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00010": [
+      {
+        "Examination": 900014,
+        "ScheduleStudyUnitID": "26120IT30202",
+        "CurriculumID": "TESTCUR-IT-302",
+        "CurriculumName": "Information Technology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      },
+      {
+        "Examination": 900015,
+        "ScheduleStudyUnitID": "26120BIO10101",
+        "CurriculumID": "TESTCUR-BIO-101",
+        "CurriculumName": "Introduction to Biology",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "60",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00046": [
+      {
+        "Examination": 900014,
+        "ScheduleStudyUnitID": "26120IT30202",
+        "CurriculumID": "TESTCUR-IT-302",
+        "CurriculumName": "Information Technology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00118": [
+      {
+        "Examination": 900014,
+        "ScheduleStudyUnitID": "26120IT30202",
+        "CurriculumID": "TESTCUR-IT-302",
+        "CurriculumName": "Information Technology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00011": [
+      {
+        "Examination": 900016,
+        "ScheduleStudyUnitID": "26120ECO30201",
+        "CurriculumID": "TESTCUR-ECO-302",
+        "CurriculumName": "Economics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00038": [
+      {
+        "Examination": 900016,
+        "ScheduleStudyUnitID": "26120ECO30201",
+        "CurriculumID": "TESTCUR-ECO-302",
+        "CurriculumName": "Economics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00083": [
+      {
+        "Examination": 900016,
+        "ScheduleStudyUnitID": "26120ECO30201",
+        "CurriculumID": "TESTCUR-ECO-302",
+        "CurriculumName": "Economics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00137": [
+      {
+        "Examination": 900016,
+        "ScheduleStudyUnitID": "26120ECO30201",
+        "CurriculumID": "TESTCUR-ECO-302",
+        "CurriculumName": "Economics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900047,
+        "ScheduleStudyUnitID": "26120CHE10101",
+        "CurriculumID": "TESTCUR-CHE-101",
+        "CurriculumName": "Introduction to Chemistry",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00012": [
+      {
+        "Examination": 900017,
+        "ScheduleStudyUnitID": "26120TOUR30202",
+        "CurriculumID": "TESTCUR-TOUR-302",
+        "CurriculumName": "Tourism Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "60",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00093": [
+      {
+        "Examination": 900017,
+        "ScheduleStudyUnitID": "26120TOUR30202",
+        "CurriculumID": "TESTCUR-TOUR-302",
+        "CurriculumName": "Tourism Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "60",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00102": [
+      {
+        "Examination": 900017,
+        "ScheduleStudyUnitID": "26120TOUR30202",
+        "CurriculumID": "TESTCUR-TOUR-302",
+        "CurriculumName": "Tourism Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "60",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00120": [
+      {
+        "Examination": 900017,
+        "ScheduleStudyUnitID": "26120TOUR30202",
+        "CurriculumID": "TESTCUR-TOUR-302",
+        "CurriculumName": "Tourism Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "60",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00013": [
+      {
+        "Examination": 900018,
+        "ScheduleStudyUnitID": "26120BUS30201",
+        "CurriculumID": "TESTCUR-BUS-302",
+        "CurriculumName": "Business Administration Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00031": [
+      {
+        "Examination": 900018,
+        "ScheduleStudyUnitID": "26120BUS30201",
+        "CurriculumID": "TESTCUR-BUS-302",
+        "CurriculumName": "Business Administration Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00148": [
+      {
+        "Examination": 900018,
+        "ScheduleStudyUnitID": "26120BUS30201",
+        "CurriculumID": "TESTCUR-BUS-302",
+        "CurriculumName": "Business Administration Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00042": [
+      {
+        "Examination": 900020,
+        "ScheduleStudyUnitID": "26120BIO30203",
+        "CurriculumID": "TESTCUR-BIO-302",
+        "CurriculumName": "Biology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900033,
+        "ScheduleStudyUnitID": "26120BIO201-RETAKE01",
+        "CurriculumID": "TESTCUR-BIO-201",
+        "CurriculumName": "Intermediate Biology Topics",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00060": [
+      {
+        "Examination": 900020,
+        "ScheduleStudyUnitID": "26120BIO30203",
+        "CurriculumID": "TESTCUR-BIO-302",
+        "CurriculumName": "Biology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00087": [
+      {
+        "Examination": 900020,
+        "ScheduleStudyUnitID": "26120BIO30203",
+        "CurriculumID": "TESTCUR-BIO-302",
+        "CurriculumName": "Biology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00132": [
+      {
+        "Examination": 900020,
+        "ScheduleStudyUnitID": "26120BIO30203",
+        "CurriculumID": "TESTCUR-BIO-302",
+        "CurriculumName": "Biology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00150": [
+      {
+        "Examination": 900020,
+        "ScheduleStudyUnitID": "26120BIO30203",
+        "CurriculumID": "TESTCUR-BIO-302",
+        "CurriculumName": "Biology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00124": [
+      {
+        "Examination": 900021,
+        "ScheduleStudyUnitID": "26120SOC30202",
+        "CurriculumID": "TESTCUR-SOC-302",
+        "CurriculumName": "Social Studies Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "45",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00053": [
+      {
+        "Examination": 900022,
+        "ScheduleStudyUnitID": "26120ENG30203",
+        "CurriculumID": "TESTCUR-ENG-302",
+        "CurriculumName": "English Language Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "60",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00107": [
+      {
+        "Examination": 900022,
+        "ScheduleStudyUnitID": "26120ENG30203",
+        "CurriculumID": "TESTCUR-ENG-302",
+        "CurriculumName": "English Language Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "60",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00116": [
+      {
+        "Examination": 900022,
+        "ScheduleStudyUnitID": "26120ENG30203",
+        "CurriculumID": "TESTCUR-ENG-302",
+        "CurriculumName": "English Language Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "60",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00018": [
+      {
+        "Examination": 900023,
+        "ScheduleStudyUnitID": "26120LING30203",
+        "CurriculumID": "TESTCUR-LING-302",
+        "CurriculumName": "Linguistics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "60",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00027": [
+      {
+        "Examination": 900023,
+        "ScheduleStudyUnitID": "26120LING30203",
+        "CurriculumID": "TESTCUR-LING-302",
+        "CurriculumName": "Linguistics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "60",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00036": [
+      {
+        "Examination": 900023,
+        "ScheduleStudyUnitID": "26120LING30203",
+        "CurriculumID": "TESTCUR-LING-302",
+        "CurriculumName": "Linguistics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "60",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      }
+    ],
+    "TEST00126": [
+      {
+        "Examination": 900023,
+        "ScheduleStudyUnitID": "26120LING30203",
+        "CurriculumID": "TESTCUR-LING-302",
+        "CurriculumName": "Linguistics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "60",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Tự luận"
+      },
+      {
+        "Examination": 900045,
+        "ScheduleStudyUnitID": "26120LING201-RETAKE01",
+        "CurriculumID": "TESTCUR-LING-201",
+        "CurriculumName": "Intermediate Linguistics Topics",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "120",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00039": [
+      {
+        "Examination": 900024,
+        "ScheduleStudyUnitID": "26120TOUR30203",
+        "CurriculumID": "TESTCUR-TOUR-302",
+        "CurriculumName": "Tourism Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00138": [
+      {
+        "Examination": 900024,
+        "ScheduleStudyUnitID": "26120TOUR30203",
+        "CurriculumID": "TESTCUR-TOUR-302",
+        "CurriculumName": "Tourism Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00147": [
+      {
+        "Examination": 900024,
+        "ScheduleStudyUnitID": "26120TOUR30203",
+        "CurriculumID": "TESTCUR-TOUR-302",
+        "CurriculumName": "Tourism Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900046,
+        "ScheduleStudyUnitID": "26120ECO10101",
+        "CurriculumID": "TESTCUR-ECO-101",
+        "CurriculumName": "Introduction to Economics",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T204",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00112": [
+      {
+        "Examination": 900025,
+        "ScheduleStudyUnitID": "26120BUS30202",
+        "CurriculumID": "TESTCUR-BUS-302",
+        "CurriculumName": "Business Administration Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      },
+      {
+        "Examination": 900044,
+        "ScheduleStudyUnitID": "26120BUS201-RETAKE01",
+        "CurriculumID": "TESTCUR-BUS-201",
+        "CurriculumName": "Intermediate Business Administration Topics",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "B105",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00121": [
+      {
+        "Examination": 900025,
+        "ScheduleStudyUnitID": "26120BUS30202",
+        "CurriculumID": "TESTCUR-BUS-302",
+        "CurriculumName": "Business Administration Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00130": [
+      {
+        "Examination": 900025,
+        "ScheduleStudyUnitID": "26120BUS30202",
+        "CurriculumID": "TESTCUR-BUS-302",
+        "CurriculumName": "Business Administration Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00023": [
+      {
+        "Examination": 900027,
+        "ScheduleStudyUnitID": "26120CHE30202",
+        "CurriculumID": "TESTCUR-CHE-302",
+        "CurriculumName": "Chemistry Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "B110",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00025": [
+      {
+        "Examination": 900029,
+        "ScheduleStudyUnitID": "26120SOC30201",
+        "CurriculumID": "TESTCUR-SOC-302",
+        "CurriculumName": "Social Studies Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "60",
+        "PhongThi": "T102",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00142": [
+      {
+        "Examination": 900029,
+        "ScheduleStudyUnitID": "26120SOC30201",
+        "CurriculumID": "TESTCUR-SOC-302",
+        "CurriculumName": "Social Studies Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "60",
+        "PhongThi": "T102",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00026": [
+      {
+        "Examination": 900030,
+        "ScheduleStudyUnitID": "26120ENG30202",
+        "CurriculumID": "TESTCUR-ENG-302",
+        "CurriculumName": "English Language Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00044": [
+      {
+        "Examination": 900030,
+        "ScheduleStudyUnitID": "26120ENG30202",
+        "CurriculumID": "TESTCUR-ENG-302",
+        "CurriculumName": "English Language Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00134": [
+      {
+        "Examination": 900030,
+        "ScheduleStudyUnitID": "26120ENG30202",
+        "CurriculumID": "TESTCUR-ENG-302",
+        "CurriculumName": "English Language Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "13g00",
+        "ThoiLuong": "90",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00077": [
+      {
+        "Examination": 900032,
+        "ScheduleStudyUnitID": "26120CHE30201",
+        "CurriculumID": "TESTCUR-CHE-302",
+        "CurriculumName": "Chemistry Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T101",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00045": [
+      {
+        "Examination": 900034,
+        "ScheduleStudyUnitID": "26120LING30202",
+        "CurriculumID": "TESTCUR-LING-302",
+        "CurriculumName": "Linguistics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00135": [
+      {
+        "Examination": 900034,
+        "ScheduleStudyUnitID": "26120LING30202",
+        "CurriculumID": "TESTCUR-LING-302",
+        "CurriculumName": "Linguistics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "120",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Vấn đáp"
+      }
+    ],
+    "TEST00055": [
+      {
+        "Examination": 900035,
+        "ScheduleStudyUnitID": "26120IT30203",
+        "CurriculumID": "TESTCUR-IT-302",
+        "CurriculumName": "Information Technology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00082": [
+      {
+        "Examination": 900035,
+        "ScheduleStudyUnitID": "26120IT30203",
+        "CurriculumID": "TESTCUR-IT-302",
+        "CurriculumName": "Information Technology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00100": [
+      {
+        "Examination": 900035,
+        "ScheduleStudyUnitID": "26120IT30203",
+        "CurriculumID": "TESTCUR-IT-302",
+        "CurriculumName": "Information Technology Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T305",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Thi máy"
+      },
+      {
+        "Examination": 900042,
+        "ScheduleStudyUnitID": "26120LING10101",
+        "CurriculumID": "TESTCUR-LING-101",
+        "CurriculumName": "Introduction to Linguistics",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "90",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building A",
+        "HinhThucThi": "Thi máy"
+      }
+    ],
+    "TEST00101": [
+      {
+        "Examination": 900037,
+        "ScheduleStudyUnitID": "26120ECO30203",
+        "CurriculumID": "TESTCUR-ECO-302",
+        "CurriculumName": "Economics Capstone Project",
+        "NgayThi": "15/12/2026",
+        "GioThi": "07g30",
+        "ThoiLuong": "45",
+        "PhongThi": "T203",
+        "DiaDiem": "Test Building B",
+        "HinhThucThi": "Tự luận"
+      }
+    ]
+  }
+}

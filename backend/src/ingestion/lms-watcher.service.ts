@@ -11,6 +11,7 @@ import { LMSService, type LmsSession } from "../lms/lms.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { parseMonthlyView } from "./core/parse-lms";
 import { monthsFrom } from "./core/semester";
+import { SyncDigest } from "./core/sync-digest";
 import type { ParsedLmsCourse } from "./core/types";
 import { IngestionJobsService } from "./ingestion-jobs.service";
 import { MaterializerService } from "./materializer.service";
@@ -71,7 +72,7 @@ export class LmsWatcherService {
     );
   }
 
-  @Cron("0 */15 * * * *")
+  @Cron(CronExpression.EVERY_30_MINUTES)
   async handleCron(): Promise<void> {
     await runCronJob("lms-watcher", async () => {
       const count = await this.run();
@@ -107,9 +108,13 @@ export class LmsWatcherService {
     const session = await this.signIn(target, jobId);
     if (!session) return;
 
+    // Changes are announced once per item type at the end of the run.
+    const digest = new SyncDigest(new Date());
+
     let created = 0;
     let updated = 0;
-    let guarded = 0;
+    let skippedDeleted = 0;
+    let skippedMoved = 0;
     let deleted = 0;
     let first = true;
     // Every externalKey any month of this run saw, and whether every fetch
@@ -142,10 +147,12 @@ export class LmsWatcherService {
           parsed.items,
           "LMS",
           now,
+          digest,
         );
         created += outcome.created;
         updated += outcome.updated;
-        guarded += outcome.guarded;
+        skippedDeleted += outcome.skippedDeleted;
+        skippedMoved += outcome.skippedMoved;
         for (const item of parsed.items) seenKeys.add(item.externalKey);
 
         await this.jobs.completeItem("LMS", itemId, {
@@ -186,18 +193,21 @@ export class LmsWatcherService {
         ["ASSIGNMENT", "EXAM"],
         seenKeys,
         now,
+        digest,
       );
       deleted = recon.deleted;
       ingestionLastSuccess.record(now.getTime() / 1000, { provider: "LMS" });
     }
 
+    await this.materializer.flushDigest(target.userId, digest, now);
     await this.jobs.finishJob("LMS", jobId, "COMPLETED");
 
-    if (created + updated + guarded + deleted > 0) {
+    if (created + updated + skippedDeleted + skippedMoved + deleted > 0) {
       this.logger.log(
         `LMS sync for integration ${target.integrationId}: ` +
-          `${created} new, ${updated} updated, ${guarded} kept as edited, ` +
-          `${deleted} removed`,
+          `${created} new, ${updated} updated, ` +
+          `${skippedMoved} kept (student-moved), ` +
+          `${skippedDeleted} skipped (student-deleted), ${deleted} removed`,
       );
     }
   }

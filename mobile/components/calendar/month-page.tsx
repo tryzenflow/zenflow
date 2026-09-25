@@ -8,9 +8,11 @@ import {
 } from "@/lib/month-date-math";
 import { isPastDeadlineDrop } from "@/lib/overdue";
 import {
-  DAY_CACHE_TTL_MS,
-  getSessionMutationEpoch,
+  fetchDaySessions,
+  getCachedDaySessions,
+  isDayCacheFresh,
   sameSessions,
+  subscribeToSessionMutations,
 } from "@/lib/session-cache";
 import {
   MONTH_PILL_CLASSES,
@@ -122,7 +124,13 @@ export function MonthPage({
   onDoubleTapDay,
 }: MonthPageProps) {
   const { toast, confirm } = useToast();
-  const [sessions, setSessions] = useState<Session[] | null>(null);
+  // Months share the day cache under a `month:` key, so a page remounted by
+  // the pager (swiping back to a month that left its 3-page window) paints the
+  // last result instantly instead of a skeleton + refetch.
+  const monthKey = `month:${format(monthDate, "yyyy-MM")}`;
+  const [sessions, setSessions] = useState<Session[] | null>(
+    () => getCachedDaySessions(monthKey) ?? null,
+  );
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   // A day key to pulse for a moment right after a drop lands on it.
@@ -143,7 +151,7 @@ export function MonthPage({
 
   const pageRef = useRef<View>(null);
   const gridRef = useRef<View>(null);
-  const gridRectRef = useRef({ x: 0, y: 0, width: 0, rows: 0 });
+  const gridRectRef = useRef({ x: 0, y: 0, width: 0, height: 0, rows: 0 });
   const lastHighlightRef = useRef<string | null>(null);
   // The dragged pill's origin day key, read inside the pan callbacks — a ref
   // rather than `dragging.fromKey` so `onUpdate` can't observe a stale
@@ -165,30 +173,23 @@ export function MonthPage({
     isActiveRef.current = isActive;
   }, [isActive]);
 
-  // Mirrors `day-timeline.tsx`'s day cache: remembers the mutation epoch and
-  // timestamp of this page's last successful fetch so a plain screen-focus
-  // bump (`reloadToken`, from `month.tsx`'s `useFocusEffect`) doesn't hit the
-  // network when nothing has actually changed since. `notifySessionsMutated`
-  // (called from every `api/tasks.ts` mutation) bumps the epoch — that's the
-  // only thing that forces a real revalidation before the TTL is up.
-  const lastFetchRef = useRef<{ epoch: number; at: number } | null>(null);
-
   const refetch = useCallback(async () => {
     try {
       // No status filter (unlike Day View's `listSessions("day", …, "PENDING")`)
       // — the month grid shows completed pills too (line-through), matching
       // `mockups/month-view.html` and the un-filtered fetch
       // `frontend/src/components/calendar/layout.tsx` already does.
-      const res = await listSessions("month", monthDate);
-      lastFetchRef.current = {
-        epoch: getSessionMutationEpoch(),
-        at: Date.now(),
-      };
+      // Shared cache + in-flight de-dupe: concurrent callers (the three
+      // pager pages, a mutation fan-out) join one request per month.
+      const fetched = await fetchDaySessions(monthKey, async () => {
+        const res = await listSessions("month", monthDate);
+        return res.sessions;
+      });
       // A revalidation that comes back identical must not re-render the
       // whole grid — same guard `day-timeline.tsx` uses to avoid the
       // "refetch on every focus" flicker.
       setSessions((prev) =>
-        prev != null && sameSessions(prev, res.sessions) ? prev : res.sessions,
+        prev != null && sameSessions(prev, fetched) ? prev : fetched,
       );
     } catch (error) {
       setSessions((cur) => cur ?? []);
@@ -200,17 +201,35 @@ export function MonthPage({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [monthDate]);
+  }, [monthDate, monthKey]);
 
+  // A mount or a plain screen-focus bump (`reloadToken`) reuses a cache entry
+  // younger than the TTL; `notifySessionsMutated` expires every entry, so a
+  // real change always revalidates.
   useEffect(() => {
-    const last = lastFetchRef.current;
-    const fresh =
-      last != null &&
-      last.epoch === getSessionMutationEpoch() &&
-      Date.now() - last.at < DAY_CACHE_TTL_MS;
-    if (fresh) return;
+    if (isDayCacheFresh(monthKey)) {
+      const cached = getCachedDaySessions(monthKey);
+      if (cached) {
+        setSessions((prev) =>
+          prev != null && sameSessions(prev, cached) ? prev : cached,
+        );
+      }
+      return;
+    }
     refetch();
-  }, [refetch, reloadToken]);
+  }, [refetch, reloadToken, monthKey]);
+
+  // Mirrors the effect above, but fired immediately by
+  // `subscribeToSessionMutations` instead of waiting for the next
+  // focus-driven `reloadToken` bump — so this month refetches right away if
+  // it's already mounted and foregrounded when a mutation lands (e.g. a
+  // background sync's create/update/remove reported over the notifications
+  // SSE stream), not just the next time the user re-focuses the screen.
+  useEffect(() => {
+    return subscribeToSessionMutations(() => {
+      refetch();
+    });
+  }, [refetch]);
 
   const tasksByDate = useMemo(
     () => groupSessionsByDate(sessions ?? [], tz),
@@ -239,8 +258,14 @@ export function MonthPage({
       pageOffX.value = x;
       pageOffY.value = y;
     });
-    gridRef.current?.measureInWindow((x, y, width) => {
-      gridRectRef.current = { x, y, width, rows: Math.ceil(days.length / 7) };
+    gridRef.current?.measureInWindow((x, y, width, height) => {
+      gridRectRef.current = {
+        x,
+        y,
+        width,
+        height,
+        rows: Math.ceil(days.length / 7),
+      };
     });
   }, [days.length, pageOffX, pageOffY]);
 
@@ -273,11 +298,14 @@ export function MonthPage({
     absoluteX: number,
     absoluteY: number,
   ): Date | null {
-    const { x, y, width, rows } = gridRectRef.current;
-    if (width === 0) return null;
+    const { x, y, width, height, rows } = gridRectRef.current;
+    if (width === 0 || rows === 0) return null;
     const cellWidth = width / 7;
+    // Rows shrink to fit small screens, so use the measured height, not
+    // `CELL_HEIGHT`.
+    const rowHeight = height > 0 ? height / rows : CELL_HEIGHT;
     const col = Math.floor((absoluteX - x) / cellWidth);
-    const row = Math.floor((absoluteY - y) / CELL_HEIGHT);
+    const row = Math.floor((absoluteY - y) / rowHeight);
     if (col < 0 || col > 6 || row < 0 || row >= rows) return null;
     return days[row * 7 + col] ?? null;
   }

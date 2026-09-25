@@ -11,7 +11,7 @@ function lmsOperation(url: string): string {
 }
 
 /**
- * HTTP client for the DLU LMS (a Moodle at `LMS_URL`).
+ * HTTP client for the LMS (a Moodle at `LMS_URL`).
  *
  * Plain `fetch` — no browser, no Playwright. Everything the watchers need is
  * reachable with two form posts and one AJAX call, so driving Chromium just to
@@ -252,7 +252,7 @@ export class LMSService {
       this.logger.warn(
         `LMS request to ${url.split("?")[0]} failed: ${(err as Error).message}`,
       );
-      throw new Error("DLU LMS is unreachable");
+      throw new Error("LMS is unreachable");
     }
   }
 }

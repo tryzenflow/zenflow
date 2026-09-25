@@ -12,6 +12,17 @@ import type { SessionRow } from "./types/session-row";
 const sortedTagNames = (row: SessionRow): string[] =>
   row.tags.map((t) => t.name).sort((a, b) => a.localeCompare(b));
 
+/** A scheduled TASK that ends after its deadline (user accepted a late deadline). */
+export function isLate(row: SessionRow): boolean {
+  return (
+    row.type === "TASK" &&
+    row.scheduledStartTime !== null &&
+    row.deadline !== null &&
+    row.scheduledStartTime.getTime() + row.durationMinutes * 60_000 >
+      row.deadline.getTime()
+  );
+}
+
 /** Map a Prisma `Session` row to the `@zenflow/shared` API shape (dates → ISO). */
 export function toSessionDto(row: SessionRow): SharedSession {
   return {
@@ -29,11 +40,13 @@ export function toSessionDto(row: SessionRow): SharedSession {
       : null,
     seriesId: row.seriesId,
     rrule: row.series?.rrule ?? null,
+    timetableGroupId: row.scheduleStudyUnitId,
     sessionIndex: row.sessionIndex,
     sessionTotal: row.sessionTotal,
     reminders: (row.reminders ?? [])
       .map((r) => r.remindBeforeMinutes)
       .sort((a, b) => b - a),
+    late: isLate(row),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -46,6 +59,7 @@ export const NO_SLOT_PROPOSAL: SlotProposalFields = {
   primarySlot: null,
   alternativeSlot: null,
   divergent: false,
+  displacedSessions: [],
 };
 
 /** {@link PlacementResult} → the wire-shape `SlotProposalFields`. */
@@ -57,6 +71,12 @@ export function slotProposalFieldsOf(
     primarySlot: placement.scheduledStartTime?.toISOString() ?? null,
     alternativeSlot: placement.alternativeSlot?.toISOString() ?? null,
     divergent: placement.divergent,
+    displacedSessions: (placement.displaced ?? []).map((d) => ({
+      id: d.id,
+      from: d.from.toISOString(),
+      to: d.to.toISOString(),
+    })),
+    ...(placement.degraded ? { schedulingDegraded: true } : {}),
   };
 }
 

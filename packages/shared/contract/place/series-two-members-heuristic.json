@@ -1,0 +1,306 @@
+{
+  "name": "series-two-members-heuristic",
+  "description": "Series of two 60 min sittings, now Mon 08:00 UTC, deadline Wed 00:00. daySpan=floor(40h/24h)=1 so windows are day 0 and day 1. Matrix: hour 14 = +1 on Mon and Tue. Member 0 -> Mon 14:00, member 1 -> Tue 14:00 (score 1 each).",
+  "ignore": [
+    "paramsVersion",
+    "timingsMs"
+  ],
+  "request": {
+    "contractVersion": 1,
+    "requestId": "00000000-0000-4000-8000-000000000001",
+    "mode": "PLACE",
+    "nowMs": 1789977600000,
+    "timezone": "UTC",
+    "maxScanDays": 30,
+    "fixedOccupied": [],
+    "deadlineMs": 1790121600000,
+    "members": [
+      {
+        "id": "s0",
+        "durationMinutes": 60,
+        "primaryPolicy": "HEURISTIC",
+        "computeBoth": false
+      },
+      {
+        "id": "s1",
+        "durationMinutes": 60,
+        "primaryPolicy": "HEURISTIC",
+        "computeBoth": false
+      }
+    ],
+    "days": [
+      {
+        "dayStr": "2026-09-21",
+        "dayStartMs": 1789948800000,
+        "dayEndMs": 1790035200000,
+        "occupied": [],
+        "workloadByType": {
+          "LECTURE": {
+            "hours": 0,
+            "count": 0
+          },
+          "ASSIGNMENT": {
+            "hours": 0,
+            "count": 0
+          },
+          "EXAM": {
+            "hours": 0,
+            "count": 0
+          },
+          "TASK": {
+            "hours": 0,
+            "count": 0
+          },
+          "DND": {
+            "hours": 0,
+            "count": 0
+          }
+        }
+      },
+      {
+        "dayStr": "2026-09-22",
+        "dayStartMs": 1790035200000,
+        "dayEndMs": 1790121600000,
+        "occupied": [],
+        "workloadByType": {
+          "LECTURE": {
+            "hours": 0,
+            "count": 0
+          },
+          "ASSIGNMENT": {
+            "hours": 0,
+            "count": 0
+          },
+          "EXAM": {
+            "hours": 0,
+            "count": 0
+          },
+          "TASK": {
+            "hours": 0,
+            "count": 0
+          },
+          "DND": {
+            "hours": 0,
+            "count": 0
+          }
+        }
+      }
+    ],
+    "user": {
+      "preferenceMatrix": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "observationCount": 0
+    }
+  },
+  "response": {
+    "contractVersion": 1,
+    "requestId": "00000000-0000-4000-8000-000000000001",
+    "paramsVersion": "ignored",
+    "results": [
+      {
+        "id": "s0",
+        "outcome": "PLACED",
+        "appliedPolicy": "HEURISTIC",
+        "heuristic": {
+          "startMs": 1789999200000,
+          "score": 1
+        },
+        "linucb": null,
+        "startMs": 1789999200000,
+        "moves": [],
+        "late": false,
+        "conflicting": false
+      },
+      {
+        "id": "s1",
+        "outcome": "PLACED",
+        "appliedPolicy": "HEURISTIC",
+        "heuristic": {
+          "startMs": 1790085600000,
+          "score": 1
+        },
+        "linucb": null,
+        "startMs": 1790085600000,
+        "moves": [],
+        "late": false,
+        "conflicting": false
+      }
+    ],
+    "timingsMs": {
+      "decode": 0,
+      "context": 0,
+      "predict": 0,
+      "scan": 0,
+      "displace": 0,
+      "total": 0
+    }
+  }
+}

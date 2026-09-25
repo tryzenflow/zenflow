@@ -1,5 +1,5 @@
 /**
- * DLU LMS / student-portal credential integrations.
+ * LMS / student-portal credential integrations.
  *
  * Credentials are held server-side under two-layer envelope encryption (a
  * per-user data-encryption key, itself wrapped by a server-held master key) and

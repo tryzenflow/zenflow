@@ -115,8 +115,7 @@ export class PushService implements OnModuleInit {
   private dataFor(row: Notification): PushDataPayload {
     return {
       notificationId: row.id,
-      topic: row.topic,
-      kind: row.kind,
+      eventName: row.eventName,
       sessionId: row.sessionId ?? "",
       url: row.sessionId
         ? `/calendar?session=${row.sessionId}`
@@ -136,6 +135,5 @@ function recordPushResult(
   const failed = Math.max(0, attempted - res.sent - invalid);
   if (res.sent > 0) pushSend.add(res.sent, { provider, result: "sent" });
   if (failed > 0) pushSend.add(failed, { provider, result: "failed" });
-  if (invalid > 0)
-    pushSend.add(invalid, { provider, result: "invalid_token" });
+  if (invalid > 0) pushSend.add(invalid, { provider, result: "invalid_token" });
 }

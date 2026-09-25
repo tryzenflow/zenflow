@@ -57,7 +57,6 @@ export function DeadlineChipRow({
   disabled,
   editing,
   tz,
-  warning,
 }: {
   /** The resolved deadline, as a UTC ISO-8601 instant (or "" when unset). */
   value: string;
@@ -67,9 +66,6 @@ export function DeadlineChipRow({
    * "unset" — so the no-rush default below must not fire. */
   editing?: boolean;
   tz: string;
-  /** Shown (red) under the preview — e.g. this deadline lands before the
-   * session's already-scheduled start. */
-  warning?: string;
 }) {
   const [options, setOptions] = useState<DeadlineOptionsResponse | null>(null);
   const [chip, setChip] = useState<ChipId | null>(null);
@@ -255,12 +251,6 @@ export function DeadlineChipRow({
 
       {preview && (
         <Text className="text-[11px] text-muted-foreground">Due {preview}</Text>
-      )}
-
-      {warning && (
-        <Text className="text-[11px] font-medium text-destructive">
-          {warning}
-        </Text>
       )}
     </View>
   );

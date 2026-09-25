@@ -147,9 +147,12 @@ export const UpdateRecurringSheet = forwardRef<
     () => ({
       open: (session, _pending, onResolve) => {
         const seriesKind = getSeriesKind(session);
-        if (seriesKind === "none") {
-          // Defensive guard — callers are responsible for only opening
-          // this sheet for a session that belongs to a series.
+        if (seriesKind === "none" || seriesKind === "timetable") {
+          // Defensive guard — callers are responsible for only opening this
+          // sheet for a session that belongs to a series. A timetable-grouped
+          // lecture has no group-wide reschedule endpoint (only delete), so a
+          // drag/resize of one always applies to just that meeting — same as
+          // a plain one-off, no scope prompt.
           onResolve(null);
           return;
         }

@@ -96,7 +96,7 @@ BREAKING CHANGE: `start` is now `requestedStartTime` in the reschedule body.
   `docs/contributing`).
 - Keep commits focused; don't mix unrelated changes (e.g. a feature + a repo-wide reformat).
 - Before opening a PR: lint, typecheck, and run the relevant tests; update the matching README
-  / `docs/heuristic.md` when you change schema, endpoints, the scheduler, screens, or the ML
+  / `services/bandit/README.md` when you change schema, endpoints, the scheduler, screens, or the ML
   roadmap.
 - PR descriptions should explain the **why** and link the issue.
 

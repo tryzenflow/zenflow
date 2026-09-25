@@ -1,20 +1,27 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { Test, TestingModule } from "@nestjs/testing";
 import { PrismaService } from "../../prisma/prisma.service";
-import { SchedulingExperimentCoordinator } from "./scheduling-experiment-coordinator.service";
-import { HeuristicPlacer } from "./heuristic-placer.service";
-import { BanditPlacer } from "./bandit-placer.service";
-import { SeriesPlacer } from "./series-placer.service";
 import { TaskPlacementService } from "./task-placement.service";
+import { PythonPlacer } from "./python-placer.service";
+import { ScheduleInfeasibleException } from "../schedule-infeasible.exception";
 
 /**
- * `TaskPlacementService.placeOnCreate` / `placeOnDeadlineChange` — the single-TASK
- * A/B facade. The A/B assignment + pairwise/bandit routing itself is
- * `scheduling-experiment-coordinator.service.spec.ts`; here we prove the
- * heuristic-write → coordinator-run → override-write sequencing and that a
- * coordinator failure always leaves the heuristic placement standing. Series
- * placement is covered by `series-placer.service.spec.ts`.
+ * `TaskPlacementService` is now a thin pass-through to {@link PythonPlacer}
+ * (ADR-0003 phase 6): it owns only the `now + duration > deadline` arithmetic
+ * guard and the series-deadline-change transaction, everything else
+ * delegates straight to Python (which itself falls back to the frozen
+ * heuristic internally — see `python-placer.service.spec.ts` and
+ * `fallback-placer.service.spec.ts`).
  */
+
+const python = {
+  placeSingle: jest.fn(),
+  preflightSingle: jest.fn(),
+  canPlaceSeries: jest.fn(),
+  placeSeries: jest.fn(),
+};
+beforeEach(() => {
+  Object.values(python).forEach((m) => m.mockClear());
+});
 
 const user = {
   id: "u1",
@@ -28,212 +35,175 @@ const task = {
 };
 const now = new Date("2026-06-08T00:00:00.000Z");
 
-async function makeTaskPlacementService(
-  prisma: unknown,
-  coordinator: unknown,
-  heuristic: unknown,
-  bandit: unknown,
-  seriesPlacer: unknown,
+async function makeService(
+  prisma: unknown = {},
 ): Promise<TaskPlacementService> {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       TaskPlacementService,
       { provide: PrismaService, useValue: prisma },
-      { provide: SchedulingExperimentCoordinator, useValue: coordinator },
-      { provide: HeuristicPlacer, useValue: heuristic },
-      { provide: BanditPlacer, useValue: bandit },
-      { provide: SeriesPlacer, useValue: seriesPlacer },
+      { provide: PythonPlacer, useValue: python },
     ],
   }).compile();
   return module.get<TaskPlacementService>(TaskPlacementService);
 }
 
-async function makeDeps(over: {
-  heuristicStart?: Date | null;
-  policy?: "HEURISTIC" | "LINUCB";
-  pick?: {
-    scheduledStartTime: Date;
-    selectedArm: string;
-    featureVector: number[];
-  };
-  banditThrows?: boolean;
-}) {
-  const sessionUpdate = jest.fn().mockResolvedValue({});
-  const prisma = { session: { update: sessionUpdate } };
-  const heuristicStart =
-    over.heuristicStart === undefined ? null : over.heuristicStart;
-  const coordinator = {
-    run: over.banditThrows
-      ? jest.fn().mockRejectedValue(new Error("bandit down"))
-      : jest.fn(async (input: { runBandit: () => Promise<unknown> }) => {
-          const primaryPolicy = over.policy ?? "HEURISTIC";
-          const banditPick =
-            primaryPolicy === "LINUCB" ? await input.runBandit() : null;
-          return {
-            appliedStart: banditPick
-              ? (banditPick as { scheduledStartTime: Date }).scheduledStartTime
-              : heuristicStart,
-            appliedPolicy: banditPick
-              ? "LINUCB"
-              : heuristicStart
-                ? "HEURISTIC"
-                : "NONE",
-            assignedPolicy: primaryPolicy,
-            banditAttempted: primaryPolicy === "LINUCB",
-            banditPick,
-            slotProposalId: banditPick ? "p1" : null,
-            alternativeSlot: null,
-            divergent: false,
-          };
-        }),
-  };
-  const heuristic = {
-    placeTask: jest.fn().mockResolvedValue(heuristicStart),
-  };
-  const bandit = {
-    placeTask: jest.fn().mockResolvedValue(over.pick ?? null),
-  };
-  const svc = await makeTaskPlacementService(
-    prisma,
-    coordinator,
-    heuristic,
-    bandit,
-    { placeSeries: jest.fn() },
-  );
-  return { svc, sessionUpdate, coordinator, heuristic, bandit };
-}
-
-describe("TaskPlacementService.placeOnCreate", () => {
-  it("keeps the heuristic placement and runs the coordinator when HEURISTIC is primary", async () => {
-    const slot = new Date("2026-06-09T09:00:00.000Z");
-    const { svc, sessionUpdate, coordinator, bandit } = await makeDeps({
-      heuristicStart: slot,
-      policy: "HEURISTIC",
-    });
-
-    const res = await svc.placeOnCreate({ user, task, now });
-
-    expect(res).toEqual({
-      scheduledStartTime: slot,
+describe("TaskPlacementService.placeOnCreate / placeOnDeadlineChange", () => {
+  it("delegates single placement to PythonPlacer with the right trigger", async () => {
+    const result = {
+      scheduledStartTime: new Date("2026-06-08T10:00:00.000Z"),
       appliedPolicy: "HEURISTIC",
-      slotProposalId: null,
+      slotProposalId: "sp",
       alternativeSlot: null,
       divergent: false,
-    });
-    expect(sessionUpdate).toHaveBeenCalledWith({
-      where: { id: "t1" },
-      data: { scheduledStartTime: slot },
-    });
-    expect(bandit.placeTask).not.toHaveBeenCalled();
-    expect(coordinator.run).toHaveBeenCalledTimes(1);
-  });
-
-  it("overrides with the LinUCB pick and reports its proposal id", async () => {
-    const heuristicSlot = new Date("2026-06-09T09:00:00.000Z");
-    const pick = {
-      scheduledStartTime: new Date("2026-06-09T20:00:00.000Z"),
-      selectedArm: "NIGHT",
-      featureVector: new Array<number>(22).fill(0),
     };
-    const { svc, sessionUpdate } = await makeDeps({
-      heuristicStart: heuristicSlot,
-      policy: "LINUCB",
-      pick,
+    python.placeSingle.mockResolvedValue(result);
+    const svc = await makeService();
+
+    const res = await svc.placeOnCreate({
+      user,
+      task,
+      now,
+      infeasiblePolicy: "ACCEPT_CONFLICTS",
     });
 
-    const res = await svc.placeOnCreate({ user, task, now });
-
-    expect(res).toEqual({
-      scheduledStartTime: pick.scheduledStartTime,
-      appliedPolicy: "LINUCB",
-      slotProposalId: "p1",
-      alternativeSlot: null,
-      divergent: false,
-    });
-    // heuristic write then LinUCB override write.
-    expect(sessionUpdate).toHaveBeenCalledTimes(2);
+    expect(res).toBe(result);
+    expect(python.placeSingle).toHaveBeenCalledWith(
+      user,
+      task,
+      "create",
+      now,
+      "ACCEPT_CONFLICTS",
+      true,
+    );
   });
 
-  it("falls back to the heuristic placement when the coordinator throws", async () => {
-    const slot = new Date("2026-06-09T09:00:00.000Z");
-    const { svc, sessionUpdate } = await makeDeps({
-      heuristicStart: slot,
-      policy: "LINUCB",
-      banditThrows: true,
-    });
-
-    const res = await svc.placeOnCreate({ user, task, now });
-
-    expect(res).toEqual({
-      scheduledStartTime: slot,
-      appliedPolicy: "HEURISTIC",
-      slotProposalId: null,
-      alternativeSlot: null,
-      divergent: false,
-    });
-    // Only the heuristic write happened — no override write followed the throw.
-    expect(sessionUpdate).toHaveBeenCalledTimes(1);
-  });
-
-  it("reports NONE when nothing free fits", async () => {
-    const { svc } = await makeDeps({
-      heuristicStart: null,
-      policy: "HEURISTIC",
-    });
-    const res = await svc.placeOnCreate({ user, task, now });
-    expect(res).toEqual({
+  it("placeOnDeadlineChange uses the deadline-change trigger", async () => {
+    python.placeSingle.mockResolvedValue({
       scheduledStartTime: null,
       appliedPolicy: "NONE",
       slotProposalId: null,
       alternativeSlot: null,
       divergent: false,
     });
+    const svc = await makeService();
+    await svc.placeOnDeadlineChange({ user, task, now });
+    expect(python.placeSingle).toHaveBeenCalledWith(
+      user,
+      task,
+      "deadline-change",
+      now,
+      undefined,
+      true,
+    );
+    await svc.placeOnDeadlineChange({
+      user,
+      task,
+      now,
+      allowLastResort: false,
+    });
+    expect(python.placeSingle).toHaveBeenLastCalledWith(
+      user,
+      task,
+      "deadline-change",
+      now,
+      undefined,
+      false,
+    );
+  });
+});
+
+describe("TaskPlacementService.preflightTask", () => {
+  it("400s before calling Python when now + duration > deadline", async () => {
+    const svc = await makeService();
+    await expect(
+      svc.preflightTask({
+        user,
+        taskId: "t1",
+        durationMinutes: 180,
+        deadline: new Date(now.getTime() + 60 * 60_000),
+        now,
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(python.preflightSingle).not.toHaveBeenCalled();
+  });
+
+  it("arithmeticOnly returns before calling Python", async () => {
+    const svc = await makeService();
+    await expect(
+      svc.preflightTask({
+        user,
+        durationMinutes: 60,
+        deadline: task.deadline,
+        now,
+        arithmeticOnly: true,
+      }),
+    ).resolves.toBeUndefined();
+    expect(python.preflightSingle).not.toHaveBeenCalled();
+  });
+
+  it("otherwise delegates the pre-flight to Python", async () => {
+    python.preflightSingle.mockResolvedValue(undefined);
+    const svc = await makeService();
+    await svc.preflightTask({
+      user,
+      durationMinutes: 60,
+      deadline: task.deadline,
+      now,
+      policy: "ACCEPT_LATE_DEADLINE",
+    });
+    expect(python.preflightSingle).toHaveBeenCalledWith({
+      user,
+      taskId: undefined,
+      durationMinutes: 60,
+      deadline: task.deadline,
+      now,
+      policy: "ACCEPT_LATE_DEADLINE",
+    });
   });
 });
 
 describe("TaskPlacementService.canPlaceTask / canPlaceSeries", () => {
-  it("canPlaceTask is true when the heuristic finds a slot, using a placeholder id (no row exists yet)", async () => {
-    const slot = new Date("2026-06-09T09:00:00.000Z");
-    const { svc, heuristic } = await makeDeps({ heuristicStart: slot });
-
+  it("canPlaceTask is true when Python's pre-flight does not throw", async () => {
+    python.preflightSingle.mockResolvedValue(undefined);
+    const svc = await makeService();
     const ok = await svc.canPlaceTask({
       user,
       durationMinutes: 60,
       deadline: task.deadline,
       now,
     });
-
     expect(ok).toBe(true);
-    expect(heuristic.placeTask.mock.calls[0][1].id).not.toBe("t1");
   });
 
-  it("canPlaceTask is false when nothing fits, and touches no prisma/coordinator write", async () => {
-    const { svc, sessionUpdate, coordinator } = await makeDeps({
-      heuristicStart: null,
-    });
-
+  it("canPlaceTask is false when Python throws ScheduleInfeasibleException", async () => {
+    python.preflightSingle.mockRejectedValue(new ScheduleInfeasibleException());
+    const svc = await makeService();
     const ok = await svc.canPlaceTask({
       user,
       durationMinutes: 60,
       deadline: task.deadline,
       now,
     });
-
     expect(ok).toBe(false);
-    expect(sessionUpdate).not.toHaveBeenCalled();
-    expect(coordinator.run).not.toHaveBeenCalled();
   });
 
-  it("canPlaceSeries is true only when every member gets a slot (dry run)", async () => {
-    const seriesPlacer = {
-      placeSeries: jest.fn().mockResolvedValue([
-        { id: "p-0", scheduledStartTime: new Date("2026-06-02T09:00:00Z") },
-        { id: "p-1", scheduledStartTime: new Date("2026-06-05T09:00:00Z") },
-        { id: "p-2", scheduledStartTime: null },
-      ]),
-    };
-    const svc = await makeTaskPlacementService({}, {}, {}, {}, seriesPlacer);
+  it("canPlaceTask rethrows any other error", async () => {
+    python.preflightSingle.mockRejectedValue(new Error("boom"));
+    const svc = await makeService();
+    await expect(
+      svc.canPlaceTask({
+        user,
+        durationMinutes: 60,
+        deadline: task.deadline,
+        now,
+      }),
+    ).rejects.toThrow("boom");
+  });
 
+  it("canPlaceSeries delegates straight to Python", async () => {
+    python.canPlaceSeries.mockResolvedValue(true);
+    const svc = await makeService();
     const ok = await svc.canPlaceSeries({
       user,
       durationMinutes: 60,
@@ -241,15 +211,270 @@ describe("TaskPlacementService.canPlaceTask / canPlaceSeries", () => {
       deadline: task.deadline,
       now,
     });
-
-    expect(ok).toBe(false);
-    expect(seriesPlacer.placeSeries).toHaveBeenCalledWith(
-      "u1",
-      expect.objectContaining({ deadline: task.deadline }),
-      "UTC",
-      [],
+    expect(ok).toBe(true);
+    expect(python.canPlaceSeries).toHaveBeenCalledWith({
+      user,
+      durationMinutes: 60,
+      sessionCount: 3,
+      deadline: task.deadline,
       now,
-      { trigger: "create", dryRun: true },
+    });
+  });
+});
+
+describe("TaskPlacementService.placeSeriesOnCreate", () => {
+  function prismaMock() {
+    return {
+      session: { update: jest.fn().mockReturnValue("update-one") },
+      $transaction: jest.fn().mockResolvedValue(undefined),
+    };
+  }
+
+  it("delegates to Python with the create trigger", async () => {
+    const rows = [{ id: "m1", scheduledStartTime: new Date(now) }];
+    python.placeSeries.mockResolvedValue(rows);
+    const svc = await makeService(prismaMock());
+    const res = await svc.placeSeriesOnCreate({
+      user,
+      seriesId: "s1",
+      members: [{ id: "m1", durationMinutes: 60 }],
+      deadline: task.deadline,
+      now,
+    });
+    expect(res).toBe(rows);
+    expect(python.placeSeries).toHaveBeenCalledWith({
+      user,
+      members: [{ id: "m1", durationMinutes: 60 }],
+      deadline: task.deadline,
+      now,
+      trigger: "create",
+    });
+  });
+
+  // Regression: series members must be persisted with their starts.
+  it("persists every member's start and never writes a null one", async () => {
+    const start1 = new Date("2026-06-08T09:00:00.000Z");
+    const start2 = new Date("2026-06-09T09:00:00.000Z");
+    python.placeSeries.mockResolvedValue([
+      { id: "m1", scheduledStartTime: start1 },
+      { id: "m2", scheduledStartTime: null },
+      { id: "m3", scheduledStartTime: start2 },
+    ]);
+    const prisma = prismaMock();
+    const svc = await makeService(prisma);
+
+    await svc.placeSeriesOnCreate({
+      user,
+      seriesId: "s1",
+      members: [
+        { id: "m1", durationMinutes: 60 },
+        { id: "m2", durationMinutes: 60 },
+        { id: "m3", durationMinutes: 60 },
+      ],
+      deadline: task.deadline,
+      now,
+    });
+
+    expect(prisma.session.update).toHaveBeenCalledTimes(2);
+    expect(prisma.session.update).toHaveBeenCalledWith({
+      where: { id: "m1" },
+      data: { scheduledStartTime: start1 },
+    });
+    expect(prisma.session.update).toHaveBeenCalledWith({
+      where: { id: "m3" },
+      data: { scheduledStartTime: start2 },
+    });
+    expect(prisma.$transaction).toHaveBeenCalledWith([
+      "update-one",
+      "update-one",
+    ]);
+  });
+});
+
+describe("TaskPlacementService.redistributeSeries", () => {
+  it("re-places only upcoming members and persists the new deadline + starts in one transaction", async () => {
+    const past = {
+      id: "past",
+      durationMinutes: 60,
+      scheduledStartTime: new Date("2026-06-07T00:00:00.000Z"),
+    };
+    const upcoming = {
+      id: "future",
+      durationMinutes: 60,
+      scheduledStartTime: new Date("2026-06-09T00:00:00.000Z"),
+    };
+    const newStart = new Date("2026-06-09T12:00:00.000Z");
+    python.placeSeries.mockResolvedValue([
+      { id: "future", scheduledStartTime: newStart },
+    ]);
+    const transaction = jest.fn().mockResolvedValue(undefined);
+    const prisma = {
+      sessionSeries: { update: jest.fn().mockReturnValue("update-series") },
+      session: {
+        updateMany: jest.fn().mockReturnValue("update-many"),
+        update: jest.fn().mockReturnValue("update-one"),
+      },
+      $transaction: transaction,
+    };
+    const svc = await makeService(prisma);
+
+    const newDeadline = new Date("2026-06-20T00:00:00.000Z");
+    const res = await svc.redistributeSeries({
+      user,
+      seriesId: "s1",
+      members: [past, upcoming],
+      newDeadline,
+      now,
+    });
+
+    expect(python.placeSeries).toHaveBeenCalledWith({
+      user,
+      members: [{ id: "future", durationMinutes: 60 }],
+      deadline: newDeadline,
+      now,
+      trigger: "deadline-change",
+      fixedOccupied: [
+        {
+          start: past.scheduledStartTime.getTime(),
+          end:
+            past.scheduledStartTime.getTime() + past.durationMinutes * 60_000,
+        },
+      ],
+    });
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(res).toEqual([
+      { id: "past", scheduledStartTime: past.scheduledStartTime },
+      { id: "future", scheduledStartTime: newStart },
+    ]);
+  });
+});
+
+describe("TaskPlacementService.redistributeSeries never unschedules", () => {
+  it("a member the placer returned no start for keeps its current start (no null write)", async () => {
+    const upcoming = {
+      id: "future",
+      durationMinutes: 60,
+      scheduledStartTime: new Date("2026-06-09T00:00:00.000Z"),
+    };
+    python.placeSeries.mockResolvedValue([
+      { id: "future", scheduledStartTime: null },
+    ]);
+    const prisma = {
+      sessionSeries: { update: jest.fn().mockReturnValue("update-series") },
+      session: {
+        updateMany: jest.fn().mockReturnValue("update-many"),
+        update: jest.fn().mockReturnValue("update-one"),
+      },
+      $transaction: jest.fn().mockResolvedValue(undefined),
+    };
+    const svc = await makeService(prisma);
+
+    const res = await svc.redistributeSeries({
+      user,
+      seriesId: "s1",
+      members: [upcoming],
+      newDeadline: new Date("2026-06-20T00:00:00.000Z"),
+      now,
+    });
+
+    expect(prisma.session.update).not.toHaveBeenCalled();
+    expect(prisma.$transaction).toHaveBeenCalledWith([
+      "update-series",
+      "update-many",
+    ]);
+    expect(res).toEqual([
+      { id: "future", scheduledStartTime: upcoming.scheduledStartTime },
+    ]);
+  });
+});
+
+describe("TaskPlacementService.planSeriesRespread", () => {
+  it("a last-resort pick counts as no slot (to: null), so the caller moves sittings one by one", async () => {
+    const a = {
+      id: "a",
+      durationMinutes: 60,
+      scheduledStartTime: new Date("2026-06-09T09:00:00.000Z"),
+    };
+    python.placeSeries.mockResolvedValue([
+      {
+        id: "a",
+        scheduledStartTime: new Date("2026-06-09T23:00:00.000Z"),
+        lastResort: true,
+      },
+    ]);
+    const prisma = {
+      session: { findMany: jest.fn().mockResolvedValue([a]) },
+    };
+    const svc = await makeService(prisma);
+    const plan = await svc.planSeriesRespread({
+      user,
+      seriesId: "s1",
+      deadline: new Date("2026-06-10T00:00:00.000Z"),
+      now,
+    });
+    expect(plan).toEqual([{ id: "a", from: a.scheduledStartTime, to: null }]);
+  });
+
+  it("re-places the series' upcoming sittings together and writes nothing", async () => {
+    const past = {
+      id: "past",
+      durationMinutes: 60,
+      scheduledStartTime: new Date("2026-06-07T00:00:00.000Z"),
+    };
+    const a = {
+      id: "a",
+      durationMinutes: 60,
+      scheduledStartTime: new Date("2026-06-09T09:00:00.000Z"),
+    };
+    const b = {
+      id: "b",
+      durationMinutes: 60,
+      scheduledStartTime: new Date("2026-06-09T10:00:00.000Z"),
+    };
+    const aTo = new Date("2026-06-09T09:00:00.000Z");
+    const bTo = new Date("2026-06-11T09:00:00.000Z");
+    python.placeSeries.mockResolvedValue([
+      { id: "a", scheduledStartTime: aTo },
+      { id: "b", scheduledStartTime: bTo },
+    ]);
+    const prisma = {
+      session: {
+        findMany: jest.fn().mockResolvedValue([past, a, b]),
+        update: jest.fn(),
+      },
+      $transaction: jest.fn(),
+    };
+    const svc = await makeService(prisma);
+    const deadline = new Date("2026-06-20T00:00:00.000Z");
+
+    const plan = await svc.planSeriesRespread({
+      user,
+      seriesId: "s1",
+      deadline,
+      now,
+    });
+
+    expect(python.placeSeries).toHaveBeenCalledWith(
+      expect.objectContaining({
+        members: [
+          { id: "a", durationMinutes: 60 },
+          { id: "b", durationMinutes: 60 },
+        ],
+        deadline,
+        trigger: "deadline-change",
+        fixedOccupied: [
+          {
+            start: past.scheduledStartTime.getTime(),
+            end: past.scheduledStartTime.getTime() + 60 * 60_000,
+          },
+        ],
+      }),
     );
+    expect(plan).toEqual([
+      { id: "a", from: a.scheduledStartTime, to: aTo },
+      { id: "b", from: b.scheduledStartTime, to: bTo },
+    ]);
+    expect(prisma.session.update).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });

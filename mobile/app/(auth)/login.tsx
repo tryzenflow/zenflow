@@ -191,8 +191,8 @@ export default function LoginScreen() {
       } else {
         const message =
           isAxiosError(error) && error.response
-            ? error.response.data?.message ??
-              "Failed to send OTP. Please try again."
+            ? (error.response.data?.message ??
+              "Failed to send OTP. Please try again.")
             : "Network error. Could not connect to the server.";
         setError("email", { type: "manual", message });
       }
@@ -216,8 +216,8 @@ export default function LoginScreen() {
       } else {
         const message =
           isAxiosError(error) && error.response
-            ? error.response.data?.message ??
-              "Failed to verify OTP. Please try again."
+            ? (error.response.data?.message ??
+              "Failed to verify OTP. Please try again.")
             : "Network error. Could not connect to the server.";
         setError("otp", { type: "manual", message });
       }
@@ -292,7 +292,7 @@ export default function LoginScreen() {
               >
                 <Text
                   className={cn(
-                    "text-[13px] font-semibold underline underline-offset-[3px]",
+                    "text-[13px] underline text-muted-foreground underline-offset-[3px]",
                     otpLockout.active && "text-muted-foreground opacity-50",
                   )}
                 >

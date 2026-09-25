@@ -35,14 +35,14 @@ export const MIN = 60_000;
 
 /**
  * Weight and saturation point for the slot-scoring "stability" nudge
- * (`core/slot-score.ts`'s `stabilityScore`, used by both `bestFreeSlot` and
- * `linucb-best-slot.ts`'s `bestMinuteInArm`): a light penalty for moving a
- * session away from the start time the user last set manually, so it isn't
- * churned without good reason.
+ * (`core/slot-score.ts`'s `stabilityScore`, used by `bestFreeSlot` here and
+ * mirrored by `services/bandit`'s LinUCB slot scoring): a light penalty for
+ * moving a session away from the start time the user last set manually, so
+ * it isn't churned without good reason.
  *
  * `STABILITY_WEIGHT` caps the term's maximum contribution to the total
  * score. It has to stay well under the scale of the terms it sits beside:
- * LinUCB's own arm-score term is a weighted blend of `/predict` outputs
+ * LinUCB's own arm-score term is a weighted blend of per-arm scores
  * whose inputs (context features, rewards) are all clamped to `[-1, 1]`
  * (`docs/adr/0001-linucb-model-design.md` §4/§5), plus a bounded UCB
  * exploration bonus (`BANDIT_ALPHA · √(xᵀA⁻¹x)`) — so it typically lands in
@@ -63,36 +63,6 @@ export const STABILITY_WEIGHT = 0.1;
 export const STABILITY_SATURATION_HOURS = 4;
 
 /**
- * Weight of the fixed, post-hoc preference-matrix nudge used ONLY to rank
- * exact minutes within LinUCB's already-chosen arm (Item 3B1/B2) — never to
- * choose the arm itself (B2 picks the arm from LinUCB's own per-arm scores
- * alone), and never fed into LinUCB's context vector at all (the preference
- * matrix was dropped from `context-vector.ts` entirely — it's no longer even
- * a reserved/zeroed slot).
- *
- * LinUCB's own arm score (`θ̂ᵀx + α·√(xᵀA⁻¹x)`) is fit against rewards in
- * `[-1, 1]` (`SESSION_RETAINED_REWARD` / `SESSION_MOVE_REWARD` /
- * `dragDistanceReward`'s range — ADR-0001 §7), so a trained arm's score is
- * itself O(1) in typical magnitude, with the `α·√(...)` exploration term
- * adding at most roughly another unit early on (bounded by `α·√FEATURE_DIM ≈
- * 0.15·√22 ≈ 0.7` for a single early observation under the `λ = 1` ridge
- * prior, per ADR-0001 §6/§10) before shrinking as more data arrives.
- * `slotPreferenceScore` is duration-scaled (a sum over every clock-hour the
- * slot touches, so an N-hour slot's raw value is up to `N`, not `O(1)`) —
- * dividing by the slot's own duration-in-hours before applying this weight
- * (see `linucb-best-slot.ts`'s `bestMinuteInArm`) normalizes it back to the
- * same `[-1, 1]`-ish per-hour scale as a single arm score, so this weight is
- * directly comparable to "what fraction of one arm-score's typical
- * magnitude."
- * `0.1` caps the nudge at ±10% of that scale — enough to break near-ties
- * between minutes/days LinUCB itself can't yet distinguish and to soften
- * cold start (arm score `0.0` before an arm has any data — see
- * `services/bandit/README.md`'s `/predict` contract), never enough to read
- * as a second competing signal.
- */
-export const PREFERENCE_NUDGE_WEIGHT = 0.1;
-
-/**
  * Reward written on the `SessionEvent` for each outcome of the move-or-keep
  * model. A user drag/resize of a scheduled TASK is a negative signal; a TASK
  * that elapses unmoved (detected by the RETAINED sweep) is a positive one.
@@ -106,7 +76,7 @@ export const SESSION_RETAINED_REWARD = 1.0;
  * (`docs/adr/0001-linucb-model-design.md` §10). `BANDIT_ALPHA` is the
  * exploration coefficient on `α·√(xᵀA⁻¹x)`; `BANDIT_RIDGE` is the ridge `λ`
  * (`A = λI` at cold start). Both are sent to the Python bandit service in every
- * `/predict` / `/update` payload.
+ * `/v1/place` / `/v1/update` payload.
  */
 export const BANDIT_ALPHA = 0.15;
 export const BANDIT_RIDGE = 1.0;
@@ -119,17 +89,29 @@ export const BANDIT_RIDGE = 1.0;
 export const MOVE_REWARD_SCALE_MINUTES = 240;
 
 /** Stamped on `SlotProposal.modelVersion` for LinUCB proposals. */
-export const BANDIT_MODEL_VERSION = "linucb-d22-v1";
+export const BANDIT_MODEL_VERSION = "linucb-d7-v0";
 
 /** `SlotProposal.experimentId` for the heuristic-vs-LinUCB A/B experiment. */
 export const BANDIT_EXPERIMENT_ID = "linucb-heuristic-v1";
 
 /**
  * Fraction of `TASK` create / deadline-change events (and, independently,
- * series members) that run **both** `HeuristicPlacer` and `BanditPlacer` and
- * get `SlotProposal.pairwiseShown = true` (`docs/scheduler/ab-testing.md`
+ * series members) that get both policies computed (`computeBoth` on the
+ * `/v1/place` request) and `SlotProposal.pairwiseShown = true`
+ * (`docs/scheduler/ab-testing.md`
  * §3). Every other event runs exactly one algorithm — the existing 50/50
  * `primaryPolicy` pick — same as before this existed. Independent draw from
  * `primaryPolicy`'s own 50/50 roll.
  */
 export const PAIRWISE_SAMPLE_RATE = 0.2;
+
+/** Most flexible tasks one displacement may move (capped cascade, issue #62 B). */
+export const MAX_DISPLACED_TASKS = 6;
+/** New-task candidate slots simulated per displacement window (min-displacement search). */
+export const DISPLACEMENT_CANDIDATES = 8;
+/** Reward stamped on scheduler-initiated `SYSTEM_MOVE` events (never a user signal). */
+export const SESSION_SYSTEM_MOVE_REWARD = 0;
+
+/** Latest local start a scan considers (cap on days scanned, ~30d); does NOT
+ * replace `MAX_SCAN_DAYS`, which still normalizes the context vector. */
+export const SCAN_CAP_DAYS = 30;

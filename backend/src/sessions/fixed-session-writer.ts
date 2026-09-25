@@ -44,6 +44,12 @@ export interface FixedSessionInput {
   externalKey?: string | null;
   /** Parent `SessionSeries` for a recurring fixed session. */
   seriesId?: string | null;
+  /**
+   * Portal `ScheduleStudyUnitID` — set only for a portal-ingested `LECTURE`,
+   * the grouping key for the timetable-group bulk-delete routes. Null/absent
+   * for every other fixed session (including a user-pinned one).
+   */
+  scheduleStudyUnitId?: string | null;
   tagIds?: readonly string[];
 }
 
@@ -69,6 +75,7 @@ export async function insertFixedSession(
       scheduledStartTime: input.scheduledStartTime,
       externalKey: input.externalKey ?? null,
       seriesId: input.seriesId ?? null,
+      scheduleStudyUnitId: input.scheduleStudyUnitId ?? null,
       tags: { connect: (input.tagIds ?? []).map((id) => ({ id })) },
       userId: input.userId,
     },

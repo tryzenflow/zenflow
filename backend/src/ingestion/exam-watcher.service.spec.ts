@@ -139,6 +139,7 @@ async function makeWatcher(
   const reconcileDeleted = jest
     .fn()
     .mockResolvedValue({ deleted: 0, keptWithWarning: 0 });
+  const flushDigest = jest.fn().mockResolvedValue(undefined);
   const revealCredentials = jest
     .fn()
     .mockResolvedValue({ username: "sv0001", password: "pw" });
@@ -159,7 +160,7 @@ async function makeWatcher(
       { provide: PortalAPIService, useValue: { authenticate, fetchExams } },
       {
         provide: MaterializerService,
-        useValue: { materialize, reconcileDeleted },
+        useValue: { materialize, reconcileDeleted, flushDigest },
       },
       { provide: IntegrationsService, useValue: { revealCredentials } },
     ],
@@ -173,6 +174,7 @@ async function makeWatcher(
     fetchExams,
     materialize,
     reconcileDeleted,
+    flushDigest,
   };
 }
 

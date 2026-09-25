@@ -24,8 +24,10 @@ import { isSessionPastDeadline } from "@/lib/overdue";
 import {
   RESCHEDULE_HINT,
   shouldSurfaceRescheduleHint,
+  showDisplacedToast,
   showErrorToast,
   showSplitToast,
+  withInfeasibleRetry,
 } from "@/lib/task-toasts";
 import {
   type EditSessionFormValues,
@@ -71,20 +73,6 @@ export default function EditSessionScreen() {
 
   const form = useSessionForm({ defaultValues: EMPTY_DEFAULTS });
   const loading = !task || form.formState.isSubmitting || deleting;
-
-  // Warn when the deadline being picked falls *before* where the engine has
-  // already scheduled this TASK — saving it would leave the session starting
-  // past its own due time (the edit-form mirror of the calendar's
-  // "schedule after the deadline?" drag guard). Recomputed as the user picks
-  // chips via `form.watch`.
-  const pendingDeadline = form.watch("deadline");
-  const deadlinePastStart =
-    !!task &&
-    task.type === "TASK" &&
-    isSessionPastDeadline({
-      scheduledStartTime: task.scheduledStartTime,
-      deadline: pendingDeadline,
-    });
 
   useEffect(() => {
     getSessionDetails(id)
@@ -163,9 +151,9 @@ export default function EditSessionScreen() {
       patch.rrule = values.rrule || null;
     }
 
-    try {
-      const updated = await updateSession(task.id, patch);
-
+    const handleUpdated = (
+      updated: Awaited<ReturnType<typeof updateSession>>,
+    ) => {
       // Handle divergent response — hand the primary-vs-alternative pick off
       // to the week view, which owns the SlotPickSheet and presents it over
       // the calendar (`useFocusEffect`, app/(app)/index.tsx).
@@ -189,6 +177,7 @@ export default function EditSessionScreen() {
         return;
       }
 
+      showDisplacedToast(toast, updated.displacedSessions);
       toast("Session updated", "success");
       if (isSessionPastDeadline(updated)) {
         toast(
@@ -210,9 +199,17 @@ export default function EditSessionScreen() {
       } else {
         router.back();
       }
-    } catch (error) {
-      showErrorToast(toast, error, "Failed to update the session");
-    }
+    };
+    await withInfeasibleRetry(
+      toast,
+      (infeasiblePolicy) =>
+        updateSession(
+          task.id,
+          infeasiblePolicy ? { ...patch, infeasiblePolicy } : patch,
+        ),
+      handleUpdated,
+      (error) => showErrorToast(toast, error, "Failed to update the session"),
+    );
   }
 
   function onInvalid(errors: Record<string, { message?: string } | undefined>) {
@@ -282,71 +279,64 @@ export default function EditSessionScreen() {
   }
 
   return (
-    <>
-      <SessionFormScreen
-        title="Edit session"
-        subtitle={
-          task
-            ? `Created ${format(new Date(task.createdAt), "MMM d")}`
-            : undefined
-        }
-        headerRight={
-          <Pressable
-            disabled={loading}
-            onPress={onDelete}
-            className="flex-row items-center gap-1.5"
-            accessibilityLabel="Delete session"
-          >
-            <Trash2 size={15} className="text-destructive" />
-            <Text className="text-[13px] font-semibold text-destructive">
-              Delete
-            </Text>
-          </Pressable>
-        }
-        footer={
-          <Button
-            className="h-[52px] w-full"
-            disabled={loading}
-            onPress={form.handleSubmit(onSubmit, onInvalid)}
-          >
-            <Text className="text-base font-semibold text-foreground">
-              {loading ? "Saving…" : "Save changes"}
-            </Text>
-          </Button>
-        }
-      >
-        {task ? (
-          <SessionSheetFields
-            initialValue={task.note || ""}
-            form={form}
-            tz={tz}
-            disabled={loading}
-            editing
-            deadlineWarning={
-              deadlinePastStart
-                ? "Earlier than this session's scheduled start — it'll be marked late."
-                : undefined
-            }
-            editingInstance={{
-              scheduledStartTime: task.scheduledStartTime,
-              durationMinutes: task.durationMinutes,
-            }}
-          />
-        ) : (
-          <View className="items-center py-16">
-            <ActivityIndicator />
-            <Text className="mt-3 text-sm text-muted-foreground">
-              Loading session…
-            </Text>
-          </View>
-        )}
-
-        <DeleteRecurringSheet
-          ref={deleteScopeSheet}
-          kind={task && getSeriesKind(task) === "task" ? "task" : "recurring"}
-          onChoose={runDelete}
+    <SessionFormScreen
+      title="Edit session"
+      subtitle={
+        task
+          ? `Created ${format(new Date(task.createdAt), "MMM d")}`
+          : undefined
+      }
+      headerRight={
+        <Pressable
+          disabled={loading}
+          onPress={onDelete}
+          className="flex-row items-center gap-1.5"
+          accessibilityLabel="Delete session"
+        >
+          <Trash2 size={15} className="text-destructive" />
+          <Text className="text-[13px] font-semibold text-destructive">
+            Delete
+          </Text>
+        </Pressable>
+      }
+      footer={
+        <Button
+          className="h-[52px] w-full"
+          disabled={loading}
+          onPress={form.handleSubmit(onSubmit, onInvalid)}
+        >
+          <Text className="text-base font-semibold text-foreground">
+            {loading ? "Saving…" : "Save changes"}
+          </Text>
+        </Button>
+      }
+    >
+      {task ? (
+        <SessionSheetFields
+          initialValue={task.note || ""}
+          form={form}
+          tz={tz}
+          disabled={loading}
+          editing
+          editingInstance={{
+            scheduledStartTime: task.scheduledStartTime,
+            durationMinutes: task.durationMinutes,
+          }}
         />
-      </SessionFormScreen>
-    </>
+      ) : (
+        <View className="items-center py-16">
+          <ActivityIndicator />
+          <Text className="mt-3 text-sm text-muted-foreground">
+            Loading session…
+          </Text>
+        </View>
+      )}
+
+      <DeleteRecurringSheet
+        ref={deleteScopeSheet}
+        kind={task && getSeriesKind(task) === "task" ? "task" : "recurring"}
+        onChoose={runDelete}
+      />
+    </SessionFormScreen>
   );
 }

@@ -1,6 +1,7 @@
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
+import { splitToastMessage } from "@/lib/task-toasts";
 import { cn } from "@/lib/utils";
 import {
   MAX_TITLE_LENGTH,
@@ -43,7 +44,6 @@ export function SessionSheetFields({
   tz,
   editing,
   typeSelector,
-  deadlineWarning,
   editingInstance,
 }: {
   initialValue?: string;
@@ -52,9 +52,6 @@ export function SessionSheetFields({
   tz: string;
   editing?: boolean;
   typeSelector?: ReactNode;
-  /** Shown (red) under the Deadline field — e.g. the picked deadline is
-   * earlier than where this TASK is already scheduled. */
-  deadlineWarning?: string;
   /**
    * Edit mode only: the schedule info of the specific `TASK` sitting
    * currently open in the form, used to bound the session-count slider's
@@ -186,7 +183,6 @@ export function SessionSheetFields({
                   disabled={disabled}
                   editing={editing}
                   tz={tz}
-                  warning={deadlineWarning}
                 />
               </Field>
             )}
@@ -271,6 +267,13 @@ export function SessionSheetFields({
   );
 }
 
+/** A "title\ndescription" message (split into two lines for toasts, see
+ * `splitToastMessage`) reads as one sentence under a field. */
+function inlineError(message: string): string {
+  const { title, description } = splitToastMessage(message);
+  return description ? `${title}. ${description}` : title;
+}
+
 function Field({
   label,
   error,
@@ -288,7 +291,7 @@ function Field({
       {children}
       {!!error && (
         <Text className="mt-1.5 text-[12px] font-medium text-destructive">
-          {error}
+          {inlineError(error)}
         </Text>
       )}
     </View>

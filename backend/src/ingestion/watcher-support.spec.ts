@@ -36,7 +36,7 @@ describe("statusCodeOf", () => {
   });
 
   it("is null when there is no status to recover", () => {
-    expect(statusCodeOf(new Error("DLU LMS is unreachable"))).toBeNull();
+    expect(statusCodeOf(new Error("LMS is unreachable"))).toBeNull();
     expect(statusCodeOf("not even an Error")).toBeNull();
   });
 });

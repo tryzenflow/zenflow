@@ -12,8 +12,10 @@ import {
   RESCHEDULE_HINT,
   placementToastMessage,
   showErrorToast,
+  showDisplacedToast,
   showSplitToast,
   shouldSurfaceRescheduleHint,
+  withInfeasibleRetry,
 } from "@/lib/task-toasts";
 import {
   type SessionFormType,
@@ -104,9 +106,9 @@ function toCreateInput(
 }
 
 /**
- * "New session" — full screen. A 3-way `SessionTypeTabs` selector sits just
- * below the Title field and switches between a flexible Task, a fixed
- * Assignment/Exam/Lecture, and a Do-Not-Disturb block. Reached via
+ * "New session" — full screen. A Task | Fixed `SessionTypeTabs` selector sits
+ * just below the Title field and switches between a flexible Task and a fixed
+ * Assignment / Exam / Lecture / Do-Not-Disturb block. Reached via
  * `router.push` with an optional `start` query param (a true UTC instant — see
  * `initialStart` / `initialDefaults` below).
  */
@@ -189,9 +191,9 @@ export default function NewSessionScreen() {
 
   async function onSubmit(values: SessionFormValues) {
     if (!user) return;
-    try {
-      const response = await createSession(toCreateInput(values, tz));
-
+    const handleCreated = (
+      response: Awaited<ReturnType<typeof createSession>>,
+    ) => {
       // Handle divergent response — present a primary-vs-alternative pick.
       // The week view owns the SlotPickSheet, so hand the payload off and
       // land there first; `useFocusEffect` (app/(app)/index.tsx) opens the
@@ -216,6 +218,7 @@ export default function NewSessionScreen() {
         return;
       }
 
+      showDisplacedToast(toast, response.displacedSessions);
       const { message, variant } = placementToastMessage(response, user);
       showSplitToast(toast, message, variant);
       if (shouldSurfaceRescheduleHint()) {
@@ -237,13 +240,22 @@ export default function NewSessionScreen() {
       } else {
         router.back();
       }
-    } catch (error) {
-      showErrorToast(
-        toast,
-        error,
-        "Something went wrong when creating the session",
-      );
-    }
+    };
+    await withInfeasibleRetry(
+      toast,
+      (infeasiblePolicy) =>
+        createSession({
+          ...toCreateInput(values, tz),
+          ...(infeasiblePolicy ? { infeasiblePolicy } : {}),
+        } as Parameters<typeof createSession>[0]),
+      handleCreated,
+      (error) =>
+        showErrorToast(
+          toast,
+          error,
+          "Something went wrong when creating the session",
+        ),
+    );
   }
 
   function onInvalid(errors: Record<string, { message?: string } | undefined>) {
@@ -263,35 +275,33 @@ export default function NewSessionScreen() {
         )}`;
 
   return (
-    <>
-      <SessionFormScreen
-        title="New session"
-        subtitle={subtitle}
-        footer={
-          <Button
-            className="h-[52px] w-full"
-            disabled={loading}
-            onPress={form.handleSubmit(onSubmit, onInvalid)}
-          >
-            <Text className="text-base font-semibold text-foreground">
-              {loading ? "Adding…" : "Add session"}
-            </Text>
-          </Button>
-        }
-      >
-        <SessionSheetFields
-          form={form}
-          tz={tz}
+    <SessionFormScreen
+      title="New session"
+      subtitle={subtitle}
+      footer={
+        <Button
+          className="h-[52px] w-full"
           disabled={loading}
-          typeSelector={
-            <SessionTypeTabs
-              value={type}
-              onChange={switchType}
-              disabled={loading}
-            />
-          }
-        />
-      </SessionFormScreen>
-    </>
+          onPress={form.handleSubmit(onSubmit, onInvalid)}
+        >
+          <Text className="text-base font-semibold text-foreground">
+            {loading ? "Adding…" : "Add session"}
+          </Text>
+        </Button>
+      }
+    >
+      <SessionSheetFields
+        form={form}
+        tz={tz}
+        disabled={loading}
+        typeSelector={
+          <SessionTypeTabs
+            value={type}
+            onChange={switchType}
+            disabled={loading}
+          />
+        }
+      />
+    </SessionFormScreen>
   );
 }

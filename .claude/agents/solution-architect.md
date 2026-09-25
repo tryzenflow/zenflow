@@ -16,7 +16,7 @@ updated diagrams, then commit.
 Read: `CLAUDE.md` (invariants), `README.md`, `backend/README.md` (schema, endpoints,
 scheduler), `frontend/README.md`, `backend/prisma/schema.prisma`, `packages/shared/src/*`,
 and the related GitHub issue (passed in your prompt). Respect the scheduling roadmap in
-`docs/scheduler/heuristic.md` (heuristic vs. LinUCB).
+`services/bandit/README.md` and ADR-0001 (heuristic vs. LinUCB).
 
 ## What to produce — an ADR in `docs/adr/`
 Create `docs/adr/NNNN-<kebab-title>.md` (zero-padded sequence; if `docs/adr/` doesn't exist,

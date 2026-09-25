@@ -1,9 +1,8 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import type {
-  NotificationDto,
-  NotificationKind,
-  NotificationsListResponse,
-  NotificationTopic,
+import {
+  notificationCategory,
+  type NotificationDto,
+  type NotificationsListResponse,
 } from "@zenflow/shared";
 import {
   Prisma,
@@ -24,74 +23,83 @@ import { EventEmitter2 } from "@nestjs/event-emitter";
  */
 const DEV_SAMPLES: CreateNotificationInput[] = [
   {
-    topic: "ASSIGNMENT",
-    kind: "NEW",
+    eventName: "assignment.created",
     title: "New assignment: Sorting Algorithms",
     content: "Added from your LMS. Plan the work that leads up to it.",
     sessionId: null,
     eventEndsAt: null,
   },
   {
-    topic: "EXAM",
-    kind: "NEW",
+    eventName: "exam.created",
     title: "New exam: Midterm — Room A305",
     content: "Added from your portal. Plan revision sessions before it.",
     sessionId: null,
     eventEndsAt: null,
   },
   {
-    topic: "TIMETABLE",
-    kind: "NEW",
-    title: "Timetable for semester 1 is available",
-    content: "12 classes were added to your calendar.",
+    eventName: "lecture.group_created",
+    title: "You have 12 new lectures",
+    content: "Synced from DLU. Tap to see the next one on your calendar.",
     sessionId: null,
     eventEndsAt: null,
   },
   {
-    topic: "TIMETABLE",
-    kind: "CHANGE",
+    eventName: "lecture.updated",
     title: "Updated: Databases — Room B210",
     content: "The portal moved this class.",
     sessionId: null,
     eventEndsAt: null,
   },
   {
-    topic: "TIMETABLE",
-    kind: "DROP",
+    eventName: "lecture.removed",
     title: "Lectures removed: Data Structures Lab",
     content: "These classes were taken off your DLU timetable.",
     sessionId: null,
     eventEndsAt: null,
+    // A removal has nothing to attach to; don't synthesize a placeholder session.
+    materializeSession: false,
   },
 ];
 
 /** What the materializer passes to {@link NotificationsService.create}. */
 export interface CreateNotificationInput {
   title: string;
-  topic: NotificationTopic;
-  kind: NotificationKind;
+  /**
+   * Stable slug ("assignment.created", "lecture.removed", …); see
+   * {@link NotificationDto.eventName}. Required, not optional, so a caller
+   * can never silently mis-tag (or forget to tag) a row.
+   */
+  eventName: string;
   sessionId: string | null;
   content: string;
   /** Fixed end instant of the session behind the row, or null (groups/drops). */
   eventEndsAt: Date | null;
+  /**
+   * Whether {@link NotificationsService.create} may synthesize a placeholder
+   * calendar session when the caller doesn't attach one (`sessionId: null`).
+   * Defaults to `true`; callers raising a removal set this `false` since there
+   * is nothing left to attach a session to.
+   */
+  materializeSession?: boolean;
 }
 
 /**
- * Topic → (session type, source, default duration) used whenever a notification
- * auto-materializes a calendar session, in both {@link NotificationsService.create}
- * and {@link NotificationsService.raiseSamples}.
+ * `eventName`'s category → (session type, source, default duration) used
+ * whenever a notification auto-materializes a calendar session, in both
+ * {@link NotificationsService.create} and {@link NotificationsService.raiseSamples}.
  */
-function resolveSessionDefaults(topic: NotificationTopic): {
+function resolveSessionDefaults(eventName: string): {
   type: SessionType;
   source: SessionSource;
   durationMinutes: number;
 } {
-  switch (topic) {
+  switch (notificationCategory(eventName)) {
     case "EXAM":
       return { type: "EXAM", source: "PORTAL", durationMinutes: 120 };
-    case "TIMETABLE":
+    case "LECTURE":
       return { type: "LECTURE", source: "PORTAL", durationMinutes: 90 };
     case "ASSIGNMENT":
+    case "REMINDER":
     default:
       return { type: "TASK", source: "LMS", durationMinutes: 90 };
   }
@@ -109,8 +117,7 @@ function cleanNotificationTitle(title: string): string {
 function toNotificationDto(row: Notification): NotificationDto {
   return {
     id: row.id,
-    topic: row.topic,
-    kind: row.kind,
+    eventName: row.eventName,
     title: row.title,
     content: row.content,
     sentAt: row.sentAt.toISOString(),
@@ -118,6 +125,7 @@ function toNotificationDto(row: Notification): NotificationDto {
     actionTakenAt: row.actionTakenAt ? row.actionTakenAt.toISOString() : null,
     eventEndsAt: row.eventEndsAt ? row.eventEndsAt.toISOString() : null,
     sessionId: row.sessionId,
+    conflictSessionIds: row.conflictSessionIds ?? [],
   };
 }
 
@@ -149,14 +157,16 @@ export class NotificationsService {
     tx?: Prisma.TransactionClient,
   ): Promise<Notification> {
     const db = tx ?? this.prisma;
+    const { materializeSession, ...notificationFields } = dto;
     let sessionId = dto.sessionId;
     let eventEndsAt = dto.eventEndsAt;
 
-    // Automatically create a calendar session/task if none is attached and kind is not DROP
-    if (!sessionId && dto.kind !== "DROP" && db?.session) {
+    // Automatically create a calendar session/task if none is attached and the
+    // caller hasn't opted out (removals have nothing left to attach one to).
+    if (!sessionId && materializeSession !== false && db?.session) {
       try {
         const { type, source, durationMinutes } = resolveSessionDefaults(
-          dto.topic,
+          dto.eventName,
         );
         const cleanTitle = cleanNotificationTitle(dto.title);
 
@@ -210,7 +220,7 @@ export class NotificationsService {
 
     const newNotification = await db.notification.create({
       data: {
-        ...dto,
+        ...notificationFields,
         sessionId,
         eventEndsAt,
         userId,
@@ -245,9 +255,9 @@ export class NotificationsService {
       let sessionId: string | null = null;
       let eventEndsAt: Date | null = null;
 
-      if (sample.kind !== "DROP") {
+      if (sample.materializeSession !== false) {
         const { type, source, durationMinutes } = resolveSessionDefaults(
-          sample.topic,
+          sample.eventName,
         );
         let title = cleanNotificationTitle(sample.title).replace(
           / \(#\d+\)$/,
@@ -256,14 +266,15 @@ export class NotificationsService {
         let location: string | null = null;
         let deadline: Date | null = null;
 
-        if (sample.topic === "ASSIGNMENT") {
+        const category = notificationCategory(sample.eventName);
+        if (category === "ASSIGNMENT") {
           deadline = new Date(sessionStart.getTime() + 4 * 60 * 60 * 1000);
           eventEndsAt = deadline;
-        } else if (sample.topic === "EXAM") {
+        } else if (category === "EXAM") {
           location = "Room A305";
           deadline = new Date(sessionStart.getTime() + durationMinutes * 60000);
           eventEndsAt = deadline;
-        } else if (sample.topic === "TIMETABLE") {
+        } else if (category === "LECTURE") {
           if (sample.title.toLowerCase().includes("semester 1")) {
             title = "Computer Architecture";
             location = "Room C201";
@@ -303,6 +314,49 @@ export class NotificationsService {
       raised.push(toNotificationDto(row));
     }
     return raised;
+  }
+
+  /**
+   * A sync-conflict row (a `sync_conflict.*` `eventName`, issue #62 D). Unlike
+   * {@link create} it never materializes a calendar session - it points at the
+   * user's own conflicting tasks via `conflictSessionIds`. The caller emits.
+   */
+  raiseConflict(
+    userId: string,
+    dto: {
+      /** Always `"sync_conflict.<category>"` — see {@link notificationEventKind}. */
+      eventName: string;
+      title: string;
+      content: string;
+      conflictSessionIds: string[];
+    },
+  ): Promise<Notification> {
+    return this.prisma.notification.create({
+      data: {
+        userId,
+        eventName: dto.eventName,
+        title: dto.title,
+        content: dto.content,
+        conflictSessionIds: dto.conflictSessionIds,
+        sessionId: null,
+        eventEndsAt: null,
+      },
+    });
+  }
+
+  /** The caller's own `sync_conflict.*` row, or 404. */
+  async findConflict(user: User, id: string): Promise<Notification> {
+    const row = await this.prisma.notification.findFirst({
+      where: {
+        id,
+        userId: user.id,
+        eventName: { startsWith: "sync_conflict." },
+      },
+    });
+    if (!row) {
+      throw new NotFoundException(`Cannot find conflict notification ${id}`);
+    }
+    return row;
   }
 
   /**

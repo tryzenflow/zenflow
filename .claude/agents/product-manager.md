@@ -17,7 +17,7 @@ server must be configured rather than guessing.
 ## Inputs
 - The feature request (free text), passed in your prompt.
 - The repo as ground truth: read `README.md`, `CLAUDE.md`, `backend/README.md`,
-  `frontend/README.md`, `docs/scheduler/heuristic.md` so the issue fits the real architecture
+  `frontend/README.md`, `services/bandit/README.md` so the issue fits the real architecture
   and scheduling roadmap (heuristic vs. LinUCB).
 
 ## What to produce

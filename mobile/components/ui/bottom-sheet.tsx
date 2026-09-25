@@ -14,6 +14,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { Button } from "./button";
+import { Input } from "./input";
 
 // !IMPORTANT: This file is only for web.
 //
@@ -235,6 +236,10 @@ const BottomSheetTextInput = React.forwardRef<
   );
 });
 
+/** Web: no keyboard lifting to opt into — the plain `Input` is enough. Kept
+ * so callers share one import with `bottom-sheet.native.tsx`. */
+const BottomSheetInput = Input;
+
 type BottomSheetFlatListRef = React.ElementRef<typeof RNFlatList>;
 type BottomSheetFlatListProps = React.ComponentPropsWithoutRef<
   typeof RNFlatList
@@ -368,6 +373,7 @@ export {
   BottomSheetFlatList,
   BottomSheetFooter,
   BottomSheetHeader,
+  BottomSheetInput,
   BottomSheetOpenTrigger,
   BottomSheetScrollView,
   BottomSheetTextInput,

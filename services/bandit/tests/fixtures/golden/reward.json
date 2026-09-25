@@ -1,0 +1,30 @@
+{
+  "function": "reward",
+  "source": "hand-checked",
+  "cases": [
+    {
+      "name": "zero",
+      "fn": "dragDistanceReward",
+      "args": [
+        0
+      ],
+      "expected": 0
+    },
+    {
+      "name": "half",
+      "fn": "dragDistanceReward",
+      "args": [
+        120
+      ],
+      "expected": -0.5
+    },
+    {
+      "name": "saturates",
+      "fn": "dragDistanceReward",
+      "args": [
+        -480
+      ],
+      "expected": -1
+    }
+  ]
+}

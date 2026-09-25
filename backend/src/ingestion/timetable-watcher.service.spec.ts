@@ -5,6 +5,7 @@ import { PortalAPIService } from "../portal/portal-api.service";
 import { PrismaService } from "../prisma/prisma.service";
 import type { PortalTimetableRow } from "./core/parse-portal";
 import { IngestionJobsService } from "./ingestion-jobs.service";
+import { SyncDigest } from "./core/sync-digest";
 import { MaterializerService } from "./materializer.service";
 import { TimetableWatcherService } from "./timetable-watcher.service";
 
@@ -180,6 +181,7 @@ async function makeWatcher(
   const reconcileDeleted = jest
     .fn()
     .mockResolvedValue({ deleted: 0, keptWithWarning: 0 });
+  const flushDigest = jest.fn().mockResolvedValue(undefined);
   const revealCredentials = jest
     .fn()
     .mockResolvedValue({ username: "sv0001", password: "pw" });
@@ -200,7 +202,7 @@ async function makeWatcher(
       { provide: PortalAPIService, useValue: { authenticate, fetchTimetable } },
       {
         provide: MaterializerService,
-        useValue: { materialize, reconcileDeleted },
+        useValue: { materialize, reconcileDeleted, flushDigest },
       },
       { provide: IntegrationsService, useValue: { revealCredentials } },
     ],
@@ -214,6 +216,7 @@ async function makeWatcher(
     fetchTimetable,
     materialize,
     reconcileDeleted,
+    flushDigest,
   };
 }
 
@@ -278,6 +281,21 @@ describe("TimetableWatcherService", () => {
     expect(w.db.items).toHaveLength(REMAINING_WEEKS.length);
     expect(w.db.items[0].url).toContain("tuan=34");
     expect(w.db.items[w.db.items.length - 1].url).toContain("tuan=52");
+  });
+
+  it("shares one digest across every week and the deletion pass, flushed once", async () => {
+    const w = await makeWatcher();
+
+    await w.service.run(NOW);
+
+    const digests = new Set([
+      ...(w.materialize.mock.calls as unknown[][]).map((c) => c[4]),
+      ...(w.reconcileDeleted.mock.calls as unknown[][]).map((c) => c[5]),
+    ]);
+    expect(digests.size).toBe(1);
+    expect([...digests][0]).toBeInstanceOf(SyncDigest);
+    expect(w.flushDigest).toHaveBeenCalledTimes(1);
+    expect(w.flushDigest).toHaveBeenCalledWith("u1", [...digests][0], NOW);
   });
 
   it("materializes the parsed meetings as PORTAL-sourced", async () => {

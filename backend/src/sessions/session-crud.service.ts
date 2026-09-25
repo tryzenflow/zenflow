@@ -6,6 +6,7 @@ import {
 import type {
   CreateSessionResponse,
   RemoveSessionResponse,
+  RemoveTimetableGroupResponse,
   Session as SharedSession,
   SessionDetailResponse,
   SessionSuggestionsResponse,
@@ -36,6 +37,7 @@ import {
 import { createEventData } from "./session-events";
 import { insertFixedSession } from "./fixed-session-writer";
 import { mapSessionPrismaError } from "./prisma-error";
+import { placeOrDiscard } from "./placement-compensation";
 import { NO_FEASIBLE_SLOT_MESSAGE, SeriesService } from "./series.service";
 
 /**
@@ -71,22 +73,26 @@ export class SessionCrudService {
       // Pre-flight feasibility — BEFORE any row is inserted, so an
       // infeasible request never leaves an unplaced task/series behind (no
       // rollback needed; see NO_FEASIBLE_SLOT_MESSAGE).
-      const feasible =
-        sessionCount > 1
-          ? await this.taskPlacement.canPlaceSeries({
-              user,
-              durationMinutes: dto.durationMinutes,
-              sessionCount,
-              deadline,
-              now,
-            })
-          : await this.taskPlacement.canPlaceTask({
-              user,
-              durationMinutes: dto.durationMinutes,
-              deadline,
-              now,
-            });
-      if (!feasible) throw new BadRequestException(NO_FEASIBLE_SLOT_MESSAGE);
+      if (sessionCount > 1) {
+        const feasible = await this.taskPlacement.canPlaceSeries({
+          user,
+          durationMinutes: dto.durationMinutes,
+          sessionCount,
+          deadline,
+          now,
+        });
+        if (!feasible) throw new BadRequestException(NO_FEASIBLE_SLOT_MESSAGE);
+      } else {
+        // Single TASK: a free slot, or a flexible-task repack, or the user's
+        // accept-conflicts / accept-late choice — else 409 (issue #62 B).
+        await this.taskPlacement.preflightTask({
+          user,
+          durationMinutes: dto.durationMinutes,
+          deadline,
+          now,
+          policy: dto.infeasiblePolicy,
+        });
+      }
 
       if (sessionCount > 1) {
         return this.series.createTaskSeries(
@@ -139,16 +145,23 @@ export class SessionCrudService {
       return s;
     });
 
-    // heuristic → 50/50 A/B → optional LinUCB override + SlotProposal.
-    const placement = await this.taskPlacement.placeOnCreate({
-      user,
-      task: {
-        id: created.id,
-        durationMinutes: created.durationMinutes,
-        deadline,
-      },
-      now,
-    });
+    // heuristic → 50/50 A/B → optional LinUCB override + SlotProposal. Never
+    // leaves the row unplaced: a miss gets the last resort, a throw discards it.
+    const placement = await placeOrDiscard(
+      this.prisma,
+      { userId: user.id, sessionIds: [created.id] },
+      () =>
+        this.taskPlacement.placeOnCreate({
+          user,
+          task: {
+            id: created.id,
+            durationMinutes: created.durationMinutes,
+            deadline,
+          },
+          now,
+          infeasiblePolicy: dto.infeasiblePolicy,
+        }),
+    );
     return toCreateSessionResponse(
       { ...created, scheduledStartTime: placement.scheduledStartTime },
       slotProposalFieldsOf(placement),
@@ -246,6 +259,7 @@ export class SessionCrudService {
     const rows = await this.prisma.session.findMany({
       where: {
         userId: user.id,
+        deleted: false,
         OR: [
           { scheduledStartTime: null },
           // A day back so a plain session that started the previous evening
@@ -314,7 +328,10 @@ export class SessionCrudService {
     const limit = dto.limit ?? 10;
     const q = dto.q?.trim();
 
-    const where: Prisma.SessionWhereInput = { userId: user.id };
+    const where: Prisma.SessionWhereInput = {
+      userId: user.id,
+      deleted: false,
+    };
     if (q) where.title = { contains: q, mode: "insensitive" };
 
     // Overfetch before deduping — a chatty multi-sitting TASK series can eat
@@ -354,7 +371,7 @@ export class SessionCrudService {
     const occ = parseOccurrenceId(id);
     if (occ) {
       const rep = await this.prisma.session.findFirst({
-        where: { seriesId: occ.seriesId, userId: user.id },
+        where: { seriesId: occ.seriesId, userId: user.id, deleted: false },
         include: WITH_TAGS_AND_SERIES,
       });
       if (!rep)
@@ -362,8 +379,8 @@ export class SessionCrudService {
       return { ...toSessionDto(rep), id, scheduledStartTime: occ.startISO };
     }
 
-    const session = await this.prisma.session.findUnique({
-      where: { id, userId: user.id },
+    const session = await this.prisma.session.findFirst({
+      where: { id, userId: user.id, deleted: false },
       include: WITH_TAGS_AND_SERIES,
     });
     if (!session)
@@ -386,15 +403,112 @@ export class SessionCrudService {
 
       return await this.prisma.$transaction(async (tx) => {
         const existing = await tx.session.findFirst({
-          where: { id, userId: user.id },
+          where: { id, userId: user.id, deleted: false },
         });
         if (!existing)
           throw new NotFoundException(`Cannot find session with id ${id}`);
-        await tx.session.delete({ where: { id, userId: user.id } });
+        // Soft-delete: an ingested item's externalKey stays unique, so the
+        // materializer recognizes this row on the next re-fetch and leaves
+        // it alone instead of recreating it.
+        await tx.session.update({
+          where: { id, userId: user.id },
+          data: { deleted: true },
+        });
         return { id };
       });
     } catch (error) {
       mapSessionPrismaError(error, id, "remove");
     }
+  }
+
+  /**
+   * Timetable-group delete (backend-only scope for the frontend's
+   * three-way delete choice on a portal-ingested `LECTURE`): soft-delete
+   * `sessionId` and every later meeting sharing its
+   * `(userId, scheduleStudyUnitId)` group ("this and following"). A
+   * portal-ingested `LECTURE` has no `SessionSeries`/`seriesId` — one flat
+   * `Session` row per meeting — so `scheduleStudyUnitId` (the portal's own
+   * course-section id) is the only grouping key. 404 when the session isn't
+   * the caller's, doesn't exist, or isn't groupable (no
+   * `scheduleStudyUnitId` — not a portal-ingested lecture).
+   */
+  async removeTimetableGroupFrom(
+    sessionId: string,
+    user: User,
+  ): Promise<RemoveTimetableGroupResponse> {
+    const anchor = await this.prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        userId: user.id,
+        deleted: false,
+        scheduleStudyUnitId: { not: null },
+      },
+      select: { scheduleStudyUnitId: true, scheduledStartTime: true },
+    });
+    if (!anchor)
+      throw new NotFoundException(
+        `Cannot find groupable timetable session ${sessionId}`,
+      );
+
+    const targets = await this.prisma.session.findMany({
+      where: {
+        userId: user.id,
+        deleted: false,
+        scheduleStudyUnitId: anchor.scheduleStudyUnitId,
+        scheduledStartTime: { gte: anchor.scheduledStartTime ?? undefined },
+      },
+      select: { id: true },
+    });
+    const removedSessionIds = targets.map((t) => t.id);
+
+    await this.prisma.session.updateMany({
+      where: { id: { in: removedSessionIds }, userId: user.id },
+      data: { deleted: true },
+    });
+
+    return { removedSessionIds };
+  }
+
+  /**
+   * Timetable-group delete, unconditional on time ("all occurrences") —
+   * soft-deletes every meeting in `sessionId`'s
+   * `(userId, scheduleStudyUnitId)` group, matching {@link removeSeries}'s
+   * "delete everything" semantics. Same 404 conditions as
+   * {@link removeTimetableGroupFrom}.
+   */
+  async removeTimetableGroup(
+    sessionId: string,
+    user: User,
+  ): Promise<RemoveTimetableGroupResponse> {
+    const anchor = await this.prisma.session.findFirst({
+      where: {
+        id: sessionId,
+        userId: user.id,
+        deleted: false,
+        scheduleStudyUnitId: { not: null },
+      },
+      select: { scheduleStudyUnitId: true },
+    });
+    if (!anchor)
+      throw new NotFoundException(
+        `Cannot find groupable timetable session ${sessionId}`,
+      );
+
+    const targets = await this.prisma.session.findMany({
+      where: {
+        userId: user.id,
+        deleted: false,
+        scheduleStudyUnitId: anchor.scheduleStudyUnitId,
+      },
+      select: { id: true },
+    });
+    const removedSessionIds = targets.map((t) => t.id);
+
+    await this.prisma.session.updateMany({
+      where: { id: { in: removedSessionIds }, userId: user.id },
+      data: { deleted: true },
+    });
+
+    return { removedSessionIds };
   }
 }

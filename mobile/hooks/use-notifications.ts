@@ -8,7 +8,9 @@ import {
 import { getSessionDetails } from "@/api/tasks";
 import { useToast } from "@/components/ui/toast";
 import { useUserStore } from "@/hooks/use-user-store";
-import type { NotificationDto } from "@zenflow/shared";
+import { claimNotification, LOCAL_NOTIFICATION_SOURCE } from "@/lib/push";
+import { notifySessionsMutated } from "@/lib/session-cache";
+import { notificationEventKind, type NotificationDto } from "@zenflow/shared";
 import * as Notifications from "expo-notifications";
 import { type Href, useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
@@ -30,12 +32,16 @@ interface NotificationsState {
   markAllRead: () => Promise<void>;
 }
 
-export const useNotificationsStore = create<NotificationsState>((set, get) => ({
+const INITIAL_NOTIFICATIONS_STATE = {
   items: [],
   unreadCount: 0,
   loading: true,
   refreshing: false,
   initialized: false,
+} satisfies Partial<NotificationsState>;
+
+export const useNotificationsStore = create<NotificationsState>((set, get) => ({
+  ...INITIAL_NOTIFICATIONS_STATE,
 
   fetchNotifications: async (mode = "initial") => {
     if (mode === "refresh") set({ refreshing: true });
@@ -244,12 +250,33 @@ export function useNotificationsSubscription(): void {
   }, [userId, fetchNotifications]);
 
   // Live SSE stream connection
+  const streamOpenedRef = useRef(false);
   useEffect(() => {
     if (!userId) return;
+    streamOpenedRef.current = false;
 
     const unsubscribe = subscribeNotificationsStream({
       onNotification: (n) => {
         addNotification(n);
+
+        // A sync watcher wrote/removed a session behind this notification —
+        // the calendar needs to resync. Mirrors the web app's precedent
+        // (`frontend/src/components/notifications/notification-bell.tsx`):
+        // `CONFLICT` rows carry no session change of their own (they just
+        // flag the user's own tasks against a session that already raised
+        // its own CREATED/UPDATED elsewhere, and the actual fix-up action —
+        // `rescheduleConflicts` in `api/notifications.ts` — already calls
+        // `notifySessionsMutated()` itself), so skip invalidation here for
+        // that case.
+        // A reminder changes no session either — it's just the nudge.
+        const kind = notificationEventKind(n.eventName);
+        if (kind !== "CONFLICT" && kind !== "REMINDER") {
+          notifySessionsMutated();
+        }
+
+        // The native push for this same notification may have been
+        // presented already — then this is a duplicate: inbox only.
+        if (!claimNotification(n.id, "sse")) return;
 
         const cleanTitle = (n.title || "").replace(/^\[.*?\]\s*/, "").trim();
 
@@ -283,7 +310,11 @@ export function useNotificationsSubscription(): void {
             content: {
               title: cleanTitle,
               body: n.content,
-              data: { sessionId: n.sessionId, notificationId: n.id },
+              data: {
+                sessionId: n.sessionId,
+                notificationId: n.id,
+                source: LOCAL_NOTIFICATION_SOURCE,
+              },
               sound: true,
             },
             trigger: null,
@@ -293,10 +324,26 @@ export function useNotificationsSubscription(): void {
       onError: (err) => {
         console.warn("[notifications-sse] Connection error:", err);
       },
+      // On reconnect, refetch the inbox to catch up on the gap (no toasts).
+      onOpen: () => {
+        if (!streamOpenedRef.current) {
+          streamOpenedRef.current = true;
+          return;
+        }
+        void fetchNotifications("refresh");
+        notifySessionsMutated();
+      },
     });
 
     return () => {
       unsubscribe();
     };
-  }, [userId, addNotification]);
+  }, [userId, addNotification, fetchNotifications]);
 }
+
+// Per-user inbox: reset whenever the signed-in user changes.
+useUserStore.subscribe((state, prev) => {
+  if (state.user?.id !== prev.user?.id) {
+    useNotificationsStore.setState(INITIAL_NOTIFICATIONS_STATE);
+  }
+});

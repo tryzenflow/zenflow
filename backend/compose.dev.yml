@@ -43,13 +43,6 @@ services:
     ports:
       - "8100:8000"
     environment:
-      # `obs` is the `zenflow-obs` network compose.observability.yml creates —
-      # start that stack first (`docker compose -f compose.observability.yml
-      # up -d`) or this container-to-container hostname won't resolve and the
-      # SDK will just retry-and-drop every export (see .env.example for the
-      # non-container case). `localhost` here is this container's own netns,
-      # not the collector's — that was the bug: the OTLP endpoint was never
-      # set, so the SDK fell back to a host nothing listens on.
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     networks:
       - bandit

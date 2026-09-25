@@ -1,0 +1,94 @@
+{
+  "function": "context-vector",
+  "source": "hand-checked (d=7)",
+  "cases": [
+    {
+      "name": "neutral",
+      "fn": "buildContextVector",
+      "args": [
+        {
+          "remainingDaysUntilDeadline": 30,
+          "durationMinutes": 240,
+          "candidateIsoWeekday": 3,
+          "candidateDaysFromNow": 0,
+          "workloadByType": {
+            "TASK": {
+              "hours": 6,
+              "count": 4
+            }
+          }
+        }
+      ],
+      "expected": [
+        0.0,
+        0.0,
+        -1.0,
+        -1,
+        0,
+        0.5,
+        1
+      ]
+    },
+    {
+      "name": "weekend-grouped-and-clamped",
+      "fn": "buildContextVector",
+      "args": [
+        {
+          "remainingDaysUntilDeadline": 90,
+          "durationMinutes": 15,
+          "candidateIsoWeekday": 7,
+          "candidateDaysFromNow": 60,
+          "workloadByType": {
+            "LECTURE": {
+              "hours": 10,
+              "count": 3
+            },
+            "EXAM": {
+              "hours": 3,
+              "count": 1
+            },
+            "DND": {
+              "hours": 2,
+              "count": 1
+            },
+            "ASSIGNMENT": {
+              "hours": 3,
+              "count": 2
+            }
+          }
+        }
+      ],
+      "expected": [
+        1.0,
+        -0.9375,
+        1.0,
+        1,
+        1.0,
+        0.25,
+        1
+      ]
+    },
+    {
+      "name": "saturday-is-weekend-friday-is-not",
+      "fn": "buildContextVector",
+      "args": [
+        {
+          "remainingDaysUntilDeadline": 0,
+          "durationMinutes": 480,
+          "candidateIsoWeekday": 6,
+          "candidateDaysFromNow": 0,
+          "workloadByType": {}
+        }
+      ],
+      "expected": [
+        -1.0,
+        1.0,
+        -1.0,
+        1,
+        0,
+        0,
+        1
+      ]
+    }
+  ]
+}

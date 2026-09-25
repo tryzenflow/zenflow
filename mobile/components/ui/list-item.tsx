@@ -1,6 +1,5 @@
 import { type VariantProps, cva } from "class-variance-authority";
 import { type Href, Link } from "expo-router";
-import type { LinkProps } from "expo-router/build/link/Link";
 import type React from "react";
 import type { ElementType, ReactElement } from "react";
 import {
@@ -53,7 +52,7 @@ type ListItemProps = VariantProps<typeof listItemTextVariants> & {
    */
   href?: Href;
   className?: string;
-} & (ViewProps | PressableProps | LinkProps);
+} & (ViewProps | PressableProps);
 
 // ListItem component
 const ListItem: React.FC<ListItemProps> = ({
@@ -84,20 +83,16 @@ const ListItem: React.FC<ListItemProps> = ({
   };
   const pressable = (props as { onPress?: unknown })?.onPress || href;
   // `Component` only ever renders as `Pressable` or `View` here — the `href`
-  // case is handled separately below by wrapping `body` in a `<Link asChild>`
-  // — so the element type is narrowed to just those two (dropping `LinkProps`
-  // from the union) rather than requiring every render site to also supply
-  // `href`.
+  // case is handled separately below by wrapping `body` in a `<Link asChild>`.
   const Component = (pressable ? Pressable : View) as ElementType<
     ViewProps | PressableProps
   >;
 
   const body = (
-    // `props` is still typed against the `ViewProps | PressableProps | LinkProps`
-    // union from the outer `ListItemProps` intersection (`href` was destructured
-    // off above, but the rest of that union's members don't collapse cleanly
-    // onto the narrowed `Component` element type) — same escape hatch already
-    // used for the analogous `React.cloneElement<any>` pattern in `list.tsx`.
+    // `props` is typed against the `ViewProps | PressableProps` union, which
+    // doesn't collapse cleanly onto the `Component` element type — same escape
+    // hatch already used for the analogous `React.cloneElement<any>` pattern in
+    // `list.tsx`.
     <Component
       className={cn(
         "flex-row items-center justify-between w-full px-4 py-3 border-b border-border bg-card",

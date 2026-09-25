@@ -84,7 +84,10 @@ export class IoredisSessionStore extends Store {
     }
   }
 
-  async destroy(sid: string, callback?: (err?: unknown) => void): Promise<void> {
+  async destroy(
+    sid: string,
+    callback?: (err?: unknown) => void,
+  ): Promise<void> {
     try {
       await this.client.del(this.key(sid));
       callback?.();

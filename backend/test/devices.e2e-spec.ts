@@ -45,7 +45,7 @@ const prismaStub = {
         Object.assign(existing, args.update);
         return Promise.resolve({ id: existing.id });
       }
-      const row: DeviceRow = { id: `d${++seq}`, ...args.create } as DeviceRow;
+      const row: DeviceRow = { id: `d${++seq}`, ...args.create };
       store.push(row);
       return Promise.resolve({ id: row.id });
     },

@@ -1,0 +1,58 @@
+{
+  "function": "series-spread",
+  "source": "hand-checked",
+  "cases": [
+    {
+      "name": "6 over 3",
+      "fn": "seriesDayWindows",
+      "args": [
+        6,
+        3
+      ],
+      "expected": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          6
+        ]
+      ]
+    },
+    {
+      "name": "more than days",
+      "fn": "seriesDayWindows",
+      "args": [
+        2,
+        5
+      ],
+      "expected": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          2,
+          2
+        ],
+        [
+          2,
+          2
+        ]
+      ]
+    }
+  ]
+}

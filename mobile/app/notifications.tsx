@@ -1,7 +1,6 @@
 import {
-  AlertCircle,
+  AlertTriangle,
   Bell,
-  Calendar,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -9,23 +8,24 @@ import {
   GraduationCap,
   type LucideIcon,
   Notebook,
-  Sliders,
+  RefreshCw,
   Trash2,
   X,
 } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
+import { rescheduleConflicts } from "@/api/notifications";
 import { useToast } from "@/components/ui/toast";
 import {
-  jumpToSession,
   useNotificationsStore,
   viewSessionOnCalendar,
 } from "@/hooks/use-notifications";
 import { useUserStore } from "@/hooks/use-user-store";
 import { cn } from "@/lib/utils";
-import type {
-  NotificationDto,
-  NotificationKind,
-  NotificationTopic,
+import {
+  notificationCategory,
+  notificationEventKind,
+  type NotificationCategory,
+  type NotificationDto,
 } from "@zenflow/shared";
 import { formatDistanceToNow } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
@@ -38,38 +38,53 @@ import {
   Modal,
   Pressable,
   RefreshControl,
-  ScrollView,
   View,
 } from "react-native";
 import Swipeable from "react-native-gesture-handler/Swipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-/** Visual configuration for notification topics matching mockups/detected-items.html */
-function topicVisual(topic: NotificationTopic): {
+const CATEGORY_LABEL: Record<NotificationCategory, string> = {
+  ASSIGNMENT: "LMS Assignment",
+  EXAM: "Exam",
+  LECTURE: "Timetable",
+  REMINDER: "Reminder",
+};
+
+/** Visual configuration for a notification's eventName, matching mockups/detected-items.html */
+function notificationVisual(eventName: string): {
   Icon: LucideIcon;
   label: string;
   tint: string;
   iconColor: string;
 } {
-  switch (topic) {
+  const category = notificationCategory(eventName);
+  if (notificationEventKind(eventName) === "CONFLICT") {
+    return {
+      Icon: AlertTriangle,
+      label: `${CATEGORY_LABEL[category]} conflict`,
+      tint: "border-amber-500/40 bg-amber-500/15",
+      iconColor: "#d97706",
+    };
+  }
+  switch (category) {
     case "ASSIGNMENT":
       return {
         Icon: ClipboardList,
-        label: "LMS Assignment",
+        label: CATEGORY_LABEL.ASSIGNMENT,
         tint: "border-teal-500/40 bg-teal-500/15",
         iconColor: "#0f766e",
       };
     case "EXAM":
       return {
         Icon: Notebook,
-        label: "Exam",
+        label: CATEGORY_LABEL.EXAM,
         tint: "border-rose-500/40 bg-rose-500/15",
         iconColor: "#e11d48",
       };
-    case "TIMETABLE":
+    case "LECTURE":
       return {
         Icon: GraduationCap,
-        label: "Timetable",
+        label: CATEGORY_LABEL.LECTURE,
         tint: "border-sky-500/40 bg-sky-500/15",
         iconColor: "#0369a1",
       };
@@ -77,45 +92,21 @@ function topicVisual(topic: NotificationTopic): {
     default:
       return {
         Icon: Bell,
-        label: "Reminder",
+        label: CATEGORY_LABEL.REMINDER,
         tint: "border-primary/40 bg-primary/15",
         iconColor: "#f97316",
       };
   }
 }
 
-/** Badge formatting for notification kind */
-const KIND_BADGE: Record<
-  NotificationKind,
-  { label: string; containerClass: string; textClass: string; desc: string }
-> = {
-  NEW: {
-    label: "New",
-    containerClass: "border-primary/30 bg-primary/10",
-    textClass: "text-primary",
-    desc: "Added directly onto your calendar",
-  },
-  CHANGE: {
-    label: "Change",
-    containerClass: "border-amber-500/30 bg-amber-500/10",
-    textClass: "text-amber-700 dark:text-amber-300",
-    desc: "Schedule or location updated upstream",
-  },
-  DROP: {
-    label: "Drop",
-    containerClass: "border-border bg-muted",
-    textClass: "text-muted-foreground",
-    desc: "Removed from your timetable",
-  },
-};
-
 /** Spelled out "due" or "at" label off eventEndsAt */
 function eventTimeLabel(n: NotificationDto, tz: string): string | null {
-  if (!n.eventEndsAt || n.kind === "DROP") return null;
+  if (!n.eventEndsAt) return null;
   try {
     const at = new Date(n.eventEndsAt);
     const date = formatInTimeZone(at, tz, "MMM d");
-    if (n.topic === "ASSIGNMENT") return `due ${date}`;
+    if (notificationCategory(n.eventName) === "ASSIGNMENT")
+      return `due ${date}`;
     return `${date}, ${formatInTimeZone(at, tz, "h:mm a")}`;
   } catch {
     return null;
@@ -123,7 +114,7 @@ function eventTimeLabel(n: NotificationDto, tz: string): string | null {
 }
 
 /**
- * The ingestion inbox — DLU LMS / student-portal notifications.
+ * The ingestion inbox — LMS / student-portal notifications.
  * Visual target: mockups/detected-items.html.
  * Updates live over SSE, supports selection/delete-all, rich detail modal with
  * Edit and View-on-calendar actions, and swipe-left to dismiss.
@@ -132,10 +123,9 @@ export default function NotificationsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { toast } = useToast();
+  const [reschedulingId, setReschedulingId] = useState<string | null>(null);
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
 
-  const [selectedNotification, setSelectedNotification] =
-    useState<NotificationDto | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showClearAllConfirm, setShowClearAllConfirm] = useState(false);
@@ -144,9 +134,7 @@ export default function NotificationsScreen() {
   const unreadCount = useNotificationsStore((s) => s.unreadCount);
   const loading = useNotificationsStore((s) => s.loading);
   const refreshing = useNotificationsStore((s) => s.refreshing);
-  const fetchNotifications = useNotificationsStore(
-    (s) => s.fetchNotifications,
-  );
+  const fetchNotifications = useNotificationsStore((s) => s.fetchNotifications);
   const dismiss = useNotificationsStore((s) => s.dismiss);
   const dismissMany = useNotificationsStore((s) => s.dismissMany);
   const clearAll = useNotificationsStore((s) => s.clearAll);
@@ -171,9 +159,35 @@ export default function NotificationsScreen() {
       if (!n.readAt) {
         void markRead(n.id);
       }
-      setSelectedNotification(n);
+      // Opens the session on the calendar; removed-item rows just mark read.
+      if (n.sessionId) {
+        void viewSessionOnCalendar(n.sessionId, router, toast, n.id);
+      }
     },
-    [isSelecting, markRead, toggleSelect],
+    [isSelecting, markRead, toggleSelect, router, toast],
+  );
+
+  const handleRescheduleAll = useCallback(
+    async (n: NotificationDto) => {
+      setReschedulingId(n.id);
+      try {
+        const res = await rescheduleConflicts(n.id);
+        const ok = res.rescheduled.length;
+        const failed = res.failedSessionIds.length;
+        toast(
+          failed
+            ? `Rescheduled ${ok}; ${failed} still conflict`
+            : `Rescheduled ${ok} task${ok === 1 ? "" : "s"}`,
+          failed ? "warning" : "success",
+        );
+        void fetchNotifications("refresh");
+      } catch {
+        toast("Couldn't reschedule the conflicting tasks.", "destructive");
+      } finally {
+        setReschedulingId(null);
+      }
+    },
+    [fetchNotifications, toast],
   );
 
   const handleDismiss = useCallback(
@@ -197,10 +211,7 @@ export default function NotificationsScreen() {
     setIsSelecting(false);
     try {
       await dismissMany(ids);
-      toast(
-        `Deleted ${count} notification${count > 1 ? "s" : ""}`,
-        "default",
-      );
+      toast(`Deleted ${count} notification${count > 1 ? "s" : ""}`, "default");
     } catch {
       toast("Couldn't delete selected notifications.", "destructive");
     }
@@ -208,6 +219,8 @@ export default function NotificationsScreen() {
 
   const handleConfirmClearAll = useCallback(async () => {
     setShowClearAllConfirm(false);
+    setIsSelecting(false);
+    setSelectedIds(new Set());
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     try {
       await clearAll();
@@ -216,6 +229,13 @@ export default function NotificationsScreen() {
       toast("Couldn't clear all notifications.", "destructive");
     }
   }, [clearAll, toast]);
+
+  const allSelected = items.length > 0 && selectedIds.size === items.length;
+
+  const exitSelecting = useCallback(() => {
+    setIsSelecting(false);
+    setSelectedIds(new Set());
+  }, []);
 
   const handleSelectAll = useCallback(() => {
     void Haptics.selectionAsync();
@@ -231,103 +251,82 @@ export default function NotificationsScreen() {
       className="flex-1 bg-background"
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
-      {/* Header */}
-      {isSelecting ? (
-        <View className="relative z-30 flex-row items-center justify-between border-b border-border/70 bg-background px-4 pb-3.5 pt-2">
-          <Pressable
-            onPress={() => {
-              setIsSelecting(false);
-              setSelectedIds(new Set());
-            }}
-            hitSlop={8}
-            className="py-1"
-          >
-            <Text className="text-sm font-medium text-muted-foreground">
-              Cancel
+      {/* Header — one row, one primary action per mode */}
+      <View className="h-14 flex-row items-center gap-2 border-b border-border/70 bg-background px-3">
+        {isSelecting ? (
+          <>
+            <Pressable
+              onPress={exitSelecting}
+              accessibilityLabel="Cancel selection"
+              hitSlop={8}
+              className="size-9 items-center justify-center rounded-full active:bg-muted"
+            >
+              <X size={20} className="text-foreground" />
+            </Pressable>
+            <Text className="flex-1 text-[17px] font-semibold text-foreground">
+              {selectedIds.size} selected
             </Text>
-          </Pressable>
-
-          <Text className="text-base font-bold text-foreground">
-            {selectedIds.size} selected
-          </Text>
-
-          <View className="flex-row items-center gap-3">
-            <Pressable onPress={handleSelectAll} hitSlop={8} className="py-1">
-              <Text className="text-xs font-semibold text-primary">
-                {selectedIds.size === items.length
-                  ? "Deselect all"
-                  : "Select all"}
+            <Pressable
+              onPress={handleSelectAll}
+              hitSlop={8}
+              className="rounded-full px-3 py-1.5 active:bg-muted"
+            >
+              <Text className="text-[13px] font-semibold text-primary">
+                {allSelected ? "None" : "All"}
               </Text>
             </Pressable>
-
             <Pressable
               disabled={selectedIds.size === 0}
-              onPress={handleDeleteSelected}
+              onPress={
+                allSelected
+                  ? () => setShowClearAllConfirm(true)
+                  : handleDeleteSelected
+              }
+              accessibilityLabel="Delete selected"
               hitSlop={8}
-              className={cn("py-1", selectedIds.size === 0 && "opacity-40")}
+              className={cn(
+                "size-9 items-center justify-center rounded-full active:bg-destructive/10",
+                selectedIds.size === 0 && "opacity-40",
+              )}
             >
-              <Text className="text-sm font-bold text-destructive">
-                Delete ({selectedIds.size})
-              </Text>
+              <Trash2 size={19} className="text-destructive" />
             </Pressable>
-          </View>
-        </View>
-      ) : (
-        <View className="relative z-30 flex-row items-center justify-between border-b border-border/70 bg-background px-3 pb-3.5 pt-1.5">
-          <View className="flex-row items-center gap-2.5">
+          </>
+        ) : (
+          <>
             <Pressable
               onPress={() => router.back()}
               accessibilityLabel="Back"
               hitSlop={8}
-              className="h-9 w-9 items-center justify-center rounded-xl bg-muted/50 border border-border/40 active:bg-muted"
+              className="size-9 items-center justify-center rounded-full active:bg-muted"
             >
-              <ChevronLeft size={20} className="text-foreground" />
+              <ChevronLeft size={22} className="text-foreground" />
             </Pressable>
-            <Text className="text-xl font-bold tracking-tight text-foreground">
-              Inbox
-            </Text>
-            {unreadCount > 0 && (
-              <View className="flex-row items-center gap-1 rounded-full border border-red-500/40 bg-red-500/10 px-2.5 py-1">
-                <AlertCircle size={11} color="#ef4444" />
-                <Text className="text-[11px] font-bold leading-none text-red-500">
-                  {unreadCount} unread
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {items.length > 0 && (
-            <View className="flex-row items-center gap-2">
+            <View className="flex-1 flex-row items-center gap-2">
+              <Text className="text-xl font-bold tracking-tight text-foreground">
+                Inbox
+              </Text>
+              {unreadCount > 0 && (
+                <View className="h-[20px] min-w-[26px] rounded-full items-center justify-center bg-primary px-2">
+                  <Text className="text-sm font-bold leading-none text-primary-foreground">
+                    {unreadCount.toLocaleString("en-US")}
+                  </Text>
+                </View>
+              )}
+            </View>
+            {items.length > 0 && (
               <Pressable
                 onPress={() => setIsSelecting(true)}
-                hitSlop={6}
-                className="rounded-xl border border-border/80 bg-muted/60 px-3 py-1.5 active:bg-muted"
+                hitSlop={8}
+                className="rounded-full px-3 py-1.5 active:bg-muted"
               >
-                <Text className="text-xs font-semibold text-foreground">
+                <Text className="text-[14px] font-semibold text-primary">
                   Select
                 </Text>
               </Pressable>
-              <Pressable
-                onPress={() => setShowClearAllConfirm(true)}
-                hitSlop={6}
-                className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-1.5 active:bg-destructive/20"
-              >
-                <Text className="text-xs font-semibold text-destructive">
-                  Clear all
-                </Text>
-              </Pressable>
-            </View>
-          )}
-        </View>
-      )}
-
-      {/* Dismiss hint pinned to top */}
-      <View className="shrink-0 border-b border-border/40 bg-muted/20 px-4 py-2">
-        <Text className="text-[11.5px] font-medium text-muted-foreground">
-          {isSelecting
-            ? "Tap items to select or deselect"
-            : "Swipe left to dismiss · Tap to view details"}
-        </Text>
+            )}
+          </>
+        )}
       </View>
 
       {/* Body */}
@@ -359,8 +358,7 @@ export default function NotificationsScreen() {
                 You're all caught up
               </Text>
               <Text className="mt-1.5 text-center text-[13px] leading-snug text-muted-foreground">
-                No new notifications from your LMS or student portal. Zenflow will
-                automatically notify you when assignments or schedule changes are detected.
+                No new notifications from your LMS or student portal.
               </Text>
             </View>
           }
@@ -372,38 +370,10 @@ export default function NotificationsScreen() {
               isSelected={selectedIds.has(n.id)}
               onOpen={() => openRow(n)}
               onDismiss={() => handleDismiss(n.id)}
+              rescheduling={reschedulingId === n.id}
+              onRescheduleAll={() => handleRescheduleAll(n)}
             />
           )}
-        />
-      )}
-
-      {/* Detail Modal with Edit and View on Calendar */}
-      {selectedNotification && (
-        <NotificationDetailModal
-          n={selectedNotification}
-          tz={tz}
-          onClose={() => setSelectedNotification(null)}
-          onDismiss={() => {
-            const id = selectedNotification.id;
-            setSelectedNotification(null);
-            void handleDismiss(id);
-          }}
-          onEdit={async () => {
-            const sid = selectedNotification.sessionId;
-            const nid = selectedNotification.id;
-            setSelectedNotification(null);
-            if (sid) {
-              await jumpToSession(sid, router, toast, nid, true);
-            }
-          }}
-          onViewOnCalendar={async () => {
-            const sid = selectedNotification.sessionId;
-            const nid = selectedNotification.id;
-            setSelectedNotification(null);
-            if (sid) {
-              await viewSessionOnCalendar(sid, router, toast, nid);
-            }
-          }}
         />
       )}
 
@@ -419,7 +389,8 @@ export default function NotificationsScreen() {
                 Clear all notifications?
               </Text>
               <Text className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                All notifications in your inbox will be permanently removed. This action cannot be undone.
+                All notifications in your inbox will be permanently removed.
+                This action cannot be undone.
               </Text>
 
               <View className="mt-6 flex-row gap-3">
@@ -435,7 +406,10 @@ export default function NotificationsScreen() {
                   onPress={handleConfirmClearAll}
                   className="h-11 flex-1 items-center justify-center rounded-xl bg-destructive active:opacity-90"
                 >
-                  <Text style={{ color: "#ffffff" }} className="text-sm font-bold text-white">
+                  <Text
+                    style={{ color: "#ffffff" }}
+                    className="text-sm font-bold text-white"
+                  >
                     Clear all
                   </Text>
                 </Pressable>
@@ -455,6 +429,8 @@ function NotificationRowItem({
   isSelected,
   onOpen,
   onDismiss,
+  rescheduling,
+  onRescheduleAll,
 }: {
   n: NotificationDto;
   tz: string;
@@ -462,13 +438,17 @@ function NotificationRowItem({
   isSelected: boolean;
   onOpen: () => void;
   onDismiss: () => void;
+  rescheduling: boolean;
+  onRescheduleAll: () => void;
 }) {
   const swipeableRef = useRef<Swipeable>(null);
-  const { Icon, tint, iconColor } = topicVisual(n.topic);
-  const badge = KIND_BADGE[n.kind];
+  const { Icon, tint, iconColor } = notificationVisual(n.eventName);
   const unread = !n.readAt;
   const relative = formatDistanceToNow(new Date(n.sentAt), { addSuffix: true });
   const when = eventTimeLabel(n, tz);
+  // Reschedule stamps `actionTakenAt` but keeps `conflictSessionIds`.
+  const hasConflicts =
+    !n.actionTakenAt && (n.conflictSessionIds?.length ?? 0) > 0;
 
   const renderRightActions = () => (
     <Pressable
@@ -505,13 +485,13 @@ function NotificationRowItem({
         {isSelecting && (
           <View
             className={cn(
-              "h-5 w-5 shrink-0 items-center justify-center rounded-lg border",
+              "h-6 w-6 shrink-0 items-center justify-center rounded-full border-[1.5px]",
               isSelected
                 ? "border-primary bg-primary"
                 : "border-muted-foreground/50 bg-transparent",
             )}
           >
-            {isSelected && <Check size={13} color="#ffffff" strokeWidth={3} />}
+            {isSelected && <Check size={15} color="#ffffff" strokeWidth={3} />}
           </View>
         )}
 
@@ -534,7 +514,7 @@ function NotificationRowItem({
         <View className="min-w-0 flex-1">
           {/* Title line - always aligned! */}
           <Text
-            numberOfLines={1}
+            numberOfLines={2}
             className={cn(
               "text-[13.5px]",
               unread
@@ -547,23 +527,6 @@ function NotificationRowItem({
 
           {/* Meta line */}
           <View className="mt-1 flex-row items-center gap-1.5">
-            <View
-              className={cn(
-                "shrink-0 rounded-md border px-1.5 py-0.5",
-                badge.containerClass,
-              )}
-            >
-              <Text
-                className={cn(
-                  "text-[9px] font-bold uppercase leading-none tracking-wide",
-                  badge.textClass,
-                )}
-              >
-                {badge.label}
-              </Text>
-            </View>
-
-            <Text className="text-[11px] text-muted-foreground/60">·</Text>
             <Text
               className={cn(
                 "shrink-0 text-[11px]",
@@ -592,152 +555,33 @@ function NotificationRowItem({
               </>
             )}
           </View>
+
+          {hasConflicts && !isSelecting && (
+            <Pressable
+              onPress={onRescheduleAll}
+              disabled={rescheduling}
+              hitSlop={6}
+              className="mt-2 flex-row items-center gap-1.5 self-start rounded-full bg-amber-600 px-3 py-1 active:opacity-80"
+            >
+              {rescheduling ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <RefreshCw size={12} color="#ffffff" />
+              )}
+              <Text className="text-[12px] font-semibold text-white">
+                Reschedule them all
+              </Text>
+            </Pressable>
+          )}
         </View>
 
-        {/* Right indicator */}
-        {!isSelecting && (
+        {/* Right indicator — only rows that open something */}
+        {!isSelecting && n.sessionId && (
           <View className="shrink-0 pl-1 pr-0.5 items-center justify-center">
-            {n.kind === "NEW" ? (
-              <AlertCircle size={17} color="#ef4444" />
-            ) : (
-              <ChevronRight
-                size={16}
-                className="text-muted-foreground/40"
-              />
-            )}
+            <ChevronRight size={16} className="text-muted-foreground/40" />
           </View>
         )}
       </Pressable>
     </Swipeable>
-  );
-}
-
-/** Detail Dialog for a tapped notification with Edit and View on Calendar */
-function NotificationDetailModal({
-  n,
-  tz: _tz,
-  onClose,
-  onDismiss,
-  onEdit,
-  onViewOnCalendar,
-}: {
-  n: NotificationDto;
-  tz?: string;
-  onClose: () => void;
-  onDismiss: () => void;
-  onEdit: () => void;
-  onViewOnCalendar: () => void;
-}) {
-  const { Icon, label: topicLabel, tint, iconColor } = topicVisual(n.topic);
-  const badge = KIND_BADGE[n.kind];
-
-  return (
-    <Modal visible={true} transparent animationType="fade" onRequestClose={onClose}>
-      <View className="flex-1 items-center justify-center bg-black/70 px-5">
-        <View className="w-full max-w-sm rounded-[28px] border border-border/80 bg-card p-5 shadow-2xl">
-          {/* Header row */}
-          <View className="flex-row items-center justify-between pb-2">
-            <View className="flex-row items-center gap-3">
-              <View
-                className={cn(
-                  "h-11 w-11 items-center justify-center rounded-2xl border",
-                  tint,
-                )}
-              >
-                <Icon size={22} color={iconColor} />
-              </View>
-              <View>
-                <Text className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                  {topicLabel}
-                </Text>
-                <View
-                  className={cn(
-                    "mt-1 self-start rounded-md border px-1.5 py-0.5",
-                    badge.containerClass,
-                  )}
-                >
-                  <Text
-                    className={cn(
-                      "text-[9.5px] font-bold uppercase leading-none tracking-wide",
-                      badge.textClass,
-                    )}
-                  >
-                    {badge.label}
-                  </Text>
-                </View>
-              </View>
-            </View>
-            <Pressable
-              onPress={onClose}
-              hitSlop={10}
-              className="h-8 w-8 items-center justify-center rounded-full bg-muted/80 active:bg-muted border border-border/40"
-            >
-              <X size={16} className="text-muted-foreground" />
-            </Pressable>
-          </View>
-
-          {/* Title and content */}
-          <ScrollView className="my-3 max-h-56" showsVerticalScrollIndicator={false}>
-            <Text className="text-[17px] font-bold leading-snug tracking-tight text-foreground">
-              {n.title}
-            </Text>
-            {n.content ? (
-              <Text className="mt-2 text-[13.5px] leading-relaxed text-muted-foreground">
-                {n.content}
-              </Text>
-            ) : null}
-          </ScrollView>
-
-          {/* Action buttons: View on Calendar & Edit Session */}
-          <View className="gap-2.5 pt-3 border-t border-border/50">
-            {n.sessionId ? (
-              <View className="gap-2.5">
-                {/* Button 1: View on calendar */}
-                <Pressable
-                  onPress={onViewOnCalendar}
-                  className="h-12 w-full flex-row items-center justify-center gap-2.5 rounded-2xl bg-primary shadow-sm active:opacity-90"
-                >
-                  <Calendar size={18} color="#ffffff" />
-                  <Text
-                    style={{ color: "#ffffff" }}
-                    className="text-[14.5px] font-bold text-white tracking-wide"
-                  >
-                    View on calendar
-                  </Text>
-                </Pressable>
-
-                {/* Button 2: Edit session */}
-                <Pressable
-                  onPress={onEdit}
-                  className="h-11 w-full flex-row items-center justify-center gap-2 rounded-2xl border border-border/80 bg-muted/60 active:bg-muted"
-                >
-                  <Sliders size={16} className="text-foreground" />
-                  <Text className="text-[14px] font-semibold text-foreground">
-                    Edit session
-                  </Text>
-                </Pressable>
-              </View>
-            ) : (
-              <View className="rounded-xl border border-border/60 bg-muted/40 p-3">
-                <Text className="text-center text-xs leading-relaxed text-muted-foreground">
-                  This notification is not linked to an active calendar session.
-                </Text>
-              </View>
-            )}
-
-            {/* Button 3: Dismiss notification */}
-            <Pressable
-              onPress={onDismiss}
-              className="mt-0.5 h-10 w-full flex-row items-center justify-center gap-2 rounded-2xl border border-destructive/20 bg-destructive/10 active:bg-destructive/20"
-            >
-              <Trash2 size={15} color="#ef4444" />
-              <Text className="text-[13px] font-semibold text-destructive">
-                Dismiss notification
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    </Modal>
   );
 }

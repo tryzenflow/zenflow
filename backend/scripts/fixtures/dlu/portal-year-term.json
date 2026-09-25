@@ -1,0 +1,25 @@
+{
+  "_comment": "GET /api/student/yearandterm response shape — static, same for every student.",
+  "YearStudy": [
+    "2026-2027",
+    "2025-2026",
+    "2024-2025",
+    "2023-2024"
+  ],
+  "Terms": [
+    {
+      "TermID": "HK01",
+      "TermName": "Học kỳ 1"
+    },
+    {
+      "TermID": "HK02",
+      "TermName": "Học kỳ 2"
+    },
+    {
+      "TermID": "HK03",
+      "TermName": "Học kỳ 3"
+    }
+  ],
+  "CurrentYear": "2026-2027",
+  "CurrentTerm": "HK01"
+}

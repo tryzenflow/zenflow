@@ -206,6 +206,7 @@ async function makeWatcher(
   const reconcileDeleted = jest
     .fn()
     .mockResolvedValue({ deleted: 0, keptWithWarning: 0 });
+  const flushDigest = jest.fn().mockResolvedValue(undefined);
   const revealCredentials = jest
     .fn()
     .mockResolvedValue({ username: "sv0001", password: "pw" });
@@ -226,7 +227,7 @@ async function makeWatcher(
       { provide: LMSService, useValue: { login, fetchMonthlyView } },
       {
         provide: MaterializerService,
-        useValue: { materialize, reconcileDeleted },
+        useValue: { materialize, reconcileDeleted, flushDigest },
       },
       {
         provide: NotificationsService,
@@ -244,6 +245,7 @@ async function makeWatcher(
     fetchMonthlyView,
     materialize,
     reconcileDeleted,
+    flushDigest,
     revealCredentials,
   };
 }
@@ -391,7 +393,7 @@ describe("LmsWatcherService", () => {
     it("fails the job when DLU is unreachable at login", async () => {
       const login = jest
         .fn()
-        .mockRejectedValue(new Error("DLU LMS is unreachable"));
+        .mockRejectedValue(new Error("LMS is unreachable"));
       const w = await makeWatcher({ login });
 
       await w.service.run(NOW);

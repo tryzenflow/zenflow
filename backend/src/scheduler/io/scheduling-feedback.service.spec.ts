@@ -11,13 +11,15 @@ import { SchedulingFeedbackService } from "./scheduling-feedback.service";
  * `sessions.service.spec.ts` used to assert about `applyBanditMoveFeedback`.
  */
 
+const X = [0.1, 0.2, 0.3, -1, 0, 0.25, 1]; // length FEATURE_DIM
+
 async function makeSvc(over: { proposal?: unknown; updateResult?: unknown }) {
   const slotFindFirst = jest.fn().mockResolvedValue(
     over.proposal === undefined
       ? {
           id: "p1",
           selectedArm: "MORNING",
-          featureVector: [1, 0, 0, 1],
+          featureVector: X,
         }
       : over.proposal,
   );
@@ -56,7 +58,7 @@ describe("SchedulingFeedbackService.onFirstMove", () => {
     await svc.onFirstMove("u1", "s1", 42n, 120);
 
     // reward = -min(1, 120/240) = -0.5
-    expect(bandit.update).toHaveBeenCalledWith("MORNING", [1, 0, 0, 1], -0.5, {
+    expect(bandit.update).toHaveBeenCalledWith("MORNING", X, -0.5, {
       A: [1, 0, 0, 1],
       b: [0.5, 0.5],
     });
@@ -71,6 +73,19 @@ describe("SchedulingFeedbackService.onFirstMove", () => {
     const { svc, bandit } = await makeSvc({});
     await svc.onFirstMove("u1", "s1", 1n, 0);
     expect(bandit.update.mock.calls[0][2]).toBe(0);
+  });
+
+  it("drops the reward for a proposal made under an older vector layout (d=22)", async () => {
+    const { svc, bandit, eventUpdate } = await makeSvc({
+      proposal: {
+        id: "p1",
+        selectedArm: "MORNING",
+        featureVector: new Array<number>(22).fill(0),
+      },
+    });
+    await svc.onFirstMove("u1", "s1", 1n, 60);
+    expect(bandit.update).not.toHaveBeenCalled();
+    expect(eventUpdate).not.toHaveBeenCalled();
   });
 
   it("does nothing when there is no LinUCB proposal for the session", async () => {

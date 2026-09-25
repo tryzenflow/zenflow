@@ -1,13 +1,13 @@
 import { logout as logoutRequest } from "@/api/auth";
-import { LogOut, Moon, ChevronRight } from "@/components/Icons";
-import { IntegrationsSection } from "@/components/settings/integrations-section";
+import { listIntegrations } from "@/api/integrations";
+import { LogOut, Moon } from "@/components/Icons";
+import { DluAccountsSection } from "@/components/settings/dlu-accounts-section";
 import { ProfileRow } from "@/components/settings/profile-row";
 import { SettingsSectionLabel } from "@/components/settings/settings-header";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useIntegrationStore } from "@/hooks/use-integration-store";
-import { getIntegrationStatus } from "@/api/dlu";
 import { setAndroidNavigationBar } from "@/lib/android-navigation-bar";
 import { clearSession } from "@/lib/api-client";
 import { dropPushRegistration } from "@/lib/push";
@@ -36,9 +36,9 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     let mounted = true;
-    getIntegrationStatus()
-      .then((res) => {
-        if (mounted) setIntegrations(res.integrations);
+    listIntegrations()
+      .then((integrations) => {
+        if (mounted) setIntegrations(integrations);
       })
       .catch(() => {})
       .finally(() => {
@@ -113,20 +113,9 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        <IntegrationsSection />
+        <DluAccountsSection />
 
         <SettingsSectionLabel>Account</SettingsSectionLabel>
-        <View className="mb-[18px] overflow-hidden rounded-2xl border border-border bg-card">
-          <Pressable
-            onPress={() => router.push("/connect-dlu-account" as Href)}
-            className="flex-row items-center gap-[13px] bg-card px-4 py-3.5"
-          >
-            <Text className="text-[15px] font-semibold flex-1">
-              Connect DLU account
-            </Text>
-            <ChevronRight size={18} className="text-muted-foreground" />
-          </Pressable>
-        </View>
         <View className="mb-[18px] overflow-hidden rounded-2xl border border-border bg-card">
           <Pressable
             onPress={handleSignOut}

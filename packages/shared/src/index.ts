@@ -8,3 +8,4 @@ export * from "./schedule";
 export * from "./bandit";
 export * from "./notification";
 export * from "./push";
+export * from "./placement";

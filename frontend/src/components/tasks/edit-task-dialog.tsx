@@ -5,14 +5,23 @@ import { useSessionForm } from "@/hooks/use-task-form";
 import { format } from "date-fns";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { apiErrorMessage, errorToast } from "@/lib/toast";
+import {
+  apiErrorMessage,
+  errorToast,
+  notifyDisplaced,
+  withInfeasibleRetry,
+} from "@/lib/toast";
 import { postData } from "@/api";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useHighlightStore } from "@/hooks/use-highlight-store";
 import type { Session } from "@/types/tasks";
 import type { UpdateSessionInput, UpdateSessionResponse } from "@zenflow/shared";
 import { EditSessionFormValues, deleteSession } from "@/utils/tasks";
-import { getSeriesKind, hhmmToMinutes } from "@zenflow/core";
+import {
+  displayLocation,
+  getSeriesKind,
+  hhmmToMinutes,
+} from "@zenflow/core";
 import { zonedDate, zonedWallClockToUtc } from "@/utils/tz";
 import { SessionForm } from "./form/task-form";
 import {
@@ -26,6 +35,8 @@ import {
   getSessionDetails,
   removeSeriesFrom,
   removeSessionSeries,
+  removeTimetableGroup,
+  removeTimetableGroupFrom,
   truncateSessionSeries,
   updateSession,
 } from "@/api/tasks";
@@ -170,7 +181,14 @@ export function EditSessionDialog({
         patch.rrule = values.rrule || null;
       }
 
-      const updated = await updateSession(task.id, patch);
+      const updated = await withInfeasibleRetry((infeasiblePolicy) =>
+        updateSession(
+          task.id,
+          infeasiblePolicy ? { ...patch, infeasiblePolicy } : patch,
+        ),
+      );
+      if (!updated) return; // user dismissed the infeasible prompt
+      notifyDisplaced(updated);
       if (updated.divergent && updated.slotProposalId && updated.alternativeSlot) {
         setPendingPick(updated);
       } else {
@@ -192,7 +210,11 @@ export function EditSessionDialog({
     if (!task) return;
     setLoading(true);
     try {
-      if (scope === "series" && task.seriesId) {
+      if (scope === "series" && seriesKind === "timetable") {
+        await removeTimetableGroup(task.id);
+      } else if (scope === "following" && seriesKind === "timetable") {
+        await removeTimetableGroupFrom(task.id);
+      } else if (scope === "series" && task.seriesId) {
         await removeSessionSeries(task.seriesId);
       } else if (
         scope === "following" &&
@@ -208,16 +230,23 @@ export function EditSessionDialog({
       ) {
         await removeSeriesFrom(task.seriesId, task.id);
       } else {
-        // "occurrence": a recurring occurrence id, a TASK sitting, or a one-off.
+        // "occurrence": a recurring occurrence id, a TASK sitting, a single
+        // timetable meeting, or a one-off.
         await deleteSession(task.id);
       }
       onSaved();
-      toast.success(scope === "series" ? "Series deleted" : "Session deleted", {
-        description:
-          scope === "series"
-            ? "Every session in the series was removed from your calendar."
-            : "It was removed from your calendar.",
-      });
+      const seriesLabel = seriesKind === "timetable" ? "Class" : "Series";
+      toast.success(
+        scope === "series" ? `${seriesLabel} deleted` : "Session deleted",
+        {
+          description:
+            scope === "series"
+              ? seriesKind === "timetable"
+                ? "Every meeting of this class was removed from your calendar."
+                : "Every session in the series was removed from your calendar."
+              : "It was removed from your calendar.",
+        },
+      );
       setOpen(false);
     } catch (error) {
       errorToast("Couldn't delete the session", {
@@ -311,7 +340,7 @@ export function EditSessionDialog({
               <p className="text-[11px] text-muted-foreground">
                 {task.durationMinutes} min
                 {task.rrule ? " · repeats" : ""}
-                {task.location ? ` · ${task.location}` : ""}
+                {task.location ? ` · ${displayLocation(task.location)}` : ""}
               </p>
             </div>
           </div>

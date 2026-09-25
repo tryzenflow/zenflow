@@ -1,0 +1,40 @@
+{
+  "function": "matrix-decay",
+  "source": "hand-checked",
+  "cases": [
+    {
+      "name": "one half life",
+      "fn": "decayMatrix",
+      "args": [
+        [
+          1,
+          -1,
+          0.5
+        ],
+        21
+      ],
+      "expected": [
+        0.5,
+        -0.5,
+        0.25
+      ]
+    },
+    {
+      "name": "noop",
+      "fn": "decayMatrix",
+      "args": [
+        [
+          1,
+          -1,
+          0.5
+        ],
+        0
+      ],
+      "expected": [
+        1,
+        -1,
+        0.5
+      ]
+    }
+  ]
+}

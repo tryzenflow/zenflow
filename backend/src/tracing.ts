@@ -29,7 +29,6 @@ function startTelemetry(): void {
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? DEFAULT_ENDPOINT
   ).replace(/\/+$/, "");
 
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const pkgVersion = (() => {
     try {
       return require("../package.json").version as string;

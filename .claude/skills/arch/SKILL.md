@@ -16,7 +16,7 @@ Spawn the **`solution-architect`** subagent (Agent tool, `subagent_type: solutio
 - The UI/UX spec from `/ui-ux` if one exists.
 - Instruction to ground decisions in `CLAUDE.md` invariants, `backend/README.md`,
   `frontend/README.md`, `backend/prisma/schema.prisma`, `packages/shared/src/*`, and the
-  roadmap in `docs/heuristic.md`.
+  scheduling docs in `services/bandit/README.md`.
 
 ## The deliverable (the subagent produces)
 An ADR at `docs/adr/NNNN-<title>.md` containing: status/date/issue link, context, decision +

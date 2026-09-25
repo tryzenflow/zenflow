@@ -1,0 +1,288 @@
+{
+  "name": "single-displaced",
+  "description": "08:00-12:00 is two movable 2 h tasks (deadline next day); the new 60 min task has deadline 12:00. Call 2 repacks with an EDF cascade.",
+  "ignore": [
+    "paramsVersion",
+    "timingsMs"
+  ],
+  "request": {
+    "contractVersion": 1,
+    "requestId": "00000000-0000-4000-8000-000000000002-2",
+    "mode": "PLACE",
+    "nowMs": 1789977600000,
+    "timezone": "UTC",
+    "maxScanDays": 30,
+    "fixedOccupied": [],
+    "deadlineMs": 1789992000000,
+    "members": [
+      {
+        "id": "t1",
+        "durationMinutes": 60,
+        "primaryPolicy": "HEURISTIC",
+        "computeBoth": false
+      }
+    ],
+    "days": [
+      {
+        "dayStr": "2026-09-21",
+        "dayStartMs": 1789948800000,
+        "dayEndMs": 1790035200000,
+        "occupied": [
+          {
+            "startMs": 1789977600000,
+            "endMs": 1789984800000
+          },
+          {
+            "startMs": 1789984800000,
+            "endMs": 1789992000000
+          }
+        ],
+        "workloadByType": {
+          "LECTURE": {
+            "hours": 0,
+            "count": 0
+          },
+          "ASSIGNMENT": {
+            "hours": 0,
+            "count": 0
+          },
+          "EXAM": {
+            "hours": 0,
+            "count": 0
+          },
+          "TASK": {
+            "hours": 0,
+            "count": 0
+          },
+          "DND": {
+            "hours": 0,
+            "count": 0
+          }
+        }
+      }
+    ],
+    "user": {
+      "preferenceMatrix": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.5,
+        0.5,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.5,
+        0.5,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.5,
+        0.5,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.5,
+        0.5,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.5,
+        0.5,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.5,
+        0.5,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        1.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.5,
+        0.5,
+        0.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "observationCount": 0
+    },
+    "infeasible": {
+      "flexible": [
+        {
+          "id": "f1",
+          "durationMinutes": 120,
+          "deadlineMs": 1790064000000,
+          "startMs": 1789977600000
+        },
+        {
+          "id": "f2",
+          "durationMinutes": 120,
+          "deadlineMs": 1790064000000,
+          "startMs": 1789984800000
+        }
+      ],
+      "fixed": [],
+      "horizonOccupied": []
+    }
+  },
+  "response": {
+    "contractVersion": 1,
+    "requestId": "00000000-0000-4000-8000-000000000002-2",
+    "paramsVersion": "py-5f9d5c31203c",
+    "results": [
+      {
+        "id": "t1",
+        "outcome": "DISPLACED",
+        "appliedPolicy": "HEURISTIC",
+        "heuristic": null,
+        "linucb": null,
+        "startMs": 1789977600000,
+        "moves": [
+          {
+            "id": "f1",
+            "fromMs": 1789977600000,
+            "toMs": 1789992000000
+          }
+        ],
+        "late": false,
+        "conflicting": false
+      }
+    ],
+    "timingsMs": {
+      "decode": 0.206,
+      "context": 0.0,
+      "predict": 0.0,
+      "scan": 0.079,
+      "displace": 0.297,
+      "total": 0.713
+    }
+  }
+}

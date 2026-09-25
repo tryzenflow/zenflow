@@ -137,10 +137,13 @@ export function buildReminderText(input: {
       };
     case "TASK":
       return {
-        title: `Event in ${lead}: ${t}`,
+        title: `Task starts in ${lead}: ${t}`,
         content: `${t} starts at ${at}${input.location ? ` at ${input.location}` : ""}.`,
       };
     default:
-      throw new Error("Session type doesn't have reminder supported");
+      return {
+        title: `Event starts in ${lead}: ${t}`,
+        content: `${t} starts at ${at}${input.location ? ` at ${input.location}` : ""}.`,
+      };
   }
 }

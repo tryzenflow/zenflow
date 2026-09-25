@@ -21,7 +21,7 @@ interface Option {
 }
 
 const COPY: Record<
-  "recurring" | "task",
+  "recurring" | "task" | "timetable",
   { title: string; options: Option[] }
 > = {
   recurring: {
@@ -68,6 +68,30 @@ const COPY: Record<
         Icon: CalendarDays,
         label: "All sittings",
         hint: "Delete the task and every sitting.",
+        destructive: true,
+      },
+    ],
+  },
+  timetable: {
+    title: "Delete class",
+    options: [
+      {
+        scope: "occurrence",
+        Icon: Trash2,
+        label: "This meeting",
+        hint: "Only this class meeting is removed.",
+      },
+      {
+        scope: "following",
+        Icon: CalendarRange,
+        label: "This and all following",
+        hint: "Every remaining meeting of this class this term is removed.",
+      },
+      {
+        scope: "series",
+        Icon: CalendarDays,
+        label: "All meetings",
+        hint: "Delete every meeting of this class.",
         destructive: true,
       },
     ],

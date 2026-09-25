@@ -1,6 +1,6 @@
 /**
  * Module-level types for the bandit slice (HTTP client + `(A, b)` persistence).
- * The wire contract types (`BanditPredictRequest`, …) live in `@zenflow/shared`.
+ * The wire contract types (`BanditUpdateRequest`, …) live in `@zenflow/shared`.
  */
 
 /** One arm's `(A, b)` as loaded from `BanditArmState`, with its concurrency version. */

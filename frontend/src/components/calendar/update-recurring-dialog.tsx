@@ -82,7 +82,10 @@ export function UpdateRecurringDialog({
   onResolve,
 }: {
   open: boolean;
-  kind: Exclude<SeriesKind, "none">;
+  // No "timetable" here: a portal-ingested lecture has no group-wide
+  // reschedule endpoint, so `layout.tsx` never requests a scope for one —
+  // see the `commitMove` narrowing in `calendar/layout.tsx`.
+  kind: Exclude<SeriesKind, "none" | "timetable">;
   onResolve: (choice: ScopeChoice | null) => void;
 }) {
   const [expanded, setExpanded] = useState<UpdateScope | null>(null);

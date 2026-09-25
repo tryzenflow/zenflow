@@ -67,7 +67,8 @@ Instruments use OTel dot-notation (`http.server.request.duration`). The collecto
 | `scheduler.proposals`                 | `scheduler_proposals_total`                       |
 | `scheduler.cron.duration` (s)         | `scheduler_cron_duration_seconds_bucket`          |
 | `ingestion.last_success.timestamp` (s)| `ingestion_last_success_timestamp_seconds`        |
-| `bandit.predict.duration` (s)         | `bandit_predict_duration_seconds_bucket`          |
+| `bandit.update.duration` (s)          | `bandit_update_duration_seconds_bucket`           |
+| `bandit.linucb.cold_arms`             | `bandit_linucb_cold_arms_{sum,count}`             |
 
 `service.name` / `service.version` / `deployment.environment.name` ride along as
 labels (`resource_to_telemetry_conversion`).

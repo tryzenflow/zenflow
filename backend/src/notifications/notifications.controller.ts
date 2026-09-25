@@ -17,6 +17,7 @@ import { Notification, type User } from "../../generated/prisma";
 import { ListNotificationsDto } from "./dto/list-notifications.dto";
 import { RaiseDevNotificationDto } from "./dto/raise-dev-notification.dto";
 import { NotificationsService } from "./notifications.service";
+import { ConflictRescheduleService } from "../scheduler/io/conflict-reschedule.service";
 import { NotificationEvent } from "./types";
 import { filter, fromEvent, map, Observable } from "rxjs";
 import { sseActiveConnections } from "../observability/metrics";
@@ -31,7 +32,10 @@ import { sseActiveConnections } from "../observability/metrics";
  */
 @Controller("notifications")
 export class NotificationsController {
-  constructor(private readonly notifications: NotificationsService) {}
+  constructor(
+    private readonly notifications: NotificationsService,
+    private readonly conflictReschedule: ConflictRescheduleService,
+  ) {}
   @Sse("stream")
   @UseGuards(CookieAuthGuard)
   async sendInApp(@CurrentUser() user: User) {
@@ -105,6 +109,37 @@ export class NotificationsController {
   async markActionTaken(@CurrentUser() user: User, @Param("id") id: string) {
     const data = await this.notifications.markActionTaken(user, id);
     return { success: true, message: "Notification marked as acted on", data };
+  }
+
+  /**
+   * "Reschedule them all" for a `*_CONFLICT` notification: re-places every
+   * listed task that still overlaps, records `SYSTEM_MOVE`s, and marks the
+   * notification acted on. Idempotent.
+   */
+  @Post(":id/reschedule-conflicts")
+  @UseGuards(CookieAuthGuard)
+  async rescheduleConflicts(
+    @CurrentUser() user: User,
+    @Param("id") id: string,
+  ) {
+    const row = await this.notifications.findConflict(user, id);
+    const result = await this.conflictReschedule.rescheduleAll(
+      user,
+      row.conflictSessionIds,
+    );
+    await this.notifications.markActionTaken(user, id);
+    return {
+      success: true,
+      message: `Rescheduled ${result.rescheduled.length} task(s)`,
+      data: {
+        rescheduled: result.rescheduled.map((r) => ({
+          id: r.id,
+          from: r.from.toISOString(),
+          to: r.to.toISOString(),
+        })),
+        failedSessionIds: result.failedSessionIds,
+      },
+    };
   }
 
   /** Dismiss (hard-delete) one notification. 404 if it is not the caller's. */

@@ -1,19 +1,11 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { SchedulingModel, type User } from "../../../generated/prisma";
-import type { Span } from "@opentelemetry/api";
+import { BadRequestException, Injectable } from "@nestjs/common";
+import type { InfeasiblePolicy } from "@zenflow/shared";
+import { type User } from "../../../generated/prisma";
 import { withSpan } from "../../observability/otel";
-import {
-  schedulerAppliedPolicy,
-  schedulerBanditFallback,
-} from "../../observability/metrics";
 import { PrismaService } from "../../prisma/prisma.service";
-import { HeuristicPlacer } from "./heuristic-placer.service";
-import { BanditPlacer } from "./bandit-placer.service";
-import { SeriesPlacer } from "./series-placer.service";
-import {
-  SchedulingExperimentCoordinator,
-  type ExperimentPlacementOutcome,
-} from "./scheduling-experiment-coordinator.service";
+import { PythonPlacer } from "./python-placer.service";
+import { ScheduleInfeasibleException } from "../schedule-infeasible.exception";
+import { blocksPlacement, ceilToSlot, MS_PER_MINUTE } from "../core/slot";
 import type {
   PlaceableTask,
   PlacementResult,
@@ -23,31 +15,19 @@ import type {
 
 type Trigger = "create" | "deadline-change";
 
-/** Placeholder id for a pre-flight feasibility scan — no `Session` row exists
- * yet, so this never matches a real occupied interval to exclude. */
-const PREFLIGHT_TASK_ID = "__preflight__";
-
 /**
  * The single placement entry point `sessions/` talks to. It owns the whole
- * "place a `TASK` and persist its `scheduledStartTime`" flow — heuristic pass,
- * the 50/50 A/B policy assignment, the optional LinUCB override, and the
- * `SlotProposal` record — so `SessionsService` never touches `assignPolicy`
- * or `recordProposal` directly. Nothing else on the calendar is ever moved.
- *
- * The A/B override runs per single `TASK` and per series member
- * (`docs/scheduler/ab-testing.md`); a bandit failure always falls back to the
- * heuristic placement and never throws.
+ * "place a `TASK` and persist its `scheduledStartTime`" flow by delegating to
+ * {@link PythonPlacer} (ADR-0003: Python owns ranking; Nest gathers, calls,
+ * applies, persists). A Python failure falls back to the frozen TS heuristic
+ * (`FallbackPlacer`, driven from inside `PythonPlacer`) — this service never
+ * runs its own ranking.
  */
 @Injectable()
 export class TaskPlacementService {
-  private readonly logger = new Logger(TaskPlacementService.name);
-
   constructor(
     private readonly prisma: PrismaService,
-    private readonly coordinator: SchedulingExperimentCoordinator,
-    private readonly heuristic: HeuristicPlacer,
-    private readonly bandit: BanditPlacer,
-    private readonly seriesPlacer: SeriesPlacer,
+    private readonly python: PythonPlacer,
   ) {}
 
   /** Place a freshly-created single `TASK`. */
@@ -55,202 +35,103 @@ export class TaskPlacementService {
     user: User;
     task: PlaceableTask;
     now: Date;
+    infeasiblePolicy?: InfeasiblePolicy;
   }): Promise<PlacementResult> {
-    return this.placeSingle(args.user, args.task, "create", args.now);
+    return this.placeSingle(
+      args.user,
+      args.task,
+      "create",
+      args.now,
+      args.infeasiblePolicy,
+    );
   }
 
-  /** Re-place a single `TASK` after its deadline changed. */
+  /**
+   * Re-place a single `TASK` after its deadline changed. `allowLastResort:
+   * false` returns a `null` start (nothing written) instead of the last
+   * resort — only for callers whose task already has a start to keep.
+   */
   placeOnDeadlineChange(args: {
     user: User;
     task: PlaceableTask;
     now: Date;
+    infeasiblePolicy?: InfeasiblePolicy;
+    allowLastResort?: boolean;
   }): Promise<PlacementResult> {
-    return this.placeSingle(args.user, args.task, "deadline-change", args.now);
+    return this.placeSingle(
+      args.user,
+      args.task,
+      "deadline-change",
+      args.now,
+      args.infeasiblePolicy,
+      args.allowLastResort ?? true,
+    );
   }
 
-  /**
-   * heuristic place → persist → assignPolicy 50/50 → (LINUCB) bandit place →
-   * persist + `recordProposal`. Best-effort: any A/B failure leaves the
-   * heuristic placement standing.
-   */
   private placeSingle(
     user: User,
     task: PlaceableTask,
     trigger: Trigger,
     now: Date,
+    policy?: InfeasiblePolicy,
+    allowLastResort = true,
   ): Promise<PlacementResult> {
     return withSpan(
       "scheduler.placeSingle",
-      (span) => this.placeSingleInner(span, user, task, trigger, now),
+      () =>
+        this.python.placeSingle(
+          user,
+          task,
+          trigger,
+          now,
+          policy,
+          allowLastResort,
+        ),
       { "scheduling.trigger": trigger, "session.id": task.id },
     );
   }
 
-  private async placeSingleInner(
-    span: Span,
-    user: User,
-    task: PlaceableTask,
-    trigger: Trigger,
-    now: Date,
-  ): Promise<PlacementResult> {
-    const heuristicStart = await this.computeHeuristicStart(user, task, now);
-    await this.applyStart(task.id, heuristicStart);
-
-    const outcome = await this.runExperimentSafely(
-      user,
-      task,
-      trigger,
-      now,
-      heuristicStart,
-    );
-    await this.applyWinningSlotIfDifferent(task.id, heuristicStart, outcome);
-
-    this.logPlacement(trigger, task.id, heuristicStart, outcome);
-    this.emitPlacementTelemetry(span, trigger, heuristicStart, outcome);
-
-    return {
-      scheduledStartTime: outcome?.appliedStart ?? heuristicStart,
-      appliedPolicy:
-        outcome?.appliedPolicy ?? (heuristicStart ? "HEURISTIC" : "NONE"),
-      slotProposalId: outcome?.slotProposalId ?? null,
-      alternativeSlot: outcome?.alternativeSlot ?? null,
-      divergent: outcome?.divergent ?? false,
-    };
-  }
-
-  private computeHeuristicStart(
-    user: User,
-    task: PlaceableTask,
-    now: Date,
-  ): Promise<Date | null> {
-    return this.heuristic.placeTask(
-      user.id,
-      task,
-      user.timezone,
-      user.preferenceMatrix,
-      now,
-    );
-  }
-
-  private async applyStart(taskId: string, start: Date | null): Promise<void> {
-    if (!start) return;
-    await this.prisma.session.update({
-      where: { id: taskId },
-      data: { scheduledStartTime: start },
-    });
-  }
-
-  /** The coordinator may have applied a different (LinUCB) start than the
-   * heuristic pass already persisted — write it if so. */
-  private async applyWinningSlotIfDifferent(
-    taskId: string,
-    heuristicStart: Date | null,
-    outcome: ExperimentPlacementOutcome | null,
-  ): Promise<void> {
-    if (!outcome?.appliedStart) return;
-    if (outcome.appliedStart.getTime() === heuristicStart?.getTime()) return;
-    await this.applyStart(taskId, outcome.appliedStart);
-  }
-
-  /** The A/B assignment + optional bandit run — best-effort, the heuristic
-   * placement above always stands if this fails. */
-  private async runExperimentSafely(
-    user: User,
-    task: PlaceableTask,
-    trigger: Trigger,
-    now: Date,
-    heuristicStart: Date | null,
-  ): Promise<ExperimentPlacementOutcome | null> {
-    try {
-      const outcome = await this.coordinator.run({
-        userId: user.id,
-        sessionId: task.id,
-        trigger,
-        heuristicStart,
-        runBandit: () =>
-          this.bandit.placeTask(
-            user.id,
-            task,
-            user.timezone,
-            user.preferenceMatrix,
-            now,
-          ),
-      });
-      if (outcome.banditAttempted && !outcome.banditPick) {
-        // LinUCB was attempted (primary or pairwise-sampled) but produced
-        // nothing — the heuristic placement stands. `no_pick` covers URL
-        // unset / timeout / non-2xx / no surviving slot (BanditPlacer
-        // collapses them all to `null`).
-        schedulerBanditFallback.add(1, { reason: "no_pick", trigger });
-      }
-      return outcome;
-    } catch (err) {
-      schedulerBanditFallback.add(1, { reason: "exception", trigger });
-      this.logger.warn(
-        `scheduling experiment (${trigger}) failed for session ${task.id}: ${
-          (err as Error).message
-        }`,
-      );
-      return null;
-    }
-  }
-
-  private logPlacement(
-    trigger: Trigger,
-    taskId: string,
-    heuristicStart: Date | null,
-    outcome: ExperimentPlacementOutcome | null,
-  ): void {
-    const pick =
-      outcome?.appliedPolicy === "LINUCB" ? outcome.banditPick : null;
-    this.logger.log(
-      `schedule[${trigger}] session=${taskId} assignedPolicy=${outcome?.assignedPolicy ?? "NONE"} ` +
-        `applied=${outcome?.appliedPolicy ?? (heuristicStart ? "HEURISTIC" : "NONE")} ` +
-        `heuristicProposal=${heuristicStart?.toISOString() ?? "none"} ` +
-        `linucbProposal=${
-          pick
-            ? `${pick.scheduledStartTime.toISOString()} (arm=${pick.selectedArm})`
-            : outcome?.assignedPolicy === SchedulingModel.LINUCB
-              ? "none"
-              : "n/a (not primary)"
-        }`,
-    );
-  }
-
-  private emitPlacementTelemetry(
-    span: Span,
-    trigger: Trigger,
-    heuristicStart: Date | null,
-    outcome: ExperimentPlacementOutcome | null,
-  ): void {
-    const assignedPolicy = outcome?.assignedPolicy ?? "NONE";
-    const appliedPolicy =
-      outcome?.appliedPolicy ?? (heuristicStart ? "HEURISTIC" : "NONE");
-    schedulerAppliedPolicy.add(1, {
-      assigned: assignedPolicy,
-      applied: appliedPolicy,
-      trigger,
-    });
-    span.setAttributes({
-      "scheduling.assigned_policy": assignedPolicy,
-      "scheduling.applied_policy": appliedPolicy,
-    });
-  }
-
   /**
-   * Place every member of a freshly-created `TASK` series and persist the
-   * placed `scheduledStartTime`s in one transaction. The caller has already
-   * inserted the rows + `CREATE` events. Returns one row per member
-   * (`null` start = nothing free fit).
+   * Read-only guard for a single `TASK` create / deadline edit, run BEFORE
+   * anything is written: rejects a deadline too close for the duration (400),
+   * and — when no slot exists — throws the 409 `ScheduleInfeasibleException`
+   * (via `PythonPlacer`) unless the request already carries an
+   * `infeasiblePolicy`. `taskId` (edit path) excludes the task itself.
    */
+  async preflightTask(args: {
+    user: User;
+    taskId?: string;
+    durationMinutes: number;
+    deadline: Date;
+    now: Date;
+    policy?: InfeasiblePolicy;
+    /** Series member edit: only the `now + duration > deadline` arithmetic guard. */
+    arithmeticOnly?: boolean;
+  }): Promise<void> {
+    const { user, durationMinutes, deadline, now } = args;
+    if (
+      ceilToSlot(now.getTime()) + durationMinutes * MS_PER_MINUTE >
+      deadline.getTime()
+    ) {
+      throw new BadRequestException(
+        "Won't fit before the deadline\nPick a later deadline.",
+      );
+    }
+    if (args.arithmeticOnly) return;
+    await this.python.preflightSingle({
+      user,
+      taskId: args.taskId,
+      durationMinutes,
+      deadline,
+      now,
+      policy: args.policy,
+    });
+  }
+
   /**
    * Read-only pre-flight feasibility check for a single `TASK` create — `true`
    * iff at least one empty slot fits `durationMinutes` somewhere in
-   * `now … deadline`. Runs the same {@link HeuristicPlacer.placeTask} scan a
-   * real create would, but against a placeholder id (no `Session` row exists
-   * yet) — no DB write, no telemetry. `SessionCrudService.create` calls this
-   * BEFORE inserting anything, so an infeasible create never persists an
-   * unplaced task (no rollback needed).
+   * `now … deadline`. No DB write, no telemetry.
    */
   async canPlaceTask(args: {
     user: User;
@@ -258,52 +139,30 @@ export class TaskPlacementService {
     deadline: Date;
     now: Date;
   }): Promise<boolean> {
-    const start = await this.heuristic.placeTask(
-      args.user.id,
-      {
-        id: PREFLIGHT_TASK_ID,
-        durationMinutes: args.durationMinutes,
-        deadline: args.deadline,
-      },
-      args.user.timezone,
-      args.user.preferenceMatrix,
-      args.now,
-    );
-    return start !== null;
+    try {
+      await this.python.preflightSingle(args);
+      return true;
+    } catch (err) {
+      if (err instanceof ScheduleInfeasibleException) return false;
+      throw err;
+    }
   }
 
   /**
    * Read-only pre-flight feasibility check for a `TASK` series create —
    * `true` iff EVERY member (`sessionCount` sittings of `durationMinutes`)
-   * can be placed somewhere in `now … deadline` under the real placement
-   * constraints (per-day cap, sibling spacing — {@link SeriesPlacer.placeSeries}
-   * with `dryRun: true`). One infeasible member fails the whole check, so
-   * `SessionCrudService.create` can reject the batch before any row exists —
-   * no partially-placed series is ever persisted.
+   * can be placed somewhere in `now … deadline`. One infeasible member fails
+   * the whole check, so `SessionCrudService.create` can reject the batch
+   * before any row exists — no partially-placed series is ever persisted.
    */
-  async canPlaceSeries(args: {
+  canPlaceSeries(args: {
     user: User;
     durationMinutes: number;
     sessionCount: number;
     deadline: Date;
     now: Date;
   }): Promise<boolean> {
-    const members: SeriesMemberInput[] = Array.from(
-      { length: args.sessionCount },
-      (_, i) => ({
-        id: `${PREFLIGHT_TASK_ID}-${i}`,
-        durationMinutes: args.durationMinutes,
-      }),
-    );
-    const placements = await this.seriesPlacer.placeSeries(
-      args.user.id,
-      { members, deadline: args.deadline },
-      args.user.timezone,
-      args.user.preferenceMatrix,
-      args.now,
-      { trigger: "create", dryRun: true },
-    );
-    return placements.every((p) => p.scheduledStartTime !== null);
+    return this.python.canPlaceSeries(args);
   }
 
   async placeSeriesOnCreate(args: {
@@ -313,24 +172,31 @@ export class TaskPlacementService {
     deadline: Date;
     now: Date;
   }): Promise<SeriesPlacementRow[]> {
-    const { user, seriesId, members, deadline, now } = args;
-
-    const placements = await this.seriesPlacer.placeSeries(
-      user.id,
-      { members, deadline },
-      user.timezone,
-      user.preferenceMatrix,
+    const { user, members, deadline, now } = args;
+    const placements = await this.python.placeSeries({
+      user,
+      members,
+      deadline,
       now,
-      { trigger: "create" },
-    );
-
-    const placed = placements.filter((p) => p.scheduledStartTime).length;
-    this.logger.log(
-      `schedule[create-series] series=${seriesId} members=${members.length} placed=${placed}/${members.length}`,
-    );
-
+      trigger: "create",
+    });
+    // `placeSeries` only computes starts; persist them here.
     await this.persistPlaced(placements);
     return placements;
+  }
+
+  /** Write each member's start (`placeSeries` never returns a `null` one). */
+  private async persistPlaced(rows: SeriesPlacementRow[]): Promise<void> {
+    const placed = rows.filter((p) => p.scheduledStartTime);
+    if (placed.length === 0) return;
+    await this.prisma.$transaction(
+      placed.map((p) =>
+        this.prisma.session.update({
+          where: { id: p.id },
+          data: { scheduledStartTime: p.scheduledStartTime },
+        }),
+      ),
+    );
   }
 
   /**
@@ -352,30 +218,11 @@ export class TaskPlacementService {
   }): Promise<SeriesPlacementRow[]> {
     const { user, seriesId, members, newDeadline, now } = args;
 
-    const isPast = (s: { scheduledStartTime: Date | null }) =>
-      s.scheduledStartTime != null &&
-      s.scheduledStartTime.getTime() < now.getTime();
-    const upcoming = members.filter((m) => !isPast(m));
-    const fixedOccupied = members.filter(isPast).map((m) => ({
-      start: (m.scheduledStartTime as Date).getTime(),
-      end:
-        (m.scheduledStartTime as Date).getTime() + m.durationMinutes * 60_000,
-    }));
-
-    const placements = await this.seriesPlacer.placeSeries(
-      user.id,
-      {
-        members: upcoming.map((m) => ({
-          id: m.id,
-          durationMinutes: m.durationMinutes,
-        })),
-        deadline: newDeadline,
-        fixedOccupied,
-      },
-      user.timezone,
-      user.preferenceMatrix,
+    const { isPast, upcoming, placements } = await this.placeUpcoming(
+      user,
+      members,
+      newDeadline,
       now,
-      { trigger: "deadline-change" },
     );
     const startById = new Map(
       placements.map((p) => [p.id, p.scheduledStartTime]),
@@ -390,32 +237,98 @@ export class TaskPlacementService {
         where: { seriesId, userId: user.id },
         data: { deadline: newDeadline },
       }),
-      ...upcoming.map((m) =>
-        this.prisma.session.update({
-          where: { id: m.id },
-          data: { scheduledStartTime: startById.get(m.id) ?? null },
-        }),
-      ),
+      // Never writes a `null` start: `placeSeries` gives every member one.
+      ...upcoming.flatMap((m) => {
+        const start = startById.get(m.id);
+        return start
+          ? [
+              this.prisma.session.update({
+                where: { id: m.id },
+                data: { scheduledStartTime: start },
+              }),
+            ]
+          : [];
+      }),
     ]);
 
+    const degraded = placements.some((p) => p.degraded);
     return members.map((m) => ({
       id: m.id,
       scheduledStartTime: isPast(m)
         ? m.scheduledStartTime
-        : (startById.get(m.id) ?? null),
+        : (startById.get(m.id) ?? m.scheduledStartTime),
+      ...(degraded ? { degraded: true } : {}),
     }));
   }
 
-  private async persistPlaced(rows: SeriesPlacementRow[]): Promise<void> {
-    const placed = rows.filter((p) => p.scheduledStartTime);
-    if (placed.length === 0) return;
-    await this.prisma.$transaction(
-      placed.map((p) =>
-        this.prisma.session.update({
-          where: { id: p.id },
-          data: { scheduledStartTime: p.scheduledStartTime },
-        }),
-      ),
+  /**
+   * Re-spread a `TASK` series' upcoming sittings without persisting (sync
+   * conflict "Reschedule them all"). Returns `{ id, from, to }` per sitting
+   * (`to` null = no real slot: a last-resort pick would only trade one
+   * conflict for another, so the caller falls back to one-by-one moves).
+   */
+  async planSeriesRespread(args: {
+    user: User;
+    seriesId: string;
+    deadline: Date;
+    now: Date;
+  }): Promise<{ id: string; from: Date | null; to: Date | null }[]> {
+    const { user, seriesId, deadline, now } = args;
+    const members = await this.prisma.session.findMany({
+      where: { seriesId, userId: user.id, type: "TASK", deleted: false },
+      select: { id: true, durationMinutes: true, scheduledStartTime: true },
+      orderBy: { scheduledStartTime: "asc" },
+    });
+    const { upcoming, placements } = await this.placeUpcoming(
+      user,
+      members,
+      deadline,
+      now,
     );
+    const toById = new Map(
+      placements.map((p) => [p.id, p.lastResort ? null : p.scheduledStartTime]),
+    );
+    return upcoming.map((m) => ({
+      id: m.id,
+      from: m.scheduledStartTime,
+      to: toById.get(m.id) ?? null,
+    }));
+  }
+
+  /**
+   * Started sittings keep their slot (as `fixedOccupied`); the rest are
+   * placed together via `placeSeries`.
+   */
+  private async placeUpcoming<
+    M extends {
+      id: string;
+      durationMinutes: number;
+      scheduledStartTime: Date | null;
+    },
+  >(user: User, members: M[], deadline: Date, now: Date) {
+    const isPast = (s: { scheduledStartTime: Date | null }) =>
+      s.scheduledStartTime != null &&
+      s.scheduledStartTime.getTime() < now.getTime();
+    const upcoming = members.filter((m) => !isPast(m));
+    const fixedOccupied = members
+      .filter((m) => isPast(m) && blocksPlacement(m.durationMinutes))
+      .map((m) => ({
+        start: (m.scheduledStartTime as Date).getTime(),
+        end:
+          (m.scheduledStartTime as Date).getTime() + m.durationMinutes * 60_000,
+      }));
+
+    const placements = await this.python.placeSeries({
+      user,
+      members: upcoming.map((m) => ({
+        id: m.id,
+        durationMinutes: m.durationMinutes,
+      })),
+      deadline,
+      now,
+      trigger: "deadline-change",
+      fixedOccupied,
+    });
+    return { isPast, upcoming, placements };
   }
 }

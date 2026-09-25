@@ -3,7 +3,12 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { apiErrorMessage, errorToast } from "@/lib/toast";
+import {
+  apiErrorMessage,
+  errorToast,
+  notifyDisplaced,
+  withInfeasibleRetry,
+} from "@/lib/toast";
 import { postData } from "@/api";
 import { useFilesTracker } from "@/hooks/use-files-tracker";
 import { useUserStore } from "@/hooks/use-user-store";
@@ -196,7 +201,16 @@ export function CreateSessionDialog({
     if (!user) return;
     setLoading(true);
     try {
-      const session = await createSession(toCreateInput(values, tz));
+      const input = toCreateInput(values, tz);
+      const session = await withInfeasibleRetry((infeasiblePolicy) =>
+        createSession(
+          infeasiblePolicy && input.type === "TASK"
+            ? { ...input, infeasiblePolicy }
+            : input,
+        ),
+      );
+      if (!session) return; // user dismissed the infeasible prompt
+      notifyDisplaced(session);
 
       if (session.divergent && session.slotProposalId && session.alternativeSlot) {
         setPendingPick(session);

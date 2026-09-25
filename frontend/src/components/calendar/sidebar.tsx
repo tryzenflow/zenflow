@@ -247,8 +247,8 @@ export function SidebarBody({ agenda, view }: SidebarProps) {
             one edge to resize it.
           </li>
           <li>
-            New tasks start unscheduled — drag them onto the calendar to give
-            them a slot.
+            New tasks are placed on the calendar automatically — drag them to
+            another slot any time.
           </li>
           <li>
             <span className="font-semibold text-foreground">Fixed</span> sessions

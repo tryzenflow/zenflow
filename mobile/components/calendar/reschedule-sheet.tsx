@@ -183,7 +183,9 @@ export const RescheduleSheet = forwardRef<
   const commitWithScope = () => {
     if (!session || !pickedISO) return;
     const seriesKind = getSeriesKind(session);
-    if (seriesKind !== "none" && onRequestScopedUpdate) {
+    // A timetable-grouped lecture moves just that meeting — no scope prompt.
+    const needsScope = seriesKind === "recurring" || seriesKind === "task";
+    if (needsScope && onRequestScopedUpdate) {
       onRequestScopedUpdate(
         session,
         { scheduledStartTime: pickedISO, durationMinutes },
