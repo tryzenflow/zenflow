@@ -19,6 +19,7 @@ import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
+import { setPendingSlotPick } from "@/lib/pending-slot-pick";
 import { isSessionPastDeadline } from "@/lib/overdue";
 import {
   RESCHEDULE_HINT,
@@ -164,6 +165,30 @@ export default function EditSessionScreen() {
 
     try {
       const updated = await updateSession(task.id, patch);
+
+      // Handle divergent response — hand the primary-vs-alternative pick off
+      // to the week view, which owns the SlotPickSheet and presents it over
+      // the calendar (`useFocusEffect`, app/(app)/index.tsx).
+      if (
+        updated.divergent &&
+        updated.slotProposalId &&
+        updated.primarySlot &&
+        updated.alternativeSlot
+      ) {
+        setPendingSlotPick({
+          session: updated,
+          primarySlot: updated.primarySlot,
+          alternativeSlot: updated.alternativeSlot,
+          slotProposalId: updated.slotProposalId,
+          tz,
+        });
+        router.replace({
+          pathname: "/",
+          params: { date: updated.primarySlot, flash: updated.id },
+        } as Href);
+        return;
+      }
+
       toast("Session updated", "success");
       if (isSessionPastDeadline(updated)) {
         toast(
@@ -257,69 +282,71 @@ export default function EditSessionScreen() {
   }
 
   return (
-    <SessionFormScreen
-      title="Edit session"
-      subtitle={
-        task
-          ? `Created ${format(new Date(task.createdAt), "MMM d")}`
-          : undefined
-      }
-      headerRight={
-        <Pressable
-          disabled={loading}
-          onPress={onDelete}
-          className="flex-row items-center gap-1.5"
-          accessibilityLabel="Delete session"
-        >
-          <Trash2 size={15} className="text-destructive" />
-          <Text className="text-[13px] font-semibold text-destructive">
-            Delete
-          </Text>
-        </Pressable>
-      }
-      footer={
-        <Button
-          className="h-[52px] w-full"
-          disabled={loading}
-          onPress={form.handleSubmit(onSubmit, onInvalid)}
-        >
-          <Text className="text-base font-semibold text-foreground">
-            {loading ? "Saving…" : "Save changes"}
-          </Text>
-        </Button>
-      }
-    >
-      {task ? (
-        <SessionSheetFields
-          initialValue={task.note || ""}
-          form={form}
-          tz={tz}
-          disabled={loading}
-          editing
-          deadlineWarning={
-            deadlinePastStart
-              ? "Earlier than this session's scheduled start — it'll be marked late."
-              : undefined
-          }
-          editingInstance={{
-            scheduledStartTime: task.scheduledStartTime,
-            durationMinutes: task.durationMinutes,
-          }}
-        />
-      ) : (
-        <View className="items-center py-16">
-          <ActivityIndicator />
-          <Text className="mt-3 text-sm text-muted-foreground">
-            Loading session…
-          </Text>
-        </View>
-      )}
+    <>
+      <SessionFormScreen
+        title="Edit session"
+        subtitle={
+          task
+            ? `Created ${format(new Date(task.createdAt), "MMM d")}`
+            : undefined
+        }
+        headerRight={
+          <Pressable
+            disabled={loading}
+            onPress={onDelete}
+            className="flex-row items-center gap-1.5"
+            accessibilityLabel="Delete session"
+          >
+            <Trash2 size={15} className="text-destructive" />
+            <Text className="text-[13px] font-semibold text-destructive">
+              Delete
+            </Text>
+          </Pressable>
+        }
+        footer={
+          <Button
+            className="h-[52px] w-full"
+            disabled={loading}
+            onPress={form.handleSubmit(onSubmit, onInvalid)}
+          >
+            <Text className="text-base font-semibold text-foreground">
+              {loading ? "Saving…" : "Save changes"}
+            </Text>
+          </Button>
+        }
+      >
+        {task ? (
+          <SessionSheetFields
+            initialValue={task.note || ""}
+            form={form}
+            tz={tz}
+            disabled={loading}
+            editing
+            deadlineWarning={
+              deadlinePastStart
+                ? "Earlier than this session's scheduled start — it'll be marked late."
+                : undefined
+            }
+            editingInstance={{
+              scheduledStartTime: task.scheduledStartTime,
+              durationMinutes: task.durationMinutes,
+            }}
+          />
+        ) : (
+          <View className="items-center py-16">
+            <ActivityIndicator />
+            <Text className="mt-3 text-sm text-muted-foreground">
+              Loading session…
+            </Text>
+          </View>
+        )}
 
-      <DeleteRecurringSheet
-        ref={deleteScopeSheet}
-        kind={task && getSeriesKind(task) === "task" ? "task" : "recurring"}
-        onChoose={runDelete}
-      />
-    </SessionFormScreen>
+        <DeleteRecurringSheet
+          ref={deleteScopeSheet}
+          kind={task && getSeriesKind(task) === "task" ? "task" : "recurring"}
+          onChoose={runDelete}
+        />
+      </SessionFormScreen>
+    </>
   );
 }

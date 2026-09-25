@@ -7,6 +7,8 @@ import type {
   Session,
   SessionDetailResponse,
   SessionsListResponse,
+  SlotPickRequest,
+  SlotPickResponse,
   UpdateSessionInput,
   UpdateSessionResponse,
   ViewMode,
@@ -139,6 +141,24 @@ export async function removeSeriesFrom(
 ): Promise<RemoveSessionSeriesResponse> {
   const { data } = await api.delete(
     `/sessions/series/${seriesId}/from/${sessionId}`,
+  );
+  notifySessionsMutated();
+  return data.data;
+}
+
+/**
+ * Record the user's pick from a pairwise slot proposal (issue #41).
+ * Called when `CreateSessionResponse` or `UpdateSessionResponse` has
+ * `divergent: true` and the user chooses between `primarySlot` and
+ * `alternativeSlot`. Non-blocking — failures are surfaced as toasts by callers.
+ */
+export async function slotPick(
+  id: string,
+  input: SlotPickRequest,
+): Promise<SlotPickResponse> {
+  const { data } = await api.post(
+    `/sessions/${encodeURIComponent(id)}/slot-pick`,
+    input,
   );
   notifySessionsMutated();
   return data.data;

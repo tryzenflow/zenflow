@@ -1,4 +1,4 @@
-import { listSessions, updateSession } from "@/api/tasks";
+import { listSessions, slotPick, updateSession } from "@/api/tasks";
 import { AlertTriangle, RefreshCcw, RotateCw } from "@/components/Icons";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -27,9 +27,10 @@ import {
   getOverlapLayout,
   getSeriesKind,
   tasksToBlocks,
+  zonedDate,
   zonedNow,
 } from "@zenflow/core";
-import type { Session } from "@zenflow/shared";
+import type { Session, UpdateSessionResponse } from "@zenflow/shared";
 import { format } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -124,6 +125,17 @@ interface DayTimelineProps {
       } | null,
     ) => void,
   ) => void;
+  /** When a drag-drop results in a divergent placement (heuristic vs LinUCB),
+   * shows the slot picker for the user to choose between primary and alternative.
+   * The callback receives the session, primary slot, alternative slot, proposal ID,
+   * and a resolve function to call with the user's choice. */
+  onRequestSlotPick?: (
+    session: Session,
+    primarySlot: string,
+    alternativeSlot: string,
+    slotProposalId: string,
+    onPick: (chose: "primary" | "alternative") => void,
+  ) => void;
   /** Reports this day's sessions as mini-day blocks so a parent week pager
    * can render its next-day peek strip from real data. */
   onPeekChange?: (blocks: PeekBlock[], dayKey: string) => void;
@@ -159,6 +171,7 @@ export function DayTimeline({
   onRequestReschedule,
   onRequestBlockMenu,
   onRequestScopedUpdate,
+  onRequestSlotPick,
   onPeekChange,
   rightInset = 0,
   isActive = true,
@@ -529,6 +542,41 @@ export function DayTimeline({
             scope,
             skipConflicting,
           });
+
+          // Handle divergent response — show picker for primary vs alternative slot
+          if (
+            updated.divergent &&
+            updated.slotProposalId &&
+            updated.primarySlot &&
+            updated.alternativeSlot &&
+            onRequestSlotPick
+          ) {
+            const session = tasks.find((t) => t.id === taskId);
+            if (session) {
+              onRequestSlotPick(
+                session,
+                updated.primarySlot,
+                updated.alternativeSlot,
+                updated.slotProposalId,
+                async (chose) => {
+                  try {
+                    await slotPick(updated.id, {
+                      slotProposalId: updated.slotProposalId!,
+                      chose,
+                    });
+                  } catch (error) {
+                    // Non-blocking — surface as toast but continue with placement
+                    // Toast will be shown by the parent component
+                    console.warn("slotPick failed:", error);
+                  }
+                  // Refetch to get the authoritative state after the pick
+                  await refetch();
+                },
+              );
+              return;
+            }
+          }
+
           // Patch the dragged task from the authoritative response so its new
           // time shows immediately; the refetch below re-derives every card's
           // column layout, since neighbors' positions can shift too.
@@ -591,7 +639,7 @@ export function DayTimeline({
 
       commitWithScope();
     },
-    [confirm, deadlineBySession, refetch, tasks, onRequestScopedUpdate],
+    [confirm, deadlineBySession, refetch, tasks, onRequestScopedUpdate, onRequestSlotPick],
   );
 
   const handleDragStateChange = useCallback(

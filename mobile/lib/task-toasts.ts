@@ -125,3 +125,18 @@ export function placementToastMessage(
   );
   return { message: `Scheduled for ${when}${suffix}`, variant: "success" };
 }
+
+/**
+ * Toast shown after the user picks the alternative slot in a divergent
+ * placement (issue #41). Matches the mockup: "Moved to [time]" + "Thanks — noted for next time".
+ */
+export function showAlternativePickToast(
+  toast: ToastFn,
+  alternativeSlot: string,
+  tz: string,
+): void {
+  const when = format(zonedDate(alternativeSlot, tz), "h:mm a 'on' EEE MMM d");
+  toast("Moved to " + when, "success", 4000, "bottom", false, undefined, {
+    description: "Thanks — noted for next time",
+  });
+}

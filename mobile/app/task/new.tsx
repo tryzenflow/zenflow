@@ -7,6 +7,7 @@ import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
+import { setPendingSlotPick } from "@/lib/pending-slot-pick";
 import {
   RESCHEDULE_HINT,
   placementToastMessage,
@@ -190,6 +191,31 @@ export default function NewSessionScreen() {
     if (!user) return;
     try {
       const response = await createSession(toCreateInput(values, tz));
+
+      // Handle divergent response — present a primary-vs-alternative pick.
+      // The week view owns the SlotPickSheet, so hand the payload off and
+      // land there first; `useFocusEffect` (app/(app)/index.tsx) opens the
+      // sheet over the week view and the new block is already behind it.
+      if (
+        response.divergent &&
+        response.slotProposalId &&
+        response.primarySlot &&
+        response.alternativeSlot
+      ) {
+        setPendingSlotPick({
+          session: response,
+          primarySlot: response.primarySlot,
+          alternativeSlot: response.alternativeSlot,
+          slotProposalId: response.slotProposalId,
+          tz,
+        });
+        router.replace({
+          pathname: "/",
+          params: { date: response.primarySlot, flash: response.id },
+        } as Href);
+        return;
+      }
+
       const { message, variant } = placementToastMessage(response, user);
       showSplitToast(toast, message, variant);
       if (shouldSurfaceRescheduleHint()) {
@@ -237,33 +263,35 @@ export default function NewSessionScreen() {
         )}`;
 
   return (
-    <SessionFormScreen
-      title="New session"
-      subtitle={subtitle}
-      footer={
-        <Button
-          className="h-[52px] w-full"
-          disabled={loading}
-          onPress={form.handleSubmit(onSubmit, onInvalid)}
-        >
-          <Text className="text-base font-semibold text-foreground">
-            {loading ? "Adding…" : "Add session"}
-          </Text>
-        </Button>
-      }
-    >
-      <SessionSheetFields
-        form={form}
-        tz={tz}
-        disabled={loading}
-        typeSelector={
-          <SessionTypeTabs
-            value={type}
-            onChange={switchType}
+    <>
+      <SessionFormScreen
+        title="New session"
+        subtitle={subtitle}
+        footer={
+          <Button
+            className="h-[52px] w-full"
             disabled={loading}
-          />
+            onPress={form.handleSubmit(onSubmit, onInvalid)}
+          >
+            <Text className="text-base font-semibold text-foreground">
+              {loading ? "Adding…" : "Add session"}
+            </Text>
+          </Button>
         }
-      />
-    </SessionFormScreen>
+      >
+        <SessionSheetFields
+          form={form}
+          tz={tz}
+          disabled={loading}
+          typeSelector={
+            <SessionTypeTabs
+              value={type}
+              onChange={switchType}
+              disabled={loading}
+            />
+          }
+        />
+      </SessionFormScreen>
+    </>
   );
 }
