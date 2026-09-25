@@ -279,15 +279,18 @@ export class MaterializerService {
 
     const runDigest = digest ?? new SyncDigest(new Date());
     for (const s of removable) {
-      runDigest.add({
-        // Narrowed by the `type: { in: types }` filter on the query above.
-        type: s.type as IngestedSessionType,
-        kind: "removed",
-        sessionId: null,
-        title: s.title,
-        startsAt: null,
-        endsAt: null,
-      });
+      runDigest.add(
+        {
+          // Narrowed by the `type: { in: types }` filter on the query above.
+          type: s.type as IngestedSessionType,
+          kind: "removed",
+          sessionId: null,
+          title: s.title,
+          startsAt: null,
+          endsAt: null,
+        },
+        source,
+      );
     }
     if (!digest) await this.flushDigest(userId, runDigest, now);
 

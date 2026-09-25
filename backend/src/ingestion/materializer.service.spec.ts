@@ -553,7 +553,7 @@ describe("MaterializerService", () => {
       // One CREATED notification from the first sighting, one UPDATED from the move.
       expect(db.notifications).toHaveLength(2);
       expect(db.notifications[1].title).toBe(
-        "You have a change to your assignments",
+        "You have a change to your assignments from LMS",
       );
       expect(db.notifications[1]).toMatchObject({
         eventName: "assignment.group_updated",
@@ -622,7 +622,7 @@ describe("MaterializerService", () => {
         sessionId: db.sessions[0].id,
       });
       expect(db.notifications[1].title).toBe(
-        "You have a change to your assignments",
+        "You have a change to your assignments from LMS",
       );
     });
 
@@ -676,7 +676,7 @@ describe("MaterializerService", () => {
       expect(db.sessions[0].deleted).toBe(true);
       const drop = db.notifications.at(-1)!;
       expect(drop.sessionId).toBeNull();
-      expect(drop.title).toBe("You have a lecture removed");
+      expect(drop.title).toBe("You have a lecture removed from the portal");
     });
 
     it("removes a hand-moved session upstream drops too — the move only protects position, not existence", async () => {
@@ -701,7 +701,7 @@ describe("MaterializerService", () => {
       expect(db.sessions).toHaveLength(1);
       expect(db.sessions[0].deleted).toBe(true);
       const drop = db.notifications.at(-1)!;
-      expect(drop.title).toBe("You have a lecture removed");
+      expect(drop.title).toBe("You have a lecture removed from the portal");
     });
   });
 
@@ -724,7 +724,7 @@ describe("MaterializerService", () => {
       expect(db.notifications).toHaveLength(1);
       expect(db.notifications[0]).toMatchObject({
         eventName: "lecture.group_created",
-        title: "You have 12 new lectures",
+        title: "You have 12 new lectures from the portal",
         // The soonest upcoming meeting, for the calendar to land on.
         sessionId: db.sessions[0].id,
         // A group has no single event time.
@@ -741,10 +741,12 @@ describe("MaterializerService", () => {
       await service.materialize(USER, many(2), "PORTAL", IN_TERM);
 
       expect(db.notifications).toHaveLength(1);
-      expect(db.notifications[0].title).toBe("You have 2 new lectures");
+      expect(db.notifications[0].title).toBe(
+        "You have 2 new lectures from the portal",
+      );
     });
 
-    it('still groups a single change: "You have a new lecture"', async () => {
+    it('still groups a single change: "You have a new lecture from the portal"', async () => {
       const { db, service } = await makeService();
       await service.materialize(
         USER,
@@ -755,7 +757,7 @@ describe("MaterializerService", () => {
 
       expect(db.notifications).toHaveLength(1);
       expect(db.notifications[0]).toMatchObject({
-        title: "You have a new lecture",
+        title: "You have a new lecture from the portal",
         eventName: "lecture.group_created",
       });
       // A per-item row carries the session's fixed end instant for its badge.
@@ -779,7 +781,9 @@ describe("MaterializerService", () => {
         "exam.group_created",
         "assignment.group_created",
       ]);
-      expect(db.notifications[1].title).toBe("You have 2 new assignments");
+      expect(db.notifications[1].title).toBe(
+        "You have 2 new assignments from LMS",
+      );
     });
 
     it("spans every call that shares a digest, removals included, until flushed", async () => {
@@ -806,7 +810,7 @@ describe("MaterializerService", () => {
 
       expect(db.notifications).toHaveLength(before + 1);
       expect(db.notifications.at(-1)).toMatchObject({
-        title: "You have 2 new lectures, 1 lecture removed",
+        title: "You have 2 new lectures, 1 lecture removed from the portal",
         eventName: "lecture.group_created",
       });
     });
@@ -897,7 +901,7 @@ describe("MaterializerService", () => {
       expect(kept.deleted).toBe(false);
       const removal = db.notifications.at(-1)!;
       expect(removal.eventName).toBe("lecture.group_removed");
-      expect(removal.title).toBe("You have a lecture removed");
+      expect(removal.title).toBe("You have a lecture removed from the portal");
       expect(removal.sessionId).toBeNull();
     });
 
@@ -982,7 +986,7 @@ describe("MaterializerService", () => {
       expect(db.sessions.every((s) => s.deleted)).toBe(true);
       expect(db.notifications).toHaveLength(before + 1);
       expect(db.notifications.at(-1)).toMatchObject({
-        title: "You have 11 lectures removed",
+        title: "You have 11 lectures removed from the portal",
         eventName: "lecture.group_removed",
         // The sessions are gone — nothing to open.
         sessionId: null,

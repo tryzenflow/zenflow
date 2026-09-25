@@ -172,4 +172,29 @@ describe("SyncDigest", () => {
     d.drain();
     expect(d.conflictChecks()).toEqual([]);
   });
+
+  it("names the source in the title when every item shares one", () => {
+    const d = new SyncDigest(NOW);
+    d.add(item({ sessionId: "a" }), "PORTAL");
+    d.add(item({ sessionId: "b" }), "PORTAL");
+    d.add(
+      item({ type: "ASSIGNMENT", kind: "removed", sessionId: null }),
+      "LMS",
+    );
+
+    const titles = digestNotifications(d.drain(), NOW).map((n) => n.title);
+    expect(titles).toEqual([
+      "You have an assignment removed from LMS",
+      "You have 2 new lectures from the portal",
+    ]);
+  });
+
+  it("drops the source when a type's items came from different ones", () => {
+    const d = new SyncDigest(NOW);
+    d.add(item({ sessionId: "a" }), "PORTAL");
+    d.add(item({ sessionId: "b" }), "LMS");
+
+    const [n] = digestNotifications(d.drain(), NOW);
+    expect(n.title).toBe("You have 2 new lectures");
+  });
 });

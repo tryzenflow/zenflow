@@ -17,6 +17,8 @@ export interface DigestItem {
   title: string;
   startsAt: Date | null;
   endsAt: Date | null;
+  /** Where the item came from; stamped by {@link SyncDigest.add}. */
+  source?: SessionSource;
 }
 
 /** What {@link digestNotifications} asks the materializer to raise. */
@@ -47,9 +49,12 @@ export class SyncDigest {
    */
   constructor(readonly startedAt: Date) {}
 
-  /** Record a change; `source` marks created/updated blocks for the conflict pass. */
+  /**
+   * Record a change. `source` names it in the notification title and marks
+   * created/updated blocks for the conflict pass.
+   */
   add(item: DigestItem, source?: SessionSource): void {
-    this.items.push(item);
+    this.items.push(source ? { ...item, source } : item);
     if (source && item.kind !== "removed") {
       this.checks.set(`${source}:${item.type}`, { source, type: item.type });
     }
@@ -107,6 +112,21 @@ function phrase(
   return `${count} ${n === 1 ? one : many} removed`;
 }
 
+/** How a title names the upstream an item was synced from. */
+const SOURCE_LABEL: Partial<Record<SessionSource, string>> = {
+  LMS: "LMS",
+  PORTAL: "the portal",
+};
+
+/** " from LMS" when every item shares one known source, else "". */
+function fromSource(items: readonly DigestItem[]): string {
+  const sources = new Set(items.map((i) => i.source));
+  if (sources.size !== 1) return "";
+  const [source] = sources;
+  const label = source && SOURCE_LABEL[source];
+  return label ? ` from ${label}` : "";
+}
+
 /**
  * The session a row opens on the calendar: the soonest upcoming live one,
  * else the latest past one. `null` when every item was removed.
@@ -132,7 +152,7 @@ function representative(
 
 /**
  * One notification per item type the run touched, e.g. "You have 3 new
- * lectures, 2 changes to your lectures, 1 lecture removed". `eventName` uses
+ * lectures, 2 changes to your lectures, 1 lecture removed from the portal". `eventName` uses
  * the most significant kind (created > updated > removed); a one-item row
  * keeps its `eventEndsAt`.
  */
@@ -162,7 +182,7 @@ export function digestNotifications(
         : "removed";
     out.push({
       sessionId,
-      title: `You have ${parts.join(", ")}`,
+      title: `You have ${parts.join(", ")}${fromSource(ofType)}`,
       content: sessionId
         ? one
           ? "Synced from DLU. Tap to see it on your calendar."
