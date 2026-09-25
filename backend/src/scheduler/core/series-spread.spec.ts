@@ -1,4 +1,4 @@
-import { seriesDayWindows } from "./series-spread";
+import { seriesDayWindows, seriesWindowsAreDisjoint } from "./series-spread";
 
 function assertPartition(
   windows: [number, number][],
@@ -113,5 +113,32 @@ describe("seriesDayWindows — non-overlapping day buckets across [0, daySpan]",
       [0, 1],
       [2, 4],
     ]);
+  });
+});
+
+describe("seriesWindowsAreDisjoint — count <= daySpan + 1 boundary", () => {
+  it("count === daySpan + 1 (exactly one member per day) → disjoint", () => {
+    expect(seriesWindowsAreDisjoint(8, 9)).toBe(true);
+  });
+
+  it("count === daySpan + 2 (one more member than days) → dense", () => {
+    expect(seriesWindowsAreDisjoint(8, 10)).toBe(false);
+  });
+
+  it("count well under daySpan + 1 → disjoint", () => {
+    expect(seriesWindowsAreDisjoint(30, 2)).toBe(true);
+  });
+
+  it("count === 1 → always disjoint regardless of span", () => {
+    expect(seriesWindowsAreDisjoint(0, 1)).toBe(true);
+    expect(seriesWindowsAreDisjoint(100, 1)).toBe(true);
+  });
+
+  it("clamps a negative / fractional span the same way seriesDayWindows does", () => {
+    // span clamps to 0 → daySpan+1 = 1 day available.
+    expect(seriesWindowsAreDisjoint(-4, 1)).toBe(true);
+    expect(seriesWindowsAreDisjoint(-4, 2)).toBe(false);
+    expect(seriesWindowsAreDisjoint(4.9, 5)).toBe(true); // floor(4.9)=4 → 5 days
+    expect(seriesWindowsAreDisjoint(4.9, 6)).toBe(false);
   });
 });

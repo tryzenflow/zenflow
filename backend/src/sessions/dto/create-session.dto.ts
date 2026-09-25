@@ -20,8 +20,14 @@ import { IsFeasibleTaskWindow } from "../../common/validators/feasible-task-wind
 import {
   MAX_REMINDER_MINUTES,
   MAX_REMINDERS_PER_SESSION,
+  type InfeasiblePolicy,
   type SessionType,
 } from "@zenflow/shared";
+
+export const INFEASIBLE_POLICIES: InfeasiblePolicy[] = [
+  "ACCEPT_CONFLICTS",
+  "ACCEPT_LATE_DEADLINE",
+];
 
 export const SESSION_TYPES: SessionType[] = [
   "TASK",
@@ -48,6 +54,16 @@ export const MAX_SESSION_COUNT = MAX_SERIES_PER_DAY * MAX_SCAN_DAYS;
  *   deadline; may carry an `rrule` recurrence (a weekly lecture, a nightly DND).
  */
 export class CreateSessionDto {
+  /**
+   * Answer to a prior 409 `SCHEDULE_INFEASIBLE`: `ACCEPT_CONFLICTS` places the
+   * task before its deadline even overlapping other sessions;
+   * `ACCEPT_LATE_DEADLINE` places it conflict-free after the deadline. Omit on
+   * the first attempt.
+   */
+  @IsOptional()
+  @IsIn(INFEASIBLE_POLICIES)
+  infeasiblePolicy?: InfeasiblePolicy;
+
   @IsIn(SESSION_TYPES)
   type: SessionType;
 
@@ -87,7 +103,7 @@ export class CreateSessionDto {
   /**
    * Number of study sessions (`TASK` only). Omitted or `1` → one ordinary
    * task; `> 1` → a `TASK` series of N linked sessions spread across
-   * `now … deadline` (see `docs/scheduler/heuristic.md`).
+   * `now … deadline` (see `services/bandit/README.md`).
    */
   @IsOptional()
   @ValidateIf((o: CreateSessionDto) => o.type === "TASK")

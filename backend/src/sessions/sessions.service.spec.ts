@@ -5,6 +5,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { TagsService } from "../tags/tags.service";
 import { TaskPlacementService } from "../scheduler/io/task-placement.service";
 import { SchedulingFeedbackService } from "../scheduler/io/scheduling-feedback.service";
+import { ScheduleInfeasibleException } from "../scheduler/schedule-infeasible.exception";
 import { SessionsService } from "./sessions.service";
 import { SessionCrudService } from "./session-crud.service";
 import { SeriesService } from "./series.service";
@@ -56,11 +57,15 @@ function session(overrides: Partial<SessionRow> & { id: string }): SessionRow {
     scheduledStartTime: null,
     lastMovedAt: null,
     retainedAt: null,
+    syncConfirmedAt: null,
+    syncMissedAt: null,
+    deleted: false,
     userId: user.id,
     seriesId: null,
     sessionIndex: null,
     sessionTotal: null,
     externalKey: null,
+    scheduleStudyUnitId: null,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     ...overrides,
@@ -104,6 +109,7 @@ function fakeTaskPlacement() {
     // create-success assertions below don't have to opt in.
     canPlaceTask: jest.fn().mockResolvedValue(true),
     canPlaceSeries: jest.fn().mockResolvedValue(true),
+    preflightTask: jest.fn().mockResolvedValue(undefined),
     placeOnCreate: jest.fn().mockResolvedValue(NO_PLACEMENT_OUTCOME),
     placeOnDeadlineChange: jest.fn().mockResolvedValue(NO_PLACEMENT_OUTCOME),
     placeSeriesOnCreate: jest.fn().mockResolvedValue([]),
@@ -165,6 +171,7 @@ async function makeService(
 /** Build a prisma double whose `$transaction` runs against the given tx double. */
 function prismaWithTx(tx: Record<string, unknown>) {
   return {
+    ...tx, // the deadline-edit pre-flight reads outside the transaction
     $transaction: (fn: (t: unknown) => unknown) => fn(tx),
   };
 }
@@ -238,8 +245,11 @@ describe("SessionsService.create", () => {
       scheduledStartTime: null,
       seriesId: null,
       rrule: null,
+      timetableGroupId: null,
       sessionIndex: null,
       sessionTotal: null,
+      late: false,
+      displacedSessions: [],
       reminders: [60],
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
@@ -384,7 +394,9 @@ describe("SessionsService.create", () => {
       sessionEvent: { create: eventCreate },
     });
     const placement = fakeTaskPlacement();
-    placement.canPlaceTask.mockResolvedValue(false);
+    placement.preflightTask.mockRejectedValue(
+      new ScheduleInfeasibleException(),
+    );
     const service = await makeService(
       prisma,
       fakeTagsService(),
@@ -399,9 +411,10 @@ describe("SessionsService.create", () => {
       deadline: "2026-06-10T17:00:00.000Z",
     };
 
-    await expect(service.create(dto, user)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(service.create(dto, user)).rejects.toMatchObject({
+      status: 409,
+      response: { code: "SCHEDULE_INFEASIBLE" },
+    });
     expect(sessionCreate).not.toHaveBeenCalled();
     expect(eventCreate).not.toHaveBeenCalled();
     expect(placement.placeOnCreate).not.toHaveBeenCalled();
@@ -883,8 +896,8 @@ describe("SessionsService.suggestions", () => {
 describe("SessionsService.findById", () => {
   it("returns the mapped session when found", async () => {
     const row = session({ id: "session-1" });
-    const findUnique = jest.fn().mockResolvedValue(row);
-    const prisma = { session: { findUnique } };
+    const findFirst = jest.fn().mockResolvedValue(row);
+    const prisma = { session: { findFirst } };
     const service = await makeService(
       prisma,
       fakeTagsService(),
@@ -897,8 +910,8 @@ describe("SessionsService.findById", () => {
   });
 
   it("throws NotFoundException when missing", async () => {
-    const findUnique = jest.fn().mockResolvedValue(null);
-    const prisma = { session: { findUnique } };
+    const findFirst = jest.fn().mockResolvedValue(null);
+    const prisma = { session: { findFirst } };
     const service = await makeService(
       prisma,
       fakeTagsService(),
@@ -912,7 +925,119 @@ describe("SessionsService.findById", () => {
   });
 });
 
+describe("SessionsService.create never leaves a TASK unplaced", () => {
+  /** tx double for the insert + array-form `$transaction` for the discard. */
+  function prismaForDiscard(tx: Record<string, unknown>) {
+    const discard = {
+      sessionEvent: { deleteMany: jest.fn().mockReturnValue("del-events") },
+      session: { deleteMany: jest.fn().mockReturnValue("del-sessions") },
+      sessionSeries: { deleteMany: jest.fn().mockReturnValue("del-series") },
+    };
+    const batch = jest.fn((ops: unknown[]) => Promise.resolve(ops));
+    const prisma = {
+      ...discard,
+      $transaction: (arg: unknown) =>
+        Array.isArray(arg) ? batch(arg) : (arg as (t: unknown) => unknown)(tx),
+    };
+    return { prisma, discard, batch };
+  }
+
+  it("single TASK: a placement that throws discards the just-inserted row", async () => {
+    const created = session({ id: "session-1" });
+    const { prisma, discard, batch } = prismaForDiscard({
+      session: { create: jest.fn().mockResolvedValue(created) },
+      sessionEvent: { create: jest.fn().mockResolvedValue({}) },
+    });
+    const placement = fakeTaskPlacement();
+    const boom = new Error("placement blew up");
+    placement.placeOnCreate.mockRejectedValue(boom);
+    const service = await makeService(prisma, fakeTagsService(), placement);
+
+    await expect(
+      service.create(
+        {
+          type: "TASK",
+          title: "T",
+          durationMinutes: 60,
+          deadline: "2026-06-10T17:00:00.000Z",
+        },
+        user,
+      ),
+    ).rejects.toBe(boom);
+
+    expect(discard.session.deleteMany).toHaveBeenCalledWith({
+      where: { userId: user.id, id: { in: ["session-1"] } },
+    });
+    expect(discard.sessionEvent.deleteMany).toHaveBeenCalledWith({
+      where: { userId: user.id, sessionId: { in: ["session-1"] } },
+    });
+    expect(discard.sessionSeries.deleteMany).not.toHaveBeenCalled();
+    expect(batch).toHaveBeenCalledWith(["del-events", "del-sessions"]);
+  });
+
+  it("TASK series: a placement that throws discards every member and the series", async () => {
+    const rows = [1, 2].map((i) =>
+      session({ id: `s-${i}`, seriesId: "series-1", sessionIndex: i }),
+    );
+    let n = 0;
+    const { prisma, discard, batch } = prismaForDiscard({
+      sessionSeries: {
+        create: jest.fn().mockResolvedValue({ id: "series-1" }),
+      },
+      session: { create: jest.fn(() => Promise.resolve(rows[n++])) },
+      sessionEvent: { create: jest.fn().mockResolvedValue({}) },
+    });
+    const placement = fakeTaskPlacement();
+    placement.placeSeriesOnCreate.mockRejectedValue(new Error("down"));
+    const service = await makeService(prisma, fakeTagsService(), placement);
+
+    await expect(
+      service.create(
+        {
+          type: "TASK",
+          title: "T",
+          durationMinutes: 60,
+          sessionCount: 2,
+          deadline: "2026-06-12T17:00:00.000Z",
+        },
+        user,
+      ),
+    ).rejects.toThrow("down");
+
+    expect(discard.session.deleteMany).toHaveBeenCalledWith({
+      where: { userId: user.id, id: { in: ["s-1", "s-2"] } },
+    });
+    expect(discard.sessionSeries.deleteMany).toHaveBeenCalledWith({
+      where: { userId: user.id, id: "series-1" },
+    });
+    expect(batch).toHaveBeenCalledWith([
+      "del-events",
+      "del-sessions",
+      "del-series",
+    ]);
+  });
+});
+
 describe("SessionsService.update", () => {
+  it("rejects PATCH scheduledStartTime: null on a TASK (400) and writes nothing", async () => {
+    const existing = session({
+      id: "session-1",
+      scheduledStartTime: new Date("2026-06-11T08:00:00.000Z"),
+    });
+    const update = jest.fn();
+    const prisma = prismaWithTx({
+      session: { findFirst: jest.fn().mockResolvedValue(existing), update },
+      sessionEvent: { create: jest.fn() },
+      slotProposal: { findFirst: () => Promise.resolve(null) },
+    });
+    const service = await makeService(prisma, fakeTagsService());
+
+    await expect(
+      service.update("session-1", { scheduledStartTime: null }, user),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it("applies a title-only diff, emits no event, runs no placer", async () => {
     const existing = session({ id: "session-1", title: "Old title" });
     const updated = session({ id: "session-1", title: "New title" });
@@ -1145,7 +1270,7 @@ describe("SessionsService.update", () => {
               sessionEvent: { create: jest.fn().mockResolvedValue({}) },
             })
           : Promise.all(arg as Promise<unknown>[]),
-      session: { findMany },
+      session: { findMany, findFirst },
     };
     const placement = fakeTaskPlacement();
     placement.redistributeSeries.mockResolvedValue([
@@ -1199,12 +1324,13 @@ describe("SessionsService.update", () => {
 });
 
 describe("SessionsService.remove", () => {
-  it("deletes the session and returns just its id", async () => {
+  it("soft-deletes the session and returns just its id", async () => {
     const existing = session({ id: "session-1" });
     const findFirst = jest.fn().mockResolvedValue(existing);
-    const del = jest.fn().mockResolvedValue(existing);
+    const update = jest.fn().mockResolvedValue({ ...existing, deleted: true });
+    const del = jest.fn();
     const prisma = prismaWithTx({
-      session: { findFirst, delete: del },
+      session: { findFirst, update, delete: del },
     });
     const service = await makeService(
       prisma,
@@ -1215,16 +1341,18 @@ describe("SessionsService.remove", () => {
 
     const result = await service.remove("session-1", user);
 
-    expect(del).toHaveBeenCalledWith({
+    expect(update).toHaveBeenCalledWith({
       where: { id: "session-1", userId: user.id },
+      data: { deleted: true },
     });
+    expect(del).not.toHaveBeenCalled();
     expect(result).toEqual({ id: "session-1" });
   });
 
   it("throws NotFoundException when the session doesn't exist", async () => {
     const findFirst = jest.fn().mockResolvedValue(null);
     const prisma = prismaWithTx({
-      session: { findFirst, delete: jest.fn() },
+      session: { findFirst, delete: jest.fn(), update: jest.fn() },
     });
     const service = await makeService(
       prisma,
@@ -1496,5 +1624,78 @@ describe("SessionsService.removeSeriesFrom", () => {
     await expect(
       service.removeSeriesFrom("series-1", "not-mine", user),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe("SessionsService.update — deadline edit feasibility guard (#62 E)", () => {
+  async function setup(existing: SessionRow) {
+    const findFirst = jest.fn().mockResolvedValue(existing);
+    const update = jest.fn().mockResolvedValue(existing);
+    const prisma = prismaWithTx({
+      session: { findFirst, update },
+      sessionEvent: { create: jest.fn().mockResolvedValue({}) },
+    });
+    const placement = fakeTaskPlacement();
+    const service = await makeService(
+      prisma,
+      fakeTagsService(),
+      placement,
+      fakeSchedulingFeedback(),
+    );
+    return { service, placement, update };
+  }
+
+  it("pre-flights a standalone TASK deadline edit (excluding itself) and passes the policy", async () => {
+    const { service, placement } = await setup(
+      session({ id: "t1", deadline: new Date("2026-06-10T12:00:00.000Z") }),
+    );
+    await service.update(
+      "t1",
+      {
+        deadline: "2026-06-12T15:30:00.000Z",
+        infeasiblePolicy: "ACCEPT_LATE_DEADLINE",
+      },
+      user,
+    );
+    expect(placement.preflightTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: "t1",
+        durationMinutes: 60,
+        policy: "ACCEPT_LATE_DEADLINE",
+        arithmeticOnly: false,
+      }),
+    );
+    expect(placement.placeOnDeadlineChange).toHaveBeenCalledWith(
+      expect.objectContaining({ infeasiblePolicy: "ACCEPT_LATE_DEADLINE" }),
+    );
+  });
+
+  it("a rejected pre-flight (409) writes nothing", async () => {
+    const { service, placement, update } = await setup(
+      session({ id: "t1", deadline: new Date("2026-06-10T12:00:00.000Z") }),
+    );
+    placement.preflightTask.mockRejectedValue(
+      new ScheduleInfeasibleException(),
+    );
+    await expect(
+      service.update("t1", { deadline: "2026-06-11T00:00:00.000Z" }, user),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("a series member only gets the arithmetic guard", async () => {
+    const { service, placement } = await setup(
+      session({
+        id: "s1",
+        seriesId: "series-1",
+        deadline: new Date("2026-06-10T12:00:00.000Z"),
+      }),
+    );
+    await service
+      .update("s1", { deadline: "2026-06-12T00:00:00.000Z" }, user)
+      .catch(() => undefined);
+    expect(placement.preflightTask).toHaveBeenCalledWith(
+      expect.objectContaining({ arithmeticOnly: true }),
+    );
   });
 });

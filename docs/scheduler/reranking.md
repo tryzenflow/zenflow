@@ -20,7 +20,7 @@ The live scheduler today is the deterministic heuristic —
 [`backend/src/scheduler/heuristic.ts`](../../backend/src/scheduler/heuristic.ts) (pure
 core) + [`heuristic-schedule.service.ts`](../../backend/src/scheduler/heuristic-schedule.service.ts)
 (the only Prisma layer — `scheduleTask` / `scheduleSeries`, single-session, no repack).
-See [`heuristic.md`](./heuristic.md). LinUCB scheduling adds a
+See [`services/bandit/README.md`](../../services/bandit/README.md). LinUCB scheduling adds a
 sibling path: a per-day call to the bandit service
 (`BANDIT_SERVICE_URL`, see `services/bandit/README.md`), then the mapping below. The
 `optimize()` slot-scoring and overlap-rate helpers are pure functions in
@@ -48,13 +48,14 @@ For every candidate day `d` from the next 15-minute boundary through the deadlin
 d ∈ [next_15min(now), dl_s]
 ```
 
-build the LinUCB context vector for `(s, d)` (ADR-0001 §5, `d = 22`) and call `/predict`
-to score all five arms:
+build the LinUCB context vector for `(s, d)` (ADR-0001 §5, `d = 7`) and score all six arms
+(in-process, `/v1/place`):
 
 ```text
 EARLY_MORNING = [00:00, 06:00)
 MORNING       = [06:00, 11:00)
-AFTERNOON     = [11:00, 17:00)
+MIDDAY        = [11:00, 14:00)
+AFTERNOON     = [14:00, 17:00)
 EVENING       = [17:00, 20:00)
 NIGHT         = [20:00, 24:00)
 ```

@@ -130,7 +130,20 @@ import { ObservabilityModule } from "./observability/observability.module";
         // (services/bandit/, docs/adr/0001-linucb-model-design.md). Optional:
         // when unset, LinUCB scheduling is disabled and every event falls back
         // to the heuristic.
-        BANDIT_SERVICE_URL: Joi.string().uri().optional(),
+        // ADR-0003: REQUIRED when NODE_ENV=production (boot fails otherwise);
+        // dev/test may leave it unset and run degraded (frozen TS heuristic).
+        BANDIT_SERVICE_URL: Joi.string().uri().when(Joi.ref("NODE_ENV"), {
+          is: "production",
+          then: Joi.required(),
+          otherwise: Joi.optional(),
+        }),
+        // Optional shared bearer secret sent as `Authorization: Bearer` on
+        // /v1/place (the Python side verifies it; /health and /ready exempt).
+        BANDIT_SERVICE_TOKEN: Joi.string().optional(),
+        // Total per-call budget for POST /v1/place, ms (ADR-0003: 2500).
+        PLACE_TIMEOUT_MS: Joi.number().integer().min(100).default(2500),
+        // "1" => emit a `Server-Timing` header on responses (bench/test env).
+        BENCH_TIMING: Joi.string().valid("0", "1").optional(),
         // --- Native mobile push (devices/) --------------------------------
         // Each provider self-disables when its vars are unset, like
         // BANDIT_SERVICE_URL: FcmSender needs FCM_SERVICE_ACCOUNT, ApnsSender

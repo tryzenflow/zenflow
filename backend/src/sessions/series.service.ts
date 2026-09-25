@@ -27,6 +27,7 @@ import { CreateSessionDto } from "./dto/create-session.dto";
 import { SessionRow, WITH_TAGS_AND_SERIES } from "./types/session-row";
 import { NO_SLOT_PROPOSAL, toSessionDto } from "./session-mapper";
 import { createEventData } from "./session-events";
+import { placeOrDiscard } from "./placement-compensation";
 
 /**
  * Shown when a `TASK` (or series, or a series being grown) has no feasible
@@ -107,16 +108,24 @@ export class SeriesService {
       return created;
     });
 
-    const placements = await this.taskPlacement.placeSeriesOnCreate({
-      user,
-      seriesId: rows[0]?.seriesId as string,
-      members: rows.map((r) => ({
-        id: r.id,
-        durationMinutes: r.durationMinutes,
-      })),
-      deadline,
-      now,
-    });
+    // Every member gets a start (last resort on a miss); a throw discards the
+    // whole just-created series rather than leaving it unplaced.
+    const seriesId = rows[0]?.seriesId as string;
+    const placements = await placeOrDiscard(
+      this.prisma,
+      { userId: user.id, sessionIds: rows.map((r) => r.id), seriesId },
+      () =>
+        this.taskPlacement.placeSeriesOnCreate({
+          user,
+          seriesId,
+          members: rows.map((r) => ({
+            id: r.id,
+            durationMinutes: r.durationMinutes,
+          })),
+          deadline,
+          now,
+        }),
+    );
 
     const startById = new Map(
       placements.map((p) => [p.id, p.scheduledStartTime]),
@@ -124,7 +133,14 @@ export class SeriesService {
     const sessions = rows.map((r) =>
       toSessionDto({ ...r, scheduledStartTime: startById.get(r.id) ?? null }),
     );
-    return { ...sessions[0], ...NO_SLOT_PROPOSAL, sessions };
+    return {
+      ...sessions[0],
+      ...NO_SLOT_PROPOSAL,
+      sessions,
+      ...(placements.some((p) => p.degraded)
+        ? { schedulingDegraded: true }
+        : {}),
+    };
   }
 
   /**
@@ -139,13 +155,13 @@ export class SeriesService {
     user: User,
     newDeadline: Date,
     now: Date,
-  ): Promise<SharedSession[]> {
+  ): Promise<{ sessions: SharedSession[]; degraded: boolean }> {
     const members = await this.prisma.session.findMany({
-      where: { seriesId, userId: user.id },
+      where: { seriesId, userId: user.id, deleted: false },
       include: WITH_TAGS_AND_SERIES,
       orderBy: [{ sessionIndex: "asc" }, { createdAt: "asc" }],
     });
-    if (members.length === 0) return [];
+    if (members.length === 0) return { sessions: [], degraded: false };
 
     const placed = await this.taskPlacement.redistributeSeries({
       user,
@@ -160,13 +176,16 @@ export class SeriesService {
     });
     const startById = new Map(placed.map((p) => [p.id, p.scheduledStartTime]));
 
-    return members.map((m) =>
-      toSessionDto({
-        ...m,
-        deadline: newDeadline,
-        scheduledStartTime: startById.get(m.id) ?? null,
-      }),
-    );
+    return {
+      sessions: members.map((m) =>
+        toSessionDto({
+          ...m,
+          deadline: newDeadline,
+          scheduledStartTime: startById.get(m.id) ?? null,
+        }),
+      ),
+      degraded: placed.some((p) => p.degraded),
+    };
   }
 
   /**
@@ -212,7 +231,7 @@ export class SeriesService {
       throw new NotFoundException(`Cannot find TASK series ${seriesId}`);
 
     const members = await this.prisma.session.findMany({
-      where: { seriesId, userId: user.id },
+      where: { seriesId, userId: user.id, deleted: false },
       include: WITH_TAGS_AND_SERIES,
       orderBy: [{ sessionIndex: "asc" }, { createdAt: "asc" }],
     });
@@ -297,15 +316,27 @@ export class SeriesService {
       return rows;
     });
 
-    const placements = await this.taskPlacement.placeSeriesOnCreate({
-      user,
-      seriesId: series.id,
-      members: created.map((r) => ({
-        id: r.id,
-        durationMinutes: r.durationMinutes,
-      })),
-      deadline,
-      now,
+    // A throw discards the added sittings and restores `sessionTotal`.
+    const placements = await placeOrDiscard(
+      this.prisma,
+      { userId: user.id, sessionIds: created.map((r) => r.id) },
+      () =>
+        this.taskPlacement.placeSeriesOnCreate({
+          user,
+          seriesId: series.id,
+          members: created.map((r) => ({
+            id: r.id,
+            durationMinutes: r.durationMinutes,
+          })),
+          deadline,
+          now,
+        }),
+    ).catch(async (err: unknown) => {
+      await this.prisma.session.updateMany({
+        where: { seriesId: series.id, userId: user.id },
+        data: { sessionTotal: members.length },
+      });
+      throw err;
     });
     const startById = new Map(
       placements.map((p) => [p.id, p.scheduledStartTime]),
@@ -474,7 +505,7 @@ export class SeriesService {
   ): Promise<{ sessions: SharedSession[]; skippedSessionIds: string[] }> {
     return this.prisma.$transaction(async (tx) => {
       const members = await tx.session.findMany({
-        where: { seriesId, userId: user.id },
+        where: { seriesId, userId: user.id, deleted: false },
         include: WITH_TAGS_AND_SERIES,
         orderBy: [{ sessionIndex: "asc" }, { createdAt: "asc" }],
       });

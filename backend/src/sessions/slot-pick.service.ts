@@ -134,7 +134,7 @@ export class SlotPickService {
     user: User,
   ): Promise<SharedSession | null> {
     const existing = await this.prisma.session.findFirst({
-      where: { id: sessionId, userId: user.id },
+      where: { id: sessionId, userId: user.id, deleted: false },
       include: WITH_TAGS_AND_SERIES,
     });
     if (!existing?.scheduledStartTime) return null;
@@ -213,7 +213,7 @@ export class SlotPickService {
     user: User,
   ): Promise<SharedSession> {
     const row = await this.prisma.session.findFirst({
-      where: { id: sessionId, userId: user.id },
+      where: { id: sessionId, userId: user.id, deleted: false },
       include: WITH_TAGS_AND_SERIES,
     });
     if (!row)

@@ -137,6 +137,40 @@ export class SessionsController {
     };
   }
 
+  // NOTE: must precede @Delete(":id") so "timetable-group" isn't matched as
+  // an :id, same ordering constraint as the "series/..." routes above.
+  @Delete("timetable-group/:sessionId/from")
+  async removeTimetableGroupFrom(
+    @Param("sessionId") sessionId: string,
+    @CurrentUser() user: User,
+  ) {
+    const data = await this.sessionsService.removeTimetableGroupFrom(
+      sessionId,
+      user,
+    );
+    return {
+      success: true,
+      message: `Deleted ${data.removedSessionIds.length} sessions`,
+      data,
+    };
+  }
+
+  @Delete("timetable-group/:sessionId")
+  async removeTimetableGroup(
+    @Param("sessionId") sessionId: string,
+    @CurrentUser() user: User,
+  ) {
+    const data = await this.sessionsService.removeTimetableGroup(
+      sessionId,
+      user,
+    );
+    return {
+      success: true,
+      message: `Deleted ${data.removedSessionIds.length} sessions`,
+      data,
+    };
+  }
+
   @Delete(":id")
   async remove(@Param("id") id: string, @CurrentUser() user: User) {
     const data = await this.sessionsService.remove(id, user);

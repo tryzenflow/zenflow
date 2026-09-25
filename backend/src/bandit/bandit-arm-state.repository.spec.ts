@@ -17,7 +17,14 @@ describe("BanditArmStateRepository.loadAll", () => {
     const { repo } = make();
     const out = await repo.loadAll("u1");
     expect(Object.keys(out).sort()).toEqual(
-      ["AFTERNOON", "EARLY_MORNING", "EVENING", "MORNING", "NIGHT"].sort(),
+      [
+        "AFTERNOON",
+        "EARLY_MORNING",
+        "EVENING",
+        "MIDDAY",
+        "MORNING",
+        "NIGHT",
+      ].sort(),
     );
     expect(out.MORNING).toEqual({ A: [], b: [], version: 0 });
   });

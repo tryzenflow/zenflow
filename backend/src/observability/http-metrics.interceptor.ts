@@ -14,6 +14,7 @@ import type { Request, Response } from "express";
 import { httpServerDuration, statusClass } from "./metrics";
 import { activeTraceIds } from "./otel";
 import { shouldLogRequest } from "./request-sampling";
+import { serverTimingHeader } from "./phase-timings";
 
 /**
  * The one place inbound HTTP is measured + logged:
@@ -30,6 +31,7 @@ import { shouldLogRequest } from "./request-sampling";
 @Injectable()
 export class HttpMetricsInterceptor implements NestInterceptor {
   private readonly slowMs: number;
+  private readonly benchTiming: boolean;
 
   constructor(
     private readonly logger: PinoLogger,
@@ -38,6 +40,7 @@ export class HttpMetricsInterceptor implements NestInterceptor {
   ) {
     this.logger.setContext("http");
     this.slowMs = config.get<number>("HTTP_SLOW_REQUEST_MS") ?? 1000;
+    this.benchTiming = String(config.get("BENCH_TIMING")) === "1";
   }
 
   intercept(ctx: ExecutionContext, next: CallHandler): Observable<unknown> {
@@ -105,7 +108,13 @@ export class HttpMetricsInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       tap({
-        next: () => finish(res.statusCode),
+        next: () => {
+          if (this.benchTiming) {
+            const h = serverTimingHeader(this.cls);
+            if (h && !res.headersSent) res.setHeader("Server-Timing", h);
+          }
+          finish(res.statusCode);
+        },
         error: (err: unknown) =>
           finish(err instanceof HttpException ? err.getStatus() : 500),
       }),

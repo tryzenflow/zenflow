@@ -1,4 +1,4 @@
-import { loadDayLoad } from "./day-load";
+import { loadDayLoad, loadDayLoads } from "./day-load";
 
 /**
  * `loadDayLoad` with an in-memory Prisma double that actually honours the
@@ -24,6 +24,7 @@ interface FakeSession {
   scheduledStartTime: Date;
   durationMinutes: number;
   type: string;
+  deleted?: boolean;
 }
 
 interface FakeSeries {
@@ -47,11 +48,13 @@ function makeFakePrisma(sessions: FakeSession[], seriesList: FakeSeries[]) {
               { seriesId: null } | { series: { is: { rrule: null } } }
             >;
             scheduledStartTime?: { gte?: Date; lte?: Date };
+            deleted?: boolean;
           };
         }) => {
           const { where } = args;
           const rows = sessions.filter((s) => {
             if (s.userId !== where.userId) return false;
+            if (where.deleted === false && s.deleted) return false;
             if (where.id?.notIn.includes(s.id)) return false;
             if (where.NOT && s.seriesId === where.NOT.seriesId) return false;
             if (where.OR) {
@@ -344,6 +347,131 @@ describe("loadDayLoad", () => {
     ).toBe(false);
   });
 
+  it("does not block placement on a 15-minute (minimum-duration) session, but still counts its workload", async () => {
+    const prisma = makeFakePrisma(
+      [
+        {
+          id: "short-1",
+          userId: "u1",
+          seriesId: null,
+          seriesRrule: null,
+          scheduledStartTime: new Date("2026-06-15T09:00:00.000Z"),
+          durationMinutes: 15,
+          type: "TASK",
+        },
+      ],
+      [],
+    );
+
+    const { occupied, workloadByType } = await loadDayLoad(prisma as never, {
+      userId: "u1",
+      dayStart,
+      dayEnd,
+      timezone: TZ,
+    });
+
+    expect(occupied).toEqual([]);
+    expect(workloadByType.TASK).toEqual({ hours: 0.25, count: 1 });
+  });
+
+  it("still blocks placement on a 20-minute (above-minimum) session", async () => {
+    const prisma = makeFakePrisma(
+      [
+        {
+          id: "medium-1",
+          userId: "u1",
+          seriesId: null,
+          seriesRrule: null,
+          scheduledStartTime: new Date("2026-06-15T09:00:00.000Z"),
+          durationMinutes: 20,
+          type: "TASK",
+        },
+      ],
+      [],
+    );
+
+    const { occupied, workloadByType } = await loadDayLoad(prisma as never, {
+      userId: "u1",
+      dayStart,
+      dayEnd,
+      timezone: TZ,
+    });
+
+    expect(occupied).toEqual([
+      {
+        start: new Date("2026-06-15T09:00:00.000Z").getTime(),
+        end: new Date("2026-06-15T09:20:00.000Z").getTime(),
+      },
+    ]);
+    expect(workloadByType.TASK).toEqual({ hours: 20 / 60, count: 1 });
+  });
+
+  it("does not block placement on a 15-minute recurring (fixed) occurrence of any type, but still counts its workload", async () => {
+    const prisma = makeFakePrisma(
+      [
+        {
+          id: "dnd-rep-short",
+          userId: "u1",
+          seriesId: "dnd-series-short",
+          seriesRrule: "FREQ=DAILY",
+          scheduledStartTime: new Date("2026-06-14T22:00:00.000Z"),
+          durationMinutes: 15,
+          type: "DND",
+        },
+      ],
+      [
+        {
+          id: "dnd-series-short",
+          userId: "u1",
+          type: "DND",
+          rrule: "FREQ=DAILY",
+          rep: {
+            scheduledStartTime: new Date("2026-06-14T22:00:00.000Z"),
+            durationMinutes: 15,
+          },
+        },
+      ],
+    );
+
+    const { occupied, workloadByType } = await loadDayLoad(prisma as never, {
+      userId: "u1",
+      dayStart,
+      dayEnd,
+      timezone: TZ,
+    });
+
+    expect(occupied).toEqual([]);
+    expect(workloadByType.DND).toEqual({ hours: 0.25, count: 1 });
+  });
+
+  it("excludes a soft-deleted session from occupancy and workload", async () => {
+    const prisma = makeFakePrisma(
+      [
+        {
+          id: "deleted-1",
+          userId: "u1",
+          seriesId: null,
+          seriesRrule: null,
+          scheduledStartTime: new Date("2026-06-15T09:00:00.000Z"),
+          durationMinutes: 60,
+          type: "LECTURE",
+          deleted: true,
+        },
+      ],
+      [],
+    );
+
+    const { occupied, workloadByType } = await loadDayLoad(prisma as never, {
+      userId: "u1",
+      dayStart,
+      dayEnd,
+      timezone: TZ,
+    });
+
+    expect(occupied).toEqual([]);
+    expect(workloadByType.LECTURE).toEqual({ hours: 0, count: 0 });
+  });
+
   it("defaults excludeSeriesId to a no-op, leaving existing callers unaffected", async () => {
     const prisma = makeFakePrisma(
       [
@@ -368,5 +496,114 @@ describe("loadDayLoad", () => {
     });
 
     expect(occupied).toHaveLength(1);
+  });
+});
+
+describe("loadDayLoads (batched range read, #62 C)", () => {
+  const DAY = 86_400_000;
+  const start0 = Date.parse("2026-06-15T00:00:00.000Z");
+  const days = Array.from({ length: 30 }, (_, i) => ({
+    dayStartMs: start0 + i * DAY,
+    dayEndMs: start0 + (i + 1) * DAY,
+  }));
+  const sessions: FakeSession[] = [
+    {
+      id: "a",
+      userId: "u1",
+      seriesId: null,
+      seriesRrule: null,
+      scheduledStartTime: new Date("2026-06-15T23:00:00.000Z"),
+      durationMinutes: 120, // spills into the 16th
+      type: "ASSIGNMENT",
+    },
+    {
+      id: "b",
+      userId: "u1",
+      seriesId: null,
+      seriesRrule: null,
+      scheduledStartTime: new Date("2026-06-20T10:00:00.000Z"),
+      durationMinutes: 60,
+      type: "EXAM",
+    },
+  ];
+  const series: FakeSeries[] = [
+    {
+      id: "s",
+      userId: "u1",
+      type: "DND",
+      rrule: "FREQ=DAILY;COUNT=10",
+      rep: {
+        scheduledStartTime: new Date("2026-06-15T22:00:00.000Z"),
+        durationMinutes: 60,
+      },
+    },
+  ];
+
+  it("issues exactly one session query and one series query for N days", async () => {
+    const prisma = makeFakePrisma(sessions, series);
+    await loadDayLoads(prisma as never, { userId: "u1", days, timezone: TZ });
+    expect(prisma.session.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.sessionSeries.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("matches per-day loadDayLoad for occupancy and workload (incl. lookahead)", async () => {
+    const lookahead = 45 * 60_000;
+    const batched = await loadDayLoads(
+      makeFakePrisma(sessions, series) as never,
+      {
+        userId: "u1",
+        days,
+        timezone: TZ,
+        occupiedLookaheadMs: lookahead,
+      },
+    );
+    for (let i = 0; i < days.length; i++) {
+      const single = await loadDayLoad(
+        makeFakePrisma(sessions, series) as never,
+        {
+          userId: "u1",
+          dayStart: new Date(days[i].dayStartMs),
+          dayEnd: new Date(days[i].dayEndMs),
+          timezone: TZ,
+          occupiedLookaheadMs: lookahead,
+        },
+      );
+      const norm = (o: { start: number; end: number }[]) =>
+        [...o].sort((x, y) => x.start - y.start || x.end - y.end);
+      expect(norm(batched[i].occupied)).toEqual(norm(single.occupied));
+      expect(batched[i].workloadByType).toEqual(single.workloadByType);
+    }
+  });
+
+  it("returns [] without querying for an empty day list", async () => {
+    const prisma = makeFakePrisma(sessions, series);
+    expect(
+      await loadDayLoads(prisma as never, {
+        userId: "u1",
+        days: [],
+        timezone: TZ,
+      }),
+    ).toEqual([]);
+    expect(prisma.session.findMany).not.toHaveBeenCalled();
+  });
+
+  it("excludes a 15-minute session from occupancy but still counts its workload (matches loadDayLoad)", async () => {
+    const shortSession: FakeSession[] = [
+      {
+        id: "short-1",
+        userId: "u1",
+        seriesId: null,
+        seriesRrule: null,
+        scheduledStartTime: new Date("2026-06-15T09:00:00.000Z"),
+        durationMinutes: 15,
+        type: "TASK",
+      },
+    ];
+    const batched = await loadDayLoads(
+      makeFakePrisma(shortSession, []) as never,
+      { userId: "u1", days: [days[0]], timezone: TZ },
+    );
+    expect(batched[0].occupied).toEqual([]);
+    expect(batched[0].workloadByType.TASK).toEqual({ hours: 0.25, count: 1 });
   });
 });

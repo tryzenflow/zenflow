@@ -1,4 +1,5 @@
 import {
+  HttpException,
   InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
@@ -16,7 +17,8 @@ export function mapSessionPrismaError(
   id: string,
   method: "update" | "remove",
 ): never {
-  if (error instanceof NotFoundException) throw error;
+  // Any deliberate HTTP error (404, 400 guard, 409 SCHEDULE_INFEASIBLE) propagates.
+  if (error instanceof HttpException) throw error;
   if (
     error instanceof Prisma.PrismaClientKnownRequestError &&
     error.code === (PostgresErrorCode.RecordNotFound as string)

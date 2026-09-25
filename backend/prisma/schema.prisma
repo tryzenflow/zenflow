@@ -48,11 +48,13 @@ model User {
  * Time-of-day arms for the Disjoint LinUCB scheduler
  * (`docs/adr/0001-linucb-model-design.md` §2). Half-open, lower-inclusive
  * local-wall-clock bands: EARLY_MORNING [00:00,06:00), MORNING [06:00,11:00),
- * AFTERNOON [11:00,17:00), EVENING [17:00,20:00), NIGHT [20:00,24:00).
+ * MIDDAY [11:00,14:00), AFTERNOON [14:00,17:00), EVENING [17:00,20:00),
+ * NIGHT [20:00,24:00).
  */
 enum SchedulingArm {
   EARLY_MORNING
   MORNING
+  MIDDAY
   AFTERNOON
   EVENING
   NIGHT
@@ -176,6 +178,15 @@ model Session {
 
   conflict Boolean @default(false)
 
+  // Soft-delete flag. A user-initiated delete sets this instead of removing
+  // the row, so an ingested item's still-unique `externalKey` lets the
+  // materializer recognize "the student deleted this" on the next re-fetch
+  // and skip recreating it, rather than the row disappearing and silently
+  // coming back. Every read that feeds scheduling or calendar display filters
+  // `deleted: false`; the materializer's own `userId_externalKey` lookup is
+  // the deliberate exception (it must see a soft-deleted row on purpose).
+  deleted Boolean @default(false)
+
   scheduledStartTime DateTime? // fixed types (ASSIGNMENT/EXAM/LECTURE/DND) are always scheduled; TASK is placed by the engine
   userId             String
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -186,6 +197,23 @@ model Session {
   // Idempotency guard for the RETAINED sweep — set once the session has elapsed
   // unmoved and its RETAINED SessionEvent has been written.
   retainedAt  DateTime?
+
+  // Two-consecutive-run confirmation gate for ingested rows (materializer.service.ts).
+  // Null means "created but not yet confirmed by a second watcher run" — the
+  // item is already on the calendar, but its "new item" notification is held
+  // back and a run that stops seeing it hard-deletes the row outright rather
+  // than soft-deleting it, since it was never a real, user-facing item. Set to
+  // the confirming run's `now` the first time a second run also sees it; from
+  // then on the row is a normal ingested session eligible for update/removal
+  // notifications. Always null for a user-created (non-ingested) session.
+  syncConfirmedAt DateTime?
+  // Set to a run's `now` the first time a *confirmed* item is missing from
+  // that run's upstream listing — one miss so far, not yet a removal. Cleared
+  // back to null the moment the item reappears (the miss streak broke, no
+  // notification either way). A second consecutive miss (still set on the next
+  // run) is what actually soft-deletes the row and raises the removal
+  // notification. Always null for a user-created (non-ingested) session.
+  syncMissedAt    DateTime?
 
   // Per-user labels (implicit many-to-many).
   tags Tag[]
@@ -218,6 +246,16 @@ model Session {
   // duplicate the student's whole calendar.
   externalKey String?
 
+  // The portal's ScheduleStudyUnitID for a portal-ingested LECTURE — one
+  // meeting's course section, shared by every meeting of that class across
+  // the term. Null for anything that isn't a portal-ingested LECTURE
+  // (including a user-created recurring LECTURE via rrule). There is no
+  // SessionSeries linking these rows (each meeting is its own flat Session),
+  // so this is the grouping key for bulk delete/scope operations on a
+  // timetable class ("this and following" / "all occurrences" —
+  // `DELETE /sessions/timetable-group/:sessionId[/from]`).
+  scheduleStudyUnitId String?
+
   reminders     SessionReminder[]
   notifications Notification[]
   slotProposals SlotProposal[]
@@ -229,6 +267,7 @@ model Session {
   @@index([userId, deadline])
   @@index([userId, scheduledStartTime])
   @@index([userId, seriesId, createdAt(sort: Asc)])
+  @@index([userId, scheduleStudyUnitId])
 }
 
 model SessionSeries {
@@ -252,8 +291,8 @@ model SessionSeries {
 // (see src/reminders/). For a recurring fixed series the row hangs off the
 // representative session and applies to every occurrence.
 model SessionReminder {
-  id                  String @id @default(uuid())
-  remindBeforeMinutes Int    @default(15)
+  id                  String    @id @default(uuid())
+  remindBeforeMinutes Int       @default(15)
   // Start instant of the occurrence this reminder last fired for — dedupes
   // firing across restarts / re-arms and lets a recurring series fire once
   // per occurrence. Null until first fired.
@@ -285,6 +324,11 @@ enum SlotProposalFeedback {
 // (`docs/scheduler/ab-testing.md`). Columns only for now — nothing writes this
 // table yet; the ExperimentService / randomizer / pairwise + feedback UI are a
 // later phase.
+enum PlacementSource {
+  PYTHON
+  TS_FALLBACK
+}
+
 model SlotProposal {
   id                String            @id @default(uuid())
   experimentId      String
@@ -303,8 +347,18 @@ model SlotProposal {
   // behind the chosen slot, kept so a delayed MOVE / RETAINED reward can call
   // `/update` for the right arm (`docs/adr/0001-linucb-model-design.md` §9).
   // Empty / null when the primary policy was the heuristic.
-  featureVector Float[]        @default([])
-  selectedArm   SchedulingArm?
+  featureVector    Float[]        @default([])
+  selectedArm      SchedulingArm?
+  // Applied LinUCB slot-score weights (`wL` = 1, `wS` = proximity-scaled
+  // stability, `services/bandit/src/core/slot_score.py::stability_weight`);
+  // null when the primary policy was the pref-only heuristic.
+  linucbWeight     Float?
+  stabilityWeight  Float?
+
+  // Provenance (ADR-0003): which implementation produced the placement, so A/B
+  // analysis can exclude degraded (frozen-TS-fallback) events.
+  placementSource PlacementSource @default(PYTHON)
+  degradedReason  String? // "timeout" | "breaker_open" | "connect" | "http_5xx" | "version" | "disabled"
 
   sessionEvents SessionEvent[]
 
@@ -335,6 +389,7 @@ enum SessionEventType {
   CREATE
   MOVE // user drag or resize of a scheduled TASK (negative signal)
   RETAINED // session elapsed without ever being moved (positive signal)
+  SYSTEM_MOVE // scheduler-initiated move (displacement / conflict reschedule): reward 0, no preference update
 }
 
 model SessionEvent {
@@ -418,34 +473,28 @@ model Integration {
   @@index([encryptionVersion(sort: Desc)])
 }
 
-enum NotificationTopic {
-  ASSIGNMENT
-  EXAM
-  TIMETABLE
-  REMINDER
-}
-
-// How the inbox row is categorised for its badge: something new on the
-// calendar, an upstream change to an existing item, or an item dropped upstream.
-enum NotificationKind {
-  NEW
-  CHANGE
-  DROP
-}
-
 model Notification {
-  id            String            @id @default(uuid())
-  sentAt        DateTime          @default(now())
-  readAt        DateTime?
-  actionTakenAt DateTime?
-  topic         NotificationTopic
-  kind          NotificationKind  @default(NEW)
-  title         String
-  content       String
+  id                 String    @id @default(uuid())
+  sentAt             DateTime  @default(now())
+  readAt             DateTime?
+  actionTakenAt      DateTime?
+  // Stable machine-readable slug ("assignment.created", "lecture.removed",
+  // "sync_conflict.exam", …) a client can switch on without pattern-matching
+  // the free-text `title`/`content` below, which are for display only.
+  // Encodes both the created/updated/removed/conflict classification and the
+  // assignment/exam/lecture/reminder category (see `notificationEventKind` /
+  // `notificationCategory` in @zenflow/shared) — no separate `topic`/
+  // `eventType` columns for those, so there is one field to keep in sync.
+  eventName          String
+  title              String
+  content            String
   // The fixed end instant of the session behind this row (start + duration) —
   // an ASSIGNMENT/EXAM/LECTURE is always scheduled, so this is the "due" / "at"
   // time the inbox shows. Null for grouped rows and for drops (no one session).
-  eventEndsAt   DateTime?
+  eventEndsAt        DateTime?
+  // A CONFLICT row's (see `notificationEventKind`) user's flexible tasks the
+  // sync landed on top of.
+  conflictSessionIds String[]  @default([])
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
