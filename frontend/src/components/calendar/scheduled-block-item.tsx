@@ -8,13 +8,17 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import { DaySegment } from "@zenflow/shared";
-import { DAILY_HORIZON, TIME_GRANULARITY } from "@zenflow/core";
+import {
+  DAILY_HORIZON,
+  TIME_GRANULARITY,
+  isOnlineLocation,
+} from "@zenflow/core";
 import type { BlockLayout } from "@zenflow/core";
 import { zonedDate, zonedWallClockToUtc } from "@/utils/tz";
 import { CSS } from "@dnd-kit/utilities";
 import { useDndMonitor, useDraggable, type DragEndEvent } from "@dnd-kit/core";
 import { toZonedTime } from "date-fns-tz";
-import { CornerDownRight, MapPin } from "lucide-react";
+import { CornerDownRight, Globe, MapPin } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { OverdueBadge, SessionTypeBadge } from "./session-type-badge";
 import { LATE_CARD_CLASSES, useIsLate } from "./late-context";
@@ -514,8 +518,16 @@ export function ScheduledBlockItem({
                     {late && <OverdueBadge />}
                     {block.location && (
                       <span className="inline-flex items-center gap-0.5 text-[9px] text-muted-foreground">
-                        <MapPin className="h-2.5 w-2.5" />
-                        <span className="truncate">{block.location}</span>
+                        {isOnlineLocation(block.location) ? (
+                          <Globe className="h-2.5 w-2.5" />
+                        ) : (
+                          <MapPin className="h-2.5 w-2.5" />
+                        )}
+                        <span className="truncate">
+                          {isOnlineLocation(block.location)
+                            ? "Online"
+                            : block.location}
+                        </span>
                       </span>
                     )}
                   </div>

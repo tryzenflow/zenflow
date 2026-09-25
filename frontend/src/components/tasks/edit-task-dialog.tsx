@@ -17,7 +17,11 @@ import { useHighlightStore } from "@/hooks/use-highlight-store";
 import type { Session } from "@/types/tasks";
 import type { UpdateSessionInput, UpdateSessionResponse } from "@zenflow/shared";
 import { EditSessionFormValues, deleteSession } from "@/utils/tasks";
-import { getSeriesKind, hhmmToMinutes } from "@zenflow/core";
+import {
+  displayLocation,
+  getSeriesKind,
+  hhmmToMinutes,
+} from "@zenflow/core";
 import { zonedDate, zonedWallClockToUtc } from "@/utils/tz";
 import { SessionForm } from "./form/task-form";
 import {
@@ -336,7 +340,7 @@ export function EditSessionDialog({
               <p className="text-[11px] text-muted-foreground">
                 {task.durationMinutes} min
                 {task.rrule ? " · repeats" : ""}
-                {task.location ? ` · ${task.location}` : ""}
+                {task.location ? ` · ${displayLocation(task.location)}` : ""}
               </p>
             </div>
           </div>
