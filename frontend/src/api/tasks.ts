@@ -4,6 +4,7 @@ import type {
   DeadlineOptionsResponse,
   RemoveSessionResponse,
   RemoveSessionSeriesResponse,
+  RemoveTimetableGroupResponse,
   Session,
   SessionDetailResponse,
   SessionsListResponse,
@@ -148,6 +149,33 @@ export async function removeSeriesFrom(
 ): Promise<RemoveSessionSeriesResponse> {
   const { data } = await api.delete(
     `/sessions/series/${seriesId}/from/${sessionId}`,
+  );
+  return data.data;
+}
+
+/**
+ * Delete every meeting of a portal-ingested timetable lecture's course
+ * section, regardless of time — the whole `timetableGroupId` group.
+ */
+export async function removeTimetableGroup(
+  sessionId: string,
+): Promise<RemoveTimetableGroupResponse> {
+  const { data } = await api.delete(
+    `/sessions/timetable-group/${encodeURIComponent(sessionId)}`,
+  );
+  return data.data;
+}
+
+/**
+ * "Delete this meeting and every later one" for a portal-ingested timetable
+ * lecture — deletes every session in `sessionId`'s `timetableGroupId` group
+ * whose `scheduledStartTime` is at or after this one's.
+ */
+export async function removeTimetableGroupFrom(
+  sessionId: string,
+): Promise<RemoveTimetableGroupResponse> {
+  const { data } = await api.delete(
+    `/sessions/timetable-group/${encodeURIComponent(sessionId)}/from`,
   );
   return data.data;
 }

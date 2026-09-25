@@ -8,15 +8,20 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import { DaySegment } from "@zenflow/shared";
-import { DAILY_HORIZON, TIME_GRANULARITY } from "@zenflow/core";
+import {
+  DAILY_HORIZON,
+  TIME_GRANULARITY,
+  isOnlineLocation,
+} from "@zenflow/core";
 import type { BlockLayout } from "@zenflow/core";
 import { zonedDate, zonedWallClockToUtc } from "@/utils/tz";
 import { CSS } from "@dnd-kit/utilities";
 import { useDndMonitor, useDraggable, type DragEndEvent } from "@dnd-kit/core";
 import { toZonedTime } from "date-fns-tz";
-import { CornerDownRight, MapPin } from "lucide-react";
+import { CornerDownRight, Globe, MapPin } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { SessionTypeBadge } from "./session-type-badge";
+import { OverdueBadge, SessionTypeBadge } from "./session-type-badge";
+import { LATE_CARD_CLASSES, useIsLate } from "./late-context";
 
 function minutesOfDay(iso: string, tz: string) {
   const d = toZonedTime(new Date(iso), tz);
@@ -325,7 +330,14 @@ export function ScheduledBlockItem({
   // session renders in exactly its normal type colour. The clash is still
   // resolved *spatially* (side-by-side columns via `layout`), just not tinted.
   const state = block.state;
+  const late = useIsLate(block.taskId);
   const width = 100 / layout.columns;
+  const leftPct = layout.column * width;
+  // A short session fully contained inside another block's time range renders
+  // stacked on top of it — full (container) width, inset down-and-right —
+  // instead of splitting both into unreadably-narrow side-by-side columns.
+  const isNested = Boolean(layout.nested);
+  const nestOffsetPx = isNested ? 6 + (layout.nestIndex ?? 0) * 6 : 0;
 
   return (
     <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
@@ -333,6 +345,9 @@ export function ScheduledBlockItem({
         <div
           className={cn(
             "group absolute z-10 px-0.5",
+            // A nested (fully time-contained) block stacks on top of its
+            // container, so it needs to win the paint order.
+            isNested && "z-20",
             // Animate position/size changes that come from data (server-confirmed
             // reschedules, other clients, scheduler re-runs) so blocks glide to
             // their new slot instead of popping there. Suppressed while the user
@@ -357,9 +372,13 @@ export function ScheduledBlockItem({
               : "Drag to reschedule · click for details"
           }
           style={{
-            top: `${(dispStart / DAILY_HORIZON) * 100}%`,
-            left: `${layout.column * width}%`,
-            width: `${width}%`,
+            top: isNested
+              ? `calc(${(dispStart / DAILY_HORIZON) * 100}% + ${nestOffsetPx}px)`
+              : `${(dispStart / DAILY_HORIZON) * 100}%`,
+            left: isNested
+              ? `calc(${leftPct}% + ${nestOffsetPx}px)`
+              : `${leftPct}%`,
+            width: isNested ? `calc(${width}% - ${nestOffsetPx}px)` : `${width}%`,
             height: `${((dispEnd - dispStart) / DAILY_HORIZON) * 100}%`,
             transform: CSS.Translate.toString(transform),
           }}
@@ -436,6 +455,9 @@ export function ScheduledBlockItem({
               // While shrinking, outline the block in rose so the removed extent
               // reads distinctly from a normal resize.
               preview && deltaMinutes < 0 && "ring-1 ring-rose-400/60",
+              // A nested (stacked) block gets a firmer outline + shadow so it
+              // reads as a card peeking out from behind its container.
+              isNested && "shadow-md ring-1 ring-background",
               isInteractive
                 ? "cursor-grab active:cursor-grabbing"
                 : "cursor-pointer",
@@ -447,6 +469,7 @@ export function ScheduledBlockItem({
               block.continued &&
                 "rounded-t-none border-t-0 border-l-4 border-dashed",
               TASK_CARD_CLASSES[state],
+              late && LATE_CARD_CLASSES,
               // Ring-glow pulse that fires once after the task is created so the
               // user's eye is drawn to where it landed on the grid.
               isHighlighted && "animate-block-highlight",
@@ -462,6 +485,7 @@ export function ScheduledBlockItem({
                   <span className="truncate text-[10px] font-semibold leading-none">
                     {block.title}
                   </span>
+                  {late && <OverdueBadge iconOnly />}
                 </div>
                 <span className="shrink-0 font-mono text-[9px] leading-none">
                   {block.continued
@@ -486,15 +510,24 @@ export function ScheduledBlockItem({
                       ? `${fmt(block.taskStart, tz)} → next day`
                       : `${fmt(block.taskStart, tz)} – ${fmt(block.taskEnd, tz)}`}
                 </span>
-                {(block.type !== "TASK" || block.location) && (
+                {(block.type !== "TASK" || block.location || late) && (
                   <div className="mt-0.5 flex flex-wrap items-center gap-1 overflow-hidden">
                     {block.type !== "TASK" && (
                       <SessionTypeBadge type={block.type} />
                     )}
+                    {late && <OverdueBadge />}
                     {block.location && (
                       <span className="inline-flex items-center gap-0.5 text-[9px] text-muted-foreground">
-                        <MapPin className="h-2.5 w-2.5" />
-                        <span className="truncate">{block.location}</span>
+                        {isOnlineLocation(block.location) ? (
+                          <Globe className="h-2.5 w-2.5" />
+                        ) : (
+                          <MapPin className="h-2.5 w-2.5" />
+                        )}
+                        <span className="truncate">
+                          {isOnlineLocation(block.location)
+                            ? "Online"
+                            : block.location}
+                        </span>
                       </span>
                     )}
                   </div>
@@ -531,6 +564,7 @@ export function ScheduledBlockItem({
               className={cn(
                 "h-2.5 w-2.5 shrink-0 translate-y-1 rounded-full border-l-4",
                 TASK_CARD_CLASSES[state],
+                late && LATE_CARD_CLASSES,
               )}
               aria-hidden
             />
