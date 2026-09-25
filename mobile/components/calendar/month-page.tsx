@@ -8,8 +8,9 @@ import {
 } from "@/lib/month-date-math";
 import { isPastDeadlineDrop } from "@/lib/overdue";
 import {
-  DAY_CACHE_TTL_MS,
-  getSessionMutationEpoch,
+  fetchDaySessions,
+  getCachedDaySessions,
+  isDayCacheFresh,
   sameSessions,
   subscribeToSessionMutations,
 } from "@/lib/session-cache";
@@ -123,7 +124,13 @@ export function MonthPage({
   onDoubleTapDay,
 }: MonthPageProps) {
   const { toast, confirm } = useToast();
-  const [sessions, setSessions] = useState<Session[] | null>(null);
+  // Months share the day cache under a `month:` key, so a page remounted by
+  // the pager (swiping back to a month that left its 3-page window) paints the
+  // last result instantly instead of a skeleton + refetch.
+  const monthKey = `month:${format(monthDate, "yyyy-MM")}`;
+  const [sessions, setSessions] = useState<Session[] | null>(
+    () => getCachedDaySessions(monthKey) ?? null,
+  );
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   // A day key to pulse for a moment right after a drop lands on it.
@@ -166,30 +173,23 @@ export function MonthPage({
     isActiveRef.current = isActive;
   }, [isActive]);
 
-  // Mirrors `day-timeline.tsx`'s day cache: remembers the mutation epoch and
-  // timestamp of this page's last successful fetch so a plain screen-focus
-  // bump (`reloadToken`, from `month.tsx`'s `useFocusEffect`) doesn't hit the
-  // network when nothing has actually changed since. `notifySessionsMutated`
-  // (called from every `api/tasks.ts` mutation) bumps the epoch — that's the
-  // only thing that forces a real revalidation before the TTL is up.
-  const lastFetchRef = useRef<{ epoch: number; at: number } | null>(null);
-
   const refetch = useCallback(async () => {
     try {
       // No status filter (unlike Day View's `listSessions("day", …, "PENDING")`)
       // — the month grid shows completed pills too (line-through), matching
       // `mockups/month-view.html` and the un-filtered fetch
       // `frontend/src/components/calendar/layout.tsx` already does.
-      const res = await listSessions("month", monthDate);
-      lastFetchRef.current = {
-        epoch: getSessionMutationEpoch(),
-        at: Date.now(),
-      };
+      // Shared cache + in-flight de-dupe: concurrent callers (the three
+      // pager pages, a mutation fan-out) join one request per month.
+      const fetched = await fetchDaySessions(monthKey, async () => {
+        const res = await listSessions("month", monthDate);
+        return res.sessions;
+      });
       // A revalidation that comes back identical must not re-render the
       // whole grid — same guard `day-timeline.tsx` uses to avoid the
       // "refetch on every focus" flicker.
       setSessions((prev) =>
-        prev != null && sameSessions(prev, res.sessions) ? prev : res.sessions,
+        prev != null && sameSessions(prev, fetched) ? prev : fetched,
       );
     } catch (error) {
       setSessions((cur) => cur ?? []);
@@ -201,17 +201,23 @@ export function MonthPage({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [monthDate]);
+  }, [monthDate, monthKey]);
 
+  // A mount or a plain screen-focus bump (`reloadToken`) reuses a cache entry
+  // younger than the TTL; `notifySessionsMutated` expires every entry, so a
+  // real change always revalidates.
   useEffect(() => {
-    const last = lastFetchRef.current;
-    const fresh =
-      last != null &&
-      last.epoch === getSessionMutationEpoch() &&
-      Date.now() - last.at < DAY_CACHE_TTL_MS;
-    if (fresh) return;
+    if (isDayCacheFresh(monthKey)) {
+      const cached = getCachedDaySessions(monthKey);
+      if (cached) {
+        setSessions((prev) =>
+          prev != null && sameSessions(prev, cached) ? prev : cached,
+        );
+      }
+      return;
+    }
     refetch();
-  }, [refetch, reloadToken]);
+  }, [refetch, reloadToken, monthKey]);
 
   // Mirrors the effect above, but fired immediately by
   // `subscribeToSessionMutations` instead of waiting for the next

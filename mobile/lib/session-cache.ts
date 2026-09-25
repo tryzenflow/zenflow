@@ -2,7 +2,8 @@ import type { Session } from "@zenflow/shared";
 
 /**
  * In-memory, session-lifetime cache of each day's `listSessions("day", …)`
- * result, keyed by the `'YYYY-MM-DD'` day key.
+ * result, keyed by the `'YYYY-MM-DD'` day key — and of each month's
+ * `listSessions("month", …)` under `'month:YYYY-MM'` (`month-page.tsx`).
  *
  * Purpose: stale-while-revalidate for the calendar timelines. A `DayTimeline`
  * seeds its `tasks` from here on mount, so a day the user has already seen
@@ -36,8 +37,7 @@ interface DayCacheEntry {
   fetchedAt: number;
 }
 
-/** How long a cached day (or month — `month-page.tsx` reuses this constant)
- * counts as "fresh" — a page mount, or a plain screen-focus, within this
+/** How long a cached day (or month) counts as "fresh" — a page mount, or a plain screen-focus, within this
  * window of the last fetch reuses the cache with no background revalidation
  * at all. */
 export const DAY_CACHE_TTL_MS = 30_000;
@@ -46,9 +46,7 @@ const cache = new Map<string, DayCacheEntry>();
 const inFlight = new Map<string, Promise<Session[]>>();
 
 /** Bumped by `notifySessionsMutated` every time a session is created,
- * updated, or deleted anywhere in the app. Callers that don't key off the
- * per-day cache (Month View's per-month fetch) can stash the epoch they last
- * fetched at and compare it here instead of re-deriving day keys. */
+ * updated, or deleted anywhere in the app. */
 let mutationEpoch = 0;
 
 export function getSessionMutationEpoch(): number {
@@ -89,7 +87,7 @@ export function subscribeToSessionMutations(listener: () => void): () => void {
  * deleting it, like `clearDaySessionCache`) matters: a day whose cache entry
  * was deleted reads as "never fetched" and flashes the loading skeleton on
  * next view, even though nothing about that particular day changed. Also
- * bumps `mutationEpoch` for `month-page.tsx`'s equivalent check, and fires
+ * bumps `mutationEpoch` and fires
  * every listener registered via `subscribeToSessionMutations` so a
  * currently-foregrounded calendar screen revalidates right away instead of
  * waiting for its next focus.
