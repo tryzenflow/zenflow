@@ -137,6 +137,14 @@ const POLICY_LABEL: Record<InfeasiblePolicy, string> = {
   ACCEPT_LATE_DEADLINE: "Accept late deadline",
 };
 
+/** Per-policy button accent, matching the web toast's tints
+ * (`frontend/src/lib/toast.tsx` `POLICY_COPY`): rose = overlap, sky = late. */
+const POLICY_COLOR: Record<InfeasiblePolicy, { light: string; dark: string }> =
+  {
+    ACCEPT_CONFLICTS: { light: "#e11d48", dark: "#fb7185" },
+    ACCEPT_LATE_DEADLINE: { light: "#0284c7", dark: "#38bdf8" },
+  };
+
 /** The 409 SCHEDULE_INFEASIBLE body when `error` is one, else null. */
 export function getInfeasibleError(
   error: unknown,
@@ -172,18 +180,16 @@ export async function withInfeasibleRetry<T>(
   } catch (error) {
     const infeasible = getInfeasibleError(error);
     if (!infeasible) return onError(error);
+    // One toast offering every policy, not one toast per policy.
     const { title, description } = splitToastMessage(infeasible.message);
-    for (const policy of infeasible.options) {
-      toast(
-        title,
-        "warning",
-        12000,
-        "bottom",
-        false,
-        { label: POLICY_LABEL[policy], onPress: () => void retry(policy) },
-        { description },
-      );
-    }
+    toast(title, "warning", 12000, "bottom", false, undefined, {
+      description,
+      actions: infeasible.options.map((policy) => ({
+        label: POLICY_LABEL[policy],
+        color: POLICY_COLOR[policy],
+        onPress: () => void retry(policy),
+      })),
+    });
     return;
   }
   onSuccess(result);

@@ -35,6 +35,9 @@ import { Text } from "./text";
 export interface ToastAction {
   label: string;
   onPress: () => void;
+  /** Accent for this button (tinted fill + border + text) so several choices
+   * on one toast read as different options, not a row of identical pills. */
+  color?: { light: string; dark: string };
 }
 
 /**
@@ -164,6 +167,9 @@ interface ToastProps {
   duration?: number;
   showProgress?: boolean;
   action?: ToastAction;
+  /** Several choices on one toast (e.g. the infeasible-slot policies), shown
+   * as a button row; takes precedence over `action`'s single button. */
+  actions?: ToastAction[];
   confirm?: ToastConfirm;
   /** Optional second line under the message, rendered muted. When set (and
    * this isn't a confirm toast) the `message` becomes a compact title. */
@@ -185,6 +191,7 @@ function Toast({
   duration = 3000,
   showProgress = true,
   action,
+  actions,
   confirm,
   description,
   paused = false,
@@ -205,6 +212,7 @@ function Toast({
   ];
 
   const autoDismiss = !confirm && variant === "success";
+  const buttons = confirm ? [] : (actions ?? (action ? [action] : []));
 
   const hide = useCallback(() => {
     onHide(id);
@@ -341,9 +349,9 @@ function Toast({
 
           <Pressable
             className="flex-1"
-            disabled={!action || Boolean(confirm)}
+            disabled={!action || Boolean(confirm) || Boolean(actions)}
             onPress={() => {
-              if (action && !confirm) {
+              if (action && !confirm && !actions) {
                 action.onPress();
                 dismiss(0);
               }
@@ -379,32 +387,43 @@ function Toast({
           )}
         </View>
 
-        {action && !confirm && (
-          <View className="mt-2.5 flex-row justify-end">
-            <Pressable
-              onPress={() => {
-                action.onPress();
-                dismiss(0);
-              }}
-              hitSlop={8}
-              style={{
-                borderRadius: 999,
-                borderWidth: 1,
-                borderColor: palette.border,
-                paddingHorizontal: 14,
-                paddingVertical: 5,
-                backgroundColor: isDarkColorScheme
-                  ? "rgba(255, 255, 255, 0.06)"
-                  : "rgba(0, 0, 0, 0.04)",
-              }}
-            >
-              <Text
-                className="text-[13px] font-semibold"
-                style={{ color: palette.text }}
-              >
-                {action.label}
-              </Text>
-            </Pressable>
+        {buttons.length > 0 && (
+          <View
+            className="mt-2.5 flex-row flex-wrap justify-end"
+            style={{ gap: 8 }}
+          >
+            {buttons.map((b) => {
+              const tint = b.color?.[isDarkColorScheme ? "dark" : "light"];
+              return (
+                <Pressable
+                  key={b.label}
+                  onPress={() => {
+                    b.onPress();
+                    dismiss(0);
+                  }}
+                  hitSlop={8}
+                  style={{
+                    borderRadius: 999,
+                    borderWidth: 1,
+                    borderColor: tint ? `${tint}66` : palette.border,
+                    paddingHorizontal: 14,
+                    paddingVertical: 5,
+                    backgroundColor: tint
+                      ? `${tint}22`
+                      : isDarkColorScheme
+                        ? "rgba(255, 255, 255, 0.06)"
+                        : "rgba(0, 0, 0, 0.04)",
+                  }}
+                >
+                  <Text
+                    className="text-[13px] font-semibold"
+                    style={{ color: tint ?? palette.text }}
+                  >
+                    {b.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </View>
         )}
 
@@ -575,6 +594,7 @@ interface ToastMessage {
   position?: string;
   showProgress?: boolean;
   action?: ToastAction;
+  actions?: ToastAction[];
   confirm?: ToastConfirm;
   description?: string;
 }
@@ -586,7 +606,7 @@ interface ToastContextProps {
     position?: "top" | "bottom",
     showProgress?: boolean,
     action?: ToastAction,
-    opts?: { description?: string },
+    opts?: { description?: string; actions?: ToastAction[] },
   ) => void;
   /** Blocking yes/no rendered as a toast — resolves via its callbacks, not a
    * return value. See {@link ToastConfirmOptions}. */
@@ -618,7 +638,7 @@ function ToastProvider({
     position: "top" | "bottom" = "top",
     showProgress = true,
     action?: ToastAction,
-    opts?: { description?: string },
+    opts?: { description?: string; actions?: ToastAction[] },
   ) => {
     setMessages((prev) => [
       ...prev,
@@ -630,6 +650,7 @@ function ToastProvider({
         position,
         showProgress,
         action,
+        actions: opts?.actions,
         description: opts?.description,
       },
     ]);
@@ -681,6 +702,7 @@ function ToastProvider({
       duration={message.duration}
       showProgress={message.showProgress}
       action={message.action}
+      actions={message.actions}
       confirm={message.confirm}
       description={message.description}
       onHide={removeToast}
