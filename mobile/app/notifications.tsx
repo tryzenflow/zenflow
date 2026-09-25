@@ -62,8 +62,8 @@ function notificationVisual(eventName: string): {
     return {
       Icon: AlertTriangle,
       label: `${CATEGORY_LABEL[category]} conflict`,
-      tint: "border-red-500/40 bg-red-500/15",
-      iconColor: "#dc2626",
+      tint: "border-amber-500/40 bg-amber-500/15",
+      iconColor: "#d97706",
     };
   }
   switch (category) {
@@ -561,7 +561,7 @@ function NotificationRowItem({
               onPress={onRescheduleAll}
               disabled={rescheduling}
               hitSlop={6}
-              className="mt-2 flex-row items-center gap-1.5 self-start rounded-full bg-destructive px-3 py-1 active:opacity-80"
+              className="mt-2 flex-row items-center gap-1.5 self-start rounded-full bg-amber-600 px-3 py-1 active:opacity-80"
             >
               {rescheduling ? (
                 <ActivityIndicator size="small" color="#ffffff" />
