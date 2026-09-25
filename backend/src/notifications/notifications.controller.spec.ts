@@ -2,13 +2,13 @@ import { Test, TestingModule } from "@nestjs/testing";
 import type { User } from "../../generated/prisma";
 import { NotificationsController } from "./notifications.controller";
 import { NotificationsService } from "./notifications.service";
+import { ConflictRescheduleService } from "../scheduler/io/conflict-reschedule.service";
 
 const USER = { id: "u1" } as User;
 
 const DTO = {
   id: "n1",
-  topic: "ASSIGNMENT" as const,
-  kind: "NEW" as const,
+  eventName: "assignment.created",
   title: "New assignment: Môn học Mẫu Một",
   content: "Added to your calendar from DLU.",
   sentAt: "2026-09-01T00:00:00.000Z",
@@ -24,6 +24,8 @@ describe("NotificationsController", () => {
   const markRead = jest.fn();
   const markActionTaken = jest.fn();
   const remove = jest.fn();
+  const findConflict = jest.fn();
+  const rescheduleAll = jest.fn();
 
   beforeEach(async () => {
     list
@@ -36,14 +38,28 @@ describe("NotificationsController", () => {
       .mockReset()
       .mockResolvedValue({ ...DTO, actionTakenAt: "2026-09-06T00:00:00.000Z" });
     remove.mockReset().mockResolvedValue({ id: "n1" });
+    findConflict
+      .mockReset()
+      .mockResolvedValue({ conflictSessionIds: ["t1", "t2"] });
+    rescheduleAll.mockReset().mockResolvedValue({
+      rescheduled: [
+        {
+          id: "t1",
+          from: new Date("2026-09-10T09:00:00.000Z"),
+          to: new Date("2026-09-10T15:00:00.000Z"),
+        },
+      ],
+      failedSessionIds: ["t2"],
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [NotificationsController],
       providers: [
         {
           provide: NotificationsService,
-          useValue: { list, markRead, markActionTaken, remove },
+          useValue: { list, markRead, markActionTaken, remove, findConflict },
         },
+        { provide: ConflictRescheduleService, useValue: { rescheduleAll } },
       ],
     }).compile();
 
@@ -93,6 +109,22 @@ describe("NotificationsController", () => {
       success: true,
       message: "Notification dismissed",
       data: { id: "n1" },
+    });
+  });
+
+  it("reschedule-conflicts re-places the listed tasks, marks the row acted on and wraps the result", async () => {
+    const res = await controller.rescheduleConflicts(USER, "n1");
+    expect(rescheduleAll).toHaveBeenCalledWith(USER, ["t1", "t2"]);
+    expect(markActionTaken).toHaveBeenCalledWith(USER, "n1");
+    expect(res.data).toEqual({
+      rescheduled: [
+        {
+          id: "t1",
+          from: "2026-09-10T09:00:00.000Z",
+          to: "2026-09-10T15:00:00.000Z",
+        },
+      ],
+      failedSessionIds: ["t2"],
     });
   });
 });

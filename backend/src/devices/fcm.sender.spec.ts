@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import { cert, deleteApp, initializeApp } from "firebase-admin/app";
 import { getMessaging } from "firebase-admin/messaging";
 import { FcmSender } from "./fcm.sender";
@@ -20,8 +20,7 @@ const MSG: PushMessage = {
   body: "Added to your calendar from DLU.",
   data: {
     notificationId: "n1",
-    topic: "EXAM",
-    kind: "NEW",
+    eventName: "exam.created",
     sessionId: "s1",
     url: "/calendar?session=s1",
   },
@@ -83,8 +82,7 @@ describe("FcmSender", () => {
     expect(arg.notification).toEqual({ title: MSG.title, body: MSG.body });
     expect(arg.data).toEqual({
       notificationId: "n1",
-      topic: "EXAM",
-      kind: "NEW",
+      eventName: "exam.created",
       sessionId: "s1",
       url: "/calendar?session=s1",
     });

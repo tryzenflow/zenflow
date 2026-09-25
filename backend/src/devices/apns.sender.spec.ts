@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import { ApnsSender } from "./apns.sender";
 import type { PushMessage } from "./types";
 
@@ -23,8 +23,7 @@ const MSG: PushMessage = {
   body: "Added to your calendar from DLU.",
   data: {
     notificationId: "n1",
-    topic: "EXAM",
-    kind: "NEW",
+    eventName: "exam.created",
     sessionId: "s1",
     url: "/calendar?session=s1",
   },
@@ -88,8 +87,7 @@ describe("ApnsSender", () => {
     expect(note.alert).toEqual({ title: MSG.title, body: MSG.body });
     expect(note.payload).toEqual({
       notificationId: "n1",
-      topic: "EXAM",
-      kind: "NEW",
+      eventName: "exam.created",
       sessionId: "s1",
       url: "/calendar?session=s1",
     });

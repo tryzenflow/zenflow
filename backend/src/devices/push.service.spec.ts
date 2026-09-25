@@ -52,8 +52,7 @@ const ROW = {
   userId: "u1",
   title: "New exam: Môn học Mẫu Một",
   content: "Added to your calendar from DLU.",
-  topic: "EXAM",
-  kind: "NEW",
+  eventName: "exam.created",
   sessionId: "s1",
 } as unknown as Notification;
 
@@ -126,8 +125,7 @@ describe("PushService", () => {
         body: ROW.content,
         data: {
           notificationId: "n1",
-          topic: "EXAM",
-          kind: "NEW",
+          eventName: "exam.created",
           sessionId: "s1",
           url: "/calendar?session=s1",
         },

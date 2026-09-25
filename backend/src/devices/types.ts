@@ -25,8 +25,7 @@ export interface SendResult {
 export function toStringMap(data: PushDataPayload): Record<string, string> {
   return {
     notificationId: data.notificationId,
-    topic: data.topic,
-    kind: data.kind,
+    eventName: data.eventName,
     sessionId: data.sessionId,
     url: data.url,
   };

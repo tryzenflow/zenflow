@@ -9,8 +9,7 @@ interface Row {
   id: string;
   userId: string;
   sessionId: string | null;
-  topic: string;
-  kind: string;
+  eventName: string;
   title: string;
   content: string;
   sentAt: Date;
@@ -108,8 +107,7 @@ function row(over: Partial<Row> & { id: string }): Row {
   return {
     userId: "u1",
     sessionId: "s1",
-    topic: "ASSIGNMENT",
-    kind: "NEW",
+    eventName: "assignment.created",
     title: "New assignment: Môn học Mẫu Một",
     content: "Added to your calendar from DLU.",
     sentAt: new Date("2026-09-01T00:00:00.000Z"),
@@ -190,8 +188,7 @@ describe("NotificationsService", () => {
 
       expect(dto).toEqual({
         id: "n1",
-        topic: "ASSIGNMENT",
-        kind: "NEW",
+        eventName: "assignment.created",
         title: "New assignment: Môn học Mẫu Một",
         content: "Added to your calendar from DLU.",
         sentAt: "2026-09-01T00:00:00.000Z",
@@ -199,6 +196,7 @@ describe("NotificationsService", () => {
         actionTakenAt: null,
         eventEndsAt: null,
         sessionId: null,
+        conflictSessionIds: [],
       });
     });
   });
@@ -294,8 +292,7 @@ describe("NotificationsService", () => {
       const { db, service } = makeService([]);
 
       await service.create("u1", {
-        topic: "TIMETABLE",
-        kind: "NEW",
+        eventName: "lecture.group_updated",
         title: "Timetable for Semester 2 Update",
         content: "Room B12 schedule change.",
         sessionId: null,
@@ -304,6 +301,22 @@ describe("NotificationsService", () => {
 
       expect(db.sessions).toHaveLength(1);
       expect(db.sessions[0].title).toBe("Timetable for Semester 2 Update");
+    });
+
+    it("does not synthesize a session when materializeSession is false", async () => {
+      const { db, service } = makeService([]);
+
+      const row = await service.create("u1", {
+        eventName: "lecture.removed",
+        title: "Removed from DLU: Data Structures Lab",
+        content: "These classes were taken off your DLU timetable.",
+        sessionId: null,
+        eventEndsAt: null,
+        materializeSession: false,
+      });
+
+      expect(db.sessions).toHaveLength(0);
+      expect(row.sessionId).toBeNull();
     });
   });
 
