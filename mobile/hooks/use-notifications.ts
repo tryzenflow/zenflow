@@ -8,6 +8,7 @@ import {
 import { getSessionDetails } from "@/api/tasks";
 import { useToast } from "@/components/ui/toast";
 import { useUserStore } from "@/hooks/use-user-store";
+import { claimNotification, LOCAL_NOTIFICATION_SOURCE } from "@/lib/push";
 import { notifySessionsMutated } from "@/lib/session-cache";
 import { notificationEventKind, type NotificationDto } from "@zenflow/shared";
 import * as Notifications from "expo-notifications";
@@ -273,6 +274,10 @@ export function useNotificationsSubscription(): void {
           notifySessionsMutated();
         }
 
+        // The native push for this same notification may have been
+        // presented already — then this is a duplicate: inbox only.
+        if (!claimNotification(n.id, "sse")) return;
+
         const cleanTitle = (n.title || "").replace(/^\[.*?\]\s*/, "").trim();
 
         // 1. In-app tap-to-act toast with clear title and "View on calendar" action
@@ -305,7 +310,11 @@ export function useNotificationsSubscription(): void {
             content: {
               title: cleanTitle,
               body: n.content,
-              data: { sessionId: n.sessionId, notificationId: n.id },
+              data: {
+                sessionId: n.sessionId,
+                notificationId: n.id,
+                source: LOCAL_NOTIFICATION_SOURCE,
+              },
               sound: true,
             },
             trigger: null,

@@ -19,6 +19,63 @@ import { debugLog } from "@/lib/debug-log";
 
 export const ANDROID_CHANNEL_ID = "default";
 
+/**
+ * `data.source` on the system notification the SSE handler posts itself
+ * (`hooks/use-notifications.ts`), so the foreground push listener can tell it
+ * from a server push and not toast it a second time.
+ */
+export const LOCAL_NOTIFICATION_SOURCE = "sse-local";
+
+// One backend notification reaches a foregrounded app twice — over the SSE
+// stream and as a native push (`PushService` fans out the same event) — and
+// both carry its `notificationId`. Whichever channel arrives first claims the
+// id and is the only one presented; the other is swallowed.
+const claimedBy = new Map<string, string>();
+const CLAIM_CAP = 200;
+
+/**
+ * `true` if `owner` may present notification `id`: nobody claimed it yet, or
+ * `owner` already did (the push handler and the push listener both see the
+ * same push, so each passes the push's own request identifier as `owner`).
+ */
+export function claimNotification(
+  id: string | undefined | null,
+  owner: string,
+): boolean {
+  if (!id) return true;
+  const current = claimedBy.get(id);
+  if (current !== undefined) return current === owner;
+  claimedBy.set(id, owner);
+  if (claimedBy.size > CLAIM_CAP) {
+    claimedBy.delete(claimedBy.keys().next().value as string);
+  }
+  return true;
+}
+
+/** Owner key for a native notification (its OS request identifier). */
+export function pushOwner(n: Notifications.Notification): string {
+  return `push:${n.request.identifier}`;
+}
+
+function notificationData(
+  n: Notifications.Notification,
+): Record<string, unknown> | undefined {
+  return n.request.content.data as Record<string, unknown> | undefined;
+}
+
+/** The SSE handler's own system notification (never toasted again). */
+export function isLocalNotification(n: Notifications.Notification): boolean {
+  return notificationData(n)?.source === LOCAL_NOTIFICATION_SOURCE;
+}
+
+/** Backend `notificationId` a push/local notification carries, if any. */
+export function notificationIdOf(
+  n: Notifications.Notification,
+): string | undefined {
+  const id = notificationData(n)?.notificationId;
+  return typeof id === "string" && id ? id : undefined;
+}
+
 /** How a foreground push is presented while the app is open. */
 export function configureForegroundHandler(): void {
   // No native push on web (see file header) — `expo-notifications` has no
@@ -27,11 +84,18 @@ export function configureForegroundHandler(): void {
   // breaks the whole root layout's module evaluation on web.
   if (Platform.OS === "web") return;
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-    }),
+    handleNotification: async (n) => {
+      // A server push the SSE stream already presented (toast + its own
+      // system notification) stays silent.
+      const duplicate =
+        !isLocalNotification(n) &&
+        !claimNotification(notificationIdOf(n), pushOwner(n));
+      return {
+        shouldShowAlert: !duplicate,
+        shouldPlaySound: !duplicate,
+        shouldSetBadge: !duplicate,
+      };
+    },
   });
 }
 
