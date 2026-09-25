@@ -43,7 +43,7 @@ frontend/
 │   │   ├── calendar/          # day/week/month views + grid + blocks + header
 │   │   │   ├── update-recurring-dialog.tsx  # scope picker for a series drag/resize
 │   │   │   └── session-type-badge.tsx
-│   │   ├── tasks/             # create/edit dialogs, delete-recurring-dialog
+│   │   ├── tasks/             # create/edit dialogs, delete-recurring-dialog, slot-pick + series-alternatives dialogs
 │   │   │   └── form/          # task-form + title / deadline-chip / tag /
 │   │   │                      #   session-type-tabs / recurrence / fixed-time /
 │   │   │                      #   session-count / reminder fields
@@ -121,6 +121,22 @@ There is **no completion lifecycle** (no "Mark done", no `status`) and **no manu
 Optimize** — the backend removed both (see [ADR-0002](../docs/adr/0002-scheduling-simplification.md)).
 Scheduling is server-side: `POST /sessions` places a `TASK` into its single best free slot,
 and every later edit is a plain `PATCH /sessions/:id` field diff.
+
+**Alternative times.** On a pairwise-sampled placement the response carries a second
+candidate slot (model identity is never shown). A single `TASK` create/deadline change with
+`divergent: true` opens `slot-pick-dialog.tsx` (keep vs. switch). A **series** (`sessionCount
+> 1`) create or redistribute never blocks: every sitting is already scheduled, and if any
+`sessions[i].divergent` is set, `promptSeriesAlternatives`
+(`hooks/use-series-alternatives-store.ts`) raises a dismissible toast — "N sittings have an
+alternative · All M are already scheduled" — whose **View** action opens
+`series-alternatives-dialog.tsx` (mounted once in `calendar/layout.tsx`). It lists only the
+divergent sittings (the backend marks at most 5, soonest first), each labelled "Sitting k/M"
+with a primary/alternative radio-card pair; every card shows its own date + time range in the
+user's tz, since an alternative may land on another day. Picking an alternative immediately
+calls `POST /sessions/:id/slot-pick` (`chose: "alternative"`) for that sitting, fires
+`zenflow:calendar-refresh`, and locks the row; a `409` (the alternative now overlaps another
+sitting) marks it "No longer available". Closing sends nothing — untouched sittings stay as
+scheduled.
 
 ## Calendar
 

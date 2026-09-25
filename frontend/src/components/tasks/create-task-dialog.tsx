@@ -34,6 +34,7 @@ import {
   type ViewMode,
 } from "@zenflow/shared";
 import { SlotPickDialog } from "./slot-pick-dialog";
+import { promptSeriesAlternatives } from "@/hooks/use-series-alternatives-store";
 
 const DEFAULT_DURATION = 60;
 
@@ -216,6 +217,9 @@ export function CreateSessionDialog({
         setPendingPick(session);
       } else {
         finishCreateSuccess(session, session.sessions?.length ?? 0);
+        // A series is fully scheduled already; if any sitting has an
+        // alternative, offer it via a non-blocking toast (#58).
+        promptSeriesAlternatives(session.title, session.sessions);
       }
     } catch (error) {
       errorToast("Couldn't create the session", {

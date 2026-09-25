@@ -10,6 +10,7 @@ import { CalendarSidebar, SidebarBody } from "./sidebar";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { EditSessionDialog } from "@/components/tasks/edit-task-dialog";
 import { CreateSessionDialog } from "@/components/tasks/create-task-dialog";
+import { SeriesAlternativesDialog } from "@/components/tasks/series-alternatives-dialog";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 import {
   UpdateRecurringDialog,
@@ -384,6 +385,7 @@ export function CalendarLayout() {
           />
         )}
         <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+        <SeriesAlternativesDialog />
         {scopePrompt && (
           <UpdateRecurringDialog
             open

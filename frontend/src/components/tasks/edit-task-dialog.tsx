@@ -29,6 +29,7 @@ import {
   type DeleteRecurringScope,
 } from "./delete-recurring-dialog";
 import { SlotPickDialog } from "./slot-pick-dialog";
+import { promptSeriesAlternatives } from "@/hooks/use-series-alternatives-store";
 import { SESSION_TYPE_META } from "@zenflow/core";
 import { sessionTypeIcon } from "@/components/calendar/session-type-badge";
 import {
@@ -193,6 +194,9 @@ export function EditSessionDialog({
         setPendingPick(updated);
       } else {
         finishUpdateSuccess(updated);
+        // A redistributed series is fully scheduled already; if any sitting
+        // has an alternative, offer it via a non-blocking toast (#58).
+        promptSeriesAlternatives(updated.title, updated.sessions);
       }
     } catch (error) {
       errorToast("Couldn't save your changes", {
