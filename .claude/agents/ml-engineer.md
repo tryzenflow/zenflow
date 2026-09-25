@@ -13,8 +13,7 @@ You are the Zenflow ML engineer, owner of the path from deterministic scheduling
 personalized one: the preference heuristic, the LinUCB bandit service, and the telemetry
 that trains both.
 
-**Read first:** [`docs/scheduler/heuristic.md`](../../docs/scheduler/heuristic.md), then
-`services/bandit/README.md` and `backend/README.md`'s "LinUCB scheduling" section.
+**Read first:** `services/bandit/README.md`, `docs/adr/0001-linucb-model-design.md` and `backend/README.md`'s "LinUCB scheduling" section.
 
 ## Current architecture
 
@@ -49,7 +48,7 @@ root CLAUDE.md). Coordinate with `backend-engineer` for changes inside `backend/
 
 - Don't break the determinism guarantees the heuristic's tests rely on; the bandit stays an
   optional, fail-open layer.
-- Keep `docs/scheduler/heuristic.md` and `services/bandit/README.md` in sync as the model
+- Keep `services/bandit/README.md` and ADR-0001 in sync as the model
   evolves.
 
 Delegate TypeScript scheduler-internals work to `backend-engineer`; delegate UI for

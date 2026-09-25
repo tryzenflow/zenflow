@@ -10,7 +10,7 @@ product overview; this file is the conventions + "how to not break things" refer
 | Frontend (React PWA)          | `frontend/`                   | `frontend-engineer` | [frontend/README.md](frontend/README.md)                                                       |
 | Backend (NestJS API + scheduler) | `backend/`                 | `backend-engineer`  | [backend/README.md](backend/README.md)                                                         |
 | Shared types (FE/BE contract) | `packages/shared/`            | `backend-engineer`  | —                                                                                              |
-| ML scheduling (heuristic + LinUCB) | `services/bandit/`, telemetry | `ml-engineer`  | [services/bandit/README.md](services/bandit/README.md), [docs/scheduler/heuristic.md](docs/scheduler/heuristic.md) |
+| ML scheduling (heuristic + LinUCB) | `services/bandit/`, telemetry | `ml-engineer`  | [services/bandit/README.md](services/bandit/README.md), [ADR-0001](docs/adr/0001-linucb-model-design.md) |
 
 Delegate area work to the matching subagent in `.claude/agents/`.
 
@@ -37,15 +37,28 @@ frontend `dev | build | typecheck | lint | test:e2e`.
    `packages/shared/src`. Change them there, then `pnpm shared:build` so both FE and BE see
    the new types. Don't duplicate these shapes in either app.
 
-2. **The scheduler core is pure.** Everything in `backend/src/scheduler/core/*`
-   (`slot-score.ts`, `linucb-slot-score.ts`, `preference.ts`, `arms.ts`, `series-spread.ts`,
-   `context-vector.ts`, `slot.ts`, `horizon.ts`, `recurrence.ts`, `matrix-decay.ts`, …) takes
-   `now` as a parameter and does **no I/O and no randomness at all** — never `Math.random()`,
-   never the clock. Only `backend/src/scheduler/io/*` (the placer services, `day-load.ts`, the
-   `TaskPlacementService` A/B facade, `SchedulingFeedbackService`, and the two `@Cron`
-   services) touches Prisma or the bandit HTTP service / writes telemetry. Keep that split.
-   Any change to a pure function must update its `*.spec.ts` in the same change. See
-   [backend/README.md](backend/README.md) → "Scheduler architecture".
+2. **Ranking lives in Python; Nest is thin (ADR-0003).** All placement ranking — heuristic
+   best slot, LinUCB slot-first scoring, series spreading, displacement — is implemented in
+   `services/bandit/src/core/*`, which is pure numpy: `now` is a parameter, no I/O, no clock,
+   no randomness. `backend/src/scheduler/io/*` gathers inputs (day loads, preference matrix,
+   observation count, bandit `(A, b)`), calls `POST /v1/place` through `PlacementClient`,
+   applies and persists the result, and owns the only RNG (`ExperimentService.assignPolicy`).
+   `backend/src/scheduler/core/*` is the calendar/recurrence/preference-write toolbox
+   (`slot.ts`, `horizon.ts`, `recurrence.ts`, `matrix-decay.ts`, `sync-conflicts.ts`, …) plus a
+   **frozen** heuristic fallback (`slot-score.ts`, `preference.ts`, `series-spread.ts`, the
+   pre-#62 behaviour), used only when Python is unavailable (`FallbackPlacer`, built on
+   `HeuristicPlacer`); it stays pure (no I/O, clock, or randomness) and takes `now` as a
+   parameter. Do not add ranking logic to Nest. See [backend/README.md](backend/README.md) →
+   "Scheduler architecture".
+
+   **Ranking change => Python change + Python tests + contract fixtures.** Behaviour changes
+   to scoring or placement go in `services/bandit/src/core/*` with pytest coverage and updated
+   `packages/shared/contract/place/*.json` fixtures — not a TS↔Python port. The frozen TS
+   fallback does not follow this rule: its files (`slot-score.ts`, `preference.ts`,
+   `series-spread.ts`, `sync-conflicts.ts`) change only for bug fixes, and a fix must keep
+   `backend/test/golden/scheduler-core.golden.json` (regenerate via
+   `pnpm --filter backend golden:export`; `golden-fixtures.spec.ts` fails on drift) and
+   `services/bandit/tests/test_golden_ts.py` green.
 
 3. **Durations are always positive multiples of 15** (minutes). Slots are 15-minute;
    `DAILY_HORIZON` = 1440. Don't introduce off-grid times.
@@ -70,7 +83,13 @@ frontend `dev | build | typecheck | lint | test:e2e`.
    `{ success: true, message, data }`; errors are `{ success: false, message, … }`. Let
    NestJS `HttpException`s propagate.
 
-7. **Auth is OTP + Redis sessions** (no passwords/JWT). Protected routes use
+7. **A live `TASK` always has a `scheduledStartTime`.** A null start is a corrupt row. Pre-flights
+   may still reject a create/edit before anything is written; once a row exists, placement ends in
+   a real slot or the last resort (`ACCEPTED_LAST_RESORT` / `lastResortStart`), and a placement
+   that throws discards the just-inserted rows (`placeOrDiscard`). Don't add a path that writes
+   `null` onto a `TASK`. Repair old rows with `pnpm --filter backend backfill:unplaced`.
+
+8. **Auth is OTP + Redis sessions** (no passwords/JWT). Protected routes use
    `CookieAuthGuard`; the current user comes from `@CurrentUser()`.
 
 ## Conventions (digest — full versions in the app READMEs)
@@ -114,7 +133,7 @@ frontend `dev | build | typecheck | lint | test:e2e`.
 ## Keeping docs in sync
 
 When a change affects schema, endpoints, the scheduler, screens, conventions, or the ML
-roadmap, update the matching README (and `docs/scheduler/heuristic.md` for scheduling/ML).
+roadmap, update the matching README (and `services/bandit/README.md` / ADR-0001 for scheduling/ML).
 
 ## Feature workflow (skills & subagents)
 
