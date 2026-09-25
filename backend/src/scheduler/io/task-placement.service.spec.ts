@@ -304,8 +304,15 @@ describe("TaskPlacementService.redistributeSeries", () => {
       scheduledStartTime: new Date("2026-06-09T00:00:00.000Z"),
     };
     const newStart = new Date("2026-06-09T12:00:00.000Z");
+    const alt = new Date("2026-06-09T15:00:00.000Z");
     python.placeSeries.mockResolvedValue([
-      { id: "future", scheduledStartTime: newStart },
+      {
+        id: "future",
+        scheduledStartTime: newStart,
+        slotProposalId: "sp-f",
+        alternativeSlot: alt,
+        divergent: true,
+      },
     ]);
     const transaction = jest.fn().mockResolvedValue(undefined);
     const prisma = {
@@ -342,9 +349,22 @@ describe("TaskPlacementService.redistributeSeries", () => {
       ],
     });
     expect(transaction).toHaveBeenCalledTimes(1);
+    // Only the re-placed sitting carries its proposal / alternative (#58).
     expect(res).toEqual([
-      { id: "past", scheduledStartTime: past.scheduledStartTime },
-      { id: "future", scheduledStartTime: newStart },
+      {
+        id: "past",
+        scheduledStartTime: past.scheduledStartTime,
+        slotProposalId: null,
+        alternativeSlot: null,
+        divergent: false,
+      },
+      {
+        id: "future",
+        scheduledStartTime: newStart,
+        slotProposalId: "sp-f",
+        alternativeSlot: alt,
+        divergent: true,
+      },
     ]);
   });
 });
@@ -383,7 +403,13 @@ describe("TaskPlacementService.redistributeSeries never unschedules", () => {
       "update-many",
     ]);
     expect(res).toEqual([
-      { id: "future", scheduledStartTime: upcoming.scheduledStartTime },
+      {
+        id: "future",
+        scheduledStartTime: upcoming.scheduledStartTime,
+        slotProposalId: null,
+        alternativeSlot: null,
+        divergent: false,
+      },
     ]);
   });
 });
@@ -468,6 +494,8 @@ describe("TaskPlacementService.planSeriesRespread", () => {
             end: past.scheduledStartTime.getTime() + 60 * 60_000,
           },
         ],
+        // Never shown to the user => never recorded as pairwiseShown (#58).
+        surfaceAlternatives: false,
       }),
     );
     expect(plan).toEqual([

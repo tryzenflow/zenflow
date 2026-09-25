@@ -5,11 +5,13 @@ import type {
 } from "@zenflow/shared";
 import { SchedulingModel, type User } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
+import { MS_PER_MINUTE, overlapsAny } from "../scheduler/core/slot";
 import { SchedulingFeedbackService } from "../scheduler/io/scheduling-feedback.service";
 import { WITH_TAGS_AND_SERIES } from "./types/session-row";
 import { toSessionDto } from "./session-mapper";
 import { moveEventData } from "./session-events";
 import { SlotPickDto } from "./dto/slot-pick.dto";
+import { SlotTakenException } from "./slot-taken.exception";
 
 type LoadedProposal = {
   id: string;
@@ -27,7 +29,9 @@ type LoadedProposal = {
  * applies the other policy's raw proposal as a `MOVE`; `"primary"` (or a
  * proposal with no pairwise comparison at all) just records "kept". Idempotent
  * — a proposal that already has `chosenByUser` set is a no-op that just
- * echoes what was recorded, never re-applying a move.
+ * echoes what was recorded, never re-applying a move. An alternative that
+ * overlaps another sitting of the same `TASK` series is refused with a 409
+ * {@link SlotTakenException} and nothing is recorded (#58).
  */
 @Injectable()
 export class SlotPickService {
@@ -123,7 +127,49 @@ export class SlotPickService {
   ): Promise<SharedSession | null> {
     const altStart = this.alternativeStart(proposal);
     if (!altStart) return null;
+    await this.assertNoSiblingClash(sessionId, altStart, user);
     return this.moveSessionTo(sessionId, altStart, user);
+  }
+
+  /**
+   * A series sitting's alternative came from an independent plan, and its
+   * siblings may have moved since (#58): refuse (409 `SLOT_TAKEN`, nothing
+   * recorded) when it would overlap any other live sitting of the series.
+   */
+  private async assertNoSiblingClash(
+    sessionId: string,
+    altStart: Date,
+    user: User,
+  ): Promise<void> {
+    const session = await this.prisma.session.findFirst({
+      where: { id: sessionId, userId: user.id, deleted: false },
+      select: { seriesId: true, durationMinutes: true },
+    });
+    if (!session?.seriesId) return;
+    const siblings = await this.prisma.session.findMany({
+      where: {
+        seriesId: session.seriesId,
+        userId: user.id,
+        deleted: false,
+        id: { not: sessionId },
+        scheduledStartTime: { not: null },
+      },
+      select: { scheduledStartTime: true, durationMinutes: true },
+    });
+    const start = altStart.getTime();
+    const occupied = siblings.map((s) => {
+      const from = (s.scheduledStartTime as Date).getTime();
+      return { start: from, end: from + s.durationMinutes * MS_PER_MINUTE };
+    });
+    if (
+      overlapsAny(
+        occupied,
+        start,
+        start + session.durationMinutes * MS_PER_MINUTE,
+      )
+    ) {
+      throw new SlotTakenException();
+    }
   }
 
   /** Applies the pick as an ordinary `MOVE` — same drag-distance grading and

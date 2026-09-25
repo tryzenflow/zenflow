@@ -476,7 +476,7 @@ all occurrences). Violations → 400.
 | DELETE | `/sessions/series/:seriesId/from/:sessionId` | Materialized `TASK` series only — delete that sitting and every later one by `sessionIndex`; earlier sittings kept.                                                                                                                                                                                                                    |
 | DELETE | `/sessions/timetable-group/:sessionId/from`  | Portal-ingested `LECTURE`s only (no `SessionSeries`) — soft-delete that meeting and every later one sharing its `scheduleStudyUnitId` (the portal course-section id). 404 if not the caller's or not groupable (no `scheduleStudyUnitId`). Returns `RemoveTimetableGroupResponse` (`{ removedSessionIds }`).                           |
 | DELETE | `/sessions/timetable-group/:sessionId`       | Same grouping, unconditional on time — soft-deletes every meeting in the section. Same 404s/response shape.                                                                                                                                                                                                                            |
-| POST   | `/sessions/:id/slot-pick`                    | `{ slotProposalId, chose: "primary" \| "alternative" }` — records which side of a pairwise-sampled `SlotProposal` the user picked (`pairwiseShown` events only); `"alternative"` applies that start as an ordinary `MOVE`. Idempotent, best-effort — never blocks the flow. See [LinUCB scheduling](#linucb-scheduling-ab-experiment). |
+| POST   | `/sessions/:id/slot-pick`                    | `{ slotProposalId, chose: "primary" \| "alternative" }` — records which side of a pairwise-sampled `SlotProposal` the user picked (`pairwiseShown` events only); `"alternative"` applies that start as an ordinary `MOVE`. Idempotent, best-effort — never blocks the flow. `409 SLOT_TAKEN` (nothing recorded) when a series sitting's alternative overlaps a live sibling (#58). See [LinUCB scheduling](#linucb-scheduling-ab-experiment). |
 
 ### Tags (`/tags`)
 
@@ -735,9 +735,10 @@ clients see `409 SCHEDULE_INFEASIBLE`.
 `docs/adr/0001-linucb-model-design.md` + `docs/scheduler/{reranking,ab-testing}.md`.
 `ExperimentService.assignPolicy()` (the only RNG left in the placement path) rolls a 50/50
 `primaryPolicy` **and** an independent `PAIRWISE_SAMPLE_RATE` (20%) pairwise-sample draw per
-`TASK` create / deadline-change event (and, independently, per series member); Python computes
-both policies' picks whenever `computeBoth` is set on the request (primary is LINUCB, or this
-event was sampled) and Nest records one `SlotProposal` per placement with both proposals when
+`TASK` create / deadline-change event — a `TASK` series rolls **once for the whole series**
+(#58, see _Series pairwise surface_ below); Python computes both policies' picks whenever
+`computeBoth` is set on the request (single task: primary is LINUCB, or the event was sampled;
+series: sampled only) and Nest records one `SlotProposal` per placement with both proposals when
 sampled, so `POST /sessions/:id/slot-pick` (`docs/scheduler/ab-testing.md` §3) has something to
 offer. Applied weights (`wL` = 1, `wS` = proximity-scaled stability) come back on the response and
 land on `SlotProposal.linucbWeight` / `.stabilityWeight`.
@@ -887,11 +888,12 @@ sequenceDiagram
   S->>S: $tx( sessionSeries.create + N× session.create + N× CREATE event )
   S->>T: placeSeriesOnCreate({ seriesId, members, deadline })
   T->>P: placeSeries({ members, deadline, trigger: "create" })
-  P->>P: assignPolicy() per member
-  P->>PY: POST /v1/place (members.length > 1 = one materialized series, sibling ledger server-side)
+  P->>P: assignPolicy() ONCE for the series (shared primaryPolicy + seed)
+  P->>PY: POST /v1/place (members.length > 1 = one materialized series, sibling ledger server-side; computeBoth = sampled)
   alt Python healthy
-    PY-->>P: one PlacedMember per member
-    P->>P: recordProposal per member (placementSource=PYTHON)
+    PY-->>P: one PlacedMember per member (sampled: primary plan + other plan's pick)
+    P->>P: pinUnplaced, selectSeriesAlternatives (≤ MAX_SERIES_ALTERNATIVES)
+    P->>P: recordProposal per member (placementSource=PYTHON, pairwiseShown on shown ones)
   else degraded
     P->>FB: placeSeries (frozen loop — seriesDayWindows, then spillover; siblings, day cap)
     FB-->>P: rows[] (null start = no slot anywhere)
@@ -901,6 +903,48 @@ sequenceDiagram
   T->>T: $tx( session.update scheduledStartTime for every row )
   T-->>S: rows[]
 ```
+
+#### Series pairwise surface (#58)
+
+A series is one A/B event: `PythonPlacer.placeSeries` calls `assignPolicy()` once, and every
+member is sent with that `primaryPolicy` and `computeBoth = pairwiseShown` (a LinUCB primary
+still runs LinUCB — Python's `PolicySelector` — falling back to the heuristic per member). On a
+sampled series Python runs two complete, independent series plans over one batched context
+(each with its own sibling ledger / `MAX_SERIES_PER_DAY`); the applied starts come from the
+primary plan, and each `PlacedMember`'s non-primary pick (`linucb` when HEURISTIC is primary,
+`heuristic` when LINUCB is) is the other plan's start, or `null` when that plan fell back /
+hit its last resort. Nest then (`scheduler/io/series-alternatives.ts`, a pure filter — no
+ranking):
+
+- a sitting is a candidate iff its applied outcome is `PLACED` (never the last resort), both
+  picks are non-null and the other plan's start differs from the applied one;
+- a candidate whose alternative interval (`[start, start + duration)`) overlaps any **other**
+  applied sitting or `fixedOccupied` (redistribute: started sittings) is dropped — the other
+  plan's ledger is independent, so e.g. a 23:45 sitting running past midnight can hit a
+  sibling at 00:00;
+- the first `MAX_SERIES_ALTERNATIVES` (5) remaining sittings by index are shown:
+  `SlotProposal.pairwiseShown = true` + `pairwisePositions`. Every other sitting keeps both
+  proposals in its `SlotProposal` (`pairwiseShown = false`) for offline analysis.
+
+Still one `SlotProposal` per sitting, all sharing the series' `randomizationSeed`. The rows
+(`SeriesPlacementRow.slotProposalId` / `alternativeSlot` / `divergent`) are mapped by
+`toSeriesSessionDto` (`sessions/session-mapper.ts`) onto each `sessions[]` entry
+(`SeriesSession` = `Session & SeriesSittingProposal` in `@zenflow/shared`) of the series create,
+deadline redistribute and `sessionCount` grow responses (only the newly placed / re-placed
+sittings carry values; the others get the empty `NO_SERIES_SITTING_PROPOSAL`). The response's
+top-level `SlotProposalFields` stay `null`/`false` for a series. The degraded (TS fallback) path
+and the sync-conflict respread planner (`surfaceAlternatives: false`) never surface
+alternatives.
+
+The client offers the swap per sitting through the existing `POST /sessions/:id/slot-pick`. For
+a series member, `SlotPickService` refuses an `"alternative"` that now overlaps any other
+non-deleted sitting of the same `seriesId` with `409` and records nothing:
+
+```json
+{ "success": false, "message": "That alternative time now overlaps another sitting of this task.", "code": "SLOT_TAKEN" }
+```
+
+(`SlotTakenException`, body typed by `SlotTakenError` / `SLOT_TAKEN_CODE` in `@zenflow/shared`.)
 
 ### Flow 3 — deadline edit → redistribute
 

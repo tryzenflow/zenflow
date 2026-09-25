@@ -95,8 +95,8 @@ export const BANDIT_MODEL_VERSION = "linucb-d7-v0";
 export const BANDIT_EXPERIMENT_ID = "linucb-heuristic-v1";
 
 /**
- * Fraction of `TASK` create / deadline-change events (and, independently,
- * series members) that get both policies computed (`computeBoth` on the
+ * Fraction of `TASK` create / deadline-change events (a `TASK` series rolls once, for
+ * the whole series — #58) that get both policies computed (`computeBoth` on the
  * `/v1/place` request) and `SlotProposal.pairwiseShown = true`
  * (`docs/scheduler/ab-testing.md`
  * §3). Every other event runs exactly one algorithm — the existing 50/50
@@ -104,6 +104,14 @@ export const BANDIT_EXPERIMENT_ID = "linucb-heuristic-v1";
  * `primaryPolicy`'s own 50/50 roll.
  */
 export const PAIRWISE_SAMPLE_RATE = 0.2;
+
+/**
+ * Most sittings of one pairwise-sampled `TASK` series that surface an
+ * alternative slot (#58): the soonest divergent ones (by `sessionIndex`)
+ * whose alternative doesn't overlap a sibling. The rest keep both proposals
+ * in `SlotProposal` for offline analysis only (`pairwiseShown = false`).
+ */
+export const MAX_SERIES_ALTERNATIVES = 5;
 
 /** Most flexible tasks one displacement may move (capped cascade, issue #62 B). */
 export const MAX_DISPLACED_TASKS = 6;
