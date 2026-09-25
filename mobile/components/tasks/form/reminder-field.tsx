@@ -3,6 +3,7 @@ import {
   BottomSheet,
   BottomSheetContent,
   BottomSheetTextInput,
+  BottomSheetView,
   useBottomSheet,
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
@@ -123,96 +124,102 @@ export function ReminderField({
 
       <BottomSheet>
         <BottomSheetContent ref={sheet.ref}>
-          <View className="px-5">
-            <Text className="text-[19px] font-bold tracking-tight">
-              {current === undefined ? "Add reminder" : "Change reminder"}
-            </Text>
-            <Text className="mt-0.5 text-[13px] text-muted-foreground">
-              How long before it starts?
-            </Text>
-          </View>
-
-          <View className="mt-4 flex-row flex-wrap gap-2 px-5">
-            {REMINDER_PRESETS.map((m) => {
-              const taken = others.includes(m);
-              return (
-                <Pressable
-                  key={m}
-                  disabled={taken}
-                  onPress={() => pick(m)}
-                  className={cn(
-                    "h-10 min-w-[30%] flex-1 items-center justify-center rounded-xl border border-border bg-muted px-3",
-                    m === current && "border-primary/50 bg-primary/15",
-                    taken && "opacity-40",
-                  )}
-                >
-                  <Text
-                    className={cn(
-                      "text-[13px] font-semibold text-muted-foreground",
-                      m === current && "text-primary",
-                    )}
-                  >
-                    {reminderLeadLabel(m)}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <View className="mt-4 flex-row items-center gap-2 px-5">
-            <View className="h-px flex-1 bg-border" />
-            <Text className="text-[11px] text-muted-foreground">or custom</Text>
-            <View className="h-px flex-1 bg-border" />
-          </View>
-
-          <View className="mt-3 flex-row items-center gap-2 px-5">
-            <BottomSheetTextInput
-              value={custom}
-              onChangeText={setCustom}
-              keyboardType="number-pad"
-              placeholder="e.g. 2"
-              accessibilityLabel="Custom reminder amount"
-              className="w-20"
-            />
-            <View className="flex-1 flex-row gap-1">
-              {REMINDER_UNITS.map((u) => (
-                <Pressable
-                  key={u.id}
-                  onPress={() => setUnit(u.id)}
-                  className={cn(
-                    "h-10 flex-1 items-center justify-center rounded-lg border border-border bg-muted",
-                    u.id === unit && "border-primary/50 bg-primary/15",
-                  )}
-                >
-                  <Text
-                    className={cn(
-                      "text-[12px] font-semibold text-muted-foreground",
-                      u.id === unit && "text-primary",
-                    )}
-                  >
-                    {u.id}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-          {!!customError && (
-            <Text className="mt-1.5 px-5 text-[12px] font-medium text-destructive">
-              {customError}
-            </Text>
-          )}
-
-          <View className="px-5 pt-4">
-            <Button
-              className="w-full"
-              disabled={custom === "" || customError !== null}
-              onPress={() => pick(customMinutes)}
-            >
-              <Text className="font-semibold text-primary-foreground">
-                {current === undefined ? "Add custom reminder" : "Save"}
+          {/* gorhom sizes a dynamic sheet by measuring a BottomSheetView —
+              plain Views here left it at height 0 on native. */}
+          <BottomSheetView hadHeader={false} className="px-5">
+            <View>
+              <Text className="text-[19px] font-bold tracking-tight">
+                {current === undefined ? "Add reminder" : "Change reminder"}
               </Text>
-            </Button>
-          </View>
+              <Text className="mt-0.5 text-[13px] text-muted-foreground">
+                How long before it starts?
+              </Text>
+            </View>
+
+            <View className="mt-4 flex-row flex-wrap gap-2">
+              {REMINDER_PRESETS.map((m) => {
+                const taken = others.includes(m);
+                return (
+                  <Pressable
+                    key={m}
+                    disabled={taken}
+                    onPress={() => pick(m)}
+                    className={cn(
+                      "h-10 min-w-[30%] flex-1 items-center justify-center rounded-xl border border-border bg-muted px-3",
+                      m === current && "border-primary/50 bg-primary/15",
+                      taken && "opacity-40",
+                    )}
+                  >
+                    <Text
+                      className={cn(
+                        "text-[13px] font-semibold text-muted-foreground",
+                        m === current && "text-primary",
+                      )}
+                    >
+                      {reminderLeadLabel(m)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <View className="mt-4 flex-row items-center gap-2">
+              <View className="h-px flex-1 bg-border" />
+              <Text className="text-[11px] text-muted-foreground">
+                or custom
+              </Text>
+              <View className="h-px flex-1 bg-border" />
+            </View>
+
+            <View className="mt-3 flex-row h-10 items-center gap-2">
+              <BottomSheetTextInput
+                value={custom}
+                onChangeText={setCustom}
+                keyboardType="number-pad"
+                placeholder="e.g. 2"
+                accessibilityLabel="Custom reminder amount"
+                className="w-20 h-12"
+              />
+              <View className="flex-1 flex-row h-full gap-1">
+                {REMINDER_UNITS.map((u) => (
+                  <Pressable
+                    key={u.id}
+                    onPress={() => setUnit(u.id)}
+                    className={cn(
+                      "flex-1 items-center justify-center rounded-lg border border-border bg-muted",
+                      u.id === unit && "border-primary/50 bg-primary/15",
+                    )}
+                  >
+                    <Text
+                      className={cn(
+                        "text-[12px] font-semibold text-muted-foreground",
+                        u.id === unit && "text-primary",
+                      )}
+                    >
+                      {u.id}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+            {!!customError && (
+              <Text className="mt-1.5 text-[12px] font-medium text-destructive">
+                {customError}
+              </Text>
+            )}
+
+            <View className="pt-4">
+              <Button
+                className="w-full"
+                disabled={custom === "" || customError !== null}
+                onPress={() => pick(customMinutes)}
+              >
+                <Text className="font-semibold text-primary-foreground">
+                  {current === undefined ? "Add custom reminder" : "Save"}
+                </Text>
+              </Button>
+            </View>
+          </BottomSheetView>
         </BottomSheetContent>
       </BottomSheet>
     </View>

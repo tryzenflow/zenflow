@@ -84,7 +84,7 @@ export const MonthGrid = memo(
         <View
           ref={ref}
           onLayout={onGridLayout}
-          className="overflow-hidden rounded-xl border-l border-t border-border"
+          className="shrink overflow-hidden rounded-xl border-l border-t border-border"
         >
           {/* Plain rows of `View`s, NOT a `FlatList numColumns={7}`. This grid
               never scrolls (`MonthPage` sizes each page to its own row count)
@@ -96,7 +96,11 @@ export const MonthGrid = memo(
               […] the specified child already has a parent". Same structure the
               skeleton below already used. */}
           {chunkIntoWeeks(days).map((week) => (
-            <View key={dateKey(week[0])} className="flex-row">
+            <View
+              key={dateKey(week[0])}
+              style={{ height: CELL_HEIGHT }}
+              className="shrink flex-row"
+            >
               {week.map((day) => {
                 const key = dateKey(day);
                 return (
@@ -152,7 +156,7 @@ const SKELETON_PILL_WIDTHS = [
   "w-[56%]",
 ];
 
-/** Loading skeleton — same weekday header + fixed `CELL_HEIGHT` row geometry
+/** Loading skeleton — same weekday header + `CELL_HEIGHT` (shrink-to-fit) row geometry
  * as the loaded grid (4 rows, matching the mockup's Loading state), so
  * swapping to real data never shifts layout (GitHub issue #21's checklist). */
 export function MonthGridSkeleton() {
@@ -168,17 +172,20 @@ export function MonthGridSkeleton() {
           </Text>
         ))}
       </View>
-      <View className="overflow-hidden rounded-xl border-l border-t border-border">
+      <View className="shrink overflow-hidden rounded-xl border-l border-t border-border">
         {/* Static placeholder grid — never reordered/inserted/removed, so an
             index key is safe despite the usual React caveat. */}
         {Array.from({ length: SKELETON_ROWS }).map((_, row) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton row, never reordered
-          <View key={`skeleton-row-${row}`} className="flex-row">
+          <View
+            key={`skeleton-row-${row}`}
+            style={{ height: CELL_HEIGHT }}
+            className="shrink flex-row"
+          >
             {Array.from({ length: 7 }).map((_, col) => (
               <View
                 // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton cell, never reordered
                 key={`skeleton-cell-${row}-${col}`}
-                style={{ height: CELL_HEIGHT }}
                 className="flex-1 gap-[3px] overflow-hidden border-b border-r border-border p-[5px] pb-[3px]"
               >
                 <Skeleton className="h-[14px] w-[18px] rounded" />

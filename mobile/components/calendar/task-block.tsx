@@ -1,5 +1,12 @@
-import { AlertTriangle, Clock, MapPin } from "@/components/Icons";
+import {
+  AlertCircle,
+  AlertTriangle,
+  Clock,
+  Globe,
+  MapPin,
+} from "@/components/Icons";
 import { Text } from "@/components/ui/text";
+import { NAV_THEME } from "@/lib/constants";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
 import { differenceInCalendarDays } from "date-fns";
@@ -8,6 +15,7 @@ import {
   SESSION_TYPE_META,
   TIME_GRANULARITY,
   formatDeadlineShort,
+  isOnlineLocation,
   zonedDate,
   zonedWallClockToUtc,
 } from "@zenflow/core";
@@ -18,7 +26,7 @@ import * as Haptics from "expo-haptics";
 import { memo, useCallback, useEffect, useState } from "react";
 import { View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Svg, { Defs, Path, Pattern, Rect } from "react-native-svg";
+import Svg, { Path } from "react-native-svg";
 import Animated, {
   Easing,
   useAnimatedReaction,
@@ -31,9 +39,32 @@ import Animated, {
   runOnJS,
   type SharedValue,
 } from "react-native-reanimated";
-import { SessionTypeBadge, sessionTypeIcon } from "./session-type-badge";
+import {
+  OverdueBadge,
+  SessionTypeBadge,
+  sessionTypeIcon,
+} from "./session-type-badge";
+
+/** Gap (px) between the DND hatch's diagonal lines. */
+const HATCH_SPACING = 7;
+
+/** One SVG path of parallel 45° lines covering a `width`×`height` box. */
+function hatchPath(width: number, height: number, spacing: number): string {
+  const parts: string[] = [];
+  for (let x = -height; x < width; x += spacing) {
+    parts.push(`M${x},${height}L${x + height},0`);
+  }
+  return parts.join("");
+}
 
 const TAGS_MIN_DURATION = 45;
+
+/** Android pads text for ascenders/descenders on top of `lineHeight`, which
+ * pushes a one-line compact row off-centre in a 15-min block. */
+const COMPACT_TEXT_STYLE = {
+  includeFontPadding: false,
+  textAlignVertical: "center",
+} as const;
 
 /** Distance (px) from the top / bottom of the screen a *lifted* block must be
  * dragged into for the timeline to start auto-scrolling under it, so an
@@ -118,17 +149,20 @@ function DueChip({ late, label }: { late: boolean; label: string }) {
 
 /** Compact room / building marker on the block's meta line. `MapPin` + the
  * session's `location` string, truncated to one line — shown after the time
- * range (and any due chip) whenever the session carries a location. */
+ * range (and any due chip) whenever the session carries a location. A meeting
+ * link reads "Online" with a globe instead of the raw URL. */
 function LocationChip({ location }: { location: string }) {
+  const online = isOnlineLocation(location);
+  const Icon = online ? Globe : MapPin;
   return (
     <View className="min-w-0 flex-row items-center gap-1 rounded bg-muted px-1 py-0.5">
-      <MapPin size={11} className="shrink-0 text-muted-foreground" />
+      <Icon size={11} className="shrink-0 text-muted-foreground" />
       <Text
         className="shrink text-xs font-medium leading-none text-muted-foreground"
         numberOfLines={1}
         ellipsizeMode="tail"
       >
-        {location}
+        {online ? "Online" : location}
       </Text>
     </View>
   );
@@ -143,9 +177,15 @@ interface SessionBlockProps {
   layout: BlockLayout;
   tz: string;
   totalHeight: number;
+  /** Left edge (px) within the day column — `DayTimeline` cascades
+   * overlapping blocks by shifting later columns right. */
   leftOffset: number;
+  /** Downward shift (px) that keeps the title of the block beneath visible. */
+  topShift?: number;
   blockWidth: number;
   deadline?: string | null;
+  /** `Session.late` — placed past its deadline ("accept late deadline"). */
+  late?: boolean;
   onReschedule?: (taskId: string, startISO: string) => void;
   onDragStateChange?: (snap: DragSnap | null) => void;
   onDragEnd?: (snap: DragSnap | null) => void;
@@ -184,6 +224,9 @@ interface SessionBlockProps {
    * scale up + a brief amber ring) — set right after this session was created,
    * rescheduled, or the calendar teleported to it. */
   flash?: boolean;
+  /** Bumped by the parent when a drop didn't move the session (save failed,
+   * scope sheet cancelled) — releases the drop pin so the card snaps back. */
+  settleKey?: number;
 }
 
 function SessionBlockImpl({
@@ -192,8 +235,10 @@ function SessionBlockImpl({
   tz,
   totalHeight,
   leftOffset,
+  topShift = 0,
   blockWidth,
   deadline,
+  late = false,
   onReschedule,
   onDragStateChange,
   onDragEnd,
@@ -206,8 +251,9 @@ function SessionBlockImpl({
   onDragVerticalEdge,
   bottomInset = 0,
   flash = false,
+  settleKey = 0,
 }: SessionBlockProps) {
-  const { height: screenHeight } = useWindowDimensions();
+  const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const { isDarkColorScheme } = useColorScheme();
   const startMin = minutesOfDayLocal(segment.start, tz);
   const rawEndMin = minutesOfDayLocal(segment.end, tz);
@@ -226,7 +272,9 @@ function SessionBlockImpl({
       ? DAILY_HORIZON
       : rawEndMin;
   const duration = endMin - startMin;
-  const isCompact = duration < 30;
+  // ≤30 min: one row with the time inline after the title — a 30-min block is
+  // too short for the stacked title + time + chips layout on a phone.
+  const isCompact = duration <= 30;
   // Bare Lucide icon for the one-line compact layout (the bordered
   // `SessionTypeBadge` chip is itself taller than a 15-min block).
   const CompactTypeIcon = sessionTypeIcon(segment.type);
@@ -235,7 +283,7 @@ function SessionBlockImpl({
   const typeBadgeIconOnly = duration <= TAGS_MIN_DURATION;
 
   // Overlapping blocks render in their normal type colour — no conflict state,
-  // no annotation. `layout` still lays them out side-by-side in columns.
+  // no annotation. `layout` still cascades them (see `DayTimeline`).
   const state = segment.state;
   const isSplit = Boolean(segment.continued);
   // Any whole (non-split) block can be dragged/long-pressed into "Move
@@ -267,6 +315,10 @@ function SessionBlockImpl({
       label: formatDeadlineShort(deadline, tz, new Date(segment.taskStart)),
     };
   })();
+  // Overdue = the server flagged it late (placed past its deadline) or it now
+  // starts after its deadline (e.g. dragged there). Drives the red card, the
+  // thick red left border and the Overdue badge — as on web.
+  const overdue = (late || dueChip?.late === true) && state !== "dnd";
 
   const height = Math.max((duration / DAILY_HORIZON) * totalHeight, 16);
   const pxPerMin = totalHeight / DAILY_HORIZON;
@@ -319,7 +371,14 @@ function SessionBlockImpl({
     snapOffsetY.value = 0;
     translateY.value = 0;
     translateX.value = 0;
-  }, [segment.taskStart, pinnedStartMin, snapOffsetY, translateX, translateY]);
+  }, [
+    segment.taskStart,
+    settleKey,
+    pinnedStartMin,
+    snapOffsetY,
+    translateX,
+    translateY,
+  ]);
 
   // Drive the lift chrome once when the drag starts / ends — not per frame.
   const [isDraggingJS, setIsDraggingJS] = useState(false);
@@ -401,12 +460,21 @@ function SessionBlockImpl({
     }),
   }));
 
+  // A session nested inside another block's range stacks on top of it,
+  // inset down-and-right (mirrors the web's `scheduled-block-item.tsx`).
+  const isNested = Boolean(layout.nested);
+  const nestOffset = isNested ? 6 + (layout.nestIndex ?? 0) * 6 : 0;
+  const topOffset = Math.max(nestOffset, topShift);
+  // Drawn over another block: needs an opaque backing + shadow.
+  const cascadeLayer = Math.min(layout.column, 9);
+  const isStacked = isNested || cascadeLayer > 0;
+
   const wrapperStyle = useAnimatedStyle(() => {
     const effectiveStart =
       pinnedStartMin.value != null ? pinnedStartMin.value : startMin;
     return {
-      top: (effectiveStart / DAILY_HORIZON) * totalHeight,
-      zIndex: isDragging.value ? 30 : 10,
+      top: (effectiveStart / DAILY_HORIZON) * totalHeight + topOffset,
+      zIndex: isDragging.value ? 40 : isNested ? 30 : 10 + cascadeLayer,
     };
   });
 
@@ -644,36 +712,51 @@ function SessionBlockImpl({
     // teleport.
     flashing ? "ring-2 ring-amber-400" : "ring-1 ring-amber-500/40",
   );
-  // Diagonal hatch fill for DND blocks (mirrors `.hatch-dnd` in
-  // mockups/day-view.html). SVG `<Pattern>` id must be unique per block or a
-  // second DND block on screen re-uses the first's (empty) def — and it has to
-  // be a clean token, since `segmentId` can carry `::`/`:` from a recurring
-  // occurrence id, which breaks a `url(#…)` reference.
-  const dndHatchId = `dnd-hatch-${segment.segmentId.replace(/[^a-zA-Z0-9]/g, "")}`;
+  // DND diagonal hatch (`.hatch-dnd` in mockups/day-view.html). Explicit line
+  // segments: an SVG `<Pattern>` clipped its 1px stroke at the tile edge.
+  const dndHatchPath =
+    state === "dnd" ? hatchPath(screenWidth, height, HATCH_SPACING) : "";
   const dndHatchStroke = isDarkColorScheme
     ? "rgb(148,163,184)" // slate-400
     : "rgb(100,116,139)"; // slate-500
   const stateClasses =
-    state === "dnd"
-      ? `${borderChrome} border-l-slate-400 [border-left-style:dashed] bg-slate-500/[0.07] dark:bg-slate-400/10`
-      : state === "assignment"
-        ? `${borderChrome} border-l-teal-500 bg-teal-50/50 dark:bg-teal-950/20`
-        : state === "exam"
-          ? `${borderChrome} border-l-rose-500 bg-rose-50/50 dark:bg-rose-950/20`
-          : state === "lecture"
-            ? `${borderChrome} border-l-sky-500 bg-sky-50/50 dark:bg-sky-950/20`
-            : `${borderChrome} border-l-primary glass-task`;
+    // No bare `border` here: `cn` would let it override the base `border-l-4`
+    // and the thick red left edge collapsed to 1px.
+    overdue
+      ? `${borderChrome} border-l-red-500 bg-red-500/15 dark:bg-red-500/20`
+      : state === "dnd"
+        ? `${borderChrome} border-l-slate-400 [border-left-style:dashed] bg-slate-500/[0.07] dark:bg-slate-400/10`
+        : state === "assignment"
+          ? `${borderChrome} border-l-teal-500 bg-teal-50/50 dark:bg-teal-950/20`
+          : state === "exam"
+            ? `${borderChrome} border-l-rose-500 bg-rose-50/50 dark:bg-rose-950/20`
+            : state === "lecture"
+              ? `${borderChrome} border-l-sky-500 bg-sky-50/50 dark:bg-sky-950/20`
+              : `${borderChrome} border-l-primary glass-task`;
 
-  const isMultiColumn = layout.columns > 1;
+  const horizontal = {
+    left: leftOffset + nestOffset,
+    width: blockWidth - nestOffset,
+  };
 
   return (
     <Animated.View
-      className={cn("absolute", !isMultiColumn && "left-1.5 right-1.5")}
+      className="absolute"
       style={[
         wrapperStyle,
-        isMultiColumn
-          ? { left: leftOffset, width: blockWidth, height }
-          : { height },
+        { ...horizontal, height },
+        isStacked && {
+          borderRadius: 10,
+          backgroundColor: (isDarkColorScheme
+            ? NAV_THEME.dark
+            : NAV_THEME.light
+          ).background,
+          shadowColor: "#000",
+          shadowOpacity: isDarkColorScheme ? 0.5 : 0.18,
+          shadowRadius: 6,
+          shadowOffset: { width: 0, height: 3 },
+          elevation: 6,
+        },
       ]}
     >
       {isDraggingJS && (
@@ -713,28 +796,11 @@ function SessionBlockImpl({
           {state === "dnd" && (
             <View pointerEvents="none" className="absolute inset-0">
               <Svg width="100%" height="100%">
-                <Defs>
-                  <Pattern
-                    id={dndHatchId}
-                    patternUnits="userSpaceOnUse"
-                    width={7}
-                    height={7}
-                    patternTransform="rotate(45)"
-                  >
-                    <Path
-                      d="M0,0 V7"
-                      stroke={dndHatchStroke}
-                      strokeWidth={1}
-                      strokeOpacity={0.3}
-                    />
-                  </Pattern>
-                </Defs>
-                <Rect
-                  x={0}
-                  y={0}
-                  width="100%"
-                  height="100%"
-                  fill={`url(#${dndHatchId})`}
+                <Path
+                  d={dndHatchPath}
+                  stroke={dndHatchStroke}
+                  strokeWidth={1}
+                  strokeOpacity={isDarkColorScheme ? 0.26 : 0.22}
                 />
               </Svg>
             </View>
@@ -758,14 +824,29 @@ function SessionBlockImpl({
                   )}
                 />
               )}
+              {/* Overdue marker: a bare icon beside the type icon (no chip —
+                  the card is already red). */}
+              {overdue && (
+                <AlertCircle
+                  size={11}
+                  color={isDarkColorScheme ? "#fca5a5" : "#dc2626"}
+                  style={{ flexShrink: 0 }}
+                />
+              )}
+              {/* Explicit px line heights: `leading-none` (lineHeight = font
+                  size) clipped the tops of the glyphs on Android. */}
               <Text
-                className="min-w-0 flex-1 text-[11px] font-semibold leading-none"
+                className="min-w-0 flex-1 text-[11px] font-semibold leading-[14px]"
+                style={COMPACT_TEXT_STYLE}
                 numberOfLines={1}
                 ellipsizeMode="tail"
               >
                 {segment.title}
               </Text>
-              <Text className="shrink-0 text-[9px] leading-none text-muted-foreground">
+              <Text
+                className="shrink-0 text-[9px] leading-[12px] text-muted-foreground"
+                style={COMPACT_TEXT_STYLE}
+              >
                 {segment.continued
                   ? `ends ${fmt(segment.taskEnd, tz)}`
                   : fmt(segment.taskStart, tz)}
@@ -786,7 +867,7 @@ function SessionBlockImpl({
                   />
                 )}
                 <Text
-                  className="min-w-0 flex-1 text-sm font-semibold leading-none"
+                  className="min-w-0 flex-1 text-[12px] font-semibold leading-5"
                   numberOfLines={1}
                   ellipsizeMode="tail"
                 >
@@ -794,7 +875,7 @@ function SessionBlockImpl({
                 </Text>
               </View>
               <View className="flex-row flex-wrap items-center gap-1">
-                <Text className="text-[10px] text-muted-foreground leading-none">
+                <Text className="text-[10px] leading-[12px] text-muted-foreground">
                   {segment.continued
                     ? `cont. → ${fmt(segment.taskEnd, tz)}`
                     : segment.continues && !drawsThrough
@@ -804,7 +885,11 @@ function SessionBlockImpl({
                           fmt(segment.taskEnd, tz),
                         )}
                 </Text>
-                {dueChip && <DueChip {...dueChip} />}
+                {overdue ? (
+                  <OverdueBadge />
+                ) : (
+                  dueChip && <DueChip {...dueChip} />
+                )}
                 {!!segment.location && (
                   <LocationChip location={segment.location} />
                 )}

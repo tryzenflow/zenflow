@@ -139,9 +139,11 @@ export default function RootLayout() {
       setLoading(true);
       try {
         console.log("[_layout] Restoring cached session and cookie...");
+        // Restore the cookie before `setUser`: the SSE connect it triggers
+        // reads the cookie synchronously.
+        await restoreSessionCookie();
         const cached = await readCachedSessionUser();
         if (cached) setUser(cached);
-        await restoreSessionCookie();
       } catch (err) {
         console.warn("[_layout] Session cache read error:", err);
       } finally {
@@ -156,14 +158,24 @@ export default function RootLayout() {
         if (fresh) await cacheSessionUser(fresh);
         else await clearCachedSessionUser();
       } catch (err) {
-        console.log("[_layout] Background /auth/me finished (unauthenticated or network error):", err);
+        console.log(
+          "[_layout] Background /auth/me finished (unauthenticated or network error):",
+          err,
+        );
       }
     })();
   }, []);
 
   // Keep the splash screen up until BOTH fonts and the local session are resolved
   React.useEffect(() => {
-    console.log("[_layout] fontsLoaded:", fontsLoaded, "fontError:", fontError, "loading:", loading);
+    console.log(
+      "[_layout] fontsLoaded:",
+      fontsLoaded,
+      "fontError:",
+      fontError,
+      "loading:",
+      loading,
+    );
     if ((fontsLoaded || fontError) && !loading) {
       SplashScreen.hideAsync().catch((err) => {
         console.warn("[_layout] SplashScreen.hideAsync warning:", err);
@@ -213,11 +225,7 @@ export default function RootLayout() {
                 name="task/[id]/edit"
                 options={{ presentation: "modal" }}
               />
-              <Stack.Screen
-                name="connect-dlu-account"
-                options={{ presentation: "modal" }}
-              />
-              {/* The ingestion inbox — DLU LMS / portal notifications. */}
+              {/* The ingestion inbox — LMS / portal notifications. */}
               <Stack.Screen
                 name="notifications"
                 options={{ presentation: "modal" }}
@@ -226,7 +234,17 @@ export default function RootLayout() {
             <AuthGate />
             <PushRegistrar />
             <NotificationsSubscriber />
-            <StatusBar hidden={true} />
+            {/* Visible and themed, not `hidden`: on Android a hidden status
+                bar still reserves its strip, which showed as an empty band
+                above every screen's header. */}
+            <StatusBar
+              barStyle={isDarkColorScheme ? "light-content" : "dark-content"}
+              backgroundColor={
+                isDarkColorScheme
+                  ? DARK_THEME.colors.background
+                  : LIGHT_THEME.colors.background
+              }
+            />
           </BottomSheetModalProvider>
         </ThemeProvider>
       </ToastProvider>

@@ -6,8 +6,12 @@ import { getSessionDetails } from "@/api/tasks";
 import { useToast } from "@/components/ui/toast";
 import { useUserStore } from "@/hooks/use-user-store";
 import {
+  claimNotification,
   configureForegroundHandler,
   hrefFromPushData,
+  isLocalNotification,
+  notificationIdOf,
+  pushOwner,
   syncPushRegistration,
 } from "@/lib/push";
 import type { Href } from "expo-router";
@@ -78,6 +82,17 @@ export function usePushRegistration(): void {
     // Foreground push listener: shows in-app tap-to-act toast with deleted-session guard
     const subForeground = Notifications.addNotificationReceivedListener(
       (notification) => {
+        // The SSE handler already toasted what it posted itself, and a push
+        // the SSE stream already presented is a duplicate — one toast each.
+        if (
+          isLocalNotification(notification) ||
+          !claimNotification(
+            notificationIdOf(notification),
+            pushOwner(notification),
+          )
+        ) {
+          return;
+        }
         const data = notification.request.content.data as
           | Record<string, string>
           | undefined;

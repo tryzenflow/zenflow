@@ -36,6 +36,7 @@ import { useColorScheme } from "../../lib/useColorScheme";
 import { cn } from "../../lib/utils";
 import * as Slot from "../primitives/slot";
 import { Button } from "./button";
+import { Input } from "./input";
 
 // `GBottomSheetTextInput` wraps a `TextInput` from `react-native-gesture-handler`,
 // not the plain `react-native` one NativeWind auto-interops — without this, its
@@ -134,8 +135,10 @@ const BottomSheetContent = React.forwardRef<
       (props: BottomSheetBackdropProps) => {
         const {
           pressBehavior = "close",
-          opacity = isDarkColorScheme ? 0.3 : 0.7,
+          opacity = isDarkColorScheme ? 0.7 : 0.6,
           disappearsOnIndex = CLOSED_INDEX,
+          // Sheets open at index 0; gorhom's default (1) leaves the dim half-faded.
+          appearsOnIndex = 0,
           style,
           onPress,
           ...rest
@@ -147,6 +150,7 @@ const BottomSheetContent = React.forwardRef<
           <BottomSheetBackdrop
             opacity={opacity}
             disappearsOnIndex={disappearsOnIndex}
+            appearsOnIndex={appearsOnIndex}
             pressBehavior={pressBehavior}
             style={[{ backgroundColor: "rgba(0,0,0,0.8)" }, style]}
             onPress={() => {
@@ -169,7 +173,17 @@ const BottomSheetContent = React.forwardRef<
         enablePanDownToClose={enablePanDownToClose}
         backdropComponent={renderBackdrop}
         enableDynamicSizing={enableDynamicSizing}
-        backgroundStyle={[{ backgroundColor: colors.card }, backgroundStyle]}
+        backgroundStyle={[
+          {
+            backgroundColor: colors.card,
+            // Hairline edge so the sheet reads as a surface, not a
+            // continuation of the (similarly dark) screen behind it.
+            borderWidth: 1,
+            borderBottomWidth: 0,
+            borderColor: colors.border,
+          },
+          backgroundStyle,
+        ]}
         handleIndicatorStyle={{
           backgroundColor: colors.text,
         }}
@@ -228,6 +242,8 @@ const BottomSheetCloseTrigger = React.forwardRef<
 });
 
 const BOTTOM_SHEET_HEADER_HEIGHT = 60; // BottomSheetHeader height
+/** Room under the last row; the safe-area inset is 0 on gesture-nav Android. */
+const BOTTOM_SHEET_BOTTOM_GAP = 20;
 
 type BottomSheetViewProps = Omit<
   React.ComponentPropsWithoutRef<typeof GBottomSheetView>,
@@ -250,7 +266,9 @@ function BottomSheetView({
       style={[
         {
           paddingBottom:
-            insets.bottom + (hadHeader ? BOTTOM_SHEET_HEADER_HEIGHT : 0),
+            insets.bottom +
+            BOTTOM_SHEET_BOTTOM_GAP +
+            (hadHeader ? BOTTOM_SHEET_HEADER_HEIGHT : 0),
         },
         style,
       ]}
@@ -284,6 +302,16 @@ const BottomSheetTextInput = React.forwardRef<
   );
 });
 
+/**
+ * The app's `Input` on gorhom's `BottomSheetTextInput`. Use it for fields in
+ * a sheet so the sheet lifts above the keyboard.
+ */
+const BottomSheetInput = React.forwardRef<
+  React.ElementRef<typeof Input>,
+  Omit<React.ComponentPropsWithoutRef<typeof Input>, "as">
+>((props, ref) => <Input ref={ref} as={GBottomSheetTextInput} {...props} />);
+BottomSheetInput.displayName = "BottomSheetInput";
+
 type BottomSheetFlatListRef = React.ElementRef<typeof GBottomSheetFlatList>;
 type BottomSheetFlatListProps = React.ComponentPropsWithoutRef<
   typeof GBottomSheetFlatList
@@ -296,7 +324,9 @@ const BottomSheetFlatList = React.forwardRef<
   return (
     <GBottomSheetFlatList
       ref={ref}
-      contentContainerStyle={[{ paddingBottom: insets.bottom }]}
+      contentContainerStyle={[
+        { paddingBottom: insets.bottom + BOTTOM_SHEET_BOTTOM_GAP },
+      ]}
       className={cn("py-4", className)}
       keyboardShouldPersistTaps="handled"
       {...props}
@@ -396,6 +426,7 @@ export {
   BottomSheetFlatList,
   BottomSheetFooter,
   BottomSheetHeader,
+  BottomSheetInput,
   BottomSheetOpenTrigger,
   BottomSheetScrollView,
   BottomSheetTextInput,

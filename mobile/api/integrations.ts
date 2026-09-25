@@ -18,8 +18,11 @@ export async function listIntegrations(): Promise<IntegrationStatus[]> {
  */
 export async function connectIntegration(
   input: ConnectIntegrationInput,
+  config?: { signal?: AbortSignal },
 ): Promise<IntegrationStatus> {
-  const { data } = await api.post("/integrations", input);
+  const { data } = await api.post("/integrations", input, {
+    signal: config?.signal,
+  });
   return data.data;
 }
 
@@ -27,8 +30,11 @@ export async function connectIntegration(
 export async function updateIntegration(
   provider: IntegrationProvider,
   body: { username?: string; password?: string },
+  config?: { signal?: AbortSignal },
 ): Promise<IntegrationStatus> {
-  const { data } = await api.patch(`/integrations/${provider}`, body);
+  const { data } = await api.patch(`/integrations/${provider}`, body, {
+    signal: config?.signal,
+  });
   return data.data;
 }
 

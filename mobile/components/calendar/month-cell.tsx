@@ -19,6 +19,9 @@ import { memo, useEffect, useMemo, useRef } from "react";
 import { Pressable, View } from "react-native";
 import { sessionTypeIcon } from "./session-type-badge";
 
+/** A week row's *preferred* height. Rows shrink below it (equally) when the
+ * month doesn't fit between the header and the tab bar — small screens,
+ * 6-week months — so the last week is never hidden under the bar. */
 export const CELL_HEIGHT = 96;
 
 interface MonthCellProps {
@@ -127,9 +130,9 @@ export const MonthCell = memo(function MonthCell({
   return (
     <Pressable
       onPress={handlePress}
-      style={{ width: `${100 / 7}%`, height: CELL_HEIGHT }}
+      style={{ width: `${100 / 7}%` }}
       className={cn(
-        "border-b border-r border-border p-[5px] pb-[6px]",
+        "overflow-hidden border-b border-r border-border p-[5px] pb-[6px]",
         outside ? "bg-muted/40" : "bg-transparent",
         isToday &&
           "border-t-2 border-t-orange-500 bg-orange-50 dark:bg-orange-950/20",

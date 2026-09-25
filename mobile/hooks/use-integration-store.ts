@@ -1,5 +1,6 @@
 import type { IntegrationStatus, IntegrationProvider } from "@zenflow/shared";
 import { create } from "zustand";
+import { useUserStore } from "@/hooks/use-user-store";
 
 type State = {
   integrations: IntegrationStatus[];
@@ -24,3 +25,10 @@ export const useIntegrationStore = create<State & Action>((set) => ({
       ),
     })),
 }));
+
+// Per-user, like the notifications store: reset when the signed-in user changes.
+useUserStore.subscribe((state, prev) => {
+  if (state.user?.id !== prev.user?.id) {
+    useIntegrationStore.setState({ integrations: [], loading: true });
+  }
+});

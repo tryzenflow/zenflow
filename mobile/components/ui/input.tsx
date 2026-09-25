@@ -34,12 +34,20 @@ type InputProps = {
   accessibilityLabel?: string;
   "aria-invalid"?: boolean;
   rightElement?: React.ReactNode;
+  /** Text-input component to render — defaults to RN `TextInput`. Sheets pass
+   * `@gorhom/bottom-sheet`'s `BottomSheetTextInput` (via `BottomSheetInput`)
+   * so the sheet lifts above the keyboard on focus. */
+  as?: React.ComponentType<any>;
 };
 
 const Input = React.forwardRef<React.ElementRef<typeof TextInput>, InputProps>(
-  ({ className, placeholderClassName, rightElement, ...props }, ref) => {
+  (
+    { className, placeholderClassName, rightElement, as, ...props },
+    ref,
+  ) => {
+    const Component: React.ComponentType<any> = as ?? TextInput;
     const input = (
-      <TextInput
+      <Component
         ref={ref}
         className={cn(
           "web:flex h-10 native:h-12 web:w-full rounded-md border border-input bg-background px-3 web:py-2 text-base lg:text-sm native:text-lg native:leading-[1.25] text-foreground placeholder:text-muted-foreground web:ring-offset-background file:border-0 file:bg-transparent file:font-medium web:focus-visible:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring web:focus-visible:ring-offset-2",

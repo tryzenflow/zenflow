@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/toast";
 import { useNow } from "@/hooks/use-now";
 import { useUserStore } from "@/hooks/use-user-store";
 import { isPastDeadlineDrop } from "@/lib/overdue";
+import { showErrorToast } from "@/lib/task-toasts";
 import { type PeekBlock, peekBlocksFromSegments } from "@/lib/peek";
 import {
   fetchDaySessions,
@@ -14,6 +15,7 @@ import {
   isDayCacheFresh,
   sameSessions,
   setCachedDaySessions,
+  subscribeToSessionMutations,
 } from "@/lib/session-cache";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import {
@@ -29,8 +31,13 @@ import {
   tasksToBlocks,
   zonedDate,
   zonedNow,
+  type BlockLayout,
 } from "@zenflow/core";
-import type { Session, UpdateSessionResponse } from "@zenflow/shared";
+import type {
+  DaySegment,
+  Session,
+  UpdateSessionResponse,
+} from "@zenflow/shared";
 import { format } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -38,7 +45,6 @@ import {
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
-  RefreshControl,
   ScrollView,
   View,
   useWindowDimensions,
@@ -58,6 +64,60 @@ import type {
   UpdateRecurringScope,
 } from "./update-recurring-sheet";
 
+/** Inset (px) of every block from the day column's edges. */
+const BLOCK_GUTTER = 2;
+/** Each overlapping (cascaded) block shifts right by this share of the day
+ * column's width, capped at {@link CASCADE_MAX_STEP} px. */
+const CASCADE_STEP_RATIO = 0.02;
+const CASCADE_MAX_STEP = 44;
+/** Room (px) a stacked block leaves above it so the title of the block
+ * beneath stays visible, e.g. when both start at the same time. */
+const TITLE_PEEK = 22;
+
+/**
+ * Downward shift (px) per segment: a block drawn over an overlapping one whose
+ * top is within {@link TITLE_PEEK} of its own moves below that block's title.
+ */
+function stackShifts(
+  segments: readonly DaySegment[],
+  layout: Map<string, BlockLayout>,
+  pxPerMs: number,
+): Map<string, number> {
+  const items = segments.map((s) => {
+    const l = layout.get(s.segmentId);
+    const startMs = new Date(s.start).getTime();
+    return {
+      id: s.segmentId,
+      startMs,
+      endMs: new Date(s.end).getTime(),
+      top: startMs * pxPerMs,
+      // Paint order: cascade columns left to right, nested blocks on top.
+      z: (l?.nested ? 1000 : 0) + (l?.column ?? 0) * 10 + (l?.nestIndex ?? 0),
+      shift: 0,
+    };
+  });
+  items.sort((a, b) => a.z - b.z || a.startMs - b.startMs);
+  const shifts = new Map<string, number>();
+  items.forEach((item, i) => {
+    const beneath = items
+      .slice(0, i)
+      .filter(
+        (p) =>
+          p.z < item.z && p.startMs < item.endMs && item.startMs < p.endMs,
+      )
+      .sort((a, b) => a.top + a.shift - (b.top + b.shift));
+    for (const p of beneath) {
+      const pTop = p.top + p.shift;
+      const top = item.top + item.shift;
+      if (top >= pTop && top < pTop + TITLE_PEEK) {
+        item.shift = pTop + TITLE_PEEK - item.top;
+      }
+    }
+    shifts.set(item.id, item.shift);
+  });
+  return shifts;
+}
+
 const GUTTER_WIDTH = 64;
 const HOUR_HEIGHT_DEFAULT = 64;
 const HOUR_HEIGHT_MIN = 48;
@@ -70,6 +130,9 @@ const LOADING_PLACEHOLDERS = [
   { startMin: 12 * 60 + 30, duration: 90 },
   { startMin: 15 * 60, duration: 45 },
 ];
+
+/** How long a teleport target waits for its day to load and come into view. */
+const PENDING_FLASH_TTL_MS = 5000;
 
 function scrollToNowOffset(totalHeight: number, tz: string): number {
   // Wall clock in the user's tz — matches `NowIndicator` (which uses
@@ -179,7 +242,10 @@ export function DayTimeline({
   flashSessionId = null,
 }: DayTimelineProps) {
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
-  const { confirm } = useToast();
+  const { confirm, toast } = useToast();
+  // Bumped whenever a drop settles, so a block whose start didn't change
+  // (save failed, sheet cancelled) releases its drop pin and snaps back.
+  const [settleKey, setSettleKey] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   const { width: screenWidth } = useWindowDimensions();
   const now = useNow();
@@ -212,7 +278,15 @@ export function DayTimeline({
     () => getCachedDaySessions(dayKey) == null,
   );
   const [error, setError] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  // Bumped by `subscribeToSessionMutations` so a mutation that lands while
+  // this day is already mounted and foregrounded (e.g. a background sync's
+  // create/update/remove reported over the notifications SSE stream)
+  // revalidates immediately instead of waiting for the next focus-driven
+  // `refreshKey` bump.
+  const [mutationTick, setMutationTick] = useState(0);
+  useEffect(() => {
+    return subscribeToSessionMutations(() => setMutationTick((t) => t + 1));
+  }, []);
   const [dragSnap, setDragSnap] = useState<{ startMin: number } | null>(null);
   // Only a create / reschedule / teleport (the screen-level `flashSessionId`)
   // plays the "just landed" flash — a within-day drag drop no longer flashes
@@ -239,7 +313,7 @@ export function DayTimeline({
     // cached for this day. A warm day (screen focus, implicit day-reschedule
     // after a create/edit, paging back to a visited day) updates `tasks` in
     // place — the timeline stays mounted so derived rendering doesn't flicker
-    // off. Pull-to-refresh has its own `RefreshControl` signal.
+    // off.
     const cached = getCachedDaySessions(dayKey);
     if (cached == null) setLoading(true);
 
@@ -287,7 +361,7 @@ export function DayTimeline({
     return () => {
       cancelled = true;
     };
-  }, [dayKey, refreshKey]);
+  }, [dayKey, refreshKey, mutationTick]);
 
   useEffect(() => {
     onStateChange?.(loading ? "loading" : error ? "error" : "ready");
@@ -319,21 +393,16 @@ export function DayTimeline({
     }
   }, [date]);
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      await refetch();
-    } finally {
-      setRefreshing(false);
-    }
-  }, [refetch]);
-
   const segments = useMemo(() => {
     const blocks = tasksToBlocks(tasks);
     return eventsForDay(blocks, date, tz);
   }, [tasks, date, tz]);
 
   const layout = useMemo(() => getOverlapLayout(segments), [segments]);
+  const topShifts = useMemo(
+    () => stackShifts(segments, layout, totalHeight / (DAILY_HORIZON * 60_000)),
+    [segments, layout, totalHeight],
+  );
 
   // A task clamped at the midnight line (its flat bottom edge + "→ next day"
   // label, task-block.tsx) gets the dashed boundary marker under it — the
@@ -363,6 +432,12 @@ export function DayTimeline({
       if (t.deadline) map.set(t.id, t.deadline);
     }
     return map;
+  }, [tasks]);
+
+  const lateSessionIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of tasks) if (t.late) set.add(t.id);
+    return set;
   }, [tasks]);
 
   const scrollToNow = useCallback(() => {
@@ -434,6 +509,60 @@ export function DayTimeline({
   useEffect(() => {
     positionScroll();
   }, [positionScroll]);
+
+  // Teleport to a session (`flashSessionId` — notification tap, create/edit,
+  // cross-day move): once this day has it loaded and is the visible page,
+  // smooth-scroll it to the middle of the viewport, then play the flash so it
+  // lands on screen. The target outlives the screen's short-lived
+  // `flashSessionId` so a cold day that loads late still gets it; it expires
+  // so a page that never had the session doesn't jump later.
+  const [flashTarget, setFlashTarget] = useState<string | null>(null);
+  const pendingFlashRef = useRef<{ id: string; at: number } | null>(null);
+  const flashTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => {
+    if (flashSessionId) {
+      pendingFlashRef.current = { id: flashSessionId, at: Date.now() };
+    }
+  }, [flashSessionId]);
+  useEffect(() => {
+    const pending = pendingFlashRef.current;
+    if (!pending || loading || error || !isActive) return;
+    if (Date.now() - pending.at > PENDING_FLASH_TTL_MS) {
+      pendingFlashRef.current = null;
+      return;
+    }
+    const segment = segments.find((s) => s.taskId === pending.id);
+    if (!segment) return;
+    pendingFlashRef.current = null;
+
+    const start = toZonedTime(new Date(segment.start), tz);
+    const end = toZonedTime(new Date(segment.end), tz);
+    const startMin = start.getHours() * 60 + start.getMinutes();
+    const durationMin = Math.max(
+      15,
+      (end.getTime() - start.getTime()) / 60_000,
+    );
+    const top = (startMin / DAILY_HORIZON) * totalHeight;
+    const height = (durationMin / DAILY_HORIZON) * totalHeight;
+    const viewport = viewportHRef.current;
+    const y =
+      height >= viewport - 48 ? top - 24 : top - (viewport - height) / 2;
+    scrollRef.current?.scrollTo({ y: Math.max(0, y), animated: true });
+
+    // Timers live in a ref, not this effect's cleanup: the teleport's own
+    // revalidation re-runs this effect within ms and must not cancel them.
+    for (const t of flashTimersRef.current) clearTimeout(t);
+    flashTimersRef.current = [
+      setTimeout(() => setFlashTarget(pending.id), 350),
+      setTimeout(() => setFlashTarget(null), 1300),
+    ];
+  }, [flashSessionId, segments, loading, error, isActive, totalHeight, tz]);
+  useEffect(
+    () => () => {
+      for (const t of flashTimersRef.current) clearTimeout(t);
+    },
+    [],
+  );
 
   // Off-screen pages follow the focused page's scroll so paging in lands on
   // the same hours. The focused page is the writer and ignores its own echo.
@@ -583,10 +712,11 @@ export function DayTimeline({
           setSessions((prev) =>
             prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)),
           );
-        } catch {
-          // Swallow the error — the finally below reconciles from the server.
+        } catch (error) {
+          showErrorToast(toast, error, "Couldn't move this session");
         } finally {
           await refetch();
+          setSettleKey((k) => k + 1);
         }
       };
 
@@ -598,7 +728,9 @@ export function DayTimeline({
       const commitWithScope = () => {
         const session = tasks.find((t) => t.id === taskId);
         const seriesKind = session ? getSeriesKind(session) : "none";
-        if (session && seriesKind !== "none" && onRequestScopedUpdate) {
+        // A timetable-grouped lecture moves just that meeting — no scope prompt.
+        const needsScope = seriesKind === "recurring" || seriesKind === "task";
+        if (session && needsScope && onRequestScopedUpdate) {
           onRequestScopedUpdate(
             session,
             {
@@ -607,6 +739,7 @@ export function DayTimeline({
             },
             (choice) => {
               if (!choice) {
+                setSettleKey((k) => k + 1);
                 void refetch();
                 return;
               }
@@ -631,6 +764,7 @@ export function DayTimeline({
             commitWithScope();
           },
           onCancel: () => {
+            setSettleKey((k) => k + 1);
             void refetch();
           },
         });
@@ -639,7 +773,15 @@ export function DayTimeline({
 
       commitWithScope();
     },
-    [confirm, deadlineBySession, refetch, tasks, onRequestScopedUpdate, onRequestSlotPick],
+    [
+      confirm,
+      toast,
+      deadlineBySession,
+      refetch,
+      tasks,
+      onRequestScopedUpdate,
+      onRequestSlotPick,
+    ],
   );
 
   const handleDragStateChange = useCallback(
@@ -791,9 +933,9 @@ export function DayTimeline({
         onLayout={handleTimelineLayout}
         onScroll={handleScroll}
         scrollEventThrottle={16}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
+        // No pull-to-refresh: on Android its native wrapper pushed the grid
+        // ~6px below the Week header, and the screen already refetches on
+        // every focus.
         contentContainerClassName={
           error ? "flex-1 items-center justify-center px-8" : undefined
         }
@@ -894,8 +1036,15 @@ export function DayTimeline({
                     columns: 1,
                     conflict: false,
                   };
-                  const blockWidthPx = contentWidth / blockLayout.columns;
-                  const leftOffsetPx = blockLayout.column * blockWidthPx;
+                  // Overlaps cascade: later columns draw on top, offset left.
+                  const cascadeStep = Math.min(
+                    CASCADE_MAX_STEP,
+                    contentWidth * CASCADE_STEP_RATIO,
+                  );
+                  const leftOffsetPx =
+                    BLOCK_GUTTER + blockLayout.column * cascadeStep;
+                  const blockWidthPx =
+                    contentWidth - BLOCK_GUTTER - leftOffsetPx;
 
                   return (
                     <SessionBlock
@@ -905,16 +1054,17 @@ export function DayTimeline({
                       tz={tz}
                       totalHeight={totalHeight}
                       leftOffset={leftOffsetPx}
+                      topShift={topShifts.get(segment.segmentId) ?? 0}
                       blockWidth={blockWidthPx}
                       deadline={deadlineBySession.get(segment.taskId) ?? null}
+                      late={lateSessionIds.has(segment.taskId)}
                       onReschedule={handleReschedule}
+                      settleKey={settleKey}
                       onDragStateChange={handleDragStateChange}
                       onPress={onSessionPress}
                       onRequestReschedule={handleRequestReschedule}
                       onLongPressMenu={
-                        onRequestBlockMenu
-                          ? handleRequestBlockMenu
-                          : undefined
+                        onRequestBlockMenu ? handleRequestBlockMenu : undefined
                       }
                       autoScrollDeltaSV={
                         !segment.continued ? autoScrollDeltaSV : undefined
@@ -924,7 +1074,7 @@ export function DayTimeline({
                       }
                       onDragVerticalEdge={handleDragVerticalEdge}
                       bottomInset={tabBarOverlay}
-                      flash={segment.taskId === flashSessionId}
+                      flash={segment.taskId === flashTarget}
                     />
                   );
                 })}

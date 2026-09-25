@@ -272,7 +272,8 @@ export function TagAutocomplete({
           onDismiss={() => setQuery("")}
           enableDynamicSizing={false}
           snapPoints={["70%"]}
-          keyboardBehavior="interactive"
+          // Default `fillParent`: `interactive` leaves the sheet under the
+          // keyboard on Android `adjustResize`.
         >
           <BottomSheetHeader>
             <Text className="text-lg font-bold text-foreground">Add tags</Text>

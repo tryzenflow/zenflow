@@ -4,6 +4,7 @@ import {
   BottomSheetContent,
   BottomSheetOpenTrigger,
   BottomSheetScrollView,
+  BottomSheetView,
   useBottomSheet,
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { minutesToLabel } from "@/utils/preferences";
 import { useCallback, useRef } from "react";
 import { Pressable, type ScrollView, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /** The 12 selectable hours on a 12-hour clock (1 … 12). */
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 1);
@@ -23,9 +25,18 @@ type Meridiem = (typeof MERIDIEMS)[number];
 
 /** Approximate row height (px) used to auto-scroll the active entry into
  * view — doesn't need to be pixel-perfect, just close enough that the
- * active row lands inside the visible ~192px column. */
+ * active row lands inside the visible column. */
 const ROW_HEIGHT = 44;
-const COLUMN_HEIGHT = 208;
+const COLUMN_HEIGHT = ROW_HEIGHT * 5.5;
+
+/**
+ * Fixed sheet height: handle (24) + title (26) + gap (16) + columns + gap (16)
+ * + Done (48) + bottom gap (20), plus slack and the safe-area inset.
+ */
+function useTimeSheetSnapPoints(): number[] {
+  const insets = useSafeAreaInsets();
+  return [24 + 26 + 16 + COLUMN_HEIGHT + 16 + 48 + 20 + 12 + insets.bottom];
+}
 
 /** Split a minutes-of-day value into 12-hour clock parts. */
 function toParts(value: number): {
@@ -83,8 +94,8 @@ function Column<T extends number | string>({
     // reads `useBottomSheetInternal()` so the sheet yields to it correctly.
     <BottomSheetScrollView
       ref={scrollRef}
-      style={{ maxHeight: COLUMN_HEIGHT }}
-      className="flex-1 h-full"
+      style={{ height: COLUMN_HEIGHT }}
+      className="flex-1"
       contentContainerClassName="gap-1.5 pb-1"
       showsVerticalScrollIndicator={false}
     >
@@ -168,8 +179,10 @@ function TimePickerBody({
     [onChange],
   );
 
+  // `BottomSheetView` adds the safe-area bottom padding that the sheet height
+  // in `useTimeSheetSnapPoints` accounts for.
   return (
-    <>
+    <BottomSheetView hadHeader={false} className="px-0">
       <View className="px-5">
         <Text className="text-[19px] font-bold tracking-tight">{title}</Text>
         {subtitle && (
@@ -222,7 +235,7 @@ function TimePickerBody({
           <Text className="font-semibold text-primary-foreground">Done</Text>
         </Button>
       </View>
-    </>
+    </BottomSheetView>
   );
 }
 
@@ -254,6 +267,7 @@ export function TimePickerRow({
   const bottomSheet = useBottomSheet();
   const { hourScrollRef, minuteScrollRef, onSheetChange } =
     useTimePickerScroll(value);
+  const snapPoints = useTimeSheetSnapPoints();
 
   return (
     <BottomSheet>
@@ -274,7 +288,10 @@ export function TimePickerRow({
       <BottomSheetContent
         ref={bottomSheet.ref}
         enableDynamicSizing={false}
-        snapPoints={["50%"]}
+        snapPoints={snapPoints}
+        // Vertical drags inside the sheet scroll the hour/minute columns
+        // instead of dragging the sheet; the handle still pans it closed.
+        enableContentPanningGesture={false}
         onChange={onSheetChange}
       >
         <TimePickerBody
@@ -315,6 +332,7 @@ export function TimePickerInline({
   const bottomSheet = useBottomSheet();
   const { hourScrollRef, minuteScrollRef, onSheetChange } =
     useTimePickerScroll(value);
+  const snapPoints = useTimeSheetSnapPoints();
 
   return (
     <BottomSheet>
@@ -334,7 +352,10 @@ export function TimePickerInline({
       <BottomSheetContent
         ref={bottomSheet.ref}
         enableDynamicSizing={false}
-        snapPoints={["50%"]}
+        snapPoints={snapPoints}
+        // Vertical drags inside the sheet scroll the hour/minute columns
+        // instead of dragging the sheet; the handle still pans it closed.
+        enableContentPanningGesture={false}
         onChange={onSheetChange}
       >
         <TimePickerBody

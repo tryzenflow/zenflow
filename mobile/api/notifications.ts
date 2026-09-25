@@ -1,7 +1,9 @@
 import type {
   NotificationDto,
   NotificationsListResponse,
+  RescheduleConflictsResponse,
 } from "@zenflow/shared";
+import { notifySessionsMutated } from "@/lib/session-cache";
 import { api } from "./base";
 
 /**
@@ -43,10 +45,18 @@ export interface NotificationStreamOptions {
   onOpen?: () => void;
 }
 
+/** First retry delay after the stream drops; doubles up to the cap. */
+const STREAM_RETRY_MIN_MS = 2_000;
+const STREAM_RETRY_MAX_MS = 30_000;
+
 /**
  * Connect to the persistent SSE notification stream (`GET /notifications/stream`).
  * Wraps `react-native-sse` and passes the active session cookie on native platforms.
  * Returns an unsubscribe callback `() => void` that closes the connection.
+ *
+ * Reconnects with exponential backoff (`react-native-sse` never retries after
+ * a transport error). Each attempt re-reads the cookie; `onOpen` fires on every
+ * (re)connect so the caller can catch up.
  */
 export function subscribeNotificationsStream(
   options: NotificationStreamOptions,
@@ -56,19 +66,11 @@ export function subscribeNotificationsStream(
   const { getBaseURL, getSessionCookie } = require("@/lib/api-client");
   const { Platform } = require("react-native");
 
-  const baseURL = getBaseURL();
-  const url = `${baseURL}/notifications/stream`;
-  const cookie = getSessionCookie();
-
-  const headers: Record<string, string> = {};
-  if (cookie && Platform.OS !== "web") {
-    headers.Cookie = cookie;
-  }
-
-  const es = new EventSource(url, {
-    headers,
-    withCredentials: true,
-  });
+  // biome-ignore lint/suspicious/noExplicitAny: react-native-sse ships no types
+  let es: any = null;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let retryDelay = STREAM_RETRY_MIN_MS;
+  let stopped = false;
 
   const onMessage = (event: { data?: string | null }) => {
     try {
@@ -83,26 +85,69 @@ export function subscribeNotificationsStream(
     }
   };
 
-  const onError = (event: unknown) => {
-    options.onError?.(event);
-  };
-
-  const onOpen = () => {
-    options.onOpen?.();
-  };
-
-  es.addEventListener("message", onMessage);
-  es.addEventListener("error", onError);
-  es.addEventListener("open", onOpen);
-
-  return () => {
+  const teardown = () => {
+    if (!es) return;
     try {
-      es.removeEventListener("message", onMessage);
-      es.removeEventListener("error", onError);
-      es.removeEventListener("open", onOpen);
+      es.removeAllEventListeners();
       es.close();
     } catch (err) {
       console.warn("[notifications-sse] Error closing EventSource:", err);
     }
+    es = null;
   };
+
+  const scheduleReconnect = () => {
+    if (stopped || retryTimer) return;
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      connect();
+    }, retryDelay);
+    retryDelay = Math.min(retryDelay * 2, STREAM_RETRY_MAX_MS);
+  };
+
+  function connect() {
+    if (stopped) return;
+    teardown();
+
+    const headers: Record<string, string> = {};
+    const cookie = getSessionCookie();
+    if (cookie && Platform.OS !== "web") {
+      headers.Cookie = cookie;
+    }
+
+    es = new EventSource(`${getBaseURL()}/notifications/stream`, {
+      headers,
+      withCredentials: true,
+    });
+
+    es.addEventListener("open", () => {
+      retryDelay = STREAM_RETRY_MIN_MS;
+      options.onOpen?.();
+    });
+    es.addEventListener("message", onMessage);
+    // Close (also cancels the library's own re-poll) and retry with backoff.
+    es.addEventListener("error", (event: unknown) => {
+      options.onError?.(event);
+      teardown();
+      scheduleReconnect();
+    });
+  }
+
+  connect();
+
+  return () => {
+    stopped = true;
+    if (retryTimer) clearTimeout(retryTimer);
+    retryTimer = null;
+    teardown();
+  };
+}
+
+/** Re-place every session listed in a conflict notification's `conflictSessionIds`. */
+export async function rescheduleConflicts(
+  id: string,
+): Promise<RescheduleConflictsResponse> {
+  const { data } = await api.post(`/notifications/${id}/reschedule-conflicts`);
+  notifySessionsMutated();
+  return data.data;
 }
