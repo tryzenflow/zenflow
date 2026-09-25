@@ -1,0 +1,33 @@
+# syntax=docker/dockerfile:1
+# API image for the load test. Build context = the VARIANT'S git worktree root (not this checkout):
+#   docker build -f loadtest/Dockerfile.api -t zf-lt-api:<variant> <worktree>
+# Same recipe as backend/Dockerfile (pnpm deploy bundle, prod deps only) but the CMD runs
+# `prisma migrate deploy` and then node directly (no pnpm wrapper process) so container CPU/mem
+# stats are the API alone.
+FROM node:20-alpine AS base
+RUN apk add --no-cache openssl && corepack enable && corepack prepare pnpm@10.32.1 --activate
+ENV PNPM_HOME=/pnpm
+ENV PATH="$PNPM_HOME:$PATH"
+WORKDIR /app
+
+FROM base AS builder
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
+COPY packages/shared/package.json ./packages/shared/
+COPY backend/package.json ./backend/
+RUN pnpm install --frozen-lockfile --filter backend...
+COPY packages/shared ./packages/shared
+COPY backend ./backend
+RUN pnpm --filter @zenflow/shared build \
+ && pnpm --filter backend exec prisma generate \
+ && pnpm --filter backend build
+RUN pnpm deploy --filter=backend --prod --legacy /app/deploy
+
+FROM base AS runner
+ENV NODE_ENV=production PORT=5000
+COPY --from=builder /app/deploy/node_modules ./node_modules
+COPY --from=builder /app/deploy/package.json ./package.json
+COPY --from=builder /app/backend/dist ./dist
+COPY --from=builder /app/backend/prisma ./prisma
+COPY --from=builder /app/backend/generated ./generated
+EXPOSE 5000
+CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && exec node dist/main"]

@@ -1,0 +1,83 @@
+{
+  "function": "slot",
+  "source": "hand-checked",
+  "cases": [
+    {
+      "name": "ceilToSlot",
+      "fn": "ceilToSlot",
+      "args": [
+        1
+      ],
+      "expected": 900000
+    },
+    {
+      "name": "floorToSlot",
+      "fn": "floorToSlot",
+      "args": [
+        900001
+      ],
+      "expected": 900000
+    },
+    {
+      "name": "isoWeekday monday",
+      "fn": "isoWeekday",
+      "args": [
+        "2026-09-21"
+      ],
+      "expected": 1
+    },
+    {
+      "name": "isoWeekday sunday",
+      "fn": "isoWeekday",
+      "args": [
+        "2026-09-27"
+      ],
+      "expected": 7
+    },
+    {
+      "name": "dayDiffStr",
+      "fn": "dayDiffStr",
+      "args": [
+        "2026-01-01",
+        "2026-03-01"
+      ],
+      "expected": 59
+    },
+    {
+      "name": "addDaysStr",
+      "fn": "addDaysStr",
+      "args": [
+        "2026-02-28",
+        1
+      ],
+      "expected": "2026-03-01"
+    },
+    {
+      "name": "localDateStr tz",
+      "fn": "localDateStr",
+      "args": [
+        1767643200000,
+        "Asia/Ho_Chi_Minh"
+      ],
+      "expected": "2026-01-06"
+    },
+    {
+      "name": "deadlineDayStr midnight",
+      "fn": "deadlineDayStr",
+      "args": [
+        1767657600000,
+        "UTC"
+      ],
+      "expected": "2026-01-05"
+    },
+    {
+      "name": "utcToMinutes",
+      "fn": "utcToMinutes",
+      "args": [
+        1767645000000,
+        "Asia/Ho_Chi_Minh"
+      ],
+      "expected": 210
+    }
+  ]
+}

@@ -1,0 +1,94 @@
+{
+  "function": "best-free-slot",
+  "source": "hand-checked",
+  "cases": [
+    {
+      "name": "empty day picks earliest tied peak",
+      "fn": "bestFreeSlot",
+      "args": [
+        60,
+        [],
+        1767571200000,
+        1767657600000,
+        "DEFAULT",
+        "UTC"
+      ],
+      "expected": 1767600000000
+    },
+    {
+      "name": "occupied 08-10 pushes to 10:00",
+      "fn": "bestFreeSlot",
+      "args": [
+        60,
+        [
+          {
+            "start": 1767600000000,
+            "end": 1767607200000
+          }
+        ],
+        1767571200000,
+        1767657600000,
+        "DEFAULT",
+        "UTC"
+      ],
+      "expected": 1767607200000
+    },
+    {
+      "name": "stability pulls toward prev start",
+      "fn": "bestFreeSlot",
+      "args": [
+        60,
+        [],
+        1767571200000,
+        1767657600000,
+        "DEFAULT",
+        "UTC",
+        null,
+        1767607200000
+      ],
+      "expected": 1767607200000
+    },
+    {
+      "name": "tz shifts window (ICT)",
+      "fn": "bestFreeSlot",
+      "args": [
+        60,
+        [],
+        1767546000000,
+        1767632400000,
+        "DEFAULT",
+        "Asia/Ho_Chi_Minh"
+      ],
+      "expected": 1767574800000
+    },
+    {
+      "name": "window too small -> null",
+      "fn": "bestFreeSlot",
+      "args": [
+        60,
+        [],
+        1767571200000,
+        1767573000000,
+        "DEFAULT",
+        "UTC"
+      ],
+      "expected": null
+    },
+    {
+      "name": "cross-midnight fit window",
+      "fn": "bestFreeSlot",
+      "args": [
+        120,
+        [],
+        1767654000000,
+        1767657600000,
+        {
+          "const": "zeros"
+        },
+        "UTC",
+        1767661200000
+      ],
+      "expected": 1767654000000
+    }
+  ]
+}
