@@ -57,7 +57,7 @@ export function DayGrid({ events, date }: { events: Event[]; date: Date }) {
 
         {isZonedToday(date, tz) && (
           <div
-            className="pointer-events-none absolute inset-x-0 z-20 transition-[top] duration-1000 ease-linear"
+            className="pointer-events-none absolute inset-x-0 z-50 transition-[top] duration-1000 ease-linear"
             style={{ top: nowTop }}
           >
             <div className="relative flex items-center">
