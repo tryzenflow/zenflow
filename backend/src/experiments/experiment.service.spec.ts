@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
+import { PAIRWISE_SAMPLE_RATE } from "../scheduler/constants";
 import { ExperimentService } from "./experiment.service";
 
 const HEURISTIC_RESULT = {
@@ -31,10 +32,10 @@ describe("ExperimentService.assignPolicy", () => {
     expect(a.randomizationSeed).not.toBe(b.randomizationSeed);
   });
 
-  it("rolls pairwiseShown independently against PAIRWISE_SAMPLE_RATE (0.2)", () => {
+  it("rolls pairwiseShown independently against PAIRWISE_SAMPLE_RATE", () => {
     const { service } = make();
-    const shown = service.assignPolicy(() => 0.1);
-    const notShown = service.assignPolicy(() => 0.5);
+    const shown = service.assignPolicy(() => PAIRWISE_SAMPLE_RATE - 1e-9);
+    const notShown = service.assignPolicy(() => PAIRWISE_SAMPLE_RATE);
     expect(shown.pairwiseShown).toBe(true);
     expect(notShown.pairwiseShown).toBe(false);
   });
