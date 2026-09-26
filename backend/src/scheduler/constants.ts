@@ -103,7 +103,7 @@ export const BANDIT_EXPERIMENT_ID = "linucb-heuristic-v1";
  * `primaryPolicy` pick — same as before this existed. Independent draw from
  * `primaryPolicy`'s own 50/50 roll.
  */
-export const PAIRWISE_SAMPLE_RATE = 0.2;
+export const PAIRWISE_SAMPLE_RATE = 1;
 
 /**
  * Most sittings of one pairwise-sampled `TASK` series that surface an
