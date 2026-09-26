@@ -11,6 +11,9 @@ bandit / series placers and displacement service (``5763a29``):
   :class:`~src.policies.linucb.LinucbPolicy` compute a pick each;
   :class:`~src.policies.selector.PolicySelector` is the A/B split deciding
   which one is applied (see ``place_member`` below);
+* a pairwise-sampled series (all members ``computeBoth`` with one shared
+  ``primaryPolicy``, #58) is placed twice -- an all-heuristic and an all-LinUCB
+  plan, each with its own sibling ledger (see ``_dual_plan_policy``);
 * no free slot for a single member -> ``NEEDS_INFEASIBLE_CONTEXT``, then (with
   ``infeasible``) EDF displacement and the user's fallback.
 """
@@ -61,6 +64,7 @@ from src.schemas_place import (
     PlacedMember,
     PlacementDay,
     PlacementMember,
+    PlacementPolicy,
     PlaceRequest,
     PlaceResponse,
     Timings,
@@ -510,9 +514,74 @@ class _Placer:
             out.append(r)
         return out
 
+    def _dual_plan_policy(self, batch: _ScoreBatch) -> PlacementPolicy | None:
+        """The series' primary policy if this request asks for two full plans.
+
+        A materialized series (``len(members) > 1``) whose members *all* set
+        ``computeBoth`` and share one ``primaryPolicy`` is a pairwise-sampled
+        series (issue #58: Nest rolls the policy once per series and the
+        pairwise sample once per series). Then :meth:`run` computes a complete
+        heuristic-only plan and a complete LinUCB plan, each against its own
+        :class:`_Ledger`. Everything else -- a lone task, ``PREFLIGHT``, a
+        series where only some members set ``computeBoth``, or a series with a
+        *mixed* ``primaryPolicy`` (the pre-#58 per-member roll) -- keeps the
+        single shared-ledger pass, byte-identical to before. With LinUCB
+        unavailable (no bandit state / singular ``A``) the LinUCB plan would
+        just be the heuristic plan again, so the single pass is used too (its
+        output is identical in that case).
+        """
+        req = self.req
+        members = req.members
+        if req.mode != "PLACE" or len(members) < 2:
+            return None
+        if not all(m.compute_both for m in members):
+            return None
+        policies = {m.primary_policy for m in members}
+        if len(policies) != 1:
+            return None
+        if not self.linucb_policy.enabled or not batch.ok:
+            return None
+        return policies.pop()
+
+    def _run_plan(
+        self,
+        windows_days: list[tuple[str, str]],
+        batch: _ScoreBatch,
+        policy: PlacementPolicy | None,
+    ) -> list[PlacedMember]:
+        """Place every member in order against one fresh :class:`_Ledger`.
+
+        ``policy=None`` honours each member's own ``primaryPolicy`` /
+        ``computeBoth`` (the single-pass behaviour). ``"HEURISTIC"`` /
+        ``"LINUCB"`` force that policy for every member with ``computeBoth``
+        off -- a LinUCB member still falls back to the heuristic when LinUCB
+        finds no slot (:meth:`PolicySelector.resolve`), and a member neither
+        policy can seat gets this plan's own last resort (invariant 7).
+        """
+        ledger = _Ledger(siblings=_ivals(self.req.fixed_occupied))
+        results: list[PlacedMember] = []
+        for i, (m, (first, last)) in enumerate(
+            zip(self.req.members, windows_days, strict=True)
+        ):
+            pm = (
+                m
+                if policy is None
+                else m.model_copy(
+                    update={"primary_policy": policy, "compute_both": False}
+                )
+            )
+            r = self.place_member(pm, first, last, ledger, batch, i)
+            results.append(r)
+            if r.start_ms is not None:
+                ledger.siblings.append(
+                    (r.start_ms, r.start_ms + m.duration_minutes * consts.MS_PER_MINUTE)
+                )
+                day = local_date_str(r.start_ms, self.tz)
+                ledger.count_by_day[day] = ledger.count_by_day.get(day, 0) + 1
+        return results
+
     def run(self) -> list[PlacedMember]:
         req = self.req
-        ledger = _Ledger(siblings=_ivals(req.fixed_occupied))
         members = req.members
 
         if len(members) == 1:
@@ -521,7 +590,9 @@ class _Placer:
             windows_days = [(first, last)]
         else:
             if self.next15 >= req.deadline_ms:
-                return self._past_deadline_series(ledger)
+                return self._past_deadline_series(
+                    _Ledger(siblings=_ivals(req.fixed_occupied))
+                )
             span = min(
                 math.floor((req.deadline_ms - self.next15) / consts.DAY_MS),
                 consts.MAX_SCAN_DAYS - 1,
@@ -534,23 +605,30 @@ class _Placer:
             ]
 
         # Single upfront batched (M, N, D) tensor build -- M=1 for a lone
-        # task, no special-casing -- then one cheap per-member loop (as
-        # today) that only threads `ledger.siblings`/`count_by_day` forward
-        # for series with overlapping windows; it no longer rebuilds any
-        # vectors/arm-scores per iteration.
-        batch = self._build_batch(members, windows_days, ledger)
+        # task, no special-casing -- against an empty ledger (no member placed
+        # yet), so it is a valid superset for *every* plan built from it below.
+        # Each plan is then one cheap per-member loop threading its own
+        # `ledger.siblings`/`count_by_day` forward; no vectors/arm-scores are
+        # rebuilt per iteration or per plan.
+        batch = self._build_batch(
+            members, windows_days, _Ledger(siblings=_ivals(req.fixed_occupied))
+        )
 
-        results: list[PlacedMember] = []
-        for i, (m, (first, last)) in enumerate(zip(members, windows_days, strict=True)):
-            r = self.place_member(m, first, last, ledger, batch, i)
-            results.append(r)
-            if r.start_ms is not None:
-                ledger.siblings.append(
-                    (r.start_ms, r.start_ms + m.duration_minutes * consts.MS_PER_MINUTE)
-                )
-                day = local_date_str(r.start_ms, self.tz)
-                ledger.count_by_day[day] = ledger.count_by_day.get(day, 0) + 1
-        return results
+        primary = self._dual_plan_policy(batch)
+        if primary is None:
+            return self._run_plan(windows_days, batch, None)
+
+        # Pairwise-sampled series (#58): two complete, independent plans.
+        # start/outcome/appliedPolicy come from the primary plan; `heuristic`
+        # is the member's pick in the heuristic plan and `linucb` its pick in
+        # the LinUCB plan (null where that plan fell back / went last resort).
+        heur_plan = self._run_plan(windows_days, batch, "HEURISTIC")
+        lin_plan = self._run_plan(windows_days, batch, "LINUCB")
+        applied = heur_plan if primary == "HEURISTIC" else lin_plan
+        return [
+            r.model_copy(update={"heuristic": h.heuristic, "linucb": lin.linucb})
+            for r, h, lin in zip(applied, heur_plan, lin_plan, strict=True)
+        ]
 
 
 def place(req: PlaceRequest, decode_s: float = 0.0) -> PlaceResponse:

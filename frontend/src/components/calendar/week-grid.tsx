@@ -62,7 +62,7 @@ export const WeekGrid = ({
 
           {isZonedToday(date, tz) && (
             <div
-              className="pointer-events-none absolute right-0 left-0 z-20 transition-[top] duration-1000 ease-linear"
+              className="pointer-events-none absolute right-0 left-0 z-50 transition-[top] duration-1000 ease-linear"
               style={{
                 top: `${64 * zonedNowDate.getHours() + zonedNowDate.getMinutes()}px`,
               }}

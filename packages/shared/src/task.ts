@@ -111,6 +111,22 @@ export interface ScheduleInfeasibleError {
   options: InfeasiblePolicy[];
 }
 
+/** `code` of the 409 {@link SlotTakenError} `POST /sessions/:id/slot-pick` answers with. */
+export const SLOT_TAKEN_CODE = "SLOT_TAKEN";
+
+/**
+ * 409 body when `POST /sessions/:id/slot-pick` with `chose: "alternative"`
+ * targets a `TASK` series sitting whose alternative now overlaps another
+ * (non-deleted) sitting of the same series (#58). Nothing was moved or
+ * recorded — the pick can still be answered later (e.g. `"primary"`).
+ */
+export interface SlotTakenError {
+  success: false;
+  statusCode: 409;
+  message: string;
+  code: typeof SLOT_TAKEN_CODE;
+}
+
 /** `code` of the 503 {@link SchedulerDegradedError} (ADR-0003 section 2.4). */
 export const SCHEDULER_DEGRADED_CODE = "SCHEDULER_DEGRADED";
 
@@ -306,9 +322,9 @@ export interface SessionSuggestionsResponse {
 /**
  * The heuristic-vs-LinUCB `SlotProposal` this placement recorded, present
  * only for a single (non-series) `TASK` create / deadline-change — a
- * `sessionCount > 1` series response leaves these `null`/`false` even though
- * each member is individually sampled and proposed behind the scenes (the
- * pairwise picker's series surface is designed in #41).
+ * `sessionCount > 1` series response leaves these top-level fields
+ * `null`/`false`; its per-sitting proposals ride on each `sessions[]` entry
+ * instead ({@link SeriesSittingProposal}, #58).
  *
  * On most events only one algorithm ran (today's random 50/50) and
  * `alternativeSlot` is `null`. On the `PAIRWISE_SAMPLE_RATE` fraction of
@@ -336,6 +352,19 @@ export interface SlotProposalFields {
 }
 
 /**
+ * Per-sitting pairwise fields on a series response entry (#58). A series rolls
+ * its policy (and the pairwise sample) once; on a sampled series at most
+ * `MAX_SERIES_ALTERNATIVES` (5) sittings — the soonest divergent ones whose
+ * alternative doesn't clash with a sibling — carry `divergent: true` and an
+ * `alternativeSlot`; every other entry has `divergent: false,
+ * alternativeSlot: null`. `slotProposalId` is set whenever that sitting's
+ * `SlotProposal` write succeeded, so `POST /sessions/:id/slot-pick` works per
+ * sitting.
+ */
+export type SeriesSittingProposal = Pick<SlotProposalFields, "slotProposalId" | "primarySlot" | "alternativeSlot" | "divergent">;
+export type SeriesSession = Session & SeriesSittingProposal;
+
+/**
  * Creating a `TASK` places it into its single best empty slot between now and
  * its deadline (`services/bandit/README.md`) — no other session is moved.
  * When `sessionCount > 1` the response also carries every session in
@@ -345,7 +374,7 @@ export interface SlotProposalFields {
  */
 export interface CreateSessionResponse extends Session, SlotProposalFields {
   /** Present only for a `TASK` series create — all N sessions, `sessionIndex` order. */
-  sessions?: Session[];
+  sessions?: SeriesSession[];
 }
 
 /**
@@ -355,7 +384,7 @@ export interface CreateSessionResponse extends Session, SlotProposalFields {
  */
 export interface UpdateSessionResponse extends Session, SlotProposalFields {
   /** Present only when a `TASK` series was redistributed — its members in `sessionIndex` order. */
-  sessions?: Session[];
+  sessions?: SeriesSession[];
   /** Ids left untouched by a `skipConflicting` update because their new landing slot conflicted. */
   skippedSessionIds?: string[];
 }

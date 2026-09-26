@@ -22,7 +22,11 @@ import {
 } from "../../observability/metrics";
 import { recordPhase } from "../../observability/phase-timings";
 import { PrismaService } from "../../prisma/prisma.service";
-import { MAX_SCAN_DAYS, SCAN_CAP_DAYS } from "../constants";
+import {
+  MAX_SCAN_DAYS,
+  MAX_SERIES_ALTERNATIVES,
+  SCAN_CAP_DAYS,
+} from "../constants";
 import {
   ceilToSlot,
   DAY_MS,
@@ -40,6 +44,7 @@ import type {
 import { DisplacementService, type AppliedMove } from "./displacement.service";
 import { FallbackPlacer } from "./fallback-placer.service";
 import { PlacementGateway } from "./placement-gateway.service";
+import { selectSeriesAlternatives } from "./series-alternatives";
 import type { DegradedReason } from "./placement-mode";
 
 /** Placeholder id for a pre-flight scan: no `Session` row exists yet. */
@@ -404,6 +409,16 @@ export class PythonPlacer {
    * member, never with a `null` start: a member with no real slot gets the
    * last resort (`lastResort: true`). Persisting the starts is the caller's
    * job. Degraded => frozen loop, then the same last resort.
+   *
+   * The A/B roll is series-level (#58): ONE `assignPolicy()`, so every member
+   * shares its `primaryPolicy` and `randomizationSeed`, and the whole series
+   * is applied from one plan. On a pairwise-sampled series Python computes a
+   * second full plan with the other policy; the soonest (≤
+   * {@link MAX_SERIES_ALTERNATIVES}) sittings whose other-plan pick differs
+   * and doesn't clash with a sibling are surfaced (`divergent`,
+   * `alternativeSlot`, `pairwiseShown`). Still one `SlotProposal` per member.
+   * `surfaceAlternatives: false` (a caller that never shows the rows) records
+   * every member with `pairwiseShown = false`.
    */
   async placeSeries(args: {
     user: User;
@@ -412,6 +427,7 @@ export class PythonPlacer {
     now: Date;
     trigger: Trigger;
     fixedOccupied?: Interval[];
+    surfaceAlternatives?: boolean;
   }): Promise<SeriesPlacementRow[]> {
     const { user, members, deadline, now, trigger } = args;
     const fixedOccupied = args.fixedOccupied ?? [];
@@ -427,14 +443,11 @@ export class PythonPlacer {
         fixedOccupied,
       );
     }
-    const assignments = members.map(() => this.experiment.assignPolicy());
-    const defs: PlacementMember[] = members.map((m, i) =>
-      this.memberOf(
-        m,
-        assignments[i].primaryPolicy,
-        assignments[i].pairwiseShown ||
-          assignments[i].primaryPolicy === SchedulingModel.LINUCB,
-      ),
+    const assignment = this.experiment.assignPolicy();
+    // A LinUCB primary runs LinUCB regardless of `computeBoth` (Python's
+    // PolicySelector); `computeBoth` only asks for the second full plan.
+    const defs: PlacementMember[] = members.map((m) =>
+      this.memberOf(m, assignment.primaryPolicy, assignment.pairwiseShown),
     );
     const req = await this.gateway.buildRequest({
       user,
@@ -457,14 +470,15 @@ export class PythonPlacer {
         user.preferenceMatrix,
         now,
       );
-      await Promise.all(
-        rows.map((row, i) =>
+      // Degraded: one plan only, never any alternatives.
+      const ids = await Promise.all(
+        rows.map((row) =>
           row.scheduledStartTime
             ? this.recordFallbackProposal(
                 user.id,
                 row.id,
                 trigger,
-                assignments[i],
+                assignment,
                 row.scheduledStartTime,
                 res.reason,
               )
@@ -472,7 +486,13 @@ export class PythonPlacer {
         ),
       );
       return this.pinUnplaced(
-        rows.map((r) => ({ ...r, degraded: true })),
+        rows.map((r, i) => ({
+          ...r,
+          degraded: true,
+          slotProposalId: ids[i],
+          alternativeSlot: null,
+          divergent: false,
+        })),
         members,
         deadline,
         now,
@@ -481,25 +501,63 @@ export class PythonPlacer {
     }
 
     this.noteSource("python");
-    const rows: SeriesPlacementRow[] = [];
-    for (let i = 0; i < members.length; i++) {
-      const r = res.response.results[i];
+    const results = res.response.results;
+    const rawStarts = members.map((_, i) => {
+      const r = results[i];
       const lastResort = r.outcome === "ACCEPTED_LAST_RESORT";
-      const start = r.outcome === "PLACED" || lastResort ? r.startMs : null;
-      rows.push({
-        id: members[i].id,
-        scheduledStartTime: start !== null ? new Date(start) : null,
-        ...(lastResort && start !== null ? { lastResort: true } : {}),
-      });
-      const a = assignments[i];
+      return r.outcome === "PLACED" || lastResort ? r.startMs : null;
+    });
+    const rows = this.pinUnplaced(
+      members.map((m, i) => ({
+        id: m.id,
+        scheduledStartTime:
+          rawStarts[i] !== null ? new Date(rawStarts[i]) : null,
+        ...(results[i].outcome === "ACCEPTED_LAST_RESORT" &&
+        rawStarts[i] !== null
+          ? { lastResort: true }
+          : {}),
+      })),
+      members,
+      deadline,
+      now,
+      fixedOccupied,
+    );
+
+    // The other plan's pick: only when both plans placed the sitting and the
+    // applied outcome is a real slot (never the last resort).
+    const otherStarts = members.map((_, i) => {
+      const r = results[i];
+      if (r.outcome !== "PLACED" || !r.heuristic || !r.linucb) return null;
+      return assignment.primaryPolicy === SchedulingModel.LINUCB
+        ? r.heuristic.startMs
+        : r.linucb.startMs;
+    });
+    const shown = new Set(
+      assignment.pairwiseShown && args.surfaceAlternatives !== false
+        ? selectSeriesAlternatives(
+            members.map((m, i) => ({
+              durationMinutes: m.durationMinutes,
+              appliedStartMs: (rows[i].scheduledStartTime as Date).getTime(),
+              otherStartMs: otherStarts[i],
+            })),
+            fixedOccupied,
+            MAX_SERIES_ALTERNATIVES,
+          )
+        : [],
+    );
+
+    const out: SeriesPlacementRow[] = [];
+    for (let i = 0; i < members.length; i++) {
+      const r = results[i];
+      const start = rawStarts[i];
       const linucb = r.linucb;
-      const effectivePairwise = a.pairwiseShown && linucb !== null;
-      await this.experiment.recordProposal({
+      const isShown = shown.has(i);
+      const slotProposalId = await this.experiment.recordProposal({
         userId: user.id,
         sessionId: members[i].id,
         trigger,
-        primaryPolicy: a.primaryPolicy,
-        randomizationSeed: a.randomizationSeed,
+        primaryPolicy: assignment.primaryPolicy,
+        randomizationSeed: assignment.randomizationSeed,
         heuristicProposal: {
           scheduledStartTime: r.heuristic
             ? new Date(r.heuristic.startMs).toISOString()
@@ -515,16 +573,23 @@ export class PythonPlacer {
         featureVector: linucb?.featureVector ?? [],
         selectedArm: linucb?.selectedArm ?? null,
         weights: linucb?.weights ?? null,
-        pairwiseShown: effectivePairwise,
-        pairwisePositions: effectivePairwise
+        pairwiseShown: isShown,
+        pairwisePositions: isShown
           ? { primaryPosition: Math.random() < 0.5 ? "first" : "second" }
           : null,
         placementSource: PlacementSource.PYTHON,
         degradedReason: null,
         modelVersion: res.response.paramsVersion,
       });
+      const other = otherStarts[i];
+      out.push({
+        ...rows[i],
+        slotProposalId,
+        alternativeSlot: isShown && other !== null ? new Date(other) : null,
+        divergent: isShown,
+      });
     }
-    return this.pinUnplaced(rows, members, deadline, now, fixedOccupied);
+    return out;
   }
 
   // ---- helpers -----------------------------------------------------------
@@ -564,9 +629,12 @@ export class PythonPlacer {
   }
 
   /**
-   * `computeBoth` is true whenever LinUCB is primary or the event was
-   * pairwise-sampled, so the heuristic pick is always recorded as
-   * `SlotProposal.heuristicProposal` exactly like the legacy path did.
+   * Single `TASK`: `computeBoth` is true whenever LinUCB is primary or the
+   * event was pairwise-sampled, so the heuristic pick is always recorded as
+   * `SlotProposal.heuristicProposal` exactly like the legacy path did. A
+   * series sets it only when pairwise-sampled — on a series it asks Python
+   * for a second full plan (#58); a LinUCB primary still runs LinUCB either
+   * way (Python `PolicySelector`), falling back to the heuristic per member.
    */
   private memberOf(
     task: { id: string; durationMinutes: number; prevStartMs?: number },

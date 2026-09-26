@@ -1,11 +1,16 @@
 import type { Prisma } from "../../generated/prisma";
 import type {
   CreateSessionResponse,
+  SeriesSession,
+  SeriesSittingProposal,
   Session as SharedSession,
   SlotProposalFields,
   UpdateSessionResponse,
 } from "@zenflow/shared";
-import type { PlacementResult } from "../scheduler/types/placement.types";
+import type {
+  PlacementResult,
+  SeriesPlacementRow,
+} from "../scheduler/types/placement.types";
 import type { SessionRow } from "./types/session-row";
 
 /** Sort tag names for stable wire output. */
@@ -77,6 +82,40 @@ export function slotProposalFieldsOf(
       to: d.to.toISOString(),
     })),
     ...(placement.degraded ? { schedulingDegraded: true } : {}),
+  };
+}
+
+/** A series sitting with no proposal / alternative to surface (#58). */
+export const NO_SERIES_SITTING_PROPOSAL: SeriesSittingProposal = {
+  slotProposalId: NO_SLOT_PROPOSAL.slotProposalId,
+  primarySlot: NO_SLOT_PROPOSAL.primarySlot,
+  alternativeSlot: NO_SLOT_PROPOSAL.alternativeSlot,
+  divergent: NO_SLOT_PROPOSAL.divergent,
+};
+
+/**
+ * One `sessions[]` entry of a series create / redistribute response (#58):
+ * the row plus its sitting's pairwise fields from `placement`. Without a
+ * placement (a sitting that wasn't re-placed) the fields are the empty
+ * {@link NO_SERIES_SITTING_PROPOSAL}. `primarySlot` mirrors the row's applied
+ * start (as {@link slotProposalFieldsOf} does for a single task).
+ */
+export function toSeriesSessionDto(
+  row: SessionRow,
+  placement?: SeriesPlacementRow,
+): SeriesSession {
+  const dto = toSessionDto(row);
+  if (!placement) return { ...dto, ...NO_SERIES_SITTING_PROPOSAL };
+  const slotProposalId = placement.slotProposalId ?? null;
+  const divergent = placement.divergent === true && !!placement.alternativeSlot;
+  return {
+    ...dto,
+    slotProposalId,
+    primarySlot: dto.scheduledStartTime,
+    alternativeSlot: divergent
+      ? (placement.alternativeSlot as Date).toISOString()
+      : null,
+    divergent,
   };
 }
 

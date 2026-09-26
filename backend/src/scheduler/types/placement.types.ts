@@ -68,6 +68,16 @@ export interface SeriesPlacementRow {
   degraded?: boolean;
   /** `true` when no real slot existed and the "never unplaced" last resort was applied. */
   lastResort?: boolean;
+  /** This sitting's `SlotProposal` id; `null`/absent when the write failed or none was recorded. */
+  slotProposalId?: string | null;
+  /**
+   * The other plan's pick for this sitting, set only on the (≤
+   * `MAX_SERIES_ALTERNATIVES`) shown divergent sittings of a pairwise-sampled
+   * series (#58); `null`/absent otherwise.
+   */
+  alternativeSlot?: Date | null;
+  /** `true` iff `alternativeSlot` is set. */
+  divergent?: boolean;
 }
 
 /** The concrete placement LinUCB proposes for one `TASK`. */

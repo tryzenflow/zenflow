@@ -75,6 +75,23 @@ computed in-process from the supplied `(A, b)`.
   precomputed tensor per member, not a 4th (slot) tensor axis.
 - **Response**: `heuristic` / `linucb` appear only if requested (primary or `computeBoth`; heuristic
   also on fallback). `startMs` is the applied pick. `mode: "PREFLIGHT"` runs the heuristic only.
+- **Pairwise-sampled series (#58) -- two complete plans.** When a series (`members.length > 1`)
+  has **every** member `computeBoth: true` with **one shared** `primaryPolicy` (Nest rolls the policy
+  and the pairwise sample once per series), `_Placer.run` builds two whole-series plans over the
+  same `(M, N, D)` batch via `_run_plan(policy)`: an all-heuristic plan and an all-LinUCB plan
+  (per member LinUCB falls back to the heuristic when it finds no slot), **each with its own sibling
+  ledger** (non-overlap + `MAX_SERIES_PER_DAY`) and its own last resort, so the applied plan is never
+  unplaced in `PLACE`. Per member: `heuristic` = its pick in the heuristic plan, `linucb` = its pick
+  in the LinUCB plan (`null` where that plan fell back or went last resort), and
+  `startMs`/`outcome`/`appliedPolicy`/`late`/`conflicting` come from the primary plan. The primary
+  plan is exactly the old single-pass plan, so applied starts don't change; only the alternative
+  field is now a sitting in a self-consistent other plan (it may overlap an *applied* sibling --
+  Nest filters those before surfacing an alternative). Everything else -- a lone task, `PREFLIGHT`,
+  a partially-`computeBoth` series, no usable bandit state, or a series with a **mixed**
+  `primaryPolicy` (the pre-#58 per-member roll; deliberately *not* a 422, so the rollout is safe) --
+  keeps the single shared-ledger pass, byte-identical to before. No wire-shape change
+  (`contractVersion` stays 1). Tests: `tests/test_place_series_pairwise.py`; fixtures
+  `series-pairwise-{heuristic,linucb}-primary.json`.
 - **No free slot (single member)**:
   1. First call returns `NEEDS_INFEASIBLE_CONTEXT`.
   2. Second call (with `infeasible`) tries EDF displacement over the deadline day (widening to +/-1

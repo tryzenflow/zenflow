@@ -7,6 +7,7 @@ import type {
   CreateSessionResponse,
   RemoveSessionResponse,
   RemoveSessionSeriesResponse,
+  SeriesSession,
   Session as SharedSession,
 } from "@zenflow/shared";
 import { type SessionSeries, type User } from "../../generated/prisma";
@@ -25,7 +26,11 @@ import { DAY_MS, localDateStr } from "../scheduler/core/slot";
 import { minutesToUtc } from "../common/utils";
 import { CreateSessionDto } from "./dto/create-session.dto";
 import { SessionRow, WITH_TAGS_AND_SERIES } from "./types/session-row";
-import { NO_SLOT_PROPOSAL, toSessionDto } from "./session-mapper";
+import {
+  NO_SLOT_PROPOSAL,
+  toSeriesSessionDto,
+  toSessionDto,
+} from "./session-mapper";
 import { createEventData } from "./session-events";
 import { placeOrDiscard } from "./placement-compensation";
 
@@ -59,9 +64,10 @@ export class SeriesService {
    * Create a `TASK` series: one `SessionSeries` (`type: TASK`, shared `deadline`,
    * no `rrule`) plus `count` linked `Session` rows, then hand the batch to
    * {@link TaskPlacementService.placeSeriesOnCreate} — each member is spread
-   * across `now … deadline` and placed through the same per-member 50/50
-   * heuristic-or-LinUCB pick as a single task, ≤3 per calendar day, no member
-   * overlapping another and no existing session moved.
+   * across `now … deadline` from ONE series-level 50/50 heuristic-or-LinUCB
+   * roll (#58), `MAX_SERIES_PER_DAY` per calendar day, no member overlapping
+   * another and no existing session moved. Each `sessions[]` entry carries its
+   * sitting's `SeriesSittingProposal` fields (≤5 alternatives when sampled).
    */
   async createTaskSeries(
     dto: CreateSessionDto,
@@ -127,12 +133,14 @@ export class SeriesService {
         }),
     );
 
-    const startById = new Map(
-      placements.map((p) => [p.id, p.scheduledStartTime]),
-    );
-    const sessions = rows.map((r) =>
-      toSessionDto({ ...r, scheduledStartTime: startById.get(r.id) ?? null }),
-    );
+    const placementById = new Map(placements.map((p) => [p.id, p]));
+    const sessions = rows.map((r) => {
+      const p = placementById.get(r.id);
+      return toSeriesSessionDto(
+        { ...r, scheduledStartTime: p?.scheduledStartTime ?? null },
+        p,
+      );
+    });
     return {
       ...sessions[0],
       ...NO_SLOT_PROPOSAL,
@@ -146,8 +154,9 @@ export class SeriesService {
   /**
    * A `TASK` series' deadline moved: hand the still-upcoming sittings to
    * {@link TaskPlacementService.redistributeSeries}, which pushes the new
-   * `deadline` onto the series row + every member and re-runs the per-member
-   * bounded 50/50 placement over the new window. Past sittings keep their slot.
+   * `deadline` onto the series row + every member and re-runs the series-level
+   * bounded 50/50 placement over the new window (entries carry their sitting's
+   * `SeriesSittingProposal` fields). Past sittings keep their slot.
    * No non-series session is moved. Returns every member (`sessionIndex` order).
    */
   async redistribute(
@@ -155,7 +164,7 @@ export class SeriesService {
     user: User,
     newDeadline: Date,
     now: Date,
-  ): Promise<{ sessions: SharedSession[]; degraded: boolean }> {
+  ): Promise<{ sessions: SeriesSession[]; degraded: boolean }> {
     const members = await this.prisma.session.findMany({
       where: { seriesId, userId: user.id, deleted: false },
       include: WITH_TAGS_AND_SERIES,
@@ -174,16 +183,20 @@ export class SeriesService {
       newDeadline,
       now,
     });
-    const startById = new Map(placed.map((p) => [p.id, p.scheduledStartTime]));
+    const placementById = new Map(placed.map((p) => [p.id, p]));
 
     return {
-      sessions: members.map((m) =>
-        toSessionDto({
-          ...m,
-          deadline: newDeadline,
-          scheduledStartTime: startById.get(m.id) ?? null,
-        }),
-      ),
+      sessions: members.map((m) => {
+        const p = placementById.get(m.id);
+        return toSeriesSessionDto(
+          {
+            ...m,
+            deadline: newDeadline,
+            scheduledStartTime: p?.scheduledStartTime ?? null,
+          },
+          p,
+        );
+      }),
       degraded: placed.some((p) => p.degraded),
     };
   }
@@ -223,7 +236,7 @@ export class SeriesService {
     targetCount: number,
     user: User,
     now: Date,
-  ): Promise<SharedSession[]> {
+  ): Promise<SeriesSession[]> {
     const series = await this.prisma.sessionSeries.findFirst({
       where: { id: seriesId, userId: user.id, type: "TASK" },
     });
@@ -239,7 +252,7 @@ export class SeriesService {
       throw new NotFoundException(`Cannot find TASK series ${seriesId}`);
 
     if (targetCount === members.length) {
-      return members.map((m) => toSessionDto(m));
+      return members.map((m) => toSeriesSessionDto(m));
     }
     if (targetCount > members.length) {
       return this.growSeries(series, members, targetCount, user, now);
@@ -267,7 +280,7 @@ export class SeriesService {
     targetCount: number,
     user: User,
     now: Date,
-  ): Promise<SharedSession[]> {
+  ): Promise<SeriesSession[]> {
     const addCount = targetCount - members.length;
     const rep = members[0];
     const deadline = rep.deadline as Date;
@@ -338,21 +351,20 @@ export class SeriesService {
       });
       throw err;
     });
-    const startById = new Map(
-      placements.map((p) => [p.id, p.scheduledStartTime]),
-    );
+    const placementById = new Map(placements.map((p) => [p.id, p]));
 
     const allRows = [
       ...members.map((m) => ({ ...m, sessionTotal: targetCount })),
       ...created.map((r) => ({
         ...r,
         sessionTotal: targetCount,
-        scheduledStartTime: startById.get(r.id) ?? null,
+        scheduledStartTime: placementById.get(r.id)?.scheduledStartTime ?? null,
       })),
     ];
+    // Only the just-placed sittings carry a proposal / alternative.
     return allRows
       .sort((a, b) => (a.sessionIndex ?? 0) - (b.sessionIndex ?? 0))
-      .map((m) => toSessionDto(m));
+      .map((m) => toSeriesSessionDto(m, placementById.get(m.id)));
   }
 
   /**
@@ -369,7 +381,7 @@ export class SeriesService {
     targetCount: number,
     user: User,
     now: Date,
-  ): Promise<SharedSession[]> {
+  ): Promise<SeriesSession[]> {
     const removeCount = members.length - targetCount;
     const candidates = members.slice(-removeCount);
 
@@ -397,7 +409,9 @@ export class SeriesService {
       }),
     ]);
 
-    return keep.map((m) => toSessionDto({ ...m, sessionTotal: targetCount }));
+    return keep.map((m) =>
+      toSeriesSessionDto({ ...m, sessionTotal: targetCount }),
+    );
   }
 
   /**
@@ -502,7 +516,7 @@ export class SeriesService {
     scopeAll: boolean,
     skipConflicting: boolean,
     user: User,
-  ): Promise<{ sessions: SharedSession[]; skippedSessionIds: string[] }> {
+  ): Promise<{ sessions: SeriesSession[]; skippedSessionIds: string[] }> {
     return this.prisma.$transaction(async (tx) => {
       const members = await tx.session.findMany({
         where: { seriesId, userId: user.id, deleted: false },
@@ -570,7 +584,7 @@ export class SeriesService {
       }
 
       const sessions = members.map((m) =>
-        toSessionDto(updatedById.get(m.id) ?? m),
+        toSeriesSessionDto(updatedById.get(m.id) ?? m),
       );
       return { sessions, skippedSessionIds };
     });

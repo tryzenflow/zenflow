@@ -890,3 +890,123 @@ describe("SeriesService.promoteToSeries", () => {
     });
   });
 });
+
+describe("SeriesService series responses carry per-sitting proposals (#58)", () => {
+  const seriesId = "task-series-58";
+  const deadline = new Date("2026-07-01T00:00:00.000Z");
+  const s1 = new Date("2026-06-05T08:00:00.000Z");
+  const s2 = new Date("2026-06-07T08:00:00.000Z");
+  const alt = new Date("2026-06-05T14:00:00.000Z");
+  const placements = [
+    {
+      id: "c-1",
+      scheduledStartTime: s1,
+      slotProposalId: "sp-1",
+      alternativeSlot: alt,
+      divergent: true,
+    },
+    {
+      id: "c-2",
+      scheduledStartTime: s2,
+      slotProposalId: "sp-2",
+      alternativeSlot: null,
+      divergent: false,
+    },
+  ];
+
+  it("createTaskSeries: sessions[] entries map each sitting's fields; top level stays empty", async () => {
+    let n = 0;
+    const tx = {
+      sessionSeries: { create: jest.fn().mockResolvedValue({ id: seriesId }) },
+      session: {
+        create: jest.fn((args: { data: Record<string, unknown> }) => {
+          n++;
+          return Promise.resolve(
+            session({
+              id: `c-${n}`,
+              seriesId,
+              deadline,
+              sessionIndex: args.data.sessionIndex as number,
+              sessionTotal: 2,
+            }),
+          );
+        }),
+      },
+      sessionEvent: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      $transaction: (fn: (t: typeof tx) => unknown) => fn(tx),
+    };
+    const placement = {
+      canPlaceSeries: jest.fn(),
+      placeSeriesOnCreate: jest.fn().mockResolvedValue(placements),
+      redistributeSeries: jest.fn(),
+    };
+    const service = await makeSeriesService(prisma, undefined, placement);
+
+    const res = await service.createTaskSeries(
+      { title: "Essay", durationMinutes: 60 } as never,
+      user,
+      [],
+      deadline,
+      2,
+      new Date("2026-06-01T00:00:00.000Z"),
+    );
+
+    expect(res.sessions).toEqual([
+      expect.objectContaining({
+        id: "c-1",
+        scheduledStartTime: s1.toISOString(),
+        slotProposalId: "sp-1",
+        primarySlot: s1.toISOString(),
+        alternativeSlot: alt.toISOString(),
+        divergent: true,
+      }),
+      expect.objectContaining({
+        id: "c-2",
+        slotProposalId: "sp-2",
+        primarySlot: s2.toISOString(),
+        alternativeSlot: null,
+        divergent: false,
+      }),
+    ]);
+    expect(res).toMatchObject({
+      id: "c-1",
+      slotProposalId: null,
+      primarySlot: null,
+      alternativeSlot: null,
+      divergent: false,
+    });
+  });
+
+  it("redistribute: sessions[] entries carry the redistributed sittings' fields", async () => {
+    const members = [
+      session({ id: "c-1", seriesId, sessionIndex: 1, deadline }),
+      session({ id: "c-2", seriesId, sessionIndex: 2, deadline }),
+    ];
+    const prisma = {
+      session: { findMany: jest.fn().mockResolvedValue(members) },
+    };
+    const placement = {
+      canPlaceSeries: jest.fn(),
+      placeSeriesOnCreate: jest.fn(),
+      redistributeSeries: jest.fn().mockResolvedValue(placements),
+    };
+    const service = await makeSeriesService(prisma, undefined, placement);
+
+    const { sessions } = await service.redistribute(
+      seriesId,
+      user,
+      deadline,
+      new Date("2026-06-01T00:00:00.000Z"),
+    );
+
+    expect(sessions.map((s) => [s.id, s.divergent, s.alternativeSlot])).toEqual(
+      [
+        ["c-1", true, alt.toISOString()],
+        ["c-2", false, null],
+      ],
+    );
+    expect(sessions.map((s) => s.slotProposalId)).toEqual(["sp-1", "sp-2"]);
+  });
+});

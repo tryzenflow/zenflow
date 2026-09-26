@@ -260,6 +260,12 @@ event and records one `SlotProposal`; a `sessionCount > 1` `TASK` series runs th
 even-spread target, `X` = whole days to deadline, `N` = member count), one `SlotProposal`
 per member. See [`ab-testing.md`](../scheduler/ab-testing.md).
 
+*Amended by #58:* a series now takes **one** 50/50 roll and **one** pairwise roll for the whole
+series (every sitting shares the primary policy). On a pairwise hit the placement service
+computes two complete series plans -- all-heuristic and all-LinUCB, each with its own sibling
+ledger -- and each sitting's `SlotProposal` pairs its pick in the applied plan with its pick in
+the other plan (ADR-0003 §3.2 amendment). One `SlotProposal` per member is still recorded.
+
 ---
 
 ## 12. Decision summary

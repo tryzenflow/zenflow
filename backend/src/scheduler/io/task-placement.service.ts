@@ -227,6 +227,7 @@ export class TaskPlacementService {
     const startById = new Map(
       placements.map((p) => [p.id, p.scheduledStartTime]),
     );
+    const placementById = new Map(placements.map((p) => [p.id, p]));
 
     await this.prisma.$transaction([
       this.prisma.sessionSeries.update({
@@ -252,13 +253,20 @@ export class TaskPlacementService {
     ]);
 
     const degraded = placements.some((p) => p.degraded);
-    return members.map((m) => ({
-      id: m.id,
-      scheduledStartTime: isPast(m)
-        ? m.scheduledStartTime
-        : (startById.get(m.id) ?? m.scheduledStartTime),
-      ...(degraded ? { degraded: true } : {}),
-    }));
+    // Past sittings were not re-placed: no proposal, no alternative.
+    return members.map((m) => {
+      const p = isPast(m) ? undefined : placementById.get(m.id);
+      return {
+        id: m.id,
+        scheduledStartTime: isPast(m)
+          ? m.scheduledStartTime
+          : (startById.get(m.id) ?? m.scheduledStartTime),
+        slotProposalId: p?.slotProposalId ?? null,
+        alternativeSlot: p?.alternativeSlot ?? null,
+        divergent: p?.divergent ?? false,
+        ...(degraded ? { degraded: true } : {}),
+      };
+    });
   }
 
   /**
@@ -279,11 +287,13 @@ export class TaskPlacementService {
       select: { id: true, durationMinutes: true, scheduledStartTime: true },
       orderBy: { scheduledStartTime: "asc" },
     });
+    // Never shown as a pairwise choice: record no `pairwiseShown`.
     const { upcoming, placements } = await this.placeUpcoming(
       user,
       members,
       deadline,
       now,
+      false,
     );
     const toById = new Map(
       placements.map((p) => [p.id, p.lastResort ? null : p.scheduledStartTime]),
@@ -305,7 +315,13 @@ export class TaskPlacementService {
       durationMinutes: number;
       scheduledStartTime: Date | null;
     },
-  >(user: User, members: M[], deadline: Date, now: Date) {
+  >(
+    user: User,
+    members: M[],
+    deadline: Date,
+    now: Date,
+    surfaceAlternatives = true,
+  ) {
     const isPast = (s: { scheduledStartTime: Date | null }) =>
       s.scheduledStartTime != null &&
       s.scheduledStartTime.getTime() < now.getTime();
@@ -328,6 +344,7 @@ export class TaskPlacementService {
       now,
       trigger: "deadline-change",
       fixedOccupied,
+      ...(surfaceAlternatives ? {} : { surfaceAlternatives: false }),
     });
     return { isPast, upcoming, placements };
   }
