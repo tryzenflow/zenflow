@@ -5,6 +5,7 @@
   "license": "Apache-2.0",
   "private": true,
   "scripts": {
+    "postinstall": "cd .. && patch-package --patch-dir mobile/patches",
     "dev": "expo start --dev-client --clear",
     "dev:web": "expo start -c --web",
     "dev:android": "expo start -c --android",
@@ -91,6 +92,7 @@
     "@babel/core": "^7.26.0",
     "@babel/runtime": "^7.26.0",
     "@types/react": "18.3.31",
+    "patch-package": "^8.0.1",
     "tailwindcss": "3.4.1",
     "typescript": "~5.3.3",
     "vitest": "^2.1.9"

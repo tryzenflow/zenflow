@@ -1,0 +1,70 @@
+diff --git a/node_modules/@expo/cli/build/src/run/ios/options/resolveDevice.js b/node_modules/@expo/cli/build/src/run/ios/options/resolveDevice.js
+index 336f4ac..fdbd577 100644
+--- a/node_modules/@expo/cli/build/src/run/ios/options/resolveDevice.js
++++ b/node_modules/@expo/cli/build/src/run/ios/options/resolveDevice.js
+@@ -107,8 +107,11 @@ function _interopRequireWildcard(obj, nodeInterop) {
+     });
+ }
+ async function resolveDeviceAsync(device, buildProps) {
+-    await _appleDeviceManager.AppleDeviceManager.assertSystemRequirementsAsync();
+     if (!device) {
++        // No --device target was requested at all, so this branch always resolves and boots a
++        // simulator (AppleDeviceManager.resolveAsync below) -- keep the full check, including
++        // Simulator.app, here.
++        await _appleDeviceManager.AppleDeviceManager.assertSystemRequirementsAsync();
+         /** Finds the first possible device and returns in a booted state. */ const manager = await _appleDeviceManager.AppleDeviceManager.resolveAsync({
+             device: {
+                 osType: buildProps.osType
+@@ -117,6 +120,16 @@ async function resolveDeviceAsync(device, buildProps) {
+         _log.debug(`Resolved default device (name: ${manager.device.name}, udid: ${manager.device.udid}, osType: ${buildProps.osType})`);
+         return manager.device;
+     }
++    // PATCH (zenflow): `device` is either `true` (interactive --device prompt) or a UDID/name
++    // search value -- in both cases we don't yet know whether the resolved device will be a
++    // simulator or a physical device. Xcode/xcrun still need to be verified (xcodebuild is used
++    // either way), but the Simulator.app-specific check is deferred to `ensureBootedAsync` below,
++    // which only runs it once we know the resolved device actually is a simulator. This keeps
++    // `--device <physical udid/name>` working on Xcode 27+ (Simulator.app -> Device Hub), where
++    // that check always throws. See github.com/expo/expo#46694, #46882.
++    await _appleDeviceManager.AppleDeviceManager.assertSystemRequirementsAsync({
++        skipSimulatorAppCheck: true
++    });
+     const devices = await getDevicesAsync(buildProps);
+     const resolved = device === true ? // @ts-expect-error
+     await (0, _promptDevice.promptDeviceAsync)(devices) : findDeviceFromSearchValue(devices, device.toLowerCase());
+@@ -137,6 +150,9 @@ function isSimulatorDevice(device) {
+     // --device with no props after
+     (0, _hints.logDeviceArgument)(device.udid);
+     if (isSimulatorDevice(device)) {
++        // PATCH (zenflow): full check here (including Simulator.app), now that we know the
++        // resolved device really is a simulator.
++        await _appleDeviceManager.AppleDeviceManager.assertSystemRequirementsAsync();
+         return (0, _appleDeviceManager.ensureSimulatorOpenAsync)({
+             udid: device.udid
+         });
+diff --git a/node_modules/@expo/cli/build/src/start/platforms/ios/assertSystemRequirements.js b/node_modules/@expo/cli/build/src/start/platforms/ios/assertSystemRequirements.js
+index 4a8a0db..2a8d0a6 100644
+--- a/node_modules/@expo/cli/build/src/start/platforms/ios/assertSystemRequirements.js
++++ b/node_modules/@expo/cli/build/src/start/platforms/ios/assertSystemRequirements.js
+@@ -10,11 +10,18 @@ const _profile = require("../../../utils/profile");
+ const _simulatorAppPrerequisite = require("../../doctor/apple/SimulatorAppPrerequisite");
+ const _xcodePrerequisite = require("../../doctor/apple/XcodePrerequisite");
+ const _xcrunPrerequisite = require("../../doctor/apple/XcrunPrerequisite");
+-async function assertSystemRequirementsAsync() {
++async function assertSystemRequirementsAsync({ skipSimulatorAppCheck  } = {}) {
+     // Order is important
+     await (0, _profile.profile)(_xcodePrerequisite.XcodePrerequisite.instance.assertAsync.bind(_xcodePrerequisite.XcodePrerequisite.instance), "XcodePrerequisite")();
+     await (0, _profile.profile)(_xcrunPrerequisite.XcrunPrerequisite.instance.assertAsync.bind(_xcrunPrerequisite.XcrunPrerequisite.instance), "XcrunPrerequisite")();
+-    await (0, _profile.profile)(_simulatorAppPrerequisite.SimulatorAppPrerequisite.instance.assertAsync.bind(_simulatorAppPrerequisite.SimulatorAppPrerequisite.instance), "SimulatorAppPrerequisite")();
++    if (!skipSimulatorAppCheck) {
++        // PATCH (zenflow): On Xcode 27+, Simulator.app was replaced by Device Hub and the old
++        // `id of app "Simulator"` osascript lookup this prerequisite relies on always fails, even
++        // when the user only wants to build for a physical device (which never launches
++        // Simulator.app). Callers that already know they're targeting a physical device pass
++        // `{ skipSimulatorAppCheck: true }` to skip this. See github.com/expo/expo#46694, #46882.
++        await (0, _profile.profile)(_simulatorAppPrerequisite.SimulatorAppPrerequisite.instance.assertAsync.bind(_simulatorAppPrerequisite.SimulatorAppPrerequisite.instance), "SimulatorAppPrerequisite")();
++    }
+ }
+ 
+ //# sourceMappingURL=assertSystemRequirements.js.map
+\ No newline at end of file
