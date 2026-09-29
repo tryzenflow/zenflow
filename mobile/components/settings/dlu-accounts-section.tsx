@@ -24,6 +24,7 @@ import {
   useBottomSheet,
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { useIntegrationStore } from "@/hooks/use-integration-store";
@@ -115,7 +116,7 @@ function errorMessageFor(error: unknown): string {
  */
 export function DluAccountsSection() {
   const { toast } = useToast();
-  const { integrations, updateIntegration } = useIntegrationStore();
+  const { integrations, updateIntegration, loading } = useIntegrationStore();
   const [selectedProvider, setSelectedProvider] =
     useState<IntegrationProvider | null>(null);
   const [mode, setMode] = useState<SheetMode>("connect");
@@ -247,6 +248,23 @@ export function DluAccountsSection() {
       <SettingsSectionLabel>DLU accounts</SettingsSectionLabel>
       <View className="overflow-hidden rounded-2xl border border-border bg-card">
         {PROVIDERS.map((provider, index) => {
+          if (loading) {
+            return (
+              <View
+                key={provider}
+                className={cn(
+                  "flex-row items-center gap-[13px] px-4 py-3.5",
+                  index > 0 && "border-t border-border",
+                )}
+              >
+                <Skeleton className="size-[38px] rounded-xl" />
+                <View className="flex-1 gap-2">
+                  <Skeleton className="h-4 w-1/3" />
+                  <Skeleton className="h-3 w-1/2" />
+                </View>
+              </View>
+            );
+          }
           const status = statusOf(provider);
           const connected = !!status?.connected;
           const subtitle = rowSubtitle(status, syncing === provider);

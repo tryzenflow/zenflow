@@ -4,6 +4,7 @@ import { LogOut, Moon } from "@/components/Icons";
 import { DluAccountsSection } from "@/components/settings/dlu-accounts-section";
 import { ProfileRow } from "@/components/settings/profile-row";
 import { SettingsSectionLabel } from "@/components/settings/settings-header";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
 import { useUserStore } from "@/hooks/use-user-store";
@@ -76,8 +77,6 @@ export default function SettingsScreen() {
   const tabBarOverlay = useTabBarOverlayHeight();
   const insets = useSafeAreaInsets();
 
-  if (!user) return null;
-
   return (
     <View className="flex-1 bg-background">
       <View
@@ -92,7 +91,17 @@ export default function SettingsScreen() {
       >
         <SettingsSectionLabel>Profile</SettingsSectionLabel>
         <View className="overflow-hidden rounded-2xl border border-border bg-card">
-          <ProfileRow user={user} onUpdated={setUser} />
+          {user ? (
+            <ProfileRow user={user} onUpdated={setUser} />
+          ) : (
+            <View className="flex-row items-center gap-[13px] px-4 py-3.5">
+              <Skeleton className="size-12 rounded-full" />
+              <View className="flex-1 gap-2">
+                <Skeleton className="h-4 w-1/2" />
+                <Skeleton className="h-3 w-2/3" />
+              </View>
+            </View>
+          )}
         </View>
 
         <SettingsSectionLabel>Appearance</SettingsSectionLabel>
