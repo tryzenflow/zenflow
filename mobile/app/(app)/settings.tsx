@@ -19,11 +19,8 @@ import { useColorScheme } from "@/lib/useColorScheme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { type Href, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import {
-  Pressable,
-  ScrollView,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /** Single flat Settings screen — mirrors mockups/settings.html exactly. */
 export default function SettingsScreen() {
@@ -77,12 +74,16 @@ export default function SettingsScreen() {
   }
 
   const tabBarOverlay = useTabBarOverlayHeight();
+  const insets = useSafeAreaInsets();
 
   if (!user) return null;
 
   return (
     <View className="flex-1 bg-background">
-      <View className="border-b border-border bg-background px-6 py-4">
+      <View
+        className="border-b border-border bg-background px-6 pb-4"
+        style={{ paddingTop: insets.top + 16 }}
+      >
         <Text className="text-xl font-bold tracking-tight">Settings</Text>
       </View>
       <ScrollView

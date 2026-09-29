@@ -26,12 +26,12 @@ import { Text } from "@/components/ui/text";
 import { useUserStore } from "@/hooks/use-user-store";
 import { addMonths, monthLabel } from "@/lib/month-date-math";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
-import { useFocusEffect } from "@react-navigation/native";
 import { zonedNow, zonedWallClockToUtc } from "@zenflow/core";
 import type { Session, UpdateScope } from "@zenflow/shared";
-import { type Href, useRouter } from "expo-router";
+import { type Href, useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /**
  * Month screen — RN migration Phase 4 (GitHub issue #21). Paginated
@@ -62,6 +62,7 @@ export default function MonthScreen() {
   const [reloadToken, setReloadToken] = useState(0);
 
   const tabBarOverlay = useTabBarOverlayHeight();
+  const insets = useSafeAreaInsets();
 
   const taskListSheetRef = useRef<SessionListSheetHandle>(null);
   const rescheduleSheetRef = useRef<RescheduleSheetHandle>(null);
@@ -157,7 +158,10 @@ export default function MonthScreen() {
   return (
     <View className="flex-1 bg-background">
       <NotificationBell />
-      <View className="flex-row justify-between items-center gap-3 border-b border-border bg-background px-4 py-4">
+      <View
+        className="flex-row justify-between items-center gap-3 border-b border-border bg-background px-4 pb-4"
+        style={{ paddingTop: insets.top + 16 }}
+      >
         <View className="min-w-0 shrink gap-1">
           <View className="flex-row items-center gap-2">
             <Pressable

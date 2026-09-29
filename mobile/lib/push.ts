@@ -91,7 +91,13 @@ export function configureForegroundHandler(): void {
         !isLocalNotification(n) &&
         !claimNotification(notificationIdOf(n), pushOwner(n));
       return {
+        // `shouldShowAlert` is deprecated in favor of the banner/list split
+        // below (iOS 14+ distinguishes a foreground banner from the
+        // notification-list entry) -- kept too since it's still read on
+        // older platforms/typings that predate the split.
         shouldShowAlert: !duplicate,
+        shouldShowBanner: !duplicate,
+        shouldShowList: !duplicate,
         shouldPlaySound: !duplicate,
         shouldSetBadge: !duplicate,
       };

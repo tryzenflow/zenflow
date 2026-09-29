@@ -27,11 +27,13 @@ import {
   BoldBridge,
   BulletListBridge,
   CoreBridge,
+  type EditorTheme,
   HighlightBridge,
   ImageBridge,
   ItalicBridge,
   LinkBridge,
   OrderedListBridge,
+  type RecursivePartial,
   RichText,
   UnderlineBridge,
   useBridgeState,
@@ -39,7 +41,13 @@ import {
 } from "@10play/tentap-editor";
 import * as DocumentPicker from "expo-document-picker";
 import { useEffect, useRef, useState } from "react";
-import { Linking, Platform, Pressable, View } from "react-native";
+import {
+  Linking,
+  Platform,
+  Pressable,
+  View,
+  type ViewInstance,
+} from "react-native";
 import type { WebViewMessageEvent } from "react-native-webview";
 import { AudioBridge, VideoBridge } from "./media-bridges";
 
@@ -107,7 +115,9 @@ function DescriptionFieldEditor({
   const [linkTitle, setLinkTitle] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [fontDataUri, setFontDataUri] = useState<string | null>(null);
-  const containerRef = useRef<View>(null);
+  // RN 0.88: ref instance type is `ViewInstance`, not `View` -- see
+  // day-timeline.tsx's `scrollRef` comment.
+  const containerRef = useRef<ViewInstance>(null);
   const scrollIntoView = useScrollIntoViewOnFocus();
 
   // Base64-embed Geist as a `@font-face` inside the editor's WebView
@@ -129,18 +139,27 @@ function DescriptionFieldEditor({
     };
   }, []);
 
+  // `useEditorBridge`'s `theme` param is `RecursivePartial<EditorTheme>`,
+  // and `EditorTheme`'s fields are themselves `StyleProp<ViewStyle>` (RN
+  // 0.88's much more deeply nested structural style types, see
+  // `lib/native-style.ts`'s doc comment). Structurally checking an object
+  // literal against `RecursivePartial<StyleProp<ViewStyle>>` — whether
+  // inline, via a `satisfies`, or via a typed local — blows past TS's
+  // instantiation-depth limit; the object below is exactly the shape
+  // `EditorTheme["webview"]` expects (a plain `backgroundColor`), so bridge
+  // through `unknown` rather than asking TS to prove it structurally.
+  const editorTheme = {
+    webview: {
+      backgroundColor: isDarkColorScheme ? "rgb(29 26 23)" : "rgb(255 255 255)",
+    },
+  } as unknown as RecursivePartial<EditorTheme>;
+
   const editor = useEditorBridge({
     bridgeExtensions: EDITOR_EXTENSIONS,
     initialContent: initialValue,
     editable: !disabled,
     dynamicHeight: false,
-    theme: {
-      webview: {
-        backgroundColor: isDarkColorScheme
-          ? "rgb(29 26 23)"
-          : "rgb(255 255 255)",
-      },
-    },
+    theme: editorTheme,
     onChange: () => {
       editor.getHTML().then((html) => {
         valueRef.current = html;

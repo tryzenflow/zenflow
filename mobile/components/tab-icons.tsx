@@ -1,7 +1,11 @@
+import type { ColorValue } from "react-native";
 import Svg, { Line, Rect } from "react-native-svg";
 
 type TabIconProps = {
-  color: string;
+  // `Tabs.Screen`'s `tabBarIcon` (expo-router, re-vendored bottom-tabs) hands
+  // this through as `ColorValue` (nullable) now, not a plain `string` --
+  // matches what `Line`/`Rect`'s own `stroke`/`fill` props accept anyway.
+  color: ColorValue;
   size: number;
 };
 

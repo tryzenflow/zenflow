@@ -1,4 +1,4 @@
-import type { ViewStyle } from "react-native";
+import type { NativeViewStyle } from "@/lib/native-style";
 
 /**
  * Warm amber cast for the floating "new task" action (`CreateSessionFab`).
@@ -16,7 +16,7 @@ export const FAB_GLOW_COLOR = "rgb(255,142,62)";
  * wide-and-faint wrapper under a tight-and-strong button produces the
  * two-stop falloff that actually reads as a glow.
  */
-export const FAB_GLOW_OUTER: ViewStyle = {
+export const FAB_GLOW_OUTER: NativeViewStyle = {
   shadowColor: FAB_GLOW_COLOR,
   shadowOffset: { width: 0, height: 6 },
   shadowOpacity: 0.4,
@@ -28,7 +28,7 @@ export const FAB_GLOW_OUTER: ViewStyle = {
 };
 
 /** Tight, saturated half of the glow — goes on the button itself. */
-export const FAB_GLOW_INNER: ViewStyle = {
+export const FAB_GLOW_INNER: NativeViewStyle = {
   shadowColor: FAB_GLOW_COLOR,
   shadowOffset: { width: 0, height: 2 },
   shadowOpacity: 0.55,

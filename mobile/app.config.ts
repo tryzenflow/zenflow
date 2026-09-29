@@ -3,6 +3,8 @@ import type { ConfigContext, ExpoConfig } from "@expo/config";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const withAndroidBuildFixes = require("./plugins/withAndroidBuildFixes");
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const withIosBuildFixes = require("./plugins/withIosBuildFixes");
 
 // FCM (Android push) needs the Firebase Android app config baked into the
 // native build. Drop `google-services.json` (from the Firebase console) next
@@ -17,7 +19,15 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: "Zenflow",
   slug: "zenflow",
-  newArchEnabled: false,
+  // NOTE: `newArchEnabled` was dropped here (and from `ExpoConfig`'s type
+  // entirely -- `tsc` fails with TS2353 if it's left in) as of SDK 58: the
+  // legacy/bridge architecture was removed from the RN 0.88 toolchain, and
+  // `expo`'s own native `ExpoReactNativeFactory.swift` now hardcodes
+  // `newArchEnabled: true` unconditionally (`react-native-reanimated@4.x`,
+  // pulled in by `expo install --fix` for this SDK, requires Fabric/
+  // TurboModules too, so this isn't optional even in principle anymore). The
+  // app runs on the New Architecture unconditionally now -- flag any
+  // native-module behavior anywhere in the app that assumed the old one.
   version: "0.1.0",
   orientation: "portrait",
   icon: "./assets/images/icon.png",
@@ -26,15 +36,26 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   runtimeVersion: {
     policy: "appVersion",
   },
-  splash: {
-    image: "./assets/images/splash.png",
-    resizeMode: "contain",
-    backgroundColor: "#ffffff",
-  },
+  // NOTE: the top-level `splash` field (native splash) was removed from
+  // `ExpoConfig`'s type in SDK 58 -- it's been superseded by the
+  // `expo-splash-screen` config plugin (see `plugins` below) for a while,
+  // but the old field was still tolerated by the type until now.
   assetBundlePatterns: ["**/*"],
   ios: {
     supportsTablet: false,
-    bundleIdentifier: "com.zenflow.app",
+    // App identifiers are globally unique across every Apple developer
+    // account, not just your own -- "com.zenflow.app" is already registered
+    // to someone else, so a personal team can never claim it (Xcode fails
+    // with "cannot be registered ... because it is not available"). Local
+    // personal-team device builds need their own throwaway identifier;
+    // override it via EXPO_IOS_BUNDLE_ID (e.g. "com.<your-name>.zenflowdev").
+    bundleIdentifier: process.env.EXPO_IOS_BUNDLE_ID ?? "com.zenflow.app",
+    // Only set for local personal-team device builds -- see the
+    // `ios:personal-team` package.json script. Not committed anywhere else
+    // since a development team is specific to one developer's Apple ID.
+    ...(process.env.EXPO_APPLE_TEAM_ID
+      ? { appleTeamId: process.env.EXPO_APPLE_TEAM_ID }
+      : {}),
   },
   android: {
     adaptiveIcon: {
@@ -63,7 +84,24 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     // notification permission / channel wiring. Raw FCM/APNs tokens come from
     // `Notifications.getDevicePushTokenAsync()` (see `lib/push.ts`).
     "expo-notifications",
+    // SDK 58 requires these autolinked packages' config plugins to be listed
+    // explicitly (previously implicit) -- `expo install --fix` /
+    // `expo-doctor` flagged this after the SDK 52 -> 58 jump.
+    "expo-asset",
+    "expo-font",
+    "expo-secure-store",
+    [
+      "expo-splash-screen",
+      {
+        image: "./assets/images/splash.png",
+        resizeMode: "contain",
+        backgroundColor: "#ffffff",
+      },
+    ],
+    "expo-status-bar",
+    "expo-web-browser",
     withAndroidBuildFixes,
+    withIosBuildFixes,
   ],
   experiments: {
     typedRoutes: true,

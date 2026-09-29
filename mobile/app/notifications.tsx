@@ -36,11 +36,19 @@ import {
   ActivityIndicator,
   FlatList,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   View,
 } from "react-native";
-import Swipeable from "react-native-gesture-handler/Swipeable";
+// `react-native-gesture-handler/Swipeable` (JS-thread) was removed entirely
+// in gesture-handler v3 (bumped for SDK 58) -- only the Reanimated-driven
+// version remains, under its own subpath. `renderRightActions`/
+// `onSwipeableOpen` here don't use the (progress, translation) worklet args
+// it now passes, so the zero-arg callback signatures below still type-check.
+import Swipeable, {
+  type SwipeableMethods,
+} from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const CATEGORY_LABEL: Record<NotificationCategory, string> = {
@@ -249,7 +257,11 @@ export default function NotificationsScreen() {
   return (
     <View
       className="flex-1 bg-background"
-      style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
+      style={{
+        // iOS presents this as a page sheet already below the status bar; 14 is breathing room.
+        paddingTop: Platform.OS === "ios" ? 14 : insets.top,
+        paddingBottom: insets.bottom,
+      }}
     >
       {/* Header — one row, one primary action per mode */}
       <View className="h-14 flex-row items-center gap-2 border-b border-border/70 bg-background px-3">
@@ -441,7 +453,7 @@ function NotificationRowItem({
   rescheduling: boolean;
   onRescheduleAll: () => void;
 }) {
-  const swipeableRef = useRef<Swipeable>(null);
+  const swipeableRef = useRef<SwipeableMethods>(null);
   const { Icon, tint, iconColor } = notificationVisual(n.eventName);
   const unread = !n.readAt;
   const relative = formatDistanceToNow(new Date(n.sentAt), { addSuffix: true });
@@ -473,6 +485,9 @@ function NotificationRowItem({
       renderRightActions={renderRightActions}
       onSwipeableOpen={() => onDismiss()}
     >
+      {/* Opaque base: the row's unread/selected tints are translucent, so on
+          iOS the Dismiss action (laid out underneath) showed through at rest. */}
+      <View className="bg-background">
       <Pressable
         onPress={onOpen}
         className={cn(
@@ -582,6 +597,7 @@ function NotificationRowItem({
           </View>
         )}
       </Pressable>
+      </View>
     </Swipeable>
   );
 }

@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import type { Session } from "@zenflow/shared";
 import { isSameDay } from "date-fns";
 import { forwardRef, memo } from "react";
-import { View } from "react-native";
+import { View, type ViewInstance } from "react-native";
 import { CELL_HEIGHT, MonthCell } from "./month-cell";
 
 // Monday-first — matches `WEEK_STARTS_ON` in `@/lib/month-date-math`.
@@ -52,7 +52,10 @@ interface MonthGridProps {
  * `today` from `MonthPage` plus primitives and stable callbacks.
  */
 export const MonthGrid = memo(
-  forwardRef<View, MonthGridProps>(function MonthGrid(
+  // RN 0.88: forward to `ViewInstance` (the `HostInstance`/`ReactNativeElement`
+  // alias), not the `View` component-function type -- see day-timeline.tsx's
+  // `scrollRef` comment.
+  forwardRef<ViewInstance, MonthGridProps>(function MonthGrid(
     {
       monthDate,
       days,

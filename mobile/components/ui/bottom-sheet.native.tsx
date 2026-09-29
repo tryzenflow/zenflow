@@ -1,6 +1,7 @@
 import type {
   BottomSheetBackdropProps,
   BottomSheetFooterProps as GBottomSheetFooterProps,
+  BottomSheetScrollViewMethods,
 } from "@gorhom/bottom-sheet";
 import {
   BottomSheetBackdrop,
@@ -20,18 +21,21 @@ import {
   BottomSheetView as GBottomSheetView,
 } from "@gorhom/bottom-sheet";
 import type { BottomSheetModalMethods } from "@gorhom/bottom-sheet/lib/typescript/types";
-import { useTheme } from "@react-navigation/native";
+import { useTheme } from "expo-router";
 import { cssInterop } from "nativewind";
 import * as React from "react";
 import {
   type GestureResponderEvent,
   Keyboard,
+  Platform,
   Pressable,
   View,
-  type ViewStyle,
 } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { FullWindowOverlay } from "react-native-screens";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { X } from "../../components/Icons";
+import type { NativeViewStyle } from "../../lib/native-style";
 import { useColorScheme } from "../../lib/useColorScheme";
 import { cn } from "../../lib/utils";
 import * as Slot from "../primitives/slot";
@@ -86,6 +90,21 @@ function useBottomSheetContext() {
 }
 
 const CLOSED_INDEX = -1;
+
+/**
+ * iOS presents `presentation: "modal"` screens (task form, inbox) in their own
+ * view controller, above the root `BottomSheetModalProvider` host -- sheets
+ * opened from them mounted behind the modal and looked like they never opened.
+ * `FullWindowOverlay` renders above native modals; gestures need their own root
+ * inside it.
+ */
+const IosSheetContainer = ({ children }: React.PropsWithChildren) => (
+  <FullWindowOverlay>
+    <GestureHandlerRootView style={{ flex: 1 }} pointerEvents="box-none">
+      {children}
+    </GestureHandlerRootView>
+  </FullWindowOverlay>
+);
 
 type BottomSheetContentRef = BottomSheetModalMethods;
 
@@ -169,6 +188,7 @@ const BottomSheetContent = React.forwardRef<
     return (
       <BottomSheetModal
         ref={setRefs}
+        containerComponent={Platform.OS === "ios" ? IosSheetContainer : undefined}
         index={0}
         enablePanDownToClose={enablePanDownToClose}
         backdropComponent={renderBackdrop}
@@ -250,7 +270,7 @@ type BottomSheetViewProps = Omit<
   "style"
 > & {
   hadHeader?: boolean;
-  style?: ViewStyle;
+  style?: NativeViewStyle;
 };
 
 function BottomSheetView({
@@ -380,7 +400,7 @@ type BottomSheetFooterProps = Omit<
 > & {
   bottomSheetFooterProps: GBottomSheetFooterProps;
   children?: React.ReactNode;
-  style?: ViewStyle;
+  style?: NativeViewStyle;
 };
 
 /**
@@ -418,6 +438,12 @@ function useBottomSheet() {
 
   return { ref, open, close };
 }
+
+// Callers that need a ref into `BottomSheetScrollView` (e.g. `time-picker.tsx`)
+// import this instead of reaching into `@gorhom/bottom-sheet` directly, so
+// the same import path works cross-platform -- see `bottom-sheet.tsx` (web)'s
+// matching export.
+export type BottomSheetScrollViewRef = BottomSheetScrollViewMethods;
 
 export {
   BottomSheet,

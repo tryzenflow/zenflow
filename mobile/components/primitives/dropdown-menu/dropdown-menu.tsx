@@ -23,6 +23,7 @@ import {
   type LayoutRectangle,
   Pressable,
   View,
+  type ViewInstance,
 } from "react-native";
 import type {
   DropdownMenuCheckboxItemProps,
@@ -89,17 +90,19 @@ function useRootContext() {
 
 const Trigger = React.forwardRef<PressableRef, SlottablePressableProps>(
   ({ asChild, onPress: onPressProp, disabled = false, ...props }, ref) => {
-    const triggerRef = React.useRef<View>(null);
+    const triggerRef = React.useRef<ViewInstance>(null);
     const { open, onOpenChange, setTriggerPosition } = useRootContext();
 
     React.useImperativeHandle(
       ref,
-      () => {
-        if (!triggerRef.current) {
-          return new View({});
-        }
-        return triggerRef.current;
-      },
+      // `triggerRef.current` is only `null` before the first mount commit;
+      // by the time a consumer of `ref` could plausibly call an imperative
+      // method (e.g. `.measure()`), the trigger has mounted. RN's host
+      // instance (`ViewInstance`/`ReactNativeElement`) has a `protected`
+      // constructor as of RN 0.88, so — unlike the old class-`View`-backed
+      // instance this used to fall back to — there's no standalone dummy
+      // instance to construct here anymore.
+      () => triggerRef.current as ViewInstance,
       [triggerRef.current],
     );
 
