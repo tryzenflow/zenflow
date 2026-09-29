@@ -14,9 +14,17 @@ import {
 } from "@/lib/session";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
-import { type Theme, ThemeProvider } from "@react-navigation/native";
+import { isAxiosError } from "axios";
 import { useFonts } from "expo-font";
-import { Href, Redirect, SplashScreen, Stack, useSegments } from "expo-router";
+import {
+  Href,
+  Redirect,
+  SplashScreen,
+  Stack,
+  type Theme,
+  ThemeProvider,
+  useSegments,
+} from "expo-router";
 import * as React from "react";
 import { StatusBar } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -137,31 +145,33 @@ export default function RootLayout() {
   React.useEffect(() => {
     (async () => {
       setLoading(true);
+      let cached: Awaited<ReturnType<typeof readCachedSessionUser>> = null;
       try {
-        console.log("[_layout] Restoring cached session and cookie...");
-        // Restore the cookie before `setUser`: the SSE connect it triggers
-        // reads the cookie synchronously.
         await restoreSessionCookie();
-        const cached = await readCachedSessionUser();
-        if (cached) setUser(cached);
+        cached = await readCachedSessionUser();
       } catch (err) {
         console.warn("[_layout] Session cache read error:", err);
-      } finally {
-        setLoading(false);
       }
 
-      // Reconcile against `/auth/me` in the background (non-blocking)
+      // Resolve `/auth/me` *before* dropping the splash, so a dead session goes
+      // straight to login instead of flashing the cached user's calendar first.
+      // The cache is only a fallback for when the server is unreachable.
       try {
-        console.log("[_layout] Background /auth/me check...");
         const fresh = await me();
         setUser(fresh);
         if (fresh) await cacheSessionUser(fresh);
         else await clearCachedSessionUser();
       } catch (err) {
-        console.log(
-          "[_layout] Background /auth/me finished (unauthenticated or network error):",
-          err,
-        );
+        if (isAxiosError(err) && err.response) {
+          // Server answered (401/403): the session is dead.
+          setUser(null);
+          await clearCachedSessionUser();
+        } else if (cached) {
+          // Offline / timeout: fall back to the cached user.
+          setUser(cached);
+        }
+      } finally {
+        setLoading(false);
       }
     })();
   }, []);
@@ -236,14 +246,17 @@ export default function RootLayout() {
             <NotificationsSubscriber />
             {/* Visible and themed, not `hidden`: on Android a hidden status
                 bar still reserves its strip, which showed as an empty band
-                above every screen's header. */}
+                above every screen's header.
+                `backgroundColor` is gone from this SDK's `StatusBar` type
+                entirely (Android's mandatory edge-to-edge display removed
+                it, same as `expo-navigation-bar`'s style/color setters --
+                see `lib/android-navigation-bar.ts`) -- the status bar is now
+                always transparent over whatever's drawn beneath it. Flagged:
+                needs a real design pass if Android's status bar area should
+                still read as themed (e.g. a themed scrim behind it), not a
+                drop-in fix. */}
             <StatusBar
               barStyle={isDarkColorScheme ? "light-content" : "dark-content"}
-              backgroundColor={
-                isDarkColorScheme
-                  ? DARK_THEME.colors.background
-                  : LIGHT_THEME.colors.background
-              }
             />
           </BottomSheetModalProvider>
         </ThemeProvider>

@@ -1,6 +1,7 @@
 import { X } from "@/components/Icons";
 import * as DialogPrimitive from "@/components/primitives/dialog";
 import * as Slot from "@/components/primitives/slot";
+import type { NativeViewStyle } from "@/lib/native-style";
 import { cn } from "@/lib/utils";
 import * as React from "react";
 import {
@@ -11,7 +12,6 @@ import {
   StyleSheet,
   TextInput as RNTextInput,
   View,
-  type ViewStyle,
 } from "react-native";
 import { Button } from "./button";
 import { Input } from "./input";
@@ -81,7 +81,7 @@ type BottomSheetContentProps = Omit<
   "style"
 > & {
   onDismiss?: () => void;
-  style?: ViewStyle;
+  style?: NativeViewStyle;
   /** Accepted for API parity with `bottom-sheet.native.tsx`, and ignored: the
    * overlay here is the Radix `Dialog.Overlay` below, which has no snap-point-
    * driven opacity to tune. Declared (and destructured out) so callers can
@@ -141,7 +141,17 @@ const BottomSheetContent = React.forwardRef<
           />
           <DialogPrimitive.Content
             style={
-              { position: "fixed", left: 0, right: 0, bottom: 0 } as unknown as ViewStyle
+              // Web-only fixed positioning (this file is the web-only sheet
+              // shim, see the header comment above) — `position: "fixed"`
+              // is valid CSS but outside the native-only style prop type
+              // `DialogPrimitive.Content` is typed against, so bridge through
+              // `unknown` rather than pretending it's a native-safe value.
+              {
+                position: "fixed",
+                left: 0,
+                right: 0,
+                bottom: 0,
+              } as unknown as NativeViewStyle
             }
             className={cn(
               "z-50 mx-auto flex max-h-[85vh] w-full max-w-[480px] flex-col overflow-hidden rounded-t-[26px] border border-b-0 border-border bg-background pb-2 pt-2.5 shadow-2xl",
@@ -196,7 +206,7 @@ type BottomSheetViewProps = Omit<
   "style"
 > & {
   hadHeader?: boolean;
-  style?: ViewStyle;
+  style?: NativeViewStyle;
 };
 
 function BottomSheetView({
@@ -263,7 +273,10 @@ const BottomSheetFlatList = React.forwardRef<
   );
 });
 
-type BottomSheetScrollViewRef = React.ElementRef<typeof RNScrollView>;
+// Exported (see `bottom-sheet.native.tsx`'s matching export) so callers that
+// need a ref into `BottomSheetScrollView` (e.g. `time-picker.tsx`) get one
+// import path that resolves correctly on both platforms.
+export type BottomSheetScrollViewRef = React.ElementRef<typeof RNScrollView>;
 type BottomSheetScrollViewProps = React.ComponentPropsWithoutRef<
   typeof RNScrollView
 >;

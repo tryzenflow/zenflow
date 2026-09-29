@@ -7,7 +7,9 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  type ScrollViewInstance,
   View,
+  type ViewInstance,
   findNodeHandle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -26,7 +28,27 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
  * reveal whatever's now supposed to be visible in the shrunk viewport).
  */
 const SessionFormScrollContext =
-  createContext<React.RefObject<ScrollView | null> | null>(null);
+  createContext<React.RefObject<ScrollViewInstance | null> | null>(null);
+
+/**
+ * `scrollResponderScrollNativeHandleToKeyboard` is a legacy-bridge
+ * `ScrollResponder` mixin method tied to the old `findNodeHandle`/numeric
+ * view-tag system -- it's gone from `ScrollViewImperativeMethods`'s type
+ * entirely as of RN 0.88 (New Architecture host components don't use numeric
+ * node handles the same way; see `HostInstance`'s doc comment). It may or may
+ * not still exist at runtime depending on architecture/platform -- this file
+ * already only calls it after checking `typeof ... === "function"`, so the
+ * narrow cast below only restores that possibility to the type; it doesn't
+ * change runtime behavior. Flagged: not confirmed working on-device under
+ * the New Architecture, only that it no-ops safely if absent.
+ */
+interface LegacyScrollResponder {
+  scrollResponderScrollNativeHandleToKeyboard?: (
+    handle: number,
+    additionalOffset?: number,
+    preventNegativeScroll?: boolean,
+  ) => void;
+}
 
 /**
  * Scrolls a given node (by ref) into view above the keyboard, the same way
@@ -37,11 +59,13 @@ const SessionFormScrollContext =
  */
 export function useScrollIntoViewOnFocus() {
   const scrollViewRef = useContext(SessionFormScrollContext);
-  return (nodeRef: React.RefObject<View | null>) => {
+  return (nodeRef: React.RefObject<ViewInstance | null>) => {
     const scrollView = scrollViewRef?.current;
     const node = nodeRef.current;
     if (!scrollView || !node) return;
-    const responder = scrollView.getScrollResponder?.();
+    const responder = scrollView.getScrollResponder?.() as
+      | LegacyScrollResponder
+      | undefined;
     const handle = findNodeHandle(node);
     if (
       !responder ||
@@ -85,12 +109,16 @@ export function SessionFormScreen({
 }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const scrollViewRef = useRef<ScrollView | null>(null);
+  const scrollViewRef = useRef<ScrollViewInstance | null>(null);
 
   return (
     <View
       className="flex-1 bg-background"
-      style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
+      style={{
+        // iOS modal page sheet already sits below the status bar.
+        paddingTop: Platform.OS === "ios" ? 14 : insets.top,
+        paddingBottom: insets.bottom,
+      }}
     >
       <View className="flex-row items-center justify-between gap-3 border-b border-border px-5 pb-3.5 pt-2">
         <View className="flex-1">

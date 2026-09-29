@@ -46,6 +46,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   ScrollView,
+  type ScrollViewInstance,
   View,
   useWindowDimensions,
 } from "react-native";
@@ -246,7 +247,11 @@ export function DayTimeline({
   // Bumped whenever a drop settles, so a block whose start didn't change
   // (save failed, sheet cancelled) releases its drop pin and snaps back.
   const [settleKey, setSettleKey] = useState(0);
-  const scrollRef = useRef<ScrollView>(null);
+  // RN 0.88: `ScrollView` the import is now a plain function component, not a
+  // class -- ref instance methods (`.scrollTo`, etc.) live on the dedicated
+  // `ScrollViewInstance` type instead. See react-native's `HostInstance` doc
+  // comment for why (host components now expose a DOM-compatible element).
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const { width: screenWidth } = useWindowDimensions();
   const now = useNow();
   const tabBarOverlay = useTabBarOverlayHeight();

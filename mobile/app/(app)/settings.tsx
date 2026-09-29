@@ -4,6 +4,7 @@ import { LogOut, Moon } from "@/components/Icons";
 import { DluAccountsSection } from "@/components/settings/dlu-accounts-section";
 import { ProfileRow } from "@/components/settings/profile-row";
 import { SettingsSectionLabel } from "@/components/settings/settings-header";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
 import { useUserStore } from "@/hooks/use-user-store";
@@ -19,11 +20,8 @@ import { useColorScheme } from "@/lib/useColorScheme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { type Href, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import {
-  Pressable,
-  ScrollView,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /** Single flat Settings screen — mirrors mockups/settings.html exactly. */
 export default function SettingsScreen() {
@@ -77,12 +75,14 @@ export default function SettingsScreen() {
   }
 
   const tabBarOverlay = useTabBarOverlayHeight();
-
-  if (!user) return null;
+  const insets = useSafeAreaInsets();
 
   return (
     <View className="flex-1 bg-background">
-      <View className="border-b border-border bg-background px-6 py-4">
+      <View
+        className="border-b border-border bg-background px-6 pb-4"
+        style={{ paddingTop: insets.top + 16 }}
+      >
         <Text className="text-xl font-bold tracking-tight">Settings</Text>
       </View>
       <ScrollView
@@ -91,7 +91,17 @@ export default function SettingsScreen() {
       >
         <SettingsSectionLabel>Profile</SettingsSectionLabel>
         <View className="overflow-hidden rounded-2xl border border-border bg-card">
-          <ProfileRow user={user} onUpdated={setUser} />
+          {user ? (
+            <ProfileRow user={user} onUpdated={setUser} />
+          ) : (
+            <View className="flex-row items-center gap-[13px] px-4 py-3.5">
+              <Skeleton className="size-12 rounded-full" />
+              <View className="flex-1 gap-2">
+                <Skeleton className="h-4 w-1/2" />
+                <Skeleton className="h-3 w-2/3" />
+              </View>
+            </View>
+          )}
         </View>
 
         <SettingsSectionLabel>Appearance</SettingsSectionLabel>

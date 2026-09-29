@@ -4,6 +4,7 @@ import {
   BottomSheetContent,
   BottomSheetOpenTrigger,
   BottomSheetScrollView,
+  type BottomSheetScrollViewRef,
   BottomSheetView,
   useBottomSheet,
 } from "@/components/ui/bottom-sheet";
@@ -12,7 +13,7 @@ import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import { minutesToLabel } from "@/utils/preferences";
 import { useCallback, useRef } from "react";
-import { Pressable, type ScrollView, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /** The 12 selectable hours on a 12-hour clock (1 … 12). */
@@ -60,7 +61,7 @@ function fromParts(hour: number, minute: number, meridiem: Meridiem): number {
 }
 
 function scrollIntoView(
-  ref: React.RefObject<ScrollView | null>,
+  ref: React.RefObject<BottomSheetScrollViewRef | null>,
   index: number,
 ) {
   const y = Math.max(
@@ -81,7 +82,7 @@ function Column<T extends number | string>({
   isActive: (item: T) => boolean;
   renderLabel: (item: T) => string;
   onSelect: (item: T) => void;
-  scrollRef?: React.RefObject<ScrollView | null>;
+  scrollRef?: React.RefObject<BottomSheetScrollViewRef | null>;
 }) {
   return (
     // Was a plain `ScrollView` from "react-native" — nested inside
@@ -130,8 +131,8 @@ function Column<T extends number | string>({
  * trigger variants below since the refs must live above `BottomSheetContent`
  * (its `onChange` prop is what fires on every open, not just first mount). */
 function useTimePickerScroll(value: number) {
-  const hourScrollRef = useRef<ScrollView>(null);
-  const minuteScrollRef = useRef<ScrollView>(null);
+  const hourScrollRef = useRef<BottomSheetScrollViewRef>(null);
+  const minuteScrollRef = useRef<BottomSheetScrollViewRef>(null);
 
   const onSheetChange = useCallback(
     (index: number) => {
@@ -169,8 +170,8 @@ function TimePickerBody({
   value: number;
   onChange: (minutes: number) => void;
   onDone: () => void;
-  hourScrollRef: React.RefObject<ScrollView | null>;
-  minuteScrollRef: React.RefObject<ScrollView | null>;
+  hourScrollRef: React.RefObject<BottomSheetScrollViewRef | null>;
+  minuteScrollRef: React.RefObject<BottomSheetScrollViewRef | null>;
 }) {
   const { hour, minute, meridiem } = toParts(value);
 

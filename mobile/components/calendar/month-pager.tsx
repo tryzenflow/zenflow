@@ -1,17 +1,23 @@
-import { addMonths, monthLabel } from "@/lib/month-date-math";
+import { addMonths } from "@/lib/month-date-math";
+import { differenceInCalendarMonths } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 import {
-  FlatList,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  ScrollView,
+  type ScrollViewInstance,
   View,
   useWindowDimensions,
 } from "react-native";
 
+/** Months reachable either side of the month the pager mounted on. */
+const RANGE = 240;
+const PAGE_COUNT = RANGE * 2 + 1;
+
 interface MonthPagerProps {
   /** The month currently shown in the header — the pager stays in sync with
    * it in both directions: swiping updates it (via `onMonthChange`), and an
-   * external change (chevron tap) re-centers the pager. */
+   * external change (chevron tap) scrolls the pager to it. */
   monthDate: Date;
   onMonthChange: (monthDate: Date) => void;
   /** Fired the instant a swipe carries a new month past the halfway point —
@@ -26,14 +32,18 @@ interface MonthPagerProps {
 }
 
 /**
- * Outer horizontal pager for Month View — a sliding 3-month window
- * (prev/current/next) recentered on every page change, rather than an
- * unbounded data list, so paging never needs to know how far back/forward
- * the user might go. Swipe (momentum scroll past the current page) and the
- * header's chevron taps (`app/(app)/month.tsx`) both drive the same
- * `monthDate`/`onMonthChange`, so the header label always stays in sync
- * (GitHub issue #21's acceptance criteria) regardless of which triggered
- * the change.
+ * Outer horizontal pager for Month View. Every month has a fixed slot on one
+ * long paged strip (`RANGE` months either side of the mount month), and only
+ * the committed month ± 1 are actually rendered, absolutely positioned at
+ * their slots. So the scroll offset alone says which month is on screen.
+ *
+ * This replaced a sliding 3-page window that was re-centred after every swipe
+ * (swap the pages, then `scrollTo` the middle). On iOS that `scrollTo` was
+ * sometimes silently dropped (no scroll or momentum event ever arrived), which
+ * left the viewport on a slot that now held a different month: the grid ran a
+ * month off the header. With fixed slots a swipe needs no programmatic scroll
+ * at all; only a chevron / Today tap scrolls, to a slot that is already laid
+ * out.
  */
 export function MonthPager({
   monthDate,
@@ -43,124 +53,143 @@ export function MonthPager({
   renderPage,
 }: MonthPagerProps) {
   const { width } = useWindowDimensions();
-  const listRef = useRef<FlatList<Date>>(null);
-  const [pages, setPages] = useState<Date[]>(() => [
-    addMonths(monthDate, -1),
-    monthDate,
-    addMonths(monthDate, 1),
-  ]);
-  // Tracks the label of the month we last centered on, so the effect below
-  // can tell "monthDate changed because WE scrolled" (already centered, a
-  // no-op) apart from "monthDate changed because the caller changed it out
-  // from under us" (a chevron tap — needs an explicit re-center).
-  const centeredLabelRef = useRef(monthLabel(monthDate));
-  // Confirmed live on an Android emulator: `initialScrollIndex` alone is not
-  // reliable here — the FlatList can render still sitting at offset 0 (the
-  // "prev" page) for a beat after mount while the header (driven by
-  // `monthDate` state, not scroll position) already reads the center page,
-  // and if that late self-correction fires through `onMomentumScrollEnd` it
-  // reads as a "user swiped back a month" and silently changes the header. A
-  // `didDragRef` gate (below) plus an explicit forced re-center on the
-  // FlatList's own first `onLayout` (not just the mount-time
-  // `initialScrollIndex` prop) closes both gaps.
+  // A horizontal ScrollView's content doesn't stretch its children vertically
+  // on iOS, so `flex-1` pages collapse to 0 height (header only, no grid).
+  // Give each page the pager's measured height explicitly.
+  const [height, setHeight] = useState(0);
+  const listRef = useRef<ScrollViewInstance>(null);
+
+  // Slot `RANGE` is the month the pager mounted on; slot i is `anchor + (i -
+  // RANGE)` months. Dates are cached per slot so a page's `monthDate` prop
+  // keeps its identity across renders (`MonthPage` keys its fetch on it).
+  const [anchor] = useState(monthDate);
+  const slotDatesRef = useRef(new Map<number, Date>());
+  function monthAt(index: number): Date {
+    let date = slotDatesRef.current.get(index);
+    if (!date) {
+      date = addMonths(anchor, index - RANGE);
+      slotDatesRef.current.set(index, date);
+    }
+    return date;
+  }
+  function clampIndex(index: number): number {
+    return Math.min(PAGE_COUNT - 1, Math.max(0, index));
+  }
+
+  const committedIndex = clampIndex(
+    RANGE + differenceInCalendarMonths(monthDate, anchor),
+  );
+  const committedIndexRef = useRef(committedIndex);
+  committedIndexRef.current = committedIndex;
+
+  // Slot the header was last told about, so `handleScroll` reports each
+  // crossing once rather than every frame.
+  const visibleIndexRef = useRef(committedIndex);
+  // Confirmed live on an Android emulator: the scroll view can render still
+  // sitting at offset 0 for a beat after mount, and if that late
+  // self-correction fires through `onMomentumScrollEnd` it reads as a "user
+  // swiped" and silently changes the header. Only scrolls that follow an
+  // actual drag may change the month.
   const didDragRef = useRef(false);
   const hasLaidOutRef = useRef(false);
 
+  // The month changed from outside (chevron, Today button), after a swipe, or
+  // the window resized. The viewport follows through the `contentOffset` prop
+  // below, not a `scrollTo` here: the prop is applied in the same native
+  // update that mounts the new neighbour pages, whereas a `scrollTo` sent
+  // alongside that mount was silently dropped on iOS (header moved, grid
+  // didn't). After a swipe the viewport is already there, so it's a no-op.
   useEffect(() => {
-    const label = monthLabel(monthDate);
-    if (label === centeredLabelRef.current) return;
-    centeredLabelRef.current = label;
-    visibleLabelRef.current = label;
-    setPages([addMonths(monthDate, -1), monthDate, addMonths(monthDate, 1)]);
-    requestAnimationFrame(() => {
-      listRef.current?.scrollToOffset({ offset: width, animated: false });
-    });
-  }, [monthDate, width]);
+    visibleIndexRef.current = committedIndex;
+  }, [committedIndex]);
 
-  function handleFirstLayout() {
-    if (hasLaidOutRef.current) return;
+  // Centering must wait for the content to be laid out: before that, iOS
+  // clamps any offset (`contentOffset` prop or an early `scrollTo`) to 0.
+  function handleContentSizeChange(contentWidth: number) {
+    if (hasLaidOutRef.current || contentWidth < width * PAGE_COUNT - 1) return;
     hasLaidOutRef.current = true;
-    // Force the initial center position ourselves rather than trusting
-    // `initialScrollIndex` alone to have already applied it correctly.
-    requestAnimationFrame(() => {
-      listRef.current?.scrollToOffset({ offset: width, animated: false });
-    });
+    // JS knows the size before UIKit's `contentSize` has caught up, so the first
+    // `scrollTo` can still be clamped to 0. Repeat (idempotent) until it sticks,
+    // unless the user has already started dragging.
+    const center = () => {
+      if (!didDragRef.current) {
+        listRef.current?.scrollTo({
+          x: committedIndexRef.current * width,
+          y: 0,
+          animated: false,
+        });
+      }
+    };
+    center();
+    [50, 150, 400].forEach((ms) => setTimeout(center, ms));
   }
 
-  // Label of the month the *viewport* is currently over, so `handleScroll`
-  // only reports a change once per crossing rather than on every frame.
-  const visibleLabelRef = useRef(monthLabel(monthDate));
+  function indexFromEvent(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    return clampIndex(Math.round(event.nativeEvent.contentOffset.x / width));
+  }
 
   function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    if (!didDragRef.current) return; // ignore programmatic recentering
-    const index = Math.round(event.nativeEvent.contentOffset.x / width);
-    const page = pages[index];
-    if (!page) return;
-    const label = monthLabel(page);
-    if (label === visibleLabelRef.current) return;
-    visibleLabelRef.current = label;
-    onVisibleMonthChange(page);
+    if (!didDragRef.current) return; // ignore programmatic scrolls
+    const index = indexFromEvent(event);
+    if (index === visibleIndexRef.current) return;
+    visibleIndexRef.current = index;
+    onVisibleMonthChange(monthAt(index));
   }
 
   function handleMomentumScrollEnd(
     event: NativeSyntheticEvent<NativeScrollEvent>,
   ) {
-    // Ignore any programmatic/self-correcting scroll settle that didn't
-    // follow an actual user drag (see `didDragRef`'s doc comment above).
     if (!didDragRef.current) return;
     didDragRef.current = false;
-
-    const index = Math.round(event.nativeEvent.contentOffset.x / width);
-    if (index === 1 || !pages[index]) return; // stayed on the center page
-    const nextMonth = pages[index];
-    centeredLabelRef.current = monthLabel(nextMonth);
-    visibleLabelRef.current = monthLabel(nextMonth);
-    onMonthChange(nextMonth);
-    setPages([addMonths(nextMonth, -1), nextMonth, addMonths(nextMonth, 1)]);
-    requestAnimationFrame(() => {
-      listRef.current?.scrollToOffset({ offset: width, animated: false });
-    });
+    const index = indexFromEvent(event);
+    visibleIndexRef.current = index;
+    if (index !== committedIndexRef.current) onMonthChange(monthAt(index));
   }
 
+  const rendered = [committedIndex - 1, committedIndex, committedIndex + 1]
+    .filter((index) => index >= 0 && index < PAGE_COUNT);
+
   return (
-    <FlatList
-      ref={listRef}
-      data={pages}
-      horizontal
-      pagingEnabled
-      showsHorizontalScrollIndicator={false}
-      initialScrollIndex={1}
-      getItemLayout={(_, index) => ({
-        length: width,
-        offset: width * index,
-        index,
-      })}
-      keyExtractor={(page) => monthLabel(page)}
-      // Android's `VirtualizedList` defaults this to `true`, and it is the
-      // remaining cause of "addViewAt: failed to insert view […] the
-      // specified child already has a parent" when leaving Month View (the
-      // segmented control or the bottom tab bar, either one): clipping works
-      // by detaching/re-attaching child views from their `ViewGroup` behind
-      // React's back, and when `react-native-screens` detaches this screen on
-      // a tab switch that bookkeeping desyncs — RN then re-inserts a view
-      // that still has a parent and throws. `data` is only ever the 3-month
-      // sliding window, so clipping bought nothing here anyway. Same failure
-      // family as the nested-VirtualizedList note in `month-grid.tsx`.
-      removeClippedSubviews={false}
-      renderItem={({ item }) => (
-        <View style={{ width }} className="flex-1">
-          {renderPage(item)}
-        </View>
+    <View
+      style={{ flex: 1 }}
+      onLayout={(e) => setHeight(e.nativeEvent.layout.height)}
+    >
+      {height > 0 && (
+        // A plain paged `ScrollView`, not a `FlatList`: on iOS the virtualized
+        // list rendered nothing here (blank grid, not even the skeleton).
+        <ScrollView
+          ref={listRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          contentOffset={{ x: committedIndex * width, y: 0 }}
+          contentContainerStyle={{ width: PAGE_COUNT * width, height }}
+          onContentSizeChange={handleContentSizeChange}
+          scrollEnabled={scrollEnabled}
+          onScrollBeginDrag={() => {
+            didDragRef.current = true;
+          }}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          onMomentumScrollEnd={handleMomentumScrollEnd}
+          style={{ flex: 1 }}
+        >
+          {rendered.map((index) => (
+            <View
+              key={index}
+              style={{
+                position: "absolute",
+                left: index * width,
+                top: 0,
+                width,
+                height,
+              }}
+            >
+              {renderPage(monthAt(index))}
+            </View>
+          ))}
+        </ScrollView>
       )}
-      onLayout={handleFirstLayout}
-      scrollEnabled={scrollEnabled}
-      onScrollBeginDrag={() => {
-        didDragRef.current = true;
-      }}
-      onScroll={handleScroll}
-      scrollEventThrottle={16}
-      onMomentumScrollEnd={handleMomentumScrollEnd}
-      className="flex-1"
-    />
+    </View>
   );
 }

@@ -39,12 +39,16 @@ const ToggleGroupUtils = {
 const EmptyGestureResponderEvent: GestureResponderEvent = {
   nativeEvent: {
     changedTouches: [],
-    identifier: "0",
+    // RN 0.88 types `identifier`/`target` as `number` (host-instance tag),
+    // not `string` -- these were always meant as placeholder zeros for this
+    // synthetic empty event, so `0` rather than `"0"` is the more correct
+    // value anyway, not just a type-only fix.
+    identifier: 0,
     locationX: 0,
     locationY: 0,
     pageX: 0,
     pageY: 0,
-    target: "0",
+    target: 0,
     timestamp: 0,
     touches: [],
   },
@@ -52,6 +56,12 @@ const EmptyGestureResponderEvent: GestureResponderEvent = {
   cancelable: false,
   currentTarget: {} as any,
   defaultPrevented: false,
+  // RN 0.88 types now require these two React-internal synthetic-event
+  // fields (`dispatchConfig`, `touchHistory`) too -- same
+  // never-meant-to-be-constructed-by-app-code territory as `currentTarget`
+  // above, so following that file's existing precedent.
+  dispatchConfig: {} as any,
+  touchHistory: {} as any,
   eventPhase: 0,
   persist: () => {},
   isDefaultPrevented: () => false,

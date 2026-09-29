@@ -35,11 +35,15 @@ import {
 } from "@/lib/pending-slot-pick";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import { dateKey } from "@/lib/week-date-math";
-import { useFocusEffect } from "@react-navigation/native";
 import { zonedDate, zonedNow } from "@zenflow/core";
 import type { Session, UpdateScope } from "@zenflow/shared";
 import { differenceInCalendarDays } from "date-fns";
-import { type Href, useLocalSearchParams, useRouter } from "expo-router";
+import {
+  type Href,
+  useFocusEffect,
+  useLocalSearchParams,
+  useRouter,
+} from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { View, useWindowDimensions } from "react-native";
 import { useSharedValue } from "react-native-reanimated";

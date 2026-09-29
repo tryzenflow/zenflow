@@ -31,7 +31,7 @@ import { isAxiosError } from "axios";
 import { format } from "date-fns";
 import * as Haptics from "expo-haptics";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View } from "react-native";
+import { View, type ViewInstance } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -149,8 +149,11 @@ export function MonthPage({
   const pageOffX = useSharedValue(0);
   const pageOffY = useSharedValue(0);
 
-  const pageRef = useRef<View>(null);
-  const gridRef = useRef<View>(null);
+  // RN 0.88: ref instance methods (`.measureInWindow`, etc.) live on
+  // `ViewInstance`, not the `View` component-function type -- see
+  // day-timeline.tsx's `scrollRef` comment.
+  const pageRef = useRef<ViewInstance>(null);
+  const gridRef = useRef<ViewInstance>(null);
   const gridRectRef = useRef({ x: 0, y: 0, width: 0, height: 0, rows: 0 });
   const lastHighlightRef = useRef<string | null>(null);
   // The dragged pill's origin day key, read inside the pan callbacks — a ref

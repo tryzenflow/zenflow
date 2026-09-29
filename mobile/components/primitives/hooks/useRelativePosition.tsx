@@ -1,17 +1,17 @@
 import type { Insets } from "@/components/primitives/types";
+import type { NativeViewStyle } from "@/lib/native-style";
 import * as React from "react";
 import {
   type LayoutRectangle,
   type ScaledSize,
-  type ViewStyle,
   useWindowDimensions,
 } from "react-native";
 
-const POSITION_ABSOLUTE: ViewStyle = {
+const POSITION_ABSOLUTE: NativeViewStyle = {
   position: "absolute",
 };
 
-const HIDDEN_CONTENT: ViewStyle = {
+const HIDDEN_CONTENT: NativeViewStyle = {
   position: "absolute",
   opacity: 0,
   zIndex: -9999999,

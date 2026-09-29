@@ -8,7 +8,13 @@ import {
   type SubmitHandler,
   useForm,
 } from "react-hook-form";
-import { ActivityIndicator, Pressable, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  TextInput,
+  type TextInputInstance,
+  View,
+} from "react-native";
 import { z } from "zod";
 
 import { requestOtp, verifyOtp } from "@/api/auth";
@@ -89,7 +95,9 @@ function OtpBoxes({
   error?: boolean;
   disabled?: boolean;
 }) {
-  const inputRef = useRef<TextInput>(null);
+  // RN 0.88: ref instance type is `TextInputInstance`, not `TextInput` -- see
+  // day-timeline.tsx's `scrollRef` comment.
+  const inputRef = useRef<TextInputInstance>(null);
   const digits = value.padEnd(OTP_LENGTH, " ").split("");
 
   return (

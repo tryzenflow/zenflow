@@ -1,4 +1,5 @@
-import type { Pressable, Text, View, ViewStyle } from "react-native";
+import type { NativeViewStyle } from "@/lib/native-style";
+import type { Pressable, Text, View } from "react-native";
 
 type ComponentPropsWithAsChild<T extends React.ElementType<any>> =
   React.ComponentPropsWithoutRef<T> & { asChild?: boolean };
@@ -36,7 +37,7 @@ type FocusOutsideEvent = CustomEvent<{ originalEvent: FocusEvent }>;
  */
 interface PositionedContentProps {
   forceMount?: true | undefined;
-  style?: ViewStyle;
+  style?: NativeViewStyle;
   alignOffset?: number;
   insets?: Insets;
   avoidCollisions?: boolean;

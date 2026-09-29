@@ -7,14 +7,20 @@ import {
   BAR_RADIUS,
 } from "@/lib/tab-bar-metrics";
 import { useColorScheme } from "@/lib/useColorScheme";
-import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
+// `expo-router` (bumped for SDK 58) vendors its own bottom-tabs
+// implementation now and no longer depends on `@react-navigation/bottom-tabs`
+// at all (it's gone from node_modules). The package root doesn't re-export
+// this type, but `./layouts/Tabs` (what `<Tabs>` itself is defined in, see
+// `app/(app)/_layout.tsx`) does.
+import type { BottomTabBarProps } from "expo-router/build/layouts/Tabs";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export function AppTabBar({
   state,
   descriptors,
-  navigation,
+  emitter,
+  navigateToTab,
 }: BottomTabBarProps) {
   const { isDarkColorScheme } = useColorScheme();
   const theme = isDarkColorScheme ? NAV_THEME.dark : NAV_THEME.light;
@@ -47,14 +53,18 @@ export function AppTabBar({
     const color = focused ? theme.primary : theme.mutedForeground;
     const label = options.title ?? route.name;
 
+    // `expo-router`'s SDK 58 `BottomTabBarProps` dropped the react-navigation
+    // `navigation` prop in favor of a plain `emitter` + `navigateToTab(key)`
+    // pair -- mirrors the emit/navigate pattern from expo-router's own
+    // `BottomTabBar` reference implementation.
     function onPress() {
-      const event = navigation.emit({
+      const event = emitter.emit({
         type: "tabPress",
         target: route.key,
         canPreventDefault: true,
       });
       if (!focused && !event.defaultPrevented) {
-        navigation.navigate(route.name, route.params);
+        navigateToTab(route.key);
       }
     }
 
@@ -63,7 +73,7 @@ export function AppTabBar({
         key={route.key}
         onPress={onPress}
         onLongPress={() =>
-          navigation.emit({ type: "tabLongPress", target: route.key })
+          emitter.emit({ type: "tabLongPress", target: route.key })
         }
         accessibilityRole="button"
         accessibilityState={focused ? { selected: true } : {}}

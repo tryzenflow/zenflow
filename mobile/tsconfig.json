@@ -1,7 +1,11 @@
 {
-  "extends": "expo/tsconfig.base",
+  "extends": "expo/tsconfig.base.json",
   "compilerOptions": {
     "strict": true,
+    // TS 6.0 (bumped for SDK 58, see mobile/package.json) deprecates
+    // `baseUrl` ahead of removal in TS 7 -- still required here to anchor the
+    // `paths` aliases below, so silence rather than restructure for now.
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     // Match Metro's platform-extension resolution order for the app's
     // primary targets (iOS/Android) — without this, a bare `tsc` (this is

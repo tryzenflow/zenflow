@@ -6,6 +6,7 @@ import {
 } from "@/components/Icons";
 import * as DropdownMenuPrimitive from "@/components/primitives/dropdown-menu";
 import { TextClassContext } from "@/components/ui/text";
+import type { NativeViewStyle } from "@/lib/native-style";
 import { cn } from "@/lib/utils";
 import * as React from "react";
 import {
@@ -107,7 +108,13 @@ const DropdownMenuContent = React.forwardRef<
               ? (StyleSheet.flatten([
                   Platform.OS !== "web" ? StyleSheet.absoluteFill : undefined,
                   overlayStyle,
-                ]) as ViewStyle)
+                  // `overlayStyle: StyleProp<ViewStyle>` picks up the
+                  // public, web-widened `ViewStyle` (see
+                  // `lib/native-style.ts`), which no longer satisfies
+                  // `StyleSheet.flatten`'s native-only generic constraint.
+                ] as unknown as Parameters<
+                  typeof StyleSheet.flatten
+                >[0]) as NativeViewStyle)
               : Platform.OS !== "web"
                 ? StyleSheet.absoluteFill
                 : undefined

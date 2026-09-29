@@ -25,6 +25,7 @@ import {
 } from "react";
 import { Pressable, View, useWindowDimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, {
   Easing,
   clamp,
@@ -122,6 +123,7 @@ function WeekHeaderImpl(
 ) {
   const now = useNow();
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
 
   // What the title / range / highlight read. The carousel and anchor logic
   // stay on `focusedDate` so they never re-derive mid-swipe.
@@ -337,7 +339,10 @@ function WeekHeaderImpl(
 
   return (
     <GestureDetector gesture={weekSwipe}>
-      <View className="overflow-hidden border-b border-border bg-background pt-2.5 pb-2">
+      <View
+        className="overflow-hidden border-b border-border bg-background pb-2"
+        style={{ paddingTop: insets.top + 10 }}
+      >
         <View className="px-4 pb-2">
           <Text className="text-xl font-bold tracking-tight">
             {format(shownDate, "MMMM yyyy")}

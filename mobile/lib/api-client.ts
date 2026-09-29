@@ -70,12 +70,18 @@ function cookiePair(setCookieHeader: string): string {
   return setCookieHeader.split(";")[0].trim();
 }
 
+// Manual cookie replay is Android-only. iOS's NSURLSession keeps HttpOnly
+// cookies in its own jar and replays them itself (web has the browser jar), so
+// a hand-set `Cookie` header there is redundant at best and, when it comes from
+// a stale cached value, actively breaks auth.
+const MANUAL_COOKIES = Platform.OS === "android";
+
 export async function restoreSessionCookie() {
-  if (Platform.OS === "web") return;
+  if (!MANUAL_COOKIES) return;
   sessionCookie = await readCachedSessionCookie();
 }
 
-if (Platform.OS !== "web") {
+if (MANUAL_COOKIES) {
   // Capture `Set-Cookie` off every response (set on `/auth/otp/verify`) and
   // persist it so it survives app restarts.
   api.interceptors.response.use(async (response) => {
@@ -109,6 +115,14 @@ api.interceptors.response.use(
       isAxiosError(error) &&
       (error.response?.status === 401 || error.response?.status === 403)
     ) {
+      // Ignore failures from a request sent with a cookie that has since been
+      // replaced (e.g. the startup `/auth/me` carrying a stale cached cookie
+      // resolving *after* the user logged in): it says nothing about the new
+      // session, and signing out here would wipe it.
+      if (MANUAL_COOKIES) {
+        const sent = (error.config?.headers?.get?.("Cookie") as string) ?? null;
+        if (sent !== sessionCookie) return Promise.reject(error);
+      }
       useUserStore.getState().setUser(null);
       // Same per-user cleanup as Settings sign-out.
       clearDaySessionCache();
@@ -122,7 +136,7 @@ api.interceptors.response.use(
 
 export async function clearSession() {
   sessionCookie = null;
-  if (Platform.OS !== "web") {
+  if (MANUAL_COOKIES) {
     await clearCachedSessionCookie();
   }
 }

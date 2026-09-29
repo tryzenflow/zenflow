@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Platform, type View, type ViewStyle } from "react-native";
+import { Platform, type ViewInstance, type ViewStyle } from "react-native";
 import { create } from "zustand";
 
 const DEFAULT_PORTAL_HOST = "INTERNAL_PRIMITIVE_DEFAULT_HOST_NAME";
@@ -72,7 +72,7 @@ const ROOT: ViewStyle = {
 };
 
 export function useModalPortalRoot() {
-  const ref = React.useRef<View>(null);
+  const ref = React.useRef<ViewInstance>(null);
   const [sideOffset, setSideOffSet] = React.useState(0);
 
   const onLayout = React.useCallback(() => {
