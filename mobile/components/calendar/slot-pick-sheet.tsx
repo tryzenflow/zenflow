@@ -100,6 +100,15 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
       sheet.close();
     }
 
+    // Whichever side is selected, the buttons read from it — so the two can
+    // never contradict each other or the highlighted card.
+    const chosen = options.find((o) => o.kind === selected);
+    const commitLabel = chosen
+      ? selected === "primary"
+        ? `Keep ${chosen.time} ${chosen.day}`
+        : `Switch to ${chosen.time} ${chosen.day}`
+      : "";
+
     return (
       <BottomSheet>
         <BottomSheetContent ref={sheet.ref} onDismiss={handleDismiss}>
@@ -179,28 +188,28 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
               it never moves anything else on your calendar.
             </Text>
 
+            {/* Both footer buttons commit ONE decision — whichever card is
+                selected — and each labels itself from that same decision. They
+                used to hard-code their own side, so tapping the primary card
+                and then "Switch to" silently applied the alternative. */}
             <View className="flex-none pt-4 flex flex-col gap-2 mb-8">
               <Button
                 size="lg"
                 className="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl h-[52px] px-5 text-base font-semibold shrink-0"
-                onPress={() => handlePick("alternative")}
+                onPress={() =>
+                  handlePick(selected === "primary" ? "primary" : "alternative")
+                }
               >
-                <Text className="font-bold">
-                  {options[1]
-                    ? `Switch to ${options[1].time} ${options[1].day}`
-                    : ""}
-                </Text>
+                <Text className="font-bold">{commitLabel}</Text>
               </Button>
               <Button
                 variant="ghost"
                 className="inline-flex w-full items-center justify-center rounded-xl h-[42px] px-5 text-[13.5px] font-semibold text-muted-foreground"
-                onPress={() => handlePick("primary")}
+                onPress={() =>
+                  handlePick(selected === "primary" ? "primary" : "alternative")
+                }
               >
-                <Text className="font-semibold">
-                  {options[0]
-                    ? `Keep ${options[0].time} ${options[0].day}`
-                    : ""}
-                </Text>
+                <Text className="font-semibold">{commitLabel}</Text>
               </Button>
             </View>
           </BottomSheetView>
