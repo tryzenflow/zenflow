@@ -20,6 +20,7 @@ import { useToast } from "@/components/ui/toast";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
 import { setPendingSlotPick } from "@/lib/pending-slot-pick";
+import { divergentSittings } from "@/lib/series-alternatives";
 import { isSessionPastDeadline } from "@/lib/overdue";
 import {
   RESCHEDULE_HINT,
@@ -174,6 +175,23 @@ export default function EditSessionScreen() {
         router.replace({
           pathname: "/",
           params: { date: updated.primarySlot, flash: updated.id },
+        } as Href);
+        return;
+      }
+
+      // A redistributed series (#59): same shape as the create path, the
+      // per-sitting divergence is on `sessions[]` and nothing at the top level.
+      const series = divergentSittings(updated.sessions);
+      if (series.length > 0) {
+        setPendingSlotPick({
+          kind: "series",
+          title: updated.title,
+          sittings: series,
+          tz,
+        });
+        router.replace({
+          pathname: "/",
+          params: { date: series[0].primarySlot, flash: updated.id },
         } as Href);
         return;
       }
