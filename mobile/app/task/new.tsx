@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/toast";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
 import { setPendingSlotPick } from "@/lib/pending-slot-pick";
+import { divergentSittings } from "@/lib/series-alternatives";
 import {
   RESCHEDULE_HINT,
   placementToastMessage,
@@ -215,6 +216,25 @@ export default function NewSessionScreen() {
         router.replace({
           pathname: "/",
           params: { date: response.primarySlot, flash: response.id },
+        } as Href);
+        return;
+      }
+
+      // A `sessionCount > 1` series (#59): the divergence rides on `sessions[]`,
+      // while the top-level fields are hard-set to `NO_SLOT_PROPOSAL` server
+      // side, so the single-session guard above can never match one. Filter to
+      // the sittings that actually diverge and hand those off.
+      const series = divergentSittings(response.sessions);
+      if (series.length > 0) {
+        setPendingSlotPick({
+          kind: "series",
+          title: response.title,
+          sittings: series,
+          tz,
+        });
+        router.replace({
+          pathname: "/",
+          params: { date: series[0].primarySlot, flash: response.id },
         } as Href);
         return;
       }
