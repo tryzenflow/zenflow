@@ -164,6 +164,7 @@ export default function EditSessionScreen() {
         updated.alternativeSlot
       ) {
         setPendingSlotPick({
+          kind: "single",
           session: updated,
           primarySlot: updated.primarySlot,
           alternativeSlot: updated.alternativeSlot,

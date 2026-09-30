@@ -205,6 +205,7 @@ export default function NewSessionScreen() {
         response.alternativeSlot
       ) {
         setPendingSlotPick({
+          kind: "single",
           session: response,
           primarySlot: response.primarySlot,
           alternativeSlot: response.alternativeSlot,

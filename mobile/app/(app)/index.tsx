@@ -186,7 +186,7 @@ export default function WeekScreen() {
   // A divergent create/edit landed on the week view (`?date=`/`?flash=` params
   // already focused it and pulsed the block) — present the same sheet over it.
   const handlePendingSlotPick = useCallback(
-    (pending: PendingSlotPick) => {
+    (pending: Extract<PendingSlotPick, { kind: "single" }>) => {
       slotPickSheetRef.current?.open(
         pending.session,
         pending.primarySlot,
@@ -245,7 +245,9 @@ export default function WeekScreen() {
       // (`setPendingSlotPick` in task/new|edit) — consume it here so the
       // sheet is presented over the week view, never the modal form.
       const pending = takePendingSlotPick();
-      if (pending) handlePendingSlotPick(pending);
+      // A `sessionCount > 1` series (#59) carries its per-sitting divergence on
+      // `sessions[]` and lands here too; handled in a follow-up.
+      if (pending?.kind === "single") handlePendingSlotPick(pending);
     }, [handlePendingSlotPick]),
   );
 
