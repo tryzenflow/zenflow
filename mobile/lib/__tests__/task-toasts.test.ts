@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  getSlotTakenError,
   shouldSurfaceRescheduleHint,
+  showBulkPickToast,
   showErrorToast,
+  showSeriesAlternativesPrompt,
+  showSlotTakenToast,
   showSplitToast,
   splitToastMessage,
 } from "../task-toasts";
@@ -91,5 +95,92 @@ describe("shouldSurfaceRescheduleHint", () => {
       false, // 11
       false, // 12
     ]);
+  });
+});
+
+describe("getSlotTakenError", () => {
+  const axiosErr = (status: number, data: unknown) => ({
+    isAxiosError: true,
+    response: { status, data },
+  });
+
+  it("returns the body on a 409 SLOT_TAKEN", () => {
+    const body = {
+      success: false,
+      statusCode: 409,
+      message: "That alternative time now overlaps another sitting of this task.",
+      code: "SLOT_TAKEN",
+    };
+    expect(getSlotTakenError(axiosErr(409, body))).toEqual(body);
+  });
+
+  it("ignores a 409 carrying a different code, e.g. SCHEDULE_INFEASIBLE", () => {
+    expect(
+      getSlotTakenError(axiosErr(409, { code: "SCHEDULE_INFEASIBLE" })),
+    ).toBeNull();
+  });
+
+  it("ignores a non-409 even with the right code", () => {
+    expect(getSlotTakenError(axiosErr(500, { code: "SLOT_TAKEN" }))).toBeNull();
+  });
+
+  it("ignores a non-axios error", () => {
+    expect(getSlotTakenError(new Error("boom"))).toBeNull();
+  });
+});
+
+describe("showSeriesAlternativesPrompt", () => {
+  it("is a non-auto-dismissing info toast carrying a View action", () => {
+    const toast = vi.fn();
+    const onView = vi.fn();
+    showSeriesAlternativesPrompt(toast, 3, 5, onView);
+    const [title, variant, duration, position, , action, opts] =
+      toast.mock.calls[0];
+    expect(title).toBe("3 sittings have an alternative");
+    // "info" is what keeps it up: only `success` auto-dismisses.
+    expect(variant).toBe("info");
+    expect(duration).toBeUndefined();
+    expect(position).toBe("bottom");
+    expect(action.label).toBe("View");
+    action.onPress();
+    expect(onView).toHaveBeenCalled();
+    expect(opts.description).toContain("All 5 are already scheduled");
+  });
+
+  it("uses singular copy for a single divergent sitting", () => {
+    const toast = vi.fn();
+    showSeriesAlternativesPrompt(toast, 1, 1, vi.fn());
+    expect(toast.mock.calls[0][0]).toBe("1 sitting has an alternative");
+    expect(toast.mock.calls[0][6].description).toContain("All 1 is");
+  });
+});
+
+describe("showSlotTakenToast", () => {
+  it("is destructive and states that nothing moved", () => {
+    const toast = vi.fn();
+    showSlotTakenToast(toast);
+    const [title, variant, , , , , opts] = toast.mock.calls[0];
+    expect(title).toBe("That time was just taken");
+    expect(variant).toBe("destructive");
+    expect(opts.description).toContain("stayed put");
+  });
+});
+
+describe("showBulkPickToast", () => {
+  it("is a plain success when nothing failed", () => {
+    const toast = vi.fn();
+    showBulkPickToast(toast, 3, 0);
+    const [title, variant] = toast.mock.calls[0];
+    expect(title).toBe("Updated 3 sittings");
+    expect(variant).toBe("success");
+  });
+
+  it("warns and names the failure count on a partial pass", () => {
+    const toast = vi.fn();
+    showBulkPickToast(toast, 2, 1);
+    const [title, variant, , , , , opts] = toast.mock.calls[0];
+    expect(title).toBe("2 updated, 1 couldn't be");
+    expect(variant).toBe("warning");
+    expect(opts.description).toContain("stayed where they are");
   });
 });
