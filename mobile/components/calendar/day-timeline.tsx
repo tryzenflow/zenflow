@@ -1,4 +1,4 @@
-import { listSessions, slotPick, updateSession } from "@/api/tasks";
+import { listSessions, updateSession } from "@/api/tasks";
 import { AlertTriangle, RefreshCcw, RotateCw } from "@/components/Icons";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -692,18 +692,13 @@ export function DayTimeline({
                 updated.primarySlot,
                 updated.alternativeSlot,
                 updated.slotProposalId,
-                async (chose) => {
-                  try {
-                    await slotPick(updated.id, {
-                      slotProposalId: updated.slotProposalId!,
-                      chose,
-                    });
-                  } catch (error) {
-                    // Non-blocking — surface as toast but continue with placement
-                    // Toast will be shown by the parent component
-                    console.warn("slotPick failed:", error);
-                  }
-                  // Refetch to get the authoritative state after the pick
+                async () => {
+                  // The POST belongs to `app/(app)/index.tsx`, which wraps this
+                  // callback in its own `slotPick` call and then invokes it.
+                  // Doing it here as well fired every drag-reschedule pick
+                  // twice; harmless (slot-pick is idempotent) but wasteful and
+                  // confusing to debug. All that is left here is a refetch for
+                  // the authoritative state.
                   await refetch();
                 },
               );
