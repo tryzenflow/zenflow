@@ -223,7 +223,7 @@ def _old_run(req: PlaceRequest) -> list[PlacedMember]:
         )
         dur_ms = m.duration_minutes * consts.MS_PER_MINUTE
         if placer.next15 + dur_ms > req.deadline_ms:
-            return placer._no_slot(m, base)
+            return placer._no_slot(m, base, ledger)
         days = placer._select_days(first, last, ledger)
         extra = list(ledger.siblings)
         lin = (
@@ -238,7 +238,7 @@ def _old_run(req: PlaceRequest) -> list[PlacedMember]:
         )
         decision = PolicySelector.resolve(req.mode, m, heur, lin)
         if decision is None:
-            return placer._no_slot(m, base)
+            return placer._no_slot(m, base, ledger)
         policy, start_ms = decision
         return base.model_copy(
             update={
