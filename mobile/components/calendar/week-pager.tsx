@@ -133,7 +133,7 @@ interface WeekPagerProps {
     primarySlot: string,
     alternativeSlot: string,
     slotProposalId: string,
-    onPick: (chose: "primary" | "alternative") => void,
+    onPick: (chose: "primary" | "alternative") => Promise<void>,
   ) => void;
   /** Session id to pulse on the focused day — a teleport target. Forwarded to
    * the active `DayTimeline` only. */

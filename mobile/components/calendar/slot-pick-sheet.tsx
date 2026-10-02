@@ -7,9 +7,15 @@ import {
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
-import { isZonedToday, zonedDate, zonedNow } from "@zenflow/core";
+import { useToast } from "@/components/ui/toast";
+import { buildSlotOptions, type SlotOption } from "@/lib/slot-option";
+import {
+  getSlotTakenError,
+  showErrorToast,
+  showSlotTakenToast,
+} from "@/lib/task-toasts";
+import { zonedNow } from "@zenflow/core";
 import type { Session } from "@zenflow/shared";
-import { addDays, addMinutes, format, isSameDay } from "date-fns";
 import * as Haptics from "expo-haptics";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
@@ -21,7 +27,7 @@ export interface SlotPickSheetHandle {
     alternativeSlot: string,
     slotProposalId: string,
     tz: string,
-    onPick: (chose: "primary" | "alternative") => void,
+    onPick: (chose: "primary" | "alternative") => Promise<void>,
     onDismiss: () => void,
   ) => void;
 }
@@ -30,44 +36,13 @@ interface SlotPickSheetProps {
   tz: string;
 }
 
-interface Option {
-  label: string;
-  time: string;
-  /** Lowercased relative day ("today"/"tomorrow") or `EEE MMM d` — used in
-   * the footer buttons ("Switch to 9:00 AM tomorrow"). */
-  day: string;
-  hint: string;
-  isPrimary: boolean;
-}
-
-/** `7:00 – 8:00 PM` when both ends share a half-day, `11:00 AM – 12:00 PM`
- * when the range crosses meridiem — matches the week-view mockup blocks. */
-function formatRange(start: Date, end: Date): string {
-  const sameHalf = (start.getHours() < 12) === (end.getHours() < 12);
-  return sameHalf
-    ? `${format(start, "h:mm")} – ${format(end, "h:mm a")}`
-    : `${format(start, "h:mm a")} – ${format(end, "h:mm a")}`;
-}
-
-/** Relative day word in user-tz space (never device clock): "today" /
- * "tomorrow", else `EEE MMM d` ("Wed Jul 1"). */
-function dayWord(date: Date, tz: string): string {
-  if (isZonedToday(date, tz)) return "today";
-  if (isSameDay(date, addDays(zonedNow(tz), 1))) return "tomorrow";
-  return format(date, "EEE MMM d");
-}
-
-const capitalize = (word: string): string =>
-  word.charAt(0).toUpperCase() + word.slice(1);
-
 const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
   ({ tz }, ref) => {
     const sheet = useBottomSheet();
+    const { toast } = useToast();
     const [session, setSession] = useState<Session | null>(null);
-    const [primarySlot, setPrimarySlot] = useState("");
-    const [alternativeSlot, setAlternativeSlot] = useState("");
-    const [slotProposalId, setSlotProposalId] = useState("");
-    const [options, setOptions] = useState<Option[]>([]);
+    const [options, setOptions] = useState<SlotOption[]>([]);
+    const [busy, setBusy] = useState(false);
     const [selected, setSelected] = useState<"primary" | "alternative" | null>(
       "alternative",
     );
@@ -75,6 +50,10 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
       ((chose: "primary" | "alternative") => void) | null
     >(null);
     const onDismissRef = useRef<(() => void) | null>(null);
+    // Ref-based single-flight guard: `busy` state alone can let two taps in
+    // the same tick both see `false`, so the ref is the source of truth for
+    // preventing a second submission while the first is in flight.
+    const busyRef = useRef(false);
 
     useImperativeHandle(
       ref,
@@ -89,42 +68,23 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
           onDismiss,
         ) => {
           setSession(nextSession);
-          setPrimarySlot(nextPrimarySlot);
-          setAlternativeSlot(nextAlternativeSlot);
-          setSlotProposalId(nextSlotProposalId);
           onPickRef.current = onPick;
           onDismissRef.current = onDismiss;
 
-          const primaryDate = zonedDate(nextPrimarySlot, nextTz);
-          const alternativeDate = zonedDate(nextAlternativeSlot, nextTz);
-          const duration = nextSession.durationMinutes;
-
-          const primaryDay = dayWord(primaryDate, nextTz);
-          const alternativeDay = dayWord(alternativeDate, nextTz);
-
-          setOptions([
-            {
-              label: `${capitalize(primaryDay)} · ${formatRange(
-                primaryDate,
-                addMinutes(primaryDate, duration),
-              )}`,
-              time: format(primaryDate, "h:mm a"),
-              day: primaryDay,
-              hint: "Currently scheduled",
-              isPrimary: true,
-            },
-            {
-              label: `${capitalize(alternativeDay)} · ${formatRange(
-                alternativeDate,
-                addMinutes(alternativeDate, duration),
-              )}`,
-              time: format(alternativeDate, "h:mm a"),
-              day: alternativeDay,
-              hint: "Also fits before the deadline",
-              isPrimary: false,
-            },
-          ]);
+          setOptions(
+            buildSlotOptions(
+              {
+                primarySlot: nextPrimarySlot,
+                alternativeSlot: nextAlternativeSlot,
+                durationMinutes: nextSession.durationMinutes,
+              },
+              nextTz,
+              zonedNow(nextTz),
+            ),
+          );
           setSelected("alternative");
+          busyRef.current = false;
+          setBusy(false);
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(
             () => {},
           );
@@ -134,25 +94,62 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
       [sheet],
     );
 
-    function handlePick(chose: "primary" | "alternative") {
+    async function handlePick(chose: "primary" | "alternative") {
+      if (onPickRef.current === null || busyRef.current) return;
+      busyRef.current = true;
+      setBusy(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       setSelected(chose);
-      sheet.close();
-      onPickRef.current?.(chose);
-      onPickRef.current = null;
-      onDismissRef.current = null;
+      try {
+        await onPickRef.current(chose);
+        onPickRef.current = null;
+        onDismissRef.current = null;
+        sheet.close();
+      } catch (error) {
+        setSelected("primary");
+        if (getSlotTakenError(error)) {
+          showSlotTakenToast(toast);
+        } else {
+          showErrorToast(toast, error, "Couldn't update this session");
+        }
+      } finally {
+        busyRef.current = false;
+        setBusy(false);
+      }
     }
 
-    function handleDismiss() {
-      if (onPickRef.current === null) return;
+    async function handleDismiss() {
+      if (onPickRef.current === null || busyRef.current) return;
+      busyRef.current = true;
+      setBusy(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       setSelected("primary");
-      onPickRef.current("primary");
-      onPickRef.current = null;
-      onDismissRef.current?.();
-      onDismissRef.current = null;
-      sheet.close();
+      try {
+        await onPickRef.current("primary");
+      } catch (error) {
+        if (getSlotTakenError(error)) {
+          showSlotTakenToast(toast);
+        } else {
+          showErrorToast(toast, error, "Couldn't record this choice");
+        }
+      } finally {
+        onPickRef.current = null;
+        onDismissRef.current?.();
+        onDismissRef.current = null;
+        sheet.close();
+        busyRef.current = false;
+        setBusy(false);
+      }
     }
+
+    const primaryOption = options.find((o) => o.kind === "primary");
+    const alternativeOption = options.find((o) => o.kind === "alternative");
+    const primaryLabel = primaryOption
+      ? `Keep ${primaryOption.time} ${primaryOption.day}`
+      : "";
+    const alternativeLabel = alternativeOption
+      ? `Switch to ${alternativeOption.time} ${alternativeOption.day}`
+      : "";
 
     return (
       <BottomSheet>
@@ -169,6 +166,7 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
               </View>
               <Pressable
                 onPress={handleDismiss}
+                disabled={busy}
                 accessibilityLabel="Dismiss — keeps the current time"
                 className="inline-flex size-8 items-center justify-center rounded-full bg-muted shrink-0 "
               >
@@ -177,11 +175,12 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
             </View>
 
             <View className="mt-4 flex flex-col gap-2.5">
-              {options.map((option, index) => (
+              {options.map((option) => (
                 <Pressable
-                  key={option.isPrimary ? "primary" : "alternative"}
+                  key={option.kind}
+                  disabled={busy}
                   onPress={() => {
-                    const chose = option.isPrimary ? "primary" : "alternative";
+                    const chose = option.kind;
                     if (selected === chose) {
                       handlePick(chose);
                     } else {
@@ -192,8 +191,7 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
                   className={`
                       text-left rounded-2xl border-2 px-4 py-5 flex flex-row items-center gap-3 my-0.5
                       ${
-                        selected ===
-                        (option.isPrimary ? "primary" : "alternative")
+                        selected === option.kind
                           ? "border-primary bg-primary/[0.08]"
                           : "border-border bg-card"
                       }
@@ -203,15 +201,13 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
                     className={`
                     shrink-0 size-5 rounded-full border-2 flex items-center justify-center
                     ${
-                      selected ===
-                      (option.isPrimary ? "primary" : "alternative")
+                      selected === option.kind
                         ? "bg-primary border-primary"
                         : "border-border bg-transparent"
                     }
                   `}
                   >
-                    {selected ===
-                      (option.isPrimary ? "primary" : "alternative") && (
+                    {selected === option.kind && (
                       <Check
                         size={12}
                         className="text-primary-foreground"
@@ -239,25 +235,19 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
             <View className="flex-none pt-4 flex flex-col gap-2 mb-8">
               <Button
                 size="lg"
+                disabled={busy}
                 className="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl h-[52px] px-5 text-base font-semibold shrink-0"
-                onPress={() => handlePick("alternative")}
+                onPress={() => handlePick("primary")}
               >
-                <Text className="font-bold">
-                  {options[1]
-                    ? `Switch to ${options[1].time} ${options[1].day}`
-                    : ""}
-                </Text>
+                <Text className="font-bold">{primaryLabel}</Text>
               </Button>
               <Button
                 variant="ghost"
+                disabled={busy}
                 className="inline-flex w-full items-center justify-center rounded-xl h-[42px] px-5 text-[13.5px] font-semibold text-muted-foreground"
-                onPress={() => handlePick("primary")}
+                onPress={() => handlePick("alternative")}
               >
-                <Text className="font-semibold">
-                  {options[0]
-                    ? `Keep ${options[0].time} ${options[0].day}`
-                    : ""}
-                </Text>
+                <Text className="font-semibold">{alternativeLabel}</Text>
               </Button>
             </View>
           </BottomSheetView>
