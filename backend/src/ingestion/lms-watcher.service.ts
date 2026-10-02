@@ -423,11 +423,18 @@ export class LmsWatcherService {
         now,
         digest,
       );
+      // Activities the cache holds for courses discovery has not confirmed are
+      // ones a live walk may have shown this student; we cannot speak for them,
+      // so they are kept rather than reconciled away.
+      const unconfirmed = await this.cache.lmsKeysOutside(courseIds, {
+        from: now,
+        to: window.to,
+      });
       const recon = await this.materializer.reconcileDeleted(
         target.userId,
         "LMS",
         ["ASSIGNMENT", "EXAM"],
-        new Set(blocks.map((b) => b.externalKey)),
+        new Set([...blocks.map((b) => b.externalKey), ...unconfirmed]),
         now,
         digest,
       );

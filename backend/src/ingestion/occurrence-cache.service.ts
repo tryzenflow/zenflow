@@ -146,7 +146,19 @@ export class OccurrenceCacheService {
    */
   async recordTimetableWeek(
     occurrences: readonly PortalOccurrenceInput[],
-    opts: { isoWeek: number; now: Date; complete: boolean; throughDate: Date },
+    opts: {
+      isoWeek: number;
+      now: Date;
+      complete: boolean;
+      throughDate: Date;
+      /**
+       * Every section this response speaks for — the walker's confirmed
+       * sections — not just those that appear in it. A section with no
+       * meetings this week is a real, empty view, and is the only way a
+       * week's last meeting can ever be seen to be cancelled.
+       */
+      sectionIds?: readonly string[];
+    },
   ): Promise<RecordOutcome> {
     const outcome: RecordOutcome = {
       ...EMPTY_OUTCOME,
@@ -221,18 +233,26 @@ export class OccurrenceCacheService {
     }
 
     if (opts.complete) {
-      outcome.canceledKeys = await this.cancelUnseenMeetings(
+      const covered = [
+        ...new Set([
+          ...(opts.sectionIds ?? []),
+          ...occurrences.map((o) => o.scheduleStudyUnitId),
+        ]),
+      ];
+      const canceled = await this.cancelUnseenMeetings(
         occurrences,
+        covered,
         opts.isoWeek,
         opts.now,
       );
-      await this.stampSectionCoverage(
-        occurrences.map((o) => o.scheduleStudyUnitId),
-        {
-          timetableRefreshedAt: opts.now,
-          timetableThroughDate: opts.throughDate,
-        },
-      );
+      outcome.canceledKeys = canceled.keys;
+      // A section whose only change is a cancellation is still touched, so
+      // fan-out can find its classmates.
+      for (const id of canceled.sectionIds) touched.add(id);
+      await this.stampSectionCoverage(covered, {
+        timetableRefreshedAt: opts.now,
+        timetableThroughDate: opts.throughDate,
+      });
     }
 
     outcome.touchedIds = [...touched];
@@ -249,13 +269,12 @@ export class OccurrenceCacheService {
    */
   private async cancelUnseenMeetings(
     occurrences: readonly PortalOccurrenceInput[],
+    sectionIds: readonly string[],
     isoWeek: number,
     now: Date,
-  ): Promise<string[]> {
-    const sectionIds = [
-      ...new Set(occurrences.map((o) => o.scheduleStudyUnitId)),
-    ];
-    if (sectionIds.length === 0) return [];
+  ): Promise<{ keys: string[]; sectionIds: string[] }> {
+    const none = { keys: [], sectionIds: [] };
+    if (sectionIds.length === 0) return none;
 
     const seen = new Set(
       occurrences.map(
@@ -264,7 +283,7 @@ export class OccurrenceCacheService {
     );
     const candidates = await this.prisma.portalSectionOccurrence.findMany({
       where: {
-        scheduleStudyUnitId: { in: sectionIds },
+        scheduleStudyUnitId: { in: [...sectionIds] },
         isoWeek,
         canceledAt: null,
       },
@@ -282,20 +301,23 @@ export class OccurrenceCacheService {
           `${row.scheduleStudyUnitId}|${row.meetingDate}|${row.periodId}`,
         ),
     );
-    if (gone.length === 0) return [];
+    if (gone.length === 0) return none;
 
     await this.prisma.portalSectionOccurrence.updateMany({
       where: { id: { in: gone.map((row) => row.id) } },
       data: { canceledAt: now },
     });
 
-    return gone.map((row) =>
-      portalLectureKey({
-        scheduleStudyUnitId: row.scheduleStudyUnitId,
-        meetingDate: row.meetingDate,
-        periodId: row.periodId,
-      }),
-    );
+    return {
+      keys: gone.map((row) =>
+        portalLectureKey({
+          scheduleStudyUnitId: row.scheduleStudyUnitId,
+          meetingDate: row.meetingDate,
+          periodId: row.periodId,
+        }),
+      ),
+      sectionIds: [...new Set(gone.map((row) => row.scheduleStudyUnitId))],
+    };
   }
 
   /**
@@ -615,6 +637,28 @@ export class OccurrenceCacheService {
       orderBy: { startsAt: "asc" },
     });
     return blocksFromPortalOccurrences(rows);
+  }
+
+  /**
+   * Keys of cached activities in `window` from courses *outside* `courseIds`.
+   *
+   * A live walk can show a student an activity from a course discovery has not
+   * confirmed yet. A cache-served pass cannot speak for those, so it must treat
+   * them as still present rather than reconcile them away.
+   */
+  async lmsKeysOutside(
+    courseIds: readonly number[],
+    window: { from: Date; to: Date },
+  ): Promise<string[]> {
+    const rows = await this.prisma.lmsCourseOccurrence.findMany({
+      where: {
+        lmsCourseId: { notIn: [...courseIds] },
+        canceledAt: null,
+        startsAt: { gte: window.from, lte: window.to },
+      },
+      select: { externalKey: true },
+    });
+    return rows.map((r) => r.externalKey);
   }
 
   /**

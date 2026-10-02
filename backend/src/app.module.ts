@@ -97,9 +97,12 @@ import { ObservabilityModule } from "./observability/observability.module";
         PORTAL_API_KEY: Joi.string().required(),
         // DKHP (course-registration) API: base URL and key for the
         // registration-history call that drives enrolment discovery. No
-        // default — the host is deployment-specific. The key is never logged.
-        DKHP_API_URL: Joi.string().uri().required(),
-        DKHP_API_KEY: Joi.string().required(),
+        // default — the host is deployment-specific. Optional at boot so an
+        // existing deployment that has not been given them still starts;
+        // DKHP calls fail per-pass (and are logged) until they are set. The
+        // key is never logged.
+        DKHP_API_URL: Joi.string().uri().optional(),
+        DKHP_API_KEY: Joi.string().optional(),
         // --- DLU ingestion (lms/, portal/, ingestion/) ---------------------
         // These three are read with `getOrThrow` by LMSService /
         // PortalAPIService, so they must always resolve — the defaults below

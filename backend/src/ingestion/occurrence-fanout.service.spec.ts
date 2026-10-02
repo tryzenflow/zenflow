@@ -37,8 +37,21 @@ function matches<T>(filter: T | { in: T[] } | undefined, value: T): boolean {
 function makePrismaDouble(
   enrollments: Enrollment[] = [],
   courseEnrollments: CourseEnrollment[] = [],
+  sessions: { userId: string; externalKey: string }[] = [],
 ) {
   const client = {
+    session: {
+      findMany: (args: {
+        where: { userId: string; externalKey: { in: string[] } };
+      }) =>
+        Promise.resolve(
+          sessions.filter(
+            (r) =>
+              r.userId === args.where.userId &&
+              args.where.externalKey.in.includes(r.externalKey),
+          ),
+        ),
+    },
     portalSectionEnrollment: {
       findMany: (args: {
         where: {
@@ -126,13 +139,19 @@ async function makeFanout(
   opts: {
     enrollments?: Enrollment[];
     courseEnrollments?: CourseEnrollment[];
+    sessions?: { userId: string; externalKey: string }[];
+    lmsBlocks?: jest.Mock;
     env?: Record<string, unknown>;
     materialize?: jest.Mock;
     retireExternalKeys?: jest.Mock;
     timetableBlocks?: jest.Mock;
   } = {},
 ) {
-  const db = makePrismaDouble(opts.enrollments, opts.courseEnrollments);
+  const db = makePrismaDouble(
+    opts.enrollments,
+    opts.courseEnrollments,
+    opts.sessions,
+  );
   const materialize =
     opts.materialize ??
     jest.fn().mockResolvedValue({
@@ -148,7 +167,7 @@ async function makeFanout(
   const timetableBlocks =
     opts.timetableBlocks ??
     jest.fn().mockResolvedValue([{ externalKey: "portal:lecture:x" }]);
-  const lmsBlocks = jest.fn().mockResolvedValue([]);
+  const lmsBlocks = opts.lmsBlocks ?? jest.fn().mockResolvedValue([]);
 
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -455,6 +474,42 @@ describe("OccurrenceFanoutService — fanOutLms", () => {
       expect.anything(),
     );
     expect(lmsBlocks).toHaveBeenCalledWith([20001], WINDOW);
+  });
+
+  it("only updates activities already on the student's calendar — never creates", async () => {
+    // Enrolment + a matching fingerprint do not prove the student can see a
+    // group-restricted activity, so a new one must wait for their own walk.
+    const { service, materialize } = await makeFanout({
+      courseEnrollments: [
+        {
+          userId: "u2",
+          lmsCourseId: 20001,
+          droppedAt: null,
+          seenFingerprint: OLD_VIEW,
+        },
+      ],
+      sessions: [{ userId: "u2", externalKey: "lms:assign:1" }],
+      lmsBlocks: jest
+        .fn()
+        .mockResolvedValue([
+          { externalKey: "lms:assign:1" },
+          { externalKey: "lms:assign:restricted" },
+        ]),
+    });
+
+    await service.fanOutLms([{ unitId: 20001, before: OLD_VIEW }], {
+      excludeUserId: "walker",
+      window: WINDOW,
+      now: NOW,
+    });
+
+    expect(materialize).toHaveBeenCalledWith(
+      "u2",
+      [{ externalKey: "lms:assign:1" }],
+      "LMS",
+      NOW,
+      expect.anything(),
+    );
   });
 
   it("never retires anything — a wrong retirement could not be undone", async () => {

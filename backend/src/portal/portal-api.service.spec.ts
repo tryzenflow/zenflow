@@ -7,15 +7,16 @@ const DKHP_BASE = "https://dkhp.example.test";
 const API_KEY = "super-secret-apikey";
 const DKHP_API_KEY = "super-secret-dkhp-apikey";
 
+const values: Record<string, string> = {
+  PORTAL_API_URL: BASE,
+  PORTAL_API_TIMEOUT_MS: "10000",
+  PORTAL_API_KEY: API_KEY,
+  DKHP_API_URL: DKHP_BASE,
+  DKHP_API_KEY,
+};
 const config = {
-  getOrThrow: (key: string) =>
-    ({
-      PORTAL_API_URL: BASE,
-      PORTAL_API_TIMEOUT_MS: "10000",
-      PORTAL_API_KEY: API_KEY,
-      DKHP_API_URL: DKHP_BASE,
-      DKHP_API_KEY,
-    })[key],
+  get: (key: string) => values[key],
+  getOrThrow: (key: string) => values[key],
 } as unknown as ConfigService;
 
 const reply = (init: { status?: number; json?: unknown } = {}): Response =>

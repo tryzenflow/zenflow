@@ -77,7 +77,8 @@ export class PortalAPIService {
 
   constructor(private configService: ConfigService) {
     this.endpoint = this.configService.getOrThrow("PORTAL_API_URL");
-    this.dkhpEndpoint = this.configService.getOrThrow("DKHP_API_URL");
+    // Optional at boot (see app.module.ts); DKHP calls throw if unset.
+    this.dkhpEndpoint = this.configService.get<string>("DKHP_API_URL") ?? "";
     this.portalUpstream = {
       base: this.endpoint,
       clientId: "vhu",
@@ -116,7 +117,14 @@ export class PortalAPIService {
     username: string,
     password: string,
   ): Promise<PortalAuthResult> {
+    this.requireDkhpEndpoint();
     return this.login(this.dkhpUpstream, username, password);
+  }
+
+  private requireDkhpEndpoint(): void {
+    if (!this.dkhpEndpoint) {
+      throw new Error("DKHP_API_URL is not configured");
+    }
   }
 
   private async login(
@@ -223,6 +231,7 @@ export class PortalAPIService {
     academicYear: string,
     semester: string,
   ): Promise<PortalRegistHistoryRow[]> {
+    this.requireDkhpEndpoint();
     const path = "/api/student/getAllRegistHistory";
     const res = await this.fetch(`${this.dkhpEndpoint}${path}`, {
       method: "POST",

@@ -269,6 +269,7 @@ export class TimetableWatcherService {
       weekResults,
       complete: allFetchesOk,
       throughDate: endDate,
+      term: { academicYear, termId: semester },
     });
     await this.jobs.finishJob("PORTAL", jobId, "COMPLETED");
 
@@ -304,18 +305,25 @@ export class TimetableWatcherService {
       }[];
       complete: boolean;
       throughDate: Date;
+      term: { academicYear: string; termId: string };
     },
   ): Promise<void> {
     const touched = new Set<string>();
     const canceledKeys: string[] = [];
 
     try {
+      // The sections this student's responses speak for, so a section with an
+      // empty week is still checked for cancellations.
+      const sectionIds = input.complete
+        ? await this.discovery.confirmedSections(target.userId, input.term)
+        : [];
       for (const { week, occurrences } of input.weekResults) {
         const outcome = await this.cache.recordTimetableWeek(occurrences, {
           isoWeek: week,
           now,
           complete: input.complete,
           throughDate: input.throughDate,
+          sectionIds,
         });
         for (const id of outcome.touchedIds) touched.add(id);
         canceledKeys.push(...outcome.canceledKeys);
@@ -395,7 +403,9 @@ export class TimetableWatcherService {
         userId: target.userId,
         source: "PORTAL",
         type: "LECTURE",
-        deleted: false,
+        // Soft-deleted rows count too: a cached block cannot alias them, so
+        // the materializer would mint a new-key copy and resurrect a class the
+        // student deleted. A live walk adopts deleted legacy rows as well.
         externalKey: { startsWith: "portal:meeting:" },
       },
     });

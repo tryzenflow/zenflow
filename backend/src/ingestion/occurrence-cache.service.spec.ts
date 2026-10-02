@@ -92,6 +92,19 @@ function makeDb() {
   return {
     lmsCourse: table([], (w) => (r) => r.lmsCourseId === w.lmsCourseId),
     lmsCourseEnrollment: table([], byId),
+    portalSection: table(
+      [],
+      (w) => (r) => r.scheduleStudyUnitId === w.scheduleStudyUnitId,
+    ),
+    portalSectionOccurrence: table([], (w) => {
+      const k = w.scheduleStudyUnitId_meetingDate_periodId as Row | undefined;
+      return k
+        ? (r) =>
+            r.scheduleStudyUnitId === k.scheduleStudyUnitId &&
+            r.meetingDate === k.meetingDate &&
+            r.periodId === k.periodId
+        : byId(w);
+    }),
     lmsCourseOccurrence: table([], (w) =>
       "externalKey" in w ? (r) => r.externalKey === w.externalKey : byId(w),
     ),
@@ -249,5 +262,103 @@ describe("OccurrenceCacheService — the Moodle divergence guard", () => {
 
     expect(outcome.canceledKeys).toEqual(["lms:quiz:530001"]);
     expect(await servableLms(cache, "a")).toBe(true);
+  });
+});
+
+describe("OccurrenceCacheService — timetable cancellation", () => {
+  const SECTION = "SEC-1";
+  const meeting = {
+    scheduleStudyUnitId: SECTION,
+    meetingDate: "2026-10-27",
+    periodId: 3,
+    isoWeek: 44,
+    yearStudy: "2026-2027",
+    termId: "1",
+    numberOfPeriods: 3,
+    startsAt: new Date("2026-10-27T01:00:00.000Z"),
+    durationMinutes: 150,
+    title: "Giải tích",
+    roomId: "A1",
+    teacherName: "T",
+  } as never;
+
+  it("cancels the last meeting of a section whose week came back empty", async () => {
+    const { db, cache } = await makeCache();
+    await cache.recordTimetableWeek([meeting], {
+      isoWeek: 44,
+      now: NOW,
+      complete: true,
+      throughDate: LATER,
+      sectionIds: [SECTION],
+    });
+
+    // Week 44 now lists nothing at all for the section.
+    const outcome = await cache.recordTimetableWeek([], {
+      isoWeek: 44,
+      now: LATER,
+      complete: true,
+      throughDate: LATER,
+      sectionIds: [SECTION],
+    });
+
+    expect(outcome.canceledKeys).toHaveLength(1);
+    expect(db.portalSectionOccurrence.rows[0].canceledAt).toEqual(LATER);
+    // So fan-out can find the classmates even though nothing else changed.
+    expect(outcome.touchedIds).toEqual([SECTION]);
+  });
+
+  it("keeps the meeting when the week is not known to be complete", async () => {
+    const { cache } = await makeCache();
+    await cache.recordTimetableWeek([meeting], {
+      isoWeek: 44,
+      now: NOW,
+      complete: true,
+      throughDate: LATER,
+      sectionIds: [SECTION],
+    });
+    const outcome = await cache.recordTimetableWeek([], {
+      isoWeek: 44,
+      now: LATER,
+      complete: false,
+      throughDate: LATER,
+      sectionIds: [SECTION],
+    });
+    expect(outcome.canceledKeys).toEqual([]);
+  });
+});
+
+describe("OccurrenceCacheService — lmsKeysOutside", () => {
+  it("returns live cached activities from courses outside the confirmed set", async () => {
+    const { db, cache } = await makeCache();
+    const at = new Date("2026-10-30T00:00:00.000Z");
+    db.lmsCourseOccurrence.rows.push(
+      {
+        id: "a",
+        lmsCourseId: 1,
+        externalKey: "in",
+        startsAt: at,
+        canceledAt: null,
+      },
+      {
+        id: "b",
+        lmsCourseId: 2,
+        externalKey: "out",
+        startsAt: at,
+        canceledAt: null,
+      },
+      {
+        id: "c",
+        lmsCourseId: 2,
+        externalKey: "gone",
+        startsAt: at,
+        canceledAt: NOW,
+      },
+    );
+    await expect(
+      cache.lmsKeysOutside([1], {
+        from: new Date("2026-10-01T00:00:00.000Z"),
+        to: new Date("2026-11-30T00:00:00.000Z"),
+      }),
+    ).resolves.toEqual(["out"]);
   });
 });

@@ -192,6 +192,7 @@ async function makeWatcher(
     lastSuccessAt?: jest.Mock;
     lmsFreshness?: jest.Mock;
     lmsBlocks?: jest.Mock;
+    lmsKeysOutside?: jest.Mock;
     recordLmsItems?: jest.Mock;
     fanOutLms?: jest.Mock;
   } = {},
@@ -227,6 +228,7 @@ async function makeWatcher(
   const lmsFreshness =
     opts.lmsFreshness ?? jest.fn().mockResolvedValue({ fresh: [], stale: [] });
   const lmsBlocks = opts.lmsBlocks ?? jest.fn().mockResolvedValue([]);
+  const lmsKeysOutside = opts.lmsKeysOutside ?? jest.fn().mockResolvedValue([]);
   const recordLmsItems =
     opts.recordLmsItems ??
     jest.fn().mockResolvedValue({
@@ -265,7 +267,7 @@ async function makeWatcher(
       { provide: EnrollmentDiscoveryService, useValue: { confirmedCourses } },
       {
         provide: OccurrenceCacheService,
-        useValue: { lmsFreshness, lmsBlocks, recordLmsItems },
+        useValue: { lmsFreshness, lmsBlocks, lmsKeysOutside, recordLmsItems },
       },
       { provide: OccurrenceFanoutService, useValue: { fanOutLms } },
       {
@@ -289,6 +291,7 @@ async function makeWatcher(
     lastSuccessAt,
     lmsFreshness,
     lmsBlocks,
+    lmsKeysOutside,
     recordLmsItems,
     fanOutLms,
   };
@@ -562,6 +565,25 @@ describe("LmsWatcherService — the occurrence cache (issue #56)", () => {
       "LMS",
       ["ASSIGNMENT", "EXAM"],
       new Set(["lms:assign:800001"]),
+      NOW,
+      expect.anything(),
+    );
+  });
+
+  it("does not reconcile away activities the cache holds for unconfirmed courses", async () => {
+    const w = await makeWatcher(
+      cacheOn({
+        lmsKeysOutside: jest.fn().mockResolvedValue(["lms:assign:999"]),
+      }),
+    );
+
+    await w.service.run(NOW);
+
+    expect(w.reconcileDeleted).toHaveBeenCalledWith(
+      "u1",
+      "LMS",
+      ["ASSIGNMENT", "EXAM"],
+      new Set(["lms:assign:800001", "lms:assign:999"]),
       NOW,
       expect.anything(),
     );

@@ -163,7 +163,10 @@ export class OccurrenceFanoutService {
    * otherwise leak to a whole course; it cannot, because one student's private
    * change is never corroborated by a second.
    *
-   * Two deliberate omissions. It never retires rows: a wrongly retired session
+   * Three deliberate omissions. It never creates rows: whether a student can
+   * see an activity is decided by Moodle (group restrictions), not by course
+   * enrolment, so it only updates activities already on their calendar. It
+   * never retires rows: a wrongly retired session
    * is soft-deleted and so never re-created, a permanent loss, whereas a missed
    * removal is corrected by the student's own next walk. And it never touches a
    * recipient's seen fingerprint, so their next pass no longer matches the
@@ -197,9 +200,25 @@ export class OccurrenceFanoutService {
       }
     }
 
-    return this.pushTo(recipients, "LMS", opts.now, (units) =>
-      this.cache.lmsBlocks(units, opts.window),
-    );
+    return this.pushTo(recipients, "LMS", opts.now, async (units, userId) => {
+      const blocks = await this.cache.lmsBlocks(units, opts.window);
+      // Update-only. Course enrolment and a matching fingerprint say nothing
+      // about whether *this* student can see an activity (group-restricted
+      // content), so a fan-out never creates one — it only follows changes to
+      // activities the student's own walk already put on their calendar. A new
+      // activity reaches them on their next pass, which no longer matches the
+      // cache and walks live.
+      const owned = await this.prisma.session.findMany({
+        where: {
+          userId,
+          source: "LMS",
+          externalKey: { in: blocks.map((b) => b.externalKey) },
+        },
+        select: { externalKey: true },
+      });
+      const keys = new Set(owned.map((r) => r.externalKey));
+      return blocks.filter((b) => keys.has(b.externalKey));
+    });
   }
 
   /**
@@ -210,7 +229,7 @@ export class OccurrenceFanoutService {
     recipients: ReadonlyMap<string, T[]>,
     source: "PORTAL" | "LMS",
     now: Date,
-    blocksFor: (units: T[]) => Promise<ParsedBlock[]>,
+    blocksFor: (units: T[], userId: string) => Promise<ParsedBlock[]>,
   ): Promise<FanoutSummary> {
     if (recipients.size === 0) return EMPTY;
     const summary: FanoutSummary = { ...EMPTY, students: recipients.size };
@@ -218,7 +237,7 @@ export class OccurrenceFanoutService {
       const digest = new SyncDigest(new Date());
       const outcome = await this.materializer.materialize(
         userId,
-        await blocksFor(units),
+        await blocksFor(units, userId),
         source,
         now,
         digest,

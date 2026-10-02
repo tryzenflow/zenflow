@@ -89,6 +89,8 @@ export class IngestionTickerService implements OnModuleInit {
   private readonly maxBatch: number;
   private readonly budgetMs: number;
   private readonly dluTimezone: string;
+  /** Kinds already warned about for an undersized batch cap (once per boot). */
+  private readonly warnedUndersized = new Set<string>();
   /** In-process guard: a tick must not start while the previous one runs. */
   private running = false;
 
@@ -101,7 +103,7 @@ export class IngestionTickerService implements OnModuleInit {
     private readonly discovery: EnrollmentDiscoveryService,
   ) {
     this.dluTimezone = this.config.get<string>("DLU_TZ") ?? "Asia/Ho_Chi_Minh";
-    this.maxBatch = this.positiveConfig("INGESTION_TICK_MAX_BATCH", 5);
+    this.maxBatch = this.positiveConfig("INGESTION_TICK_MAX_BATCH", 20);
     this.budgetMs = this.positiveConfig(
       "INGESTION_TICK_BUDGET_MS",
       // Comfortably inside one tick, so a long tick cannot overlap the next.
@@ -207,6 +209,24 @@ export class IngestionTickerService implements OnModuleInit {
           minBatch: 1,
           maxBatch: this.maxBatch,
         });
+
+        // The cap is a safety rail, not a throughput budget: if it admits fewer
+        // claims per period than there are targets, the overdue queue grows
+        // without bound and the cadence silently stretches. Say so.
+        const capacityPerPeriod =
+          this.maxBatch * Math.max(1, plan.targetPeriodMs / TICK_INTERVAL_MS);
+        if (
+          population > capacityPerPeriod &&
+          !this.warnedUndersized.has(plan.kind)
+        ) {
+          this.warnedUndersized.add(plan.kind);
+          this.logger.warn(
+            `${plan.kind}: ${population} targets but INGESTION_TICK_MAX_BATCH=` +
+              `${this.maxBatch} allows only ${capacityPerPeriod} claims per ` +
+              `${Math.round(plan.targetPeriodMs / 60_000)}m period; the queue ` +
+              `will fall behind. Raise the cap or lengthen the period.`,
+          );
+        }
 
         const targets = await this.schedule.claimDue(plan.kind, now, batchSize);
         if (targets.length === 0) continue;
