@@ -5,3 +5,7 @@ __pycache__/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
+
+# Simulator (issue #60): result cache and generated reports
+.sim_cache/
+sim_out/
