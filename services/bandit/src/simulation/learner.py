@@ -25,6 +25,8 @@ from src.core.preference import (
 from src.models.linucb import score as linucb_score
 from src.models.linucb import update as linucb_update
 
+from .prior import PriorSpec, warm_state
+
 ARMS = tuple(b[0] for b in ARM_BANDS)
 RETAINED_REWARD = 1.0
 
@@ -49,10 +51,15 @@ class PreferenceMatrix:
 
 
 class LinUCBState:
-    def __init__(self, alpha: float, ridge: float) -> None:
+    def __init__(
+        self, alpha: float, ridge: float, prior: PriorSpec | None = None
+    ) -> None:
         self.alpha = alpha
-        self.a = {arm: ridge * np.identity(FEATURE_DIM) for arm in ARMS}
-        self.b = {arm: np.zeros(FEATURE_DIM) for arm in ARMS}
+        if prior is not None and prior.active:
+            self.a, self.b = warm_state(prior, ridge)
+        else:
+            self.a = {arm: ridge * np.identity(FEATURE_DIM) for arm in ARMS}
+            self.b = {arm: np.zeros(FEATURE_DIM) for arm in ARMS}
 
     def arm_scores(self, x: NDArray[np.float64]) -> dict[str, NDArray[np.float64]]:
         """Score every arm for a batch ``(n, d)`` of per-day context vectors."""

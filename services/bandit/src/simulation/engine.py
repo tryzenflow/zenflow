@@ -34,6 +34,7 @@ from src.core.slot_score import (
 
 from .archetypes import StudentProfile, make_student
 from .learner import RETAINED_REWARD, LinUCBState, PreferenceMatrix
+from .prior import PriorSpec
 from .reaction import decide, draw_reaction
 from .utility import DayContext, slot_utility
 from .world import (
@@ -68,10 +69,14 @@ class SimConfig:
     ridge: float = 1.0
     scenarios: tuple[str, ...] = tuple(s.name for s in SCENARIOS)
     balanced: bool = True
+    # warm-start prototype (prototype only): extra LinUCB worlds per alpha, one per
+    # (mode, n0) with n0 > 0; empty = the production cold start only
+    priors: tuple[tuple[str, float], ...] = ()
 
 
-def linucb_label(alpha: float) -> str:
-    return f"linucb@{alpha:g}"
+def linucb_label(alpha: float, prior: PriorSpec | None = None) -> str:
+    base = f"linucb@{alpha:g}"
+    return base if prior is None or not prior.active else f"{base}+{prior.tag}"
 
 
 @dataclass
@@ -136,6 +141,7 @@ class World:
         alpha: float,
         scenario: str,
         daytime: NDArray[np.float64] | None = None,
+        prior: PriorSpec | None = None,
     ) -> None:
         self.cfg = cfg
         self.daytime = (
@@ -148,7 +154,9 @@ class World:
         self.policy = policy
         self.scenario = scenario
         self.prefs = PreferenceMatrix(TZ)
-        self.linucb = LinUCBState(alpha, cfg.ridge) if policy != HEURISTIC else None
+        self.linucb = (
+            LinUCBState(alpha, cfg.ridge, prior) if policy != HEURISTIC else None
+        )
         self.placed: list[Interval] = []
         self.log = PlacementLog()
         self._last_day = 0
@@ -493,5 +501,12 @@ def run_student(cfg: SimConfig, student_id: int) -> StudentResult:
                 cfg, profile, tasks, calendar, drift, "linucb", alpha, name, daytime
             )
             worlds[linucb_label(alpha)] = lw.run().arrays()
+            for mode, n0 in cfg.priors:
+                spec = PriorSpec(mode, n0)
+                ww = World(
+                    cfg, profile, tasks, calendar, drift, "linucb", alpha, name,
+                    daytime, spec,
+                )  # fmt: skip
+                worlds[linucb_label(alpha, spec)] = ww.run().arrays()
         out[name] = worlds
     return StudentResult(student_id, profile.chronotype, profile.behavior, out)
