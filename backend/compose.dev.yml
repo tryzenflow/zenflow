@@ -29,11 +29,11 @@ services:
       - cache
 
   mail:
-    container_name: zenflow-mail
-    image: mailhog/mailhog:v1.0.1
+    image: axllent/mailpit
     ports:
-      - 1025:1025
-      - 8025:8025
+      - "1025:1025" # SMTP port (same as MailHog)
+      - "8025:8025" # Web UI port (same as MailHog)
+
     networks:
       - mail
 
@@ -42,8 +42,6 @@ services:
     build: ../services/bandit
     ports:
       - "8100:8000"
-    environment:
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     networks:
       - bandit
 
