@@ -248,8 +248,10 @@ export default function WeekScreen() {
             setFocusTick((t) => t + 1);
           },
           onBulk: async (chose, ids) => {
-            const settled = await Promise.allSettled(
-              ids.map(async (id) => {
+            const appliedIds: string[] = [];
+            const failedIds: string[] = [];
+            for (const id of ids) {
+              try {
                 const sitting = pending.sittings.find((s) => s.session.id === id);
                 if (!sitting) throw new Error("Unknown sitting");
                 const res = await slotPick(id, {
@@ -257,13 +259,11 @@ export default function WeekScreen() {
                   chose,
                 });
                 showSeriesPickToast(toast, res, pending.tz);
-                return id;
-              }),
-            );
-            const appliedIds = settled.flatMap((result) =>
-              result.status === "fulfilled" ? [result.value] : [],
-            );
-            const failedIds = ids.filter((id) => !appliedIds.includes(id));
+                appliedIds.push(id);
+              } catch {
+                failedIds.push(id);
+              }
+            }
             showBulkPickToast(toast, appliedIds.length, failedIds.length);
             setFocusTick((t) => t + 1);
             return { appliedIds, failedIds };

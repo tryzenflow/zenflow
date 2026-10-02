@@ -42,6 +42,7 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
     const { toast } = useToast();
     const [session, setSession] = useState<Session | null>(null);
     const [options, setOptions] = useState<SlotOption[]>([]);
+    const [busy, setBusy] = useState(false);
     const [selected, setSelected] = useState<"primary" | "alternative" | null>(
       "alternative",
     );
@@ -49,6 +50,10 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
       ((chose: "primary" | "alternative") => void) | null
     >(null);
     const onDismissRef = useRef<(() => void) | null>(null);
+    // Ref-based single-flight guard: `busy` state alone can let two taps in
+    // the same tick both see `false`, so the ref is the source of truth for
+    // preventing a second submission while the first is in flight.
+    const busyRef = useRef(false);
 
     useImperativeHandle(
       ref,
@@ -78,6 +83,8 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
             ),
           );
           setSelected("alternative");
+          busyRef.current = false;
+          setBusy(false);
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(
             () => {},
           );
@@ -88,7 +95,9 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
     );
 
     async function handlePick(chose: "primary" | "alternative") {
-      if (onPickRef.current === null) return;
+      if (onPickRef.current === null || busyRef.current) return;
+      busyRef.current = true;
+      setBusy(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       setSelected(chose);
       try {
@@ -103,11 +112,16 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
         } else {
           showErrorToast(toast, error, "Couldn't update this session");
         }
+      } finally {
+        busyRef.current = false;
+        setBusy(false);
       }
     }
 
     async function handleDismiss() {
-      if (onPickRef.current === null) return;
+      if (onPickRef.current === null || busyRef.current) return;
+      busyRef.current = true;
+      setBusy(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       setSelected("primary");
       try {
@@ -123,6 +137,8 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
         onDismissRef.current?.();
         onDismissRef.current = null;
         sheet.close();
+        busyRef.current = false;
+        setBusy(false);
       }
     }
 
@@ -150,6 +166,7 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
               </View>
               <Pressable
                 onPress={handleDismiss}
+                disabled={busy}
                 accessibilityLabel="Dismiss — keeps the current time"
                 className="inline-flex size-8 items-center justify-center rounded-full bg-muted shrink-0 "
               >
@@ -161,6 +178,7 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
               {options.map((option) => (
                 <Pressable
                   key={option.kind}
+                  disabled={busy}
                   onPress={() => {
                     const chose = option.kind;
                     if (selected === chose) {
@@ -217,6 +235,7 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
             <View className="flex-none pt-4 flex flex-col gap-2 mb-8">
               <Button
                 size="lg"
+                disabled={busy}
                 className="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl h-[52px] px-5 text-base font-semibold shrink-0"
                 onPress={() => handlePick("primary")}
               >
@@ -224,6 +243,7 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
               </Button>
               <Button
                 variant="ghost"
+                disabled={busy}
                 className="inline-flex w-full items-center justify-center rounded-xl h-[42px] px-5 text-[13.5px] font-semibold text-muted-foreground"
                 onPress={() => handlePick("alternative")}
               >

@@ -191,7 +191,7 @@ export default function EditSessionScreen() {
         });
         router.replace({
           pathname: "/",
-          params: { date: series[0].primarySlot, flash: updated.id },
+          params: { date: series[0].primarySlot, flash: series[0].session.id },
         } as Href);
         return;
       }

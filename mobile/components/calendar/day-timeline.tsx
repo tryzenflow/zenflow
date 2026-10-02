@@ -198,7 +198,7 @@ interface DayTimelineProps {
     primarySlot: string,
     alternativeSlot: string,
     slotProposalId: string,
-    onPick: (chose: "primary" | "alternative") => void,
+    onPick: (chose: "primary" | "alternative") => Promise<void>,
   ) => void;
   /** Reports this day's sessions as mini-day blocks so a parent week pager
    * can render its next-day peek strip from real data. */

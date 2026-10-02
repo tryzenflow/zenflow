@@ -1,6 +1,6 @@
 import type { SeriesSession } from "@zenflow/shared";
 import { describe, expect, it } from "vitest";
-import { divergentSittings } from "../series-alternatives";
+import { divergentSittings, undecidedSittingIds } from "../series-alternatives";
 
 const sitting = (o: Partial<SeriesSession> & { id: string }): SeriesSession =>
   ({
@@ -73,7 +73,7 @@ describe("divergentSittings", () => {
     expect(divergentSittings(sessions).map((d) => d.session.id)).toEqual(["a", "c"]);
   });
 
-  it("limits the mobile picker to the three soonest divergent sittings", () => {
+  it("keeps all divergent sittings in session-index order", () => {
     const sessions = [
       sitting({ id: "d", sessionIndex: 4 }),
       sitting({ id: "b", sessionIndex: 2 }),
@@ -85,6 +85,38 @@ describe("divergentSittings", () => {
       "a",
       "b",
       "c",
+      "d",
+      "e",
     ]);
+  });
+});
+
+describe("undecidedSittingIds", () => {
+  it("targets every sitting when none has a recorded choice", () => {
+    expect(
+      undecidedSittingIds([
+        { id: "a", decided: false },
+        { id: "b", decided: false },
+      ]),
+    ).toEqual(["a", "b"]);
+  });
+
+  it("excludes already-decided sittings after a partial bulk success", () => {
+    expect(
+      undecidedSittingIds([
+        { id: "a", decided: true },
+        { id: "b", decided: false },
+        { id: "c", decided: true },
+      ]),
+    ).toEqual(["b"]);
+  });
+
+  it("is empty when every sitting is decided, so keep-all just closes", () => {
+    expect(
+      undecidedSittingIds([
+        { id: "a", decided: true },
+        { id: "b", decided: true },
+      ]),
+    ).toEqual([]);
   });
 });

@@ -10,7 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { buildSlotOptions, type SlotOption } from "@/lib/slot-option";
-import type { DivergentSitting } from "@/lib/series-alternatives";
+import {
+  undecidedSittingIds,
+  type DivergentSitting,
+} from "@/lib/series-alternatives";
 import {
   getSlotTakenError,
   showErrorToast,
@@ -46,6 +49,13 @@ export interface SeriesSlotPickInput {
 interface SittingState {
   selected: Chose;
   committed: Chose;
+  /**
+   * Whether this sitting's proposal already has a recorded choice.
+   * `committed === "primary"` alone cannot identify bulk targets: it holds
+   * both for untouched sittings and for ones explicitly kept at primary, so
+   * bulk actions filter on `decided` instead (Option A — undecided only).
+   */
+  decided: boolean;
   busy: boolean;
 }
 
@@ -143,6 +153,7 @@ const SeriesSlotPickSheet = forwardRef<
             state: {
               selected: "primary",
               committed: "primary",
+              decided: false,
               busy: false,
             },
           })),
@@ -166,7 +177,12 @@ const SeriesSlotPickSheet = forwardRef<
     try {
       await onPickRef.current?.(id, chose);
       setPairs((p) =>
-        updatePairs(p, id, { selected: chose, committed: chose, busy: false }),
+        updatePairs(p, id, {
+          selected: chose,
+          committed: chose,
+          decided: true,
+          busy: false,
+        }),
       );
       closeSheet();
     } catch (e) {
@@ -208,16 +224,17 @@ const SeriesSlotPickSheet = forwardRef<
 
   async function bulk(chose: Chose) {
     if (bulkBusy || pairs.some((pair) => pair.state.busy)) return;
-    const targets = pairs
-      .filter((pair) => pair.state.committed !== chose)
-      .map((pair) => pair.sitting.session.id);
+    const targets = undecidedSittingIds(
+      pairs.map((pair) => ({
+        id: pair.sitting.session.id,
+        decided: pair.state.decided,
+      })),
+    );
 
-    if (chose === "primary" && targets.length === 0) {
+    if (targets.length === 0) {
       closeSheet();
       return;
     }
-
-    if (targets.length === 0) return;
     setBulkBusy(true);
     setPairs((p) =>
       p.map((pair) =>
@@ -243,6 +260,7 @@ const SeriesSlotPickSheet = forwardRef<
           return updatePair(pair, {
             selected: chose,
             committed: chose,
+            decided: true,
             busy: false,
           });
         }
@@ -259,9 +277,10 @@ const SeriesSlotPickSheet = forwardRef<
   }
 
   /**
-   * X, or a scrim swipe-away. A sitting left on its alternative has been
-   * reported as moved, so on dismiss those re-assert the already-applied
-   * primary — which is also what records the pick as "kept".
+   * X, or a scrim swipe-away. Dismissal records nothing: untouched sittings
+   * keep their already-applied primary slots by default, and already-moved
+   * sittings stay moved (`POST /sessions/:id/slot-pick` is a one-shot record,
+   * so a second "primary" vote would be a no-op, never a move-back).
    */
   function handleDismiss() {
     if (
@@ -272,12 +291,6 @@ const SeriesSlotPickSheet = forwardRef<
       return;
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    const moved = pairs
-      .filter((pair) => pair.state.committed === "alternative")
-      .map((pair) => pair.sitting.session.id);
-    if (moved.length > 0) {
-      void onBulkRef.current?.("primary", moved);
-    }
     onPickRef.current = null;
     onBulkRef.current = null;
     sheet.close();
@@ -323,7 +336,7 @@ const SeriesSlotPickSheet = forwardRef<
             </View>
 
             <View className="gap-1 pt-7">
-              {pairs.map((pair) => (
+              {pairs.slice(0, 3).map((pair) => (
                 <View
                   key={pair.sitting.session.id}
                   className="flex-row items-start gap-2 shrink-0"
@@ -407,7 +420,9 @@ const SeriesSlotPickSheet = forwardRef<
                 className="w-full rounded-xl h-[38px]"
                 onPress={() => void bulk("primary")}
               >
-                <Text className="font-semibold">Keep all as scheduled</Text>
+                <Text className="font-semibold text-muted-foreground">
+                  Keep all as scheduled
+                </Text>
               </Button>
             </View>
           </View>

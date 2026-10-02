@@ -39,8 +39,8 @@ type DivergentSession = SeriesSession & {
  * `POST /sessions/:id/slot-pick` needs — so require all three rather than
  * trusting the flag.
  *
- * Sorts by `sessionIndex` (not array order), then keeps the three soonest
- * divergent sittings for the mobile picker.
+ * Sorts by `sessionIndex` (not array order) so the full divergent set remains
+ * available for bulk actions.
  */
 export function divergentSittings(
   sessions: SeriesSession[] | undefined,
@@ -62,6 +62,19 @@ export function divergentSittings(
       index: session.sessionIndex ?? 0,
       total: session.sessionTotal ?? 0,
      }))
-     .sort((a, b) => a.index - b.index)
-     .slice(0, 3);
+     .sort((a, b) => a.index - b.index);
+}
+
+/**
+ * IDs still eligible for a bulk decision (Option A — undecided only).
+ *
+ * A sitting whose proposal already has a recorded choice must never be
+ * re-POSTed: `POST /sessions/:id/slot-pick` treats a second vote as an
+ * idempotent no-op echo, so counting it as newly applied would misreport the
+ * bulk result (and a "primary" re-vote would never move anything back).
+ */
+export function undecidedSittingIds(
+  states: Array<{ id: string; decided: boolean }>,
+): string[] {
+  return states.filter((s) => !s.decided).map((s) => s.id);
 }
