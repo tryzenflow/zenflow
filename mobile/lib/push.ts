@@ -5,6 +5,7 @@ import type { Href } from "expo-router";
 import { Platform } from "react-native";
 import { registerDevice, unregisterDevice } from "@/api/devices";
 import { debugLog } from "@/lib/debug-log";
+import { isPushEnabled } from "@/lib/preferences";
 
 /**
  * Native push plumbing for the direct-FCM/APNs backend (`backend/src/devices/`).
@@ -182,6 +183,8 @@ export function hrefFromPushData(
  * repeats are cheap. Returns the token that was registered, or `null`.
  */
 export async function syncPushRegistration(): Promise<string | null> {
+  // Respect the Settings → "Allow notifications" opt-out.
+  if (!(await isPushEnabled())) return null;
   const t = await getNativePushToken();
   if (!t) return null;
   try {
