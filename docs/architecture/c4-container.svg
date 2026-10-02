@@ -1,0 +1,148 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 1100" font-family="Helvetica, Arial, sans-serif">
+  <title>Zenflow — C4 container diagram</title>
+  <defs>
+    <marker id="arrOrange" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#FF6900"/>
+    </marker>
+    <marker id="arrAmber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#F0B100"/>
+    </marker>
+    <marker id="arrNeutral" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2B2724" fill-opacity="0.55"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1500" height="1100" fill="#FCFBFA"/>
+  <text x="30" y="34" font-size="21" font-weight="700" fill="#2B2724">Zenflow — C4 container diagram</text>
+
+  <!-- Person -->
+  <rect x="650" y="70" width="200" height="90" rx="10" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
+  <circle cx="750" cy="98" r="9" fill="#2B2724" fill-opacity="0.75"/>
+  <path d="M732,132 Q750,108 768,132 L768,144 L732,144 Z" fill="#2B2724" fill-opacity="0.75"/>
+  <text x="750" y="118" text-anchor="middle" font-size="9.5" fill="#2B2724" opacity="0" > </text>
+  <text x="750" y="152" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">Student</text>
+
+  <!-- boundary -->
+  <rect x="210" y="200" width="1080" height="810" rx="16" fill="none" stroke="#FF6900" stroke-width="2" stroke-dasharray="9 6"/>
+  <text x="232" y="226" font-size="15" font-weight="700" fill="#FF6900" letter-spacing="1">ZENFLOW</text>
+
+  <!-- Row: clients -->
+  <rect x="250" y="250" width="230" height="80" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="365" y="278" text-anchor="middle" font-size="14" font-weight="700" fill="#2B2724">Web PWA</text>
+  <text x="365" y="296" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">React 19 + Vite</text>
+  <text x="365" y="311" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">desktop browser client</text>
+
+  <rect x="1020" y="250" width="230" height="80" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="1135" y="278" text-anchor="middle" font-size="14" font-weight="700" fill="#2B2724">Mobile app</text>
+  <text x="1135" y="296" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">Expo (RN)</text>
+  <text x="1135" y="311" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">web target only</text>
+
+  <!-- Row: API -->
+  <rect x="630" y="430" width="240" height="100" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
+  <text x="750" y="460" text-anchor="middle" font-size="15" font-weight="700" fill="#2B2724">NestJS API</text>
+  <text x="750" y="478" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">:5000</text>
+  <text x="750" y="493" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">owns Postgres via Prisma</text>
+  <text x="750" y="508" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">thin — gathers / applies / persists</text>
+
+  <!-- external left: Portal + LMS -->
+  <rect x="20" y="440" width="170" height="70" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="105" y="465" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">DLU Portal</text>
+  <text x="105" y="482" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">external, university</text>
+  <text x="105" y="495" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">timetable + exams</text>
+
+  <rect x="20" y="545" width="170" height="70" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="105" y="570" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">Moodle LMS</text>
+  <text x="105" y="587" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">external, university</text>
+  <text x="105" y="600" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">assignments/quizzes</text>
+
+  <!-- external right: FCM + APNs -->
+  <rect x="1310" y="440" width="170" height="70" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="1395" y="465" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">FCM</text>
+  <text x="1395" y="482" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">external, Google</text>
+  <text x="1395" y="495" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">Android push</text>
+
+  <rect x="1310" y="545" width="170" height="70" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="1395" y="570" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">APNs</text>
+  <text x="1395" y="587" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">external, Apple</text>
+  <text x="1395" y="600" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">iOS push</text>
+
+  <!-- Row: Bandit -->
+  <rect x="630" y="650" width="240" height="100" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
+  <text x="750" y="680" text-anchor="middle" font-size="15" font-weight="700" fill="#2B2724">Bandit service</text>
+  <text x="750" y="698" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">Python + FastAPI · :8000</text>
+  <text x="750" y="713" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">authoritative ranking (ADR-0003)</text>
+  <text x="750" y="728" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">heuristic + LinUCB + displacement</text>
+
+  <!-- Row: infra -->
+  <rect x="230" y="890" width="160" height="100" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="310" y="922" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">PostgreSQL</text>
+  <text x="310" y="940" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">primary datastore</text>
+  <text x="310" y="954" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">via Prisma</text>
+
+  <rect x="440" y="890" width="160" height="100" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="520" y="922" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">Redis</text>
+  <text x="520" y="940" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">sessions + OTP</text>
+  <text x="520" y="954" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">cache</text>
+
+  <rect x="900" y="890" width="160" height="100" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="980" y="922" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">Redis</text>
+  <text x="980" y="940" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">rate limiting</text>
+  <text x="980" y="954" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">(LimitKit, separate)</text>
+
+  <rect x="1110" y="890" width="160" height="100" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="1190" y="922" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">MailHog</text>
+  <text x="1190" y="940" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">dev-only</text>
+  <text x="1190" y="954" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">OTP email capture</text>
+
+  <!-- Person -> clients -->
+  <path d="M750,160 L750,182 L365,182 L365,250" fill="none" stroke="#2B2724" stroke-opacity="0.55" stroke-width="2" marker-end="url(#arrNeutral)"/>
+  <path d="M750,160 L750,182 L1135,182 L1135,250" fill="none" stroke="#2B2724" stroke-opacity="0.55" stroke-width="2" marker-end="url(#arrNeutral)"/>
+
+  <!-- clients -> API -->
+  <path d="M365,330 L365,380 L680,380 L680,430" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#arrOrange)"/>
+  <path d="M1135,330 L1135,380 L820,380 L820,430" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#arrOrange)"/>
+  <rect x="690" y="360" width="120" height="18" fill="#FCFBFA"/>
+  <text x="750" y="373" text-anchor="middle" font-size="11" fill="#FF6900">HTTPS/REST + SSE</text>
+
+  <!-- API -> Bandit (primary) -->
+  <path d="M750,530 L750,650" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#arrOrange)"/>
+  <rect x="762" y="580" width="150" height="16" fill="#FCFBFA"/>
+  <text x="766" y="592" font-size="11" fill="#FF6900">POST /v1/place, /update</text>
+
+  <!-- API -> Portal / LMS (ingestion pull, amber) -->
+  <path d="M630,460 L190,460" fill="none" stroke="#F0B100" stroke-width="2.5" marker-end="url(#arrAmber)"/>
+  <path d="M630,500 L280,500 L280,580 L190,580" fill="none" stroke="#F0B100" stroke-width="2.5" marker-end="url(#arrAmber)"/>
+  <rect x="300" y="440" width="88" height="16" fill="#FCFBFA"/>
+  <text x="344" y="452" text-anchor="middle" font-size="10.5" fill="#F0B100">ingestion pull</text>
+  <rect x="196" y="560" width="88" height="16" fill="#FCFBFA"/>
+  <text x="240" y="572" text-anchor="middle" font-size="10.5" fill="#F0B100">ingestion pull</text>
+
+  <!-- API -> FCM / APNs (push, neutral) -->
+  <path d="M870,460 L1310,460" fill="none" stroke="#2B2724" stroke-opacity="0.55" stroke-width="2" marker-end="url(#arrNeutral)"/>
+  <path d="M870,500 L1220,500 L1220,580 L1310,580" fill="none" stroke="#2B2724" stroke-opacity="0.55" stroke-width="2" marker-end="url(#arrNeutral)"/>
+  <rect x="1060" y="440" width="40" height="16" fill="#FCFBFA"/>
+  <text x="1080" y="452" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.75">push</text>
+  <rect x="1242" y="572" width="40" height="16" fill="#FCFBFA"/>
+  <text x="1262" y="584" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.75">push</text>
+
+  <!-- API -> infra row (neutral, routed clear of the Bandit box) -->
+  <path d="M660,530 L660,550 L310,550 L310,890" fill="none" stroke="#2B2724" stroke-opacity="0.5" stroke-width="2" marker-end="url(#arrNeutral)"/>
+  <path d="M690,530 L690,565 L520,565 L520,890" fill="none" stroke="#2B2724" stroke-opacity="0.5" stroke-width="2" marker-end="url(#arrNeutral)"/>
+  <path d="M810,530 L810,565 L980,565 L980,890" fill="none" stroke="#2B2724" stroke-opacity="0.5" stroke-width="2" marker-end="url(#arrNeutral)"/>
+  <path d="M840,530 L840,550 L1190,550 L1190,890" fill="none" stroke="#2B2724" stroke-opacity="0.5" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrNeutral)"/>
+
+  <!-- legend -->
+  <g transform="translate(30,1030)">
+    <line x1="0" y1="0" x2="34" y2="0" stroke="#FF6900" stroke-width="2.5"/>
+    <text x="42" y="4" font-size="11.5" fill="#2B2724">primary scheduling flow</text>
+    <line x1="230" y1="0" x2="264" y2="0" stroke="#F0B100" stroke-width="2.5"/>
+    <text x="272" y="4" font-size="11.5" fill="#2B2724">ingestion pull</text>
+    <line x1="410" y1="0" x2="444" y2="0" stroke="#2B2724" stroke-opacity="0.55" stroke-width="2"/>
+    <text x="452" y="4" font-size="11.5" fill="#2B2724">supporting infra / push</text>
+    <line x1="680" y1="0" x2="714" y2="0" stroke="#2B2724" stroke-opacity="0.55" stroke-width="2" stroke-dasharray="7 5"/>
+    <text x="722" y="4" font-size="11.5" fill="#2B2724">dev-only</text>
+  </g>
+
+  <text x="30" y="1068" font-size="11.5" fill="#2B2724" opacity="0.7">Production adds a Caddy edge proxy in front of the Web PWA/API, and an OTel + Tempo + Loki +</text>
+  <text x="30" y="1084" font-size="11.5" fill="#2B2724" opacity="0.7">Prometheus + Grafana observability stack. Both are out of scope for this diagram and not drawn.</text>
+</svg>

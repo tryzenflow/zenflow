@@ -35,7 +35,7 @@ This is a **pnpm workspace monorepo** (pnpm `10.32.1`).
 | [`packages/core/`](packages/core/)     | `@zenflow/core` — calendar-block / overlap / form-schema logic shared by both clients | —                                     |
 | [`services/bandit/`](services/bandit/) | FastAPI service hosting the Disjoint LinUCB model                     | [services/bandit/README.md](services/bandit/README.md) |
 | [`docs/`](docs/)                       | ADRs + the scheduling/ML design docs                                 | [docs/adr/](docs/adr/), [docs/scheduler/](docs/scheduler/) |
-| [`CLAUDE.md`](CLAUDE.md)               | Operating guide + conventions for Claude Code and contributors        | [CLAUDE.md](CLAUDE.md)                                 |
+| [`AGENTS.md`](AGENTS.md)               | Operating guide + conventions for Claude Code and contributors        | [AGENTS.md](AGENTS.md)                                 |
 
 ## Tech stack at a glance
 
@@ -126,7 +126,7 @@ thing with `/feature "<request>"`, or any phase on its own:
 - **MCP** (`.mcp.json`) — `github`, `figma`, `playwright` servers; set
   `GITHUB_PERSONAL_ACCESS_TOKEN` and `FIGMA_API_KEY` before using the requirements/design phases.
 
-See [CLAUDE.md](CLAUDE.md) for conventions and the critical invariants.
+See [AGENTS.md](AGENTS.md) for conventions and the critical invariants.
 
 ## Contributing
 

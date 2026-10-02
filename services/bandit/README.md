@@ -15,7 +15,8 @@ Experiment: [`docs/scheduler/ab-testing.md`](../../docs/scheduler/ab-testing.md)
 
 - **Disjoint LinUCB.** Each of the 6 time-of-day arms keeps its own ridge regression
   `A = λI + Σ xxᵀ`, `b = Σ r·x` over a context vector shared across arms, scored by
-  `θ̂ᵀx + α·√(xᵀA⁻¹x)`. `λ = 1.0`, `α = 0.15` (ADR-0001 §10). `A⁻¹` is cached per arm and
+  `θ̂ᵀx + α·√(xᵀA⁻¹x)`. `λ = 1.0`, `α = 0.15` (the shipped ridge/exploration defaults; see
+  ADR-0001). `A⁻¹` is cached per arm and
   invalidated on update. The `LinUCB` class is arm-agnostic — arms are created lazily by
   string key at the ridge prior — so the same code serves 3 arms (the offline demo) or 5
   (production).
@@ -23,23 +24,40 @@ Experiment: [`docs/scheduler/ab-testing.md`](../../docs/scheduler/ab-testing.md)
   `EARLY_MORNING [00:00,06:00)`, `MORNING [06:00,11:00)`, `MIDDAY [11:00,14:00)`,
   `AFTERNOON [14:00,17:00)`,
   `EVENING [17:00,20:00)`, `NIGHT [20:00,24:00)`.
-- **Context vector, `d = 7`:**
-  - deadline days, duration, days from now;
-  - `is_weekend` (±1);
-  - fixed-load hours and flexible-load hours;
-  - bias.
+- **Context vector, `d = 7`** (`src/core/context_vector.py`). One vector per candidate day,
+  shared across all 6 arms (disjoint LinUCB keeps a separate model per arm, so the arm itself is
+  never part of the vector):
 
-  Details: ADR-0001 §5.1.
+  | # | Feature | Encoding |
+  | - | --- | --- |
+  | 0 | remaining days until deadline | `clamp(x / MAX_SCAN_DAYS, 0, 1) · 2 − 1` |
+  | 1 | duration (minutes) | `clamp(x / DURATION_DIVISOR, 0, 1) · 2 − 1` |
+  | 2 | candidate days from now | `clamp(x / MAX_SCAN_DAYS, 0, 1) · 2 − 1` |
+  | 3 | candidate day is a weekend (ISO 6/7) | `+1` / `−1` |
+  | 4 | fixed-load hours (`LECTURE`+`EXAM`+`DND`) on the day | `clamp(h / WORKLOAD_HOURS_DIVISOR, 0, 1)` |
+  | 5 | flexible-load hours (`TASK`+`ASSIGNMENT`) on the day | `clamp(h / WORKLOAD_HOURS_DIVISOR, 0, 1)` |
+  | 6 | bias | `1` |
+
+  - Signed features use the same fixed-divisor pattern so the vector stays reproducible and
+    stateless — no running stats. `is_weekend` is signed so `‖x‖` (and the exploration bonus)
+    doesn't favour weekends.
+  - Excluded on purpose: per-weekday one-hots (collinear with the bias), per-type workload hours
+    and counts beyond the two buckets above, tags, session type (always `TASK`), and the
+    never-populated semester phase — dropped in the `d = 22 → 7` reshape.
+  - `d` fixes the width of `BanditArmState.A`/`.b` and `SlotProposal.featureVector`
+    (`FEATURE_DIM` in `@zenflow/shared`). Changing it means resetting arm state and bumping
+    `BANDIT_MODEL_VERSION`.
+  - The preference matrix is never an input to this vector.
 - **Cold arm** = ridge prior. It scores `α·√(xᵀx/λ)`, not `0`.
 - **Learning check:** `uv run pytest tests/test_learning.py -s` prints simulated learning curves.
 - **Stateless service.** This service holds **no per-user state**. The NestJS backend owns
-  `(A, b)` persistence (Postgres table `BanditArmState`, ADR-0001 §6.1) and passes the 5
+  `(A, b)` persistence (Postgres table `BanditArmState`, per ADR-0001) and passes the 5
   arms' `(A, b)` in every request; `/v1/update` returns the new `(A, b)` for the backend to
   persist. This keeps all durable state in one database and makes the "fall back to the
   heuristic when the service is down" path trivial.
 - **Reproducible.** The only randomness is uniform tie-breaking from an injected
   `random.Random` — no `Math.random()`, no clock reads, no module-global RNG
-  (mirrors the scheduler-core invariant in [`CLAUDE.md`](../../CLAUDE.md)).
+  (mirrors the scheduler-core invariant in [`AGENTS.md`](../../AGENTS.md)).
 
 ## HTTP surface
 
@@ -141,7 +159,8 @@ update.
 `d*d`, each non-empty `b` is `d`); bad shapes / non-finite values / `alpha < 0` /
 `ridge <= 0` / an unknown `arm` → HTTP 422.
 
-Reward values (ADR-0001 §7): `RETAINED → +1`; `MOVE → −clamp(|dragDistanceMinutes| / 240, 0, 1)`;
+Reward values (the move-or-keep signal ADR-0001 defines): `RETAINED → +1`;
+`MOVE → −clamp(|dragDistanceMinutes| / 240, 0, 1)`;
 resize-only `MOVE` (`dragDistanceMinutes == 0`) → `0`. `CREATE` is never sent.
 
 ## Toolchain
@@ -196,13 +215,12 @@ Pure numpy: `slot`, `arms`, `context_vector`, `reward`, `series_spread`, `prefer
 `displacement` and `sync_conflicts`. No I/O, clock or randomness; instants are epoch-ms ints.
 The 7x24 matrix is 168 floats.
 
-Originally ported from `backend/src/scheduler/core/*` (issue #60, when the TS core was the
-source of truth). **ADR-0003 phase 6 reversed that**: Python is now the sole ranking
-implementation — `linucb_best_slot`, `context_vector`, `arms` and
-`displacement` no longer have a TS counterpart at all (that code was deleted from `backend/`).
-A behaviour change to any of those goes in this package's `src/core/*` with pytest coverage
-and updated `packages/shared/contract/place/*.json` fixtures — not a TS port, per the rewritten
-CLAUDE.md invariant 2.
+Python is the sole ranking implementation: `linucb_best_slot`, `context_vector`, `arms`, and
+`displacement` have no TS counterpart — this package's core was ported once from
+`backend/src/scheduler/core/*` (issue #60), and that TS ranking code is now frozen/deleted per
+ADR-0003. A behaviour change to any of those goes in this package's `src/core/*` with pytest
+coverage and updated `packages/shared/contract/place/*.json` fixtures — not a TS port (ranking
+changes land in Python, per the invariant AGENTS.md records).
 
 - `linucb_best_slot` (issue #62 A): scores every feasible 15-min start on all days as
   `armTerm + wS*stability` -- no preference-matrix term. `wS = stability_weight(prevStart, now)` is

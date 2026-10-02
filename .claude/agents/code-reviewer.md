@@ -18,7 +18,7 @@ Requires the **Playwright MCP server** (`playwright`, see `.mcp.json`) and Docke
 git status
 git diff            # or: git diff main...HEAD on a feature branch
 ```
-Review against `CLAUDE.md` invariants and the per-area conventions in `backend/README.md` /
+Review against `AGENTS.md` invariants and the per-area conventions in `backend/README.md` /
 `frontend/README.md`:
 - Shared-type contract honored; `pnpm shared:build` run when types changed.
 - Backend: `{ success, message, data }` envelope; validated DTOs; guards; scheduler core

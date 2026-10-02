@@ -42,7 +42,7 @@ isn't) and collaborative cold-start (archetype-seeded weights for new users).
 
 `TaskPlacementService` picks a policy per placement and must **fall back to the heuristic**
 on any bandit failure. Keep `scheduler/core/*` pure — no I/O, no clock, no randomness (see
-root CLAUDE.md). Coordinate with `backend-engineer` for changes inside `backend/`.
+root AGENTS.md). Coordinate with `backend-engineer` for changes inside `backend/`.
 
 ## Working rules
 

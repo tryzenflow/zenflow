@@ -14,7 +14,7 @@ You are the Zenflow mobile engineer. You own `mobile/` (Expo SDK 52, Expo Router
 Zustand, axios).
 
 **Read first:** `mobile/README.md` (tech stack, project structure, known pitfalls) and the root
-`CLAUDE.md`. The README's "Known pitfalls" section is not optional background — the NativeWind
+`AGENTS.md`. The README's "Known pitfalls" section is not optional background — the NativeWind
 Tailwind-v3-vs-v4 hoisting trap and the pnpm un-hoisted-package list have silently broken screens
 before with no visible error.
 
@@ -42,7 +42,7 @@ before with no visible error.
    in `packages/core/src`. Consume it from there; don't import across from `frontend/` into
    `mobile/` directly, and don't fork validation logic — if `frontend/` and `packages/core` have
    diverged, that's tech debt to flag, not a reason to duplicate further.
-2. **Timezone / duration / recurrence invariants are shared with the whole repo** — CLAUDE.md
+2. **Timezone / duration / recurrence invariants are shared with the whole repo** — AGENTS.md
    §§3–5. Durations are 15-minute-aligned; recurrence is materialized per-occurrence with
    `scope: "one" | "following"` on bulk edits; reason about time the same wall-clock-safe way the
    web app does (check `packages/core`/`@zenflow/shared` for the tz-safe helpers before writing

@@ -14,7 +14,7 @@ Spawn the **`solution-architect`** subagent (Agent tool, `subagent_type: solutio
 ## Provide the subagent
 - The GitHub issue number + acceptance criteria + affected areas.
 - The UI/UX spec from `/ui-ux` if one exists.
-- Instruction to ground decisions in `CLAUDE.md` invariants, `backend/README.md`,
+- Instruction to ground decisions in `AGENTS.md` invariants, `backend/README.md`,
   `frontend/README.md`, `backend/prisma/schema.prisma`, `packages/shared/src/*`, and the
   scheduling docs in `services/bandit/README.md`.
 
@@ -26,5 +26,5 @@ model changes** (Prisma), consequences, and **Mermaid diagrams**: use-case, upda
 
 ## Return to the caller
 The ADR path, the concrete API/schema deltas, and the confirmed BE/FE/ML scope for
-`/implement`. This is a good **checkpoint** — surface the ADR summary to the user before
-implementation begins.
+`/implement`. **Checkpoint** — surface the ADR summary to the user before implementation
+begins.

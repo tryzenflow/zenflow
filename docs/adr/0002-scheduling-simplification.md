@@ -8,13 +8,13 @@
 
 ## 1. Context
 
-The session model had accreted a full completion lifecycle (`SessionStatus`
-`PENDING | DONE | ABANDONED`, `COMPLETE` / `ABANDON` / `KEEP` events, an hourly overdue
-sweep) on top of a scheduler that had already been reduced to a single pure heuristic. The
-completion states carried little signal — a student rarely marks study work done — while
-adding UI (checkmarks, "Mark done", strikethrough) and telemetry surface. This ADR removes
-that, adds the education-focused session types, and fixes the personalization signal to a
-single **move-or-keep** outcome.
+- The session model had accreted a full completion lifecycle (`SessionStatus`
+  `PENDING | DONE | ABANDONED`, `COMPLETE` / `ABANDON` / `KEEP` events, an hourly overdue
+  sweep) on top of a scheduler that had already been reduced to a single pure heuristic.
+- The completion states carried little signal — a student rarely marks study work done —
+  while adding UI (checkmarks, "Mark done", strikethrough) and telemetry surface.
+- This ADR removes that, adds the education-focused session types, and fixes the
+  personalization signal to a single **move-or-keep** outcome.
 
 ## 2. Decision
 
@@ -74,16 +74,17 @@ Editing / deleting a series member is routed by the backend:
 
 ### 2.5 A/B experiment
 
-`SlotProposal` holds everything [`docs/scheduler/ab-testing.md`](../scheduler/ab-testing.md)
-needs (`experimentId`, `randomizationSeed`, `primaryPolicy`, `observationCount`,
-`proposedStartTime` / `appliedStartTime`, `featureVector`, `selectedArm`). `SessionEvent`
-carries `dragDistanceMinutes` + `slotProposalId`; both models' `sessionId` is nullable with
-`onDelete: SetNull` so history survives a delete.
-
-`ExperimentService` **writes a `SlotProposal` on every `TASK` scheduling event** and assigns
-a 50/50 `primaryPolicy` (`HEURISTIC` — Policy A; `LINUCB` — Policy B, calling the Python
-bandit service). The delayed reward path (first `MOVE` / `RETAINED` → `/update` →
-`BanditArmState`) is live. See [ADR-0001](0001-linucb-model-design.md).
+- `SlotProposal` holds everything the A/B experiment needs (`experimentId`,
+  `randomizationSeed`, `primaryPolicy`, `observationCount`, `proposedStartTime` /
+  `appliedStartTime`, `featureVector`, `selectedArm`) — see
+  [`docs/scheduler/ab-testing.md`](../scheduler/ab-testing.md).
+- `SessionEvent` carries `dragDistanceMinutes` + `slotProposalId`; both models' `sessionId` is
+  nullable with `onDelete: SetNull` so history survives a delete.
+- `ExperimentService` writes a `SlotProposal` on every `TASK` scheduling event and assigns a
+  50/50 `primaryPolicy` (`HEURISTIC` — Policy A; `LINUCB` — Policy B, calling the Python bandit
+  service).
+- The delayed reward path (first `MOVE` / `RETAINED` → `/update` → `BanditArmState`) is live —
+  see [ADR-0001](0001-linucb-model-design.md).
 
 ## 3. Consequences
 
