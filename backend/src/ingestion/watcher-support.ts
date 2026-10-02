@@ -31,7 +31,43 @@ export const MAX_RESPONSE_BODY_CHARS = 200_000;
 export interface IntegrationTarget {
   integrationId: string;
   userId: string;
+  /**
+   * Consecutive cache-served passes so far, from the claimed
+   * `IngestionSchedule` row (issue #56).
+   *
+   * Optional because the manual `POST /integrations/:provider/sync` path builds
+   * its targets from `eachIntegrationTarget`, which has no schedule row in hand.
+   * Absent reads as `0`, i.e. "not on a cache streak" — and a manual sync
+   * always walks anyway, since the student asked for fresh data.
+   */
+  cacheHitStreak?: number;
 }
+
+/**
+ * What one student's sync pass did, as far as the rolling scheduler cares
+ * (issue #56).
+ *
+ * Lives here rather than on either service because both the watchers (which
+ * produce it) and `IngestionScheduleService` (which records it) need it, and
+ * this file is already where the plumbing they share lives.
+ */
+export interface PassOutcome {
+  /**
+   * False if any upstream request failed. Note this is not "the job row says
+   * COMPLETED": a pass finishes even when one week 503s, but a pass with a
+   * failed fetch must not advance the freshness stamp other passes gate on.
+   */
+  ok: boolean;
+  /**
+   * True when the pass issued **no** upstream requests at all — served entirely
+   * from the cross-student occurrence cache. Counted as a streak so a cohort
+   * cannot sit on cached data indefinitely (`mustFullWalk`).
+   */
+  servedFromCache: boolean;
+}
+
+/** A pass that never got off the ground — a rejected or unreachable login. */
+export const FAILED_PASS: PassOutcome = { ok: false, servedFromCache: false };
 
 /**
  * The `INGESTION_ENABLED` kill switch.
@@ -44,6 +80,42 @@ export interface IntegrationTarget {
 export function isIngestionEnabled(config: ConfigService): boolean {
   const raw = config.get<boolean | string>("INGESTION_ENABLED");
   return raw !== false && raw !== "false";
+}
+
+/**
+ * The `INGESTION_OCCURRENCE_CACHE_ENABLED` rollout gate (issue #56).
+ *
+ * Deliberately mirrors {@link isIngestionEnabled}'s boolean-or-string tolerance
+ * but **inverts its default**. That one is a kill switch, so absent means on;
+ * this one is a rollout gate for behaviour that can silently drop a class off a
+ * student's calendar if the confirmed-set plumbing is wrong, so absent means
+ * off. Only an explicit `true` enables it.
+ *
+ * It gates exactly two things:
+ *  1. whether a walk may **skip** a live fetch, and
+ *  2. whether fan-out may **write** another student's `Session` rows.
+ *
+ * Recording occurrences from a walk that happened anyway is deliberately NOT
+ * gated: flipping this flag on should find a warm, already-validated cache
+ * rather than a cold one doing full-cost walks. So with
+ * the flag off, every upstream request and every student-visible write is what
+ * it is today, plus some local rows nobody reads yet.
+ */
+export function isOccurrenceCacheEnabled(config: ConfigService): boolean {
+  const raw = config.get<boolean | string>(
+    "INGESTION_OCCURRENCE_CACHE_ENABLED",
+  );
+  return raw === true || raw === "true";
+}
+
+/** A positive number from config, tolerating the string a `.env` file gives. */
+export function positiveConfig(
+  config: ConfigService,
+  name: string,
+  fallback: number,
+): number {
+  const value = Number(config.get<number | string>(name));
+  return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
 /** Resolves after `ms`; a non-positive delay resolves on the next tick. */
@@ -65,12 +137,19 @@ export function sleep(ms: number): Promise<void> {
  * cron runs rather than a parallel one-off.
  *
  * Returns the number of integrations visited.
+ *
+ * `handle`'s resolved value is ignored: since issue #56 the watchers' per-student
+ * pass returns a {@link PassOutcome} for the rolling ticker to record, but this
+ * sweep is the manual-sync path, which reports status through the job rows
+ * (`IntegrationStatus.lastSyncStatus`) rather than through a return value. The
+ * parameter is typed `unknown` rather than `void` purely so passing that
+ * function here needs no throwaway wrapper.
  */
 export async function eachIntegrationTarget(
   prisma: PrismaService,
   provider: IntegrationProvider,
   userId: string | undefined,
-  handle: (target: IntegrationTarget) => Promise<void>,
+  handle: (target: IntegrationTarget) => Promise<unknown>,
 ): Promise<number> {
   let visited = 0;
   let cursor: string | undefined;

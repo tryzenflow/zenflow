@@ -24,6 +24,7 @@ import { CryptoService } from "../crypto/crypto.service";
 import { MasterKeyService } from "../crypto/master-key.service";
 import { IntegrationAuthService } from "./integration-auth.service";
 import { IngestionSyncService } from "../ingestion/ingestion-sync.service";
+import { IngestionScheduleService } from "../ingestion/ingestion-schedule.service";
 import { ConnectIntegrationDto } from "./dto/connect-integration.dto";
 import { UpdateIntegrationDto } from "./dto/update-integration.dto";
 
@@ -86,6 +87,10 @@ export class IntegrationsService {
     // the manual sync trigger needs the watchers. See `IngestionModule`.
     @Inject(forwardRef(() => IngestionSyncService))
     private readonly ingestionSync: IngestionSyncService,
+    // Issue #56: a newly connected student needs their rolling-schedule rows
+    // now, not at the next tick's backfill sweep.
+    @Inject(forwardRef(() => IngestionScheduleService))
+    private readonly ingestionSchedule: IngestionScheduleService,
   ) {}
 
   /** `POST /integrations` — verify against DLU, then encrypt + upsert. */
@@ -200,6 +205,17 @@ export class IntegrationsService {
     }
 
     await this.ingestionSync.syncNow(user.id, provider);
+
+    // The student just got fresh data by hand, so push their rolling schedule
+    // out by a full period — re-walking them minutes later would be pure waste
+    // against DLU. Best-effort: the sync itself already succeeded, and a failure
+    // here only costs one redundant pass.
+    try {
+      await this.ingestionSchedule.deferAfterManualSync(connected.id, provider);
+    } catch {
+      // Deliberately swallowed; see above.
+    }
+
     return this.statusOf(user.id, provider);
   }
 
@@ -264,6 +280,13 @@ export class IntegrationsService {
       update: payload,
       include: LATEST_JOB_SELECT,
     });
+
+    // Issue #56: seed the rolling-schedule rows for this provider. Idempotent,
+    // so a reconnect neither duplicates them nor resets an existing cadence.
+    // Discovery is seeded due immediately and the walks a lead behind it, so a
+    // brand-new integration's confirmed section set is known before anything
+    // tries to read it.
+    await this.ingestionSchedule.ensureRows(row.id, provider, now);
 
     // Re-connecting doesn't erase the run history, so report the same sync
     // state `GET /integrations` would.

@@ -2,6 +2,8 @@ import {
   isoWeek,
   isoWeeksBetween,
   monthsFrom,
+  monthsWindow,
+  isoWeekStart,
   resolveSemester,
   SEMESTER_LOOKAHEAD_WEEKS,
 } from "./semester";
@@ -273,5 +275,37 @@ describe("monthsFrom", () => {
       { year: 2027, month: 1 },
       { year: 2027, month: 2 },
     ]);
+  });
+});
+
+describe("monthsWindow", () => {
+  const VN = "Asia/Ho_Chi_Minh";
+
+  it("spans the 1st of this month to the last instant of the next, in DLU time", () => {
+    const w = monthsWindow(new Date("2026-10-26T03:00:00.000Z"), VN, 2);
+    expect(w.from).toEqual(new Date("2026-09-30T17:00:00.000Z"));
+    expect(w.to).toEqual(new Date("2026-11-30T16:59:59.999Z"));
+    expect(w.scope).toBe("lms:2026-10,2026-11");
+  });
+
+  it("rolls the year over December", () => {
+    const w = monthsWindow(new Date("2026-12-10T03:00:00.000Z"), VN, 2);
+    expect(w.scope).toBe("lms:2026-12,2027-01");
+    expect(w.to).toEqual(new Date("2027-01-31T16:59:59.999Z"));
+  });
+
+  it("uses the university's month, not the server's, at midnight", () => {
+    // 31 Oct 18:00 UTC is already 1 Nov in Vietnam.
+    const w = monthsWindow(new Date("2026-10-31T18:00:00.000Z"), VN, 2);
+    expect(w.scope).toBe("lms:2026-11,2026-12");
+  });
+});
+
+describe("isoWeekStart", () => {
+  it("is Monday 00:00 in DLU time, even from a Sunday night", () => {
+    // Sun 27 Sep 2026, 22:00 in Vietnam.
+    expect(
+      isoWeekStart(new Date("2026-09-27T15:00:00.000Z"), "Asia/Ho_Chi_Minh"),
+    ).toEqual(new Date("2026-09-20T17:00:00.000Z"));
   });
 });

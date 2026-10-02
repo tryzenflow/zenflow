@@ -5,9 +5,13 @@ import { LMSService } from "../lms/lms.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PrismaService } from "../prisma/prisma.service";
 import type { MoodleMonthlyView } from "./core/parse-lms";
+import { EnrollmentDiscoveryService } from "./enrollment-discovery.service";
 import { IngestionJobsService } from "./ingestion-jobs.service";
+import { IngestionScheduleService } from "./ingestion-schedule.service";
 import { LmsWatcherService } from "./lms-watcher.service";
 import { MaterializerService } from "./materializer.service";
+import { OccurrenceCacheService } from "./occurrence-cache.service";
+import { OccurrenceFanoutService } from "./occurrence-fanout.service";
 
 // ── in-memory Prisma double ────────────────────────────────────────────────
 
@@ -183,6 +187,13 @@ async function makeWatcher(
     env?: Record<string, unknown>;
     login?: jest.Mock;
     fetchMonthlyView?: jest.Mock;
+    // Issue #56's cache seams; the defaults keep the flag-off behaviour.
+    confirmedCourses?: jest.Mock;
+    lastSuccessAt?: jest.Mock;
+    lmsFreshness?: jest.Mock;
+    lmsBlocks?: jest.Mock;
+    recordLmsItems?: jest.Mock;
+    fanOutLms?: jest.Mock;
   } = {},
 ) {
   const db = makePrismaDouble(
@@ -210,6 +221,23 @@ async function makeWatcher(
   const revealCredentials = jest
     .fn()
     .mockResolvedValue({ username: "sv0001", password: "pw" });
+  const confirmedCourses =
+    opts.confirmedCourses ?? jest.fn().mockResolvedValue([]);
+  const lastSuccessAt = opts.lastSuccessAt ?? jest.fn().mockResolvedValue(null);
+  const lmsFreshness =
+    opts.lmsFreshness ?? jest.fn().mockResolvedValue({ fresh: [], stale: [] });
+  const lmsBlocks = opts.lmsBlocks ?? jest.fn().mockResolvedValue([]);
+  const recordLmsItems =
+    opts.recordLmsItems ??
+    jest.fn().mockResolvedValue({
+      created: 0,
+      changed: 0,
+      unchanged: 0,
+      canceledKeys: [],
+      touchedIds: [],
+      transitions: [],
+    });
+  const fanOutLms = opts.fanOutLms ?? jest.fn().mockResolvedValue(undefined);
 
   const prisma = db.client as unknown as PrismaService;
 
@@ -234,6 +262,16 @@ async function makeWatcher(
         useValue: { notify: jest.fn(), create: jest.fn() },
       },
       { provide: IntegrationsService, useValue: { revealCredentials } },
+      { provide: EnrollmentDiscoveryService, useValue: { confirmedCourses } },
+      {
+        provide: OccurrenceCacheService,
+        useValue: { lmsFreshness, lmsBlocks, recordLmsItems },
+      },
+      { provide: OccurrenceFanoutService, useValue: { fanOutLms } },
+      {
+        provide: IngestionScheduleService,
+        useValue: { lastSuccessAt },
+      },
     ],
   }).compile();
   const service = module.get<LmsWatcherService>(LmsWatcherService);
@@ -247,6 +285,12 @@ async function makeWatcher(
     reconcileDeleted,
     flushDigest,
     revealCredentials,
+    confirmedCourses,
+    lastSuccessAt,
+    lmsFreshness,
+    lmsBlocks,
+    recordLmsItems,
+    fanOutLms,
   };
 }
 
@@ -438,5 +482,241 @@ describe("LmsWatcherService", () => {
       expect(w.db.jobs).toHaveLength(1);
       expect(w.db.jobs[0].integrationId).toBe("int-2");
     });
+  });
+});
+
+describe("LmsWatcherService — the occurrence cache (issue #56)", () => {
+  const COURSE = 90001;
+  /** Everything `decide()` needs in order to reach "cache". */
+  const CACHEABLE = {
+    confirmedCourses: jest.fn().mockResolvedValue([COURSE]),
+    lastSuccessAt: jest
+      .fn()
+      .mockResolvedValue(new Date(NOW.getTime() - 3600_000)),
+    lmsFreshness: jest.fn().mockResolvedValue({ fresh: [COURSE], stale: [] }),
+    lmsBlocks: jest.fn().mockResolvedValue([
+      {
+        externalKey: "lms:assign:800001",
+        title: "Môn học Mẫu Một — bài tập 1",
+        type: "ASSIGNMENT" as const,
+        scheduledStartTime: new Date("2026-09-20T15:45:00.000Z"),
+        durationMinutes: 15,
+        location: null,
+        note: null,
+        lmsCourse: {
+          lmsCourseId: COURSE,
+          fullName: "Môn học Mẫu Một",
+          shortName: "MHM1",
+        },
+      },
+    ]),
+  };
+
+  const cacheOn = (over: Record<string, unknown> = {}) => ({
+    env: { INGESTION_OCCURRENCE_CACHE_ENABLED: true },
+    ...CACHEABLE,
+    ...over,
+  });
+
+  type RecordCall = [unknown[], Record<string, unknown>];
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it("makes ZERO upstream requests — not even the login — when served", async () => {
+    // Issue #56 acceptance criterion 8(a), calendar side.
+    const w = await makeWatcher(cacheOn());
+
+    await w.service.run(NOW);
+
+    expect(w.login).not.toHaveBeenCalled();
+    expect(w.fetchMonthlyView).not.toHaveBeenCalled();
+    expect(w.materialize).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks whether the cache still holds THIS student's own view of the window", async () => {
+    const w = await makeWatcher(cacheOn());
+
+    await w.service.run(NOW);
+
+    expect(w.lmsFreshness).toHaveBeenCalledWith("u1", [COURSE], {
+      now: NOW,
+      window: {
+        from: new Date("2026-08-31T17:00:00.000Z"),
+        to: new Date("2026-10-31T16:59:59.999Z"),
+        scope: "lms:2026-09,2026-10",
+      },
+    });
+  });
+
+  it("reconciles from the cached view over the rest of the window", async () => {
+    const w = await makeWatcher(cacheOn());
+
+    await w.service.run(NOW);
+
+    expect(w.lmsBlocks).toHaveBeenCalledWith([COURSE], {
+      from: NOW,
+      to: new Date("2026-10-31T16:59:59.999Z"),
+    });
+    expect(w.reconcileDeleted).toHaveBeenCalledWith(
+      "u1",
+      "LMS",
+      ["ASSIGNMENT", "EXAM"],
+      new Set(["lms:assign:800001"]),
+      NOW,
+      expect.anything(),
+    );
+  });
+
+  it("still writes a job row, and reports the pass as cache-served", async () => {
+    const w = await makeWatcher(cacheOn());
+    await expect(
+      w.service.syncOne({ integrationId: "int-1", userId: "u1" }, NOW),
+    ).resolves.toEqual({ ok: true, servedFromCache: true });
+    expect(w.db.items).toHaveLength(1);
+  });
+
+  it("walks when the flag is off, however fresh the cache looks", async () => {
+    const w = await makeWatcher({ ...CACHEABLE });
+    await w.service.run(NOW);
+    expect(w.fetchMonthlyView).toHaveBeenCalledTimes(2);
+    expect(w.lmsBlocks).not.toHaveBeenCalled();
+  });
+
+  it("walks when LMS discovery has never succeeded", async () => {
+    const w = await makeWatcher(
+      cacheOn({ lastSuccessAt: jest.fn().mockResolvedValue(null) }),
+    );
+    await w.service.run(NOW);
+    expect(w.fetchMonthlyView).toHaveBeenCalled();
+    expect(w.lastSuccessAt).toHaveBeenCalledWith("int-1", "LMS_DISCOVERY");
+  });
+
+  it("walks when the student has no confirmed courses yet", async () => {
+    // Moodle enrolment lags the timetable: empty means "not yet known".
+    const w = await makeWatcher(
+      cacheOn({ confirmedCourses: jest.fn().mockResolvedValue([]) }),
+    );
+    await w.service.run(NOW);
+    expect(w.fetchMonthlyView).toHaveBeenCalled();
+  });
+
+  it("walks when a course is stale or a classmate sees it differently", async () => {
+    // e.g. someone else holds an extension: the rows no longer match this
+    // student's own view, so they fetch rather than inherit it.
+    const w = await makeWatcher(
+      cacheOn({
+        lmsFreshness: jest
+          .fn()
+          .mockResolvedValue({ fresh: [], stale: [COURSE] }),
+      }),
+    );
+    await w.service.run(NOW);
+    expect(w.fetchMonthlyView).toHaveBeenCalledTimes(2);
+    expect(w.lmsBlocks).not.toHaveBeenCalled();
+  });
+
+  it("walks on the periodic audit, however fresh everything is", async () => {
+    const w = await makeWatcher(cacheOn());
+    await w.service.syncOne(
+      { integrationId: "int-1", userId: "u1", cacheHitStreak: 7 },
+      NOW,
+    );
+    expect(w.fetchMonthlyView).toHaveBeenCalled();
+  });
+
+  it("records the student's view after a walk even with the flag off", async () => {
+    const w = await makeWatcher({
+      confirmedCourses: jest.fn().mockResolvedValue([COURSE, 90002]),
+      lastSuccessAt: jest
+        .fn()
+        .mockResolvedValue(new Date(NOW.getTime() - 3600_000)),
+    });
+
+    await w.service.run(NOW);
+
+    expect(w.recordLmsItems).toHaveBeenCalledTimes(1);
+    const [occurrences, opts] = w.recordLmsItems.mock.calls[0] as RecordCall;
+    // The same assignment in both months' responses is ONE occurrence.
+    expect(occurrences).toHaveLength(1);
+    expect(opts).toMatchObject({
+      userId: "u1",
+      complete: true,
+      cacheable: true,
+      courseIds: [COURSE, 90002],
+    });
+    expect(w.fanOutLms).not.toHaveBeenCalled();
+  });
+
+  it("records an incomplete read as incomplete, so nothing is retired", async () => {
+    const w = await makeWatcher({
+      fetchMonthlyView: jest
+        .fn()
+        .mockResolvedValueOnce(MONTHLY_VIEW)
+        .mockRejectedValue(new Error("status 503")),
+    });
+    await w.service.run(NOW);
+    const [, opts] = w.recordLmsItems.mock.calls[0] as RecordCall;
+    expect(opts.complete).toBe(false);
+  });
+
+  it("fans out only corroborated transitions, and only with the flag on", async () => {
+    const transitions = [{ unitId: COURSE, before: "lms#old" }];
+    const recordLmsItems = jest.fn().mockResolvedValue({
+      created: 0,
+      changed: 1,
+      unchanged: 0,
+      canceledKeys: [],
+      touchedIds: [String(COURSE)],
+      transitions,
+    });
+
+    const on = await makeWatcher({
+      env: { INGESTION_OCCURRENCE_CACHE_ENABLED: true },
+      recordLmsItems,
+    });
+    await on.service.run(NOW);
+    expect(on.fanOutLms).toHaveBeenCalledWith(transitions, {
+      excludeUserId: "u1",
+      window: { from: NOW, to: new Date("2026-10-31T16:59:59.999Z") },
+      now: NOW,
+    });
+
+    const off = await makeWatcher({ recordLmsItems });
+    await off.service.run(NOW);
+    expect(off.fanOutLms).not.toHaveBeenCalled();
+  });
+
+  it("does not fan out a lone student's change (an extension, say)", async () => {
+    const w = await makeWatcher({
+      env: { INGESTION_OCCURRENCE_CACHE_ENABLED: true },
+      recordLmsItems: jest.fn().mockResolvedValue({
+        created: 0,
+        changed: 1,
+        unchanged: 0,
+        canceledKeys: [],
+        touchedIds: [String(COURSE)],
+        transitions: [],
+      }),
+    });
+    await w.service.run(NOW);
+    expect(w.fanOutLms).not.toHaveBeenCalled();
+  });
+
+  it("reports a failed cache read as a failed pass, so the next one walks", async () => {
+    const w = await makeWatcher(
+      cacheOn({ lmsBlocks: jest.fn().mockRejectedValue(new Error("db gone")) }),
+    );
+    await expect(
+      w.service.syncOne({ integrationId: "int-1", userId: "u1" }, NOW),
+    ).resolves.toEqual({ ok: false, servedFromCache: false });
+  });
+
+  it("a failure to record the cache does not fail the student's own pass", async () => {
+    const w = await makeWatcher({
+      recordLmsItems: jest.fn().mockRejectedValue(new Error("db gone")),
+    });
+    await expect(
+      w.service.syncOne({ integrationId: "int-1", userId: "u1" }, NOW),
+    ).resolves.toMatchObject({ ok: true });
   });
 });

@@ -100,6 +100,15 @@ function dayStartIn(dateStr: string, tz: string): Date {
 }
 
 /**
+ * Monday 00:00, in `tz`, of the ISO week holding `date`. The timetable walk
+ * fetches whole weeks, so this is where its first fetched week begins — and so
+ * where a cache-served pass must start reading to hand back the same meetings.
+ */
+export function isoWeekStart(date: Date, tz: string): Date {
+  return dayStartIn(isoWeekStartStr(localDateStr(date, tz)), tz);
+}
+
+/**
  * Which `(academicYear, semester)` the instant `now` falls in, in timezone
  * `tz`, and the window that term covers.
  *
@@ -242,4 +251,40 @@ export function monthsFrom(
     });
   }
   return months;
+}
+
+/**
+ * The instants the LMS watcher's `count` months cover, plus a `scope` naming
+ * them — the window one Moodle walk speaks for (issue #56).
+ *
+ * `from` is 00:00 on the 1st of the first month and `to` the last millisecond
+ * of the last, both in `tz`. The occurrence cache scopes a course's view to
+ * exactly this range, and a cache-served pass reconciles over the tail of it,
+ * so it must match the materializer's LMS reconcile window to the millisecond.
+ */
+export function monthsWindow(
+  now: Date,
+  tz: string,
+  count: number,
+): { from: Date; to: Date; scope: string } {
+  const months = monthsFrom(now, tz, count);
+  const first = months[0];
+  const last = months[months.length - 1];
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const following =
+    last.month === 12
+      ? { year: last.year + 1, month: 1 }
+      : { year: last.year, month: last.month + 1 };
+  const from = fromZonedTime(
+    `${first.year}-${pad(first.month)}-01T00:00:00.000`,
+    tz,
+  );
+  const to = new Date(
+    fromZonedTime(
+      `${following.year}-${pad(following.month)}-01T00:00:00.000`,
+      tz,
+    ).getTime() - 1,
+  );
+  const scope = `lms:${months.map((m) => `${m.year}-${pad(m.month)}`).join(",")}`;
+  return { from, to, scope };
 }

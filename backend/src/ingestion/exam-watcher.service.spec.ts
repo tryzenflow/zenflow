@@ -259,3 +259,32 @@ describe("ExamWatcherService", () => {
     expect(w.db.jobs).toHaveLength(0);
   });
 });
+
+describe("ExamWatcherService — a plain fetch", () => {
+  it("fetches for every student even with the occurrence cache on", async () => {
+    // No cache and no fan-out for exams: the watcher is built without either,
+    // and the flag changes nothing about its requests.
+    const w = await makeWatcher({
+      env: { INGESTION_OCCURRENCE_CACHE_ENABLED: true },
+    });
+
+    await expect(
+      w.service.syncOne({ integrationId: "int-1", userId: "u1" }, NOW),
+    ).resolves.toEqual({ ok: true, servedFromCache: false });
+
+    expect(w.authenticate).toHaveBeenCalledTimes(1);
+    expect(w.fetchExams).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a failed fetch as a failed pass", async () => {
+    const w = await makeWatcher({
+      fetchExams: jest
+        .fn()
+        .mockRejectedValue(new Error("Portal request failed (status 502)")),
+    });
+
+    await expect(
+      w.service.syncOne({ integrationId: "int-1", userId: "u1" }, NOW),
+    ).resolves.toEqual({ ok: false, servedFromCache: false });
+  });
+});
