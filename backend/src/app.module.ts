@@ -95,6 +95,14 @@ import { ObservabilityModule } from "./observability/observability.module";
           .default(600), // 10 min
         OTP_VERIFY_EMAIL_LIMIT: Joi.number().integer().positive().default(10),
         PORTAL_API_KEY: Joi.string().required(),
+        // DKHP (course-registration) API: base URL and key for the
+        // registration-history call that drives enrolment discovery. No
+        // default — the host is deployment-specific. Optional at boot so an
+        // existing deployment that has not been given them still starts;
+        // DKHP calls fail per-pass (and are logged) until they are set. The
+        // key is never logged.
+        DKHP_API_URL: Joi.string().uri().optional(),
+        DKHP_API_KEY: Joi.string().optional(),
         // --- DLU ingestion (lms/, portal/, ingestion/) ---------------------
         // These three are read with `getOrThrow` by LMSService /
         // PortalAPIService, so they must always resolve — the defaults below
@@ -126,6 +134,91 @@ import { ObservabilityModule } from "./observability/observability.module";
         // config rather than a constant: DLU's tolerance can be discovered
         // without a redeploy. `0` in `.env.test` so a suite never waits on it.
         INGESTION_REQUEST_DELAY_MS: Joi.number().integer().min(0).default(750),
+        // --- DLU ingestion: the rolling scheduler (issue #56) --------------
+        // The three watchers no longer carry a `@Cron`. `IngestionTickerService`
+        // fires every minute and claims only the most-overdue few students per
+        // kind, so the same daily volume is spread continuously instead of
+        // sweeping the whole population at one instant. The cadence lives
+        // entirely in these periods plus each row's `nextDueAt`; the heartbeat
+        // is a fixed literal and deliberately not configurable (see the note on
+        // `IngestionTickerService`).
+        //
+        // How often each student should be refreshed, per kind. The LMS calendar
+        // is the only frequent one: a deadline can move at any hour, while a
+        // timetable or exam schedule changes a handful of times a term.
+        INGESTION_PORTAL_DISCOVERY_PERIOD_MS: Joi.number()
+          .integer()
+          .positive()
+          .default(24 * 60 * 60_000),
+        INGESTION_LMS_DISCOVERY_PERIOD_MS: Joi.number()
+          .integer()
+          .positive()
+          .default(24 * 60 * 60_000),
+        INGESTION_TIMETABLE_PERIOD_MS: Joi.number()
+          .integer()
+          .positive()
+          .default(24 * 60 * 60_000),
+        INGESTION_EXAM_PERIOD_MS: Joi.number()
+          .integer()
+          .positive()
+          .default(24 * 60 * 60_000),
+        INGESTION_LMS_CALENDAR_PERIOD_MS: Joi.number()
+          .integer()
+          .positive()
+          .default(60 * 60_000),
+        // Hard ceiling on how many students one tick may claim for one kind.
+        // The safety rail that makes "the load is spread" a property of the code
+        // rather than of whoever last edited this file. A measurement run lifts
+        // it on purpose, together with 60s periods, to replay the pre-#56 burst.
+        INGESTION_TICK_MAX_BATCH: Joi.number().integer().positive().default(5),
+        // Stop claiming further kinds once a tick has spent this long, so one
+        // slow kind cannot push a tick past the next heartbeat. A deferred
+        // target simply stays overdue and leads the next tick.
+        INGESTION_TICK_BUDGET_MS: Joi.number()
+          .integer()
+          .positive()
+          .default(48_000),
+        // --- DLU ingestion: the cross-student occurrence cache (issue #56) --
+        // The rollout gate. Off by default, and the inverse of
+        // INGESTION_ENABLED's "absent means on": this one lets a walk be SKIPPED
+        // and lets one student's fetch write another student's calendar, which
+        // is behaviour that can silently drop a class if the confirmed-set
+        // plumbing is wrong. Recording occurrences from a walk that happened
+        // anyway is deliberately NOT gated, so flipping this on finds a warm,
+        // already-validated cache. See `isOccurrenceCacheEnabled`.
+        INGESTION_OCCURRENCE_CACHE_ENABLED: Joi.boolean().default(false),
+        // How long a section's/course's cached occurrences are served before one
+        // student's live walk refreshes them for everyone.
+        INGESTION_CACHE_TTL_MS: Joi.number()
+          .integer()
+          .positive()
+          .default(7 * 24 * 60 * 60_000),
+        // Hard staleness ceiling on a student's confirmed set. Past this a walk
+        // pass stops trusting discovery and does the full live walk. Two
+        // discovery periods, so one missed pass is tolerated.
+        INGESTION_DISCOVERY_MAX_AGE_MS: Joi.number()
+          .integer()
+          .positive()
+          .default(48 * 60 * 60_000),
+        // Force a full live walk every N consecutive cache-served passes. The
+        // audit that bounds how wrong the cache can quietly be: without it a
+        // cohort could sit indefinitely on occurrences that keep looking fresh.
+        INGESTION_FULL_WALK_EVERY: Joi.number().integer().positive().default(7),
+        // Cap on how many classmates one fan-out may write to, so a shared
+        // elective cannot turn one tick into a thousand writes. The remainder
+        // pick the change up on their own next pass.
+        INGESTION_FANOUT_MAX_STUDENTS: Joi.number()
+          .integer()
+          .positive()
+          .default(200),
+        // Whether the Moodle current-term filter may narrow a student's course
+        // set. "shadow" (default) records and meters its verdict but gates
+        // nothing — issue #56 requires the filter be validated against a real
+        // account before it can cause a skip. "enforce" acts on it; "off" is
+        // shadow, said deliberately.
+        INGESTION_LMS_TERM_FILTER: Joi.string()
+          .valid("off", "shadow", "enforce")
+          .default("shadow"),
         // Base URL of the stateless Python bandit service
         // (services/bandit/, docs/adr/0001-linucb-model-design.md). Optional:
         // when unset, LinUCB scheduling is disabled and every event falls back

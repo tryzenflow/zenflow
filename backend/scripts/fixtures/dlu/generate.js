@@ -3,7 +3,7 @@
  *
  * Fully synthetic: no real student names, ids, or course content — every
  * name is a "Test Student N" / "Introduction to <Department>" placeholder.
- * Shapes mirror the real DLU endpoints (see lmsfetchall.md / marks.md at the
+ * Shapes mirror the real DLU endpoints (see lmsfetchall.md at the
  * repo root, and backend/src/ingestion/core/parse-{lms,portal}.ts).
  *
  * Deterministic (seeded PRNG) so re-running reproduces the same output —
@@ -146,9 +146,13 @@ function scheduleId(year, term, deptCode, levelSuffix, seq) {
 }
 
 // ---------------------------------------------------------------------------
-// marks generation (with retakes + dual-program records)
+// per-student course load (with retakes + dual-program records)
+//
+// The grade-history records built here are no longer written out — subjects now
+// come from DKHP's registration history, below. The loop is kept as is because
+// it draws from the seeded PRNG: dropping it would reshuffle every other fixture.
 // ---------------------------------------------------------------------------
-const marksOut = {}; // studentId -> [{NamHoc, DanhSachDiem}]
+const marksOut = {}; // studentId -> [{NamHoc, DanhSachDiem}]; not written
 const currentCourseLoad = new Map(); // studentId -> [{subject, programId, sectionKey}]
 
 function gradeFor(rand2) {
@@ -439,6 +443,72 @@ for (const [studentId, load] of currentCourseLoad) {
 }
 
 // ---------------------------------------------------------------------------
+// DKHP registration history (POST /api/student/getAllRegistHistory)
+//
+// An event log, not a state: Status 1 = registered, 0 = cancelled. The current
+// term's sections are derived from each student's course load, so the registered
+// set matches the timetable exactly. On top of that, deterministic cases that a
+// parser must get right:
+//   - every 5th student re-registers a section (register, cancel, register)
+//   - every 7th student registered then cancelled a section they do not attend
+//   - every 3rd student has an event in the previous term, which the endpoint
+//     only returns when that term is asked for
+// A separate PRNG-free scheme (index arithmetic) keeps the other fixtures stable.
+// ---------------------------------------------------------------------------
+const CURRENT_YEAR = "2026-2027";
+const CURRENT_TERM = "HK01";
+const registHistoryOut = {};
+
+students.forEach((student, idx) => {
+  const events = [];
+  const stamp = (day, hh, mm, ss) =>
+    `2026-06-${String(day).padStart(2, "0")} ${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
+  const push = (unitId, name, credits, status, updateDate, year, term) =>
+    events.push({
+      UpdateDate: updateDate,
+      Task: status === 1 ? "Đăng ký" : "Hủy đăng ký",
+      Info: `${unitId} [${name}]`,
+      UpdateStaff: student.id,
+      // The real endpoint leaves a stray "()" (or a reason) on the name.
+      CurriculumName: status === 1 ? `${name} ()` : `${name} (DKHP_WIN)`,
+      CurriculumID: unitId,
+      Status: status,
+      color: status === 1 ? "#fff" : "#ff6a00",
+      Credits: Number(credits),
+      YearStudy: year,
+      TermID: term,
+      Lydo: status === 1 ? "" : "DKHP_WIN",
+    });
+
+  const load = currentCourseLoad.get(student.id);
+  load.forEach((item, i) => {
+    const id = item.unitId;
+    const name = item.subject.name;
+    const credits = item.subject.credits;
+    push(id, name, credits, 1, stamp(9, 9, 50, i), CURRENT_YEAR, CURRENT_TERM);
+    if (idx % 5 === 0 && i === 0) {
+      push(id, name, credits, 0, stamp(10, 10, 0, 0), CURRENT_YEAR, CURRENT_TERM);
+      push(id, name, credits, 1, stamp(10, 10, 5, 0), CURRENT_YEAR, CURRENT_TERM);
+    }
+  });
+
+  if (idx % 7 === 0 && load.length > 0) {
+    const item = load[0];
+    const id = `${item.unitId}-CXL`;
+    push(id, item.subject.name, item.subject.credits, 1, stamp(11, 9, 0, 0), CURRENT_YEAR, CURRENT_TERM);
+    push(id, item.subject.name, item.subject.credits, 0, stamp(12, 9, 0, 0), CURRENT_YEAR, CURRENT_TERM);
+  }
+
+  if (idx % 3 === 0 && load.length > 0) {
+    const item = load[0];
+    push(`PREV-${item.unitId}`, item.subject.name, item.subject.credits, 1, stamp(1, 9, 0, 0), "2025-2026", "HK02");
+  }
+
+  events.sort((a, b) => a.UpdateDate.localeCompare(b.UpdateDate));
+  registHistoryOut[student.id] = events.map((e, n) => ({ STT: n + 1, ...e }));
+});
+
+// ---------------------------------------------------------------------------
 // output: students.json
 // ---------------------------------------------------------------------------
 const studentsOut = students.map((s) => ({
@@ -595,7 +665,7 @@ for (const sec of sections.values()) {
 }
 
 // ---------------------------------------------------------------------------
-// output: portal-year-term.json / portal-study-program.json
+// output: portal-year-term.json
 // ---------------------------------------------------------------------------
 const yearTermOut = {
   _comment: "GET /api/student/yearandterm response shape — static, same for every student.",
@@ -608,15 +678,6 @@ const yearTermOut = {
   CurrentYear: "2026-2027",
   CurrentTerm: "HK01",
 };
-
-const studyProgramOut = {};
-for (const s of students) {
-  const rows = [{ StudentID: s.id, StudyProgramID: s.dept.program, StudyProgramName: s.dept.program, Type: 1 }];
-  if (s.secondaryDept) {
-    rows.push({ StudentID: s.id, StudyProgramID: s.secondaryDept.program, StudyProgramName: s.secondaryDept.program, Type: 2 });
-  }
-  studyProgramOut[s.id] = rows;
-}
 
 // ---------------------------------------------------------------------------
 // write
@@ -655,15 +716,10 @@ write(
   "studentId -> PortalExamRow[] for the current term, one exam per section the student is in (classmates in the same section share the exam row's Examination id).",
 );
 write(
-  "portal-marks.json",
-  marksOut,
-  "studentId -> GET /api/student/marks response shape. 3 past graded academic years + the current in-progress term (NotScore=\"1\", grades null). Students with retakeStatus (see students.json) carry a failing record for one subject plus either a later passing retake (\"resolved\") or a currently-in-progress retake (\"in-progress\") — same CurriculumID, a NEW ScheduleStudyUnitID. Dual-program students (secondaryDept in students.json) carry extra records tagged with their secondary StudyProgramID.",
+  "portal-regist-history.json",
+  registHistoryOut,
+  "studentId -> POST /api/student/getAllRegistHistory events (the whole log; the fake server filters by the asked year/term). An event log: Status 1 = registered, 0 = cancelled, so the current sections are the latest event per CurriculumID with Status 1. Includes register/cancel/register, register-then-cancel and previous-term cases.",
 );
 write("portal-year-term.json", yearTermOut);
-write(
-  "portal-study-program.json",
-  studyProgramOut,
-  "studentId -> GET /api/student/getstudyprogram rows. Dual-program students have two rows (Type 1 = primary, Type 2 = secondary).",
-);
 
 console.log(`\n${students.length} students, ${sections.size} current-term sections, ${[...sections.values()].reduce((n, s) => n + s.students.length, 0)} section-enrollments.`);

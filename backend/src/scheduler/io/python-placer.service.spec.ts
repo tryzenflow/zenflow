@@ -1,7 +1,13 @@
+import { Test, TestingModule } from "@nestjs/testing";
 import type { PlacedMember, PlaceResponse } from "@zenflow/shared";
 import type { User } from "../../../generated/prisma";
+import { PrismaService } from "../../prisma/prisma.service";
+import { ExperimentService } from "../../experiments/experiment.service";
 import { ScheduleInfeasibleException } from "../schedule-infeasible.exception";
 import { SchedulerDegradedException } from "../schedule-degraded.exception";
+import { DisplacementService } from "./displacement.service";
+import { FallbackPlacer } from "./fallback-placer.service";
+import { PlacementGateway } from "./placement-gateway.service";
 import { PythonPlacer } from "./python-placer.service";
 
 const user = {
@@ -50,7 +56,7 @@ type Assign = {
   randomizationSeed: string;
 };
 
-function make(opts: {
+async function make(opts: {
   place?: unknown; // gateway.placeSingleTwoPhase / place result
   fallbackSingle?: Date | null;
   fallbackSeries?: { id: string; scheduledStartTime: Date | null }[];
@@ -86,13 +92,17 @@ function make(opts: {
       .fn()
       .mockResolvedValue([{ id: "x", from: new Date(1), to: new Date(2) }]),
   };
-  const placer = new PythonPlacer(
-    prisma as never,
-    gateway as never,
-    fallback as never,
-    experiment as never,
-    displacement as never,
-  );
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      PythonPlacer,
+      { provide: PrismaService, useValue: prisma },
+      { provide: PlacementGateway, useValue: gateway },
+      { provide: FallbackPlacer, useValue: fallback },
+      { provide: ExperimentService, useValue: experiment },
+      { provide: DisplacementService, useValue: displacement },
+    ],
+  }).compile();
+  const placer = module.get<PythonPlacer>(PythonPlacer);
   return { placer, prisma, gateway, fallback, experiment, displacement };
 }
 
@@ -104,7 +114,9 @@ const down = (reason: string) => ({ ok: false as const, reason });
 
 describe("PythonPlacer.placeSingle (python answers)", () => {
   it("writes Python's start and records a PYTHON proposal stamped with paramsVersion", async () => {
-    const { placer, prisma, experiment } = make({ place: ok([member()]) });
+    const { placer, prisma, experiment } = await make({
+      place: ok([member()]),
+    });
     const res = await placer.placeSingle(user, task, "create", now);
     expect(res.scheduledStartTime?.getTime()).toBe(START);
     expect(res.degraded).toBeUndefined();
@@ -128,7 +140,7 @@ describe("PythonPlacer.placeSingle (python answers)", () => {
       outcome: "DISPLACED",
       moves: [{ id: "x", fromMs: 1, toMs: 2 }],
     });
-    const { placer, displacement } = make({ place: ok([moved]) });
+    const { placer, displacement } = await make({ place: ok([moved]) });
     const res = await placer.placeSingle(user, task, "create", now);
     expect(displacement.applyMoves).toHaveBeenCalledWith(
       "u1",
@@ -151,7 +163,7 @@ describe("PythonPlacer.placeSingle (python answers)", () => {
         weights: { wL: 1, wS: 0 },
       },
     });
-    const { placer, experiment } = make({
+    const { placer, experiment } = await make({
       place: ok([r]),
       assign: { primaryPolicy: "LINUCB", pairwiseShown: true },
     });
@@ -175,7 +187,7 @@ describe("PythonPlacer.placeSingle (python answers)", () => {
       heuristic: null,
       conflicting: true,
     });
-    const { placer, prisma } = make({ place: ok([r]) });
+    const { placer, prisma } = await make({ place: ok([r]) });
     const res = await placer.placeSingle(user, task, "create", now);
     expect(res.scheduledStartTime?.getTime()).toBe(START);
     expect(res.lastResort).toBe(true);
@@ -192,7 +204,7 @@ describe("PythonPlacer.placeSingle (python answers)", () => {
       heuristic: null,
       appliedPolicy: "NONE",
     });
-    const { placer, prisma } = make({ place: ok([r]) });
+    const { placer, prisma } = await make({ place: ok([r]) });
     const res = await placer.placeSingle(user, task, "create", now);
     expect(res.scheduledStartTime).toEqual(PINNED);
     expect(res.lastResort).toBe(true);
@@ -204,7 +216,7 @@ describe("PythonPlacer.placeSingle (python answers)", () => {
 
   it("allowLastResort=false: a last-resort answer writes nothing (the task keeps its start)", async () => {
     const r = member({ outcome: "ACCEPTED_LAST_RESORT", heuristic: null });
-    const { placer, prisma } = make({ place: ok([r]) });
+    const { placer, prisma } = await make({ place: ok([r]) });
     const res = await placer.placeSingle(
       user,
       task,
@@ -223,7 +235,7 @@ describe("PythonPlacer.placeSingle (python answers)", () => {
 describe("PythonPlacer.placeSingle (degraded, ADR-0003 2.4)", () => {
   it("free slot: heuristic start, degraded flag, TS_FALLBACK proposal without model data", async () => {
     const start = new Date(START);
-    const { placer, prisma, experiment } = make({
+    const { placer, prisma, experiment } = await make({
       place: down("breaker_open"),
       fallbackSingle: start,
       assign: { primaryPolicy: "LINUCB", pairwiseShown: true },
@@ -254,7 +266,7 @@ describe("PythonPlacer.placeSingle (degraded, ADR-0003 2.4)", () => {
   });
 
   it("no free slot anywhere: pinned by the deadline, never unplaced (never a 503)", async () => {
-    const { placer, prisma, experiment, fallback } = make({
+    const { placer, prisma, experiment, fallback } = await make({
       place: down("timeout"),
       fallbackSingle: null,
     });
@@ -275,7 +287,7 @@ describe("PythonPlacer.placeSingle (degraded, ADR-0003 2.4)", () => {
   });
 
   it("no free slot, allowLastResort=false: nothing written", async () => {
-    const { placer, prisma, fallback } = make({
+    const { placer, prisma, fallback } = await make({
       place: down("timeout"),
       fallbackSingle: null,
     });
@@ -298,7 +310,9 @@ describe("PythonPlacer.placeSingle (degraded, ADR-0003 2.4)", () => {
 
   it("no free slot + policy: best slot up to 30 days past the deadline", async () => {
     const late = new Date(deadline.getTime() + 3_600_000);
-    const { placer, prisma, fallback } = make({ place: down("breaker_open") });
+    const { placer, prisma, fallback } = await make({
+      place: down("breaker_open"),
+    });
     fallback.placeSingle
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(late);
@@ -342,7 +356,7 @@ describe("PythonPlacer.preflightSingle", () => {
 
   it("passes when Python can place, displace or accept", async () => {
     for (const outcome of ["PLACED", "DISPLACED", "ACCEPTED_LATE"] as const) {
-      const { placer } = make({ place: ok([member({ outcome })]) });
+      const { placer } = await make({ place: ok([member({ outcome })]) });
       await expect(placer.preflightSingle(args)).resolves.toBeUndefined();
     }
   });
@@ -350,10 +364,10 @@ describe("PythonPlacer.preflightSingle", () => {
   it("INFEASIBLE without a policy => 409; with a policy => allowed", async () => {
     const infeasible = ok([member({ outcome: "INFEASIBLE", startMs: null })]);
     await expect(
-      make({ place: infeasible }).placer.preflightSingle(args),
+      (await make({ place: infeasible })).placer.preflightSingle(args),
     ).rejects.toBeInstanceOf(ScheduleInfeasibleException);
     await expect(
-      make({ place: infeasible }).placer.preflightSingle({
+      (await make({ place: infeasible })).placer.preflightSingle({
         ...args,
         policy: "ACCEPT_CONFLICTS",
       }),
@@ -362,22 +376,28 @@ describe("PythonPlacer.preflightSingle", () => {
 
   it("degraded: free slot passes; none => 409 w/o policy, allowed with one", async () => {
     await expect(
-      make({
-        place: down("connect"),
-        fallbackSingle: new Date(START),
-      }).placer.preflightSingle(args),
+      (
+        await make({
+          place: down("connect"),
+          fallbackSingle: new Date(START),
+        })
+      ).placer.preflightSingle(args),
     ).resolves.toBeUndefined();
     await expect(
-      make({
-        place: down("connect"),
-        fallbackSingle: null,
-      }).placer.preflightSingle(args),
+      (
+        await make({
+          place: down("connect"),
+          fallbackSingle: null,
+        })
+      ).placer.preflightSingle(args),
     ).rejects.toBeInstanceOf(ScheduleInfeasibleException);
     await expect(
-      make({
-        place: down("connect"),
-        fallbackSingle: null,
-      }).placer.preflightSingle({
+      (
+        await make({
+          place: down("connect"),
+          fallbackSingle: null,
+        })
+      ).placer.preflightSingle({
         ...args,
         policy: "ACCEPT_LATE_DEADLINE",
       }),
@@ -403,7 +423,7 @@ describe("PythonPlacer series", () => {
       member({ id: "a", startMs: START }),
       member({ id: "b", startMs: START + 86_400_000 }),
     ];
-    const { placer, experiment, gateway } = make({ place: ok(results) });
+    const { placer, experiment, gateway } = await make({ place: ok(results) });
     const rows = await placer.placeSeries(seriesArgs);
     expect(gateway.place).toHaveBeenCalledTimes(1);
     expect(rows.map((r) => r.scheduledStartTime?.getTime())).toEqual([
@@ -422,7 +442,7 @@ describe("PythonPlacer series", () => {
         startMs: START + 7_200_000,
       }),
     ];
-    const { placer } = make({ place: ok(results) });
+    const { placer } = await make({ place: ok(results) });
     const rows = await placer.placeSeries(seriesArgs);
     expect(rows[1]).toEqual({
       id: "b",
@@ -444,7 +464,7 @@ describe("PythonPlacer series", () => {
         startMs: null,
       }),
     ];
-    const { placer } = make({ place: ok(results) });
+    const { placer } = await make({ place: ok(results) });
     const rows = await placer.placeSeries(seriesArgs);
     expect(rows[1]).toMatchObject({
       scheduledStartTime: PINNED,
@@ -453,7 +473,7 @@ describe("PythonPlacer series", () => {
   });
 
   it("deadline already passed: sittings pinned back-to-back from the next slot, no Python call", async () => {
-    const { placer, gateway } = make({});
+    const { placer, gateway } = await make({});
     const rows = await placer.placeSeries({
       ...seriesArgs,
       deadline: new Date(now.getTime() - 3_600_000),
@@ -468,7 +488,7 @@ describe("PythonPlacer series", () => {
   });
 
   it("degraded: all members placed => rows flagged degraded + TS_FALLBACK proposals", async () => {
-    const { placer, experiment } = make({
+    const { placer, experiment } = await make({
       place: down("timeout"),
       fallbackSeries: [
         { id: "a", scheduledStartTime: new Date(START) },
@@ -486,7 +506,7 @@ describe("PythonPlacer series", () => {
   });
 
   it("degraded: a member without a slot gets the last resort (never null, never a 503)", async () => {
-    const { placer, experiment } = make({
+    const { placer, experiment } = await make({
       place: down("breaker_open"),
       fallbackSeries: [
         { id: "a", scheduledStartTime: new Date(START) },
@@ -544,7 +564,7 @@ describe("PythonPlacer series", () => {
     }): ReqMember[] => gateway.buildRequest.mock.calls[0][0].members;
 
     it("rolls assignPolicy ONCE and stamps every member with it", async () => {
-      const { placer, experiment, gateway } = make({
+      const { placer, experiment, gateway } = await make({
         place: ok(divergentResults(3)),
         assign: { primaryPolicy: "LINUCB", pairwiseShown: false },
       });
@@ -565,7 +585,9 @@ describe("PythonPlacer series", () => {
     });
 
     it("non-sampled series: no alternatives, pairwiseShown false", async () => {
-      const { placer, experiment } = make({ place: ok(divergentResults(3)) });
+      const { placer, experiment } = await make({
+        place: ok(divergentResults(3)),
+      });
       const rows = await placer.placeSeries(args(3));
       expect(
         rows.every((r) => r.divergent === false && r.alternativeSlot === null),
@@ -580,7 +602,7 @@ describe("PythonPlacer series", () => {
     });
 
     it("sampled: computeBoth on every member; at most 5 alternatives, soonest first", async () => {
-      const { placer, experiment, gateway } = make({
+      const { placer, experiment, gateway } = await make({
         place: ok(divergentResults(7)),
         assign: { pairwiseShown: true },
       });
@@ -620,7 +642,7 @@ describe("PythonPlacer series", () => {
         appliedPolicy: "LINUCB" as const,
         startMs: r.linucb?.startMs ?? null,
       }));
-      const { placer } = make({
+      const { placer } = await make({
         place: ok(results),
         assign: { primaryPolicy: "LINUCB", pairwiseShown: true },
       });
@@ -634,7 +656,7 @@ describe("PythonPlacer series", () => {
       const results = divergentResults(3);
       // m0's alternative runs into m1's applied slot (the 23:45-past-midnight case).
       results[0].linucb = linucbAt(START + DAY - 15 * 60_000);
-      const { placer } = make({
+      const { placer } = await make({
         place: ok(results),
         assign: { pairwiseShown: true },
       });
@@ -657,7 +679,7 @@ describe("PythonPlacer series", () => {
       results[0] = { ...results[0], outcome: "ACCEPTED_LAST_RESORT" };
       results[1] = { ...results[1], linucb: null };
       results[2] = { ...results[2], linucb: linucbAt(START + 2 * DAY) };
-      const { placer } = make({
+      const { placer } = await make({
         place: ok(results),
         assign: { pairwiseShown: true },
       });
@@ -666,7 +688,7 @@ describe("PythonPlacer series", () => {
     });
 
     it("surfaceAlternatives: false records nothing as shown", async () => {
-      const { placer, experiment } = make({
+      const { placer, experiment } = await make({
         place: ok(divergentResults(2)),
         assign: { pairwiseShown: true },
       });
@@ -679,7 +701,7 @@ describe("PythonPlacer series", () => {
     });
 
     it("degraded sampled series: one assignment, no alternatives", async () => {
-      const { placer, experiment } = make({
+      const { placer, experiment } = await make({
         place: down("timeout"),
         assign: { pairwiseShown: true },
         fallbackSeries: [
@@ -708,16 +730,22 @@ describe("PythonPlacer series", () => {
       member({ id: "b", outcome: "NEEDS_INFEASIBLE_CONTEXT", startMs: null }),
     ]);
     const a = { user, durationMinutes: 60, sessionCount: 2, deadline, now };
-    expect(await make({ place: good }).placer.canPlaceSeries(a)).toBe(true);
-    expect(await make({ place: bad }).placer.canPlaceSeries(a)).toBe(false);
+    expect(await (await make({ place: good })).placer.canPlaceSeries(a)).toBe(
+      true,
+    );
+    expect(await (await make({ place: bad })).placer.canPlaceSeries(a)).toBe(
+      false,
+    );
     await expect(
-      make({
-        place: down("timeout"),
-        fallbackSeries: [
-          { id: "x", scheduledStartTime: new Date(START) },
-          { id: "y", scheduledStartTime: null },
-        ],
-      }).placer.canPlaceSeries(a),
+      (
+        await make({
+          place: down("timeout"),
+          fallbackSeries: [
+            { id: "x", scheduledStartTime: new Date(START) },
+            { id: "y", scheduledStartTime: null },
+          ],
+        })
+      ).placer.canPlaceSeries(a),
     ).resolves.toBe(false);
   });
 });

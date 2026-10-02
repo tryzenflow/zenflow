@@ -1,5 +1,8 @@
+import { Test, TestingModule } from "@nestjs/testing";
 import { DisplacementService, isFlexible } from "./displacement.service";
 import { ConflictRescheduleService } from "./conflict-reschedule.service";
+import { PrismaService } from "../../prisma/prisma.service";
+import { TaskPlacementService } from "./task-placement.service";
 
 const user = {
   id: "u1",
@@ -26,10 +29,20 @@ function makePrisma(rows: unknown[] = []) {
   };
 }
 
+async function makeDisplacement(prisma: unknown): Promise<DisplacementService> {
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      DisplacementService,
+      { provide: PrismaService, useValue: prisma },
+    ],
+  }).compile();
+  return module.get<DisplacementService>(DisplacementService);
+}
+
 describe("DisplacementService", () => {
   it("records scheduler moves as SYSTEM_MOVE with reward 0 - never MOVE", async () => {
     const { prisma, eventCreate, sessionUpdate } = makePrisma();
-    const svc = new DisplacementService(prisma as never);
+    const svc = await makeDisplacement(prisma);
     const applied = await svc.applyMoves(
       "u1",
       [
@@ -53,7 +66,7 @@ describe("DisplacementService", () => {
 
   it("is a no-op for an empty plan (idempotent re-apply)", async () => {
     const { prisma } = makePrisma();
-    const svc = new DisplacementService(prisma as never);
+    const svc = await makeDisplacement(prisma);
     expect(await svc.applyMoves("u1", [], () => 60)).toEqual([]);
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
@@ -88,7 +101,7 @@ describe("ConflictRescheduleService", () => {
     scheduledStartTime: new Date("2026-09-02T09:00:00Z"),
   });
 
-  function make(placedTo: Date | null, conflicts: boolean) {
+  async function make(placedTo: Date | null, conflicts: boolean) {
     const prisma = {
       session: {
         // 1st findMany: the tasks; later calls (wouldConflict's loadDayLoad): blockers
@@ -115,20 +128,24 @@ describe("ConflictRescheduleService", () => {
         .mockResolvedValue({ scheduledStartTime: placedTo }),
     };
     const displacement = { applyMoves: jest.fn().mockResolvedValue([]) };
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        ConflictRescheduleService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: TaskPlacementService, useValue: placement },
+        { provide: DisplacementService, useValue: displacement },
+      ],
+    }).compile();
     return {
       placement,
       displacement,
-      svc: new ConflictRescheduleService(
-        prisma as never,
-        placement as never,
-        displacement as never,
-      ),
+      svc: module.get<ConflictRescheduleService>(ConflictRescheduleService),
     };
   }
 
   it("re-places a still-conflicting task and records a SYSTEM_MOVE", async () => {
     const to = new Date("2026-09-02T15:00:00Z");
-    const { svc, placement, displacement } = make(to, true);
+    const { svc, placement, displacement } = await make(to, true);
     const res = await svc.rescheduleAll(
       user,
       ["t1"],
@@ -140,14 +157,17 @@ describe("ConflictRescheduleService", () => {
   });
 
   it("is idempotent: a task that no longer conflicts is left alone", async () => {
-    const { svc, placement } = make(new Date("2026-09-02T15:00:00Z"), false);
+    const { svc, placement } = await make(
+      new Date("2026-09-02T15:00:00Z"),
+      false,
+    );
     const res = await svc.rescheduleAll(user, ["t1"]);
     expect(res).toEqual({ rescheduled: [], failedSessionIds: [] });
     expect(placement.placeOnDeadlineChange).not.toHaveBeenCalled();
   });
 
   it("reports a task that cannot be moved as failed", async () => {
-    const { svc, displacement } = make(null, true);
+    const { svc, displacement } = await make(null, true);
     const res = await svc.rescheduleAll(user, ["t1"]);
     expect(res.failedSessionIds).toEqual(["t1"]);
     expect(displacement.applyMoves).not.toHaveBeenCalled();

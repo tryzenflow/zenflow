@@ -10,17 +10,21 @@
  *  - backend `start:dev` on :5000, .env.dev LMS_URL/PORTAL_API_URL pointed at
  *    the fake server, OTP rate limits raised (see .env.dev)
  *  - `node scripts/fake-dlu-server.ts` (ts-node) on :4100
- *  - the three ingestion watchers' @Cron temporarily set to EVERY_MINUTE
+ *  - the issue-#56 measurement block in .env.dev (every period = one tick, batch
+ *    ceiling lifted) — no code edits; the watchers no longer carry a @Cron
  *
  * Run: node seed-and-sync.js [--limit N]
+ * Env: ZENFLOW_API, MAILHOG_URL, FAKE_DLU_URL override the localhost defaults.
  */
 "use strict";
 const fs = require("fs");
 const path = require("path");
 
-const API = "http://localhost:5000/api/v1";
-const MAILHOG = "http://localhost:8025";
-const FAKE_DLU = "http://localhost:4100";
+// Overridable because :5000 is not always free — macOS's AirPlay receiver
+// holds it by default.
+const API = process.env.ZENFLOW_API ?? "http://localhost:5000/api/v1";
+const MAILHOG = process.env.MAILHOG_URL ?? "http://localhost:8025";
+const FAKE_DLU = process.env.FAKE_DLU_URL ?? "http://localhost:4100";
 const CONCURRENCY = 8;
 
 const students = JSON.parse(fs.readFileSync(path.join(__dirname, "students.json"), "utf8"));
@@ -36,17 +40,14 @@ async function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/** Poll MailHog for the OTP email and extract the 6-digit code. */
+/** Poll Mailpit (compose.dev.yml's mail service) for the OTP email and extract the 6-digit code. */
 async function fetchOtp(email, { retries = 20, delayMs = 500 } = {}) {
   for (let i = 0; i < retries; i++) {
-    const res = await fetch(`${MAILHOG}/api/v2/search?kind=to&query=${encodeURIComponent(email)}`);
+    const res = await fetch(`${MAILHOG}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}`);
     const json = await res.json();
-    if (json.total > 0) {
-      const body = json.items[0].Content.Body;
-      const decoded = body
-        .replace(/=\r?\n/g, "")
-        .replace(/=([0-9A-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
-      const match = decoded.match(/\b\d{6}\b/);
+    if (json.messages_count > 0 || json.messages?.length > 0) {
+      const msg = await (await fetch(`${MAILHOG}/api/v1/message/${json.messages[0].ID}`)).json();
+      const match = `${msg.Text ?? ""} ${msg.HTML ?? ""}`.match(/\b\d{6}\b/);
       if (match) return match[0];
     }
     await sleep(delayMs);

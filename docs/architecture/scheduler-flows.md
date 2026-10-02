@@ -1,156 +1,152 @@
 # Scheduler sequence flows
 
-Companion to [ARCHITECTURE.md](../../ARCHITECTURE.md) — that doc has the component-level
+Companion to [ARCHITECTURE.md](../../ARCHITECTURE.md), which has the component-level
 picture; this one has the call sequences. See
 [backend/README.md](../../backend/README.md) for the module map and
 [ADR-0003](../adr/0003-python-authoritative-placement.md) for why ranking lives in Python.
 
-## Create a single `TASK`
+## Create a single task
 
 ```mermaid
 sequenceDiagram
-  participant C as SessionsController
-  participant S as SessionsService
-  participant T as TaskPlacementService
-  participant P as PythonPlacer
-  participant G as PlacementGateway
-  participant PC as PlacementClient
-  participant PY as services/bandit /v1/place
-  participant FB as FallbackPlacer
-  C->>S: create(dto)
-  S->>S: resolveTagIds + $tx( session.create + CREATE event )
-  S->>T: placeOnCreate({ user, task, now })
-  T->>P: placeSingle(user, task, "create", now, policy?)
-  P->>P: assignPolicy() (primaryPolicy 50/50 + pairwise-sample draw)
-  P->>G: buildRequest (day loads, pref matrix, obs count, bandit A/b)
-  G->>PC: place(request)
-  alt Python healthy
-    PC->>PY: POST /v1/place
-    PY-->>PC: PlaceResponse (picks, moves, timingsMs)
-    opt outcome NEEDS_INFEASIBLE_CONTEXT
-      G->>G: load deadline+/-1 day + 30d horizon, retry with infeasible context
+  participant C as Sessions API
+  participant S as Sessions service
+  participant T as Task placement
+  participant P as Placer
+  participant PC as Bandit client
+  participant PY as Bandit service
+  participant FB as Fallback placer
+  C->>S: create
+  S->>S: save session and create event
+  S->>T: place on create
+  T->>P: place single task
+  P->>P: assign policy
+  P->>PC: build request from day loads and bandit state
+  alt Bandit healthy
+    PC->>PY: place
+    PY-->>PC: picks and moves
+    opt Context missing
+      P->>PC: retry with wider horizon
     end
     PC-->>P: results
-    P->>P: apply moves, session.update scheduledStartTime, recordProposal (placementSource=PYTHON)
-  else timeout/5xx/breaker open/disabled
-    PC-->>P: failure(reason)
-    P->>FB: placeSingle (frozen heuristic)
-    alt free slot exists
+    P->>P: apply moves, record proposal
+  else Bandit unavailable
+    PC-->>P: failure
+    P->>FB: place with heuristic
+    alt Free slot exists
       FB-->>P: start
-      P->>P: session.update, recordProposal (placementSource=TS_FALLBACK, degradedReason)
-    else no free slot
-      P->>FB: placeSingle (deadline + 30 days)
-      P->>P: else lastResortStart (pinned by the deadline) — never unplaced
+      P->>P: save start, record degraded proposal
+    else No free slot
+      P->>FB: retry up to deadline
+      P->>P: pin to last resort, never unplaced
     end
   end
-  P-->>T: PlacementResult
-  T-->>S: PlacementResult
-  S-->>C: CreateSessionResponse (+ slotProposalId/alternativeSlot/divergent/schedulingDegraded?)
+  P-->>T: placement result
+  T-->>S: placement result
+  S-->>C: created session with alternative slot
 ```
 
-A pairwise-sampled event's `alternativeSlot`/`divergent` let the client offer a pick via
-`POST /sessions/:id/slot-pick` — see [docs/scheduler/ab-testing.md](../scheduler/ab-testing.md).
+A pairwise-sampled event also carries an alternative slot, which the client can offer as a
+pick. See [docs/scheduler/ab-testing.md](../scheduler/ab-testing.md).
 
-## Create a `TASK` series (`sessionCount > 1`)
+## Create a task series
 
 ```mermaid
 sequenceDiagram
-  participant S as SessionsService.createTaskSeries
-  participant T as TaskPlacementService
-  participant P as PythonPlacer
-  participant PY as services/bandit /v1/place
-  participant FB as FallbackPlacer
-  S->>S: $tx( sessionSeries.create + N× session.create + N× CREATE event )
-  S->>T: placeSeriesOnCreate({ seriesId, members, deadline })
-  T->>P: placeSeries({ members, deadline, trigger: "create" })
-  P->>P: assignPolicy() ONCE for the series (shared primaryPolicy + seed)
-  P->>PY: POST /v1/place (members.length > 1 = one materialized series, sibling ledger server-side; computeBoth = sampled)
-  alt Python healthy
-    PY-->>P: one PlacedMember per member (sampled: primary plan + other plan's pick)
-    P->>P: pinUnplaced, selectSeriesAlternatives (≤ MAX_SERIES_ALTERNATIVES)
-    P->>P: recordProposal per member (placementSource=PYTHON, pairwiseShown on shown ones)
-  else degraded
-    P->>FB: placeSeries (frozen loop — seriesDayWindows, then spillover; siblings, day cap)
-    FB-->>P: rows[] (null start = no slot anywhere)
+  participant S as Sessions service
+  participant T as Task placement
+  participant P as Placer
+  participant PY as Bandit service
+  participant FB as Fallback placer
+  S->>S: save series, sessions and create events
+  S->>T: place series on create
+  T->>P: place series
+  P->>P: assign policy once for the series
+  alt Bandit healthy
+    P->>PY: place whole series
+    PY-->>P: one placement per member
+    P->>P: pin unplaced, choose alternatives
+    P->>P: record proposal per member
+  else Bandit unavailable
+    P->>FB: place series with heuristic
+    FB-->>P: starts for every member
   end
-  P->>P: pinUnplaced (lastResortStart, back-to-back) — no null rows
-  P-->>T: rows[]
-  T->>T: $tx( session.update scheduledStartTime for every row )
-  T-->>S: rows[]
+  P->>P: pin any unplaced member
+  P-->>T: placements
+  T->>T: save start times
+  T-->>S: placements
 ```
 
-A series is one A/B event (issue #58): one `assignPolicy()` roll for the whole series, and
-on a sampled series Python runs two full independent series plans and Nest
-(`scheduler/io/series-alternatives.ts`, a pure filter) picks up to `MAX_SERIES_ALTERNATIVES`
-(5) non-overlapping sittings to offer as swaps via `POST /sessions/:id/slot-pick`, which
-answers `409 SLOT_TAKEN` if the alternative has since been taken by a sibling.
+A series is one A/B event. The policy is assigned once for the whole series. On a sampled
+series the Bandit service runs two independent plans and the API offers a bounded set of
+non-overlapping sittings as swaps. A swap is rejected if a sibling has since taken the slot.
 
-## Deadline edit → redistribute
+## Deadline edit and redistribute
 
 ```mermaid
 sequenceDiagram
-  participant S as SessionsService.update
-  participant T as TaskPlacementService
-  participant P as PythonPlacer
-  S->>S: $tx( applyFieldDiff detects newDeadline → session.update )
-  alt standalone TASK
-    S->>T: placeOnDeadlineChange({ task, now })
-    Note over T: identical to Flow 1, trigger "deadline-change"
-  else TASK series member
-    S->>T: redistributeSeries({ seriesId, members, newDeadline })
-    T->>T: partition past / upcoming;  past → fixedOccupied
-    T->>P: placeSeries(upcoming, fixedOccupied, trigger "deadline-change")
-    T->>T: $tx( sessionSeries.deadline + session.updateMany deadline + upcoming starts )
+  participant S as Sessions service
+  participant T as Task placement
+  participant P as Placer
+  S->>S: detect deadline change and save
+  alt Standalone task
+    S->>T: place on deadline change
+    Note over T: same as creating a single task
+  else Series member
+    S->>T: redistribute series
+    T->>T: split past and upcoming sessions
+    T->>P: place upcoming sessions around the past ones
+    T->>T: save series deadline and new starts
   end
 ```
 
-## Delayed LinUCB reward
+## Delayed reward
 
 ```mermaid
 sequenceDiagram
-  participant S as SessionsService.update / SlotPickService
-  participant F as SchedulingFeedbackService
-  participant R as RetainedSessionsService (@Cron)
-  participant BA as Bandit (/update + BanditArmState)
-  Note over S: first user MOVE of a scheduled TASK (a drag, or a slot-pick "alternative")
-  S->>S: $tx( MOVE SessionEvent + lastMovedAt );  existing.lastMovedAt == null → firstMove
-  S->>F: onFirstMove(userId, sessionId, moveEventId, dragMinutes)
-  F->>F: applyDelayedReward(reward = dragDistanceReward(dragMinutes), modificationType = MOVE)
-  F->>F: slotProposal.findFirst(primaryPolicy LINUCB, selectedArm != null)
-  F->>BA: loadAll → /update(reward) → save → link event
-  F->>F: firstModifiedAt still null? stamp firstModifiedAt/firstModificationType/acceptedWithoutModification=false
-  Note over R: every 30 min
-  R->>R: sweep — elapsed, never-moved USER TASK → RETAINED event (+1)
-  R->>F: applyDelayedReward(SESSION_RETAINED_REWARD, modificationType = null)
-  F->>BA: same loadAll → /update(+1) → save → link event
+  participant S as Sessions service
+  participant F as Feedback service
+  participant R as Retained sessions job
+  participant BA as Bandit service
+  Note over S: First manual move of a scheduled task
+  S->>S: record move event
+  S->>F: first move
+  F->>F: compute reward from drag distance
+  F->>F: find the proposal that chose an arm
+  F->>BA: update arm state
+  F->>F: mark proposal as modified
+  Note over R: Runs every 30 minutes
+  R->>R: find sessions that elapsed without a move
+  R->>F: retained reward
+  F->>BA: update arm state
 ```
 
-## Edit-mode `sessionCount` resize/promote
+## Resize or promote a series
 
 ```mermaid
 sequenceDiagram
-  participant S as SessionUpdateService.update
-  participant SR as SeriesService
-  participant T as TaskPlacementService
-  participant P as PythonPlacer
-  Note over S: PATCH /sessions/:id with sessionCount
-  alt no existing seriesId AND sessionCount > 1
-    S->>SR: promoteToSeries(sessionId, deadline, user)
-    SR->>SR: $tx( sessionSeries.create + session.update seriesId/sessionIndex=1/sessionTotal=1 )
+  participant S as Session update
+  participant SR as Series service
+  participant T as Task placement
+  participant P as Placer
+  Note over S: Edit with a new session count
+  alt Single session becoming a series
+    S->>SR: promote to series
+    SR->>SR: create series and link session
   end
-  S->>SR: resizeSessionCount(seriesId, targetCount, user, now)
-  alt grow (targetCount > memberCount)
-    SR->>T: canPlaceSeries({ sessionCount: added })  // pre-flight, added sittings only
-    T-->>SR: feasible?
-    SR->>SR: $tx( session.updateMany sessionTotal + N× session.create + N× CREATE event )
-    SR->>T: placeSeriesOnCreate({ seriesId, members: newMembers, deadline })
-    T->>P: placeSeries(trigger "create")
-    Note over P: day-load naturally schedules around the already-persisted existing members
-    P-->>T: rows[]
-    T->>T: $tx( session.update scheduledStartTime for placed rows )
-  else shrink (targetCount < memberCount)
-    Note over SR: candidates = highest-sessionIndex members;<br/>any already started (scheduledStartTime ≤ now) → reject, write nothing
-    SR->>SR: $tx( session.deleteMany + session.updateMany sessionTotal )
+  S->>SR: resize series
+  alt Grow
+    SR->>T: check added sittings can be placed
+    T-->>SR: feasible
+    SR->>SR: save new sessions
+    SR->>T: place new sessions
+    T->>P: place series
+    Note over P: Existing members stay in place
+    P-->>T: placements
+    T->>T: save start times
+  else Shrink
+    Note over SR: Reject if a removed session has already started
+    SR->>SR: delete highest-numbered sessions
   end
-  SR-->>S: every member, sessionIndex order
+  SR-->>S: all members in order
 ```

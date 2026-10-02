@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
+import { Test, TestingModule } from "@nestjs/testing";
+import { ConfigService } from "@nestjs/config";
 import { ApnsSender } from "./apns.sender";
 import type { PushMessage } from "./types";
 
@@ -37,18 +39,21 @@ const FULL = {
   APNS_PRODUCTION: false,
 };
 
-function make(env: Partial<typeof FULL>) {
+async function make(env: Partial<typeof FULL>) {
   const config = {
     get: jest.fn((k: string) => (env as Record<string, unknown>)[k]),
   };
-  return new ApnsSender(config as never);
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [ApnsSender, { provide: ConfigService, useValue: config }],
+  }).compile();
+  return module.get<ApnsSender>(ApnsSender);
 }
 
 describe("ApnsSender", () => {
   afterEach(() => jest.clearAllMocks());
 
   it("is disabled unless all four APNS_* resolve", async () => {
-    const sender = make({
+    const sender = await make({
       APNS_KEY: FULL.APNS_KEY,
       APNS_KEY_ID: FULL.APNS_KEY_ID,
     });
@@ -61,8 +66,8 @@ describe("ApnsSender", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it("enabled: builds the provider with token auth + decoded key", () => {
-    const sender = make(FULL);
+  it("enabled: builds the provider with token auth + decoded key", async () => {
+    const sender = await make(FULL);
 
     expect(sender.enabled).toBe(true);
     const opts = providerCtor.mock.calls[0][0];
@@ -76,7 +81,7 @@ describe("ApnsSender", () => {
 
   it("sends a notification carrying the bundle id as topic + alert + data", async () => {
     send.mockResolvedValue({ sent: [{ device: "t1" }], failed: [] });
-    const sender = make(FULL);
+    const sender = await make(FULL);
 
     const res = await sender.send(["t1"], MSG);
 
@@ -107,7 +112,7 @@ describe("ApnsSender", () => {
         },
       ],
     });
-    const sender = make(FULL);
+    const sender = await make(FULL);
 
     const res = await sender.send(["ok", "gone", "unreg", "bad", "flaky"], MSG);
 
@@ -116,7 +121,7 @@ describe("ApnsSender", () => {
 
   it("swallows a thrown send", async () => {
     send.mockRejectedValue(new Error("http2 down"));
-    const sender = make(FULL);
+    const sender = await make(FULL);
 
     await expect(sender.send(["t1"], MSG)).resolves.toEqual({
       sent: 0,
@@ -125,7 +130,7 @@ describe("ApnsSender", () => {
   });
 
   it("shuts the provider down on module destroy", async () => {
-    const sender = make(FULL);
+    const sender = await make(FULL);
     await sender.onModuleDestroy();
     expect(shutdown).toHaveBeenCalled();
   });

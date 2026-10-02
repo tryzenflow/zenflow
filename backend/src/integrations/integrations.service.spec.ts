@@ -17,6 +17,7 @@ import { ENCRYPTION_ALGORITHM } from "../common/constants";
 import { IntegrationAuthService } from "./integration-auth.service";
 import { IntegrationsService } from "./integrations.service";
 import { IngestionSyncService } from "../ingestion/ingestion-sync.service";
+import { IngestionScheduleService } from "../ingestion/ingestion-schedule.service";
 
 // ── in-memory Prisma double ────────────────────────────────────────────────
 interface IntegrationRow {
@@ -195,12 +196,18 @@ describe("IntegrationsService", () => {
   let crypto: CryptoService;
   let verifyCredentials: jest.Mock;
   let syncNow: jest.Mock;
+  // Issue #56's rolling schedule: connecting seeds a student's schedule rows,
+  // and a manual sync pushes them out so the ticker does not re-walk at once.
+  let ensureRows: jest.Mock;
+  let deferAfterManualSync: jest.Mock;
   let db: ReturnType<typeof makePrismaDouble>;
 
   beforeEach(async () => {
     db = makePrismaDouble();
     verifyCredentials = jest.fn().mockResolvedValue(true);
     syncNow = jest.fn().mockResolvedValue(undefined);
+    ensureRows = jest.fn().mockResolvedValue(3);
+    deferAfterManualSync = jest.fn().mockResolvedValue(undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -211,6 +218,10 @@ describe("IntegrationsService", () => {
         { provide: ConfigService, useValue: { get: (n: string) => ENV[n] } },
         { provide: IntegrationAuthService, useValue: { verifyCredentials } },
         { provide: IngestionSyncService, useValue: { syncNow } },
+        {
+          provide: IngestionScheduleService,
+          useValue: { ensureRows, deferAfterManualSync },
+        },
       ],
     }).compile();
 
@@ -220,6 +231,54 @@ describe("IntegrationsService", () => {
 
   it("should be defined", () => {
     expect(service).toBeDefined();
+  });
+
+  describe("the rolling ingestion schedule (issue #56)", () => {
+    it("seeds the provider's schedule rows on connect", async () => {
+      // Otherwise a newly connected student waits for the next tick's backfill
+      // sweep before the rolling scheduler can claim them at all.
+      await service.connect(USER, creds);
+
+      expect(ensureRows).toHaveBeenCalledWith(
+        db.integrations[0].id,
+        "LMS",
+        expect.any(Date),
+      );
+    });
+
+    it("seeds again on reconnect, relying on the call being idempotent", async () => {
+      await service.connect(USER, creds);
+      await service.connect(USER, creds);
+
+      // Two calls, one integration: `ensureRows` uses skipDuplicates against the
+      // [integrationId, kind] unique index, so a reconnect must not reset an
+      // existing cadence — asserted in ingestion-schedule.service.spec.ts.
+      expect(ensureRows).toHaveBeenCalledTimes(2);
+      expect(db.integrations).toHaveLength(1);
+    });
+
+    it("pushes the schedule out after a manual sync", async () => {
+      await service.connect(USER, creds);
+
+      await service.sync(USER, "LMS");
+
+      expect(deferAfterManualSync).toHaveBeenCalledWith(
+        db.integrations[0].id,
+        "LMS",
+      );
+    });
+
+    it("still reports the sync when deferring the schedule fails", async () => {
+      // Best-effort by design: the sync already happened, and a failure here
+      // costs at most one redundant background pass.
+      await service.connect(USER, creds);
+      deferAfterManualSync.mockRejectedValue(new Error("db gone"));
+
+      await expect(service.sync(USER, "LMS")).resolves.toMatchObject({
+        provider: "LMS",
+        connected: true,
+      });
+    });
   });
 
   describe("connect", () => {

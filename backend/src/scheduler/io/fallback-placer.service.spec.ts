@@ -1,19 +1,27 @@
+import { Test, TestingModule } from "@nestjs/testing";
 import { FallbackPlacer } from "./fallback-placer.service";
+import { HeuristicPlacer } from "./heuristic-placer.service";
 
 const tz = "UTC";
 const now = new Date("2026-06-08T08:00:00.000Z");
 const deadline = new Date("2026-06-11T00:00:00.000Z");
 
-function make(placeInWindow: jest.Mock) {
+async function make(placeInWindow: jest.Mock) {
   const heuristic = { placeTask: jest.fn(), placeInWindow };
-  return { fb: new FallbackPlacer(heuristic as never), heuristic };
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      FallbackPlacer,
+      { provide: HeuristicPlacer, useValue: heuristic },
+    ],
+  }).compile();
+  return { fb: module.get<FallbackPlacer>(FallbackPlacer), heuristic };
 }
 
 const slotAt = (iso: string) => ({ start: new Date(iso), score: 1 });
 
 describe("FallbackPlacer (frozen heuristic, ADR-0003)", () => {
   it("placeSingle delegates to the heuristic and never displaces or accepts conflicts", async () => {
-    const { fb, heuristic } = make(jest.fn());
+    const { fb, heuristic } = await make(jest.fn());
     heuristic.placeTask.mockResolvedValue(null);
     const t = { id: "t", durationMinutes: 60, deadline };
     expect(await fb.placeSingle("u", t, tz, [], now)).toBeNull();
@@ -25,7 +33,7 @@ describe("FallbackPlacer (frozen heuristic, ADR-0003)", () => {
       .fn()
       .mockResolvedValueOnce(slotAt("2026-06-08T09:00:00.000Z"))
       .mockResolvedValueOnce(slotAt("2026-06-09T09:00:00.000Z"));
-    const { fb } = make(place);
+    const { fb } = await make(place);
     const rows = await fb.placeSeries(
       "u",
       {
@@ -73,7 +81,7 @@ describe("FallbackPlacer (frozen heuristic, ADR-0003)", () => {
       .mockResolvedValueOnce(slotAt("2026-06-08T09:00:00.000Z"))
       .mockResolvedValueOnce(null) // b's own window: full
       .mockResolvedValueOnce(slotAt("2026-06-10T09:00:00.000Z"));
-    const { fb } = make(place);
+    const { fb } = await make(place);
     const rows = await fb.placeSeries(
       "u",
       {
@@ -106,7 +114,7 @@ describe("FallbackPlacer (frozen heuristic, ADR-0003)", () => {
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(slotAt("2026-06-08T11:00:00.000Z"));
-    const { fb } = make(place);
+    const { fb } = await make(place);
     const rows = await fb.placeSeries(
       "u",
       {
@@ -136,7 +144,7 @@ describe("FallbackPlacer (frozen heuristic, ADR-0003)", () => {
       .fn()
       .mockResolvedValueOnce(slotAt("2026-06-08T09:00:00.000Z"))
       .mockResolvedValue(null);
-    const { fb } = make(place);
+    const { fb } = await make(place);
     const rows = await fb.placeSeries(
       "u",
       {
@@ -154,7 +162,7 @@ describe("FallbackPlacer (frozen heuristic, ADR-0003)", () => {
   });
 
   it("returns all-null rows when the deadline has passed", async () => {
-    const { fb } = make(jest.fn());
+    const { fb } = await make(jest.fn());
     const rows = await fb.placeSeries(
       "u",
       { members: [{ id: "a", durationMinutes: 60 }], deadline: now },

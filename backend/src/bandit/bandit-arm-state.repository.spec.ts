@@ -1,6 +1,8 @@
+import { Test, TestingModule } from "@nestjs/testing";
+import { PrismaService } from "../prisma/prisma.service";
 import { BanditArmStateRepository } from "./bandit-arm-state.repository";
 
-function make(overrides: Record<string, unknown> = {}) {
+async function make(overrides: Record<string, unknown> = {}) {
   const prisma = {
     banditArmState: {
       findMany: jest.fn().mockResolvedValue([]),
@@ -9,12 +11,21 @@ function make(overrides: Record<string, unknown> = {}) {
       ...overrides,
     },
   };
-  return { repo: new BanditArmStateRepository(prisma as never), prisma };
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      BanditArmStateRepository,
+      { provide: PrismaService, useValue: prisma },
+    ],
+  }).compile();
+  return {
+    repo: module.get<BanditArmStateRepository>(BanditArmStateRepository),
+    prisma,
+  };
 }
 
 describe("BanditArmStateRepository.loadAll", () => {
   it("fills every missing arm with the cold prior", async () => {
-    const { repo } = make();
+    const { repo } = await make();
     const out = await repo.loadAll("u1");
     expect(Object.keys(out).sort()).toEqual(
       [
@@ -30,7 +41,7 @@ describe("BanditArmStateRepository.loadAll", () => {
   });
 
   it("returns the stored state for arms that have a row", async () => {
-    const { repo } = make({
+    const { repo } = await make({
       findMany: jest
         .fn()
         .mockResolvedValue([
@@ -45,7 +56,7 @@ describe("BanditArmStateRepository.loadAll", () => {
 
 describe("BanditArmStateRepository.save", () => {
   it("updates in place when the version guard matches", async () => {
-    const { repo, prisma } = make({
+    const { repo, prisma } = await make({
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     });
     await repo.save("u1", "NIGHT", [1], [2], 4);
@@ -57,7 +68,7 @@ describe("BanditArmStateRepository.save", () => {
   });
 
   it("creates the row on the first write (prevVersion 0, no match)", async () => {
-    const { repo, prisma } = make();
+    const { repo, prisma } = await make();
     await repo.save("u1", "MORNING", [1], [2], 0);
     expect(prisma.banditArmState.create).toHaveBeenCalledWith({
       data: { userId: "u1", arm: "MORNING", A: [1], b: [2], version: 1 },
@@ -65,7 +76,7 @@ describe("BanditArmStateRepository.save", () => {
   });
 
   it("is a no-op (never throws) when another writer moved the version ahead", async () => {
-    const { repo, prisma } = make();
+    const { repo, prisma } = await make();
     await expect(
       repo.save("u1", "NIGHT", [1], [2], 9),
     ).resolves.toBeUndefined();
@@ -73,7 +84,7 @@ describe("BanditArmStateRepository.save", () => {
   });
 
   it("swallows a create race error", async () => {
-    const { repo } = make({
+    const { repo } = await make({
       create: jest.fn().mockRejectedValue(new Error("unique constraint")),
     });
     await expect(

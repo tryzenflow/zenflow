@@ -1,4 +1,10 @@
+import { Test, TestingModule } from "@nestjs/testing";
 import { SessionUpdateService } from "./session-update.service";
+import { PrismaService } from "../prisma/prisma.service";
+import { TagsService } from "../tags/tags.service";
+import { TaskPlacementService } from "../scheduler/io/task-placement.service";
+import { SchedulingFeedbackService } from "../scheduler/io/scheduling-feedback.service";
+import { SeriesService } from "./series.service";
 import { occurrenceId } from "../scheduler/core/recurrence";
 import { DAY_MS } from "../scheduler/core/slot";
 import type { Tag, Session, SessionSeries, User } from "../../generated/prisma";
@@ -51,6 +57,7 @@ function session(overrides: Partial<SessionRow> & { id: string }): SessionRow {
     sessionTotal: null,
     externalKey: null,
     scheduleStudyUnitId: null,
+    lmsCourseId: null,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     ...overrides,
@@ -88,20 +95,24 @@ function fakeSchedulingFeedback() {
   };
 }
 
-function makeService(
+async function makeService(
   prisma: never,
   series: ReturnType<typeof fakeSeries> = fakeSeries(),
   schedulingFeedback: ReturnType<
     typeof fakeSchedulingFeedback
   > = fakeSchedulingFeedback(),
-) {
-  return new SessionUpdateService(
-    prisma,
-    fakeTagsService() as never,
-    fakeTaskPlacement() as never,
-    schedulingFeedback as never,
-    series as never,
-  );
+): Promise<SessionUpdateService> {
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      SessionUpdateService,
+      { provide: PrismaService, useValue: prisma },
+      { provide: TagsService, useValue: fakeTagsService() },
+      { provide: TaskPlacementService, useValue: fakeTaskPlacement() },
+      { provide: SchedulingFeedbackService, useValue: schedulingFeedback },
+      { provide: SeriesService, useValue: series },
+    ],
+  }).compile();
+  return module.get<SessionUpdateService>(SessionUpdateService);
 }
 
 describe("SessionUpdateService — no scope (regression: byte-for-byte unchanged)", () => {
@@ -118,7 +129,7 @@ describe("SessionUpdateService — no scope (regression: byte-for-byte unchanged
         }),
     };
     const series = fakeSeries();
-    const service = makeService(prisma as never, series);
+    const service = await makeService(prisma as never, series);
 
     const result = await service.update("session-1", { title: "New" }, user);
 
@@ -151,7 +162,7 @@ describe("SessionUpdateService — no scope (regression: byte-for-byte unchanged
         }),
     };
     const series = fakeSeries();
-    const service = makeService(prisma as never, series);
+    const service = await makeService(prisma as never, series);
 
     await service.update(
       "sit-2",
@@ -191,7 +202,11 @@ describe("SessionUpdateService — preference-matrix reinforcement (Item 3B3)", 
     };
     const series = fakeSeries();
     const schedulingFeedback = fakeSchedulingFeedback();
-    const service = makeService(prisma as never, series, schedulingFeedback);
+    const service = await makeService(
+      prisma as never,
+      series,
+      schedulingFeedback,
+    );
 
     await service.update(
       "task-1",
@@ -236,7 +251,7 @@ describe("SessionUpdateService — preference-matrix reinforcement (Item 3B3)", 
         }),
     };
     const schedulingFeedback = fakeSchedulingFeedback();
-    const service = makeService(
+    const service = await makeService(
       prisma as never,
       fakeSeries(),
       schedulingFeedback,
@@ -274,7 +289,7 @@ describe("SessionUpdateService — preference-matrix reinforcement (Item 3B3)", 
         }),
     };
     const schedulingFeedback = fakeSchedulingFeedback();
-    const service = makeService(
+    const service = await makeService(
       prisma as never,
       fakeSeries(),
       schedulingFeedback,
@@ -310,7 +325,7 @@ describe("SessionUpdateService — preference-matrix reinforcement (Item 3B3)", 
           sessionEvent: { create: eventCreate },
         }),
     };
-    const service = makeService(prisma as never, fakeSeries());
+    const service = await makeService(prisma as never, fakeSeries());
 
     await service.update(
       "assignment-1",
@@ -348,7 +363,7 @@ describe("SessionUpdateService — preference-matrix reinforcement (Item 3B3)", 
         }),
     };
     const schedulingFeedback = fakeSchedulingFeedback();
-    const service = makeService(
+    const service = await makeService(
       prisma as never,
       fakeSeries(),
       schedulingFeedback,
@@ -388,7 +403,7 @@ describe("SessionUpdateService — preference-matrix reinforcement (Item 3B3)", 
         }),
     };
     const schedulingFeedback = fakeSchedulingFeedback();
-    const service = makeService(
+    const service = await makeService(
       prisma as never,
       fakeSeries(),
       schedulingFeedback,
@@ -418,7 +433,7 @@ describe("SessionUpdateService — TASK-series sitting, scope following/series",
       sessions: returnedSessions,
       skippedSessionIds: [],
     });
-    const service = makeService(prisma as never, series);
+    const service = await makeService(prisma as never, series);
 
     const dto: UpdateSessionDto = {
       scheduledStartTime: "2026-06-11T09:30:00.000Z",
@@ -453,7 +468,7 @@ describe("SessionUpdateService — TASK-series sitting, scope following/series",
       sessions: [{ id: "sit-2" }],
       skippedSessionIds: ["sit-3"],
     });
-    const service = makeService(prisma as never, series);
+    const service = await makeService(prisma as never, series);
 
     const dto: UpdateSessionDto = {
       scheduledStartTime: "2026-06-11T09:30:00.000Z",
@@ -486,7 +501,7 @@ describe("SessionUpdateService — TASK-series sitting, scope following/series",
       sessions: [],
       skippedSessionIds: [],
     });
-    const service = makeService(prisma as never, series);
+    const service = await makeService(prisma as never, series);
 
     await service.update(
       "sit-2",
@@ -527,7 +542,7 @@ describe("SessionUpdateService — TASK-series sitting, scope following/series",
         }),
     };
     const series = fakeSeries();
-    const service = makeService(prisma as never, series);
+    const service = await makeService(prisma as never, series);
 
     const result = await service.update(
       "sit-2",
@@ -562,7 +577,7 @@ describe("SessionUpdateService — TASK-series sitting, scope following/series",
         }),
     };
     const series = fakeSeries();
-    const service = makeService(prisma as never, series);
+    const service = await makeService(prisma as never, series);
 
     await service.update(
       "plain-1",
@@ -603,7 +618,7 @@ describe("SessionUpdateService — sessionCount resize/promote", () => {
       { id: "s-4" },
     ];
     series.resizeSessionCount.mockResolvedValue(grownSessions);
-    const service = makeService(prisma as never, series);
+    const service = await makeService(prisma as never, series);
 
     const result = await service.update("s-1", { sessionCount: 4 }, user);
 
@@ -639,7 +654,7 @@ describe("SessionUpdateService — sessionCount resize/promote", () => {
     series.promoteToSeries.mockResolvedValue("new-series-1");
     const grownSessions = [{ id: "plain-1" }, { id: "new-2" }];
     series.resizeSessionCount.mockResolvedValue(grownSessions);
-    const service = makeService(prisma as never, series);
+    const service = await makeService(prisma as never, series);
 
     const result = await service.update("plain-1", { sessionCount: 2 }, user);
 
@@ -675,7 +690,7 @@ describe("SessionUpdateService — sessionCount resize/promote", () => {
         }),
     };
     const series = fakeSeries();
-    const service = makeService(prisma as never, series);
+    const service = await makeService(prisma as never, series);
 
     const result = await service.update("plain-1", { sessionCount: 1 }, user);
 
@@ -698,7 +713,7 @@ describe("SessionUpdateService — recurring occurrence, scope 'following'", () 
       session: { id: "new-rep-1", title: "Lecture" },
       skippedSessionIds: [],
     });
-    const service = makeService(prisma as never, series);
+    const service = await makeService(prisma as never, series);
 
     const occId = occurrenceId(
       "lecture-series-1",
@@ -735,7 +750,7 @@ describe("SessionUpdateService — recurring occurrence, scope 'following'", () 
       session: { id: "new-rep-1" },
       skippedSessionIds: ["new-rep-1::2026-06-15T10:00:00.000Z"],
     });
-    const service = makeService(prisma as never, series);
+    const service = await makeService(prisma as never, series);
 
     const occId = occurrenceId(
       "lecture-series-1",
@@ -827,7 +842,7 @@ describe("SessionUpdateService — recurring occurrence, scope 'series' (or omit
         }),
     };
     const series = fakeSeries();
-    const service = makeService(prisma as never, series);
+    const service = await makeService(prisma as never, series);
 
     const occId = occurrenceId("lecture-series-1", anchor);
     const result = await service.update(occId, { skipConflicting: true }, user);
@@ -879,7 +894,7 @@ describe("SessionUpdateService — recurring occurrence, scope 'series' (or omit
         }),
     };
     const series = fakeSeries();
-    const service = makeService(prisma as never, series);
+    const service = await makeService(prisma as never, series);
 
     const occId = occurrenceId("lecture-series-1", anchor);
     const result = await service.update(occId, { title: "New" }, user);
