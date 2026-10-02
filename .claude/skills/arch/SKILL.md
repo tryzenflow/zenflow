@@ -26,5 +26,5 @@ model changes** (Prisma), consequences, and **Mermaid diagrams**: use-case, upda
 
 ## Return to the caller
 The ADR path, the concrete API/schema deltas, and the confirmed BE/FE/ML scope for
-`/implement`. This is a good **checkpoint** — surface the ADR summary to the user before
-implementation begins.
+`/implement`. **Checkpoint** — surface the ADR summary to the user before implementation
+begins.
