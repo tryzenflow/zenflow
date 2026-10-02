@@ -20,7 +20,7 @@ Spawn the area engineers **in parallel** (multiple Agent tool calls in one messa
 1. Read the **GitHub issue** (acceptance criteria) and the **ADR** (`docs/adr/NNNN-…`) —
    pass the issue number and ADR path.
 2. Implement its slice following the area conventions (see its agent definition + the per-app
-   READMEs and `CLAUDE.md` invariants).
+   READMEs and `AGENTS.md` invariants).
 3. **Write unit + integration tests and run them** (`pnpm --filter backend test` /
    `pnpm --filter frontend typecheck` + relevant suites) until green.
 4. **Commit** its own changes with a clear message (`feat(area): … (#<issue>)` + the required

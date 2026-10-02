@@ -39,7 +39,7 @@ Experiment: [`docs/scheduler/ab-testing.md`](../../docs/scheduler/ab-testing.md)
   heuristic when the service is down" path trivial.
 - **Reproducible.** The only randomness is uniform tie-breaking from an injected
   `random.Random` — no `Math.random()`, no clock reads, no module-global RNG
-  (mirrors the scheduler-core invariant in [`CLAUDE.md`](../../CLAUDE.md)).
+  (mirrors the scheduler-core invariant in [`AGENTS.md`](../../AGENTS.md)).
 
 ## HTTP surface
 
@@ -201,7 +201,7 @@ Python is the sole ranking implementation: `linucb_best_slot`, `context_vector`,
 `backend/src/scheduler/core/*` (issue #60), and that TS ranking code is now frozen/deleted per
 ADR-0003. A behaviour change to any of those goes in this package's `src/core/*` with pytest
 coverage and updated `packages/shared/contract/place/*.json` fixtures — not a TS port, per
-CLAUDE.md invariant 2.
+AGENTS.md invariant 2.
 
 - `linucb_best_slot` (issue #62 A): scores every feasible 15-min start on all days as
   `armTerm + wS*stability` -- no preference-matrix term. `wS = stability_weight(prevStart, now)` is

@@ -2,7 +2,7 @@
 
 Thanks for working on Zenflow! This guide covers local setup, code style, and our commit
 convention. For the product overview and architecture, start with [README.md](README.md) and
-[CLAUDE.md](CLAUDE.md); each app has its own README with deeper conventions.
+[AGENTS.md](AGENTS.md); each app has its own README with deeper conventions.
 
 ## Prerequisites & setup
 
@@ -118,7 +118,7 @@ fill in every section rather than deleting the template. A good PR:
    separate PRs to keep review fast.
 8. **Calls out breaking changes** — if the change is breaking, say so in the PR body, add the
    `BREAKING CHANGE:` footer to the commit, and describe the migration path.
-9. **Respects the [CLAUDE.md](CLAUDE.md) invariants** — pure scheduler, `@zenflow/shared` as
+9. **Respects the [AGENTS.md](AGENTS.md) invariants** — pure scheduler, `@zenflow/shared` as
    the single API contract, the 15-minute slot grid, the response envelope, and the frontend
    timezone wall-clock rule.
 
@@ -142,4 +142,4 @@ the matching `*.spec.ts` in the same commit.
 
 This repo ships a phased pipeline (`.claude/`) — `/feature` runs requirements → design →
 architecture → implementation → review → QA, each phase backed by a subagent. See the
-"Feature workflow" tables in [README.md](README.md) and [CLAUDE.md](CLAUDE.md).
+"Feature workflow" tables in [README.md](README.md) and [AGENTS.md](AGENTS.md).

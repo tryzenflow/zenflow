@@ -1,6 +1,6 @@
 # Zenflow Architecture
 
-This is a diagram-first companion to [README.md](README.md), [CLAUDE.md](CLAUDE.md), and the
+This is a diagram-first companion to [README.md](README.md), [AGENTS.md](AGENTS.md), and the
 per-app READMEs ([backend](backend/README.md), [frontend](frontend/README.md),
 [services/bandit](services/bandit/README.md)). It does not duplicate their prose — it shows the
 shape of the system so a new contributor can place a change before reading the detail. For the

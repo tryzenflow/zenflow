@@ -24,7 +24,7 @@ See [`services/bandit/README.md`](../../services/bandit/README.md). LinUCB sched
 sibling path: a per-day call to the bandit service
 (`BANDIT_SERVICE_URL`, see `services/bandit/README.md`), then the mapping below. The
 `optimize()` slot-scoring and overlap-rate helpers are pure functions in
-`backend/src/scheduler/utils/` with `*.spec.ts` coverage (CLAUDE.md invariant 2).
+`backend/src/scheduler/utils/` with `*.spec.ts` coverage (AGENTS.md invariant 2).
 
 ## Input / output
 

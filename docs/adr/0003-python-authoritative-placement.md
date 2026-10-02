@@ -6,7 +6,7 @@ decision (§8 Costs).
 **Date:** 2026-09-21
 **Issue:** none; builds on #60 (numpy core port, golden parity) and #62 (slot-first LinUCB,
 displacement, batched loads). Replaces #60's "TS core is the source of truth" stance and the
-"core change => spec + Python port + fixtures" rule in CLAUDE.md invariant 2.
+"core change => spec + Python port + fixtures" rule in AGENTS.md invariant 2.
 Related: [ADR-0001](0001-linucb-model-design.md) (§8, §11),
 [ADR-0002](0002-scheduling-simplification.md),
 [`services/bandit/README.md`](../../services/bandit/README.md),
@@ -29,7 +29,7 @@ is sure which implementation is authoritative.
 **Decision:** Python is the single source of ranking logic. Nest gathers, calls, applies and
 persists. A small frozen copy of the pre-#62 TS heuristic stays as a fallback when Python is down.
 
-CLAUDE.md invariants: **2** is rewritten; **1, 3, 4, 5, 6** are unchanged (invariant 1 gains the
+AGENTS.md invariants: **2** is rewritten; **1, 3, 4, 5, 6** are unchanged (invariant 1 gains the
 placement wire types).
 
 ## 2. Decision
@@ -293,7 +293,7 @@ No new endpoints. Additive fields in `@zenflow/shared`:
 
 ## 5. Invariant and testing changes
 
-**CLAUDE.md invariant 2 becomes:**
+**AGENTS.md invariant 2 becomes:**
 
 > **Ranking lives in Python; Nest is thin.** All placement ranking - heuristic best slot,
 > LinUCB slot-first scoring, series spreading, displacement - is implemented in
@@ -386,7 +386,7 @@ until phase 4) kept `master` releasable through the cut-over.
    own degraded-mode driver, not a parallel TS ranking implementation: they only run when
    `PlacementClient` reports a failure (timeout, 5xx, connect error, breaker open, contract
    mismatch, or `BANDIT_SERVICE_URL` unset/disabled), and that fallback-trigger logic in
-   `PlacementClient`/`PythonPlacer` was unchanged by this deletion. Rewrote CLAUDE.md invariant
+   `PlacementClient`/`PythonPlacer` was unchanged by this deletion. Rewrote AGENTS.md invariant
    2 and the core-change rule, `backend/README.md` (scheduler architecture, golden section),
    `services/bandit/README.md`; added a pointer from ADR-0001 §8/§11.
 7. **Benchmark (§9):** not a cut-over gate; ideally run right after phase 4 so BEFORE/AFTER

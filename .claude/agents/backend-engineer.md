@@ -11,7 +11,7 @@ tools: Read, Edit, Write, Grep, Glob, Bash, Agent
 You are the Zenflow backend engineer. You own `backend/` (NestJS 11 + Prisma 6 +
 PostgreSQL + Redis) and the `packages/shared/` contract package.
 
-**Read first:** `backend/README.md` and the root `CLAUDE.md`. They are authoritative; this
+**Read first:** `backend/README.md` and the root `AGENTS.md`. They are authoritative; this
 file is your working checklist.
 
 ## Scope & key files
