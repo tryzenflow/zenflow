@@ -307,6 +307,27 @@ describe("OccurrenceCacheService — timetable cancellation", () => {
     expect(outcome.touchedIds).toEqual([SECTION]);
   });
 
+  it("leaves already-held meetings alone — history stays on calendars", async () => {
+    const { db, cache } = await makeCache();
+    await cache.recordTimetableWeek([meeting], {
+      isoWeek: 44,
+      now: new Date("2026-10-20T00:00:00.000Z"),
+      complete: true,
+      throughDate: LATER,
+      sectionIds: [SECTION],
+    });
+    // The meeting (2026-10-27) is past by the time the section is withdrawn.
+    const outcome = await cache.recordTimetableWeek([], {
+      isoWeek: 44,
+      now: new Date("2026-10-28T00:00:00.000Z"),
+      complete: true,
+      throughDate: LATER,
+      sectionIds: [SECTION],
+    });
+    expect(outcome.canceledKeys).toEqual([]);
+    expect(db.portalSectionOccurrence.rows[0].canceledAt).toBeNull();
+  });
+
   it("keeps the meeting when the week is not known to be complete", async () => {
     const { cache } = await makeCache();
     await cache.recordTimetableWeek([meeting], {

@@ -42,37 +42,37 @@ One-time discovery, outside the runs: 911 requests (150 DKHP history, 161 LMS en
 
 | Tick | A (no cache) total / data | B (cache + fanout) total / data |
 | ---- | ------------------------- | ------------------------------- |
-| 1 | 1,575 / 1,200 | 1,029 / 693 |
-| 2 | 1,575 / 1,200 | 623 / 316 |
-| 3 | 0 / 0 | 651 / 527 |
+| 1 | 1,575 / 1,200 | 945 / 615 |
+| 2 | 1,575 / 1,200 | 637 / 329 |
+| 3 | 0 / 0 | 516 / 399 |
 | 4 | 1,575 / 1,200 | 0 / 0 |
-| 5 | 1,575 / 1,200 | 894 / 676 |
-| **Run** | **6,300 / 4,800** | **3,197 / 2,212** |
+| 5 | 1,575 / 1,200 | 930 / 683 |
+| **Run** | **6,300 / 4,800** | **3,028 / 2,026** |
 
 | Case | Auth | Busy s per tick (mean) | Skipped ticks | Exam passes per student |
 | ---- | ---- | ---------------------- | ------------- | ----------------------- |
-| A | 1,500 | 29.2 | 0 | 2.5 |
-| B | 985 | 19.5 | 0 | 2.5 |
+| A | 1,500 | 27.7 | 0 | 2.5 |
+| B | 1,002 | 17.9 | 0 | 2.5 |
 
 "Busy s per tick" is the span between the first and last request in each minute, from the fake server's timestamps. Both cases did the same work (5 batches of 75, so 2.5 passes per student), which makes the totals directly comparable.
 
 Checks:
 - **Calendars:** identical between A and B (4,020 rows).
 - **Moves and deletes:** all 104 moved lectures kept their time and room, all 65 deleted lectures stayed deleted, 208 other students' sessions got the new room with none stale, and every upcoming session of the removed sections was deleted. Same in A and B.
-- **Order:** 0 timetable requests before a student's DKHP history request (150 students, 140 timetable requests seen).
+- **Order:** 0 timetable requests before a student's DKHP history request (150 students, 232 timetable requests seen).
 - **Exams:** no exam cache table or row, and every student had upstream exam requests in both runs.
 
 ## Findings
-1. **The cache cuts total requests by 49% and data requests by 54%** for the same work. Auth drops 34% because students served from the cache skip their login.
-2. **Busy time per tick falls from 29 s to 19.5 s**, and neither case skipped a tick at this scale.
+1. **The cache cuts total requests by 52% and data requests by 58%** for the same work. Auth drops 33% because students served from the cache skip their login.
+2. **Busy time per tick falls from 28 s to 18 s**, and neither case skipped a tick at this scale.
 3. **Updates and removals reach everyone through fanout.** Calendars are identical to the no-cache run, and no student's own move or delete was overwritten or undone.
-4. **B is not free of data requests.** Ticks 3 and 5 still send 500-700 data requests, because the TTL expired and a representative per section refetched live.
+4. **B is not free of data requests.** Ticks 3 and 5 still send 400-700 data requests, because the TTL expired and a representative per section refetched live.
 
 ## Limitations
 - **One run per case.** There is no spread. A tick with 0 requests (A tick 3, B tick 4) appears when a batch's due time lands a few milliseconds after the next tick and waits a tick; the spare tick 5 absorbs it.
 - **Synthetic upstream.** Latency is 4-8 ms, far below real DLU. The fake assumes DKHP `CurriculumID` equals the timetable `ScheduleStudyUnitID`; this is not checked against the real DKHP API.
 - **Compressed schedule.** A 2-minute period and a 90 s TTL stand in for production's daily periods and 7-day TTL.
-- **Removals are checked for upcoming sessions only.** A walk reconciles from now onward, so past occurrences of a removed section correctly remain as history.
+- **Removals are checked for upcoming sessions only.** A walk reconciles from now onward, and the cache's cancellation pass applies the same forward-only rule, so past occurrences of a removed section correctly remain as history. (An earlier run of this benchmark caught the cache retiring already-held lectures of the current week; fixed.)
 - **No backend timing.** The portal client duration histogram was not collected (OpenTelemetry is off in the dev stack); timing comes from fake-server timestamps.
 
 ## Reproduce
@@ -82,4 +82,4 @@ docker compose -f compose.dev.yml up -d
 npm run build
 REPEATS=1 scripts/fixtures/dlu/bench.sh   # ticks=5, latency=4 ms
 ```
-`bench.sh` drops and recreates the dev `zenflow` database (and temporary `zenflow_seed*` copies). `.env.dev` must point `LMS_URL`, `PORTAL_API_URL` and `DKHP_API_URL` at the fake server on port 4100 and carry any non-empty `DKHP_API_KEY`. Output goes to `$OUT` (default `/tmp/dlu-bench`, wiped at start). The one-time setup takes about 5 minutes and each run about 7.
+`bench.sh` drops and recreates the dev `zenflow` database (and temporary `zenflow_seed*` copies). It overrides, per backend process, the LMS/portal/DKHP URLs (fake server on port 4100), dummy API keys, `PORT=8000`, the OTP rate limits and `INGESTION_TICK_MAX_BATCH=1000`, so `.env.dev` needs no benchmark-specific edits and the real hosts are never contacted. Output goes to `$OUT` (default `/tmp/dlu-bench`, wiped at start). The one-time setup takes about 5 minutes and each run about 7.

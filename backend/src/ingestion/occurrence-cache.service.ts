@@ -286,6 +286,9 @@ export class OccurrenceCacheService {
         scheduleStudyUnitId: { in: [...sectionIds] },
         isoWeek,
         canceledAt: null,
+        // Forward only, like `reconcileDeleted`: a meeting already held stays
+        // on calendars as history even if the section was later withdrawn.
+        startsAt: { gte: now },
       },
       select: {
         id: true,

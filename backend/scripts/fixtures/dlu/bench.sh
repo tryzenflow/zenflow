@@ -75,7 +75,9 @@ start_fake() { # start_fake <latency> <jitter>
 }
 start_backend() { # start_backend <log> VAR=value...   (overrides first: dotenv never overwrites)
   local log="$1"; shift
-  env INGESTION_REQUEST_DELAY_MS=0 "$@" \
+  env INGESTION_REQUEST_DELAY_MS=0 INGESTION_TICK_MAX_BATCH=1000 \
+    LMS_URL="$FAKE" PORTAL_API_URL="$FAKE" DKHP_API_URL="$FAKE" \
+    PORT=8000 OTP_REQUEST_IP_LIMIT=100000 OTP_REQUEST_EMAIL_LIMIT=100000 OTP_VERIFY_IP_LIMIT=100000 OTP_VERIFY_EMAIL_LIMIT=100000 PORTAL_API_KEY=bench DKHP_API_KEY=bench "$@" \
     npx dotenv -e .env.dev -- env NODE_EXTRA_CA_CERTS=certs/lms-ca.pem node dist/main >"$log" 2>&1 &
   PIDS+=($!)
 }
