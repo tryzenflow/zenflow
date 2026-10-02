@@ -34,19 +34,19 @@
 
   <rect x="1020" y="250" width="230" height="80" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
   <text x="1135" y="278" text-anchor="middle" font-size="14" font-weight="700" fill="#2B2724">Mobile app</text>
-  <text x="1135" y="296" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">Expo (RN)</text>
+  <text x="1135" y="296" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">Expo React Native</text>
   <text x="1135" y="311" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">web target only</text>
 
   <!-- Row: API -->
   <rect x="630" y="430" width="240" height="100" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
   <text x="750" y="460" text-anchor="middle" font-size="15" font-weight="700" fill="#2B2724">NestJS API</text>
-  <text x="750" y="478" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">:5000</text>
+  <text x="750" y="478" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">single backend</text>
   <text x="750" y="493" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">owns Postgres via Prisma</text>
-  <text x="750" y="508" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">thin — gathers / applies / persists</text>
+  <text x="750" y="508" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">thin orchestration layer</text>
 
   <!-- external left: Portal + LMS -->
   <rect x="20" y="440" width="170" height="70" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="105" y="465" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">DLU Portal</text>
+  <text x="105" y="465" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">DLU Portal and DKHP</text>
   <text x="105" y="482" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">external, university</text>
   <text x="105" y="495" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">timetable + exams</text>
 
@@ -69,8 +69,8 @@
   <!-- Row: Bandit -->
   <rect x="630" y="650" width="240" height="100" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
   <text x="750" y="680" text-anchor="middle" font-size="15" font-weight="700" fill="#2B2724">Bandit service</text>
-  <text x="750" y="698" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">Python + FastAPI · :8000</text>
-  <text x="750" y="713" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">authoritative ranking (ADR-0003)</text>
+  <text x="750" y="698" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">Python + FastAPI</text>
+  <text x="750" y="713" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">authoritative ranking</text>
   <text x="750" y="728" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">heuristic + LinUCB + displacement</text>
 
   <!-- Row: infra -->
@@ -87,7 +87,7 @@
   <rect x="900" y="890" width="160" height="100" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
   <text x="980" y="922" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">Redis</text>
   <text x="980" y="940" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">rate limiting</text>
-  <text x="980" y="954" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">(LimitKit, separate)</text>
+  <text x="980" y="954" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">separate instance</text>
 
   <rect x="1110" y="890" width="160" height="100" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
   <text x="1190" y="922" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">MailHog</text>
@@ -107,7 +107,7 @@
   <!-- API -> Bandit (primary) -->
   <path d="M750,530 L750,650" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#arrOrange)"/>
   <rect x="762" y="580" width="150" height="16" fill="#FCFBFA"/>
-  <text x="766" y="592" font-size="11" fill="#FF6900">POST /v1/place, /update</text>
+  <text x="766" y="592" font-size="11" fill="#FF6900">placement + feedback</text>
 
   <!-- API -> Portal / LMS (ingestion pull, amber) -->
   <path d="M630,460 L190,460" fill="none" stroke="#F0B100" stroke-width="2.5" marker-end="url(#arrAmber)"/>
@@ -143,6 +143,5 @@
     <text x="722" y="4" font-size="11.5" fill="#2B2724">dev-only</text>
   </g>
 
-  <text x="30" y="1068" font-size="11.5" fill="#2B2724" opacity="0.7">Production adds a Caddy edge proxy in front of the Web PWA/API, and an OTel + Tempo + Loki +</text>
-  <text x="30" y="1084" font-size="11.5" fill="#2B2724" opacity="0.7">Prometheus + Grafana observability stack. Both are out of scope for this diagram and not drawn.</text>
+  <text x="30" y="1070" font-size="11.5" fill="#2B2724" opacity="0.7">Production also runs an edge proxy and an observability stack, not drawn here.</text>
 </svg>
