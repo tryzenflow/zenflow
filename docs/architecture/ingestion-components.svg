@@ -13,11 +13,11 @@
   </defs>
 
   <rect x="0" y="0" width="1500" height="1300" fill="#FCFBFA"/>
-  <text x="30" y="32" font-size="20" font-weight="700" fill="#2B2724">Zenflow — ingestion components (backend/src/ingestion/*)</text>
+  <text x="30" y="32" font-size="20" font-weight="700" fill="#2B2724">Zenflow — ingestion components</text>
 
   <!-- Panel IO-TOP -->
   <rect x="40" y="90" width="1420" height="420" rx="14" fill="none" stroke="#2B2724" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="8 6"/>
-  <text x="60" y="116" font-size="13.5" font-weight="700" fill="#2B2724" opacity="0.8">ingestion/ + lms/ + portal/ — I/O layer (one rolling ticker, one credential decrypt per pass)</text>
+  <text x="60" y="116" font-size="13.5" font-weight="700" fill="#2B2724" opacity="0.8">Sync watchers — one rolling ticker, one credential decrypt per pass</text>
 
   <!-- Row1: cron + schedule -->
   <rect x="90" y="150" width="260" height="80" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
@@ -59,10 +59,10 @@
 
   <!-- Panel CORE -->
   <rect x="40" y="580" width="1420" height="140" rx="14" fill="none" stroke="#2B2724" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="8 6"/>
-  <text x="60" y="606" font-size="13.5" font-weight="700" fill="#2B2724" opacity="0.8">ingestion/core/* — pure, no I/O</text>
+  <text x="60" y="606" font-size="13.5" font-weight="700" fill="#2B2724" opacity="0.8">Parsing &amp; normalization</text>
   <rect x="560" y="630" width="380" height="70" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="750" y="658" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">core/parse-*.ts</text>
-  <text x="750" y="675" text-anchor="middle" font-size="10" fill="#2B2724" opacity="0.7">parse-portal / parse-lms / period-map / grid / semester</text>
+  <text x="750" y="658" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">Parsers</text>
+  <text x="750" y="675" text-anchor="middle" font-size="10" fill="#2B2724" opacity="0.7">portal + LMS payloads → calendar blocks (periods, grid, semester)</text>
 
   <!-- Panel IO-BOTTOM -->
   <rect x="40" y="790" width="1420" height="400" rx="14" fill="none" stroke="#2B2724" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="8 6"/>
@@ -72,8 +72,8 @@
   <rect x="420" y="850" width="320" height="100" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
   <text x="580" y="878" text-anchor="middle" font-size="13.5" font-weight="700" fill="#2B2724">MaterializerService</text>
   <text x="580" y="895" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">writes Session rows; confirm-gate</text>
-  <text x="580" y="908" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">+ two-miss rule; notifies via</text>
-  <text x="580" y="921" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">core/sync-digest.ts</text>
+  <text x="580" y="908" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">+ two-miss rule; sends a</text>
+  <text x="580" y="921" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">sync digest notification</text>
 
   <rect x="820" y="850" width="260" height="100" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
   <text x="950" y="890" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">SyncConflictsService</text>

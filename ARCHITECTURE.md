@@ -31,11 +31,11 @@ prose.
   `POST /v1/place`, and persists the result.
 - `backend/src/scheduler/core/*` is pure calendar/preference-write logic plus a frozen TS
   heuristic, used only as `FallbackPlacer` when the breaker is open or Python is down.
-- The Bandit service (Python, authoritative) is the only ranking implementation. Its
-  `src/core/*` modules are grouped into a **scoring** cluster (`context_vector.py`, `arms.py`,
-  `linucb_best_slot.py`, `slot_score.py`) and a **supporting/shared** cluster (`preference.py`,
-  `displacement.py`, `series_spread.py`, `sync_conflicts.py`, `reward.py`, `slot.py`,
-  `constants.py`), reached through the two endpoints `POST /v1/place` and `POST /update`.
+- The Bandit service (Python, authoritative) is the only ranking implementation. Its scoring logic
+  is grouped into a **scoring** cluster (context vector, time-of-day arms, LinUCB slot search with
+  stability-weighted scoring) and a **supporting logic** cluster (preference matrix + decay, EDF
+  displacement, series spreading, conflict detection, reward calculation), reached through the two
+  endpoints `POST /v1/place` and `POST /update`.
 - A separate delayed-reward loop feeds `MOVE`/`RETAINED` events back to `POST /update`; a daily
   cron decays the preference matrix independently of placement.
 
