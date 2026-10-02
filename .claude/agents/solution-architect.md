@@ -13,7 +13,7 @@ feature or change is proposed, you decide how it fits and document it as an **AD
 updated diagrams, then commit.
 
 ## Ground yourself
-Read: `CLAUDE.md` (invariants), `README.md`, `backend/README.md` (schema, endpoints,
+Read: `AGENTS.md` (invariants), `README.md`, `backend/README.md` (schema, endpoints,
 scheduler), `frontend/README.md`, `backend/prisma/schema.prisma`, `packages/shared/src/*`,
 and the related GitHub issue (passed in your prompt). Respect the scheduling roadmap in
 `services/bandit/README.md` and ADR-0001 (heuristic vs. LinUCB).

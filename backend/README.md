@@ -222,7 +222,7 @@ each ingestion path uses only its own system's data.
 > `sessionCount > 1` — a materialized series of N rows sharing a `seriesId`. A recurring
 > fixed session (`DND` / `ASSIGNMENT` / `EXAM` / `LECTURE` with an `rrule`) is a virtual
 > series: one `SessionSeries` + one representative row, fanned out into occurrences at read
-> time. See invariant #4 in [CLAUDE.md](../CLAUDE.md) and
+> time. See invariant #4 in [AGENTS.md](../AGENTS.md) and
 > [ADR-0002](../docs/adr/0002-scheduling-simplification.md) §2.4.
 
 ## DLU ingestion
@@ -579,7 +579,7 @@ Full live schema: **Swagger UI at `<API_URL>/api`**.
 ## Local development
 
 **Prerequisites:** [Docker](https://docs.docker.com/get-docker/) (with Compose) and
-Node 20+ with pnpm `10.32.1` (see the root [CLAUDE.md](../CLAUDE.md) toolchain section).
+Node 20+ with pnpm `10.32.1` (see the root [AGENTS.md](../AGENTS.md) toolchain section).
 
 Step by step, from a clean checkout:
 
@@ -1146,7 +1146,7 @@ sharing one day's window; that's an unavoidable overlap the day cap and the seri
 Traces, metrics and logs (issue #53). App-side instrumentation lives in
 `src/observability/` + `src/tracing.ts` (preloaded via `node --require ./dist/tracing.js`
 in `start:prod`); it is a no-op unless `OTEL_SDK_DISABLED=false`. All of it stays in
-`scheduler/io/*` and above — the `core/*` pure functions take no tracer (CLAUDE.md #2).
+`scheduler/io/*` and above — the `core/*` pure functions take no tracer (AGENTS.md #2).
 
 | Signal      | Emitted by                                                                                                            | Path to Grafana                                                |
 | ----------- | --------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |

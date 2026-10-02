@@ -18,7 +18,7 @@ on the opus model per its definition).
 - The branch / diff base to review (e.g. `git diff main...HEAD`).
 
 ## The subagent will
-1. Review the diff against `CLAUDE.md` invariants and the per-app conventions.
+1. Review the diff against `AGENTS.md` invariants and the per-app conventions.
 2. Bring up the dev stack (`backend` → `docker compose up -d`) and the frontend dev server,
    then drive the running app with the **Playwright MCP** to verify each acceptance criterion
    (log in via the MailHog OTP, exercise the new flow), capturing evidence.

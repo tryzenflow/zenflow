@@ -90,6 +90,8 @@ type BottomSheetContentProps = Omit<
   /** Accepted for API parity with `bottom-sheet.native.tsx`, and ignored —
    * this reimplementation has no mounted-but-closed state to preserve. */
   enableDismissOnClose?: boolean;
+  snapPoints?: Array<string | number>;
+  enableDynamicSizing?: boolean;
 };
 
 const BottomSheetContent = React.forwardRef<
@@ -103,6 +105,8 @@ const BottomSheetContent = React.forwardRef<
       onDismiss,
       backdropProps: _backdropProps,
       enableDismissOnClose: _enableDismissOnClose,
+      snapPoints: _snapPoints,
+      enableDynamicSizing: _enableDynamicSizing,
       ...props
     },
     ref,

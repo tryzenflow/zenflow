@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import { Pressable, ScrollView, View } from "react-native";
+import Svg, { Path } from "react-native-svg";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   cancelAnimation,
@@ -27,6 +28,7 @@ import {
   CheckCircle,
   Info,
   Lightbulb,
+  Sparkles,
   type LucideIcon,
   X,
 } from "../Icons";
@@ -38,6 +40,8 @@ export interface ToastAction {
   /** Accent for this button (tinted fill + border + text) so several choices
    * on one toast read as different options, not a row of identical pills. */
   color?: { light: string; dark: string };
+  inline?: boolean;
+  mockup?: boolean;
 }
 
 /**
@@ -47,7 +51,16 @@ export interface ToastAction {
  * background, `icon` its foreground (passed straight to the lucide glyph — RN
  * has no `currentColor` inheritance through `cssInterop`).
  */
-const TOAST_VARIANTS = {
+const TOAST_VARIANTS: Record<
+  string,
+  {
+    badge: string;
+    icon: string;
+    Icon: LucideIcon;
+    confirmBtn: string;
+    fillIcon?: boolean;
+  }
+> = {
   default: {
     badge: "bg-blue-500/15",
     icon: "text-blue-600 dark:text-blue-400",
@@ -79,14 +92,21 @@ const TOAST_VARIANTS = {
     confirmBtn: "bg-blue-600",
   },
   tip: {
-    badge: "bg-orange-500/15",
-    icon: "text-orange-600 dark:text-orange-400",
-    Icon: Lightbulb,
-    confirmBtn: "bg-orange-600",
+    badge: "bg-primary/15",
+    icon: "text-primary",
+    Icon: Sparkles,
+    confirmBtn: "bg-primary",
+    fillIcon: true,
   },
 } satisfies Record<
   string,
-  { badge: string; icon: string; Icon: LucideIcon; confirmBtn: string }
+  {
+    badge: string;
+    icon: string;
+    Icon: LucideIcon;
+    confirmBtn: string;
+    fillIcon?: boolean;
+  }
 >;
 
 type ToastVariant = keyof typeof TOAST_VARIANTS;
@@ -212,7 +232,9 @@ function Toast({
   ];
 
   const autoDismiss = !confirm && variant === "success";
-  const buttons = confirm ? [] : (actions ?? (action ? [action] : []));
+  const buttons = confirm
+    ? []
+    : (actions ?? (action && !action.inline ? [action] : []));
 
   const hide = useCallback(() => {
     onHide(id);
@@ -319,11 +341,15 @@ function Toast({
             alignSelf: "center",
             marginBottom: spacing,
             display: hidden ? "none" : "flex",
-            borderRadius: 18,
+            borderRadius: action?.mockup ? 16 : 18,
             borderWidth: 1,
-            borderColor: palette.border,
-            backgroundColor: palette.card,
-            padding: 14,
+            borderColor: action?.mockup
+              ? isDarkColorScheme
+                ? "rgba(255,255,255,0.24)"
+                : "rgba(0,0,0,0.6)"
+              : palette.border,
+            backgroundColor: action?.mockup ? palette.card : palette.card,
+            padding: action?.mockup ? 14 : 14,
             shadowColor: "#000",
             shadowOpacity: isDarkColorScheme ? 0.45 : 0.16,
             shadowRadius: 18,
@@ -333,7 +359,7 @@ function Toast({
           containerStyle,
         ]}
       >
-        <View className="flex-row items-start" style={{ gap: 10 }}>
+        <View className="flex-row items-center" style={{ gap: 10 }}>
           <View
             style={{
               height: 30,
@@ -344,7 +370,16 @@ function Toast({
               backgroundColor: `${accent}22`,
             }}
           >
-            <Icon size={17} color={accent} />
+            {meta.fillIcon ? (
+              <Svg width={17} height={17} viewBox="0 0 24 24">
+                <Path
+                  d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"
+                  fill={accent}
+                />
+              </Svg>
+            ) : (
+              <Icon size={17} color={accent} />
+            )}
           </View>
 
           <Pressable
@@ -375,7 +410,32 @@ function Toast({
             ) : null}
           </Pressable>
 
-          {!confirm && (
+          {action?.inline && !confirm && !actions ? (
+            <Pressable
+              onPress={() => {
+                action.onPress();
+                dismiss(0);
+              }}
+              hitSlop={8}
+              style={{
+                borderRadius: 8,
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                backgroundColor:
+                  action.color?.[isDarkColorScheme ? "dark" : "light"] ??
+                  palette.primary,
+              }}
+            >
+              <Text
+                className="text-[12.5px] font-semibold"
+                style={{ color: "#fff" }}
+              >
+                {action.label}
+              </Text>
+            </Pressable>
+          ) : null}
+
+          {!confirm && !action?.inline && (
             <Pressable
               onPress={() => dismiss(0)}
               hitSlop={10}
@@ -409,7 +469,7 @@ function Toast({
                     paddingHorizontal: 14,
                     paddingVertical: 5,
                     backgroundColor: tint
-                      ? `${tint}22`
+                      ? tint
                       : isDarkColorScheme
                         ? "rgba(255, 255, 255, 0.06)"
                         : "rgba(0, 0, 0, 0.04)",
@@ -417,7 +477,7 @@ function Toast({
                 >
                   <Text
                     className="text-[13px] font-semibold"
-                    style={{ color: tint ?? palette.text }}
+                    style={{ color: tint ? "#fff" : palette.text }}
                   >
                     {b.label}
                   </Text>

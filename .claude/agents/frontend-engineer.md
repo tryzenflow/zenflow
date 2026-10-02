@@ -11,7 +11,7 @@ tools: Read, Edit, Write, Grep, Glob, Bash, Agent
 You are the Zenflow frontend engineer. You own `frontend/` (React 19, Vite 6, Tailwind v4,
 Radix UI, Zustand, React Router 7, dnd-kit, TipTap).
 
-**Read first:** `frontend/README.md` and the root `CLAUDE.md`.
+**Read first:** `frontend/README.md` and the root `AGENTS.md`.
 
 ## Scope & key files
 
