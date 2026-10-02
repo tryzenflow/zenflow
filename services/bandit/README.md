@@ -30,7 +30,11 @@ Experiment: [`docs/scheduler/ab-testing.md`](../../docs/scheduler/ab-testing.md)
   - bias.
 
   Details: ADR-0001 §5.1.
-- **Cold arm** = ridge prior. It scores `α·√(xᵀx/λ)`, not `0`.
+- **Cold arm** = warm-start prior (ADR-0001 §15). A cold arm (no `A` and no `b`) is seeded with
+  `LINUCB_PRIOR_N0` (= 5) pseudo-observations built from the default preference matrix
+  (`src/core/prior.py`), applied in `hydrate`/`hydrate_arms` so `/v1/place` and `/v1/update` agree.
+  It still keeps an exploration bonus, not `0`; `LINUCB_PRIOR_N0 = 0` is the plain ridge prior
+  `(λI, 0)`. Changing it changes `paramsVersion`.
 - **Learning check:** `uv run pytest tests/test_learning.py -s` prints simulated learning curves.
 - **Stateless service.** This service holds **no per-user state**. The NestJS backend owns
   `(A, b)` persistence (Postgres table `BanditArmState`, ADR-0001 §6.1) and passes the 5
