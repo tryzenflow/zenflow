@@ -364,37 +364,4 @@ Replaces §5.1's d = 22, the "cold arm scores 0" rule, and the preference-matrix
 - **AFTERNOON [11:00, 17:00) split into MIDDAY [11:00, 14:00) + AFTERNOON [14:00, 17:00).**
   Each task goes to its band's centre, so a 6 h band could only offer 13:30. The split adds one
   exploration step for a new user (a fixed band is now found in ≤ 5 placements).
-- **Deferred until prod data points to them:** hybrid LinUCB. (The matrix-seeded prior shipped in §15.)
-
----
-
-## 15. Addendum (2026-10-02, issue #60): matrix-seeded warm-start prior for cold arms
-
-Replaces the "matrix-seeded prior" deferral of §14 and qualifies §6's "every arm starts at the ridge
-prior" and §14's "cold arm = ridge prior".
-
-- **A cold arm** (no persisted `A` and no `b`) starts at `A = λI + Σ wᵢ xᵢxᵢᵀ`, `b = Σ wᵢ rᵢ xᵢ`
-  instead of `(λI, 0)`. The sum runs over the 168 cells of the *default* preference matrix
-  (`default_preference_matrix`, 7 weekdays × 24 hours). Each cell adds one pseudo-observation to the
-  arm that owns its hour (`arm_of_minute(hour * 60)`):
-  - context `xᵢ` = the typical candidate day for that weekday (`src/core/prior.py`; the weekend flag
-    is the only difference between cells);
-  - payoff `rᵢ` = the cell's matrix weight (0 to 1);
-  - weight `wᵢ = n0 / cells_owned_by_arm`, so each arm gets `n0` pseudo-observations in total.
-- **`LINUCB_PRIOR_N0 = 5.0`** (`src/core/constants.py`), chosen from the #60 simulator study (mean
-  regret 0.447 cold, about 0.37-0.38 with `pref`, n0 = 5, same students). `n0 = 0` is exactly the old
-  cold start. Data overrides the prior at rate `1 / (n0 + n_obs)`.
-- **Applied in `serialization.hydrate` / `hydrate_arms`**, so `/v1/place` scoring and `/v1/update`
-  start a cold arm from the same prior and the state persisted after the first update keeps it. A
-  partially empty state (only `A` or only `b`) is anomalous and is filled at the plain ridge prior.
-  `is_cold` still means "no persisted state" (telemetry unchanged).
-- **`paramsVersion` changes.** The hash covers every upper-case constant in `src.core.constants`, so
-  adding `LINUCB_PRIOR_N0` (and any later change to it) moves it. Persisted `(A, b)` stay valid (same
-  `d`, same meaning).
-- **§14 qualification.** The prior reads the DEFAULT matrix once, at cold start. LinUCB scoring still
-  ignores the user's *learned* matrix, so the A/B stays LinUCB vs the preference heuristic.
-- **Behaviour change.** Cold users start in the default-preferred bands (MORNING, AFTERNOON) instead of
-  the seeded tie order, and a mild move (-0.25) dethrones them only after a few rounds. A band the
-  prior disfavours takes longer to find (budgets in `tests/test_learning.py`).
-- Collaborative (archetype-seeded) cold start is still not built; it would swap the default matrix
-  for a cluster matrix in the same function.
+- **Deferred until prod data points to them:** hybrid LinUCB, a matrix-seeded prior.
