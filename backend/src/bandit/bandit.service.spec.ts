@@ -1,9 +1,14 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument */
+import { Test, TestingModule } from "@nestjs/testing";
+import { ConfigService } from "@nestjs/config";
 import { BanditService } from "./bandit.service";
 
-function make(url: string | undefined) {
+async function make(url: string | undefined) {
   const config = { get: jest.fn().mockReturnValue(url) };
-  return new BanditService(config as never);
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [BanditService, { provide: ConfigService, useValue: config }],
+  }).compile();
+  return module.get<BanditService>(BanditService);
 }
 
 describe("BanditService", () => {
@@ -16,7 +21,7 @@ describe("BanditService", () => {
   it("is disabled and returns null without calling fetch when no URL is set", async () => {
     const fetchSpy = jest.fn();
     global.fetch = fetchSpy as never;
-    const svc = make(undefined);
+    const svc = await make(undefined);
 
     expect(svc.enabled).toBe(false);
     expect(await svc.update("MORNING", [1], 1, { A: [], b: [] })).toBeNull();
@@ -28,7 +33,7 @@ describe("BanditService", () => {
       ok: true,
       json: () => Promise.resolve({ A: [1, 0, 0, 1], b: [2, 3] }),
     }) as never;
-    const svc = make("http://bandit:8100/");
+    const svc = await make("http://bandit:8100/");
 
     const out = await svc.update("NIGHT", [0.1], -0.5, { A: [], b: [] });
     expect(out).toEqual({ A: [1, 0, 0, 1], b: [2, 3] });
@@ -44,7 +49,7 @@ describe("BanditService", () => {
     global.fetch = jest
       .fn()
       .mockResolvedValue({ ok: false, status: 503 }) as never;
-    const svc = make("http://bandit:8100");
+    const svc = await make("http://bandit:8100");
     expect(await svc.update("MORNING", [1], 1, { A: [], b: [] })).toBeNull();
   });
 
@@ -52,7 +57,7 @@ describe("BanditService", () => {
     global.fetch = jest
       .fn()
       .mockRejectedValue(new Error("The operation was aborted")) as never;
-    const svc = make("http://bandit:8100");
+    const svc = await make("http://bandit:8100");
     expect(await svc.update("MORNING", [1], 1, { A: [], b: [] })).toBeNull();
   });
 });

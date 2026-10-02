@@ -1,3 +1,4 @@
+import { Test, TestingModule } from "@nestjs/testing";
 import { ConfigService } from "@nestjs/config";
 import { PortalAPIService } from "./portal-api.service";
 
@@ -27,8 +28,14 @@ describe("PortalAPIService", () => {
   let service: PortalAPIService;
   let fetchMock: jest.Mock;
 
-  beforeEach(() => {
-    service = new PortalAPIService(config);
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        PortalAPIService,
+        { provide: ConfigService, useValue: config },
+      ],
+    }).compile();
+    service = module.get<PortalAPIService>(PortalAPIService);
     fetchMock = jest.fn();
     global.fetch = fetchMock;
   });

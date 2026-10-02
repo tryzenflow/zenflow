@@ -1,6 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
+import { Test, TestingModule } from "@nestjs/testing";
 import { RetainedSessionsService } from "./retained-sessions.service";
 import { SchedulingFeedbackService } from "./scheduling-feedback.service";
+import { PrismaService } from "../../prisma/prisma.service";
+import { BanditService } from "../../bandit/bandit.service";
+import { BanditArmStateRepository } from "../../bandit/bandit-arm-state.repository";
 import { RETAINED_GRACE_MS } from "../../common/constants";
 
 interface Row {
@@ -27,7 +31,7 @@ function row(over: Partial<Row> & { id: string }): Row {
   };
 }
 
-function makeService(
+async function makeService(
   batches: Row[][],
   opts: { proposal?: Record<string, unknown> | null } = {},
 ) {
@@ -94,14 +98,18 @@ function makeService(
     $transaction: (fn: (t: typeof tx) => unknown) => fn(tx),
   };
 
-  const schedulingFeedback = new SchedulingFeedbackService(
-    prisma as never,
-    bandit as never,
-    armStates as never,
-  );
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      RetainedSessionsService,
+      SchedulingFeedbackService,
+      { provide: PrismaService, useValue: prisma },
+      { provide: BanditService, useValue: bandit },
+      { provide: BanditArmStateRepository, useValue: armStates },
+    ],
+  }).compile();
 
   return {
-    service: new RetainedSessionsService(prisma as never, schedulingFeedback),
+    service: module.get<RetainedSessionsService>(RetainedSessionsService),
     findMany,
     updates,
     events,
@@ -113,7 +121,9 @@ function makeService(
 
 describe("RetainedSessionsService.sweep", () => {
   it("marks an elapsed, never-moved TASK as retained with a positive reward", async () => {
-    const { service, updates, events } = makeService([[row({ id: "s1" })]]);
+    const { service, updates, events } = await makeService([
+      [row({ id: "s1" })],
+    ]);
 
     const count = await service.sweep(NOW);
 
@@ -132,7 +142,7 @@ describe("RetainedSessionsService.sweep", () => {
       scheduledStartTime: new Date("2026-06-15T10:59:00.000Z"),
       durationMinutes: 60,
     });
-    const { service, updates, events } = makeService([[notElapsed]]);
+    const { service, updates, events } = await makeService([[notElapsed]]);
 
     const count = await service.sweep(NOW);
 
@@ -149,14 +159,14 @@ describe("RetainedSessionsService.sweep", () => {
       ),
       durationMinutes: 60,
     });
-    const { service } = makeService([[boundary]]);
+    const { service } = await makeService([[boundary]]);
     expect(await service.sweep(NOW)).toBe(1);
   });
 
   it("paginates by cursor across full batches", async () => {
     const big = Array.from({ length: 100 }, (_, i) => row({ id: `s${i}` }));
     const rest = [row({ id: "s100" })];
-    const { service, findMany } = makeService([big, rest]);
+    const { service, findMany } = await makeService([big, rest]);
 
     const count = await service.sweep(NOW);
 
@@ -168,12 +178,12 @@ describe("RetainedSessionsService.sweep", () => {
   });
 
   it("a second run is a no-op (rows already filtered by retainedAt)", async () => {
-    const { service } = makeService([[]]);
+    const { service } = await makeService([[]]);
     expect(await service.sweep(NOW)).toBe(0);
   });
 
   it("delivers a +1 LinUCB reward when a matching proposal exists", async () => {
-    const { service, events, banditUpdate, armSave } = makeService(
+    const { service, events, banditUpdate, armSave } = await makeService(
       [[row({ id: "s1" })]],
       {
         proposal: {
@@ -203,13 +213,13 @@ describe("RetainedSessionsService.sweep", () => {
   });
 
   it("skips the bandit update when there is no LinUCB proposal", async () => {
-    const { service, banditUpdate } = makeService([[row({ id: "s1" })]]);
+    const { service, banditUpdate } = await makeService([[row({ id: "s1" })]]);
     await service.sweep(NOW);
     expect(banditUpdate).not.toHaveBeenCalled();
   });
 
   it("reinforces the user's preference matrix with the RETAINED weight (0.25) on the kept hour, regardless of policy (Item 3B3)", async () => {
-    const { service, userUpdates } = makeService([
+    const { service, userUpdates } = await makeService([
       [
         row({
           id: "s1",
@@ -229,7 +239,7 @@ describe("RetainedSessionsService.sweep", () => {
   });
 
   it("reinforces the preference matrix even when there is no LinUCB proposal for the session", async () => {
-    const { service, userUpdates, banditUpdate } = makeService([
+    const { service, userUpdates, banditUpdate } = await makeService([
       [row({ id: "s1" })],
     ]);
 

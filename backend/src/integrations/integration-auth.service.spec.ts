@@ -1,3 +1,4 @@
+import { Test, TestingModule } from "@nestjs/testing";
 import { LMSService } from "../lms/lms.service";
 import { PortalAPIService } from "../portal/portal-api.service";
 import { IntegrationAuthService } from "./integration-auth.service";
@@ -7,13 +8,17 @@ describe("IntegrationAuthService", () => {
   const authenticate = jest.fn();
   let service: IntegrationAuthService;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     login.mockReset();
     authenticate.mockReset();
-    service = new IntegrationAuthService(
-      { login } as unknown as LMSService,
-      { authenticate } as unknown as PortalAPIService,
-    );
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        IntegrationAuthService,
+        { provide: LMSService, useValue: { login } },
+        { provide: PortalAPIService, useValue: { authenticate } },
+      ],
+    }).compile();
+    service = module.get<IntegrationAuthService>(IntegrationAuthService);
   });
 
   it("accepts a good LMS login", async () => {

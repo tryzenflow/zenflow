@@ -1,7 +1,11 @@
+import { Test, TestingModule } from "@nestjs/testing";
 import type { User } from "../../../generated/prisma";
 import { ScheduleInfeasibleException } from "../schedule-infeasible.exception";
 import { wouldConflict } from "./conflict-check";
 import { ConflictRescheduleService } from "./conflict-reschedule.service";
+import { PrismaService } from "../../prisma/prisma.service";
+import { TaskPlacementService } from "./task-placement.service";
+import { DisplacementService } from "./displacement.service";
 
 jest.mock("./conflict-check", () => ({ wouldConflict: jest.fn() }));
 const conflicts = wouldConflict as jest.MockedFunction<typeof wouldConflict>;
@@ -21,7 +25,7 @@ const row = (id: string, start: string, seriesId: string | null = null) => ({
 
 type Move = { id: string; fromMs: number; toMs: number };
 
-function make(rows: ReturnType<typeof row>[]) {
+async function make(rows: ReturnType<typeof row>[]) {
   const prisma = {
     session: {
       findMany: jest
@@ -49,11 +53,15 @@ function make(rows: ReturnType<typeof row>[]) {
       ),
     ),
   };
-  const svc = new ConflictRescheduleService(
-    prisma as never,
-    placement as never,
-    displacement as never,
-  );
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      ConflictRescheduleService,
+      { provide: PrismaService, useValue: prisma },
+      { provide: TaskPlacementService, useValue: placement },
+      { provide: DisplacementService, useValue: displacement },
+    ],
+  }).compile();
+  const svc = module.get<ConflictRescheduleService>(ConflictRescheduleService);
   return { svc, prisma, placement, displacement };
 }
 
@@ -64,7 +72,7 @@ beforeEach(() => {
 
 describe("ConflictRescheduleService.rescheduleAll", () => {
   it("moves a lone conflicting task through single placement", async () => {
-    const { svc, placement, displacement } = make([
+    const { svc, placement, displacement } = await make([
       row("t", "2026-06-09T09:00:00.000Z"),
     ]);
     const to = at("2026-06-09T13:00:00.000Z");
@@ -82,7 +90,7 @@ describe("ConflictRescheduleService.rescheduleAll", () => {
   });
 
   it("re-spreads a series' conflicting sittings in ONE call (no lone-task placements)", async () => {
-    const { svc, placement, displacement } = make([
+    const { svc, placement, displacement } = await make([
       row("a", "2026-06-09T09:00:00.000Z", "s1"),
       row("b", "2026-06-11T09:00:00.000Z", "s1"),
       row("c", "2026-06-13T09:00:00.000Z", "s1"),
@@ -132,7 +140,7 @@ describe("ConflictRescheduleService.rescheduleAll", () => {
   });
 
   it("falls back to single placement when the respread leaves a sitting unplaced", async () => {
-    const { svc, placement, displacement } = make([
+    const { svc, placement, displacement } = await make([
       row("a", "2026-06-09T09:00:00.000Z", "s1"),
     ]);
     placement.planSeriesRespread.mockResolvedValue([
@@ -150,7 +158,7 @@ describe("ConflictRescheduleService.rescheduleAll", () => {
   });
 
   it("one task that can't be placed is reported, the rest still move", async () => {
-    const { svc, placement } = make([
+    const { svc, placement } = await make([
       row("x", "2026-06-09T09:00:00.000Z"),
       row("y", "2026-06-10T09:00:00.000Z"),
     ]);
@@ -168,7 +176,7 @@ describe("ConflictRescheduleService.rescheduleAll", () => {
 
   it("leaves tasks that no longer conflict alone", async () => {
     conflicts.mockResolvedValue(false);
-    const { svc, placement, displacement } = make([
+    const { svc, placement, displacement } = await make([
       row("t", "2026-06-09T09:00:00.000Z", "s1"),
     ]);
 

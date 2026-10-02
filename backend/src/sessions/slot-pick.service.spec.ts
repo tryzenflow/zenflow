@@ -1,5 +1,8 @@
+import { Test, TestingModule } from "@nestjs/testing";
 import { SchedulingModel, type User } from "../../generated/prisma";
 import { SlotPickService } from "./slot-pick.service";
+import { PrismaService } from "../prisma/prisma.service";
+import { SchedulingFeedbackService } from "../scheduler/io/scheduling-feedback.service";
 import { SLOT_TAKEN_MESSAGE, SlotTakenException } from "./slot-taken.exception";
 
 const user = {
@@ -37,7 +40,7 @@ function row(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function makeService(
+async function makeService(
   existing: ReturnType<typeof row>,
   siblings: { scheduledStartTime: Date; durationMinutes: number }[] = [],
 ) {
@@ -73,16 +76,20 @@ function makeService(
     onFirstMove: jest.fn().mockResolvedValue(undefined),
     reinforcePreferenceMove: jest.fn().mockResolvedValue(undefined),
   };
-  const service = new SlotPickService(
-    prisma as never,
-    schedulingFeedback as never,
-  );
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      SlotPickService,
+      { provide: PrismaService, useValue: prisma },
+      { provide: SchedulingFeedbackService, useValue: schedulingFeedback },
+    ],
+  }).compile();
+  const service = module.get<SlotPickService>(SlotPickService);
   return { service, schedulingFeedback, prisma, tx };
 }
 
 describe("SlotPickService — matrix reinforcement", () => {
   it("picking the alternative on a never-moved session reinforces the matrix like a drag (old hour down, new hour up)", async () => {
-    const { service, schedulingFeedback } = makeService(row());
+    const { service, schedulingFeedback } = await makeService(row());
 
     await service.recordPick(
       "task-1",
@@ -106,7 +113,7 @@ describe("SlotPickService — matrix reinforcement", () => {
   });
 
   it("does not reinforce when the session was already moved", async () => {
-    const { service, schedulingFeedback } = makeService(
+    const { service, schedulingFeedback } = await makeService(
       row({ lastMovedAt: new Date("2026-06-10T00:00:00.000Z") }),
     );
 
@@ -124,7 +131,7 @@ describe("SlotPickService — series sibling clash (#58)", () => {
   const seriesRow = () => row({ seriesId: "series-1", sessionIndex: 1 });
 
   it("409 SLOT_TAKEN when the alternative overlaps a live sibling; nothing moved or recorded", async () => {
-    const { service, prisma, tx } = makeService(seriesRow(), [
+    const { service, prisma, tx } = await makeService(seriesRow(), [
       // 10:30-11:30 overlaps the 10:00-11:00 alternative
       {
         scheduledStartTime: new Date("2026-06-11T10:30:00.000Z"),
@@ -162,7 +169,7 @@ describe("SlotPickService — series sibling clash (#58)", () => {
   });
 
   it("applies the alternative when siblings only touch it (half-open intervals)", async () => {
-    const { service, tx, prisma } = makeService(seriesRow(), [
+    const { service, tx, prisma } = await makeService(seriesRow(), [
       {
         scheduledStartTime: new Date("2026-06-11T11:00:00.000Z"),
         durationMinutes: 60,
@@ -188,7 +195,7 @@ describe("SlotPickService — series sibling clash (#58)", () => {
   });
 
   it("a non-series session never queries siblings", async () => {
-    const { service, prisma } = makeService(row());
+    const { service, prisma } = await makeService(row());
     await service.recordPick(
       "task-1",
       { slotProposalId: "prop-1", chose: "alternative" },

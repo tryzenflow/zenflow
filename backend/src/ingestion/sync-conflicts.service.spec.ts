@@ -1,4 +1,7 @@
+import { Test, TestingModule } from "@nestjs/testing";
 import { SyncConflictsService } from "./sync-conflicts.service";
+import { PrismaService } from "../prisma/prisma.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import {
   conflictCountLabel,
   findConflictingTaskIds,
@@ -7,7 +10,7 @@ import {
 const NOW = new Date("2026-09-01T00:00:00.000Z");
 const at = (iso: string) => new Date(iso);
 
-function make(opts: {
+async function make(opts: {
   fixed?: { scheduledStartTime: Date; durationMinutes: number }[];
   tasks?: { id: string; scheduledStartTime: Date; durationMinutes: number }[];
   open?: { conflictSessionIds: string[] }[];
@@ -29,7 +32,14 @@ function make(opts: {
     ),
     notify: jest.fn(),
   };
-  const svc = new SyncConflictsService(prisma as never, notifications as never);
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      SyncConflictsService,
+      { provide: PrismaService, useValue: prisma },
+      { provide: NotificationsService, useValue: notifications },
+    ],
+  }).compile();
+  const svc = module.get<SyncConflictsService>(SyncConflictsService);
   return { svc, notifications, prisma };
 }
 
@@ -73,7 +83,10 @@ describe("SyncConflictsService.detectAndNotify", () => {
   };
 
   it("raises a per-source notification with the count and 'Reschedule them all?'", async () => {
-    const { svc, notifications } = make({ fixed: [lecture], tasks: [clash] });
+    const { svc, notifications } = await make({
+      fixed: [lecture],
+      tasks: [clash],
+    });
     expect(await run(svc, "LECTURE")).toBe(1);
     const dto = notifications.raiseConflict.mock.calls[0][1] as {
       eventName: string;
@@ -91,7 +104,10 @@ describe("SyncConflictsService.detectAndNotify", () => {
     ["EXAM", "sync_conflict.exam"],
     ["ASSIGNMENT", "sync_conflict.assignment"],
   ] as const)("uses the %s eventName", async (type, eventName) => {
-    const { svc, notifications } = make({ fixed: [lecture], tasks: [clash] });
+    const { svc, notifications } = await make({
+      fixed: [lecture],
+      tasks: [clash],
+    });
     await run(svc, type);
     expect(
       (
@@ -103,7 +119,7 @@ describe("SyncConflictsService.detectAndNotify", () => {
   });
 
   it("is a no-op when nothing conflicts", async () => {
-    const { svc, notifications } = make({
+    const { svc, notifications } = await make({
       fixed: [lecture],
       tasks: [{ ...clash, scheduledStartTime: at("2026-09-02T12:00:00.000Z") }],
     });
@@ -112,13 +128,13 @@ describe("SyncConflictsService.detectAndNotify", () => {
   });
 
   it("is a no-op when the sync wrote nothing new", async () => {
-    const { svc, notifications } = make({ fixed: [], tasks: [clash] });
+    const { svc, notifications } = await make({ fixed: [], tasks: [clash] });
     expect(await run(svc, "LECTURE")).toBe(0);
     expect(notifications.raiseConflict).not.toHaveBeenCalled();
   });
 
   it("dedupes against an identical still-open notification", async () => {
-    const { svc, notifications } = make({
+    const { svc, notifications } = await make({
       fixed: [lecture],
       tasks: [clash],
       open: [{ conflictSessionIds: ["t1"] }],
@@ -128,7 +144,7 @@ describe("SyncConflictsService.detectAndNotify", () => {
   });
 
   it("raises again when the conflict set changed", async () => {
-    const { svc, notifications } = make({
+    const { svc, notifications } = await make({
       fixed: [lecture],
       tasks: [clash, { ...clash, id: "t2" }],
       open: [{ conflictSessionIds: ["t1"] }],

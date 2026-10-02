@@ -1,3 +1,4 @@
+import { Test, TestingModule } from "@nestjs/testing";
 import { NotFoundException } from "@nestjs/common";
 import { Prisma, type User } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
@@ -118,18 +119,24 @@ function row(over: Partial<Row> & { id: string }): Row {
   };
 }
 
-function makeService(rows: Row[]) {
+async function makeService(rows: Row[]) {
   const db = makePrismaDouble(rows);
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      NotificationsService,
+      { provide: PrismaService, useValue: db.client },
+    ],
+  }).compile();
   return {
     db,
-    service: new NotificationsService(db.client as unknown as PrismaService),
+    service: module.get<NotificationsService>(NotificationsService),
   };
 }
 
 describe("NotificationsService", () => {
   describe("list", () => {
     it("returns newest first, regardless of read state", async () => {
-      const { service } = makeService([
+      const { service } = await makeService([
         row({ id: "n1", sentAt: new Date("2026-09-01T00:00:00.000Z") }),
         row({
           id: "n2",
@@ -145,7 +152,7 @@ describe("NotificationsService", () => {
     });
 
     it("counts unread across the whole inbox, not just the page", async () => {
-      const { service } = makeService([
+      const { service } = await makeService([
         row({ id: "n1" }),
         row({ id: "n2" }),
         row({ id: "n3" }),
@@ -158,7 +165,7 @@ describe("NotificationsService", () => {
     });
 
     it("pages with limit and offset", async () => {
-      const { service } = makeService([
+      const { service } = await makeService([
         row({ id: "n1", sentAt: new Date("2026-09-01T00:00:00.000Z") }),
         row({ id: "n2", sentAt: new Date("2026-09-02T00:00:00.000Z") }),
         row({ id: "n3", sentAt: new Date("2026-09-03T00:00:00.000Z") }),
@@ -170,7 +177,7 @@ describe("NotificationsService", () => {
     });
 
     it("never returns another student's notifications", async () => {
-      const { service } = makeService([
+      const { service } = await makeService([
         row({ id: "n1" }),
         row({ id: "n2", userId: "u2" }),
       ]);
@@ -182,7 +189,9 @@ describe("NotificationsService", () => {
     });
 
     it("serializes instants as ISO strings and absences as null", async () => {
-      const { service } = makeService([row({ id: "n1", sessionId: null })]);
+      const { service } = await makeService([
+        row({ id: "n1", sessionId: null }),
+      ]);
 
       const [dto] = (await service.list(USER, {})).notifications;
 
@@ -203,7 +212,7 @@ describe("NotificationsService", () => {
 
   describe("markRead", () => {
     it("stamps readAt", async () => {
-      const { db, service } = makeService([row({ id: "n1" })]);
+      const { db, service } = await makeService([row({ id: "n1" })]);
 
       const dto = await service.markRead(USER, "n1");
 
@@ -213,7 +222,9 @@ describe("NotificationsService", () => {
 
     it("is idempotent and keeps the first instant", async () => {
       const first = new Date("2026-09-02T00:00:00.000Z");
-      const { db, service } = makeService([row({ id: "n1", readAt: first })]);
+      const { db, service } = await makeService([
+        row({ id: "n1", readAt: first }),
+      ]);
 
       const dto = await service.markRead(USER, "n1");
 
@@ -222,7 +233,7 @@ describe("NotificationsService", () => {
     });
 
     it("404s on another student's notification", async () => {
-      const { service } = makeService([row({ id: "n1", userId: "u2" })]);
+      const { service } = await makeService([row({ id: "n1", userId: "u2" })]);
 
       await expect(service.markRead(USER, "n1")).rejects.toBeInstanceOf(
         NotFoundException,
@@ -230,7 +241,7 @@ describe("NotificationsService", () => {
     });
 
     it("404s on an id that does not exist", async () => {
-      const { service } = makeService([]);
+      const { service } = await makeService([]);
 
       await expect(service.markRead(USER, "nope")).rejects.toBeInstanceOf(
         NotFoundException,
@@ -240,7 +251,7 @@ describe("NotificationsService", () => {
 
   describe("markActionTaken", () => {
     it("stamps actionTakenAt without touching readAt", async () => {
-      const { db, service } = makeService([row({ id: "n1" })]);
+      const { db, service } = await makeService([row({ id: "n1" })]);
 
       const dto = await service.markActionTaken(USER, "n1");
 
@@ -250,7 +261,7 @@ describe("NotificationsService", () => {
     });
 
     it("404s on another student's notification", async () => {
-      const { service } = makeService([row({ id: "n1", userId: "u2" })]);
+      const { service } = await makeService([row({ id: "n1", userId: "u2" })]);
 
       await expect(service.markActionTaken(USER, "n1")).rejects.toBeInstanceOf(
         NotFoundException,
@@ -260,7 +271,7 @@ describe("NotificationsService", () => {
 
   describe("remove", () => {
     it("hard-deletes the caller's notification", async () => {
-      const { db, service } = makeService([
+      const { db, service } = await makeService([
         row({ id: "n1" }),
         row({ id: "n2" }),
       ]);
@@ -270,7 +281,9 @@ describe("NotificationsService", () => {
     });
 
     it("404s on another student's notification, leaving it in place", async () => {
-      const { db, service } = makeService([row({ id: "n1", userId: "u2" })]);
+      const { db, service } = await makeService([
+        row({ id: "n1", userId: "u2" }),
+      ]);
 
       await expect(service.remove(USER, "n1")).rejects.toBeInstanceOf(
         NotFoundException,
@@ -279,7 +292,7 @@ describe("NotificationsService", () => {
     });
 
     it("404s on an id that does not exist", async () => {
-      const { service } = makeService([]);
+      const { service } = await makeService([]);
 
       await expect(service.remove(USER, "nope")).rejects.toBeInstanceOf(
         NotFoundException,
@@ -289,7 +302,7 @@ describe("NotificationsService", () => {
 
   describe("create", () => {
     it("auto-materializes a session titled from the real ingested title, never a hardcoded demo title", async () => {
-      const { db, service } = makeService([]);
+      const { db, service } = await makeService([]);
 
       await service.create("u1", {
         eventName: "lecture.group_updated",
@@ -304,7 +317,7 @@ describe("NotificationsService", () => {
     });
 
     it("does not synthesize a session when materializeSession is false", async () => {
-      const { db, service } = makeService([]);
+      const { db, service } = await makeService([]);
 
       const row = await service.create("u1", {
         eventName: "lecture.removed",
@@ -322,7 +335,7 @@ describe("NotificationsService", () => {
 
   describe("raiseSamples", () => {
     it("writes a row and emits NEW_SESSION for each, cycling the sample styles", async () => {
-      const { db, service } = makeService([]);
+      const { db, service } = await makeService([]);
       const emitted: { title: string }[] = [];
       service.notificationEmitter.on("session.new", (p: { title: string }) =>
         emitted.push(p),
@@ -338,7 +351,7 @@ describe("NotificationsService", () => {
     });
 
     it("does not number the title for a single notification", async () => {
-      const { service } = makeService([]);
+      const { service } = await makeService([]);
 
       const [only] = await service.raiseSamples(USER.id, 1);
 
@@ -346,7 +359,7 @@ describe("NotificationsService", () => {
     });
 
     it("clamps count to at least 1", async () => {
-      const { db, service } = makeService([]);
+      const { db, service } = await makeService([]);
 
       await service.raiseSamples(USER.id, 0);
 

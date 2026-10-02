@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
+import { Test, TestingModule } from "@nestjs/testing";
+import { ConfigService } from "@nestjs/config";
 import { cert, deleteApp, initializeApp } from "firebase-admin/app";
 import { getMessaging } from "firebase-admin/messaging";
 import { FcmSender } from "./fcm.sender";
@@ -35,16 +37,19 @@ const FAKE_SA = Buffer.from(
   }),
 ).toString("base64");
 
-function make(raw: string | undefined) {
+async function make(raw: string | undefined) {
   const config = { get: jest.fn().mockReturnValue(raw) };
-  return new FcmSender(config as never);
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [FcmSender, { provide: ConfigService, useValue: config }],
+  }).compile();
+  return module.get<FcmSender>(FcmSender);
 }
 
 describe("FcmSender", () => {
   afterEach(() => jest.clearAllMocks());
 
   it("is disabled with no FCM_SERVICE_ACCOUNT: no init, send is a no-op", async () => {
-    const sender = make(undefined);
+    const sender = await make(undefined);
 
     expect(sender.enabled).toBe(false);
     expect(initializeApp).not.toHaveBeenCalled();
@@ -55,8 +60,8 @@ describe("FcmSender", () => {
     expect(sendEachForMulticast).not.toHaveBeenCalled();
   });
 
-  it("is disabled when FCM_SERVICE_ACCOUNT is not valid base64 JSON", () => {
-    const sender = make("not-base64-json!!!");
+  it("is disabled when FCM_SERVICE_ACCOUNT is not valid base64 JSON", async () => {
+    const sender = await make("not-base64-json!!!");
     expect(sender.enabled).toBe(false);
   });
 
@@ -64,7 +69,7 @@ describe("FcmSender", () => {
     sendEachForMulticast.mockResolvedValue({
       responses: [{ success: true }, { success: true }],
     });
-    const sender = make(FAKE_SA);
+    const sender = await make(FAKE_SA);
 
     expect(sender.enabled).toBe(true);
     expect(cert).toHaveBeenCalled();
@@ -100,7 +105,7 @@ describe("FcmSender", () => {
         { success: false, error: { code: "messaging/internal-error" } },
       ],
     });
-    const sender = make(FAKE_SA);
+    const sender = await make(FAKE_SA);
 
     const res = await sender.send(["good", "dead", "flaky"], MSG);
 
@@ -109,7 +114,7 @@ describe("FcmSender", () => {
 
   it("chunks token lists over the 500 multicast limit", async () => {
     sendEachForMulticast.mockResolvedValue({ responses: [] });
-    const sender = make(FAKE_SA);
+    const sender = await make(FAKE_SA);
 
     await sender.send(
       Array.from({ length: 501 }, (_, i) => `t${i}`),
@@ -123,7 +128,7 @@ describe("FcmSender", () => {
 
   it("swallows a thrown multicast", async () => {
     sendEachForMulticast.mockRejectedValue(new Error("network"));
-    const sender = make(FAKE_SA);
+    const sender = await make(FAKE_SA);
 
     await expect(sender.send(["t1"], MSG)).resolves.toEqual({
       sent: 0,
@@ -132,7 +137,7 @@ describe("FcmSender", () => {
   });
 
   it("deletes the firebase app on module destroy", async () => {
-    const sender = make(FAKE_SA);
+    const sender = await make(FAKE_SA);
     await sender.onModuleDestroy();
     expect(deleteApp).toHaveBeenCalled();
   });
