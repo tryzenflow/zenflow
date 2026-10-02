@@ -17,6 +17,7 @@ _PURPOSES = {
     "reaction": 5,
     "tiebreak": 6,
     "bootstrap": 7,
+    "daytime": 8,
 }
 
 

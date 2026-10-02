@@ -44,10 +44,12 @@ from .world import (
     Interval,
     Task,
     build_calendar,
+    build_daytime,
     build_drift,
     build_tasks,
     day_index,
     day_start_ms,
+    daytime_pull,
     iso_weekday_of,
     n_calendar_days,
 )
@@ -133,8 +135,12 @@ class World:
         policy: str,
         alpha: float,
         scenario: str,
+        daytime: NDArray[np.float64] | None = None,
     ) -> None:
         self.cfg = cfg
+        self.daytime = (
+            build_daytime(cfg.seed, profile, len(drift)) if daytime is None else daytime
+        )
         self.p = profile
         self.tasks = tasks
         self.cal = calendar
@@ -163,11 +169,13 @@ class World:
         return _Day(idx, start, end, occ, self.cal.fixed_hours[idx], flex.get(idx, 0.0))
 
     def _ctx(self, day: _Day, deadline_day: int) -> DayContext:
+        days_left = float(max(0, deadline_day - day.idx))
         return DayContext(
             weekday=iso_weekday_of(day.idx),
-            days_left=float(max(0, deadline_day - day.idx)),
+            days_left=days_left,
             fixed_hours=day.fixed_hours,
             drift_h=float(self.drift[day.idx]),
+            daytime_pull=daytime_pull(self.p, self.daytime[day.idx], days_left),
         )
 
     # ---- slot machinery ---------------------------------------------------
@@ -473,14 +481,17 @@ def run_student(cfg: SimConfig, student_id: int) -> StudentResult:
     n_days = n_calendar_days(cfg.n_events)
     calendar = build_calendar(cfg.seed, student_id, n_days)
     drift = build_drift(cfg.seed, profile, n_days)
+    daytime = build_daytime(cfg.seed, profile, n_days)
     out: dict[str, dict[str, dict[str, NDArray[np.float64]]]] = {}
     for name in cfg.scenarios:
         tasks = build_tasks(cfg.seed, student_id, SCENARIO_BY_NAME[name], cfg.n_events)
         worlds: dict[str, dict[str, NDArray[np.float64]]] = {}
-        h = World(cfg, profile, tasks, calendar, drift, HEURISTIC, 0.0, name)
+        h = World(cfg, profile, tasks, calendar, drift, HEURISTIC, 0.0, name, daytime)
         worlds[HEURISTIC] = h.run().arrays()
         for alpha in cfg.alphas:
-            lw = World(cfg, profile, tasks, calendar, drift, "linucb", alpha, name)
+            lw = World(
+                cfg, profile, tasks, calendar, drift, "linucb", alpha, name, daytime
+            )
             worlds[linucb_label(alpha)] = lw.run().arrays()
         out[name] = worlds
     return StudentResult(student_id, profile.chronotype, profile.behavior, out)

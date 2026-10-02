@@ -116,6 +116,32 @@ def build_drift(seed: int, p: StudentProfile, n_days: int) -> NDArray[np.float64
     return np.asarray(np.clip(walk, -4.0, 4.0), dtype=np.float64)
 
 
+def build_daytime(seed: int, p: StudentProfile, n_days: int) -> NDArray[np.float64]:
+    """Per-day uniforms ``(n_days, 2)``: obligation-day draw and exam draw.
+
+    A pure function of ``(seed, student)``: both policy worlds read the same
+    values, so the daytime pull is shared luck. Unused by non-night-owls.
+    """
+    rng = stream(seed, "daytime", p.student_id)
+    return np.asarray(rng.random((n_days, 2)), dtype=np.float64)
+
+
+def daytime_pull(
+    p: StudentProfile, draws: NDArray[np.float64], days_left: float
+) -> float:
+    """Pull toward daytime (0..1) of a candidate day for a task ``days_left`` from
+    its deadline: full on an obligation day (probability ``daytime_freq``),
+    otherwise an exam-style pull that grows toward the deadline for the
+    ``daytime_exam_prob`` share of days."""
+    if not p.daytime_strength:
+        return 0.0
+    if draws[0] < p.daytime_freq:
+        return 1.0
+    if draws[1] < p.daytime_exam_prob:
+        return float(math.exp(-days_left / 2.0))
+    return 0.0
+
+
 def build_tasks(
     seed: int, student_id: int, scenario: Scenario, n_events: int
 ) -> list[Task]:

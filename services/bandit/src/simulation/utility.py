@@ -11,7 +11,8 @@ Deliberately neither policy's model class:
 
 It has a static part (the chronotype field) and context-dependent parts
 (weekend shift, busy-day evening pull, crammer lateness near the due date,
-planner front-loading, weekender weekend bonus) plus a slow drift of the peak.
+planner front-loading, weekender weekend bonus, the night owl's daytime pull
+on obligation days and exam-proximity tasks) plus a slow drift of the peak.
 """
 
 from __future__ import annotations
@@ -42,6 +43,7 @@ class DayContext:
     days_left: float  # whole days from this day to the deadline day
     fixed_hours: float  # lectures/exams/DND on the day
     drift_h: float  # drift of the field's peak on this day (hours)
+    daytime_pull: float = 0.0  # night owls: how much daytime obligations bite (0..1)
 
 
 def slot_utility(
@@ -61,6 +63,12 @@ def slot_utility(
     load = min(ctx.fixed_hours / 6.0, 1.0)
     evening = np.exp(-0.5 * (_circ(h, 20.0) / 2.0) ** 2)
     u = field * (1.0 - 0.35 * load) + 0.35 * load * evening
+    if p.daytime_strength and ctx.daytime_pull:
+        # daytime obligations: damp the late-night peak and lift the afternoon,
+        # in proportion to the pull (a day x task context term, not a table cell)
+        k = p.daytime_strength * ctx.daytime_pull
+        day = np.exp(-0.5 * (_circ(h, 14.0) / 3.0) ** 2)
+        u = u * (1.0 - 0.5 * k) + 0.9 * k * day
     # the hours opposite the peak (sleep) are bad for everyone
     u = u - 0.45 * np.exp(-0.5 * (_circ(h, peak + 12.0) / 2.0) ** 2)
     if p.weekend_weight:

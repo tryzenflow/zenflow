@@ -6,7 +6,7 @@ seeded jitter, so two "night owl / crammer" students are similar, not equal.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from .rng import stream
 
@@ -27,6 +27,11 @@ _BEHAVIOR = {
 }
 
 
+# night owls still have daytime obligations: (strength, obligation-day frequency,
+# exam-proximity probability), each jittered per student; zero for other chronotypes
+_DAYTIME_PULL = {"night_owl": (1.0, 0.30, 0.5)}
+
+
 @dataclass(frozen=True)
 class StudentProfile:
     student_id: int
@@ -43,6 +48,12 @@ class StudentProfile:
     cram_weight: float
     plan_weight: float
     weekend_weight: float
+    # night-owl daytime pull (0 = never): how strongly a pull day lifts daytime
+    # slots / damps the late-night peak, the share of days with daytime
+    # obligations, and the chance a task near its deadline is an "exam" task
+    daytime_strength: float = 0.0
+    daytime_freq: float = 0.0
+    daytime_exam_prob: float = 0.0
 
     @property
     def cell(self) -> str:
@@ -81,7 +92,7 @@ def make_student(seed: int, student_id: int, balanced: bool = True) -> StudentPr
     def jit(v: float, rel: float = 0.25) -> float:
         return float(v * rng.uniform(1 - rel, 1 + rel))
 
-    return StudentProfile(
+    sp = StudentProfile(
         student_id=student_id,
         chronotype=chrono,
         behavior=behavior,
@@ -96,4 +107,12 @@ def make_student(seed: int, student_id: int, balanced: bool = True) -> StudentPr
         cram_weight=jit(cram),
         plan_weight=jit(plan),
         weekend_weight=jit(wknd),
+    )
+    # drawn last (and always), so adding the pull shifts no earlier draw
+    d_str, d_freq, d_exam = _DAYTIME_PULL.get(chrono, (0.0, 0.0, 0.0))
+    return replace(
+        sp,
+        daytime_strength=jit(d_str),
+        daytime_freq=min(1.0, jit(d_freq, 0.4)),
+        daytime_exam_prob=min(1.0, jit(d_exam, 0.3)),
     )
