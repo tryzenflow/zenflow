@@ -79,12 +79,12 @@
   <rect x="280" y="910" width="400" height="90" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
   <text x="480" y="940" text-anchor="middle" font-size="14" font-weight="700" fill="#2B2724">POST /v1/place</text>
   <text x="480" y="958" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">heuristic + LinUCB slot-first + series spread + displacement</text>
-  <text x="480" y="976" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.6">pure numpy, stateless</text>
+  <text x="480" y="976" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.6">deterministic, stateless</text>
 
   <rect x="800" y="910" width="280" height="90" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
   <text x="940" y="940" text-anchor="middle" font-size="14" font-weight="700" fill="#2B2724">POST /update</text>
   <text x="940" y="958" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">delayed reward → BanditArmState</text>
-  <text x="940" y="976" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.6">pure numpy, stateless</text>
+  <text x="940" y="976" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.6">deterministic, stateless</text>
 
   <!-- Scoring sub-panel -->
   <rect x="340" y="1040" width="820" height="180" rx="12" fill="#F5F3F0" stroke="#FF6900" stroke-width="1.5" stroke-dasharray="6 5"/>
