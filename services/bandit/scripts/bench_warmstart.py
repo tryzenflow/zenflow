@@ -18,18 +18,25 @@ import json
 import os
 import sys
 import time
-from collections import defaultdict
+import zlib
 from collections.abc import Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 from numpy.typing import NDArray
 
 from src.simulation.engine import HEURISTIC, SimConfig, linucb_label
-from src.simulation.metrics import BUCKET_LABELS, paired_rows, time_to_threshold
+from src.simulation.metrics import (
+    BUCKET_LABELS,
+    N_BOOT,
+    paired_rows,
+    time_to_threshold,
+)
 from src.simulation.prior import PriorSpec
+from src.simulation.rng import stream
 from src.simulation.run import _run_one
 
 Floats = NDArray[np.float64]
@@ -114,15 +121,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--events", type=int, default=60)
     ap.add_argument("--workers", type=int, default=min(16, os.cpu_count() or 1))
     ap.add_argument("--priors", nargs="+", default=["pref:2", "pref:5", "pref:10"])
+    ap.add_argument("--n-boot", type=int, default=N_BOOT)
     ap.add_argument("--out-dir", type=Path, default=Path("sim_out") / "warmstart")
     a = ap.parse_args(argv)
     priors = tuple((p.split(":")[0], float(p.split(":")[1])) for p in a.priors)
     names = [PriorSpec(m, n).tag for m, n in priors]
     pol_names = ["heuristic", "cold", *names]
 
-    # acc[group][policy] -> (B,4) sums and ttt lists; group = "ALL" or a cell
-    sums: dict[str, dict[str, Floats]] = defaultdict(dict)
-    ttts: dict[str, dict[str, list[Floats]]] = defaultdict(lambda: defaultdict(list))
+    # one record per student (all seeds pooled): cell, sums[policy] (B,4), ttt[policy]
+    cells: list[str] = []
+    recs: list[dict[str, Floats]] = []
+    ttt_recs: list[dict[str, float]] = []
     t0 = time.perf_counter()
     with ProcessPoolExecutor(max_workers=a.workers) as pool:
         for seed in parse_seeds(a.seeds):
@@ -132,28 +141,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             jobs = [(cfg, sid) for sid in range(cfg.n_students)]
             for cell, s, t in pool.map(_job, jobs, chunksize=2):
-                for grp in ("ALL", cell):
-                    for pol, g in s.items():
-                        sums[grp][pol] = sums[grp].get(pol, 0.0) + g
-                    for pol, v in t.items():
-                        ttts[grp][pol].append(v)
+                cells.append(cell)
+                recs.append(s)
+                ttt_recs.append({p: float(v.mean()) for p, v in t.items()})
             print(f"seed {seed} done {time.perf_counter() - t0:.0f}s", file=sys.stderr)
 
-    out: dict[str, dict[str, dict[str, float]]] = {}
-    for grp in sums:
-        out[grp] = {}
-        for pol in pol_names:
-            g = sums[grp][pol]
-            n = g[:, 0].sum()
-            row = {m: float(g[:, j].sum() / n) for j, m in enumerate(METRICS, start=1)}
-            row["ttt"] = float(np.concatenate(ttts[grp][pol]).mean())
-            row["n"] = float(n)
-            late = g[4]  # 40+ bucket
-            row["regret40"] = float(late[1] / late[0])
-            row["accept40"] = float(late[2] / late[0])
-            early = g[0] + g[1]  # 0-10
-            row["regret0_10"] = float(early[1] / early[0])
-            out[grp][pol] = row
+    out = summarize(np.array(cells), recs, ttt_recs, pol_names, a.n_boot)
     a.out_dir.mkdir(parents=True, exist_ok=True)
     (a.out_dir / "summary.json").write_text(json.dumps(out, indent=1), encoding="utf-8")
     md = render(out, pol_names)
@@ -163,15 +156,122 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
-def render(out: dict[str, dict[str, dict[str, float]]], pols: list[str]) -> str:
+_CHUNK_ELEMS = 4_000_000
+# metric -> (numerator column, denominator bucket columns, numerator buckets)
+_BUCKETS = {"all": slice(None), "0_10": slice(0, 2), "40": slice(4, 5)}
+_SPECS = {
+    "regret": (1, "all"),
+    "accept": (2, "all"),
+    "drag": (3, "all"),
+    "regret0_10": (1, "0_10"),
+    "regret40": (1, "40"),
+    "accept40": (2, "40"),
+}
+
+
+def pairs(pols: list[str]) -> list[tuple[str, str]]:
+    """``(a, b)`` differences ``a - b``: cold vs heuristic, each warm vs both."""
+    out = [("cold", "heuristic")]
+    for w in pols[2:]:
+        out += [(w, "heuristic"), (w, "cold")]
+    return out
+
+
+def _student_terms(
+    recs: list[dict[str, Floats]], ttt: list[dict[str, float]], pol: str
+) -> dict[str, tuple[Floats, Floats]]:
+    """Per-student ``(numerator, denominator)`` of every metric for one policy."""
+    g = np.stack([r[pol] for r in recs])  # (N, B, 4)
+    terms: dict[str, tuple[Floats, Floats]] = {}
+    for m, (col, bk) in _SPECS.items():
+        sl = _BUCKETS[bk]
+        terms[m] = (g[:, sl, col].sum(axis=1), g[:, sl, 0].sum(axis=1))
+    t = np.array([x[pol] for x in ttt])
+    terms["ttt"] = (t, np.ones_like(t))
+    return terms
+
+
+def summarize(
+    cells: NDArray[np.str_],
+    recs: list[dict[str, Floats]],
+    ttt: list[dict[str, float]],
+    pols: list[str],
+    n_boot: int,
+) -> dict[str, dict[str, dict[str, object]]]:
+    """Point estimates + 95% student-level cluster-bootstrap CIs, overall and per cell.
+
+    Every policy (and every paired difference) is resampled with the *same* student
+    indices, so the difference CIs respect that the systems share students.
+    """
+    terms = {p: _student_terms(recs, ttt, p) for p in pols}
+    metrics = [*_SPECS, "ttt"]
+    out: dict[str, dict[str, dict[str, object]]] = {}
+    groups = {"ALL": np.ones(cells.size, dtype=bool)}
+    groups.update({c: cells == c for c in sorted(set(cells.tolist()))})
+    for grp, keep in groups.items():
+        rng = stream(0, "bootstrap", zlib.crc32(f"warmstart|{grp}".encode()))
+        sub = {
+            p: {m: (n[keep], d[keep]) for m, (n, d) in terms[p].items()} for p in pols
+        }
+        k = int(keep.sum())
+        point = {
+            p: {m: float(n.sum() / d.sum()) for m, (n, d) in sub[p].items()}
+            for p in pols
+        }
+        est: dict[str, dict[str, list[Floats]]] = {
+            p: {m: [] for m in metrics} for p in pols
+        }
+        done, chunk = 0, max(1, _CHUNK_ELEMS // k)
+        while done < n_boot:
+            b = min(chunk, n_boot - done)
+            idx = rng.integers(0, k, size=(b, k))
+            for p in pols:
+                for m, (n, d) in sub[p].items():
+                    est[p][m].append(n[idx].sum(axis=1) / d[idx].sum(axis=1))
+            done += b
+        boots = {p: {m: np.concatenate(v) for m, v in est[p].items()} for p in pols}
+
+        def ci(x: Floats) -> list[float]:
+            lo, hi = np.percentile(x, [2.5, 97.5])
+            return [float(lo), float(hi)]
+
+        out[grp] = {}
+        for p in pols:
+            row: dict[str, object] = {"n": float(sub[p]["regret"][1].sum())}
+            for m in metrics:
+                row[m] = point[p][m]
+                row[f"{m}_ci"] = ci(boots[p][m])
+            out[grp][p] = row
+        for a_, b_ in pairs(pols):
+            row = {}
+            for m in metrics:
+                row[m] = point[a_][m] - point[b_][m]
+                diff = boots[a_][m] - boots[b_][m]
+                row[f"{m}_ci"] = ci(diff)
+                row[f"{m}_sig"] = bool(row[f"{m}_ci"][0] > 0 or row[f"{m}_ci"][1] < 0)  # type: ignore[index]
+            out[grp][f"{a_}-{b_}"] = row
+    return out
+
+
+def render(out: dict[str, dict[str, dict[str, object]]], pols: list[str]) -> str:
     lines: list[str] = []
+    diffs = [f"{a}-{b}" for a, b in pairs(pols)]
     for metric in ("regret", "accept", "drag", "ttt", "regret0_10", "regret40"):
         lines.append(f"\n### {metric}\n")
-        lines.append("| group | " + " | ".join(pols) + " |")
-        lines.append("|---|" + "---|" * len(pols))
+        cols = [*pols, *diffs]
+        lines.append("| group | " + " | ".join(cols) + " |")
+        lines.append("|---|" + "---|" * len(cols))
         for grp in ["ALL", *sorted(g for g in out if g != "ALL")]:
-            vals = [out[grp][p][metric] for p in pols]
-            lines.append(f"| {grp} | " + " | ".join(f"{v:.3f}" for v in vals) + " |")
+            cells = []
+            for c in cols:
+                r = out[grp][c]
+                lo, hi = cast("list[float]", r[f"{metric}_ci"])
+                star = "*" if r.get(f"{metric}_sig") else ""
+                cells.append(
+                    f"{cast('float', r[metric]):.3f} [{lo:.3f}, {hi:.3f}]{star}"
+                )
+            lines.append(f"| {grp} | " + " | ".join(cells) + " |")
+    lines.append("\n`*` = paired difference whose 95% CI excludes 0.\n")
     return "\n".join(lines) + "\n"
 
 
