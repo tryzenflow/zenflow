@@ -88,10 +88,10 @@ candidate `c` survives only if `[c, c + dur_s)` satisfies every **hard constrain
 Steps 1 and 4 mean `DND` is a hard block even though LinUCB scored its bucket in step 1;
 the filter removes it here.
 
-> **Update (scheduler reorg).** The old constraint 3 ("`c + dur_s ≤ the candidate day's
-> local midnight`") is gone: a slot may now start before local midnight and run into the
-> next morning up to the deadline, matching the heuristic path. `overlapRate` splits a
-> straddling slot at midnight and scores each side against its own day's arm scores.
+There is no same-day constraint on candidate starts: a slot may start before local midnight
+and run into the next morning, up to the deadline, matching the heuristic path.
+`overlapRate` splits a straddling slot at local midnight and scores each side against its
+own day's arm scores.
 
 ### 3. Derive a preference score for each concrete slot
 
@@ -115,8 +115,7 @@ reward, so without this addend a cold model would rank every slot equally. Examp
 slot_score = 0.5 · score(day, EVENING) + 0.5 · score(day, NIGHT)
 ```
 
-One pass, one ranking. (An earlier draft sorted by overlap and then re-sorted by score;
-that produces a different, slower, and less meaningful ordering — dropped.)
+One pass, one ranking.
 
 ### 4. Rank and pick
 

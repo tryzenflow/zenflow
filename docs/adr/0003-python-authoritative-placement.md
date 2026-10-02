@@ -1,12 +1,13 @@
 # ADR-0003: Python-Authoritative Placement (thin Nest API, frozen TS heuristic fallback)
 
-**Status:** Accepted — phase 6 executed out of sequence, phases 4/5's soak/validation gates
-skipped by explicit product decision; see [§12](#12-phase-6-executed-out-of-sequence).
+**Status:** Accepted. Phase 6 (delete the dead TS ranking code, §7) is done; phases 4/5's
+soak/validation gate was not exercised in production before it landed, by explicit product
+decision (§8 Costs).
 **Date:** 2026-09-21
 **Issue:** none; builds on #60 (numpy core port, golden parity) and #62 (slot-first LinUCB,
 displacement, batched loads). Replaces #60's "TS core is the source of truth" stance and the
 "core change => spec + Python port + fixtures" rule in CLAUDE.md invariant 2.
-Related: [ADR-0001](0001-linucb-model-design.md) (+ section 13),
+Related: [ADR-0001](0001-linucb-model-design.md) (§8, §11),
 [ADR-0002](0002-scheduling-simplification.md),
 [`services/bandit/README.md`](../../services/bandit/README.md),
 [`services/bandit/README.md`](../../services/bandit/README.md).
@@ -92,27 +93,23 @@ Deletion happens in phase 6, after a soak release, so rollback stays cheap until
 
 The fallback uses the frozen heuristic and never invents policy:
 
+A `null` start on a live `TASK` is treated as a corrupt row: pre-flights still report a miss
+(409 / 400, nothing written) before any row exists, but once the row exists a miss is never
+answered with an unplaced/`null` row or a 503 — it resolves to `ACCEPTED_LAST_RESORT`.
+
 | Situation | Behavior |
 | --- | --- |
 | Single/series, free slot exists | Heuristic slot, `appliedPolicy: "HEURISTIC"`. Saved with `placementSource = TS_FALLBACK`, `modelProposal = null` (excluded from A/B analysis) |
-| No free slot before deadline | No displacement. Answered like a Python `INFEASIBLE`: pre-flight `409 SCHEDULE_INFEASIBLE` without a policy; placement leaves the task unplaced. Never a 503 (see addendum) |
+| No free slot before deadline, row not yet inserted | Pre-flight miss: `409 SCHEDULE_INFEASIBLE` without a policy, nothing written |
+| No free slot before deadline, row exists | `ACCEPTED_LAST_RESORT`: least-conflict start before the deadline, else the first free start up to 30 days past the deadline, else the latest on-grid start that ends by the deadline (or the next slot once that has passed) pinned by `lastResortStart`, pushed past already-pinned siblings; overlap accepted, no new TS ranking; result carries `lastResort: true` |
 | `infeasiblePolicy` in a degraded request | Honoured as "best free slot up to 30 days past the deadline" (no conflicts accepted) |
-| Series | Frozen loop, each member in its own day-window first, then spilling over the whole range (one per day, then uncapped). A member with no slot anywhere comes back `null`, like Python |
+| Series | Frozen loop, each member in its own day-window first, then spilling over the whole range (one per day, then uncapped); a member with no slot anywhere falls back to `ACCEPTED_LAST_RESORT` the same as Python, never `null` |
 | Response | Success carries `schedulingDegraded: true` (client shows a quiet "placed with basic scheduling" note); absent otherwise |
 | `/update` rewards | Best-effort, skipped when down |
-| Reschedule-all / sync-conflict reschedule | Same rules; series sittings are re-spread as a series. A task that cannot move lands in `failedSessionIds` |
+| Reschedule-all / sync-conflict reschedule | Same rules; series sittings are re-spread as a series. A task that cannot move lands in `failedSessionIds`. Conflict "reschedule them all" opts out of last-resort respreading (`allowLastResort: false`) since those tasks already have a start |
 
-**Addendum (2026-09-24):** degraded mode no longer returns `503 SCHEDULER_DEGRADED`; a
-fallback miss is answered like Python (409 / unplaced / `null` rows).
-
-**Addendum (2026-09-25): a live `TASK` is never unplaced.** A `null` start is treated as a
-corrupt row. Pre-flights still report a miss (409 / 400, nothing written); once the row exists,
-Python `PLACE` answers a miss with the new outcome `ACCEPTED_LAST_RESORT` (least-conflict start
-before the deadline, else first free start up to 30 days late, else pinned by the deadline), and
-the table rows above that say "unplaced" / "`null`" now mean: best free slot up to 30 days late,
-then `lastResortStart` (pinned by the deadline, overlap accepted; no new TS ranking). Placement
-that throws after the insert discards the inserted rows. Conflict "reschedule them all" opts out
-(its tasks already have a start). See `backend/README.md` -> "Never unplaced".
+Placement that throws after the row is inserted discards the just-inserted rows
+(`placeOrDiscard`). See `backend/README.md` -> "Never unplaced".
 
 ### 2.5 Alternatives rejected
 
@@ -230,16 +227,16 @@ Nest takes `startMs` per member and, when `computeBoth`, the other policy's pick
 `linucb: null` (bad bandit state, no surviving slot), Python falls back to the heuristic pick
 and reports `appliedPolicy: "HEURISTIC"`, same as today.
 
-**Amendment (#58) -- pairwise-sampled series get two complete plans.** For a series whose
-members all send `computeBoth: true` with one shared `primaryPolicy` (one policy roll and one
-pairwise roll per series), Python places the series twice over the same batched context tensor:
-an all-heuristic plan and an all-LinUCB plan (per-member heuristic fallback), each with its own
-sibling ledger (non-overlap, `MAX_SERIES_PER_DAY`) and its own last resort. `startMs` /
-`outcome` / `appliedPolicy` come from the primary plan; `heuristic` / `linucb` are that
-member's picks in the heuristic / LinUCB plan respectively, so the non-primary pick is a sitting
-of a coherent alternative *series* rather than a pick computed against the other policy's
-siblings. Mixed-`primaryPolicy` or partially-`computeBoth` series, single tasks and `PREFLIGHT`
-keep the single shared-ledger pass unchanged. Wire shape and `contractVersion` are unchanged.
+For a series whose members all send `computeBoth: true` with one shared `primaryPolicy` (one
+policy roll and one pairwise roll per series), Python places the series twice over the same
+batched context tensor: an all-heuristic plan and an all-LinUCB plan (per-member heuristic
+fallback), each with its own sibling ledger (non-overlap, `MAX_SERIES_PER_DAY`) and its own
+last resort. `startMs` / `outcome` / `appliedPolicy` come from the primary plan; `heuristic` /
+`linucb` are that member's picks in the heuristic / LinUCB plan respectively, so the
+non-primary pick is a sitting of a coherent alternative *series* rather than a pick computed
+against the other policy's siblings. Mixed-`primaryPolicy` or partially-`computeBoth` series,
+single tasks and `PREFLIGHT` keep the single shared-ledger pass. Wire shape and
+`contractVersion` are unchanged.
 
 ### 3.3 Two-phase infeasible path
 
@@ -354,7 +351,7 @@ Tests that remain:
 ## 7. Migration and rollout (app works at every commit)
 
 Each phase ships on its own. `SCHEDULER_PLACEMENT_MODE=legacy|shadow|python` (default `legacy`
-until phase 4) keeps `master` releasable.
+until phase 4) kept `master` releasable through the cut-over.
 
 1. **Contract (shared/BE):** `placement.ts` types, contract fixtures, migration for
    `placementSource`/`degradedReason` (unused). No behaviour change.
@@ -364,17 +361,36 @@ until phase 4) keeps `master` releasable.
    code. `shadow` runs legacy, also calls Python, and logs the diff (HEURISTIC should match;
    LINUCB only float noise; investigate any mismatch). Ship dark.
 4. **Cut-over (BE + FE/mobile):** mode `python` with `FallbackPlacer`, `503 SCHEDULER_DEGRADED`,
-   `schedulingDegraded`; FE/mobile show the degraded note and a retry on 503. Staging, then
-   prod, once shadow mismatch is ~0 over a soak. Legacy code stays for one-flag rollback.
+   `schedulingDegraded`; FE/mobile show the degraded note and a retry on 503.
 5. **Prod hardening (BE/ops):** token auth on, drop the published port, require
-   `BANDIT_SERVICE_URL` in prod, alerts. May land with 4.
-6. **Delete dead TS (BE):** after a full release in mode `python` with no rollbacks, remove
-   `legacy`/`shadow`, the code in 2.3 and trimmed golden cases. Rewrite CLAUDE.md invariant 2
-   and the core-change rule, `backend/README.md` (scheduler architecture, golden section),
-   `services/bandit/README.md`; add a pointer from ADR-0001
-   section 13.
-7. **Benchmark (section 9):** not a cut-over gate, but run right after phase 4 so BEFORE/AFTER
-   numbers exist before phase 6 deletes the baseline.
+   `BANDIT_SERVICE_URL` in prod, alerts.
+6. **Delete dead TS (BE):** ran directly from phase 3 — no environment ever ran
+   `SCHEDULER_PLACEMENT_MODE=python` (`.env.dev/.staging/.prod/.test` and every compose config
+   left it unset, Joi default `legacy`), and no shadow-mode soak evidence existed showing
+   Python's picks matched legacy's within tolerance; this phase's soak/validation gate was
+   skipped by explicit product decision (costs: §8). Removed
+   `SCHEDULER_PLACEMENT_MODE`/`PlacementMode`/`parsePlacementMode` (kept `DegradedReason`); the
+   `legacy`/`shadow` branches of `TaskPlacementService` (now a thin pass-through to
+   `PythonPlacer`) and its `coordinator`/`heuristic`/`bandit`/`seriesPlacer` dependencies;
+   `SeriesPlacer`, `BanditPlacer`, `SchedulingExperimentCoordinator` (+ specs);
+   `core/linucb-best-slot.ts`, `core/arms.ts`, `core/adaptive-weights.ts`, `core/normalize.ts`,
+   `core/context-vector.ts` (the math file — `types/context-vector.types.ts` is a separate,
+   types-only file, kept, still used by `day-load.ts`/`heuristic-placer.service.ts`), and
+   `core/displacement.ts` (+ all specs). `DisplacementService.plan()`/`.fallbackStart()` were
+   deleted; `.applyMoves()`/`isFlexible`/`AppliedMove` were kept (used by
+   `python-placer.service.ts` and `conflict-reschedule.service.ts`). The golden fixture set
+   (`backend/test/golden/scheduler-core.golden.json`) was narrowed to `slotPreferenceScore`,
+   `stabilityScore`, `bestFreeSlot`, and `findConflictingTaskIds` — the frozen-fallback surface
+   plus mode-independent `sync-conflicts.ts` — matched by a trimmed
+   `services/bandit/tests/test_golden_ts.py`. `HeuristicPlacer`/`FallbackPlacer` are Python's
+   own degraded-mode driver, not a parallel TS ranking implementation: they only run when
+   `PlacementClient` reports a failure (timeout, 5xx, connect error, breaker open, contract
+   mismatch, or `BANDIT_SERVICE_URL` unset/disabled), and that fallback-trigger logic in
+   `PlacementClient`/`PythonPlacer` was unchanged by this deletion. Rewrote CLAUDE.md invariant
+   2 and the core-change rule, `backend/README.md` (scheduler architecture, golden section),
+   `services/bandit/README.md`; added a pointer from ADR-0001 §8/§11.
+7. **Benchmark (§9):** not a cut-over gate; ideally run right after phase 4 so BEFORE/AFTER
+   numbers exist before phase 6's deletions remove the pre-Python baseline from `master`.
 
 Areas: shared+BE (1), ML (2), BE (3), BE+FE+mobile (4), BE/ops (5), BE+docs (6).
 
@@ -389,47 +405,34 @@ one versioned model (`paramsVersion`) for the A/B experiment.
 - One extra network hop per placement (about 1-3 ms in-cluster, plus day-load JSON).
 - Contract drift risk (shared fixtures and `extra="forbid"` mitigate it).
 - The frozen fallback can drift from the Python heuristic (accepted; the golden pins the freeze).
+- Phase 6 (§7) deleted the dead TS ranking code without ever running mode `python` in a
+  deployed environment or a shadow-mode soak — a real, accepted reduction in safety margin,
+  chosen over waiting for a soak. There is no longer a parallel full TS ranking implementation
+  to fall back to if `PythonPlacer`/`FallbackPlacer` has an undiscovered bug; only git history
+  (`5763a29`) has the deleted code, not a live rollback flag. `FallbackPlacer` +
+  `PlacementClient`'s breaker/retry/timeout remain the degraded-mode safety net (§2.4); contract
+  fixtures and `test_golden_ts.py`'s narrowed parity check remain the drift guards on the
+  surfaces that still have two implementations (the fallback) or a documented contract (the
+  wire types) — but the golden-fixture narrowing removed TS<->Python parity coverage for
+  LinUCB/arm/displacement math entirely, so no test besides Python's own (`services/bandit`)
+  catches a Python-side regression in that code going forward. A production issue that a
+  shadow-soak would have caught is fixed forward in `services/bandit` (or, worst case, by
+  reverting to the commit before phase 6 landed) — not by restoring `legacy` mode, since that
+  code is gone.
 
 **Follow-ups:** move matrix reinforcement/decay to Python if the matrix becomes learned;
 breaker state is per-process (fine at current scale).
 
-## 9. Benchmark plan (not built now)
+## 9. Benchmark plan
 
-Goal: no latency/throughput regression, measured gain, per-phase attribution. A k6 suite in `bench/` (own README, outside the pnpm workspace graph).
-
-**Arms**
-
-| Arm | Commit | Meaning |
-| --- | --- | --- |
-| BEFORE-0 | `bc6636d^` (`f821194`) | last pre-#62: arm-then-minute LinUCB, per-day loads |
-| BEFORE-1 | `5763a29` | slot-first TS scan, batched loads, Python only scores arms |
-| AFTER | phase-4 head (mode `python`) | this ADR |
-
-Plus AFTER-degraded (Python killed) to measure the fallback.
-
-**Scales** (deterministic seed `bench/seed.ts`, same DB snapshot per run):
-
-| Scale | Users | Sessions/user in horizon | Deadline horizon | k6 load |
-| --- | --- | --- | --- | --- |
-| S | 50 | 20 | 3-14 d | 2 req/s, 20 VUs cap |
-| M | 500 | 150 | 14-30 d | 10 req/s, 100 VUs |
-| L | 5 000 | 600 (dense; some days full) | 30-60 d | 40 req/s, ramp to knee |
-| XL-density | 200 | 900 (near-infeasible) | 7 d | 10 req/s (drives displacement) |
-
-Executors: `constant-arrival-rate` (latency at fixed load), `ramping-arrival-rate` (knee: p95 > 1 s or errors > 1%), 10-minute soak on M.
-
-**Scenarios:** create single `TASK` (mixed A/B primaries); create series x8; deadline change; infeasible -> displacement and policy retry (XL-density); reschedule-all. Fault injection: kill/restart Python mid-run; add 200 ms latency.
-
-**Per-phase timings:** with `BENCH_TIMING=1` (test env only) Nest emits `Server-Timing`: `dayload`, `http`, `scan`, `predict`, `db_apply`, `total`. k6 turns each into a `Trend` tagged by scale/scenario/arm.
-
-**Method:** identical container limits per arm, 60 s warm-up discarded, 3 runs, random arm order. A correctness check diffs BEFORE-1 vs AFTER placements on the same seeded scenarios (HEURISTIC must match; LINUCB reported as agreement rate).
-
-**Report:** `bench/report.mjs` renders Markdown (p50/p95/p99 per scale x scenario, knee throughput, error and fallback rate, per-phase bars, arm deltas) and checks proposed thresholds:
-
-- AFTER p95 <= BEFORE-1 p95 at M and L
-- Python `scan` p95 < 50 ms for 30 days
-- degraded p95 <= BEFORE-0 p95
-- fallback recovery < breaker window + 15 s
+Not built. Intent: confirm no latency/throughput regression and quantify the actual gain from
+moving ranking to Python, comparing pre-#62 TS, slot-first TS, and the current
+Python-authoritative placement (plus a Python-killed/degraded arm) across a light, a medium,
+and a dense/near-infeasible load scale, via a k6 suite living outside the pnpm workspace in
+`bench/`. Per §7, it should ideally run right after phase 4 so BEFORE/AFTER numbers exist
+before phase 6's deletions remove the pre-Python baseline from `master`; since phase 6 already
+ran, the pre-Python arms would need to be built from history (`bc6636d^`, `5763a29`) rather
+than a live mode flag.
 
 ## 10. Diagrams
 
@@ -572,58 +575,3 @@ sequenceDiagram
   narrowed golden parity.
 - **FE/mobile:** degraded notice and 503 retry.
 - **Ops:** compose (private network, no prod port, `/ready` healthcheck, secrets), alerts.
-
-## 12. Phase 6 executed (out of sequence)
-
-Phase 6 ("Delete dead TS") landed directly, skipping phases 4/5's cut-over gate as originally
-specified in §7: no environment had ever run `SCHEDULER_PLACEMENT_MODE=python` in production
-(`.env.dev/.staging/.prod/.test` and every docker-compose config omitted the flag; the Joi
-default was `legacy`), and no shadow-mode soak evidence exists showing Python's picks matched
-legacy's within tolerance before this landed. This is a real, accepted reduction in safety
-margin — the user was told explicitly and chose "full deletion now" over waiting for a soak.
-Rationale: `legacy`/`shadow` mode were a rollback path that had never actually been exercised
-in anger, so the cost of keeping them (double-maintained ranking code, `TaskPlacementService`
-staying mode-branched, a soon-to-be-orphaned golden-fixture surface) outweighed the value of a
-rollback nobody had validated.
-
-**What was deleted:** `SCHEDULER_PLACEMENT_MODE`/`PlacementMode`/`parsePlacementMode` (kept
-`DegradedReason`); the `legacy`/`shadow` branches of `TaskPlacementService` (now a thin
-pass-through to `PythonPlacer`) and its `coordinator`/`heuristic`/`bandit`/`seriesPlacer`
-dependencies; `SeriesPlacer`, `BanditPlacer`, `SchedulingExperimentCoordinator` (+ specs);
-`core/linucb-best-slot.ts`, `core/arms.ts`, `core/adaptive-weights.ts`, `core/normalize.ts`,
-`core/context-vector.ts` (the math file — `types/context-vector.types.ts` is a separate,
-types-only file, kept, still used by `day-load.ts`/`heuristic-placer.service.ts`), and
-`core/displacement.ts` (+ all specs). `DisplacementService.plan()`/`.fallbackStart()` were
-deleted; `.applyMoves()`/`isFlexible`/`AppliedMove` were kept (used by
-`python-placer.service.ts` and `conflict-reschedule.service.ts`). The golden fixture set
-(`backend/test/golden/scheduler-core.golden.json`) was narrowed to `slotPreferenceScore`,
-`stabilityScore`, `bestFreeSlot`, and `findConflictingTaskIds` — the frozen-fallback surface
-plus mode-independent `sync-conflicts.ts` — matched by a trimmed
-`services/bandit/tests/test_golden_ts.py`.
-
-**What stayed, and why it isn't "legacy mode":** `HeuristicPlacer` and `FallbackPlacer` are
-Python's own degraded-mode driver, not a parallel TS ranking implementation — they only run
-when `PlacementClient` reports a failure (timeout, 5xx, connect error, breaker open, contract
-mismatch, or `BANDIT_SERVICE_URL` unset/disabled). The existing 5xx/timeout/breaker-triggers-
-fallback logic in `PlacementClient`/`PythonPlacer` was verified unchanged by this deletion — no
-new code was needed for "fall back to heuristic TS on a bandit 503," since `PythonPlacer`
-already routed every `PlacementClient` failure to `FallbackPlacer` before this change.
-
-**Remaining mitigations, given the skipped soak (§8 "Costs" already named the general risk;
-this is the specific instance)**:
-
-1. No fallback to a parallel TS implementation exists any more if `PythonPlacer`/
-   `FallbackPlacer` has an undiscovered bug — only git history (`5763a29`) has the deleted
-   code, not a live rollback flag.
-2. `FallbackPlacer` + `PlacementClient`'s breaker/retry/timeout are the degraded-mode safety
-   net — see [§2.4](#24-degraded-behavior-python-down-breaker-open-or-contract-version-mismatch).
-3. Contract fixtures (`packages/shared/contract/place/*.json`) and `test_golden_ts.py`'s
-   narrowed parity check remain as the drift guards on the surfaces that still have two
-   implementations (the fallback) or a documented contract (the wire types).
-4. Golden-fixture narrowing removes TS↔Python parity coverage for LinUCB/arm/displacement math
-   entirely (expected — that logic no longer exists in TS) — no test besides Python's own
-   (`services/bandit`) catches a Python-side regression in that code going forward.
-
-If a production issue surfaces that the missing shadow-soak would have caught, the mitigation
-is a forward fix in `services/bandit` (or, in the worst case, reverting to the commit before
-this ADR's phase 6 landed), not restoring `legacy` mode — that code is gone.

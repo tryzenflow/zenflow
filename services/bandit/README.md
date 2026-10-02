@@ -196,12 +196,11 @@ Pure numpy: `slot`, `arms`, `context_vector`, `reward`, `series_spread`, `prefer
 `displacement` and `sync_conflicts`. No I/O, clock or randomness; instants are epoch-ms ints.
 The 7x24 matrix is 168 floats.
 
-Originally ported from `backend/src/scheduler/core/*` (issue #60, when the TS core was the
-source of truth). **ADR-0003 phase 6 reversed that**: Python is now the sole ranking
-implementation — `linucb_best_slot`, `context_vector`, `arms` and
-`displacement` no longer have a TS counterpart at all (that code was deleted from `backend/`).
-A behaviour change to any of those goes in this package's `src/core/*` with pytest coverage
-and updated `packages/shared/contract/place/*.json` fixtures — not a TS port, per the rewritten
+Python is the sole ranking implementation: `linucb_best_slot`, `context_vector`, `arms`, and
+`displacement` have no TS counterpart — this package's core was ported once from
+`backend/src/scheduler/core/*` (issue #60), and that TS ranking code is now frozen/deleted per
+ADR-0003. A behaviour change to any of those goes in this package's `src/core/*` with pytest
+coverage and updated `packages/shared/contract/place/*.json` fixtures — not a TS port, per
 CLAUDE.md invariant 2.
 
 - `linucb_best_slot` (issue #62 A): scores every feasible 15-min start on all days as

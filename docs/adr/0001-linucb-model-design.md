@@ -97,8 +97,11 @@ arm). The vector is deliberately small — behavioral data is limited.
 - `d` fixes the width of `BanditArmState.A` (d×d), `.b` and `SlotProposal.featureVector`.
   Changing it means resetting arm state and bumping `BANDIT_MODEL_VERSION`.
 - The preference matrix is never an input.
-- Excluded: tags (per-user vocabulary), session type (always TASK), titles/notes.
-- History: d = 46 → 22 (dropped the unused preference slots). 22 → 7 on 2026-09-23 (§14).
+- Excluded: tags (per-user vocabulary), session type (always TASK), titles/notes,
+  `semester_phase` (always 0), weekday one-hots (collinear with the bias), and per-type
+  hours/counts beyond the two workload buckets in rows 4-5 (overlapping, mostly 0).
+- `d = 7`; stored state at a different `d` must be cleared before deploy
+  (`BANDIT_MODEL_VERSION = "linucb-d7-v0"`, `FEATURE_DIM` in `@zenflow/shared`).
 
 ---
 
@@ -112,8 +115,10 @@ b = 0
 ```
 
 A cold arm scores its exploration bonus `α·√(xᵀx/λ)`, never a fixed `0`, so an arm whose
-placements get moved falls below the untried ones. As feedback arrives, each
-student's arm models are updated independently.
+placements get moved falls below the untried ones. At full cold start (every arm untried),
+ties break on a seeded band order with `EARLY_MORNING` last (the same `TIE_BREAK_ARM_ORDER`
+used in §8's tie-break rule). As feedback arrives, each student's arm models are updated
+independently.
 
 ```text
 student
@@ -183,20 +188,42 @@ deadline `dl`:
 
 1. For each candidate day `d ∈ [next_15min(now), dl]`, build `x` (§5) and score all 6 arms
    in-process (`/v1/place`, ADR-0003) → `score(d, arm)`.
-2. Generate 15-minute-aligned candidate start times, filter to those that are **fully
-   empty** and satisfy the hard constraints (§8.1).
+2. Score every feasible 15-minute start on every candidate day in one scan (not "arm, then
+   minute inside it"): starts include one overhanging local midnight (e.g. 23:45); the
+   deadline caps the slot's _end_ and need not itself be slot-aligned. Filter to those that
+   are **fully empty** and satisfy the hard constraints (§8.1).
 3. Score each surviving slot in a single pass:
-   `slot_score(c) = Σ_arm overlap_rate(c, arm) · score(day(c), arm) + slotPreferenceScore(c)`.
-   `overlap_rate` is the fraction of `[c, c + duration)` inside that arm's band (a slot
-   straddling local midnight is split there and each part scored against its own day). The
-   `slotPreferenceScore` addend is the same overlap-weighted preference score Policy A uses
-   (`services/bandit/README.md`); it keeps slots meaningfully ordered before any arm has
-   accumulated reward — a bandit arm with no data scores `0`.
-4. Pick the highest `slot_score`; earliest start breaks ties.
+
+   ```text
+   score(c) = wL · Σ_arm overlap_rate(c, arm) · score(day(c), arm)
+            + wP · slotPreferenceScore(c) / durationHours
+            + STABILITY_WEIGHT · stabilityScore(prevStart, c)
+   ```
+
+   - `overlap_rate(c, arm)` is the fraction of `[c, c + duration)` inside that arm's band (a
+     slot straddling local midnight is split there and each part scored against its own
+     day); arm/hour overlap uses per-day wall-clock offsets (exact on 24 h days; DST days
+     use the Intl-based `overlapRate`).
+   - `selectedArm` (the arm a delayed `/update` reward is credited to) is the arm containing
+     the slot's start, not a weighted blend across arms.
+   - `slotPreferenceScore` is the same overlap-weighted preference score Policy A uses
+     (`services/bandit/README.md`); it keeps slots meaningfully ordered before any arm has
+     accumulated reward — a bandit arm with no data scores `0`.
+   - **Adaptive weights** `(wL, wP) = adaptiveWeights(observationCount)`
+     (`core/adaptive-weights.ts`, constants in `constants.ts`): cold `wP = 1, wL = 0.3`; warm
+     `wP = 0.1, wL = 1`; linear over `WEIGHT_WARMUP_OBSERVATIONS = 40` reward events (user
+     `MOVE` + `RETAINED`; `SYSTEM_MOVE` never counts). Applied weights are stored on
+     `SlotProposal.linucbWeight` / `.stabilityWeight`. The heuristic stays preference-only
+     (no arm term), so the A/B keeps two distinct policies.
+   - Exact ties break by `TIE_BREAK_ARM_ORDER` (MORNING, AFTERNOON, EVENING, EARLY_MORNING,
+     NIGHT) on the start's arm, then earliest start — deterministic, never favors 00:00.
+4. Pick the highest score; earliest start breaks any remaining ties.
 
 Full detail and worked examples: [`reranking.md`](../scheduler/reranking.md). Existing
-sessions are never moved to realize a better score — the mapping only ever places the new
-session (or the one series member being placed).
+sessions are never moved to realize a better score outside of displacement (§11) — the
+mapping only ever places the new session (or the one series member being placed).
+`MAX_SCAN_DAYS` stays 60 (it normalizes the context vector); single-task placement scans at
+most `SCAN_CAP_DAYS = 30` days, loading all day loads for the range in one query.
 
 ### 8.1 Hard constraints
 
@@ -252,19 +279,26 @@ Optional stability follow-up (not shipped): warm-start `θ` for each arm from th
 
 LinUCB (Policy B) is compared against the preference heuristic (Policy A) under the same
 hard constraints and the same slot-scoring pass (§8). Both policies place **only the
-current session (or series member), into an empty slot**, and never repack other sessions.
-The stability constraint (empty-slot-only, no displacement) is shared, so neither policy
-needs a move-cost term. `ExperimentService` assigns a 50/50 `primaryPolicy` per scheduling
-event and records one `SlotProposal`; a `sessionCount > 1` `TASK` series runs the same
-50/50 pick per member (each within a `± max(1, floor(X/N))`-day window around its
-even-spread target, `X` = whole days to deadline, `N` = member count), one `SlotProposal`
-per member. See [`ab-testing.md`](../scheduler/ab-testing.md).
+current session (or series member), into an empty slot**, and never repack other sessions
+except through displacement (below). The stability constraint (empty-slot-only outside that
+exception) is shared, so neither policy needs a separate move-cost term. `ExperimentService`
+assigns one 50/50 `primaryPolicy` roll and one independent pairwise-sample roll per
+scheduling event; for a `sessionCount > 1` `TASK` series, both rolls are made **once for the
+whole series** (every sitting shares the primary policy), with each member still placed
+within its own `± max(1, floor(X/N))`-day window around its even-spread target (`X` = whole
+days to deadline, `N` = member count). On a pairwise hit the placement service computes two
+complete series plans — all-heuristic and all-LinUCB, each with its own sibling ledger — and
+each sitting's `SlotProposal` pairs its pick in the applied plan with its pick in the other
+plan (ADR-0003 §3.2). One `SlotProposal` per member is recorded either way. See
+[`ab-testing.md`](../scheduler/ab-testing.md).
 
-*Amended by #58:* a series now takes **one** 50/50 roll and **one** pairwise roll for the whole
-series (every sitting shares the primary policy). On a pairwise hit the placement service
-computes two complete series plans -- all-heuristic and all-LinUCB, each with its own sibling
-ledger -- and each sitting's `SlotProposal` pairs its pick in the applied plan with its pick in
-the other plan (ADR-0003 §3.2 amendment). One `SlotProposal` per member is still recorded.
+**Displacement.** The empty-slot-only stance is relaxed only when a `TASK` has no free slot
+before its deadline: `core/displacement.ts` repacks standalone flexible tasks on the deadline
+day (widening to ±1 day) in earliest-deadline-first order, capped at `MAX_DISPLACED_TASKS`,
+minimizing moves. Fixed blocks and series sittings never move. These scheduler-initiated
+moves are `SYSTEM_MOVE` events (reward `0`): no bandit update, no preference change. If still
+infeasible the API returns `409 SCHEDULE_INFEASIBLE`, and the client retries with
+`infeasiblePolicy: "ACCEPT_CONFLICTS" | "ACCEPT_LATE_DEADLINE"`.
 
 ---
 
@@ -289,79 +323,3 @@ The design prioritizes simple state, reusable arms, fast personalization, schedu
 stability, and a focused evaluation. Pure scoring math lives in
 `backend/src/scheduler/core/*`; the `/v1/place` / `/v1/update` calls, `SlotProposal` writes and
 `BanditArmState` persistence live in `backend/src/scheduler/io/*` and `backend/src/bandit/*`.
-
----
-
-## 13. Addendum (2026-09-21, issue #62): slot-first scoring and adaptive weights
-
-Supersedes §8's "arm, then minute" pick (Item 3B2). There is no separate ADR for #62; this
-addendum is the decision record.
-
-**Problem.** With an untrained bandit every arm scores 0. The small preference nudge
-(`PREFERENCE_NUDGE_WEIGHT = 0.1`) only ranked minutes inside an arm chosen by ARM_BANDS order, so a
-new user was proposed 00:00 (EARLY_MORNING first). A bigger nudge would make LinUCB irrelevant.
-
-**Decision.**
-
-1. `core/linucb-best-slot.ts` scores every feasible 15-min start on every candidate day and ranks
-   across days. Starts include 23:45 overhanging midnight; the deadline caps the _end_ and need not
-   be slot-aligned.
-
-   ```text
-   score = wL * SUM_arm overlapRate(slot, arm) * armScore[day][arm]
-         + wP * slotPreferenceScore(slot) / durationHours
-         + STABILITY_WEIGHT * stabilityScore(prevStart, slot)
-   ```
-
-   - `armScore[day]` is the arm's LinUCB score for the day the slot starts on.
-   - `selectedArm` (the arm a delayed `/update` reward is credited to) stays the arm containing the start.
-   - Arm/hour overlap uses per-day wall-clock offsets (exact on 24h days; DST days use the Intl `overlapRate`).
-
-2. **Adaptive weights** `(wL, wP) = adaptiveWeights(observationCount)` (`core/adaptive-weights.ts`,
-   constants in `constants.ts`). Cold: `wP = 1, wL = 0.3`. Warm: `wP = 0.1, wL = 1`. Linear over
-   `WEIGHT_WARMUP_OBSERVATIONS = 40` reward events (user `MOVE` + `RETAINED`; `SYSTEM_MOVE` never
-   counts). Applied weights are stored on `SlotProposal.linucbWeight` / `.stabilityWeight` (was `.preferenceWeight` before the pref term was dropped). The
-   heuristic stays preference-only (no arm term), so the A/B keeps two distinct policies.
-3. **Exact ties**: `TIE_BREAK_ARM_ORDER` (MORNING, AFTERNOON, EVENING, EARLY_MORNING, NIGHT) on the
-   start's arm, then earlier start. Deterministic, never favours 00:00.
-4. `PREFERENCE_NUDGE_WEIGHT` is unused by the scan (deleted 2026-09-23). The `/update`
-   contract is unchanged.
-5. `MAX_SCAN_DAYS` stays 60 (it normalizes the context vector). Single-task placement scans at most
-   `SCAN_CAP_DAYS = 30` days. One range query loads all day loads for a scan.
-
-**Displacement (issue #62 B).** §11's "no displacement" stance is relaxed only when a `TASK` has no
-free slot before its deadline.
-
-- `core/displacement.ts` repacks standalone flexible tasks on the deadline day (widening to +/-1 day)
-  in earliest-deadline-first order, capped at `MAX_DISPLACED_TASKS`, minimizing moves. Fixed blocks
-  and series sittings never move.
-- Scheduler moves are `SYSTEM_MOVE` events (reward 0): no bandit update, no preference change.
-- If still infeasible the API returns `409 SCHEDULE_INFEASIBLE`. The client retries with
-  `infeasiblePolicy: "ACCEPT_CONFLICTS" | "ACCEPT_LATE_DEADLINE"`.
-
----
-
-## 14. Addendum (2026-09-23): fast learning for MVP verification
-
-Replaces §5.1's d = 22, the "cold arm scores 0" rule, and the preference-matrix in-band tie-break.
-
-- **Cold arm = ridge prior.** Every untried arm scores `α·√(xᵀx/λ)`.
-  - Before: a cold arm was pinned at `0`. The first arm to be rewarded won forever, even when its
-    placements were moved.
-  - At full cold start the seeded band order still breaks the tie, with EARLY_MORNING last.
-- **d = 22 → 7** (§5.1).
-  - Dropped: `semester_phase` (always 0), the weekday one-hots (collinear with the bias), and
-    per-type hours and counts (overlapping, mostly 0).
-  - Stored d = 22 arm state must be cleared before deploy (`BANDIT_MODEL_VERSION = "linucb-d7-v0"`).
-  - Delayed rewards for d = 22 proposals are dropped (`FEATURE_DIM` in `@zenflow/shared`).
-- **No preference matrix in LinUCB.** Inside the winning band, the start closest to the band's
-  centre wins: a fixed rule that learns nothing. This keeps the A/B as pure LinUCB vs the pure
-  heuristic.
-- **Evidence:** `services/bandit/tests/test_learning.py` runs the real place → reward → update loop
-  against simulated users.
-  - A fixed band is found in ≤ 5 placements and then held.
-  - A weekday/weekend split is learned by the 3rd weekend.
-- **AFTERNOON [11:00, 17:00) split into MIDDAY [11:00, 14:00) + AFTERNOON [14:00, 17:00).**
-  Each task goes to its band's centre, so a 6 h band could only offer 13:30. The split adds one
-  exploration step for a new user (a fixed band is now found in ≤ 5 placements).
-- **Deferred until prod data points to them:** hybrid LinUCB, a matrix-seeded prior.
