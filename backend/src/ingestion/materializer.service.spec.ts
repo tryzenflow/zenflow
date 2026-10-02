@@ -174,6 +174,26 @@ function makePrismaDouble() {
       }) => {
         const row = sessions.find((s) => s.id === args.where.id);
         if (!row) throw new Error(`no session ${args.where.id}`);
+        // `adoptLegacyKey` rewrites `externalKey`, so `update` can violate the
+        // same [userId, externalKey] unique index `create` can.
+        const nextKey = args.data.externalKey as string | undefined;
+        if (
+          nextKey !== undefined &&
+          nextKey !== row.externalKey &&
+          sessions.some(
+            (s) =>
+              s.id !== row.id &&
+              s.userId === row.userId &&
+              s.externalKey === nextKey,
+          )
+        ) {
+          return Promise.reject(
+            new Prisma.PrismaClientKnownRequestError("Unique constraint", {
+              code: "P2002",
+              clientVersion: "6",
+            }),
+          );
+        }
         Object.assign(row, args.data);
         return Promise.resolve(row);
       },
@@ -291,6 +311,24 @@ function lecture(over: Partial<ParsedBlock> = {}): ParsedBlock {
     location: "X01.01",
     ...over,
   });
+}
+
+/**
+ * A post-#56 portal lecture: the section-scoped key plus the pre-#56 alias the
+ * materializer adopts rows under. Both are deliberately fictional.
+ */
+function reKeyedLecture(
+  over: Partial<ParsedPortalItem> = {},
+): ParsedPortalItem {
+  return {
+    ...lecture({ externalKey: "portal:lecture:99910AB100101:2026-09-10:1" }),
+    legacyExternalKey: "portal:meeting:700001",
+    scheduleStudyUnitId: "99910AB100101",
+    meetingDate: "2026-09-10",
+    periodId: 1,
+    numberOfPeriods: 4,
+    ...over,
+  };
 }
 
 /** An instant inside HK01 of the 2026–2027 DLU academic year. */
@@ -1029,6 +1067,181 @@ describe("MaterializerService", () => {
 
       expect(outcome.skippedDeleted).toBe(1);
       expect(db.sessions[0].title).not.toBe("Renamed upstream");
+    });
+  });
+
+  describe("adopting a pre-#56 lecture key", () => {
+    // Issue #56 re-keyed portal lectures from the per-student
+    // portal:meeting:<WeekScheduleID> to the section-scoped
+    // portal:lecture:<section>:<date>:<period>. Rows stored under the old name
+    // must be renamed, never duplicated-and-retired.
+
+    it("renames the stored row instead of inserting a second one", async () => {
+      const { db, service } = await makeService();
+      // Stored the way the pre-#56 parser would have written it.
+      await seedExisting(
+        service,
+        [lecture({ externalKey: "portal:meeting:700001" })],
+        "PORTAL",
+        IN_TERM,
+      );
+      const originalId = db.sessions[0].id;
+
+      const outcome = await service.materialize(
+        USER,
+        [reKeyedLecture()],
+        "PORTAL",
+        IN_TERM,
+      );
+
+      expect(db.sessions).toHaveLength(1);
+      expect(db.sessions[0].id).toBe(originalId);
+      expect(db.sessions[0].externalKey).toBe(
+        "portal:lecture:99910AB100101:2026-09-10:1",
+      );
+      expect(outcome).toMatchObject({ created: 0, updated: 0, unchanged: 1 });
+    });
+
+    it("raises no notification for a rename alone", async () => {
+      const { db, service } = await makeService();
+      await seedExisting(
+        service,
+        [lecture({ externalKey: "portal:meeting:700001" })],
+        "PORTAL",
+        IN_TERM,
+      );
+      const before = db.notifications.length;
+
+      await service.materialize(USER, [reKeyedLecture()], "PORTAL", IN_TERM);
+
+      // A row that only changed its internal identity is not news.
+      expect(db.notifications).toHaveLength(before);
+    });
+
+    it("keeps the student's own move across the rename", async () => {
+      const { db, service } = await makeService();
+      await seedExisting(
+        service,
+        [lecture({ externalKey: "portal:meeting:700001" })],
+        "PORTAL",
+        IN_TERM,
+      );
+      const moved = new Date("2026-09-09T00:00:00.000Z");
+      const studentsTime = new Date("2026-09-10T06:00:00.000Z");
+      Object.assign(db.sessions[0], {
+        lastMovedAt: moved,
+        scheduledStartTime: studentsTime,
+      });
+
+      // Upstream still says 02:00; the student moved it to 06:00.
+      const outcome = await service.materialize(
+        USER,
+        [reKeyedLecture()],
+        "PORTAL",
+        IN_TERM,
+      );
+
+      expect(outcome.skippedMoved).toBe(1);
+      expect(db.sessions[0].lastMovedAt).toEqual(moved);
+      expect(db.sessions[0].scheduledStartTime).toEqual(studentsTime);
+      // …and it was still adopted, so reconcileDeleted won't see an orphan.
+      expect(db.sessions[0].externalKey).toBe(
+        "portal:lecture:99910AB100101:2026-09-10:1",
+      );
+    });
+
+    it("applies a real upstream change in the same pass as the rename", async () => {
+      const { db, service } = await makeService();
+      await seedExisting(
+        service,
+        [lecture({ externalKey: "portal:meeting:700001" })],
+        "PORTAL",
+        IN_TERM,
+      );
+
+      const outcome = await service.materialize(
+        USER,
+        [reKeyedLecture({ location: "X09.09" })],
+        "PORTAL",
+        IN_TERM,
+      );
+
+      expect(outcome).toMatchObject({ updated: 1, created: 0 });
+      expect(db.sessions).toHaveLength(1);
+      expect(db.sessions[0].location).toBe("X09.09");
+    });
+
+    it("adopts a student-deleted row and still does not recreate it", async () => {
+      const { db, service } = await makeService();
+      await seedExisting(
+        service,
+        [lecture({ externalKey: "portal:meeting:700001" })],
+        "PORTAL",
+        IN_TERM,
+      );
+      db.sessions[0].deleted = true;
+
+      const outcome = await service.materialize(
+        USER,
+        [reKeyedLecture()],
+        "PORTAL",
+        IN_TERM,
+      );
+
+      expect(outcome.skippedDeleted).toBe(1);
+      expect(db.sessions).toHaveLength(1);
+      // Renamed, so the next run recognises it as the same deleted class
+      // instead of inserting a fresh copy.
+      expect(db.sessions[0].externalKey).toBe(
+        "portal:lecture:99910AB100101:2026-09-10:1",
+      );
+    });
+
+    it("leaves the legacy row alone when the new key is already taken", async () => {
+      const { db, service } = await makeService();
+      // Duplicate pre-existing data: two legacy rows collapsing onto one key.
+      await seedExisting(
+        service,
+        [
+          lecture({ externalKey: "portal:lecture:99910AB100101:2026-09-10:1" }),
+          lecture({ externalKey: "portal:meeting:700001" }),
+        ],
+        "PORTAL",
+        IN_TERM,
+      );
+
+      const outcome = await service.materialize(
+        USER,
+        [reKeyedLecture()],
+        "PORTAL",
+        IN_TERM,
+      );
+
+      expect(db.sessions).toHaveLength(2);
+      expect(db.sessions[1].externalKey).toBe("portal:meeting:700001");
+      // The already-correct row was matched directly, so nothing was created.
+      expect(outcome.created).toBe(0);
+    });
+
+    it("does nothing when the block carries no legacy alias", async () => {
+      const { db, service } = await makeService();
+      await seedExisting(
+        service,
+        [lecture({ externalKey: "portal:meeting:700001" })],
+        "PORTAL",
+        IN_TERM,
+      );
+
+      // An exam, an LMS item, or a timetable row with no WeekScheduleID.
+      const outcome = await service.materialize(
+        USER,
+        [reKeyedLecture({ legacyExternalKey: null })],
+        "PORTAL",
+        IN_TERM,
+      );
+
+      expect(outcome.created).toBe(1);
+      expect(db.sessions).toHaveLength(2);
     });
   });
 });

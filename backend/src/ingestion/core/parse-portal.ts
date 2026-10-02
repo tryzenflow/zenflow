@@ -1,4 +1,10 @@
 import { minutesToUtc } from "../../common/utils";
+import {
+  legacyPortalMeetingKey,
+  portalExamKey,
+  portalLectureKey,
+  unkeyablePortalLectureRef,
+} from "./external-key";
 import { snapToGrid } from "./grid";
 import { periodsToWallClock } from "./period-map";
 import type {
@@ -29,7 +35,12 @@ import type {
 
 /** One row of the `DrawingStudentSchedules` response (fields we read). */
 export interface PortalTimetableRow {
-  /** Stable per-meeting id — the `externalKey` source. */
+  /**
+   * The portal's per-meeting id. **Not** the `externalKey` source any more: it is
+   * minted per (section, student), so keying on it made a lecture
+   * student-specific and blocked the cross-student occurrence cache (issue #56,
+   * see `external-key.ts`). Still read, to rename pre-#56 rows in place.
+   */
   WeekScheduleID?: number | string | null;
   ScheduleStudyUnitID?: string | null;
   CurriculumName?: string | null;
@@ -142,9 +153,16 @@ function parseDisplayBlob(html: string | null | undefined): {
  * it lets a room swap or a one-off cancellation show up naturally instead of
  * having to mutate a recurrence rule.
  *
- * A row is skipped (and the reason returned) when it has no `WeekScheduleID`
- * to key on, an unparseable `Ngay`, or a period span `period-map.ts` refuses —
- * which today means anything touching the undocumented periods 5–6.
+ * A row is skipped (and the reason returned) when it lacks any of the three
+ * fields the key is built from (`ScheduleStudyUnitID`, a parseable `Ngay`, a
+ * `PeriodID` span `period-map.ts` accepts — the last of which today means
+ * anything touching the undocumented periods 5–6).
+ *
+ * Note the narrowing since issue #56: a row with a usable date and period but no
+ * `ScheduleStudyUnitID` used to still yield a meeting (with a null section id).
+ * It cannot now — the section id is part of the key — so it is skipped instead.
+ * No capture has ever shown such a row, and one could not participate in the
+ * cross-student cache anyway, since the section is what students share.
  */
 export function parseTimetable(
   rows: readonly PortalTimetableRow[] | null | undefined,
@@ -155,15 +173,17 @@ export function parseTimetable(
   const sections = new Map<string, ParsedPortalSection>();
 
   for (const row of rows ?? []) {
-    const meetingId = row?.WeekScheduleID;
-    if (meetingId === null || meetingId === undefined || meetingId === "") {
+    // The section id leads now: it is the first component of the key, so a row
+    // without one cannot be identified at all (see the note in the docblock).
+    const sectionId = orNull(row?.ScheduleStudyUnitID);
+    const ref = unkeyablePortalLectureRef(sectionId);
+    if (!sectionId) {
       skipped.push({
-        ref: `portal:meeting:${row?.ScheduleStudyUnitID ?? "unknown"}`,
-        reason: "timetable row has no WeekScheduleID",
+        ref,
+        reason: "timetable row has no ScheduleStudyUnitID to key on",
       });
       continue;
     }
-    const ref = `portal:meeting:${meetingId}`;
 
     const dateStr = parseDdMmYyyy(row.Ngay);
     if (!dateStr) {
@@ -171,11 +191,9 @@ export function parseTimetable(
       continue;
     }
 
-    const span = periodsToWallClock(
-      row.PeriodID ?? NaN,
-      row.NumberOfPeriods ?? 1,
-    );
-    if (!span) {
+    const periodId = row.PeriodID;
+    const span = periodsToWallClock(periodId ?? NaN, row.NumberOfPeriods ?? 1);
+    if (!span || periodId === null || periodId === undefined) {
       skipped.push({
         ref,
         reason: `no time mapping for periods ${row.PeriodID}+${row.NumberOfPeriods} (periods 5–6 are undocumented)`,
@@ -185,12 +203,22 @@ export function parseTimetable(
 
     const block = snapToGrid(span.startMin, span.endMin);
     const teacher = orNull(row.FullName);
+    // `WeekScheduleID` is optional in the response and only ever used to find a
+    // pre-#56 row to rename, so a row missing it simply has no legacy alias —
+    // that is not a reason to drop the meeting.
+    const meetingId = row.WeekScheduleID;
+    const hasMeetingId =
+      meetingId !== null && meetingId !== undefined && meetingId !== "";
     items.push({
-      externalKey: ref,
-      title:
-        orNull(row.CurriculumName) ??
-        orNull(row.ScheduleStudyUnitID) ??
-        "Lớp học",
+      externalKey: portalLectureKey({
+        scheduleStudyUnitId: sectionId,
+        meetingDate: dateStr,
+        periodId,
+      }),
+      legacyExternalKey: hasMeetingId
+        ? legacyPortalMeetingKey(meetingId)
+        : null,
+      title: orNull(row.CurriculumName) ?? sectionId,
       type: "LECTURE",
       scheduledStartTime: minutesToUtc(dateStr, block.startMin, timezone),
       durationMinutes: block.durationMinutes,
@@ -198,15 +226,19 @@ export function parseTimetable(
       // The one bit of section metadata worth carrying onto the block itself —
       // "who teaches this" is useful at a glance on the calendar.
       note: teacher ? `GV: ${teacher}` : null,
-      scheduleStudyUnitId: orNull(row.ScheduleStudyUnitID),
+      scheduleStudyUnitId: sectionId,
+      // The occurrence-cache coordinates — the same triple the key is built
+      // from, kept as fields so the cache never has to re-parse the key.
+      meetingDate: dateStr,
+      periodId,
+      numberOfPeriods: row.NumberOfPeriods ?? 1,
     });
 
     // The section catalog needs the term coordinates, which are NOT nullable in
     // `PortalSection`; a row missing them still yields a usable meeting.
-    const sectionId = orNull(row.ScheduleStudyUnitID);
     const yearStudy = orNull(row.YearStudy);
     const termId = orNull(row.TermID);
-    if (sectionId && yearStudy && termId && !sections.has(sectionId)) {
+    if (yearStudy && termId && !sections.has(sectionId)) {
       const { curriculumId, groupNo } = parseDisplayBlob(row.TKHHienThi);
       sections.set(sectionId, {
         scheduleStudyUnitId: sectionId,
@@ -249,12 +281,12 @@ export function parseExams(
     const examId = row?.Examination;
     if (examId === null || examId === undefined || examId === "") {
       skipped.push({
-        ref: `portal:exam:${row?.ScheduleStudyUnitID ?? "unknown"}`,
+        ref: portalExamKey(row?.ScheduleStudyUnitID ?? "unknown"),
         reason: "exam row has no Examination id",
       });
       continue;
     }
-    const ref = `portal:exam:${examId}`;
+    const ref = portalExamKey(examId);
 
     const dateStr = parseDdMmYyyy(row.NgayThi);
     if (!dateStr) {

@@ -78,7 +78,12 @@ describe("parseTimetable", () => {
 
     expect(items).toEqual([
       {
-        externalKey: "portal:meeting:600001",
+        // Section + DLU-local day + starting period: nothing student-specific,
+        // so a cached occurrence can mint this key for any classmate (#56).
+        externalKey: "portal:lecture:99910AB100101:2026-08-17:1",
+        // The pre-#56 key, carried only so an already-stored row can be found
+        // under its old name and renamed in place.
+        legacyExternalKey: "portal:meeting:600001",
         title: "Môn học Mẫu Một",
         type: "LECTURE",
         // Periods 1–4 = 07:30–11:15 VN, already on the 15-min grid (225 min).
@@ -87,8 +92,46 @@ describe("parseTimetable", () => {
         location: "X01.01",
         note: "GV: Nguyễn Văn A",
         scheduleStudyUnitId: "99910AB100101",
+        meetingDate: "2026-08-17",
+        periodId: 1,
+        numberOfPeriods: 4,
       },
     ]);
+  });
+
+  it("gives two students in one meeting the same key, from different WeekScheduleIDs", () => {
+    // The portal mints WeekScheduleID per (section, student). Before #56 that
+    // made the key student-specific and the occurrence cache impossible.
+    const mine = parseTimetable([LECTURE_ROW], VN).items[0];
+    const theirs = parseTimetable(
+      [{ ...LECTURE_ROW, WeekScheduleID: 600999 }],
+      VN,
+    ).items[0];
+
+    expect(theirs.externalKey).toBe(mine.externalKey);
+    expect(theirs.legacyExternalKey).not.toBe(mine.legacyExternalKey);
+  });
+
+  it("separates two meetings of one section on the same day", () => {
+    const { items } = parseTimetable(
+      [LECTURE_ROW, { ...LECTURE_ROW, WeekScheduleID: 600002, PeriodID: 7 }],
+      VN,
+    );
+
+    expect(items).toHaveLength(2);
+    expect(items[0].externalKey).not.toBe(items[1].externalKey);
+  });
+
+  it("emits a null legacy alias when the row carries no WeekScheduleID", () => {
+    // Nothing to rename from, which is not a reason to drop the meeting.
+    const { items, skipped } = parseTimetable(
+      [{ ...LECTURE_ROW, WeekScheduleID: null }],
+      VN,
+    );
+
+    expect(skipped).toEqual([]);
+    expect(items).toHaveLength(1);
+    expect(items[0].legacyExternalKey).toBeNull();
   });
 
   it("falls back to a null note when the row names no teacher", () => {
@@ -159,24 +202,28 @@ describe("parseTimetable", () => {
 
     expect(items).toEqual([]);
     expect(skipped).toHaveLength(1);
-    expect(skipped[0].ref).toBe("portal:meeting:600001");
+    expect(skipped[0].ref).toBe("portal:lecture:99910AB100101");
     expect(skipped[0].reason).toMatch(/periods 5–6 are undocumented/);
   });
 
-  it("skips a row with no WeekScheduleID or an unparseable Ngay", () => {
+  it("skips a row with no ScheduleStudyUnitID or an unparseable Ngay", () => {
+    // Since #56 the section id is the first component of the key, so a row
+    // without one cannot be identified at all. It has never been observed, and
+    // such a row could not join the cross-student cache anyway.
     const { items, skipped } = parseTimetable(
       [
-        { ...LECTURE_ROW, WeekScheduleID: null },
-        { ...LECTURE_ROW, WeekScheduleID: 7, Ngay: "2026-08-17" },
+        { ...LECTURE_ROW, ScheduleStudyUnitID: null },
+        { ...LECTURE_ROW, Ngay: "2026-08-17" },
       ],
       VN,
     );
 
     expect(items).toEqual([]);
     expect(skipped.map((s) => s.reason)).toEqual([
-      "timetable row has no WeekScheduleID",
+      "timetable row has no ScheduleStudyUnitID to key on",
       'unparseable Ngay "2026-08-17"',
     ]);
+    expect(skipped[0].ref).toBe("portal:lecture:unknown");
   });
 
   it("tolerates a null or empty payload", () => {
