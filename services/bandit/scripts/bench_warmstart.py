@@ -22,6 +22,7 @@ import zlib
 from collections.abc import Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import replace
+from functools import reduce
 from pathlib import Path
 from typing import cast
 
@@ -32,7 +33,8 @@ from src.simulation.engine import HEURISTIC, SimConfig, linucb_label
 from src.simulation.metrics import (
     BUCKET_LABELS,
     N_BOOT,
-    paired_rows,
+    _key,
+    bucket_index,
     time_to_threshold,
 )
 from src.simulation.prior import PriorSpec
@@ -66,31 +68,38 @@ def student_record(
 ) -> tuple[str, dict[str, Floats], dict[str, Floats]]:
     """``(cell, sums[policy] (B, 4), ttt[policy] (S,))`` for one student.
 
-    ``sums`` columns: placements, regret, accept, drag over the placements the
-    policy shares with the heuristic; the heuristic row is that same paired set of
-    the *cold* pairing (the placements are identical for every pairing unless a
-    policy skips an infeasible task, which the key intersection handles).
+    ``sums`` columns: placements, regret, accept, drag over the placements shared by
+    *every* policy (heuristic, cold and all warm priors) in each scenario, so every
+    policy difference is over the same proposals even when a policy leaves a later
+    task infeasible.
     """
     res = _run_one((cfg, student_id))
     specs = [PriorSpec(m, n) for m, n in cfg.priors]
     labels = {"cold": linucb_label(0.15)}
     labels.update({s.tag: linucb_label(0.15, s) for s in specs})
     n_b = len(BUCKET_LABELS)
-    sums: dict[str, Floats] = {}
+    sums = {p: np.zeros((n_b, 4)) for p in ("heuristic", *labels)}
     ttt: dict[str, Floats] = {}
+    for scn in cfg.scenarios:
+        logs = {"heuristic": res.logs[scn][HEURISTIC]}
+        logs.update({n: res.logs[scn][lab] for n, lab in labels.items()})
+        # one placement set for every policy, so all differences are paired
+        common = reduce(np.intersect1d, (_key(lg) for lg in logs.values()))
+        # buckets follow the cold arm's own observation count, as in paired_rows
+        cold = logs["cold"]
+        bucket = bucket_index(
+            cold["obs_before"][np.isin(_key(cold), common, assume_unique=True)]
+        )
+        for pol, lg in logs.items():
+            keep = np.isin(_key(lg), common, assume_unique=True)
+            g = sums[pol]
+            g[:, 0] += np.bincount(bucket, minlength=n_b)
+            for j, (_m, src) in enumerate(
+                (("regret", "regret"), ("accept", "accepted"), ("drag", "drag")),
+                start=1,
+            ):
+                g[:, j] += np.bincount(bucket, weights=lg[src][keep], minlength=n_b)
     for name, label in labels.items():
-        (rows,) = paired_rows([res], cfg.scenarios, label)
-        for pol, side in (
-            ("heuristic" if name == "cold" else None, rows.h),
-            (name, rows.ln),
-        ):
-            if pol is None:
-                continue
-            g = np.zeros((n_b, 4))
-            g[:, 0] = np.bincount(rows.bucket, minlength=n_b)
-            for j, m in enumerate(METRICS, start=1):
-                g[:, j] = np.bincount(rows.bucket, weights=side[m], minlength=n_b)
-            sums[pol] = g
         ttt[name] = np.array(
             [
                 time_to_threshold(res.logs[s][label]["accepted"])[0]

@@ -31,6 +31,11 @@ Experiment: [`docs/scheduler/ab-testing.md`](../../docs/scheduler/ab-testing.md)
 
   Details: ADR-0001 §5.1.
 - **Cold arm** = ridge prior. It scores `α·√(xᵀx/λ)`, not `0`.
+- **Warm-start prior (issue #60).** A brand-new arm is seeded from the default preference matrix
+  instead of `(λI, 0)`: each of the 7×24 cells becomes one pseudo-observation for its band
+  (typical-day context, cell value as reward), scaled so each arm holds `LINUCB_PRIOR_N0 = 5.0` total
+  pseudo-observations (`src/core/constants.py`). `0` restores the plain ridge start. Real feedback
+  outweighs it as observations accumulate. Evidence: `docs/scheduler/heuristic-vs-linucb-report.md`.
 - **Learning check:** `uv run pytest tests/test_learning.py -s` prints simulated learning curves.
 - **Stateless service.** This service holds **no per-user state**. The NestJS backend owns
   `(A, b)` persistence (Postgres table `BanditArmState`, ADR-0001 §6.1) and passes the 5

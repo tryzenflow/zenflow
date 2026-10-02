@@ -50,8 +50,8 @@ will see the same.
 - Keeps a table with one liking score for each hour of each weekday (7 × 24 cells).
 - The table starts from defaults:
   - 08:00-11:00 scores 1.0, 14:00-17:00 scores 0.5, 19:00-22:00 scores 0.2, and every other hour 0.
-  - Saturday and Sunday scores are half of the weekday scores, because people rarely want to study on
-  weekends.
+  - Saturday and Sunday use the same hour scores as weekdays; the default table has no weekend
+  adjustment.
 - It proposes the free slot with the best score.
 - When the student drags a proposal, the table shifts toward the new hour by a small step. It learns slowly.
 
@@ -67,7 +67,7 @@ band. The prediction uses:
 - It proposes a slot in the band with the highest prediction plus an exploration bonus. The bonus is
 larger for bands it knows little about, so it tries different bands early.
 - Score of a band = predicted liking + 0.15 × uncertainty. The 0.15 sets how adventurous it is.
-- After each proposal it updates the band's model from the student's reaction. The reward is 0 when the
+- After each proposal it updates the band's model from the student's reaction. The reward is +1 when the
 proposal is kept, and minus (minutes dragged ÷ 240), capped at -1, when it is dragged.
 - It starts with no knowledge at all.
 
@@ -106,7 +106,7 @@ simulator can see).
 | **Regret**                 | mean over proposals of `U(best) - U(proposed)`                                                                                                                                                                   | How much worse the proposed slot is than the best free slot, in the student's own taste. 0 means the proposal was the best slot.                                                                     | lower     |
 | **Kept**                   | `(number of proposals with moved = 0) / (number of proposals)`                                                                                                                                                   | The share of proposals the student leaves alone. It is what a user feels as "the app got it right". It is a rough measure: a student also keeps slots that are only good enough.                     | higher    |
 | **Drag**                   | mean over proposals of `moved(i)`, in minutes                                                                                                                                                                    | How far the student moves a proposal on average. A kept proposal counts as 0, so it is a per-proposal average, not an average over dragged ones.                                                     | lower     |
-| **Proposals to reach 60%** | for each student and scenario: the first proposal number `n >= 10` where `(kept among proposals n-9 .. n) / 10 >= 0.6`; if that never happens, `60` (the run length). Then averaged over students and scenarios. | How many proposals pass before the student has kept at least 6 of the last 10. It shows how fast the system becomes useful to a new student. 10 is the fastest possible, 60 means "never got there". | lower     |
+| **Proposals to reach 60%** | for each student and scenario: the first proposal number `n >= 10` where `(kept among proposals n-9 .. n) / 10 >= 0.6`; if that never happens, the number of placements in the run (60 for single tasks; more when multi-sitting series add placements, hence averages above 60). Then averaged over students and scenarios. | How many proposals pass before the student has kept at least 6 of the last 10. It shows how fast the system becomes useful to a new student. 10 is the fastest possible, a value equal to the run's placement count means "never got there". | lower     |
 | **First 10**               | regret, using only proposals 1 to 11 of a student's run                                                                                                                                                          | Regret while the system knows almost nothing about the student.                                                                                                                                      | lower     |
 | **40+**                    | regret, using only proposals 42 and later                                                                                                                                                                        | Regret once the system has had a lot of feedback.                                                                                                                                                    | lower     |
 
@@ -135,6 +135,11 @@ difference excludes 0, the two systems are clearly different. "n.s." in the tabl
 includes 0. "pts" means percentage points.
 - With 14,000 students the intervals are very narrow, so nearly every difference is clear. Judge by the size
 of a difference.
+
+**Known limitation: infeasible placements.** When no free slot exists inside a task's window the simulator
+records no proposal for that member, whereas production still assigns a start through displacement or the
+last resort. Crowded cases are therefore under-represented in regret, kept and drag. Every difference between
+systems is taken over the placements all systems produced (same task and member), so they stay paired.
 
 **Regret and kept can disagree.**
 

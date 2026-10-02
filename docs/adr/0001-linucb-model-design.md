@@ -242,9 +242,11 @@ stamps the proposal consumed (`observationCount++`).
 | `D_SCALE`       | `240`  | minutes; `MOVE` penalty saturates at ≥ 4 h displacement                                                                                                          |
 | `MAX_SCAN_DAYS` | `60`   | candidate-day horizon and the deadline/day normalization divisor (`scheduler/constants.ts`); it feeds every stored feature vector, so changing it is a migration |
 
-Optional stability follow-up (not shipped): warm-start `θ` for each arm from the user's
-`preferenceMatrix` band means instead of `b = 0`, so a brand-new user does not explore
-`EARLY_MORNING` as if it were neutral.
+Warm start (issue #60, shipped): each arm starts from the **default** preference matrix
+rather than `b = 0`, with `LINUCB_PRIOR_N0 = 5` pseudo-observations per arm, so a brand-new user
+does not explore `EARLY_MORNING` as if it were neutral. Seeding from the user's own
+`preferenceMatrix` band means remains unshipped. See
+`docs/scheduler/heuristic-vs-linucb-report.md`.
 
 ---
 
@@ -364,4 +366,4 @@ Replaces §5.1's d = 22, the "cold arm scores 0" rule, and the preference-matrix
 - **AFTERNOON [11:00, 17:00) split into MIDDAY [11:00, 14:00) + AFTERNOON [14:00, 17:00).**
   Each task goes to its band's centre, so a 6 h band could only offer 13:30. The split adds one
   exploration step for a new user (a fixed band is now found in ≤ 5 placements).
-- **Deferred until prod data points to them:** hybrid LinUCB, a matrix-seeded prior.
+- **Deferred until prod data points to them:** hybrid LinUCB, a per-user matrix-seeded prior.
