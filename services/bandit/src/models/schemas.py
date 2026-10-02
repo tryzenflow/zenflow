@@ -62,16 +62,21 @@ class ArmParams:
             self._a_inv = np.linalg.inv(self.A)
         return self._a_inv
 
-    def add_observation(self, x: np.ndarray, payoff: float) -> None:
+    def add_observation(
+        self, x: np.ndarray, payoff: float, weight: float = 1.0
+    ) -> None:
         """Fold one ``(context, payoff)`` pair into this arm's statistics, in place.
 
         Parameters
         ----------
         x : ndarray of shape (d,)
         payoff : float
+        weight : float, default 1.0
+            Observation weight ``w``: ``A += w x xᵀ``, ``b += w payoff x``
+            (fractional weights seed the warm-start prior).
         """
-        self.A += np.outer(x, x)
-        self.b += payoff * x
+        self.A += weight * np.outer(x, x)
+        self.b += weight * payoff * x
         self._a_inv = None
 
     def to_lists(self) -> tuple[list[float], list[float]]:

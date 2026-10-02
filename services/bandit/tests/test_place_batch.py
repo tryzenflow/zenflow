@@ -223,7 +223,7 @@ def _old_run(req: PlaceRequest) -> list[PlacedMember]:
         )
         dur_ms = m.duration_minutes * consts.MS_PER_MINUTE
         if placer.next15 + dur_ms > req.deadline_ms:
-            return placer._no_slot(m, base)
+            return placer._no_slot(m, base, ledger)
         days = placer._select_days(first, last, ledger)
         extra = list(ledger.siblings)
         lin = (
@@ -238,7 +238,7 @@ def _old_run(req: PlaceRequest) -> list[PlacedMember]:
         )
         decision = PolicySelector.resolve(req.mode, m, heur, lin)
         if decision is None:
-            return placer._no_slot(m, base)
+            return placer._no_slot(m, base, ledger)
         policy, start_ms = decision
         return base.model_copy(
             update={
@@ -356,9 +356,9 @@ def test_dense_overlapping_series_threads_siblings_correctly() -> None:
 
 
 def test_all_cold_arms_matches_oracle() -> None:
-    """Every arm cold (no A/b) -> every arm scores the same ridge-prior bonus
-    (the batch tensor's arm-score slices, not just the final pick), so the
-    seeded tie-break order decides the band."""
+    """Every arm cold (no A/b) -> each arm scores its warm-start prior (the batch
+    tensor's arm-score slices, not just the final pick): equal arms tie, the
+    prior's preferred bands (MORNING, AFTERNOON) outscore the rest."""
     req = make_req(
         members=[member(dur=60), member("t2", dur=60)],
         deadlineMs=NOW + 3 * DAY_MS,
@@ -377,8 +377,10 @@ def test_all_cold_arms_matches_oracle() -> None:
     batch = placer._build_batch(req.members, windows_days, ledger)
     first_arr = next(iter(batch.arm_scores.values()))
     assert (first_arr[batch.valid] > 0.0).all()
-    for arr in batch.arm_scores.values():
-        np.testing.assert_allclose(arr[batch.valid], first_arr[batch.valid])
+    scores = {a: arr[batch.valid] for a, arr in batch.arm_scores.items()}
+    assert (scores["MORNING"] > scores["EVENING"]).all()
+    assert (scores["AFTERNOON"] > scores["NIGHT"]).all()
+    assert (scores["NIGHT"] > scores["EARLY_MORNING"]).all()
 
 
 def test_dst_boundary_day_matches_oracle() -> None:
