@@ -16,7 +16,8 @@ depends on the mode:
 
 The data overrides the prior at rate ``1 / (n0 + n_obs)``. ``n0 = 0`` (or no
 spec at all) is exactly the production cold start. A pure function: no I/O,
-clock or randomness. Nothing here is imported by the service.
+clock or randomness. ``pref`` delegates to the production prior
+(:mod:`src.core.prior`); the other modes are simulator-only ablations.
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ from src.core.arms import ARM_BANDS
 from src.core.constants import FEATURE_DIM
 from src.core.context_vector import build_context_vector
 from src.core.preference import default_preference_matrix
+from src.core.prior import seeded_arm_params
 
 PRIOR_MODES = ("pref", "pref_norm", "pref_hi", "flat")
 WEEKDAY_SHARE = 5 / 7
@@ -99,6 +101,15 @@ def prior_rewards(mode: str) -> dict[str, float]:
 
 def warm_state(spec: PriorSpec, ridge: float) -> Prior:
     """Per-arm ``(A, b)`` at the prior (``ridge * I, 0`` when the spec is off)."""
+    if spec.mode == "pref":
+        # The production prior (one implementation, no drift): n0 per arm.
+        seeded = {
+            arm: seeded_arm_params(arm, ridge, spec.n0) for arm, _, _ in ARM_BANDS
+        }
+        return (
+            {arm: p.A for arm, p in seeded.items()},
+            {arm: p.b for arm, p in seeded.items()},
+        )
     rewards = prior_rewards(spec.mode)
     ctxs = typical_contexts()
     gram = np.sum([w * np.outer(x, x) for w, x in ctxs], axis=0)
