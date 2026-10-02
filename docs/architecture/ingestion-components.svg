@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1260 970" font-family="Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 1300" font-family="Helvetica, Arial, sans-serif">
   <title>Zenflow — ingestion component diagram</title>
   <defs>
     <marker id="iArrOrange" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
@@ -12,120 +12,122 @@
     </marker>
   </defs>
 
-  <rect x="0" y="0" width="1260" height="970" fill="#FCFBFA"/>
+  <rect x="0" y="0" width="1500" height="1300" fill="#FCFBFA"/>
   <text x="30" y="32" font-size="20" font-weight="700" fill="#2B2724">Zenflow — ingestion components (backend/src/ingestion/*)</text>
 
   <!-- Panel IO-TOP -->
-  <rect x="40" y="58" width="1180" height="382" rx="14" fill="none" stroke="#2B2724" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="8 6"/>
-  <text x="60" y="82" font-size="13.5" font-weight="700" fill="#2B2724" opacity="0.8">ingestion/ + lms/ + portal/ — I/O layer (one rolling ticker, one credential decrypt per pass)</text>
+  <rect x="40" y="90" width="1420" height="420" rx="14" fill="none" stroke="#2B2724" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="8 6"/>
+  <text x="60" y="116" font-size="13.5" font-weight="700" fill="#2B2724" opacity="0.8">ingestion/ + lms/ + portal/ — I/O layer (one rolling ticker, one credential decrypt per pass)</text>
 
   <!-- Row1: cron + schedule -->
-  <rect x="70" y="100" width="230" height="70" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
-  <text x="185" y="128" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">IngestionTickerService</text>
-  <text x="185" y="144" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">@Cron, 1-minute heartbeat</text>
-  <text x="185" y="157" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">the only cron in the module</text>
+  <rect x="90" y="150" width="260" height="80" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
+  <text x="220" y="182" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">IngestionTickerService</text>
+  <text x="220" y="199" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">@Cron, 1-minute heartbeat</text>
+  <text x="220" y="213" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">the only cron in the module</text>
 
-  <rect x="340" y="100" width="260" height="70" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
-  <text x="470" y="128" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">IngestionScheduleService</text>
-  <text x="470" y="144" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">claims most-overdue</text>
-  <text x="470" y="157" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">(integration, kind) targets</text>
+  <rect x="430" y="150" width="300" height="80" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
+  <text x="580" y="182" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">IngestionScheduleService</text>
+  <text x="580" y="199" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">claims most-overdue</text>
+  <text x="580" y="213" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">(integration, kind) targets</text>
 
   <!-- Row2: watchers -->
-  <rect x="70" y="210" width="240" height="70" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="190" y="235" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">EnrollmentDiscoveryService</text>
-  <text x="190" y="252" text-anchor="middle" font-size="10" fill="#2B2724" opacity="0.7">confirmed section/course set</text>
-  <text x="190" y="265" text-anchor="middle" font-size="10" fill="#2B2724" opacity="0.7">never narrows on failure</text>
+  <rect x="90" y="280" width="280" height="80" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="230" y="310" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">EnrollmentDiscoveryService</text>
+  <text x="230" y="327" text-anchor="middle" font-size="10" fill="#2B2724" opacity="0.7">confirmed section/course set</text>
+  <text x="230" y="341" text-anchor="middle" font-size="10" fill="#2B2724" opacity="0.7">never narrows on failure</text>
 
-  <rect x="340" y="210" width="230" height="70" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="455" y="240" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">TimetableWatcherService</text>
-  <text x="455" y="257" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">one LECTURE per meeting</text>
+  <rect x="410" y="280" width="260" height="80" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="540" y="315" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">TimetableWatcherService</text>
+  <text x="540" y="332" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">one LECTURE per meeting</text>
 
-  <rect x="600" y="210" width="210" height="70" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="705" y="240" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">ExamWatcherService</text>
-  <text x="705" y="257" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">one EXAM per row</text>
+  <rect x="710" y="280" width="240" height="80" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="830" y="315" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">ExamWatcherService</text>
+  <text x="830" y="332" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">one EXAM per row</text>
 
-  <rect x="840" y="210" width="210" height="70" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="945" y="240" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">LmsWatcherService</text>
-  <text x="945" y="257" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">ASSIGNMENT / EXAM (quiz)</text>
+  <rect x="990" y="280" width="240" height="80" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="1110" y="315" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">LmsWatcherService</text>
+  <text x="1110" y="332" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">ASSIGNMENT / EXAM (quiz)</text>
 
   <!-- Row3: clients -->
-  <rect x="340" y="330" width="230" height="70" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="455" y="358" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">PortalAPIService</text>
-  <text x="455" y="374" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">decrypt creds, fetch</text>
+  <rect x="410" y="410" width="260" height="80" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="540" y="442" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">PortalAPIService</text>
+  <text x="540" y="459" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">decrypt creds, fetch</text>
 
-  <rect x="700" y="330" width="230" height="70" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="815" y="358" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">LMSService</text>
-  <text x="815" y="374" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">decrypt creds, fetch</text>
+  <rect x="850" y="410" width="260" height="80" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="980" y="442" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">LMSService</text>
+  <text x="980" y="459" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">decrypt creds, fetch</text>
 
   <!-- Panel CORE -->
-  <rect x="40" y="460" width="1180" height="110" rx="14" fill="none" stroke="#2B2724" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="8 6"/>
-  <text x="60" y="482" font-size="13.5" font-weight="700" fill="#2B2724" opacity="0.8">ingestion/core/* — pure, no I/O</text>
-  <rect x="460" y="498" width="340" height="58" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="630" y="520" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">core/parse-*.ts</text>
-  <text x="630" y="536" text-anchor="middle" font-size="10" fill="#2B2724" opacity="0.7">parse-portal / parse-lms / period-map / grid / semester</text>
+  <rect x="40" y="580" width="1420" height="140" rx="14" fill="none" stroke="#2B2724" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="8 6"/>
+  <text x="60" y="606" font-size="13.5" font-weight="700" fill="#2B2724" opacity="0.8">ingestion/core/* — pure, no I/O</text>
+  <rect x="560" y="630" width="380" height="70" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="750" y="658" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">core/parse-*.ts</text>
+  <text x="750" y="675" text-anchor="middle" font-size="10" fill="#2B2724" opacity="0.7">parse-portal / parse-lms / period-map / grid / semester</text>
 
   <!-- Panel IO-BOTTOM -->
-  <rect x="40" y="590" width="1180" height="280" rx="14" fill="none" stroke="#2B2724" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="8 6"/>
-  <text x="60" y="612" font-size="13.5" font-weight="700" fill="#2B2724" opacity="0.8">write-back + cross-student cache</text>
+  <rect x="40" y="790" width="1420" height="400" rx="14" fill="none" stroke="#2B2724" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="8 6"/>
+  <text x="60" y="816" font-size="13.5" font-weight="700" fill="#2B2724" opacity="0.8">write-back + cross-student cache</text>
 
   <!-- Row5: materializer + conflicts -->
-  <rect x="380" y="630" width="300" height="90" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
-  <text x="530" y="656" text-anchor="middle" font-size="13.5" font-weight="700" fill="#2B2724">MaterializerService</text>
-  <text x="530" y="673" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">writes Session rows; confirm-gate</text>
-  <text x="530" y="686" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">+ two-miss rules; notifies via</text>
-  <text x="530" y="699" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">core/sync-digest.ts</text>
+  <rect x="420" y="850" width="320" height="100" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
+  <text x="580" y="878" text-anchor="middle" font-size="13.5" font-weight="700" fill="#2B2724">MaterializerService</text>
+  <text x="580" y="895" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">writes Session rows; confirm-gate</text>
+  <text x="580" y="908" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">+ two-miss rule; notifies via</text>
+  <text x="580" y="921" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">core/sync-digest.ts</text>
 
-  <rect x="760" y="630" width="220" height="90" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
-  <text x="870" y="660" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">SyncConflictsService</text>
-  <text x="870" y="677" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">one check per</text>
-  <text x="870" y="690" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">(source, type)</text>
+  <rect x="820" y="850" width="260" height="100" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="950" y="890" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">SyncConflictsService</text>
+  <text x="950" y="907" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">one check per (source, type)</text>
 
   <!-- Row6: cache + fanout side path -->
-  <rect x="140" y="760" width="250" height="80" rx="8" fill="#F5F3F0" stroke="#F0B100" stroke-width="2"/>
-  <text x="265" y="788" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">OccurrenceCacheService</text>
-  <text x="265" y="805" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">skip-upstream-fetch vs</text>
-  <text x="265" y="818" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">live-walk decision</text>
+  <rect x="150" y="1000" width="280" height="90" rx="8" fill="#F5F3F0" stroke="#F0B100" stroke-width="2"/>
+  <text x="290" y="1030" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">OccurrenceCacheService</text>
+  <text x="290" y="1047" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">skip-upstream-fetch vs</text>
+  <text x="290" y="1060" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">live-walk decision</text>
 
-  <rect x="440" y="760" width="250" height="80" rx="8" fill="#F5F3F0" stroke="#F0B100" stroke-width="2"/>
-  <text x="565" y="788" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">OccurrenceFanoutService</text>
-  <text x="565" y="805" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">pushes a live walk's change</text>
-  <text x="565" y="818" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">to confirmed classmates</text>
+  <rect x="470" y="1000" width="280" height="90" rx="8" fill="#F5F3F0" stroke="#F0B100" stroke-width="2"/>
+  <text x="610" y="1030" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">OccurrenceFanoutService</text>
+  <text x="610" y="1047" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">pushes a live walk's change</text>
+  <text x="610" y="1060" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">to confirmed classmates</text>
 
   <!-- Arrows: primary pipeline (orange) -->
-  <path d="M300,135 L340,135" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
+  <path d="M350,190 L430,190" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
 
-  <path d="M420,170 L190,210" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
-  <path d="M460,170 L455,210" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
-  <path d="M540,170 L700,210" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
-  <path d="M580,170 L940,210" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
-  <text x="470" y="192" text-anchor="middle" font-size="10" fill="#FF6900">claims due targets</text>
+  <path d="M460,230 L460,255 L230,255 L230,280" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
+  <path d="M530,230 L530,255 L540,255 L540,280" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
+  <path d="M630,230 L630,255 L830,255 L830,280" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
+  <path d="M700,230 L700,255 L1110,255 L1110,280" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
+  <rect x="525" y="238" width="112" height="15" fill="#FCFBFA"/>
+  <text x="581" y="249" text-anchor="middle" font-size="10" fill="#FF6900">claims due targets</text>
 
-  <path d="M170,280 L400,330" fill="none" stroke="#FF6900" stroke-width="2" marker-end="url(#iArrOrange)"/>
-  <path d="M230,280 L770,330" fill="none" stroke="#FF6900" stroke-width="2" marker-end="url(#iArrOrange)"/>
-  <path d="M455,280 L455,330" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
-  <path d="M705,280 L500,330" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
-  <path d="M945,280 L830,330" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
+  <path d="M230,360 L230,385 L500,385 L500,410" fill="none" stroke="#FF6900" stroke-width="2" marker-end="url(#iArrOrange)"/>
+  <path d="M540,360 L540,410" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
+  <path d="M830,360 L830,385 L960,385 L960,410" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
+  <path d="M1110,360 L1110,385 L1010,385 L1010,410" fill="none" stroke="#FF6900" stroke-width="2" marker-end="url(#iArrOrange)"/>
 
-  <path d="M455,400 L560,498" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
-  <path d="M815,400 L700,498" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
+  <path d="M500,490 L500,610 L700,610 L700,630" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
+  <path d="M980,490 L980,610 L820,610 L820,630" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
 
-  <path d="M630,556 L560,630" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
-  <text x="640" y="600" font-size="10.5" fill="#FF6900">parsed blocks</text>
+  <path d="M750,700 L750,775 L580,775 L580,850" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
+  <rect x="620" y="762" width="82" height="15" fill="#FCFBFA"/>
+  <text x="661" y="773" text-anchor="middle" font-size="10.5" fill="#FF6900">parsed blocks</text>
 
-  <path d="M680,675 L760,675" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
+  <path d="M740,900 L820,900" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#iArrOrange)"/>
 
   <!-- decision gate: watchers consult the cache before fetching -->
-  <path d="M470,170 L470,760" fill="none" stroke="#2B2724" stroke-opacity="0.45" stroke-width="1.75" stroke-dasharray="6 5" marker-end="url(#iArrNeutral)"/>
-  <text x="480" y="500" font-size="10" fill="#2B2724" opacity="0.7">each watcher's decide(): skip vs walk</text>
+  <path d="M380,230 L380,1000" fill="none" stroke="#2B2724" stroke-opacity="0.45" stroke-width="1.75" stroke-dasharray="6 5" marker-end="url(#iArrNeutral)"/>
+  <rect x="388" y="518" width="230" height="16" fill="#FCFBFA"/>
+  <text x="393" y="530" font-size="10" fill="#2B2724" opacity="0.75">each watcher's decide(): skip vs walk</text>
 
   <!-- side path: cache + fanout into Materializer (amber, never a bulk write) -->
-  <path d="M300,760 L420,720" fill="none" stroke="#F0B100" stroke-width="2.25" marker-end="url(#iArrAmber)"/>
-  <path d="M540,760 L490,720" fill="none" stroke="#F0B100" stroke-width="2.25" marker-end="url(#iArrAmber)"/>
-  <text x="480" y="742" text-anchor="middle" font-size="11" fill="#F0B100" font-weight="600">never a bulk write —</text>
-  <text x="480" y="756" text-anchor="middle" font-size="11" fill="#F0B100" font-weight="600">always through materialize()</text>
+  <path d="M300,1000 L300,970 L500,970 L500,950" fill="none" stroke="#F0B100" stroke-width="2.25" marker-end="url(#iArrAmber)"/>
+  <path d="M610,1000 L610,975 L640,975 L640,950" fill="none" stroke="#F0B100" stroke-width="2.25" marker-end="url(#iArrAmber)"/>
+  <rect x="790" y="958" width="230" height="32" fill="#FCFBFA"/>
+  <text x="800" y="971" font-size="11" fill="#F0B100" font-weight="600">never a bulk write —</text>
+  <text x="800" y="985" font-size="11" fill="#F0B100" font-weight="600">always through materialize()</text>
 
   <!-- legend -->
-  <g transform="translate(40,900)">
+  <g transform="translate(40,1220)">
     <line x1="0" y1="0" x2="34" y2="0" stroke="#FF6900" stroke-width="2.5"/>
     <text x="42" y="4" font-size="11.5" fill="#2B2724">primary ingestion pipeline</text>
     <line x1="270" y1="0" x2="304" y2="0" stroke="#F0B100" stroke-width="2.25"/>
@@ -133,6 +135,6 @@
     <line x1="640" y1="0" x2="674" y2="0" stroke="#2B2724" stroke-opacity="0.45" stroke-width="1.75" stroke-dasharray="6 5"/>
     <text x="682" y="4" font-size="11.5" fill="#2B2724">per-watcher decision gate</text>
   </g>
-  <text x="40" y="940" font-size="11.5" fill="#2B2724" opacity="0.7">Every ingested item is written and notified through MaterializerService.materialize — cache-served and fanned-out changes included — so a</text>
-  <text x="40" y="956" font-size="11.5" fill="#2B2724" opacity="0.7">hand-moved session keeps its time and a deleted one is never resurrected, regardless of which path discovered the change.</text>
+  <text x="40" y="1260" font-size="11.5" fill="#2B2724" opacity="0.7">Every ingested item is written and notified through MaterializerService.materialize — cache-served and fanned-out changes included — so a</text>
+  <text x="40" y="1276" font-size="11.5" fill="#2B2724" opacity="0.7">hand-moved session keeps its time and a deleted one is never resurrected, regardless of which path discovered the change.</text>
 </svg>
