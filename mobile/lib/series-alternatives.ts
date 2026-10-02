@@ -39,10 +39,8 @@ type DivergentSession = SeriesSession & {
  * `POST /sessions/:id/slot-pick` needs — so require all three rather than
  * trusting the flag.
  *
- * Sorts by `sessionIndex` (not array order) to match `selectSeriesAlternatives`,
- * which surfaces the soonest `MAX_SERIES_ALTERNATIVES` = 5. The cap is already
- * applied server-side and is deliberately not re-applied here, so raising it
- * needs no app release.
+ * Sorts by `sessionIndex` (not array order), then keeps the three soonest
+ * divergent sittings for the mobile picker.
  */
 export function divergentSittings(
   sessions: SeriesSession[] | undefined,
@@ -63,6 +61,7 @@ export function divergentSittings(
       alternativeSlot: session.alternativeSlot,
       index: session.sessionIndex ?? 0,
       total: session.sessionTotal ?? 0,
-    }))
-    .sort((a, b) => a.index - b.index);
+     }))
+     .sort((a, b) => a.index - b.index)
+     .slice(0, 3);
 }

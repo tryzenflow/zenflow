@@ -72,4 +72,19 @@ describe("divergentSittings", () => {
     ];
     expect(divergentSittings(sessions).map((d) => d.session.id)).toEqual(["a", "c"]);
   });
+
+  it("limits the mobile picker to the three soonest divergent sittings", () => {
+    const sessions = [
+      sitting({ id: "d", sessionIndex: 4 }),
+      sitting({ id: "b", sessionIndex: 2 }),
+      sitting({ id: "e", sessionIndex: 5 }),
+      sitting({ id: "a", sessionIndex: 1 }),
+      sitting({ id: "c", sessionIndex: 3 }),
+    ];
+    expect(divergentSittings(sessions).map((d) => d.session.id)).toEqual([
+      "a",
+      "b",
+      "c",
+    ]);
+  });
 });

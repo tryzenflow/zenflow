@@ -40,6 +40,8 @@ export interface SlotOption {
   label: string;
   /** `"10:00 AM"` — for the single-session sheet's footer buttons. */
   time: string;
+  /** `"10:00 – 11:00 AM"` — full sitting range for comparison cards. */
+  range: string;
   /** `"Sat Jul 4"` / `"today"` / `"tomorrow"`. */
   day: string;
   hint: string;
@@ -90,6 +92,7 @@ export function buildSlotOptions(
       kind: "primary",
       label: `${capitalize(primaryDay)} · ${formatRange(primary, addMinutes(primary, dur))}`,
       time: format(primary, "h:mm a"),
+      range: formatRange(primary, addMinutes(primary, dur)),
       day: primaryDay,
       hint: "Currently scheduled",
       dayDelta: "",
@@ -98,6 +101,7 @@ export function buildSlotOptions(
       kind: "alternative",
       label: `${capitalize(alternativeDay)} · ${formatRange(alternative, addMinutes(alternative, dur))}`,
       time: format(alternative, "h:mm a"),
+      range: formatRange(alternative, addMinutes(alternative, dur)),
       day: alternativeDay,
       hint: "Also fits before the deadline",
       dayDelta,

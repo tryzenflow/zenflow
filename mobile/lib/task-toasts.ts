@@ -261,13 +261,19 @@ export function showSeriesAlternativesPrompt(
 ): void {
   toast(
     `${count} sitting${count === 1 ? "" : "s"} ${count === 1 ? "has" : "have"} an alternative`,
-    "info",
+    "tip",
     undefined,
     "bottom",
     false,
-    { label: "View", onPress: onView },
     {
-      description: `All ${total} ${total === 1 ? "is" : "are"} already scheduled — swap any you like`,
+      label: "View",
+      onPress: onView,
+      color: { light: "#f97316", dark: "#fb923c" },
+      inline: true,
+      mockup: true,
+    },
+    {
+      description: `All ${total} are already scheduled — swap any you like`,
     },
   );
 }

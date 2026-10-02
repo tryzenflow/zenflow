@@ -169,7 +169,7 @@ export default function WeekScreen() {
       primarySlot: string,
       alternativeSlot: string,
       slotProposalId: string,
-      onPick: (chose: "primary" | "alternative") => void,
+      onPick: (chose: "primary" | "alternative") => Promise<void>,
     ) => {
       slotPickSheetRef.current?.open(
         session,
@@ -178,19 +178,14 @@ export default function WeekScreen() {
         slotProposalId,
         tz,
         async (chose) => {
-          try {
-            await slotPick(session.id, { slotProposalId, chose });
-          } catch (error) {
-            // Non-blocking — parent handles toast
-            console.warn("slotPick failed:", error);
-          }
-          onPick(chose);
+          await slotPick(session.id, { slotProposalId, chose });
+          await onPick(chose);
           applySlotPickChoice(session, primarySlot, alternativeSlot, chose);
         },
         () => {},
       );
     },
-    [applySlotPickChoice],
+    [applySlotPickChoice, tz],
   );
 
   // A divergent create/edit landed on the week view (`?date=`/`?flash=` params
@@ -204,15 +199,10 @@ export default function WeekScreen() {
         pending.slotProposalId,
         pending.tz,
         async (chose) => {
-          try {
-            await slotPick(pending.session.id, {
-              slotProposalId: pending.slotProposalId,
-              chose,
-            });
-          } catch (error) {
-            // Non-blocking — keep the placement, surface via the toast path
-            console.warn("slotPick failed:", error);
-          }
+          await slotPick(pending.session.id, {
+            slotProposalId: pending.slotProposalId,
+            chose,
+          });
           applySlotPickChoice(
             pending.session,
             pending.primarySlot,
@@ -258,22 +248,25 @@ export default function WeekScreen() {
             setFocusTick((t) => t + 1);
           },
           onBulk: async (chose, ids) => {
-            // allSettled, never all: one 409 must not read as a whole-batch
-            // failure, and the sittings that did land stay landed.
             const settled = await Promise.allSettled(
               ids.map(async (id) => {
                 const sitting = pending.sittings.find((s) => s.session.id === id);
-                if (!sitting) return;
+                if (!sitting) throw new Error("Unknown sitting");
                 const res = await slotPick(id, {
                   slotProposalId: sitting.slotProposalId,
                   chose,
                 });
                 showSeriesPickToast(toast, res, pending.tz);
+                return id;
               }),
             );
-            const applied = settled.filter((r) => r.status === "fulfilled").length;
-            showBulkPickToast(toast, applied, ids.length - applied);
+            const appliedIds = settled.flatMap((result) =>
+              result.status === "fulfilled" ? [result.value] : [],
+            );
+            const failedIds = ids.filter((id) => !appliedIds.includes(id));
+            showBulkPickToast(toast, appliedIds.length, failedIds.length);
             setFocusTick((t) => t + 1);
+            return { appliedIds, failedIds };
           },
         });
 

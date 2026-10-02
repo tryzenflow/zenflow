@@ -37,7 +37,43 @@ export interface SeriesSlotPickInput {
    */
   onPick: (sittingId: string, chose: Chose) => Promise<void>;
   /** Apply a decision to every still-undecided sitting, in one pass. */
-  onBulk: (chose: Chose, sittingIds: string[]) => Promise<void>;
+  onBulk: (
+    chose: Chose,
+    sittingIds: string[],
+  ) => Promise<{ appliedIds: string[]; failedIds: string[] }>;
+}
+
+interface SittingState {
+  selected: Chose;
+  committed: Chose;
+  busy: boolean;
+}
+
+interface BulkResult {
+  appliedIds: string[];
+  failedIds: string[];
+}
+
+interface CardPair {
+  sitting: DivergentSitting;
+  options: [SlotOption, SlotOption];
+  state: SittingState;
+}
+
+const emptyBulkResult: BulkResult = { appliedIds: [], failedIds: [] };
+
+function updatePair(pair: CardPair, state: Partial<SittingState>): CardPair {
+  return { ...pair, state: { ...pair.state, ...state } };
+}
+
+function updatePairs(
+  pairs: CardPair[],
+  id: string,
+  state: Partial<SittingState>,
+): CardPair[] {
+  return pairs.map((pair) =>
+    pair.sitting.session.id === id ? updatePair(pair, state) : pair,
+  );
 }
 
 export interface SeriesSlotPickSheetHandle {
@@ -48,22 +84,14 @@ interface SeriesSlotPickSheetProps {
   tz: string;
 }
 
-/** One sitting's two cards plus its own selection and in-flight flag. */
-interface CardPair {
-  sitting: DivergentSitting;
-  options: [SlotOption, SlotOption];
-  selected: Chose;
-  busy: boolean;
-}
-
 /**
  * The multi-sitting alternative-slot picker (issue #59).
  *
  * A `sessionCount > 1` TASK series is entirely scheduled the moment it is
  * created — this is never a gate before that. It only surfaces the sittings
  * where the heuristic and LinUCB disagreed, and lets each one be swapped
- * independently. `MAX_SERIES_ALTERNATIVES` (5) bounds the list server-side, so
- * this is always a short scroll rather than all N sittings.
+ * independently. The mobile picker shows at most the three soonest divergent
+ * sittings, so this is always a short scroll rather than all N sittings.
  *
  * Every option prints its own DATE, not just a time: the two plans are
  * independent, so an alternative can land on a different day than the primary
@@ -112,8 +140,11 @@ const SeriesSlotPickSheet = forwardRef<
             // The primary is what the server already applied, so it starts
             // selected. Note this is the OPPOSITE of SlotPickSheet's
             // "alternative" default — here the applied state is the safe one.
-            selected: "primary" as Chose,
-            busy: false,
+            state: {
+              selected: "primary",
+              committed: "primary",
+              busy: false,
+            },
           })),
         );
         onPickRef.current = input.onPick;
@@ -125,76 +156,105 @@ const SeriesSlotPickSheet = forwardRef<
     [sheet],
   );
 
-  const setBusy = (id: string, busy: boolean) =>
-    setPairs((p) =>
-      p.map((c) => (c.sitting.session.id === id ? { ...c, busy } : c)),
-    );
-
-  const setSelected = (id: string, selected: Chose) =>
-    setPairs((p) =>
-      p.map((c) => (c.sitting.session.id === id ? { ...c, selected } : c)),
-    );
-
-  /**
-   * Apply one sitting's pick. Never throws — a failure must not unwind the
-   * create or redistribute that already succeeded, and the user keeps their
-   * other picks.
-   */
+  /** Apply one sitting's pick without allowing a second mutation for that
+   * sitting to overlap the first. */
   async function commit(sitting: DivergentSitting, chose: Chose) {
     const id = sitting.session.id;
-    setBusy(id, true);
+    const current = pairs.find((pair) => pair.sitting.session.id === id);
+    if (!current || current.state.busy || bulkBusy) return;
+    setPairs((p) => updatePairs(p, id, { busy: true }));
     try {
       await onPickRef.current?.(id, chose);
-      setSelected(id, chose);
+      setPairs((p) =>
+        updatePairs(p, id, { selected: chose, committed: chose, busy: false }),
+      );
+      closeSheet();
     } catch (e) {
       if (getSlotTakenError(e)) {
-        // The server kept the primary — say so, and reflect it on the card.
         showSlotTakenToast(toast);
-        setSelected(id, "primary");
       } else {
         showErrorToast(toast, e, "Couldn't move that sitting");
       }
-    } finally {
-      setBusy(id, false);
+      setPairs((p) =>
+        updatePairs(p, id, {
+          selected: current.state.committed,
+          committed: current.state.committed,
+          busy: false,
+        }),
+      );
     }
   }
 
-  /**
-   * Two-click select-then-commit, matching SlotPickSheet: the first tap only
-   * moves the selection, the second on the same card commits. The bulk buttons
-   * below are the one-tap path.
-   */
   function select(pair: CardPair, chose: Chose) {
-    if (pair.busy) return;
-    if (pair.selected === chose) {
+    if (pair.state.busy || bulkBusy) return;
+    if (pair.state.selected === chose) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       void commit(pair.sitting, chose);
-    } else {
-      setSelected(pair.sitting.session.id, chose);
-      Haptics.selectionAsync().catch(() => {});
+      return;
     }
+    setPairs((p) =>
+      updatePairs(p, pair.sitting.session.id, { selected: chose }),
+    );
+    Haptics.selectionAsync().catch(() => {});
   }
 
-  /**
-   * "Switch all" / "Keep all" — only the sittings not already decided, so a
-   * re-tap can never re-POST a pick that already landed. The caller fans out
-   * with `Promise.allSettled`, so one 409 leaves the rest applied.
-   */
+  /** Apply a bulk decision and keep failed cards at their committed state. */
+  function closeSheet() {
+    onPickRef.current = null;
+    onBulkRef.current = null;
+    sheet.ref.current?.dismiss?.();
+    sheet.close();
+  }
+
   async function bulk(chose: Chose) {
+    if (bulkBusy || pairs.some((pair) => pair.state.busy)) return;
     const targets = pairs
-      .filter((c) => c.selected !== chose)
-      .map((c) => c.sitting.session.id);
+      .filter((pair) => pair.state.committed !== chose)
+      .map((pair) => pair.sitting.session.id);
+
+    if (chose === "primary" && targets.length === 0) {
+      closeSheet();
+      return;
+    }
+
     if (targets.length === 0) return;
     setBulkBusy(true);
+    setPairs((p) =>
+      p.map((pair) =>
+        targets.includes(pair.sitting.session.id)
+          ? updatePair(pair, { busy: true })
+          : pair,
+      ),
+    );
+    let result = emptyBulkResult;
     try {
-      await onBulkRef.current?.(chose, targets);
-      setPairs((p) =>
-        p.map((c) =>
-          targets.includes(c.sitting.session.id) ? { ...c, selected: chose } : c,
-        ),
-      );
-    } finally {
-      setBulkBusy(false);
+      result = (await onBulkRef.current?.(chose, targets)) ?? {
+        appliedIds: [],
+        failedIds: targets,
+      };
+    } catch {
+      result = { appliedIds: [], failedIds: targets };
+    }
+    setPairs((p) =>
+      p.map((pair) => {
+        if (!targets.includes(pair.sitting.session.id)) return pair;
+        const id = pair.sitting.session.id;
+        if (result.appliedIds.includes(id)) {
+          return updatePair(pair, {
+            selected: chose,
+            committed: chose,
+            busy: false,
+          });
+        }
+        return updatePair(pair, {
+          selected: pair.state.committed,
+          busy: false,
+        });
+      }),
+    );
+    setBulkBusy(false);
+    if (result.appliedIds.length === targets.length) {
+      closeSheet();
     }
   }
 
@@ -204,134 +264,154 @@ const SeriesSlotPickSheet = forwardRef<
    * primary — which is also what records the pick as "kept".
    */
   function handleDismiss() {
-    if (onPickRef.current === null) return;
+    if (
+      onPickRef.current === null ||
+      bulkBusy ||
+      pairs.some((pair) => pair.state.busy)
+    ) {
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     const moved = pairs
-      .filter((c) => c.selected === "alternative")
-      .map((c) => c.sitting.session.id);
-    if (moved.length > 0) void onBulkRef.current?.("primary", moved);
+      .filter((pair) => pair.state.committed === "alternative")
+      .map((pair) => pair.sitting.session.id);
+    if (moved.length > 0) {
+      void onBulkRef.current?.("primary", moved);
+    }
     onPickRef.current = null;
     onBulkRef.current = null;
     sheet.close();
   }
 
-  // How many sittings are still on their already-applied primary — the bulk
-  // "switch all" target count, and the number behind the header copy.
-  const onPrimary = pairs.filter((c) => c.selected === "primary").length;
+  const onPrimary = pairs.filter(
+    (pair) => pair.state.committed === "primary",
+  ).length;
   const total = pairs[0]?.sitting.total ?? pairs.length;
 
   return (
     <BottomSheet>
-      <BottomSheetContent ref={sheet.ref} onDismiss={handleDismiss}>
-        <BottomSheetView hadHeader={false} className="gap-2 pt-2 px-5">
-          <View className="flex-row items-start justify-between gap-3">
-            <View className="min-w-0 flex-1">
-              <Text className="text-[17px] font-bold tracking-[-0.01em] leading-tight">
-                Alternative times
-              </Text>
-              <Text className="text-[12px] text-muted-foreground mt-[3px]">
-                {title} · {pairs.length} of {total} sittings have an alternative
-              </Text>
-            </View>
-            <Pressable
-              onPress={handleDismiss}
-              accessibilityLabel="Close — keeps everything as scheduled"
-              className="inline-flex size-8 items-center justify-center rounded-full bg-muted shrink-0"
-            >
-              <X size={15} className="text-muted-foreground" />
-            </Pressable>
-          </View>
-        </BottomSheetView>
-
-        <BottomSheetScrollView
-          className="px-5"
-          contentContainerStyle={{ paddingTop: 12, paddingBottom: 8, gap: 10 }}
-        >
-          {pairs.map((pair) => (
-            <View key={pair.sitting.session.id} className="flex-row gap-2">
-              {pair.options.map((option) => {
-                const isSelected = pair.selected === option.kind;
-                return (
-                  <Pressable
-                    key={option.kind}
-                    disabled={pair.busy}
-                    onPress={() => select(pair, option.kind)}
-                    accessibilityLabel={`${option.kind === "primary" ? "Scheduled" : "Alternative"} — ${option.label}`}
-                    className={`
-                        flex-1 rounded-lg border-2 px-2.5 py-2
-                        ${isSelected ? "border-primary bg-primary/[0.08]" : "border-border bg-card"}
-                      `}
-                  >
-                    <View className="flex-row items-center gap-1.5">
-                      <View
-                        className={`
-                            size-3.5 shrink-0 rounded-full border-2 items-center justify-center
-                            ${isSelected ? "bg-primary border-primary" : "border-border"}
-                          `}
-                      >
-                        {isSelected ? (
-                          <Check
-                            size={8}
-                            strokeWidth={3.5}
-                            className="text-primary-foreground"
-                          />
-                        ) : null}
-                      </View>
-                      <Text
-                        className="text-[10.5px] font-semibold text-muted-foreground flex-1"
-                        numberOfLines={1}
-                      >
-                        {option.day} ·{" "}
-                        {option.kind === "primary" ? "Scheduled" : "Alternative"}
-                      </Text>
-                    </View>
-                    <Text
-                      className="text-[13px] font-semibold mt-1 pl-5"
-                      numberOfLines={1}
-                    >
-                      {option.time}
-                    </Text>
-                    {option.dayDelta ? (
-                      <Text className="text-[10px] font-semibold text-primary mt-0.5 pl-5">
-                        {option.dayDelta}
-                      </Text>
-                    ) : null}
-                  </Pressable>
-                );
-              })}
-            </View>
-          ))}
-        </BottomSheetScrollView>
-
-        <BottomSheetView hadHeader={false} className="px-5 pt-2 pb-1">
-          <Text className="text-[10.5px] text-muted-foreground leading-snug">
-            Tap an alternative to swap that sitting — applied right away.
-          </Text>
-        </BottomSheetView>
-
-        <BottomSheetView hadHeader={false} className="px-5 pt-2 pb-6 flex-col gap-2">
-          <Button
-            size="lg"
-            disabled={bulkBusy || onPrimary === 0}
-            accessibilityLabel="Switch every undecided sitting to its alternative"
-            className="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl h-[46px] px-5 text-[14.5px] font-semibold shrink-0"
-            onPress={() => void bulk("alternative")}
+      <BottomSheetContent
+        ref={sheet.ref}
+        onDismiss={handleDismiss}
+        snapPoints={["65%"]}
+        enableDynamicSizing={false}
+      >
+        <View className="flex-1 flex-col">
+          <BottomSheetScrollView
+            className="flex-1 px-5"
+            contentContainerStyle={{ paddingBottom: 16 }}
           >
-            {bulkBusy ? <ActivityIndicator color="#fff" /> : null}
-            <Text className="font-bold">
-              {onPrimary === 0 ? "All switched" : "Switch all to alternatives"}
+            <View className="w-full pt-2">
+              <View className="flex-row items-start justify-between gap-3">
+                <View className="min-w-0 flex-1">
+                  <Text className="text-[17px] font-bold tracking-[-0.01em] leading-tight">
+                    Alternative times
+                  </Text>
+                  <Text className="text-[12px] text-muted-foreground mt-[3px]">
+                    {title} · {pairs.length} of {total} sittings have an
+                    alternative
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={handleDismiss}
+                  accessibilityLabel="Close — keeps everything as scheduled"
+                  className="inline-flex size-8 items-center justify-center rounded-full bg-muted shrink-0"
+                >
+                  <X size={15} className="text-muted-foreground" />
+                </Pressable>
+              </View>
+            </View>
+
+            <View className="gap-1 pt-7">
+              {pairs.map((pair) => (
+                <View
+                  key={pair.sitting.session.id}
+                  className="flex-row items-start gap-2 shrink-0"
+                  style={{ minHeight: 69 }}
+                >
+                  {pair.options.map((option) => {
+                    const isSelected = pair.state.selected === option.kind;
+                    return (
+                      <Pressable
+                        key={option.kind}
+                        disabled={pair.state.busy || bulkBusy}
+                        onPress={() => select(pair, option.kind)}
+                        accessibilityLabel={`${option.kind === "primary" ? "Scheduled" : "Alternative"} — ${option.label}`}
+                        className={`flex-1 overflow-hidden rounded-lg border-2 px-2.5 py-3 ${isSelected ? "border-primary bg-primary/[0.08]" : "border-border bg-card"}`}
+                      >
+                        <View className="flex-row items-center gap-1.5">
+                          <View
+                            className={`size-3.5 shrink-0 items-center justify-center rounded-full border-2 ${isSelected ? "border-primary bg-primary" : "border-border bg-transparent"}`}
+                          >
+                            {isSelected ? (
+                              <Check
+                                size={8}
+                                color="#ffffff"
+                                strokeWidth={3.5}
+                              />
+                            ) : null}
+                          </View>
+                          <Text
+                            className="flex-1 text-[10.5px] font-semibold text-muted-foreground"
+                            numberOfLines={2}
+                          >
+                            {option.day} ·{" "}
+                            {option.kind === "primary"
+                              ? "Scheduled"
+                              : "Alternative"}
+                          </Text>
+                        </View>
+                        <Text
+                          className="mt-1 pl-5 text-[13px] font-semibold"
+                          numberOfLines={1}
+                        >
+                          {option.range}
+                        </Text>
+                        {/* {option.dayDelta ? (
+                          <Text className="text-[10px] font-semibold text-primary mt-0.5">
+                            {option.dayDelta}
+                          </Text>
+                        ) : null} */}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ))}
+            </View>
+          </BottomSheetScrollView>
+
+          <View className="shrink-0 px-5 pt-6 pb-6">
+            <Text className="text-[10.5px] text-muted-foreground leading-snug">
+              Tap an alternative to swap that sitting — applied right away.
             </Text>
-          </Button>
-          <Button
-            variant="ghost"
-            disabled={bulkBusy || onPrimary === pairs.length}
-            accessibilityLabel="Keep every undecided sitting where it is scheduled"
-            className="inline-flex w-full items-center justify-center rounded-xl h-[38px] px-5 text-[13px] font-semibold text-muted-foreground"
-            onPress={() => void bulk("primary")}
-          >
-            <Text className="font-semibold">Keep all as scheduled</Text>
-          </Button>
-        </BottomSheetView>
+
+            <View className="pt-3 flex-col gap-2">
+              <Button
+                size="lg"
+                disabled={bulkBusy || onPrimary === 0}
+                accessibilityLabel="Switch every undecided sitting to its alternative"
+                className="w-full rounded-xl h-[46px]"
+                onPress={() => void bulk("alternative")}
+              >
+                {bulkBusy ? <ActivityIndicator color="#fff" /> : null}
+                <Text className="font-bold">
+                  {onPrimary === 0
+                    ? "All switched"
+                    : "Switch all to alternatives"}
+                </Text>
+              </Button>
+              <Button
+                variant="ghost"
+                disabled={bulkBusy}
+                accessibilityLabel="Keep every undecided sitting where it is scheduled"
+                className="w-full rounded-xl h-[38px]"
+                onPress={() => void bulk("primary")}
+              >
+                <Text className="font-semibold">Keep all as scheduled</Text>
+              </Button>
+            </View>
+          </View>
+        </View>
       </BottomSheetContent>
     </BottomSheet>
   );

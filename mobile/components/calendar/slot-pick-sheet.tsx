@@ -7,7 +7,13 @@ import {
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
+import { useToast } from "@/components/ui/toast";
 import { buildSlotOptions, type SlotOption } from "@/lib/slot-option";
+import {
+  getSlotTakenError,
+  showErrorToast,
+  showSlotTakenToast,
+} from "@/lib/task-toasts";
 import { zonedNow } from "@zenflow/core";
 import type { Session } from "@zenflow/shared";
 import * as Haptics from "expo-haptics";
@@ -21,7 +27,7 @@ export interface SlotPickSheetHandle {
     alternativeSlot: string,
     slotProposalId: string,
     tz: string,
-    onPick: (chose: "primary" | "alternative") => void,
+    onPick: (chose: "primary" | "alternative") => Promise<void>,
     onDismiss: () => void,
   ) => void;
 }
@@ -33,6 +39,7 @@ interface SlotPickSheetProps {
 const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
   ({ tz }, ref) => {
     const sheet = useBottomSheet();
+    const { toast } = useToast();
     const [session, setSession] = useState<Session | null>(null);
     const [options, setOptions] = useState<SlotOption[]>([]);
     const [selected, setSelected] = useState<"primary" | "alternative" | null>(
@@ -80,33 +87,52 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
       [sheet],
     );
 
-    function handlePick(chose: "primary" | "alternative") {
+    async function handlePick(chose: "primary" | "alternative") {
+      if (onPickRef.current === null) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       setSelected(chose);
-      sheet.close();
-      onPickRef.current?.(chose);
-      onPickRef.current = null;
-      onDismissRef.current = null;
+      try {
+        await onPickRef.current(chose);
+        onPickRef.current = null;
+        onDismissRef.current = null;
+        sheet.close();
+      } catch (error) {
+        setSelected("primary");
+        if (getSlotTakenError(error)) {
+          showSlotTakenToast(toast);
+        } else {
+          showErrorToast(toast, error, "Couldn't update this session");
+        }
+      }
     }
 
-    function handleDismiss() {
+    async function handleDismiss() {
       if (onPickRef.current === null) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       setSelected("primary");
-      onPickRef.current("primary");
-      onPickRef.current = null;
-      onDismissRef.current?.();
-      onDismissRef.current = null;
-      sheet.close();
+      try {
+        await onPickRef.current("primary");
+      } catch (error) {
+        if (getSlotTakenError(error)) {
+          showSlotTakenToast(toast);
+        } else {
+          showErrorToast(toast, error, "Couldn't record this choice");
+        }
+      } finally {
+        onPickRef.current = null;
+        onDismissRef.current?.();
+        onDismissRef.current = null;
+        sheet.close();
+      }
     }
 
-    // Whichever side is selected, the buttons read from it — so the two can
-    // never contradict each other or the highlighted card.
-    const chosen = options.find((o) => o.kind === selected);
-    const commitLabel = chosen
-      ? selected === "primary"
-        ? `Keep ${chosen.time} ${chosen.day}`
-        : `Switch to ${chosen.time} ${chosen.day}`
+    const primaryOption = options.find((o) => o.kind === "primary");
+    const alternativeOption = options.find((o) => o.kind === "alternative");
+    const primaryLabel = primaryOption
+      ? `Keep ${primaryOption.time} ${primaryOption.day}`
+      : "";
+    const alternativeLabel = alternativeOption
+      ? `Switch to ${alternativeOption.time} ${alternativeOption.day}`
       : "";
 
     return (
@@ -188,28 +214,20 @@ const SlotPickSheet = forwardRef<SlotPickSheetHandle, SlotPickSheetProps>(
               it never moves anything else on your calendar.
             </Text>
 
-            {/* Both footer buttons commit ONE decision — whichever card is
-                selected — and each labels itself from that same decision. They
-                used to hard-code their own side, so tapping the primary card
-                and then "Switch to" silently applied the alternative. */}
             <View className="flex-none pt-4 flex flex-col gap-2 mb-8">
               <Button
                 size="lg"
                 className="inline-flex w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl h-[52px] px-5 text-base font-semibold shrink-0"
-                onPress={() =>
-                  handlePick(selected === "primary" ? "primary" : "alternative")
-                }
+                onPress={() => handlePick("primary")}
               >
-                <Text className="font-bold">{commitLabel}</Text>
+                <Text className="font-bold">{primaryLabel}</Text>
               </Button>
               <Button
                 variant="ghost"
                 className="inline-flex w-full items-center justify-center rounded-xl h-[42px] px-5 text-[13.5px] font-semibold text-muted-foreground"
-                onPress={() =>
-                  handlePick(selected === "primary" ? "primary" : "alternative")
-                }
+                onPress={() => handlePick("alternative")}
               >
-                <Text className="font-semibold">{commitLabel}</Text>
+                <Text className="font-semibold">{alternativeLabel}</Text>
               </Button>
             </View>
           </BottomSheetView>
