@@ -122,21 +122,18 @@ Optimize** — the backend removed both (see [ADR-0002](../docs/adr/0002-schedul
 Scheduling is server-side: `POST /sessions` places a `TASK` into its single best free slot,
 and every later edit is a plain `PATCH /sessions/:id` field diff.
 
-**Alternative times.** On a pairwise-sampled placement the response carries a second
-candidate slot (model identity is never shown). A single `TASK` create/deadline change with
-`divergent: true` opens `slot-pick-dialog.tsx` (keep vs. switch). A **series** (`sessionCount
-> 1`) create or redistribute never blocks: every sitting is already scheduled, and if any
-`sessions[i].divergent` is set, `promptSeriesAlternatives`
-(`hooks/use-series-alternatives-store.ts`) raises a dismissible toast — "N sittings have an
-alternative · All M are already scheduled" — whose **View** action opens
-`series-alternatives-dialog.tsx` (mounted once in `calendar/layout.tsx`). It lists only the
-divergent sittings (the backend marks at most 5, soonest first), each labelled "Sitting k/M"
-with a primary/alternative radio-card pair; every card shows its own date + time range in the
-user's tz, since an alternative may land on another day. Picking an alternative immediately
-calls `POST /sessions/:id/slot-pick` (`chose: "alternative"`) for that sitting, fires
-`zenflow:calendar-refresh`, and locks the row; a `409` (the alternative now overlaps another
-sitting) marks it "No longer available". Closing sends nothing — untouched sittings stay as
-scheduled.
+**Alternative times.** On a pairwise-sampled placement, the response carries a second
+candidate slot (model identity never shown):
+
+- **Single `TASK`** create/deadline change with `divergent: true` → `slot-pick-dialog.tsx`
+  (keep vs. switch).
+- **Series** create/redistribute never blocks — every sitting is already scheduled. If any
+  `sessions[i].divergent` is set, a dismissible toast ("N sittings have an alternative")
+  opens `series-alternatives-dialog.tsx`, listing up to 5 divergent sittings (soonest first)
+  as primary/alternative radio-card pairs, each showing its own date/time.
+- Picking an alternative calls `POST /sessions/:id/slot-pick` (`chose: "alternative"`),
+  fires `zenflow:calendar-refresh`, and locks the row; `409` (now overlaps a sibling) marks
+  it "No longer available". Closing without picking leaves every sitting as scheduled.
 
 ## Calendar
 
@@ -162,13 +159,14 @@ draggable/resizable block with a click popover.
 ## Notifications
 
 `components/notifications/notification-bell.tsx` — a header bell with an unread-count badge
-that opens a popover listing the DLU watchers' notifications (`GET /notifications`,
-polled). Opening it marks the shown rows read (`PATCH /notifications/:id/read`); a row that
-points at a session opens it and stamps `action-taken`. Each row shows the calendar type's
-icon/tint, a `kind` badge (New / Change / Drop), a spelled-out relative time and, for an
-assignment/exam/lecture, its `eventEndsAt` as a `due`/clock label. Unread rows get a red
-dot + bold meta; a `NEW` row also gets a red alert mark. The hover ✕ dismisses
-(`DELETE /notifications/:id`) — the web counterpart of mobile's swipe.
+opening a popover of the DLU watchers' notifications (`GET /notifications`, polled).
+
+- Opening the popover marks shown rows read; clicking a row that points at a session opens
+  it and stamps `action-taken`.
+- Each row shows the type's icon/tint, a `kind` badge (New/Change/Drop), a relative time,
+  and for an assignment/exam/lecture its `eventEndsAt`. Unread = red dot + bold meta; `NEW`
+  also gets a red alert mark.
+- Hover ✕ dismisses (`DELETE /notifications/:id`) — the web counterpart of mobile's swipe.
 
 **Toasts** (`components/ui/sonner.tsx`) are glass (`.glass-notice` in `index.css`), use Geist and a
 small tinted icon per type, and pile up as an **iPhone-style collapsed stack**: only the newest is
