@@ -2,6 +2,7 @@ import { logout as logoutRequest } from "@/api/auth";
 import { listIntegrations } from "@/api/integrations";
 import { LogOut, Moon } from "@/components/Icons";
 import { DluAccountsSection } from "@/components/settings/dlu-accounts-section";
+import { PreferencesSection } from "@/components/settings/preferences-section";
 import { ProfileRow } from "@/components/settings/profile-row";
 import { SettingsSectionLabel } from "@/components/settings/settings-header";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -122,6 +123,8 @@ export default function SettingsScreen() {
             />
           </View>
         </View>
+
+        <PreferencesSection />
 
         <DluAccountsSection />
 
