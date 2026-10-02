@@ -1,0 +1,172 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 950" font-family="Helvetica, Arial, sans-serif">
+  <title>Zenflow — scheduler component diagram</title>
+  <defs>
+    <marker id="sArrOrange" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#FF6900"/>
+    </marker>
+    <marker id="sArrAmber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#F0B100"/>
+    </marker>
+    <marker id="sArrNeutral" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2B2724" fill-opacity="0.5"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1300" height="950" fill="#FCFBFA"/>
+  <text x="30" y="34" font-size="21" font-weight="700" fill="#2B2724">Zenflow — scheduler components (backend/src/scheduler/* + services/bandit/src/core/*)</text>
+
+  <!-- IO panel -->
+  <rect x="40" y="70" width="1000" height="500" rx="14" fill="none" stroke="#2B2724" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="8 6"/>
+  <text x="60" y="96" font-size="14.5" font-weight="700" fill="#2B2724" opacity="0.8">scheduler/io — I/O layer (Prisma, clock, RNG)</text>
+
+  <!-- Core panel -->
+  <rect x="1060" y="70" width="200" height="500" rx="14" fill="none" stroke="#2B2724" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="8 6"/>
+  <text x="1075" y="96" font-size="12.5" font-weight="700" fill="#2B2724" opacity="0.8">scheduler/core</text>
+  <text x="1075" y="112" font-size="11" fill="#2B2724" opacity="0.7">pure, no I/O</text>
+
+  <!-- Row A: primary chain -->
+  <rect x="70" y="120" width="170" height="70" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="155" y="148" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">SessionsService</text>
+  <text x="155" y="164" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">sessions/</text>
+
+  <rect x="280" y="120" width="190" height="70" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
+  <text x="375" y="145" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">TaskPlacementService</text>
+  <text x="375" y="161" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">pass-through to</text>
+  <text x="375" y="174" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">PythonPlacer</text>
+
+  <rect x="510" y="120" width="170" height="70" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
+  <text x="595" y="148" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">PythonPlacer</text>
+  <text x="595" y="164" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">applies + persists</text>
+
+  <rect x="720" y="120" width="190" height="70" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
+  <text x="815" y="145" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">PlacementGateway</text>
+  <text x="815" y="161" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">builds PlaceRequest</text>
+
+  <!-- Row B -->
+  <rect x="380" y="220" width="160" height="70" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="460" y="248" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">day-load.ts</text>
+  <text x="460" y="264" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">the only occupancy query</text>
+
+  <rect x="600" y="220" width="190" height="70" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
+  <text x="695" y="245" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">ExperimentService</text>
+  <text x="695" y="261" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">primaryPolicy 50/50 +</text>
+  <text x="695" y="274" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">pairwise (only RNG)</text>
+
+  <rect x="820" y="220" width="190" height="70" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
+  <text x="915" y="248" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">PlacementClient</text>
+  <text x="915" y="264" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">timeout / retry / breaker</text>
+
+  <!-- Row C: fallback -->
+  <rect x="600" y="340" width="180" height="70" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="690" y="365" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">FallbackPlacer</text>
+  <text x="690" y="381" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">Python-down driver</text>
+
+  <rect x="820" y="340" width="180" height="70" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="910" y="365" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">HeuristicPlacer</text>
+  <text x="910" y="381" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">frozen TS heuristic</text>
+
+  <!-- Row D: crons + feedback -->
+  <rect x="70" y="470" width="220" height="70" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="180" y="495" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">RetainedSessionsService</text>
+  <text x="180" y="511" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">@Cron EVERY_30_MINUTES</text>
+
+  <rect x="330" y="470" width="220" height="70" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="440" y="495" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">SchedulingFeedbackService</text>
+  <text x="440" y="511" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">MOVE / RETAINED reward</text>
+
+  <rect x="590" y="470" width="220" height="70" rx="8" fill="#F5F3F0" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="700" y="495" text-anchor="middle" font-size="13" font-weight="700" fill="#2B2724">MatrixDecayService</text>
+  <text x="700" y="511" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">@Cron EVERY_DAY_AT_3AM</text>
+
+  <!-- Core boxes -->
+  <rect x="1075" y="220" width="170" height="70" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="1160" y="245" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">slot-score.ts</text>
+  <text x="1160" y="261" text-anchor="middle" font-size="10" fill="#2B2724" opacity="0.7">frozen: bestFreeSlot</text>
+  <text x="1160" y="274" text-anchor="middle" font-size="10" fill="#2B2724" opacity="0.7">slotPreferenceScore</text>
+
+  <rect x="1075" y="340" width="170" height="70" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="1160" y="365" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">series-spread.ts</text>
+  <text x="1160" y="381" text-anchor="middle" font-size="10" fill="#2B2724" opacity="0.7">frozen: day windows</text>
+
+  <rect x="1075" y="470" width="170" height="70" rx="8" fill="#FFFFFF" stroke="#E3DFDA" stroke-width="1.5"/>
+  <text x="1160" y="495" text-anchor="middle" font-size="12.5" font-weight="700" fill="#2B2724">matrix-decay.ts</text>
+  <text x="1160" y="511" text-anchor="middle" font-size="10" fill="#2B2724" opacity="0.7">preference decay</text>
+
+  <!-- Bandit panel -->
+  <rect x="40" y="650" width="1220" height="200" rx="14" fill="none" stroke="#FF6900" stroke-width="2.5"/>
+  <text x="60" y="676" font-size="14.5" font-weight="700" fill="#FF6900">services/bandit — separate process, authoritative ranking (ADR-0003)</text>
+
+  <rect x="260" y="710" width="360" height="100" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
+  <text x="440" y="742" text-anchor="middle" font-size="14" font-weight="700" fill="#2B2724">POST /v1/place</text>
+  <text x="440" y="760" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">heuristic + LinUCB slot-first</text>
+  <text x="440" y="774" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">+ series spread + displacement</text>
+  <text x="440" y="795" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.6">pure numpy, stateless</text>
+
+  <rect x="700" y="710" width="300" height="100" rx="8" fill="#FFFFFF" stroke="#FF6900" stroke-width="2"/>
+  <text x="850" y="748" text-anchor="middle" font-size="14" font-weight="700" fill="#2B2724">POST /update</text>
+  <text x="850" y="766" text-anchor="middle" font-size="11" fill="#2B2724" opacity="0.7">delayed reward → BanditArmState</text>
+  <text x="850" y="787" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.6">pure numpy, stateless</text>
+
+  <!-- Row A primary chain arrows -->
+  <path d="M240,155 L280,155" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#sArrOrange)"/>
+  <path d="M470,155 L510,155" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#sArrOrange)"/>
+  <path d="M680,155 L720,155" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#sArrOrange)"/>
+
+  <!-- PythonPlacer -> ExperimentService (policy assignment) -->
+  <path d="M615,190 L680,220" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#sArrOrange)"/>
+  <text x="628" y="208" font-size="10.5" fill="#FF6900">policy assignment</text>
+
+  <!-- PlacementGateway -> day-load.ts -->
+  <path d="M780,190 L490,220" fill="none" stroke="#2B2724" stroke-opacity="0.5" stroke-width="2" marker-end="url(#sArrNeutral)"/>
+  <text x="650" y="212" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.7">occupancy query</text>
+
+  <!-- PlacementGateway -> PlacementClient -->
+  <path d="M860,190 L900,220" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#sArrOrange)"/>
+
+  <!-- PlacementClient -> Bandit /v1/place (authoritative) -->
+  <path d="M915,290 L915,300 L1010,300 L1010,610 L460,610 L440,650 L440,710" fill="none" stroke="#FF6900" stroke-width="2.5" marker-end="url(#sArrOrange)"/>
+  <text x="960" y="360" font-size="11.5" fill="#FF6900" transform="rotate(90 960 360)">POST /v1/place</text>
+
+  <!-- PlacementClient -. down/breaker open .-> FallbackPlacer -->
+  <path d="M860,290 L700,340" fill="none" stroke="#2B2724" stroke-opacity="0.55" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#sArrNeutral)"/>
+  <text x="700" y="318" text-anchor="middle" font-size="10.5" fill="#2B2724" opacity="0.75">breaker open / Python down</text>
+
+  <!-- FallbackPlacer -> HeuristicPlacer -->
+  <path d="M780,375 L820,375" fill="none" stroke="#2B2724" stroke-opacity="0.5" stroke-width="2" marker-end="url(#sArrNeutral)"/>
+
+  <!-- HeuristicPlacer -> day-load.ts -->
+  <path d="M870,340 L470,292" fill="none" stroke="#2B2724" stroke-opacity="0.5" stroke-width="2" marker-end="url(#sArrNeutral)"/>
+
+  <!-- HeuristicPlacer -> slot-score.ts (core) -->
+  <path d="M1000,360 L1075,270" fill="none" stroke="#2B2724" stroke-opacity="0.5" stroke-width="2" marker-end="url(#sArrNeutral)"/>
+
+  <!-- FallbackPlacer -> series-spread.ts (core), routed under HeuristicPlacer -->
+  <path d="M690,410 L690,432 L1060,432 L1075,395" fill="none" stroke="#2B2724" stroke-opacity="0.5" stroke-width="2" marker-end="url(#sArrNeutral)"/>
+
+  <!-- PythonPlacer -> SchedulingFeedbackService (delayed reward, MOVE) -->
+  <path d="M595,190 L595,205 L560,205 L560,460 L440,460 L440,470" fill="none" stroke="#F0B100" stroke-width="2.25" marker-end="url(#sArrAmber)"/>
+  <text x="566" y="330" font-size="10.5" fill="#F0B100" transform="rotate(90 566 330)">delayed reward (MOVE)</text>
+
+  <!-- RetainedSessionsService -> SchedulingFeedbackService -->
+  <path d="M290,505 L330,505" fill="none" stroke="#F0B100" stroke-width="2.25" marker-end="url(#sArrAmber)"/>
+  <text x="310" y="497" text-anchor="middle" font-size="9.5" fill="#F0B100">RETAINED</text>
+
+  <!-- MatrixDecayService -> matrix-decay.ts -->
+  <path d="M810,505 L1075,505" fill="none" stroke="#2B2724" stroke-opacity="0.5" stroke-width="2" marker-end="url(#sArrNeutral)"/>
+
+  <!-- SchedulingFeedbackService -> Bandit /update -->
+  <path d="M440,540 L440,600 L850,600 L850,650 L850,710" fill="none" stroke="#F0B100" stroke-width="2.25" marker-end="url(#sArrAmber)"/>
+  <text x="650" y="593" text-anchor="middle" font-size="11" fill="#F0B100">POST /update</text>
+
+  <!-- legend -->
+  <g transform="translate(40,890)">
+    <line x1="0" y1="0" x2="34" y2="0" stroke="#FF6900" stroke-width="2.5"/>
+    <text x="42" y="4" font-size="11.5" fill="#2B2724">primary placement path</text>
+    <line x1="240" y1="0" x2="274" y2="0" stroke="#F0B100" stroke-width="2.25"/>
+    <text x="282" y="4" font-size="11.5" fill="#2B2724">delayed-reward feedback loop</text>
+    <line x1="520" y1="0" x2="554" y2="0" stroke="#2B2724" stroke-opacity="0.5" stroke-width="2"/>
+    <text x="562" y="4" font-size="11.5" fill="#2B2724">supporting / fallback</text>
+    <line x1="770" y1="0" x2="804" y2="0" stroke="#2B2724" stroke-opacity="0.55" stroke-width="2" stroke-dasharray="7 5"/>
+    <text x="812" y="4" font-size="11.5" fill="#2B2724">on breaker open / Python down</text>
+  </g>
+</svg>

@@ -2,6 +2,7 @@
 
 Operating guide for working in the Zenflow monorepo. Read [README.md](README.md) for the
 product overview; this file is the conventions + "how to not break things" reference.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for system/component diagrams.
 
 ## Repository map & ownership
 
