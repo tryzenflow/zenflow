@@ -39,6 +39,7 @@ def test_cache_hit_returns_the_same_report(tmp_path: Path) -> None:
     second, hit2 = run(TINY, cache_dir=tmp_path)
     assert (hit1, hit2) == (False, True)
     assert cache.dumps(first) == cache.dumps(second)
+    assert render_markdown(first) == render_markdown(second)  # same row order
     # a different config is a different key
     _, hit3 = run(replace(TINY, seed=9), cache_dir=tmp_path)
     assert hit3 is False

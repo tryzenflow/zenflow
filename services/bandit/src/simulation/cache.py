@@ -55,5 +55,6 @@ def store(
 
 
 def dumps(report: dict[str, object]) -> str:
-    """Canonical JSON (sorted keys, fixed separators, trailing newline)."""
-    return json.dumps(report, sort_keys=True, indent=2, ensure_ascii=True) + "\n"
+    """Canonical JSON: insertion order (deterministic, and what the markdown
+    renderer iterates), 2-space indent, trailing newline."""
+    return json.dumps(report, indent=2, ensure_ascii=True) + "\n"
