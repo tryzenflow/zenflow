@@ -4,6 +4,7 @@ import type {
   PortalExamRow,
   PortalTimetableRow,
 } from "../ingestion/core/parse-portal";
+import type { PortalRegistHistoryRow } from "../ingestion/core/parse-regist-history";
 import { portalClientDuration } from "../observability/metrics";
 
 /** Low-cardinality operation label for the portal RED histogram. */
@@ -11,6 +12,8 @@ function portalOperation(url: string): string {
   if (url.includes("/api/authenticate/")) return "authenticate";
   if (url.includes("/DrawingStudentSchedules")) return "fetch_timetable";
   if (url.includes("/api/student/exam")) return "fetch_exams";
+  if (url.includes("/api/student/getAllRegistHistory"))
+    return "fetch_regist_history";
   return "other";
 }
 
@@ -39,13 +42,24 @@ const REJECTED_LOGIN_STATUSES: readonly number[] = [
   Number(HttpStatus.FORBIDDEN),
 ];
 
+/** The two upstream hosts this client talks to; each has its own key and client id. */
+interface Upstream {
+  base: string;
+  clientId: string;
+  /** Config key the `Apikey` header is read from — never inlined, never logged. */
+  apiKeyConfig: string;
+}
+
 /**
- * HTTP client for the DLU student portal API (`PORTAL_API_URL`).
+ * HTTP client for the DLU student portal API (`PORTAL_API_URL`) and the DKHP
+ * registration API (`DKHP_API_URL`).
  *
- * Three endpoints, all JSON, all behind the same three headers:
- * `Authorization: Bearer <token>` from {@link PortalAPIService.authenticate},
- * a constant `Clientid: vhu`, and `Apikey` — which comes from
- * `PORTAL_API_KEY` in config and is never hardcoded and never logged.
+ * Portal: timetable and exam endpoints, all JSON, all behind the same three
+ * headers: `Authorization: Bearer <token>` from
+ * {@link PortalAPIService.authenticate}, a constant `Clientid: vhu`, and
+ * `Apikey` — which comes from `PORTAL_API_KEY` in config and is never hardcoded
+ * and never logged. DKHP: the same login and the same student credentials, with
+ * `Clientid: dtl` and `DKHP_API_KEY`; it serves the registration history.
  *
  * The timetable and exam endpoints are addressed by academic coordinates
  * (`academicYear`, `semester`, `tuan`), not by date range; `ingestion/core/semester.ts`
@@ -56,10 +70,24 @@ const REJECTED_LOGIN_STATUSES: readonly number[] = [
 export class PortalAPIService {
   private readonly logger = new Logger(PortalAPIService.name);
   private readonly endpoint: string;
+  private readonly dkhpEndpoint: string;
   private readonly requestTimeout: number;
+  private readonly portalUpstream: Upstream;
+  private readonly dkhpUpstream: Upstream;
 
   constructor(private configService: ConfigService) {
     this.endpoint = this.configService.getOrThrow("PORTAL_API_URL");
+    this.dkhpEndpoint = this.configService.getOrThrow("DKHP_API_URL");
+    this.portalUpstream = {
+      base: this.endpoint,
+      clientId: "vhu",
+      apiKeyConfig: "PORTAL_API_KEY",
+    };
+    this.dkhpUpstream = {
+      base: this.dkhpEndpoint,
+      clientId: "dtl",
+      apiKeyConfig: "DKHP_API_KEY",
+    };
     this.requestTimeout =
       +this.configService.getOrThrow("PORTAL_API_TIMEOUT_MS") || 10000;
   }
@@ -77,20 +105,43 @@ export class PortalAPIService {
     username: string,
     password: string,
   ): Promise<PortalAuthResult> {
-    const loginUrl = `${this.endpoint}/api/authenticate/authpsc`;
-    const res = await this.fetch(loginUrl, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        apikey: this.configService.getOrThrow("PORTAL_API_KEY"),
-        clientid: "vhu",
+    return this.login(this.portalUpstream, username, password);
+  }
+
+  /**
+   * The same login against DKHP — same endpoint path, same credentials, with
+   * `Clientid: dtl` and `DKHP_API_KEY`. Same contract as {@link authenticate}.
+   */
+  async authenticateDkhp(
+    username: string,
+    password: string,
+  ): Promise<PortalAuthResult> {
+    return this.login(this.dkhpUpstream, username, password);
+  }
+
+  private async login(
+    upstream: Upstream,
+    username: string,
+    password: string,
+  ): Promise<PortalAuthResult> {
+    const loginUrl = `${upstream.base}/api/authenticate/authpsc`;
+    const res = await this.fetch(
+      loginUrl,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          apikey: this.configService.getOrThrow(upstream.apiKeyConfig),
+          clientid: upstream.clientId,
+        },
+        body: JSON.stringify({
+          password,
+          username,
+          type: 0,
+        }),
       },
-      body: JSON.stringify({
-        password,
-        username,
-        type: 0,
-      }),
-    });
+      upstream === this.dkhpUpstream ? "authenticate_dkhp" : undefined,
+    );
 
     if (REJECTED_LOGIN_STATUSES.includes(res.status)) {
       // The portal answered — it just doesn't like these credentials. Never
@@ -155,6 +206,43 @@ export class PortalAPIService {
     return this.getJson<PortalExamRow>(`/api/student/exam?${query}`, token);
   }
 
+  /**
+   * One term's registration events — `POST /api/student/getAllRegistHistory`
+   * on DKHP, body `{p1: year, p2: term}`.
+   *
+   * The response is an event log (`Status` 1 registered, 0 cancelled), not a
+   * current state; `parseRegistHistory` reduces it to the sections the student
+   * is in. It answers enrolment discovery (issue #56): one request names every
+   * section of the term, so the timetable need not be walked to find them.
+   *
+   * **The response is a PII surface** (`UpdateStaff` is a student id), so the
+   * caller does not store the raw body on its job item.
+   */
+  async fetchRegistHistory(
+    token: string,
+    academicYear: string,
+    semester: string,
+  ): Promise<PortalRegistHistoryRow[]> {
+    const path = "/api/student/getAllRegistHistory";
+    const res = await this.fetch(`${this.dkhpEndpoint}${path}`, {
+      method: "POST",
+      headers: {
+        ...this.authHeaders(token, this.dkhpUpstream),
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ p1: academicYear, p2: semester }),
+    });
+
+    if (!res.ok) {
+      throw new Error(
+        `Portal request to ${path} failed (status ${res.status})`,
+      );
+    }
+
+    const json: unknown = await res.json();
+    return Array.isArray(json) ? (json as PortalRegistHistoryRow[]) : [];
+  }
+
   /** Authenticated GET returning a JSON array, or `[]` when the portal sends none. */
   private async getJson<T>(path: string, token: string): Promise<T[]> {
     const res = await this.fetch(`${this.endpoint}${path}`, {
@@ -172,18 +260,25 @@ export class PortalAPIService {
     return Array.isArray(json) ? (json as T[]) : [];
   }
 
-  /** The three headers every authenticated portal call needs. */
-  private authHeaders(token: string): Record<string, string> {
+  /** The three headers every authenticated upstream call needs. */
+  private authHeaders(
+    token: string,
+    upstream: Upstream = this.portalUpstream,
+  ): Record<string, string> {
     return {
       authorization: `Bearer ${token}`,
-      clientid: "vhu",
+      clientid: upstream.clientId,
       // Secret — read from config on every call, never inlined, never logged.
-      apikey: this.configService.getOrThrow("PORTAL_API_KEY"),
+      apikey: this.configService.getOrThrow(upstream.apiKeyConfig),
     };
   }
 
-  private async fetch(url: string, init: RequestInit): Promise<Response> {
-    const operation = portalOperation(url);
+  private async fetch(
+    url: string,
+    init: RequestInit,
+    operationOverride?: string,
+  ): Promise<Response> {
+    const operation = operationOverride ?? portalOperation(url);
     const start = process.hrtime.bigint();
     const record = (status: string) =>
       portalClientDuration.record(
