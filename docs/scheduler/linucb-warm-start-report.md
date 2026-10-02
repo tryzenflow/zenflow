@@ -182,5 +182,18 @@ H = heuristic, Cold = current LinUCB, W2 / W5 / W10 = warm start with n0 = 2 / 5
 
 ## 7. Production change
 
-PENDING: the production change (seeding a cold arm from the default table as in section 1, with n0 = 5)
-is being implemented in `services/bandit`. This section will be updated when it is done.
+LinUCB now seeds a cold arm from the default table as described in section 1, with n0 = 5
+(`LINUCB_PRIOR_N0` in `services/bandit/src/core/constants.py`; 0 restores the old cold start).
+
+- **Code:** `src/core/prior.py` loops over the 168 table cells and adds a weighted pseudo-observation to the
+  arm that owns each hour. Both `/v1/place` and `/v1/update` start a cold arm from the same prior, so the
+  state saved after the first update keeps it. Arms that already have data are untouched.
+- **Version:** the parameter hash `paramsVersion` changed (`py-5f9d5c31203c` to `py-1ce2e99ca66e`), so
+  proposals from before and after are told apart.
+- **Fixtures:** the `/v1/place` contract fixtures were regenerated. Cold LinUCB scores changed
+  (for example 0.314 to 0.700 in one case), but the chosen slot did not.
+- **Check through the production path:** 300 students, 1 seed: regret 0.372 for warm LinUCB, against
+  0.447 cold and 0.464 for the heuristic. This agrees with the prototype.
+- **Tests:** 306 Python tests pass, ruff and mypy are clean.
+- **Docs:** ADR-0001 has a new section 15, and the bandit README has a short note.
+- **Not done:** the backend test suite was not run, and the 20-seed rerun is still pending.
