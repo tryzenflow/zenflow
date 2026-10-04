@@ -1,5 +1,6 @@
 import { updateBasicInfo } from "@/api/users";
 import { useUserStore } from "@/hooks/use-user-store";
+import { IANA_TIMEZONES } from "@/lib/timezones";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { DefaultReminderChoice, Lang } from "@zenflow/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -73,22 +74,12 @@ export const TIMEZONES = [
   "UTC",
 ];
 
-type IntlWithSupported = typeof Intl & {
-  supportedValuesOf?: (key: "timeZone") => string[];
-};
-
 /**
- * Every IANA timezone the runtime knows. Falls back to the curated
- * `TIMEZONES` list on engines without `Intl.supportedValuesOf` (older Hermes).
+ * Every selectable IANA timezone. Static (see `timezones.ts`) because Hermes
+ * has no `Intl.supportedValuesOf` to enumerate them at runtime.
  */
-export function allTimezones(): string[] {
-  try {
-    const all = (Intl as IntlWithSupported).supportedValuesOf?.("timeZone");
-    if (all?.length) return all.includes("UTC") ? all : [...all, "UTC"];
-  } catch {
-    // fall through to the curated list
-  }
-  return TIMEZONES;
+export function allTimezones(): readonly string[] {
+  return IANA_TIMEZONES;
 }
 
 export function deviceTimezone(): string {
