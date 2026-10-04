@@ -358,13 +358,18 @@ export class MaterializerService {
         });
         newId = row.id;
 
-        // Same default reminder as an in-app task.
-        await tx.sessionReminder.create({
-          data: {
-            sessionId: row.id,
-            remindBeforeMinutes: DEFAULT_REMINDER_MINUTES,
-          },
+        // Same default reminder as an in-app task (0 = none).
+        const owner = await tx.user.findUnique({
+          where: { id: userId },
+          select: { defaultReminderMinutes: true },
         });
+        const reminderMinutes =
+          owner?.defaultReminderMinutes ?? DEFAULT_REMINDER_MINUTES;
+        if (reminderMinutes > 0) {
+          await tx.sessionReminder.create({
+            data: { sessionId: row.id, remindBeforeMinutes: reminderMinutes },
+          });
+        }
       });
       return newId;
     } catch (error) {

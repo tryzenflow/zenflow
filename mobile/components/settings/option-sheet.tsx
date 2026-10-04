@@ -19,6 +19,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const ROW_HEIGHT = 52;
 const HANDLE_AND_HEADER = 72;
+/** `pb-8` on the scroll content. */
+const LIST_BOTTOM_PADDING = 32;
 
 export interface OptionSheetHandle {
   open: () => void;
@@ -44,7 +46,10 @@ function OptionSheetInner<T extends string | number>(
   // below the status bar so long lists (timezones) scroll instead.
   const maxHeight = Math.round(height - insets.top - 24);
   const contentHeight =
-    HANDLE_AND_HEADER + options.length * ROW_HEIGHT + insets.bottom;
+    HANDLE_AND_HEADER +
+    options.length * ROW_HEIGHT +
+    LIST_BOTTOM_PADDING +
+    insets.bottom;
   const sheetHeight = Math.min(contentHeight, maxHeight);
   useImperativeHandle(ref, () => ({ open: sheet.open, close: sheet.close }), [
     sheet.open,

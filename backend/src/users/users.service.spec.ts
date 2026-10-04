@@ -14,7 +14,18 @@ async function makeService(update: jest.Mock) {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       UsersService,
-      { provide: PrismaService, useValue: { user: { update } } },
+      {
+        provide: PrismaService,
+        useValue: {
+          user: {
+            update,
+            findUnique: jest.fn(() => ({ timezone: "Asia/Ho_Chi_Minh" })),
+          },
+          session: { findMany: jest.fn(() => []) },
+          sessionSeries: { update: jest.fn() },
+          $transaction: (ops: unknown[]) => Promise.all(ops),
+        },
+      },
     ],
   }).compile();
   return module.get<UsersService>(UsersService);

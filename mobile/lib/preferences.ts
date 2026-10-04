@@ -86,6 +86,21 @@ export function deviceTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
+/** The persisted timezone mode, or null if this device has never saved one. */
+async function loadStoredMode(): Promise<TimezoneMode | null> {
+  try {
+    const raw = await AsyncStorage.getItem(PREFERENCES_KEY);
+    if (!raw) return null;
+    const stored = JSON.parse(raw);
+    if (stored.timezoneMode === undefined && stored.timezone === undefined) {
+      return null;
+    }
+    return storedMode(stored);
+  } catch {
+    return null;
+  }
+}
+
 export async function loadPreferences(): Promise<Preferences> {
   try {
     const raw = await AsyncStorage.getItem(PREFERENCES_KEY);
@@ -124,20 +139,31 @@ export function usePreferences() {
   const prefsRef = useRef(prefs);
   prefsRef.current = prefs;
   const driftChecked = useRef(false);
+  // PATCHes run one at a time so a slower, older response can't overwrite the
+  // result of a newer edit.
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
 
   // Hydrate from the server user (source of truth); cache for offline.
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const stored = await loadPreferences();
+      const [stored, savedMode] = await Promise.all([
+        loadPreferences(),
+        loadStoredMode(),
+      ]);
       if (!mounted) return;
       if (!user) {
         setPrefs(stored);
         return;
       }
+      // No saved mode (fresh install / cleared cache): don't assume "follow
+      // the device" — that would overwrite a zone chosen on another device.
+      // Infer it from whether the account's zone already matches this phone.
+      const mode: TimezoneMode =
+        savedMode ?? (user.timezone === deviceTimezone() ? "device" : "explicit");
       const next = {
         ...stored,
-        ...userToSyncedPrefs(user, stored.timezoneMode),
+        ...userToSyncedPrefs(user, mode),
       };
       setPrefs(next);
       void savePreferences(next);
@@ -145,7 +171,9 @@ export function usePreferences() {
       // Device mode: if the phone's zone moved, push it once per launch.
       if (driftChecked.current) return;
       driftChecked.current = true;
-      const drift = deviceZoneDrift(user, next.timezoneMode, deviceTimezone());
+      const drift = savedMode
+        ? deviceZoneDrift(user, next.timezoneMode, deviceTimezone())
+        : null;
       if (drift) {
         try {
           setUser(await updateBasicInfo({ timezone: drift }));
@@ -193,23 +221,48 @@ export function usePreferences() {
         });
         return true;
       }
-      try {
-        const updated = await updateBasicInfo(input);
-        // Keep the optimistic mode; take values from the server's response.
-        const next = {
-          ...optimistic,
-          ...userToSyncedPrefs(updated, optimistic.timezoneMode),
-        };
-        setPrefs(next);
-        prefsRef.current = next;
-        await savePreferences(next);
-        setUser(updated);
-        return true;
-      } catch {
-        setPrefs(previous);
-        prefsRef.current = previous;
-        return false;
-      }
+      const run = async (): Promise<boolean> => {
+        try {
+          const updated = await updateBasicInfo(input);
+          // Later edits are already applied optimistically; only take the
+          // server's values for the fields this request changed.
+          const latest = prefsRef.current;
+          const server = userToSyncedPrefs(updated, latest.timezoneMode);
+          const next: Preferences = {
+            ...latest,
+            ...(input.lang !== undefined && { language: server.language }),
+            ...(input.defaultReminderMinutes !== undefined && {
+              defaultReminder: server.defaultReminder,
+            }),
+            ...(input.timezone !== undefined && { timezone: server.timezone }),
+          };
+          setPrefs(next);
+          prefsRef.current = next;
+          await savePreferences(next);
+          setUser(updated);
+          return true;
+        } catch {
+          // Roll back only this edit's fields, keeping any newer ones.
+          const latest = prefsRef.current;
+          const rolled: Preferences = {
+            ...latest,
+            ...(input.lang !== undefined && { language: previous.language }),
+            ...(input.defaultReminderMinutes !== undefined && {
+              defaultReminder: previous.defaultReminder,
+            }),
+            ...(input.timezone !== undefined && {
+              timezone: previous.timezone,
+              timezoneMode: previous.timezoneMode,
+            }),
+          };
+          setPrefs(rolled);
+          prefsRef.current = rolled;
+          return false;
+        }
+      };
+      const result = queue.current.then(run, run);
+      queue.current = result;
+      return result;
     },
     [setUser],
   );

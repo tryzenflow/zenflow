@@ -41,8 +41,12 @@ export function parseFileIdFromHref(
   if (url.origin !== base.origin) return null;
   const prefix = `${trimTrailingSlashes(base.pathname)}/files/`;
   if (!url.pathname.startsWith(prefix)) return null;
-  const id = decodeURIComponent(url.pathname.slice(prefix.length));
-  return FILE_ID.test(id) ? id : null;
+  try {
+    const id = decodeURIComponent(url.pathname.slice(prefix.length));
+    return FILE_ID.test(id) ? id : null;
+  } catch {
+    return null; // malformed percent-encoding
+  }
 }
 
 /** Strip path separators / control chars so a name is safe as a cache file name. */
