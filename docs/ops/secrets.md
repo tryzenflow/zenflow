@@ -12,6 +12,7 @@ Values are never listed here. "Where" is the runtime source; `.env.example` show
 | --- | --- | --- | --- |
 | `DATABASE_URL` (contains the DB password), `POSTGRES_PASSWORD` | API, migrations, Postgres container | store, injected into `.env.<env>` | runbook below |
 | `SESSION_SECRET` | signs the session cookie (`express-session`). This app has **no JWT**; this is the equivalent signing key | store | runbook below |
+| `FILE_URL_SECRET` | HMAC-SHA256 key for signed, non-expiring file URLs (`/files/:id?sig=`) embedded in notes. Rotating it **invalidates every stored link** (images in existing notes stop loading), so rotate only on suspected leak | store | change and redeploy; accept broken embeds |
 | `MASTER_LMS_ENCRYPTION_KEY_V<n>`, `MASTER_PORTAL_ENCRYPTION_KEY_V<n>` | wrap per-user data-encryption keys that protect stored DLU/LMS credentials (`backend/src/crypto`) | store; NEVER only in the DB | runbook below |
 | `PORTAL_API_KEY` | DLU portal API key (expires upstream, taken from a browser session) | store | replace when DLU invalidates it |
 | `MAIL_TRANSPORT` | SMTP URL with credentials | store | rotate at the SMTP provider |

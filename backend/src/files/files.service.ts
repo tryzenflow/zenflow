@@ -16,11 +16,12 @@ export interface FilesService {
     uploadFilesDto: UploadFileDto[],
     userId: string,
   ): Promise<UploadFilesResponse[]>;
-  findOne(id: string, userId: string): Promise<File | null>;
+  /** `userId` undefined skips the ownership check (signed-URL path only). */
+  findOne(id: string, userId?: string): Promise<File | null>;
   remove(keys: string[], userId: string): Promise<void>;
   getMetadata(id: string, userId: string): Promise<UploadFilesResponse>;
   download(
     id: string,
-    userId: string,
+    userId?: string,
   ): Promise<{ file: File; stream: Readable }>;
 }
