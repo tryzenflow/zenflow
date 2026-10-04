@@ -49,6 +49,7 @@ import {
   Globe,
   GraduationCap,
   Highlighter,
+  ImagePlus,
   Home,
   Info,
   Italic,
@@ -205,6 +206,7 @@ interopIcon(Globe);
 interopIcon(Lock);
 interopIcon(Tag);
 interopIcon(Highlighter);
+interopIcon(ImagePlus);
 interopIcon(Link2);
 interopIcon(KeyRound);
 interopIcon(MoreHorizontal);
@@ -272,6 +274,7 @@ export {
   Globe,
   GraduationCap,
   Highlighter,
+  ImagePlus,
   Info,
   Italic,
   Lamp,
