@@ -150,6 +150,13 @@ const BottomSheetContent = React.forwardRef<
       [ref, sheetRef],
     );
 
+    // Read through a ref so `renderBackdrop` keeps a stable identity even when
+    // a caller passes an inline `backdropProps` literal: a new
+    // `backdropComponent` makes gorhom remount the backdrop, which mid-open
+    // can leave it painting over the sheet.
+    const backdropPropsRef = React.useRef(backdropProps);
+    backdropPropsRef.current = backdropProps;
+
     const renderBackdrop = React.useCallback(
       (props: BottomSheetBackdropProps) => {
         const {
@@ -163,7 +170,7 @@ const BottomSheetContent = React.forwardRef<
           ...rest
         } = {
           ...props,
-          ...backdropProps,
+          ...backdropPropsRef.current,
         };
         return (
           <BottomSheetBackdrop
@@ -182,7 +189,7 @@ const BottomSheetContent = React.forwardRef<
           />
         );
       },
-      [backdropProps, colors],
+      [isDarkColorScheme],
     );
 
     return (

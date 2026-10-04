@@ -119,18 +119,16 @@ export const SessionListSheet = forwardRef<
         // also leaves the modal mounted at index -1 instead of unmounting it
         // (the header's X still calls `dismiss()` and tears it down properly).
         enableDismissOnClose={false}
-        // `@gorhom/bottom-sheet`'s backdrop interpolates its opacity between
-        // `disappearsOnIndex` and `appearsOnIndex`, and only reaches full
-        // strength at the latter. The wrapper in `ui/bottom-sheet.native.tsx`
-        // overrides `disappearsOnIndex` to -1 but leaves `appearsOnIndex` at
-        // the library default of 1 — fine for a two-snap-point sheet, but this
-        // one has a single snap point, so index 0 is fully open and the scrim
-        // would sit permanently halfway, reading as a barely-there tint over
-        // the month grid. Pinning it to 0 makes the overlay reach full opacity
-        // at this sheet's only open position. (No-op on web, where
-        // `BottomSheetContent` is the Radix `Dialog` reimplementation and the
-        // overlay is a plain `bg-black/50`.)
-        backdropProps={{ appearsOnIndex: 0 }}
+        // No `backdropProps` here, deliberately. The wrapper in
+        // `ui/bottom-sheet.native.tsx` already defaults `appearsOnIndex` to 0
+        // (right for this single-snap-point sheet), so the override was a
+        // no-op -- but passing an inline `{ ... }` literal gave the wrapper's
+        // `renderBackdrop` a new identity on every render of this component.
+        // `open()` sets state right before `present()`, so the backdrop
+        // component was torn down and remounted in the middle of the sheet's
+        // open animation (this is the only sheet that passes `backdropProps`
+        // and re-renders at open time), which could leave the scrim painting
+        // over the sheet instead of under it.
       >
         <BottomSheetHeader>
           <View className="min-w-0 flex-1">
