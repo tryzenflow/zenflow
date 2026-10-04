@@ -3,6 +3,7 @@ import {
   ValidationPipe,
   type ExecutionContext,
 } from "@nestjs/common";
+import { ConfigModule } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
 import request from "supertest";
 import type { App } from "supertest/types";
@@ -82,7 +83,11 @@ describe("Devices (e2e)", () => {
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [DevicesModule],
+      // Global ConfigService, as AppModule provides it (BanditService needs it).
+      imports: [
+        ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }),
+        DevicesModule,
+      ],
     })
       .overrideProvider(PrismaService)
       .useValue(prismaStub)
