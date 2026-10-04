@@ -13,6 +13,6 @@ paths = [
   '''pnpm-lock\.yaml''',
   '''backend/\.env\.example''',
   '''backend/certs/.*\.pem''',          # public CA certificate
-  '''backend/src/.*\.spec\.ts''',      # synthetic keys in unit tests
+  '''backend/src/devices/apns\.sender\.spec\.ts''',  # one synthetic private-key fixture
   '''packages/shared/contract/.*''',
 ]
