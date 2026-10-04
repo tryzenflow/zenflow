@@ -1,6 +1,6 @@
 # Secrets management
 
-Issue #76. Minimum viable setup: secrets live in a managed store (or SOPS-encrypted files), are injected at deploy time, and never exist in the repo or in an image. Full Vault (dynamic DB credentials, transit encryption) is post-MVP.
+Issue #76. Minimum viable setup: secrets live in a managed store (or SOPS-encrypted files), are injected at deploy time, and never exist in the repo or in an image. A self-hosted Vault container (KV + AppRole) is included; dynamic DB credentials and transit encryption are post-MVP.
 
 Rule of thumb: if it would hurt to see it in a screenshot, it is a secret and goes through this document.
 
@@ -39,7 +39,8 @@ The app reads everything through `ConfigService`/`process.env`; `ConfigModule` n
 | --- | --- | --- |
 | `host` (default) | `backend/.env.<env>` already exists on the host, written by your platform/secret manager agent | Vault Agent, cloud secret manager sidecar/cron, manual bootstrap |
 | `sops` | CI decrypts `backend/secrets/<env>.env.enc` with `SOPS_AGE_KEY` and streams it to the host as `.env.<env>` (mode 600, never to disk on the runner) | no managed store yet; encrypted file is safe to commit |
-| `command` | runs `SECRETS_COMMAND` (e.g. `aws secretsmanager get-secret-value ... \| jq -r ...`, `vault kv get -format=json ... \| jq ...`) which prints dotenv on stdout | cloud secret manager / Vault |
+| `command` | runs `SECRETS_COMMAND` (e.g. `aws secretsmanager get-secret-value ... \| jq -r ...`, `vault kv get -format=json ... \| jq ...`) which prints dotenv on stdout | cloud secret manager / an external Vault |
+| `vault` (**production only**) | the self-hosted `vault` container on the prod deploy host; the deploy renders its secrets into tmpfs `*_FILE` mounts on the host (no plaintext `.env`, nothing passes through the runner) | prod, you run Vault yourself; refused for staging by `deploy.sh`/`deploy.yml`; see [Vault](#vault-self-hosted-container) |
 
 SOPS bootstrap (once):
 
@@ -58,6 +59,111 @@ sops --encrypt --input-type dotenv --output-type dotenv backend/.env.staging > b
 Note: compose `env_file` means the plaintext lands in `.env.<env>` on the host (root-owned, 600). That is the accepted minimum. Moving to `*_FILE` mounts on tmpfs (compose `secrets:`) removes it from the host disk and from `docker inspect`.
 
 Acceptance check for "app boots in staging reading secrets from the store": set `SECRETS_PROVIDER` for the staging Environment, deploy, confirm `docker compose ps` healthy and `.env.staging` was written by the deploy (`ls -l`, mtime).
+
+## Vault (self-hosted container)
+
+**Vault is production-only.** The `vault` service exists only in `backend/compose.prod.yml`; dev and staging have no Vault container and `SECRETS_PROVIDER=vault` is valid only for the `production` Environment (`deploy.sh` exits 2 and `deploy.yml` fails for any other). Dev and staging read secrets from `.env.<env>` via `host`, `sops` or `command`, with `FOO_FILE` support unchanged.
+
+Scope: this is the **MVP-minimum** use of Vault, a KV v2 store with least-privilege AppRole access, replacing plaintext `.env` secrets. **Not implemented, post-MVP (issue #76 "full Vault"): dynamic database credentials, the transit engine for field encryption, automated key rotation, auto-unseal, HA/Raft.** Nothing here claims them.
+
+Files: `backend/ops/vault/` (`config.hcl` server config, `policy.hcl` read-only policy, `setup-approle.sh`, `render-secrets.sh`). Image `hashicorp/vault` is pinned in `compose.prod.yml` (bump deliberately; Dependabot's Docker ecosystem tracks it).
+
+### Layout
+
+- KV v2 mounted at `secret/`. One secret per consumer set and environment: `secret/zenflow/<env>/api` (used by `api` and `migrations`) and `secret/zenflow/<env>/bandit`. `BANDIT_SERVICE_TOKEN` is stored in both (each side needs it). Keys are env var names (`SESSION_SECRET`, `DATABASE_URL`, `MASTER_LMS_ENCRYPTION_KEY_V1`, ...).
+- Policy `zenflow-api-<env>`: `read` on `secret/data/zenflow/<env>/*` only. No list, no write, no other environments.
+- AppRole `zenflow-api-<env>`: tokens live 10 minutes (max 30), `secret_id` valid 30 days.
+- `render-secrets.sh` logs in with the AppRole, reads each set and writes one file per key plus `files.env` (`FOO_FILE=/run/secrets/zenflow/FOO`) under `/run/zenflow/<env>/<set>/` on the **host tmpfs**. Compose mounts `.../api` into `api` and `migrations` and `.../bandit` into `bandit` at `/run/secrets/zenflow` (read-only) and loads `files.env` as an optional `env_file`. The existing `file-secrets.ts` and `docker-entrypoint.sh` do the rest; bandit reuses `docker-entrypoint.sh` (bind-mounted, entrypoint override in compose) because it only reads plain env vars.
+- Still on `.env.<env>` (not Vault-backed yet): `POSTGRES_*` for the Postgres container (the image supports `POSTGRES_PASSWORD_FILE` natively, wire it up when needed), `S3_*` for the MinIO container root user, `GRAFANA_ADMIN_PASSWORD`. Remove a key from `.env.<env>` once it is served from Vault (an explicit `FOO` beats `FOO_FILE`).
+
+### Local testing of the render script (no dev Vault service)
+
+There is no Vault in the dev compose stack. To try `render-secrets.sh`, run a throwaway dev-mode server by hand (this is also what CI does):
+
+```bash
+docker run -d --name vault-smoke --cap-add IPC_LOCK -e VAULT_DEV_ROOT_TOKEN_ID=local-root \
+  -p 127.0.0.1:8200:8200 hashicorp/vault:1.20.4 server -dev -dev-listen-address=0.0.0.0:8200
+# put secret/zenflow/dev/{api,bandit}, run ops/setup-approle.sh with ENV_NAME=dev, then render-secrets.sh
+docker rm -f vault-smoke
+```
+
+`.secrets-rendered/` is gitignored.
+
+### Production: first-time init and unseal
+
+The `vault` service uses file storage on the named volume `vault_data`, an `IPC_LOCK` cap, no UI, a plain-HTTP listener published on `127.0.0.1:8200` only (not on any network the app uses), and a healthcheck that treats sealed/uninitialised as "process up" (`sealedcode=200&uninitcode=200`). It always starts **sealed**.
+
+1. Deploy once with `SECRETS_PROVIDER=host` (or start only Vault: `docker compose -f compose.prod.yml up -d vault`).
+2. Initialise with 5 key shares and a threshold of 3, on the host, saving the output only into the password managers below:
+   ```bash
+   docker exec zenflow-vault-prod vault operator init -key-shares=5 -key-threshold=3
+   ```
+3. Unseal with three different shares (each holder enters theirs, ideally not all in one shell history): `docker exec -it zenflow-vault-prod vault operator unseal` (x3).
+4. With the initial root token (`VAULT_TOKEN`), enable KV and load the secrets, then create the policy/AppRole and the host credentials:
+   ```bash
+   V="docker exec -e VAULT_TOKEN zenflow-vault-prod vault"
+   $V secrets enable -path=secret -version=2 kv
+   $V kv put -mount=secret zenflow/prod/api DATABASE_URL=... SESSION_SECRET=... ...   # prefer reading values from a prompt/file, not shell history
+   $V kv put -mount=secret zenflow/prod/bandit BANDIT_SERVICE_TOKEN=...
+   sudo install -d -m 700 /etc/zenflow/vault
+   docker run --rm --network container:zenflow-vault-prod -v $PWD/backend/ops/vault:/ops:ro \
+     -v /etc/zenflow/vault:/creds -e VAULT_ADDR=http://127.0.0.1:8200 -e VAULT_TOKEN -e ENV_NAME=prod \
+     hashicorp/vault:1.20.4 /ops/setup-approle.sh --role-id-file /creds/role_id --secret-id-file /creds/secret_id
+   ```
+5. **Revoke the root token** (`vault token revoke -self`) and keep it out of daily use. Recreate one from the unseal shares only with `vault operator generate-root` when you truly need it (policy changes, new environment).
+6. Set `SECRETS_PROVIDER=vault` on the GitHub Environment and deploy. The deploy starts Vault, **fails with a clear message if it is sealed** (HTTP 503) or uninitialised (501), renders the files, and force-recreates `api`, `migrations` and `bandit`.
+
+**After every Vault restart or host reboot Vault is sealed** and deploys fail until three share holders unseal it. The apps already running keep working (they read files at boot only), but a restarted container cannot start without the rendered files; `/run` is tmpfs, so a **host reboot also clears the rendered secrets**. Re-run the deploy (or `render-secrets.sh` by hand) after unsealing. Plan for that in the on-call runbook.
+
+### Who holds the key shares
+
+Fill in and review quarterly. Rule: **no one person holds 3 shares**, shares live in different password managers/vaults (never the repo, CI, chat or the deploy host), and the root token is not stored at all.
+
+| Share | Holder | Stored in | Reviewed |
+| --- | --- | --- | --- |
+| 1 | _name (owner)_ | _personal password manager_ | _date_ |
+| 2 | _name (second maintainer)_ | _personal password manager_ | _date_ |
+| 3 | _name_ | _personal password manager_ | _date_ |
+| 4 | _name_ | _offline/sealed envelope or hardware token_ | _date_ |
+| 5 | _name_ | _offline/sealed envelope or hardware token_ | _date_ |
+
+With a single maintainer, split to threshold 2 of 3 held by two separate people if at all possible; one person holding everything is a single point of failure and compromise. Losing more than `shares - threshold` shares makes the data unrecoverable (see backup below).
+
+Future option (documented, **not configured**): auto-unseal via a cloud KMS or Transit seal (`seal "awskms" { ... }` etc. in `config.hcl`) removes the manual unseal after reboots. It trades the human quorum for trust in the KMS IAM policy; migrate with `vault operator unseal -migrate`. Not done because the repo has no cloud account to bind to.
+
+### AppRole credential rotation
+
+`role_id` is an identifier, not a secret; `secret_id` is the credential (stored in `/etc/zenflow/vault/secret_id`, root-only 600, on the deploy host). It expires after 30 days, so rotate at least monthly (calendar it) and immediately if the host or the file is suspected exposed.
+
+1. With an admin token (or a root token generated for the occasion): `ENV_NAME=prod ... setup-approle.sh --secret-id-file /creds/secret_id.new`. Old secret_ids stay valid until they expire, so this has no downtime.
+2. On the host move the new file over `/etc/zenflow/vault/secret_id` (`mv`, 600).
+3. Run a deploy (or `render-secrets.sh` by hand) and confirm the login works.
+4. Revoke the old one if exposure is suspected: `vault write auth/approle/role/zenflow-api-prod/secret-id-accessor/destroy secret_id_accessor=<accessor>` (list with `vault list auth/approle/role/zenflow-api-prod/secret-id`). To rotate the `role_id` itself: `vault write auth/approle/role/zenflow-api-prod/role-id role_id=$(uuidgen)` then re-run `setup-approle.sh --role-id-file`.
+
+### Backup and restore of the Vault volume
+
+The volume `vault_data` holds the encrypted data; it is useless without 3 unseal shares, but keep the backups encrypted anyway and off the host.
+
+```bash
+# backup (file backend: stop Vault briefly so the files are consistent)
+docker compose -f compose.prod.yml stop vault
+docker run --rm -v zenflow-prod_vault_data:/v:ro -v "$PWD":/out alpine tar czf /out/vault-$(date +%F).tgz -C /v .
+docker compose -f compose.prod.yml start vault        # then unseal
+# restore (into an empty volume, Vault stopped)
+docker compose -f compose.prod.yml stop vault
+docker run --rm -v zenflow-prod_vault_data:/v -v "$PWD":/in alpine sh -c 'rm -rf /v/* && tar xzf /in/vault-YYYY-MM-DD.tgz -C /v'
+docker compose -f compose.prod.yml start vault        # then unseal with the SAME shares
+```
+
+(The volume name is `<compose project>_vault_data`, e.g. `zenflow-prod_vault_data`; check `docker volume ls`.) Restore always needs the unseal shares that were current when the backup was taken. Test a restore on a scratch host before relying on it. A rebuilt, never-initialised Vault is not a restore: re-run `operator init` and re-load every secret from their upstream sources.
+
+### Rotation runbooks with Vault
+
+The three runbooks above stay the same except that "update the store" means writing to Vault (`vault kv patch -mount=secret zenflow/prod/api KEY=...`, which creates a new KV version; the old one stays in history, `vault kv rollback` undoes a bad write) and "deploy" re-renders and force-recreates the containers.
+
+- **Session key**: patch `SESSION_SECRET`, deploy. Same forced logout of all users.
+- **Database password**: do the `ALTER USER` step, then patch `DATABASE_URL` in Vault and deploy. `POSTGRES_PASSWORD` still lives in `.env.<env>` for the Postgres container until it is moved to `POSTGRES_PASSWORD_FILE`; update it there too. Rotation is by hand: **dynamic DB credentials (Vault database engine) are post-MVP.**
+- **Crypto master keys**: add `MASTER_*_ENCRYPTION_KEY_V2` with `kv patch` (patch keeps V1, which must stay while rows reference it), ship the code change, deploy. Never `kv put` over the set without V1; `kv put` replaces all keys. Vault's KV version history is not a substitute for the re-wrap job described above, and **transit-engine key management (Vault wrapping the DEKs) is post-MVP**.
 
 ## Rotation runbooks
 
@@ -134,6 +240,7 @@ Review quarterly and on every offboarding; rotate anything the departing person 
 
 ## Guardrails
 
+- Compose files (Vault only in prod), `ops/vault/config.hcl` and the policy are checked in CI (`vault` job); they contain no secrets. Vault seal keys and root token must never be committed.
 - `gitleaks` runs on every PR (`ci.yml`, config in `.gitleaks.toml`). Optionally add a local hook: `gitleaks protect --staged`.
 - Never paste env values into issues, PRs or CI logs; CI masks the generated test values.
 - Test and CI secrets are generated per run (`.github/scripts/write-test-env.sh`).

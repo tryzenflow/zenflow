@@ -1,0 +1,19 @@
+name: Setup workspace
+description: Node + pnpm (cached) install, then build @zenflow/shared and @zenflow/core and generate the Prisma client.
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v4 # version comes from package.json "packageManager"
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: pnpm
+    - name: Install
+      shell: bash
+      run: pnpm install --frozen-lockfile
+    - name: Build shared packages + generate Prisma client
+      shell: bash
+      run: |
+        pnpm shared:build
+        pnpm core:build
+        pnpm --filter backend exec prisma generate

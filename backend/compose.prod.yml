@@ -5,7 +5,7 @@ services:
     build:
       context: ..
       dockerfile: backend/Dockerfile
-    image: zenflow-api:2.1.0
+    image: ${ZENFLOW_API_IMAGE:-zenflow-api:2.1.0}
     expose:
       - "5000"
     networks:
@@ -18,6 +18,7 @@ services:
       - o11y
       - storage
     volumes:
+      - ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/api:/run/secrets/zenflow:ro
       # Legacy local uploads; kept mounted only until scripts/migrate-files-to-s3.ts has run.
       - uploads:/app/uploads
     depends_on:
@@ -35,14 +36,28 @@ services:
         condition: service_started
     env_file:
       - .env.prod
+      # Written by ops/vault/render-secrets.sh when SECRETS_PROVIDER=vault; absent otherwise.
+      - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/api/files.env
+        required: false
 
   bandit:
     container_name: zenflow-bandit-prod
     build: ../services/bandit
+    image: ${ZENFLOW_BANDIT_IMAGE:-zenflow-bandit:latest}
     expose:
       - "8000"
     environment:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    # The image only reads plain env vars; reuse the API's *_FILE expander and
+    # keep the image CMD (overriding entrypoint resets it).
+    entrypoint: ["docker-entrypoint.sh"]
+    command: ["uv", "run", "--no-dev", "uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    env_file:
+      - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/bandit/files.env
+        required: false
+    volumes:
+      - ./docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro
+      - ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/bandit:/run/secrets/zenflow:ro
     networks:
       - bandit
       - o11y
@@ -52,7 +67,7 @@ services:
     build:
       context: ..
       dockerfile: backend/Dockerfile
-    image: zenflow-api:2.1.0
+    image: ${ZENFLOW_API_IMAGE:-zenflow-api:2.1.0}
     networks:
       - db
       - egress
@@ -62,6 +77,11 @@ services:
         condition: service_healthy
     env_file:
       - .env.prod
+      # Written by ops/vault/render-secrets.sh when SECRETS_PROVIDER=vault; absent otherwise.
+      - path: ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/api/files.env
+        required: false
+    volumes:
+      - ${ZENFLOW_SECRETS_DIR:-/run/zenflow/prod}/api:/run/secrets/zenflow:ro
 
   postgres:
     container_name: zenflow-db-prod
@@ -306,6 +326,36 @@ services:
     networks:
       - storage
 
+  # HashiCorp Vault (OSS, file storage). Secrets store for SECRETS_PROVIDER=vault;
+  # see docs/ops/secrets.md. Starts sealed: init/unseal by hand after every restart.
+  # Not reachable from other containers' networks and published on loopback only.
+  vault:
+    container_name: zenflow-vault-prod
+    image: hashicorp/vault:1.20.4
+    restart: unless-stopped
+    # Config lives outside /vault/config: the image entrypoint already passes
+    # -config=/vault/config for `server`, and a second file there duplicates the listener.
+    command: ["server", "-config=/vault/custom/config.hcl"]
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_ADDR: http://127.0.0.1:8200
+    ports:
+      - "127.0.0.1:8200:8200"
+    volumes:
+      - vault_data:/vault/file
+      - ./ops/vault/config.hcl:/vault/custom/config.hcl:ro
+    networks:
+      - vault
+    healthcheck:
+      # sealedcode/uninitcode=200 so a sealed or not-yet-initialised Vault still
+      # counts as "process is up" (it must be unsealed by a human, not by compose).
+      test: ["CMD-SHELL", "wget -q -O /dev/null 'http://127.0.0.1:8200/v1/sys/health?standbyok=true&sealedcode=200&uninitcode=200'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
 networks:
   edge:
     driver: bridge
@@ -329,6 +379,8 @@ networks:
   storage:
     driver: bridge
     internal: true
+  vault:
+    driver: bridge
 
 volumes:
   storage_data:
@@ -341,3 +393,4 @@ volumes:
   alloy_data:
   prometheus_data:
   grafana_data:
+  vault_data:
