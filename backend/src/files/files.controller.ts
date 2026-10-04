@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Inject,
   Get,
   Param,
   Post,
@@ -11,23 +12,23 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { type Response } from "express";
-import { createReadStream } from "fs";
-import { join } from "path";
 import { type User } from "../../generated/prisma";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
 import { RemoveFilesDto } from "./dto";
-import { LocalFilesInterceptor } from "./interceptors/local-files.interceptor";
-import { LocalFilesService } from "./local-files.service";
+import { FILES_SERVICE, type FilesService } from "./files.service";
+import { FilesUploadInterceptor } from "./interceptors/files-upload.interceptor";
 
 @Controller("files")
 @UseGuards(CookieAuthGuard)
 export class FilesController {
-  constructor(private readonly filesService: LocalFilesService) {}
+  constructor(
+    @Inject(FILES_SERVICE) private readonly filesService: FilesService,
+  ) {}
 
   @Post("upload")
   @UseInterceptors(
-    LocalFilesInterceptor({
+    FilesUploadInterceptor({
       fieldName: "files",
       limits: { fileSize: Math.pow(1024, 2) * 100 },
       maxFilesCount: 5,
@@ -72,12 +73,10 @@ export class FilesController {
     @CurrentUser() user: User,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const file = await this.filesService.findOne(id, user.id);
-
-    const stream = createReadStream(join(process.cwd(), file.path));
+    const { file, stream } = await this.filesService.download(id, user.id);
 
     response.set({
-      "Content-Disposition": `inline; filename="${file.originalName}"`,
+      "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.originalName)}`,
       "Content-Type": file.mimetype,
     });
     return new StreamableFile(stream);

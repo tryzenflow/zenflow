@@ -8,10 +8,37 @@ services:
     volumes:
       - /data/postgres:/data/postgres
     env_file:
-      - docker.test.env
+      - .env.test
     networks:
       - db
+
+  storage:
+    container_name: zenflow-storage-test
+    image: alphatran/minio:latest
+    # The bucket is created before the server starts (a top-level directory in
+    # the data dir is a bucket), so it exists the moment the API can connect —
+    # no init job and no create-if-missing logic in the app.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mkdir -p "/data/$$S3_BUCKET" &&
+        MINIO_ROOT_USER="$$S3_ACCESS_KEY_ID"
+        MINIO_ROOT_PASSWORD="$$S3_SECRET_ACCESS_KEY"
+        exec minio server /data --console-address ":9001"
+    ports:
+      - "9010:9000"
+    volumes:
+      - storage_data:/data
+    env_file:
+      - .env.test
+    networks:
+      - storage
 
 networks:
   db:
     driver: bridge
+  storage:
+    driver: bridge
+
+volumes:
+  storage_data:

@@ -62,7 +62,7 @@ pnpm shared:build
 # 3. Start the backend stack (API + Postgres + Redis + mail) via Docker
 cd backend
 sh build_images.sh                 # build the api/scheduler images
-#   create .env.prod and docker.env (see backend/README.md)
+#   create .env.prod, including POSTGRES_* (see backend/README.md)
 docker compose up -d               # uses compose.local.yml
 #   API      → http://localhost:5000
 #   Swagger  → http://localhost:5000/api
