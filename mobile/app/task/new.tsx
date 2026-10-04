@@ -144,7 +144,13 @@ export default function NewSessionScreen() {
   // (it's always engine-placed — `CreateSessionInput` has no
   // `scheduledStartTime`), but carrying them costs nothing.
   const initialDefaults = useMemo<SessionFormValues>(() => {
-    const base: SessionFormValues = { ...EMPTY_DEFAULTS };
+    // Pre-fill the user's Settings → Default reminder (0 = none).
+    const reminderMinutes =
+      user?.defaultReminderMinutes ?? DEFAULT_REMINDER_MINUTES;
+    const base: SessionFormValues = {
+      ...EMPTY_DEFAULTS,
+      reminders: reminderMinutes > 0 ? [reminderMinutes] : [],
+    };
     if (deadline) base.deadline = deadline;
     const n = sessions ? Number.parseInt(sessions, 10) : Number.NaN;
     if (Number.isFinite(n) && n > 1) base.sessionCount = n;
@@ -155,7 +161,7 @@ export default function NewSessionScreen() {
       base.endTime = shiftHhmm(startTime, DEFAULT_DURATION);
     }
     return base;
-  }, [start, deadline, sessions, tz]);
+  }, [start, deadline, sessions, tz, user?.defaultReminderMinutes]);
 
   const form = useSessionForm({ defaultValues: initialDefaults });
   const loading = form.formState.isSubmitting;
