@@ -8,14 +8,17 @@ set -eu
 
 for name in $(env | sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)_FILE=.*/\1/p'); do
   eval "path=\${${name}_FILE}"
-  eval "current=\${${name}:-}"
   [ -n "$path" ] || continue
-  [ -z "$current" ] || continue
+  # An explicitly set FOO (even empty) wins, matching file-secrets.ts.
+  eval "is_set=\${${name}+x}"
+  [ -z "$is_set" ] || continue
   if [ ! -r "$path" ]; then
     echo "docker-entrypoint: ${name}_FILE=$path is not readable" >&2
     exit 1
   fi
   value=$(cat "$path")
+  # Same trim as file-secrets.ts: $(...) drops the LF, also drop a CR from CRLF.
+  value=${value%"$(printf '\r')"}
   export "$name=$value"
 done
 
