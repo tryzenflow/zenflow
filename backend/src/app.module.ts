@@ -53,6 +53,16 @@ import { ObservabilityModule } from "./observability/observability.module";
           .regex(/^[0-9a-fA-F]+$/, "hex")
           .required(),
         CORS_ORIGIN: Joi.string().required(),
+        // S3-compatible object storage for uploaded files (files/). The bucket
+        // must already exist — compose `storage-init` creates it.
+        S3_ENDPOINT: Joi.string().uri().required(),
+        S3_REGION: Joi.string().default("us-east-1"),
+        S3_ACCESS_KEY_ID: Joi.string().required(),
+        S3_SECRET_ACCESS_KEY: Joi.string().required(),
+        S3_BUCKET: Joi.string().required(),
+        // Where multer buffers uploads before they move to S3. Defaults to the
+        // OS temp dir.
+        UPLOAD_TMP_DIR: Joi.string().optional(),
         CACHE_URL: Joi.string().uri().required(),
         // Separate Redis instance dedicated to LimitKit's rate-limit
         // counters (see common/rate-limit/) — kept off the session/OTP

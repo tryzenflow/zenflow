@@ -93,7 +93,7 @@ backend/
 │   ├── integrations/          # encrypted DLU credential storage + live login probe
 │   ├── notifications/         # the ingestion inbox — list, read, act-on, dismiss
 │   ├── devices/               # native push — POST/DELETE /devices + FCM/APNs fan-out
-│   ├── files/                 # multipart upload/download to local disk
+│   ├── files/                 # multipart upload/download, bytes in S3-compatible storage
 │   ├── mail/                  # login email + Handlebars templates
 │   ├── prisma/                # PrismaService + Postgres error-code map
 │   └── common/                # constants, utils, validators, dto, types
@@ -488,6 +488,14 @@ all occurrences). Violations → 400.
 
 `POST /files/upload` (multipart, ≤100 MB × 5), `POST /files/remove`,
 `GET /files/metadata/:id`, `GET /files/:id` (download stream).
+
+Bytes live in an S3-compatible bucket (`S3_*` env; `File.path` is the object key,
+`<userId>/<uuid>`). Uploads are buffered to a temp dir (`UPLOAD_TMP_DIR`), streamed
+to S3, then the temp file is removed. The API proxies downloads, so stored
+`/files/<id>` URLs are unchanged. The bucket is created by the compose `storage`
+service when it starts — the app never creates it. Move pre-S3 files with
+`docker compose exec api node dist/files/migrate-to-s3.cli.js [--dry-run]`
+(compiled into the image; `pnpm migrate:files-to-s3` locally).
 
 ### Integrations (`/integrations`)
 
@@ -1175,8 +1183,8 @@ install, the API itself runs inside the container.
 `compose.staging.yml` is the fully containerized stack: `api` (built from the
 `Dockerfile`), `postgres`, `redis` (sessions/OTP), `redis-ratelimit` (dedicated to
 LimitKit's rate-limit counters — see "Rate limiting"), `mail` (MailHog — catches OTP
-emails), and a `caddy` reverse proxy on `:80`, configured via `.env.staging` +
-`docker.staging.env`. `compose.prod.yml` follows the same shape minus `mail`.
+emails), and a `caddy` reverse proxy on `:80`, configured via `.env.staging`
+(which also carries the `POSTGRES_*` vars for the Postgres container). `compose.prod.yml` follows the same shape minus `mail`.
 
 ```bash
 # From backend/ — build the zenflow-api image (build context is the repo root,
