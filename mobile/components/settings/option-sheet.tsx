@@ -57,8 +57,9 @@ function OptionSheetInner<T extends string | number>(
                   onSelect(option.value);
                   sheet.close();
                 }}
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
+                role="radio"
+                aria-checked={selected}
+                accessibilityState={{ checked: selected }}
                 className="flex-row items-center justify-between py-3.5"
               >
                 <Text
