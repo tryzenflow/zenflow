@@ -49,6 +49,7 @@ import {
   useEditorBridge,
 } from "@10play/tentap-editor";
 import * as DocumentPicker from "expo-document-picker";
+import * as ImagePicker from "expo-image-picker";
 import { useEffect, useRef, useState } from "react";
 import {
   Linking,
@@ -419,28 +420,32 @@ function DescriptionFieldEditor({
     );
   }
 
-  // `expo-image-picker` is not an installed dependency, so this goes through
-  // the system document picker filtered to `image/*` (on both platforms this
-  // surfaces the photo library / Photos provider alongside Files, and needs no
-  // runtime permission, so there is no permission-denied path to handle —
-  // picker errors are toasted). Name/mime fall back to values derived from the
-  // uri, see `lib/picked-file.ts`.
+  // Native photo library picker (PHPicker on iOS, Photo Picker on Android) --
+  // runs out-of-process and needs no runtime permission, so there is no
+  // permission-denied path; picker errors are toasted. Name/mime fall back to
+  // values derived from the uri, see `lib/picked-file.ts`.
   async function handleInsertImage() {
-    let result: DocumentPicker.DocumentPickerResult;
+    let result: ImagePicker.ImagePickerResult;
     try {
-      result = await DocumentPicker.getDocumentAsync({
-        type: "image/*",
-        multiple: true,
-        copyToCacheDirectory: true,
+      result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsMultipleSelection: true,
+        quality: 0.8,
       });
     } catch {
-      toast("Couldn't open the image picker.", "destructive");
+      toast("Couldn't open the photo library.", "destructive");
       return;
     }
     if (result.canceled) return;
 
     await embedUploaded(
-      result.assets.map((asset) => toImageUploadPart(asset)),
+      result.assets.map((asset) =>
+        toImageUploadPart({
+          uri: asset.uri,
+          name: asset.fileName,
+          mimeType: asset.mimeType,
+        }),
+      ),
       "Couldn't upload the image. Try again.",
     );
   }
