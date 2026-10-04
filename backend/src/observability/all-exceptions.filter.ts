@@ -33,7 +33,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     const { status, message, errors, extra } = this.normalize(exception);
 
-    if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+    if (status >= 500) {
       const err = exception as Error & { code?: string };
       this.logger.error(
         {
@@ -103,9 +103,30 @@ export class AllExceptionsFilter implements ExceptionFilter {
       };
     }
 
+    // body-parser / http-errors style errors (bad JSON, payload too large…).
+    const e = exception as
+      | { status?: unknown; statusCode?: unknown; type?: unknown }
+      | null
+      | undefined;
+    const raw = e?.status ?? e?.statusCode;
+    if (typeof raw === "number" && raw >= 400 && raw < 500) {
+      return { status: raw, message: clientErrorMessage(raw, e?.type) };
+    }
+
     return {
       status: HttpStatus.INTERNAL_SERVER_ERROR,
       message: "Internal server error",
     };
   }
+}
+
+function clientErrorMessage(status: number, type: unknown): string {
+  if (status === 413 || type === "entity.too.large") {
+    return "That content is too large to save.";
+  }
+  if (type === "entity.parse.failed") return "Malformed request body.";
+  if (type === "encoding.unsupported" || type === "charset.unsupported") {
+    return "Unsupported request encoding.";
+  }
+  return "Bad request";
 }

@@ -9,3 +9,4 @@ export * from "./bandit";
 export * from "./notification";
 export * from "./push";
 export * from "./placement";
+export * from "./file";

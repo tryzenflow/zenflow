@@ -52,6 +52,9 @@ import { ObservabilityModule } from "./observability/observability.module";
           .length(64)
           .regex(/^[0-9a-fA-F]+$/, "hex")
           .required(),
+        // HMAC key for signed file URLs (files/). Rotating it invalidates every
+        // link already stored in notes.
+        FILE_URL_SECRET: Joi.string().min(32).required(),
         CORS_ORIGIN: Joi.string().required(),
         // S3-compatible object storage for uploaded files (files/). The bucket
         // must already exist — compose `storage-init` creates it.
