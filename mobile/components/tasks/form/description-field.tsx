@@ -1,4 +1,9 @@
-import { fetchFileDataUri, getFileMetadata, uploadFiles } from "@/api/files";
+import {
+  downloadFileToCache,
+  fetchFileDataUri,
+  getFileMetadata,
+  uploadFiles,
+} from "@/api/files";
 import {
   Bold,
   Check,
@@ -18,6 +23,12 @@ import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
+import { getBaseURL } from "@/lib/api-client";
+import {
+  buildFileUrl,
+  escapeHtml,
+  parseFileIdFromHref,
+} from "@/lib/file-link";
 import { loadGeistWebviewFontDataUri } from "@/lib/geist-webview-font";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
@@ -253,6 +264,18 @@ function DescriptionFieldEditor({
     `);
   }
 
+  // Our own `/files/:id` links are cookie-auth protected; the system browser
+  // has no session, so download via the authenticated `api` client and hand
+  // the cached copy to the OS viewer / share sheet instead.
+  async function openNoteFile(id: string) {
+    try {
+      const { file, mimeType, name } = await downloadFileToCache(id);
+      await file.preview({ mimeType, title: name });
+    } catch {
+      toast("Couldn't open that file.", "destructive");
+    }
+  }
+
   function handleWebviewMessage(event: WebViewMessageEvent) {
     let data: unknown;
     try {
@@ -267,6 +290,11 @@ function DescriptionFieldEditor({
     ) {
       const href = (data as { href?: unknown }).href;
       if (typeof href === "string") {
+        const fileId = parseFileIdFromHref(href, getBaseURL());
+        if (fileId) {
+          void openNoteFile(fileId);
+          return;
+        }
         Linking.openURL(href).catch(() => {
           toast("Couldn't open that link.", "destructive");
         });
@@ -322,6 +350,17 @@ function DescriptionFieldEditor({
   // header, so a plain `<img src>` pointed at the `CookieAuthGuard`-protected
   // `/files/:id` endpoint 401s silently with nothing rendered.
   async function fileEmbedMarkup(fileMetadata: FileMetadata): Promise<string> {
+    const isMedia = /^(image|audio|video)\//.test(fileMetadata.mimetype);
+    if (!isMedia) {
+      const baseURL = getBaseURL();
+      if (!baseURL) throw new Error("API base URL is not configured");
+      const name = escapeHtml(fileMetadata.originalName);
+      // Not a `data:` URI: Tiptap's Link only allows http(s)/mailto/tel/…, so
+      // a `data:` href is stripped to plain text by `setContent`, and would
+      // bloat the saved note. Link to the (authenticated) backend URL
+      // instead; taps are handled in `handleWebviewMessage`.
+      return `<p><a href="${buildFileUrl(baseURL, fileMetadata.id)}">${name}</a></p>`;
+    }
     const dataUri = await fetchFileDataUri(
       fileMetadata.id,
       fileMetadata.mimetype,
@@ -332,10 +371,7 @@ function DescriptionFieldEditor({
     if (fileMetadata.mimetype.startsWith("audio/")) {
       return `<audio controls src="${dataUri}" style="max-width: 100%;"></audio>`;
     }
-    if (fileMetadata.mimetype.startsWith("video/")) {
-      return `<video controls src="${dataUri}" style="max-width: 100%;"></video>`;
-    }
-    return `<a href="${dataUri}" download="${fileMetadata.originalName}">${fileMetadata.originalName}</a>`;
+    return `<video controls src="${dataUri}" style="max-width: 100%;"></video>`;
   }
 
   async function handleUploadFile() {
