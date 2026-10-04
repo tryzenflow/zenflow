@@ -30,7 +30,7 @@ export function dayWord(date: Date, now: Date): string {
   return format(date, "EEE MMM d");
 }
 
-const capitalize = (word: string): string =>
+export const capitalize = (word: string): string =>
   word.charAt(0).toUpperCase() + word.slice(1);
 
 /** One selectable side of a slot comparison. */
