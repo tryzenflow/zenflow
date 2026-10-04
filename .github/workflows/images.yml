@@ -1,0 +1,58 @@
+name: Images & staging deploy
+
+# Merge to master => build + push images tagged with the commit SHA (and
+# :latest), then deploy that SHA to staging automatically.
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: false # never cancel a half-pushed release
+
+permissions:
+  contents: read
+
+jobs:
+  build-push:
+    name: Build & push images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: meta
+        run: |
+          echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "registry=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4 # build_images.sh reads backend/package.json
+        with:
+          node-version: 20
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: build_images.sh (push)
+        env:
+          REGISTRY: ${{ steps.meta.outputs.registry }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          PUSH: "1"
+        run: ./build_images.sh
+
+  deploy-staging:
+    name: Deploy to staging
+    needs: build-push
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: staging
+      image_tag: ${{ needs.build-push.outputs.tag }}
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: read
