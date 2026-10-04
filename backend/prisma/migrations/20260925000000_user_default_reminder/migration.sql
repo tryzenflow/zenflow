@@ -1,0 +1,1 @@
+ALTER TABLE "User" ADD COLUMN "defaultReminderMinutes" INTEGER NOT NULL DEFAULT 10;

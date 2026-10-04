@@ -1,3 +1,11 @@
+/** Supported UI languages (wire form of the DB `Language` enum). */
+export const LANGS = ["vi", "en"] as const;
+export type Lang = (typeof LANGS)[number];
+
+/** Allowed values of `defaultReminderMinutes` (0 = none). */
+export const DEFAULT_REMINDER_CHOICES = [0, 5, 10, 15, 30, 60] as const;
+export type DefaultReminderChoice = (typeof DEFAULT_REMINDER_CHOICES)[number];
+
 /**
  * A user's scheduling preferences. Used to carry just `timezone` — the
  * working-window fields (workStart/workEnd/workDays) were dropped from
@@ -8,6 +16,14 @@
 export interface UserPreferences {
   /** IANA timezone, e.g. "Asia/Ho_Chi_Minh". */
   timezone: string;
+  /** UI language. Maps to the DB enum VI_VN / EN_US. */
+  lang: Lang;
+  /**
+   * Lead time (minutes) of the reminder given to a new session when the
+   * request omits `reminders`. One of {@link DEFAULT_REMINDER_CHOICES};
+   * 0 = no default reminder. DND sessions never get one.
+   */
+  defaultReminderMinutes: DefaultReminderChoice;
 }
 
 export interface User extends UserPreferences {
@@ -18,7 +34,11 @@ export interface User extends UserPreferences {
   updatedAt: string;
 }
 
-/** Partial update to a user's basic (non-scheduling) identity fields. */
+/** Partial update to a user's name and preferences. */
 export interface UpdateUserInput {
   name?: string;
+  /** Valid IANA zone. Affects only future scheduling/rendering. */
+  timezone?: string;
+  lang?: Lang;
+  defaultReminderMinutes?: DefaultReminderChoice;
 }

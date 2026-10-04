@@ -22,6 +22,9 @@ model User {
   timezone String   @default("Asia/Saigon") @db.VarChar(50)
   lang     Language @default(VI_VN)
 
+  /// Reminder lead time (minutes) applied to new sessions that omit `reminders`; 0 = none.
+  defaultReminderMinutes Int @default(10)
+
   preferenceMatrix          Float[]   @default([])
   preferenceMatrixDecayedAt DateTime?
 

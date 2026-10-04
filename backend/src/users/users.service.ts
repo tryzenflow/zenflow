@@ -8,6 +8,7 @@ import { Prisma, type User } from "../../generated/prisma";
 import { PostgresErrorCode } from "../prisma/error-codes";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateUserDto } from "./dto/create-user.dto";
+import { langToDb } from "./user-response";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import {
   PREFERENCE_MATRIX_LENGTH,
@@ -45,7 +46,10 @@ export class UsersService {
     try {
       return await this.prisma.user.update({
         where: { id },
-        data: updateUserDto,
+        data: {
+          ...updateUserDto,
+          lang: updateUserDto.lang ? langToDb(updateUserDto.lang) : undefined,
+        },
       });
     } catch (error) {
       if (

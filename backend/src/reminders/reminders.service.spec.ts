@@ -79,6 +79,11 @@ describe("RemindersService", () => {
     it("defaults to one 60-minute reminder, none for DND", () => {
       expect(service.resolveForCreate("LECTURE", undefined)).toEqual([60]);
       expect(service.resolveForCreate("DND", undefined)).toEqual([]);
+      // user default: honoured, 0 = none, DND still excluded, explicit wins
+      expect(service.resolveForCreate("LECTURE", undefined, 10)).toEqual([10]);
+      expect(service.resolveForCreate("LECTURE", undefined, 0)).toEqual([]);
+      expect(service.resolveForCreate("DND", undefined, 10)).toEqual([]);
+      expect(service.resolveForCreate("TASK", [15], 10)).toEqual([15]);
     });
     it("honours an explicit list and an explicit empty list", () => {
       expect(service.resolveForCreate("TASK", [15, 1440])).toEqual([1440, 15]);

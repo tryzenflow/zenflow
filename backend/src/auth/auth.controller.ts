@@ -18,6 +18,7 @@ import {
   otpRequestRateLimitRules,
   otpVerifyRateLimitRules,
 } from "../common/rate-limit";
+import { toUserResponse } from "../users/user-response";
 import type { User } from "../../generated/prisma";
 import type { Request } from "express";
 
@@ -50,7 +51,7 @@ export class AuthController {
     return {
       success: true,
       message: "OTP verified successfully. You are now logged in",
-      data: user,
+      data: toUserResponse(user),
     };
   }
 
@@ -60,7 +61,7 @@ export class AuthController {
     return {
       success: true,
       message: `Welcome back, ${user.name}`,
-      data: user,
+      data: toUserResponse(user),
     };
   }
 

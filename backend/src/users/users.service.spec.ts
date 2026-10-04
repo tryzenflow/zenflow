@@ -38,6 +38,29 @@ describe("UsersService.update", () => {
     });
   });
 
+  it("maps lang to the DB enum and persists timezone + default reminder", async () => {
+    const update = jest.fn((args: UpdateArgs) => ({
+      id: user.id,
+      ...args.data,
+    }));
+    const service = await makeService(update);
+
+    await service.update(user.id, {
+      timezone: "Asia/Tokyo",
+      lang: "en",
+      defaultReminderMinutes: 0,
+    });
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: user.id },
+      data: {
+        timezone: "Asia/Tokyo",
+        lang: "EN_US",
+        defaultReminderMinutes: 0,
+      },
+    });
+  });
+
   it("throws NotFoundException when the user doesn't exist", async () => {
     const update = jest.fn(() => {
       throw new Prisma.PrismaClientKnownRequestError("Record not found", {
