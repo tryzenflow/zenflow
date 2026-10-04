@@ -409,7 +409,8 @@ lectures, 1 lecture removed"`. `eventName` is `<type>.group_<kind>` (most signif
 ## API endpoints
 
 Global prefix `**/api/v1**`. All routes except `POST /auth/otp/*` require
-`CookieAuthGuard` (a valid Redis session cookie). Success responses use the
+`CookieAuthGuard` (a valid Redis session cookie), with one exception: `GET /files/:id?sig=…`
+is also served without a session when `sig` is a valid file-URL signature (see Files). Success responses use the
 `@zenflow/shared` envelope `{ success: true, message?, data }`; errors use
 `{ success: false, message, statusCode?, field? }`.
 
@@ -487,7 +488,11 @@ all occurrences). Violations → 400.
 ### Files (`/files`)
 
 `POST /files/upload` (multipart, ≤100 MB × 5), `POST /files/remove`,
-`GET /files/metadata/:id`, `GET /files/:id` (download stream).
+`GET /files/metadata/:id`, `GET /files/:id` (download stream). Upload and metadata
+responses include a signed `url` (`/files/<id>?sig=…`, HMAC-SHA256 of the id with
+`FILE_URL_SECRET`, no expiry, not revocable per file; rotating the secret breaks stored links).
+A valid `sig` is accepted without a session; otherwise the cookie session must own the file.
+Signed responses are `Cache-Control: private, no-cache` so removals take effect.
 
 Bytes live in an S3-compatible bucket (`S3_*` env; `File.path` is the object key,
 `<userId>/<uuid>`). Uploads are buffered to a temp dir (`UPLOAD_TMP_DIR`), streamed

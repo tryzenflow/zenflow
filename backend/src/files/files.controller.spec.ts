@@ -32,7 +32,7 @@ describe("FilesController.stream", () => {
     expect(download).toHaveBeenCalledWith("f1", undefined);
     expect(res.set).toHaveBeenCalledWith(
       expect.objectContaining({
-        "Cache-Control": "private, max-age=31536000, immutable",
+        "Cache-Control": "private, no-cache",
       }),
     );
   });

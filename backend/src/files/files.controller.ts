@@ -103,10 +103,9 @@ export class FilesController {
       // Uploaded content is user-controlled: never let it sniff into HTML/JS.
       "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy": "sandbox; default-src 'none'",
-      // Bytes for a given id never change; the signed URL is stable.
-      "Cache-Control": signed
-        ? "private, max-age=31536000, immutable"
-        : "private, max-age=3600",
+      // Signed URLs are stable but must revalidate so removing a file takes
+      // effect even for browsers that already fetched it.
+      "Cache-Control": signed ? "private, no-cache" : "private, max-age=3600",
     });
     return new StreamableFile(stream);
   }
