@@ -1,0 +1,299 @@
+name: CI
+
+on:
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint (changed files)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      # The tree currently carries pre-existing eslint errors (backend ~32,
+      # frontend ~5), so a whole-repo lint would be red on day one. Lint only
+      # the files this PR touches: new violations are blocked, and the debt can
+      # be burned down separately (then switch to `eslint .`).
+      # Read-only on purpose: `pnpm --filter backend lint` uses --fix.
+      - name: Resolve base
+        id: base
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          [ -n "$base" ] || base="$(git merge-base origin/master HEAD)"
+          echo "sha=$base" >> "$GITHUB_OUTPUT"
+      - name: Backend (eslint + prettier)
+        run: |
+          files=$(git diff --name-only --diff-filter=ACMR "${{ steps.base.outputs.sha }}" HEAD -- 'backend/src/**/*.ts' 'backend/test/**/*.ts' | sed 's#^backend/##')
+          [ -z "$files" ] && { echo "no backend TS changes"; exit 0; }
+          pnpm --filter backend exec eslint $files
+      - name: Frontend (eslint)
+        run: |
+          files=$(git diff --name-only --diff-filter=ACMR "${{ steps.base.outputs.sha }}" HEAD -- 'frontend/src/**/*.ts' 'frontend/src/**/*.tsx' 'frontend/e2e/**/*.ts' | sed 's#^frontend/##')
+          [ -z "$files" ] && { echo "no frontend changes"; exit 0; }
+          pnpm --filter frontend exec eslint $files
+
+  typecheck:
+    name: Typecheck (shared, core, backend, frontend, mobile)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: pnpm -r typecheck
+
+  unit-tests:
+    name: Unit tests (backend, mobile)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: pnpm --filter backend test
+      - run: pnpm --filter mobile test
+
+  bandit-tests:
+    name: Unit tests (bandit, python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: services/bandit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: services/bandit/uv.lock
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run pytest
+
+  prisma-check:
+    name: Prisma migrations match schema
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      shadow:
+        image: postgres:18.4-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: shadow
+        ports: ["5434:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci -d shadow"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # Prisma needs *a* DATABASE_URL to parse the datasource; the real work
+      # happens against the shadow database below.
+      DATABASE_URL: postgresql://ci:ci@localhost:5434/shadow?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      # Replays prisma/migrations on the shadow DB and diffs the result with
+      # schema.prisma. Exit code 2 = the schema has changes with no migration
+      # (drift); a migration that fails to apply fails the job too.
+      - name: migrate diff (migrations -> schema.prisma)
+        working-directory: backend
+        run: >-
+          pnpm exec prisma migrate diff
+          --from-migrations prisma/migrations
+          --to-schema-datamodel prisma/schema.prisma
+          --shadow-database-url "$DATABASE_URL"
+          --exit-code
+
+  backend-e2e:
+    name: Backend e2e (compose.test.yml)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      redis:
+        image: redis:8.8.0-alpine
+        ports: ["6379:6379"]
+      redis-ratelimit:
+        image: redis:8.8.0-alpine
+        ports: ["6380:6379"]
+      mailhog:
+        image: mailhog/mailhog:v1.0.1
+        ports: ["1025:1025", "8025:8025"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Generate throwaway .env.test
+        run: .github/scripts/write-test-env.sh backend/.env.test
+      - name: Start Postgres + object storage
+        working-directory: backend
+        run: docker compose -f compose.test.yml up -d
+      - name: Wait for Postgres
+        working-directory: backend
+        run: |
+          for i in $(seq 1 30); do
+            docker exec zenflow-test-db pg_isready -U ci -d zenflow-test && exit 0
+            sleep 2
+          done
+          docker compose -f compose.test.yml logs postgres
+          exit 1
+      # migrate deploy (not db push) so the e2e run also proves the migration
+      # history applies cleanly from scratch.
+      - name: Apply migrations
+        working-directory: backend
+        run: pnpm exec dotenv -e .env.test -- prisma migrate deploy
+      - name: Run e2e
+        run: pnpm --filter backend test:e2e
+      - name: Dump compose logs on failure
+        if: failure()
+        working-directory: backend
+        run: docker compose -f compose.test.yml logs --no-color
+      - name: Tear down
+        if: always()
+        working-directory: backend
+        run: docker compose -f compose.test.yml down -v
+
+  frontend-e2e:
+    name: Frontend e2e (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      redis:
+        image: redis:8.8.0-alpine
+        ports: ["6379:6379"]
+      redis-ratelimit:
+        image: redis:8.8.0-alpine
+        ports: ["6380:6379"]
+      mailhog:
+        image: mailhog/mailhog:v1.0.1
+        ports: ["1025:1025", "8025:8025"]
+    steps:
+      - uses: actions/checkout@v4
+      # frontend/e2e/ does not exist yet (the Playwright config points at it).
+      # Skip rather than fail so this job becomes real the day specs land.
+      - name: Detect Playwright specs
+        id: specs
+        run: |
+          if [ -n "$(find frontend/e2e -name '*.spec.ts' 2>/dev/null | head -1)" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No frontend/e2e specs found; skipping Playwright."
+          fi
+      - uses: ./.github/actions/setup
+        if: steps.specs.outputs.present == 'true'
+      - name: Generate throwaway .env.test
+        if: steps.specs.outputs.present == 'true'
+        run: .github/scripts/write-test-env.sh backend/.env.test
+      - name: Start Postgres + object storage
+        if: steps.specs.outputs.present == 'true'
+        working-directory: backend
+        run: docker compose -f compose.test.yml up -d
+      - name: Migrate and start the API
+        if: steps.specs.outputs.present == 'true'
+        working-directory: backend
+        run: |
+          for i in $(seq 1 30); do docker exec zenflow-test-db pg_isready -U ci -d zenflow-test && break; sleep 2; done
+          pnpm exec dotenv -e .env.test -- prisma migrate deploy
+          pnpm build
+          (pnpm exec dotenv -e .env.test -- env PORT=5000 node dist/main > ../api.log 2>&1 &)
+          for i in $(seq 1 60); do curl -fs http://localhost:5000/api >/dev/null && exit 0; sleep 2; done
+          cat ../api.log; exit 1
+      - name: Install Playwright browser
+        if: steps.specs.outputs.present == 'true'
+        run: pnpm --filter frontend exec playwright install --with-deps chromium
+      - name: Playwright
+        if: steps.specs.outputs.present == 'true'
+        env:
+          VITE_API_URL: http://localhost:5000/api/v1
+          MAILHOG_URL: http://localhost:8025
+        run: pnpm --filter frontend test:e2e
+      - name: Upload report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+            api.log
+          if-no-files-found: ignore
+
+  docker-build:
+    name: API image builds (no push)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile
+          push: false
+          load: true
+          tags: zenflow-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      # #76: no env files / plaintext secrets may end up in the image, and the
+      # entrypoint must expand FOO_FILE secrets.
+      - name: Image contains no env files
+        run: |
+          docker run --rm --entrypoint sh zenflow-api:ci -c \
+            '! find /app -not -path "*/node_modules/*" \( -name ".env*" -o -name "*.env" \) | grep .'
+      - name: Entrypoint expands *_FILE secrets
+        run: |
+          echo -n s3cret > "$RUNNER_TEMP/v"
+          out=$(docker run --rm -v "$RUNNER_TEMP/v:/run/secrets/v:ro" -e FOO_FILE=/run/secrets/v zenflow-api:ci sh -c 'echo "$FOO"')
+          [ "$out" = "s3cret" ]
+
+  gitleaks:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # scan the PR's commits, not just the tip
+      - name: Run gitleaks
+        env:
+          GITLEAKS_VERSION: "8.28.0"
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz gitleaks
+          # PRs: only the commits the PR adds (historic leaks are tracked in
+          # docs/ops/secrets.md and rotated, not re-flagged on every PR).
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            range="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+          else
+            range="HEAD~1..HEAD"
+          fi
+          ./gitleaks detect --source . --config .gitleaks.toml --log-opts "$range" --redact --verbose
+
+  # Single status for branch protection: require only this check ("CI ok").
+  ci-ok:
+    name: CI ok
+    if: always()
+    needs:
+      - lint
+      - typecheck
+      - unit-tests
+      - bandit-tests
+      - prisma-check
+      - backend-e2e
+      - frontend-e2e
+      - docker-build
+      - gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any required job failed or was cancelled
+        run: |
+          echo '${{ toJSON(needs) }}' | jq -e 'all(.[]; .result == "success" or .result == "skipped")' >/dev/null \
+            || { echo '${{ toJSON(needs) }}'; exit 1; }

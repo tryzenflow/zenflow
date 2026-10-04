@@ -1,0 +1,41 @@
+name: Release (production)
+
+# Production deploys are promotions, not rebuilds: publishing a GitHub Release
+# for tag vX.Y.Z deploys the images that images.yml already built for that
+# tag's commit. The "production" Environment's required reviewers gate it.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.sha.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+      - id: sha
+        run: |
+          sha="$(git rev-parse HEAD)"
+          # Only release commits that are on master (i.e. passed required CI).
+          git fetch origin master
+          git merge-base --is-ancestor "$sha" origin/master \
+            || { echo "::error::Tag ${{ github.event.release.tag_name }} is not on master"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+  deploy-production:
+    needs: resolve
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: production
+      image_tag: ${{ needs.resolve.outputs.sha }}
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: read

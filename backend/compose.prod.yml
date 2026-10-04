@@ -5,7 +5,7 @@ services:
     build:
       context: ..
       dockerfile: backend/Dockerfile
-    image: zenflow-api:2.1.0
+    image: ${ZENFLOW_API_IMAGE:-zenflow-api:2.1.0}
     expose:
       - "5000"
     networks:
@@ -39,6 +39,7 @@ services:
   bandit:
     container_name: zenflow-bandit-prod
     build: ../services/bandit
+    image: ${ZENFLOW_BANDIT_IMAGE:-zenflow-bandit:latest}
     expose:
       - "8000"
     environment:
@@ -52,7 +53,7 @@ services:
     build:
       context: ..
       dockerfile: backend/Dockerfile
-    image: zenflow-api:2.1.0
+    image: ${ZENFLOW_API_IMAGE:-zenflow-api:2.1.0}
     networks:
       - db
       - egress
