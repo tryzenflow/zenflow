@@ -16,12 +16,13 @@ import { useToast } from "@/components/ui/toast";
 import {
   LANGUAGES,
   REMINDERS,
-  TIMEZONES,
+  allTimezones,
   deviceTimezone,
   usePreferences,
 } from "@/lib/preferences";
+import { timezonePickerValue } from "@/lib/preferences-sync";
 import { dropPushRegistration, syncPushRegistration } from "@/lib/push";
-import { type ComponentType, useRef } from "react";
+import { type ComponentType, useMemo, useRef } from "react";
 import { Pressable, View } from "react-native";
 
 function Row({
@@ -59,11 +60,20 @@ export function PreferencesSection() {
   const reminderSheet = useRef<OptionSheetHandle>(null);
 
   const device = deviceTimezone();
-  const tzOptions = [
-    { value: "device", label: `Device (${device})` },
-    ...TIMEZONES.map((z) => ({ value: z, label: z })),
-  ];
-  const tzLabel = prefs.timezone === "device" ? device : prefs.timezone;
+  const tzOptions = useMemo(
+    () => [
+      { value: "device", label: `Device (${device})` },
+      ...allTimezones().map((z) => ({ value: z, label: z })),
+    ],
+    [device],
+  );
+  const tzLabel = prefs.timezoneMode === "device" ? device : prefs.timezone;
+
+  async function save(patch: Parameters<typeof update>[0]) {
+    if (!(await update(patch))) {
+      toast("Couldn't save preference. Try again.", "destructive");
+    }
+  }
 
   async function toggleNotifications(on: boolean) {
     await update({ notificationsEnabled: on });
@@ -132,21 +142,21 @@ export function PreferencesSection() {
         title="Language"
         options={LANGUAGES}
         value={prefs.language}
-        onSelect={(language) => update({ language })}
+        onSelect={(language) => save({ language })}
       />
       <OptionSheet
         ref={timezoneSheet}
         title="Timezone"
         options={tzOptions}
-        value={prefs.timezone}
-        onSelect={(timezone) => update({ timezone })}
+        value={timezonePickerValue(prefs)}
+        onSelect={(timezone) => save({ timezone })}
       />
       <OptionSheet
         ref={reminderSheet}
         title="Default reminder"
         options={REMINDERS}
         value={prefs.defaultReminder}
-        onSelect={(defaultReminder) => update({ defaultReminder })}
+        onSelect={(defaultReminder) => save({ defaultReminder })}
       />
     </>
   );

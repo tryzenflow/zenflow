@@ -126,7 +126,7 @@ Defined in [`prisma/schema.prisma`](prisma/schema.prisma)
 | `id`                        | uuid       | PK                                                                                                                                                                             |
 | `name`, `email`             | string     | `email` unique                                                                                                                                                                 |
 | `timezone`                  | string     | IANA, default `"UTC"`                                                                                                                                                          |
-| `lang`                      | `Language` | `VI_VN` \| `EN_US`, default `EN_US`. Not yet read by any endpoint.                                                                                                             |
+| `lang`                      | `Language` | `VI_VN` \| `EN_US`, default `EN_US`. Editable via `PATCH /users/update/basic-info`.                                                                                                             |
 | `preferenceMatrix`          | float[]    | flat 168 signed floats (7 weekdays × 24 hours, row-major). +/−/0 = preferred/disliked/neutral. Read by the engine; decayed nightly; seeded lazily from the cold-start default. |
 | `preferenceMatrixDecayedAt` | DateTime?  | last decay-cron pass; null until the first.                                                                                                                                    |
 | `onboardingComplete`        | bool       | always `true`; no onboarding flow. Unused.                                                                                                                                     |
@@ -427,11 +427,13 @@ Global prefix `**/api/v1**`. All routes except `POST /auth/otp/*` require
 | Method | Path                          | Purpose                                                                                |
 | ------ | ----------------------------- | -------------------------------------------------------------------------------------- |
 | GET    | `/users/me`                   | profile                                                                                |
-| PATCH  | `/users/update/basic-info`    | update name/email                                                                      |
+| PATCH  | `/users/update/basic-info`    | update name, timezone, lang, defaultReminderMinutes                                                                    |
 | GET    | `/users/me/preference-matrix` | the 168-float preference matrix for the Insights heatmap (`PreferenceMatrixResponse`). |
 
-No onboarding or preferences-update endpoint. `timezone` is captured once at OTP signup
-(`x-timezone` header) and never edited after.
+No onboarding endpoint. `timezone` is captured at OTP signup (`x-timezone` header) and can be
+changed later, with `lang` and `defaultReminderMinutes` (0 = none, default 10; existing users were
+migrated to 60), through `PATCH /users/update/basic-info`. Changing `timezone` re-keys each
+recurring series' `exdates` so individually deleted occurrences stay deleted.
 
 A brand-new signup also seeds 4 daily-recurring `DND` blocks (Breakfast 06:00–07:00, Lunch
 11:00–13:00, Evening 17:00–19:00, Sleep 22:00–06:00) via the normal `DND` + `rrule` path,
@@ -457,7 +459,7 @@ deadline and returns `late: true`. `now + duration > deadline` is a `400` on cre
 deadline edit. Every `Session` carries `late: boolean`.
 `POST` and `PATCH` accept `reminders?: number[]` (minutes before start, max 2 distinct ints in
 0…10080 (0 = at start), not for `DND`); every `Session` response carries `reminders: number[]` (descending;
-`[]` for DND). On create, omitted → one default reminder at 60 min (non-DND), `[]` → none. On
+`[]` for DND). On create, omitted → one reminder at the user's `defaultReminderMinutes` (non-DND; none if 0), `[]` → none. On
 PATCH, omitted → unchanged, an array replaces. On a materialized `TASK` series the list applies
 to every sitting; on a recurring fixed occurrence id it edits the series' representative (so
 all occurrences). Violations → 400.

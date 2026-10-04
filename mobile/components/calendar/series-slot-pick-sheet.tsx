@@ -9,7 +9,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
-import { buildSlotOptions, type SlotOption } from "@/lib/slot-option";
+import {
+  buildSlotOptions,
+  capitalize,
+  type SlotOption,
+} from "@/lib/slot-option";
 import {
   undecidedSittingIds,
   type DivergentSitting,
@@ -354,13 +358,13 @@ const SeriesSlotPickSheet = forwardRef<
                       >
                         <View className="flex-row items-center gap-1.5">
                           <View
-                            className={`size-3.5 shrink-0 items-center justify-center rounded-full border-2 ${isSelected ? "border-primary bg-primary" : "border-border bg-transparent"}`}
+                            className={`size-5 shrink-0 items-center justify-center rounded-full border-2 ${isSelected ? "border-primary bg-primary" : "border-muted-foreground/40 bg-transparent"}`}
                           >
                             {isSelected ? (
                               <Check
-                                size={8}
-                                color="#ffffff"
+                                size={12}
                                 strokeWidth={3.5}
+                                className="text-primary-foreground"
                               />
                             ) : null}
                           </View>
@@ -368,14 +372,14 @@ const SeriesSlotPickSheet = forwardRef<
                             className="flex-1 text-[10.5px] font-semibold text-muted-foreground"
                             numberOfLines={2}
                           >
-                            {option.day} ·{" "}
+                            {capitalize(option.day)} ·{" "}
                             {option.kind === "primary"
                               ? "Scheduled"
                               : "Alternative"}
                           </Text>
                         </View>
                         <Text
-                          className="mt-1 pl-5 text-[13px] font-semibold"
+                          className="mt-1 pl-[26px] text-[13px] font-semibold"
                           numberOfLines={1}
                         >
                           {option.range}

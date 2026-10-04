@@ -3,6 +3,7 @@ import {
   firstOccurrence,
   occurrenceId,
   parseOccurrenceId,
+  remapExdatesForTimezone,
   rruleWithUntil,
 } from "./recurrence";
 
@@ -225,5 +226,37 @@ describe("firstOccurrence", () => {
     expect(iso(firstOccurrence("FREQ=WEEKLY;BYDAY=MO", anchor, "UTC"))).toBe(
       "2026-06-08T09:00:00.000Z",
     );
+  });
+});
+
+describe("remapExdatesForTimezone", () => {
+  it("keeps a deleted occurrence deleted after a timezone change", () => {
+    const dtstart = new Date("2026-03-02T02:00:00Z"); // 09:00 Asia/Ho_Chi_Minh
+    const range: [Date, Date] = [
+      new Date("2026-03-01T00:00:00Z"),
+      new Date("2026-04-30T00:00:00Z"),
+    ];
+    const rule = "FREQ=DAILY";
+    const [, second] = expandRrule(
+      rule,
+      dtstart,
+      ...range,
+      "Asia/Ho_Chi_Minh",
+    );
+    const remapped = remapExdatesForTimezone(
+      [second.toISOString()],
+      dtstart,
+      "Asia/Ho_Chi_Minh",
+      "America/New_York",
+    );
+    const after = expandRrule(
+      rule,
+      dtstart,
+      ...range,
+      "America/New_York",
+      remapped,
+    );
+    const all = expandRrule(rule, dtstart, ...range, "America/New_York");
+    expect(after).toHaveLength(all.length - 1);
   });
 });

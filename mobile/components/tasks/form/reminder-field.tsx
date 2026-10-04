@@ -119,7 +119,7 @@ export function ReminderField({
       <Text className="text-[12.5px] leading-snug text-muted-foreground">
         {full
           ? `${value.length} of ${MAX_REMINDERS_PER_SESSION} reminders set — tap one to change it.`
-          : `Defaults to 1 hour before it starts. Tap a reminder to change it. Up to ${MAX_REMINDERS_PER_SESSION} per task.`}
+          : `New tasks use your default reminder from Settings. Tap a reminder to change it. Up to ${MAX_REMINDERS_PER_SESSION} per task.`}
       </Text>
 
       <BottomSheet>

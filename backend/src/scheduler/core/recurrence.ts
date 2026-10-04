@@ -134,6 +134,30 @@ export function firstOccurrence(
   return naive ? fromNaive(naive, timezone) : dtstart;
 }
 
+/**
+ * Re-key a series' `exdates` after the user's timezone changes. Occurrences are
+ * generated on the wall-clock calendar of the active zone, so the same logical
+ * occurrence lands on a different UTC instant under the new zone (and DST can
+ * make the shift differ per date). Each excluded instant is mapped to the
+ * wall-clock it had in `oldTz`, shifted by how the series anchor (`dtstart`)
+ * moved, and converted back in `newTz`, so deleted occurrences stay deleted.
+ */
+export function remapExdatesForTimezone(
+  exdates: string[],
+  dtstart: Date,
+  oldTz: string,
+  newTz: string,
+): string[] {
+  const anchorShift =
+    toNaive(dtstart, newTz).getTime() - toNaive(dtstart, oldTz).getTime();
+  return exdates.map((e) => {
+    const d = new Date(e);
+    if (Number.isNaN(d.getTime())) return e;
+    const naive = new Date(toNaive(d, oldTz).getTime() + anchorShift);
+    return fromNaive(naive, newTz).toISOString();
+  });
+}
+
 /** Real instant → naive Date whose UTC fields hold its `timezone` wall-clock. */
 function toNaive(date: Date, timezone: string): Date {
   const z = toZonedTime(date, timezone);

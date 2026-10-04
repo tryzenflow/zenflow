@@ -14,7 +14,18 @@ async function makeService(update: jest.Mock) {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       UsersService,
-      { provide: PrismaService, useValue: { user: { update } } },
+      {
+        provide: PrismaService,
+        useValue: {
+          user: {
+            update,
+            findUnique: jest.fn(() => ({ timezone: "Asia/Ho_Chi_Minh" })),
+          },
+          session: { findMany: jest.fn(() => []) },
+          sessionSeries: { update: jest.fn() },
+          $transaction: (ops: unknown[]) => Promise.all(ops),
+        },
+      },
     ],
   }).compile();
   return module.get<UsersService>(UsersService);
@@ -35,6 +46,29 @@ describe("UsersService.update", () => {
     expect(update).toHaveBeenCalledWith({
       where: { id: user.id },
       data: { name: "New Name" },
+    });
+  });
+
+  it("maps lang to the DB enum and persists timezone + default reminder", async () => {
+    const update = jest.fn((args: UpdateArgs) => ({
+      id: user.id,
+      ...args.data,
+    }));
+    const service = await makeService(update);
+
+    await service.update(user.id, {
+      timezone: "Asia/Tokyo",
+      lang: "en",
+      defaultReminderMinutes: 0,
+    });
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: user.id },
+      data: {
+        timezone: "Asia/Tokyo",
+        lang: "EN_US",
+        defaultReminderMinutes: 0,
+      },
     });
   });
 

@@ -1,4 +1,6 @@
 import type { FileMetadata } from "@/types/files";
+import { safeFileName } from "@/lib/file-link";
+import { Directory, File as ExpoFile, Paths } from "expo-file-system";
 import { api } from "./base";
 
 export interface PickedFilePart {
@@ -62,4 +64,25 @@ export async function fetchFileDataUri(
     reader.onload = () => resolve(reader.result as string);
     reader.readAsDataURL(blob);
   });
+}
+
+/**
+ * Download a file through the authenticated `api` client into the app cache
+ * dir and return it, ready for `file.preview()` (OS viewer / share sheet).
+ * Used for non-media note links: the system browser has no session cookie,
+ * so `Linking.openURL` on `/files/:id` would 401.
+ */
+export async function downloadFileToCache(
+  id: string,
+): Promise<{ file: ExpoFile; mimeType: string; name: string }> {
+  const meta = await getFileMetadata(id);
+  const response = await api.get(`/files/${id}`, {
+    responseType: "arraybuffer",
+    timeout: 60_000,
+  });
+  const dir = new Directory(Paths.cache, "note-files", id);
+  dir.create({ idempotent: true, intermediates: true });
+  const file = new ExpoFile(dir, safeFileName(meta.originalName));
+  await file.write(new Uint8Array(response.data as ArrayBuffer));
+  return { file, mimeType: meta.mimetype, name: meta.originalName };
 }

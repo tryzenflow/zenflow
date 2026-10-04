@@ -1,8 +1,14 @@
-import { fetchFileDataUri, getFileMetadata, uploadFiles } from "@/api/files";
+import {
+  downloadFileToCache,
+  fetchFileDataUri,
+  getFileMetadata,
+  uploadFiles,
+} from "@/api/files";
 import {
   Bold,
   Check,
   Highlighter,
+  ImagePlus,
   Italic,
   Link2,
   List,
@@ -18,7 +24,10 @@ import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
+import { getBaseURL } from "@/lib/api-client";
+import { buildFileUrl, escapeHtml, parseFileIdFromHref } from "@/lib/file-link";
 import { loadGeistWebviewFontDataUri } from "@/lib/geist-webview-font";
+import { toImageUploadPart } from "@/lib/picked-file";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
 import type { FileMetadata } from "@/types/files";
@@ -40,6 +49,7 @@ import {
   useEditorBridge,
 } from "@10play/tentap-editor";
 import * as DocumentPicker from "expo-document-picker";
+import * as ImagePicker from "expo-image-picker";
 import { useEffect, useRef, useState } from "react";
 import {
   Linking,
@@ -210,7 +220,7 @@ function DescriptionFieldEditor({
       // keeps any embedded image/video to a sane thumbnail-ish size, same
       // idea as the web editor's `prose-img:max-h-64` (`frontend/src/
       // index.css`).
-      `${fontFace} body { background-color: ${bg}; } .ProseMirror { background-color: ${bg}; color: ${fg}; font-family: ${fontFamily}; font-size: 15px; padding: 4px 12px; line-height: 1.15; overflow-y: auto; } .ProseMirror a { color: ${linkColor}; text-decoration: underline; } .ProseMirror img, .ProseMirror video { max-height: 200px; width: auto; object-fit: contain; border-radius: 8px; }`,
+      `${fontFace} html, body { margin: 0; padding: 0; background-color: ${bg}; } .ProseMirror { box-sizing: border-box; background-color: ${bg}; color: ${fg}; font-family: ${fontFamily}; font-size: 15px; padding: 12px; line-height: 1.4; overflow-y: auto; } .ProseMirror > :first-child { margin-top: 0; } .ProseMirror > :last-child { margin-bottom: 0; } .ProseMirror a { color: ${linkColor}; text-decoration: underline; } .ProseMirror img, .ProseMirror video { max-height: 200px; width: auto; object-fit: contain; border-radius: 8px; }`,
       "description-field-theme",
     );
   }
@@ -253,6 +263,18 @@ function DescriptionFieldEditor({
     `);
   }
 
+  // Our own `/files/:id` links are cookie-auth protected; the system browser
+  // has no session, so download via the authenticated `api` client and hand
+  // the cached copy to the OS viewer / share sheet instead.
+  async function openNoteFile(id: string) {
+    try {
+      const { file, mimeType, name } = await downloadFileToCache(id);
+      await file.preview({ mimeType, title: name });
+    } catch {
+      toast("Couldn't open that file.", "destructive");
+    }
+  }
+
   function handleWebviewMessage(event: WebViewMessageEvent) {
     let data: unknown;
     try {
@@ -267,6 +289,11 @@ function DescriptionFieldEditor({
     ) {
       const href = (data as { href?: unknown }).href;
       if (typeof href === "string") {
+        const fileId = parseFileIdFromHref(href, getBaseURL());
+        if (fileId) {
+          void openNoteFile(fileId);
+          return;
+        }
         Linking.openURL(href).catch(() => {
           toast("Couldn't open that link.", "destructive");
         });
@@ -322,6 +349,20 @@ function DescriptionFieldEditor({
   // header, so a plain `<img src>` pointed at the `CookieAuthGuard`-protected
   // `/files/:id` endpoint 401s silently with nothing rendered.
   async function fileEmbedMarkup(fileMetadata: FileMetadata): Promise<string> {
+    const isMedia = /^(image|audio|video)\//.test(fileMetadata.mimetype);
+    if (!isMedia) {
+      const baseURL = getBaseURL();
+      if (!baseURL) throw new Error("API base URL is not configured");
+      const name = escapeHtml(fileMetadata.originalName);
+      // Not a `data:` URI: Tiptap's Link only allows http(s)/mailto/tel/…, so
+      // a `data:` href is stripped to plain text by `setContent`, and would
+      // bloat the saved note. Link to the (authenticated) backend URL
+      // instead; taps are handled in `handleWebviewMessage`.
+      return `<p><a href="${buildFileUrl(
+        baseURL,
+        fileMetadata.id,
+      )}">${name}</a></p>`;
+    }
     const dataUri = await fetchFileDataUri(
       fileMetadata.id,
       fileMetadata.mimetype,
@@ -332,28 +373,15 @@ function DescriptionFieldEditor({
     if (fileMetadata.mimetype.startsWith("audio/")) {
       return `<audio controls src="${dataUri}" style="max-width: 100%;"></audio>`;
     }
-    if (fileMetadata.mimetype.startsWith("video/")) {
-      return `<video controls src="${dataUri}" style="max-width: 100%;"></video>`;
-    }
-    return `<a href="${dataUri}" download="${fileMetadata.originalName}">${fileMetadata.originalName}</a>`;
+    return `<video controls src="${dataUri}" style="max-width: 100%;"></video>`;
   }
 
-  async function handleUploadFile() {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: "*/*",
-      multiple: true,
-      copyToCacheDirectory: true,
-    });
-    if (result.canceled) return;
-
+  async function embedUploaded(
+    parts: { uri: string; name: string; mimeType: string }[],
+    failureMessage: string,
+  ) {
     try {
-      const uploaded = await uploadFiles(
-        result.assets.map((asset) => ({
-          uri: asset.uri,
-          name: asset.name,
-          mimeType: asset.mimeType ?? "application/octet-stream",
-        })),
-      );
+      const uploaded = await uploadFiles(parts);
 
       let html = await editor.getHTML();
       for (const file of uploaded) {
@@ -364,29 +392,90 @@ function DescriptionFieldEditor({
       editor.setContent(html);
       onChange(html);
     } catch {
-      toast("Couldn't upload the file. Try again.", "destructive");
+      toast(failureMessage, "destructive");
     }
+  }
+
+  async function handleUploadFile() {
+    let result: DocumentPicker.DocumentPickerResult;
+    try {
+      result = await DocumentPicker.getDocumentAsync({
+        type: "*/*",
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+    } catch {
+      toast("Couldn't open the file picker.", "destructive");
+      return;
+    }
+    if (result.canceled) return;
+
+    await embedUploaded(
+      result.assets.map((asset) => ({
+        uri: asset.uri,
+        name: asset.name,
+        mimeType: asset.mimeType ?? "application/octet-stream",
+      })),
+      "Couldn't upload the file. Try again.",
+    );
+  }
+
+  // Native photo library picker (PHPicker on iOS, Photo Picker on Android) --
+  // runs out-of-process and needs no runtime permission, so there is no
+  // permission-denied path; picker errors are toasted. Name/mime fall back to
+  // values derived from the uri, see `lib/picked-file.ts`.
+  async function handleInsertImage() {
+    let result: ImagePicker.ImagePickerResult;
+    try {
+      result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsMultipleSelection: true,
+        quality: 0.8,
+      });
+    } catch {
+      toast("Couldn't open the photo library.", "destructive");
+      return;
+    }
+    if (result.canceled) return;
+
+    await embedUploaded(
+      result.assets.map((asset) =>
+        toImageUploadPart({
+          uri: asset.uri,
+          name: asset.fileName,
+          mimeType: asset.mimeType,
+        }),
+      ),
+      "Couldn't upload the image. Try again.",
+    );
   }
 
   return (
     <View ref={containerRef}>
-      <View className="min-h-[300px] max-h-[400px] w-full overflow-hidden rounded-t-[13px] border border-b-0 border-input bg-card">
-        <RichText
-          editor={editor}
-          onLoad={() => {
-            injectContentStyles();
-            injectLinkTapHandler();
-            // Fires on every WebView (re)load. If the current content has
-            // drifted from what tentap booted with, this is a *reload* that
-            // just snapped the document back — restore the real content.
-            // On the very first load the two are equal, so this is a no-op.
-            if (valueRef.current !== bootContentRef.current) {
-              editor.setContent(valueRef.current);
-            }
-          }}
-          onMessage={handleWebviewMessage}
-          exclusivelyUseCustomOnMessage={false}
-        />
+      {/* Outer: 13px radius + 1px border, no clipping of its own (RN's
+          overflow clipping differs between iOS/Android w.r.t. the border
+          box). Inner wrapper: radius = outer - border width (12px) so the
+          WebView's square corners are clipped concentrically inside the
+          border. Its bg matches the WebView/document bg. */}
+      <View className="min-h-[300px] max-h-[400px] w-full rounded-t-[13px] border border-b-0 border-input bg-card">
+        <View className="flex-1 overflow-hidden rounded-t-[12px] bg-card">
+          <RichText
+            editor={editor}
+            onLoad={() => {
+              injectContentStyles();
+              injectLinkTapHandler();
+              // Fires on every WebView (re)load. If the current content has
+              // drifted from what tentap booted with, this is a *reload* that
+              // just snapped the document back — restore the real content.
+              // On the very first load the two are equal, so this is a no-op.
+              if (valueRef.current !== bootContentRef.current) {
+                editor.setContent(valueRef.current);
+              }
+            }}
+            onMessage={handleWebviewMessage}
+            exclusivelyUseCustomOnMessage={false}
+          />
+        </View>
       </View>
       <View className="flex-row flex-wrap items-center gap-0.5 rounded-b-[13px] border border-input bg-background p-1">
         <ToolbarButton
@@ -431,6 +520,12 @@ function DescriptionFieldEditor({
           active={linkOpen}
           disabled={disabled}
           onPress={openLink}
+        />
+        <ToolbarButton
+          icon={ImagePlus}
+          label="Insert image"
+          disabled={disabled}
+          onPress={() => void handleInsertImage()}
         />
         <ToolbarButton
           icon={Upload}

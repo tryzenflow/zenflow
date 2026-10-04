@@ -67,7 +67,7 @@ mobile/
 | `/(auth)/login`     | email → OTP                 | timezone captured on verify              |
 | `/(app)` (Week tab) | `index.tsx`                 | home; day view folded in                 |
 | `/(app)/month`      | `month.tsx`                 | Monday-first month grid                  |
-| `/(app)/settings`   | `settings.tsx`              | profile, appearance, integrations        |
+| `/(app)/settings`   | `settings.tsx`              | profile, appearance, preferences (language, timezone, default reminder — synced to the API), integrations        |
 | `/task/new`         | `task/new.tsx` (modal)      | create                                   |
 | `/task/[id]/edit`   | `task/[id]/edit.tsx` (modal)| edit; type read-only                     |
 | `/notifications`    | `notifications.tsx` (modal) | ingestion inbox                          |
