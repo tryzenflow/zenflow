@@ -92,6 +92,10 @@ type BottomSheetContentProps = Omit<
   enableDismissOnClose?: boolean;
   snapPoints?: Array<string | number>;
   enableDynamicSizing?: boolean;
+  /** Accepted for API parity with `bottom-sheet.native.tsx`, and ignored — the
+   * web sheet sizes itself with CSS. Destructured out so it can't leak onto
+   * the DOM node. */
+  maxDynamicContentSize?: number;
 };
 
 const BottomSheetContent = React.forwardRef<
@@ -107,6 +111,7 @@ const BottomSheetContent = React.forwardRef<
       enableDismissOnClose: _enableDismissOnClose,
       snapPoints: _snapPoints,
       enableDynamicSizing: _enableDynamicSizing,
+      maxDynamicContentSize: _maxDynamicContentSize,
       ...props
     },
     ref,
