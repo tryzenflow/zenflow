@@ -3,6 +3,7 @@ import {
   BottomSheet,
   BottomSheetContent,
   BottomSheetOpenTrigger,
+  BottomSheetView,
   useBottomSheet,
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
@@ -109,6 +110,7 @@ export function InlineDateField({
   const trigger = (
     <Pressable
       onPress={Platform.OS === "android" ? () => setOpen(true) : undefined}
+      disabled={disabled}
       className={cn(
         "h-[46px] flex-row items-center justify-between rounded-xl border border-input bg-card px-3",
         disabled && "opacity-50",
@@ -150,6 +152,10 @@ export function InlineDateField({
         {trigger}
       </BottomSheetOpenTrigger>
       <BottomSheetContent ref={bottomSheet.ref}>
+        {/* Dynamic sizing only measures gorhom's own `BottomSheetView` (or
+            scrollables); bare children measure 0 high and the sheet never
+            appears. */}
+        <BottomSheetView hadHeader={false} className="px-0">
         <View className="px-5">
           <Text className="text-[19px] font-bold tracking-tight">
             Pick a date
@@ -172,6 +178,7 @@ export function InlineDateField({
             <Text className="font-semibold text-primary-foreground">Done</Text>
           </Button>
         </View>
+        </BottomSheetView>
       </BottomSheetContent>
     </BottomSheet>
   );
