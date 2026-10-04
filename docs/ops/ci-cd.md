@@ -4,7 +4,7 @@ Issue #75. Workflows live in `.github/workflows/`.
 
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
-| `ci.yml` | every PR (and merge queue) | lint (changed files), typecheck (shared, core, backend, frontend, mobile), unit tests (backend Jest, mobile Vitest, bandit pytest/ruff), Prisma migration drift check, backend e2e on `compose.test.yml`, frontend Playwright e2e, API image build smoke test, gitleaks. A final aggregate job **`CI ok`** is the only check branch protection needs to require. |
+| `ci.yml` | every PR (and merge queue) | lint (changed files), typecheck (shared, core, backend, frontend, mobile), unit tests (backend Jest, mobile Vitest, bandit pytest/ruff), Prisma migration drift check, backend e2e on `compose.test.yml`, frontend Playwright e2e, API image build smoke test, gitleaks, Vault (`docker compose config` for all compose files, Vault absent from dev/staging/test and loopback-only in prod, `render-secrets.sh` against a throwaway `vault server -dev` run via plain `docker run`, prod Vault config boots). A final aggregate job **`CI ok`** is the only check branch protection needs to require. |
 | `images.yml` | push to `master` | `build_images.sh` builds `zenflow-api` and `zenflow-bandit`, pushes `ghcr.io/<owner>/<image>:<git-sha>` (+ `:latest`), then deploys that SHA to **staging** automatically. |
 | `release.yml` | GitHub Release published (tag `vX.Y.Z`) | Resolves the tag to its commit (must be on `master`), then deploys the **already built** images for that SHA to **production**. Gated by the `production` Environment's required reviewers. No rebuild: what ran in staging is what ships. |
 | `deploy.yml` | called by the two above, or run manually | The single deploy entry point (see "Deploy target" below). Manual run = rollback. |
@@ -32,7 +32,8 @@ Create two Environments (Settings, Environments): `staging` (no reviewers) and `
 | var | `DEPLOY_ENABLED` | `true` to turn the deploy on |
 | var | `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PATH` | SSH target; `DEPLOY_PATH` holds `backend/` |
 | var | `HEALTHCHECK_URL` | optional URL polled after rollout |
-| var | `SECRETS_PROVIDER` | `host` (default), `sops`, or `command` (see [secrets.md](secrets.md)) |
+| var | `SECRETS_PROVIDER` | `host` (default), `sops`, `command`, or `vault` (**`production` Environment only**; `deploy.yml` and `deploy.sh` refuse it for staging; see [secrets.md](secrets.md)) |
+| var | `VAULT_ADDR`, `VAULT_ROLE_ID_FILE`, `VAULT_SECRET_ID_FILE` | only for `vault` (production only); paths/addr as seen **on the deploy host** (defaults `http://127.0.0.1:8200`, `/etc/zenflow/vault/{role_id,secret_id}`). The AppRole creds live on the host, not in GitHub |
 | secret | `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS` | deploy key and pinned host key (`ssh-keyscan`) |
 | secret | `SOPS_AGE_KEY` | only for `sops` |
 | secret | `SECRETS_COMMAND` | only for `command` |

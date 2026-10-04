@@ -15,7 +15,10 @@
 #   DEPLOY_USER       ssh user
 #   DEPLOY_PATH       checkout dir on the host that contains backend/
 # Optional:
-#   SECRETS_PROVIDER  host (default) | sops | command   -- see docs/ops/secrets.md
+#   SECRETS_PROVIDER  host (default) | sops | command | vault   -- see docs/ops/secrets.md (vault: prod only)
+#   VAULT_ROLE_ID_FILE / VAULT_SECRET_ID_FILE  for vault: AppRole creds ON THE HOST
+#                     (default /etc/zenflow/vault/{role_id,secret_id}, root-only)
+#   VAULT_ADDR        for vault: address as seen from the host (default http://127.0.0.1:8200)
 #   SOPS_FILE         for sops: path to the encrypted dotenv (default backend/secrets/<env>.env.enc)
 #   SECRETS_COMMAND   for command: prints a dotenv document on stdout
 #   REGISTRY_USER / REGISTRY_TOKEN  to `docker login` on the host (omit if public/pre-logged-in)
@@ -27,6 +30,9 @@ set -euo pipefail
 : "${DEPLOY_HOST:?}" "${DEPLOY_USER:?}" "${DEPLOY_PATH:?}"
 SECRETS_PROVIDER="${SECRETS_PROVIDER:-host}"
 case "$DEPLOY_ENV" in staging|prod) ;; *) echo "DEPLOY_ENV must be staging or prod" >&2; exit 2;; esac
+if [ "$SECRETS_PROVIDER" = "vault" ] && [ "$DEPLOY_ENV" != "prod" ]; then
+  echo "SECRETS_PROVIDER=vault is production-only (Vault runs only in compose.prod.yml); use host, sops or command for ${DEPLOY_ENV}" >&2; exit 2
+fi
 [[ "$IMAGE_TAG" =~ ^[0-9a-f]{7,40}$ ]] || { echo "IMAGE_TAG must be a git SHA, got: $IMAGE_TAG" >&2; exit 2; }
 
 SSH_TARGET="${DEPLOY_USER}@${DEPLOY_HOST}"
@@ -47,6 +53,11 @@ case "$SECRETS_PROVIDER" in
   sops)    sops --decrypt --input-type dotenv --output-type dotenv \
              "${SOPS_FILE:-backend/secrets/${DEPLOY_ENV}.env.enc}" | push_env ;;
   command) bash -c "${SECRETS_COMMAND:?SECRETS_COMMAND required}" | push_env ;;
+  vault)   # Secrets stay on the host: they are rendered from the Vault container into
+           # tmpfs *_FILE mounts during the remote steps. .env.<env> then holds only
+           # non-secret config; compose still needs the file to exist.
+           ssh_run "umask 077 && mkdir -p '${DEPLOY_PATH}/backend' && touch '${env_target}'"
+           echo "==> Secrets: rendering from Vault on the host (see remote steps)" ;;
   *)       echo "unknown SECRETS_PROVIDER ${SECRETS_PROVIDER}" >&2; exit 2 ;;
 esac
 
@@ -55,6 +66,8 @@ esac
 rsync -az -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes" \
   "backend/compose.${DEPLOY_ENV}.yml" "backend/Caddyfile.${DEPLOY_ENV}" \
   "${SSH_TARGET}:${DEPLOY_PATH}/backend/"
+[ -d backend/ops/vault ] && rsync -az -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes" \
+  backend/ops "${SSH_TARGET}:${DEPLOY_PATH}/backend/"
 [ -d backend/observability ] && rsync -az -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes" \
   backend/observability "${SSH_TARGET}:${DEPLOY_PATH}/backend/"
 
@@ -63,16 +76,43 @@ if [ -n "${REGISTRY_USER:-}" ] && [ -n "${REGISTRY_TOKEN:-}" ]; then
   printf '%s' "$REGISTRY_TOKEN" | ssh_run "docker login '${REGISTRY%%/*}' -u '${REGISTRY_USER}' --password-stdin"
 fi
 ssh_run "bash -s" \
-  "$DEPLOY_ENV" "$IMAGE_TAG" "$api_image" "$bandit_image" "$DEPLOY_PATH" <<'REMOTE'
+  "$DEPLOY_ENV" "$IMAGE_TAG" "$api_image" "$bandit_image" "$DEPLOY_PATH" \
+  "$SECRETS_PROVIDER" "${VAULT_ADDR:-http://127.0.0.1:8200}" \
+  "${VAULT_ROLE_ID_FILE:-/etc/zenflow/vault/role_id}" "${VAULT_SECRET_ID_FILE:-/etc/zenflow/vault/secret_id}" <<'REMOTE'
 set -euo pipefail
 env_name="$1"; tag="$2"; api="$3"; bandit="$4"; path="$5"
+provider="$6"; vault_addr="$7"; role_id_file="$8"; secret_id_file="$9"
 cd "$path/backend"
 export ZENFLOW_API_IMAGE="$api" ZENFLOW_BANDIT_IMAGE="$bandit"
 prev="$(tail -n1 "$path/.deploy-history" 2>/dev/null | awk '{print $2}' || true)"
 compose="docker compose -f compose.${env_name}.yml"
 $compose pull api migrations bandit
+force=""
+if [ "$provider" = "vault" ]; then
+  export ZENFLOW_SECRETS_DIR="/run/zenflow/${env_name}"
+  $compose up -d --no-build vault
+  # Vault starts sealed after any restart; unsealing is a manual, human step.
+  for i in $(seq 1 20); do
+    code="$(curl -s -o /dev/null -w '%{http_code}' "${vault_addr}/v1/sys/health" || true)"
+    [ "$code" = "200" ] && break
+    [ "$i" = 20 ] && { echo "Vault not ready (health HTTP ${code}; 503=sealed, 501=uninitialised). Unseal it: docs/ops/secrets.md" >&2; exit 1; }
+    sleep 3
+  done
+  VAULT_ADDR="$vault_addr" VAULT_ENV="$env_name" OUT_DIR="$ZENFLOW_SECRETS_DIR" \
+    VAULT_ROLE_ID_FILE="$role_id_file" VAULT_SECRET_ID_FILE="$secret_id_file" \
+    ./ops/vault/render-secrets.sh
+  # Containers read *_FILE only at boot, so always restart them after a render.
+  force="--force-recreate"
+  svcs="api migrations bandit"
+fi
 # `migrations` (prisma migrate deploy) runs to completion before `api` starts.
-$compose up -d --no-build --remove-orphans
+if [ -n "$force" ]; then
+  # Recreate only the consumers; leave postgres/redis/vault running.
+  $compose up -d --no-build --remove-orphans
+  $compose up -d --no-build --force-recreate $svcs
+else
+  $compose up -d --no-build --remove-orphans
+fi
 echo "$(date -u +%FT%TZ) $tag prev=${prev:-none}" >> "$path/.deploy-history"
 $compose ps
 REMOTE

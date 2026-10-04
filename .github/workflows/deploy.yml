@@ -69,6 +69,11 @@ jobs:
           echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           docker manifest inspect "$registry/zenflow-api:$IMAGE_TAG" >/dev/null
           docker manifest inspect "$registry/zenflow-bandit:$IMAGE_TAG" >/dev/null
+      - name: Refuse Vault outside production
+        if: env.DEPLOY_ENABLED == 'true' && vars.SECRETS_PROVIDER == 'vault' && inputs.environment != 'production'
+        run: |
+          echo "::error::SECRETS_PROVIDER=vault is valid only for the production Environment (Vault runs only in compose.prod.yml). Use host, sops or command for '${{ inputs.environment }}'."
+          exit 1
       - name: Install sops
         if: env.DEPLOY_ENABLED == 'true' && vars.SECRETS_PROVIDER == 'sops'
         run: |
@@ -98,6 +103,9 @@ jobs:
           SECRETS_PROVIDER: ${{ vars.SECRETS_PROVIDER }}
           SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
           SECRETS_COMMAND: ${{ secrets.SECRETS_COMMAND }}
+          VAULT_ADDR: ${{ vars.VAULT_ADDR }}
+          VAULT_ROLE_ID_FILE: ${{ vars.VAULT_ROLE_ID_FILE }}
+          VAULT_SECRET_ID_FILE: ${{ vars.VAULT_SECRET_ID_FILE }}
           REGISTRY_USER: ${{ github.actor }}
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
