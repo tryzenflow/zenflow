@@ -16,7 +16,10 @@ import { SessionFormScreen } from "@/components/tasks/task-form-screen";
 import { SessionSheetFields } from "@/components/tasks/task-sheet-fields";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
-import { useToast } from "@/components/ui/toast";
+import {
+  ModalToastScope,
+  useModalToast,
+} from "@/components/tasks/modal-toast-scope";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
 import { setPendingSlotPick } from "@/lib/pending-slot-pick";
@@ -63,11 +66,19 @@ const pad = (n: number) => String(n).padStart(2, "0");
  * date + start/end time, DND also recurrence).
  */
 export default function EditSessionScreen() {
+  return (
+    <ModalToastScope>
+      <EditSessionForm />
+    </ModalToastScope>
+  );
+}
+
+function EditSessionForm() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const user = useUserStore((s) => s.user);
   const tz = user?.timezone || "UTC";
-  const { toast } = useToast();
+  const { toast } = useModalToast();
   const [task, setSession] = useState<Session | null>(null);
   const [deleting, setDeleting] = useState(false);
   const deleteScopeSheet = useRef<DeleteRecurringSheetHandle>(null);

@@ -11,6 +11,7 @@ import {
   type SlotTakenError,
 } from "@zenflow/shared";
 import { isAxiosError } from "axios";
+import { describeSaveError } from "./save-error";
 import { format } from "date-fns";
 
 export interface PlacementToastUser {
@@ -65,11 +66,7 @@ export function showErrorToast(
   error: unknown,
   fallback: string,
 ): void {
-  const raw =
-    (isAxiosError(error) &&
-      (error.response?.data as { message?: string } | undefined)?.message) ||
-    fallback;
-  showSplitToast(toast, raw, "destructive");
+  showSplitToast(toast, describeSaveError(error, fallback), "destructive");
 }
 
 /**
@@ -214,7 +211,13 @@ export async function withInfeasibleRetry<T>(
     });
     return;
   }
-  onSuccess(result);
+  // A throw while handling a *successful* save (bad response shape, a
+  // navigation error…) must still surface, not reject out of `handleSubmit`.
+  try {
+    onSuccess(result);
+  } catch (e) {
+    onError(e);
+  }
 }
 
 /** Info toast when the engine moved flexible tasks to make room. */
