@@ -1,0 +1,18 @@
+title = "zenflow gitleaks config"
+
+[extend]
+useDefault = true
+
+# Real env files were committed in the past (see docs/ops/secrets.md, "Leak
+# audit"). Those commits are not re-flagged on every PR (CI scans only the PR's
+# own commits); the values are rotated instead. Add fingerprints here only after
+# the secret has been rotated.
+[allowlist]
+description = "Non-secret fixtures"
+paths = [
+  '''pnpm-lock\.yaml''',
+  '''backend/\.env\.example''',
+  '''backend/certs/.*\.pem''',          # public CA certificate
+  '''backend/src/.*\.spec\.ts''',      # synthetic keys in unit tests
+  '''packages/shared/contract/.*''',
+]

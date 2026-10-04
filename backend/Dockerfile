@@ -50,7 +50,15 @@ COPY --from=builder /app/backend/dist ./dist
 COPY --from=builder /app/backend/prisma ./prisma
 COPY --from=builder /app/backend/generated ./generated
 
+# Secrets are never baked in: env files are excluded by .dockerignore and the
+# platform injects them at runtime, either as env vars or as FOO_FILE=/path
+# (expanded by the entrypoint; see docs/ops/secrets.md).
+COPY backend/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 EXPOSE 5000
+
+ENTRYPOINT ["docker-entrypoint.sh"]
 
 # start:prod = `prisma migrate deploy && node dist/main`
 CMD ["pnpm", "start:prod"]

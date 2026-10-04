@@ -631,6 +631,12 @@ Copy `.env.example` to `.env.{dev,staging,prod,test}`:
 cp .env.example .env.dev # same for .env.staging, .env.test, .env.prod
 ```
 
+Deployed environments inject secrets from a managed store rather than hand-edited files, and any
+variable can be given as `FOO_FILE=/path` (file contents become `FOO`; explicit `FOO` wins; see
+`src/common/config/file-secrets.ts` and `docker-entrypoint.sh`). Secret inventory, rotation
+runbooks and the leak audit: [docs/ops/secrets.md](../docs/ops/secrets.md). CI/CD and rollback:
+[docs/ops/ci-cd.md](../docs/ops/ci-cd.md).
+
 DLU ingestion config (all validated with defaults, so a deployment that omits them still
 boots): `LMS_URL` / `PORTAL_API_URL` (upstream base URLs — read with `getOrThrow` at
 service construction, which is why they must always resolve), `LMS_TIMEOUT_MS` (15000) /
