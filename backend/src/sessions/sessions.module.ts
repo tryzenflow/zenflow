@@ -6,7 +6,7 @@ import { SessionUpdateService } from "./session-update.service";
 import { SlotPickService } from "./slot-pick.service";
 import { SessionsController } from "./sessions.controller";
 import { PrismaModule } from "../prisma/prisma.module";
-import { TagsModule } from "src/tags/tags.module";
+import { TagsModule } from "../tags/tags.module";
 import { RemindersModule } from "../reminders/reminders.module";
 import { SchedulerModule } from "../scheduler/scheduler.module";
 

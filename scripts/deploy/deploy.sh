@@ -65,6 +65,7 @@ esac
 #    rollback also restores the config that matched that release.
 rsync -az -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes" \
   "backend/compose.${DEPLOY_ENV}.yml" "backend/Caddyfile.${DEPLOY_ENV}" \
+  backend/docker-entrypoint.sh \
   "${SSH_TARGET}:${DEPLOY_PATH}/backend/"
 [ -d backend/ops/vault ] && rsync -az -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes" \
   backend/ops "${SSH_TARGET}:${DEPLOY_PATH}/backend/"
@@ -75,10 +76,13 @@ rsync -az -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes" \
 if [ -n "${REGISTRY_USER:-}" ] && [ -n "${REGISTRY_TOKEN:-}" ]; then
   printf '%s' "$REGISTRY_TOKEN" | ssh_run "docker login '${REGISTRY%%/*}' -u '${REGISTRY_USER}' --password-stdin"
 fi
-ssh_run "bash -s" \
+# ssh joins its arguments into one string for the remote shell, so quote each
+# one (%q) to keep values with spaces as single positional parameters.
+remote_args=$(printf ' %q' \
   "$DEPLOY_ENV" "$IMAGE_TAG" "$api_image" "$bandit_image" "$DEPLOY_PATH" \
   "$SECRETS_PROVIDER" "${VAULT_ADDR:-http://127.0.0.1:8200}" \
-  "${VAULT_ROLE_ID_FILE:-/etc/zenflow/vault/role_id}" "${VAULT_SECRET_ID_FILE:-/etc/zenflow/vault/secret_id}" <<'REMOTE'
+  "${VAULT_ROLE_ID_FILE:-/etc/zenflow/vault/role_id}" "${VAULT_SECRET_ID_FILE:-/etc/zenflow/vault/secret_id}")
+ssh_run "bash -s${remote_args}" <<'REMOTE'
 set -euo pipefail
 env_name="$1"; tag="$2"; api="$3"; bandit="$4"; path="$5"
 provider="$6"; vault_addr="$7"; role_id_file="$8"; secret_id_file="$9"
@@ -89,6 +93,11 @@ compose="docker compose -f compose.${env_name}.yml"
 $compose pull api migrations bandit
 force=""
 if [ "$provider" = "vault" ]; then
+  # AppRole creds are root-only and /run/zenflow is a root-owned 700 dir that
+  # compose reads env_file from, so the vault flow needs a root deploy account.
+  if [ "$(id -u)" != 0 ]; then
+    echo "SECRETS_PROVIDER=vault requires DEPLOY_USER=root on the host (see docs/ops/secrets.md)" >&2; exit 1
+  fi
   export ZENFLOW_SECRETS_DIR="/run/zenflow/${env_name}"
   $compose up -d --no-build vault
   # Vault starts sealed after any restart; unsealing is a manual, human step.
@@ -101,6 +110,12 @@ if [ "$provider" = "vault" ]; then
   VAULT_ADDR="$vault_addr" VAULT_ENV="$env_name" OUT_DIR="$ZENFLOW_SECRETS_DIR" \
     VAULT_ROLE_ID_FILE="$role_id_file" VAULT_SECRET_ID_FILE="$secret_id_file" \
     ./ops/vault/render-secrets.sh
+  # An explicit KEY in .env.<env> would beat the rendered KEY_FILE, so drop any
+  # leftovers from a previous dotenv-based provider.
+  for f in "$ZENFLOW_SECRETS_DIR"/*/files.env; do
+    [ -f "$f" ] || continue
+    sed -n 's/_FILE=.*//p' "$f" | while read -r k; do sed -i "/^${k}=/d" ".env.${env_name}"; done
+  done
   # Containers read *_FILE only at boot, so always restart them after a render.
   force="--force-recreate"
   svcs="api migrations bandit"

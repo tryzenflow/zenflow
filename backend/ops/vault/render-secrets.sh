@@ -41,7 +41,10 @@ token=$(jq -n --rawfile r "$ROLE_ID_FILE" --rawfile s "$SECRET_ID_FILE" \
 
 umask 077
 parent=$(dirname "$OUT_DIR")
-[ -d "$parent" ] || { mkdir -p "$parent"; chmod 700 "$parent"; }
+case "$parent" in /|/run|/tmp|/var|/etc) echo "render-secrets: refusing to restrict shared directory $parent" >&2; exit 1;; esac
+# Always enforce 700: a pre-existing parent could let other accounts traverse
+# into the world-readable rendered files.
+mkdir -p "$parent"; chmod 700 "$parent"
 tmp=$(mktemp -d "$parent/.render.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 

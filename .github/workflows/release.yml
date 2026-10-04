@@ -21,12 +21,14 @@ jobs:
           ref: ${{ github.event.release.tag_name }}
           fetch-depth: 0
       - id: sha
+        env:
+          TAG_NAME: ${{ github.event.release.tag_name }}
         run: |
           sha="$(git rev-parse HEAD)"
           # Only release commits that are on master (i.e. passed required CI).
           git fetch origin master
           git merge-base --is-ancestor "$sha" origin/master \
-            || { echo "::error::Tag ${{ github.event.release.tag_name }} is not on master"; exit 1; }
+            || { echo "::error::Tag ${TAG_NAME} is not on master"; exit 1; }
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
   deploy-production:
