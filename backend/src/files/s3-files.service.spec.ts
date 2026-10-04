@@ -1,3 +1,4 @@
+import { Readable } from "stream";
 import { mkdtemp, writeFile, access } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -50,6 +51,7 @@ describe("S3FilesService", () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockSend.mockResolvedValue({});
     const module = await Test.createTestingModule({
       providers: [
         { provide: FILES_SERVICE, useClass: S3FilesService },
@@ -108,6 +110,68 @@ describe("S3FilesService", () => {
     });
     expect(prisma.file.deleteMany).toHaveBeenCalledWith({
       where: { id: { in: ["mine"] }, userId: "u1" },
+    });
+  });
+
+  it("keeps the rows when deleting the objects fails, so it can be retried", async () => {
+    prisma.file.findMany.mockResolvedValue([{ id: "mine", path: "u1/k" }]);
+    mockSend.mockRejectedValue(new Error("s3 down"));
+
+    await expect(service.remove(["mine"], "u1")).rejects.toThrow("s3 down");
+    expect(prisma.file.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("treats per-object delete errors as a failure", async () => {
+    prisma.file.findMany.mockResolvedValue([{ id: "mine", path: "u1/k" }]);
+    mockSend.mockResolvedValue({
+      Errors: [{ Key: "u1/k", Code: "AccessDenied", Message: "nope" }],
+    });
+
+    await expect(service.remove(["mine"], "u1")).rejects.toThrow(
+      /AccessDenied/,
+    );
+    expect(prisma.file.deleteMany).not.toHaveBeenCalled();
+  });
+
+  describe("download", () => {
+    const row = { id: "f1", path: "u1/k", originalName: "a.txt" };
+
+    it("returns the row and the object body stream", async () => {
+      const body = Readable.from(["data"]);
+      prisma.file.findUnique.mockResolvedValue(row);
+      mockSend.mockResolvedValue({ Body: body });
+
+      const result = await service.download("f1", "u1");
+
+      expect(result.file).toBe(row);
+      expect(result.stream).toBe(body);
+    });
+
+    it("throws NotFound when the object is missing in the bucket", async () => {
+      prisma.file.findUnique.mockResolvedValue(row);
+      mockSend.mockRejectedValue(
+        Object.assign(new Error("gone"), { name: "NoSuchKey" }),
+      );
+
+      await expect(service.download("f1", "u1")).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it("throws NotFound when the response has no readable body", async () => {
+      prisma.file.findUnique.mockResolvedValue(row);
+      mockSend.mockResolvedValue({ Body: undefined });
+
+      await expect(service.download("f1", "u1")).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it("rethrows other S3 errors", async () => {
+      prisma.file.findUnique.mockResolvedValue(row);
+      mockSend.mockRejectedValue(new Error("boom"));
+
+      await expect(service.download("f1", "u1")).rejects.toThrow("boom");
     });
   });
 

@@ -7,22 +7,24 @@
  * Idempotent — migrated rows are skipped, so it is safe to re-run. Row ids are
  * unchanged, so existing `/files/<id>` URLs keep working.
  *
- *   pnpm --filter backend migrate:files-to-s3            # migrate
- *   pnpm --filter backend migrate:files-to-s3 --dry-run  # only list them
+ * Compiled into `dist/` with the API, so it runs inside the production image
+ * (where the legacy `uploads/` volume is mounted), before that volume is removed:
  *
- * Boots the app context against `.env.dev` (point it elsewhere with
- * `dotenv -e <file>`). Run it where the legacy `uploads/` dir is readable
- * (the api container in staging/prod), before removing the `uploads` volume.
+ *   docker compose exec api node dist/files/migrate-to-s3.cli.js            # migrate
+ *   docker compose exec api node dist/files/migrate-to-s3.cli.js --dry-run  # only list
+ *
+ * Locally: `pnpm --filter backend migrate:files-to-s3 [--dry-run]` (ts-node,
+ * `.env.dev`).
  */
 import { randomUUID } from "crypto";
 import { createReadStream } from "fs";
 import { join } from "path";
-import { S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
-import { AppModule } from "../src/app.module";
-import { PrismaService } from "../src/prisma/prisma.service";
+import { AppModule } from "../app.module";
+import { PrismaService } from "../prisma/prisma.service";
 
 async function main(): Promise<void> {
   const dryRun = process.argv.includes("--dry-run");
@@ -52,6 +54,7 @@ async function main(): Promise<void> {
     const failed: string[] = [];
     for (const file of legacy) {
       const key = `${file.userId}/${randomUUID()}`;
+      let uploaded = false;
       try {
         await new Upload({
           client: s3,
@@ -62,12 +65,20 @@ async function main(): Promise<void> {
             ContentType: file.mimetype,
           },
         }).done();
-        await prisma.file.update({
-          where: { id: file.id },
+        uploaded = true;
+        // Guarded on the old path: if the row was removed (or already migrated)
+        // since we read it, nothing matches and the new object is cleaned up.
+        const { count } = await prisma.file.updateMany({
+          where: { id: file.id, path: file.path },
           data: { path: key },
         });
+        if (count === 0) throw new Error("row removed or changed; skipped");
         migrated++;
       } catch (err) {
+        if (uploaded)
+          await s3
+            .send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
+            .catch(() => undefined);
         failed.push(file.id);
         console.error(
           `file ${file.id} (${file.path}): ${(err as Error).message}`,

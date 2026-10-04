@@ -20,5 +20,5 @@ from it, tying the API to a single host's volume.
 - `remove` now scopes the DB delete by `userId` (it previously did not).
 
 ## Migration
-`scripts/migrate-files-to-s3.ts` uploads legacy disk files and rewrites `path`
+`src/files/migrate-to-s3.cli.ts` (compiled into the image) uploads legacy disk files and rewrites `path`
 (idempotent). Run it before dropping the `uploads` volume.

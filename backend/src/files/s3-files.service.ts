@@ -3,7 +3,6 @@ import { createReadStream } from "fs";
 import { rm } from "fs/promises";
 import { Readable } from "stream";
 import {
-  DeleteObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
   S3Client,
@@ -92,25 +91,37 @@ export class S3FilesService implements FilesService {
 
   async download(id: string, userId: string) {
     const file = await this.findOne(id, userId);
-    const { Body } = await this.s3.send(
-      new GetObjectCommand({ Bucket: this.bucket, Key: file.path }),
-    );
-    if (!(Body instanceof Readable))
-      throw new NotFoundException({
-        success: false,
-        message: "Cannot find file content",
-      });
-    return { file, stream: Body };
+    const notFound = new NotFoundException({
+      success: false,
+      message: "Cannot find file content",
+    });
+    let body: unknown;
+    try {
+      ({ Body: body } = await this.s3.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: file.path }),
+      ));
+    } catch (err) {
+      if ((err as { name?: string }).name === "NoSuchKey") throw notFound;
+      throw err;
+    }
+    if (!(body instanceof Readable)) throw notFound;
+    return { file, stream: body };
   }
 
   async remove(keys: string[], userId: string) {
     const toDeleteFiles = await this.prisma.file.findMany({
       where: { id: { in: keys }, userId },
     });
+    // Objects first, and failures propagate: if S3 fails the rows are kept, so
+    // the caller can retry (deleting an absent object is a no-op). The reverse
+    // order would leave unreachable objects with no row to retry from.
+    await this.deleteObjects(
+      toDeleteFiles.map((f) => f.path),
+      { strict: true },
+    );
     await this.prisma.file.deleteMany({
       where: { id: { in: toDeleteFiles.map((f) => f.id) }, userId },
     });
-    await this.deleteObjects(toDeleteFiles.map((f) => f.path));
   }
 
   async getMetadata(id: string, userId: string) {
@@ -126,23 +137,26 @@ export class S3FilesService implements FilesService {
     return file;
   }
 
-  /** Best-effort delete; failures are logged so orphans can be swept later. */
-  private async deleteObjects(keys: string[]) {
+  /**
+   * Deletes objects. `strict` throws on any failure (including per-object
+   * errors S3 reports in a 200 response); otherwise failures are logged so
+   * orphans can be swept later (used for upload rollback).
+   */
+  private async deleteObjects(keys: string[], opts: { strict?: boolean } = {}) {
     if (keys.length === 0) return;
     try {
-      if (keys.length === 1) {
-        await this.s3.send(
-          new DeleteObjectCommand({ Bucket: this.bucket, Key: keys[0] }),
-        );
-        return;
-      }
-      await this.s3.send(
+      const { Errors } = await this.s3.send(
         new DeleteObjectsCommand({
           Bucket: this.bucket,
           Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
         }),
       );
+      if (Errors?.length)
+        throw new Error(
+          Errors.map((e) => `${e.Key}: ${e.Code} ${e.Message}`).join("; "),
+        );
     } catch (err) {
+      if (opts.strict) throw err;
       this.logger.error(
         `Failed to delete objects [${keys.join(", ")}]: ${(err as Error).message}`,
       );

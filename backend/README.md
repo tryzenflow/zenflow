@@ -494,7 +494,8 @@ Bytes live in an S3-compatible bucket (`S3_*` env; `File.path` is the object key
 to S3, then the temp file is removed. The API proxies downloads, so stored
 `/files/<id>` URLs are unchanged. The bucket is created by the compose `storage`
 service when it starts — the app never creates it. Move pre-S3 files with
-`pnpm --filter backend migrate:files-to-s3 [--dry-run]`.
+`docker compose exec api node dist/files/migrate-to-s3.cli.js [--dry-run]`
+(compiled into the image; `pnpm migrate:files-to-s3` locally).
 
 ### Integrations (`/integrations`)
 
