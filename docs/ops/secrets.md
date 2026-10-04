@@ -51,6 +51,7 @@ creation_rules:
   - path_regex: backend/secrets/.*\.env\.enc$
     age: <age1...public key(s)>
 YAML
+mkdir -p backend/secrets
 sops --encrypt --input-type dotenv --output-type dotenv backend/.env.staging > backend/secrets/staging.env.enc
 # store the age PRIVATE key as the SOPS_AGE_KEY Environment secret; delete the plaintext file
 ```
@@ -182,7 +183,7 @@ There is no JWT. `express-session` is given a single secret string (`auth/sessio
 Postgres 16/18 compose: the `POSTGRES_PASSWORD` env var is only read when the data directory is first initialised, so changing the env var alone does NOT change the password.
 
 1. Generate a password: `openssl rand -hex 24`.
-2. `docker compose exec postgres psql -U $POSTGRES_USER -c "ALTER USER $POSTGRES_USER PASSWORD '<new>';"` (existing connections stay valid).
+2. `docker compose exec postgres sh -c 'psql -U "$POSTGRES_USER" -c "ALTER USER \"$POSTGRES_USER\" PASSWORD '"'"'<new>'"'"';"'` (the username is expanded inside the container, where `env_file` values exist) (existing connections stay valid).
 3. Update `POSTGRES_PASSWORD` and the password inside `DATABASE_URL` (URL-encode special characters) in the store.
 4. Redeploy so `api` and `migrations` pick it up (brief reconnect; run off-peak).
 5. Confirm logins work; the old password is dead already after step 2.

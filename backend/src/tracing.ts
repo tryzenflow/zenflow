@@ -1,3 +1,6 @@
+// Preloaded via `node --require` before main.ts: expand *_FILE secrets first so
+// OTEL_* settings supplied as files are visible below.
+import "./common/config/file-secrets";
 import { diag, DiagConsoleLogger, DiagLogLevel } from "@opentelemetry/api";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
