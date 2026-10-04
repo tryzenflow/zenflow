@@ -30,7 +30,7 @@ Create two Environments (Settings, Environments): `staging` (no reviewers) and `
 | Kind | Name | Purpose |
 | --- | --- | --- |
 | var | `DEPLOY_ENABLED` | `true` to turn the deploy on |
-| var | `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PATH` | SSH target; `DEPLOY_PATH` holds `backend/` |
+| var | `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PATH` | SSH target; `DEPLOY_PATH` holds `backend/`; `DEPLOY_USER` must be `root` when `SECRETS_PROVIDER=vault` |
 | var | `HEALTHCHECK_URL` | optional URL polled after rollout |
 | var | `SECRETS_PROVIDER` | `host` (default), `sops`, `command`, or `vault` (**`production` Environment only**; `deploy.yml` and `deploy.sh` refuse it for staging; see [secrets.md](secrets.md)) |
 | var | `VAULT_ADDR`, `VAULT_ROLE_ID_FILE`, `VAULT_SECRET_ID_FILE` | only for `vault` (production only); paths/addr as seen **on the deploy host** (defaults `http://127.0.0.1:8200`, `/etc/zenflow/vault/{role_id,secret_id}`). The AppRole creds live on the host, not in GitHub |
