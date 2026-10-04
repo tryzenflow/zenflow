@@ -165,7 +165,7 @@ export function InlineDateField({
           <DateTimePicker
             value={anchor}
             mode="date"
-            display="default"
+            display="inline"
             minimumDate={minimumDate}
             maximumDate={maximumDate}
             onChange={(_event, selected) => {
