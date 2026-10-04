@@ -60,7 +60,7 @@
     "@opentelemetry/sdk-node": "^0.222.0",
     "@opentelemetry/semantic-conventions": "^1.43.0",
     "@parse/node-apn": "^8.1.0",
-    "@prisma/client": "^6.13.0",
+    "@prisma/client": "^7.10.0",
     "@prisma/instrumentation": "^6.19.3",
     "@zenflow/shared": "workspace:*",
     "axios": "^1.11.0",
