@@ -176,11 +176,14 @@ export default function RootLayout() {
   const sessionUser = useUserStore((s) => s.user);
   const routeSettled =
     !loading && routeForSession(sessionUser, segments[0] as string) === null;
+  // Safety net only for a redirect that never settles; it starts once the
+  // session has resolved, so a slow `/auth/me` can't trip it early.
   const [splashTimedOut, setSplashTimedOut] = React.useState(false);
   React.useEffect(() => {
-    const t = setTimeout(() => setSplashTimedOut(true), 2500);
+    if (loading) return;
+    const t = setTimeout(() => setSplashTimedOut(true), 1500);
     return () => clearTimeout(t);
-  }, []);
+  }, [loading]);
 
   // Keep the splash screen up until BOTH fonts and the local session are resolved
   React.useEffect(() => {

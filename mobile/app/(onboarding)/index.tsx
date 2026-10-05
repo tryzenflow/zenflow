@@ -217,6 +217,9 @@ export default function OnboardingScreen() {
 
   // Local UI step index only; every value below is persisted server-side.
   const [step, setStep] = useState<OnboardingStep>(FIRST_STEP);
+  // Set when a skipped step is reopened from the done summary: finishing,
+  // skipping or going back returns straight to the summary.
+  const [fromSummary, setFromSummary] = useState(false);
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState(user?.name ?? "");
   const [blocked, setBlocked] = useState(false);
@@ -249,7 +252,23 @@ export default function OnboardingScreen() {
     return () => sub.remove();
   }, []);
 
-  const go = () => setStep((s) => nextStep(s));
+  const go = () => {
+    if (fromSummary) {
+      setFromSummary(false);
+      setStep("done");
+    } else {
+      setStep((s) => nextStep(s));
+    }
+  };
+  const goBack = () => {
+    setBlocked(false);
+    if (fromSummary) {
+      setFromSummary(false);
+      setStep("done");
+    } else {
+      setStep((s) => prevStep(s));
+    }
+  };
   const dluConnected = integrations.some((i) => i.connected);
   const device = deviceTimezone();
   const zones = useMemo(
@@ -308,18 +327,28 @@ export default function OnboardingScreen() {
       setSavedTagCount(names.length);
     });
 
+  /**
+   * Turn notifications on. "saved" = the preference is on but this device
+   * couldn't register (simulator / no FCM) — a quiet success, retried next
+   * launch. A failed preference save is NOT that: it stays on the step.
+   */
+  async function turnOnNotifications(): Promise<"on" | "saved" | "blocked" | "failed"> {
+    if (await notif.setEnabled(true, { quiet: true })) return "on";
+    const granted = usePushStatusStore.getState().permission === "granted";
+    if (!granted) return "blocked";
+    if (useUserStore.getState().user?.allowNotifications === true) {
+      return "saved";
+    }
+    toast(COPY.saveFailed, "destructive");
+    return "failed";
+  }
+
   async function enableNotifications() {
     setBusy(true);
-    const ok = await notif.setEnabled(true, { quiet: true });
-    // Permission granted but device registration failed: the preference is
-    // saved (retried on next launch), so this is not a "blocked" state.
-    const granted = usePushStatusStore.getState().permission === "granted";
+    const result = await turnOnNotifications();
     setBusy(false);
-    if (ok || granted) {
-      go();
-      return;
-    }
-    setBlocked(true);
+    if (result === "on" || result === "saved") go();
+    else setBlocked(result === "blocked");
   }
 
   async function toggleNotifications() {
@@ -330,8 +359,7 @@ export default function OnboardingScreen() {
         await notif.setEnabled(false);
         return;
       }
-      await notif.setEnabled(true, { quiet: true });
-      setBlocked(usePushStatusStore.getState().permission !== "granted");
+      setBlocked((await turnOnNotifications()) === "blocked");
     } finally {
       setBusy(false);
     }
@@ -726,7 +754,12 @@ export default function OnboardingScreen() {
               <View className="flex-row items-center gap-2.5">
                 <Text className="text-[13px] text-muted-foreground">{r.v}</Text>
                 {r.skipped && r.step ? (
-                  <Pressable onPress={() => setStep(r.step as OnboardingStep)}>
+                  <Pressable
+                    onPress={() => {
+                      setFromSummary(true);
+                      setStep(r.step as OnboardingStep);
+                    }}
+                  >
                     <Text className="text-[13px] font-semibold text-primary">
                       Set up
                     </Text>
@@ -758,10 +791,7 @@ export default function OnboardingScreen() {
         >
           {canGoBack(step) ? (
             <Pressable
-              onPress={() => {
-                setBlocked(false);
-                setStep((s) => prevStep(s));
-              }}
+              onPress={goBack}
               hitSlop={8}
               accessibilityLabel={COPY.back}
               className="size-[38px] items-center justify-center rounded-xl"

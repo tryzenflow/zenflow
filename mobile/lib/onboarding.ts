@@ -177,11 +177,28 @@ export function pendingSetupItems(state: {
   return items;
 }
 
-/** Current UTC offset of an IANA zone in minutes (0 if the zone is unknown). */
+const offsetFormatters = new Map<string, Intl.DateTimeFormat>();
+const offsetCache = new Map<string, number>();
+
+/**
+ * Current UTC offset of an IANA zone in minutes (0 if the zone is unknown).
+ * Formatters are reused and results cached per zone per hour, so filtering the
+ * full zone list on every keystroke doesn't rebuild hundreds of formatters.
+ */
 export function utcOffsetMinutes(tz: string, at: Date = new Date()): number {
+  const key = `${tz}|${Math.floor(at.getTime() / 3_600_000)}`;
+  const cached = offsetCache.get(key);
+  if (cached !== undefined) return cached;
+  const value = computeUtcOffsetMinutes(tz, at);
+  offsetCache.set(key, value);
+  return value;
+}
+
+function computeUtcOffsetMinutes(tz: string, at: Date): number {
   try {
-    const p = Object.fromEntries(
-      new Intl.DateTimeFormat("en-US", {
+    let fmt = offsetFormatters.get(tz);
+    if (!fmt) {
+      fmt = new Intl.DateTimeFormat("en-US", {
         timeZone: tz,
         hourCycle: "h23",
         year: "numeric",
@@ -190,9 +207,11 @@ export function utcOffsetMinutes(tz: string, at: Date = new Date()): number {
         hour: "numeric",
         minute: "numeric",
         second: "numeric",
-      })
-        .formatToParts(at)
-        .map((x) => [x.type, Number(x.value)]),
+      });
+      offsetFormatters.set(tz, fmt);
+    }
+    const p = Object.fromEntries(
+      fmt.formatToParts(at).map((x) => [x.type, Number(x.value)]),
     );
     const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
     return Math.round((asUtc - Math.floor(at.getTime() / 1000) * 1000) / 60000);
