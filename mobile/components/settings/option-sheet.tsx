@@ -33,6 +33,8 @@ interface Option<T> {
   value: T;
   label: string;
   flag?: string;
+  /** Muted text right-aligned before the check (e.g. a GMT offset). */
+  detail?: string;
 }
 
 interface OptionSheetProps<T extends string | number> {
@@ -56,7 +58,13 @@ interface OptionSheetProps<T extends string | number> {
 }
 
 function OptionSheetInner<T extends string | number>(
-  { title, options: staticOptions, value, onSelect, search }: OptionSheetProps<T>,
+  {
+    title,
+    options: staticOptions,
+    value,
+    onSelect,
+    search,
+  }: OptionSheetProps<T>,
   ref: ForwardedRef<OptionSheetHandle>,
 ) {
   const sheet = useBottomSheet();
@@ -92,32 +100,35 @@ function OptionSheetInner<T extends string | number>(
 
   return (
     <BottomSheet>
-      <BottomSheetContent ref={sheet.ref} enableDynamicSizing={false}
-        snapPoints={[sheetHeight]}>
+      <BottomSheetContent
+        ref={sheet.ref}
+        enableDynamicSizing={false}
+        snapPoints={[sheetHeight]}
+      >
         <BottomSheetHeader className="bg-background">
           <Text className="pb-1 text-xl font-bold text-foreground">
             {title}
           </Text>
         </BottomSheetHeader>
-        {search ? (
-          <View className="px-4 pb-3 pt-1">
-            <BottomSheetInput
-              value={query}
-              onChangeText={setQuery}
-              placeholder={search.placeholder}
-              autoCapitalize="none"
-              autoCorrect={false}
-              rightElement={
-                <Search size={18} className="text-muted-foreground" />
-              }
-            />
-          </View>
-        ) : null}
         {/* Scrollable: the timezone list is taller than a dynamic sheet. */}
         <BottomSheetScrollView
           contentContainerClassName="px-4 pb-8"
           keyboardShouldPersistTaps="handled"
         >
+          {search ? (
+            <View className="pb-2 pt-1">
+              <BottomSheetInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder={search.placeholder}
+                autoCapitalize="none"
+                autoCorrect={false}
+                rightElement={
+                  <Search size={18} className="text-muted-foreground" />
+                }
+              />
+            </View>
+          ) : null}
           {options.map((option) => {
             const selected = option.value === value;
             return (
@@ -132,7 +143,7 @@ function OptionSheetInner<T extends string | number>(
                 accessibilityState={{ checked: selected }}
                 className="flex-row items-center justify-between py-3.5"
               >
-                <View className="flex-row items-center gap-3">
+                <View className="flex-1 flex-row items-center gap-3">
                   {option.flag ? (
                     <Text className="text-[22px] leading-[28px]">
                       {option.flag}
@@ -149,7 +160,12 @@ function OptionSheetInner<T extends string | number>(
                     {option.label}
                   </Text>
                 </View>
-                {selected && <Check size={18} className="text-primary" />}
+                {option.detail ? (
+                  <Text className="ml-3 text-[13px] text-muted-foreground">
+                    {option.detail}
+                  </Text>
+                ) : null}
+                {selected && <Check size={18} className="ml-3 text-primary" />}
               </Pressable>
             );
           })}

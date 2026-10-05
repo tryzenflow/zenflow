@@ -21,7 +21,7 @@ import {
   deviceTimezone,
   usePreferences,
 } from "@/lib/preferences";
-import { filterTimezones } from "@/lib/onboarding";
+import { filterTimezones, gmtOffset } from "@/lib/onboarding";
 import { timezonePickerValue } from "@/lib/preferences-sync";
 import { type ComponentType, useMemo, useRef } from "react";
 import { Pressable, View } from "react-native";
@@ -74,11 +74,15 @@ export function PreferencesSection() {
         const hits = filterTimezones(allTimezones(), query, Infinity, device);
         const options = hits
           .slice(0, TZ_RESULT_LIMIT)
-          .map((z) => ({ value: z, label: z }));
+          .map((z) => ({ value: z, label: z, detail: gmtOffset(z) }));
         if (query.trim()) return { options, total: hits.length };
         return {
           options: [
-            { value: "device", label: `Device (${device})` },
+            {
+              value: "device",
+              label: `Device (${device})`,
+              detail: gmtOffset(device),
+            },
             ...options,
           ],
           total: hits.length + 1,
@@ -145,10 +149,7 @@ export function PreferencesSection() {
               Push alerts for reminders and schedule changes
             </Text>
           </View>
-          <Switch
-            checked={active}
-            onCheckedChange={toggleNotifications}
-          />
+          <Switch checked={active} onCheckedChange={toggleNotifications} />
         </View>
       </View>
 

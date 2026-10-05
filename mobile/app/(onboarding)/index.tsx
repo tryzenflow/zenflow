@@ -29,12 +29,12 @@ import {
   type OnboardingStep,
   canGoBack,
   filterTimezones,
+  gmtOffset,
   initialTagSelection,
   nextStep,
   prevStep,
   stepProgress,
   tagsForBulk,
-  utcOffsetMinutes,
 } from "@/lib/onboarding";
 import {
   LANGUAGES,
@@ -140,17 +140,6 @@ const STEP_ICON: Partial<Record<OnboardingStep, typeof Globe>> = {
   reminder: Clock,
   tags: Tag,
 };
-
-/** "GMT+7", "GMT+5:30", "GMT" — derived from the offset, not Intl's shortOffset. */
-function gmtOffset(tz: string): string {
-  const min = utcOffsetMinutes(tz);
-  if (min === 0) return "GMT";
-  const abs = Math.abs(min);
-  const mm = abs % 60;
-  return `GMT${min < 0 ? "-" : "+"}${Math.floor(abs / 60)}${
-    mm ? `:${String(mm).padStart(2, "0")}` : ""
-  }`;
-}
 
 function RadioDot({ selected }: { selected: boolean }) {
   return (

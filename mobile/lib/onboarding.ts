@@ -251,3 +251,14 @@ export function filterTimezones(
   }
   return hits.slice(0, limit);
 }
+
+/** "GMT+7", "GMT+5:30", "GMT" — derived from the offset, not Intl's shortOffset. */
+export function gmtOffset(tz: string): string {
+  const min = utcOffsetMinutes(tz);
+  if (min === 0) return "GMT";
+  const abs = Math.abs(min);
+  const mm = abs % 60;
+  return `GMT${min < 0 ? "-" : "+"}${Math.floor(abs / 60)}${
+    mm ? `:${String(mm).padStart(2, "0")}` : ""
+  }`;
+}
