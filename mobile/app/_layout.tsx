@@ -7,6 +7,7 @@ import { useUserStore } from "@/hooks/use-user-store";
 import { setAndroidNavigationBar } from "@/lib/android-navigation-bar";
 import { restoreSessionCookie } from "@/lib/api-client";
 import { NAV_THEME } from "@/lib/constants";
+import { routeForSession } from "@/lib/onboarding";
 import {
   cacheSessionUser,
   clearCachedSessionUser,
@@ -90,23 +91,14 @@ function AuthGate() {
   if (loading) return null;
 
   const group = segments[0] as string;
-  const inAuthGroup = group === "(auth)";
 
-  if (!user) {
-    return inAuthGroup ? null : <Redirect href={"/(auth)/login" as Href} />;
-  }
-  if (inAuthGroup) {
-    // Group-qualified, not bare "/": `(app)/index` and `(auth)/index` (if it
-    // existed) both compile to the URL "/" (parenthesized segments are
-    // stripped from the path), so a bare "/" redirect fired while the
-    // focused navigator is still the `(auth)` stack could resolve back into
-    // auth's own index instead of escaping to `(app)`. Naming the group
-    // disambiguates it. There is no onboarding step: a fresh signup lands
-    // straight in `(app)` (timezone is captured at OTP signup via the
-    // `x-timezone` header — see `api/auth.ts` — with no separate
-    // onboarding-complete gate).
-    return <Redirect href={"/(app)" as Href} />;
-  }
+  // Signed out -> login; signed in with `onboardedAt === null` -> onboarding
+  // (server-side flag, so it follows the user across devices); otherwise out
+  // of the auth/onboarding groups. Group-qualified hrefs, not bare "/":
+  // `(app)/index` and `(auth)/index` both compile to "/", so a bare redirect
+  // could resolve back into the focused group.
+  const target = routeForSession(user, group);
+  if (target) return <Redirect href={target as Href} />;
   return null;
 }
 
@@ -223,6 +215,7 @@ export default function RootLayout() {
           <BottomSheetModalProvider>
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="(auth)" />
+              <Stack.Screen name="(onboarding)" />
               <Stack.Screen name="(app)" />
               {/* Session create/edit — full screens, not bottom sheets (see
                   mobile/README.md); presented modally so they still read
