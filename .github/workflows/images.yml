@@ -33,7 +33,7 @@ jobs:
       - uses: actions/setup-node@v4 # build_images.sh reads backend/package.json
         with:
           node-version: 20
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
