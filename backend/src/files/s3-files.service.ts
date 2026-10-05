@@ -77,7 +77,7 @@ export class S3FilesService implements FilesService {
     }
   }
 
-  async findOne(id: string, userId: string) {
+  async findOne(id: string, userId?: string) {
     const file = await this.prisma.file.findUnique({
       where: { id, userId },
     });
@@ -89,7 +89,7 @@ export class S3FilesService implements FilesService {
     return file;
   }
 
-  async download(id: string, userId: string) {
+  async download(id: string, userId?: string) {
     const file = await this.findOne(id, userId);
     const notFound = new NotFoundException({
       success: false,

@@ -22,6 +22,7 @@ CORS_ORIGIN=http://localhost:5173
 MAIL_TRANSPORT=smtp://localhost:1025
 MAIL_FROM=noreply@example.com
 SESSION_SECRET=$(rnd 32)
+FILE_URL_SECRET=$(rnd 32)
 COOKIE_SECURE=false
 COOKIE_SAMESITE=lax
 MASTER_LMS_ENCRYPTION_KEY_V1=$(rnd 32)
