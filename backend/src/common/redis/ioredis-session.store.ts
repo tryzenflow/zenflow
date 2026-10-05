@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-misused-promises -- express-session's Store declares callback-style (void) methods; these overrides are async but catch every error and report it through the callback, so nothing can reject unhandled. */
 import type { Redis } from "ioredis";
 import { Store, type SessionData } from "express-session";
 

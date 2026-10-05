@@ -46,7 +46,13 @@ export class AuthController {
     // client's immediate post-login requests (me / tasks) aren't rejected by a
     // not-yet-saved session (first-login 403 race).
     await new Promise<void>((resolve, reject) =>
-      req.session.save((err) => (err ? reject(err) : resolve())),
+      req.session.save((err?: unknown) =>
+        err
+          ? reject(
+              err instanceof Error ? err : new Error("Failed to save session"),
+            )
+          : resolve(),
+      ),
     );
     return {
       success: true,
@@ -57,7 +63,7 @@ export class AuthController {
 
   @UseGuards(CookieAuthGuard)
   @Get("me")
-  async me(@CurrentUser() user: User) {
+  me(@CurrentUser() user: User) {
     return {
       success: true,
       message: `Welcome back, ${user.name}`,

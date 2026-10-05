@@ -1,3 +1,4 @@
+import type { Request } from "express";
 import { Injectable } from "@nestjs/common";
 import { PassportStrategy } from "@nestjs/passport";
 import { Strategy } from "passport-local";
@@ -15,7 +16,9 @@ export class LocalStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(req: Request, email: string, otp: string): Promise<User> {
-    const timezone: string = req.headers?.["x-timezone"] || "UTC";
+    const header = req.headers?.["x-timezone"];
+    const timezone: string =
+      (Array.isArray(header) ? header[0] : header) || "UTC";
 
     // example: create or verify user with timezone
     await this.authService.verifyOTPCode(email, otp);

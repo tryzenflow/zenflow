@@ -36,7 +36,7 @@ export class UsersService {
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === PostgresErrorCode.UniqueConstraintViolation
+        error.code === (PostgresErrorCode.UniqueConstraintViolation as string)
       )
         throw new BadRequestException("Email already exists");
       throw new InternalServerErrorException();
@@ -70,7 +70,7 @@ export class UsersService {
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === PostgresErrorCode.RecordNotFound
+        error.code === (PostgresErrorCode.RecordNotFound as string)
       )
         throw new NotFoundException("Cannot find user with the given id");
       throw new InternalServerErrorException();
@@ -129,16 +129,16 @@ export class UsersService {
    * / wrong-length matrix is normalised to all-zero so the FE never has to
    * special-case the length. Read-only.
    */
-  async getPreferenceMatrix(user: User): Promise<PreferenceMatrixResponse> {
+  getPreferenceMatrix(user: User): Promise<PreferenceMatrixResponse> {
     const matrix =
       user.preferenceMatrix.length === PREFERENCE_MATRIX_LENGTH
         ? user.preferenceMatrix
         : new Array<number>(PREFERENCE_MATRIX_LENGTH).fill(0);
-    return {
+    return Promise.resolve({
       matrix,
       days: PREFERENCE_MATRIX_DAYS,
       blocks: PREFERENCE_SLOTS_PER_DAY,
-    };
+    });
   }
 
   async findByEmail(email: string) {
@@ -163,7 +163,7 @@ export class UsersService {
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === PostgresErrorCode.RecordNotFound
+        error.code === (PostgresErrorCode.RecordNotFound as string)
       )
         throw new NotFoundException("User with that id does not exist");
       throw new InternalServerErrorException();

@@ -101,4 +101,4 @@ async function bootstrap() {
   app.use(passport.session());
   await app.listen(process.env.PORT ?? 5000);
 }
-bootstrap();
+void bootstrap();

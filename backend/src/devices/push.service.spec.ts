@@ -166,7 +166,7 @@ describe("PushService", () => {
           data: expect.objectContaining({
             sessionId: "",
             url: "/notifications",
-          }),
+          }) as unknown,
         }),
       );
     });
