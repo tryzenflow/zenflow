@@ -33,7 +33,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     const { status, message, errors, extra } = this.normalize(exception);
 
-    if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+    if (Number(status) >= Number(HttpStatus.INTERNAL_SERVER_ERROR)) {
       const err = exception as Error & { code?: string };
       this.logger.error(
         {
