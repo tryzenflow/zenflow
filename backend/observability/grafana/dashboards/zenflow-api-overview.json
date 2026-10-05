@@ -6,7 +6,7 @@
   "editable": true,
   "graphTooltip": 1,
   "schemaVersion": 39,
-  "version": 1,
+  "version": 3,
   "refresh": "30s",
   "time": { "from": "now-6h", "to": "now" },
   "annotations": { "list": [] },
@@ -36,7 +36,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "reqps", "decimals": 2, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] } }, "overrides": [] },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(rate(http_server_request_duration_seconds_count[$__rate_interval]))" } ]
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(rate(http_server_request_duration_seconds_count{route!=\"\"}[$__rate_interval]))" } ]
     },
     {
       "id": 3, "type": "stat", "title": "Error ratio (5xx)",
@@ -44,23 +44,23 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 2, "min": 0, "max": 1, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 0.01 }, { "color": "red", "value": 0.05 } ] } }, "overrides": [] },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(rate(http_server_request_duration_seconds_count{status_class=\"5xx\"}[$__rate_interval])) / clamp_min(sum(rate(http_server_request_duration_seconds_count[$__rate_interval])), 0.001)" } ]
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(rate(http_server_request_duration_seconds_count{route!=\"\",status_class=\"5xx\"}[$__rate_interval])) / clamp_min(sum(rate(http_server_request_duration_seconds_count{route!=\"\"}[$__rate_interval])), 0.001)" } ]
     },
     {
-      "id": 4, "type": "stat", "title": "Latency p95",
+      "id": 4, "type": "stat", "title": "Latency p95 (excl. sync)",
       "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "s", "decimals": 3, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 0.5 }, { "color": "red", "value": 1 } ] } }, "overrides": [] },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket[$__rate_interval])) by (le))" } ]
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket{route!=\"\",route!~\".*/sync\"}[$__rate_interval])) by (le))" } ]
     },
     {
-      "id": 5, "type": "stat", "title": "Latency p99",
+      "id": 5, "type": "stat", "title": "Latency p99 (excl. sync)",
       "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "s", "decimals": 3, "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 2 } ] } }, "overrides": [] },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.99, sum(rate(http_server_request_duration_seconds_bucket[$__rate_interval])) by (le))" } ]
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.99, sum(rate(http_server_request_duration_seconds_bucket{route!=\"\",route!~\".*/sync\"}[$__rate_interval])) by (le))" } ]
     },
 
     {
@@ -73,30 +73,30 @@
         { "matcher": { "id": "byName", "options": "2xx" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] }
       ] },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (status_class) (rate(http_server_request_duration_seconds_count[$__rate_interval]))", "legendFormat": "{{status_class}}" } ]
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (status_class) (rate(http_server_request_duration_seconds_count{route!=\"\"}[$__rate_interval]))", "legendFormat": "{{status_class}}" } ]
     },
     {
-      "id": 7, "type": "timeseries", "title": "Ingress latency quantiles",
+      "id": 7, "type": "timeseries", "title": "Ingress latency quantiles (excl. sync)",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
       "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.50, sum(rate(http_server_request_duration_seconds_bucket[$__rate_interval])) by (le))", "legendFormat": "p50" },
-        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.90, sum(rate(http_server_request_duration_seconds_bucket[$__rate_interval])) by (le))", "legendFormat": "p90" },
-        { "refId": "C", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.99, sum(rate(http_server_request_duration_seconds_bucket[$__rate_interval])) by (le))", "legendFormat": "p99" }
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.50, sum(rate(http_server_request_duration_seconds_bucket{route!=\"\",route!~\".*/sync\"}[$__rate_interval])) by (le))", "legendFormat": "p50" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.90, sum(rate(http_server_request_duration_seconds_bucket{route!=\"\",route!~\".*/sync\"}[$__rate_interval])) by (le))", "legendFormat": "p90" },
+        { "refId": "C", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.99, sum(rate(http_server_request_duration_seconds_bucket{route!=\"\",route!~\".*/sync\"}[$__rate_interval])) by (le))", "legendFormat": "p99" }
       ]
     },
     {
-      "id": 8, "type": "timeseries", "title": "Top routes by request rate",
+      "id": 8, "type": "timeseries", "title": "Top endpoints (method + route) by request rate",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
       "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
-      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "topk(10, sum by (route) (rate(http_server_request_duration_seconds_count[$__rate_interval])))", "legendFormat": "{{route}}" } ]
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "topk(10, sum by (http_request_method, route) (rate(http_server_request_duration_seconds_count{route!=\"\"}[$__rate_interval])))", "legendFormat": "{{http_request_method}} {{route}}" } ]
     },
     {
-      "id": 9, "type": "table", "title": "Route breakdown (rate · error% · p95)",
+      "id": 9, "type": "table", "title": "Endpoint breakdown (method · route · rate · error% · p95)",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": {}, "overrides": [
@@ -106,20 +106,48 @@
       ] },
       "options": { "showHeader": true, "sortBy": [ { "displayName": "req/s", "desc": true } ] },
       "targets": [
-        { "refId": "A", "format": "table", "instant": true, "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (route) (rate(http_server_request_duration_seconds_count[$__range]))" },
-        { "refId": "B", "format": "table", "instant": true, "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (route) (rate(http_server_request_duration_seconds_count{status_class=\"5xx\"}[$__range])) / clamp_min(sum by (route) (rate(http_server_request_duration_seconds_count[$__range])), 0.001)" },
-        { "refId": "C", "format": "table", "instant": true, "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.95, sum by (route, le) (rate(http_server_request_duration_seconds_bucket[$__range])))" }
+        { "refId": "A", "format": "table", "instant": true, "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (http_request_method, route) (rate(http_server_request_duration_seconds_count{route!=\"\"}[$__range]))" },
+        { "refId": "B", "format": "table", "instant": true, "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (http_request_method, route) (rate(http_server_request_duration_seconds_count{route!=\"\",status_class=\"5xx\"}[$__range])) / clamp_min(sum by (http_request_method, route) (rate(http_server_request_duration_seconds_count{route!=\"\"}[$__range])), 0.001)" },
+        { "refId": "C", "format": "table", "instant": true, "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.95, sum by (http_request_method, route, le) (rate(http_server_request_duration_seconds_bucket{route!=\"\"}[$__range])))" }
       ],
       "transformations": [
         { "id": "merge", "options": {} },
-        { "id": "organize", "options": { "renameByName": { "route": "route", "Value #A": "req/s", "Value #B": "error %", "Value #C": "p95 (s)" }, "excludeByName": { "Time": true } } }
+        { "id": "organize", "options": { "renameByName": { "http_request_method": "method", "route": "route", "Value #A": "req/s", "Value #B": "error %", "Value #C": "p95 (s)" }, "excludeByName": { "Time": true } } }
       ]
     },
 
-    { "id": 10, "type": "row", "title": "Outbound clients — portal · LMS · bandit", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 21 } },
+    {
+      "id": 50, "type": "timeseries", "title": "Latency p95 by endpoint (method + route, excl. sync)",
+      "description": "GET /sessions and POST /sessions are separate series. The sync route is excluded because a DLU sync takes seconds by design and would dominate the scale.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 21 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [
+        { "matcher": { "id": "byRegexp", "options": "/.*/" }, "properties": [ { "id": "unit", "value": "s" } ] }
+      ] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "topk(8, histogram_quantile(0.95, sum by (le, http_request_method, route) (rate(http_server_request_duration_seconds_bucket{route!=\"\",route!~\".*/sync\"}[$__rate_interval]))))", "legendFormat": "{{http_request_method}} {{route}}" }
+      ]
+    },
+    {
+      "id": 51, "type": "timeseries", "title": "Sync calls (long-running by design): rate & p95",
+      "description": "POST /integrations/:provider/sync waits on the upstream (DLU), so it is kept out of the aggregate latency panels above.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 21 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [
+        { "matcher": { "id": "byRegexp", "options": "/p(50|95).*/" }, "properties": [ { "id": "unit", "value": "s" }, { "id": "custom.axisPlacement", "value": "right" } ] },
+        { "matcher": { "id": "byRegexp", "options": "/rate.*/" }, "properties": [ { "id": "unit", "value": "reqps" } ] }
+      ] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (route) (rate(http_server_request_duration_seconds_count{route=~\".*/sync\"}[$__rate_interval]))", "legendFormat": "rate · {{route}}" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_server_request_duration_seconds_bucket{route=~\".*/sync\"}[$__rate_interval])))", "legendFormat": "p95 · {{route}}" }
+      ]
+    },
+    { "id": 10, "type": "row", "title": "Outbound clients — portal · LMS · bandit", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 29 } },
     {
       "id": 11, "type": "timeseries", "title": "Outbound request rate by operation",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 30 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
       "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
@@ -131,7 +159,7 @@
     },
     {
       "id": 12, "type": "timeseries", "title": "Outbound p95 latency",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 30 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } },
@@ -142,10 +170,10 @@
       ]
     },
 
-    { "id": 20, "type": "row", "title": "Runtime & container USE", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 30 } },
+    { "id": 20, "type": "row", "title": "Runtime & container USE", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 38 } },
     {
       "id": 21, "type": "timeseries", "title": "Node.js event-loop utilization",
-      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 31 },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 39 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "custom": { "drawStyle": "line", "fillOpacity": 20 } }, "overrides": [] },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
@@ -153,7 +181,7 @@
     },
     {
       "id": 22, "type": "timeseries", "title": "Node.js event-loop delay p99",
-      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 31 },
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 39 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
@@ -161,7 +189,7 @@
     },
     {
       "id": 23, "type": "timeseries", "title": "Node.js heap / RSS",
-      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 31 },
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 39 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
@@ -172,7 +200,7 @@
     },
     {
       "id": 24, "type": "timeseries", "title": "Container CPU (cAdvisor)",
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 38 },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 46 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
       "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
@@ -180,17 +208,17 @@
     },
     {
       "id": 25, "type": "timeseries", "title": "Container memory working set (cAdvisor)",
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 38 },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 46 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
       "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } },
       "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (name) (container_memory_working_set_bytes{name=~\"zenflow.*\"})", "legendFormat": "{{name}}" } ]
     },
 
-    { "id": 30, "type": "row", "title": "Push & SSE", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 45 } },
+    { "id": 30, "type": "row", "title": "Push & SSE", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 53 } },
     {
       "id": 31, "type": "timeseries", "title": "Push sends/s by provider · result",
-      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 46 },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 54 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "cps", "custom": { "drawStyle": "bars", "fillOpacity": 60, "stacking": { "mode": "normal" } } }, "overrides": [] },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
@@ -198,7 +226,7 @@
     },
     {
       "id": 32, "type": "stat", "title": "Devices pruned (range)",
-      "gridPos": { "h": 7, "w": 4, "x": 8, "y": 46 },
+      "gridPos": { "h": 7, "w": 4, "x": 8, "y": 54 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 1 } ] } }, "overrides": [] },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
@@ -206,17 +234,17 @@
     },
     {
       "id": 33, "type": "timeseries", "title": "SSE — open /notifications/stream connections",
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 46 },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 54 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 20, "stepInterval": null } }, "overrides": [] },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
       "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(sse_active_connections)", "legendFormat": "open connections" } ]
     },
 
-    { "id": 40, "type": "row", "title": "Logs", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 53 } },
+    { "id": 40, "type": "row", "title": "Logs", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 61 } },
     {
       "id": 41, "type": "timeseries", "title": "Log volume by level",
-      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 54 },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 62 },
       "datasource": { "type": "loki", "uid": "loki" },
       "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "bars", "fillOpacity": 70, "stacking": { "mode": "normal" } } }, "overrides": [
         { "matcher": { "id": "byName", "options": "error" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] },
@@ -227,14 +255,14 @@
     },
     {
       "id": 42, "type": "logs", "title": "Live logs — $service",
-      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 60 },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 68 },
       "datasource": { "type": "loki", "uid": "loki" },
       "options": { "showTime": true, "wrapLogMessage": true, "prettifyLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" },
       "targets": [ { "refId": "A", "datasource": { "type": "loki", "uid": "loki" }, "expr": "{service=~\"$service\"} | json" } ]
     },
     {
       "id": 43, "type": "logs", "title": "Errors & warnings only",
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 72 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 80 },
       "datasource": { "type": "loki", "uid": "loki" },
       "options": { "showTime": true, "wrapLogMessage": true, "prettifyLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" },
       "targets": [ { "refId": "A", "datasource": { "type": "loki", "uid": "loki" }, "expr": "{service=~\"$service\", level=~\"error|fatal|warn\"}" } ]

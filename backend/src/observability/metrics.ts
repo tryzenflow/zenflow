@@ -103,6 +103,29 @@ export const schedulerMoveDragMinutes = meter.createHistogram(
     },
   },
 );
+// Placement latency split by the A/B policy (HEURISTIC vs LINUCB). The roll is a coin flip inside
+// ExperimentService, so nothing else can attribute a request's latency to a policy.
+const PLACEMENT_BUCKETS_S = [
+  0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5,
+];
+export const schedulerPlacementPythonDuration = meter.createHistogram(
+  "scheduler.placement.python.duration",
+  {
+    unit: "s",
+    description:
+      "Python /v1/place time by phase (decode|context|predict|scan|displace|total, as the service reports it; http = round trip incl. network), by assigned policy / compute_both / mode",
+    advice: { explicitBucketBoundaries: PLACEMENT_BUCKETS_S },
+  },
+);
+export const schedulerPlacementDuration = meter.createHistogram(
+  "scheduler.placement.duration",
+  {
+    unit: "s",
+    description:
+      "End-to-end single-TASK placement (gather + Python + apply + persist, or the degraded fallback), by assigned/applied policy and source",
+    advice: { explicitBucketBoundaries: PLACEMENT_BUCKETS_S },
+  },
+);
 export const schedulerRewardUpdates = meter.createCounter(
   "scheduler.reward_updates",
   { description: "Delayed LinUCB reward updates, by source + result" },

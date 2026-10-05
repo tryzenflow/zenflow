@@ -14,6 +14,7 @@ import {
 import type { User } from "../../../generated/prisma";
 import { BanditArmStateRepository } from "../../bandit/bandit-arm-state.repository";
 import { minutesToUtc } from "../../common/utils";
+import { schedulerPlacementPythonDuration } from "../../observability/metrics";
 import { recordPhase } from "../../observability/phase-timings";
 import { withSpan } from "../../observability/otel";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -174,6 +175,27 @@ export class PlacementGateway {
           });
           recordPhase(this.cls, "scan", t.scan);
           recordPhase(this.cls, "predict", t.predict);
+          // Per-policy view. A series' members share one primary policy; `compute_both` marks the
+          // requests where Python ran the heuristic AND LinUCB (LINUCB-primary, or pairwise-sampled).
+          const attrs = {
+            assigned: req.members[0]?.primaryPolicy ?? "HEURISTIC",
+            compute_both: req.members.some((m) => m.computeBoth),
+            mode: req.mode,
+          };
+          for (const [phase, ms] of Object.entries({
+            decode: t.decode,
+            context: t.context,
+            predict: t.predict,
+            scan: t.scan,
+            displace: t.displace,
+            total: t.total,
+            http: Date.now() - t0,
+          })) {
+            schedulerPlacementPythonDuration.record(ms / 1000, {
+              ...attrs,
+              phase,
+            });
+          }
         } else {
           span.setAttribute("placement.degraded_reason", result.reason);
         }
