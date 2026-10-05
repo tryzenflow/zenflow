@@ -168,6 +168,23 @@ export default function RootLayout() {
     })();
   }, []);
 
+  // The session is resolved but `AuthGate` may still have to redirect (e.g. a
+  // signed-out launch lands on the "/" calendar first). Keep the splash up
+  // until the focused group is the one the gate wants, so the wrong screen
+  // never flashes before the redirect.
+  const segments = useSegments();
+  const sessionUser = useUserStore((s) => s.user);
+  const routeSettled =
+    !loading && routeForSession(sessionUser, segments[0] as string) === null;
+  // Safety net only for a redirect that never settles; it starts once the
+  // session has resolved, so a slow `/auth/me` can't trip it early.
+  const [splashTimedOut, setSplashTimedOut] = React.useState(false);
+  React.useEffect(() => {
+    if (loading) return;
+    const t = setTimeout(() => setSplashTimedOut(true), 1500);
+    return () => clearTimeout(t);
+  }, [loading]);
+
   // Keep the splash screen up until BOTH fonts and the local session are resolved
   React.useEffect(() => {
     console.log(
@@ -178,12 +195,12 @@ export default function RootLayout() {
       "loading:",
       loading,
     );
-    if ((fontsLoaded || fontError) && !loading) {
+    if ((fontsLoaded || fontError) && !loading && (routeSettled || splashTimedOut)) {
       SplashScreen.hideAsync().catch((err) => {
         console.warn("[_layout] SplashScreen.hideAsync warning:", err);
       });
     }
-  }, [fontsLoaded, fontError, loading]);
+  }, [fontsLoaded, fontError, loading, routeSettled, splashTimedOut]);
 
   if (!fontsLoaded && !fontError) {
     return null;

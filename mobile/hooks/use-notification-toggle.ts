@@ -44,14 +44,20 @@ export function useNotificationToggle() {
     void refresh();
   }, [refresh]);
 
-  /** Resolves true when push is on for this device. */
-  const setEnabled = async (on: boolean): Promise<boolean> => {
+  /**
+   * Resolves true when push is on for this device. `quiet` skips the failure
+   * toast for callers (onboarding) that render their own blocked state.
+   */
+  const setEnabled = async (
+    on: boolean,
+    { quiet = false }: { quiet?: boolean } = {},
+  ): Promise<boolean> => {
     if (!on) {
       await disable();
       return false;
     }
     const ok = await enable();
-    if (!ok) {
+    if (!ok && !quiet) {
       const blocked = usePushStatusStore.getState().permission !== "granted";
       toast(
         blocked

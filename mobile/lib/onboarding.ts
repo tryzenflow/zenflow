@@ -177,15 +177,77 @@ export function pendingSetupItems(state: {
   return items;
 }
 
-/** Case-insensitive timezone search; "_" and " " are interchangeable. */
+const offsetFormatters = new Map<string, Intl.DateTimeFormat>();
+const offsetCache = new Map<string, number>();
+
+/**
+ * Current UTC offset of an IANA zone in minutes (0 if the zone is unknown).
+ * Formatters are reused and results cached per zone per hour, so filtering the
+ * full zone list on every keystroke doesn't rebuild hundreds of formatters.
+ */
+export function utcOffsetMinutes(tz: string, at: Date = new Date()): number {
+  const key = `${tz}|${Math.floor(at.getTime() / 3_600_000)}`;
+  const cached = offsetCache.get(key);
+  if (cached !== undefined) return cached;
+  const value = computeUtcOffsetMinutes(tz, at);
+  offsetCache.set(key, value);
+  return value;
+}
+
+function computeUtcOffsetMinutes(tz: string, at: Date): number {
+  try {
+    let fmt = offsetFormatters.get(tz);
+    if (!fmt) {
+      fmt = new Intl.DateTimeFormat("en-US", {
+        timeZone: tz,
+        hourCycle: "h23",
+        year: "numeric",
+        month: "numeric",
+        day: "numeric",
+        hour: "numeric",
+        minute: "numeric",
+        second: "numeric",
+      });
+      offsetFormatters.set(tz, fmt);
+    }
+    const p = Object.fromEntries(
+      fmt.formatToParts(at).map((x) => [x.type, Number(x.value)]),
+    );
+    const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+    return Math.round((asUtc - Math.floor(at.getTime() / 1000) * 1000) / 60000);
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Case-insensitive timezone search; "_" and " " are interchangeable. With
+ * `near`, results are ordered by closeness to that zone (UTC-offset distance,
+ * then same region, then name) instead of alphabetically, and `near` itself is
+ * left out when there is no query (the UI shows it separately).
+ */
 export function filterTimezones(
   zones: readonly string[],
   query: string,
   limit = 50,
+  near?: string,
 ): string[] {
   const q = query.trim().toLowerCase().replace(/\s+/g, "_");
-  const hits = q
-    ? zones.filter((z) => z.toLowerCase().includes(q))
-    : [...zones];
+  let hits = q ? zones.filter((z) => z.toLowerCase().includes(q)) : [...zones];
+  if (near) {
+    const now = new Date();
+    const ref = utcOffsetMinutes(near, now);
+    const region = near.split("/")[0];
+    const dist = new Map(
+      hits.map((z) => [z, Math.abs(utcOffsetMinutes(z, now) - ref)]),
+    );
+    hits.sort(
+      (a, b) =>
+        (dist.get(a) as number) - (dist.get(b) as number) ||
+        Number(b.startsWith(`${region}/`)) - Number(a.startsWith(`${region}/`)) ||
+        a.localeCompare(b),
+    );
+    if (!q) hits = hits.filter((z) => z !== near);
+  }
   return hits.slice(0, limit);
 }
