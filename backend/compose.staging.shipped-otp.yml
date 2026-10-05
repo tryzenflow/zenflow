@@ -1,0 +1,14 @@
+# Overlay for the auth-burst "limits" run: restores the shipped OTP rate limits (.env.example) on the
+# staging API, which otherwise runs with raised limits so k6 can log users in from one IP.
+#   docker compose --env-file .env.staging -f compose.staging.yml -f compose.staging.shipped-otp.yml up -d api
+services:
+  api:
+    environment:
+      OTP_REQUEST_IP_WINDOW_SEC: "60"
+      OTP_REQUEST_IP_LIMIT: "5"
+      OTP_REQUEST_EMAIL_WINDOW_SEC: "900"
+      OTP_REQUEST_EMAIL_LIMIT: "3"
+      OTP_VERIFY_IP_WINDOW_SEC: "60"
+      OTP_VERIFY_IP_LIMIT: "20"
+      OTP_VERIFY_EMAIL_WINDOW_SEC: "600"
+      OTP_VERIFY_EMAIL_LIMIT: "10"

@@ -1,10 +1,11 @@
-// Shared helpers: OTP login via MailHog, deterministic seed layout, date maths.
-// Variant-agnostic: talks only to the public HTTP API + MailHog.
+// Shared helpers: OTP login via MailHog or Mailpit, deterministic seed layout, date maths.
+// Variant-agnostic: talks only to the public HTTP API + the mail catcher's HTTP API.
 import http from "k6/http";
 import { sleep } from "k6";
 
 export const BASE = __ENV.BASE; // e.g. http://localhost:5641/api/v1
 export const MAIL = __ENV.MAIL; // e.g. http://localhost:8541
+export const MAIL_KIND = __ENV.MAIL_KIND || "mailhog"; // "mailhog" | "mailpit" (staging)
 export const TZ = __ENV.TZ_NAME || "Asia/Ho_Chi_Minh";
 export const TZ_OFFSET_MIN = 7 * 60; // Asia/Ho_Chi_Minh has no DST; keep in sync with TZ
 // Per-VU private jar: setup() logins would otherwise leak their cookie into the VU jar and override our explicit Cookie header.
@@ -15,9 +16,20 @@ export function emailFor(level, i) {
   return `lt-${level}-${i}@example.com`;
 }
 
+// Normalised view of a catcher's mails for `email`: [{ id, created, body }] (body fetched lazily for Mailpit).
 function mailsFor(email) {
+  if (MAIL_KIND === "mailpit") {
+    const r = http.get(`${MAIL}/api/v1/search?query=${encodeURIComponent("to:" + email)}&limit=50`, { tags: { name: "mail" } });
+    return (r.json("messages") || []).map((m) => ({ id: m.ID, created: m.Created, body: null }));
+  }
   const r = http.get(`${MAIL}/api/v2/search?kind=to&query=${encodeURIComponent(email)}`, { tags: { name: "mail" } });
-  return r.json("items") || [];
+  return (r.json("items") || []).map((m) => ({ id: m.ID, created: m.Created, body: m.Content.Body.replace(/=\r?\n/g, "") }));
+}
+
+function bodyOf(mail) {
+  if (mail.body !== null) return mail.body;
+  const r = http.get(`${MAIL}/api/v1/message/${mail.id}`, { tags: { name: "mail" } });
+  return (r.json("HTML") || "") + "\n" + (r.json("Text") || "");
 }
 
 // Wait for a mail newer than the `before` count, then take the newest by Created.
@@ -25,9 +37,9 @@ function otpFromMail(email, before) {
   for (let attempt = 0; attempt < 50; attempt++) {
     const items = mailsFor(email);
     if (items.length > before) {
-      items.sort((a, b) => (a.Created < b.Created ? 1 : -1));
-      const body = items[0].Content.Body.replace(/=\r?\n/g, "");
-      const m = body.match(/>\s*(\d{6})\s*</);
+      items.sort((a, b) => (a.created < b.created ? 1 : -1));
+      const body = bodyOf(items[0]);
+      const m = body.match(/>\s*(\d{6})\s*</) || body.match(/\b(\d{6})\b/);
       if (m) return m[1];
     }
     sleep(0.2);

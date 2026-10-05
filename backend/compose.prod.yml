@@ -295,8 +295,8 @@ services:
       - edge
 
   mail:
-    container_name: zenflow-mail-staging
-    image: mailhog/mailhog:v1.0.1
+    container_name: zenflow-mail-prod
+    image: axllent/mailpit:v1.31.4
     expose:
       - "1025"
     ports:
