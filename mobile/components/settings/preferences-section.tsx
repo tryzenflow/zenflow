@@ -10,6 +10,7 @@ import {
   type OptionSheetHandle,
 } from "@/components/settings/option-sheet";
 import { SettingsSectionLabel } from "@/components/settings/settings-header";
+import { useNotificationToggle } from "@/hooks/use-notification-toggle";
 import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
@@ -21,7 +22,6 @@ import {
   usePreferences,
 } from "@/lib/preferences";
 import { timezonePickerValue } from "@/lib/preferences-sync";
-import { dropPushRegistration, syncPushRegistration } from "@/lib/push";
 import { type ComponentType, useMemo, useRef } from "react";
 import { Pressable, View } from "react-native";
 
@@ -54,6 +54,7 @@ function Row({
 /** Preferences + Notifications sections (mockups/settings.html). */
 export function PreferencesSection() {
   const { prefs, update } = usePreferences();
+  const { setEnabled, active } = useNotificationToggle();
   const { toast } = useToast();
   const languageSheet = useRef<OptionSheetHandle>(null);
   const timezoneSheet = useRef<OptionSheetHandle>(null);
@@ -76,15 +77,7 @@ export function PreferencesSection() {
   }
 
   async function toggleNotifications(on: boolean) {
-    await update({ notificationsEnabled: on });
-    if (on) {
-      // Re-registers this device (also asks for OS permission if needed).
-      const token = await syncPushRegistration();
-      if (!token) toast("Couldn't enable push on this device.", "destructive");
-    } else {
-      // Revoke this device server-side so it stops receiving pushes.
-      await dropPushRegistration();
-    }
+    await setEnabled(on);
   }
 
   return (
@@ -131,7 +124,7 @@ export function PreferencesSection() {
             </Text>
           </View>
           <Switch
-            checked={prefs.notificationsEnabled}
+            checked={active}
             onCheckedChange={toggleNotifications}
           />
         </View>

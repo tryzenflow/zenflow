@@ -8,3 +8,17 @@ export interface Tag {
 export interface TagsListResponse {
   tags: Tag[];
 }
+
+/** Body of POST /tags/bulk. */
+export interface BulkCreateTagsInput {
+  /** 1..{@link BULK_TAGS_MAX} names; trimmed, deduped, existing ones skipped. */
+  names: string[];
+}
+
+export const BULK_TAGS_MAX = 50;
+export const TAG_NAME_MAX = 50;
+
+/** Response of POST /tags/bulk — every requested tag (new + pre-existing), name-sorted. */
+export interface BulkCreateTagsResponse {
+  tags: Tag[];
+}

@@ -221,7 +221,7 @@ export class MaterializerService {
 
     // `unchanged` / total ≈ how much of the run was redundant re-work (the
     // thing a cache on this path would save). `source` is portal|lms.
-    for (const [label, n] of Object.entries(outcome)) {
+    for (const [label, n] of Object.entries(outcome) as [string, number][]) {
       if (n > 0) ingestionBlocks.add(n, { source, outcome: label });
     }
 

@@ -38,7 +38,7 @@ export class NotificationsController {
   ) {}
   @Sse("stream")
   @UseGuards(CookieAuthGuard)
-  async sendInApp(@CurrentUser() user: User) {
+  sendInApp(@CurrentUser() user: User) {
     const events$ = fromEvent(
       this.notifications.notificationEmitter,
       NotificationEvent.NEW_SESSION,

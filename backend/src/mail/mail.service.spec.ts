@@ -2,9 +2,15 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { MailerService } from "@nestjs-modules/mailer";
 import { MailService } from "./mail.service";
 
+interface MailPayload {
+  from?: string;
+  attachments?: { path: string }[];
+  [key: string]: unknown;
+}
+
 describe("MailService", () => {
   let service: MailService;
-  const sendMail = jest.fn().mockResolvedValue(undefined);
+  const sendMail = jest.fn<Promise<void>, [MailPayload]>().mockResolvedValue();
 
   beforeEach(async () => {
     sendMail.mockClear();
@@ -44,12 +50,12 @@ describe("MailService", () => {
         expect.objectContaining({
           filename: "logo.png",
           cid: "logo",
-          path: expect.stringContaining("logo.png"),
+          path: expect.stringContaining("logo.png") as string,
         }),
       ]);
       // The CID attachment path must resolve into the templates/assets dir so
       // it works from dist at runtime.
-      expect(payload.attachments[0].path).toContain("assets");
+      expect(payload.attachments?.[0].path).toContain("assets");
     });
 
     it("forwards an explicit from address when provided", async () => {

@@ -114,7 +114,9 @@ function errorMessageFor(error: unknown): string {
  * Settings section for LMS / student-portal accounts: connect, update
  * credentials, sync and disconnect inline.
  */
-export function DluAccountsSection() {
+export function DluAccountsSection({
+  hideLabel = false,
+}: { hideLabel?: boolean } = {}) {
   const { toast } = useToast();
   const { integrations, updateIntegration, loading } = useIntegrationStore();
   const [selectedProvider, setSelectedProvider] =
@@ -245,7 +247,7 @@ export function DluAccountsSection() {
 
   return (
     <>
-      <SettingsSectionLabel>DLU accounts</SettingsSectionLabel>
+      {!hideLabel && <SettingsSectionLabel>DLU accounts</SettingsSectionLabel>}
       <View className="overflow-hidden rounded-2xl border border-border bg-card">
         {PROVIDERS.map((provider, index) => {
           if (loading) {

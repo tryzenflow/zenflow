@@ -1,4 +1,12 @@
-import { Controller, Get, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Post,
+  UseGuards,
+} from "@nestjs/common";
+import { BulkCreateTagsDto } from "./dto/bulk-create-tags.dto";
 import { TagsService } from "./tags.service";
 import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
@@ -17,5 +25,13 @@ export class TagsController {
       message: `Found ${data.tags.length} tags`,
       data,
     };
+  }
+
+  /** Idempotent bulk create (skips duplicates); used by onboarding. */
+  @Post("bulk")
+  @HttpCode(200)
+  async bulkCreate(@CurrentUser() user: User, @Body() dto: BulkCreateTagsDto) {
+    const data = await this.tagsService.bulkCreate(user, dto.names);
+    return { success: true, message: `Ensured ${data.tags.length} tags`, data };
   }
 }

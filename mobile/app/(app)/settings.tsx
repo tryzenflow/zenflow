@@ -2,6 +2,10 @@ import { logout as logoutRequest } from "@/api/auth";
 import { listIntegrations } from "@/api/integrations";
 import { LogOut, Moon } from "@/components/Icons";
 import { DluAccountsSection } from "@/components/settings/dlu-accounts-section";
+import { FinishSetupCard } from "@/components/settings/finish-setup-card";
+import { TagsRow } from "@/components/settings/tags-row";
+import { usePushStatusStore } from "@/hooks/use-push-status-store";
+import { useNotificationToggle } from "@/hooks/use-notification-toggle";
 import { PreferencesSection } from "@/components/settings/preferences-section";
 import { ProfileRow } from "@/components/settings/profile-row";
 import { SettingsSectionLabel } from "@/components/settings/settings-header";
@@ -12,7 +16,6 @@ import { useUserStore } from "@/hooks/use-user-store";
 import { useIntegrationStore } from "@/hooks/use-integration-store";
 import { setAndroidNavigationBar } from "@/lib/android-navigation-bar";
 import { clearSession } from "@/lib/api-client";
-import { dropPushRegistration } from "@/lib/push";
 import { clearCachedSessionUser } from "@/lib/session";
 import { clearDaySessionCache } from "@/lib/session-cache";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
@@ -20,7 +23,7 @@ import { resetTimelineScroll } from "@/lib/timeline-scroll";
 import { useColorScheme } from "@/lib/useColorScheme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { type Href, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -32,6 +35,12 @@ export default function SettingsScreen() {
   const { setIntegrations, setLoading } = useIntegrationStore();
   const { isDarkColorScheme, setColorScheme } = useColorScheme();
   const [loggingOut, setLoggingOut] = useState(false);
+  const scrollRef = useRef<{ scrollTo: (o: { y: number; animated: boolean }) => void }>(null);
+  const dluY = useRef(0);
+  const notif = useNotificationToggle();
+  const integrations = useIntegrationStore((s) => s.integrations);
+  const integrationsLoading = useIntegrationStore((s) => s.loading);
+  const dluConnected = integrations.some((i) => i.connected);
 
   useEffect(() => {
     let mounted = true;
@@ -57,8 +66,9 @@ export default function SettingsScreen() {
 
   async function handleSignOut() {
     setLoggingOut(true);
-    // Drop this device from push while the session cookie is still valid.
-    await dropPushRegistration();
+    // Drop this device from push while the session cookie is still valid;
+    // allowNotifications is kept so the next login prompts again.
+    await usePushStatusStore.getState().unregisterOnLogout();
     try {
       await logoutRequest();
     } catch {
@@ -87,9 +97,21 @@ export default function SettingsScreen() {
         <Text className="text-xl font-bold tracking-tight">Settings</Text>
       </View>
       <ScrollView
+        ref={scrollRef as never}
         className="flex-1 px-5"
         contentContainerStyle={{ paddingBottom: tabBarOverlay + 32 }}
       >
+        {notif.ready && !integrationsLoading && (
+          <FinishSetupCard
+            notificationsActive={notif.active}
+            dluConnected={dluConnected}
+            onPress={(item) => {
+              if (item === "notifications") void notif.setEnabled(true);
+              else scrollRef.current?.scrollTo({ y: dluY.current, animated: true });
+            }}
+          />
+        )}
+
         <SettingsSectionLabel>Profile</SettingsSectionLabel>
         <View className="overflow-hidden rounded-2xl border border-border bg-card">
           {user ? (
@@ -126,7 +148,11 @@ export default function SettingsScreen() {
 
         <PreferencesSection />
 
-        <DluAccountsSection />
+        <TagsRow />
+
+        <View onLayout={(e) => { dluY.current = e.nativeEvent.layout.y; }}>
+          <DluAccountsSection />
+        </View>
 
         <SettingsSectionLabel>Account</SettingsSectionLabel>
         <View className="mb-[18px] overflow-hidden rounded-2xl border border-border bg-card">

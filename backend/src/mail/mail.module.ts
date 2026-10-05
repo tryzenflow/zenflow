@@ -11,7 +11,7 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
     MailerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: async (config: ConfigService) => ({
+      useFactory: (config: ConfigService) => ({
         transport: config.get("MAIL_TRANSPORT"),
         defaults: {
           from: `"Zenflow" <${config.get("MAIL_FROM")}>`,

@@ -1,11 +1,11 @@
+import { registerDevice, unregisterDevice } from "@/api/devices";
+import { debugLog } from "@/lib/debug-log";
+import type { PushPermission } from "@/lib/push-sync";
 import type { DevicePlatform, PushDataPayload } from "@zenflow/shared";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import type { Href } from "expo-router";
 import { Platform } from "react-native";
-import { registerDevice, unregisterDevice } from "@/api/devices";
-import { debugLog } from "@/lib/debug-log";
-import { isPushEnabled } from "@/lib/preferences";
 
 /**
  * Native push plumbing for the direct-FCM/APNs backend (`backend/src/devices/`).
@@ -118,50 +118,6 @@ export async function ensureAndroidChannel(): Promise<void> {
   });
 }
 
-export interface NativePushToken {
-  platform: DevicePlatform;
-  token: string;
-}
-
-/**
- * Ask for permission (if not already decided) and return the raw FCM/APNs
- * token, or `null` when push isn't available or was denied. Safe to call on
- * every launch — the OS prompt only shows the first time.
- */
-export async function getNativePushToken(): Promise<NativePushToken | null> {
-  if (Platform.OS === "web") return null;
-  // The iOS Simulator can't obtain an APNs token; an Android emulator with
-  // Play Services can get an FCM token, so only hard-block the former.
-  if (Platform.OS === "ios" && !Device.isDevice) {
-    debugLog("push", "skipped: iOS simulator has no APNs");
-    return null;
-  }
-
-  const existing = await Notifications.getPermissionsAsync();
-  let status = existing.status;
-  if (status !== "granted") {
-    const requested = await Notifications.requestPermissionsAsync();
-    status = requested.status;
-  }
-  if (status !== "granted") {
-    debugLog("push", `permission not granted (${status})`);
-    return null;
-  }
-
-  await ensureAndroidChannel();
-
-  try {
-    const devicePushToken = await Notifications.getDevicePushTokenAsync();
-    const platform: DevicePlatform =
-      devicePushToken.type === "ios" ? "IOS" : "ANDROID";
-    return { platform, token: String(devicePushToken.data) };
-  } catch (err) {
-    // Missing google-services.json / APNs entitlement, no network, etc.
-    debugLog("push", `getDevicePushTokenAsync failed: ${String(err)}`);
-    return null;
-  }
-}
-
 /**
  * Where a tapped notification should land. The backend's `PushDataPayload.url`
  * is web-shaped (`/calendar?session=…`), so route off `sessionId` instead and
@@ -177,35 +133,77 @@ export function hrefFromPushData(
   return "/notifications" as Href;
 }
 
-/**
- * Get this device's token and register it with the backend. Call after login
- * and whenever the app comes to the foreground — the backend upserts, so
- * repeats are cheap. Returns the token that was registered, or `null`.
- */
-export async function syncPushRegistration(): Promise<string | null> {
-  // Respect the Settings → "Allow notifications" opt-out.
-  if (!(await isPushEnabled())) return null;
-  const t = await getNativePushToken();
-  if (!t) return null;
+/** Current OS permission, normalized. Never prompts. `null` when unavailable. */
+export async function readPermission(): Promise<PushPermission | null> {
+  if (Platform.OS === "web") return null;
   try {
-    await registerDevice(t.platform, t.token);
-    debugLog("push", `registered ${t.platform} token …${t.token.slice(-6)}`);
-    return t.token;
-  } catch (err) {
-    debugLog("push", `register failed: ${String(err)}`);
+    return normalizePermission(await Notifications.getPermissionsAsync());
+  } catch {
+    return null;
+  }
+}
+
+function normalizePermission(p: {
+  granted: boolean;
+  status: string;
+  canAskAgain: boolean;
+}): PushPermission {
+  if (p.granted) return "granted";
+  if (p.status === "undetermined") return "undetermined";
+  return p.canAskAgain ? "denied" : "blocked";
+}
+
+/** Show the system prompt (no-op if the OS won't ask) and return the result. */
+export async function requestPermission(): Promise<PushPermission | null> {
+  if (Platform.OS === "web") return null;
+  try {
+    return normalizePermission(await Notifications.requestPermissionsAsync());
+  } catch {
     return null;
   }
 }
 
 /**
- * Unregister this device (call on logout, before the session cookie is
- * cleared). Best-effort — a failure here must never block sign-out.
+ * Register (upsert) this device. Requires permission to already be granted —
+ * never prompts. Returns true on success. `isCurrent` is re-checked after the
+ * (slow) token fetch, right before `POST /devices`, so a registration that was
+ * invalidated meanwhile (toggle off / logout) never re-adds the token.
+ */
+export async function registerThisDevice(
+  isCurrent: () => boolean = () => true,
+): Promise<boolean> {
+  if (Platform.OS === "web") return false;
+  if (Platform.OS === "ios" && !Device.isDevice) {
+    debugLog("push", "skipped: iOS simulator has no APNs");
+    return false;
+  }
+  try {
+    await ensureAndroidChannel();
+    const t = await Notifications.getDevicePushTokenAsync();
+    const platform: DevicePlatform = t.type === "ios" ? "IOS" : "ANDROID";
+    const token = String(t.data);
+    if (!isCurrent()) {
+      debugLog("push", "register cancelled (superseded)");
+      return false;
+    }
+    await registerDevice(platform, token);
+    debugLog("push", `registered ${platform} token …${token.slice(-6)}`);
+    return true;
+  } catch (err) {
+    debugLog("push", `register failed: ${String(err)}`);
+    return false;
+  }
+}
+
+/**
+ * Unregister this device (toggle off, or logout before the session cookie is
+ * cleared). Best-effort — never blocks sign-out.
  */
 export async function dropPushRegistration(): Promise<void> {
   if (Platform.OS === "web") return;
   try {
-    const devicePushToken = await Notifications.getDevicePushTokenAsync();
-    await unregisterDevice(String(devicePushToken.data));
+    const t = await Notifications.getDevicePushTokenAsync();
+    await unregisterDevice(String(t.data));
     debugLog("push", "unregistered this device");
   } catch (err) {
     debugLog("push", `unregister skipped: ${String(err)}`);

@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { AppState } from "react-native";
 import { getSessionDetails } from "@/api/tasks";
 import { useToast } from "@/components/ui/toast";
+import { usePushStatusStore } from "@/hooks/use-push-status-store";
 import { useUserStore } from "@/hooks/use-user-store";
 import {
   claimNotification,
@@ -12,7 +13,6 @@ import {
   isLocalNotification,
   notificationIdOf,
   pushOwner,
-  syncPushRegistration,
 } from "@/lib/push";
 import type { Href } from "expo-router";
 
@@ -30,20 +30,22 @@ export function usePushRegistration(): void {
   const router = useRouter();
   const { toast } = useToast();
   const userId = useUserStore((s) => s.user?.id ?? null);
+  const onboarded = useUserStore((s) => s.user?.onboardedAt != null);
   const lastHandledResponseId = useRef<string | null>(null);
 
-  // Register on login, and re-sync each time the app returns to the foreground
-  // (a token can rotate, or permission can be granted from Settings.app).
+  // Apply the push rule (`decidePushAction`) on login / onboarding completion
+  // (`onboarded`) and each time the app returns to the foreground (a token can
+  // rotate, or permission can change in system settings).
   useEffect(() => {
     if (!userId) return;
 
-    void syncPushRegistration();
+    void usePushStatusStore.getState().sync();
 
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") void syncPushRegistration();
+      if (state === "active") void usePushStatusStore.getState().sync();
     });
     return () => sub.remove();
-  }, [userId]);
+  }, [userId, onboarded]);
 
   // Deep-link on tap — both the cold-start case (app launched by the tap) and
   // the warm case (already running). De-duped by notification id so the

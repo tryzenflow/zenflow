@@ -86,3 +86,31 @@ describe("UsersService.update", () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 });
+
+describe("UsersService.update onboarding", () => {
+  it("stamps onboardedAt only when still null, and never writes the flag as a column", async () => {
+    const update = jest.fn((args: UpdateArgs) => ({
+      id: user.id,
+      ...args.data,
+    }));
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const module = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        { provide: PrismaService, useValue: { user: { update, updateMany } } },
+      ],
+    }).compile();
+    const service = module.get(UsersService);
+
+    await service.update(user.id, { onboarded: true });
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: user.id, onboardedAt: null },
+      data: { onboardedAt: expect.any(Date) as Date },
+    });
+    expect(update).toHaveBeenCalledWith({
+      where: { id: user.id },
+      data: {},
+    });
+  });
+});

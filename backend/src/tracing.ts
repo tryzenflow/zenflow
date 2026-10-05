@@ -34,7 +34,8 @@ function startTelemetry(): void {
 
   const pkgVersion = (() => {
     try {
-      return require("../package.json").version as string;
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- sync read of package.json at startup; a static import would pull it outside tsconfig rootDir
+      return (require("../package.json") as { version: string }).version;
     } catch {
       return process.env.SERVICE_VERSION ?? "0.0.0";
     }

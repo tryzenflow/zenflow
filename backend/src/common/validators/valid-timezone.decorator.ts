@@ -12,7 +12,7 @@ export function IsValidTimezone(validationOptions?: ValidationOptions) {
       propertyName: propertyName,
       options: validationOptions,
       validator: {
-        validate(value: any, args: ValidationArguments) {
+        validate(value: any) {
           if (typeof value !== "string") {
             return false; // Not a string, so not a valid IANA name
           }
