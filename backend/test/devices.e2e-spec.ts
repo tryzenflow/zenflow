@@ -50,14 +50,6 @@ const prismaStub = {
       store.push(row);
       return Promise.resolve({ id: row.id });
     },
-    count: (args: { where: { pushToken: string; userId: string } }) =>
-      Promise.resolve(
-        store.filter(
-          (r) =>
-            r.pushToken === args.where.pushToken &&
-            r.userId === args.where.userId,
-        ).length,
-      ),
     deleteMany: (args: { where: { pushToken: string; userId: string } }) => {
       const before = store.length;
       for (let i = store.length - 1; i >= 0; i--) {
@@ -227,59 +219,6 @@ describe("Devices (e2e)", () => {
 
       expect(res.status).toBe(200); // idempotent, not a 404
       expect(store).toHaveLength(1);
-    });
-  });
-
-  describe("POST /devices/status", () => {
-    it("reports registered for the caller's token, false after unregister", async () => {
-      const server = app.getHttpServer();
-      await request(server)
-        .post("/devices")
-        .send({ platform: "ANDROID", pushToken: "tok-a" });
-
-      const yes = await request(server)
-        .post("/devices/status")
-        .send({ pushToken: "tok-a" });
-      expect(yes.status).toBe(200);
-      expect(yes.body).toMatchObject({ success: true });
-      expect(body<{ registered: boolean }>(yes).data).toEqual({
-        registered: true,
-      });
-
-      await request(server).delete("/devices").send({ pushToken: "tok-a" });
-      const no = await request(server)
-        .post("/devices/status")
-        .send({ pushToken: "tok-a" });
-      expect(body<{ registered: boolean }>(no).data.registered).toBe(false);
-    });
-
-    it("treats another user's token as not registered", async () => {
-      const server = app.getHttpServer();
-      await request(server)
-        .post("/devices")
-        .set("x-test-user", "owner")
-        .send({ platform: "IOS", pushToken: "tok-x" });
-
-      const res = await request(server)
-        .post("/devices/status")
-        .set("x-test-user", "intruder")
-        .send({ pushToken: "tok-x" });
-      expect(res.status).toBe(200);
-      expect(body<{ registered: boolean }>(res).data.registered).toBe(false);
-    });
-
-    it("rejects a missing token and unknown fields", async () => {
-      const server = app.getHttpServer();
-      expect(
-        (await request(server).post("/devices/status").send({})).status,
-      ).toBe(400);
-      expect(
-        (
-          await request(server)
-            .post("/devices/status")
-            .send({ pushToken: "t", extra: 1 })
-        ).status,
-      ).toBe(400);
     });
   });
 });

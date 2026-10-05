@@ -1,8 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type {
-  DeviceStatusResponse,
-  RegisterDeviceInput,
-} from "@zenflow/shared";
+import type { RegisterDeviceInput } from "@zenflow/shared";
 import { type User } from "../../generated/prisma";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -54,19 +51,5 @@ export class DevicesService {
       where: { pushToken, userId: user.id },
     });
     return { pushToken };
-  }
-
-  /**
-   * `POST /devices/status` — is this token registered to the caller? A token
-   * owned by a different user counts as not registered (and leaks nothing).
-   */
-  async deviceStatus(
-    user: User,
-    pushToken: string,
-  ): Promise<DeviceStatusResponse> {
-    const count = await this.prisma.userDevice.count({
-      where: { pushToken, userId: user.id },
-    });
-    return { registered: count > 0 };
   }
 }

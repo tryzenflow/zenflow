@@ -10,7 +10,6 @@ import { CookieAuthGuard } from "../auth/guards";
 import { CurrentUser } from "../users/decorators/current-user.decorator";
 import { type User } from "../../generated/prisma";
 import { DevicesService } from "./devices.service";
-import { DeviceStatusDto } from "./dto/device-status.dto";
 import { RegisterDeviceDto } from "./dto/register-device.dto";
 import { UnregisterDeviceDto } from "./dto/unregister-device.dto";
 
@@ -19,9 +18,7 @@ import { UnregisterDeviceDto } from "./dto/unregister-device.dto";
  *
  * Register on login and on every token refresh; unregister on logout. There is
  * deliberately no list route — a user's device tokens are not something the
- * client reads back; the client may only ask whether its own token is
- * registered (`POST /devices/status`, body-based so the token stays out of
- * URLs and access logs).
+ * client reads back.
  */
 @Controller("devices")
 @UseGuards(CookieAuthGuard)
@@ -34,14 +31,6 @@ export class DevicesController {
   async register(@CurrentUser() user: User, @Body() dto: RegisterDeviceDto) {
     const data = await this.devices.registerDevice(user, dto);
     return { success: true, message: "Device registered", data };
-  }
-
-  /** Is this token registered to the caller? Another user's token reads as false. */
-  @Post("status")
-  @HttpCode(200)
-  async status(@CurrentUser() user: User, @Body() dto: DeviceStatusDto) {
-    const data = await this.devices.deviceStatus(user, dto.pushToken);
-    return { success: true, message: "Device status", data };
   }
 
   /** Unregister this device by its token. Idempotent; scoped to the caller. */

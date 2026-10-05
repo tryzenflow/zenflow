@@ -1,3 +1,4 @@
+import { ConfigModule } from "@nestjs/config";
 import {
   INestApplication,
   ValidationPipe,
@@ -14,7 +15,12 @@ import { UsersModule } from "../src/users/users.module";
 /** POST /tags/bulk and PATCH /users/update/basic-info { onboarded } over a stubbed Prisma. */
 
 const tags: { id: string; userId: string; name: string }[] = [];
-const user = { id: "u1", onboardedAt: null as Date | null, lang: "VI_VN" };
+const user = {
+  id: "u1",
+  onboardedAt: null as Date | null,
+  lang: "VI_VN",
+  allowNotifications: true,
+};
 
 const prismaStub = {
   tag: {
@@ -41,12 +47,20 @@ const prismaStub = {
       if (user.onboardedAt === null) user.onboardedAt = data.onboardedAt;
       return { count: 1 };
     },
-    update: () => ({ ...user }),
+    update: ({ data }: { data: { allowNotifications?: boolean } }) => {
+      if (data.allowNotifications !== undefined)
+        user.allowNotifications = data.allowNotifications;
+      return { ...user };
+    },
   },
 };
 
 interface Body {
-  data: { tags: { name: string }[]; onboardedAt: string | null };
+  data: {
+    tags: { name: string }[];
+    onboardedAt: string | null;
+    allowNotifications: boolean;
+  };
 }
 const parse = (r: { body: unknown }) => r.body as Body;
 
@@ -55,7 +69,11 @@ describe("onboarding API (e2e)", () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [TagsModule, UsersModule],
+      imports: [
+        ConfigModule.forRoot({ isGlobal: true }),
+        TagsModule,
+        UsersModule,
+      ],
     })
       .overrideProvider(PrismaService)
       .useValue(prismaStub)
@@ -124,6 +142,24 @@ describe("onboarding API (e2e)", () => {
     await http
       .patch("/users/update/basic-info")
       .send({ onboarded: false })
+      .expect(400);
+  });
+
+  it("defaults allowNotifications to true and lets the user toggle it", async () => {
+    const http = request(app.getHttpServer());
+    const off = await http
+      .patch("/users/update/basic-info")
+      .send({ allowNotifications: false })
+      .expect(200);
+    expect(parse(off).data.allowNotifications).toBe(false);
+    const on = await http
+      .patch("/users/update/basic-info")
+      .send({ allowNotifications: true })
+      .expect(200);
+    expect(parse(on).data.allowNotifications).toBe(true);
+    await http
+      .patch("/users/update/basic-info")
+      .send({ allowNotifications: "no" })
       .expect(400);
   });
 });

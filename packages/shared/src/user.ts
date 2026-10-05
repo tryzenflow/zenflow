@@ -34,6 +34,8 @@ export interface User extends UserPreferences {
   updatedAt: string;
   /** ISO time first-run onboarding was completed; null = show onboarding. */
   onboardedAt: string | null;
+  /** User intent for native push notifications; in-app notifications are unaffected. */
+  allowNotifications: boolean;
 }
 
 /** Partial update to a user's name and preferences. */
@@ -48,4 +50,6 @@ export interface UpdateUserInput {
    * null; idempotent — never moves an existing timestamp). Can't be unset.
    */
   onboarded?: true;
+  /** Native push preference: false when the user turns it off or denies the OS prompt. */
+  allowNotifications?: boolean;
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "User" ADD COLUMN "allowNotifications" BOOLEAN NOT NULL DEFAULT true;

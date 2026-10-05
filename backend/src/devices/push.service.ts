@@ -63,6 +63,12 @@ export class PushService implements OnModuleInit {
       return;
     }
 
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { allowNotifications: true },
+    });
+    if (user && !user.allowNotifications) return;
+
     const devices = await this.prisma.userDevice.findMany({
       where: { userId },
       select: { platform: true, pushToken: true },

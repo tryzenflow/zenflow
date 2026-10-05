@@ -1,4 +1,12 @@
-import { Equals, IsIn, IsOptional, IsString, Length } from "class-validator";
+import { Transform } from "class-transformer";
+import {
+  Equals,
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  IsString,
+  Length,
+} from "class-validator";
 import {
   DEFAULT_REMINDER_CHOICES,
   LANGS,
@@ -33,4 +41,12 @@ export class UpdateUserDto implements UpdateUserInput {
   @Equals(true)
   @IsOptional()
   onboarded?: true;
+
+  // Keep the raw value: implicit conversion would turn any non-empty string into `true`.
+  @Transform(
+    ({ obj, key }: { obj: Record<string, unknown>; key: string }) => obj[key],
+  )
+  @IsBoolean()
+  @IsOptional()
+  allowNotifications?: boolean;
 }

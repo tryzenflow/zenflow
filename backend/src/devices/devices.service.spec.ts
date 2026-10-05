@@ -29,14 +29,6 @@ function makePrismaDouble(rows: Row[]) {
         rows.push(created);
         return Promise.resolve({ id: created.id });
       },
-      count: (args: { where: { pushToken: string; userId: string } }) =>
-        Promise.resolve(
-          rows.filter(
-            (r) =>
-              r.pushToken === args.where.pushToken &&
-              r.userId === args.where.userId,
-          ).length,
-        ),
       deleteMany: (args: { where: { pushToken: string; userId: string } }) => {
         const before = rows.length;
         for (let i = rows.length - 1; i >= 0; i--) {
@@ -150,37 +142,6 @@ describe("DevicesService", () => {
 
       await expect(service.unregisterDevice(USER, "nope")).resolves.toEqual({
         pushToken: "nope",
-      });
-    });
-  });
-
-  describe("deviceStatus", () => {
-    const row = (userId: string): Row => ({
-      id: "d1",
-      platform: "ANDROID",
-      pushToken: "tok-a",
-      userId,
-      lastSeenAt: null,
-    });
-
-    it("is registered when the caller owns the token", async () => {
-      const { service } = makeService([row("u1")]);
-      await expect(service.deviceStatus(USER, "tok-a")).resolves.toEqual({
-        registered: true,
-      });
-    });
-
-    it("is not registered when another user owns the token", async () => {
-      const { service } = makeService([row("someone-else")]);
-      await expect(service.deviceStatus(USER, "tok-a")).resolves.toEqual({
-        registered: false,
-      });
-    });
-
-    it("is not registered for an unknown token", async () => {
-      const { service } = makeService([]);
-      await expect(service.deviceStatus(USER, "nope")).resolves.toEqual({
-        registered: false,
       });
     });
   });
