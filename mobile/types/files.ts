@@ -6,4 +6,6 @@ export interface FileMetadata {
   originalName: string;
   mimetype: string;
   size: number;
+  /** Signed session-less URL, relative to the API origin (`/api/v1/files/:id?sig=…`). */
+  url: string;
 }
