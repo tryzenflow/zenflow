@@ -346,6 +346,19 @@ jobs:
           docker rm -f vault-smoke || true
           sudo rm -rf vault-creds .secrets-rendered || true
 
+  agents:
+    name: Agent config in sync (.agents -> .claude, .codex)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node --test .agents/hooks/hooks.test.mjs
+      - run: node .agents/scripts/owner.mjs --check
+      - run: node scripts/sync-agents.mjs --check
+
   # Single status for branch protection: require only this check ("CI ok").
   ci-ok:
     name: CI ok
@@ -361,6 +374,7 @@ jobs:
       - docker-build
       - gitleaks
       - vault
+      - agents
     runs-on: ubuntu-latest
     steps:
       - name: Fail if any required job failed or was cancelled

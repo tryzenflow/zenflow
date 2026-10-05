@@ -1,0 +1,29 @@
+name: Feature
+description: Propose a new capability
+labels: [feature]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [frontend, backend, mobile, ml, infra, security, other]
+    validations: { required: true }
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What to build and what is out of scope.
+    validations: { required: true }
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      value: "- [ ] "
+    validations: { required: true }
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options: [P0-blocker, P1-high, P2-medium, P3-low]
+      default: 2
+    validations: { required: true }

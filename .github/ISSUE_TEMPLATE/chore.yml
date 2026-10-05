@@ -1,0 +1,22 @@
+name: Chore
+description: Tooling, docs, CI, refactor or other upkeep
+labels: [dx]
+body:
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+    validations: { required: true }
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      value: "- [ ] "
+    validations: { required: true }
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options: [P0-blocker, P1-high, P2-medium, P3-low]
+      default: 3
+    validations: { required: true }

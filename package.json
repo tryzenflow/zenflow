@@ -9,6 +9,9 @@
     "test": "pnpm -r test",
     "shared:build": "pnpm --filter @zenflow/shared build",
     "core:build": "pnpm --filter @zenflow/core build",
+    "check": "pnpm shared:build && pnpm -r typecheck",
+    "sync:agents": "node scripts/sync-agents.mjs",
+    "test:agents": "node --test .agents/hooks/hooks.test.mjs && node .agents/scripts/owner.mjs --check && node scripts/sync-agents.mjs --check",
     "android": "expo run:android",
     "ios": "expo run:ios"
   },

@@ -1,6 +1,7 @@
-# 0004 — S3-compatible file storage
+# ADR-0004: S3-compatible file storage
 
-Status: accepted
+**Status:** Accepted
+**Date:** 2026-10-04
 
 ## Context
 Uploads were written to the API host's disk (`uploads/` volume) and streamed back
@@ -19,6 +20,7 @@ from it, tying the API to a single host's volume.
   not create or check it, so there is no startup race to handle in code.
 - `remove` now scopes the DB delete by `userId` (it previously did not).
 
-## Migration
+## Consequences
 `src/files/migrate-to-s3.cli.ts` (compiled into the image) uploads legacy disk files and rewrites `path`
 (idempotent). Run it before dropping the `uploads` volume.
+- Signed file URLs for embeds (#89): `FILE_URL_SECRET` HMAC, see `backend/src/files/file-url-signer.service.ts`.
