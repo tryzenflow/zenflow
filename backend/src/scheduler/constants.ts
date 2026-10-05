@@ -102,8 +102,14 @@ export const BANDIT_EXPERIMENT_ID = "linucb-heuristic-v1";
  * §3). Every other event runs exactly one algorithm — the existing 50/50
  * `primaryPolicy` pick — same as before this existed. Independent draw from
  * `primaryPolicy`'s own 50/50 roll.
+ *
+ * Defaults to 1 (every event). `PAIRWISE_SAMPLE_RATE` in the environment overrides it (clamped to
+ * 0..1) so the load test can measure each policy's stand-alone latency at 0; leave it unset in prod.
  */
-export const PAIRWISE_SAMPLE_RATE = 1;
+const pairwiseFromEnv = Number(process.env.PAIRWISE_SAMPLE_RATE ?? "1");
+export const PAIRWISE_SAMPLE_RATE = Number.isFinite(pairwiseFromEnv)
+  ? Math.min(1, Math.max(0, pairwiseFromEnv))
+  : 1;
 
 /**
  * Most sittings of one pairwise-sampled `TASK` series that surface an

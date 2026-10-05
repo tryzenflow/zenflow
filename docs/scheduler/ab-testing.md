@@ -34,6 +34,13 @@ presentation position randomized 50/50. Recorded (`SlotProposal.pairwiseShown`,
 `pairwisePositions`, `chosenByUser`) for the win-rate metric only — **not** a LinUCB weight
 update (§4).
 
+The sampled fraction is `PAIRWISE_SAMPLE_RATE` (`backend/src/scheduler/constants.ts`), currently `1`:
+every placement computes both policies and the roll only picks which result is applied, so
+latency does not differ by assigned policy. The environment variable of the same name overrides it
+(clamped to 0..1, unset in production); `0` makes each placement run exactly one algorithm, which
+is how a policy's stand-alone latency is measured. Latency by assigned policy is exported as
+`scheduler.placement.duration` and `scheduler.placement.python.duration`.
+
 ## 4. Like/dislike feedback
 
 An optional 👍/👎 after a generated schedule is an **evaluation signal only** — a

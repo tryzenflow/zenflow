@@ -16,23 +16,20 @@ folder is everything that receives, stores and visualises what they emit.
 
 ## Run it
 
-### Standalone (local) — `compose.observability.yml`
+### Staging / local — `compose.staging.yml`
 
-```powershell
-docker compose -f ../compose.observability.yml up -d
-
-# API with the SDK on, pointed at the collector on the host:
-$env:OTEL_SDK_DISABLED = "false"
-$env:OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4318"
-pnpm --filter backend build
-node --require ./backend/dist/tracing.js backend/dist/main
+```bash
+docker compose --env-file .env.staging -f compose.staging.yml up -d --build
 ```
 
-Grafana → <http://localhost:3000> (anonymous Admin, no login). Dashboards are under
-the **Zenflow** folder; **Explore** has Tempo / Loki / Prometheus pre-wired.
+Same images and configs as production, plus `postgres-exporter` (Postgres connections, locks,
+`pg_stat_*`; its scrape job is the staging-only `prometheus/scrape.d/postgres-exporter.yml`) and the
+fake DLU upstream the load test drives (`loadtest/staging/README.md`). `.env.staging` must set
+`GRAFANA_ADMIN_PASSWORD`. Grafana (<http://localhost:3000>) and the Mailpit UI bind to `127.0.0.1`
+only. Dashboards are under the **Zenflow** folder; **Explore** has Tempo / Loki / Prometheus pre-wired.
 
-Podman / rootless: point Alloy at the real socket —
-`$env:OBS_RUNTIME_SOCK = "/run/user/1000/podman/podman.sock"` before `up`.
+cAdvisor only reports the aggregate `/docker` cgroup on a Docker whose image store is containerd's
+(Colima, recent Docker Engine defaults): see the comment on the `cadvisor` service for the fix.
 
 ### Production — `compose.prod.yml`
 
