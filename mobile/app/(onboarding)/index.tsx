@@ -29,6 +29,7 @@ import {
   type OnboardingStep,
   canGoBack,
   filterTimezones,
+  gmtOffset,
   initialTagSelection,
   nextStep,
   prevStep,
@@ -102,6 +103,7 @@ const COPY = {
     body: "Used to place sessions and reminders at the right local time.",
     detected: "Detected from device",
     search: "Search all timezones",
+    refine: "Showing the closest matches — refine your search to see more",
   },
   reminder: {
     title: "Default reminder",
@@ -122,6 +124,9 @@ const COPY = {
   saveFailed: "Couldn't save. Try again.",
 } as const;
 
+/** Max timezones listed at once; more matches prompt a "refine" hint. */
+const TZ_LIMIT = 50;
+
 const LANGUAGE_SUB: Record<string, string> = {
   vi: "Vietnamese · default",
   en: "English",
@@ -136,17 +141,6 @@ const STEP_ICON: Partial<Record<OnboardingStep, typeof Globe>> = {
   reminder: Clock,
   tags: Tag,
 };
-
-/** "GMT+7", "GMT+5:30", "GMT" — derived from the offset, not Intl's shortOffset. */
-function gmtOffset(tz: string): string {
-  const min = utcOffsetMinutes(tz);
-  if (min === 0) return "GMT";
-  const abs = Math.abs(min);
-  const mm = abs % 60;
-  return `GMT${min < 0 ? "-" : "+"}${Math.floor(abs / 60)}${
-    mm ? `:${String(mm).padStart(2, "0")}` : ""
-  }`;
-}
 
 function RadioDot({ selected }: { selected: boolean }) {
   return (
@@ -272,7 +266,7 @@ export default function OnboardingScreen() {
   const dluConnected = integrations.some((i) => i.connected);
   const device = deviceTimezone();
   const zones = useMemo(
-    () => filterTimezones(allTimezones(), tzQuery, 50, device),
+    () => filterTimezones(allTimezones(), tzQuery, TZ_LIMIT, device),
     [tzQuery, device],
   );
 
@@ -611,7 +605,7 @@ export default function OnboardingScreen() {
           </View>
           <View className="mt-3">
             <Group>
-              {zones.slice(0, 30).map((z) => {
+              {zones.map((z) => {
                 const on =
                   prefs.timezoneMode === "explicit" && prefs.timezone === z;
                 return (
@@ -637,6 +631,11 @@ export default function OnboardingScreen() {
                 );
               })}
             </Group>
+            {zones.length >= TZ_LIMIT && (
+              <Text className="mt-3 px-1 text-center text-[12.5px] text-muted-foreground">
+                {COPY.timezone.refine}
+              </Text>
+            )}
           </View>
         </View>
       );

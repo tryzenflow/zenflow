@@ -1,4 +1,4 @@
-import type { FileMetadata } from "@/types/files";
+import type { FileMetadata } from "@zenflow/shared";
 import { safeFileName } from "@/lib/file-link";
 import { Directory, File as ExpoFile, Paths } from "expo-file-system";
 import { api } from "./base";
@@ -35,35 +35,6 @@ export async function uploadFiles(
 export async function getFileMetadata(id: string): Promise<FileMetadata> {
   const { data } = await api.get(`/files/metadata/${id}`);
   return data.data;
-}
-
-/**
- * Fetch a file's bytes through the authenticated `api` client and return a
- * `data:` URI. `@10play/tentap-editor`'s `RichText` (see
- * `components/tasks/form/description-field.tsx`) renders into a real,
- * separate WebView document with its own cookie jar, entirely disconnected
- * from `lib/api-client.ts`'s manually-replayed session `Cookie` header (see
- * that file's Auth doc comment) — so a bare `<img src>`/`<video src>`/
- * `<audio src>` pointed straight at a `CookieAuthGuard`-protected
- * `/files/:id` URL 401s silently inside the WebView, with no error surfaced
- * to RN. Fetching the bytes through the already-authenticated `api` client
- * and inlining them as a `data:` URI sidesteps the WebView ever needing to
- * authenticate itself — same fix shape as `lib/geist-webview-font.ts`'s
- * embedded font.
- */
-export async function fetchFileDataUri(
-  id: string,
-  mimetype: string,
-): Promise<string> {
-  const response = await api.get(`/files/${id}`, { responseType: "blob" });
-  const blob = response.data as Blob;
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () =>
-      reject(reader.error ?? new Error("Failed to read downloaded file"));
-    reader.onload = () => resolve(reader.result as string);
-    reader.readAsDataURL(blob);
-  });
 }
 
 /**

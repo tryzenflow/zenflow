@@ -1,9 +1,4 @@
-import {
-  downloadFileToCache,
-  fetchFileDataUri,
-  getFileMetadata,
-  uploadFiles,
-} from "@/api/files";
+import { downloadFileToCache, getFileMetadata, uploadFiles } from "@/api/files";
 import {
   Bold,
   Check,
@@ -25,12 +20,12 @@ import { Text } from "@/components/ui/text";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/toast";
 import { getBaseURL } from "@/lib/api-client";
-import { buildFileUrl, escapeHtml, parseFileIdFromHref } from "@/lib/file-link";
+import { escapeHtml, parseFileIdFromHref } from "@/lib/file-link";
 import { loadGeistWebviewFontDataUri } from "@/lib/geist-webview-font";
 import { toImageUploadPart } from "@/lib/picked-file";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
-import type { FileMetadata } from "@/types/files";
+import type { FileMetadata } from "@zenflow/shared";
 import {
   BlockquoteBridge,
   BoldBridge,
@@ -64,8 +59,8 @@ import { AudioBridge, VideoBridge } from "./media-bridges";
 const HIGHLIGHT_COLOR = "#fde68a";
 
 // `ImageBridge` is the library's own (wraps `@tiptap/extension-image`,
-// pre-configured `allowBase64: true` — needed since uploaded files are
-// embedded as `data:` URIs, see `fileEmbedMarkup` below). `VideoBridge`/
+// pre-configured `allowBase64: true`, which also keeps notes written
+// before signed URLs — with `data:` images — rendering). `VideoBridge`/
 // `AudioBridge` are this app's own (see `./media-bridges`'s doc comment) —
 // the library ships no equivalent for those tags. Without all three, the
 // WebView's ProseMirror schema has no node type for `<img>`/`<video>`/
@@ -342,38 +337,28 @@ function DescriptionFieldEditor({
     setLinkOpen(false);
   }
 
-  // Files are embedded as `data:` URIs (fetched via the authenticated `api`
-  // client, see `api/files.ts`'s `fetchFileDataUri`) rather than a bare
-  // backend URL — the WebView rendering this editor has its own cookie jar,
-  // disconnected from `lib/api-client.ts`'s replayed session `Cookie`
-  // header, so a plain `<img src>` pointed at the `CookieAuthGuard`-protected
-  // `/files/:id` endpoint 401s silently with nothing rendered.
-  async function fileEmbedMarkup(fileMetadata: FileMetadata): Promise<string> {
-    const isMedia = /^(image|audio|video)\//.test(fileMetadata.mimetype);
-    if (!isMedia) {
-      const baseURL = getBaseURL();
-      if (!baseURL) throw new Error("API base URL is not configured");
-      const name = escapeHtml(fileMetadata.originalName);
-      // Not a `data:` URI: Tiptap's Link only allows http(s)/mailto/tel/…, so
-      // a `data:` href is stripped to plain text by `setContent`, and would
-      // bloat the saved note. Link to the (authenticated) backend URL
-      // instead; taps are handled in `handleWebviewMessage`.
-      return `<p><a href="${buildFileUrl(
-        baseURL,
-        fileMetadata.id,
-      )}">${name}</a></p>`;
-    }
-    const dataUri = await fetchFileDataUri(
-      fileMetadata.id,
-      fileMetadata.mimetype,
-    );
+  // Files are embedded by URL: the backend returns a signed, session-less
+  // `url` (`/api/v1/files/:id?sig=…`, relative to the API origin) that the
+  // editor WebView — which has no session cookie — can load directly. This
+  // keeps the saved note tiny instead of inlining the bytes as `data:` URIs.
+  function fileEmbedMarkup(fileMetadata: FileMetadata): string {
+    const baseURL = getBaseURL();
+    if (!baseURL) throw new Error("API base URL is not configured");
+    // Backends without signed-URL support omit `url`; fail the upload loudly
+    // rather than saving a broken `…/undefined` embed into the note.
+    if (!fileMetadata.url) throw new Error("File response has no url");
+    const src = escapeHtml(new URL(fileMetadata.url, baseURL).toString());
+    const name = escapeHtml(fileMetadata.originalName);
     if (fileMetadata.mimetype.startsWith("image/")) {
-      return `<img src="${dataUri}" alt="${fileMetadata.originalName}" style="max-width: 100%;"/>`;
+      return `<img src="${src}" alt="${name}" style="max-width: 100%;"/>`;
     }
     if (fileMetadata.mimetype.startsWith("audio/")) {
-      return `<audio controls src="${dataUri}" style="max-width: 100%;"></audio>`;
+      return `<audio controls src="${src}" style="max-width: 100%;"></audio>`;
     }
-    return `<video controls src="${dataUri}" style="max-width: 100%;"></video>`;
+    if (fileMetadata.mimetype.startsWith("video/")) {
+      return `<video controls src="${src}" style="max-width: 100%;"></video>`;
+    }
+    return `<p><a href="${src}">${name}</a></p>`;
   }
 
   async function embedUploaded(
@@ -386,7 +371,7 @@ function DescriptionFieldEditor({
       let html = await editor.getHTML();
       for (const file of uploaded) {
         const fileMetadata = await getFileMetadata(file.id);
-        html += await fileEmbedMarkup(fileMetadata);
+        html += fileEmbedMarkup(fileMetadata);
       }
       valueRef.current = html;
       editor.setContent(html);
