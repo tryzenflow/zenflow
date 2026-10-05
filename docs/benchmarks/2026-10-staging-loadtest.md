@@ -7,7 +7,7 @@
 
 - **Calendar read scans the whole `Session` table.** `WHERE "seriesId" IN (...) ORDER BY "createdAt"` is ~75% of DB time. The only `seriesId` index also starts with `userId`, which the query lacks. Fix first.
 - **One Node event loop is the limit.** ELU peaked at 0.75 at 3x using ~1.5 of 4 cores. Capacity above ~3-4x needs more API processes.
-- **Heuristic and LinUCB cost the same** because `PAIRWISE_SAMPLE_RATE=1` computes both on every placement.
+- **Heuristic and LinUCB cost the same** because `PAIRWISE_SAMPLE_RATE` is 1 (the default; the A/B pairwise surface needs it), so both run on every placement.
 - **DLU sync did not disturb user traffic** at the sparse rate used.
 
 ## Environment
@@ -128,7 +128,7 @@ End-to-end single-task placement, p50 / p95 (ms):
 
 Python `/v1/place` p95: 6.6 / 5.5 ms (1x), 9.1 / 9.0 (2x), 13.7 / 13.1 (3x), heuristic / LinUCB. The slot scan dominates; `predict` is below the 1 ms bucket. Python is ~5-14 ms of the 47-90 ms end-to-end; the rest is day-load gathering and Postgres. Every placement was served by Python (no fallback events).
 
-Not measured: heuristic-only vs LinUCB-only cost (needs `PAIRWISE_SAMPLE_RATE=0`).
+Not measured: heuristic-only vs LinUCB-only cost. A load-test-only rate below 1 reduces pairwise comparisons; production keeps the default of 1.
 
 ### DLU sync
 204 syncs, 0 failures. LMS p50 0.81 s / p95 0.89 s; portal p50 8.77 s / p95 9.44 s (sequential upstream calls with a 750 ms pause). Excluded from aggregate latency and shown on its own. Last successful sync was 40-50 s old at each step end; no change at 3x.
@@ -152,9 +152,8 @@ Not measured: heuristic-only vs LinUCB-only cost (needs `PAIRWISE_SAMPLE_RATE=0`
 2. Multiple API processes; measure ELU per instance.
 3. Prisma pool metrics; `pg_stat_statements` in the staging runbook.
 4. Re-run on a prod-sized host with real network and 5k users; revise SLOs.
-5. `PAIRWISE_SAMPLE_RATE=0 node loadtest/staging/orchestrate.js run full`.
+5. Stand-alone policy cost: load-test only, never a production setting.
 6. Breaking point and soak: `MAX_MULT=8 ... run full` (~40 min), `run soak` (15 min at 1x).
-7. Decide whether `PAIRWISE_SAMPLE_RATE=1` stays in production.
 
 ## Reproduce
 ```bash

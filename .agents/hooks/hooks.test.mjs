@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -61,4 +62,14 @@ test("git guard blocks blanket staging and allows explicit paths", () => {
   assert.equal(bash("git add -A").status, 2);
   assert.equal(bash("git commit -am x").status, 2);
   assert.equal(bash("git add backend/src/a.ts").status, 0);
+});
+
+test("format hook never runs edited filenames through a shell", () => {
+  const marker = path.join(dir, "pwned");
+  const r = run("format-on-edit.mjs", {
+    tool_name: "Edit",
+    tool_input: { file_path: `backend/src/$(touch ${marker}).ts` },
+  });
+  assert.equal(r.status, 0);
+  assert.equal(existsSync(marker), false);
 });
