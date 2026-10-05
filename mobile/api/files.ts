@@ -1,4 +1,4 @@
-import type { FileMetadata } from "@/types/files";
+import type { FileMetadata } from "@zenflow/shared";
 import { safeFileName } from "@/lib/file-link";
 import { Directory, File as ExpoFile, Paths } from "expo-file-system";
 import { api } from "./base";

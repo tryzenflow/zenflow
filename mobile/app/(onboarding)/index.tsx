@@ -102,6 +102,7 @@ const COPY = {
     body: "Used to place sessions and reminders at the right local time.",
     detected: "Detected from device",
     search: "Search all timezones",
+    refine: "Showing the closest matches — refine your search to see more",
   },
   reminder: {
     title: "Default reminder",
@@ -121,6 +122,9 @@ const COPY = {
   },
   saveFailed: "Couldn't save. Try again.",
 } as const;
+
+/** Max timezones listed at once; more matches prompt a "refine" hint. */
+const TZ_LIMIT = 50;
 
 const LANGUAGE_SUB: Record<string, string> = {
   vi: "Vietnamese · default",
@@ -272,7 +276,7 @@ export default function OnboardingScreen() {
   const dluConnected = integrations.some((i) => i.connected);
   const device = deviceTimezone();
   const zones = useMemo(
-    () => filterTimezones(allTimezones(), tzQuery, 50, device),
+    () => filterTimezones(allTimezones(), tzQuery, TZ_LIMIT, device),
     [tzQuery, device],
   );
 
@@ -611,7 +615,7 @@ export default function OnboardingScreen() {
           </View>
           <View className="mt-3">
             <Group>
-              {zones.slice(0, 30).map((z) => {
+              {zones.map((z) => {
                 const on =
                   prefs.timezoneMode === "explicit" && prefs.timezone === z;
                 return (
@@ -637,6 +641,11 @@ export default function OnboardingScreen() {
                 );
               })}
             </Group>
+            {zones.length >= TZ_LIMIT && (
+              <Text className="mt-3 px-1 text-center text-[12.5px] text-muted-foreground">
+                {COPY.timezone.refine}
+              </Text>
+            )}
           </View>
         </View>
       );

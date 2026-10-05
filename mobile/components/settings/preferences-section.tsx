@@ -21,6 +21,7 @@ import {
   deviceTimezone,
   usePreferences,
 } from "@/lib/preferences";
+import { filterTimezones } from "@/lib/onboarding";
 import { timezonePickerValue } from "@/lib/preferences-sync";
 import { type ComponentType, useMemo, useRef } from "react";
 import { Pressable, View } from "react-native";
@@ -52,6 +53,8 @@ function Row({
 }
 
 /** Preferences + Notifications sections (mockups/settings.html). */
+const TZ_RESULT_LIMIT = 50;
+
 export function PreferencesSection() {
   const { prefs, update } = usePreferences();
   const { setEnabled, active } = useNotificationToggle();
@@ -61,11 +64,27 @@ export function PreferencesSection() {
   const reminderSheet = useRef<OptionSheetHandle>(null);
 
   const device = deviceTimezone();
-  const tzOptions = useMemo(
-    () => [
-      { value: "device", label: `Device (${device})` },
-      ...allTimezones().map((z) => ({ value: z, label: z })),
-    ],
+  // Searchable, nearest-to-device-first (same ordering as onboarding). With no
+  // query the pinned "Device" row leads; the full list is capped, with a
+  // "refine your search" hint for the rest.
+  const tzSearch = useMemo(
+    () => ({
+      placeholder: "Search all timezones",
+      results: (query: string) => {
+        const hits = filterTimezones(allTimezones(), query, Infinity, device);
+        const options = hits
+          .slice(0, TZ_RESULT_LIMIT)
+          .map((z) => ({ value: z, label: z }));
+        if (query.trim()) return { options, total: hits.length };
+        return {
+          options: [
+            { value: "device", label: `Device (${device})` },
+            ...options,
+          ],
+          total: hits.length + 1,
+        };
+      },
+    }),
     [device],
   );
   const tzLabel = prefs.timezoneMode === "device" ? device : prefs.timezone;
@@ -143,7 +162,8 @@ export function PreferencesSection() {
       <OptionSheet
         ref={timezoneSheet}
         title="Timezone"
-        options={tzOptions}
+        options={[]}
+        search={tzSearch}
         value={timezonePickerValue(prefs)}
         onSelect={(timezone) => save({ timezone })}
       />

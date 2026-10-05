@@ -25,7 +25,7 @@ import { loadGeistWebviewFontDataUri } from "@/lib/geist-webview-font";
 import { toImageUploadPart } from "@/lib/picked-file";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
-import type { FileMetadata } from "@/types/files";
+import type { FileMetadata } from "@zenflow/shared";
 import {
   BlockquoteBridge,
   BoldBridge,
@@ -344,6 +344,9 @@ function DescriptionFieldEditor({
   function fileEmbedMarkup(fileMetadata: FileMetadata): string {
     const baseURL = getBaseURL();
     if (!baseURL) throw new Error("API base URL is not configured");
+    // Backends without signed-URL support omit `url`; fail the upload loudly
+    // rather than saving a broken `…/undefined` embed into the note.
+    if (!fileMetadata.url) throw new Error("File response has no url");
     const src = escapeHtml(new URL(fileMetadata.url, baseURL).toString());
     const name = escapeHtml(fileMetadata.originalName);
     if (fileMetadata.mimetype.startsWith("image/")) {
