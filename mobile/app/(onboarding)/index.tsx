@@ -1,7 +1,19 @@
 import { listIntegrations } from "@/api/integrations";
 import { createTagsBulk, listTags } from "@/api/tags";
 import { updateBasicInfo } from "@/api/users";
-import { ChevronLeft } from "@/components/Icons";
+import {
+  AlertCircle,
+  Bell,
+  Check,
+  ChevronLeft,
+  Clock,
+  GraduationCap,
+  Globe,
+  MapPin,
+  Search,
+  Tag,
+  User,
+} from "@/components/Icons";
 import { TagPicker } from "@/components/onboarding/tag-picker";
 import { DluAccountsSection } from "@/components/settings/dlu-accounts-section";
 import { Button } from "@/components/ui/button";
@@ -10,6 +22,7 @@ import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { useIntegrationStore } from "@/hooks/use-integration-store";
 import { useNotificationToggle } from "@/hooks/use-notification-toggle";
+import { usePushStatusStore } from "@/hooks/use-push-status-store";
 import { useUserStore } from "@/hooks/use-user-store";
 import {
   FIRST_STEP,
@@ -21,6 +34,7 @@ import {
   prevStep,
   stepProgress,
   tagsForBulk,
+  utcOffsetMinutes,
 } from "@/lib/onboarding";
 import {
   LANGUAGES,
@@ -32,6 +46,7 @@ import { DEVICE_TIMEZONE } from "@/lib/preferences-sync";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  AppState,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -51,66 +66,129 @@ const COPY = {
   continue: "Continue",
   back: "Back",
   language: {
-    title: "Pick a language",
-    body: "You can change it anytime in Settings.",
+    title: "Choose your language",
+    body: "You can change this any time in Settings. Everything after this screen switches immediately.",
   },
   name: {
-    title: "What's your name?",
-    body: "We'll use it in the app and reminders.",
-    label: "Name",
+    title: "What should we call you?",
+    body: "Shown in the app and in reminders. We guessed it from your email.",
+    label: "Display name",
+    hint: "Prefilled from your email — edit if you like",
   },
   dlu: {
-    title: "Connect DLU",
-    body: "Link your account and we'll keep your timetable, exams and assignments up to date.",
-    hint: "You can do this later in Settings.",
+    title: "Connect your DLU account",
+    body: "Zenflow watches your timetable, exams and LMS for changes and new assignments. Your login is only used to check DLU on your behalf.",
+    hint: "Opens the same sign-in sheet as Settings → Connect your DLU account. You can connect later.",
   },
   notifications: {
-    title: "Never miss a deadline",
-    body: "Get a heads-up before sessions and when your schedule changes.",
+    title: "Stay ahead of deadlines",
+    body: "Zenflow sends a push when a reminder is due or your schedule changes. We'll ask iOS / Android for permission next.",
+    rowTitle: "Allow notifications",
+    rowBody: "Reminders and schedule changes",
     bullets: [
-      "Reminders before each session",
-      "Timetable and exam changes",
-      "New assignments",
+      "Reminder before each study session",
+      "Alert when the timetable or an exam changes",
+      "New LMS assignments, scheduled for you",
     ],
     enable: "Turn on notifications",
     notNow: "Not now",
-    blockedTitle: "Notifications are off",
-    blockedBody: "Allow them in system settings to get reminders.",
-    openSettings: "Open settings",
+    blockedTitle: "Notifications are blocked",
+    blockedBody:
+      "Turn them on in system settings to get reminders. The preference is saved as off for now.",
+    openSettings: "Open system settings",
   },
   timezone: {
     title: "Where are you?",
-    body: "So reminders land at the right local time.",
-    detected: "From your device",
-    search: "Search timezones",
+    body: "Used to place sessions and reminders at the right local time.",
+    detected: "Detected from device",
+    search: "Search all timezones",
   },
   reminder: {
     title: "Default reminder",
-    body: "How early should we remind you? You can change it per task.",
+    body: "How long before a session should we nudge you? Each task can override this.",
+    hint: "Optional step · stored as your default reminder.",
   },
   tags: {
     title: "Pick your tags",
-    body: "Tags help you organize tasks. Tap to keep, or add your own.",
-    footer: (n: number) => `${n} selected`,
+    body: "Tags group your tasks and sessions. We've suggested a few for students — tap to keep, add your own, rename them later.",
+    footer: (n: number) =>
+      `${n} selected · saved to your account, available in the task form’s Tags field.`,
   },
   done: {
-    title: "You're all set",
-    body: "Anything you skipped is in Settings.",
-    open: "Open calendar",
+    title: "You’re all set",
+    body: "Skipped steps are waiting for you in Settings.",
+    open: "Open my calendar",
   },
   saveFailed: "Couldn't save. Try again.",
 } as const;
 
-function Choice({
-  label,
+const LANGUAGE_SUB: Record<string, string> = {
+  vi: "Vietnamese · default",
+  en: "English",
+};
+
+const STEP_ICON: Partial<Record<OnboardingStep, typeof Globe>> = {
+  language: Globe,
+  name: User,
+  dlu: GraduationCap,
+  notifications: Bell,
+  timezone: MapPin,
+  reminder: Clock,
+  tags: Tag,
+};
+
+/** "GMT+7", "GMT+5:30", "GMT" — derived from the offset, not Intl's shortOffset. */
+function gmtOffset(tz: string): string {
+  const min = utcOffsetMinutes(tz);
+  if (min === 0) return "GMT";
+  const abs = Math.abs(min);
+  const mm = abs % 60;
+  return `GMT${min < 0 ? "-" : "+"}${Math.floor(abs / 60)}${
+    mm ? `:${String(mm).padStart(2, "0")}` : ""
+  }`;
+}
+
+function RadioDot({ selected }: { selected: boolean }) {
+  return (
+    <View
+      className={cn(
+        "size-[22px] shrink-0 items-center justify-center rounded-full border-2",
+        selected ? "border-primary bg-primary" : "border-border",
+      )}
+    >
+      {selected && <Check size={14} className="text-primary-foreground" />}
+    </View>
+  );
+}
+
+/** Rounded card whose children are separated by hairlines. */
+function Group({ children }: { children: React.ReactNode }) {
+  const items = (Array.isArray(children) ? children : [children]).flat();
+  return (
+    <View className="overflow-hidden rounded-2xl border border-border bg-card">
+      {items.filter(Boolean).map((child, i) => (
+        <View
+          // biome-ignore lint/suspicious/noArrayIndexKey: static ordering
+          key={i}
+          className={cn(i > 0 && "border-t border-border")}
+        >
+          {child}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function Row({
   selected,
   onPress,
-  hint,
+  children,
+  className,
 }: {
-  label: string;
   selected: boolean;
   onPress: () => void;
-  hint?: string;
+  children: React.ReactNode;
+  className?: string;
 }) {
   return (
     <Pressable
@@ -118,14 +196,12 @@ function Choice({
       accessibilityRole="radio"
       accessibilityState={{ checked: selected }}
       className={cn(
-        "flex-row items-center justify-between rounded-2xl border px-4 py-4",
-        selected ? "border-primary bg-primary/10" : "border-border bg-card",
+        "flex-row items-center gap-3 px-4 py-3.5",
+        selected && "bg-primary/10",
+        className,
       )}
     >
-      <Text className="text-[15px] font-semibold">{label}</Text>
-      {hint ? (
-        <Text className="text-[13px] text-muted-foreground">{hint}</Text>
-      ) : null}
+      {children}
     </Pressable>
   );
 }
@@ -162,12 +238,23 @@ export default function OnboardingScreen() {
       .finally(() => setTagsLoaded(true));
   }, [setIntegrations, setLoading]);
 
+  // Returning from system settings with permission granted clears the hint.
+  useEffect(() => {
+    if (notif.permissionGranted) setBlocked(false);
+  }, [notif.permissionGranted]);
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") void usePushStatusStore.getState().refresh();
+    });
+    return () => sub.remove();
+  }, []);
+
   const go = () => setStep((s) => nextStep(s));
   const dluConnected = integrations.some((i) => i.connected);
   const device = deviceTimezone();
   const zones = useMemo(
-    () => filterTimezones(allTimezones(), tzQuery),
-    [tzQuery],
+    () => filterTimezones(allTimezones(), tzQuery, 50, device),
+    [tzQuery, device],
   );
 
   async function run(fn: () => Promise<undefined | false>) {
@@ -223,14 +310,31 @@ export default function OnboardingScreen() {
 
   async function enableNotifications() {
     setBusy(true);
-    const ok = await notif.setEnabled(true);
-    if (ok) {
-      setBusy(false);
+    const ok = await notif.setEnabled(true, { quiet: true });
+    // Permission granted but device registration failed: the preference is
+    // saved (retried on next launch), so this is not a "blocked" state.
+    const granted = usePushStatusStore.getState().permission === "granted";
+    setBusy(false);
+    if (ok || granted) {
       go();
       return;
     }
     setBlocked(true);
-    setBusy(false);
+  }
+
+  async function toggleNotifications() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (notif.active) {
+        await notif.setEnabled(false);
+        return;
+      }
+      await notif.setEnabled(true, { quiet: true });
+      setBlocked(usePushStatusStore.getState().permission !== "granted");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function notNow() {
@@ -281,30 +385,47 @@ export default function OnboardingScreen() {
     case "language":
       ({ title, body } = COPY.language);
       content = (
-        <View className="gap-3">
-          {LANGUAGES.map((l) => (
-            <Choice
-              key={l.value}
-              label={l.label}
-              selected={prefs.language === l.value}
-              onPress={() => void savePref({ language: l.value })}
-            />
-          ))}
-        </View>
+        <Group>
+          {[...LANGUAGES]
+            .sort((x, y) => (x.value === "vi" ? -1 : y.value === "vi" ? 1 : 0))
+            .map((l) => (
+              <Row
+                key={l.value}
+                selected={prefs.language === l.value}
+                onPress={() => void savePref({ language: l.value })}
+              >
+                <Text className="text-[26px] leading-[32px]">
+                  {l.flag}
+                </Text>
+                <View className="flex-1">
+                  <Text className="text-[16px] font-semibold">{l.label}</Text>
+                  <Text className="text-[13px] text-muted-foreground">
+                    {LANGUAGE_SUB[l.value]}
+                  </Text>
+                </View>
+                <RadioDot selected={prefs.language === l.value} />
+              </Row>
+            ))}
+        </Group>
       );
       footer = primary(COPY.continue, advance);
       break;
     case "name":
       ({ title, body } = COPY.name);
       content = (
-        <View className="gap-2">
-          <Text className="text-[13px] font-semibold">{COPY.name.label}</Text>
+        <View>
+          <Text className="mb-2 text-[13.5px] font-semibold">
+            {COPY.name.label}
+          </Text>
           <Input
             value={name}
             onChangeText={setName}
             autoComplete="name"
             maxLength={100}
           />
+          <Text className="mt-2 text-[12.5px] text-muted-foreground">
+            {COPY.name.hint}
+          </Text>
         </View>
       );
       footer = (
@@ -319,7 +440,7 @@ export default function OnboardingScreen() {
       content = (
         <View>
           <DluAccountsSection hideLabel />
-          <Text className="mt-3 text-[13px] text-muted-foreground">
+          <Text className="mt-3.5 px-1 text-[12px] leading-snug text-muted-foreground">
             {COPY.dlu.hint}
           </Text>
         </View>
@@ -334,29 +455,70 @@ export default function OnboardingScreen() {
     case "notifications":
       ({ title, body } = COPY.notifications);
       content = (
-        <View className="gap-3">
-          {COPY.notifications.bullets.map((b) => (
-            <Text key={b} className="text-[15px]">
-              {"•  "}
-              {b}
-            </Text>
-          ))}
-          {blocked && (
-            <View className="mt-3 rounded-2xl border border-destructive/40 bg-destructive/10 p-4">
-              <Text className="text-[14px] font-semibold">
-                {COPY.notifications.blockedTitle}
-              </Text>
-              <Text className="mt-1 text-[13px] text-muted-foreground">
-                {COPY.notifications.blockedBody}
-              </Text>
-              <Pressable
-                onPress={() => void Linking.openSettings()}
-                className="mt-3"
-              >
-                <Text className="text-[14px] font-semibold text-primary">
-                  {COPY.notifications.openSettings}
+        <View>
+          <Group>
+            <View className="flex-row items-center gap-[13px] px-4 py-3.5">
+              <View className="size-[38px] items-center justify-center rounded-xl bg-muted">
+                <Bell size={18} className="text-foreground" />
+              </View>
+              <View className="min-w-0 flex-1">
+                <Text className="text-[15px] font-semibold">
+                  {COPY.notifications.rowTitle}
                 </Text>
+                <Text className="mt-0.5 text-[13px] text-muted-foreground">
+                  {COPY.notifications.rowBody}
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => void toggleNotifications()}
+                disabled={busy}
+                hitSlop={8}
+                role="switch"
+                aria-checked={notif.active}
+                accessibilityLabel={COPY.notifications.rowTitle}
+                className={cn(
+                  "h-[26px] w-[46px] justify-center rounded-full px-[3px]",
+                  notif.active ? "items-end bg-primary" : "items-start bg-muted",
+                )}
+              >
+                <View
+                  className={cn(
+                    "size-5 rounded-full shadow",
+                    notif.active ? "bg-white" : "bg-card",
+                  )}
+                />
               </Pressable>
+            </View>
+          </Group>
+          <View className="mt-4 gap-3 px-1">
+            {COPY.notifications.bullets.map((b) => (
+              <View key={b} className="flex-row items-start gap-2.5">
+                <Check size={16} className="mt-0.5 text-primary" />
+                <Text className="flex-1 text-[13.5px] text-muted-foreground">
+                  {b}
+                </Text>
+              </View>
+            ))}
+          </View>
+          {blocked && (
+            <View className="mt-5 flex-row gap-3 rounded-2xl border border-destructive/40 bg-destructive/10 p-4">
+              <AlertCircle size={20} className="text-destructive" />
+              <View className="flex-1">
+                <Text className="text-[13.5px] font-semibold">
+                  {COPY.notifications.blockedTitle}
+                </Text>
+                <Text className="mt-1 text-[13.5px] leading-snug text-muted-foreground">
+                  {COPY.notifications.blockedBody}
+                </Text>
+                <Pressable
+                  onPress={() => void Linking.openSettings()}
+                  className="mt-2"
+                >
+                  <Text className="text-[13.5px] font-semibold text-primary">
+                    {COPY.notifications.openSettings}
+                  </Text>
+                </Pressable>
+              </View>
             </View>
           )}
         </View>
@@ -364,40 +526,90 @@ export default function OnboardingScreen() {
       footer = (
         <>
           {primary(
-            blocked ? COPY.continue : COPY.notifications.enable,
-            blocked ? advance : enableNotifications,
+            notif.active
+              ? COPY.continue
+              : blocked
+                ? COPY.notifications.openSettings
+                : COPY.notifications.enable,
+            notif.active
+              ? advance
+              : blocked
+                ? () => void Linking.openSettings()
+                : enableNotifications,
           )}
-          {!blocked && ghost(COPY.notifications.notNow, notNow)}
+          {!notif.active &&
+            ghost(COPY.notifications.notNow, blocked ? advance : notNow)}
         </>
       );
       break;
     case "timezone":
       ({ title, body } = COPY.timezone);
       content = (
-        <View className="gap-3">
-          <Choice
-            label={COPY.timezone.detected}
-            hint={device}
-            selected={prefs.timezoneMode === "device"}
+        <View>
+          <Pressable
             onPress={() => void savePref({ timezone: DEVICE_TIMEZONE })}
-          />
-          <Input
-            value={tzQuery}
-            onChangeText={setTzQuery}
-            placeholder={COPY.timezone.search}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          {zones.map((z) => (
-            <Choice
-              key={z}
-              label={z}
-              selected={
-                prefs.timezoneMode === "explicit" && prefs.timezone === z
-              }
-              onPress={() => void savePref({ timezone: z })}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: prefs.timezoneMode === "device" }}
+            className={cn(
+              "flex-row items-center gap-3 rounded-2xl border px-4 py-3.5",
+              prefs.timezoneMode === "device"
+                ? "border-primary/50 bg-primary/10"
+                : "border-border bg-card",
+            )}
+          >
+            <MapPin size={20} className="text-primary" />
+            <View className="flex-1">
+              <Text className="text-[12px] font-bold uppercase tracking-wider text-muted-foreground">
+                {COPY.timezone.detected}
+              </Text>
+              <Text className="text-[15px] font-semibold">
+                {device}
+                <Text className="font-normal text-muted-foreground">
+                  {gmtOffset(device) ? ` · ${gmtOffset(device)}` : ""}
+                </Text>
+              </Text>
+            </View>
+            <RadioDot selected={prefs.timezoneMode === "device"} />
+          </Pressable>
+          <View className="mt-4">
+            <Input
+              value={tzQuery}
+              onChangeText={setTzQuery}
+              placeholder={COPY.timezone.search}
+              autoCapitalize="none"
+              autoCorrect={false}
+              rightElement={<Search size={18} className="text-muted-foreground" />}
             />
-          ))}
+          </View>
+          <View className="mt-3">
+            <Group>
+              {zones.slice(0, 30).map((z) => {
+                const on =
+                  prefs.timezoneMode === "explicit" && prefs.timezone === z;
+                return (
+                  <Row
+                    key={z}
+                    selected={on}
+                    onPress={() => void savePref({ timezone: z })}
+                    className="justify-between"
+                  >
+                    <Text
+                      className={cn(
+                        "flex-1 text-[15px]",
+                        on ? "font-semibold" : "font-medium",
+                      )}
+                    >
+                      {z}
+                    </Text>
+                    <Text className="text-[13px] text-muted-foreground">
+                      {gmtOffset(z)}
+                    </Text>
+                    {on && <RadioDot selected />}
+                  </Row>
+                );
+              })}
+            </Group>
+          </View>
         </View>
       );
       footer = (
@@ -410,15 +622,33 @@ export default function OnboardingScreen() {
     case "reminder":
       ({ title, body } = COPY.reminder);
       content = (
-        <View className="gap-3">
-          {REMINDERS.map((r) => (
-            <Choice
-              key={r.value}
-              label={r.label}
-              selected={prefs.defaultReminder === r.value}
-              onPress={() => void savePref({ defaultReminder: r.value })}
-            />
-          ))}
+        <View>
+          <Group>
+            {REMINDERS.map((r) => {
+              const on = prefs.defaultReminder === r.value;
+              return (
+                <Row
+                  key={r.value}
+                  selected={on}
+                  onPress={() => void savePref({ defaultReminder: r.value })}
+                  className="justify-between"
+                >
+                  <Text
+                    className={cn(
+                      "flex-1 text-[15px]",
+                      on ? "font-semibold" : "font-medium",
+                    )}
+                  >
+                    {r.label}
+                  </Text>
+                  <RadioDot selected={on} />
+                </Row>
+              );
+            })}
+          </Group>
+          <Text className="mt-3 px-1 text-[12px] text-muted-foreground">
+            {COPY.reminder.hint}
+          </Text>
         </View>
       );
       footer = (
@@ -433,7 +663,7 @@ export default function OnboardingScreen() {
       content = tagsLoaded ? (
         <View>
           <TagPicker selected={tags} onChange={setTags} />
-          <Text className="mt-4 text-[13px] text-muted-foreground">
+          <Text className="mt-3 px-1 text-[12.5px] text-muted-foreground">
             {COPY.tags.footer(tagsForBulk(tags).length)}
           </Text>
         </View>
@@ -447,103 +677,167 @@ export default function OnboardingScreen() {
             saveTags,
             !tagsLoaded,
           )}
-          {ghost(COPY.skipForNow, advance)}
+          {tagsForBulk(tags).length === 0 && ghost(COPY.skipForNow, advance)}
         </>
       );
       break;
-    case "done":
+    case "done": {
       ({ title, body } = COPY.done);
+      const rows: {
+        k: string;
+        v: string;
+        skipped?: boolean;
+        step?: OnboardingStep;
+      }[] = [
+        {
+          k: "Language",
+          v: LANGUAGES.find((l) => l.value === prefs.language)?.label ?? "",
+        },
+        { k: "Name", v: user?.name ?? "" },
+        {
+          k: "DLU account",
+          v: dluConnected ? "Connected" : "Skipped",
+          skipped: !dluConnected,
+          step: "dlu",
+        },
+        {
+          k: "Notifications",
+          v: notif.active ? "On" : "Skipped",
+          skipped: !notif.active,
+          step: "notifications",
+        },
+        { k: "Timezone", v: prefs.timezone },
+        {
+          k: "Default reminder",
+          v:
+            REMINDERS.find((r) => r.value === prefs.defaultReminder)?.label ??
+            "",
+        },
+        { k: "Tags", v: `${savedTagCount} selected` },
+      ];
       content = (
-        <View className="overflow-hidden rounded-2xl border border-border bg-card">
-          {[
-            [
-              "Language",
-              LANGUAGES.find((l) => l.value === prefs.language)?.label ?? "",
-            ],
-            ["Name", user?.name ?? ""],
-            ["DLU account", dluConnected ? "Connected" : "Skipped"],
-            ["Notifications", notif.active ? "On" : "Skipped"],
-            ["Timezone", prefs.timezone],
-            [
-              "Default reminder",
-              REMINDERS.find((r) => r.value === prefs.defaultReminder)?.label ??
-                "",
-            ],
-            ["Tags", `${savedTagCount} selected`],
-          ].map(([k, v], i) => (
+        <Group>
+          {rows.map((r) => (
             <View
-              key={k}
-              className={cn(
-                "flex-row justify-between px-4 py-3.5",
-                i > 0 && "border-t border-border",
-              )}
+              key={r.k}
+              className="flex-row items-center justify-between px-4 py-3"
             >
-              <Text className="text-[15px] font-semibold">{k}</Text>
-              <Text className="text-[14px] text-muted-foreground">{v}</Text>
+              <Text className="text-[14.5px] font-medium">{r.k}</Text>
+              <View className="flex-row items-center gap-2.5">
+                <Text className="text-[13px] text-muted-foreground">{r.v}</Text>
+                {r.skipped && r.step ? (
+                  <Pressable onPress={() => setStep(r.step as OnboardingStep)}>
+                    <Text className="text-[13px] font-semibold text-primary">
+                      Set up
+                    </Text>
+                  </Pressable>
+                ) : (
+                  <Check size={16} className="text-emerald-500" />
+                )}
+              </View>
             </View>
           ))}
-        </View>
+        </Group>
       );
       footer = primary(COPY.done.open, finish);
       break;
+    }
   }
+
+  const Hero = STEP_ICON[step];
 
   return (
     <KeyboardAvoidingView
       className="flex-1 bg-background"
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <View
-        className="flex-row items-center justify-between px-5 pb-2"
-        style={{ paddingTop: insets.top + 8 }}
-      >
-        {canGoBack(step) ? (
-          <Pressable
-            onPress={() => setStep((s) => prevStep(s))}
-            hitSlop={8}
-            accessibilityLabel={COPY.back}
-            className="size-9 items-center justify-center"
-          >
-            <ChevronLeft size={22} className="text-foreground" />
-          </Pressable>
-        ) : (
-          <View className="size-9" />
-        )}
-        {step !== "done" ? (
-          <>
-            <Text className="text-[13px] text-muted-foreground">
-              {progress.index} / {progress.total}
-            </Text>
+      {step !== "done" ? (
+        <View
+          className="flex-row items-center gap-3 px-3 pb-3"
+          style={{ paddingTop: insets.top + 6 }}
+        >
+          {canGoBack(step) ? (
             <Pressable
               onPress={() => {
                 setBlocked(false);
-                void advance();
+                setStep((s) => prevStep(s));
               }}
               hitSlop={8}
-              disabled={busy}
+              accessibilityLabel={COPY.back}
+              className="size-[38px] items-center justify-center rounded-xl"
             >
-              <Text className="text-[14px] font-medium text-muted-foreground">
-                {COPY.skip}
-              </Text>
+              <ChevronLeft size={22} className="text-foreground" />
             </Pressable>
-          </>
-        ) : (
-          <View className="size-9" />
-        )}
-      </View>
+          ) : (
+            <View className="size-[38px]" />
+          )}
+          <View className="flex-1 flex-row gap-1.5">
+            {Array.from({ length: progress.total }, (_, i) => (
+              <View
+                // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length bar
+                key={i}
+                className={cn(
+                  "h-1 flex-1 rounded-full",
+                  i < progress.index ? "bg-primary" : "bg-muted",
+                )}
+              />
+            ))}
+          </View>
+          <Pressable
+            onPress={() => {
+              setBlocked(false);
+              void advance();
+            }}
+            hitSlop={8}
+            disabled={busy}
+            className="px-2"
+          >
+            <Text className="text-[14px] font-semibold text-muted-foreground">
+              {COPY.skip}
+            </Text>
+          </Pressable>
+        </View>
+      ) : (
+        <View style={{ paddingTop: insets.top + 10 }} />
+      )}
       <ScrollView
-        className="flex-1 px-6"
+        className="flex-1"
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 24 }}
       >
-        <Text className="mt-4 text-2xl font-bold tracking-tight">{title}</Text>
-        <Text className="mb-6 mt-2 text-[15px] text-muted-foreground">
-          {body}
-        </Text>
-        {content}
+        <View className={cn("px-6 pt-3", step === "done" && "items-center pt-8")}>
+          {step === "done" ? (
+            <View className="mb-5 size-16 items-center justify-center rounded-full bg-brand-orange">
+              <Check size={30} className="text-primary-foreground" />
+            </View>
+          ) : Hero ? (
+            <View className="mb-4 size-12 items-center justify-center rounded-2xl bg-primary/10">
+              <Hero size={24} className="text-primary" />
+            </View>
+          ) : null}
+          <Text
+            className={cn(
+              "text-[26px] font-bold leading-tight tracking-tight",
+              step === "done" && "text-center",
+            )}
+          >
+            {title}
+          </Text>
+          <Text
+            className={cn(
+              "mt-2 text-[14.5px] leading-relaxed text-muted-foreground",
+              step === "done" && "text-center",
+            )}
+          >
+            {body}
+          </Text>
+        </View>
+        <View className={cn("px-5", step === "language" ? "mt-6" : "mt-6")}>
+          {content}
+        </View>
       </ScrollView>
       <View
-        className="gap-1 px-6 pt-2"
+        className="gap-1 px-5 pt-3"
         style={{ paddingBottom: insets.bottom + 12 }}
       >
         {footer}

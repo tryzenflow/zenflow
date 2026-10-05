@@ -14,7 +14,7 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import { Pressable, useWindowDimensions } from "react-native";
+import { Pressable, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const ROW_HEIGHT = 52;
@@ -29,7 +29,7 @@ export interface OptionSheetHandle {
 
 interface OptionSheetProps<T extends string | number> {
   title: string;
-  options: readonly { value: T; label: string }[];
+  options: readonly { value: T; label: string; flag?: string }[];
   value: T;
   onSelect: (value: T) => void;
 }
@@ -81,14 +81,23 @@ function OptionSheetInner<T extends string | number>(
                 accessibilityState={{ checked: selected }}
                 className="flex-row items-center justify-between py-3.5"
               >
-                <Text
-                  className={cn(
-                    "text-[15px]",
-                    selected ? "font-semibold text-primary" : "text-foreground",
-                  )}
-                >
-                  {option.label}
-                </Text>
+                <View className="flex-row items-center gap-3">
+                  {option.flag ? (
+                    <Text className="text-[22px] leading-[28px]">
+                      {option.flag}
+                    </Text>
+                  ) : null}
+                  <Text
+                    className={cn(
+                      "text-[15px]",
+                      selected
+                        ? "font-semibold text-primary"
+                        : "text-foreground",
+                    )}
+                  >
+                    {option.label}
+                  </Text>
+                </View>
                 {selected && <Check size={18} className="text-primary" />}
               </Pressable>
             );

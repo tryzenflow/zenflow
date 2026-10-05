@@ -42,9 +42,9 @@ export const DEFAULT_PREFERENCES: Preferences = {
 
 export const PREFERENCES_KEY = "preferences";
 
-export const LANGUAGES: { value: Lang; label: string }[] = [
-  { value: "en", label: "English" },
-  { value: "vi", label: "Tiếng Việt" },
+export const LANGUAGES: { value: Lang; label: string; flag: string }[] = [
+  { value: "en", label: "English", flag: "🇬🇧" },
+  { value: "vi", label: "Tiếng Việt", flag: "🇻🇳" },
 ];
 
 export const REMINDERS: { value: DefaultReminderChoice; label: string }[] = [

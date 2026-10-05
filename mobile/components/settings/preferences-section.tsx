@@ -87,7 +87,10 @@ export function PreferencesSection() {
         <Row
           Icon={Globe}
           title="Language"
-          value={LANGUAGES.find((l) => l.value === prefs.language)?.label ?? ""}
+          value={(() => {
+            const l = LANGUAGES.find((l) => l.value === prefs.language);
+            return l ? `${l.flag} ${l.label}` : "";
+          })()}
           onPress={() => languageSheet.current?.open()}
         />
         <View className="h-px bg-border" />

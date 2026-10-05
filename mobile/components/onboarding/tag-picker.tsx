@@ -28,7 +28,7 @@ export function TagPicker({
 
   return (
     <View>
-      <View className="flex-row flex-wrap gap-2">
+      <View className="flex-row flex-wrap gap-2.5">
         {tagOptions(selected).map((name) => {
           const on = selected.some(
             (s) => s.toLowerCase() === name.toLowerCase(),
@@ -45,12 +45,19 @@ export function TagPicker({
               )}
             >
               {on && <Check size={14} className="text-primary" />}
-              <Text className="text-[14px] font-medium">{name}</Text>
+              <Text
+                className={cn(
+                  "text-[14px]",
+                  on ? "font-semibold" : "font-medium text-muted-foreground",
+                )}
+              >
+                {name}
+              </Text>
             </Pressable>
           );
         })}
       </View>
-      <View className="mt-4 flex-row items-center gap-2">
+      <View className="mt-5 flex-row items-center gap-2">
         <InputComponent
           className="flex-1"
           value={draft}

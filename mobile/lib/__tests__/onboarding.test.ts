@@ -13,6 +13,7 @@ import {
   tagOptions,
   tagsForBulk,
   toggleTag,
+  utcOffsetMinutes,
 } from "../onboarding";
 
 describe("routeForSession", () => {
@@ -103,6 +104,29 @@ describe("filterTimezones", () => {
     expect(filterTimezones(zones, "ho chi")).toEqual(["Asia/Ho_Chi_Minh"]);
     expect(filterTimezones(zones, "")).toEqual(zones);
   });
+  it("orders by proximity to the detected zone, not alphabetically", () => {
+    const all = [
+      "America/New_York",
+      "Asia/Bangkok",
+      "Asia/Tokyo",
+      "Asia/Ho_Chi_Minh",
+      "Australia/Perth",
+      "Europe/Paris",
+      "Asia/Jakarta",
+    ];
+    const out = filterTimezones(all, "", 50, "Asia/Ho_Chi_Minh");
+    expect(out).not.toContain("Asia/Ho_Chi_Minh");
+    // Same +7 offset first (same-region, then name), then nearer offsets.
+    expect(out.slice(0, 2)).toEqual(["Asia/Bangkok", "Asia/Jakarta"]);
+    expect(out.indexOf("Australia/Perth")).toBeLessThan(out.indexOf("Asia/Tokyo"));
+    expect(out.indexOf("Asia/Tokyo")).toBeLessThan(out.indexOf("Europe/Paris"));
+    expect(out.indexOf("Europe/Paris")).toBeLessThan(
+      out.indexOf("America/New_York"),
+    );
+  });
+  it("keeps the detected zone when searching", () => {
+    expect(filterTimezones(["Asia/Ho_Chi_Minh", "Asia/Bangkok"], "asia", 50, "Asia/Ho_Chi_Minh")[0]).toBe("Asia/Bangkok");
+  });
 });
 
 describe("newTagsForBulk / mergeTagNames", () => {
@@ -117,5 +141,15 @@ describe("newTagsForBulk / mergeTagNames", () => {
     const merged = mergeTagNames(existing, ["Fresh", "e1"]);
     expect(merged).toHaveLength(56);
     expect(merged.slice(0, 55)).toEqual(existing);
+  });
+});
+
+describe("utcOffsetMinutes", () => {
+  const jan = new Date("2025-01-15T12:00:00Z");
+  it("returns real offsets, not 0 for everything", () => {
+    expect(utcOffsetMinutes("Asia/Ho_Chi_Minh", jan)).toBe(420);
+    expect(utcOffsetMinutes("Asia/Kolkata", jan)).toBe(330);
+    expect(utcOffsetMinutes("America/New_York", jan)).toBe(-300);
+    expect(utcOffsetMinutes("UTC", jan)).toBe(0);
   });
 });
