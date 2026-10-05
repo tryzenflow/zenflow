@@ -20,8 +20,7 @@ node loadtest/staging/orchestrate.js run smoke          # 1 min; each `run` rest
 node loadtest/staging/orchestrate.js run full           # ONE ~17 min run: warm-up, 1x/2x/3x holds, ramp-down (--no-sync drops the DLU sync load)
 MAX_MULT=8 node loadtest/staging/orchestrate.js run full  # keep stepping up (1x, 2x, ... 8x) to find the breaking point
 node loadtest/staging/orchestrate.js run soak           # optional: 15 min at 1x (SOAK_S)
-node loadtest/staging/orchestrate.js auth throughput    # OTP burst, raised limits
-node loadtest/staging/orchestrate.js auth limits        # shipped OTP limits (compose.staging.shipped-otp.yml): expect 429s
+node loadtest/staging/orchestrate.js auth              # OTP login burst (AUTH_RATE logins/s, default 5)
 node loadtest/staging/orchestrate.js down               # remove containers and volumes
 ```
 

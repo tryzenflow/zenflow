@@ -1,15 +1,13 @@
 // W9: OTP login burst (launch day: many users sign in at once).
-//   MODE=throughput  staging with the raised OTP limits: measures request/verify latency at RATE logins/s.
-//   MODE=limits      staging started with compose.staging.shipped-otp.yml: from ONE IP expect 429s once the
-//                    shipped limits trip (5/min per IP on request); checks the limiter works and stays fast.
-//   k6 run -e BASE=... -e MAIL=http://localhost:8025 -e MAIL_KIND=mailpit -e MODE=throughput -e RATE=5 auth.js
+// Measures OTP request/verify latency at RATE logins/s. Staging runs with raised OTP limits (see .env.staging),
+// so a 429 here is unexpected and shows up in otp_*_429.
+//   k6 run -e BASE=... -e MAIL=http://localhost:8025 -e MAIL_KIND=mailpit -e RATE=5 auth.js
 import http from "k6/http";
 import { Trend, Counter } from "k6/metrics";
 import { sleep } from "k6";
 import exec from "k6/execution";
 import { BASE, MAIL, MAIL_KIND, JSON_H, TZ } from "../scripts/lib.js";
 
-const MODE = __ENV.MODE || "throughput";
 const RATE = parseFloat(__ENV.RATE || "5");
 const DURATION = __ENV.DURATION || "2m";
 
@@ -21,7 +19,7 @@ const status = (op, code) => ST[`${op}_${code === 200 ? "200" : code === 429 ? "
 
 export const options = {
   scenarios: { burst: { executor: "constant-arrival-rate", rate: RATE, timeUnit: "1s", duration: DURATION, preAllocatedVUs: 20, maxVUs: 300 } },
-  thresholds: MODE === "throughput" ? { otp_verify: ["p(95)<500"], otp_request: ["p(95)<1500"] } : {},
+  thresholds: { otp_verify: ["p(95)<500"], otp_request: ["p(95)<1500"] },
   summaryTrendStats: ["avg", "med", "p(95)", "p(99)", "max"],
 };
 

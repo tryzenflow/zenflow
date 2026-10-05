@@ -1,6 +1,6 @@
 # Staging load test, issue #77
 
-Run date: 2026-10-05. Code: branch `feat/load-testing` at `cbaf302` plus uncommitted working-tree changes (the placement instrumentation described below). One full run, no repeats.
+Run date: 2026-10-05. Code: branch `feat/load-testing` at `cbaf302` plus uncommitted working-tree changes: the placement instrumentation described in section 8, and unrelated in-progress work on signed file URLs (a new required `FILE_URL_SECRET`, `files/` changes) and an error-filter tweak for non-HTTP 4xx errors. None of that unrelated work sits on a request path this test exercises (no file endpoints are called, and the filter change only affects errors that are not already HTTP exceptions, which excludes the expected 409s), so it should not change the numbers; this was reasoned from the diffs, not re-measured. One full run, no repeats.
 
 This document is self-contained: environment, method, results, conclusions and caveats. Raw output of the run is in `loadtest/staging/results/<timestamp>-full/` (git-ignored).
 
@@ -42,7 +42,7 @@ Resource caps, set so no service can starve another: api 4 CPU / 4 GB, postgres 
 
 - One host, loopback networking. The issue asked for real network hops; there are none here.
 - k6 shares the Mac with the VM, so the load generator competes for CPU.
-- OTP rate limits are raised (otherwise one IP cannot log users in). They were checked separately with the shipped values.
+- OTP rate limits are raised (otherwise one IP cannot log users in), so the production limits were not exercised here.
 - DLU is a fake server (`scripts/fake-dlu-server.ts`), never the real university.
 - Plain HTTP through Caddy, no TLS. A single API instance. Prod hardware is unknown.
 - 1,500 users, not 5,000.
@@ -207,7 +207,7 @@ LinUCB scoring (`predict`) is at or below the histogram's lowest bucket (1 ms), 
 - k6 shares the host with the VM, the network is loopback, there is one API instance, and 1,500 users stand in for 5,000.
 - Prometheus values per step are taken over the hold window ending 30 s late (to let metrics arrive), so a few seconds of the next ramp can leak in. The k6 numbers (section 4.2) are the exact per-step figures.
 - Histogram resolution: the smallest bucket is 1 ms for the Python phases and 5 ms for HTTP, so values at the floor are upper bounds.
-- The OTP burst and shipped-limit behaviour were validated separately and briefly (verify p95 16 ms at 5 logins/s; with shipped limits 5 of 61 requests from one IP were allowed and the rest got 429). They were not part of this run.
+- The OTP burst was validated separately and briefly (verify p95 16 ms at 5 logins/s) and was not part of this run. The shipped OTP rate limits were not exercised: staging deliberately runs unrestricted.
 - Grafana's container panels stay empty on Colima (cAdvisor limitation); container CPU and memory here come from `docker stats`.
 - The Prisma connection pool exposes no metrics, so pool saturation could not be observed.
 
@@ -225,7 +225,7 @@ Not filed yet; each is a candidate issue.
 
 ## 8. What changed in the code for this test
 
-- `backend/compose.staging.yml`: observability stack merged in from `compose.observability.yml`, fake DLU, Postgres 16 with `pg_stat_statements`, postgres-exporter, resource caps, Mailpit, and a `PAIRWISE_SAMPLE_RATE` pass-through. `compose.staging.shipped-otp.yml` restores the shipped OTP limits for the auth check.
+- `backend/compose.staging.yml`: observability stack merged in from `compose.observability.yml`, fake DLU, Postgres 16 with `pg_stat_statements`, postgres-exporter, resource caps, Mailpit, and a `PAIRWISE_SAMPLE_RATE` pass-through.
 - `backend/src/observability/metrics.ts`, `scheduler/io/placement-gateway.service.ts`, `scheduler/io/python-placer.service.ts`: the two placement histograms. `scheduler/constants.ts`: `PAIRWISE_SAMPLE_RATE` can be overridden by an environment variable (clamped to 0-1, default 1, so production behaviour is unchanged).
 - Grafana: API Overview now groups by method and route, pins HTTP queries to the app's own series (OpenTelemetry's auto-instrumentation emits the same metric a second time without a `route` label, which doubled every sum), excludes the sync route from aggregates and shows it separately. Scheduler & Bandit has a new "Placement latency — heuristic vs LinUCB" row.
 - `loadtest/staging/`: the harness. `loadtest/scripts/lib.js`: Mailpit support (`MAIL_KIND=mailpit`), MailHog stays the default.

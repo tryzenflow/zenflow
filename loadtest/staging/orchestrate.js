@@ -7,7 +7,7 @@
 //   node loadtest/staging/orchestrate.js run smoke           # restore snapshot, run one profile (smoke|full|soak)
 //   node loadtest/staging/orchestrate.js run full            # warm-up, 1x/2x/3x holds, ramp-down in ONE run (~17 min)
 //   node loadtest/staging/orchestrate.js run full --no-sync  # same without the background DLU sync load
-//   node loadtest/staging/orchestrate.js auth throughput     # OTP burst (raised limits) | auth limits (shipped limits)
+//   node loadtest/staging/orchestrate.js auth                # OTP login burst (AUTH_RATE logins/s, default 5)
 //   node loadtest/staging/orchestrate.js down                # stop and remove containers + volumes
 //
 // Env: BASE (default http://localhost/api/v1) MAIL (default http://localhost:8025)
@@ -226,15 +226,8 @@ async function run(profile, flags) {
   process.exitCode = codes[codes.length - 1] === 0 ? 0 : 1;
 }
 
-async function auth(mode) {
-  const out = path.join(RESULTS, `${new Date().toISOString().replace(/[:.]/g, "-")}-auth-${mode}`);
-  fs.mkdirSync(out, { recursive: true });
-  if (mode === "limits") {
-    sh("docker", ["compose", "--env-file", ".env.staging", "-f", "compose.staging.yml", "-f", "compose.staging.shipped-otp.yml", "up", "-d", "--force-recreate", "api"], { cwd: BACKEND });
-    await waitApi(); // not up(): a plain `compose up` would recreate the API without the overlay
-  }
-  sh("k6", ["run", ...k6Env({ MODE: mode, RATE: mode === "limits" ? 2 : process.env.AUTH_RATE || 5 }), path.join(__dirname, "auth.js")], { allowFail: true });
-  if (mode === "limits") { compose("up", "-d", "--force-recreate", "api"); await waitApi(); }
+function auth() {
+  sh("k6", ["run", ...k6Env({ RATE: process.env.AUTH_RATE || 5 }), path.join(__dirname, "auth.js")], { allowFail: true });
 }
 
 (async () => {
@@ -249,7 +242,7 @@ async function auth(mode) {
       console.log(`${Object.keys(all).length} users -> ${COOKIES}`);
     }
     else if (cmd === "run") await run(a || "smoke", rest);
-    else if (cmd === "auth") await auth(a || "throughput");
+    else if (cmd === "auth") auth();
     else if (cmd === "down") compose("down", "-v");
     else console.log(fs.readFileSync(__filename, "utf8").split("\n").slice(1, 14).join("\n"));
   } catch (e) {
