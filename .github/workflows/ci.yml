@@ -289,6 +289,9 @@ jobs:
         working-directory: backend
         run: |
           touch .env.dev .env.staging .env.prod .env.test
+          # compose.staging.yml requires GRAFANA_ADMIN_PASSWORD (interpolated from the shell, not from env_file);
+          # a placeholder is enough to validate structure.
+          export GRAFANA_ADMIN_PASSWORD=admin
           for f in dev staging prod test; do docker compose -f "compose.$f.yml" config -q; done
           # Vault is production-only: absent from dev/staging/test, loopback-only in prod.
           for f in dev staging test; do
