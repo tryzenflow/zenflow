@@ -18,10 +18,10 @@ import {
  * Settings preferences. `language`, `timezone` and `defaultReminder` are
  * server-backed (`User.lang` / `timezone` / `defaultReminderMinutes`, via
  * `PATCH /users/update/basic-info`); the server user is the source of truth
- * and AsyncStorage only caches them for offline. `timezoneMode` and
- * `notificationsEnabled` are device-local. (`notificationsEnabled`
- * additionally registers/revokes this device for push; see
- * `components/settings/preferences-section.tsx`.)
+ * and AsyncStorage only caches them for offline. `timezoneMode` is
+ * device-local. ("Allow notifications" is not a preference: it is derived from
+ * OS permission + server device registration, see
+ * `hooks/use-notification-toggle.ts`.)
  */
 export interface Preferences {
   language: Lang;
@@ -31,7 +31,6 @@ export interface Preferences {
   timezoneMode: TimezoneMode;
   /** Minutes before a session starts; 0 = no reminder. */
   defaultReminder: DefaultReminderChoice;
-  notificationsEnabled: boolean;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -39,7 +38,6 @@ export const DEFAULT_PREFERENCES: Preferences = {
   timezone: deviceTimezone(),
   timezoneMode: "device",
   defaultReminder: 10,
-  notificationsEnabled: true,
 };
 
 export const PREFERENCES_KEY = "preferences";
@@ -124,13 +122,8 @@ async function savePreferences(next: Preferences) {
   }
 }
 
-/** Push opt-out flag, read by `syncPushRegistration` without a React context. */
-export async function isPushEnabled(): Promise<boolean> {
-  return (await loadPreferences()).notificationsEnabled;
-}
-
 /** Edit accepted by `update`; `timezone` may be the "device" sentinel. */
-export type PreferencesPatch = SyncedPatch & { notificationsEnabled?: boolean };
+export type PreferencesPatch = SyncedPatch;
 
 export function usePreferences() {
   const user = useUserStore((s) => s.user);
@@ -194,12 +187,11 @@ export function usePreferences() {
    */
   const update = useCallback(
     async (patch: PreferencesPatch): Promise<boolean> => {
-      const { notificationsEnabled, ...synced } = patch;
+      const synced = patch;
       const previous = prefsRef.current;
       const mode = modeForTimezone(synced.timezone);
       const optimistic: Preferences = {
         ...previous,
-        ...(notificationsEnabled !== undefined && { notificationsEnabled }),
         ...(synced.language !== undefined && { language: synced.language }),
         ...(synced.defaultReminder !== undefined && {
           defaultReminder: synced.defaultReminder,

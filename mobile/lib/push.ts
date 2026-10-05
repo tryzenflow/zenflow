@@ -3,9 +3,10 @@ import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import type { Href } from "expo-router";
 import { Platform } from "react-native";
-import { registerDevice, unregisterDevice } from "@/api/devices";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { deviceStatus, registerDevice, unregisterDevice } from "@/api/devices";
 import { debugLog } from "@/lib/debug-log";
-import { isPushEnabled } from "@/lib/preferences";
+import { decideLaunchSync } from "@/lib/push-sync";
 
 /**
  * Native push plumbing for the direct-FCM/APNs backend (`backend/src/devices/`).
@@ -177,18 +178,66 @@ export function hrefFromPushData(
   return "/notifications" as Href;
 }
 
+/** Last token this install registered; non-preference marker (see push-sync). */
+const REGISTERED_TOKEN_KEY = "push.registeredToken";
+
+async function readMarker(): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(REGISTERED_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+async function writeMarker(token: string | null): Promise<void> {
+  try {
+    if (token) await AsyncStorage.setItem(REGISTERED_TOKEN_KEY, token);
+    else await AsyncStorage.removeItem(REGISTERED_TOKEN_KEY);
+  } catch {
+    // Non-fatal.
+  }
+}
+
 /**
- * Get this device's token and register it with the backend. Call after login
- * and whenever the app comes to the foreground — the backend upserts, so
- * repeats are cheap. Returns the token that was registered, or `null`.
+ * Current OS permission and, if granted, this device's token. Never prompts.
  */
-export async function syncPushRegistration(): Promise<string | null> {
-  // Respect the Settings → "Allow notifications" opt-out.
-  if (!(await isPushEnabled())) return null;
+export async function readPushState(): Promise<{
+  permissionGranted: boolean;
+  token: string | null;
+}> {
+  if (Platform.OS === "web") return { permissionGranted: false, token: null };
+  try {
+    const granted = (await Notifications.getPermissionsAsync()).granted;
+    if (!granted) return { permissionGranted: false, token: null };
+    if (Platform.OS === "ios" && !Device.isDevice) {
+      return { permissionGranted: true, token: null };
+    }
+    const t = await Notifications.getDevicePushTokenAsync();
+    return { permissionGranted: true, token: String(t.data) };
+  } catch {
+    return { permissionGranted: false, token: null };
+  }
+}
+
+/** Is `token` registered to the signed-in user? `null` if the call failed. */
+export async function fetchRegistered(token: string): Promise<boolean | null> {
+  try {
+    return (await deviceStatus(token)).registered;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * EXPLICIT enable (toggle / onboarding): ask for permission if needed and
+ * register this device. Returns the registered token, or `null`.
+ */
+export async function enablePushRegistration(): Promise<string | null> {
   const t = await getNativePushToken();
   if (!t) return null;
   try {
     await registerDevice(t.platform, t.token);
+    await writeMarker(t.token);
     debugLog("push", `registered ${t.platform} token …${t.token.slice(-6)}`);
     return t.token;
   } catch (err) {
@@ -198,11 +247,47 @@ export async function syncPushRegistration(): Promise<string | null> {
 }
 
 /**
- * Unregister this device (call on logout, before the session cookie is
- * cleared). Best-effort — a failure here must never block sign-out.
+ * Launch / foreground / login sync. Never prompts and never newly opts a
+ * device in; it only keeps an existing registration alive across token
+ * rotation (rule in `decideLaunchSync`). Call from login and foreground resume.
+ */
+export async function syncPushRegistration(): Promise<void> {
+  const { permissionGranted, token } = await readPushState();
+  if (!permissionGranted || !token) return;
+  const registered = await fetchRegistered(token);
+  if (registered === null) return; // offline: decide next time
+  const markerToken = await readMarker();
+  const action = decideLaunchSync({
+    permissionGranted,
+    token,
+    registered,
+    markerToken,
+  });
+  if (action === "mark") {
+    await writeMarker(token);
+  } else if (action === "rotate") {
+    try {
+      await registerDevice(
+        Platform.OS === "ios" ? "IOS" : "ANDROID",
+        token,
+      );
+      await writeMarker(token);
+      if (markerToken) await unregisterDevice(markerToken).catch(() => {});
+      debugLog("push", "token rotated; re-registered");
+    } catch (err) {
+      debugLog("push", `rotate failed: ${String(err)}`);
+    }
+  }
+}
+
+/**
+ * Unregister this device (turning notifications off, or logout before the
+ * session cookie is cleared). Best-effort — never blocks sign-out. Clears the
+ * rotation marker so an opt-out is not mistaken for a rotated token.
  */
 export async function dropPushRegistration(): Promise<void> {
   if (Platform.OS === "web") return;
+  await writeMarker(null);
   try {
     const devicePushToken = await Notifications.getDevicePushTokenAsync();
     await unregisterDevice(String(devicePushToken.data));

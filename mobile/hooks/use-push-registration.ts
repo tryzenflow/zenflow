@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { AppState } from "react-native";
 import { getSessionDetails } from "@/api/tasks";
 import { useToast } from "@/components/ui/toast";
+import { usePushStatusStore } from "@/hooks/use-push-status-store";
 import { useUserStore } from "@/hooks/use-user-store";
 import {
   claimNotification,
@@ -12,7 +13,6 @@ import {
   isLocalNotification,
   notificationIdOf,
   pushOwner,
-  syncPushRegistration,
 } from "@/lib/push";
 import type { Href } from "expo-router";
 
@@ -32,15 +32,15 @@ export function usePushRegistration(): void {
   const userId = useUserStore((s) => s.user?.id ?? null);
   const lastHandledResponseId = useRef<string | null>(null);
 
-  // Register on login, and re-sync each time the app returns to the foreground
+  // Sync on login (never opts in; only token rotation, see use-notification-toggle), re-sync each time the app returns to the foreground
   // (a token can rotate, or permission can be granted from Settings.app).
   useEffect(() => {
     if (!userId) return;
 
-    void syncPushRegistration();
+    void usePushStatusStore.getState().sync();
 
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") void syncPushRegistration();
+      if (state === "active") void usePushStatusStore.getState().sync();
     });
     return () => sub.remove();
   }, [userId]);

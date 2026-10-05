@@ -1,5 +1,6 @@
 import type {
   DevicePlatform,
+  DeviceStatusResponse,
   RegisterDeviceResponse,
 } from "@zenflow/shared";
 import { api } from "./base";
@@ -23,5 +24,16 @@ export async function unregisterDevice(
   pushToken: string,
 ): Promise<{ pushToken: string }> {
   const { data } = await api.delete("/devices", { data: { pushToken } });
+  return data.data;
+}
+
+/**
+ * Is this push token registered to the signed-in user? Used to derive the
+ * "Allow notifications" state from the server (no local preference).
+ */
+export async function deviceStatus(
+  pushToken: string,
+): Promise<DeviceStatusResponse> {
+  const { data } = await api.post("/devices/status", { pushToken });
   return data.data;
 }

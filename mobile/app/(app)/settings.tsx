@@ -4,6 +4,7 @@ import { LogOut, Moon } from "@/components/Icons";
 import { DluAccountsSection } from "@/components/settings/dlu-accounts-section";
 import { FinishSetupCard } from "@/components/settings/finish-setup-card";
 import { TagsRow } from "@/components/settings/tags-row";
+import { usePushStatusStore } from "@/hooks/use-push-status-store";
 import { useNotificationToggle } from "@/hooks/use-notification-toggle";
 import { PreferencesSection } from "@/components/settings/preferences-section";
 import { ProfileRow } from "@/components/settings/profile-row";
@@ -15,7 +16,6 @@ import { useUserStore } from "@/hooks/use-user-store";
 import { useIntegrationStore } from "@/hooks/use-integration-store";
 import { setAndroidNavigationBar } from "@/lib/android-navigation-bar";
 import { clearSession } from "@/lib/api-client";
-import { dropPushRegistration } from "@/lib/push";
 import { clearCachedSessionUser } from "@/lib/session";
 import { clearDaySessionCache } from "@/lib/session-cache";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
@@ -67,7 +67,7 @@ export default function SettingsScreen() {
   async function handleSignOut() {
     setLoggingOut(true);
     // Drop this device from push while the session cookie is still valid.
-    await dropPushRegistration();
+    await usePushStatusStore.getState().disable();
     try {
       await logoutRequest();
     } catch {

@@ -209,7 +209,6 @@ export default function OnboardingScreen() {
       go();
       return;
     }
-    await update({ notificationsEnabled: false });
     setBlocked(true);
     setBusy(false);
   }
