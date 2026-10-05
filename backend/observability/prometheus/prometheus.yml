@@ -11,6 +11,11 @@ global:
   external_labels:
     stack: zenflow-observability
 
+# Extra, stack-specific jobs: a stack mounts files into this directory (staging adds postgres-exporter).
+# No match is fine, so stacks without extras never show a permanently down target.
+scrape_config_files:
+  - /etc/prometheus/scrape.d/*.yml
+
 scrape_configs:
   # --- application signals (OTLP -> collector -> here) ---------------------
   - job_name: otel-collector-app

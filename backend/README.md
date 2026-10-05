@@ -1174,15 +1174,13 @@ in `start:prod`); it is a no-op unless `OTEL_SDK_DISABLED=false`. All of it stay
 | **Logs**    | `nestjs-pino` JSON (one line, `message` key, `traceId`/`correlationId`/`userId` mixin)                                | container stdout → **Alloy** → **Loki**                        |
 
 The Grafana stack (Collector, Tempo, Loki, Alloy, Prometheus, node-exporter, cAdvisor,
-Grafana) is defined in **`compose.prod.yml`** and, for local use, the standalone
-**`compose.observability.yml`**. Config + provisioned datasources + three dashboards
+Grafana) is defined in **`compose.prod.yml`** and **`compose.staging.yml`**. Config + provisioned datasources + three dashboards
 (_API Overview_, _Scheduler & Bandit_, _Ingestion & Watchers_) live in
 [`observability/`](observability/README.md) — start there.
 
 ```bash
-# Standalone stack, then run the API locally against it:
-docker compose -f compose.observability.yml up -d          # Grafana → :3000
-OTEL_SDK_DISABLED=false OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 pnpm start:prod
+# Staging stack with the observability services (needs GRAFANA_ADMIN_PASSWORD in .env.staging):
+docker compose --env-file .env.staging -f compose.staging.yml up -d --build   # Grafana → 127.0.0.1:3000
 ```
 
 ## Running staging
@@ -1193,7 +1191,7 @@ install, the API itself runs inside the container.
 
 `compose.staging.yml` is the fully containerized stack: `api` (built from the
 `Dockerfile`), `postgres`, `redis` (sessions/OTP), `redis-ratelimit` (dedicated to
-LimitKit's rate-limit counters — see "Rate limiting"), `mail` (MailHog — catches OTP
+LimitKit's rate-limit counters — see "Rate limiting"), `mail` (Mailpit — catches OTP
 emails), and a `caddy` reverse proxy on `:80`, configured via `.env.staging`
 (which also carries the `POSTGRES_*` vars for the Postgres container). `compose.prod.yml` follows the same shape minus `mail`.
 
