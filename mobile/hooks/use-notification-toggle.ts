@@ -48,7 +48,7 @@ export function useNotificationToggle() {
       const token = await syncPushRegistration();
       await refreshPermission();
       if (!token) {
-        toast("Couldn't enable push on this device.", "destructive");
+        toast("Couldn't turn on notifications.", "destructive");
         return false;
       }
       return true;
