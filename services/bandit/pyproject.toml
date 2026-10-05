@@ -5,7 +5,7 @@ description = "Contextual bandit (LinUCB) service for Zenflow's scheduler"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.141.1",
+    "fastapi>=0.142.2",
     "numpy>=2.5.3",
     "opentelemetry-distro>=0.65b0",
     "opentelemetry-exporter-otlp-proto-http>=1.45.0",
