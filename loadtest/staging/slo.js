@@ -58,6 +58,12 @@ export function thresholdsFor(profile) {
     if (!isHold(st.name)) continue;
     const tier = st.name === "1x" || st.name === "smoke" ? 0 : 1;
     t[`unavailable{step:${st.name}}`] = [`rate<${AVAILABILITY[tier]}`];
+    // Unexpected 4xx/5xx (e.g. 401s from expired seed sessions) are not "unavailable", but a step full of them is not a pass.
+    t[`unexpected_status{step:${st.name}}`] = ["count==0"];
+    // The step must actually deliver its planned load: if k6 runs out of VUs it drops iterations, and the requests it did
+    // send could still meet the latency SLOs. 2% tolerance for ramp edges.
+    const planned = (st.rate * (st.endMs - st.startMs)) / 1000;
+    t[`step_iterations{step:${st.name}}`] = [`count>=${Math.floor(planned * 0.98)}`];
     for (const [op, p95] of Object.entries(SLO)) t[`op_${op}{step:${st.name}}`] = [`p(95)<${p95[tier]}`];
   }
   return t;

@@ -85,11 +85,12 @@ services:
 
   postgres:
     container_name: zenflow-db-prod
-    image: postgres:16-alpine
+    # Postgres 18 keeps its data under /var/lib/postgresql/18/docker, so the volume mounts one level up.
+    image: postgres:18.4-alpine
     expose:
       - "5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     env_file:
       - .env.prod
     networks:
@@ -239,8 +240,7 @@ services:
       - o11y
 
   # Dashboards + Explore. Bound to loopback only — reach it with an SSH tunnel
-  # or put it behind Caddy with auth. Anonymous access is OFF here (unlike the
-  # standalone compose.observability.yml).
+  # or put it behind Caddy with auth. Anonymous access is OFF.
   grafana:
     container_name: zenflow-grafana-prod
     image: grafana/grafana:11.4.0

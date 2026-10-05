@@ -25,7 +25,7 @@ What matters more than the pass:
 | Docker | Colima VM, 16 vCPU / 32 GiB, Docker 29.8.1, containerd image store |
 | Load generator | k6 v2.3.0 on the same Mac, outside the VM |
 | API | NestJS, Node 20.20, image built from this working tree |
-| Database | PostgreSQL 16.15 (same major as prod) with `pg_stat_statements` |
+| Database | PostgreSQL 16.15 with `pg_stat_statements` for this run (the committed staging and prod stacks now use 18.4, same as each other; not re-measured on 18) |
 | Scheduler | Python bandit service (`services/bandit`), the `python` placement mode |
 
 ### 2.2 Stack (`backend/compose.staging.yml`)
@@ -74,7 +74,7 @@ In the background, DLU sync (`POST /integrations/:provider/sync`) runs at 0.2 pe
 
 ### 3.3 SLOs (draft)
 
-The thresholds are enforced by k6, so a failed SLO exits the run with code 99.
+The thresholds are enforced by k6, so a failed SLO exits the run with code 99. Each hold step is also required to deliver at least 98% of its planned iterations and to have no unexpected 4xx/5xx responses, and any failed DLU sync fails the run, so a step cannot pass by dropping load or by erroring quickly. (These guards were added after this run; it recorded 0 dropped iterations, 0 unexpected statuses and 0 failed syncs, so its results stand.)
 
 | SLI | SLO at 1x | SLO at 2-3x |
 | --- | --- | --- |
@@ -225,7 +225,7 @@ Not filed yet; each is a candidate issue.
 
 ## 8. What changed in the code for this test
 
-- `backend/compose.staging.yml`: observability stack merged in from `compose.observability.yml`, fake DLU, Postgres 16 with `pg_stat_statements`, postgres-exporter, resource caps, Mailpit, and a `PAIRWISE_SAMPLE_RATE` pass-through.
+- `backend/compose.staging.yml`: the observability stack (the standalone `compose.observability.yml` is removed), fake DLU, Postgres with `pg_stat_statements`, postgres-exporter, resource caps, Mailpit, and a `PAIRWISE_SAMPLE_RATE` pass-through.
 - `backend/src/observability/metrics.ts`, `scheduler/io/placement-gateway.service.ts`, `scheduler/io/python-placer.service.ts`: the two placement histograms. `scheduler/constants.ts`: `PAIRWISE_SAMPLE_RATE` can be overridden by an environment variable (clamped to 0-1, default 1, so production behaviour is unchanged).
 - Grafana: API Overview now groups by method and route, pins HTTP queries to the app's own series (OpenTelemetry's auto-instrumentation emits the same metric a second time without a `route` label, which doubled every sum), excludes the sync route from aggregates and shows it separately. Scheduler & Bandit has a new "Placement latency — heuristic vs LinUCB" row.
 - `loadtest/staging/`: the harness. `loadtest/scripts/lib.js`: Mailpit support (`MAIL_KIND=mailpit`), MailHog stays the default.

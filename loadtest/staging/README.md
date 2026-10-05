@@ -5,9 +5,9 @@ parent `loadtest/` harness there are no git worktrees or A/B/C variants: it test
 SLOs and results live in [docs/benchmarks](../../docs/benchmarks/2026-10-staging-loadtest.md).
 
 ## Stack
-`backend/.env.staging` (git-ignored) needs the full API env, see `backend/.env.example`. OTP rate limits are raised
+`backend/.env.staging` (git-ignored) needs the full API env, see `backend/.env.example`, plus `GRAFANA_ADMIN_PASSWORD` (compose refuses to start Grafana without it). OTP rate limits are raised
 there so one k6 IP can log users in; `LMS_URL` / `PORTAL_API_URL` point at `fake-dlu`, never a real DLU host.
-Caps: api 4 CPU / 4 GB, postgres 4 CPU / 8 GB, bandit 2 CPU / 2 GB. Postgres 16 (same major as prod) with `pg_stat_statements`.
+Caps: api 4 CPU / 4 GB, postgres 4 CPU / 8 GB, bandit 2 CPU / 2 GB. Postgres 18 with `pg_stat_statements`.
 Grafana: http://localhost:3000 (admin / `GRAFANA_ADMIN_PASSWORD`, default `admin`). Mail UI: http://localhost:8025.
 
 ## Run

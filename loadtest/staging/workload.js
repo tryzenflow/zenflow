@@ -26,6 +26,7 @@ const UNAVAILABLE = new Rate("unavailable");
 const UNEXPECTED = new Counter("unexpected_status"); // 4xx/5xx other than the expected 409 on the infeasible path
 const DEGRADED = new Counter("resp_degraded_true");
 const NOOP = new Counter("noop_no_target");
+const STEP_ITERS = new Counter("step_iterations"); // iterations actually started in each step (dropped ones never start)
 
 export const options = {
   scenarios: {
@@ -70,7 +71,7 @@ function record(op, res, expected409 = false) {
   T[op].add(res.timings.duration, { step: STEP });
   const s = res.status;
   UNAVAILABLE.add(s === 0 || s >= 500, { step: STEP });
-  if (!(s === 200 || s === 201 || s === 204 || (expected409 && s === 409))) UNEXPECTED.add(1, { op });
+  if (!(s === 200 || s === 201 || s === 204 || (expected409 && s === 409))) UNEXPECTED.add(1, { op, step: STEP });
   return s === 200 || s === 201;
 }
 
@@ -173,6 +174,7 @@ function settings(h) {
 
 export default function () {
   STEP = currentStep();
+  STEP_ITERS.add(1, { step: STEP });
   const cookie = pick(COOKIES);
   const h = headers(cookie);
   const now = Date.now();
@@ -196,6 +198,9 @@ export function handleSummary(data) {
     out.failed = [];
     for (const o of OPS) if (m[`op_${o}{step:${st.name}}`]) out.ops[o] = trend(`op_${o}{step:${st.name}}`);
     out.unavailableRate = v(`unavailable{step:${st.name}}`, "rate");
+    out.iterationsDelivered = v(`step_iterations{step:${st.name}}`, "count") || 0;
+    out.iterationsPlanned = Math.round((st.rate * (st.endMs - st.startMs)) / 1000);
+    out.unexpectedStatuses = v(`unexpected_status{step:${st.name}}`, "count") || 0;
     for (const [name, mm] of Object.entries(m)) if (name.endsWith(`{step:${st.name}}`) && mm.thresholds) for (const [t, r] of Object.entries(mm.thresholds)) if (!r.ok) out.failed.push(`${name} ${t}`);
     out.passed = out.failed.length === 0;
     return out;
@@ -207,6 +212,6 @@ export function handleSummary(data) {
     unexpectedStatus: v("unexpected_status", "count") || 0, degraded: v("resp_degraded_true", "count") || 0, noop: v("noop_no_target", "count") || 0,
     steps, ops,
   };
-  const table = steps.filter((x) => x.ops).map((x) => `${x.name.padEnd(6)} ${x.passed ? "PASS" : "FAIL"}  unavailable=${((x.unavailableRate || 0) * 100).toFixed(2)}%  ` + ["list_week", "list_month", "post_task", "post_series", "patch_move"].map((o) => `${o}=${x.ops[o] ? Math.round(x.ops[o].p95) : "-"}ms`).join(" ") + (x.failed.length ? `\n         failed: ${x.failed.join("; ")}` : "")).join("\n");
+  const table = steps.filter((x) => x.ops).map((x) => `${x.name.padEnd(6)} ${x.passed ? "PASS" : "FAIL"}  load=${x.iterationsDelivered}/${x.iterationsPlanned}  unexpected=${x.unexpectedStatuses}  unavailable=${((x.unavailableRate || 0) * 100).toFixed(2)}%  ` + ["list_week", "list_month", "post_task", "post_series", "patch_move"].map((o) => `${o}=${x.ops[o] ? Math.round(x.ops[o].p95) : "-"}ms`).join(" ") + (x.failed.length ? `\n         failed: ${x.failed.join("; ")}` : "")).join("\n");
   return { [__ENV.OUT || "summary.json"]: JSON.stringify(out, null, 2), stdout: `\np95 per step (dropped iterations: ${out.droppedIterations}, unexpected statuses: ${out.unexpectedStatus})\n${table}\n` };
 }

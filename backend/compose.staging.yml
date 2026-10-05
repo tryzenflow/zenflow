@@ -44,6 +44,11 @@ services:
     environment:
       OTEL_SDK_DISABLED: "false"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      # Pinned here, not left to .env.staging: a missing value would fall back to the REAL DLU hosts, and the load
+      # test drives hundreds of synthetic accounts. These must only ever point at fake-dlu.
+      LMS_URL: http://fake-dlu:4100
+      PORTAL_API_URL: http://fake-dlu:4100
+      PORTAL_API_KEY: fake-portal-key
       # Load test knob: 0 = each placement runs exactly one algorithm (see scheduler/constants.ts). Prod leaves it unset (=1).
       PAIRWISE_SAMPLE_RATE: ${PAIRWISE_SAMPLE_RATE:-1}
     # Caps keep the load test fair: no service can starve the others on a big host.
@@ -99,8 +104,7 @@ services:
 
   postgres:
     container_name: zenflow-db-staging
-    # Same major as prod (compose.prod.yml) so planner behaviour matches.
-    image: postgres:16-alpine
+    image: postgres:18.4-alpine
     command:
       - postgres
       - -c
@@ -110,7 +114,7 @@ services:
     expose:
       - "5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
       - ./observability/postgres/init-pg-stat-statements.sql:/docker-entrypoint-initdb.d/10-pg-stat-statements.sql:ro
     env_file:
       - .env.staging
@@ -146,11 +150,11 @@ services:
     expose:
       - "1025"
     ports:
-      - 8025:8025
+      - "127.0.0.1:8025:8025"
     networks:
       - mail
 
-  # --- Observability stack (see observability/README.md; merged from compose.observability.yml) --------------------
+  # --- Observability stack (see observability/README.md) --------------------
   # Receives OTLP/HTTP from the API (src/tracing.ts) and the bandit service on
   # :4318, fans traces -> Tempo, metrics -> Prometheus (scrape :8889),
   # logs -> Loki. .env.prod must set
@@ -236,6 +240,7 @@ services:
       - --enable-feature=exemplar-storage,native-histograms
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/scrape.d/postgres-exporter.yml:/etc/prometheus/scrape.d/postgres-exporter.yml:ro
       - prometheus_data:/prometheus
     expose:
       - "9090"
@@ -255,6 +260,12 @@ services:
     networks:
       - o11y
 
+  # `cgroup: host`: on a cgroup v2 host cAdvisor otherwise runs in a private cgroup namespace and sees only its
+  # own cgroup, so every container_* series for sibling containers comes back empty. It also needs the host's Docker
+  # on the classic overlay2 graphdriver, not the containerd image store (`docker info` -> Driver Type
+  # io.containerd.snapshotter.v1): there it cannot resolve a container's read-write layer and container_* series
+  # carry no name/image label (Colima does this; the load test samples `docker stats` instead). Fix: set
+  # {"features": {"containerd-snapshotter": false}} in /etc/docker/daemon.json and restart dockerd.
   cadvisor:
     container_name: zenflow-cadvisor-staging
     image: gcr.io/cadvisor/cadvisor:v0.49.1
@@ -273,14 +284,13 @@ services:
       - o11y
 
   # Dashboards + Explore. Bound to loopback only — reach it with an SSH tunnel
-  # or put it behind Caddy with auth. Anonymous access is OFF here (unlike the
-  # standalone compose.observability.yml).
+  # or put it behind Caddy with auth. Anonymous access is OFF.
   grafana:
     container_name: zenflow-grafana-staging
     image: grafana/grafana:11.4.0
     restart: unless-stopped
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env.staging}
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000}
       GF_FEATURE_TOGGLES_ENABLE: traceqlEditor traceToMetrics
       GF_LOG_LEVEL: warn
@@ -292,7 +302,7 @@ services:
       - ./observability/grafana/dashboards:/etc/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     networks:
       - o11y
     depends_on:

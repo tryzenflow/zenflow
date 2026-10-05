@@ -24,6 +24,7 @@ export const options = {
     sync: { executor: "constant-arrival-rate", rate: SYNC_RATE < 1 ? 1 : Math.round(SYNC_RATE), timeUnit: SYNC_RATE < 1 ? `${Math.round(1 / SYNC_RATE)}s` : "1s", duration: DURATION, preAllocatedVUs: 20, maxVUs: 200 },
   },
   setupTimeout: "10m",
+  thresholds: { sync_failed: ["rate==0"] }, // any failed sync fails the run (k6 exits 99)
   summaryTrendStats: ["avg", "med", "p(95)", "p(99)", "max"],
 };
 

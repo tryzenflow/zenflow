@@ -97,8 +97,12 @@ async function restore() {
   compose("stop", "api");
   sh("docker", ["exec", PG, "psql", "-U", user, "-d", "postgres", "-c", `DROP DATABASE IF EXISTS "${db}" WITH (FORCE)`]);
   sh("docker", ["exec", PG, "psql", "-U", user, "-d", "postgres", "-c", `CREATE DATABASE "${db}"`]);
-  sh("docker", ["exec", PG, "psql", "-U", user, "-d", db, "-c", "CREATE EXTENSION IF NOT EXISTS pg_stat_statements"]);
-  sh("docker", ["exec", "-i", PG, "pg_restore", "-U", user, "-d", db, "--no-owner"], { input: fs.readFileSync(SNAPSHOT), stdio: ["pipe", "inherit", "inherit"], allowFail: true });
+  // Strict: a partial restore must stop the run, not benchmark an incomplete seed. The dump creates pg_stat_statements
+  // itself (pre-creating it made pg_restore exit non-zero, which is why this used to be allowed to fail).
+  sh("docker", ["exec", "-i", PG, "pg_restore", "-U", user, "-d", db, "--no-owner", "--exit-on-error"], { input: fs.readFileSync(SNAPSHOT), stdio: ["pipe", "inherit", "inherit"] });
+  const seeded = Object.keys(JSON.parse(fs.readFileSync(COOKIES, "utf8"))).length;
+  const users = +sh("docker", ["exec", PG, "psql", "-U", user, "-d", db, "-At", "-c", 'SELECT count(*) FROM "User"'], { capture: true }).stdout.trim();
+  if (!(users >= seeded)) throw new Error(`restore incomplete: ${users} users in the database, expected at least ${seeded}`);
   compose("up", "-d", "api");
   await up();
 }
@@ -111,7 +115,7 @@ function promQuery(q, atMs) {
 
 // Server-side view of the phase: what Grafana would show. `w` = window, e.g. "12m".
 // Per-container CPU/memory is NOT taken from cAdvisor: on Colima's containerd image store it reports only
-// the aggregate /docker cgroup (see the note in compose.observability.yml), so we sample `docker stats` instead.
+// the aggregate /docker cgroup (see the cadvisor note in backend/compose.staging.yml), so we sample `docker stats` instead.
 function promSnapshot(w, atMs) {
   const H = "http_server_request_duration_seconds";
   // route!="" pins the app's own series: OTel's HTTP auto-instrumentation emits the same metric name (label http_route,
@@ -223,7 +227,8 @@ async function run(profile, flags) {
     console.log(`${name.padEnd(6)} api ${cpu("zenflow-api-staging")} | db ${cpu("zenflow-db-staging")} | bandit ${cpu("zenflow-bandit-staging")}`);
   }
   console.log(`\nresults: ${out}\nk6 exit codes${withSync ? " (sync, workload)" : ""}: ${codes.join(",")}  (99 = an SLO threshold failed)`);
-  process.exitCode = codes[codes.length - 1] === 0 ? 0 : 1;
+  // every k6 process must have passed (a failed sync must not hide behind a green workload)
+  process.exitCode = codes.every((c) => c === 0) ? 0 : 1;
 }
 
 function auth() {
