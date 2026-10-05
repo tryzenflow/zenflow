@@ -7,6 +7,7 @@ const USER = { id: "u1" } as User;
 function make() {
   const service = {
     registerDevice: jest.fn().mockResolvedValue({ id: "d1" }),
+    deviceStatus: jest.fn().mockResolvedValue({ registered: true }),
     unregisterDevice: jest.fn().mockResolvedValue({ pushToken: "tok-a" }),
   };
   return {
@@ -45,6 +46,19 @@ describe("DevicesController", () => {
       success: true,
       message: "Device unregistered",
       data: { pushToken: "tok-a" },
+    });
+  });
+
+  it("status forwards just the token and wraps the envelope", async () => {
+    const { controller, service } = make();
+
+    const res = await controller.status(USER, { pushToken: "tok-a" });
+
+    expect(service.deviceStatus).toHaveBeenCalledWith(USER, "tok-a");
+    expect(res).toEqual({
+      success: true,
+      message: "Device status",
+      data: { registered: true },
     });
   });
 });

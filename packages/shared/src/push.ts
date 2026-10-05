@@ -25,6 +25,17 @@ export interface UnregisterDeviceInput {
   pushToken: string;
 }
 
+/** Request body for `POST /devices/status` — is this token registered for me? */
+export interface DeviceStatusInput {
+  pushToken: string;
+}
+
+/** `data` payload for `POST /devices/status`. */
+export interface DeviceStatusResponse {
+  /** True only if the token is registered to the calling user. */
+  registered: boolean;
+}
+
 /** `data` payload for `POST /devices`. */
 export interface RegisterDeviceResponse {
   id: string;
