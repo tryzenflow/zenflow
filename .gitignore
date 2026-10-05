@@ -10,3 +10,11 @@ tw-test-out.css
 start-dev.bat
 start-dev.ps1
 startdev-*.bat
+
+# Env files: commit only *.example (frontend .env.production/.staging are tracked Vite build config)
+.env
+.env.*
+!.env.example
+!frontend/.env.production
+!frontend/.env.staging
+backend/.vault-dev/
