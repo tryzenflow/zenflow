@@ -25,6 +25,9 @@ model User {
   /// Reminder lead time (minutes) applied to new sessions that omit `reminders`; 0 = none.
   defaultReminderMinutes Int @default(10)
 
+  /// When the user finished (or skipped through) first-run onboarding; null = not yet. Set once, server-side.
+  onboardedAt DateTime?
+
   preferenceMatrix          Float[]   @default([])
   preferenceMatrixDecayedAt DateTime?
 

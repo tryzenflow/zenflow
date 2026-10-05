@@ -44,11 +44,19 @@ export class UsersService {
   }
 
   async update(id: string, updateUserDto: UpdateUserDto) {
+    const { onboarded, ...rest } = updateUserDto;
     try {
+      if (onboarded) {
+        // Idempotent: only the first completion stamps the time.
+        await this.prisma.user.updateMany({
+          where: { id, onboardedAt: null },
+          data: { onboardedAt: new Date() },
+        });
+      }
       const userUpdate = this.prisma.user.update({
         where: { id },
         data: {
-          ...updateUserDto,
+          ...rest,
           lang: updateUserDto.lang ? langToDb(updateUserDto.lang) : undefined,
         },
       });

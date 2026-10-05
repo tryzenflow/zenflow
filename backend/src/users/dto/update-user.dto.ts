@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, Length } from "class-validator";
+import { Equals, IsIn, IsOptional, IsString, Length } from "class-validator";
 import {
   DEFAULT_REMINDER_CHOICES,
   LANGS,
@@ -28,4 +28,9 @@ export class UpdateUserDto implements UpdateUserInput {
   @IsIn(DEFAULT_REMINDER_CHOICES)
   @IsOptional()
   defaultReminderMinutes?: DefaultReminderChoice;
+
+  /** `true` completes onboarding (idempotent). */
+  @Equals(true)
+  @IsOptional()
+  onboarded?: true;
 }
