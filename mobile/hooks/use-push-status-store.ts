@@ -1,4 +1,3 @@
-import { create } from "zustand";
 import { updateBasicInfo } from "@/api/users";
 import { useUserStore } from "@/hooks/use-user-store";
 import {
@@ -7,7 +6,9 @@ import {
   registerThisDevice,
   requestPermission,
 } from "@/lib/push";
-import { decidePushAction, type PushPermission } from "@/lib/push-sync";
+import { type PushPermission, decidePushAction } from "@/lib/push-sync";
+import { createSerialGate } from "@/lib/serial-gate";
+import { create } from "zustand";
 
 type State = {
   /** OS notification permission; `null` until first read. */
@@ -19,7 +20,11 @@ type Action = {
   refresh: () => Promise<void>;
   /** Login / launch / foreground rule (see `decidePushAction`). */
   sync: () => Promise<void>;
-  /** Explicit enable: prompt, PATCH the preference, register. True on success. */
+  /**
+   * Explicit enable: prompt, PATCH the preference, register. True only if this
+   * device is actually registered; on registration failure the preference
+   * stays true (retried by `sync`) but the caller is told it failed.
+   */
   enable: () => Promise<boolean>;
   /** Explicit disable: PATCH false and unregister this device. */
   disable: () => Promise<void>;
@@ -30,10 +35,31 @@ type Action = {
 /** User id we already showed the system prompt for in this login/session. */
 let promptedFor: string | null = null;
 
+/**
+ * Register/unregister run through one gate: strictly in call order, and any
+ * unregister invalidates registrations still waiting, so a late login/foreground
+ * registration can't re-add the token after the user turned notifications off.
+ */
+const pushGate = createSerialGate();
+
+const register = (stillWanted: () => boolean = () => true) =>
+  pushGate.run(
+    (isCurrent) =>
+      stillWanted() ? registerThisDevice(isCurrent) : Promise.resolve(false),
+    false,
+  );
+
+const unregister = () => {
+  pushGate.invalidate();
+  return pushGate.run(() => dropPushRegistration(), undefined);
+};
+
 /** PATCH the server preference and mirror the response into the user store. */
 async function saveAllow(allowNotifications: boolean): Promise<boolean> {
   try {
-    useUserStore.getState().setUser(await updateBasicInfo({ allowNotifications }));
+    useUserStore
+      .getState()
+      .updateUser(await updateBasicInfo({ allowNotifications }));
     return true;
   } catch {
     return false;
@@ -68,8 +94,12 @@ export const usePushStatusStore = create<State & Action>((set) => ({
       set({ permission });
       action = permission === "granted" ? "register" : "disable";
     }
-    if (action === "register") await registerThisDevice();
-    else if (action === "disable") await saveAllow(false);
+    if (action === "register") {
+      // The preference may have been switched off while we awaited the OS.
+      await register(
+        () => useUserStore.getState().user?.allowNotifications === true,
+      );
+    } else if (action === "disable") await saveAllow(false);
   },
   enable: async () => {
     const user = useUserStore.getState().user;
@@ -82,15 +112,16 @@ export const usePushStatusStore = create<State & Action>((set) => ({
       return false;
     }
     if (!(await saveAllow(true))) return false;
-    await registerThisDevice();
-    return true;
+    // Keep allowNotifications true on failure (the user's intent): the next
+    // launch/foreground sync retries. But don't report success.
+    return register();
   },
   disable: async () => {
     await saveAllow(false);
-    await dropPushRegistration();
+    await unregister();
   },
   unregisterOnLogout: async () => {
-    await dropPushRegistration();
+    await unregister();
   },
 }));
 

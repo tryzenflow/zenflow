@@ -1,11 +1,11 @@
+import { registerDevice, unregisterDevice } from "@/api/devices";
+import { debugLog } from "@/lib/debug-log";
+import type { PushPermission } from "@/lib/push-sync";
 import type { DevicePlatform, PushDataPayload } from "@zenflow/shared";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import type { Href } from "expo-router";
 import { Platform } from "react-native";
-import { registerDevice, unregisterDevice } from "@/api/devices";
-import { debugLog } from "@/lib/debug-log";
-import type { PushPermission } from "@/lib/push-sync";
 
 /**
  * Native push plumbing for the direct-FCM/APNs backend (`backend/src/devices/`).
@@ -165,9 +165,13 @@ export async function requestPermission(): Promise<PushPermission | null> {
 
 /**
  * Register (upsert) this device. Requires permission to already be granted —
- * never prompts. Returns true on success.
+ * never prompts. Returns true on success. `isCurrent` is re-checked after the
+ * (slow) token fetch, right before `POST /devices`, so a registration that was
+ * invalidated meanwhile (toggle off / logout) never re-adds the token.
  */
-export async function registerThisDevice(): Promise<boolean> {
+export async function registerThisDevice(
+  isCurrent: () => boolean = () => true,
+): Promise<boolean> {
   if (Platform.OS === "web") return false;
   if (Platform.OS === "ios" && !Device.isDevice) {
     debugLog("push", "skipped: iOS simulator has no APNs");
@@ -178,6 +182,10 @@ export async function registerThisDevice(): Promise<boolean> {
     const t = await Notifications.getDevicePushTokenAsync();
     const platform: DevicePlatform = t.type === "ios" ? "IOS" : "ANDROID";
     const token = String(t.data);
+    if (!isCurrent()) {
+      debugLog("push", "register cancelled (superseded)");
+      return false;
+    }
     await registerDevice(platform, token);
     debugLog("push", `registered ${platform} token …${token.slice(-6)}`);
     return true;

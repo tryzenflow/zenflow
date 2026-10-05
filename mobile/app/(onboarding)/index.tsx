@@ -30,7 +30,7 @@ import {
 } from "@/lib/preferences";
 import { DEVICE_TIMEZONE } from "@/lib/preferences-sync";
 import { cn } from "@/lib/utils";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Linking,
@@ -134,7 +134,7 @@ export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
   const { toast } = useToast();
   const user = useUserStore((s) => s.user);
-  const setUser = useUserStore((s) => s.setUser);
+  const updateUser = useUserStore((s) => s.updateUser);
   const { setIntegrations, setLoading, integrations } = useIntegrationStore();
   const notif = useNotificationToggle();
   const { prefs, update } = notif;
@@ -181,17 +181,37 @@ export default function OnboardingScreen() {
     }
   }
 
-  async function savePref(patch: Parameters<typeof update>[0]) {
-    if (await update(patch)) return true;
-    toast(COPY.saveFailed, "destructive");
-    return false;
+  // Preference saves started by tapping a choice; Continue/Skip/finish wait
+  // for them so onboarding can't move on (or complete) with a save pending
+  // that might still fail and roll the choice back.
+  const pendingSaves = useRef(new Set<Promise<boolean>>());
+
+  function savePref(patch: Parameters<typeof update>[0]) {
+    const p = (async () => {
+      if (await update(patch)) return true;
+      toast(COPY.saveFailed, "destructive");
+      return false;
+    })();
+    pendingSaves.current.add(p);
+    void p.finally(() => pendingSaves.current.delete(p));
+    return p;
   }
+
+  /** Wait for in-flight saves; false if any failed (toast already shown). */
+  async function settleSaves() {
+    const results = await Promise.all([...pendingSaves.current]);
+    return results.every(Boolean);
+  }
+
+  /** Advance once pending saves finish; stay on the step if one failed. */
+  const advance = () =>
+    run(async () => ((await settleSaves()) ? undefined : false));
 
   const saveName = () =>
     run(async () => {
       const trimmed = name.trim();
       if (!trimmed || trimmed === user?.name) return;
-      setUser(await updateBasicInfo({ name: trimmed }));
+      updateUser(await updateBasicInfo({ name: trimmed }));
     });
 
   const saveTags = () =>
@@ -221,8 +241,12 @@ export default function OnboardingScreen() {
   async function finish() {
     setBusy(true);
     try {
+      if (!(await settleSaves())) {
+        setBusy(false);
+        return;
+      }
       // Idempotent; the root AuthGate then routes to the app.
-      setUser(await updateBasicInfo({ onboarded: true }));
+      updateUser(await updateBasicInfo({ onboarded: true }));
     } catch {
       toast(COPY.saveFailed, "destructive");
       setBusy(false);
@@ -268,7 +292,7 @@ export default function OnboardingScreen() {
           ))}
         </View>
       );
-      footer = primary(COPY.continue, go);
+      footer = primary(COPY.continue, advance);
       break;
     case "name":
       ({ title, body } = COPY.name);
@@ -286,7 +310,7 @@ export default function OnboardingScreen() {
       footer = (
         <>
           {primary(COPY.continue, saveName, !name.trim())}
-          {ghost(COPY.skipForNow, go)}
+          {ghost(COPY.skipForNow, advance)}
         </>
       );
       break;
@@ -302,8 +326,8 @@ export default function OnboardingScreen() {
       );
       footer = (
         <>
-          {primary(COPY.continue, go)}
-          {!dluConnected && ghost(COPY.skipForNow, go)}
+          {primary(COPY.continue, advance)}
+          {!dluConnected && ghost(COPY.skipForNow, advance)}
         </>
       );
       break;
@@ -341,7 +365,7 @@ export default function OnboardingScreen() {
         <>
           {primary(
             blocked ? COPY.continue : COPY.notifications.enable,
-            blocked ? go : enableNotifications,
+            blocked ? advance : enableNotifications,
           )}
           {!blocked && ghost(COPY.notifications.notNow, notNow)}
         </>
@@ -378,8 +402,8 @@ export default function OnboardingScreen() {
       );
       footer = (
         <>
-          {primary(COPY.continue, go)}
-          {ghost(COPY.skipForNow, go)}
+          {primary(COPY.continue, advance)}
+          {ghost(COPY.skipForNow, advance)}
         </>
       );
       break;
@@ -399,8 +423,8 @@ export default function OnboardingScreen() {
       );
       footer = (
         <>
-          {primary(COPY.continue, go)}
-          {ghost(COPY.skipForNow, go)}
+          {primary(COPY.continue, advance)}
+          {ghost(COPY.skipForNow, advance)}
         </>
       );
       break;
@@ -423,7 +447,7 @@ export default function OnboardingScreen() {
             saveTags,
             !tagsLoaded,
           )}
-          {ghost(COPY.skipForNow, go)}
+          {ghost(COPY.skipForNow, advance)}
         </>
       );
       break;
@@ -493,7 +517,7 @@ export default function OnboardingScreen() {
             <Pressable
               onPress={() => {
                 setBlocked(false);
-                go();
+                void advance();
               }}
               hitSlop={8}
               disabled={busy}

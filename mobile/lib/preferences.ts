@@ -127,7 +127,7 @@ export type PreferencesPatch = SyncedPatch;
 
 export function usePreferences() {
   const user = useUserStore((s) => s.user);
-  const setUser = useUserStore((s) => s.setUser);
+  const updateUser = useUserStore((s) => s.updateUser);
   const [prefs, setPrefs] = useState<Preferences>(DEFAULT_PREFERENCES);
   const prefsRef = useRef(prefs);
   prefsRef.current = prefs;
@@ -153,7 +153,8 @@ export function usePreferences() {
       // the device" — that would overwrite a zone chosen on another device.
       // Infer it from whether the account's zone already matches this phone.
       const mode: TimezoneMode =
-        savedMode ?? (user.timezone === deviceTimezone() ? "device" : "explicit");
+        savedMode ??
+        (user.timezone === deviceTimezone() ? "device" : "explicit");
       const next = {
         ...stored,
         ...userToSyncedPrefs(user, mode),
@@ -169,7 +170,7 @@ export function usePreferences() {
         : null;
       if (drift) {
         try {
-          setUser(await updateBasicInfo({ timezone: drift }));
+          updateUser(await updateBasicInfo({ timezone: drift }));
         } catch {
           // Offline — retried next launch.
           driftChecked.current = false;
@@ -179,7 +180,7 @@ export function usePreferences() {
     return () => {
       mounted = false;
     };
-  }, [user, setUser]);
+  }, [user, updateUser]);
 
   /**
    * Apply an edit. Server-backed fields are optimistic: rolled back if the
@@ -231,7 +232,7 @@ export function usePreferences() {
           setPrefs(next);
           prefsRef.current = next;
           await savePreferences(next);
-          setUser(updated);
+          updateUser(updated);
           return true;
         } catch {
           // Roll back only this edit's fields, keeping any newer ones.
@@ -256,7 +257,7 @@ export function usePreferences() {
       queue.current = result;
       return result;
     },
-    [setUser],
+    [updateUser],
   );
 
   return { prefs, update };

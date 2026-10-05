@@ -125,6 +125,35 @@ export function addCustomTag(
   return [...selected, canonical];
 }
 
+/**
+ * Names to actually POST: `selected` minus tags that already exist, so the
+ * {@link BULK_TAGS_MAX} cap applies to new tags only (a user with more than
+ * 50 existing tags can still add one).
+ */
+export function newTagsForBulk(
+  selected: readonly string[],
+  existing: readonly string[],
+): string[] {
+  return tagsForBulk(
+    selected.filter((s) => {
+      const n = normalizeTagName(s);
+      return n !== null && !existing.some((e) => sameTag(e, n));
+    }),
+  );
+}
+
+/** Existing names plus `incoming` (case-insensitive dedupe, existing first). */
+export function mergeTagNames(
+  existing: readonly string[],
+  incoming: readonly string[],
+): string[] {
+  const out = [...existing];
+  for (const name of incoming) {
+    if (!out.some((o) => sameTag(o, name))) out.push(name);
+  }
+  return out;
+}
+
 /** Names for POST /tags/bulk: deduped, capped; empty => skip the call. */
 export function tagsForBulk(selected: readonly string[]): string[] {
   const out: string[] = [];

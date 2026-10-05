@@ -4,6 +4,8 @@ import {
   canGoBack,
   filterTimezones,
   initialTagSelection,
+  mergeTagNames,
+  newTagsForBulk,
   nextStep,
   pendingSetupItems,
   prevStep,
@@ -100,5 +102,20 @@ describe("filterTimezones", () => {
     expect(filterTimezones(zones, "sing")).toEqual(["Asia/Singapore"]);
     expect(filterTimezones(zones, "ho chi")).toEqual(["Asia/Ho_Chi_Minh"]);
     expect(filterTimezones(zones, "")).toEqual(zones);
+  });
+});
+
+describe("newTagsForBulk / mergeTagNames", () => {
+  const existing = Array.from({ length: 55 }, (_, i) => `e${i}`);
+  it("sends only new tags, so >50 existing don't crowd out additions", () => {
+    expect(newTagsForBulk([...existing, "Fresh", "E1"], existing)).toEqual([
+      "Fresh",
+    ]);
+    expect(newTagsForBulk(existing, existing)).toEqual([]);
+  });
+  it("merges a response without dropping existing tags", () => {
+    const merged = mergeTagNames(existing, ["Fresh", "e1"]);
+    expect(merged).toHaveLength(56);
+    expect(merged.slice(0, 55)).toEqual(existing);
   });
 });

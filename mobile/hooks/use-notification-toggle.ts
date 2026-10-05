@@ -1,10 +1,10 @@
-import { Linking } from "react-native";
-import { useEffect } from "react";
+import { useToast } from "@/components/ui/toast";
 import { usePushStatusStore } from "@/hooks/use-push-status-store";
 import { useUserStore } from "@/hooks/use-user-store";
-import { useToast } from "@/components/ui/toast";
 import { usePreferences } from "@/lib/preferences";
 import { deriveNotificationsActive } from "@/lib/push-sync";
+import { useEffect } from "react";
+import { Linking } from "react-native";
 
 /**
  * The single "Allow notifications" mechanism, shared by Settings, the
@@ -17,7 +17,11 @@ import { deriveNotificationsActive } from "@/lib/push-sync";
  * Rules (`lib/push-sync.ts` `decidePushAction`, run by `use-push-registration`):
  *  - Toggle on: ask the OS; granted -> allowNotifications:true + register
  *    device; denied -> allowNotifications:false + blocked/open-settings hint.
- *    Toggle off: allowNotifications:false + unregister this device.
+ *    Granted but device registration fails (no token / network) -> the toggle
+ *    reports failure (error toast, onboarding doesn't advance as "on") yet
+ *    allowNotifications stays true, so the next launch/foreground retries.
+ *    Toggle off: allowNotifications:false + unregister this device. Register
+ *    and unregister are serialized; an unregister cancels pending registers.
  *  - Onboarding (onboardedAt null): never prompt on login; the Notifications
  *    step is the only place that asks.
  *  - After login, if allowNotifications is true: permission granted -> silently
@@ -58,7 +62,10 @@ export function useNotificationToggle() {
         "top",
         true,
         blocked
-          ? { label: "Open settings", onPress: () => void Linking.openSettings() }
+          ? {
+              label: "Open settings",
+              onPress: () => void Linking.openSettings(),
+            }
           : undefined,
       );
     }

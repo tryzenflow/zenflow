@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
-import { tagsForBulk } from "@/lib/onboarding";
+import { mergeTagNames, newTagsForBulk } from "@/lib/onboarding";
 import { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 
@@ -31,12 +31,18 @@ export function TagsRow() {
   }, []);
 
   async function save() {
-    const names = tagsForBulk(selected);
+    const names = newTagsForBulk(selected, saved);
     if (names.length === 0) return sheet.close();
     setSaving(true);
     try {
       const tags = await createTagsBulk(names);
-      setSaved(tags.map((t) => t.name));
+      // Merge, don't replace: the response may omit tags we didn't send.
+      setSaved((prev) =>
+        mergeTagNames(
+          prev,
+          tags.map((t) => t.name),
+        ),
+      );
       sheet.close();
     } catch {
       toast("Couldn't save tags. Try again.", "destructive");
