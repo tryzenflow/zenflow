@@ -14,6 +14,7 @@ import {
 import type { User } from "../../../generated/prisma";
 import { BanditArmStateRepository } from "../../bandit/bandit-arm-state.repository";
 import { minutesToUtc } from "../../common/utils";
+import { schedulerPlacementPythonDuration } from "../../observability/metrics";
 import { recordPhase } from "../../observability/phase-timings";
 import { withSpan } from "../../observability/otel";
 import { PrismaService } from "../../prisma/prisma.service";
@@ -61,6 +62,22 @@ const toMs = (i: Interval): IntervalMs => ({ startMs: i.start, endMs: i.end });
  * {@link PlacementClient}, and does the second, `infeasible`-carrying call of
  * the two-phase path. It never applies or persists anything.
  */
+/** Python-reported phase times (ms) plus the API-side round trip, for one placement. */
+type PhaseTimingsMs = Record<
+  "decode" | "context" | "predict" | "scan" | "displace" | "total" | "http",
+  number
+>;
+
+const addPhases = (a: PhaseTimingsMs, b: PhaseTimingsMs): PhaseTimingsMs => ({
+  decode: a.decode + b.decode,
+  context: a.context + b.context,
+  predict: a.predict + b.predict,
+  scan: a.scan + b.scan,
+  displace: a.displace + b.displace,
+  total: a.total + b.total,
+  http: a.http + b.http,
+});
+
 @Injectable()
 export class PlacementGateway {
   constructor(
@@ -154,7 +171,19 @@ export class PlacementGateway {
   }
 
   /** One `/v1/place` call, timed as the `placement.http` span / phase. */
-  place(req: PlaceRequest): Promise<PlaceResult> {
+  async place(req: PlaceRequest): Promise<PlaceResult> {
+    return (await this.placeTimed(req)).result;
+  }
+
+  /**
+   * {@link place} plus the per-policy latency histogram. One observation per *placement*: a
+   * `NEEDS_INFEASIBLE_CONTEXT` answer is only a request for more context, so it is not recorded
+   * itself; its timings are `carry`ed into the follow-up call, which records the sum.
+   */
+  private placeTimed(
+    req: PlaceRequest,
+    carry?: PhaseTimingsMs,
+  ): Promise<{ result: PlaceResult; phases: PhaseTimingsMs | null }> {
     return withSpan(
       "placement.http",
       async (span) => {
@@ -162,6 +191,7 @@ export class PlacementGateway {
         const result = await this.client.place(req);
         recordPhase(this.cls, "http", Date.now() - t0);
         span.setAttribute("placement.ok", result.ok);
+        let phases: PhaseTimingsMs | null = null;
         if (result.ok) {
           const t = result.response.timingsMs;
           span.setAttributes({
@@ -174,10 +204,37 @@ export class PlacementGateway {
           });
           recordPhase(this.cls, "scan", t.scan);
           recordPhase(this.cls, "predict", t.predict);
+          const own: PhaseTimingsMs = {
+            decode: t.decode,
+            context: t.context,
+            predict: t.predict,
+            scan: t.scan,
+            displace: t.displace,
+            total: t.total,
+            http: Date.now() - t0,
+          };
+          phases = carry ? addPhases(carry, own) : own;
+          if (
+            result.response.results[0]?.outcome !== "NEEDS_INFEASIBLE_CONTEXT"
+          ) {
+            // Per-policy view. A series' members share one primary policy; `compute_both` marks the
+            // requests where Python ran the heuristic AND LinUCB (LINUCB-primary, or pairwise-sampled).
+            const attrs = {
+              assigned: req.members[0]?.primaryPolicy ?? "HEURISTIC",
+              compute_both: req.members.some((m) => m.computeBoth),
+              mode: req.mode,
+            };
+            for (const [phase, ms] of Object.entries(phases)) {
+              schedulerPlacementPythonDuration.record(ms / 1000, {
+                ...attrs,
+                phase,
+              });
+            }
+          }
         } else {
           span.setAttribute("placement.degraded_reason", result.reason);
         }
-        return result;
+        return { result, phases };
       },
       { "placement.request_id": req.requestId, "placement.mode": req.mode },
     );
@@ -194,7 +251,7 @@ export class PlacementGateway {
     task: PlaceableTask,
     policy: InfeasiblePolicy | undefined,
   ): Promise<PlaceResult> {
-    const first = await this.place(req);
+    const { result: first, phases } = await this.placeTimed(req);
     if (
       !first.ok ||
       first.response.results[0]?.outcome !== "NEEDS_INFEASIBLE_CONTEXT"
@@ -207,11 +264,11 @@ export class PlacementGateway {
       new Date(req.nowMs),
       policy,
     );
-    return this.place({
-      ...req,
-      requestId: `${req.requestId}-2`,
-      infeasible,
-    });
+    const second = await this.placeTimed(
+      { ...req, requestId: `${req.requestId}-2`, infeasible },
+      phases ?? undefined,
+    );
+    return second.result;
   }
 
   async loadInfeasibleContext(

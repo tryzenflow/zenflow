@@ -1,5 +1,6 @@
 import type { PlaceResponse } from "@zenflow/shared";
 import type { User } from "../../../generated/prisma";
+import { schedulerPlacementPythonDuration } from "../../observability/metrics";
 import { PlacementGateway } from "./placement-gateway.service";
 
 const user = {
@@ -207,5 +208,64 @@ describe("PlacementGateway.placeSingleTwoPhase", () => {
     expect(res).toEqual({ ok: false, reason: "timeout" });
     expect(place).toHaveBeenCalledTimes(1);
     expect(prisma.session.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("PlacementGateway per-policy latency histogram", () => {
+  const req = {
+    requestId: "r",
+    nowMs: now.getTime(),
+    mode: "PLACE",
+    members: [member({ primaryPolicy: "LINUCB", computeBoth: true })],
+  } as never;
+
+  const totalsRecorded = (record: jest.SpyInstance) =>
+    (record.mock.calls as [number, Record<string, unknown>][])
+      .filter(([, attrs]) => attrs.phase === "total")
+      .map(([seconds]) => seconds);
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it("records one observation per placement, tagged by assigned policy", async () => {
+    const record = jest.spyOn(schedulerPlacementPythonDuration, "record");
+    const place = jest
+      .fn()
+      .mockResolvedValue({ ok: true, response: respond("PLACED") });
+    const { gw } = make(place);
+    await gw.placeSingleTwoPhase(req, user, task, undefined);
+    expect(totalsRecorded(record)).toEqual([0.005]);
+    expect(record).toHaveBeenCalledWith(
+      0.005,
+      expect.objectContaining({
+        assigned: "LINUCB",
+        compute_both: true,
+        mode: "PLACE",
+        phase: "total",
+      }),
+    );
+  });
+
+  it("an infeasible retry is still ONE placement, with both calls' time summed", async () => {
+    const record = jest.spyOn(schedulerPlacementPythonDuration, "record");
+    const place = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        response: respond("NEEDS_INFEASIBLE_CONTEXT"),
+      })
+      .mockResolvedValueOnce({ ok: true, response: respond("DISPLACED") });
+    const { gw } = make(place);
+    await gw.placeSingleTwoPhase(req, user, task, "ACCEPT_LATE_DEADLINE");
+    expect(place).toHaveBeenCalledTimes(2);
+    // total = 5 ms (context request) + 5 ms (final answer), recorded once
+    expect(totalsRecorded(record)).toEqual([0.01]);
+  });
+
+  it("records nothing when Python is unavailable", async () => {
+    const record = jest.spyOn(schedulerPlacementPythonDuration, "record");
+    const place = jest.fn().mockResolvedValue({ ok: false, reason: "timeout" });
+    const { gw } = make(place);
+    await gw.placeSingleTwoPhase(req, user, task, undefined);
+    expect(record).not.toHaveBeenCalled();
   });
 });
