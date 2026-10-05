@@ -1,32 +1,37 @@
+import { Linking } from "react-native";
 import { useEffect } from "react";
 import { usePushStatusStore } from "@/hooks/use-push-status-store";
+import { useUserStore } from "@/hooks/use-user-store";
 import { useToast } from "@/components/ui/toast";
 import { usePreferences } from "@/lib/preferences";
 import { deriveNotificationsActive } from "@/lib/push-sync";
 
 /**
  * The single "Allow notifications" mechanism, shared by Settings, the
- * onboarding step and the "Finish setting up" card. There is NO local
- * preference: notifications are ON for this device iff OS permission is
- * granted AND the server has this device's push token registered for the
- * signed-in user (`POST /devices/status`). State lives in
- * `use-push-status-store`, so every consumer updates together.
+ * onboarding step and the "Finish setting up" card. The user's intent is the
+ * server column `user.allowNotifications` (user store, updated from PATCH
+ * responses); notifications are ON iff that is true AND OS permission is
+ * granted. `use-push-status-store` holds the OS permission, so all consumers
+ * update together.
  *
- * Launch-sync rule (`lib/push-sync.ts` `decideLaunchSync`, run by
- * `use-push-registration` on login and foreground resume): it NEVER opts a
- * device in. Registration happens only via the explicit toggle / onboarding
- * (`setEnabled(true)`). On launch it only (a) remembers the token when the
- * server already has it, and (b) handles token rotation: if the server lacks
- * the current token but this install last registered a different one (a
- * non-preference marker in AsyncStorage, cleared on toggle-off and logout), it
- * registers the new token and drops the old. Missing row + no marker, or
- * marker == current token (row removed), is left off.
+ * Rules (`lib/push-sync.ts` `decidePushAction`, run by `use-push-registration`):
+ *  - Toggle on: ask the OS; granted -> allowNotifications:true + register
+ *    device; denied -> allowNotifications:false + blocked/open-settings hint.
+ *    Toggle off: allowNotifications:false + unregister this device.
+ *  - Onboarding (onboardedAt null): never prompt on login; the Notifications
+ *    step is the only place that asks.
+ *  - After login, if allowNotifications is true: permission granted -> silently
+ *    register (also on launch/foreground); otherwise prompt ONCE per login,
+ *    granted -> register, denied/blocked -> allowNotifications:false.
+ *  - allowNotifications false -> never register.
+ *  - Logout unregisters the device but keeps allowNotifications, so the next
+ *    login prompts again.
  */
 export function useNotificationToggle() {
   const { prefs, update } = usePreferences();
   const { toast } = useToast();
-  const permissionGranted = usePushStatusStore((s) => s.permissionGranted);
-  const registered = usePushStatusStore((s) => s.registered);
+  const allow = useUserStore((s) => s.user?.allowNotifications);
+  const permission = usePushStatusStore((s) => s.permission);
   const refresh = usePushStatusStore((s) => s.refresh);
   const enable = usePushStatusStore((s) => s.enable);
   const disable = usePushStatusStore((s) => s.disable);
@@ -35,17 +40,39 @@ export function useNotificationToggle() {
     void refresh();
   }, [refresh]);
 
-  /** Resolves true when push is registered on this device. */
+  /** Resolves true when push is on for this device. */
   const setEnabled = async (on: boolean): Promise<boolean> => {
     if (!on) {
       await disable();
       return false;
     }
     const ok = await enable();
-    if (!ok) toast("Couldn't turn on notifications.", "destructive");
+    if (!ok) {
+      const blocked = usePushStatusStore.getState().permission !== "granted";
+      toast(
+        blocked
+          ? "Notifications are blocked. Allow them in system settings."
+          : "Couldn't turn on notifications.",
+        "destructive",
+        6000,
+        "top",
+        true,
+        blocked
+          ? { label: "Open settings", onPress: () => void Linking.openSettings() }
+          : undefined,
+      );
+    }
     return ok;
   };
 
-  const active = deriveNotificationsActive(permissionGranted, registered);
-  return { prefs, update, setEnabled, active, permissionGranted };
+  const active = deriveNotificationsActive(allow, permission);
+  return {
+    prefs,
+    update,
+    setEnabled,
+    active,
+    permissionGranted: permission === "granted",
+    /** OS permission has been read (gates UI that depends on `active`). */
+    ready: permission !== null,
+  };
 }

@@ -2,46 +2,56 @@
  * Pure decision logic for push state (no React Native imports, unit-tested).
  */
 
-/** Notifications are ON iff OS permission is granted AND the server has this device. */
+/**
+ * OS notification permission, normalized:
+ *  - granted      -> allowed
+ *  - undetermined -> never asked (or the OS will ask again); can prompt
+ *  - denied       -> denied but the OS would still show a prompt
+ *  - blocked      -> denied and the OS will not prompt again (Settings only)
+ */
+export type PushPermission = "granted" | "undetermined" | "denied" | "blocked";
+
+/** Notifications are ON iff the user wants them (server) AND the OS allows. */
 export function deriveNotificationsActive(
-  permissionGranted: boolean | null,
-  registered: boolean | null,
+  allowNotifications: boolean | null | undefined,
+  permission: PushPermission | null,
 ): boolean {
-  return permissionGranted === true && registered === true;
+  return allowNotifications === true && permission === "granted";
 }
 
-export type LaunchSyncAction =
-  /** Leave everything alone (never decided, or turned off). */
+export type PushAction =
+  /** Nothing to do. */
   | "none"
-  /** Server already has this token; just remember it as this install's token. */
-  | "mark"
-  /** Token rotated: register the new token and drop the old one. */
-  | "rotate";
+  /** Permission granted + wanted: (re)register the token, no prompt. */
+  | "register"
+  /** Show the system prompt; then register on grant, PATCH false on deny. */
+  | "prompt"
+  /** Cannot get permission: PATCH allowNotifications:false. */
+  | "disable";
 
 /**
- * Launch / foreground rule. Must never re-enable a device the user switched
- * off, and "no server row" is ambiguous (never decided vs. turned off), so:
+ * Login / launch / foreground rule.
  *
- *  - no OS permission or no token            -> none
- *  - server has this token                   -> mark (refresh the local marker)
- *  - server lacks it, and this install last
- *    registered a DIFFERENT token (marker)   -> rotate (the OS rotated the token)
- *  - otherwise (no marker, or marker equals
- *    the current token => row was removed)   -> none
- *
- * The marker (`markerToken`) is the last token this install registered; it is
- * cleared when the user turns notifications off or signs out, so an opt-out is
- * never mistaken for a rotation.
+ *  - not onboarded (onboardedAt null)       -> none (the onboarding step asks)
+ *  - allowNotifications false / unknown     -> none (never register)
+ *  - permission unread                      -> none
+ *  - granted                                -> register (silent, idempotent)
+ *  - blocked (cannot prompt)                -> disable
+ *  - undetermined / denied-but-askable      -> prompt, at most once per
+ *    login (`alreadyPrompted`); afterwards a still-ungranted permission
+ *    is treated as denied -> disable
  */
-export function decideLaunchSync(input: {
-  permissionGranted: boolean;
-  token: string | null;
-  registered: boolean;
-  markerToken: string | null;
-}): LaunchSyncAction {
-  const { permissionGranted, token, registered, markerToken } = input;
-  if (!permissionGranted || !token) return "none";
-  if (registered) return markerToken === token ? "none" : "mark";
-  if (markerToken && markerToken !== token) return "rotate";
-  return "none";
+export function decidePushAction(input: {
+  allowNotifications: boolean | null | undefined;
+  permission: PushPermission | null;
+  onboarded: boolean;
+  alreadyPrompted: boolean;
+}): PushAction {
+  const { allowNotifications, permission, onboarded, alreadyPrompted } = input;
+  if (!onboarded || allowNotifications !== true || permission === null) {
+    return "none";
+  }
+  if (permission === "granted") return "register";
+  if (permission === "blocked") return "disable";
+  return alreadyPrompted ? "disable" : "prompt";
 }

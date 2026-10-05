@@ -66,8 +66,9 @@ export default function SettingsScreen() {
 
   async function handleSignOut() {
     setLoggingOut(true);
-    // Drop this device from push while the session cookie is still valid.
-    await usePushStatusStore.getState().disable();
+    // Drop this device from push while the session cookie is still valid;
+    // allowNotifications is kept so the next login prompts again.
+    await usePushStatusStore.getState().unregisterOnLogout();
     try {
       await logoutRequest();
     } catch {
@@ -100,7 +101,7 @@ export default function SettingsScreen() {
         className="flex-1 px-5"
         contentContainerStyle={{ paddingBottom: tabBarOverlay + 32 }}
       >
-        {notif.permissionGranted !== null && !integrationsLoading && (
+        {notif.ready && !integrationsLoading && (
           <FinishSetupCard
             notificationsActive={notif.active}
             dluConnected={dluConnected}

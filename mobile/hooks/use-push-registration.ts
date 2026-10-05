@@ -30,10 +30,12 @@ export function usePushRegistration(): void {
   const router = useRouter();
   const { toast } = useToast();
   const userId = useUserStore((s) => s.user?.id ?? null);
+  const onboarded = useUserStore((s) => s.user?.onboardedAt != null);
   const lastHandledResponseId = useRef<string | null>(null);
 
-  // Sync on login (never opts in; only token rotation, see use-notification-toggle), re-sync each time the app returns to the foreground
-  // (a token can rotate, or permission can be granted from Settings.app).
+  // Apply the push rule (`decidePushAction`) on login / onboarding completion
+  // (`onboarded`) and each time the app returns to the foreground (a token can
+  // rotate, or permission can change in system settings).
   useEffect(() => {
     if (!userId) return;
 
@@ -43,7 +45,7 @@ export function usePushRegistration(): void {
       if (state === "active") void usePushStatusStore.getState().sync();
     });
     return () => sub.remove();
-  }, [userId]);
+  }, [userId, onboarded]);
 
   // Deep-link on tap — both the cold-start case (app launched by the tap) and
   // the warm case (already running). De-duped by notification id so the

@@ -3,10 +3,9 @@ import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import type { Href } from "expo-router";
 import { Platform } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { deviceStatus, registerDevice, unregisterDevice } from "@/api/devices";
+import { registerDevice, unregisterDevice } from "@/api/devices";
 import { debugLog } from "@/lib/debug-log";
-import { decideLaunchSync } from "@/lib/push-sync";
+import type { PushPermission } from "@/lib/push-sync";
 
 /**
  * Native push plumbing for the direct-FCM/APNs backend (`backend/src/devices/`).
@@ -119,50 +118,6 @@ export async function ensureAndroidChannel(): Promise<void> {
   });
 }
 
-export interface NativePushToken {
-  platform: DevicePlatform;
-  token: string;
-}
-
-/**
- * Ask for permission (if not already decided) and return the raw FCM/APNs
- * token, or `null` when push isn't available or was denied. Safe to call on
- * every launch — the OS prompt only shows the first time.
- */
-export async function getNativePushToken(): Promise<NativePushToken | null> {
-  if (Platform.OS === "web") return null;
-  // The iOS Simulator can't obtain an APNs token; an Android emulator with
-  // Play Services can get an FCM token, so only hard-block the former.
-  if (Platform.OS === "ios" && !Device.isDevice) {
-    debugLog("push", "skipped: iOS simulator has no APNs");
-    return null;
-  }
-
-  const existing = await Notifications.getPermissionsAsync();
-  let status = existing.status;
-  if (status !== "granted") {
-    const requested = await Notifications.requestPermissionsAsync();
-    status = requested.status;
-  }
-  if (status !== "granted") {
-    debugLog("push", `permission not granted (${status})`);
-    return null;
-  }
-
-  await ensureAndroidChannel();
-
-  try {
-    const devicePushToken = await Notifications.getDevicePushTokenAsync();
-    const platform: DevicePlatform =
-      devicePushToken.type === "ios" ? "IOS" : "ANDROID";
-    return { platform, token: String(devicePushToken.data) };
-  } catch (err) {
-    // Missing google-services.json / APNs entitlement, no network, etc.
-    debugLog("push", `getDevicePushTokenAsync failed: ${String(err)}`);
-    return null;
-  }
-}
-
 /**
  * Where a tapped notification should land. The backend's `PushDataPayload.url`
  * is web-shaped (`/calendar?session=…`), so route off `sessionId` instead and
@@ -178,119 +133,69 @@ export function hrefFromPushData(
   return "/notifications" as Href;
 }
 
-/** Last token this install registered; non-preference marker (see push-sync). */
-const REGISTERED_TOKEN_KEY = "push.registeredToken";
-
-async function readMarker(): Promise<string | null> {
+/** Current OS permission, normalized. Never prompts. `null` when unavailable. */
+export async function readPermission(): Promise<PushPermission | null> {
+  if (Platform.OS === "web") return null;
   try {
-    return await AsyncStorage.getItem(REGISTERED_TOKEN_KEY);
+    return normalizePermission(await Notifications.getPermissionsAsync());
   } catch {
     return null;
   }
 }
 
-async function writeMarker(token: string | null): Promise<void> {
+function normalizePermission(p: {
+  granted: boolean;
+  status: string;
+  canAskAgain: boolean;
+}): PushPermission {
+  if (p.granted) return "granted";
+  if (p.status === "undetermined") return "undetermined";
+  return p.canAskAgain ? "denied" : "blocked";
+}
+
+/** Show the system prompt (no-op if the OS won't ask) and return the result. */
+export async function requestPermission(): Promise<PushPermission | null> {
+  if (Platform.OS === "web") return null;
   try {
-    if (token) await AsyncStorage.setItem(REGISTERED_TOKEN_KEY, token);
-    else await AsyncStorage.removeItem(REGISTERED_TOKEN_KEY);
+    return normalizePermission(await Notifications.requestPermissionsAsync());
   } catch {
-    // Non-fatal.
+    return null;
   }
 }
 
 /**
- * Current OS permission and, if granted, this device's token. Never prompts.
+ * Register (upsert) this device. Requires permission to already be granted —
+ * never prompts. Returns true on success.
  */
-export async function readPushState(): Promise<{
-  permissionGranted: boolean;
-  token: string | null;
-}> {
-  if (Platform.OS === "web") return { permissionGranted: false, token: null };
+export async function registerThisDevice(): Promise<boolean> {
+  if (Platform.OS === "web") return false;
+  if (Platform.OS === "ios" && !Device.isDevice) {
+    debugLog("push", "skipped: iOS simulator has no APNs");
+    return false;
+  }
   try {
-    const granted = (await Notifications.getPermissionsAsync()).granted;
-    if (!granted) return { permissionGranted: false, token: null };
-    if (Platform.OS === "ios" && !Device.isDevice) {
-      return { permissionGranted: true, token: null };
-    }
+    await ensureAndroidChannel();
     const t = await Notifications.getDevicePushTokenAsync();
-    return { permissionGranted: true, token: String(t.data) };
-  } catch {
-    return { permissionGranted: false, token: null };
-  }
-}
-
-/** Is `token` registered to the signed-in user? `null` if the call failed. */
-export async function fetchRegistered(token: string): Promise<boolean | null> {
-  try {
-    return (await deviceStatus(token)).registered;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * EXPLICIT enable (toggle / onboarding): ask for permission if needed and
- * register this device. Returns the registered token, or `null`.
- */
-export async function enablePushRegistration(): Promise<string | null> {
-  const t = await getNativePushToken();
-  if (!t) return null;
-  try {
-    await registerDevice(t.platform, t.token);
-    await writeMarker(t.token);
-    debugLog("push", `registered ${t.platform} token …${t.token.slice(-6)}`);
-    return t.token;
+    const platform: DevicePlatform = t.type === "ios" ? "IOS" : "ANDROID";
+    const token = String(t.data);
+    await registerDevice(platform, token);
+    debugLog("push", `registered ${platform} token …${token.slice(-6)}`);
+    return true;
   } catch (err) {
     debugLog("push", `register failed: ${String(err)}`);
-    return null;
+    return false;
   }
 }
 
 /**
- * Launch / foreground / login sync. Never prompts and never newly opts a
- * device in; it only keeps an existing registration alive across token
- * rotation (rule in `decideLaunchSync`). Call from login and foreground resume.
- */
-export async function syncPushRegistration(): Promise<void> {
-  const { permissionGranted, token } = await readPushState();
-  if (!permissionGranted || !token) return;
-  const registered = await fetchRegistered(token);
-  if (registered === null) return; // offline: decide next time
-  const markerToken = await readMarker();
-  const action = decideLaunchSync({
-    permissionGranted,
-    token,
-    registered,
-    markerToken,
-  });
-  if (action === "mark") {
-    await writeMarker(token);
-  } else if (action === "rotate") {
-    try {
-      await registerDevice(
-        Platform.OS === "ios" ? "IOS" : "ANDROID",
-        token,
-      );
-      await writeMarker(token);
-      if (markerToken) await unregisterDevice(markerToken).catch(() => {});
-      debugLog("push", "token rotated; re-registered");
-    } catch (err) {
-      debugLog("push", `rotate failed: ${String(err)}`);
-    }
-  }
-}
-
-/**
- * Unregister this device (turning notifications off, or logout before the
- * session cookie is cleared). Best-effort — never blocks sign-out. Clears the
- * rotation marker so an opt-out is not mistaken for a rotated token.
+ * Unregister this device (toggle off, or logout before the session cookie is
+ * cleared). Best-effort — never blocks sign-out.
  */
 export async function dropPushRegistration(): Promise<void> {
   if (Platform.OS === "web") return;
-  await writeMarker(null);
   try {
-    const devicePushToken = await Notifications.getDevicePushTokenAsync();
-    await unregisterDevice(String(devicePushToken.data));
+    const t = await Notifications.getDevicePushTokenAsync();
+    await unregisterDevice(String(t.data));
     debugLog("push", "unregistered this device");
   } catch (err) {
     debugLog("push", `unregister skipped: ${String(err)}`);

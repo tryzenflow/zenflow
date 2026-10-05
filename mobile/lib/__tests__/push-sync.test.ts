@@ -1,47 +1,61 @@
 import { describe, expect, it } from "vitest";
-import { decideLaunchSync, deriveNotificationsActive } from "../push-sync";
+import { decidePushAction, deriveNotificationsActive } from "../push-sync";
 
 describe("deriveNotificationsActive", () => {
-  it("requires permission and registration", () => {
-    expect(deriveNotificationsActive(true, true)).toBe(true);
-    expect(deriveNotificationsActive(true, false)).toBe(false);
-    expect(deriveNotificationsActive(false, true)).toBe(false);
-    expect(deriveNotificationsActive(null, true)).toBe(false);
+  it("requires the server preference and OS permission", () => {
+    expect(deriveNotificationsActive(true, "granted")).toBe(true);
+    expect(deriveNotificationsActive(false, "granted")).toBe(false);
+    expect(deriveNotificationsActive(true, "denied")).toBe(false);
+    expect(deriveNotificationsActive(true, "blocked")).toBe(false);
     expect(deriveNotificationsActive(true, null)).toBe(false);
+    expect(deriveNotificationsActive(undefined, "granted")).toBe(false);
   });
 });
 
-describe("decideLaunchSync", () => {
+describe("decidePushAction", () => {
   const base = {
-    permissionGranted: true,
-    token: "t2",
-    registered: false,
-    markerToken: null as string | null,
+    allowNotifications: true,
+    permission: "undetermined" as const,
+    onboarded: true,
+    alreadyPrompted: false,
   };
 
-  it("does nothing without permission or token", () => {
-    expect(decideLaunchSync({ ...base, permissionGranted: false })).toBe("none");
-    expect(decideLaunchSync({ ...base, token: null })).toBe("none");
+  it("never acts during onboarding", () => {
+    for (const permission of ["granted", "undetermined", "blocked"] as const) {
+      expect(decidePushAction({ ...base, permission, onboarded: false })).toBe(
+        "none",
+      );
+    }
   });
 
-  it("never registers a device that was never decided / turned off", () => {
-    expect(decideLaunchSync(base)).toBe("none");
-  });
-
-  it("does not re-enable when the row was removed but the token is unchanged", () => {
-    expect(decideLaunchSync({ ...base, token: "t1", markerToken: "t1" })).toBe(
-      "none",
-    );
-  });
-
-  it("rotates when the server lacks a new token this install registered before", () => {
-    expect(decideLaunchSync({ ...base, markerToken: "t1" })).toBe("rotate");
-  });
-
-  it("marks an already-registered device without a marker", () => {
-    expect(decideLaunchSync({ ...base, registered: true })).toBe("mark");
+  it("never registers or prompts when the user opted out", () => {
     expect(
-      decideLaunchSync({ ...base, registered: true, markerToken: "t2" }),
+      decidePushAction({ ...base, allowNotifications: false, permission: "granted" }),
     ).toBe("none");
+    expect(decidePushAction({ ...base, allowNotifications: false })).toBe("none");
+  });
+
+  it("does nothing until permission is read", () => {
+    expect(decidePushAction({ ...base, permission: null })).toBe("none");
+  });
+
+  it("registers silently when permission is already granted", () => {
+    expect(decidePushAction({ ...base, permission: "granted" })).toBe("register");
+    expect(
+      decidePushAction({ ...base, permission: "granted", alreadyPrompted: true }),
+    ).toBe("register");
+  });
+
+  it("prompts once for an askable permission", () => {
+    expect(decidePushAction(base)).toBe("prompt");
+    expect(decidePushAction({ ...base, permission: "denied" })).toBe("prompt");
+  });
+
+  it("does not re-prompt in the same login; treats it as denied", () => {
+    expect(decidePushAction({ ...base, alreadyPrompted: true })).toBe("disable");
+  });
+
+  it("disables when permission is permanently denied", () => {
+    expect(decidePushAction({ ...base, permission: "blocked" })).toBe("disable");
   });
 });
