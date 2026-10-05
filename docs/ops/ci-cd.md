@@ -4,24 +4,32 @@ Issue #75. Workflows live in `.github/workflows/`.
 
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
-| `ci.yml` | every PR (and merge queue) | lint (changed files), typecheck (shared, core, backend, frontend, mobile), unit tests (backend Jest, mobile Vitest, bandit pytest/ruff), Prisma migration drift check, backend e2e on `compose.test.yml`, frontend Playwright e2e, API image build smoke test, gitleaks, Vault (`docker compose config` for all compose files, Vault absent from dev/staging/test and loopback-only in prod, `render-secrets.sh` against a throwaway `vault server -dev` run via plain `docker run`, prod Vault config boots). A final aggregate job **`CI ok`** is the only check branch protection needs to require. |
+| `ci.yml` | every PR, merge queue | See "CI jobs" below. Final job **`CI ok`** is the only required check. |
 | `images.yml` | push to `master` | `build_images.sh` builds `zenflow-api` and `zenflow-bandit`, pushes `ghcr.io/<owner>/<image>:<git-sha>` (+ `:latest`), then deploys that SHA to **staging** automatically. |
 | `release.yml` | GitHub Release published (tag `vX.Y.Z`) | Resolves the tag to its commit (must be on `master`), then deploys the **already built** images for that SHA to **production**. Gated by the `production` Environment's required reviewers. No rebuild: what ran in staging is what ships. |
 | `deploy.yml` | called by the two above, or run manually | The single deploy entry point (see "Deploy target" below). Manual run = rollback. |
 | `audit.yml` | weekly, and PRs touching the lockfile | `pnpm audit`, informational only (never required). |
 | `.github/dependabot.yml` | weekly | npm, GitHub Actions, Docker, uv. |
 
+## CI jobs
+
+- Lint (changed files only), typecheck (shared, core, backend, frontend, mobile).
+- Unit tests: backend Jest, mobile Vitest, bandit pytest/ruff.
+- Prisma drift, backend e2e (`compose.test.yml`), frontend Playwright e2e.
+- API image build smoke test, gitleaks.
+- Vault: `docker compose config` for every compose file; Vault absent from dev/staging/test and loopback-only in prod; `render-secrets.sh` against a throwaway `vault server -dev`; prod Vault config boots.
+- Agents: `.claude/` and `.codex/` match `.agents/` (`node scripts/sync-agents.mjs --check`), hook tests, ownership check.
+
 Prisma check: `prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --exit-code` against a throwaway shadow Postgres. It fails if `schema.prisma` has changes without a migration, or if the migration history does not apply cleanly.
 
 Backend e2e and Playwright generate a throwaway `backend/.env.test` with random secrets (`.github/scripts/write-test-env.sh`), so nothing secret-shaped is committed.
 
-## Deploy target (assumption, please confirm)
+## Deploy target
 
-No hosting target was specified. `scripts/deploy/deploy.sh` assumes the repo's existing model: **docker compose on a Linux host over SSH** (`backend/compose.staging.yml` / `compose.prod.yml`, images pulled from GHCR). It is parameterized; nothing about the host is hard-coded. If you deploy to ECS/Fly/K8s instead, replace the `REMOTE STEPS` block in that script; the image tags, environments, approval gate and rollback procedure stay the same. The frontend deploys separately through Netlify (`frontend/netlify.toml`) and is not part of these workflows.
+`scripts/deploy/deploy.sh` assumes docker compose on a Linux host over SSH (`backend/compose.{staging,prod}.yml`, images from GHCR). Nothing about the host is hard-coded; for ECS/Fly/K8s replace its `REMOTE STEPS` block. The frontend deploys separately through Netlify (`frontend/netlify.toml`).
 
-Deploys are **disabled until configured**: with `DEPLOY_ENABLED` unset, the deploy job logs a warning and skips, so merges do not fail before infrastructure exists.
-
-Compose files now read `ZENFLOW_API_IMAGE` / `ZENFLOW_BANDIT_IMAGE` (defaults keep the old local `build:` behavior).
+- Deploys are off until `DEPLOY_ENABLED` is set; unset, the job warns and skips.
+- Compose files read `ZENFLOW_API_IMAGE` / `ZENFLOW_BANDIT_IMAGE`; defaults keep the local `build:` behaviour.
 
 ### GitHub Environments
 
@@ -72,7 +80,7 @@ gh api -X PUT repos/tryzenflow/zenflow/branches/master/protection --input - <<'J
 JSON
 ```
 
-Intent: no direct pushes (PR required), PRs must be up to date and pass `CI ok`, squash-merge only (Settings, General: disable merge commits and rebase merging; matches CONTRIBUTING.md). Also protect tags `v*` (Settings, Rules, Rulesets) so only maintainers can cut releases. `Gitleaks`, `Prisma`, etc. are covered transitively by `CI ok`, so adding or renaming jobs never needs a settings change.
+Result: PR required, up to date, `CI ok` green, squash-merge only (Settings, General: disable merge commits and rebase merging). Also protect tags `v*` (Settings, Rules, Rulesets). Other jobs are covered by `CI ok`, so adding or renaming jobs needs no settings change.
 
 ## Releasing to production
 
@@ -87,7 +95,9 @@ Rollback is just a deploy of an older, already-built SHA, which restores the mat
 1. Find the last good SHA: the previous successful run of `Images & staging deploy`/`Release (production)`, `git log master`, or on the host `tail -n 5 $DEPLOY_PATH/.deploy-history` (each line records `timestamp sha prev=<previous sha>`).
 2. Run it: Actions, **Deploy**, Run workflow, choose the environment and paste the full SHA. Or `gh workflow run deploy.yml -f environment=production -f image_tag=<sha>`. Production still requires reviewer approval; that is intentional but approvers can respond quickly during an incident.
 3. Verify (`HEALTHCHECK_URL`, `docker compose ps`, Grafana).
-4. If the faulty release shipped a migration: the migrations service only moves forward and `migrate deploy` does not undo anything. Rolling the app back across a destructive migration is unsafe. Prefer "expand/contract" migrations (additive first) so the previous SHA still works against the new schema; otherwise restore from a DB backup or ship a forward fix. Check the migration list between the two SHAs (`git diff --stat <good>..<bad> -- backend/prisma/migrations`) before rolling back.
+4. Migrations only move forward; rolling back across a destructive one is unsafe.
+   - Check what shipped: `git diff --stat <good>..<bad> -- backend/prisma/migrations`.
+   - Prefer expand/contract migrations so the previous SHA still works; otherwise restore a DB backup or ship a forward fix.
 5. Revert or fix on `master` afterwards so the next merge does not redeploy the bad commit to staging.
 
 ## Known gaps
