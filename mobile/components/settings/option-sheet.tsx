@@ -98,21 +98,21 @@ function OptionSheetInner<T extends string | number>(
           <Text className="pb-1 text-xl font-bold text-foreground">
             {title}
           </Text>
-          {search ? (
-            <View className="pb-2 pt-1">
-              <BottomSheetInput
-                value={query}
-                onChangeText={setQuery}
-                placeholder={search.placeholder}
-                autoCapitalize="none"
-                autoCorrect={false}
-                rightElement={
-                  <Search size={18} className="text-muted-foreground" />
-                }
-              />
-            </View>
-          ) : null}
         </BottomSheetHeader>
+        {search ? (
+          <View className="px-4 pb-3 pt-1">
+            <BottomSheetInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder={search.placeholder}
+              autoCapitalize="none"
+              autoCorrect={false}
+              rightElement={
+                <Search size={18} className="text-muted-foreground" />
+              }
+            />
+          </View>
+        ) : null}
         {/* Scrollable: the timezone list is taller than a dynamic sheet. */}
         <BottomSheetScrollView
           contentContainerClassName="px-4 pb-8"
