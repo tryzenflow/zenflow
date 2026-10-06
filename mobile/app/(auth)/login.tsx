@@ -163,9 +163,6 @@ export default function LoginScreen() {
   const setUser = useUserStore((state) => state.setUser);
   const { toast } = useToast();
   const insets = useSafeAreaInsets();
-  // Set when the user picks a language here, so login keeps it over the
-  // account's stored one (see `handleOtpVerify`).
-  const pickedLanguage = useRef(false);
 
   const [stage, setStage] = useState<"email" | "otp">("email");
   const [submitting, setSubmitting] = useState(false);
@@ -236,11 +233,10 @@ export default function LoginScreen() {
       const result = await verifyOtp(getValues("email"), data.otp);
       toast(t("Login successfully"), "success");
       let user: User = result.data;
-      // New accounts start as English server-side; carry the language shown on
-      // this screen over so a Vietnamese default (or pick) isn't flipped back.
-      // Existing accounts keep theirs unless it was picked here.
+      // The language shown on this screen (the top-right select, or the
+      // Vietnamese default) overrides the account's stored preference.
       const language = getLanguage();
-      if (user.lang !== language && (pickedLanguage.current || !user.onboardedAt)) {
+      if (user.lang !== language) {
         try {
           user = await updateBasicInfo({ lang: language });
         } catch {
@@ -276,7 +272,7 @@ export default function LoginScreen() {
         className="absolute right-5 z-10"
         style={{ top: insets.top + 8 }}
       >
-        <LanguageSelect onSelect={() => (pickedLanguage.current = true)} />
+        <LanguageSelect />
       </View>
       <View className="flex-1 justify-center">
         <View className="items-center gap-3.5 pb-[26px]">

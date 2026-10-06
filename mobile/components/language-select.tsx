@@ -7,20 +7,15 @@ import { Text } from "@/components/ui/text";
 import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
 import { LANGUAGES, setSignedOutLanguage } from "@/lib/preferences";
-import type { Lang } from "@zenflow/shared";
 import { useRef } from "react";
 import { Pressable } from "react-native";
 
 /**
  * Compact language pill (flag + name) that opens the shared option sheet. Works
- * signed out: it only switches the UI and caches the pick, `onSelect` lets the
- * caller remember that the user chose it themselves.
+ * signed out: it only switches the UI and caches the pick; login then applies
+ * it to the account.
  */
-export function LanguageSelect({
-  onSelect,
-}: {
-  onSelect?: (language: Lang) => void;
-}) {
+export function LanguageSelect() {
   const language = useLanguage();
   const sheet = useRef<OptionSheetHandle>(null);
   const current = LANGUAGES.find((l) => l.value === language);
@@ -42,10 +37,7 @@ export function LanguageSelect({
         title={t("Language")}
         options={LANGUAGES}
         value={language}
-        onSelect={(next) => {
-          void setSignedOutLanguage(next);
-          onSelect?.(next);
-        }}
+        onSelect={(next) => void setSignedOutLanguage(next)}
       />
     </>
   );

@@ -148,7 +148,7 @@ repo-wide [CONTRIBUTING.md](../CONTRIBUTING.md).
 ## Language (developer guide)
 
 - Tiếng Việt is the default. Select English or Tiếng Việt from the select at the top right of the login screen, or later in Settings → Language; screens update immediately without resetting navigation or forms.
-- Account `User.lang` is authoritative; the cached preference supplies the language before login and while offline. On login, a new account (or one whose language was picked on the login screen) is updated to the language shown there. Failed preference saves roll back.
+- Account `User.lang` is authoritative; the cached preference supplies the language before login and while offline. On login, the account is updated to the language shown on the login screen. Failed preference saves roll back.
 - Use `t()` in [`lib/i18n.ts`](lib/i18n.ts) for application copy and `useLanguage()` in display components, including memoized components.
 - Keep task titles, notes, names, locations and existing tags unchanged. Suggested tags follow the selected language.
 - Use `locale()`, `dateFnsLocale()` and the localized `format()` for display dates and times. API dates keep their numeric format.
