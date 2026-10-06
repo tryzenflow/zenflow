@@ -132,13 +132,15 @@ export default function NewSessionScreen() {
 
 function NewSessionForm() {
   useLanguage();
-  const { start, deadline, sessions } = useLocalSearchParams<{
+  const { start, deadline, sessions, title } = useLocalSearchParams<{
     start?: string;
     /** UTC ISO instant — pre-selects the deadline (used by the Day/Week
      * block long-press "Add study session before this"). */
     deadline?: string;
     /** Pre-fills the session count when > 1 (same source). */
     sessions?: string;
+    /** Pre-fills the title (same source: "Prepare for <session>"). */
+    title?: string;
   }>();
   const router = useRouter();
   const user = useUserStore((s) => s.user);
@@ -170,6 +172,7 @@ function NewSessionForm() {
       reminders: reminderMinutes > 0 ? [reminderMinutes] : [],
     };
     if (deadline) base.deadline = deadline;
+    if (title) base.title = title;
     const n = sessions ? Number.parseInt(sessions, 10) : Number.NaN;
     if (Number.isFinite(n) && n > 1) base.sessionCount = n;
     if (start) {
@@ -179,7 +182,7 @@ function NewSessionForm() {
       base.endTime = shiftHhmm(startTime, DEFAULT_DURATION);
     }
     return base;
-  }, [start, deadline, sessions, tz, user?.defaultReminderMinutes]);
+  }, [start, deadline, sessions, title, tz, user?.defaultReminderMinutes]);
 
   const form = useSessionForm({ defaultValues: initialDefaults });
   const loading = form.formState.isSubmitting;

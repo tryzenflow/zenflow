@@ -1,9 +1,9 @@
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { locale } from "@/lib/i18n";
-import { format } from "@/lib/i18n";
+import { format, formatTitle } from "@/lib/i18n";
 import { listSessions, updateSession } from "@/api/tasks";
-import { AlertTriangle, RefreshCcw, RotateCw } from "@/components/Icons";
+import { AlertTriangle, Plus, RefreshCcw, RotateCw } from "@/components/Icons";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
@@ -34,9 +34,11 @@ import {
   eventsForDay,
   getOverlapLayout,
   getSeriesKind,
+  snapToNearestLaterQuarterHour,
   tasksToBlocks,
   zonedDate,
   zonedNow,
+  zonedWallClockToUtc,
   type BlockLayout,
 } from "@zenflow/core";
 import type {
@@ -45,12 +47,14 @@ import type {
   UpdateSessionResponse,
 } from "@zenflow/shared";
 
+import { useRouter, type Href } from "expo-router";
 import { toZonedTime } from "date-fns-tz";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  Pressable,
   ScrollView,
   type ScrollViewInstance,
   View,
@@ -70,6 +74,10 @@ import type {
   PendingSessionUpdate,
   UpdateRecurringScope,
 } from "./update-recurring-sheet";
+
+/** The empty-day "add a task" zone spans 8:00–10:00. */
+const EMPTY_ZONE_START_MIN = 8 * 60;
+const EMPTY_ZONE_MINUTES = 120;
 
 /** Inset (px) of every block from the day column's edges. */
 const BLOCK_GUTTER = 2;
@@ -681,6 +689,30 @@ export function DayTimeline({
     );
   }, [date, now, tz]);
 
+  // Tapping the empty-day zone opens the new-task form seeded at 8:00 (or the
+  // next quarter hour when today is already past it) — it never creates a
+  // session by itself.
+  const router = useRouter();
+  const openNewTaskForm = useCallback(() => {
+    let startMin = EMPTY_ZONE_START_MIN;
+    if (isToday) {
+      const wall = zonedNow(tz);
+      startMin = Math.max(
+        startMin,
+        Math.min(
+          snapToNearestLaterQuarterHour(wall.getHours() * 60 + wall.getMinutes()),
+          23 * 60 + 45,
+        ),
+      );
+    }
+    const start = new Date(date);
+    start.setHours(0, startMin, 0, 0);
+    router.push({
+      pathname: "/task/new",
+      params: { start: zonedWallClockToUtc(start, tz).toISOString() },
+    } as Href);
+  }, [date, isToday, router, tz]);
+
   const handleReschedule = useCallback(
     async (taskId: string, startISO: string) => {
       const commit = async (
@@ -937,7 +969,7 @@ export function DayTimeline({
         <View className="flex-row items-center justify-between px-4 pt-4 pb-4 border-b border-black/15 dark:border-white/15">
           <View className="min-w-0 flex-1">
             <Text className="text-xl font-bold tracking-tight">
-              {format(date, "EEE, MMM d")}
+              {formatTitle(date, "EEE, MMM d")}
             </Text>
             <Text className="mt-px text-xs font-medium text-muted-foreground">
               {subtitle}
@@ -1047,6 +1079,26 @@ export function DayTimeline({
                     }}
                   />
                 ))}
+
+                {tasks.length === 0 && !loading && (
+                  <Pressable
+                    onPress={openNewTaskForm}
+                    accessibilityRole="button"
+                    accessibilityLabel={t("Add a task to this day")}
+                    className="absolute items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-brand-orange/70 bg-brand-orange/5 active:bg-brand-orange/10"
+                    style={{
+                      left: BLOCK_GUTTER,
+                      right: BLOCK_GUTTER,
+                      top: (EMPTY_ZONE_START_MIN / DAILY_HORIZON) * totalHeight,
+                      height: (EMPTY_ZONE_MINUTES / DAILY_HORIZON) * totalHeight,
+                    }}
+                  >
+                    <Plus size={20} className="text-brand-orange" />
+                    <Text className="text-[13px] font-semibold text-brand-orange">
+                      {t("Tap to add a task")}
+                    </Text>
+                  </Pressable>
+                )}
 
                 {isToday && (
                   <NowIndicator now={now} tz={tz} totalHeight={totalHeight} />
