@@ -334,16 +334,38 @@ export class SeriesService {
       this.prisma,
       { userId: user.id, sessionIds: created.map((r) => r.id) },
       () =>
-        this.taskPlacement.placeSeriesOnCreate({
-          user,
-          seriesId: series.id,
-          members: created.map((r) => ({
-            id: r.id,
-            durationMinutes: r.durationMinutes,
-          })),
-          deadline,
-          now,
-        }),
+        this.taskPlacement
+          .placeSeriesOnCreate({
+            user,
+            seriesId: series.id,
+            members: created.map((r) => ({
+              id: r.id,
+              durationMinutes: r.durationMinutes,
+            })),
+            deadline,
+            now,
+            // Existing sittings hold their slot AND their day.
+            fixedOccupied: members.flatMap((m) =>
+              m.scheduledStartTime
+                ? [
+                    {
+                      start: m.scheduledStartTime.getTime(),
+                      end:
+                        m.scheduledStartTime.getTime() +
+                        m.durationMinutes * 60_000,
+                    },
+                  ]
+                : [],
+            ),
+          })
+          .then((rows) => {
+            // No free day left: a last-resort pick would stack on a sibling's
+            // day, so drop the extra sittings instead.
+            if (rows.some((r) => r.lastResort)) {
+              throw new BadRequestException(NO_FEASIBLE_SLOT_MESSAGE);
+            }
+            return rows;
+          }),
     ).catch(async (err: unknown) => {
       await this.prisma.session.updateMany({
         where: { seriesId: series.id, userId: user.id },
