@@ -2,7 +2,6 @@ import { Check, X } from "@/components/Icons";
 import {
   BottomSheet,
   BottomSheetContent,
-  BottomSheetScrollView,
   BottomSheetView,
   useBottomSheet,
 } from "@/components/ui/bottom-sheet";
@@ -32,6 +31,7 @@ import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
+  ScrollView,
   View,
   useWindowDimensions,
 } from "react-native";
@@ -296,9 +296,13 @@ const SeriesSlotPickSheet = forwardRef<
           </View>
 
           {/* The sheet sizes itself to its content, so every sitting fits with no
-              scrolling; the list only scrolls (capped here) on a short screen. */}
-          <BottomSheetScrollView
+              scrolling; the list only scrolls (capped here) on a short screen.
+              A plain ScrollView on purpose: gorhom's `BottomSheetScrollView`
+              reports ITS content height as the sheet's, so the sheet would size
+              to the list alone and cut off the footer. */}
+          <ScrollView
             style={{ maxHeight: maxListHeight }}
+            nestedScrollEnabled
             contentContainerStyle={{ gap: 8, paddingTop: 6 }}
             showsVerticalScrollIndicator={false}
           >
@@ -349,7 +353,7 @@ const SeriesSlotPickSheet = forwardRef<
                 })}
               </View>
             ))}
-          </BottomSheetScrollView>
+          </ScrollView>
 
           <Text className="pt-4 text-[12px] text-muted-foreground leading-snug">
             {single
