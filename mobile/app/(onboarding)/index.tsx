@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
 import { listIntegrations } from "@/api/integrations";
 import { createTagsBulk, listTags } from "@/api/tags";
 import { updateBasicInfo } from "@/api/users";
@@ -62,73 +64,165 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
  * translation keys in one place.
  */
 const COPY = {
-  skip: "Skip",
-  skipForNow: "Skip for now",
-  continue: "Continue",
-  back: "Back",
+  get skip() {
+    return t("Skip");
+  },
+  get skipForNow() {
+    return t("Skip for now");
+  },
+  get continue() {
+    return t("Continue");
+  },
+  get back() {
+    return t("Back");
+  },
   language: {
-    title: "Choose your language",
-    body: "You can change this any time in Settings. Everything after this screen switches immediately.",
+    get title() {
+      return t("Choose your language");
+    },
+    get body() {
+      return t(
+        "You can change this any time in Settings. Everything after this screen switches immediately.",
+      );
+    },
   },
   name: {
-    title: "What should we call you?",
-    body: "Shown in the app and in reminders. We guessed it from your email.",
-    label: "Display name",
-    hint: "Prefilled from your email — edit if you like",
+    get title() {
+      return t("What should we call you?");
+    },
+    get body() {
+      return t(
+        "Shown in the app and in reminders. We guessed it from your email.",
+      );
+    },
+    get label() {
+      return t("Display name");
+    },
+    get hint() {
+      return t("Prefilled from your email — edit if you like");
+    },
   },
   dlu: {
-    title: "Connect your DLU account",
-    body: "Zenflow watches your timetable, exams and LMS for changes and new assignments. Your login is only used to check DLU on your behalf.",
-    hint: "Opens the same sign-in sheet as Settings → Connect your DLU account. You can connect later.",
+    get title() {
+      return t("Connect your DLU account");
+    },
+    get body() {
+      return t(
+        "Zenflow watches your timetable, exams and LMS for changes and new assignments. Your login is only used to check DLU on your behalf.",
+      );
+    },
+    get hint() {
+      return t(
+        "Opens the same sign-in sheet as Settings → Connect your DLU account. You can connect later.",
+      );
+    },
   },
   notifications: {
-    title: "Stay ahead of deadlines",
-    body: "Zenflow sends a push when a reminder is due or your schedule changes. We'll ask iOS / Android for permission next.",
-    rowTitle: "Allow notifications",
-    rowBody: "Reminders and schedule changes",
+    get title() {
+      return t("Stay ahead of deadlines");
+    },
+    get body() {
+      return t(
+        "Zenflow sends a push when a reminder is due or your schedule changes. We'll ask iOS / Android for permission next.",
+      );
+    },
+    get rowTitle() {
+      return t("Allow notifications");
+    },
+    get rowBody() {
+      return t("Reminders and schedule changes");
+    },
     bullets: [
       "Reminder before each study session",
       "Alert when the timetable or an exam changes",
       "New LMS assignments, scheduled for you",
     ],
-    enable: "Turn on notifications",
-    notNow: "Not now",
-    blockedTitle: "Notifications are blocked",
-    blockedBody:
-      "Turn them on in system settings to get reminders. The preference is saved as off for now.",
-    openSettings: "Open system settings",
+    get enable() {
+      return t("Turn on notifications");
+    },
+    get notNow() {
+      return t("Not now");
+    },
+    get blockedTitle() {
+      return t("Notifications are blocked");
+    },
+    get blockedBody() {
+      return t(
+        "Turn them on in system settings to get reminders. The preference is saved as off for now.",
+      );
+    },
+    get openSettings() {
+      return t("Open system settings");
+    },
   },
   timezone: {
-    title: "Where are you?",
-    body: "Used to place sessions and reminders at the right local time.",
-    detected: "Detected from device",
-    search: "Search all timezones",
-    refine: "Showing the closest matches — refine your search to see more",
+    get title() {
+      return t("Where are you?");
+    },
+    get body() {
+      return t("Used to place sessions and reminders at the right local time.");
+    },
+    get detected() {
+      return t("Detected from device");
+    },
+    get search() {
+      return t("Search all timezones");
+    },
+    get refine() {
+      return t("Showing the closest matches — refine your search to see more");
+    },
   },
   reminder: {
-    title: "Default reminder",
-    body: "How long before a session should we nudge you? Each task can override this.",
-    hint: "Optional step · stored as your default reminder.",
+    get title() {
+      return t("Default reminder");
+    },
+    get body() {
+      return t(
+        "How long before a session should we nudge you? Each task can override this.",
+      );
+    },
+    get hint() {
+      return t("Optional step · stored as your default reminder.");
+    },
   },
   tags: {
-    title: "Pick your tags",
-    body: "Tags group your tasks and sessions. We've suggested a few for students — tap to keep, add your own, rename them later.",
+    get title() {
+      return t("Pick your tags");
+    },
+    get body() {
+      return t(
+        "Tags group your tasks and sessions. We've suggested a few for students — tap to keep, add your own, rename them later.",
+      );
+    },
     footer: (n: number) =>
-      `${n} selected · saved to your account, available in the task form’s Tags field.`,
+      t(
+        "{count} selected · saved to your account, available in the task form’s Tags field.",
+        { count: n },
+      ),
   },
   done: {
-    title: "You’re all set",
-    body: "Skipped steps are waiting for you in Settings.",
-    open: "Open my calendar",
+    get title() {
+      return t("You’re all set");
+    },
+    get body() {
+      return t("Skipped steps are waiting for you in Settings.");
+    },
+    get open() {
+      return t("Open my calendar");
+    },
   },
-  saveFailed: "Couldn't save. Try again.",
+  get saveFailed() {
+    return t("Couldn't save. Try again.");
+  },
 } as const;
 
 /** Max timezones listed at once; more matches prompt a "refine" hint. */
 const TZ_LIMIT = 50;
 
 const LANGUAGE_SUB: Record<string, string> = {
-  vi: "Vietnamese · default",
+  get vi() {
+    return t("Vietnamese · default");
+  },
   en: "English",
 };
 
@@ -143,6 +237,7 @@ const STEP_ICON: Partial<Record<OnboardingStep, typeof Globe>> = {
 };
 
 function RadioDot({ selected }: { selected: boolean }) {
+  useLanguage();
   return (
     <View
       className={cn(
@@ -157,6 +252,7 @@ function RadioDot({ selected }: { selected: boolean }) {
 
 /** Rounded card whose children are separated by hairlines. */
 function Group({ children }: { children: React.ReactNode }) {
+  useLanguage();
   const items = (Array.isArray(children) ? children : [children]).flat();
   return (
     <View className="overflow-hidden rounded-2xl border border-border bg-card">
@@ -184,6 +280,7 @@ function Row({
   children: React.ReactNode;
   className?: string;
 }) {
+  useLanguage();
   return (
     <Pressable
       onPress={onPress}
@@ -201,6 +298,7 @@ function Row({
 }
 
 export default function OnboardingScreen() {
+  useLanguage();
   const insets = useSafeAreaInsets();
   const { toast } = useToast();
   const user = useUserStore((s) => s.user);
@@ -326,7 +424,9 @@ export default function OnboardingScreen() {
    * couldn't register (simulator / no FCM) — a quiet success, retried next
    * launch. A failed preference save is NOT that: it stays on the step.
    */
-  async function turnOnNotifications(): Promise<"on" | "saved" | "blocked" | "failed"> {
+  async function turnOnNotifications(): Promise<
+    "on" | "saved" | "blocked" | "failed"
+  > {
     if (await notif.setEnabled(true, { quiet: true })) return "on";
     const granted = usePushStatusStore.getState().permission === "granted";
     if (!granted) return "blocked";
@@ -416,9 +516,7 @@ export default function OnboardingScreen() {
                 selected={prefs.language === l.value}
                 onPress={() => void savePref({ language: l.value })}
               >
-                <Text className="text-[26px] leading-[32px]">
-                  {l.flag}
-                </Text>
+                <Text className="text-[26px] leading-[32px]">{l.flag}</Text>
                 <View className="flex-1">
                   <Text className="text-[16px] font-semibold">{l.label}</Text>
                   <Text className="text-[13px] text-muted-foreground">
@@ -500,7 +598,9 @@ export default function OnboardingScreen() {
                 accessibilityLabel={COPY.notifications.rowTitle}
                 className={cn(
                   "h-[26px] w-[46px] justify-center rounded-full px-[3px]",
-                  notif.active ? "items-end bg-primary" : "items-start bg-muted",
+                  notif.active
+                    ? "items-end bg-primary"
+                    : "items-start bg-muted",
                 )}
               >
                 <View
@@ -514,7 +614,7 @@ export default function OnboardingScreen() {
           </Group>
           <View className="mt-4 gap-3 px-1">
             {COPY.notifications.bullets.map((b) => (
-              <View key={b} className="flex-row items-start gap-2.5">
+              <View key={t(b)} className="flex-row items-start gap-2.5">
                 <Check size={16} className="mt-0.5 text-primary" />
                 <Text className="flex-1 text-[13.5px] text-muted-foreground">
                   {b}
@@ -600,7 +700,9 @@ export default function OnboardingScreen() {
               placeholder={COPY.timezone.search}
               autoCapitalize="none"
               autoCorrect={false}
-              rightElement={<Search size={18} className="text-muted-foreground" />}
+              rightElement={
+                <Search size={18} className="text-muted-foreground" />
+              }
             />
           </View>
           <View className="mt-3">
@@ -699,7 +801,9 @@ export default function OnboardingScreen() {
         <>
           {primary(
             tagsForBulk(tags).length > 0
-              ? `${COPY.continue} · ${tagsForBulk(tags).length} tags`
+              ? t("Continue · {count} tags", {
+                  count: tagsForBulk(tags).length,
+                })
               : COPY.continue,
             saveTags,
             !tagsLoaded,
@@ -717,30 +821,30 @@ export default function OnboardingScreen() {
         step?: OnboardingStep;
       }[] = [
         {
-          k: "Language",
+          k: t("Language"),
           v: LANGUAGES.find((l) => l.value === prefs.language)?.label ?? "",
         },
-        { k: "Name", v: user?.name ?? "" },
+        { k: t("Name"), v: user?.name ?? "" },
         {
-          k: "DLU account",
-          v: dluConnected ? "Connected" : "Skipped",
+          k: t("DLU account"),
+          v: dluConnected ? t("Connected") : t("Skipped"),
           skipped: !dluConnected,
           step: "dlu",
         },
         {
-          k: "Notifications",
-          v: notif.active ? "On" : "Skipped",
+          k: t("Notifications"),
+          v: notif.active ? t("On") : t("Skipped"),
           skipped: !notif.active,
           step: "notifications",
         },
-        { k: "Timezone", v: prefs.timezone },
+        { k: t("Timezone"), v: prefs.timezone },
         {
-          k: "Default reminder",
+          k: t("Default reminder"),
           v:
             REMINDERS.find((r) => r.value === prefs.defaultReminder)?.label ??
             "",
         },
-        { k: "Tags", v: `${savedTagCount} selected` },
+        { k: t("Tags"), v: t("{count} selected", { count: savedTagCount }) },
       ];
       content = (
         <Group>
@@ -760,7 +864,7 @@ export default function OnboardingScreen() {
                     }}
                   >
                     <Text className="text-[13px] font-semibold text-primary">
-                      Set up
+                      {t("Set up")}
                     </Text>
                   </Pressable>
                 ) : (
@@ -834,7 +938,9 @@ export default function OnboardingScreen() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 24 }}
       >
-        <View className={cn("px-6 pt-3", step === "done" && "items-center pt-8")}>
+        <View
+          className={cn("px-6 pt-3", step === "done" && "items-center pt-8")}
+        >
           {step === "done" ? (
             <View className="mb-5 size-16 items-center justify-center rounded-full bg-brand-orange">
               <Check size={30} className="text-primary-foreground" />

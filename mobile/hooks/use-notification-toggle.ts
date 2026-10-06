@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import { useToast } from "@/components/ui/toast";
 import { usePushStatusStore } from "@/hooks/use-push-status-store";
 import { useUserStore } from "@/hooks/use-user-store";
@@ -61,15 +62,15 @@ export function useNotificationToggle() {
       const blocked = usePushStatusStore.getState().permission !== "granted";
       toast(
         blocked
-          ? "Notifications are blocked. Allow them in system settings."
-          : "Couldn't turn on notifications.",
+          ? t("Notifications are blocked. Allow them in system settings.")
+          : t("Couldn't turn on notifications."),
         "destructive",
         6000,
         "top",
         true,
         blocked
           ? {
-              label: "Open settings",
+              label: t("Open settings"),
               onPress: () => void Linking.openSettings(),
             }
           : undefined,

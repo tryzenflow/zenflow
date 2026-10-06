@@ -1,3 +1,5 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t } from "@/lib/i18n";
 import {
   CalendarClock,
   CheckSquare,
@@ -61,6 +63,7 @@ export function SessionTypeTabs({
   onChange: (type: SessionFormType) => void;
   disabled?: boolean;
 }) {
+  useLanguage();
   const { isDarkColorScheme } = useColorScheme();
   const scheme = isDarkColorScheme ? "dark" : "light";
   const muted = NAV_THEME[scheme].mutedForeground;
@@ -99,7 +102,7 @@ export function SessionTypeTabs({
                 style={{ color }}
                 numberOfLines={1}
               >
-                {tab.label}
+                {t(tab.label)}
               </Text>
             </Pressable>
           );
@@ -137,7 +140,7 @@ export function SessionTypeTabs({
                   style={{ color }}
                   numberOfLines={1}
                 >
-                  {ft.label}
+                  {t(ft.label)}
                 </Text>
               </Pressable>
             );

@@ -9,6 +9,7 @@ import { FcmSender } from "./fcm.sender";
 import type { PushMessage } from "./types";
 import { pushDevicesPruned, pushSend } from "../observability/metrics";
 import { withSpan } from "../observability/otel";
+import { localizeNotification } from "../notifications/localize-notification";
 
 /**
  * Fans every raised {@link Notification} out to the user's registered devices.
@@ -65,9 +66,10 @@ export class PushService implements OnModuleInit {
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { allowNotifications: true },
+      select: { allowNotifications: true, lang: true },
     });
     if (user && !user.allowNotifications) return;
+    row = localizeNotification(row, user?.lang);
 
     const devices = await this.prisma.userDevice.findMany({
       where: { userId },

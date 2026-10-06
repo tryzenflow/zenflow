@@ -1,3 +1,5 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t } from "@/lib/i18n";
 import { downloadFileToCache, getFileMetadata, uploadFiles } from "@/api/files";
 import {
   Bold,
@@ -86,6 +88,7 @@ export function DescriptionField(props: {
   onChange: (value: string) => void;
   disabled?: boolean;
 }) {
+  useLanguage();
   return <DescriptionFieldEditor {...props} />;
 }
 
@@ -98,6 +101,7 @@ function DescriptionFieldEditor({
   onChange: (value: string) => void;
   disabled?: boolean;
 }) {
+  useLanguage();
   const { isDarkColorScheme } = useColorScheme();
   const { toast } = useToast();
   // The content the editor currently owns: `initialValue` at first mount,
@@ -266,7 +270,7 @@ function DescriptionFieldEditor({
       const { file, mimeType, name } = await downloadFileToCache(id);
       await file.preview({ mimeType, title: name });
     } catch {
-      toast("Couldn't open that file.", "destructive");
+      toast(t("Couldn't open that file."), "destructive");
     }
   }
 
@@ -290,7 +294,7 @@ function DescriptionFieldEditor({
           return;
         }
         Linking.openURL(href).catch(() => {
-          toast("Couldn't open that link.", "destructive");
+          toast(t("Couldn't open that link."), "destructive");
         });
       }
     }
@@ -390,7 +394,7 @@ function DescriptionFieldEditor({
         copyToCacheDirectory: true,
       });
     } catch {
-      toast("Couldn't open the file picker.", "destructive");
+      toast(t("Couldn't open the file picker."), "destructive");
       return;
     }
     if (result.canceled) return;
@@ -401,7 +405,7 @@ function DescriptionFieldEditor({
         name: asset.name,
         mimeType: asset.mimeType ?? "application/octet-stream",
       })),
-      "Couldn't upload the file. Try again.",
+      t("Couldn't upload the file. Try again."),
     );
   }
 
@@ -418,7 +422,7 @@ function DescriptionFieldEditor({
         quality: 0.8,
       });
     } catch {
-      toast("Couldn't open the photo library.", "destructive");
+      toast(t("Couldn't open the photo library."), "destructive");
       return;
     }
     if (result.canceled) return;
@@ -431,7 +435,7 @@ function DescriptionFieldEditor({
           mimeType: asset.mimeType,
         }),
       ),
-      "Couldn't upload the image. Try again.",
+      t("Couldn't upload the image. Try again."),
     );
   }
 
@@ -465,35 +469,35 @@ function DescriptionFieldEditor({
       <View className="flex-row flex-wrap items-center gap-0.5 rounded-b-[13px] border border-input bg-background p-1">
         <ToolbarButton
           icon={Bold}
-          label="Bold"
+          label={t("Bold")}
           active={!!state.isBoldActive}
           disabled={disabled}
           onPress={() => editor.toggleBold()}
         />
         <ToolbarButton
           icon={Italic}
-          label="Italic"
+          label={t("Italic")}
           active={!!state.isItalicActive}
           disabled={disabled}
           onPress={() => editor.toggleItalic()}
         />
         <ToolbarButton
           icon={UnderlineIcon}
-          label="Underline"
+          label={t("Underline")}
           active={!!state.isUnderlineActive}
           disabled={disabled}
           onPress={() => editor.toggleUnderline()}
         />
         <ToolbarButton
           icon={Highlighter}
-          label="Highlight"
+          label={t("Highlight")}
           active={!!state.activeHighlight}
           disabled={disabled}
           onPress={() => editor.toggleHighlight(HIGHLIGHT_COLOR)}
         />
         <ToolbarButton
           icon={Quote}
-          label="Blockquote"
+          label={t("Blockquote")}
           active={!!state.isBlockquoteActive}
           disabled={disabled}
           onPress={() => editor.toggleBlockquote()}
@@ -501,34 +505,34 @@ function DescriptionFieldEditor({
         <View className="mx-1 h-4 w-px bg-black/10" />
         <ToolbarButton
           icon={Link2}
-          label="Link"
+          label={t("Link")}
           active={linkOpen}
           disabled={disabled}
           onPress={openLink}
         />
         <ToolbarButton
           icon={ImagePlus}
-          label="Insert image"
+          label={t("Insert image")}
           disabled={disabled}
           onPress={() => void handleInsertImage()}
         />
         <ToolbarButton
           icon={Upload}
-          label="Upload file"
+          label={t("Upload file")}
           disabled={disabled}
           onPress={() => void handleUploadFile()}
         />
         <View className="mx-1 h-4 w-px bg-black/10" />
         <ToolbarButton
           icon={List}
-          label="Bulleted list"
+          label={t("Bulleted list")}
           active={!!state.isBulletListActive}
           disabled={disabled}
           onPress={() => editor.toggleBulletList()}
         />
         <ToolbarButton
           icon={ListOrdered}
-          label="Numbered list"
+          label={t("Numbered list")}
           active={!!state.isOrderedListActive}
           disabled={disabled}
           onPress={() => editor.toggleOrderedList()}
@@ -542,7 +546,7 @@ function DescriptionFieldEditor({
             editable={!disabled}
             value={linkTitle}
             onChangeText={setLinkTitle}
-            placeholder="Title (optional)"
+            placeholder={t("Title (optional)")}
             returnKeyType="next"
             className="h-10 rounded-full border border-input bg-card px-3.5 text-[13px] text-foreground"
           />
@@ -551,7 +555,7 @@ function DescriptionFieldEditor({
               editable={!disabled}
               value={linkUrl}
               onChangeText={setLinkUrl}
-              placeholder="Link URL"
+              placeholder={t("Link URL")}
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="url"
@@ -561,14 +565,14 @@ function DescriptionFieldEditor({
             />
             <Pressable
               onPress={() => void confirmLink()}
-              accessibilityLabel="Confirm link"
+              accessibilityLabel={t("Confirm link")}
               className="h-10 w-10 items-center justify-center rounded-full bg-primary"
             >
               <Check size={16} className="text-primary-foreground" />
             </Pressable>
             <Pressable
               onPress={() => setLinkOpen(false)}
-              accessibilityLabel="Cancel link"
+              accessibilityLabel={t("Cancel link")}
               className="h-10 w-10 items-center justify-center rounded-full bg-muted"
             >
               <X size={16} className="text-muted-foreground" />
@@ -593,6 +597,7 @@ function ToolbarButton({
   active?: boolean;
   disabled?: boolean;
 }) {
+  useLanguage();
   return (
     <Pressable
       onPress={onPress}

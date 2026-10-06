@@ -1,3 +1,5 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t } from "@/lib/i18n";
 import { Check } from "@/components/Icons";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
@@ -18,6 +20,7 @@ export function TagPicker({
   /** Sheets pass `BottomSheetInput` so the keyboard lifts the sheet. */
   InputComponent?: React.ComponentType<React.ComponentProps<typeof Input>>;
 }) {
+  useLanguage();
   const [draft, setDraft] = useState("");
 
   function add() {
@@ -62,7 +65,7 @@ export function TagPicker({
           className="flex-1"
           value={draft}
           onChangeText={setDraft}
-          placeholder="Add your own tag…"
+          placeholder={t("Add your own tag…")}
           maxLength={50}
           returnKeyType="done"
           onSubmitEditing={add}
@@ -76,7 +79,7 @@ export function TagPicker({
           )}
         >
           <Text className="text-[14px] font-semibold text-primary-foreground">
-            Add
+            {t("Add")}
           </Text>
         </Pressable>
       </View>

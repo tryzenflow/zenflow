@@ -1,3 +1,5 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t, locale } from "@/lib/i18n";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import {
@@ -48,6 +50,7 @@ export function SessionCountField({
   from?: Date;
   disabled?: boolean;
 }) {
+  useLanguage();
   const feasible = maxFeasibleSessionCount(deadline, duration, from);
   const days = daysUntilDeadline(deadline, from);
   const ceiling = feasible > 0 ? feasible : MAX_TASK_SESSION_COUNT;
@@ -122,7 +125,7 @@ export function SessionCountField({
     <View className="gap-2">
       <View className="items-center">
         <Text className="text-[17px] font-semibold tabular-nums text-foreground">
-          {value} {value === 1 ? "session" : "sessions"}
+          {value} {value === 1 ? t("session") : t("sessions")}
         </Text>
       </View>
 
@@ -131,7 +134,7 @@ export function SessionCountField({
           disabled={atMin}
           onPress={() => handleChange(1)}
           hitSlop={8}
-          accessibilityLabel="Reset to 1 session"
+          accessibilityLabel={t("Reset to 1 session")}
         >
           <Text
             className={cn(
@@ -148,7 +151,7 @@ export function SessionCountField({
             onLayout={onTrackLayout}
             className="h-9 flex-1 justify-center"
             accessibilityRole="adjustable"
-            accessibilityLabel="Number of sessions"
+            accessibilityLabel={t("Number of sessions")}
             accessibilityValue={{ min: 1, max, now: value }}
             accessibilityActions={[
               { name: "increment" },
@@ -196,7 +199,9 @@ export function SessionCountField({
           disabled={atMax}
           onPress={() => handleChange(max)}
           hitSlop={8}
-          accessibilityLabel={`Fill every day (${max} sessions)`}
+          accessibilityLabel={t("Fill every day ({count} sessions)", {
+            count: max,
+          })}
         >
           <Text
             className={cn(
@@ -210,7 +215,11 @@ export function SessionCountField({
       </View>
 
       <Text className="text-[11px] text-muted-foreground">
-        {sessionCadenceLabel(value, days)}
+        {locale() === "vi-VN" && value > 1 && Math.round(days / value) > 1
+          ? t("About every {count} days until the deadline.", {
+              count: Math.round(days / value),
+            })
+          : t(sessionCadenceLabel(value, days))}
       </Text>
     </View>
   );

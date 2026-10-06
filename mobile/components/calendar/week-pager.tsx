@@ -1,3 +1,4 @@
+import { useLanguage } from "@/hooks/use-language";
 import { NAV_THEME } from "@/lib/constants";
 import type { PeekBlock } from "@/lib/peek";
 import { useColorScheme } from "@/lib/useColorScheme";
@@ -201,6 +202,7 @@ function WeekPagerImpl(
   }: WeekPagerProps,
   ref: ForwardedRef<WeekPagerHandle>,
 ) {
+  useLanguage();
   const { width } = useWindowDimensions();
   const { isDarkColorScheme } = useColorScheme();
   const borderColor = isDarkColorScheme

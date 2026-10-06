@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import {
   dismissNotification,
   listNotifications,
@@ -40,13 +41,25 @@ const INITIAL_NOTIFICATIONS_STATE = {
   initialized: false,
 } satisfies Partial<NotificationsState>;
 
+let inboxRequestVersion = 0;
+
 export const useNotificationsStore = create<NotificationsState>((set, get) => ({
   ...INITIAL_NOTIFICATIONS_STATE,
 
   fetchNotifications: async (mode = "initial") => {
+    const recipient = useUserStore.getState().user;
+    if (!recipient) return;
+    const version = ++inboxRequestVersion;
     if (mode === "refresh") set({ refreshing: true });
     try {
       const res = await listNotifications({ limit: 50 });
+      const current = useUserStore.getState().user;
+      if (
+        version !== inboxRequestVersion ||
+        current?.id !== recipient.id ||
+        current.lang !== recipient.lang
+      )
+        return;
       set({
         items: res.notifications,
         unreadCount: res.unreadCount,
@@ -55,7 +68,9 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     } catch (err) {
       console.warn("[notifications] Failed to fetch:", err);
     } finally {
-      set({ loading: false, refreshing: false });
+      if (version === inboxRequestVersion) {
+        set({ loading: false, refreshing: false });
+      }
     }
   },
 
@@ -87,7 +102,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     } catch {
       // Rollback on failure
       set({ items: prevItems });
-      throw new Error("Couldn't dismiss notification");
+      throw new Error(t("Couldn't dismiss notification"));
     }
   },
 
@@ -109,7 +124,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     } catch {
       // Rollback on any failure
       set({ items: prevItems });
-      throw new Error("Couldn't dismiss notifications");
+      throw new Error(t("Couldn't dismiss notifications"));
     }
   },
 
@@ -125,7 +140,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     } catch {
       // Rollback on any failure
       set({ items: prevItems });
-      throw new Error("Couldn't clear notifications");
+      throw new Error(t("Couldn't clear notifications"));
     }
   },
 
@@ -184,7 +199,7 @@ export async function jumpToSession(
       router.push(`/task/${encodeURIComponent(sessionId)}/edit` as Href);
     }
   } catch {
-    toast("That item isn't on your calendar anymore.", "destructive");
+    toast(t("That item isn't on your calendar anymore."), "destructive");
   }
 }
 
@@ -208,7 +223,7 @@ export async function viewSessionOnCalendar(
       params: { date: targetDate, flash: session.id },
     } as Href);
   } catch {
-    toast("That item isn't on your calendar anymore.", "destructive");
+    toast(t("That item isn't on your calendar anymore."), "destructive");
   }
 }
 
@@ -223,9 +238,7 @@ export function useNotificationsSubscription(): void {
   const { toast } = useToast();
   const userId = useUserStore((s) => s.user?.id ?? null);
   const addNotification = useNotificationsStore((s) => s.addNotification);
-  const fetchNotifications = useNotificationsStore(
-    (s) => s.fetchNotifications,
-  );
+  const fetchNotifications = useNotificationsStore((s) => s.fetchNotifications);
   const initialized = useNotificationsStore((s) => s.initialized);
 
   const latestRef = useRef({ router, toast });
@@ -291,7 +304,7 @@ export function useNotificationsSubscription(): void {
           true,
           n.sessionId
             ? {
-                label: "View on calendar",
+                label: t("View on calendar"),
                 onPress: () =>
                   viewSessionOnCalendar(
                     n.sessionId!,
@@ -344,6 +357,9 @@ export function useNotificationsSubscription(): void {
 // Per-user inbox: reset whenever the signed-in user changes.
 useUserStore.subscribe((state, prev) => {
   if (state.user?.id !== prev.user?.id) {
+    inboxRequestVersion++;
     useNotificationsStore.setState(INITIAL_NOTIFICATIONS_STATE);
+  } else if (state.user && state.user.lang !== prev.user?.lang) {
+    void useNotificationsStore.getState().fetchNotifications("refresh");
   }
 });

@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
 import type { ReactElement } from "react";
 import { Pressable, View } from "react-native";
 
@@ -32,6 +34,7 @@ type ItemProps = {
 };
 
 function ThemeItem({ item, onPress, selected }: ItemProps) {
+  useLanguage();
   return (
     <Pressable className="py-4" onPress={onPress}>
       <View className="flex bg-pink flex-row justify-between">
@@ -47,6 +50,7 @@ function ThemeItem({ item, onPress, selected }: ItemProps) {
 }
 
 export const ThemeSettingItem = () => {
+  const language = useLanguage();
   const { colorScheme, setColorScheme } = useColorScheme();
   const [selectedTheme, setSelectedTheme] = useState<
     "light" | "dark" | "system"
@@ -57,20 +61,20 @@ export const ThemeSettingItem = () => {
   const themes: ItemData[] = useMemo(
     () => [
       {
-        title: "Device settings",
-        subtitle: "Default to your device's appearance",
+        title: t("Device settings"),
+        subtitle: t("Default to your device's appearance"),
         value: "system",
         icon: <Smartphone className="text-foreground" />,
       },
       {
-        title: "Dark mode",
-        subtitle: "Always use Dark mode",
+        title: t("Dark mode"),
+        subtitle: t("Always use Dark mode"),
         value: "dark",
         icon: <Moon className="text-foreground" />,
       },
       {
-        title: "Light mode",
-        subtitle: "Always use Light mode",
+        title: t("Light mode"),
+        subtitle: t("Always use Light mode"),
         value: "light",
         icon: <Sun className="text-foreground" />,
       },
@@ -92,13 +96,13 @@ export const ThemeSettingItem = () => {
       <BottomSheetOpenTrigger asChild>
         <ListItem
           itemLeft={({ className }) => <Palette className={className} />}
-          label="Theme"
+          label={t("Theme")}
         />
       </BottomSheetOpenTrigger>
       <BottomSheetContent ref={bottomSheet.ref}>
         <BottomSheetHeader className="bg-background">
           <Text className="text-foreground text-xl font-bold  pb-1">
-            Select Theme
+            {t("Select Theme")}
           </Text>
         </BottomSheetHeader>
         <BottomSheetView className="gap-5 pt-6 bg-background">

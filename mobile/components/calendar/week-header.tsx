@@ -1,4 +1,7 @@
 import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
+import { format } from "@/lib/i18n";
 import { Text } from "@/components/ui/text";
 import { useNow } from "@/hooks/use-now";
 import { SESSION_TYPE_META, SESSION_TYPE_ORDER } from "@zenflow/core";
@@ -11,7 +14,7 @@ import {
 } from "@/lib/week-date-math";
 import { SETTLE_MS } from "@/lib/week-pager-math";
 import type { SessionType } from "@zenflow/shared";
-import { format } from "date-fns";
+
 import { toZonedTime } from "date-fns-tz";
 import {
   type ForwardedRef,
@@ -122,6 +125,7 @@ function WeekHeaderImpl(
   }: WeekHeaderProps,
   ref: ForwardedRef<WeekHeaderHandle>,
 ) {
+  useLanguage();
   const now = useNow();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -301,10 +305,10 @@ function WeekHeaderImpl(
           isFocused ? "bg-muted" : ""
         }`}
         accessibilityLabel={`${format(day, "EEEE, MMMM d")}${
-          isToday ? ", today" : ""
+          isToday ? t(", today") : ""
         }${
           types.length > 0
-            ? `, ${types.map((t) => SESSION_TYPE_META[t].label).join(", ")}`
+            ? `, ${types.map((type) => t(SESSION_TYPE_META[type].label)).join(", ")}`
             : ""
         }`}
       >

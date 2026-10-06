@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
 import { CalendarClock, ChevronRight, Plus } from "@/components/Icons";
 import {
   BottomSheet,
@@ -33,6 +35,7 @@ export const BlockActionsSheet = forwardRef<
   BlockActionsSheetHandle,
   BlockActionsSheetProps
 >(({ onReschedule, onSessionBefore }, ref) => {
+  useLanguage();
   const sheet = useBottomSheet();
   const [session, setSession] = useState<Session | null>(null);
 
@@ -76,7 +79,7 @@ export const BlockActionsSheet = forwardRef<
           >
             <Plus size={18} className="text-primary" />
             <Text className="flex-1 text-[14px] font-semibold text-primary">
-              Add study session before this
+              {t("Add study session before this")}
             </Text>
             <ChevronRight size={16} className="text-primary/60" />
           </Pressable>
@@ -87,7 +90,7 @@ export const BlockActionsSheet = forwardRef<
           >
             <CalendarClock size={18} className="text-foreground" />
             <Text className="flex-1 text-[14px] font-medium text-foreground">
-              Move to…
+              {t("Move to…")}
             </Text>
             <ChevronRight size={16} className="text-muted-foreground" />
           </Pressable>

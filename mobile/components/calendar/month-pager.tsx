@@ -1,3 +1,4 @@
+import { useLanguage } from "@/hooks/use-language";
 import { addMonths } from "@/lib/month-date-math";
 import { differenceInCalendarMonths } from "date-fns";
 import { useEffect, useRef, useState } from "react";
@@ -52,6 +53,7 @@ export function MonthPager({
   scrollEnabled = true,
   renderPage,
 }: MonthPagerProps) {
+  useLanguage();
   const { width } = useWindowDimensions();
   // A horizontal ScrollView's content doesn't stretch its children vertically
   // on iOS, so `flex-1` pages collapse to 0 height (header only, no grid).
@@ -146,8 +148,11 @@ export function MonthPager({
     if (index !== committedIndexRef.current) onMonthChange(monthAt(index));
   }
 
-  const rendered = [committedIndex - 1, committedIndex, committedIndex + 1]
-    .filter((index) => index >= 0 && index < PAGE_COUNT);
+  const rendered = [
+    committedIndex - 1,
+    committedIndex,
+    committedIndex + 1,
+  ].filter((index) => index >= 0 && index < PAGE_COUNT);
 
   return (
     <View

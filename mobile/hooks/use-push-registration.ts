@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
@@ -9,6 +10,7 @@ import { useUserStore } from "@/hooks/use-user-store";
 import {
   claimNotification,
   configureForegroundHandler,
+  ensureAndroidChannel,
   hrefFromPushData,
   isLocalNotification,
   notificationIdOf,
@@ -30,8 +32,13 @@ export function usePushRegistration(): void {
   const router = useRouter();
   const { toast } = useToast();
   const userId = useUserStore((s) => s.user?.id ?? null);
+  const language = useUserStore((s) => s.user?.lang);
   const onboarded = useUserStore((s) => s.user?.onboardedAt != null);
   const lastHandledResponseId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (userId) void ensureAndroidChannel().catch(() => {});
+  }, [userId, language]);
 
   // Apply the push rule (`decidePushAction`) on login / onboarding completion
   // (`onboarded`) and each time the app returns to the foreground (a token can
@@ -51,7 +58,9 @@ export function usePushRegistration(): void {
   // the warm case (already running). De-duped by notification id so the
   // cold-start response isn't re-handled when the warm listener also sees it.
   useEffect(() => {
-    const route = async (response: Notifications.NotificationResponse | null) => {
+    const route = async (
+      response: Notifications.NotificationResponse | null,
+    ) => {
       if (!response) return;
       const id = response.notification.request.identifier;
       if (id === lastHandledResponseId.current) return;
@@ -70,7 +79,7 @@ export function usePushRegistration(): void {
           } as Href);
           return;
         } catch {
-          toast("That item isn't on your calendar anymore.", "destructive");
+          toast(t("That item isn't on your calendar anymore."), "destructive");
           return;
         }
       }
@@ -100,8 +109,9 @@ export function usePushRegistration(): void {
           | undefined;
         const sessionId = data?.sessionId;
         const rawTitle =
-          notification.request.content.title || "New notification";
-        const title = rawTitle.replace(/^\[.*?\]\s*/, "").trim() || "New notification";
+          notification.request.content.title || t("New notification");
+        const title =
+          rawTitle.replace(/^\[.*?\]\s*/, "").trim() || t("New notification");
         const body = notification.request.content.body || undefined;
 
         toast(
@@ -112,7 +122,7 @@ export function usePushRegistration(): void {
           true,
           sessionId
             ? {
-                label: "View on calendar",
+                label: t("View on calendar"),
                 onPress: async () => {
                   try {
                     const session = await getSessionDetails(sessionId);
@@ -124,7 +134,7 @@ export function usePushRegistration(): void {
                     } as Href);
                   } catch {
                     toast(
-                      "That item isn't on your calendar anymore.",
+                      t("That item isn't on your calendar anymore."),
                       "destructive",
                     );
                   }
@@ -142,4 +152,3 @@ export function usePushRegistration(): void {
     };
   }, [router, toast]);
 }
-

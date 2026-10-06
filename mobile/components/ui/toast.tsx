@@ -1,3 +1,5 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t } from "@/lib/i18n";
 import { NAV_THEME } from "@/lib/constants";
 import { useColorScheme } from "@/lib/useColorScheme";
 import * as Haptics from "expo-haptics";
@@ -223,6 +225,7 @@ function Toast({
   const progress = useSharedValue(0);
   const dismissedRef = useRef(false);
 
+  useLanguage();
   const { isDarkColorScheme } = useColorScheme();
   const palette = isDarkColorScheme ? NAV_THEME.dark : NAV_THEME.light;
   const meta = TOAST_VARIANTS[variant] ?? TOAST_VARIANTS.default;
@@ -439,7 +442,7 @@ function Toast({
             <Pressable
               onPress={() => dismiss(0)}
               hitSlop={10}
-              accessibilityLabel="Dismiss notification"
+              accessibilityLabel={t("Dismiss notification")}
               style={{ paddingTop: 2 }}
             >
               <X size={16} color={palette.mutedForeground} />
@@ -507,7 +510,7 @@ function Toast({
                 className="text-[13px] font-semibold"
                 style={{ color: palette.mutedForeground }}
               >
-                {confirm.cancelLabel ?? "Cancel"}
+                {confirm.cancelLabel ?? t("Cancel")}
               </Text>
             </Pressable>
             <Pressable
@@ -524,7 +527,7 @@ function Toast({
               }}
             >
               <Text className="text-[13px] font-bold" style={{ color: "#fff" }}>
-                {confirm.confirmLabel ?? "Confirm"}
+                {confirm.confirmLabel ?? t("Confirm")}
               </Text>
             </Pressable>
           </View>
@@ -564,12 +567,13 @@ function StackLayer({
   layers: number;
   onPress: () => void;
 }) {
+  useLanguage();
   const { isDarkColorScheme } = useColorScheme();
   const palette = isDarkColorScheme ? NAV_THEME.dark : NAV_THEME.light;
   return (
     <Pressable
       onPress={onPress}
-      accessibilityLabel="Show all notifications"
+      accessibilityLabel={t("Show all notifications")}
       style={{
         position: "absolute",
         top: 0,
@@ -605,6 +609,7 @@ function StackControls({
   onToggle: () => void;
   onClearAll: () => void;
 }) {
+  useLanguage();
   const { isDarkColorScheme } = useColorScheme();
   const palette = isDarkColorScheme ? NAV_THEME.dark : NAV_THEME.light;
   const pill = {
@@ -631,7 +636,7 @@ function StackControls({
           className="text-[12px] font-semibold"
           style={{ color: palette.text }}
         >
-          {expanded ? "Show less" : `${count} notifications`}
+          {expanded ? t("Show less") : t("{count} notifications", { count })}
         </Text>
       </Pressable>
       <Pressable onPress={onClearAll} hitSlop={6} style={pill}>
@@ -639,7 +644,7 @@ function StackControls({
           className="text-[12px] font-semibold"
           style={{ color: palette.mutedForeground }}
         >
-          Clear all
+          {t("Clear all")}
         </Text>
       </Pressable>
     </View>

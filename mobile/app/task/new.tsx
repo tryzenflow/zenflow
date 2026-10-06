@@ -1,3 +1,6 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
+import { format } from "@/lib/i18n";
 import { createSession } from "@/api/tasks";
 import { SessionTypeTabs } from "@/components/tasks/form/session-type-tabs";
 import { SessionFormScreen } from "@/components/tasks/task-form-screen";
@@ -36,7 +39,7 @@ import {
   type CreateSessionInput,
   DEFAULT_REMINDER_MINUTES,
 } from "@zenflow/shared";
-import { format } from "date-fns";
+
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo } from "react";
 
@@ -119,6 +122,7 @@ function toCreateInput(
  * `initialStart` / `initialDefaults` below).
  */
 export default function NewSessionScreen() {
+  useLanguage();
   return (
     <ModalToastScope>
       <NewSessionForm />
@@ -127,6 +131,7 @@ export default function NewSessionScreen() {
 }
 
 function NewSessionForm() {
+  useLanguage();
   const { start, deadline, sessions } = useLocalSearchParams<{
     start?: string;
     /** UTC ISO instant — pre-selects the deadline (used by the Day/Week
@@ -264,8 +269,8 @@ function NewSessionForm() {
       const { message, variant } = placementToastMessage(response, user);
       showSplitToast(toast, message, variant);
       if (shouldSurfaceRescheduleHint()) {
-        toast("Tip", "tip", 6000, "top", false, undefined, {
-          description: RESCHEDULE_HINT,
+        toast(t("Tip"), "tip", 6000, "top", false, undefined, {
+          description: t(RESCHEDULE_HINT),
         });
       }
       // Teleport the calendar to where it landed and pulse the new block.
@@ -295,7 +300,7 @@ function NewSessionForm() {
         showErrorToast(
           toast,
           error,
-          "Something went wrong when creating the session",
+          t("Something went wrong when creating the session"),
         ),
     );
   }
@@ -308,17 +313,17 @@ function NewSessionForm() {
   // A TASK is engine-placed, so a "· starts H:mm" here would be a lie — show
   // just the pressed date. A fixed type keeps the time (it honours the seed).
   const subtitle = !initialStart
-    ? "New session"
+    ? t("New session")
     : type === "TASK"
-      ? `From ${format(initialStart, "EEEE, MMM d")}`
-      : `From ${format(initialStart, "EEEE, MMM d")} · starts ${format(
-          initialStart,
-          "h:mm a",
-        )}`;
+      ? t("From {date}", { date: format(initialStart, "EEEE, MMM d") })
+      : t("From {date} · starts {time}", {
+          date: format(initialStart, "EEEE, MMM d"),
+          time: format(initialStart, "h:mm a"),
+        });
 
   return (
     <SessionFormScreen
-      title="New session"
+      title={t("New session")}
       subtitle={subtitle}
       footer={
         <Button
@@ -327,7 +332,7 @@ function NewSessionForm() {
           onPress={form.handleSubmit(onSubmit, onInvalid)}
         >
           <Text className="text-base font-semibold text-foreground">
-            {loading ? "Adding…" : "Add session"}
+            {loading ? t("Adding…") : t("Add session")}
           </Text>
         </Button>
       }

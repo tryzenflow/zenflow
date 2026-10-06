@@ -1,3 +1,5 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t } from "@/lib/i18n";
 import { X } from "@/components/Icons";
 import * as DialogPrimitive from "@/components/primitives/dialog";
 import * as Slot from "@/components/primitives/slot";
@@ -117,6 +119,7 @@ const BottomSheetContent = React.forwardRef<
     ref,
   ) => {
     const [open, setOpen] = React.useState(false);
+    useLanguage();
     const { sheetRef } = useBottomSheetContext();
 
     const handle = React.useMemo<WebSheetHandle>(
@@ -186,6 +189,7 @@ const BottomSheetOpenTrigger = React.forwardRef<
     asChild?: boolean;
   }
 >(({ onPress, asChild = false, ...props }, ref) => {
+  useLanguage();
   const { sheetRef } = useBottomSheetContext();
   function handleOnPress(ev: GestureResponderEvent) {
     sheetRef.current?.present();
@@ -201,6 +205,7 @@ const BottomSheetCloseTrigger = React.forwardRef<
     asChild?: boolean;
   }
 >(({ onPress, asChild = false, ...props }, ref) => {
+  useLanguage();
   const { sheetRef } = useBottomSheetContext();
   function handleOnPress(ev: GestureResponderEvent) {
     sheetRef.current?.dismiss();
@@ -329,6 +334,7 @@ const BottomSheetHeader = React.forwardRef<
   BottomSheetHeaderRef,
   BottomSheetHeaderProps
 >(({ className, children, ...props }, ref) => {
+  useLanguage();
   const { sheetRef } = useBottomSheetContext();
   function close() {
     sheetRef.current?.dismiss();
@@ -350,7 +356,7 @@ const BottomSheetHeader = React.forwardRef<
       <Button
         onPress={close}
         variant="ghost"
-        accessibilityLabel="Close"
+        accessibilityLabel={t("Close")}
         className="h-8 w-8 self-start rounded-full bg-muted p-0"
       >
         <X className="text-muted-foreground" size={16} />

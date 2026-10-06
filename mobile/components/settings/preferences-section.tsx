@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
 import {
   AlarmClockIcon,
   Bell,
@@ -37,6 +39,7 @@ function Row({
   value: string;
   onPress: () => void;
 }) {
+  useLanguage();
   return (
     <Pressable
       onPress={onPress}
@@ -56,6 +59,7 @@ function Row({
 const TZ_RESULT_LIMIT = 50;
 
 export function PreferencesSection() {
+  useLanguage();
   const { prefs, update } = usePreferences();
   const { setEnabled, active } = useNotificationToggle();
   const { toast } = useToast();
@@ -69,7 +73,7 @@ export function PreferencesSection() {
   // "refine your search" hint for the rest.
   const tzSearch = useMemo(
     () => ({
-      placeholder: "Search all timezones",
+      placeholder: t("Search all timezones"),
       results: (query: string) => {
         const hits = filterTimezones(allTimezones(), query, Infinity, device);
         const options = hits
@@ -80,7 +84,7 @@ export function PreferencesSection() {
           options: [
             {
               value: "device",
-              label: `Device (${device})`,
+              label: t("Device ({zone})", { zone: device }),
               detail: gmtOffset(device),
             },
             ...options,
@@ -89,13 +93,13 @@ export function PreferencesSection() {
         };
       },
     }),
-    [device],
+    [device, prefs.language],
   );
   const tzLabel = prefs.timezoneMode === "device" ? device : prefs.timezone;
 
   async function save(patch: Parameters<typeof update>[0]) {
     if (!(await update(patch))) {
-      toast("Couldn't save preference. Try again.", "destructive");
+      toast(t("Couldn't save preference. Try again."), "destructive");
     }
   }
 
@@ -105,11 +109,11 @@ export function PreferencesSection() {
 
   return (
     <>
-      <SettingsSectionLabel>Preferences</SettingsSectionLabel>
+      <SettingsSectionLabel>{t("Preferences")}</SettingsSectionLabel>
       <View className="overflow-hidden rounded-2xl border border-border bg-card">
         <Row
           Icon={Globe}
-          title="Language"
+          title={t("Language")}
           value={(() => {
             const l = LANGUAGES.find((l) => l.value === prefs.language);
             return l ? `${l.flag} ${l.label}` : "";
@@ -119,14 +123,14 @@ export function PreferencesSection() {
         <View className="h-px bg-border" />
         <Row
           Icon={Clock}
-          title="Timezone"
+          title={t("Timezone")}
           value={tzLabel}
           onPress={() => timezoneSheet.current?.open()}
         />
         <View className="h-px bg-border" />
         <Row
           Icon={AlarmClockIcon}
-          title="Default reminder"
+          title={t("Default reminder")}
           value={
             REMINDERS.find((r) => r.value === prefs.defaultReminder)?.label ??
             ""
@@ -135,7 +139,7 @@ export function PreferencesSection() {
         />
       </View>
 
-      <SettingsSectionLabel>Notifications</SettingsSectionLabel>
+      <SettingsSectionLabel>{t("Notifications")}</SettingsSectionLabel>
       <View className="overflow-hidden rounded-2xl border border-border bg-card">
         <View className="flex-row items-center gap-[13px] px-4 py-3.5">
           <View className="h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl bg-muted">
@@ -143,10 +147,10 @@ export function PreferencesSection() {
           </View>
           <View className="min-w-0 flex-1">
             <Text className="text-[15px] font-semibold">
-              Allow notifications
+              {t("Allow notifications")}
             </Text>
             <Text className="mt-0.5 text-[13px] text-muted-foreground">
-              Push alerts for reminders and schedule changes
+              {t("Push alerts for reminders and schedule changes")}
             </Text>
           </View>
           <Switch checked={active} onCheckedChange={toggleNotifications} />
@@ -155,14 +159,14 @@ export function PreferencesSection() {
 
       <OptionSheet
         ref={languageSheet}
-        title="Language"
+        title={t("Language")}
         options={LANGUAGES}
         value={prefs.language}
         onSelect={(language) => save({ language })}
       />
       <OptionSheet
         ref={timezoneSheet}
-        title="Timezone"
+        title={t("Timezone")}
         options={[]}
         search={tzSearch}
         value={timezonePickerValue(prefs)}
@@ -170,7 +174,7 @@ export function PreferencesSection() {
       />
       <OptionSheet
         ref={reminderSheet}
-        title="Default reminder"
+        title={t("Default reminder")}
         options={REMINDERS}
         value={prefs.defaultReminder}
         onSelect={(defaultReminder) => save({ defaultReminder })}

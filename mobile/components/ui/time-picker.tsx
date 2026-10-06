@@ -1,3 +1,5 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t } from "@/lib/i18n";
 import { ChevronRight, Clock } from "@/components/Icons";
 import {
   BottomSheet,
@@ -204,6 +206,7 @@ function TimePickerBody({
   minuteScrollRef: React.RefObject<BottomSheetScrollViewRef | null>;
   columnHeight: number;
 }) {
+  useLanguage();
   const { hour, minute, meridiem } = toParts(value);
 
   const commit = useCallback(
@@ -216,7 +219,7 @@ function TimePickerBody({
   return (
     <BottomSheetView hadHeader={false} className="px-0">
       <View className="px-5">
-        <Text className="text-[19px] font-bold tracking-tight">{title}</Text>
+        <Text className="text-[19px] font-bold tracking-tight">{t(title)}</Text>
         {subtitle && (
           <Text className="mt-[3px] text-[13px] text-muted-foreground">
             {subtitle}
@@ -258,7 +261,7 @@ function TimePickerBody({
                     : "text-foreground",
                 )}
               >
-                {mer}
+                {t(mer)}
               </Text>
             </Pressable>
           ))}
@@ -266,7 +269,9 @@ function TimePickerBody({
       </View>
       <View className="px-5 pt-4">
         <Button className="w-full" onPress={onDone}>
-          <Text className="font-semibold text-primary-foreground">Done</Text>
+          <Text className="font-semibold text-primary-foreground">
+            {t("Done")}
+          </Text>
         </Button>
       </View>
     </BottomSheetView>
@@ -298,10 +303,13 @@ export function TimePickerRow({
   className,
   subtitle,
 }: TimePickerRowProps) {
+  useLanguage();
   const bottomSheet = useBottomSheet();
   const { snapPoints, columnHeight } = useTimeSheetLayout();
-  const { hourScrollRef, minuteScrollRef, onSheetChange } =
-    useTimePickerScroll(value, columnHeight);
+  const { hourScrollRef, minuteScrollRef, onSheetChange } = useTimePickerScroll(
+    value,
+    columnHeight,
+  );
 
   return (
     <BottomSheet>
@@ -364,10 +372,13 @@ export function TimePickerInline({
   disabled,
   label = "Pick a time",
 }: TimePickerInlineProps) {
+  useLanguage();
   const bottomSheet = useBottomSheet();
   const { snapPoints, columnHeight } = useTimeSheetLayout();
-  const { hourScrollRef, minuteScrollRef, onSheetChange } =
-    useTimePickerScroll(value, columnHeight);
+  const { hourScrollRef, minuteScrollRef, onSheetChange } = useTimePickerScroll(
+    value,
+    columnHeight,
+  );
 
   return (
     <BottomSheet>

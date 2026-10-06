@@ -1,3 +1,6 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
+import { format } from "@/lib/i18n";
 import { InlineDateField } from "@/components/tasks/form/inline-date-field";
 import {
   BottomSheet,
@@ -18,7 +21,7 @@ import {
   zonedWallClockToUtc,
 } from "@zenflow/core";
 import type { Session, UpdateScope } from "@zenflow/shared";
-import { format } from "date-fns";
+
 import * as Haptics from "expo-haptics";
 import { forwardRef, useImperativeHandle, useMemo, useState } from "react";
 import { View } from "react-native";
@@ -91,6 +94,7 @@ export const RescheduleSheet = forwardRef<
   RescheduleSheetHandle,
   RescheduleSheetProps
 >(({ tz, onConfirm, onMoved, onRequestScopedUpdate }, ref) => {
+  useLanguage();
   const sheet = useBottomSheet();
   const { confirm } = useToast();
   const [session, setSession] = useState<Session | null>(null);
@@ -207,10 +211,10 @@ export const RescheduleSheet = forwardRef<
       session.type === "TASK" &&
       isPastDeadlineDrop(pickedISO, session.deadline)
     ) {
-      confirm("Schedule after the deadline?", {
-        description: "This session will start past its due time.",
-        confirmLabel: "Schedule anyway",
-        cancelLabel: "Cancel",
+      confirm(t("Schedule after the deadline?"), {
+        description: t("This session will start past its due time."),
+        confirmLabel: t("Schedule anyway"),
+        cancelLabel: t("Cancel"),
         onConfirm: () => {
           commitWithScope();
         },
@@ -226,7 +230,7 @@ export const RescheduleSheet = forwardRef<
         <BottomSheetView hadHeader={false} className="gap-4 pt-2">
           <View className="min-w-0">
             <Text className="text-[19px] font-bold tracking-tight">
-              Move session
+              {t("Move session")}
             </Text>
             <Text
               numberOfLines={1}
@@ -239,7 +243,7 @@ export const RescheduleSheet = forwardRef<
 
           <View>
             <Text className="mb-1.5 text-[12px] font-semibold text-muted-foreground">
-              Date
+              {t("Date")}
             </Text>
             <InlineDateField
               value={date ?? undefined}
@@ -253,17 +257,17 @@ export const RescheduleSheet = forwardRef<
           <View className="flex-row gap-2">
             <View className="flex-1">
               <Text className="mb-1.5 text-[12px] font-semibold text-muted-foreground">
-                Start time
+                {t("Start time")}
               </Text>
               <TimePickerInline
                 value={startMinutes}
                 onChange={setStartMinutes}
-                label="Start time"
+                label={t("Start time")}
               />
             </View>
             <View className="flex-1">
               <Text className="mb-1.5 text-[12px] font-semibold text-muted-foreground">
-                End time
+                {t("End time")}
                 {crossesMidnight && (
                   <View pointerEvents="none" className="absolute ml-1 -top-2">
                     <Text
@@ -283,7 +287,7 @@ export const RescheduleSheet = forwardRef<
                 <TimePickerInline
                   value={endMinutes}
                   onChange={setEndMinutes}
-                  label="End time"
+                  label={t("End time")}
                 />
               </View>
             </View>
@@ -295,7 +299,7 @@ export const RescheduleSheet = forwardRef<
             onPress={handleConfirm}
           >
             <Text className="text-base font-semibold text-primary-foreground">
-              {busy ? "Moving…" : "Move"}
+              {busy ? t("Moving…") : t("Move")}
             </Text>
           </Button>
         </BottomSheetView>

@@ -1,3 +1,5 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t, locale } from "@/lib/i18n";
 import { CalendarDays, CalendarRange, Trash2, X } from "@/components/Icons";
 import {
   BottomSheet,
@@ -64,19 +66,19 @@ const COPY: Record<
         scope: "occurrence",
         Icon: Trash2,
         label: "This occurrence",
-        hint: (d) => `Only ${d} is removed.`,
+        hint: (d) => t("Only {date} is removed.", { date: d }),
       },
       {
         scope: "following",
         Icon: CalendarRange,
         label: "This and all following",
-        hint: (d) => `The series ends before ${d}.`,
+        hint: (d) => t("The series ends before {date}.", { date: d }),
       },
       {
         scope: "series",
         Icon: CalendarDays,
         label: "All occurrences",
-        hint: () => "Delete the entire series.",
+        hint: () => t("Delete the entire series."),
         destructive: true,
       },
     ],
@@ -89,19 +91,19 @@ const COPY: Record<
         scope: "occurrence",
         Icon: Trash2,
         label: "This sitting",
-        hint: (d) => `Only ${d} is removed.`,
+        hint: (d) => t("Only {date} is removed.", { date: d }),
       },
       {
         scope: "following",
         Icon: CalendarRange,
         label: "This and all later sittings",
-        hint: (d) => `Sittings from ${d} onward are removed.`,
+        hint: (d) => t("Sittings from {date} onward are removed.", { date: d }),
       },
       {
         scope: "series",
         Icon: CalendarDays,
         label: "All sittings",
-        hint: () => "Delete the entire task and all its sittings.",
+        hint: () => t("Delete the entire task and all its sittings."),
         destructive: true,
       },
     ],
@@ -123,6 +125,7 @@ export const DeleteRecurringSheet = forwardRef<
   DeleteRecurringSheetHandle,
   DeleteRecurringSheetProps
 >(({ kind = "recurring", onChoose }, ref) => {
+  useLanguage();
   const sheet = useBottomSheet();
   const [date, setDate] = useState<Date | null>(null);
   const { title, tappedLabel, options } = COPY[kind];
@@ -138,7 +141,13 @@ export const DeleteRecurringSheet = forwardRef<
     [sheet],
   );
 
-  const dateLabel = date ? format(date, "EEE, MMM d") : "";
+  const dateLabel = date
+    ? date.toLocaleDateString(locale(), {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      })
+    : "";
 
   function pick(scope: DeleteRecurringScope) {
     Haptics.selectionAsync().catch(() => {});
@@ -153,17 +162,17 @@ export const DeleteRecurringSheet = forwardRef<
           <View className="flex-row items-start justify-between gap-3">
             <View className="min-w-0 flex-1">
               <Text className="text-[19px] font-bold tracking-tight">
-                {title}
+                {t(title)}
               </Text>
               {!!dateLabel && (
                 <Text className="mt-[3px] text-[13px] text-muted-foreground">
-                  {tappedLabel} · {dateLabel}
+                  {t(tappedLabel)} · {dateLabel}
                 </Text>
               )}
             </View>
             <Pressable
               onPress={sheet.close}
-              accessibilityLabel="Cancel"
+              accessibilityLabel={t("Cancel")}
               className="h-8 w-8 items-center justify-center rounded-full bg-muted"
             >
               <X size={16} className="text-muted-foreground" />
@@ -202,7 +211,7 @@ export const DeleteRecurringSheet = forwardRef<
                       destructive ? "text-destructive" : "text-foreground",
                     )}
                   >
-                    {label}
+                    {t(label)}
                   </Text>
                   <Text className="mt-0.5 text-[12.5px] text-muted-foreground">
                     {hint(dateLabel)}

@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
 import { CalendarDays } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
@@ -17,6 +19,7 @@ export function TodayButton({
   visible: boolean;
   onPress: () => void;
 }) {
+  useLanguage();
   const tabBarOverlay = useTabBarOverlayHeight();
   if (!visible) return null;
   return (
@@ -39,11 +42,11 @@ export function TodayButton({
           onPress();
         }}
         accessibilityRole="button"
-        accessibilityLabel="Jump to today"
+        accessibilityLabel={t("Jump to today")}
         className="flex-row items-center gap-1.5 rounded-full border border-border bg-background/95 px-3.5 py-2 shadow-sm active:opacity-80"
       >
         <CalendarDays size={14} className="text-foreground" />
-        <Text className="text-[12.5px] font-semibold">Today</Text>
+        <Text className="text-[12.5px] font-semibold">{t("Today")}</Text>
       </Pressable>
     </Animated.View>
   );

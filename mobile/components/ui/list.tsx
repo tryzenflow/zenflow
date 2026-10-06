@@ -1,3 +1,5 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t } from "@/lib/i18n";
 import React from "react";
 import { View, type ViewProps } from "react-native";
 
@@ -22,6 +24,7 @@ export const ListHeader: React.FC<ListHeaderProps> = ({
 interface ListProps extends ViewProps {}
 
 const List: React.FC<ListProps> = ({ children, className, ...props }) => {
+  useLanguage();
   const childrenArray = React.Children.toArray(children);
   const modifiedChildren = childrenArray.map((child, index) => {
     if (!React.isValidElement(child)) {
@@ -54,7 +57,7 @@ const List: React.FC<ListProps> = ({ children, className, ...props }) => {
     <View
       className={className || ""}
       accessibilityRole="list"
-      accessibilityLabel="List of items"
+      accessibilityLabel={t("List of items")}
       {...props}
     >
       {modifiedChildren}

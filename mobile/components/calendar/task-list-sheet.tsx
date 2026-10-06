@@ -1,3 +1,6 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
+import { format } from "@/lib/i18n";
 import {
   BottomSheet,
   BottomSheetContent,
@@ -17,7 +20,7 @@ import { deriveState } from "@/lib/task-card";
 import { cn } from "@/lib/utils";
 import { SESSION_TYPE_META, zonedDate } from "@zenflow/core";
 import type { Session, SessionCardState } from "@zenflow/shared";
-import { format } from "date-fns";
+
 import * as Haptics from "expo-haptics";
 import {
   type RefObject,
@@ -56,6 +59,7 @@ export const SessionListSheet = forwardRef<
   SessionListSheetHandle,
   SessionListSheetProps
 >(({ tz, onSelectSession, onReschedule }, ref) => {
+  useLanguage();
   const bottomSheet = useBottomSheet();
   const [day, setDay] = useState<Date | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -147,8 +151,9 @@ export const SessionListSheet = forwardRef<
               className="shrink-0 text-muted-foreground"
             />
             <Text className="flex-1 text-[12px] leading-snug text-muted-foreground">
-              Press and hold, then drag onto another day this month — or tap
-              Move to pick any date.
+              {t(
+                "Press and hold, then drag onto another day this month — or tap Move to pick any date.",
+              )}
             </Text>
           </View>
         )}
@@ -160,10 +165,10 @@ export const SessionListSheet = forwardRef<
           ListEmptyComponent={
             <View className="items-center gap-1 py-10">
               <Text className="text-[15px] font-semibold text-muted-foreground">
-                Nothing scheduled
+                {t("Nothing scheduled")}
               </Text>
               <Text className="text-[13px] text-muted-foreground">
-                This day is free.
+                {t("This day is free.")}
               </Text>
             </View>
           }
@@ -208,15 +213,25 @@ SessionListSheet.displayName = "SessionListSheet";
 
 const ROW_STATE_LABELS: Record<SessionCardState, string> = {
   fluid: "Auto-scheduled",
-  conflict: "Conflict",
-  assignment: "Assignment",
-  exam: "Exam",
-  lecture: "Lecture",
-  dnd: "Do not disturb",
+  get conflict() {
+    return t("Conflict");
+  },
+  get assignment() {
+    return t("Assignment");
+  },
+  get exam() {
+    return t("Exam");
+  },
+  get lecture() {
+    return t("Lecture");
+  },
+  get dnd() {
+    return t("Do not disturb");
+  },
 };
 
 function summarize(tasks: Session[]): string {
-  if (tasks.length === 0) return "No tasks";
+  if (tasks.length === 0) return t("No tasks");
   const count = `${tasks.length} ${tasks.length === 1 ? "session" : "sessions"}`;
   return count;
 }
@@ -236,6 +251,7 @@ function SessionListRow({
   dragRef: RefObject<MonthDragHandle | null>;
   onReschedule?: () => void;
 }) {
+  useLanguage();
   const state = deriveState(task);
   const TypeIcon = sessionTypeIcon(task.type);
   const late = isSessionPastDeadline(task);
@@ -347,7 +363,7 @@ function SessionListRow({
           <View className="mt-0.5 flex-row items-center gap-1.5">
             <Text className="text-[12.5px] text-muted-foreground">
               {continuation
-                ? "Continued from yesterday"
+                ? t("Continued from yesterday")
                 : ROW_STATE_LABELS[state]}
             </Text>
             {late && (
@@ -357,7 +373,7 @@ function SessionListRow({
                   className="text-amber-700 dark:text-amber-300"
                 />
                 <Text className="text-[12px] font-semibold text-amber-700 dark:text-amber-300">
-                  late
+                  {t("late")}
                 </Text>
               </View>
             )}
@@ -367,7 +383,7 @@ function SessionListRow({
           <Pressable
             onPress={onReschedule}
             hitSlop={8}
-            accessibilityLabel={`Move ${task.title}`}
+            accessibilityLabel={t("Move {title}", { title: task.title })}
             className="h-9 w-9 flex-none items-center justify-center rounded-full bg-muted"
           >
             <CalendarClock size={16} className="text-muted-foreground" />

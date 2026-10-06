@@ -1,8 +1,8 @@
-<html lang="en">
+<html lang="{{language}}">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Your Zenflow Verification Code</title>
+    <title>{{pageTitle}}</title>
 
     <style>
       /* Geist-like system fallback stack */
@@ -93,31 +93,28 @@
       </div>
 
       <div class="content">
-        <p>Hi,</p>
+        <p>{{greeting}}</p>
 
         <p>
-          Welcome to
-          <strong>Zenflow</strong>
-          — we’re glad you’re here!
+          {{welcome}}
         </p>
 
-        <p>Use the one-time verification code below to confirm your email:</p>
+        <p>{{instructions}}</p>
 
         <div class="otp-box">{{otp}}</div>
 
         <p>
-          This code expires in 15 minutes. Please keep it private and do not
-          share it with anyone.
+          {{expires}}
         </p>
 
         <p>
-          If you didn’t request this code, you can safely ignore this email.
+          {{ignore}}
         </p>
 
-        <p>Thanks,<br />The Zenflow Team</p>
+        <p>{{thanks}}<br />{{team}}</p>
       </div>
 
-      <div class="footer">© 2025 Zenflow. All rights reserved.</div>
+      <div class="footer">© 2025 Zenflow. {{rights}}</div>
     </div>
   </body>
 </html>

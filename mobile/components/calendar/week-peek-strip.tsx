@@ -1,3 +1,4 @@
+import { useLanguage } from "@/hooks/use-language";
 import { DAY_MINUTES, type PeekBlock } from "@/lib/peek";
 import { useState } from "react";
 import { View } from "react-native";
@@ -19,6 +20,7 @@ export const PEEK_BLOCK_COLORS: Record<PeekBlock["state"], string> = {
 /** Right-edge sliver showing the next day's tasks as mini blocks, positioned
  * by wall-clock time and colored by task state. */
 export function PeekStrip({ blocks }: { blocks: PeekBlock[] }) {
+  useLanguage();
   const [height, setHeight] = useState(0);
 
   return (

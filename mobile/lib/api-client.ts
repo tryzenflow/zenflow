@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import axios, { isAxiosError } from "axios";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
@@ -25,13 +26,18 @@ function resolveBaseURL(): string | undefined {
   const envUrl = process.env.EXPO_PUBLIC_API_URL;
   if (Platform.OS === "web" || !envUrl) return envUrl;
 
-  const hostUri = Constants.expoConfig?.hostUri ?? Constants.expoGoConfig?.debuggerHost;
+  const hostUri =
+    Constants.expoConfig?.hostUri ?? Constants.expoGoConfig?.debuggerHost;
   const lanHost = hostUri?.split(":")[0];
   if (!lanHost) return envUrl;
 
   try {
     const url = new URL(envUrl);
-    if (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "10.0.2.2") {
+    if (
+      url.hostname === "localhost" ||
+      url.hostname === "127.0.0.1" ||
+      url.hostname === "10.0.2.2"
+    ) {
       url.hostname = lanHost;
       return url.toString();
     }
@@ -108,31 +114,40 @@ if (MANUAL_COOKIES) {
 // never successfully attached). Clear it so `AuthGate` (root layout) reacts
 // and redirects to login, instead of leaving a stale "logged in" user stuck
 // on a screen that will keep 403ing forever.
-api.interceptors.response.use(
-  undefined,
-  async (error) => {
-    if (
-      isAxiosError(error) &&
-      (error.response?.status === 401 || error.response?.status === 403)
-    ) {
-      // Ignore failures from a request sent with a cookie that has since been
-      // replaced (e.g. the startup `/auth/me` carrying a stale cached cookie
-      // resolving *after* the user logged in): it says nothing about the new
-      // session, and signing out here would wipe it.
-      if (MANUAL_COOKIES) {
-        const sent = (error.config?.headers?.get?.("Cookie") as string) ?? null;
-        if (sent !== sessionCookie) return Promise.reject(error);
-      }
-      useUserStore.getState().setUser(null);
-      // Same per-user cleanup as Settings sign-out.
-      clearDaySessionCache();
-      resetTimelineScroll();
-      await clearCachedSessionUser();
-      await clearSession();
+api.interceptors.response.use(undefined, async (error) => {
+  if (
+    isAxiosError(error) &&
+    error.response?.data &&
+    typeof error.response.data === "object"
+  ) {
+    const body = error.response.data;
+    if (typeof body.message === "string") body.message = t(body.message);
+    else if (Array.isArray(body.message))
+      body.message = body.message.map((message: unknown) =>
+        typeof message === "string" ? t(message) : message,
+      );
+  }
+  if (
+    isAxiosError(error) &&
+    (error.response?.status === 401 || error.response?.status === 403)
+  ) {
+    // Ignore failures from a request sent with a cookie that has since been
+    // replaced (e.g. the startup `/auth/me` carrying a stale cached cookie
+    // resolving *after* the user logged in): it says nothing about the new
+    // session, and signing out here would wipe it.
+    if (MANUAL_COOKIES) {
+      const sent = (error.config?.headers?.get?.("Cookie") as string) ?? null;
+      if (sent !== sessionCookie) return Promise.reject(error);
     }
-    return Promise.reject(error);
-  },
-);
+    useUserStore.getState().setUser(null);
+    // Same per-user cleanup as Settings sign-out.
+    clearDaySessionCache();
+    resetTimelineScroll();
+    await clearCachedSessionUser();
+    await clearSession();
+  }
+  return Promise.reject(error);
+});
 
 export async function clearSession() {
   sessionCookie = null;

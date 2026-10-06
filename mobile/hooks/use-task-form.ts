@@ -1,6 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { type SessionFormValues, sessionSchema } from "@zenflow/core";
 import { useForm } from "react-hook-form";
+import { useLanguage } from "@/hooks/use-language";
 
 /**
  * RN port of `frontend/src/hooks/use-task-form.ts` — same `sessionSchema`
@@ -13,6 +14,7 @@ export function useSessionForm({
 }: {
   defaultValues: SessionFormValues;
 }) {
+  useLanguage();
   return useForm<SessionFormValues>({
     // zod v4's inferred resolver Input (pre-default, e.g. `tags?: string[]`)
     // vs Output (post-default, `tags: string[]`) types don't unify cleanly

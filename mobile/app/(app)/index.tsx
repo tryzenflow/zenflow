@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
 import { slotPick, updateSession } from "@/api/tasks";
 import {
   showAlternativePickToast,
@@ -76,6 +78,7 @@ import { useToast } from "@/components/ui/toast";
  * back through this one state.
  */
 export default function WeekScreen() {
+  useLanguage();
   const router = useRouter();
   const user = useUserStore((s) => s.user);
   const tz = user?.timezone || "UTC";
@@ -166,7 +169,8 @@ export default function WeekScreen() {
       alternativeSlot: string,
       chose: "primary" | "alternative",
     ) => {
-      const chosenSlot = chose === "alternative" ? alternativeSlot : primarySlot;
+      const chosenSlot =
+        chose === "alternative" ? alternativeSlot : primarySlot;
       commitFocusedDate(zonedDate(chosenSlot, tz));
       setFocusTick((t) => t + 1);
       armFlash(session.id);

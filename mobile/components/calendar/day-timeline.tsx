@@ -1,3 +1,7 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
+import { locale } from "@/lib/i18n";
+import { format } from "@/lib/i18n";
 import { listSessions, updateSession } from "@/api/tasks";
 import { AlertTriangle, RefreshCcw, RotateCw } from "@/components/Icons";
 import { Button } from "@/components/ui/button";
@@ -40,7 +44,7 @@ import type {
   Session,
   UpdateSessionResponse,
 } from "@zenflow/shared";
-import { format } from "date-fns";
+
 import { toZonedTime } from "date-fns-tz";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -105,8 +109,7 @@ function stackShifts(
     const beneath = items
       .slice(0, i)
       .filter(
-        (p) =>
-          p.z < item.z && p.startMs < item.endMs && item.startMs < p.endMs,
+        (p) => p.z < item.z && p.startMs < item.endMs && item.startMs < p.endMs,
       )
       .sort((a, b) => a.top + a.shift - (b.top + b.shift));
     for (const p of beneath) {
@@ -244,6 +247,7 @@ export function DayTimeline({
   syncScroll = false,
   flashSessionId = null,
 }: DayTimelineProps) {
+  useLanguage();
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
   const { confirm, toast } = useToast();
   // Bumped whenever a drop settles, so a block whose start didn't change
@@ -727,7 +731,7 @@ export function DayTimeline({
             prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)),
           );
         } catch (error) {
-          showErrorToast(toast, error, "Couldn't move this session");
+          showErrorToast(toast, error, t("Couldn't move this session"));
         } finally {
           await refetch();
           setSettleKey((k) => k + 1);
@@ -770,10 +774,10 @@ export function DayTimeline({
       // back to its real (server) position.
       const deadline = deadlineBySession.get(taskId) ?? null;
       if (isPastDeadlineDrop(startISO, deadline)) {
-        confirm("Schedule after the deadline?", {
-          description: "This session will start past its due time.",
-          confirmLabel: "Schedule anyway",
-          cancelLabel: "Cancel",
+        confirm(t("Schedule after the deadline?"), {
+          description: t("This session will start past its due time."),
+          confirmLabel: t("Schedule anyway"),
+          cancelLabel: t("Cancel"),
           onConfirm: () => {
             commitWithScope();
           },
@@ -842,7 +846,7 @@ export function DayTimeline({
       // never a second `zonedDate` (which would double-apply the tz offset).
       const wall = new Date(date);
       wall.setHours(Math.floor(snap.startMin / 60), snap.startMin % 60, 0, 0);
-      return wall.toLocaleTimeString([], {
+      return wall.toLocaleTimeString(locale(), {
         hour: "numeric",
         minute: "2-digit",
       });
@@ -885,24 +889,27 @@ export function DayTimeline({
 
   const nowClock = toZonedTime(now, tz);
   const nowMinutes = nowClock.getHours() * 60 + nowClock.getMinutes();
-  const nowLabel = `Now ${nowClock.toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-  })}`;
+  const nowLabel = t("Now {time}", {
+    time: nowClock.toLocaleTimeString(locale(), {
+      hour: "numeric",
+      minute: "2-digit",
+    }),
+  });
   // The one-line status shown under the day title — rendered in the built-in
   // header, and also reported up (`onSubtitleChange`) so a parent that draws
   // its own header (the Day pager) keeps the same live status.
   const subtitle = loading
-    ? "Loading your day…"
+    ? t("Loading your day…")
     : error
-      ? "Couldn't sync"
+      ? t("Couldn't sync")
       : dragSnap
-        ? "Moving · release to reschedule"
+        ? t("Moving · release to reschedule")
         : tasks.length === 0
-          ? `${nowLabel} · nothing scheduled`
-          : `${nowLabel} · ${tasks.length} task${
-              tasks.length === 1 ? "" : "s"
-            } today`;
+          ? t("{now} · nothing scheduled", { now: nowLabel })
+          : t("{now} · {count} tasks today", {
+              now: nowLabel,
+              count: tasks.length,
+            });
 
   useEffect(() => {
     onSubtitleChange?.(subtitle);
@@ -971,11 +978,12 @@ export function DayTimeline({
               <AlertTriangle size={34} className="text-destructive" />
             </View>
             <Text className="text-center text-lg font-bold">
-              Couldn't load your day
+              {t("Couldn't load your day")}
             </Text>
             <Text className="mt-1.5 max-w-[280px] text-center text-[13.5px] leading-normal text-muted-foreground">
-              We couldn't reach the scheduler. Check your connection and try
-              again.
+              {t(
+                "We couldn't reach the scheduler. Check your connection and try again.",
+              )}
             </Text>
             <Button
               variant="outline"
@@ -983,7 +991,7 @@ export function DayTimeline({
               onPress={() => void refetch()}
             >
               <RotateCw size={16} className="text-foreground" />
-              <Text className="text-base font-semibold"> Try again</Text>
+              <Text className="text-base font-semibold"> {t("Try again")}</Text>
             </Button>
           </>
         ) : loading && skeletonVisible ? (
@@ -1097,7 +1105,7 @@ export function DayTimeline({
                 {/* Dashed boundary at the bottom of the fixed 24h grid — a
                   crossing block's flat clamped edge (task-block.tsx's
                   `rounded-b-none` + "→ next day" label) sits right above it,
-                  mirroring mockups/day-view.html's 12:00 AM marker. */}
+                  mirroring mockups/day-view.html's {t("Midnight")} marker. */}
                 {hasMidnightCrossing && (
                   <View
                     pointerEvents="none"
@@ -1106,7 +1114,7 @@ export function DayTimeline({
                   >
                     <View className="absolute right-2 -translate-y-1/2 rounded-md bg-background px-1.5 py-px">
                       <Text className="text-[10px] font-bold text-muted-foreground">
-                        12:00 AM
+                        {t("Midnight")}
                       </Text>
                     </View>
                   </View>

@@ -1,3 +1,4 @@
+import { t } from "./i18n";
 import { BULK_TAGS_MAX, TAG_NAME_MAX } from "@zenflow/shared";
 
 /**
@@ -95,15 +96,17 @@ const sameTag = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 /** Initial ticked set: the user's existing tags if any (resume), else the defaults. */
 export function initialTagSelection(existing: readonly string[]): string[] {
-  return existing.length > 0 ? [...existing] : [...DEFAULT_TICKED_TAGS];
+  return existing.length > 0
+    ? [...existing]
+    : DEFAULT_TICKED_TAGS.map((name) => t(name));
 }
 
 /** Suggestions followed by any other (existing/custom) selected tags. */
 export function tagOptions(selected: readonly string[]): string[] {
   const extras = selected.filter(
-    (s) => !SUGGESTED_TAGS.some((t) => sameTag(t, s)),
+    (s) => !SUGGESTED_TAGS.some((name) => sameTag(t(name), s)),
   );
-  return [...SUGGESTED_TAGS, ...extras];
+  return [...SUGGESTED_TAGS.map((name) => t(name)), ...extras];
 }
 
 export function toggleTag(selected: readonly string[], name: string): string[] {
@@ -213,7 +216,14 @@ function computeUtcOffsetMinutes(tz: string, at: Date): number {
     const p = Object.fromEntries(
       fmt.formatToParts(at).map((x) => [x.type, Number(x.value)]),
     );
-    const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+    const asUtc = Date.UTC(
+      p.year,
+      p.month - 1,
+      p.day,
+      p.hour,
+      p.minute,
+      p.second,
+    );
     return Math.round((asUtc - Math.floor(at.getTime() / 1000) * 1000) / 60000);
   } catch {
     return 0;
@@ -244,7 +254,8 @@ export function filterTimezones(
     hits.sort(
       (a, b) =>
         (dist.get(a) as number) - (dist.get(b) as number) ||
-        Number(b.startsWith(`${region}/`)) - Number(a.startsWith(`${region}/`)) ||
+        Number(b.startsWith(`${region}/`)) -
+          Number(a.startsWith(`${region}/`)) ||
         a.localeCompare(b),
     );
     if (!q) hits = hits.filter((z) => z !== near);

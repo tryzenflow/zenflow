@@ -1,3 +1,5 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t } from "@/lib/i18n";
 import { listTags } from "@/api/tags";
 import { Check, Plus, Tag, X } from "@/components/Icons";
 import {
@@ -36,6 +38,7 @@ export function TagAutocomplete({
   onChange: (value: string[]) => void;
   disabled?: boolean;
 }) {
+  const language = useLanguage();
   const [existing, setExisting] = useState<string[]>([]);
   // Tags created in this sheet session that aren't in `existing` yet — the
   // backend only persists a tag when the task itself is saved, so a
@@ -153,8 +156,8 @@ export function TagAutocomplete({
           <View className="items-center px-3 py-6">
             <Text className="text-sm text-muted-foreground">
               {trimmed
-                ? "No matching tags."
-                : "No tags yet — type to create one."}
+                ? t("No matching tags.")
+                : t("No tags yet — type to create one.")}
             </Text>
           </View>
         );
@@ -167,7 +170,7 @@ export function TagAutocomplete({
           >
             <Plus size={16} className="shrink-0 text-muted-foreground" />
             <Text className="flex-1 text-[15px] font-semibold text-brand-orange">
-              Create "{row.name}"
+              {t('Create "{name}"', { name: row.name })}
             </Text>
           </Pressable>
         );
@@ -237,7 +240,7 @@ export function TagAutocomplete({
                 <Pressable
                   disabled={disabled}
                   onPress={() => remove(tag)}
-                  accessibilityLabel={`Remove ${tag}`}
+                  accessibilityLabel={t("Remove {name}", { name: tag })}
                   className="h-4 w-4 items-center justify-center rounded-full"
                 >
                   <X
@@ -261,7 +264,7 @@ export function TagAutocomplete({
           >
             <Tag size={16} className="shrink-0 text-muted-foreground" />
             <Text className="flex-1 text-base text-muted-foreground">
-              Add a tag…
+              {t("Add a tag…")}
             </Text>
             <Plus size={16} className="shrink-0 text-muted-foreground" />
           </Pressable>
@@ -276,7 +279,9 @@ export function TagAutocomplete({
           // keyboard on Android `adjustResize`.
         >
           <BottomSheetHeader>
-            <Text className="text-lg font-bold text-foreground">Add tags</Text>
+            <Text className="text-lg font-bold text-foreground">
+              {t("Add tags")}
+            </Text>
           </BottomSheetHeader>
 
           <View className="px-4 pb-3 pt-3.5">
@@ -284,7 +289,7 @@ export function TagAutocomplete({
               autoFocus
               value={query}
               onChangeText={setQuery}
-              placeholder="Search or create a tag…"
+              placeholder={t("Search or create a tag…")}
               returnKeyType="done"
               onSubmitEditing={() => add(query.trim())}
               className="h-14 text-lg"
@@ -292,6 +297,7 @@ export function TagAutocomplete({
           </View>
 
           <BottomSheetFlatList
+            extraData={language}
             data={rows}
             keyExtractor={keyExtractor}
             className="px-4"

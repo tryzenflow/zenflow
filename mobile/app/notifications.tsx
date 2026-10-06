@@ -1,3 +1,6 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
+import { dateFnsLocale, locale } from "@/lib/i18n";
 import {
   AlertTriangle,
   Bell,
@@ -52,10 +55,18 @@ import Swipeable, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const CATEGORY_LABEL: Record<NotificationCategory, string> = {
-  ASSIGNMENT: "LMS Assignment",
-  EXAM: "Exam",
-  LECTURE: "Timetable",
-  REMINDER: "Reminder",
+  get ASSIGNMENT() {
+    return t("LMS Assignment");
+  },
+  get EXAM() {
+    return t("Exam");
+  },
+  get LECTURE() {
+    return t("Timetable");
+  },
+  get REMINDER() {
+    return t("Reminder");
+  },
 };
 
 /** Visual configuration for a notification's eventName, matching mockups/detected-items.html */
@@ -69,7 +80,7 @@ function notificationVisual(eventName: string): {
   if (notificationEventKind(eventName) === "CONFLICT") {
     return {
       Icon: AlertTriangle,
-      label: `${CATEGORY_LABEL[category]} conflict`,
+      label: t("{category} conflict", { category: CATEGORY_LABEL[category] }),
       tint: "border-amber-500/40 bg-amber-500/15",
       iconColor: "#d97706",
     };
@@ -112,10 +123,10 @@ function eventTimeLabel(n: NotificationDto, tz: string): string | null {
   if (!n.eventEndsAt) return null;
   try {
     const at = new Date(n.eventEndsAt);
-    const date = formatInTimeZone(at, tz, "MMM d");
+    const date = formatInTimeZone(at, tz, "MMM d", { locale: dateFnsLocale() });
     if (notificationCategory(n.eventName) === "ASSIGNMENT")
-      return `due ${date}`;
-    return `${date}, ${formatInTimeZone(at, tz, "h:mm a")}`;
+      return t("due {date}", { date });
+    return `${date}, ${formatInTimeZone(at, tz, "HH:mm", { locale: dateFnsLocale() })}`;
   } catch {
     return null;
   }
@@ -128,6 +139,7 @@ function eventTimeLabel(n: NotificationDto, tz: string): string | null {
  * Edit and View-on-calendar actions, and swipe-left to dismiss.
  */
 export default function NotificationsScreen() {
+  useLanguage();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { toast } = useToast();
@@ -184,13 +196,13 @@ export default function NotificationsScreen() {
         const failed = res.failedSessionIds.length;
         toast(
           failed
-            ? `Rescheduled ${ok}; ${failed} still conflict`
-            : `Rescheduled ${ok} task${ok === 1 ? "" : "s"}`,
+            ? t("Rescheduled {ok}; {failed} still conflict", { ok, failed })
+            : t("Rescheduled {count} tasks", { count: ok }),
           failed ? "warning" : "success",
         );
         void fetchNotifications("refresh");
       } catch {
-        toast("Couldn't reschedule the conflicting tasks.", "destructive");
+        toast(t("Couldn't reschedule the conflicting tasks."), "destructive");
       } finally {
         setReschedulingId(null);
       }
@@ -204,7 +216,7 @@ export default function NotificationsScreen() {
       try {
         await dismiss(id);
       } catch {
-        toast("Couldn't dismiss that notification.", "destructive");
+        toast(t("Couldn't dismiss that notification."), "destructive");
       }
     },
     [dismiss, toast],
@@ -219,9 +231,9 @@ export default function NotificationsScreen() {
     setIsSelecting(false);
     try {
       await dismissMany(ids);
-      toast(`Deleted ${count} notification${count > 1 ? "s" : ""}`, "default");
+      toast(t("Deleted {count} notifications", { count }), "default");
     } catch {
-      toast("Couldn't delete selected notifications.", "destructive");
+      toast(t("Couldn't delete selected notifications."), "destructive");
     }
   }, [selectedIds, dismissMany, toast]);
 
@@ -232,9 +244,9 @@ export default function NotificationsScreen() {
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     try {
       await clearAll();
-      toast("All notifications cleared", "default");
+      toast(t("All notifications cleared"), "default");
     } catch {
-      toast("Couldn't clear all notifications.", "destructive");
+      toast(t("Couldn't clear all notifications."), "destructive");
     }
   }, [clearAll, toast]);
 
@@ -269,14 +281,14 @@ export default function NotificationsScreen() {
           <>
             <Pressable
               onPress={exitSelecting}
-              accessibilityLabel="Cancel selection"
+              accessibilityLabel={t("Cancel selection")}
               hitSlop={8}
               className="size-9 items-center justify-center rounded-full active:bg-muted"
             >
               <X size={20} className="text-foreground" />
             </Pressable>
             <Text className="flex-1 text-[17px] font-semibold text-foreground">
-              {selectedIds.size} selected
+              {selectedIds.size} {t("selected")}
             </Text>
             <Pressable
               onPress={handleSelectAll}
@@ -284,7 +296,7 @@ export default function NotificationsScreen() {
               className="rounded-full px-3 py-1.5 active:bg-muted"
             >
               <Text className="text-[13px] font-semibold text-primary">
-                {allSelected ? "None" : "All"}
+                {allSelected ? t("None") : t("All")}
               </Text>
             </Pressable>
             <Pressable
@@ -294,7 +306,7 @@ export default function NotificationsScreen() {
                   ? () => setShowClearAllConfirm(true)
                   : handleDeleteSelected
               }
-              accessibilityLabel="Delete selected"
+              accessibilityLabel={t("Delete selected")}
               hitSlop={8}
               className={cn(
                 "size-9 items-center justify-center rounded-full active:bg-destructive/10",
@@ -308,7 +320,7 @@ export default function NotificationsScreen() {
           <>
             <Pressable
               onPress={() => router.back()}
-              accessibilityLabel="Back"
+              accessibilityLabel={t("Back")}
               hitSlop={8}
               className="size-9 items-center justify-center rounded-full active:bg-muted"
             >
@@ -316,12 +328,12 @@ export default function NotificationsScreen() {
             </Pressable>
             <View className="flex-1 flex-row items-center gap-2">
               <Text className="text-xl font-bold tracking-tight text-foreground">
-                Inbox
+                {t("Inbox")}
               </Text>
               {unreadCount > 0 && (
                 <View className="h-[20px] min-w-[26px] rounded-full items-center justify-center bg-primary px-2">
                   <Text className="text-sm font-bold leading-none text-primary-foreground">
-                    {unreadCount.toLocaleString("en-US")}
+                    {unreadCount.toLocaleString(locale())}
                   </Text>
                 </View>
               )}
@@ -333,7 +345,7 @@ export default function NotificationsScreen() {
                 className="rounded-full px-3 py-1.5 active:bg-muted"
               >
                 <Text className="text-[14px] font-semibold text-primary">
-                  Select
+                  {t("Select")}
                 </Text>
               </Pressable>
             )}
@@ -367,10 +379,10 @@ export default function NotificationsScreen() {
                 <Check size={24} className="text-primary" />
               </View>
               <Text className="text-center text-[16px] font-semibold text-foreground">
-                You're all caught up
+                {t("You're all caught up")}
               </Text>
               <Text className="mt-1.5 text-center text-[13px] leading-snug text-muted-foreground">
-                No new notifications from your LMS or student portal.
+                {t("No new notifications from your LMS or student portal.")}
               </Text>
             </View>
           }
@@ -398,11 +410,12 @@ export default function NotificationsScreen() {
                 <Trash2 size={22} className="text-destructive" />
               </View>
               <Text className="text-lg font-bold text-foreground">
-                Clear all notifications?
+                {t("Clear all notifications?")}
               </Text>
               <Text className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                All notifications in your inbox will be permanently removed.
-                This action cannot be undone.
+                {t(
+                  "All notifications in your inbox will be permanently removed. This action cannot be undone.",
+                )}
               </Text>
 
               <View className="mt-6 flex-row gap-3">
@@ -411,7 +424,7 @@ export default function NotificationsScreen() {
                   className="h-11 flex-1 items-center justify-center rounded-xl border border-border bg-muted/60"
                 >
                   <Text className="text-sm font-semibold text-foreground">
-                    Cancel
+                    {t("Cancel")}
                   </Text>
                 </Pressable>
                 <Pressable
@@ -422,7 +435,7 @@ export default function NotificationsScreen() {
                     style={{ color: "#ffffff" }}
                     className="text-sm font-bold text-white"
                   >
-                    Clear all
+                    {t("Clear all")}
                   </Text>
                 </Pressable>
               </View>
@@ -453,10 +466,14 @@ function NotificationRowItem({
   rescheduling: boolean;
   onRescheduleAll: () => void;
 }) {
+  useLanguage();
   const swipeableRef = useRef<SwipeableMethods>(null);
   const { Icon, tint, iconColor } = notificationVisual(n.eventName);
   const unread = !n.readAt;
-  const relative = formatDistanceToNow(new Date(n.sentAt), { addSuffix: true });
+  const relative = formatDistanceToNow(new Date(n.sentAt), {
+    addSuffix: true,
+    locale: dateFnsLocale(),
+  });
   const when = eventTimeLabel(n, tz);
   // Reschedule stamps `actionTakenAt` but keeps `conflictSessionIds`.
   const hasConflicts =
@@ -471,7 +488,9 @@ function NotificationRowItem({
       className="w-[112px] flex-row items-center justify-center gap-1.5 bg-destructive"
     >
       <Trash2 size={18} color="#ffffff" />
-      <Text className="text-[13px] font-semibold text-white">Dismiss</Text>
+      <Text className="text-[13px] font-semibold text-white">
+        {t("Dismiss")}
+      </Text>
     </Pressable>
   );
 
@@ -488,115 +507,119 @@ function NotificationRowItem({
       {/* Opaque base: the row's unread/selected tints are translucent, so on
           iOS the Dismiss action (laid out underneath) showed through at rest. */}
       <View className="bg-background">
-      <Pressable
-        onPress={onOpen}
-        className={cn(
-          "flex-row items-center gap-3.5 border-b border-border/70 bg-background px-4 py-3.5",
-          unread && "bg-primary/[0.04]",
-          isSelected && "bg-primary/[0.09]",
-        )}
-      >
-        {/* Selection Checkbox (visible in selection mode) */}
-        {isSelecting && (
-          <View
-            className={cn(
-              "h-6 w-6 shrink-0 items-center justify-center rounded-full border-[1.5px]",
-              isSelected
-                ? "border-primary bg-primary"
-                : "border-muted-foreground/50 bg-transparent",
-            )}
-          >
-            {isSelected && <Check size={15} color="#ffffff" strokeWidth={3} />}
-          </View>
-        )}
-
-        {/* Type icon badge with unread badge */}
-        <View className="relative shrink-0">
-          <View
-            className={cn(
-              "h-10 w-10 items-center justify-center rounded-2xl border",
-              tint,
-            )}
-          >
-            <Icon size={19} color={iconColor} />
-          </View>
-          {unread && (
-            <View className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-background bg-destructive" />
+        <Pressable
+          onPress={onOpen}
+          className={cn(
+            "flex-row items-center gap-3.5 border-b border-border/70 bg-background px-4 py-3.5",
+            unread && "bg-primary/[0.04]",
+            isSelected && "bg-primary/[0.09]",
           )}
-        </View>
-
-        {/* Content */}
-        <View className="min-w-0 flex-1">
-          {/* Title line - always aligned! */}
-          <Text
-            numberOfLines={2}
-            className={cn(
-              "text-[13.5px]",
-              unread
-                ? "font-semibold text-foreground"
-                : "font-medium text-foreground/85",
-            )}
-          >
-            {n.title}
-          </Text>
-
-          {/* Meta line */}
-          <View className="mt-1 flex-row items-center gap-1.5">
-            <Text
+        >
+          {/* Selection Checkbox (visible in selection mode) */}
+          {isSelecting && (
+            <View
               className={cn(
-                "shrink-0 text-[11px]",
-                unread
-                  ? "font-medium text-foreground/80"
-                  : "text-muted-foreground",
+                "h-6 w-6 shrink-0 items-center justify-center rounded-full border-[1.5px]",
+                isSelected
+                  ? "border-primary bg-primary"
+                  : "border-muted-foreground/50 bg-transparent",
               )}
             >
-              {relative}
+              {isSelected && (
+                <Check size={15} color="#ffffff" strokeWidth={3} />
+              )}
+            </View>
+          )}
+
+          {/* Type icon badge with unread badge */}
+          <View className="relative shrink-0">
+            <View
+              className={cn(
+                "h-10 w-10 items-center justify-center rounded-2xl border",
+                tint,
+              )}
+            >
+              <Icon size={19} color={iconColor} />
+            </View>
+            {unread && (
+              <View className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-background bg-destructive" />
+            )}
+          </View>
+
+          {/* Content */}
+          <View className="min-w-0 flex-1">
+            {/* Title line - always aligned! */}
+            <Text
+              numberOfLines={2}
+              className={cn(
+                "text-[13.5px]",
+                unread
+                  ? "font-semibold text-foreground"
+                  : "font-medium text-foreground/85",
+              )}
+            >
+              {n.title}
             </Text>
 
-            {when && (
-              <>
-                <Text className="text-[11px] text-muted-foreground/60">·</Text>
-                <Text
-                  numberOfLines={1}
-                  className={cn(
-                    "flex-1 text-[11px]",
-                    unread
-                      ? "font-medium text-foreground/80"
-                      : "text-muted-foreground",
-                  )}
-                >
-                  {when}
+            {/* Meta line */}
+            <View className="mt-1 flex-row items-center gap-1.5">
+              <Text
+                className={cn(
+                  "shrink-0 text-[11px]",
+                  unread
+                    ? "font-medium text-foreground/80"
+                    : "text-muted-foreground",
+                )}
+              >
+                {relative}
+              </Text>
+
+              {when && (
+                <>
+                  <Text className="text-[11px] text-muted-foreground/60">
+                    ·
+                  </Text>
+                  <Text
+                    numberOfLines={1}
+                    className={cn(
+                      "flex-1 text-[11px]",
+                      unread
+                        ? "font-medium text-foreground/80"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    {when}
+                  </Text>
+                </>
+              )}
+            </View>
+
+            {hasConflicts && !isSelecting && (
+              <Pressable
+                onPress={onRescheduleAll}
+                disabled={rescheduling}
+                hitSlop={6}
+                className="mt-2 flex-row items-center gap-1.5 self-start rounded-full bg-amber-600 px-3 py-1 active:opacity-80"
+              >
+                {rescheduling ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <RefreshCw size={12} color="#ffffff" />
+                )}
+                <Text className="text-[12px] font-semibold text-white">
+                  {t("Reschedule them all")}
                 </Text>
-              </>
+              </Pressable>
             )}
           </View>
 
-          {hasConflicts && !isSelecting && (
-            <Pressable
-              onPress={onRescheduleAll}
-              disabled={rescheduling}
-              hitSlop={6}
-              className="mt-2 flex-row items-center gap-1.5 self-start rounded-full bg-amber-600 px-3 py-1 active:opacity-80"
-            >
-              {rescheduling ? (
-                <ActivityIndicator size="small" color="#ffffff" />
-              ) : (
-                <RefreshCw size={12} color="#ffffff" />
-              )}
-              <Text className="text-[12px] font-semibold text-white">
-                Reschedule them all
-              </Text>
-            </Pressable>
+          {/* Right indicator — only rows that open something */}
+          {!isSelecting && n.sessionId && (
+            <View className="shrink-0 pl-1 pr-0.5 items-center justify-center">
+              <ChevronRight size={16} className="text-muted-foreground/40" />
+            </View>
           )}
-        </View>
-
-        {/* Right indicator — only rows that open something */}
-        {!isSelecting && n.sessionId && (
-          <View className="shrink-0 pl-1 pr-0.5 items-center justify-center">
-            <ChevronRight size={16} className="text-muted-foreground/40" />
-          </View>
-        )}
-      </Pressable>
+        </Pressable>
       </View>
     </Swipeable>
   );
