@@ -42,6 +42,7 @@ export function CreateSessionFab({ tz }: { tz: string }) {
     // `lib/fab-glow.ts`) — the same treatment the tab bar's Optimize button
     // gets, so the two floating actions read as one family.
     <View
+      testID="tasks.newFab.wrapper"
       style={[
         FAB_GLOW_OUTER,
         // Anchored to the top of the tab bar rather than the screen's bottom
@@ -53,6 +54,7 @@ export function CreateSessionFab({ tz }: { tz: string }) {
       className="absolute right-[18px] z-[35]"
     >
       <Pressable
+        testID="tasks.newButton"
         onPress={() => router.push(createSessionAtNowHref(tz))}
         accessibilityRole="button"
         accessibilityLabel="New task"

@@ -188,12 +188,13 @@ export function DeadlineChipRow({
   );
 
   return (
-    <View className="gap-2">
+    <View testID="tasks.form.deadlineChipRow" className="gap-2">
       <View className="flex-row flex-wrap gap-1.5">
         {CHIPS.map((c) => {
           const chipDisabled = disabled || (!options && c.id !== "custom");
           return (
             <Pressable
+              testID={`tasks.form.deadlineChip.${c.id}`}
               key={c.id}
               disabled={chipDisabled}
               onPress={() => pick(c.id)}
@@ -220,6 +221,7 @@ export function DeadlineChipRow({
 
       {(chip === "today" || chip === "tomorrow") && (
         <TimePickerInline
+          testID={`tasks.form.deadlineTimePicker.${chip}`}
           value={todayTomorrowMinutes}
           onChange={handleTodayTomorrowTime}
           disabled={disabled}
@@ -228,9 +230,10 @@ export function DeadlineChipRow({
       )}
 
       {chip === "custom" && (
-        <View className="flex-row gap-2">
+        <View testID="tasks.form.customDeadline" className="flex-row gap-2">
           <View className="flex-1">
             <InlineDateField
+              testID="tasks.form.customDeadline.date"
               value={customDate}
               onChange={handleCustomDate}
               tz={tz}
@@ -240,6 +243,7 @@ export function DeadlineChipRow({
           </View>
           <View className="flex-1">
             <TimePickerInline
+              testID="tasks.form.customDeadline.time"
               value={customMinutes}
               onChange={handleCustomTime}
               disabled={disabled}

@@ -1,0 +1,48 @@
+# P0 Smoke Suite — runs all critical paths end-to-end
+# This is the entry point that CI executes.
+#
+# Usage:
+#   maestro test mobile/maestro/flows/smoke.yaml
+#
+# Requires:
+#   - Backend services running (Postgres, Redis, MailHog)
+#   - Expo dev client installed on emulator/simulator
+#   - Metro bundler running
+#   - EXPO_PUBLIC_API_URL pointing to test backend
+#   - MAESTRO_APP_ID set to the app bundle ID
+
+appId: ${MAESTRO_APP_ID}
+---
+- launchApp
+
+# Flow 1: Login / OTP
+- runFlow:
+    file: login-otp.yaml
+
+# Flow 2: Onboarding (only runs if user is fresh)
+- runFlow:
+    file: onboarding.yaml
+
+# Flow 3: Create Task
+- runFlow:
+    file: task-create.yaml
+
+# Flow 4: Edit Task
+- runFlow:
+    file: task-edit.yaml
+
+# Flow 5: Calendar Week View
+- runFlow:
+    file: calendar-week.yaml
+
+# Flow 6: Calendar Month View
+- runFlow:
+    file: calendar-month.yaml
+
+# Flow 7: Logout
+- runFlow:
+    file: logout.yaml
+
+# Verify we're back at login screen (logout verified)
+- assertVisible:
+    id: auth.login.emailInput

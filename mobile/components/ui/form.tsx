@@ -89,13 +89,13 @@ const FormItemContext = React.createContext<FormItemContextValue>(
 
 const FormItem = React.forwardRef<
   React.ElementRef<typeof View>,
-  React.ComponentPropsWithoutRef<typeof View>
->(({ className, ...props }, ref) => {
+  React.ComponentPropsWithoutRef<typeof View> & { testID?: string }
+>(({ className, testID, ...props }, ref) => {
   const nativeID = React.useId();
 
   return (
     <FormItemContext.Provider value={{ nativeID }}>
-      <View ref={ref} className={cn("space-y-2", className)} {...props} />
+      <View ref={ref} className={cn("space-y-2", className)} testID={testID} {...props} />
     </FormItemContext.Provider>
   );
 });
@@ -195,6 +195,7 @@ type FormItemProps<T extends React.ElementType<any>, U> = Override<
 > & {
   label?: string;
   description?: string;
+  testID?: string;
 };
 
 const FormInput = React.forwardRef<
@@ -232,7 +233,7 @@ const FormInput = React.forwardRef<
   }
 
   return (
-    <FormItem>
+    <FormItem testID={props.testID}>
       {!!label && (
         <FormLabel
           nativeID={formItemNativeID}
@@ -298,7 +299,7 @@ const FormTextarea = React.forwardRef<
   }
 
   return (
-    <FormItem>
+    <FormItem testID={props.testID}>
       {!!label && (
         <FormLabel nativeID={formItemNativeID} onPress={handleOnLabelPress}>
           {label}

@@ -72,6 +72,7 @@ export function InlineDateField({
   minDate,
   maxDate,
   unboundedFuture,
+  testID,
 }: {
   value: Date | undefined;
   onChange: (date: Date) => void;
@@ -87,6 +88,7 @@ export function InlineDateField({
    * selectable (fixed sessions — a class/exam can be months out). Ignored when
    * an explicit `maxDate` is given. */
   unboundedFuture?: boolean;
+  testID?: string;
 }) {
   const { minimumDate, maximumDate } = useMemo(() => {
     const today = dayStart(zonedNow(tz));
@@ -109,6 +111,7 @@ export function InlineDateField({
 
   const trigger = (
     <Pressable
+      testID={testID ?? "tasks.form.inlineDateField.trigger"}
       onPress={Platform.OS === "android" ? () => setOpen(true) : undefined}
       disabled={disabled}
       className={cn(
@@ -134,6 +137,7 @@ export function InlineDateField({
         {trigger}
         {open && (
           <DateTimePicker
+            testID="tasks.form.inlineDateField.picker"
             value={anchor}
             mode="date"
             display="default"
@@ -155,7 +159,7 @@ export function InlineDateField({
         {/* Dynamic sizing only measures gorhom's own `BottomSheetView` (or
             scrollables); bare children measure 0 high and the sheet never
             appears. */}
-        <BottomSheetView hadHeader={false} className="px-0">
+        <BottomSheetView testID={testID ? `${testID}.sheet` : "tasks.form.inlineDateField.sheet"} hadHeader={false} className="px-0">
         <View className="px-5">
           <Text className="text-[19px] font-bold tracking-tight">
             Pick a date
@@ -163,6 +167,7 @@ export function InlineDateField({
         </View>
         <View className="mt-3 items-center px-5">
           <DateTimePicker
+            testID={testID ? `${testID}.picker` : "tasks.form.inlineDateField.picker"}
             value={anchor}
             mode="date"
             display="inline"

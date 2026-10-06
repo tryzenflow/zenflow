@@ -33,8 +33,9 @@ export function DurationStepper({
   const canIncrement = !disabled && value < DAILY_HORIZON;
 
   return (
-    <View className="flex-row items-center gap-3">
+    <View testID="tasks.form.durationStepper" className="flex-row items-center gap-3">
       <Pressable
+        testID="tasks.form.durationStepper.decrement"
         disabled={!canDecrement}
         onPress={() => step(-SLOT_MINUTES)}
         accessibilityLabel="Decrease duration by 15 minutes"
@@ -51,6 +52,7 @@ export function DurationStepper({
         </Text>
       </View>
       <Pressable
+        testID="tasks.form.durationStepper.increment"
         disabled={!canIncrement}
         onPress={() => step(SLOT_MINUTES)}
         accessibilityLabel="Increase duration by 15 minutes"

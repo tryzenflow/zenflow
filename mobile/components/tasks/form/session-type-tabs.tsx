@@ -68,7 +68,7 @@ export function SessionTypeTabs({
   const accentOf = (type: SessionFormType) => TYPE_ACCENT[type][scheme];
 
   return (
-    <View className="gap-2 pb-1">
+    <View testID="tasks.form.sessionTypeTabs" className="gap-2 pb-1">
       <View className="flex-row gap-1.5">
         {TABS.map((tab) => {
           const active = tab.key === activeTab;
@@ -76,6 +76,7 @@ export function SessionTypeTabs({
           const color = active ? accentOf(value) : muted;
           return (
             <Pressable
+              testID={`tasks.form.sessionTypeTab.${tab.key}`}
               key={tab.key}
               disabled={disabled}
               onPress={() => {
@@ -107,13 +108,14 @@ export function SessionTypeTabs({
       </View>
 
       {activeTab === "FIXED" && (
-        <View className="flex-row flex-wrap" style={{ gap: 6 }}>
+        <View testID="tasks.form.fixedTypeGrid" className="flex-row flex-wrap" style={{ gap: 6 }}>
           {FIXED_TYPES.map((ft) => {
             const active = ft.key === value;
             const Icon = ft.icon;
             const color = active ? accentOf(ft.key) : muted;
             return (
               <Pressable
+                testID={`tasks.form.fixedTypeTab.${ft.key}`}
                 key={ft.key}
                 disabled={disabled}
                 onPress={() => onChange(ft.key)}

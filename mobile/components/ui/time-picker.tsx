@@ -348,6 +348,7 @@ export interface TimePickerInlineProps {
   onChange: (minutes: number) => void;
   disabled?: boolean;
   label?: string;
+  testID?: string;
 }
 
 /**
@@ -363,6 +364,7 @@ export function TimePickerInline({
   onChange,
   disabled,
   label = "Pick a time",
+  testID,
 }: TimePickerInlineProps) {
   const bottomSheet = useBottomSheet();
   const { snapPoints, columnHeight } = useTimeSheetLayout();
@@ -373,6 +375,7 @@ export function TimePickerInline({
     <BottomSheet>
       <BottomSheetOpenTrigger asChild disabled={disabled}>
         <Pressable
+          testID={testID}
           className={cn(
             "h-[46px] flex-row items-center justify-between rounded-xl border border-input bg-card px-3",
             disabled && "opacity-50",

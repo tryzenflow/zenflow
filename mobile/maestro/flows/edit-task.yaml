@@ -1,0 +1,218 @@
+# Edit Task Flow Test
+
+appId: ${maestro.config.appId}
+---
+- name: "Edit Task - Update Title and Deadline"
+  tags: [smoke, edit-task]
+  steps:
+    - runFlow: "helpers/common.yaml#Ensure Clean State"
+    - runFlow:
+        file: "helpers/otp.yaml"
+        env:
+          EMAIL: "test@example.com"
+    - runFlow: "helpers/otp.yaml#Enter OTP"
+    - assertVisible:
+        id: "create-task-fab"
+        timeout: 10000
+
+    # Create a test task via API for editing
+    - runFlow: "helpers/data.yaml#Create Test Task API"
+    - wait: 2000
+
+    # Tap on the task block by title text
+    - runScript: |
+        const title = await getOutput('TASK_TITLE')
+        await setOutput('TASK_TITLE_FULL', title)
+    - scrollUntilVisible:
+        element:
+          text: "${output.TASK_TITLE_FULL}"
+    - tapOn:
+        text: "${output.TASK_TITLE_FULL}"
+    - waitForAnimationToEnd
+    - wait: 2000
+
+    # Verify edit screen opens with current values
+    - assertVisible:
+        id: "task-title-input"
+        timeout: 5000
+    - assertVisible:
+        id: "task-type-tabs"
+
+    # Change title
+    - tapOn:
+        id: "task-title-input"
+    - inputText: "Updated title ${TIMESTAMP}"
+    - runScript: |
+        await setOutput('NEW_TITLE', "Updated title " + Date.now())
+
+    # Change deadline to 3 days from now
+    - tapOn:
+        id: "task-deadline-chip"
+    - wait: 1000
+    - tapOn:
+        text: "3 days"
+    - waitForAnimationToEnd
+
+    # Tap save
+    - tapOn:
+        id: "task-submit-button"
+    - waitForAnimationToEnd
+    - wait: 3000
+
+    # Handle divergent slot picker if shown
+    - optional: true
+      assertVisible:
+        id: "slot-pick-sheet"
+        timeout: 5000
+    - optional: true
+      tapOn:
+        id: "slot-pick-primary"
+    - optional: true
+      waitForAnimationToEnd
+      wait: 2000
+
+    # Verify updated task appears on calendar
+    - assertVisible:
+        text: "${output.NEW_TITLE}"
+        timeout: 10000
+
+    # Cleanup
+    - runFlow: "helpers/data.yaml#Delete Test Task API"
+
+---
+- name: "Edit Task - Increase Session Count"
+  tags: [edit-task, series]
+  steps:
+    - runFlow: "helpers/common.yaml#Ensure Clean State"
+    - runFlow:
+        file: "helpers/otp.yaml"
+        env:
+          EMAIL: "test@example.com"
+    - runFlow: "helpers/otp.yaml#Enter OTP"
+    - assertVisible:
+        id: "create-task-fab"
+        timeout: 10000
+
+    # Create a test task via API
+    - runFlow: "helpers/data.yaml#Create Test Task API"
+    - wait: 2000
+
+    # Tap on the task
+    - runScript: |
+        const title = await getOutput('TASK_TITLE')
+        await setOutput('TASK_TITLE_FULL', title)
+    - scrollUntilVisible:
+        element:
+          text: "${output.TASK_TITLE_FULL}"
+    - tapOn:
+        text: "${output.TASK_TITLE_FULL}"
+    - waitForAnimationToEnd
+    - wait: 2000
+
+    # Increase session count from 1 to 2
+    - tapOn:
+        id: "task-session-count"
+    - swipe:
+        start: 0,50
+        end: 40,50
+        duration: 500
+    - wait: 500
+
+    # Tap save
+    - tapOn:
+        id: "task-submit-button"
+    - waitForAnimationToEnd
+    - wait: 3000
+
+    # Handle series slot picker if shown
+    - optional: true
+      assertVisible:
+        id: "series-slot-pick-sheet"
+        timeout: 5000
+    - optional: true
+      tapOn:
+        id: "series-slot-pick-keep-all"
+    - optional: true
+      waitForAnimationToEnd
+      wait: 2000
+
+    # Verify updated task shows 2 sittings
+    - assertVisible:
+        text: "${output.TASK_TITLE_FULL}"
+        timeout: 10000
+    - assertVisible:
+        text: "2 sittings"
+
+    # Cleanup
+    - runFlow: "helpers/data.yaml#Delete Test Task API"
+
+---
+- name: "Edit Task - Delete Flow"
+  tags: [edit-task, negative]
+  steps:
+    - runFlow: "helpers/common.yaml#Ensure Clean State"
+    - runFlow:
+        file: "helpers/otp.yaml"
+        env:
+          EMAIL: "test@example.com"
+    - runFlow: "helpers/otp.yaml#Enter OTP"
+    - assertVisible:
+        id: "create-task-fab"
+        timeout: 10000
+
+    # Create a test task via API
+    - runFlow: "helpers/data.yaml#Create Test Task API"
+    - wait: 2000
+
+    # Tap on the task
+    - runScript: |
+        const title = await getOutput('TASK_TITLE')
+        await setOutput('TASK_TITLE_FULL', title)
+    - scrollUntilVisible:
+        element:
+          text: "${output.TASK_TITLE_FULL}"
+    - tapOn:
+        text: "${output.TASK_TITLE_FULL}"
+    - waitForAnimationToEnd
+    - wait: 2000
+
+    # Tap delete button
+    - tapOn:
+        id: "task-delete-button"
+    - waitForAnimationToEnd
+    - wait: 1000
+
+    # Verify delete confirmation sheet opens
+    - assertVisible:
+        text: "Delete this session"
+        timeout: 5000
+
+    # Tap "Keep it" - cancel deletion
+    - tapOn:
+        id: "task-delete-keep-button"
+    - waitForAnimationToEnd
+    - wait: 1000
+
+    # Verify still on edit screen
+    - assertVisible:
+        id: "task-title-input"
+
+    # Tap delete again
+    - tapOn:
+        id: "task-delete-button"
+    - waitForAnimationToEnd
+    - wait: 1000
+
+    # Tap "Delete" - confirm deletion
+    - tapOn:
+        id: "task-delete-confirm-button"
+    - waitForAnimationToEnd
+    - wait: 2000
+
+    # Verify returned to week view and task is gone
+    - assertVisible:
+        id: "calendar-week-header"
+        timeout: 5000
+    - assertNotVisible:
+        text: "${output.TASK_TITLE_FULL}"
+        timeout: 5000

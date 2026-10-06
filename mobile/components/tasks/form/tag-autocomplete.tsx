@@ -254,6 +254,7 @@ export function TagAutocomplete({
       <BottomSheet>
         <BottomSheetOpenTrigger asChild disabled={disabled}>
           <Pressable
+            testID="tasks.form.tagAutocomplete.trigger"
             className={cn(
               "h-[46px] flex-row items-center gap-2 rounded-[13px] border border-input bg-card px-[13px]",
               disabled && "opacity-50",

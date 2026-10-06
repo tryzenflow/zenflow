@@ -53,6 +53,13 @@ export function AppTabBar({
     const color = focused ? theme.primary : theme.mutedForeground;
     const label = options.title ?? route.name;
 
+    // Map route names to testIDs
+    const tabTestIds: Record<string, string> = {
+      index: "tabs.week",
+      month: "tabs.month",
+      settings: "tabs.settings",
+    };
+
     // `expo-router`'s SDK 58 `BottomTabBarProps` dropped the react-navigation
     // `navigation` prop in favor of a plain `emitter` + `navigateToTab(key)`
     // pair -- mirrors the emit/navigate pattern from expo-router's own
@@ -71,6 +78,7 @@ export function AppTabBar({
     return (
       <Pressable
         key={route.key}
+        testID={tabTestIds[route.name] || `tabs.${route.name}`}
         onPress={onPress}
         onLongPress={() =>
           emitter.emit({ type: "tabLongPress", target: route.key })

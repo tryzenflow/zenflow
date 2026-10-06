@@ -1,0 +1,42 @@
+# Calendar Week View Flow
+# Tests: Week tab → header visible → Today button → seeded tasks visible → navigate next/prev week
+# Prerequisites: Seeded tasks in current and next week, onboarded user
+# Expected: Week navigation works, tasks render correctly
+
+appId: ${MAESTRO_APP_ID}
+---
+# Start on Week tab
+- assertVisible:
+    id: tabs.week
+- assertVisible:
+    id: calendar.week.header
+
+# Reset to today
+- tapOn:
+    id: calendar.todayButton
+
+# Verify current week tasks
+- assertVisible:
+    id: calendar.taskCard.e2e-this-week
+
+# Navigate to next week
+- tapOn:
+    id: calendar.week.nextButton
+
+# Verify next week tasks
+- assertVisible:
+    id: calendar.taskCard.e2e-next-week
+
+# Navigate back
+- tapOn:
+    id: calendar.week.prevButton
+
+# Verify back to current week
+- assertVisible:
+    id: calendar.taskCard.e2e-this-week
+
+# Open a task card
+- tapOn:
+    id: calendar.taskCard.e2e-this-week
+- assertVisible:
+    id: tasks.form.titleInput

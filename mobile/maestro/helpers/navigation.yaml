@@ -1,0 +1,51 @@
+# Navigation Helpers
+# Reusable YAML snippets for tab navigation and common paths
+
+---
+# Navigate to Week tab
+- name: "goToWeek"
+  commands:
+    - tapOn:
+        id: tabs.week
+    - assertVisible:
+        id: calendar.week.header
+
+# Navigate to Month tab
+- name: "goToMonth"
+  commands:
+    - tapOn:
+        id: tabs.month
+    - assertVisible:
+        id: calendar.month.grid
+
+# Navigate to Settings tab
+- name: "goToSettings"
+  commands:
+    - tapOn:
+        id: tabs.settings
+    - assertVisible:
+        id: settings.screen
+
+# Open task creation FAB
+- name: "openTaskCreate"
+  commands:
+    - tapOn:
+        id: tasks.newButton
+    - assertVisible:
+        id: tasks.form.titleInput
+
+# Open task by test ID
+- name: "openTask"
+  parameters:
+    - taskId
+  commands:
+    - tapOn:
+        id: calendar.taskCard.${taskId}
+    - assertVisible:
+        id: tasks.form.titleInput
+
+# Go back (dismiss modal/sheet)
+- name: "goBack"
+  commands:
+    - pressKey:
+        key: BACK

@@ -39,8 +39,9 @@ export function FixedTimeField({
   const endMin = endTime ? hhmmToMinutes(endTime) : 10 * 60;
 
   return (
-    <View className="gap-3">
+    <View testID="tasks.form.fixedTimeField" className="gap-3">
       <InlineDateField
+        testID="tasks.form.fixedTimeField.date"
         value={dateValue}
         onChange={(d) => onChangeDate(format(d, "yyyy-MM-dd"))}
         tz={tz}
@@ -53,6 +54,7 @@ export function FixedTimeField({
             Starts
           </Text>
           <TimePickerInline
+            testID="tasks.form.fixedTimeField.startTime"
             value={startMin}
             onChange={(m) => onChangeStart(minutesToHHMM(m))}
             disabled={disabled}
@@ -63,6 +65,7 @@ export function FixedTimeField({
             Ends
           </Text>
           <TimePickerInline
+            testID="tasks.form.fixedTimeField.endTime"
             value={endMin}
             onChange={(m) => onChangeEnd(minutesToHHMM(m))}
             disabled={disabled}

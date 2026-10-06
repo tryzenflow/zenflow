@@ -1,0 +1,36 @@
+# Logout Flow
+# Tests: Settings tab → logout button → confirm → login screen → relaunch → still logged out
+# Prerequisites: Authenticated onboarded user
+# Expected: Session cleared, login screen on relaunch
+
+appId: ${MAESTRO_APP_ID}
+---
+# Start on Week tab (authenticated)
+- assertVisible:
+    id: tabs.week
+
+# Open Settings
+- tapOn:
+    id: tabs.settings
+- assertVisible:
+    id: settings.screen
+
+# Tap logout
+- tapOn:
+    id: settings.logoutButton
+
+# Confirm if needed
+- optional:
+    - tapOn:
+        id: settings.logoutConfirmButton
+
+# Should be on login screen
+- assertVisible:
+    id: auth.login.emailInput
+
+# Relaunch app
+- launchApp
+
+# Should still be on login screen
+- assertVisible:
+    id: auth.login.emailInput

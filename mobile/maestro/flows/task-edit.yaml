@@ -1,0 +1,31 @@
+# Edit Task Flow
+# Tests: tap seeded task → edit screen opens → change title → save → verify updated on calendar
+# Prerequisites: Seeded task exists (via API helper), onboarded user on Week tab
+# Expected: Task title updated on calendar
+
+appId: ${MAESTRO_APP_ID}
+---
+# Start on Week tab
+- assertVisible:
+    id: tabs.week
+
+# Tap the seeded task
+- tapOn:
+    id: calendar.taskCard.e2e-seeded-task
+
+# Edit screen opens
+- assertVisible:
+    id: tasks.form.titleInput
+
+# Change title
+- tapOn:
+    id: tasks.form.titleInput
+- inputText: "E2E Edited Block ${E2E_RUN_ID}"
+
+# Save
+- tapOn:
+    id: tasks.form.saveButton
+
+# Verify updated title on calendar
+- assertVisible:
+    id: calendar.taskCard.e2e-edited-block-${E2E_RUN_ID}

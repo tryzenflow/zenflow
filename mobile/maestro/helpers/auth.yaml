@@ -1,0 +1,52 @@
+# Authentication Helpers
+# Reusable YAML snippets for auth flows
+
+---
+# Login with email and OTP
+- name: "login"
+  parameters:
+    - email
+    - otp
+  commands:
+    - tapOn:
+        id: auth.login.emailInput
+    - inputText: ${email}
+    - tapOn:
+        id: auth.login.sendOtpButton
+    - tapOn:
+        id: auth.login.otpBoxes
+    - inputText: ${otp}
+
+# Request OTP only (for resend testing)
+- name: "requestOtp"
+  parameters:
+    - email
+  commands:
+    - tapOn:
+        id: auth.login.emailInput
+    - inputText: ${email}
+    - tapOn:
+        id: auth.login.sendOtpButton
+
+# Change email during OTP stage
+- name: "changeEmail"
+  commands:
+    - tapOn:
+        id: auth.login.changeEmailLink
+
+# Resend OTP
+- name: "resendOtp"
+  commands:
+    - tapOn:
+        id: auth.login.resendButton
+
+# Logout from settings
+- name: "logout"
+  commands:
+    - tapOn:
+        id: tabs.settings
+    - tapOn:
+        id: settings.logoutButton
+    - optional:
+        - tapOn:
+            id: settings.logoutConfirmButton

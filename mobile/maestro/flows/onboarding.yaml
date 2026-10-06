@@ -1,0 +1,62 @@
+# Onboarding Flow
+# Tests: language → name → DLU (skip) → notifications (skip) → timezone → reminder → tags → finish
+# Prerequisites: Fresh authenticated user (just completed login-otp)
+# Expected: User lands on Week tab, relaunch doesn't show onboarding again
+
+appId: ${MAESTRO_APP_ID}
+---
+# Language step
+- assertVisible:
+    id: onboarding.screen
+- tapOn:
+    id: onboarding.language.option.en
+- tapOn:
+    id: onboarding.continueButton
+
+# Name step
+- assertVisible:
+    id: onboarding.name.input
+- tapOn:
+    id: onboarding.name.input
+- inputText: "E2E User"
+- tapOn:
+    id: onboarding.continueButton
+
+# DLU step - skip
+- tapOn:
+    id: onboarding.skipButton
+
+# Notifications step - skip
+- optional:
+    - tapOn:
+        id: onboarding.skipForNowButton
+
+# Timezone step
+- assertVisible:
+    id: onboarding.timezone.searchInput
+- tapOn:
+    id: onboarding.timezone.detectedOption
+- tapOn:
+    id: onboarding.continueButton
+
+# Reminder step
+- assertVisible:
+    id: onboarding.reminder.option.15min
+- tapOn:
+    id: onboarding.reminder.option.15min
+- tapOn:
+    id: onboarding.continueButton
+
+# Tags step
+- assertVisible:
+    id: onboarding.tags.input
+- tapOn:
+    id: onboarding.tags.suggestion.study
+- tapOn:
+    id: onboarding.tags.suggestion.work
+- tapOn:
+    id: onboarding.finishButton
+
+# Verify we're on Week tab
+- assertVisible:
+    id: tabs.week

@@ -68,10 +68,11 @@ export function ReminderField({
   }
 
   return (
-    <View className="gap-1.5">
+    <View testID="tasks.form.reminderField" className="gap-1.5">
       <View className="flex-row flex-wrap items-center gap-2">
         {value.map((m) => (
           <View
+            testID={`tasks.form.reminderField.chip.${m}`}
             key={m}
             className={cn(
               "flex-row items-center rounded-full border border-primary/45 bg-primary/15",
@@ -79,6 +80,7 @@ export function ReminderField({
             )}
           >
             <Pressable
+              testID={`tasks.form.reminderField.chip.${m}.edit`}
               disabled={disabled}
               onPress={() => openFor(m)}
               accessibilityLabel={`Edit reminder: ${reminderLabel(m)}`}
@@ -90,6 +92,7 @@ export function ReminderField({
               </Text>
             </Pressable>
             <Pressable
+              testID={`tasks.form.reminderField.chip.${m}.remove`}
               disabled={disabled}
               onPress={() => onChange(value.filter((x) => x !== m))}
               accessibilityLabel={`Remove reminder: ${reminderLabel(m)}`}
@@ -102,6 +105,7 @@ export function ReminderField({
         ))}
         {!full && (
           <Pressable
+            testID="tasks.form.reminderField.addButton"
             disabled={disabled}
             onPress={() => openFor("add")}
             className={cn(
@@ -126,7 +130,7 @@ export function ReminderField({
         <BottomSheetContent ref={sheet.ref}>
           {/* gorhom sizes a dynamic sheet by measuring a BottomSheetView —
               plain Views here left it at height 0 on native. */}
-          <BottomSheetView hadHeader={false} className="px-5">
+          <BottomSheetView testID="tasks.form.reminderField.sheet" hadHeader={false} className="px-5">
             <View>
               <Text className="text-[19px] font-bold tracking-tight">
                 {current === undefined ? "Add reminder" : "Change reminder"}
@@ -136,11 +140,12 @@ export function ReminderField({
               </Text>
             </View>
 
-            <View className="mt-4 flex-row flex-wrap gap-2">
+            <View testID="tasks.form.reminderField.presets" className="mt-4 flex-row flex-wrap gap-2">
               {REMINDER_PRESETS.map((m) => {
                 const taken = others.includes(m);
                 return (
                   <Pressable
+                    testID={`tasks.form.reminderField.preset.${m}`}
                     key={m}
                     disabled={taken}
                     onPress={() => pick(m)}
@@ -171,8 +176,9 @@ export function ReminderField({
               <View className="h-px flex-1 bg-border" />
             </View>
 
-            <View className="mt-3 flex-row h-10 items-center gap-2">
+            <View testID="tasks.form.reminderField.custom" className="mt-3 flex-row h-10 items-center gap-2">
               <BottomSheetTextInput
+                testID="tasks.form.reminderField.custom.amount"
                 value={custom}
                 onChangeText={setCustom}
                 keyboardType="number-pad"
@@ -180,9 +186,10 @@ export function ReminderField({
                 accessibilityLabel="Custom reminder amount"
                 className="w-20 h-12"
               />
-              <View className="flex-1 flex-row h-full gap-1">
+              <View testID="tasks.form.reminderField.custom.units" className="flex-1 flex-row h-full gap-1">
                 {REMINDER_UNITS.map((u) => (
                   <Pressable
+                    testID={`tasks.form.reminderField.custom.unit.${u.id}`}
                     key={u.id}
                     onPress={() => setUnit(u.id)}
                     className={cn(
@@ -210,6 +217,7 @@ export function ReminderField({
 
             <View className="pt-4">
               <Button
+                testID="tasks.form.reminderField.saveButton"
                 className="w-full"
                 disabled={custom === "" || customError !== null}
                 onPress={() => pick(customMinutes)}

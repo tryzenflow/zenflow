@@ -1,0 +1,38 @@
+# Maestro Configuration
+# Platform-specific app IDs and common settings
+
+appId: ${MAESTRO_APP_ID}
+
+# Common settings
+---
+# Timeout for assertions (ms)
+assertionTimeout: 10000
+
+# Timeout for tap/keyboard actions
+actionTimeout: 5000
+
+# Scroll speed
+scrollSpeed: 1.5
+
+# Default wait time between actions
+waitTime: 500
+
+# Retry failed assertions
+retry:
+  enabled: true
+  count: 2
+  delay: 1000
+
+# Screenshots on failure
+takeScreenshotOnFailure: true
+videoRecording:
+  enabled: true
+  onFailure: true
+
+# Environment variables required:
+# MAESTRO_APP_ID - App bundle ID (e.g., com.zenflow.mobile)
+# E2E_EMAIL - Unique test email per run (e.g., mobile-e2e+<run-id>@example.test)
+# E2E_OTP - OTP retrieved from MailHog
+# E2E_RUN_ID - Unique run identifier
+# EXPO_PUBLIC_API_URL - Backend API URL
+# MAILHOG_URL - MailHog API URL (e.g., http://localhost:8025)

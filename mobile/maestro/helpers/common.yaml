@@ -1,0 +1,117 @@
+# Shared subflows for common operations
+
+---
+# Login flow - reusable across tests
+- name: "Login"
+  description: "Log in with email and OTP from MailHog"
+  steps:
+    - runFlow:
+        file: otp.yaml
+        env:
+          EMAIL: "test@example.com"
+    - assertVisible:
+        id: "create-task-fab"
+        timeout: 10000
+
+---
+# Logout flow
+- name: "Logout"
+  description: "Sign out and return to login screen"
+  steps:
+    - tapOn:
+        id: "tab-settings"
+    - scrollUntilVisible:
+        element:
+          id: "settings-signout-button"
+    - tapOn:
+        id: "settings-signout-button"
+    - waitForAnimationToEnd
+    - assertVisible:
+        id: "login-email-input"
+        timeout: 10000
+
+---
+# Navigate to Week tab
+- name: "Go to Week View"
+  steps:
+    - tapOn:
+        id: "tab-week"
+    - assertVisible:
+        id: "calendar-week-header"
+
+---
+# Navigate to Month tab
+- name: "Go to Month View"
+  steps:
+    - tapOn:
+        id: "tab-month"
+    - assertVisible:
+        id: "calendar-month-header"
+
+---
+# Navigate to Settings tab
+- name: "Go to Settings"
+  steps:
+    - tapOn:
+        id: "tab-settings"
+    - assertVisible:
+        id: "settings-signout-button"
+
+---
+# Reset app state (clear AsyncStorage, relaunch)
+- name: "Reset App"
+  description: "Clear app data and restart"
+  steps:
+    - launchApp:
+        clearState: true
+    - assertVisible:
+        id: "login-email-input"
+        timeout: 15000
+
+---
+# Ensure clean state before test
+- name: "Ensure Clean State"
+  steps:
+    - runFlow: "Logout"
+    - runFlow: "Reset App"
+
+---
+# Create a test task via API (faster than UI)
+- name: "Create Test Task API"
+  description: "Create a task via backend API for test setup"
+  steps:
+    - runScript: |
+        const response = await fetch('http://localhost:5000/api/v1/sessions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': await getCookie()
+          },
+          body: JSON.stringify({
+            type: 'TASK',
+            title: 'Test Task ' + Date.now(),
+            durationMinutes: 60,
+            deadline: new Date(Date.now() + 7*24*60*60*1000).toISOString(),
+            sessionCount: 1
+          })
+        })
+        const data = await response.json()
+        if (data.success) {
+          await setOutput('TASK_ID', data.data.id)
+        } else {
+          throw new Error('Failed to create task: ' + data.message)
+        }
+    - wait: 2000
+
+---
+# Delete test task via API
+- name: "Delete Test Task API"
+  steps:
+    - runScript: |
+        const taskId = await getOutput('TASK_ID')
+        if (taskId) {
+          await fetch('http://localhost:5000/api/v1/sessions/' + taskId, {
+            method: 'DELETE',
+            headers: { 'Cookie': await getCookie() }
+          })
+        }

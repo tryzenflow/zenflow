@@ -17,6 +17,7 @@ import {
 import { TagPicker } from "@/components/onboarding/tag-picker";
 import { DluAccountsSection } from "@/components/settings/dlu-accounts-section";
 import { Button } from "@/components/ui/button";
+import { FormInput } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
@@ -156,10 +157,10 @@ function RadioDot({ selected }: { selected: boolean }) {
 }
 
 /** Rounded card whose children are separated by hairlines. */
-function Group({ children }: { children: React.ReactNode }) {
+function Group({ children, testID }: { children: React.ReactNode; testID?: string }) {
   const items = (Array.isArray(children) ? children : [children]).flat();
   return (
-    <View className="overflow-hidden rounded-2xl border border-border bg-card">
+    <View testID={testID} className="overflow-hidden rounded-2xl border border-border bg-card">
       {items.filter(Boolean).map((child, i) => (
         <View
           // biome-ignore lint/suspicious/noArrayIndexKey: static ordering
@@ -178,14 +179,17 @@ function Row({
   onPress,
   children,
   className,
+  testID,
 }: {
   selected: boolean;
   onPress: () => void;
   children: React.ReactNode;
   className?: string;
+  testID?: string;
 }) {
   return (
     <Pressable
+      testID={testID}
       onPress={onPress}
       accessibilityRole="radio"
       accessibilityState={{ checked: selected }}
@@ -382,6 +386,7 @@ export default function OnboardingScreen() {
   const progress = stepProgress(step);
   const primary = (label: string, onPress: () => void, disabled = false) => (
     <Button
+      testID="onboarding.continueButton"
       size="lg"
       className="rounded-xl"
       disabled={busy || disabled}
@@ -391,7 +396,12 @@ export default function OnboardingScreen() {
     </Button>
   );
   const ghost = (label: string, onPress: () => void) => (
-    <Pressable onPress={onPress} disabled={busy} className="items-center py-3">
+    <Pressable
+      testID="onboarding.skipButton"
+      onPress={onPress}
+      disabled={busy}
+      className="items-center py-3"
+    >
       <Text className="text-[14px] font-medium text-muted-foreground">
         {label}
       </Text>
@@ -407,11 +417,14 @@ export default function OnboardingScreen() {
     case "language":
       ({ title, body } = COPY.language);
       content = (
-        <Group>
+        <Group
+          testID="onboarding.language.group"
+        >
           {[...LANGUAGES]
             .sort((x, y) => (x.value === "vi" ? -1 : y.value === "vi" ? 1 : 0))
             .map((l) => (
               <Row
+                testID={`onboarding.language.option.${l.value}`}
                 key={l.value}
                 selected={prefs.language === l.value}
                 onPress={() => void savePref({ language: l.value })}
@@ -440,10 +453,12 @@ export default function OnboardingScreen() {
             {COPY.name.label}
           </Text>
           <Input
+            testID="onboarding.name.input"
             value={name}
             onChangeText={setName}
             autoComplete="name"
             maxLength={100}
+            className="h-[50px] rounded-xl bg-card px-4"
           />
           <Text className="mt-2 text-[12.5px] text-muted-foreground">
             {COPY.name.hint}
@@ -460,7 +475,9 @@ export default function OnboardingScreen() {
     case "dlu":
       ({ title, body } = COPY.dlu);
       content = (
-        <View>
+        <View
+          testID="onboarding.dlu.section"
+        >
           <DluAccountsSection hideLabel />
           <Text className="mt-3.5 px-1 text-[12px] leading-snug text-muted-foreground">
             {COPY.dlu.hint}
@@ -785,11 +802,13 @@ export default function OnboardingScreen() {
     >
       {step !== "done" ? (
         <View
+          testID="onboarding.screen.header"
           className="flex-row items-center gap-3 px-3 pb-3"
           style={{ paddingTop: insets.top + 6 }}
         >
           {canGoBack(step) ? (
             <Pressable
+              testID="onboarding.backButton"
               onPress={goBack}
               hitSlop={8}
               accessibilityLabel={COPY.back}
@@ -800,7 +819,10 @@ export default function OnboardingScreen() {
           ) : (
             <View className="size-[38px]" />
           )}
-          <View className="flex-1 flex-row gap-1.5">
+          <View
+            testID="onboarding.progressBar"
+            className="flex-1 flex-row gap-1.5"
+          >
             {Array.from({ length: progress.total }, (_, i) => (
               <View
                 // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length bar
@@ -813,6 +835,7 @@ export default function OnboardingScreen() {
             ))}
           </View>
           <Pressable
+            testID="onboarding.skipLink"
             onPress={() => {
               setBlocked(false);
               void advance();

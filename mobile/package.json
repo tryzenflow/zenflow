@@ -18,7 +18,11 @@
     "format": "biome check --no-errors-on-unmatched --apply .",
     "expo-check": "expo install --check",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "maestro test mobile/maestro/flows/smoke.yaml",
+    "test:e2e:smoke": "maestro test mobile/maestro/flows/smoke.yaml",
+    "test:e2e:android": "maestro test mobile/maestro/flows/smoke.yaml",
+    "test:e2e:ios": "maestro test mobile/maestro/flows/smoke.yaml"
   },
   "dependencies": {
     "@10play/tentap-editor": "^1.0.1",

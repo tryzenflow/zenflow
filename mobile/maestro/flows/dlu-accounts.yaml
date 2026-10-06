@@ -1,0 +1,51 @@
+# DLU Accounts Integration Flow (P1 Extended)
+# Tests: Settings → DLU section → connect fixture provider → sync → manage → disconnect
+# Prerequisites: Fixture/test LMS/Portal provider available (no real credentials in CI)
+# Expected: Connect/manage/sync/disconnect state transitions work
+
+appId: ${MAESTRO_APP_ID}
+---
+# Start authenticated on Week tab
+- assertVisible:
+    id: tabs.week
+
+# Open Settings
+- tapOn:
+    id: tabs.settings
+- assertVisible:
+    id: settings.screen
+
+# Open DLU accounts section
+- tapOn:
+    id: settings.dluAccounts.section
+- assertVisible:
+    id: settings.dluAccounts.list
+
+# Connect fixture provider
+- tapOn:
+    id: settings.dluAccounts.dlu-portal.connectButton
+
+# Handle fixture auth (simulated - no real credentials)
+- optional:
+    - tapOn:
+        id: settings.dluAccounts.dlu-portal.fixtureLogin
+
+# Assert connected
+- assertVisible:
+    id: settings.dluAccounts.dlu-portal.connectedBadge
+
+# Trigger sync
+- tapOn:
+    id: settings.dluAccounts.dlu-portal.syncButton
+
+# Assert sync completes
+- assertVisible:
+    id: settings.dluAccounts.dlu-portal.lastSync
+
+# Disconnect
+- tapOn:
+    id: settings.dluAccounts.dlu-portal.disconnectButton
+
+# Assert disconnected
+- assertVisible:
+    id: settings.dluAccounts.dlu-portal.connectButton

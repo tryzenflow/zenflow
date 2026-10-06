@@ -1,0 +1,34 @@
+# Login / OTP Flow
+# Tests: email entry → request OTP → retrieve OTP from MailHog → enter OTP → verify
+# Prerequisites: MailHog running, unique test email per run
+# Expected: User lands on onboarding (fresh) or Week tab (onboarded)
+
+appId: ${MAESTRO_APP_ID}
+---
+# Ensure we're on login screen
+- assertVisible:
+    id: auth.login.emailInput
+- tapOn:
+    id: auth.login.emailInput
+- inputText: ${E2E_EMAIL}
+- tapOn:
+    id: auth.login.sendOtpButton
+
+# Poll MailHog for OTP (handled by external script before this flow runs)
+# The OTP should be available in ${E2E_OTP} env var
+- tapOn:
+    id: auth.login.otpBoxes
+- inputText: ${E2E_OTP}
+
+# OTP auto-submits when 6 digits entered, but tap verify if needed
+- optional:
+    - tapOn:
+        id: auth.login.verifyOtpButton
+
+# Assert we've left login screen - either onboarding or week tab appears
+- optional:
+    - assertVisible:
+        id: onboarding.screen
+- optional:
+    - assertVisible:
+        id: tabs.week

@@ -44,12 +44,13 @@ export function RecurrenceField({
     onChange(toRrule({ ...state, ...next }));
 
   return (
-    <View className="gap-3">
+    <View testID="tasks.form.recurrenceField" className="gap-3">
       <View className="flex-row gap-1.5">
         {(["NONE", "DAILY", "WEEKLY"] as Freq[]).map((f) => {
           const active = state.freq === f;
           return (
             <Pressable
+              testID={`tasks.form.recurrenceField.freq.${f}`}
               key={f}
               disabled={disabled}
               onPress={() => set({ freq: f })}
@@ -75,11 +76,12 @@ export function RecurrenceField({
       </View>
 
       {state.freq === "WEEKLY" && (
-        <View className="flex-row justify-between">
+        <View testID="tasks.form.recurrenceField.weekdays" className="flex-row justify-between">
           {WEEKDAYS.map((d, i) => {
             const active = state.byday.includes(d.key);
             return (
               <Pressable
+                testID={`tasks.form.recurrenceField.weekday.${d.key}`}
                 key={`${d.key}-${i}`}
                 disabled={disabled}
                 onPress={() =>
@@ -112,13 +114,14 @@ export function RecurrenceField({
       )}
 
       {state.freq !== "NONE" && (
-        <View>
+        <View testID="tasks.form.recurrenceField.untilSection">
           <Text className="mb-1.5 text-[12px] font-medium text-muted-foreground">
             Ends on (optional)
           </Text>
           <View className="flex-row items-center gap-2">
             <View className="flex-1">
               <InlineDateField
+                testID="tasks.form.recurrenceField.untilDate"
                 value={
                   state.until ? new Date(`${state.until}T00:00:00`) : undefined
                 }
@@ -129,6 +132,7 @@ export function RecurrenceField({
             </View>
             {!!state.until && (
               <Pressable
+                testID="tasks.form.recurrenceField.clearUntil"
                 disabled={disabled}
                 onPress={() => set({ until: undefined })}
                 accessibilityLabel="Clear end date"

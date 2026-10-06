@@ -1,0 +1,36 @@
+# Calendar Month View Flow
+# Tests: Month tab → grid visible → tap date cell → date details → navigate next/prev month
+# Prerequisites: Seeded task on known date this month, onboarded user
+# Expected: Month navigation works, date selection works
+
+appId: ${MAESTRO_APP_ID}
+---
+# Start on Month tab
+- tapOn:
+    id: tabs.month
+- assertVisible:
+    id: calendar.month.grid
+
+# Tap Today or seeded date
+- tapOn:
+    id: calendar.todayButton
+
+# Verify date details/task list opens
+- assertVisible:
+    id: calendar.month.dateDetail
+
+# Navigate to next month
+- tapOn:
+    id: calendar.month.nextButton
+
+# Verify month header updated
+- assertVisible:
+    id: calendar.month.header
+
+# Navigate back
+- tapOn:
+    id: calendar.month.prevButton
+
+# Verify back to original month
+- assertVisible:
+    id: calendar.month.header

@@ -119,7 +119,7 @@ export function SessionCountField({
   const thumbLeft = fraction * usableWidth;
 
   return (
-    <View className="gap-2">
+    <View testID="tasks.form.sessionCountField" className="gap-2">
       <View className="items-center">
         <Text className="text-[17px] font-semibold tabular-nums text-foreground">
           {value} {value === 1 ? "session" : "sessions"}
@@ -128,6 +128,7 @@ export function SessionCountField({
 
       <View className="flex-row items-center gap-2.5">
         <Pressable
+          testID="tasks.form.sessionCountField.minButton"
           disabled={atMin}
           onPress={() => handleChange(1)}
           hitSlop={8}
@@ -145,6 +146,7 @@ export function SessionCountField({
 
         <GestureDetector gesture={pan}>
           <View
+            testID="tasks.form.sessionCountField.track"
             onLayout={onTrackLayout}
             className="h-9 flex-1 justify-center"
             accessibilityRole="adjustable"
@@ -178,6 +180,7 @@ export function SessionCountField({
               }}
             />
             <View
+              testID="tasks.form.sessionCountField.thumb"
               pointerEvents="none"
               className={cn(
                 "absolute rounded-full border-[3px] border-background bg-primary shadow-sm",
@@ -193,6 +196,7 @@ export function SessionCountField({
         </GestureDetector>
 
         <Pressable
+          testID="tasks.form.sessionCountField.maxButton"
           disabled={atMax}
           onPress={() => handleChange(max)}
           hitSlop={8}

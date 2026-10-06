@@ -436,13 +436,19 @@ function DescriptionFieldEditor({
   }
 
   return (
-    <View ref={containerRef}>
+    <View
+      testID="tasks.form.descriptionField"
+      ref={containerRef}
+    >
       {/* Outer: 13px radius + 1px border, no clipping of its own (RN's
           overflow clipping differs between iOS/Android w.r.t. the border
           box). Inner wrapper: radius = outer - border width (12px) so the
           WebView's square corners are clipped concentrically inside the
           border. Its bg matches the WebView/document bg. */}
-      <View className="min-h-[300px] max-h-[400px] w-full rounded-t-[13px] border border-b-0 border-input bg-card">
+      <View
+        testID="tasks.form.descriptionField.webviewWrapper"
+        className="min-h-[300px] max-h-[400px] w-full rounded-t-[13px] border border-b-0 border-input bg-card"
+      >
         <View className="flex-1 overflow-hidden rounded-t-[12px] bg-card">
           <RichText
             editor={editor}
@@ -462,7 +468,7 @@ function DescriptionFieldEditor({
           />
         </View>
       </View>
-      <View className="flex-row flex-wrap items-center gap-0.5 rounded-b-[13px] border border-input bg-background p-1">
+      <View testID="tasks.form.descriptionField.toolbar" className="flex-row flex-wrap items-center gap-0.5 rounded-b-[13px] border border-input bg-background p-1">
         <ToolbarButton
           icon={Bold}
           label="Bold"
@@ -536,8 +542,9 @@ function DescriptionFieldEditor({
       </View>
 
       {linkOpen && (
-        <View className="mt-2 gap-1.5">
+        <View testID="tasks.form.descriptionField.linkInputs" className="mt-2 gap-1.5">
           <Input
+            testID="tasks.form.descriptionField.linkTitle"
             autoFocus
             editable={!disabled}
             value={linkTitle}
@@ -548,6 +555,7 @@ function DescriptionFieldEditor({
           />
           <View className="flex-row items-center gap-1.5">
             <Input
+              testID="tasks.form.descriptionField.linkUrl"
               editable={!disabled}
               value={linkUrl}
               onChangeText={setLinkUrl}

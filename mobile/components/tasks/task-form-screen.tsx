@@ -113,6 +113,7 @@ export function SessionFormScreen({
 
   return (
     <View
+      testID="tasks.form.screen"
       className="flex-1 bg-background"
       style={{
         // iOS modal page sheet already sits below the status bar.
@@ -120,7 +121,7 @@ export function SessionFormScreen({
         paddingBottom: insets.bottom,
       }}
     >
-      <View className="flex-row items-center justify-between gap-3 border-b border-border px-5 pb-3.5 pt-2">
+      <View testID="tasks.form.header" className="flex-row items-center justify-between gap-3 border-b border-border px-5 pb-3.5 pt-2">
         <View className="flex-1">
           <Text className="text-[19px] font-bold tracking-tight">{title}</Text>
           {!!subtitle && (
@@ -132,6 +133,7 @@ export function SessionFormScreen({
         <View className="flex-row items-center gap-3.5">
           {headerRight}
           <Pressable
+            testID="tasks.form.closeButton"
             onPress={() => router.back()}
             accessibilityLabel="Close"
             className="h-8 w-8 items-center justify-center rounded-full bg-muted"
@@ -155,6 +157,7 @@ export function SessionFormScreen({
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
+          testID="tasks.form.scrollView"
           ref={scrollViewRef}
           className="flex-1 px-5 pt-4"
           contentContainerStyle={{ paddingBottom: 32 }}
@@ -165,7 +168,7 @@ export function SessionFormScreen({
           </SessionFormScrollContext.Provider>
         </ScrollView>
 
-        <View className="border-t border-border bg-background px-5 py-3 shadow-lg shadow-primary/10">
+        <View testID="tasks.form.footer" className="border-t border-border bg-background px-5 py-3 shadow-lg shadow-primary/10">
           {footer}
         </View>
       </KeyboardAvoidingView>

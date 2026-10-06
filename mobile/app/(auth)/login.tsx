@@ -6,7 +6,6 @@ import {
   Controller,
   type Resolver,
   type SubmitHandler,
-  useForm,
 } from "react-hook-form";
 import {
   ActivityIndicator,
@@ -37,7 +36,7 @@ import { Clock, Loader2Icon } from "lucide-react-native";
  */
 const RESEND_COOLDOWN_SECONDS = 30;
 
-/** Fallback when a 429's `Retry-After` header is missing/unparseable. */
+ /** Fallback when a 429's `Retry-After` header is missing/unparseable. */
 const DEFAULT_RETRY_AFTER_SECONDS = 30;
 
 /**
@@ -54,7 +53,7 @@ function getRetryAfterSeconds(error: unknown): number {
   return DEFAULT_RETRY_AFTER_SECONDS;
 }
 
-/** Amber clock icon + message, matching mockups/login.html's "Locked" frames. */
+ /** Amber clock icon + message, matching mockups/login.html's "Locked" frames. */
 function LockoutNotice({ children }: { children: ReactNode }) {
   return (
     <View className="mt-2 flex-row items-start gap-1.5">
@@ -89,11 +88,13 @@ function OtpBoxes({
   onChangeText,
   error,
   disabled,
+  testID,
 }: {
   value: string;
   onChangeText: (v: string) => void;
   error?: boolean;
   disabled?: boolean;
+  testID?: string;
 }) {
   // RN 0.88: ref instance type is `TextInputInstance`, not `TextInput` -- see
   // day-timeline.tsx's `scrollRef` comment.
@@ -103,6 +104,7 @@ function OtpBoxes({
   return (
     <Pressable
       className="flex-row justify-between gap-[9px]"
+      testID={testID ?? "auth.login.otpBoxes"}
       onPress={() => !disabled && inputRef.current?.focus()}
     >
       {digits.map((d, i) => (
@@ -122,10 +124,10 @@ function OtpBoxes({
               "text-[26px] font-semibold tabular-nums",
               error && "text-destructive",
             )}
-          >
-            {d.trim()}
-          </Text>
-        </View>
+            >
+              {d.trim()}
+            </Text>
+          </View>
       ))}
       <TextInput
         ref={inputRef}
@@ -254,139 +256,144 @@ export default function LoginScreen() {
                 : `Sent to ${hideEmail(email)}`}
             </Text>
           </View>
-        </View>
 
-        <Form {...form}>
-          {stage === "email" ? (
-            <View>
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormInput
-                    name={field.name}
-                    label="Email"
-                    labelClassName="text-[14px] font-semibold"
-                    placeholder="m@example.com"
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoComplete="email"
-                    editable={!submitting && !requestLockout.active}
-                    value={field.value}
-                    onBlur={field.onBlur}
-                    onChange={field.onChange}
-                    className="h-[50px] rounded-xl bg-card px-4 dark:bg-input/30 web:focus-visible:border-ring web:focus-visible:ring-ring/50 web:focus-visible:ring-[3px]"
-                  />
-                )}
-              />
-              {requestLockout.active && (
-                <LockoutNotice>
-                  Too many requests. Please wait before trying again.
-                </LockoutNotice>
-              )}
-            </View>
-          ) : (
-            <View>
-              <Pressable
-                disabled={otpLockout.active}
-                onPress={() => {
-                  if (otpLockout.active) return;
-                  setStage("email");
-                  form.setValue("otp", "");
-                  clearErrors();
-                  otpLockout.clear();
-                  resendCooldown.clear();
-                }}
-              >
-                <Text
-                  className={cn(
-                    "text-[13px] underline text-muted-foreground underline-offset-[3px]",
-                    otpLockout.active && "text-muted-foreground opacity-50",
+          <Form {...form}>
+            {stage === "email" ? (
+              <View>
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormInput
+                      testID="auth.login.emailInput"
+                      name={field.name}
+                      label="Email"
+                      labelClassName="text-[14px] font-semibold"
+                      placeholder="m@example.com"
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoComplete="email"
+                      editable={!submitting && !requestLockout.active}
+                      value={field.value}
+                      onBlur={field.onBlur}
+                      onChange={field.onChange}
+                      className="h-[50px] rounded-xl bg-card px-4 dark:bg-input/30 web:focus-visible:border-ring web:focus-visible:ring-ring web:focus-visible:ring-[3px]"
+                    />
                   )}
-                >
-                  Change email
-                </Text>
-              </Pressable>
-              <Controller
-                control={form.control}
-                name="otp"
-                render={({ field, fieldState }) => (
-                  <View className="mt-[18px] mb-[18px] gap-2">
-                    <Text className="text-[14px] font-semibold">
-                      One-Time Password
-                    </Text>
-                    <View className={cn(otpLockout.active && "opacity-50")}>
-                      <OtpBoxes
-                        value={field.value ?? ""}
-                        onChangeText={(v) => {
-                          field.onChange(v);
-                          if (v.length === OTP_LENGTH) {
-                            handleSubmit(onSubmit)();
-                          }
-                        }}
-                        error={!!fieldState.error}
-                        disabled={submitting || otpLockout.active}
-                      />
-                    </View>
-                    {fieldState.error && (
-                      <Text className="text-sm font-medium text-destructive">
-                        {fieldState.error.message}
-                      </Text>
-                    )}
-                    {otpLockout.active && (
-                      <LockoutNotice>
-                        Too many attempts. Try again in{" "}
-                        {formatCountdown(otpLockout.remaining)}.
-                      </LockoutNotice>
-                    )}
-                  </View>
+                />
+                {requestLockout.active && (
+                  <LockoutNotice>
+                    Too many requests. Please wait before trying again.
+                  </LockoutNotice>
                 )}
-              />
-              {submitting ? (
-                <View className="flex-row items-center justify-center gap-[9px]">
-                  <ActivityIndicator
-                    className="mr-2"
-                    size="small"
-                    color="black"
-                  />
-                  <Text className="text-[14px] text-muted-foreground">
-                    Verifying code…
-                  </Text>
-                </View>
-              ) : otpLockout.active ? (
-                <View className="h-12 w-full flex-row items-center justify-center rounded-xl opacity-50">
-                  <Text className="text-sm font-semibold text-muted-foreground">
-                    Resend code
-                  </Text>
-                </View>
-              ) : requestLockout.active ? (
-                <View className="h-12 w-full flex-row items-center justify-center gap-2 rounded-xl opacity-50">
-                  <Clock size={16} className="text-muted-foreground" />
-                  <Text className="text-sm font-semibold tabular-nums text-muted-foreground">
-                    Try again in {formatCountdown(requestLockout.remaining)}
-                  </Text>
-                </View>
-              ) : resendCooldown.active ? (
-                <View className="h-12 w-full flex-row items-center justify-center gap-2 rounded-xl opacity-50">
-                  <Clock size={16} className="text-muted-foreground" />
-                  <Text className="text-sm font-semibold tabular-nums text-muted-foreground">
-                    Resend code in {formatCountdown(resendCooldown.remaining)}
-                  </Text>
-                </View>
-              ) : (
-                <Button
-                  variant="ghost"
-                  disabled={submitting}
-                  onPress={() => handleEmailRequest({ email })}
-                  className="w-full rounded-xl"
+              </View>
+            ) : (
+              <View>
+                <Pressable
+                  disabled={otpLockout.active}
+                  onPress={() => {
+                    if (otpLockout.active) return;
+                    setStage("email");
+                    form.setValue("otp", "");
+                    clearErrors();
+                    otpLockout.clear();
+                    resendCooldown.clear();
+                  }}
+                  testID="auth.login.changeEmailLink"
+                  className="flex-row items-center gap-[13px] bg-card px-4 py-3.5"
                 >
-                  <Text className="text-sm font-semibold text-muted-foreground">
-                    Resend code
+                  <Text
+                    className={cn(
+                      "text-[13px] underline text-muted-foreground underline-offset-[3px]",
+                      otpLockout.active && "text-muted-foreground opacity-50",
+                    )}
+                  >
+                    Change email
                   </Text>
-                </Button>
-              )}
-            </View>
-          )}
+                </Pressable>
+                <Controller
+                  control={form.control}
+                  name="otp"
+                  render={({ field, fieldState }) => (
+                    <View className="mt-[18px] mb-[18px] gap-2">
+                      <Text className="text-[14px] font-semibold">
+                        One-Time Password
+                      </Text>
+                      <View className={cn(otpLockout.active && "opacity-50")}>
+                        <OtpBoxes
+                          testID="auth.login.otpBoxes"
+                          value={field.value ?? ""}
+                          onChangeText={(v) => {
+                            field.onChange(v);
+                            if (v.length === OTP_LENGTH) {
+                              handleSubmit(onSubmit)();
+                            }
+                          }}
+                          error={!!fieldState.error}
+                          disabled={submitting || otpLockout.active}
+                        />
+                      </View>
+                      {fieldState.error && (
+                        <Text className="text-sm font-medium text-destructive">
+                          {fieldState.error.message}
+                        </Text>
+                      )}
+                      {otpLockout.active && (
+                        <LockoutNotice>
+                          Too many attempts. Try again in{" "}
+                          {formatCountdown(otpLockout.remaining)}.
+                        </LockoutNotice>
+                      )}
+                      {submitting ? (
+                        <View className="flex-row items-center justify-center gap-[9px]">
+                          <ActivityIndicator
+                            className="mr-2"
+                            size="small"
+                            color="black"
+                          />
+                          <Text className="text-[14px] text-muted-foreground">
+                            Verifying code…
+                          </Text>
+                        </View>
+                      ) : otpLockout.active ? (
+                        <View className="h-12 w-full flex-row items-center justify-center rounded-xl opacity-50">
+                          <Text className="text-sm font-semibold text-muted-foreground">
+                            Resend code
+                          </Text>
+                        </View>
+                      ) : requestLockout.active ? (
+                        <View className="h-12 w-full flex-row items-center justify-center rounded-xl opacity-50">
+                          <Clock size={16} className="text-muted-foreground" />
+                          <Text className="text-sm font-semibold tabular-nums text-muted-foreground">
+                            Try again in {formatCountdown(requestLockout.remaining)}
+                          </Text>
+                        </View>
+                      ) : resendCooldown.active ? (
+                        <View className="h-12 w-full flex-row items-center justify-center rounded-xl opacity-50">
+                          <Clock size={16} className="text-muted-foreground" />
+                          <Text className="text-sm font-semibold tabular-nums text-muted-foreground">
+                            Resend code in {formatCountdown(resendCooldown.remaining)}
+                          </Text>
+                        </View>
+                      ) : (
+                        <Button
+                          testID="auth.login.resendButton"
+                          variant="ghost"
+                          disabled={submitting}
+                          onPress={() => handleEmailRequest({ email })}
+                          className="w-full rounded-xl"
+                        >
+                          <Text className="text-sm font-semibold text-muted-foreground">
+                            Resend code
+                          </Text>
+                        </Button>
+                      )}
+                    </View>
+                  )}
+                />
+              </View>
+            )}
+          </Form>
 
           {stage === "email" &&
             (requestLockout.active ? (
@@ -398,6 +405,7 @@ export default function LoginScreen() {
               </View>
             ) : (
               <Button
+                testID="auth.login.sendOtpButton"
                 className="mt-[18px] flex-row h-[52px] rounded-xl"
                 disabled={submitting}
                 onPress={handleSubmit(onSubmit)}
@@ -414,24 +422,12 @@ export default function LoginScreen() {
                     "font-semibold text-primary-foreground",
                     submitting && "text-primary-foreground/70",
                   )}
-                >
+                  >
                   {submitting ? "Sending…" : "Send OTP"}
                 </Text>
               </Button>
             ))}
-        </Form>
-
-        <Text className="mt-[22px] px-2.5 text-center text-[12px] leading-normal text-muted-foreground">
-          By continuing, you agree to our{" "}
-          <Text className="text-[12px] text-foreground underline underline-offset-2">
-            Terms of Service
-          </Text>{" "}
-          and{" "}
-          <Text className="text-[12px] text-foreground underline underline-offset-2">
-            Privacy Policy
-          </Text>
-          .
-        </Text>
+        </View>
       </View>
     </View>
   );

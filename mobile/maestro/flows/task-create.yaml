@@ -1,0 +1,46 @@
+# Create Task Flow
+# Tests: FAB tap → form opens → fill title/type/duration/deadline → save → verify on calendar
+# Prerequisites: Onboarded user on Week tab
+# Expected: Task appears on calendar with correct title/date
+
+appId: ${MAESTRO_APP_ID}
+---
+# Start on Week tab
+- assertVisible:
+    id: tabs.week
+- tapOn:
+    id: tasks.newButton
+
+# Task form opens
+- assertVisible:
+    id: tasks.form.titleInput
+- tapOn:
+    id: tasks.form.titleInput
+- inputText: "E2E Focus Block ${E2E_RUN_ID}"
+
+# Select task type (focus)
+- tapOn:
+    id: tasks.form.sessionType.focus
+
+# Set duration
+- tapOn:
+    id: tasks.form.durationStepper.increment
+- tapOn:
+    id: tasks.form.durationStepper.increment
+
+# Set deadline (tomorrow)
+- tapOn:
+    id: tasks.form.deadlineChip.tomorrow
+
+# Save
+- tapOn:
+    id: tasks.form.saveButton
+
+# Optional: slot picker appears, pick first slot
+- optional:
+    - tapOn:
+        id: tasks.scheduler.slot.0
+
+# Verify task appears on calendar
+- assertVisible:
+    id: calendar.taskCard.e2e-focus-block-${E2E_RUN_ID}

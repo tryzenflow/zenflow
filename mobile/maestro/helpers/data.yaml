@@ -1,0 +1,50 @@
+# Test Data Helpers
+# Reusable YAML snippets for seeding and verifying test data
+
+---
+# Verify seeded task exists on calendar
+- name: "verifyTaskOnCalendar"
+  parameters:
+    - taskId
+  commands:
+    - assertVisible:
+        id: calendar.taskCard.${taskId}
+
+# Verify task NOT on calendar (for delete testing)
+- name: "verifyTaskAbsent"
+  parameters:
+    - taskId
+  commands:
+    - assertNotVisible:
+        id: calendar.taskCard.${taskId}
+
+# Fill task form with minimal required fields
+- name: "fillTaskForm"
+  parameters:
+    - title
+    - type
+    - durationMinutes
+    - deadlineChip
+  commands:
+    - tapOn:
+        id: tasks.form.titleInput
+    - inputText: ${title}
+    - tapOn:
+        id: tasks.form.sessionType.${type}
+    - repeat:
+        times: ${durationMinutes / 15}
+        commands:
+          - tapOn:
+              id: tasks.form.durationStepper.increment
+    - tapOn:
+        id: tasks.form.deadlineChip.${deadlineChip}
+    - tapOn:
+        id: tasks.form.saveButton
+
+# Verify task created with title
+- name: "verifyTaskCreated"
+  parameters:
+    - title
+  commands:
+    - assertVisible:
+        id: calendar.taskCard.${title}
