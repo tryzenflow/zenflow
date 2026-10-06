@@ -3,6 +3,7 @@ import {
   BottomSheet,
   BottomSheetContent,
   BottomSheetScrollView,
+  BottomSheetView,
   useBottomSheet,
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
@@ -28,7 +29,13 @@ import {
 import { zonedNow } from "@zenflow/core";
 import * as Haptics from "expo-haptics";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  View,
+  useWindowDimensions,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export interface SeriesSlotPickInput {
   title: string;
@@ -65,6 +72,9 @@ interface CardPair {
   state: SittingState;
 }
 
+/** Height of everything in the sheet except the list of sittings. */
+const SHEET_CHROME = 310;
+
 export interface SeriesSlotPickSheetHandle {
   open: (input: SeriesSlotPickInput) => void;
 }
@@ -96,6 +106,12 @@ const SeriesSlotPickSheet = forwardRef<
 >((_props, ref) => {
   const sheet = useBottomSheet();
   const { toast } = useToast();
+  const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  // Everything but the list (handle, heading, column titles, footer, padding)
+  // is about this tall; the list gets the rest, so up to five sittings (the
+  // most a series surfaces) fit without scrolling on a normal phone.
+  const maxListHeight = Math.max(160, height - insets.top - insets.bottom - SHEET_CHROME);
   const [title, setTitle] = useState("");
   const [pairs, setPairs] = useState<CardPair[]>([]);
   const [busy, setBusy] = useState(false);
@@ -244,135 +260,129 @@ const SeriesSlotPickSheet = forwardRef<
 
   return (
     <BottomSheet>
-      <BottomSheetContent
-        ref={sheet.ref}
-        onDismiss={handleDismiss}
-        snapPoints={["68%"]}
-        enableDynamicSizing={false}
-      >
-        <View className="flex-1 flex-col">
+      <BottomSheetContent ref={sheet.ref} onDismiss={handleDismiss}>
+        <BottomSheetView hadHeader={false} className="px-5 pt-2">
+          <View className="flex-row items-start justify-between gap-3">
+            <View className="min-w-0 flex-1">
+              <Text className="text-[18px] font-bold tracking-[-0.01em] leading-tight">
+                {single ? "Two good times for this" : "Alternative times"}
+              </Text>
+              <Text className="text-[12.5px] text-muted-foreground mt-[3px]">
+                {single
+                  ? `${title} · ${duration}m`
+                  : `${title} · ${pairs.length} of ${total} have alternatives`}
+              </Text>
+            </View>
+            <Pressable
+              onPress={handleDismiss}
+              disabled={busy}
+              accessibilityLabel="Close — keeps everything as scheduled"
+              className="inline-flex size-8 items-center justify-center rounded-full bg-muted shrink-0"
+            >
+              <X size={15} className="text-muted-foreground" />
+            </Pressable>
+          </View>
+
+          {/* Column headings, once, above every row — like the checklist's groups. */}
+          <View className="flex-row gap-2 pt-6">
+            <Text className="flex-1 px-1 text-[12px] font-medium text-muted-foreground">
+              Scheduled
+            </Text>
+            <Text className="flex-1 px-1 text-[12px] font-medium text-muted-foreground">
+              Alternative
+            </Text>
+          </View>
+
+          {/* The sheet sizes itself to its content, so every sitting fits with no
+              scrolling; the list only scrolls (capped here) on a short screen. */}
           <BottomSheetScrollView
-            className="flex-1 px-5"
-            contentContainerStyle={{ paddingBottom: 16 }}
+            style={{ maxHeight: maxListHeight }}
+            contentContainerStyle={{ gap: 8, paddingTop: 6 }}
+            showsVerticalScrollIndicator={false}
           >
-            <View className="w-full pt-2">
-              <View className="flex-row items-start justify-between gap-3">
-                <View className="min-w-0 flex-1">
-                  <Text className="text-[18px] font-bold tracking-[-0.01em] leading-tight">
-                    {single ? "Two good times for this" : "Alternative times"}
-                  </Text>
-                  <Text className="text-[12.5px] text-muted-foreground mt-[3px]">
-                    {single
-                      ? `${title} · ${duration}m`
-                      : `${title} · ${pairs.length} of ${total} have alternatives`}
-                  </Text>
-                </View>
-                <Pressable
-                  onPress={handleDismiss}
-                  disabled={busy}
-                  accessibilityLabel="Close — keeps everything as scheduled"
-                  className="inline-flex size-8 items-center justify-center rounded-full bg-muted shrink-0"
-                >
-                  <X size={15} className="text-muted-foreground" />
-                </Pressable>
-              </View>
-            </View>
-
-            {/* Column headings, once, above every row — like the checklist's groups. */}
-            <View className="flex-row gap-2 pt-6">
-              <Text className="flex-1 px-1 text-[12px] font-medium text-muted-foreground">
-                Scheduled
-              </Text>
-              <Text className="flex-1 px-1 text-[12px] font-medium text-muted-foreground">
-                Alternative
-              </Text>
-            </View>
-
-            <View className="gap-2 pt-1.5">
-              {pairs.map((pair) => (
-                <View
-                  key={pair.sitting.session.id}
-                  className="flex-row items-stretch gap-2"
-                >
-                  {pair.options.map((option) => {
-                    const isSelected = pair.state.selected === option.kind;
-                    return (
-                      <Pressable
-                        key={option.kind}
-                        disabled={busy || pair.state.decided}
-                        onPress={() => select(pair, option.kind)}
-                        accessibilityRole="radio"
-                        accessibilityState={{ selected: isSelected }}
-                        accessibilityLabel={`${option.kind === "primary" ? "Scheduled" : "Alternative"} — ${option.label}`}
-                        className={`flex-1 overflow-hidden rounded-xl border-2 px-3 py-3 ${isSelected ? "border-primary bg-primary/[0.08]" : "border-border bg-card"}`}
-                      >
-                        <View className="flex-row items-center gap-2">
-                          <View
-                            className={`size-[22px] shrink-0 items-center justify-center rounded-full border-[1.5px] ${isSelected ? "border-primary bg-primary" : "border-border bg-transparent"}`}
-                          >
-                            {isSelected ? (
-                              <Check
-                                size={13}
-                                strokeWidth={3}
-                                className="text-primary-foreground"
-                              />
-                            ) : null}
-                          </View>
-                          <Text
-                            className="flex-1 text-[15px] font-semibold text-foreground"
-                            numberOfLines={1}
-                          >
-                            {capitalize(option.day)}
-                          </Text>
+            {pairs.map((pair) => (
+              <View
+                key={pair.sitting.session.id}
+                className="flex-row items-stretch gap-2"
+              >
+                {pair.options.map((option) => {
+                  const isSelected = pair.state.selected === option.kind;
+                  return (
+                    <Pressable
+                      key={option.kind}
+                      disabled={busy || pair.state.decided}
+                      onPress={() => select(pair, option.kind)}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: isSelected }}
+                      accessibilityLabel={`${option.kind === "primary" ? "Scheduled" : "Alternative"} — ${option.label}`}
+                      className={`flex-1 overflow-hidden rounded-xl border-2 px-3 py-3 ${isSelected ? "border-primary bg-primary/[0.08]" : "border-border bg-card"}`}
+                    >
+                      <View className="flex-row items-center gap-2">
+                        <View
+                          className={`size-[22px] shrink-0 items-center justify-center rounded-full border-[1.5px] ${isSelected ? "border-primary bg-primary" : "border-border bg-transparent"}`}
+                        >
+                          {isSelected ? (
+                            <Check
+                              size={13}
+                              strokeWidth={3}
+                              className="text-primary-foreground"
+                            />
+                          ) : null}
                         </View>
                         <Text
-                          className="mt-1.5 text-[13px] text-muted-foreground"
+                          className="flex-1 text-[15px] font-semibold text-foreground"
                           numberOfLines={1}
                         >
-                          {option.range}
+                          {capitalize(option.day)}
                         </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              ))}
-            </View>
+                      </View>
+                      <Text
+                        className="mt-1.5 text-[13px] text-muted-foreground"
+                        numberOfLines={1}
+                      >
+                        {option.range}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ))}
           </BottomSheetScrollView>
 
-          <View className="shrink-0 px-5 pt-4 pb-6">
-            <Text className="text-[12px] text-muted-foreground leading-snug">
-              {single ? "Pick a time, then confirm." : "Pick a time for each, then confirm."}
-            </Text>
+          <Text className="pt-4 text-[12px] text-muted-foreground leading-snug">
+            {single
+              ? "Pick a time, then confirm."
+              : "Pick a time for each, then confirm."}
+          </Text>
 
-            <View className="pt-3 flex-col gap-1">
-              <Button
-                size="lg"
-                disabled={busy}
-                accessibilityLabel="Confirm the selected times"
-                className="w-full rounded-xl h-[48px]"
-                onPress={() => void confirm()}
-              >
-                {busy ? <ActivityIndicator color="#fff" /> : null}
-                <Text className="font-bold">Confirm</Text>
-              </Button>
-              <Button
-                variant="ghost"
-                disabled={busy}
-                accessibilityLabel={
-                  single
-                    ? "Select the alternative time"
-                    : "Select the alternative for every sitting"
-                }
-                className="w-full rounded-xl h-[40px]"
-                onPress={selectAllAlternatives}
-              >
-                <Text className="text-[13px] font-medium text-muted-foreground">
-                  {single ? "Select the alternative" : "Select all alternatives"}
-                </Text>
-              </Button>
-            </View>
+          <View className="pt-3 flex-col gap-1">
+            <Button
+              size="lg"
+              disabled={busy}
+              accessibilityLabel="Confirm the selected times"
+              className="w-full rounded-xl h-[48px]"
+              onPress={() => void confirm()}
+            >
+              {busy ? <ActivityIndicator color="#fff" /> : null}
+              <Text className="font-bold">Confirm</Text>
+            </Button>
+            <Button
+              variant="ghost"
+              disabled={busy}
+              accessibilityLabel={
+                single
+                  ? "Select the alternative time"
+                  : "Select the alternative for every sitting"
+              }
+              className="w-full rounded-xl h-[40px]"
+              onPress={selectAllAlternatives}
+            >
+              <Text className="text-[13px] font-medium text-muted-foreground">
+                {single ? "Select the alternative" : "Select all alternatives"}
+              </Text>
+            </Button>
           </View>
-        </View>
+        </BottomSheetView>
       </BottomSheetContent>
     </BottomSheet>
   );
