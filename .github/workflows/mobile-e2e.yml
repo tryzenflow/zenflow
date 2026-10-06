@@ -1,0 +1,245 @@
+name: Mobile E2E (Android)
+
+# Nightly + release branch + manual trigger.
+# Not on every PR — the emulator + dev-client build is expensive;
+# run it nightly and gate releases instead.
+on:
+  schedule:
+    - cron: "17 2 * * *" # 2:17 AM UTC nightly (off :00 to spread load)
+  push:
+    branches:
+      - "release/**"
+  workflow_dispatch:
+
+concurrency:
+  group: mobile-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  MAESTRO_APP_ID: com.zenflow.app
+  E2E_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+
+jobs:
+  android-e2e:
+    name: Android smoke (Maestro)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    services:
+      redis:
+        image: redis:8.8.0-alpine
+        ports: ["6379:6379"]
+      redis-ratelimit:
+        image: redis:8.8.0-alpine
+        ports: ["6380:6379"]
+      mailhog:
+        image: mailhog/mailhog:v1.0.1
+        ports: ["1025:1025", "8025:8025"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Detect Maestro flows ──────────────────────────────────────────
+      - name: Detect Maestro flows
+        id: flows
+        run: |
+          if [ -n "$(find mobile/maestro/flows -name '*.yaml' 2>/dev/null | head -1)" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No mobile/maestro/flows/*.yaml found; skipping."
+          fi
+
+      - uses: ./.github/actions/setup
+        if: steps.flows.outputs.present == 'true'
+
+      # ── Backend test stack ────────────────────────────────────────────
+      - name: Generate throwaway .env.test
+        if: steps.flows.outputs.present == 'true'
+        run: .github/scripts/write-test-env.sh backend/.env.test
+
+      - name: Start Postgres + object storage
+        if: steps.flows.outputs.present == 'true'
+        working-directory: backend
+        run: docker compose -f compose.test.yml up -d
+
+      - name: Wait for Postgres
+        if: steps.flows.outputs.present == 'true'
+        working-directory: backend
+        run: |
+          for i in $(seq 1 30); do
+            docker exec zenflow-test-db pg_isready -U ci -d zenflow-test && exit 0
+            sleep 2
+          done
+          docker compose -f compose.test.yml logs postgres
+          exit 1
+
+      - name: Apply migrations
+        if: steps.flows.outputs.present == 'true'
+        working-directory: backend
+        run: pnpm exec dotenv -e .env.test -- prisma migrate deploy
+
+      - name: Start backend API
+        if: steps.flows.outputs.present == 'true'
+        working-directory: backend
+        run: |
+          pnpm build
+          (pnpm exec dotenv -e .env.test -- env PORT=5000 node dist/main > ../api.log 2>&1 &)
+          for i in $(seq 1 60); do
+            curl -fs http://localhost:5000/api > /dev/null && exit 0
+            sleep 2
+          done
+          cat ../api.log
+          exit 1
+
+      # ── Reset test data ───────────────────────────────────────────────
+      - name: Reset test data
+        if: steps.flows.outputs.present == 'true'
+        run: node mobile/maestro/scripts/reset-test-data.js
+        env:
+          EXPO_PUBLIC_API_URL: http://localhost:5000/api/v1
+          MAILHOG_URL: http://localhost:8025
+
+      # ── Install Maestro ───────────────────────────────────────────────
+      - name: Install Maestro CLI
+        if: steps.flows.outputs.present == 'true'
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> $GITHUB_PATH
+
+      # ── JDK + Gradle ─────────────────────────────────────────────────
+      - name: Set up JDK 17
+        if: steps.flows.outputs.present == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Gradle cache
+        if: steps.flows.outputs.present == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('mobile/package.json') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      # ── Android emulator ──────────────────────────────────────────────
+      - name: Enable KVM
+        if: steps.flows.outputs.present == 'true'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: AVD cache
+        if: steps.flows.outputs.present == 'true'
+        uses: actions/cache@v4
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-34-default-x86_64-v1
+
+      - name: Create AVD
+        if: steps.flows.outputs.present == 'true' && steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          disable-animations: true
+          script: echo "AVD created and cached"
+
+      - name: Build and run Maestro smoke suite
+        if: steps.flows.outputs.present == 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          disable-animations: true
+          script: |
+            cd mobile
+
+            # 1. Generate the native android project if not present.
+            npx expo prebuild --platform android --no-install
+
+            # 2. Build the debug APK via Gradle.
+            cd android
+            ./gradlew assembleDebug -x lint --no-daemon
+            cd ..
+
+            # 3. Install the APK on the emulator.
+            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+
+            # 4. Start Metro in production-like mode (no dev menu, minified).
+            npx expo start --dev-client --no-dev --minify &
+            METRO_PID=$!
+
+            # 5. Wait for Metro to be ready.
+            for i in $(seq 1 60); do
+              curl -fs http://localhost:8081/status 2>/dev/null && break
+              sleep 2
+            done
+
+            # 6. Launch the app on the emulator.
+            adb shell monkey -p "$MAESTRO_APP_ID" -c android.intent.category.LAUNCHER 1
+            sleep 10
+
+            # 7. Run P0 smoke suite.
+            maestro test \
+              --format junit \
+              --output maestro-report.xml \
+              maestro/flows/smoke.yaml
+
+            kill $METRO_PID 2>/dev/null || true
+        env:
+          MAESTRO_APP_ID: ${{ env.MAESTRO_APP_ID }}
+          E2E_EMAIL: mobile-e2e+${{ env.E2E_RUN_ID }}@example.test
+          E2E_RUN_ID: ${{ env.E2E_RUN_ID }}
+          EXPO_PUBLIC_API_URL: http://10.0.2.2:5000/api/v1
+          MAILHOG_URL: http://localhost:8025
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: 120000
+
+      # ── Artifacts ─────────────────────────────────────────────────────
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-e2e-android
+          path: |
+            mobile/maestro-report.xml
+            mobile/maestro/screenshots/
+            mobile/maestro/recordings/
+            api.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload JUnit report
+        if: always() && steps.flows.outputs.present == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-e2e-junit
+          path: mobile/maestro-report.xml
+          if-no-files-found: ignore
+          retention-days: 7
+
+      # ── Teardown ──────────────────────────────────────────────────────
+      - name: Dump compose logs on failure
+        if: failure()
+        working-directory: backend
+        run: docker compose -f compose.test.yml logs --no-color
+
+      - name: Tear down
+        if: always()
+        working-directory: backend
+        run: docker compose -f compose.test.yml down -v

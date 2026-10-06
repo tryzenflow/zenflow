@@ -6,7 +6,8 @@ Audience: mobile, QA, and CI maintainers implementing issue #79.
 - Commit 1 complete: Stable `testID`s added to app screens/components (login, onboarding, tab bar, task FAB, task form screen, all form components, tab bar)
 - Commit 2 complete: Maestro harness added with smoke entry flow, package scripts, helpers, and scripts
 - Commit 3 complete: Deterministic test data — backend test endpoints (`POST /test/reset`, `POST /test/seed-task`) and wired Maestro scripts
-- Next: Commit 4 (Android CI), Commit 5 (iOS CI), Commit 6 (extended flows), Commit 7 (docs sync)
+- Commit 4 complete: Android CI — GitHub Actions workflow with backend test stack, Android emulator, Maestro
+- Next: Commit 5 (iOS CI), Commit 6 (extended flows), Commit 7 (docs sync)
 
 Use this plan to land the **actual mobile E2E suite first**. The docs describe the harness that the remaining commits add.
 
@@ -129,7 +130,7 @@ node mobile/maestro/scripts/reset-test-data.js
 E2E_EMAIL=mobile-e2e+test@example.test node mobile/maestro/scripts/seed-task.js "E2E Seeded Task" TASK 2025-01-15 60
 ```
 
-### Commit 4 — `ci: add mobile e2e Android workflow`
+### Commit 4 — `ci: add mobile e2e Android workflow` ✅ DONE
 
 Purpose: run the P0 smoke suite on Android emulator in GitHub Actions.
 
@@ -137,21 +138,30 @@ Representative files:
 
 - `.github/workflows/mobile-e2e.yml`
 
-Work:
+Work (completed):
 
-- Checkout repo.
-- Use existing `.github/actions/setup`.
-- Generate `backend/.env.test` using `.github/scripts/write-test-env.sh`.
-- Start Postgres/object storage, Redis, rate-limit Redis, and MailHog via `backend/compose.test.yml`.
-- Apply migrations.
-- Start backend API.
-- Build/install mobile dev client on Android emulator.
-- Start Metro.
-- Run `maestro test mobile/maestro/flows/smoke.yaml`.
-- Upload artifacts on failure (Maestro logs, screenshots, screen recordings, API logs, MailHog dump).
-- Tear down test services.
+- Rewritten workflow from scratch to match existing CI patterns (backend-e2e, frontend-e2e).
+- Triggers: nightly schedule (2:17 AM UTC), `release/**` branches, manual dispatch.
+- Uses existing `.github/actions/setup` composite action.
+- Backend test stack matches `ci.yml`:
+  - Redis + Redis rate-limit + MailHog via GitHub Actions service containers.
+  - Postgres + MinIO via `compose.test.yml`.
+  - `write-test-env.sh` generates throwaway `.env.test` (includes `NODE_ENV=test`).
+  - Migrations via `prisma migrate deploy`.
+  - Backend API on port 5000.
+- Android emulator setup:
+  - KVM enablement for hardware acceleration.
+  - AVD cached across runs.
+  - JDK 17 + Gradle cache.
+  - `expo prebuild` → `gradlew assembleDebug` → `adb install`.
+  - Metro in production mode (`--no-dev --minify`).
+- Maestro test run:
+  - `maestro test` with JUnit XML output.
+  - Android emulator uses `http://10.0.2.2:5000/api/v1` to reach host backend.
+- Failure artifacts: JUnit report, screenshots, recordings, API logs, compose logs.
+- Teardown: compose down on every run.
 
-Validation: Push to a branch and verify the workflow runs and passes.
+Validation: Push to a branch and verify the workflow runs end-to-end.
 
 ### Commit 5 — `ci: add mobile e2e iOS workflow`
 
@@ -404,7 +414,7 @@ Add checklist:
 - [x] Add OTP helper.
 - [x] Add reset/seed helpers (backend test endpoints + script integration).
 - [x] Add P0 flow YAML files.
-- [ ] Add Android CI job.
-- [ ] Add failure artifact upload.
+- [x] Add Android CI job.
+- [x] Add failure artifact upload.
 - [ ] Add iOS CI after service provisioning is solved.
 - [ ] Promote P0 workflow to release gate when stable.

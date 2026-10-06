@@ -30,7 +30,7 @@ videoRecording:
   onFailure: true
 
 # Environment variables required:
-# MAESTRO_APP_ID - App bundle ID (e.g., com.zenflow.mobile)
+# MAESTRO_APP_ID - App bundle ID (e.g., com.zenflow.app)
 # E2E_EMAIL - Unique test email per run (e.g., mobile-e2e+<run-id>@example.test)
 # E2E_OTP - OTP retrieved from MailHog
 # E2E_RUN_ID - Unique run identifier
