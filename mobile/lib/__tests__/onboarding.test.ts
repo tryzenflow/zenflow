@@ -37,15 +37,15 @@ describe("routeForSession", () => {
 
 describe("step navigation", () => {
   it("walks forward and clamps", () => {
-    expect(nextStep("language")).toBe("name");
+    expect(nextStep("name")).toBe("dlu");
     expect(nextStep("tags")).toBe("done");
     expect(nextStep("done")).toBe("done");
   });
   it("walks back and clamps; no back on first/done", () => {
-    expect(prevStep("name")).toBe("language");
-    expect(prevStep("language")).toBe("language");
-    expect(canGoBack("language")).toBe(false);
-    expect(canGoBack("name")).toBe(true);
+    expect(prevStep("dlu")).toBe("name");
+    expect(prevStep("name")).toBe("name");
+    expect(canGoBack("name")).toBe(false);
+    expect(canGoBack("dlu")).toBe(true);
     expect(canGoBack("done")).toBe(false);
   });
 });

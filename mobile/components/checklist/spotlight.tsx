@@ -1,3 +1,5 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t } from "@/lib/i18n";
 import { Text } from "@/components/ui/text";
 import { STEP_COPY } from "@/lib/checklist";
 import {
@@ -71,6 +73,7 @@ export function Spotlight({
   rect: Rect;
   onDismiss: () => void;
 }) {
+  useLanguage();
   const screen = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [bubbleHeight, setBubbleHeight] = useState(FALLBACK_BUBBLE_HEIGHT);
@@ -143,11 +146,11 @@ export function Spotlight({
         <Pressable
           onPress={onDismiss}
           accessibilityRole="button"
-          accessibilityLabel="Got it"
+          accessibilityLabel={t("Got it")}
           className="mt-3 self-end rounded-full bg-primary px-4 py-2 active:opacity-80"
         >
           <Text className="text-[13px] font-semibold text-primary-foreground">
-            Got it
+            {t("Got it")}
           </Text>
         </Pressable>
       </View>

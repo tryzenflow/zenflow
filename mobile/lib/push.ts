@@ -6,6 +6,7 @@ import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import type { Href } from "expo-router";
 import { Platform } from "react-native";
+import { t } from "./i18n";
 
 /**
  * Native push plumbing for the direct-FCM/APNs backend (`backend/src/devices/`).
@@ -110,7 +111,7 @@ export function configureForegroundHandler(): void {
 export async function ensureAndroidChannel(): Promise<void> {
   if (Platform.OS !== "android") return;
   await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
-    name: "General",
+    name: t("General"),
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 250, 250, 250],
     lightColor: "#f97316",

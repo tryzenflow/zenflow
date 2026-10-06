@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
 import {
   AlarmClockIcon,
   Bell,
@@ -9,8 +11,18 @@ import { type SetupItem, pendingSetupItems } from "@/lib/onboarding";
 import { Pressable, View } from "react-native";
 
 const ITEMS: Record<SetupItem, { title: string; Icon: typeof Bell }> = {
-  notifications: { title: "Allow notifications", Icon: Bell },
-  dlu: { title: "Connect your DLU account", Icon: GraduationCap },
+  notifications: {
+    get title() {
+      return t("Allow notifications");
+    },
+    Icon: Bell,
+  },
+  dlu: {
+    get title() {
+      return t("Connect your DLU account");
+    },
+    Icon: GraduationCap,
+  },
 };
 
 /**
@@ -26,6 +38,7 @@ export function FinishSetupCard({
   dluConnected: boolean;
   onPress: (item: SetupItem) => void;
 }) {
+  useLanguage();
   const items = pendingSetupItems({ notificationsActive, dluConnected });
   if (items.length === 0) return null;
   return (
@@ -34,11 +47,11 @@ export function FinishSetupCard({
         <View className="flex-row items-center gap-2">
           <AlarmClockIcon size={16} className="text-primary" />
           <Text className="text-[15px] font-bold">
-            Finish setting up Zenflow
+            {t("Finish setting up Zenflow")}
           </Text>
         </View>
         <Text className="text-[13px] text-muted-foreground">
-          {items.length} left
+          {items.length} {t("left")}
         </Text>
       </View>
       {items.map((item) => {

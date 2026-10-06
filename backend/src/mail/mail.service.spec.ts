@@ -1,6 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { MailerService } from "@nestjs-modules/mailer";
 import { MailService } from "./mail.service";
+import { PrismaService } from "../prisma/prisma.service";
 
 interface MailPayload {
   from?: string;
@@ -11,13 +12,23 @@ interface MailPayload {
 describe("MailService", () => {
   let service: MailService;
   const sendMail = jest.fn<Promise<void>, [MailPayload]>().mockResolvedValue();
+  const findUnique = jest.fn().mockResolvedValue({ lang: "EN_US" });
 
   beforeEach(async () => {
     sendMail.mockClear();
+    findUnique.mockResolvedValue({ lang: "EN_US" });
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MailService,
         { provide: MailerService, useValue: { sendMail } },
+        {
+          provide: PrismaService,
+          useValue: {
+            user: {
+              findUnique,
+            },
+          },
+        },
       ],
     }).compile();
 
@@ -29,6 +40,14 @@ describe("MailService", () => {
   });
 
   describe("sendLoginEmail", () => {
+    it("uses Vietnamese subject and template copy for a Vietnamese recipient", async () => {
+      findUnique.mockResolvedValue({ lang: "VI_VN" });
+      await service.sendLoginEmail("user@example.com", "123456");
+      expect(sendMail.mock.calls[0][0]).toMatchObject({
+        subject: "Xác nhận địa chỉ email của bạn",
+        context: { language: "vi", greeting: "Xin chào,", otp: "123456" },
+      });
+    });
     it("sends the confirm-email template with the otp context", async () => {
       await service.sendLoginEmail("user@example.com", "123456");
 

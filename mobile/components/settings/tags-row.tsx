@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
 import { createTagsBulk, listTags } from "@/api/tags";
 import { ChevronRight, List } from "@/components/Icons";
 import { TagPicker } from "@/components/onboarding/tag-picker";
@@ -18,6 +20,7 @@ import { Pressable, View } from "react-native";
 
 /** Settings "Tags" row: shows the count and opens a picker to add more. */
 export function TagsRow() {
+  useLanguage();
   const { toast } = useToast();
   const sheet = useBottomSheet();
   const [saved, setSaved] = useState<string[]>([]);
@@ -45,7 +48,7 @@ export function TagsRow() {
       );
       sheet.close();
     } catch {
-      toast("Couldn't save tags. Try again.", "destructive");
+      toast(t("Couldn't save tags. Try again."), "destructive");
     } finally {
       setSaving(false);
     }
@@ -53,7 +56,7 @@ export function TagsRow() {
 
   return (
     <>
-      <SettingsSectionLabel>Tags</SettingsSectionLabel>
+      <SettingsSectionLabel>{t("Tags")}</SettingsSectionLabel>
       <View className="overflow-hidden rounded-2xl border border-border bg-card">
         <Pressable
           onPress={() => {
@@ -65,7 +68,7 @@ export function TagsRow() {
           <View className="h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl bg-muted">
             <List size={18} className="text-foreground" />
           </View>
-          <Text className="flex-1 text-[15px] font-semibold">Tags</Text>
+          <Text className="flex-1 text-[15px] font-semibold">{t("Tags")}</Text>
           <Text className="text-[13px] text-muted-foreground">
             {saved.length}
           </Text>
@@ -76,7 +79,7 @@ export function TagsRow() {
         <BottomSheetContent ref={sheet.ref}>
           <BottomSheetView style={{ paddingBottom: 30 }}>
             <Text className="pb-3 pt-1 text-xl font-bold tracking-tight">
-              Tags
+              {t("Tags")}
             </Text>
             <TagPicker
               selected={selected}
@@ -89,7 +92,7 @@ export function TagsRow() {
               onPress={save}
             >
               <Text className="font-semibold text-primary-foreground">
-                Save
+                {t("Save")}
               </Text>
             </Button>
           </BottomSheetView>

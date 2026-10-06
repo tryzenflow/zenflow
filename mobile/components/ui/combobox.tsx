@@ -1,3 +1,5 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import * as React from "react";
 import { type ListRenderItemInfo, View } from "react-native";
@@ -57,6 +59,7 @@ const Combobox = React.forwardRef<
     ref,
   ) => {
     const insets = useSafeAreaInsets();
+    useLanguage();
     const [search, setSearch] = React.useState("");
     const [selectedItem, setSelectedItem] =
       React.useState<ComboboxOption | null>(defaultSelectedItem);
@@ -158,7 +161,7 @@ const Combobox = React.forwardRef<
               })}
               numberOfLines={1}
             >
-              {itemSelected ? itemSelected.label : placeholder ?? ""}
+              {itemSelected ? itemSelected.label : (placeholder ?? "")}
             </Text>
             <ChevronsUpDown className="text-foreground ml-2 opacity-50" />
           </View>
@@ -184,7 +187,7 @@ const Combobox = React.forwardRef<
               onSubmitEditing={onSubmitEditing}
               returnKeyType="next"
               clearButtonMode="while-editing"
-              placeholder="Search..."
+              placeholder={t("Search...")}
               {...inputProps}
             />
             <Button

@@ -1,3 +1,6 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
+import { format } from "@/lib/i18n";
 import {
   getSessionDetails,
   removeSeriesFrom,
@@ -42,7 +45,7 @@ import {
   zonedWallClockToUtc,
 } from "@zenflow/core";
 import type { Session, UpdateSessionInput } from "@zenflow/shared";
-import { format } from "date-fns";
+
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
@@ -66,6 +69,7 @@ const pad = (n: number) => String(n).padStart(2, "0");
  * date + start/end time, DND also recurrence).
  */
 export default function EditSessionScreen() {
+  useLanguage();
   return (
     <ModalToastScope>
       <EditSessionForm />
@@ -74,6 +78,7 @@ export default function EditSessionScreen() {
 }
 
 function EditSessionForm() {
+  useLanguage();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const user = useUserStore((s) => s.user);
@@ -125,7 +130,7 @@ function EditSessionForm() {
         }
       })
       .catch((error) => {
-        showErrorToast(toast, error, "Couldn't open this session");
+        showErrorToast(toast, error, t("Couldn't open this session"));
         router.back();
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -208,16 +213,16 @@ function EditSessionForm() {
       }
 
       showDisplacedToast(toast, updated.displacedSessions);
-      toast("Session updated", "success");
+      toast(t("Session updated"), "success");
       if (isSessionPastDeadline(updated)) {
         toast(
-          "This session is now scheduled after its deadline.",
+          t("This session is now scheduled after its deadline."),
           "warning",
           5000,
         );
       } else if (shouldSurfaceRescheduleHint()) {
-        toast("Tip", "tip", 6000, "top", false, undefined, {
-          description: RESCHEDULE_HINT,
+        toast(t("Tip"), "tip", 6000, "top", false, undefined, {
+          description: t(RESCHEDULE_HINT),
         });
       }
       // Jump the calendar to the (possibly new) time and pulse the block.
@@ -238,7 +243,8 @@ function EditSessionForm() {
           infeasiblePolicy ? { ...patch, infeasiblePolicy } : patch,
         ),
       handleUpdated,
-      (error) => showErrorToast(toast, error, "Failed to update the session"),
+      (error) =>
+        showErrorToast(toast, error, t("Failed to update the session")),
     );
   }
 
@@ -279,17 +285,17 @@ function EditSessionForm() {
       }
       toast(
         scope === "series"
-          ? "Series deleted"
+          ? t("Series deleted")
           : scope === "following"
             ? seriesKind === "task"
-              ? "This and later sittings removed"
-              : "This and later occurrences removed"
-            : "Session deleted",
+              ? t("This and later sittings removed")
+              : t("This and later occurrences removed")
+            : t("Session deleted"),
         "success",
       );
       router.back();
     } catch (error) {
-      showErrorToast(toast, error, "Failed to delete the session");
+      showErrorToast(toast, error, t("Failed to delete the session"));
     } finally {
       setDeleting(false);
     }
@@ -310,10 +316,12 @@ function EditSessionForm() {
 
   return (
     <SessionFormScreen
-      title="Edit session"
+      title={t("Edit session")}
       subtitle={
         task
-          ? `Created ${format(new Date(task.createdAt), "MMM d")}`
+          ? t("Created {date}", {
+              date: format(new Date(task.createdAt), "MMM d"),
+            })
           : undefined
       }
       headerRight={
@@ -321,11 +329,11 @@ function EditSessionForm() {
           disabled={loading}
           onPress={onDelete}
           className="flex-row items-center gap-1.5"
-          accessibilityLabel="Delete session"
+          accessibilityLabel={t("Delete session")}
         >
           <Trash2 size={15} className="text-destructive" />
           <Text className="text-[13px] font-semibold text-destructive">
-            Delete
+            {t("Delete")}
           </Text>
         </Pressable>
       }
@@ -336,7 +344,7 @@ function EditSessionForm() {
           onPress={form.handleSubmit(onSubmit, onInvalid)}
         >
           <Text className="text-base font-semibold text-foreground">
-            {loading ? "Saving…" : "Save changes"}
+            {loading ? t("Saving…") : t("Save changes")}
           </Text>
         </Button>
       }
@@ -357,7 +365,7 @@ function EditSessionForm() {
         <View className="items-center py-16">
           <ActivityIndicator />
           <Text className="mt-3 text-sm text-muted-foreground">
-            Loading session…
+            {t("Loading session…")}
           </Text>
         </View>
       )}

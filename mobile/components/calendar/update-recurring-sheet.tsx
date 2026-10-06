@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
 import {
   CalendarClock,
   CalendarDays,
@@ -66,43 +68,69 @@ interface Option {
 const COPY: Record<"recurring" | "task", { title: string; options: Option[] }> =
   {
     recurring: {
-      title: "Update recurring session",
+      get title() {
+        return t("Update recurring session");
+      },
       options: [
         {
           scope: "following",
           Icon: CalendarRange,
-          label: "This and following",
-          hint: "Occurrences from this one onward move to the new time.",
+          get label() {
+            return t("This and following");
+          },
+          get hint() {
+            return t("Occurrences from this one onward move to the new time.");
+          },
         },
         {
           scope: "series",
           Icon: CalendarDays,
-          label: "All occurrences",
-          hint: "Every occurrence in the series moves to the new time.",
+          get label() {
+            return t("All occurrences");
+          },
+          get hint() {
+            return t("Every occurrence in the series moves to the new time.");
+          },
         },
       ],
     },
     task: {
-      title: "Update session",
+      get title() {
+        return t("Update session");
+      },
       options: [
         {
           scope: "occurrence",
           Icon: Clock,
-          label: "This sitting",
-          hint: "Only this sitting moves.",
+          get label() {
+            return t("This sitting");
+          },
+          get hint() {
+            return t("Only this sitting moves.");
+          },
           immediate: true,
         },
         {
           scope: "following",
           Icon: CalendarRange,
-          label: "This and later sittings",
-          hint: "Later sittings keep their dates but move to the new time.",
+          get label() {
+            return t("This and later sittings");
+          },
+          get hint() {
+            return t(
+              "Later sittings keep their dates but move to the new time.",
+            );
+          },
         },
         {
           scope: "series",
           Icon: CalendarDays,
-          label: "All sittings",
-          hint: "Every sitting keeps its date but moves to the new time.",
+          get label() {
+            return t("All sittings");
+          },
+          get hint() {
+            return t("Every sitting keeps its date but moves to the new time.");
+          },
         },
       ],
     },
@@ -132,6 +160,7 @@ export const UpdateRecurringSheet = forwardRef<
   UpdateRecurringSheetHandle,
   object
 >((_props, ref) => {
+  useLanguage();
   const sheet = useBottomSheet();
   const [kind, setKind] = useState<"recurring" | "task">("recurring");
   const [expanded, setExpanded] = useState<UpdateRecurringScope | null>(null);
@@ -212,12 +241,12 @@ export const UpdateRecurringSheet = forwardRef<
                 {title}
               </Text>
               <Text className="mt-[3px] text-[13px] text-muted-foreground">
-                Choose which occurrences pick up the new time.
+                {t("Choose which occurrences pick up the new time.")}
               </Text>
             </View>
             <Pressable
               onPress={sheet.close}
-              accessibilityLabel="Cancel"
+              accessibilityLabel={t("Cancel")}
               className="h-8 w-8 items-center justify-center rounded-full bg-muted"
             >
               <X size={16} className="text-muted-foreground" />
@@ -269,7 +298,7 @@ export const UpdateRecurringSheet = forwardRef<
                           onCheckedChange={setSkipConflicting}
                         />
                         <Text className="flex-1 text-[13px] text-foreground">
-                          Skip ones that would conflict
+                          {t("Skip ones that would conflict")}
                         </Text>
                       </Pressable>
                       <Pressable
@@ -277,7 +306,7 @@ export const UpdateRecurringSheet = forwardRef<
                         className="items-center justify-center rounded-xl bg-primary py-2.5"
                       >
                         <Text className="text-[14px] font-semibold text-primary-foreground">
-                          Confirm
+                          {t("Confirm")}
                         </Text>
                       </Pressable>
                     </View>

@@ -1,16 +1,17 @@
+import { t, getLanguage } from "./i18n";
+import { format } from "./i18n";
 import { zonedDate } from "@zenflow/core";
 import {
   addDays,
   addMinutes,
   differenceInCalendarDays,
-  format,
   isSameDay,
 } from "date-fns";
 
 /** `7:00 – 8:00 PM` when both ends share a half-day, `11:00 AM – 12:00 PM`
  * when the range crosses meridiem — matches the week-view mockup blocks. */
 export function formatRange(start: Date, end: Date): string {
-  const sameHalf = (start.getHours() < 12) === (end.getHours() < 12);
+  const sameHalf = start.getHours() < 12 === end.getHours() < 12;
   return sameHalf
     ? `${format(start, "h:mm")} – ${format(end, "h:mm a")}`
     : `${format(start, "h:mm a")} – ${format(end, "h:mm a")}`;
@@ -25,8 +26,8 @@ export function formatRange(start: Date, end: Date): string {
  * already user-tz wall clock, so a plain `isSameDay` is correct here.
  */
 export function dayWord(date: Date, now: Date): string {
-  if (isSameDay(date, now)) return "today";
-  if (isSameDay(date, addDays(now, 1))) return "tomorrow";
+  if (isSameDay(date, now)) return t("today");
+  if (isSameDay(date, addDays(now, 1))) return t("tomorrow");
   return format(date, "EEE MMM d");
 }
 
@@ -84,8 +85,12 @@ export function buildSlotOptions(
     offset === 0
       ? ""
       : offset > 0
-        ? `+${offset} day${offset > 1 ? "s" : ""}`
-        : `−${Math.abs(offset)} day${Math.abs(offset) > 1 ? "s" : ""}`;
+        ? getLanguage() === "vi"
+          ? t("{sign}{count} days", { sign: "+", count: offset })
+          : `+${offset} day${offset > 1 ? "s" : ""}`
+        : getLanguage() === "vi"
+          ? t("{sign}{count} days", { sign: "−", count: Math.abs(offset) })
+          : `−${Math.abs(offset)} day${Math.abs(offset) > 1 ? "s" : ""}`;
 
   return [
     {
@@ -94,7 +99,7 @@ export function buildSlotOptions(
       time: format(primary, "h:mm a"),
       range: formatRange(primary, addMinutes(primary, dur)),
       day: primaryDay,
-      hint: "Currently scheduled",
+      hint: t("Currently scheduled"),
       dayDelta: "",
     },
     {
@@ -103,7 +108,7 @@ export function buildSlotOptions(
       time: format(alternative, "h:mm a"),
       range: formatRange(alternative, addMinutes(alternative, dur)),
       day: alternativeDay,
-      hint: "Also fits before the deadline",
+      hint: t("Also fits before the deadline"),
       dayDelta,
     },
   ];

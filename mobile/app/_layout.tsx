@@ -1,3 +1,6 @@
+import { useLanguage } from "@/hooks/use-language";
+import { loadPreferences } from "@/lib/preferences";
+import { setLanguage } from "@/lib/i18n";
 import { me } from "@/api/auth";
 import { PortalHost } from "@/components/primitives/portal";
 import { ToastProvider } from "@/components/ui/toast";
@@ -61,6 +64,7 @@ SplashScreen.preventAutoHideAsync();
  * so its `useRouter()` sits under the mounted navigator.
  */
 function PushRegistrar() {
+  useLanguage();
   usePushRegistration();
   return null;
 }
@@ -70,6 +74,7 @@ function PushRegistrar() {
  * presents foreground tap-to-act toast, and triggers AppState catch-up fetch.
  */
 function NotificationsSubscriber() {
+  useLanguage();
   useNotificationsSubscription();
   return null;
 }
@@ -84,6 +89,7 @@ function NotificationsSubscriber() {
  * only ever add a <Redirect/> alongside the Stack, not replace it.
  */
 function AuthGate() {
+  useLanguage();
   const segments = useSegments();
   const user = useUserStore((s) => s.user);
   const loading = useUserStore((s) => s.loading);
@@ -103,6 +109,7 @@ function AuthGate() {
 }
 
 export default function RootLayout() {
+  useLanguage();
   const [fontsLoaded, fontError] = useFonts({
     Geist: require("../assets/fonts/Geist-Regular.ttf"),
     "Geist-Bold": require("../assets/fonts/Geist-Bold.ttf"),
@@ -139,6 +146,8 @@ export default function RootLayout() {
       setLoading(true);
       let cached: Awaited<ReturnType<typeof readCachedSessionUser>> = null;
       try {
+        const cachedPrefs = await loadPreferences();
+        setLanguage(cachedPrefs.language);
         await restoreSessionCookie();
         cached = await readCachedSessionUser();
       } catch (err) {
@@ -195,7 +204,11 @@ export default function RootLayout() {
       "loading:",
       loading,
     );
-    if ((fontsLoaded || fontError) && !loading && (routeSettled || splashTimedOut)) {
+    if (
+      (fontsLoaded || fontError) &&
+      !loading &&
+      (routeSettled || splashTimedOut)
+    ) {
       SplashScreen.hideAsync().catch((err) => {
         console.warn("[_layout] SplashScreen.hideAsync warning:", err);
       });

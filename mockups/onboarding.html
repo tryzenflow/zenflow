@@ -14,11 +14,11 @@
       <h1><span class="dot"></span> Onboarding — first-run setup</h1>
       <p>
         Issue #88. Shown once after the first successful login, gated by a
-        server-side <code>User.onboardedAt</code>. Seven skippable steps, each
+        server-side <code>User.onboardedAt</code>. Six skippable steps, each
         writing through the existing user preference API:
-        <b>Language · Name · DLU account · Notifications · Timezone · Default reminder · Tags</b>.
-        Language comes first (default <b>Tiếng Việt</b>) so every later screen
-        renders in the chosen language immediately. Timezone defaults to the
+        <b>Name · DLU account · Notifications · Timezone · Default reminder · Tags</b>.
+        The language (default <b>Tiếng Việt</b>) is picked on the login screen,
+        top right, so every screen already renders in it. Timezone defaults to the
         device zone with a full IANA search. Tags are new: a suggested set for
         students is pre-ticked and persisted as <code>Tag</code> rows
         (<code>@@unique([userId, name])</code>), so they appear in the task

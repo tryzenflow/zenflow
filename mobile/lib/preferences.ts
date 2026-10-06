@@ -1,3 +1,4 @@
+import { t, setLanguage } from "./i18n";
 import { updateBasicInfo } from "@/api/users";
 import { useUserStore } from "@/hooks/use-user-store";
 import { IANA_TIMEZONES } from "@/lib/timezones";
@@ -34,7 +35,7 @@ export interface Preferences {
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
-  language: "en",
+  language: "vi",
   timezone: deviceTimezone(),
   timezoneMode: "device",
   defaultReminder: 10,
@@ -48,12 +49,42 @@ export const LANGUAGES: { value: Lang; label: string; flag: string }[] = [
 ];
 
 export const REMINDERS: { value: DefaultReminderChoice; label: string }[] = [
-  { value: 0, label: "None" },
-  { value: 5, label: "5 min before" },
-  { value: 10, label: "10 min before" },
-  { value: 15, label: "15 min before" },
-  { value: 30, label: "30 min before" },
-  { value: 60, label: "1 hour before" },
+  {
+    value: 0,
+    get label() {
+      return t("None");
+    },
+  },
+  {
+    value: 5,
+    get label() {
+      return t("5 min before");
+    },
+  },
+  {
+    value: 10,
+    get label() {
+      return t("10 min before");
+    },
+  },
+  {
+    value: 15,
+    get label() {
+      return t("15 min before");
+    },
+  },
+  {
+    value: 30,
+    get label() {
+      return t("30 min before");
+    },
+  },
+  {
+    value: 60,
+    get label() {
+      return t("1 hour before");
+    },
+  },
 ];
 
 export const TIMEZONES = [
@@ -122,6 +153,16 @@ async function savePreferences(next: Preferences) {
   }
 }
 
+/**
+ * Language pick while signed out (the login screen's select). There is no
+ * session to PATCH yet, so it only switches the UI and caches the choice;
+ * login then pushes it to the account (see `app/(auth)/login.tsx`).
+ */
+export async function setSignedOutLanguage(language: Lang) {
+  setLanguage(language);
+  await savePreferences({ ...(await loadPreferences()), language });
+}
+
 /** Edit accepted by `update`; `timezone` may be the "device" sentinel. */
 export type PreferencesPatch = SyncedPatch;
 
@@ -146,6 +187,7 @@ export function usePreferences() {
       ]);
       if (!mounted) return;
       if (!user) {
+        setLanguage(stored.language);
         setPrefs(stored);
         return;
       }
@@ -159,6 +201,7 @@ export function usePreferences() {
         ...stored,
         ...userToSyncedPrefs(user, mode),
       };
+      setLanguage(next.language);
       setPrefs(next);
       void savePreferences(next);
 
@@ -203,6 +246,7 @@ export function usePreferences() {
             mode === "device" ? deviceTimezone() : (synced.timezone as string),
         }),
       };
+      setLanguage(optimistic.language);
       setPrefs(optimistic);
       prefsRef.current = optimistic;
 
@@ -248,6 +292,7 @@ export function usePreferences() {
               timezoneMode: previous.timezoneMode,
             }),
           };
+          setLanguage(rolled.language);
           setPrefs(rolled);
           prefsRef.current = rolled;
           return false;

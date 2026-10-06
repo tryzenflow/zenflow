@@ -1,3 +1,5 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t } from "@/lib/i18n";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useLastCreated } from "@/hooks/use-last-created";
@@ -98,15 +100,16 @@ export const MonthGrid = memo(
         moveDayKey: created ?? first ?? dateKey(openDay),
       };
     }, [days, monthDate, today, tasksByDate, lastCreatedId]);
+    useLanguage();
     return (
       <View className="flex-1 px-3 pb-3.5 pt-2">
         <View className="flex-row">
           {WEEKDAY_LABELS.map((label) => (
             <Text
-              key={label}
+              key={t(label)}
               className="flex-1 py-2 text-center text-[10.5px] font-bold text-muted-foreground"
             >
-              {label}
+              {t(label)}
             </Text>
           ))}
         </View>
@@ -192,15 +195,16 @@ const SKELETON_PILL_WIDTHS = [
  * as the loaded grid (4 rows, matching the mockup's Loading state), so
  * swapping to real data never shifts layout (GitHub issue #21's checklist). */
 export function MonthGridSkeleton() {
+  useLanguage();
   return (
     <View className="flex-1 px-3 pb-3.5 pt-2">
       <View className="flex-row">
         {WEEKDAY_LABELS.map((label) => (
           <Text
-            key={label}
+            key={t(label)}
             className="flex-1 py-2 text-center text-[10.5px] font-bold uppercase text-muted-foreground"
           >
-            {label}
+            {t(label)}
           </Text>
         ))}
       </View>

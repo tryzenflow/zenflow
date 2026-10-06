@@ -1,3 +1,5 @@
+import { getLanguage, t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { isAxiosError } from "axios";
 import { useLocalSearchParams } from "expo-router";
@@ -15,9 +17,12 @@ import {
   type TextInputInstance,
   View,
 } from "react-native";
+import type { User } from "@zenflow/shared";
 import { z } from "zod";
 
 import { requestOtp, verifyOtp } from "@/api/auth";
+import { updateBasicInfo } from "@/api/users";
+import { LanguageSelect } from "@/components/language-select";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Form, FormField, FormInput } from "@/components/ui/form";
@@ -29,6 +34,7 @@ import { cacheSessionUser } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import { hideEmail } from "@/utils/hide-email";
 import { Clock, Loader2Icon } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /**
  * Client-side proactive throttle on "Resend code" — shorter than the
@@ -56,6 +62,7 @@ function getRetryAfterSeconds(error: unknown): number {
 
 /** Amber clock icon + message, matching mockups/login.html's "Locked" frames. */
 function LockoutNotice({ children }: { children: ReactNode }) {
+  useLanguage();
   return (
     <View className="mt-2 flex-row items-start gap-1.5">
       <Clock size={15} className="mt-px shrink-0 text-brand-yellow" />
@@ -67,14 +74,20 @@ function LockoutNotice({ children }: { children: ReactNode }) {
 }
 
 const emailSchema = z.object({
-  email: z.email({ message: "Invalid email address." }),
+  email: z.email({
+    get message() {
+      return t("Invalid email address.");
+    },
+  }),
 });
 
 const otpSchema = z.object({
   email: z.email(),
-  otp: z
-    .string()
-    .length(6, { message: "Your one-time password must be 6 digits." }),
+  otp: z.string().length(6, {
+    get message() {
+      return t("Your one-time password must be 6 digits.");
+    },
+  }),
 });
 
 type EmailFormValues = z.infer<typeof emailSchema>;
@@ -95,6 +108,7 @@ function OtpBoxes({
   error?: boolean;
   disabled?: boolean;
 }) {
+  useLanguage();
   // RN 0.88: ref instance type is `TextInputInstance`, not `TextInput` -- see
   // day-timeline.tsx's `scrollRef` comment.
   const inputRef = useRef<TextInputInstance>(null);
@@ -144,9 +158,11 @@ function OtpBoxes({
 }
 
 export default function LoginScreen() {
+  useLanguage();
   const params = useLocalSearchParams<{ callback?: string }>();
   const setUser = useUserStore((state) => state.setUser);
   const { toast } = useToast();
+  const insets = useSafeAreaInsets();
 
   const [stage, setStage] = useState<"email" | "otp">("email");
   const [submitting, setSubmitting] = useState(false);
@@ -187,7 +203,7 @@ export default function LoginScreen() {
     clearErrors("email");
     try {
       await requestOtp(data.email);
-      toast("Email sent successfully", "info");
+      toast(t("Email sent successfully"), "info");
       requestLockout.clear();
       setStage("otp");
       form.setValue("otp", "");
@@ -200,8 +216,8 @@ export default function LoginScreen() {
         const message =
           isAxiosError(error) && error.response
             ? (error.response.data?.message ??
-              "Failed to send OTP. Please try again.")
-            : "Network error. Could not connect to the server.";
+              t("Failed to send OTP. Please try again."))
+            : t("Network error. Could not connect to the server.");
         setError("email", { type: "manual", message });
       }
     } finally {
@@ -215,9 +231,20 @@ export default function LoginScreen() {
     clearErrors("otp");
     try {
       const result = await verifyOtp(getValues("email"), data.otp);
-      toast("Login successfully", "success");
-      setUser(result.data);
-      await cacheSessionUser(result.data);
+      toast(t("Login successfully"), "success");
+      let user: User = result.data;
+      // The language shown on this screen (the top-right select, or the
+      // Vietnamese default) overrides the account's stored preference.
+      const language = getLanguage();
+      if (user.lang !== language) {
+        try {
+          user = await updateBasicInfo({ lang: language });
+        } catch {
+          // Offline blip — the account's own language applies instead.
+        }
+      }
+      setUser(user);
+      await cacheSessionUser(user);
     } catch (error) {
       if (isAxiosError(error) && error.response?.status === 429) {
         otpLockout.start(getRetryAfterSeconds(error));
@@ -225,8 +252,8 @@ export default function LoginScreen() {
         const message =
           isAxiosError(error) && error.response
             ? (error.response.data?.message ??
-              "Failed to verify OTP. Please try again.")
-            : "Network error. Could not connect to the server.";
+              t("Failed to verify OTP. Please try again."))
+            : t("Network error. Could not connect to the server.");
         setError("otp", { type: "manual", message });
       }
     } finally {
@@ -241,17 +268,23 @@ export default function LoginScreen() {
 
   return (
     <View className="flex-1 bg-background px-5">
+      <View
+        className="absolute right-5 z-10"
+        style={{ top: insets.top + 8 }}
+      >
+        <LanguageSelect />
+      </View>
       <View className="flex-1 justify-center">
         <View className="items-center gap-3.5 pb-[26px]">
           <Logo className="h-[60px] w-[60px] rounded-full shadow-lg shadow-brand-orange/30" />
           <View className="items-center gap-1">
             <Text className="text-[22px] font-bold tracking-[-0.02em]">
-              {stage === "email" ? "Login to Zenflow" : "Enter your code"}
+              {stage === "email" ? t("Login to Zenflow") : t("Enter your code")}
             </Text>
             <Text className="text-[14px] text-muted-foreground">
               {stage === "email"
-                ? "A focus-first planner that schedules for you."
-                : `Sent to ${hideEmail(email)}`}
+                ? t("A focus-first planner that schedules for you.")
+                : t("Sent to {email}", { email: hideEmail(email) })}
             </Text>
           </View>
         </View>
@@ -265,7 +298,7 @@ export default function LoginScreen() {
                 render={({ field }) => (
                   <FormInput
                     name={field.name}
-                    label="Email"
+                    label={t("Email")}
                     labelClassName="text-[14px] font-semibold"
                     placeholder="m@example.com"
                     keyboardType="email-address"
@@ -281,7 +314,7 @@ export default function LoginScreen() {
               />
               {requestLockout.active && (
                 <LockoutNotice>
-                  Too many requests. Please wait before trying again.
+                  {t("Too many requests. Please wait before trying again.")}
                 </LockoutNotice>
               )}
             </View>
@@ -304,7 +337,7 @@ export default function LoginScreen() {
                     otpLockout.active && "text-muted-foreground opacity-50",
                   )}
                 >
-                  Change email
+                  {t("Change email")}
                 </Text>
               </Pressable>
               <Controller
@@ -313,7 +346,7 @@ export default function LoginScreen() {
                 render={({ field, fieldState }) => (
                   <View className="mt-[18px] mb-[18px] gap-2">
                     <Text className="text-[14px] font-semibold">
-                      One-Time Password
+                      {t("One-Time Password")}
                     </Text>
                     <View className={cn(otpLockout.active && "opacity-50")}>
                       <OtpBoxes
@@ -335,7 +368,7 @@ export default function LoginScreen() {
                     )}
                     {otpLockout.active && (
                       <LockoutNotice>
-                        Too many attempts. Try again in{" "}
+                        {t("Too many attempts. Try again in")}{" "}
                         {formatCountdown(otpLockout.remaining)}.
                       </LockoutNotice>
                     )}
@@ -350,27 +383,29 @@ export default function LoginScreen() {
                     color="black"
                   />
                   <Text className="text-[14px] text-muted-foreground">
-                    Verifying code…
+                    {t("Verifying code…")}
                   </Text>
                 </View>
               ) : otpLockout.active ? (
                 <View className="h-12 w-full flex-row items-center justify-center rounded-xl opacity-50">
                   <Text className="text-sm font-semibold text-muted-foreground">
-                    Resend code
+                    {t("Resend code")}
                   </Text>
                 </View>
               ) : requestLockout.active ? (
                 <View className="h-12 w-full flex-row items-center justify-center gap-2 rounded-xl opacity-50">
                   <Clock size={16} className="text-muted-foreground" />
                   <Text className="text-sm font-semibold tabular-nums text-muted-foreground">
-                    Try again in {formatCountdown(requestLockout.remaining)}
+                    {t("Try again in")}{" "}
+                    {formatCountdown(requestLockout.remaining)}
                   </Text>
                 </View>
               ) : resendCooldown.active ? (
                 <View className="h-12 w-full flex-row items-center justify-center gap-2 rounded-xl opacity-50">
                   <Clock size={16} className="text-muted-foreground" />
                   <Text className="text-sm font-semibold tabular-nums text-muted-foreground">
-                    Resend code in {formatCountdown(resendCooldown.remaining)}
+                    {t("Resend code in")}{" "}
+                    {formatCountdown(resendCooldown.remaining)}
                   </Text>
                 </View>
               ) : (
@@ -381,7 +416,7 @@ export default function LoginScreen() {
                   className="w-full rounded-xl"
                 >
                   <Text className="text-sm font-semibold text-muted-foreground">
-                    Resend code
+                    {t("Resend code")}
                   </Text>
                 </Button>
               )}
@@ -393,7 +428,8 @@ export default function LoginScreen() {
               <View className="mt-[18px] h-[52px] flex-row items-center justify-center gap-2 rounded-xl bg-muted">
                 <Clock size={18} className="text-muted-foreground" />
                 <Text className="text-base font-semibold tabular-nums text-muted-foreground">
-                  Try again in {formatCountdown(requestLockout.remaining)}
+                  {t("Try again in")}{" "}
+                  {formatCountdown(requestLockout.remaining)}
                 </Text>
               </View>
             ) : (
@@ -415,20 +451,20 @@ export default function LoginScreen() {
                     submitting && "text-primary-foreground/70",
                   )}
                 >
-                  {submitting ? "Sending…" : "Send OTP"}
+                  {submitting ? t("Sending…") : t("Send OTP")}
                 </Text>
               </Button>
             ))}
         </Form>
 
         <Text className="mt-[22px] px-2.5 text-center text-[12px] leading-normal text-muted-foreground">
-          By continuing, you agree to our{" "}
+          {t("By continuing, you agree to our")}{" "}
           <Text className="text-[12px] text-foreground underline underline-offset-2">
-            Terms of Service
+            {t("Terms of Service")}
           </Text>{" "}
-          and{" "}
+          {t("and")}{" "}
           <Text className="text-[12px] text-foreground underline underline-offset-2">
-            Privacy Policy
+            {t("Privacy Policy")}
           </Text>
           .
         </Text>

@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
 import { slotPick, updateSession } from "@/api/tasks";
 import {
   showAlternativePickToast,
@@ -76,6 +78,7 @@ import { useToast } from "@/components/ui/toast";
  * back through this one state.
  */
 export default function WeekScreen() {
+  useLanguage();
   const router = useRouter();
   const user = useUserStore((s) => s.user);
   const tz = user?.timezone || "UTC";
@@ -166,7 +169,8 @@ export default function WeekScreen() {
       alternativeSlot: string,
       chose: "primary" | "alternative",
     ) => {
-      const chosenSlot = chose === "alternative" ? alternativeSlot : primarySlot;
+      const chosenSlot =
+        chose === "alternative" ? alternativeSlot : primarySlot;
       commitFocusedDate(zonedDate(chosenSlot, tz));
       setFocusTick((t) => t + 1);
       armFlash(session.id);
@@ -207,7 +211,7 @@ export default function WeekScreen() {
           for (const choice of choices) {
             try {
               const sitting = byId.get(choice.sittingId);
-              if (!sitting) throw new Error("Unknown sitting");
+              if (!sitting) throw new Error(t("Unknown sitting"));
               responses.set(
                 choice.sittingId,
                 await slotPick(choice.sittingId, {
@@ -407,7 +411,11 @@ export default function WeekScreen() {
       const sessions = Math.max(1, Math.floor(daysUntil / 2));
       router.push({
         pathname: "/task/new",
-        params: { deadline: start, sessions: String(sessions) },
+        params: {
+          deadline: start,
+          sessions: String(sessions),
+          title: t("Prepare for {title}", { title: session.title }),
+        },
       } as Href);
     },
     [tz, router],

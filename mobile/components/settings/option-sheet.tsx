@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
 import { Check, Search } from "@/components/Icons";
 import {
   BottomSheet,
@@ -67,6 +69,7 @@ function OptionSheetInner<T extends string | number>(
   }: OptionSheetProps<T>,
   ref: ForwardedRef<OptionSheetHandle>,
 ) {
+  useLanguage();
   const sheet = useBottomSheet();
   const [query, setQuery] = useState("");
   const found = search?.results(query);
@@ -171,13 +174,14 @@ function OptionSheetInner<T extends string | number>(
           })}
           {search && options.length === 0 ? (
             <Text className="py-6 text-center text-[14px] text-muted-foreground">
-              No matches
+              {t("No matches")}
             </Text>
           ) : null}
           {hiddenCount > 0 ? (
             <Text className="py-3 text-center text-[12.5px] text-muted-foreground">
-              Showing {options.length} of {found?.total} — refine your search to
-              see more
+              {t("Showing")}
+              {options.length} {t("of")}
+              {found?.total} {t("— refine your search to see more")}
             </Text>
           ) : null}
         </BottomSheetScrollView>

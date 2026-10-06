@@ -557,6 +557,12 @@ self-disable when their env is unset (`FCM_SERVICE_ACCOUNT`; the four `APNS_*`).
 (FCM `registration-token-not-registered`, APNs `410` / `Unregistered` / `BadDeviceToken`)
 are pruned on send.
 
+Notification copy follows the recipient's `User.lang` (`VI_VN` or `EN_US`) for inbox, SSE, and native push.
+Rows retain canonical English copy; known generated framing is translated on delivery and read, including existing inbox rows.
+Reminder dates and lead times use Vietnamese wording for `VI_VN`; user and upstream course titles and locations stay intact.
+OTP emails also follow the saved language. New email addresses use English until a language preference is saved.
+See [`localize-notification.ts`](src/notifications/localize-notification.ts) for supported notification templates.
+
 ### Live notifications (SSE)
 
 `GET /notifications/stream` — `@Sse`, `text/event-stream`, cookie-auth. The materializer

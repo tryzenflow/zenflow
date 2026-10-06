@@ -4,10 +4,12 @@ import { Global, Module } from "@nestjs/common";
 import { MailService } from "./mail.service";
 import { join } from "path";
 import { ConfigModule, ConfigService } from "@nestjs/config";
+import { PrismaModule } from "../prisma/prisma.module";
 
 @Global()
 @Module({
   imports: [
+    PrismaModule,
     MailerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

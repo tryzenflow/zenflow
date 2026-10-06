@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
 import { Settings } from "@/components/Icons";
 import { AppTabBar } from "@/components/tab-bar";
 import { MonthTabIcon, WeekTabIcon } from "@/components/tab-icons";
@@ -8,6 +10,7 @@ export const unstable_settings = {
 };
 
 export default function AppTabsLayout() {
+  useLanguage();
   return (
     // Fully custom bar (`components/tab-bar.tsx`): a floating glassmorphic
     // pill — the default edge-to-edge bar's rectangular `shadow*`/`elevation`
@@ -19,7 +22,7 @@ export default function AppTabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Week",
+          title: t("Week"),
           tabBarIcon: ({ color, size }) => (
             <WeekTabIcon color={color} size={size} />
           ),
@@ -28,7 +31,7 @@ export default function AppTabsLayout() {
       <Tabs.Screen
         name="month"
         options={{
-          title: "Month",
+          title: t("Month"),
           tabBarIcon: ({ color, size }) => (
             <MonthTabIcon color={color} size={size} />
           ),
@@ -37,7 +40,7 @@ export default function AppTabsLayout() {
       <Tabs.Screen
         name="settings"
         options={{
-          title: "Settings",
+          title: t("Settings"),
           tabBarIcon: ({ color, size }) => (
             <Settings color={color} size={size} />
           ),

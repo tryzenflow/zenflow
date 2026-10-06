@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/use-language";
 import { updateSession } from "@/api/tasks";
 import { ChevronLeft, ChevronRight } from "@/components/Icons";
 import {
@@ -45,6 +47,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
  * `docs/react-native-migration.md` Phase 4.
  */
 export default function MonthScreen() {
+  useLanguage();
   const router = useRouter();
   const user = useUserStore((s) => s.user);
   const tz = user?.timezone || "UTC";
@@ -173,7 +176,7 @@ export default function MonthScreen() {
             <Pressable
               onPress={() => goToMonth(addMonths(monthDate, -1))}
               hitSlop={8}
-              accessibilityLabel="Previous month"
+              accessibilityLabel={t("Previous month")}
             >
               <ChevronLeft size={18} className="text-muted-foreground" />
             </Pressable>
@@ -186,7 +189,7 @@ export default function MonthScreen() {
             <Pressable
               onPress={() => goToMonth(addMonths(monthDate, 1))}
               hitSlop={8}
-              accessibilityLabel="Next month"
+              accessibilityLabel={t("Next month")}
             >
               <ChevronRight size={18} className="text-muted-foreground" />
             </Pressable>
@@ -217,9 +220,7 @@ export default function MonthScreen() {
               // not `Date.now()` — but the gating here is still correct on
               // its own terms: a stale/off-screen page's error isn't user-
               // relevant.)
-              isActive={
-                monthLabel(pageMonthDate) === monthLabel(visibleMonth)
-              }
+              isActive={monthLabel(pageMonthDate) === monthLabel(visibleMonth)}
               onDragActiveChange={setDragActive}
               onOpenDay={openDay}
               onOpenOverflow={openDay}

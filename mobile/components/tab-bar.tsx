@@ -1,4 +1,5 @@
 import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
+import { useLanguage } from "@/hooks/use-language";
 import { Text } from "@/components/ui/text";
 import { NAV_THEME } from "@/lib/constants";
 import {
@@ -23,6 +24,7 @@ export function AppTabBar({
   emitter,
   navigateToTab,
 }: BottomTabBarProps) {
+  useLanguage();
   const { isDarkColorScheme } = useColorScheme();
   const theme = isDarkColorScheme ? NAV_THEME.dark : NAV_THEME.light;
   const insets = useSafeAreaInsets();
