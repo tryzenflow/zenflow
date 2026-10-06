@@ -86,8 +86,9 @@ interface SeriesSlotPickSheetProps {
  * Every option prints its own DATE, not just a time: the two plans are
  * independent, so an alternative can land on a different day than the primary
  * it replaces, and a card showing only "9:00 AM" would read as a same-day
- * time-of-day tweak. The mobile picker shows at most the three soonest
- * divergent sittings, so this is always a short scroll.
+ * time-of-day tweak. A series surfaces at most `MAX_SERIES_ALTERNATIVES` (5)
+ * divergent sittings and every one is listed, so the count in the header is
+ * exactly what Confirm applies; the list scrolls.
  */
 const SeriesSlotPickSheet = forwardRef<
   SeriesSlotPickSheetHandle,
@@ -263,7 +264,7 @@ const SeriesSlotPickSheet = forwardRef<
                   <Text className="text-[12.5px] text-muted-foreground mt-[3px]">
                     {single
                       ? `${title} · ${duration}m`
-                      : `${title} · ${pairs.length} of ${total} sittings have an alternative`}
+                      : `${title} · ${pairs.length} of ${total} have alternatives`}
                   </Text>
                 </View>
                 <Pressable
@@ -288,7 +289,7 @@ const SeriesSlotPickSheet = forwardRef<
             </View>
 
             <View className="gap-2 pt-1.5">
-              {pairs.slice(0, 3).map((pair) => (
+              {pairs.map((pair) => (
                 <View
                   key={pair.sitting.session.id}
                   className="flex-row items-stretch gap-2"
@@ -340,11 +341,7 @@ const SeriesSlotPickSheet = forwardRef<
 
           <View className="shrink-0 px-5 pt-4 pb-6">
             <Text className="text-[12px] text-muted-foreground leading-snug">
-              {single
-                ? "Pick a time, then confirm. "
-                : "Pick a time for each, then confirm. "}
-              Your pick helps Zenflow learn which times work for you — it never
-              moves anything else on your calendar.
+              {single ? "Pick a time, then confirm." : "Pick a time for each, then confirm."}
             </Text>
 
             <View className="pt-3 flex-col gap-1">
