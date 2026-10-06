@@ -184,15 +184,23 @@ Work (completed):
 - iOS simulator uses `http://localhost:5000/api/v1` directly (no address mapping needed).
 - Same Maestro test flow as Android with JUnit output and failure artifacts.
 
-### Commit 6 — `test(mobile): enable extended P1 flows`
+### Commit 6 — `test(mobile): enable extended P1 flows` ✅ DONE
 
 Purpose: add notification permission and DLU accounts to the nightly/extended suite once infrastructure is stable.
 
-Work:
+Representative files:
 
-- Hook `notification-permission.yaml` and `dlu-accounts.yaml` into a separate `test:e2e:extended` script.
-- Ensure DLU has a fixture/test provider (no real credentials in CI).
-- Control OS permission state before running notification flow.
+- `mobile/maestro/flows/extended.yaml` — new P1 entry point
+- `mobile/maestro/flows/notification-permission.yaml` — updated to assume authenticated state
+- `mobile/package.json` — added `test:e2e:extended` script
+
+Work (completed):
+
+- Created `extended.yaml` entry point that runs login/onboard → notification-permission → dlu-accounts → logout.
+- Updated `notification-permission.yaml` to assume authenticated state (no duplicate login when run from extended suite).
+- Added `test:e2e:extended` pnpm script pointing to `extended.yaml`.
+- DLU flow uses existing fixture/test provider IDs; requires `INGESTION_ENABLED=true` when available.
+- Notification flow documents permission state control commands for both platforms.
 
 ### Commit 7 — `docs: sync mobile e2e docs with implementation`
 

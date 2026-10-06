@@ -21,6 +21,7 @@
     "test": "vitest run",
     "test:e2e": "maestro test mobile/maestro/flows/smoke.yaml",
     "test:e2e:smoke": "maestro test mobile/maestro/flows/smoke.yaml",
+    "test:e2e:extended": "maestro test mobile/maestro/flows/extended.yaml",
     "test:e2e:android": "maestro test mobile/maestro/flows/smoke.yaml",
     "test:e2e:ios": "maestro test mobile/maestro/flows/smoke.yaml"
   },

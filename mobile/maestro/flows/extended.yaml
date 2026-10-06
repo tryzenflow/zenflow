@@ -1,0 +1,48 @@
+# P1 Extended Suite — notification permission + DLU accounts integration
+# Run this after the P0 smoke suite passes. These flows depend on platform-
+# specific permission state and/or fixture providers that may not be stable
+# in every CI run.
+#
+# Usage:
+#   maestro test mobile/maestro/flows/extended.yaml
+#
+# Prerequisites (in addition to the P0 smoke requirements):
+#   - Notification permission state pre-set via:
+#       Android: adb shell pm grant/revoke com.zenflow.app android.permission.POST_NOTIFICATIONS
+#       iOS:     xcrun simctl privacy booted grant/deny notifications com.zenflow.app
+#   - DLU fixture/test provider available (INGESTION_ENABLED may need to be true)
+#
+# Requires:
+#   - Backend services running with NODE_ENV=test
+#   - Expo dev client installed and Metro running
+#   - MAESTRO_APP_ID, E2E_EMAIL, EXPO_PUBLIC_API_URL, MAILHOG_URL set
+
+appId: ${MAESTRO_APP_ID}
+---
+- launchApp
+
+# ── Authenticate ────────────────────────────────────────────────────
+- runFlow:
+    file: login-otp.yaml
+- runFlow:
+    file: onboarding.yaml
+
+# ── P1 Flow 1: Notification Permission ──────────────────────────────
+# Tests the notification permission prompt, settings screen, and
+# inbox accessibility. Run with controlled permission state.
+- runFlow:
+    file: notification-permission.yaml
+
+# ── P1 Flow 2: DLU Accounts Integration ────────────────────────────
+# Tests connecting/syncing/disconnecting a DLU fixture provider.
+# Requires a test provider endpoint; skipped if not available.
+- runFlow:
+    file: dlu-accounts.yaml
+
+# ── Logout ──────────────────────────────────────────────────────────
+- runFlow:
+    file: logout.yaml
+
+# Verify clean state
+- assertVisible:
+    id: auth.login.emailInput

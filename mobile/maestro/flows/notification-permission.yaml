@@ -1,19 +1,18 @@
 # Notification Permission Flow (P1 Extended)
-# Tests: Fresh install → trigger permission prompt → handle allow/deny → notification inbox works
-# Prerequisites: Controlled permission state (pre-grant/revoke via simctl/adb)
+# Tests: Navigate to notification settings → handle permission state → notification inbox works
+# Prerequisites:
+#   - User already authenticated and onboarded
+#   - Controlled permission state (pre-grant/revoke via simctl/adb)
 # Expected: Permission path reachable, denied doesn't break nav, inbox opens
 
 appId: ${MAESTRO_APP_ID}
 ---
-# This flow is run separately from P0 smoke
+# This flow assumes the user is already logged in and onboarded.
+# When running standalone, run login-otp.yaml and onboarding.yaml first.
+#
+# Permission state control:
 # On Android: adb shell pm grant <package> android.permission.POST_NOTIFICATIONS (or revoke)
 # On iOS: xcrun simctl privacy booted grant notifications <bundle-id> (or deny)
-
-# Login and onboard first
-- runFlow:
-    file: login-otp.yaml
-- runFlow:
-    file: onboarding.yaml
 
 # Trigger notification permission (e.g., open settings → notifications)
 - tapOn:
