@@ -31,6 +31,9 @@ model User {
   /// User intent for native push (Settings toggle / OS-permission denial, set by mobile). Gates push fan-out only; in-app/SSE unaffected.
   allowNotifications Boolean @default(true)
 
+  /// Getting-started checklist steps done, plus `checklist-hidden` (`TIP_IDS` in @zenflow/shared); append-only.
+  seenTips String[] @default([])
+
   preferenceMatrix          Float[]   @default([])
   preferenceMatrixDecayedAt DateTime?
 
