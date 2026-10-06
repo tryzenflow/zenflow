@@ -294,16 +294,6 @@ services:
     networks:
       - edge
 
-  mail:
-    container_name: zenflow-mail-prod
-    image: axllent/mailpit:v1.31.4
-    expose:
-      - "1025"
-    ports:
-      - 8025:8025
-    networks:
-      - mail
-
   storage:
     container_name: zenflow-storage-prod
     image: alphatran/minio:latest
