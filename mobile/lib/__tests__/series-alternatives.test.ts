@@ -160,13 +160,6 @@ describe("pendingChoices", () => {
     ]);
   });
 
-  it("overrides every pending choice for 'use all alternatives'", () => {
-    expect(pendingChoices(states, "alternative")).toEqual([
-      { sittingId: "a", chose: "alternative" },
-      { sittingId: "b", chose: "alternative" },
-    ]);
-  });
-
   it("is empty once everything is decided", () => {
     expect(pendingChoices(states.map((s) => ({ ...s, decided: true })))).toEqual([]);
   });

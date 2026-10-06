@@ -116,15 +116,13 @@ export function singleSitting(
 
 /**
  * The batch a confirm sends: every sitting that has no recorded choice yet,
- * each with the side the user selected — or `override` for all of them ("use
- * all alternatives"). Decided sittings are skipped, for the same reason as
- * {@link undecidedSittingIds}.
+ * each with the side the user selected. Decided sittings are skipped, for the
+ * same reason as {@link undecidedSittingIds}.
  */
 export function pendingChoices(
   states: Array<{ id: string; decided: boolean; selected: SlotChose }>,
-  override?: SlotChose,
 ): SlotPickChoice[] {
   return states
     .filter((s) => !s.decided)
-    .map((s) => ({ sittingId: s.id, chose: override ?? s.selected }));
+    .map((s) => ({ sittingId: s.id, chose: s.selected }));
 }

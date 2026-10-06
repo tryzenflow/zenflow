@@ -79,9 +79,8 @@ interface SeriesSlotPickSheetProps {
  *
  * Everything is already scheduled at its primary when this shows, so the
  * primary starts selected and the sheet is an offer, not a gate. Tapping a card
- * only selects it; **Confirm** applies every choice in one batch, and the small
- * "Use all alternatives" applies the alternative to every sitting in one batch
- * too. Dismissing (X, or a scrim swipe) records nothing and keeps whatever is
+ * only selects it, as does the small "Select all alternatives"; **Confirm**
+ * then applies every choice in one batch. Dismissing (X, or a scrim swipe) records nothing and keeps whatever is
  * scheduled.
  *
  * Every option prints its own DATE, not just a time: the two plans are
@@ -157,8 +156,21 @@ const SeriesSlotPickSheet = forwardRef<
     Haptics.selectionAsync().catch(() => {});
   }
 
-  /** Send every pending choice as one batch — the selected sides, or every alternative. */
-  async function confirm(override?: SlotChose) {
+  /** Select the alternative for every sitting still open — nothing is sent until Confirm. */
+  function selectAllAlternatives() {
+    if (busy) return;
+    setPairs((all) =>
+      all.map((p) =>
+        p.state.decided
+          ? p
+          : { ...p, state: { ...p.state, selected: "alternative" } },
+      ),
+    );
+    Haptics.selectionAsync().catch(() => {});
+  }
+
+  /** Send every pending choice, as selected, in one batch. */
+  async function confirm() {
     const onConfirm = onConfirmRef.current;
     if (!onConfirm || busyRef.current) return;
     const choices = pendingChoices(
@@ -167,7 +179,6 @@ const SeriesSlotPickSheet = forwardRef<
         decided: p.state.decided,
         selected: p.state.selected,
       })),
-      override,
     );
     if (choices.length === 0) {
       closeSheet();
@@ -177,16 +188,6 @@ const SeriesSlotPickSheet = forwardRef<
     busyRef.current = true;
     setBusy(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    if (override) {
-      const ids = new Set(choices.map((c) => c.sittingId));
-      setPairs((all) =>
-        all.map((p) =>
-          ids.has(p.sitting.session.id)
-            ? { ...p, state: { ...p.state, selected: override } }
-            : p,
-        ),
-      );
-    }
 
     let result: SlotPickResult;
     try {
@@ -306,25 +307,25 @@ const SeriesSlotPickSheet = forwardRef<
                       >
                         <View className="flex-row items-center gap-2">
                           <View
-                            className={`size-[26px] shrink-0 items-center justify-center rounded-full border-2 ${isSelected ? "border-primary bg-primary" : "border-muted-foreground/40 bg-transparent"}`}
+                            className={`size-[22px] shrink-0 items-center justify-center rounded-full border-[1.5px] ${isSelected ? "border-primary bg-primary" : "border-border bg-transparent"}`}
                           >
                             {isSelected ? (
                               <Check
-                                size={15}
-                                strokeWidth={3.5}
+                                size={13}
+                                strokeWidth={3}
                                 className="text-primary-foreground"
                               />
                             ) : null}
                           </View>
                           <Text
-                            className="flex-1 text-[12px] font-medium text-muted-foreground"
+                            className="flex-1 text-[15px] font-semibold text-foreground"
                             numberOfLines={1}
                           >
                             {capitalize(option.day)}
                           </Text>
                         </View>
                         <Text
-                          className="mt-2 text-[13.5px] font-semibold"
+                          className="mt-1.5 text-[13px] text-muted-foreground"
                           numberOfLines={1}
                         >
                           {option.range}
@@ -362,14 +363,14 @@ const SeriesSlotPickSheet = forwardRef<
                 disabled={busy}
                 accessibilityLabel={
                   single
-                    ? "Use the alternative time"
-                    : "Use the alternative for every sitting"
+                    ? "Select the alternative time"
+                    : "Select the alternative for every sitting"
                 }
                 className="w-full rounded-xl h-[40px]"
-                onPress={() => void confirm("alternative")}
+                onPress={selectAllAlternatives}
               >
                 <Text className="text-[13px] font-medium text-muted-foreground">
-                  {single ? "Use the alternative" : "Use all alternatives"}
+                  {single ? "Select the alternative" : "Select all alternatives"}
                 </Text>
               </Button>
             </View>
