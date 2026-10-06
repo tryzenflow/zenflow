@@ -5,7 +5,12 @@ import { withSpan } from "../../observability/otel";
 import { PrismaService } from "../../prisma/prisma.service";
 import { PythonPlacer } from "./python-placer.service";
 import { ScheduleInfeasibleException } from "../schedule-infeasible.exception";
-import { blocksPlacement, ceilToSlot, MS_PER_MINUTE } from "../core/slot";
+import {
+  blocksPlacement,
+  ceilToSlot,
+  MS_PER_MINUTE,
+  type Interval,
+} from "../core/slot";
 import type {
   PlaceableTask,
   PlacementResult,
@@ -171,14 +176,18 @@ export class TaskPlacementService {
     members: SeriesMemberInput[];
     deadline: Date;
     now: Date;
+    /** Sittings of this series already on the calendar (a grow): they block
+     * their slot and their day for the new members. */
+    fixedOccupied?: Interval[];
   }): Promise<SeriesPlacementRow[]> {
-    const { user, members, deadline, now } = args;
+    const { user, members, deadline, now, fixedOccupied } = args;
     const placements = await this.python.placeSeries({
       user,
       members,
       deadline,
       now,
       trigger: "create",
+      fixedOccupied,
     });
     // `placeSeries` only computes starts; persist them here.
     await this.persistPlaced(placements);

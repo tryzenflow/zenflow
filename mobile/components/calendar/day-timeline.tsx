@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
+import { completeStep } from "@/hooks/use-checklist";
+import { useLastCreated } from "@/hooks/use-last-created";
 import { useNow } from "@/hooks/use-now";
 import { useUserStore } from "@/hooks/use-user-store";
 import { isPastDeadlineDrop } from "@/lib/overdue";
@@ -404,6 +406,17 @@ export function DayTimeline({
   }, [tasks, date, tz]);
 
   const layout = useMemo(() => getOverlapLayout(segments), [segments]);
+
+  // The block the checklist's "Move a task" / "Hold a task" spotlights point at:
+  // the task the user just created when it's on this day, else the first whole one.
+  const lastCreatedId = useLastCreated((s) => s.id);
+  const tipSegmentId = useMemo(() => {
+    const whole = segments.filter((s) => !s.continued);
+    return (
+      (whole.find((s) => s.taskId === lastCreatedId) ?? whole[0])?.segmentId ??
+      null
+    );
+  }, [segments, lastCreatedId]);
   const topShifts = useMemo(
     () => stackShifts(segments, layout, totalHeight / (DAILY_HORIZON * 60_000)),
     [segments, layout, totalHeight],
@@ -676,6 +689,7 @@ export function DayTimeline({
             scope,
             skipConflicting,
           });
+          completeStep("move-task");
 
           // Handle divergent response — show picker for primary vs alternative slot
           if (
@@ -1075,6 +1089,7 @@ export function DayTimeline({
                       onDragVerticalEdge={handleDragVerticalEdge}
                       bottomInset={tabBarOverlay}
                       flash={segment.taskId === flashTarget}
+                      tip={isActive && segment.segmentId === tipSegmentId}
                     />
                   );
                 })}

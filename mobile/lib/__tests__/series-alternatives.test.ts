@@ -1,6 +1,11 @@
-import type { SeriesSession } from "@zenflow/shared";
+import type { SeriesSession, Session } from "@zenflow/shared";
 import { describe, expect, it } from "vitest";
-import { divergentSittings, undecidedSittingIds } from "../series-alternatives";
+import {
+  divergentSittings,
+  pendingChoices,
+  singleSitting,
+  undecidedSittingIds,
+} from "../series-alternatives";
 
 const sitting = (o: Partial<SeriesSession> & { id: string }): SeriesSession =>
   ({
@@ -118,5 +123,52 @@ describe("undecidedSittingIds", () => {
         { id: "b", decided: true },
       ]),
     ).toEqual([]);
+  });
+});
+
+describe("singleSitting", () => {
+  it("wraps a plain session as a one-sitting list the shared sheet can show", () => {
+    const session = { id: "s1", title: "Essay", durationMinutes: 60 } as Session;
+    const d = singleSitting(session, {
+      slotProposalId: "sp-9",
+      primarySlot: "2026-06-30T01:00:00.000Z",
+      alternativeSlot: "2026-06-30T05:00:00.000Z",
+    });
+    expect(d).toMatchObject({
+      slotProposalId: "sp-9",
+      primarySlot: "2026-06-30T01:00:00.000Z",
+      alternativeSlot: "2026-06-30T05:00:00.000Z",
+      index: 1,
+      total: 1,
+    });
+    expect(d.session.id).toBe("s1");
+    expect(d.session.durationMinutes).toBe(60);
+  });
+});
+
+describe("pendingChoices", () => {
+  const states = [
+    { id: "a", decided: false, selected: "primary" as const },
+    { id: "b", decided: false, selected: "alternative" as const },
+    { id: "c", decided: true, selected: "alternative" as const },
+  ];
+
+  it("batches only the undecided sittings switched to their alternative", () => {
+    expect(pendingChoices(states)).toEqual([
+      { sittingId: "b", chose: "alternative" },
+    ]);
+  });
+
+  it("never sends a sitting left on its scheduled time", () => {
+    expect(
+      pendingChoices([
+        { id: "a", decided: false, selected: "primary" },
+        { id: "b", decided: false, selected: "primary" },
+      ]),
+    ).toEqual([]);
+  });
+
+  it("is empty once everything is decided", () => {
+    expect(pendingChoices(states.map((s) => ({ ...s, decided: true })))).toEqual([]);
   });
 });

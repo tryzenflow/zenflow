@@ -10,6 +10,8 @@ import {
 import {
   DEFAULT_REMINDER_CHOICES,
   LANGS,
+  TIP_IDS,
+  type TipId,
   type DefaultReminderChoice,
   type Lang,
   type UpdateUserInput,
@@ -49,4 +51,9 @@ export class UpdateUserDto implements UpdateUserInput {
   @IsBoolean()
   @IsOptional()
   allowNotifications?: boolean;
+
+  /** Marks one getting-started checklist step done, or the checklist hidden (idempotent). */
+  @IsIn(TIP_IDS)
+  @IsOptional()
+  seenTip?: TipId;
 }

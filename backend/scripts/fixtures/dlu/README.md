@@ -58,7 +58,7 @@ deterministic creation/change/deletion testing.
 ## Baseline: sync repetition without caching (pre issue #56)
 
 Seeded all 150 students as real accounts (`seed-and-sync.js`, OTP via
-MailHog), connected LMS+PORTAL, set the 3 watcher crons to `EVERY_MINUTE` for
+Mailpit), connected LMS+PORTAL, set the 3 watcher crons to `EVERY_MINUTE` for
 5 minutes, measured via `fake-dlu-server.ts`'s `/_/stats` counter (keyed by
 actual resource, not raw URL).
 

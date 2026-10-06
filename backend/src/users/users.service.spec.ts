@@ -114,3 +114,31 @@ describe("UsersService.update onboarding", () => {
     });
   });
 });
+
+describe("UsersService.update seenTip", () => {
+  it("appends the tip only when absent, and never writes seenTip as a column", async () => {
+    const update = jest.fn((args: UpdateArgs) => ({
+      id: user.id,
+      ...args.data,
+    }));
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 });
+    const module = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        { provide: PrismaService, useValue: { user: { update, updateMany } } },
+      ],
+    }).compile();
+    const service = module.get(UsersService);
+
+    await service.update(user.id, { seenTip: "move-task" });
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: user.id, NOT: { seenTips: { has: "move-task" } } },
+      data: { seenTips: { push: "move-task" } },
+    });
+    expect(update).toHaveBeenCalledWith({
+      where: { id: user.id },
+      data: {},
+    });
+  });
+});

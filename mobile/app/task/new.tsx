@@ -8,6 +8,8 @@ import {
   ModalToastScope,
   useModalToast,
 } from "@/components/tasks/modal-toast-scope";
+import { completeStep } from "@/hooks/use-checklist";
+import { useLastCreated } from "@/hooks/use-last-created";
 import { useSessionForm } from "@/hooks/use-task-form";
 import { useUserStore } from "@/hooks/use-user-store";
 import { setPendingSlotPick } from "@/lib/pending-slot-pick";
@@ -212,8 +214,10 @@ function NewSessionForm() {
     const handleCreated = (
       response: Awaited<ReturnType<typeof createSession>>,
     ) => {
+      completeStep("create-task");
+      useLastCreated.getState().set(response.id);
       // Handle divergent response — present a primary-vs-alternative pick.
-      // The week view owns the SlotPickSheet, so hand the payload off and
+      // The week view owns the slot-pick sheet, so hand the payload off and
       // land there first; `useFocusEffect` (app/(app)/index.tsx) opens the
       // sheet over the week view and the new block is already behind it.
       if (

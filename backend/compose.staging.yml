@@ -290,7 +290,7 @@ services:
     image: grafana/grafana:11.4.0
     restart: unless-stopped
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env.staging}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000}
       GF_FEATURE_TOGGLES_ENABLE: traceqlEditor traceToMetrics
       GF_LOG_LEVEL: warn

@@ -1,10 +1,11 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
-import { dateKey } from "@/lib/month-date-math";
+import { useLastCreated } from "@/hooks/use-last-created";
+import { dateKey, isOutsideMonth } from "@/lib/month-date-math";
 import { cn } from "@/lib/utils";
 import type { Session } from "@zenflow/shared";
 import { isSameDay } from "date-fns";
-import { forwardRef, memo } from "react";
+import { forwardRef, memo, useMemo } from "react";
 import { View, type ViewInstance } from "react-native";
 import { CELL_HEIGHT, MonthCell } from "./month-cell";
 
@@ -71,6 +72,32 @@ export const MonthGrid = memo(
     },
     ref,
   ) {
+    // The cells the checklist's spotlights point at. "Open a day": today when
+    // it's in this month, else mid-month. "Move a task": the day holding the
+    // task the user just created, else the first day with one.
+    const lastCreatedId = useLastCreated((s) => s.id);
+    const { openDayKey, moveDayKey } = useMemo(() => {
+      const inMonth = days.filter((d) => !isOutsideMonth(d, monthDate));
+      const openDay =
+        inMonth.find((d) => isSameDay(d, today)) ??
+        new Date(monthDate.getFullYear(), monthDate.getMonth(), 15);
+      let first: string | null = null;
+      let created: string | null = null;
+      for (const d of inMonth) {
+        const key = dateKey(d);
+        const list = tasksByDate.get(key);
+        if (!list?.length) continue;
+        first ??= key;
+        if (lastCreatedId && list.some((t) => t.id === lastCreatedId)) {
+          created = key;
+          break;
+        }
+      }
+      return {
+        openDayKey: dateKey(openDay),
+        moveDayKey: created ?? first ?? dateKey(openDay),
+      };
+    }, [days, monthDate, today, tasksByDate, lastCreatedId]);
     return (
       <View className="flex-1 px-3 pb-3.5 pt-2">
         <View className="flex-row">
@@ -113,6 +140,8 @@ export const MonthGrid = memo(
                     monthDate={monthDate}
                     sessions={tasksByDate.get(key) ?? NO_TASKS}
                     isToday={isSameDay(day, today)}
+                    openDayTip={key === openDayKey}
+                    moveDayTip={key === moveDayKey}
                     isDropTarget={highlightedKey === key}
                     isJustDropped={justDroppedKey === key}
                     draggingSessionId={draggingSessionId}

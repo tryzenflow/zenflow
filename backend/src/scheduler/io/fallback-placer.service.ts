@@ -81,6 +81,11 @@ export class FallbackPlacer {
     const windows = seriesDayWindows(daySpan, members.length);
     const siblings: Interval[] = [...fixedOccupied];
     const countByDay = new Map<string, number>();
+    // Already-placed siblings count toward the per-day cap too.
+    for (const iv of fixedOccupied) {
+      const d = localDateStr(new Date(iv.start), timezone);
+      countByDay.set(d, (countByDay.get(d) ?? 0) + 1);
+    }
     const capped = (d: string) =>
       (countByDay.get(d) ?? 0) >= MAX_SERIES_PER_DAY;
     const fullRange = { lo: 0, hi: daySpan };

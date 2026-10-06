@@ -597,7 +597,7 @@ Step by step, from a clean checkout:
 # 1. Install workspace deps + build @zenflow/shared (repo root, once)
 pnpm install && pnpm shared:build
 
-# 2. Bootstrap Postgres/Redis (x2 — session/OTP + rate-limit)/MailHog in the
+# 2. Bootstrap Postgres/Redis (x2 — session/OTP + rate-limit)/Mailpit in the
 #    background (from backend/)
 docker compose -f compose.dev.yml up -d
 

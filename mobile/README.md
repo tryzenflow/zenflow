@@ -72,6 +72,25 @@ mobile/
 | `/task/[id]/edit`   | `task/[id]/edit.tsx` (modal)| edit; type read-only                     |
 | `/notifications`    | `notifications.tsx` (modal) | ingestion inbox                          |
 
+### Getting started checklist
+
+First-run help is a "Getting started" pill floating at the top of Week and Month, left of the
+notification bell (`components/checklist/getting-started.tsx`), that opens a sheet of steps grouped Week view /
+Month view, each with a one-line how-to.
+A step ticks itself off when the user does it — `completeStep(id)` (`hooks/use-checklist.ts`) is
+called where the action succeeds: switch day, create a task, drag a task, hold a task, open Month,
+open a day, move a task to another day. Steps and copy live in `lib/checklist.ts`; step ids in
+`CHECKLIST_STEPS` (`@zenflow/shared`, rebuild it after editing). Done steps (and `checklist-hidden`,
+set by "Hide this checklist") are stored on `User.seenTips` via
+`PATCH /users/update/basic-info { seenTip }`, so progress follows the user across devices. The pill
+disappears when every step is done or it's hidden.
+
+Tapping a step closes the sheet, switches to the screen it lives on and spotlights the control
+(dim, how-to bubble with **Got it**): `<SpotlightAnchor step="…" />`
+(`components/checklist/spotlight-anchor.tsx`) goes inside that control, and `hooks/use-spotlight.ts`
+carries the request. It points at the task you just created (`hooks/use-last-created.ts`) and a step
+that needs a task (`STEP_NEEDS`) points at the + button until one exists. Placement math is in `lib/spotlight.ts`.
+
 Session model, series-scope editing, recurrence and reschedule match the web client — see
 [ADR-0002](../docs/adr/0002-scheduling-simplification.md).
 

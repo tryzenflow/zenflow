@@ -1,0 +1,13 @@
+diff --git a/node_modules/react-native-css-interop/dist/runtime/native/native-interop.js b/node_modules/react-native-css-interop/dist/runtime/native/native-interop.js
+index 9939dfc..c492416 100644
+--- a/node_modules/react-native-css-interop/dist/runtime/native/native-interop.js
++++ b/node_modules/react-native-css-interop/dist/runtime/native/native-interop.js
+@@ -176,7 +176,7 @@ function interop(component, configs, originalProps, ref) {
+     }, []);
+     sharedState.originalProps = originalProps;
+     sharedState.guardsEnabled = true;
+-    return (0, render_component_1.renderComponent)(component, sharedState, { ...props, ...memoOutput.handlers, ref }, memoOutput.possiblyAnimatedProps, memoOutput.variables, memoOutput.containers);
++    return (0, render_component_1.renderComponent)(component, sharedState, { ...props, ...memoOutput.handlers, ref: ref ?? props.ref }, memoOutput.possiblyAnimatedProps, memoOutput.variables, memoOutput.containers);
+ }
+ function initReducer({ dispatch, config, reducer, className, }) {
+     return reducer({

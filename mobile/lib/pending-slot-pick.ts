@@ -16,7 +16,7 @@ import type { DivergentSitting } from "./series-alternatives";
  * single-session one.
  */
 export type PendingSlotPick =
-  /** A plain (non-series) `TASK` — the #41 single-session sheet. */
+  /** A plain (non-series) `TASK` — shown as a one-sitting list in the shared sheet. */
   | {
       kind: "single";
       session: Session;
@@ -26,7 +26,7 @@ export type PendingSlotPick =
       tz: string;
     }
   /**
-   * A `sessionCount > 1` series — the #59 multi-sitting sheet. Carries only
+   * A `sessionCount > 1` series — the multi-sitting list in the same sheet. Carries only
    * the DIVERGENT sittings, already filtered and index-sorted by
    * `divergentSittings`; the rest have no alternative to offer and are
    * deliberately not shown.

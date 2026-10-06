@@ -1,3 +1,4 @@
+import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
 import {
   AlertCircle,
   AlertTriangle,
@@ -224,6 +225,9 @@ interface SessionBlockProps {
    * scale up + a brief amber ring) — set right after this session was created,
    * rescheduled, or the calendar teleported to it. */
   flash?: boolean;
+  /** Carry the checklist's "Move a task" / "Hold a task" spotlight anchors (the
+   * timeline sets it on one block per page). */
+  tip?: boolean;
   /** Bumped by the parent when a drop didn't move the session (save failed,
    * scope sheet cancelled) — releases the drop pin so the card snaps back. */
   settleKey?: number;
@@ -251,6 +255,7 @@ function SessionBlockImpl({
   onDragVerticalEdge,
   bottomInset = 0,
   flash = false,
+  tip = false,
   settleKey = 0,
 }: SessionBlockProps) {
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
@@ -766,6 +771,12 @@ function SessionBlockImpl({
           className="absolute inset-0 rounded-[10px] border-[1.5px] border-dashed border-muted-foreground/40 bg-muted/40"
         />
       )}
+      {tip && !segment.continued ? (
+        <>
+          <SpotlightAnchor step="move-task" />
+          <SpotlightAnchor step="block-actions" />
+        </>
+      ) : null}
       {flashing && (
         <Animated.View
           pointerEvents="none"

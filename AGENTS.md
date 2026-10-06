@@ -113,7 +113,7 @@ frontend `dev | build | typecheck | lint | test:e2e`.
 
 - Backend unit tests are `*.spec.ts` (Jest) next to the code — pure functions like the
   scheduler are the priority to cover. E2e is `backend/test/jest-e2e.json` (needs the test
-  DB). Frontend e2e is Playwright in `frontend/e2e/` (needs the backend stack + MailHog).
+  DB). Frontend e2e is Playwright in `frontend/e2e/` (needs the backend stack + Mailpit).
 - Run `pnpm --filter <app> typecheck` and `lint` before finishing. After editing shared
   types, `pnpm shared:build` first.
 - **Formatting:** ESLint (+ Prettier on the backend), 2-space indentation (`.editorconfig`);
@@ -129,7 +129,7 @@ frontend `dev | build | typecheck | lint | test:e2e`.
   `EXPO_PUBLIC_API_URL` points at the API; native iOS/Android isn't
   origin-based). Backend `CORS_ORIGIN` (`.env.dev`) is a comma-separated list
   (split in `main.ts`) and must contain both dev web origins.
-- OTP login emails are caught by MailHog in the local Docker stack.
+- OTP login emails are caught by Mailpit (UI/API on `:8025`) in the local Docker stack.
 - Native push (`backend/src/devices/`, `POST`/`DELETE /devices`): Android via
   `FCM_SERVICE_ACCOUNT`, iOS via `APNS_KEY` + `APNS_KEY_ID` + `APNS_TEAM_ID` +
   `APNS_BUNDLE_ID` (+ `APNS_PRODUCTION`). All optional — each provider

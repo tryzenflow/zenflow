@@ -20,6 +20,7 @@ const user = {
   onboardedAt: null as Date | null,
   lang: "VI_VN",
   allowNotifications: true,
+  seenTips: [] as string[],
 };
 
 const prismaStub = {
@@ -43,8 +44,15 @@ const prismaStub = {
         .map(({ id, name }) => ({ id, name })),
   },
   user: {
-    updateMany: ({ data }: { data: { onboardedAt: Date } }) => {
-      if (user.onboardedAt === null) user.onboardedAt = data.onboardedAt;
+    updateMany: ({
+      data,
+    }: {
+      data: { onboardedAt?: Date; seenTips?: { push: string } };
+    }) => {
+      if (data.onboardedAt && user.onboardedAt === null)
+        user.onboardedAt = data.onboardedAt;
+      const tip = data.seenTips?.push;
+      if (tip && !user.seenTips.includes(tip)) user.seenTips.push(tip);
       return { count: 1 };
     },
     update: ({ data }: { data: { allowNotifications?: boolean } }) => {
@@ -60,6 +68,7 @@ interface Body {
     tags: { name: string }[];
     onboardedAt: string | null;
     allowNotifications: boolean;
+    seenTips: string[];
   };
 }
 const parse = (r: { body: unknown }) => r.body as Body;
@@ -161,5 +170,20 @@ describe("onboarding API (e2e)", () => {
       .patch("/users/update/basic-info")
       .send({ allowNotifications: "no" })
       .expect(400);
+  });
+
+  it("records a done checklist step once and rejects unknown ids", async () => {
+    const http = request(app.getHttpServer());
+    const patch = (body: object) =>
+      http.patch("/users/update/basic-info").send(body);
+    await patch({ seenTip: "create-task" }).expect(200);
+    const again = await patch({ seenTip: "create-task" }).expect(200);
+    const other = await patch({ seenTip: "checklist-hidden" }).expect(200);
+    expect(parse(again).data.seenTips).toEqual(["create-task"]);
+    expect(parse(other).data.seenTips).toEqual([
+      "create-task",
+      "checklist-hidden",
+    ]);
+    await patch({ seenTip: "nope" }).expect(400);
   });
 });

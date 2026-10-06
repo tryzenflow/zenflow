@@ -21,8 +21,10 @@ import {
   type UpdateRecurringSheetHandle,
 } from "@/components/calendar/update-recurring-sheet";
 import { TodayButton } from "@/components/calendar/today-button";
+import { GettingStarted } from "@/components/checklist/getting-started";
 import { CreateSessionFab } from "@/components/tasks/create-task-fab";
 import { Text } from "@/components/ui/text";
+import { completeStep } from "@/hooks/use-checklist";
 import { useUserStore } from "@/hooks/use-user-store";
 import { addMonths, monthLabel } from "@/lib/month-date-math";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
@@ -76,6 +78,7 @@ export default function MonthScreen() {
   useFocusEffect(
     useCallback(() => {
       setReloadToken((n) => n + 1);
+      completeStep("open-month");
     }, []),
   );
 
@@ -87,6 +90,7 @@ export default function MonthScreen() {
   // actually on screen — so long-press-dragging a row out of the sheet routes
   // straight back into that page's drag machinery.
   function openDay(day: Date, tasks: Session[], drag: MonthDragHandle) {
+    completeStep("open-day");
     taskListSheetRef.current?.open(day, tasks, drag);
   }
 
@@ -131,6 +135,7 @@ export default function MonthScreen() {
         scope,
         skipConflicting,
       });
+      completeStep("move-day");
       setReloadToken((n) => n + 1);
       taskListSheetRef.current?.close();
     },
@@ -158,6 +163,7 @@ export default function MonthScreen() {
   return (
     <View className="flex-1 bg-background">
       <NotificationBell />
+      <GettingStarted />
       <View
         className="flex-row justify-between items-center gap-3 border-b border-border bg-background px-4 pb-4"
         style={{ paddingTop: insets.top + 16 }}
