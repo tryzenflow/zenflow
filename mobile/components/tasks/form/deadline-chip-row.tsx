@@ -1,12 +1,12 @@
 import { useLanguage } from "@/hooks/use-language";
-import { t, locale } from "@/lib/i18n";
+import { format, t } from "@/lib/i18n";
 import { getDeadlineOptions } from "@/api/tasks";
 import { Text } from "@/components/ui/text";
 import { TimePickerInline } from "@/components/ui/time-picker";
 import { cn } from "@/lib/utils";
 import { zonedDate, zonedNow, zonedWallClockToUtc } from "@zenflow/core";
 import type { DeadlineOptionsResponse } from "@zenflow/shared";
-import { addDays, format, isSameDay } from "date-fns";
+import { addDays, isSameDay } from "date-fns";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import { InlineDateField } from "./inline-date-field";
@@ -181,14 +181,7 @@ export function DeadlineChipRow({
   }, [editing, options, value, emit]);
 
   const preview = value
-    ? zonedDate(value, tz).toLocaleString(locale(), {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: locale() !== "vi-VN",
-      })
+    ? format(zonedDate(value, tz), "EEE, MMM d, h:mm a")
     : null;
 
   // Hard cap on how far out a Custom deadline can be set (max 60 days).

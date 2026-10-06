@@ -193,11 +193,7 @@ export function InlineDateField({
     >
       <Text className="text-[13.5px] font-medium text-foreground">
         {value
-          ? value.toLocaleDateString(locale(), {
-              weekday: "short",
-              month: "short",
-              day: "numeric",
-            })
+          ? format(value, "EEE, MMM d")
           : t("Select date")}
       </Text>
       <Calendar size={16} className="shrink-0 text-muted-foreground" />

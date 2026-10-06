@@ -134,6 +134,10 @@ export function SessionSheetFields({
               value={field.value ?? ""}
               onChangeText={field.onChange}
               placeholder={t("Room, building, or link (optional)")}
+              multiline={false}
+              numberOfLines={1}
+              autoCapitalize="none"
+              autoCorrect={false}
               className="h-[50px] rounded-xl border border-input bg-card px-4 text-base text-foreground"
             />
           </Field>

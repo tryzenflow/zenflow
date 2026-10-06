@@ -1,5 +1,5 @@
 import { useLanguage } from "@/hooks/use-language";
-import { t, locale } from "@/lib/i18n";
+import { format, t } from "@/lib/i18n";
 import { CalendarDays, CalendarRange, Trash2, X } from "@/components/Icons";
 import {
   BottomSheet,
@@ -9,7 +9,6 @@ import {
 } from "@/components/ui/bottom-sheet";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
 import * as Haptics from "expo-haptics";
 import {
   type ComponentType,
@@ -142,11 +141,7 @@ export const DeleteRecurringSheet = forwardRef<
   );
 
   const dateLabel = date
-    ? date.toLocaleDateString(locale(), {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-      })
+    ? format(date, "EEE, MMM d")
     : "";
 
   function pick(scope: DeleteRecurringScope) {

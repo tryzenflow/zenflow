@@ -1,6 +1,6 @@
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
-import { dateFnsLocale, locale } from "@/lib/i18n";
+import { dateFnsLocale, format, locale } from "@/lib/i18n";
 import {
   AlertTriangle,
   Bell,
@@ -31,7 +31,7 @@ import {
   type NotificationDto,
 } from "@zenflow/shared";
 import { formatDistanceToNow } from "date-fns";
-import { formatInTimeZone } from "date-fns-tz";
+import { zonedDate } from "@zenflow/core";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
@@ -122,11 +122,11 @@ function notificationVisual(eventName: string): {
 function eventTimeLabel(n: NotificationDto, tz: string): string | null {
   if (!n.eventEndsAt) return null;
   try {
-    const at = new Date(n.eventEndsAt);
-    const date = formatInTimeZone(at, tz, "MMM d", { locale: dateFnsLocale() });
+    const at = zonedDate(n.eventEndsAt, tz);
+    const date = format(at, "MMM d");
     if (notificationCategory(n.eventName) === "ASSIGNMENT")
       return t("due {date}", { date });
-    return `${date}, ${formatInTimeZone(at, tz, "HH:mm", { locale: dateFnsLocale() })}`;
+    return `${date}, ${format(at, "HH:mm")}`;
   } catch {
     return null;
   }
