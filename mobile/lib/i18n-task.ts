@@ -97,7 +97,7 @@ const taskTranslations: Record<string, string> = {
   "Change reminder": "Đổi nhắc nhở",
   "How long before it starts?": "Nhắc trước khi bắt đầu bao lâu?",
   "or custom": "hoặc tùy chỉnh",
-  "e.g. 2": "Ví dụ: 2",
+  "e.g. 2": "VD: 2",
   "Custom reminder amount": "Khoảng thời gian nhắc tùy chỉnh",
   "Add custom reminder": "Thêm nhắc nhở tùy chỉnh",
   Save: "Lưu",

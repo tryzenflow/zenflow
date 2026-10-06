@@ -193,7 +193,7 @@ export function ReminderField({
                 keyboardType="number-pad"
                 placeholder={t("e.g. 2")}
                 accessibilityLabel={t("Custom reminder amount")}
-                className="w-20 h-12"
+                className="h-12 w-28 px-3 text-[13px]"
               />
               <View className="flex-1 flex-row h-full gap-1">
                 {REMINDER_UNITS.map((u) => (
