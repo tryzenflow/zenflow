@@ -1,6 +1,7 @@
 import { listSessions, updateSession } from "@/api/tasks";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
+import { completeStep } from "@/hooks/use-checklist";
 import {
   dateKey,
   getMonthGridDays,
@@ -421,6 +422,7 @@ export function MonthPage({
         const updated = await updateSession(original.id, {
           scheduledStartTime: newStartISO,
         });
+        completeStep("move-day");
         setSessions((cur) =>
           (cur ?? []).map((t) => (t.id === original.id ? updated : t)),
         );

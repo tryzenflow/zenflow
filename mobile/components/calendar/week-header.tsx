@@ -1,3 +1,4 @@
+import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
 import { Text } from "@/components/ui/text";
 import { useNow } from "@/hooks/use-now";
 import { SESSION_TYPE_META, SESSION_TYPE_ORDER } from "@zenflow/core";
@@ -355,9 +356,11 @@ function WeekHeaderImpl(
         <Animated.View
           style={[{ flexDirection: "row", width: width * 3 }, stripStyle]}
         >
-          {blocks.map((weekDates) => (
+          {blocks.map((weekDates, i) => (
             <View key={dateKey(weekDates[0])} style={{ width }}>
               <View className="flex-row gap-1.5 px-4 pt-1 pb-0.5">
+                {/* The middle block is the week on screen. */}
+                {i === 1 ? <SpotlightAnchor step="switch-day" /> : null}
                 {weekDates.map((day) => renderChip(day))}
               </View>
             </View>

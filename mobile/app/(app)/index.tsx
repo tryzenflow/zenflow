@@ -35,7 +35,9 @@ import {
   type WeekPagerHandle,
 } from "@/components/calendar/week-pager";
 import { NotificationBell } from "@/components/notification-bell";
+import { GettingStarted } from "@/components/checklist/getting-started";
 import { CreateSessionFab } from "@/components/tasks/create-task-fab";
+import { completeStep } from "@/hooks/use-checklist";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useWeekDayTypes } from "@/hooks/use-week-day-types";
 import {
@@ -94,6 +96,15 @@ export default function WeekScreen() {
     setFocusedDate(day);
     setVisibleDate(day);
   }, []);
+  // The user picked a day (chip tap or swipe) — unlike `commitFocusedDate`
+  // alone, which a deep link / post-create teleport also calls.
+  const handleUserSwitchDay = useCallback(
+    (day: Date) => {
+      completeStep("switch-day");
+      commitFocusedDate(day);
+    },
+    [commitFocusedDate],
+  );
   const handleVisibleDateChange = useCallback((day: Date) => {
     setVisibleDate((cur) => (dateKey(cur) === dateKey(day) ? cur : day));
   }, []);
@@ -354,6 +365,7 @@ export default function WeekScreen() {
   // Long-press a block → open its action menu (Move to… / Add study session
   // before this).
   const handleRequestBlockMenu = useCallback((session: Session) => {
+    completeStep("block-actions");
     blockActionsSheetRef.current?.open(session);
   }, []);
 
@@ -439,12 +451,13 @@ export default function WeekScreen() {
   return (
     <View className="flex-1 bg-background">
       <NotificationBell />
+      <GettingStarted />
       <WeekHeader
         ref={headerRef}
         focusedDate={focusedDate}
         displayDate={visibleDate}
         tz={tz}
-        onSelectDay={commitFocusedDate}
+        onSelectDay={handleUserSwitchDay}
         progressSV={progressSV}
         headerStripSV={headerStripSV}
         onWeekDragBegin={handleWeekDragBegin}
@@ -457,7 +470,7 @@ export default function WeekScreen() {
         <WeekPager
           ref={pagerRef}
           focusedDate={focusedDate}
-          onFocusedDateChange={commitFocusedDate}
+          onFocusedDateChange={handleUserSwitchDay}
           onVisibleDateChange={handleVisibleDateChange}
           focusTick={focusTick}
           onSessionPress={handleSessionPress}

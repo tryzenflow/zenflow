@@ -1,4 +1,5 @@
 import { Plus } from "@/components/Icons";
+import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
 import { FAB_GLOW_INNER, FAB_GLOW_OUTER } from "@/lib/fab-glow";
 import { useTabBarOverlayHeight } from "@/lib/tab-bar-metrics";
 import {
@@ -59,6 +60,7 @@ export function CreateSessionFab({ tz }: { tz: string }) {
         style={FAB_GLOW_INNER}
         className="size-[52px] items-center justify-center rounded-[20px] bg-primary"
       >
+        <SpotlightAnchor step="create-task" />
         <Plus size={26} color="black" className="text-primary-foreground" />
       </Pressable>
     </View>
