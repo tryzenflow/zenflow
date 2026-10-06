@@ -153,11 +153,19 @@ describe("pendingChoices", () => {
     { id: "c", decided: true, selected: "alternative" as const },
   ];
 
-  it("batches each undecided sitting with the side the user selected", () => {
+  it("batches only the undecided sittings switched to their alternative", () => {
     expect(pendingChoices(states)).toEqual([
-      { sittingId: "a", chose: "primary" },
       { sittingId: "b", chose: "alternative" },
     ]);
+  });
+
+  it("never sends a sitting left on its scheduled time", () => {
+    expect(
+      pendingChoices([
+        { id: "a", decided: false, selected: "primary" },
+        { id: "b", decided: false, selected: "primary" },
+      ]),
+    ).toEqual([]);
   });
 
   it("is empty once everything is decided", () => {

@@ -90,7 +90,8 @@ interface SeriesSlotPickSheetProps {
  * Everything is already scheduled at its primary when this shows, so the
  * primary starts selected and the sheet is an offer, not a gate. Tapping a card
  * only selects it, as does the small "Select all alternatives"; **Confirm**
- * then applies every choice in one batch. Dismissing (X, or a scrim swipe) records nothing and keeps whatever is
+ * then applies the sittings switched to their alternative in one batch (and
+ * sends nothing at all when none were). Dismissing (X, or a scrim swipe) records nothing and keeps whatever is
  * scheduled.
  *
  * Every option prints its own DATE, not just a time: the two plans are
@@ -186,7 +187,7 @@ const SeriesSlotPickSheet = forwardRef<
     Haptics.selectionAsync().catch(() => {});
   }
 
-  /** Send every pending choice, as selected, in one batch. */
+  /** Send the sittings switched to their alternative — and only those — in one batch. */
   async function confirm() {
     const onConfirm = onConfirmRef.current;
     if (!onConfirm || busyRef.current) return;
@@ -197,6 +198,7 @@ const SeriesSlotPickSheet = forwardRef<
         selected: p.state.selected,
       })),
     );
+    // Nothing switched to an alternative: nothing to update, so just close.
     if (choices.length === 0) {
       closeSheet();
       return;
@@ -363,7 +365,12 @@ const SeriesSlotPickSheet = forwardRef<
               className="w-full rounded-xl h-[48px]"
               onPress={() => void confirm()}
             >
-              {busy ? <ActivityIndicator color="#fff" /> : null}
+              {busy ? (
+                <ActivityIndicator
+                  color="rgb(43, 20, 6)"
+                  style={{ marginRight: 10 }}
+                />
+              ) : null}
               <Text className="font-bold">Confirm</Text>
             </Button>
             <Button

@@ -115,14 +115,16 @@ export function singleSitting(
 }
 
 /**
- * The batch a confirm sends: every sitting that has no recorded choice yet,
- * each with the side the user selected. Decided sittings are skipped, for the
- * same reason as {@link undecidedSittingIds}.
+ * The batch a confirm sends: ONLY the sittings the user switched to their
+ * alternative. A sitting left on its scheduled time is never sent — it is
+ * already applied, so there is nothing to update — and neither is one already
+ * decided (see {@link undecidedSittingIds}). No alternatives selected means an
+ * empty batch: confirming then changes nothing.
  */
 export function pendingChoices(
   states: Array<{ id: string; decided: boolean; selected: SlotChose }>,
 ): SlotPickChoice[] {
   return states
-    .filter((s) => !s.decided)
-    .map((s) => ({ sittingId: s.id, chose: s.selected }));
+    .filter((s) => !s.decided && s.selected === "alternative")
+    .map((s) => ({ sittingId: s.id, chose: "alternative" as const }));
 }
