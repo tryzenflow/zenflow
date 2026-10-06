@@ -28,15 +28,6 @@ services:
     networks:
       - cache
 
-  mail:
-    container_name: zenflow-mail
-    image: mailhog/mailhog:v1.0.1
-    ports:
-      - 1025:1025
-      - 8025:8025
-    networks:
-      - mail
-
   bandit:
     container_name: zenflow-bandit
     build: ../services/bandit
@@ -69,6 +60,16 @@ services:
       - .env.dev
     networks:
       - storage
+    
+  
+  mail:
+    container_name: zenflow-mail-dev
+    image: axllent/mailpit:v1.31.4
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - mail
 
 networks:
   db:

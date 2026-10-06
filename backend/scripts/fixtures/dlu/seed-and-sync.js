@@ -1,6 +1,6 @@
 /**
  * Seeds every student in students.json as a real Zenflow account (OTP login
- * via MailHog, no password), connects both DLU integrations against the fake
+ * via Mailpit, no password), connects both DLU integrations against the fake
  * DLU server, then reports fake-dlu-server.ts request-count stats — the
  * "how many repetitions" baseline for issue #56 (per-section caching),
  * measured BEFORE that caching exists.
@@ -19,7 +19,7 @@ const fs = require("fs");
 const path = require("path");
 
 const API = "http://localhost:5000/api/v1";
-const MAILHOG = "http://localhost:8025";
+const MAIL = "http://localhost:8025"; // Mailpit UI/API from compose.dev.yml
 const FAKE_DLU = "http://localhost:4100";
 const CONCURRENCY = 8;
 
@@ -36,17 +36,16 @@ async function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-/** Poll MailHog for the OTP email and extract the 6-digit code. */
+/** Poll Mailpit for the OTP email and extract the 6-digit code. */
 async function fetchOtp(email, { retries = 20, delayMs = 500 } = {}) {
   for (let i = 0; i < retries; i++) {
-    const res = await fetch(`${MAILHOG}/api/v2/search?kind=to&query=${encodeURIComponent(email)}`);
-    const json = await res.json();
-    if (json.total > 0) {
-      const body = json.items[0].Content.Body;
-      const decoded = body
-        .replace(/=\r?\n/g, "")
-        .replace(/=([0-9A-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
-      const match = decoded.match(/\b\d{6}\b/);
+    const res = await fetch(`${MAIL}/api/v1/search?query=${encodeURIComponent(`to:${email}`)}&limit=1`);
+    const { messages } = await res.json();
+    if (messages?.length > 0) {
+      // Plain-text part only: the one 6-digit number in it is the code (the
+      // HTML part has colour codes like #333333).
+      const msg = await (await fetch(`${MAIL}/api/v1/message/${messages[0].ID}`)).json();
+      const match = (msg.Text ?? "").match(/\b\d{6}\b/);
       if (match) return match[0];
     }
     await sleep(delayMs);
