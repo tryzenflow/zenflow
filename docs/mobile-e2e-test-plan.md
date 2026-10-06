@@ -163,15 +163,26 @@ Work (completed):
 
 Validation: Push to a branch and verify the workflow runs end-to-end.
 
-### Commit 5 — `ci: add mobile e2e iOS workflow`
+### Commit 5 — `ci: add mobile e2e iOS workflow` ✅ DONE
 
 Purpose: run the P0 smoke suite on iOS simulator in GitHub Actions (macOS runner).
 
-Work:
+Representative files:
 
-- Same as Android but on `macos-latest`.
-- Use `xcrun simctl` to pre-grant/revoke notification permissions.
-- iOS simulator can use `http://localhost:5000/api/v1` for API.
+- `.github/workflows/mobile-e2e.yml` (new `ios-e2e` job added)
+
+Work (completed):
+
+- Added `ios-e2e` job to existing workflow running on `macos-latest`.
+- macOS runners don't have Docker, so backend services use Homebrew:
+  - PostgreSQL 17, Redis (two instances), MailHog, MinIO installed via `brew`.
+  - Inline `.env.test` with macOS-specific settings (Postgres on port 5432, peer auth).
+- iOS simulator setup:
+  - Auto-selects latest available iPhone simulator via `xcrun simctl`.
+  - `expo prebuild --platform ios` + `pod install` + `xcodebuild`.
+  - App installed via `xcrun simctl install`.
+- iOS simulator uses `http://localhost:5000/api/v1` directly (no address mapping needed).
+- Same Maestro test flow as Android with JUnit output and failure artifacts.
 
 ### Commit 6 — `test(mobile): enable extended P1 flows`
 
@@ -416,5 +427,5 @@ Add checklist:
 - [x] Add P0 flow YAML files.
 - [x] Add Android CI job.
 - [x] Add failure artifact upload.
-- [ ] Add iOS CI after service provisioning is solved.
+- [x] Add iOS CI after service provisioning is solved.
 - [ ] Promote P0 workflow to release gate when stable.
