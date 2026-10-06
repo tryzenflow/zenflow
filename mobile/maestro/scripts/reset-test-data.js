@@ -9,10 +9,23 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api/v1
 const MAILHOG_URL = process.env.MAILHOG_URL || 'http://localhost:8025';
 
 async function resetDatabase() {
-  // This would call a test-only backend endpoint to truncate/reset test data
-  // For now, this is a placeholder
-  console.log('[reset-test-data] Would reset test database');
-  console.log('[reset-test-data] NOTE: Requires backend test endpoint - implement with backend test helper');
+  try {
+    const response = await fetch(`${API_URL}/test/reset`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    const data = await response.json();
+    if (data.success) {
+      console.log('[reset-test-data] Test database reset successfully');
+    } else {
+      console.warn('[reset-test-data] Reset failed:', data.message);
+    }
+  } catch (error) {
+    console.error('[reset-test-data] Database reset error:', error.message);
+    throw error;
+  }
 }
 
 async function resetMailHog() {

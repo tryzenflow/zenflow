@@ -6,34 +6,149 @@
  */
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
+const MAILHOG_URL = process.env.MAILHOG_URL || 'http://localhost:8025';
 const EMAIL = process.env.E2E_EMAIL;
-const PASSWORD = process.env.E2E_PASSWORD; // Not used with OTP auth - would need session token
 
-async function createTask(title, type, date, durationMinutes) {
-  // This would need a valid session token from login
-  // For now, this is a placeholder - the actual implementation
-  // would use the backend API with proper auth
-  console.log(`[seed-task] Would create task: ${title} (${type}) on ${date} for ${durationMinutes}min`);
-  console.log('[seed-task] NOTE: Requires valid auth session - implement with backend test helper');
-
-  // Placeholder: return a fake task ID for testing
-  return `e2e-${title.toLowerCase().replace(/\s+/g, '-')}`;
+async function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// CLI usage
-const [title, type, date, durationMinutes] = process.argv.slice(2);
-if (!title || !type || !date || !durationMinutes) {
-  console.error('Usage: node seed-task.js <title> <type> <date> <durationMinutes>');
-  console.error('Types: FOCUS, ASSIGNMENT, EXAM, LECTURE, DND');
-  process.exit(1);
+async function requestOtp(email) {
+  const response = await fetch(`${API_URL}/auth/otp/request`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  const data = await response.json();
+  if (!data.success) {
+    throw new Error(`Failed to request OTP: ${data.message}`);
+  }
+  console.log('[seed-task] OTP requested for:', email);
 }
 
-createTask(title, type, date, parseInt(durationMinutes))
-  .then(taskId => {
-    console.log(taskId);
+async function getOtpFromMailHog(email, timeoutMs = 60000) {
+  const startTime = Date.now();
+  const pollIntervalMs = 2000;
+
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const response = await fetch(`${MAILHOG_URL}/api/v2/messages?limit=50`);
+      const data = await response.json();
+      const messages = data.items || [];
+
+      for (const msg of messages) {
+        const to = msg.To || [];
+        if (to.some(t => t.Mailbox + '@' + t.Domain === email)) {
+          const html = msg.Content.Body || '';
+          const patterns = [
+            /<strong[^>]*>(\d{6})<\/strong>/i,
+            /code[^>]*>(\d{6})</i,
+            />\s*(\d{6})\s*</i,
+            /\b(\d{6})\b/,
+          ];
+          for (const pattern of patterns) {
+            const match = html.match(pattern);
+            if (match) return match[1];
+          }
+        }
+      }
+    } catch (error) {
+      console.warn(`[seed-task] MailHog poll error: ${error.message}`);
+    }
+    await sleep(pollIntervalMs);
+  }
+  throw new Error(`Timeout: No OTP found for ${email} within ${timeoutMs}ms`);
+}
+
+async function verifyOtp(email, otp) {
+  const response = await fetch(`${API_URL}/auth/otp/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, providedOtp: otp }),
+  });
+  const data = await response.json();
+  if (!data.success) {
+    throw new Error(`OTP verification failed: ${data.message}`);
+  }
+  // Extract session cookie from response headers
+  const cookies = response.headers.get('set-cookie') || '';
+  console.log('[seed-task] OTP verified, session established');
+  return cookies;
+}
+
+async function seedTask(cookie, title, type, deadline, durationMinutes, sessionCount = 1) {
+  const response = await fetch(`${API_URL}/test/seed-task`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Cookie: cookie,
+    },
+    body: JSON.stringify({
+      title,
+      type,
+      deadline,
+      durationMinutes,
+      sessionCount,
+    }),
+  });
+  const data = await response.json();
+  if (!data.success) {
+    throw new Error(`Failed to seed task: ${data.message}`);
+  }
+  console.log('[seed-task] Task seeded:', JSON.stringify(data.data, null, 2));
+  return data.data;
+}
+
+async function main() {
+  const [title, type, date, durationMinutes, sessionCount] = process.argv.slice(2);
+  if (!title || !type || !date || !durationMinutes) {
+    console.error('Usage: node seed-task.js <title> <type> <date> <durationMinutes> [sessionCount]');
+    console.error('Types: FOCUS, ASSIGNMENT, EXAM, LECTURE, DND');
+    process.exit(1);
+  }
+
+  if (!EMAIL) {
+    console.error('[seed-task] E2E_EMAIL environment variable is required');
+    process.exit(1);
+  }
+
+  try {
+    console.log('[seed-task] Starting task seeding...');
+    console.log('[seed-task] Email:', EMAIL);
+
+    // 1. Request OTP
+    await requestOtp(EMAIL);
+
+    // 2. Get OTP from MailHog
+    console.log('[seed-task] Polling MailHog for OTP...');
+    const otp = await getOtpFromMailHog(EMAIL);
+    console.log('[seed-task] OTP received:', otp);
+
+    // 3. Verify OTP and get session cookie
+    const cookie = await verifyOtp(EMAIL, otp);
+
+    // 4. Seed task
+    const deadline = new Date(date).toISOString();
+    const result = await seedTask(
+      cookie,
+      title,
+      type,
+      deadline,
+      parseInt(durationMinutes),
+      parseInt(sessionCount) || 1
+    );
+
+    // Output task ID for shell capture
+    if (result.session) {
+      console.log(result.session.id);
+    } else if (result.sessions && result.sessions.length > 0) {
+      console.log(result.sessions[0].id);
+    }
     process.exit(0);
-  })
-  .catch(err => {
+  } catch (err) {
     console.error(`[seed-task] ${err.message}`);
     process.exit(1);
-  });
+  }
+}
+
+main();

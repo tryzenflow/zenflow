@@ -5,7 +5,8 @@ Audience: mobile, QA, and CI maintainers implementing issue #79.
 **Current state**: 
 - Commit 1 complete: Stable `testID`s added to app screens/components (login, onboarding, tab bar, task FAB, task form screen, all form components, tab bar)
 - Commit 2 complete: Maestro harness added with smoke entry flow, package scripts, helpers, and scripts
-- Next: Commit 3 (deterministic test data), Commit 4 (Android CI), Commit 5 (iOS CI), Commit 6 (extended flows), Commit 7 (docs sync)
+- Commit 3 complete: Deterministic test data — backend test endpoints (`POST /test/reset`, `POST /test/seed-task`) and wired Maestro scripts
+- Next: Commit 4 (Android CI), Commit 5 (iOS CI), Commit 6 (extended flows), Commit 7 (docs sync)
 
 Use this plan to land the **actual mobile E2E suite first**. The docs describe the harness that the remaining commits add.
 
@@ -99,30 +100,33 @@ Work (completed):
   - `EXPO_PUBLIC_API_URL`
   - `MAILHOG_URL`
 
-### Commit 3 — `test(mobile): make test data deterministic` (NEXT)
+### Commit 3 — `test(mobile): make test data deterministic` ✅ DONE
 
 Purpose: add/reset seed helpers so edit/calendar flows do not depend on create-task passing first.
 
 Representative files:
 
-- `mobile/maestro/scripts/reset-test-data.js` — needs backend test endpoint integration
-- `mobile/maestro/scripts/seed-task.js` — needs backend test endpoint integration
-- `mobile/maestro/helpers/auth.yaml` — helper for login/OTP
-- `mobile/maestro/helpers/navigation.yaml` — helper for tab navigation
-- `mobile/maestro/helpers/tasks.yaml` — helper for task seeding/cleanup
+- `backend/src/test/test.module.ts` — test-only NestJS module (conditionally imported)
+- `backend/src/test/test.controller.ts` — `POST /test/reset` and `POST /test/seed-task`
+- `backend/src/test/test.service.ts` — Prisma operations for truncate/seed
+- `backend/src/app.module.ts` — conditional `TestModule` import when `NODE_ENV=test`
+- `mobile/maestro/scripts/reset-test-data.js` — calls `POST /test/reset` + clears MailHog
+- `mobile/maestro/scripts/seed-task.js` — OTP login → `POST /test/seed-task`
 
-Work:
+Work (completed):
 
-- Implement reset test data against the test database (use backend test stack).
-- Clear MailHog before top-level flows.
-- Generate a run id and unique email per run.
-- Seed tasks directly via API/backend helper so flows are independent.
+- Added test-only backend endpoints behind `NODE_ENV === "test"` guard.
+- `POST /test/reset` truncates all data tables in FK-safe order.
+- `POST /test/seed-task` creates sessions for the authenticated user.
+- `reset-test-data.js` calls the reset endpoint + clears MailHog.
+- `seed-task.js` authenticates via OTP, then seeds a task via the test endpoint.
 
 Validation:
 
 ```bash
+pnpm --filter backend typecheck   # no new errors from src/test/
 node mobile/maestro/scripts/reset-test-data.js
-node mobile/maestro/scripts/seed-task.js "E2E Seeded Task" FOCUS 2025-01-15 60
+E2E_EMAIL=mobile-e2e+test@example.test node mobile/maestro/scripts/seed-task.js "E2E Seeded Task" TASK 2025-01-15 60
 ```
 
 ### Commit 4 — `ci: add mobile e2e Android workflow`
@@ -398,7 +402,7 @@ Add checklist:
 - [x] Add stable `testID`s.
 - [x] Add Maestro install/package scripts.
 - [x] Add OTP helper.
-- [ ] Add reset/seed helpers (backend integration needed).
+- [x] Add reset/seed helpers (backend test endpoints + script integration).
 - [x] Add P0 flow YAML files.
 - [ ] Add Android CI job.
 - [ ] Add failure artifact upload.

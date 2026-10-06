@@ -28,6 +28,7 @@ import { NotificationsModule } from "./notifications/notifications.module";
 import { RemindersModule } from "./reminders/reminders.module";
 import { DevicesModule } from "./devices/devices.module";
 import { ObservabilityModule } from "./observability/observability.module";
+import { TestModule } from "./test/test.module";
 
 @Module({
   imports: [
@@ -251,6 +252,8 @@ import { ObservabilityModule } from "./observability/observability.module";
     DevicesModule,
     // Per-session reminders: SchedulerRegistry one-shot timers -> notifications.
     RemindersModule,
+    // Test-only endpoints for E2E test data management (reset, seed)
+    ...(process.env.NODE_ENV === "test" ? [TestModule] : []),
   ],
   providers: [AppService, MailService],
   controllers: [AppController],
