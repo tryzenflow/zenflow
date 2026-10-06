@@ -211,7 +211,7 @@ export default function WeekScreen() {
           for (const choice of choices) {
             try {
               const sitting = byId.get(choice.sittingId);
-              if (!sitting) throw new Error("Unknown sitting");
+              if (!sitting) throw new Error(t("Unknown sitting"));
               responses.set(
                 choice.sittingId,
                 await slotPick(choice.sittingId, {
@@ -411,7 +411,11 @@ export default function WeekScreen() {
       const sessions = Math.max(1, Math.floor(daysUntil / 2));
       router.push({
         pathname: "/task/new",
-        params: { deadline: start, sessions: String(sessions) },
+        params: {
+          deadline: start,
+          sessions: String(sessions),
+          title: t("Prepare for {title}", { title: session.title }),
+        },
       } as Href);
     },
     [tz, router],

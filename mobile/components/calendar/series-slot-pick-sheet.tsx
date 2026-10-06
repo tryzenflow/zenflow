@@ -1,3 +1,5 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t } from "@/lib/i18n";
 import { Check, X } from "@/components/Icons";
 import {
   BottomSheet,
@@ -105,6 +107,7 @@ const SeriesSlotPickSheet = forwardRef<
   SeriesSlotPickSheetHandle,
   SeriesSlotPickSheetProps
 >((_props, ref) => {
+  useLanguage();
   const sheet = useBottomSheet();
   const { toast } = useToast();
   const { height } = useWindowDimensions();
@@ -241,7 +244,7 @@ const SeriesSlotPickSheet = forwardRef<
     }
     const taken = result.failed.some((f) => getSlotTakenError(f.error));
     if (taken) showSlotTakenToast(toast);
-    else showErrorToast(toast, result.failed[0].error, "Couldn't update that");
+    else showErrorToast(toast, result.failed[0].error, t("Couldn't update that"));
   }
 
   /**
@@ -267,18 +270,22 @@ const SeriesSlotPickSheet = forwardRef<
           <View className="flex-row items-start justify-between gap-3">
             <View className="min-w-0 flex-1">
               <Text className="text-[18px] font-bold tracking-[-0.01em] leading-tight">
-                {single ? "Two good times for this" : "Alternative times"}
+                {single ? t("Two good times for this") : t("Alternative times")}
               </Text>
               <Text className="text-[12.5px] text-muted-foreground mt-[3px]">
                 {single
                   ? `${title} · ${duration}m`
-                  : `${title} · ${pairs.length} of ${total} have alternatives`}
+                  : t("{title} · {count} of {total} have alternatives", {
+                      title,
+                      count: pairs.length,
+                      total,
+                    })}
               </Text>
             </View>
             <Pressable
               onPress={handleDismiss}
               disabled={busy}
-              accessibilityLabel="Close — keeps everything as scheduled"
+              accessibilityLabel={t("Close — keeps everything as scheduled")}
               className="inline-flex size-8 items-center justify-center rounded-full bg-muted shrink-0"
             >
               <X size={15} className="text-muted-foreground" />
@@ -288,10 +295,10 @@ const SeriesSlotPickSheet = forwardRef<
           {/* Column headings, once, above every row — like the checklist's groups. */}
           <View className="flex-row gap-2 pt-6">
             <Text className="flex-1 px-1 text-[12px] font-medium text-muted-foreground">
-              Scheduled
+              {t("Scheduled")}
             </Text>
             <Text className="flex-1 px-1 text-[12px] font-medium text-muted-foreground">
-              Alternative
+              {t("Alternative")}
             </Text>
           </View>
 
@@ -320,7 +327,7 @@ const SeriesSlotPickSheet = forwardRef<
                       onPress={() => select(pair, option.kind)}
                       accessibilityRole="radio"
                       accessibilityState={{ selected: isSelected }}
-                      accessibilityLabel={`${option.kind === "primary" ? "Scheduled" : "Alternative"} — ${option.label}`}
+                      accessibilityLabel={`${option.kind === "primary" ? t("Scheduled") : t("Alternative")} — ${option.label}`}
                       className={`flex-1 overflow-hidden rounded-xl border-2 px-3 py-3 ${isSelected ? "border-primary bg-primary/[0.08]" : "border-border bg-card"}`}
                     >
                       <View className="flex-row items-center gap-2">
@@ -357,15 +364,15 @@ const SeriesSlotPickSheet = forwardRef<
 
           <Text className="pt-4 text-[12px] text-muted-foreground leading-snug">
             {single
-              ? "Pick a time, then confirm."
-              : "Pick a time for each, then confirm."}
+              ? t("Pick a time, then confirm.")
+              : t("Pick a time for each, then confirm.")}
           </Text>
 
           <View className="pt-3 flex-col gap-1">
             <Button
               size="lg"
               disabled={busy}
-              accessibilityLabel="Confirm the selected times"
+              accessibilityLabel={t("Confirm the selected times")}
               className="w-full rounded-xl h-[48px]"
               onPress={() => void confirm()}
             >
@@ -375,21 +382,21 @@ const SeriesSlotPickSheet = forwardRef<
                   style={{ marginRight: 10 }}
                 />
               ) : null}
-              <Text className="font-bold">Confirm</Text>
+              <Text className="font-bold">{t("Confirm")}</Text>
             </Button>
             <Button
               variant="ghost"
               disabled={busy}
               accessibilityLabel={
                 single
-                  ? "Select the alternative time"
-                  : "Select the alternative for every sitting"
+                  ? t("Select the alternative time")
+                  : t("Select the alternative for every sitting")
               }
               className="w-full rounded-xl h-[40px]"
               onPress={selectAllAlternatives}
             >
               <Text className="text-[13px] font-medium text-muted-foreground">
-                {single ? "Select the alternative" : "Select all alternatives"}
+                {single ? t("Select the alternative") : t("Select all alternatives")}
               </Text>
             </Button>
           </View>

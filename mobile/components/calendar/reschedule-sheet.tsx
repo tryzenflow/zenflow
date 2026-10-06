@@ -1,6 +1,6 @@
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
-import { format } from "@/lib/i18n";
+import { formatTitle } from "@/lib/i18n";
 import { InlineDateField } from "@/components/tasks/form/inline-date-field";
 import {
   BottomSheet,
@@ -237,7 +237,7 @@ export const RescheduleSheet = forwardRef<
               className="mt-[3px] text-[13px] text-muted-foreground"
             >
               {session?.title ?? ""}
-              {date ? ` · ${format(date, "EEE, MMM d")}` : ""}
+              {date ? ` · ${formatTitle(date, "EEE, MMM d")}` : ""}
             </Text>
           </View>
 

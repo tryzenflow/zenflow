@@ -1,3 +1,5 @@
+import { useLanguage } from "@/hooks/use-language";
+import { t } from "@/lib/i18n";
 import { Check, ChevronRight, ClipboardList } from "@/components/Icons";
 import {
   BottomSheet,
@@ -44,6 +46,7 @@ const BELL_CLEARANCE = 60;
  * that step lives on and spotlights the control (`SpotlightAnchor`).
  */
 export function GettingStarted() {
+  useLanguage();
   const sheet = useBottomSheet();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -110,13 +113,16 @@ export function GettingStarted() {
               sheet.open();
             }}
             accessibilityRole="button"
-            accessibilityLabel={`Getting started, ${done} of ${total} done`}
+            accessibilityLabel={t("Getting started, {done} of {total} done", {
+              done,
+              total,
+            })}
             style={FAB_GLOW_INNER}
             className="h-9 flex-row items-center gap-1.5 rounded-full bg-primary px-3 active:opacity-80"
           >
             <ClipboardList size={15} className="text-primary-foreground" />
             <Text className="text-[13px] font-bold text-primary-foreground">
-              {done === 0 ? "Getting started" : `${done}/${total}`}
+              {done === 0 ? t("Getting started") : `${done}/${total}`}
             </Text>
           </Pressable>
         </Animated.View>
@@ -127,10 +133,13 @@ export function GettingStarted() {
           <BottomSheetView hadHeader={false} className="gap-1 pt-2">
             <View className="mb-2 px-1">
               <Text className="text-[19px] font-bold tracking-tight">
-                Getting started
+                {t("Getting started")}
               </Text>
               <Text className="mt-[3px] text-[13px] text-muted-foreground">
-                {done} of {total} done — they tick off as you try them. Tap a step to be shown.
+                {t(
+                  "{done} of {total} done — they tick off as you try them. Tap a step to be shown.",
+                  { done, total },
+                )}
               </Text>
             </View>
 
@@ -144,7 +153,7 @@ export function GettingStarted() {
                     key={item.id}
                     onPress={() => showMe(item.id, item.blockedBy)}
                     accessibilityRole="button"
-                    accessibilityLabel={`Show me: ${item.title}`}
+                    accessibilityLabel={t("Show me: {title}", { title: item.title })}
                     className="flex-row items-start gap-3 rounded-xl px-1 py-2.5 active:opacity-70"
                   >
                     <View
@@ -179,7 +188,7 @@ export function GettingStarted() {
                       </Text>
                       {item.blockedBy ? (
                         <Text className="mt-0.5 text-[12.5px] font-medium text-primary">
-                          Create a task first.
+                          {t("Create a task first.")}
                         </Text>
                       ) : null}
                     </View>
@@ -201,7 +210,7 @@ export function GettingStarted() {
               className="mt-2 items-center rounded-xl py-3 active:opacity-70"
             >
               <Text className="text-[14px] font-medium text-muted-foreground">
-                Hide this checklist
+                {t("Hide this checklist")}
               </Text>
             </Pressable>
           </BottomSheetView>

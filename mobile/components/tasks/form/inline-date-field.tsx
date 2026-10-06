@@ -16,7 +16,7 @@ import DateTimePicker, {
 } from "@react-native-community/datetimepicker";
 import { zonedNow } from "@zenflow/core";
 import { addDays, addMonths, startOfMonth } from "date-fns";
-import { format } from "@/lib/i18n";
+import { format, formatTitle } from "@/lib/i18n";
 import { useEffect, useMemo, useState } from "react";
 import { Platform, Pressable, View } from "react-native";
 
@@ -57,7 +57,7 @@ function LocalizedDateGrid({
         >
           <ChevronLeft size={20} className="text-foreground" />
         </Pressable>
-        <Text className="font-semibold">{format(month, "MMMM yyyy")}</Text>
+        <Text className="font-semibold">{formatTitle(month, "MMMM yyyy")}</Text>
         <Pressable
           disabled={!after}
           onPress={() => setMonth(addMonths(month, 1))}

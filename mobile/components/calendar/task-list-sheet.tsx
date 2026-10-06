@@ -1,6 +1,6 @@
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
-import { format } from "@/lib/i18n";
+import { format, formatTitle } from "@/lib/i18n";
 import {
   BottomSheet,
   BottomSheetContent,
@@ -137,7 +137,7 @@ export const SessionListSheet = forwardRef<
         <BottomSheetHeader>
           <View className="min-w-0 flex-1">
             <Text className="text-[19px] font-bold">
-              {day ? format(day, "EEE, MMM d") : ""}
+              {day ? formatTitle(day, "EEE, MMM d") : ""}
             </Text>
             <Text className="mt-[3px] text-[13px] text-muted-foreground">
               {summarize(sessions)}

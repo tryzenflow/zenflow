@@ -1,4 +1,5 @@
 import { CHECKLIST_STEPS, type ChecklistStep, type TipId } from "@zenflow/shared";
+import { t } from "./i18n";
 
 /**
  * The "Getting started" checklist (issue #116). RN-free so it can be unit-tested
@@ -7,36 +8,27 @@ import { CHECKLIST_STEPS, type ChecklistStep, type TipId } from "@zenflow/shared
  * labels in `block-actions-sheet.tsx` / `reschedule-sheet.tsx`.
  */
 
+/** Title/hint read through `t()` on access, so a language switch shows up without rebuilding the table. */
+function copy(title: string, hint: string) {
+  return {
+    get title() {
+      return t(title);
+    },
+    get hint() {
+      return t(hint);
+    },
+  };
+}
+
 export const STEP_COPY: Record<ChecklistStep, { title: string; hint: string }> =
   {
-    "switch-day": {
-      title: "Switch day",
-      hint: "Swipe the calendar, or tap a day at the top.",
-    },
-    "create-task": {
-      title: "Create a task",
-      hint: "Tap +, or long-press an empty slot.",
-    },
-    "move-task": {
-      title: "Move a task",
-      hint: "Hold and drag it to reschedule in 15-minute steps. Tap to edit.",
-    },
-    "block-actions": {
-      title: "Hold a task for more actions",
-      hint: "Hold it without moving. Move to… changes the day.",
-    },
-    "open-month": {
-      title: "Open the Month view",
-      hint: "Tap Month in the tab bar.",
-    },
-    "open-day": {
-      title: "Open a day",
-      hint: "Tap a day in the month to see its tasks.",
-    },
-    "move-day": {
-      title: "Move a task to another day",
-      hint: "Hold a task and drag it onto another day, or tap the calendar button.",
-    },
+    "switch-day": copy("Switch day", "Swipe the calendar, or tap a day at the top."),
+    "create-task": copy("Create a task", "Tap +, or tap the orange area on an empty day."),
+    "move-task": copy("Move a task", "Hold and drag it to reschedule in 15-minute steps. Tap to edit."),
+    "block-actions": copy("Hold a task for more actions", "Hold it without moving. Move to… changes the day."),
+    "open-month": copy("Open the Month view", "Tap Month in the tab bar."),
+    "open-day": copy("Open a day", "Tap a day in the month to see its tasks."),
+    "move-day": copy("Move a task to another day", "Hold a task and drag it onto another day, or tap the calendar button."),
   };
 
 /**
@@ -72,12 +64,16 @@ export const CHECKLIST_GROUPS: {
 }[] = [
   {
     id: "week",
-    title: "Week view",
+    get title() {
+      return t("Week view");
+    },
     steps: ["switch-day", "create-task", "move-task", "block-actions"],
   },
   {
     id: "month",
-    title: "Month view",
+    get title() {
+      return t("Month view");
+    },
     steps: ["open-month", "open-day", "move-day"],
   },
 ];

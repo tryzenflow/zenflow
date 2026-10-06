@@ -1,4 +1,4 @@
-import { t } from "@/lib/i18n";
+import { getLanguage, t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { isAxiosError } from "axios";
@@ -17,9 +17,12 @@ import {
   type TextInputInstance,
   View,
 } from "react-native";
+import type { User } from "@zenflow/shared";
 import { z } from "zod";
 
 import { requestOtp, verifyOtp } from "@/api/auth";
+import { updateBasicInfo } from "@/api/users";
+import { LanguageSelect } from "@/components/language-select";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Form, FormField, FormInput } from "@/components/ui/form";
@@ -31,6 +34,7 @@ import { cacheSessionUser } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import { hideEmail } from "@/utils/hide-email";
 import { Clock, Loader2Icon } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /**
  * Client-side proactive throttle on "Resend code" — shorter than the
@@ -158,6 +162,10 @@ export default function LoginScreen() {
   const params = useLocalSearchParams<{ callback?: string }>();
   const setUser = useUserStore((state) => state.setUser);
   const { toast } = useToast();
+  const insets = useSafeAreaInsets();
+  // Set when the user picks a language here, so login keeps it over the
+  // account's stored one (see `handleOtpVerify`).
+  const pickedLanguage = useRef(false);
 
   const [stage, setStage] = useState<"email" | "otp">("email");
   const [submitting, setSubmitting] = useState(false);
@@ -227,8 +235,20 @@ export default function LoginScreen() {
     try {
       const result = await verifyOtp(getValues("email"), data.otp);
       toast(t("Login successfully"), "success");
-      setUser(result.data);
-      await cacheSessionUser(result.data);
+      let user: User = result.data;
+      // New accounts start as English server-side; carry the language shown on
+      // this screen over so a Vietnamese default (or pick) isn't flipped back.
+      // Existing accounts keep theirs unless it was picked here.
+      const language = getLanguage();
+      if (user.lang !== language && (pickedLanguage.current || !user.onboardedAt)) {
+        try {
+          user = await updateBasicInfo({ lang: language });
+        } catch {
+          // Offline blip — the account's own language applies instead.
+        }
+      }
+      setUser(user);
+      await cacheSessionUser(user);
     } catch (error) {
       if (isAxiosError(error) && error.response?.status === 429) {
         otpLockout.start(getRetryAfterSeconds(error));
@@ -252,6 +272,12 @@ export default function LoginScreen() {
 
   return (
     <View className="flex-1 bg-background px-5">
+      <View
+        className="absolute right-5 z-10"
+        style={{ top: insets.top + 8 }}
+      >
+        <LanguageSelect onSelect={() => (pickedLanguage.current = true)} />
+      </View>
       <View className="flex-1 justify-center">
         <View className="items-center gap-3.5 pb-[26px]">
           <Logo className="h-[60px] w-[60px] rounded-full shadow-lg shadow-brand-orange/30" />
@@ -374,7 +400,7 @@ export default function LoginScreen() {
                 <View className="h-12 w-full flex-row items-center justify-center gap-2 rounded-xl opacity-50">
                   <Clock size={16} className="text-muted-foreground" />
                   <Text className="text-sm font-semibold tabular-nums text-muted-foreground">
-                    {t("Try again in")}
+                    {t("Try again in")}{" "}
                     {formatCountdown(requestLockout.remaining)}
                   </Text>
                 </View>
@@ -382,7 +408,7 @@ export default function LoginScreen() {
                 <View className="h-12 w-full flex-row items-center justify-center gap-2 rounded-xl opacity-50">
                   <Clock size={16} className="text-muted-foreground" />
                   <Text className="text-sm font-semibold tabular-nums text-muted-foreground">
-                    {t("Resend code in")}
+                    {t("Resend code in")}{" "}
                     {formatCountdown(resendCooldown.remaining)}
                   </Text>
                 </View>
@@ -406,7 +432,7 @@ export default function LoginScreen() {
               <View className="mt-[18px] h-[52px] flex-row items-center justify-center gap-2 rounded-xl bg-muted">
                 <Clock size={18} className="text-muted-foreground" />
                 <Text className="text-base font-semibold tabular-nums text-muted-foreground">
-                  {t("Try again in")}
+                  {t("Try again in")}{" "}
                   {formatCountdown(requestLockout.remaining)}
                 </Text>
               </View>

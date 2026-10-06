@@ -432,4 +432,76 @@ export default {
     "Không có chỗ trống trước hạn chót\nChọn hạn chót muộn hơn hoặc giảm số buổi rồi thử lại.",
   "Won't fit before the deadline\nPick a later deadline.":
     "Không đủ thời gian trước hạn chót\nChọn hạn chót muộn hơn.",
+  "Getting started":
+    "Bắt đầu nhanh",
+  "Getting started, {done} of {total} done":
+    "Bắt đầu nhanh, đã xong {done}/{total}",
+  "{done} of {total} done — they tick off as you try them. Tap a step to be shown.":
+    "Đã xong {done}/{total} — các bước tự được đánh dấu khi bạn thử. Chạm vào một bước để xem hướng dẫn.",
+  "Show me: {title}":
+    "Hướng dẫn: {title}",
+  "Create a task first.":
+    "Hãy tạo một công việc trước.",
+  "Hide this checklist":
+    "Ẩn danh sách này",
+  "Got it":
+    "Đã hiểu",
+  "Week view":
+    "Chế độ tuần",
+  "Month view":
+    "Chế độ tháng",
+  "Switch day":
+    "Đổi ngày",
+  "Swipe the calendar, or tap a day at the top.":
+    "Vuốt lịch, hoặc chạm vào một ngày ở trên cùng.",
+  "Create a task":
+    "Tạo công việc",
+  "Tap +, or long-press an empty slot.":
+    "Chạm +, hoặc nhấn giữ một ô trống.",
+  "Move a task":
+    "Di chuyển công việc",
+  "Hold and drag it to reschedule in 15-minute steps. Tap to edit.":
+    "Nhấn giữ và kéo để đổi lịch theo từng 15 phút. Chạm để chỉnh sửa.",
+  "Hold a task for more actions":
+    "Nhấn giữ công việc để xem thêm thao tác",
+  "Hold it without moving. Move to… changes the day.":
+    "Nhấn giữ mà không kéo. “Chuyển đến…” để đổi ngày.",
+  "Open the Month view":
+    "Mở chế độ tháng",
+  "Tap Month in the tab bar.":
+    "Chạm Tháng trên thanh tab.",
+  "Open a day":
+    "Mở một ngày",
+  "Tap a day in the month to see its tasks.":
+    "Chạm vào một ngày trong tháng để xem công việc của ngày đó.",
+  "Move a task to another day":
+    "Chuyển công việc sang ngày khác",
+  "Hold a task and drag it onto another day, or tap the calendar button.":
+    "Nhấn giữ công việc rồi kéo sang ngày khác, hoặc chạm nút lịch.",
+  "{title} · {count} of {total} have alternatives":
+    "{title} · {count}/{total} buổi có thời gian khác",
+  "Pick a time, then confirm.":
+    "Chọn một thời gian rồi xác nhận.",
+  "Pick a time for each, then confirm.":
+    "Chọn thời gian cho từng buổi rồi xác nhận.",
+  "Confirm the selected times":
+    "Xác nhận các thời gian đã chọn",
+  "Select the alternative time":
+    "Chọn thời gian khác",
+  "Select the alternative for every sitting":
+    "Chọn thời gian khác cho mọi buổi",
+  "Select the alternative":
+    "Chọn thời gian khác",
+  "Select all alternatives":
+    "Chọn tất cả thời gian khác",
+  "Couldn't update that":
+    "Không thể cập nhật",
+  "Add a task to this day":
+    "Thêm công việc vào ngày này",
+  "Tap to add a task":
+    "Chạm để thêm công việc",
+  "Tap +, or tap the orange area on an empty day.":
+    "Chạm +, hoặc chạm vùng màu cam trong ngày trống.",
+  "Prepare for {title}":
+    "Chuẩn bị cho {title}",
 } as Record<string, string>;

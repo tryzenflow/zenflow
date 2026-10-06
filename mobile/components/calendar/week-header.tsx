@@ -1,7 +1,7 @@
 import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
-import { format } from "@/lib/i18n";
+import { format, formatTitle } from "@/lib/i18n";
 import { Text } from "@/components/ui/text";
 import { useNow } from "@/hooks/use-now";
 import { SESSION_TYPE_META, SESSION_TYPE_ORDER } from "@zenflow/core";
@@ -313,7 +313,7 @@ function WeekHeaderImpl(
         }`}
       >
         <Text className="text-[10.5px] font-semibold text-muted-foreground">
-          {format(day, "EEE")}
+          {formatTitle(day, "EEE")}
         </Text>
         <View
           className={`h-[30px] w-[30px] items-center justify-center rounded-full text-base ${
@@ -350,7 +350,7 @@ function WeekHeaderImpl(
       >
         <View className="px-4 pb-2">
           <Text className="text-xl font-bold tracking-tight">
-            {format(shownDate, "MMMM yyyy")}
+            {formatTitle(shownDate, "MMMM yyyy")}
           </Text>
           <Text className="mt-px text-[11.5px] font-medium text-muted-foreground">
             {format(titleDays[0], "MMM d")} – {format(titleDays[6], "MMM d")}

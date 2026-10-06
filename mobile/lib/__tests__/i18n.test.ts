@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   format,
+  formatTitle,
   getLanguage,
   locale,
   localizedDeadlineShort,
@@ -11,6 +12,11 @@ import {
 
 afterEach(() => setLanguage("en"));
 describe("mobile language", () => {
+  it("defaults to Vietnamese", async () => {
+    vi.resetModules();
+    const fresh = await import("../i18n");
+    expect(fresh.getLanguage()).toBe("vi");
+  });
   it("translates explicit copy and preserves arbitrary user content", () => {
     setLanguage("vi");
     expect(t("Settings")).toBe("Cài đặt");
@@ -19,6 +25,14 @@ describe("mobile language", () => {
     expect(locale()).toBe("vi-VN");
     setLanguage("en");
     expect(t("Settings")).toBe("Settings");
+  });
+  it("capitalizes standalone Vietnamese date labels", () => {
+    setLanguage("vi");
+    const d = new Date(2026, 9, 6);
+    expect(format(d, "MMMM yyyy")).toBe("tháng 10 2026");
+    expect(formatTitle(d, "MMMM yyyy")).toBe("Tháng 10 2026");
+    setLanguage("en");
+    expect(formatTitle(d, "MMMM yyyy")).toBe("October 2026");
   });
   it("notifies mounted display subscribers without duplicate events", () => {
     let calls = 0;

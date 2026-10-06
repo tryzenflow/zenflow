@@ -10,7 +10,6 @@ import {
   ChevronLeft,
   Clock,
   GraduationCap,
-  Globe,
   MapPin,
   Search,
   Tag,
@@ -75,16 +74,6 @@ const COPY = {
   },
   get back() {
     return t("Back");
-  },
-  language: {
-    get title() {
-      return t("Choose your language");
-    },
-    get body() {
-      return t(
-        "You can change this any time in Settings. Everything after this screen switches immediately.",
-      );
-    },
   },
   name: {
     get title() {
@@ -219,15 +208,7 @@ const COPY = {
 /** Max timezones listed at once; more matches prompt a "refine" hint. */
 const TZ_LIMIT = 50;
 
-const LANGUAGE_SUB: Record<string, string> = {
-  get vi() {
-    return t("Vietnamese · default");
-  },
-  en: "English",
-};
-
-const STEP_ICON: Partial<Record<OnboardingStep, typeof Globe>> = {
-  language: Globe,
+const STEP_ICON: Partial<Record<OnboardingStep, typeof User>> = {
   name: User,
   dlu: GraduationCap,
   notifications: Bell,
@@ -504,32 +485,6 @@ export default function OnboardingScreen() {
   let footer: React.ReactNode = null;
 
   switch (step) {
-    case "language":
-      ({ title, body } = COPY.language);
-      content = (
-        <Group>
-          {[...LANGUAGES]
-            .sort((x, y) => (x.value === "vi" ? -1 : y.value === "vi" ? 1 : 0))
-            .map((l) => (
-              <Row
-                key={l.value}
-                selected={prefs.language === l.value}
-                onPress={() => void savePref({ language: l.value })}
-              >
-                <Text className="text-[26px] leading-[32px]">{l.flag}</Text>
-                <View className="flex-1">
-                  <Text className="text-[16px] font-semibold">{l.label}</Text>
-                  <Text className="text-[13px] text-muted-foreground">
-                    {LANGUAGE_SUB[l.value]}
-                  </Text>
-                </View>
-                <RadioDot selected={prefs.language === l.value} />
-              </Row>
-            ))}
-        </Group>
-      );
-      footer = primary(COPY.continue, advance);
-      break;
     case "name":
       ({ title, body } = COPY.name);
       content = (
@@ -617,7 +572,7 @@ export default function OnboardingScreen() {
               <View key={t(b)} className="flex-row items-start gap-2.5">
                 <Check size={16} className="mt-0.5 text-primary" />
                 <Text className="flex-1 text-[13.5px] text-muted-foreground">
-                  {b}
+                  {t(b)}
                 </Text>
               </View>
             ))}
@@ -681,7 +636,7 @@ export default function OnboardingScreen() {
           >
             <MapPin size={20} className="text-primary" />
             <View className="flex-1">
-              <Text className="text-[12px] font-bold uppercase tracking-wider text-muted-foreground">
+              <Text className="text-[12.5px] font-semibold text-muted-foreground">
                 {COPY.timezone.detected}
               </Text>
               <Text className="text-[15px] font-semibold">
@@ -967,7 +922,7 @@ export default function OnboardingScreen() {
             {body}
           </Text>
         </View>
-        <View className={cn("px-5", step === "language" ? "mt-6" : "mt-6")}>
+        <View className="px-5 mt-6">
           {content}
         </View>
       </ScrollView>

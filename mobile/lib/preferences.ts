@@ -35,7 +35,7 @@ export interface Preferences {
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
-  language: "en",
+  language: "vi",
   timezone: deviceTimezone(),
   timezoneMode: "device",
   defaultReminder: 10,
@@ -151,6 +151,16 @@ async function savePreferences(next: Preferences) {
   } catch {
     // Non-fatal — the in-memory value still applies this session.
   }
+}
+
+/**
+ * Language pick while signed out (the login screen's select). There is no
+ * session to PATCH yet, so it only switches the UI and caches the choice;
+ * login then pushes it to the account (see `app/(auth)/login.tsx`).
+ */
+export async function setSignedOutLanguage(language: Lang) {
+  setLanguage(language);
+  await savePreferences({ ...(await loadPreferences()), language });
 }
 
 /** Edit accepted by `update`; `timezone` may be the "device" sentinel. */

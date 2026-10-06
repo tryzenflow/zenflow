@@ -7,7 +7,6 @@ import { BULK_TAGS_MAX, TAG_NAME_MAX } from "@zenflow/shared";
  */
 
 export const ONBOARDING_STEPS = [
-  "language",
   "name",
   "dlu",
   "notifications",
@@ -18,7 +17,7 @@ export const ONBOARDING_STEPS = [
 ] as const;
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 
-export const FIRST_STEP: OnboardingStep = "language";
+export const FIRST_STEP: OnboardingStep = "name";
 
 /** Next step, clamped at "done". */
 export function nextStep(step: OnboardingStep): OnboardingStep {

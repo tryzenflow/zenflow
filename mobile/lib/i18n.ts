@@ -7,7 +7,7 @@ import taskTranslations from "./i18n-task";
 import vietnamese from "./i18n-vi";
 
 export type Language = "en" | "vi";
-let language: Language = "en";
+let language: Language = "vi";
 const translations: Record<string, string> = {
   ...vietnamese,
   ...taskTranslations,
@@ -67,6 +67,12 @@ export function format(
     ...options,
     locale: dateFnsLocale(),
   });
+}
+
+/** `format` for standalone labels (headers, titles): Vietnamese month/day names come back lowercase. */
+export function formatTitle(...args: Parameters<typeof format>) {
+  const text = format(...args);
+  return text.charAt(0).toLocaleUpperCase(locale()) + text.slice(1);
 }
 
 export function localizedDeadlineShort(

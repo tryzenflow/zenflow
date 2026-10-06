@@ -1,4 +1,4 @@
-import { format } from "./i18n";
+import { format, formatTitle } from "./i18n";
 import { zonedDate, zonedWallClockToUtc } from "@zenflow/core";
 import {
   addMonths as dateFnsAddMonths,
@@ -67,7 +67,7 @@ export function dateKey(day: Date): string {
 
 /** Header label for the paginated month header, e.g. "June 2026". */
 export function monthLabel(monthDate: Date): string {
-  return format(monthDate, "MMMM yyyy");
+  return formatTitle(monthDate, "MMMM yyyy");
 }
 
 /** Same-named wrapper around `date-fns`' `addMonths`, re-exported so callers
