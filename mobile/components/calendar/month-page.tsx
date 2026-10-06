@@ -1,5 +1,6 @@
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
+import { useMinSkeleton } from "@/hooks/use-min-skeleton";
 import { format } from "@/lib/i18n";
 import { listSessions, updateSession } from "@/api/tasks";
 import { Text } from "@/components/ui/text";
@@ -136,6 +137,7 @@ export function MonthPage({
   const [sessions, setSessions] = useState<Session[] | null>(
     () => getCachedDaySessions(monthKey) ?? null,
   );
+  const showSkeleton = useMinSkeleton(sessions === null);
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   // A day key to pulse for a moment right after a drop lands on it.
@@ -505,7 +507,7 @@ export function MonthPage({
 
   return (
     <View ref={pageRef} onLayout={measureGeometry} className="flex-1">
-      {sessions === null ? (
+      {sessions === null || showSkeleton ? (
         <MonthGridSkeleton />
       ) : (
         <MonthGrid

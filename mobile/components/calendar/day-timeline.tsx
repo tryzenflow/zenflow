@@ -10,6 +10,7 @@ import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { completeStep } from "@/hooks/use-checklist";
 import { useLastCreated } from "@/hooks/use-last-created";
+import { useMinSkeleton } from "@/hooks/use-min-skeleton";
 import { useNow } from "@/hooks/use-now";
 import { useUserStore } from "@/hooks/use-user-store";
 import { isPastDeadlineDrop } from "@/lib/overdue";
@@ -386,18 +387,10 @@ export function DayTimeline({
     onStateChange?.(loading ? "loading" : error ? "error" : "ready");
   }, [loading, error, onStateChange]);
 
-  // Hold the skeleton back a beat: a fetch that resolves quickly (the common
-  // case on a warm connection) never flashes it, which is what made paging
-  // feel abrupt. A cold day still gets the skeleton once the wait is real.
-  const [skeletonVisible, setSkeletonVisible] = useState(false);
-  useEffect(() => {
-    if (!loading) {
-      setSkeletonVisible(false);
-      return;
-    }
-    const t = setTimeout(() => setSkeletonVisible(true), 160);
-    return () => clearTimeout(t);
-  }, [loading]);
+  // A cold day shows the skeleton straight away and keeps it up for a moment
+  // (`useMinSkeleton`), so the grid swaps in once instead of flickering from
+  // empty to filled. Warm days aren't `loading`, so they stay instant.
+  const showSkeleton = useMinSkeleton(loading);
 
   const refetch = useCallback(async () => {
     try {
@@ -1026,7 +1019,7 @@ export function DayTimeline({
               <Text className="text-base font-semibold"> {t("Try again")}</Text>
             </Button>
           </>
-        ) : loading && skeletonVisible ? (
+        ) : showSkeleton ? (
           <Animated.View style={animatedContentStyle} className="relative">
             <TimeGutter hourHeight={hourHeight} />
 
@@ -1080,11 +1073,11 @@ export function DayTimeline({
                   />
                 ))}
 
-                {tasks.length === 0 && !loading && (
+                {segments.length === 0 && (
                   <Pressable
                     onPress={openNewTaskForm}
                     accessibilityRole="button"
-                    accessibilityLabel={t("Add a task to this day")}
+                    accessibilityLabel={t("Add a session to this day")}
                     className="absolute items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-brand-orange/70 bg-brand-orange/5 active:bg-brand-orange/10"
                     style={{
                       left: BLOCK_GUTTER,
@@ -1094,8 +1087,11 @@ export function DayTimeline({
                     }}
                   >
                     <Plus size={20} className="text-brand-orange" />
-                    <Text className="text-[13px] font-semibold text-brand-orange">
-                      {t("Tap to add a task")}
+                    <Text className="text-center text-[14px] font-semibold text-brand-orange">
+                      {t("Tap to add a session")}
+                    </Text>
+                    <Text className="text-center text-[12px] text-muted-foreground">
+                      {t("Nothing scheduled for this day")}
                     </Text>
                   </Pressable>
                 )}
