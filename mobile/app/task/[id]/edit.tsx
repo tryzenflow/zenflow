@@ -167,7 +167,7 @@ function EditSessionForm() {
       updated: Awaited<ReturnType<typeof updateSession>>,
     ) => {
       // Handle divergent response — hand the primary-vs-alternative pick off
-      // to the week view, which owns the SlotPickSheet and presents it over
+      // to the week view, which owns the slot-pick sheet and presents it over
       // the calendar (`useFocusEffect`, app/(app)/index.tsx).
       if (
         updated.divergent &&

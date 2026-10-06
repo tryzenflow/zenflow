@@ -1,4 +1,4 @@
-import type { SeriesSession } from "@zenflow/shared";
+import type { SeriesSession, Session } from "@zenflow/shared";
 
 /**
  * One sitting of a `TASK` series whose heuristic-vs-LinUCB alternative can be
@@ -77,4 +77,54 @@ export function undecidedSittingIds(
   states: Array<{ id: string; decided: boolean }>,
 ): string[] {
   return states.filter((s) => !s.decided).map((s) => s.id);
+}
+
+/** Which side of a sitting's comparison was chosen. Mirrors `SlotPickRequest["chose"]`. */
+export type SlotChose = "primary" | "alternative";
+
+/** One sitting's decision in a confirm batch. */
+export interface SlotPickChoice {
+  sittingId: string;
+  chose: SlotChose;
+}
+
+/** What a confirm batch did: the ids that landed, and each that didn't (with why). */
+export interface SlotPickResult {
+  appliedIds: string[];
+  failed: Array<{ id: string; error: unknown }>;
+}
+
+/**
+ * A plain (non-series) `TASK`'s proposal as a one-sitting list, so the single
+ * task and the series share one sheet (`series-slot-pick-sheet.tsx`).
+ */
+export function singleSitting(
+  session: Session,
+  proposal: {
+    slotProposalId: string;
+    primarySlot: string;
+    alternativeSlot: string;
+  },
+): DivergentSitting {
+  return {
+    session: { ...session, ...proposal, divergent: true },
+    ...proposal,
+    index: 1,
+    total: 1,
+  };
+}
+
+/**
+ * The batch a confirm sends: every sitting that has no recorded choice yet,
+ * each with the side the user selected — or `override` for all of them ("use
+ * all alternatives"). Decided sittings are skipped, for the same reason as
+ * {@link undecidedSittingIds}.
+ */
+export function pendingChoices(
+  states: Array<{ id: string; decided: boolean; selected: SlotChose }>,
+  override?: SlotChose,
+): SlotPickChoice[] {
+  return states
+    .filter((s) => !s.decided)
+    .map((s) => ({ sittingId: s.id, chose: override ?? s.selected }));
 }

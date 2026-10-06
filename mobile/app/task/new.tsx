@@ -217,7 +217,7 @@ function NewSessionForm() {
       completeStep("create-task");
       useLastCreated.getState().set(response.id);
       // Handle divergent response — present a primary-vs-alternative pick.
-      // The week view owns the SlotPickSheet, so hand the payload off and
+      // The week view owns the slot-pick sheet, so hand the payload off and
       // land there first; `useFocusEffect` (app/(app)/index.tsx) opens the
       // sheet over the week view and the new block is already behind it.
       if (
