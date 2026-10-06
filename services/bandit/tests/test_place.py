@@ -302,6 +302,19 @@ def test_series_member_without_a_window_slot_gets_a_last_resort_start() -> None:
     assert b["outcome"] == "INFEASIBLE" and b["startMs"] is None
 
 
+def test_series_fixed_occupied_sibling_holds_its_day() -> None:
+    # An existing sibling (a grow) sits on day 0: the new member must land on
+    # another day, not just another time on day 0.
+    existing = (NOW + HOUR, NOW + 2 * HOUR)
+    body = make_req(
+        members=[member("new")],
+        fixedOccupied=[{"startMs": existing[0], "endMs": existing[1]}],
+    )
+    (r,) = ok(body)["results"]
+    assert r["outcome"] == "PLACED"
+    assert local_date_str(r["startMs"], "UTC") != local_date_str(existing[0], "UTC")
+
+
 def test_series_past_deadline_is_pinned_back_to_back() -> None:
     body = make_req(
         members=[member("a"), member("b")], deadlineMs=NOW - HOUR, maxScanDays=60
