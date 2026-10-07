@@ -100,12 +100,12 @@ export const ThemeSettingItem = () => {
         />
       </BottomSheetOpenTrigger>
       <BottomSheetContent ref={bottomSheet.ref}>
-        <BottomSheetHeader className="bg-background">
+        <BottomSheetHeader>
           <Text className="text-foreground text-xl font-bold  pb-1">
             {t("Select Theme")}
           </Text>
         </BottomSheetHeader>
-        <BottomSheetView className="gap-5 pt-6 bg-background">
+        <BottomSheetView className="gap-5 pt-6">
           {themes.map((theme) => (
             <ThemeItem
               key={theme.title}

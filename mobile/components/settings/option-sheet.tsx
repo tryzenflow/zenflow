@@ -108,7 +108,7 @@ function OptionSheetInner<T extends string | number>(
         enableDynamicSizing={false}
         snapPoints={[sheetHeight]}
       >
-        <BottomSheetHeader className="bg-background">
+        <BottomSheetHeader>
           <Text className="pb-1 text-xl font-bold text-foreground">
             {title}
           </Text>
