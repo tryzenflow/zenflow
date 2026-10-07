@@ -7,7 +7,6 @@ import {
   GraduationCap,
 } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
-import { haptic } from "@/lib/haptics";
 import { type SetupItem, pendingSetupItems } from "@/lib/onboarding";
 import { Pressable, View } from "react-native";
 
@@ -46,8 +45,8 @@ export function FinishSetupCard({
     <View className="mt-[22px] overflow-hidden rounded-2xl border border-primary/40 bg-primary/10">
       <View className="flex-row items-center justify-between px-4 pb-1 pt-3.5">
         <View className="flex-row items-center gap-2">
-          <AlarmClockIcon size={16} className="text-primary-text" />
-          <Text accessibilityRole="header" className="text-[15px] font-bold">
+          <AlarmClockIcon size={16} className="text-primary" />
+          <Text className="text-[15px] font-bold">
             {t("Finish setting up Zenflow")}
           </Text>
         </View>
@@ -60,13 +59,8 @@ export function FinishSetupCard({
         return (
           <Pressable
             key={item}
-            onPress={() => {
-              haptic.select();
-              onPress(item);
-            }}
-            accessibilityRole="button"
-            accessibilityLabel={title}
-            className="min-h-12 flex-row items-center gap-[13px] px-4 py-3"
+            onPress={() => onPress(item)}
+            className="flex-row items-center gap-[13px] px-4 py-3"
           >
             <Icon size={18} className="text-foreground" />
             <Text className="flex-1 text-[15px] font-semibold">{title}</Text>

@@ -16,8 +16,6 @@ import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
 import { useUserStore } from "@/hooks/use-user-store";
 import { useIntegrationStore } from "@/hooks/use-integration-store";
-import { useToast } from "@/components/ui/toast";
-import { haptic } from "@/lib/haptics";
 import { setAndroidNavigationBar } from "@/lib/android-navigation-bar";
 import { clearSession } from "@/lib/api-client";
 import { clearCachedSessionUser } from "@/lib/session";
@@ -39,7 +37,6 @@ export default function SettingsScreen() {
   const setUser = useUserStore((s) => s.setUser);
   const { setIntegrations, setLoading } = useIntegrationStore();
   const { isDarkColorScheme, setColorScheme } = useColorScheme();
-  const { confirm } = useToast();
   const [loggingOut, setLoggingOut] = useState(false);
   const scrollRef = useRef<{
     scrollTo: (o: { y: number; animated: boolean }) => void;
@@ -72,18 +69,6 @@ export default function SettingsScreen() {
     AsyncStorage.setItem("theme", next);
   }
 
-  /** Signing out ends the session on this device, so ask first (the toast confirm used elsewhere). */
-  function confirmSignOut() {
-    haptic.select();
-    confirm(t("Sign out?"), {
-      description: t("You'll sign back in with a code sent to your email."),
-      confirmLabel: t("Sign out"),
-      cancelLabel: t("Stay signed in"),
-      variant: "warning",
-      onConfirm: () => void handleSignOut(),
-    });
-  }
-
   async function handleSignOut() {
     setLoggingOut(true);
     // Drop this device from push while the session cookie is still valid;
@@ -114,10 +99,7 @@ export default function SettingsScreen() {
         className="border-b border-border bg-background px-6 pb-4"
         style={{ paddingTop: insets.top + 16 }}
       >
-        <Text
-          accessibilityRole="header"
-          className="text-xl font-bold tracking-tight"
-        >
+        <Text className="text-xl font-bold tracking-tight">
           {t("Settings")}
         </Text>
       </View>
@@ -173,7 +155,6 @@ export default function SettingsScreen() {
             <Switch
               checked={isDarkColorScheme}
               onCheckedChange={toggleDarkMode}
-              accessibilityLabel={t("Dark mode")}
             />
           </View>
         </View>
@@ -193,12 +174,9 @@ export default function SettingsScreen() {
         <SettingsSectionLabel>{t("Account")}</SettingsSectionLabel>
         <View className="mb-[18px] overflow-hidden rounded-2xl border border-border bg-card">
           <Pressable
-            onPress={confirmSignOut}
+            onPress={handleSignOut}
             disabled={loggingOut}
-            accessibilityRole="button"
-            accessibilityLabel={t("Sign out")}
-            accessibilityState={{ busy: loggingOut, disabled: loggingOut }}
-            className="min-h-14 flex-row items-center gap-[13px] bg-card px-4 py-3.5"
+            className="flex-row items-center gap-[13px] bg-card px-4 py-3.5"
           >
             <View className="h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl bg-muted">
               <LogOut size={18} className="text-destructive" />

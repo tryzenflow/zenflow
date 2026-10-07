@@ -1,7 +1,6 @@
 import { useLanguage } from "@/hooks/use-language";
 import { t, locale } from "@/lib/i18n";
 import { Text } from "@/components/ui/text";
-import { haptic } from "@/lib/haptics";
 import { cn } from "@/lib/utils";
 import {
   type RecurrenceFreq as Freq,
@@ -49,41 +48,33 @@ export function RecurrenceField({
 
   return (
     <View className="gap-3">
-      <View
-        accessibilityRole="radiogroup"
-        accessibilityLabel={t("Repeat")}
-        className="flex-row gap-2"
-      >
+      <View className="flex-row gap-1.5">
         {(["NONE", "DAILY", "WEEKLY"] as Freq[]).map((f) => {
           const active = state.freq === f;
           return (
             <Pressable
               key={f}
               disabled={disabled}
-              onPress={() => {
-                if (!active) haptic.select();
-                set({ freq: f });
-              }}
-              accessibilityRole="radio"
-              accessibilityLabel={freqLabel(f)}
-              accessibilityState={{ selected: active, disabled: !!disabled }}
+              onPress={() => set({ freq: f })}
               className={cn(
-                "min-h-11 flex-1 items-center justify-center rounded-lg border px-2 py-2",
+                "flex-1 items-center rounded-lg border px-2 py-2",
                 active
-                  ? "border-primary bg-primary"
+                  ? "border-primary bg-primary/10"
                   : "border-input bg-card",
                 disabled && "opacity-50",
               )}
             >
               <Text
                 className={cn(
-                  "text-xs font-semibold",
-                  active
-                    ? "text-primary-foreground"
-                    : "text-muted-foreground",
+                  "text-[12px] font-semibold",
+                  active ? "text-primary" : "text-muted-foreground",
                 )}
               >
-                {freqLabel(f)}
+                {f === "NONE"
+                  ? t("Once")
+                  : f === "DAILY"
+                    ? t("Daily")
+                    : t("Weekly")}
               </Text>
             </Pressable>
           );
@@ -91,41 +82,32 @@ export function RecurrenceField({
       </View>
 
       {state.freq === "WEEKLY" && (
-        <View
-          accessibilityLabel={t("Repeat on")}
-          className="flex-row justify-between"
-        >
+        <View className="flex-row justify-between">
           {WEEKDAYS.map((d, i) => {
             const active = state.byday.includes(d.key);
             return (
               <Pressable
                 key={`${d.key}-${i}`}
                 disabled={disabled}
-                onPress={() => {
-                  haptic.select();
+                onPress={() =>
                   set({
                     byday: active
                       ? state.byday.filter((x) => x !== d.key)
                       : [...state.byday, d.key],
-                  });
-                }}
-                accessibilityRole="checkbox"
-                accessibilityLabel={weekdayName(i)}
-                accessibilityState={{ checked: active, disabled: !!disabled }}
+                  })
+                }
                 className={cn(
-                  "size-11 items-center justify-center rounded-full border",
+                  "h-9 w-9 items-center justify-center rounded-full border",
                   active
-                    ? "border-primary bg-primary"
+                    ? "border-primary bg-primary/10"
                     : "border-input bg-card",
                   disabled && "opacity-50",
                 )}
               >
                 <Text
                   className={cn(
-                    "text-xs font-semibold",
-                    active
-                      ? "text-primary-foreground"
-                      : "text-muted-foreground",
+                    "text-[12px] font-semibold",
+                    active ? "text-primary" : "text-muted-foreground",
                   )}
                 >
                   {locale() === "vi-VN"
@@ -140,7 +122,7 @@ export function RecurrenceField({
 
       {state.freq !== "NONE" && (
         <View>
-          <Text className="mb-1.5 text-xs font-medium text-muted-foreground">
+          <Text className="mb-1.5 text-[12px] font-medium text-muted-foreground">
             {t("Ends on (optional)")}
           </Text>
           <View className="flex-row items-center gap-2">
@@ -158,7 +140,6 @@ export function RecurrenceField({
               <Pressable
                 disabled={disabled}
                 onPress={() => set({ until: undefined })}
-                accessibilityRole="button"
                 accessibilityLabel={t("Clear end date")}
                 className={cn(
                   "h-[46px] items-center justify-center rounded-xl border border-input bg-card px-3",
@@ -171,7 +152,7 @@ export function RecurrenceField({
               </Pressable>
             )}
           </View>
-          <Text className="mt-1.5 text-label text-muted-foreground">
+          <Text className="mt-1.5 text-[11px] text-muted-foreground">
             {state.until
               ? t("Repeats until this date.")
               : t("Repeats indefinitely.")}
@@ -180,23 +161,4 @@ export function RecurrenceField({
       )}
     </View>
   );
-}
-
-function freqLabel(f: Freq): string {
-  return f === "NONE" ? t("Once") : f === "DAILY" ? t("Daily") : t("Weekly");
-}
-
-const WEEKDAY_NAMES = [
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-  "Sunday",
-];
-
-/** Full weekday name for the screen reader; the pill itself only shows "T2" or "M". */
-function weekdayName(i: number): string {
-  return t(WEEKDAY_NAMES[i]);
 }

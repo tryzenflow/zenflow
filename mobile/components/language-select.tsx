@@ -26,7 +26,7 @@ export function LanguageSelect() {
         onPress={() => sheet.current?.open()}
         accessibilityRole="button"
         accessibilityLabel={t("Language")}
-        className="min-h-11 flex-row items-center gap-1.5 rounded-full border border-border bg-card px-3 active:opacity-70"
+        className="h-9 flex-row items-center gap-1.5 rounded-full border border-border bg-card px-3 active:opacity-70"
       >
         <Text className="text-[15px]">{current?.flag}</Text>
         <Text className="text-[13px] font-semibold">{current?.label}</Text>

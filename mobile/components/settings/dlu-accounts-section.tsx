@@ -32,18 +32,10 @@ import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import { useIntegrationStore } from "@/hooks/use-integration-store";
 import { cn } from "@/lib/utils";
-import { Switch } from "@/components/ui/switch";
-import { haptic } from "@/lib/haptics";
 import type { IntegrationProvider, IntegrationStatus } from "@zenflow/shared";
 import { isAxiosError } from "axios";
-import {
-  type ElementRef,
-  forwardRef,
-  useImperativeHandle,
-  useRef,
-  useState,
-} from "react";
-import { Platform, Pressable, View } from "react-native";
+import { useState } from "react";
+import { Pressable, View } from "react-native";
 
 const PROVIDERS: IntegrationProvider[] = ["LMS", "PORTAL"];
 
@@ -59,21 +51,6 @@ const REQUEST_TIMEOUT_MS = 15000;
 
 type SheetMode = "connect" | "update";
 
-/** What each account feeds the calendar, so "which one do I need?" answers itself. */
-const PROVIDER_HELP: Record<IntegrationProvider, string> = {
-  get LMS() {
-    return t("LMS brings in your assignments and deadlines.");
-  },
-  get PORTAL() {
-    return t("The student portal brings in your timetable and exams.");
-  },
-};
-
-export interface DluAccountsHandle {
-  /** Open the sign-in sheet for the first account that isn't connected yet. */
-  connect: () => void;
-}
-
 function ProviderIcon({
   provider,
   connected,
@@ -87,15 +64,15 @@ function ProviderIcon({
     <View
       className={cn(
         "size-[38px] shrink-0 items-center justify-center rounded-xl",
-        connected ? "bg-success/15" : "bg-muted",
+        connected ? "bg-emerald-500/15" : "bg-muted",
       )}
     >
       <Icon
         size={18}
-        className={connected ? "text-success-text" : "text-muted-foreground"}
+        className={connected ? "text-emerald-600" : "text-muted-foreground"}
       />
       {connected && (
-        <View className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-card bg-success" />
+        <View className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-card bg-emerald-500" />
       )}
     </View>
   );
@@ -219,10 +196,9 @@ function errorMessageFor(error: unknown): string {
  * Settings section for LMS / student-portal accounts: connect, update
  * credentials, sync and disconnect inline.
  */
-export const DluAccountsSection = forwardRef<
-  DluAccountsHandle,
-  { hideLabel?: boolean }
->(function DluAccountsSection({ hideLabel = false }, ref) {
+export function DluAccountsSection({
+  hideLabel = false,
+}: { hideLabel?: boolean } = {}) {
   useLanguage();
   const { toast } = useToast();
   const { integrations, updateIntegration, loading } = useIntegrationStore();
@@ -234,9 +210,6 @@ export const DluAccountsSection = forwardRef<
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // "Use the same login for both": one set of credentials, two connect calls.
-  const [sameLogin, setSameLogin] = useState(true);
-  const passwordRef = useRef<ElementRef<typeof BottomSheetInput>>(null);
   // Per provider, so syncing one account never locks the other's button.
   const [syncing, setSyncing] = useState<IntegrationProvider[]>([]);
 
@@ -256,13 +229,6 @@ export const DluAccountsSection = forwardRef<
     setShowPassword(false);
     signInSheet.open();
   };
-
-  useImperativeHandle(ref, () => ({
-    connect: () => {
-      const next = PROVIDERS.find((p) => !statusOf(p)?.connected);
-      if (next) openSignInSheet(next, "connect");
-    },
-  }));
 
   const openManageSheet = (provider: IntegrationProvider) => {
     setSelectedProvider(provider);
@@ -308,37 +274,10 @@ export const DluAccountsSection = forwardRef<
               { signal: controller.signal },
             );
       updateIntegration(selectedProvider, status);
-      haptic.success();
-      // The other account can take the same login (two calls, no backend change).
-      const other = PROVIDERS.find((p) => p !== selectedProvider);
-      if (mode === "connect" && sameLogin && other && !statusOf(other)?.connected) {
-        try {
-          updateIntegration(
-            other,
-            await connectIntegration(
-              { provider: other, username, password },
-              { signal: controller.signal },
-            ),
-          );
-          toast(t("Connected LMS and student portal"), "success");
-        } catch {
-          toast({
-            title: t("{provider} connected", {
-              provider: PROVIDER_LABEL[selectedProvider],
-            }),
-            description: t(
-              "{provider} didn't accept this login. Connect it on its own.",
-              { provider: PROVIDER_LABEL[other] },
-            ),
-            variant: "warning",
-          });
-        }
-      } else {
-        toast(
-          mode === "connect" ? t("Connected") : t("Credentials updated"),
-          "success",
-        );
-      }
+      toast(
+        mode === "connect" ? t("Connected") : t("Credentials updated"),
+        "success",
+      );
       closeSignInSheet();
     } catch (err) {
       setError(errorMessageFor(err));
@@ -389,9 +328,6 @@ export const DluAccountsSection = forwardRef<
     (mode === "connect"
       ? !!studentId.trim() && !!password
       : !!studentId.trim() || !!password);
-  const otherUnconnected =
-    !!selectedProvider &&
-    PROVIDERS.some((p) => p !== selectedProvider && !statusOf(p)?.connected);
   const selectedLabel = selectedProvider
     ? PROVIDER_LABEL[selectedProvider]
     : "";
@@ -441,7 +377,7 @@ export const DluAccountsSection = forwardRef<
                     numberOfLines={1}
                     className={cn(
                       "mt-0.5 text-[13px]",
-                      subtitle.tone === "ok" && "text-success-text",
+                      subtitle.tone === "ok" && "text-emerald-600",
                       subtitle.tone === "error" && "text-destructive",
                       subtitle.tone === "muted" && "text-muted-foreground",
                     )}
@@ -452,11 +388,11 @@ export const DluAccountsSection = forwardRef<
                 {connected ? (
                   <Pressable
                     onPress={() => openManageSheet(provider)}
-                    accessibilityRole="button"
+                    hitSlop={8}
                     accessibilityLabel={t("Manage {provider}", {
                       provider: PROVIDER_LABEL[provider],
                     })}
-                    className="-mr-2 size-11 items-center justify-center rounded-lg active:bg-muted"
+                    className="size-9 items-center justify-center rounded-lg active:bg-muted"
                   >
                     <MoreHorizontal
                       size={18}
@@ -469,9 +405,6 @@ export const DluAccountsSection = forwardRef<
                     className="rounded-lg"
                     disabled={isSubmitting}
                     onPress={() => openSignInSheet(provider, "connect")}
-                    accessibilityLabel={t("Connect {provider}", {
-                      provider: PROVIDER_LABEL[provider],
-                    })}
                   >
                     <Text className="text-[13px] font-semibold text-primary-foreground">
                       {t("Connect")}
@@ -508,10 +441,7 @@ export const DluAccountsSection = forwardRef<
         {/* Manage sheet — the rarely-used actions, kept off the row */}
         <BottomSheetContent ref={manageSheet.ref}>
           <BottomSheetView hadHeader={false} className="gap-1 pt-2">
-            <Text
-              accessibilityRole="header"
-              className="mb-1 px-1 text-[15px] font-bold tracking-tight"
-            >
+            <Text className="mb-1 px-1 text-[15px] font-bold tracking-tight">
               {selectedLabel}
             </Text>
             <Pressable
@@ -521,8 +451,6 @@ export const DluAccountsSection = forwardRef<
                     openSignInSheet(selectedProvider, "update");
                 })
               }
-              accessibilityRole="button"
-              accessibilityLabel={t("Update login")}
               className="flex-row items-center gap-3 rounded-xl px-3 py-3.5 active:opacity-70"
             >
               <KeyRound size={18} className="text-foreground" />
@@ -532,8 +460,6 @@ export const DluAccountsSection = forwardRef<
             </Pressable>
             <Pressable
               onPress={() => afterManageSheet(() => confirmSheet.open())}
-              accessibilityRole="button"
-              accessibilityLabel={t("Disconnect")}
               className="flex-row items-center gap-3 rounded-xl px-3 py-3.5 active:opacity-70"
             >
               <Unlink size={18} className="text-destructive" />
@@ -548,10 +474,7 @@ export const DluAccountsSection = forwardRef<
         <BottomSheetContent ref={signInSheet.ref}>
           <BottomSheetView style={{ paddingBottom: 30 }}>
             <View className="pb-3 pt-1">
-              <Text
-                accessibilityRole="header"
-                className="text-xl font-bold tracking-tight"
-              >
+              <Text className="text-xl font-bold tracking-tight">
                 {mode === "connect"
                   ? t("Sign in to your {provider}", { provider: selectedLabel })
                   : t("Update your {provider} login", {
@@ -560,11 +483,7 @@ export const DluAccountsSection = forwardRef<
               </Text>
             </View>
             {error ? (
-              <View
-                accessibilityRole="alert"
-                accessibilityLiveRegion="polite"
-                className="mb-4 flex-row items-start gap-2.5 rounded-2xl border border-destructive/40 bg-destructive/10 px-3 py-3"
-              >
+              <View className="mb-4 flex-row items-start gap-2.5 rounded-2xl border border-destructive/40 bg-destructive/10 px-3 py-3">
                 <View className="mt-0.5 size-5 shrink-0 items-center justify-center rounded-full bg-destructive/15">
                   <AlertCircle
                     size={14}
@@ -577,20 +496,13 @@ export const DluAccountsSection = forwardRef<
                 </Text>
               </View>
             ) : (
-              <View className="mb-4 gap-1.5">
-                {selectedProvider ? (
-                  <Text className="text-[13.5px] font-medium leading-snug text-foreground">
-                    {PROVIDER_HELP[selectedProvider]}
-                  </Text>
-                ) : null}
-                <Text className="text-[13.5px] leading-relaxed text-muted-foreground">
-                  {mode === "connect"
-                    ? t(
-                        "Your DLU student ID and password — only used to check DLU for you.",
-                      )
-                    : t("Leave a field blank to keep what's saved.")}
-                </Text>
-              </View>
+              <Text className="mb-4 text-[13.5px] leading-relaxed text-muted-foreground">
+                {mode === "connect"
+                  ? t(
+                      "Your DLU student ID and password — only used to check DLU for you.",
+                    )
+                  : t("Leave a field blank to keep what's saved.")}
+              </Text>
             )}
             <View className="mb-3">
               <Text className="mb-1.5 text-[12.5px] font-semibold text-muted-foreground">
@@ -604,19 +516,10 @@ export const DluAccountsSection = forwardRef<
                 }
                 autoCapitalize="none"
                 autoCorrect={false}
-                autoComplete="username"
-                textContentType="username"
-                // Student IDs are digits; iOS keeps a return key on this pad.
-                keyboardType={
-                  Platform.OS === "ios" ? "numbers-and-punctuation" : "default"
-                }
-                returnKeyType="next"
-                onSubmitEditing={() => passwordRef.current?.focus()}
-                accessibilityLabel={t("Student ID")}
                 editable={!isSubmitting}
               />
             </View>
-            <View className="mb-4">
+            <View className="mb-5">
               <Text className="mb-1.5 text-[12.5px] font-semibold text-muted-foreground">
                 {t("Password")}
               </Text>
@@ -626,29 +529,16 @@ export const DluAccountsSection = forwardRef<
                 placeholder={
                   mode === "connect" ? "••••••••" : t("Leave blank to keep")
                 }
-                ref={passwordRef}
                 secureTextEntry={!showPassword}
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="password"
-                textContentType="password"
-                returnKeyType="done"
-                onSubmitEditing={() => canSubmit && void handleSubmit()}
-                accessibilityLabel={t("Password")}
                 editable={!isSubmitting}
                 className={cn(
-                  "pr-12",
                   error && "border-destructive ring-[3px] ring-destructive/15",
                 )}
                 aria-invalid={!!error}
                 rightElement={
                   <Pressable
                     onPress={() => setShowPassword(!showPassword)}
-                    accessibilityRole="button"
-                    accessibilityLabel={
-                      showPassword ? t("Hide password") : t("Show password")
-                    }
-                    className="-mr-3 size-11 items-center justify-center"
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
                     {showPassword ? (
                       <EyeOff
@@ -667,25 +557,8 @@ export const DluAccountsSection = forwardRef<
                 }
               />
             </View>
-            {mode === "connect" && otherUnconnected ? (
-              <View className="mb-5 flex-row items-center gap-3">
-                <Text className="flex-1 text-[13.5px] text-foreground">
-                  {t("Use the same login for LMS and the student portal")}
-                </Text>
-                <Switch
-                  checked={sameLogin}
-                  onCheckedChange={setSameLogin}
-                  accessibilityLabel={t(
-                    "Use the same login for LMS and the student portal",
-                  )}
-                />
-              </View>
-            ) : (
-              <View className="mb-1" />
-            )}
             <Button
               className="w-full"
-              loading={isSubmitting}
               disabled={!canSubmit}
               onPress={handleSubmit}
             >
@@ -708,11 +581,9 @@ export const DluAccountsSection = forwardRef<
         <BottomSheetContent ref={confirmSheet.ref}>
           <BottomSheetView style={{ paddingBottom: 30 }}>
             <View className="pb-3 pt-1">
-              <Text
-                accessibilityRole="header"
-                className="text-xl font-bold tracking-tight"
-              >
-                {t("Disconnect {provider}?", { provider: selectedLabel })}
+              <Text className="text-xl font-bold tracking-tight">
+                {t("Disconnect the")}
+                {selectedLabel}?
               </Text>
             </View>
             <Text className="mb-5 mt-1.5 text-[13px] leading-snug text-muted-foreground">
@@ -737,7 +608,9 @@ export const DluAccountsSection = forwardRef<
                 onPress={handleDisconnect}
                 disabled={isSubmitting}
               >
-                <Text className="font-semibold">{t("Disconnect")}</Text>
+                <Text className="font-semibold text-white">
+                  {t("Disconnect")}
+                </Text>
               </Button>
             </View>
           </BottomSheetView>
@@ -745,4 +618,4 @@ export const DluAccountsSection = forwardRef<
       </BottomSheet>
     </>
   );
-});
+}

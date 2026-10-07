@@ -33,12 +33,7 @@ export function TimeGutter({
           className="items-end justify-start pr-2 pt-0"
         >
           {(hour !== 0 || showZeroLabel) && (
-            <Text
-              // The gutter is a fixed-width column: never scale or wrap the hour.
-              maxFontSizeMultiplier={1}
-              numberOfLines={1}
-              className="text-label font-bold text-muted-foreground"
-            >
+            <Text className="text-[10px] font-bold text-muted-foreground">
               {getLanguage() === "vi"
                 ? `${String(hour).padStart(2, "0")}:00`
                 : minutesToTime(hour * 60)}

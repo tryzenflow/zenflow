@@ -33,8 +33,6 @@ export default {
         primary: {
           DEFAULT: "rgb(var(--primary) / <alpha-value>)",
           foreground: "rgb(var(--primary-foreground) / <alpha-value>)",
-          // Orange for text/icons on surfaces (the plain brand orange fails AA in light mode).
-          text: "rgb(var(--primary-text) / <alpha-value>)",
         },
         secondary: {
           DEFAULT: "rgb(var(--secondary) / <alpha-value>)",
@@ -65,20 +63,7 @@ export default {
           yellow: "rgb(var(--brand-yellow) / <alpha-value>)",
           lime: "rgb(var(--brand-lime) / <alpha-value>)",
         },
-        success: {
-          DEFAULT: "rgb(var(--success) / <alpha-value>)",
-          // Green for text/icons on surfaces (the fill green is 2.5:1 in light mode).
-          text: "rgb(var(--success-text) / <alpha-value>)",
-        },
-        // Amber for text/icons on surfaces (brand-yellow is for fills only).
-        warning: "rgb(var(--warning) / <alpha-value>)",
-      },
-      // Small type scale for the audited screens (day grid, tab bar, login):
-      // nothing below 11, so labels stay legible. Everything else is the stock
-      // Tailwind ramp (text-xs 12, text-sm 14, text-base 16, text-xl 20).
-      fontSize: {
-        label: ["11px", { lineHeight: "14px" }],
-        title: ["22px", { lineHeight: "28px" }],
+        success: "rgb(var(--success) / <alpha-value>)",
       },
       borderWidth: {
         hairline: hairlineWidth(),

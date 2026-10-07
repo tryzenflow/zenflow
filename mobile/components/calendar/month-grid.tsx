@@ -1,5 +1,4 @@
 import { useLanguage } from "@/hooks/use-language";
-import { FONT_SCALE_CAP } from "@/lib/constants";
 import { t } from "@/lib/i18n";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
@@ -37,6 +36,7 @@ interface MonthGridProps {
   justDroppedKey: string | null;
   draggingSessionId: string | null;
   onPressDay: (day: Date, tasks: Session[]) => void;
+  onDoubleTapDay: (day: Date) => void;
   onPressOverflow: (day: Date, tasks: Session[]) => void;
   onGridLayout: () => void;
 }
@@ -68,6 +68,7 @@ export const MonthGrid = memo(
       justDroppedKey,
       draggingSessionId,
       onPressDay,
+      onDoubleTapDay,
       onPressOverflow,
       onGridLayout,
     },
@@ -106,8 +107,7 @@ export const MonthGrid = memo(
           {WEEKDAY_LABELS.map((label) => (
             <Text
               key={t(label)}
-              maxFontSizeMultiplier={FONT_SCALE_CAP.grid}
-              className="flex-1 py-2 text-center text-label font-bold text-muted-foreground"
+              className="flex-1 py-2 text-center text-[10.5px] font-bold text-muted-foreground"
             >
               {t(label)}
             </Text>
@@ -149,6 +149,7 @@ export const MonthGrid = memo(
                     isJustDropped={justDroppedKey === key}
                     draggingSessionId={draggingSessionId}
                     onPressDay={onPressDay}
+                    onDoubleTapDay={onDoubleTapDay}
                     onPressOverflow={onPressOverflow}
                   />
                 );
@@ -201,8 +202,7 @@ export function MonthGridSkeleton() {
         {WEEKDAY_LABELS.map((label) => (
           <Text
             key={t(label)}
-            maxFontSizeMultiplier={FONT_SCALE_CAP.grid}
-            className="flex-1 py-2 text-center text-label font-bold text-muted-foreground"
+            className="flex-1 py-2 text-center text-[10.5px] font-bold uppercase text-muted-foreground"
           >
             {t(label)}
           </Text>
@@ -222,7 +222,7 @@ export function MonthGridSkeleton() {
               <View
                 // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton cell, never reordered
                 key={`skeleton-cell-${row}-${col}`}
-                className="flex-1 gap-[3px] overflow-hidden border-b border-r border-border p-[3px] pb-[3px]"
+                className="flex-1 gap-[3px] overflow-hidden border-b border-r border-border p-[5px] pb-[3px]"
               >
                 <Skeleton className="h-[14px] w-[18px] rounded" />
                 <Skeleton

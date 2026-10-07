@@ -16,13 +16,7 @@ import {
   User,
 } from "@/components/Icons";
 import { TagPicker } from "@/components/onboarding/tag-picker";
-import {
-  DluAccountsSection,
-  type DluAccountsHandle,
-} from "@/components/settings/dlu-accounts-section";
-import { Switch } from "@/components/ui/switch";
-import { TextLink } from "@/components/ui/text-link";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { DluAccountsSection } from "@/components/settings/dlu-accounts-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
@@ -32,7 +26,6 @@ import { useNotificationToggle } from "@/hooks/use-notification-toggle";
 import { usePushStatusStore } from "@/hooks/use-push-status-store";
 import { useUserStore } from "@/hooks/use-user-store";
 import {
-  DEFAULT_TIMEZONE,
   FIRST_STEP,
   type OnboardingStep,
   canGoBack,
@@ -40,15 +33,13 @@ import {
   gmtOffset,
   initialTagSelection,
   nextStep,
-  onboardingStepKey,
-  parseStoredStep,
   prevStep,
   stepProgress,
-  suggestedTimezone,
   tagsForBulk,
   utcOffsetMinutes,
 } from "@/lib/onboarding";
 import {
+  LANGUAGES,
   REMINDERS,
   allTimezones,
   deviceTimezone,
@@ -72,6 +63,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
  * translation keys in one place.
  */
 const COPY = {
+  get skip() {
+    return t("Skip");
+  },
   get skipForNow() {
     return t("Skip for now");
   },
@@ -110,12 +104,6 @@ const COPY = {
       return t(
         "You can also do this later in Settings → Connect your DLU account.",
       );
-    },
-    get connect() {
-      return t("Connect");
-    },
-    get later() {
-      return t("Do it later");
     },
   },
   notifications: {
@@ -164,13 +152,7 @@ const COPY = {
       return t("Used to place sessions and reminders at the right local time.");
     },
     get detected() {
-      return t("Your timezone");
-    },
-    get change() {
-      return t("Change");
-    },
-    get useDevice() {
-      return t("Use my device's timezone");
+      return t("Detected from device");
     },
     get search() {
       return t("Search all timezones");
@@ -212,7 +194,7 @@ const COPY = {
       return t("You’re all set");
     },
     get body() {
-      return t("Anything not set up yet is waiting for you in Settings.");
+      return t("Skipped steps are waiting for you in Settings.");
     },
     get open() {
       return t("Open my calendar");
@@ -308,13 +290,6 @@ export default function OnboardingScreen() {
 
   // Local UI step index only; every value below is persisted server-side.
   const [step, setStep] = useState<OnboardingStep>(FIRST_STEP);
-  // The step is also kept on this device, so an interruption (a call, the app
-  // killed) resumes where the student left off instead of at the start.
-  const [resumed, setResumed] = useState(false);
-  const dluRef = useRef<DluAccountsHandle>(null);
-  const [tzChoice, setTzChoice] = useState<string | null>(null);
-  const [tzPickerOpen, setTzPickerOpen] = useState(false);
-  const [existingTagCount, setExistingTagCount] = useState(0);
   // Set when a skipped step is reopened from the done summary: finishing,
   // skipping or going back returns straight to the summary.
   const [fromSummary, setFromSummary] = useState(false);
@@ -326,29 +301,15 @@ export default function OnboardingScreen() {
   const [tagsLoaded, setTagsLoaded] = useState(false);
   const [savedTagCount, setSavedTagCount] = useState(0);
 
-  const userId = user?.id;
-  useEffect(() => {
-    if (!userId) return;
-    AsyncStorage.getItem(onboardingStepKey(userId))
-      .then((raw) => setStep(parseStoredStep(raw)))
-      .catch(() => {})
-      .finally(() => setResumed(true));
-  }, [userId]);
-  useEffect(() => {
-    if (!resumed || !userId) return;
-    AsyncStorage.setItem(onboardingStepKey(userId), step).catch(() => {});
-  }, [step, resumed, userId]);
-
   useEffect(() => {
     listIntegrations()
       .then(setIntegrations)
       .catch(() => {})
       .finally(() => setLoading(false));
     listTags()
-      .then((existing) => {
-        setExistingTagCount(existing.length);
-        setTags(initialTagSelection(existing.map((t) => t.name)));
-      })
+      .then((existing) =>
+        setTags(initialTagSelection(existing.map((t) => t.name))),
+      )
       .catch(() => setTags(initialTagSelection([])))
       .finally(() => setTagsLoaded(true));
   }, [setIntegrations, setLoading]);
@@ -383,22 +344,6 @@ export default function OnboardingScreen() {
   };
   const dluConnected = integrations.some((i) => i.connected);
   const device = deviceTimezone();
-  // Vietnam time unless the student already chose something else.
-  const suggested = suggestedTimezone(device);
-  const effectiveTz =
-    tzChoice ??
-    (prefs.timezoneMode === "explicit" ? prefs.timezone : suggested);
-  const saveTimezone = () =>
-    run(async () => {
-      // Following the device keeps the app in step when the phone changes zone.
-      const value = effectiveTz === device ? DEVICE_TIMEZONE : effectiveTz;
-      const unchanged =
-        value === DEVICE_TIMEZONE
-          ? prefs.timezoneMode === "device"
-          : prefs.timezoneMode === "explicit" && prefs.timezone === value;
-      if (unchanged) return;
-      return (await savePref({ timezone: value })) ? undefined : false;
-    });
   const zones = useMemo(
     () => filterTimezones(allTimezones(), tzQuery, TZ_LIMIT, device),
     [tzQuery, device],
@@ -509,7 +454,6 @@ export default function OnboardingScreen() {
       }
       // Idempotent; the root AuthGate then routes to the app.
       updateUser(await updateBasicInfo({ onboarded: true }));
-      if (userId) AsyncStorage.removeItem(onboardingStepKey(userId)).catch(() => {});
     } catch {
       toast(COPY.saveFailed, "destructive");
       setBusy(false);
@@ -520,21 +464,15 @@ export default function OnboardingScreen() {
   const primary = (label: string, onPress: () => void, disabled = false) => (
     <Button
       size="lg"
-      loading={busy}
-      disabled={disabled}
+      className="rounded-xl"
+      disabled={busy || disabled}
       onPress={onPress}
     >
       <Text className="font-semibold text-primary-foreground">{label}</Text>
     </Button>
   );
   const ghost = (label: string, onPress: () => void) => (
-    <Pressable
-      onPress={onPress}
-      disabled={busy}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      className="min-h-11 items-center justify-center py-3"
-    >
+    <Pressable onPress={onPress} disabled={busy} className="items-center py-3">
       <Text className="text-[14px] font-medium text-muted-foreground">
         {label}
       </Text>
@@ -558,10 +496,6 @@ export default function OnboardingScreen() {
             value={name}
             onChangeText={setName}
             autoComplete="name"
-            textContentType="name"
-            autoCapitalize="words"
-            returnKeyType="done"
-            onSubmitEditing={() => name.trim() && void saveName()}
             maxLength={100}
           />
           <Text className="mt-2 text-[12.5px] text-muted-foreground">
@@ -580,7 +514,7 @@ export default function OnboardingScreen() {
       ({ title, body } = COPY.dlu);
       content = (
         <View>
-          <DluAccountsSection ref={dluRef} hideLabel />
+          <DluAccountsSection hideLabel />
           <Text className="mt-3.5 px-1 text-[12px] leading-snug text-muted-foreground">
             {COPY.dlu.hint}
           </Text>
@@ -588,10 +522,8 @@ export default function OnboardingScreen() {
       );
       footer = (
         <>
-          {dluConnected
-            ? primary(COPY.continue, advance)
-            : primary(COPY.dlu.connect, () => dluRef.current?.connect())}
-          {!dluConnected && ghost(COPY.dlu.later, advance)}
+          {primary(COPY.continue, advance)}
+          {!dluConnected && ghost(COPY.skipForNow, advance)}
         </>
       );
       break;
@@ -612,18 +544,33 @@ export default function OnboardingScreen() {
                   {COPY.notifications.rowBody}
                 </Text>
               </View>
-              <Switch
-                checked={notif.active}
-                onCheckedChange={() => void toggleNotifications()}
+              <Pressable
+                onPress={() => void toggleNotifications()}
                 disabled={busy}
+                hitSlop={8}
+                role="switch"
+                aria-checked={notif.active}
                 accessibilityLabel={COPY.notifications.rowTitle}
-              />
+                className={cn(
+                  "h-[26px] w-[46px] justify-center rounded-full px-[3px]",
+                  notif.active
+                    ? "items-end bg-primary"
+                    : "items-start bg-muted",
+                )}
+              >
+                <View
+                  className={cn(
+                    "size-5 rounded-full shadow",
+                    notif.active ? "bg-white" : "bg-card",
+                  )}
+                />
+              </Pressable>
             </View>
           </Group>
           <View className="mt-4 gap-3 px-1">
             {COPY.notifications.bullets.map((b) => (
               <View key={t(b)} className="flex-row items-start gap-2.5">
-                <Check size={16} className="mt-0.5 text-primary-text" />
+                <Check size={16} className="mt-0.5 text-primary" />
                 <Text className="flex-1 text-[13.5px] text-muted-foreground">
                   {t(b)}
                 </Text>
@@ -642,10 +589,9 @@ export default function OnboardingScreen() {
                 </Text>
                 <Pressable
                   onPress={() => void Linking.openSettings()}
-                  accessibilityRole="link"
-                  className="mt-1 min-h-11 justify-center"
+                  className="mt-2"
                 >
-                  <Text className="text-[13.5px] font-semibold text-primary-text">
+                  <Text className="text-[13.5px] font-semibold text-primary">
                     {COPY.notifications.openSettings}
                   </Text>
                 </Pressable>
@@ -677,104 +623,82 @@ export default function OnboardingScreen() {
       ({ title, body } = COPY.timezone);
       content = (
         <View>
-          <View
-            accessible
+          <Pressable
+            onPress={() => void savePref({ timezone: DEVICE_TIMEZONE })}
             accessibilityRole="radio"
-            accessibilityState={{ checked: true }}
-            accessibilityLabel={`${effectiveTz}, ${gmtOffset(effectiveTz)}`}
-            className="flex-row items-center gap-3 rounded-2xl border border-primary/50 bg-primary/10 px-4 py-3.5"
+            accessibilityState={{ checked: prefs.timezoneMode === "device" }}
+            className={cn(
+              "flex-row items-center gap-3 rounded-2xl border px-4 py-3.5",
+              prefs.timezoneMode === "device"
+                ? "border-primary/50 bg-primary/10"
+                : "border-border bg-card",
+            )}
           >
-            <MapPin size={20} className="text-primary-text" />
+            <MapPin size={20} className="text-primary" />
             <View className="flex-1">
               <Text className="text-[12.5px] font-semibold text-muted-foreground">
                 {COPY.timezone.detected}
               </Text>
               <Text className="text-[15px] font-semibold">
-                {effectiveTz}
+                {device}
                 <Text className="font-normal text-muted-foreground">
-                  {` · ${gmtOffset(effectiveTz)}`}
+                  {gmtOffset(device) ? ` · ${gmtOffset(device)}` : ""}
                 </Text>
               </Text>
             </View>
-            <RadioDot selected />
+            <RadioDot selected={prefs.timezoneMode === "device"} />
+          </Pressable>
+          <View className="mt-4">
+            <Input
+              value={tzQuery}
+              onChangeText={setTzQuery}
+              placeholder={COPY.timezone.search}
+              autoCapitalize="none"
+              autoCorrect={false}
+              rightElement={
+                <Search size={18} className="text-muted-foreground" />
+              }
+            />
           </View>
-          <View className="mt-1 flex-row flex-wrap gap-x-5">
-            <TextLink
-              tone="primary"
-              onPress={() => setTzPickerOpen((open) => !open)}
-              accessibilityHint={t("Shows every timezone")}
-            >
-              {tzPickerOpen ? t("Hide list") : COPY.timezone.change}
-            </TextLink>
-            {effectiveTz !== device && (
-              <TextLink
-                onPress={() => {
-                  setTzChoice(device);
-                  setTzPickerOpen(false);
-                }}
-              >
-                {COPY.timezone.useDevice}
-              </TextLink>
+          <View className="mt-3">
+            <Group>
+              {zones.map((z) => {
+                const on =
+                  prefs.timezoneMode === "explicit" && prefs.timezone === z;
+                return (
+                  <Row
+                    key={z}
+                    selected={on}
+                    onPress={() => void savePref({ timezone: z })}
+                    className="justify-between"
+                  >
+                    <Text
+                      className={cn(
+                        "flex-1 text-[15px]",
+                        on ? "font-semibold" : "font-medium",
+                      )}
+                    >
+                      {z}
+                    </Text>
+                    <Text className="text-[13px] text-muted-foreground">
+                      {gmtOffset(z)}
+                    </Text>
+                    {on && <RadioDot selected />}
+                  </Row>
+                );
+              })}
+            </Group>
+            {zones.length >= TZ_LIMIT && (
+              <Text className="mt-3 px-1 text-center text-[12.5px] text-muted-foreground">
+                {COPY.timezone.refine}
+              </Text>
             )}
           </View>
-          {tzPickerOpen && (
-            <View>
-              <View className="mt-2">
-                <Input
-                  value={tzQuery}
-                  onChangeText={setTzQuery}
-                  placeholder={COPY.timezone.search}
-                  accessibilityLabel={COPY.timezone.search}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  rightElement={
-                    <Search size={18} className="text-muted-foreground" />
-                  }
-                />
-              </View>
-              <View className="mt-3">
-                <Group>
-                  {zones.map((z) => {
-                    const on = effectiveTz === z;
-                    return (
-                      <Row
-                        key={z}
-                        selected={on}
-                        onPress={() => {
-                          setTzChoice(z);
-                          setTzPickerOpen(false);
-                        }}
-                        className="justify-between"
-                      >
-                        <Text
-                          className={cn(
-                            "flex-1 text-[15px]",
-                            on ? "font-semibold" : "font-medium",
-                          )}
-                        >
-                          {z}
-                        </Text>
-                        <Text className="text-[13px] text-muted-foreground">
-                          {gmtOffset(z)}
-                        </Text>
-                        {on && <RadioDot selected />}
-                      </Row>
-                    );
-                  })}
-                </Group>
-                {zones.length >= TZ_LIMIT && (
-                  <Text className="mt-3 px-1 text-center text-[12.5px] text-muted-foreground">
-                    {COPY.timezone.refine}
-                  </Text>
-                )}
-              </View>
-            </View>
-          )}
         </View>
       );
       footer = (
         <>
-          {primary(COPY.continue, saveTimezone)}
+          {primary(COPY.continue, advance)}
           {ghost(COPY.skipForNow, advance)}
         </>
       );
@@ -845,24 +769,27 @@ export default function OnboardingScreen() {
       break;
     case "done": {
       ({ title, body } = COPY.done);
-      const tagCount = Math.max(savedTagCount, existingTagCount);
       const rows: {
         k: string;
         v: string;
-        pending?: boolean;
+        skipped?: boolean;
         step?: OnboardingStep;
       }[] = [
         {
-          k: t("DLU account"),
-          v: dluConnected ? t("Connected") : t("Not set up yet"),
-          pending: !dluConnected,
-          step: "dlu",
+          k: t("Language"),
+          v: LANGUAGES.find((l) => l.value === prefs.language)?.label ?? "",
         },
         { k: t("Name"), v: user?.name ?? "" },
         {
+          k: t("DLU account"),
+          v: dluConnected ? t("Connected") : t("Skipped"),
+          skipped: !dluConnected,
+          step: "dlu",
+        },
+        {
           k: t("Notifications"),
-          v: notif.active ? t("On") : t("Not set up yet"),
-          pending: !notif.active,
+          v: notif.active ? t("On") : t("Skipped"),
+          skipped: !notif.active,
           step: "notifications",
         },
         { k: t("Timezone"), v: prefs.timezone },
@@ -872,39 +799,31 @@ export default function OnboardingScreen() {
             REMINDERS.find((r) => r.value === prefs.defaultReminder)?.label ??
             "",
         },
-        {
-          k: t("Tags"),
-          v: tagCount > 0 ? t("{count} tags", { count: tagCount }) : t("Not set up yet"),
-          pending: tagCount === 0,
-          step: "tags",
-        },
+        { k: t("Tags"), v: t("{count} selected", { count: savedTagCount }) },
       ];
       content = (
         <Group>
           {rows.map((r) => (
             <View
               key={r.k}
-              className="min-h-12 flex-row items-center justify-between px-4"
+              className="flex-row items-center justify-between px-4 py-3"
             >
               <Text className="text-[14.5px] font-medium">{r.k}</Text>
               <View className="flex-row items-center gap-2.5">
                 <Text className="text-[13px] text-muted-foreground">{r.v}</Text>
-                {r.pending && r.step ? (
+                {r.skipped && r.step ? (
                   <Pressable
                     onPress={() => {
                       setFromSummary(true);
                       setStep(r.step as OnboardingStep);
                     }}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${t("Set up")}: ${r.k}`}
-                    className="min-h-11 justify-center px-1"
                   >
-                    <Text className="text-[13px] font-semibold text-primary-text">
+                    <Text className="text-[13px] font-semibold text-primary">
                       {t("Set up")}
                     </Text>
                   </Pressable>
                 ) : (
-                  <Check size={16} className="text-success-text" />
+                  <Check size={16} className="text-emerald-500" />
                 )}
               </View>
             </View>
@@ -917,9 +836,6 @@ export default function OnboardingScreen() {
   }
 
   const Hero = STEP_ICON[step];
-
-  // One beat to read the saved step, so a resumed student never sees step one flash by.
-  if (!resumed) return <View className="flex-1 bg-background" />;
 
   return (
     <KeyboardAvoidingView
@@ -934,24 +850,16 @@ export default function OnboardingScreen() {
           {canGoBack(step) ? (
             <Pressable
               onPress={goBack}
-              accessibilityRole="button"
+              hitSlop={8}
               accessibilityLabel={COPY.back}
-              className="size-11 items-center justify-center rounded-xl"
+              className="size-[38px] items-center justify-center rounded-xl"
             >
               <ChevronLeft size={22} className="text-foreground" />
             </Pressable>
           ) : (
-            <View className="size-11" />
+            <View className="size-[38px]" />
           )}
-          <View
-            accessible
-            accessibilityRole="progressbar"
-            accessibilityLabel={t("Step {index} of {total}", {
-              index: progress.index,
-              total: progress.total,
-            })}
-            className="flex-1 flex-row gap-1.5"
-          >
+          <View className="flex-1 flex-row gap-1.5">
             {Array.from({ length: progress.total }, (_, i) => (
               <View
                 // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length bar
@@ -963,6 +871,19 @@ export default function OnboardingScreen() {
               />
             ))}
           </View>
+          <Pressable
+            onPress={() => {
+              setBlocked(false);
+              void advance();
+            }}
+            hitSlop={8}
+            disabled={busy}
+            className="px-2"
+          >
+            <Text className="text-[14px] font-semibold text-muted-foreground">
+              {COPY.skip}
+            </Text>
+          </Pressable>
         </View>
       ) : (
         <View style={{ paddingTop: insets.top + 10 }} />
@@ -981,11 +902,10 @@ export default function OnboardingScreen() {
             </View>
           ) : Hero ? (
             <View className="mb-4 size-12 items-center justify-center rounded-2xl bg-primary/10">
-              <Hero size={24} className="text-primary-text" />
+              <Hero size={24} className="text-primary" />
             </View>
           ) : null}
           <Text
-            accessibilityRole="header"
             className={cn(
               "text-[26px] font-bold leading-tight tracking-tight",
               step === "done" && "text-center",

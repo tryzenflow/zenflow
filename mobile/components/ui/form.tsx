@@ -16,8 +16,7 @@ import {
   useFormContext,
 } from "react-hook-form";
 import { Platform, View } from "react-native";
-import { useMotion } from "@/hooks/use-motion";
-import Animated from "react-native-reanimated";
+import Animated, { FadeInDown, FadeOut } from "react-native-reanimated";
 import { cn } from "../../lib/utils";
 import { Checkbox } from "./checkbox";
 import { Combobox, type ComboboxOption } from "./combobox";
@@ -150,7 +149,6 @@ const FormMessage = React.forwardRef<
 >(({ className, children, style, ...props }, ref) => {
   const { error, formMessageNativeID } = useFormField();
   useLanguage();
-  const motion = useMotion();
   const body = error ? t(String(error?.message)) : children;
 
   if (!body) {
@@ -169,7 +167,8 @@ const FormMessage = React.forwardRef<
     <View className="flex flex-row items-center mt-2">
       <AlertCircle className="text-destructive" size={16} />
       <Animated.Text
-        {...motion.rise(275)}
+        entering={FadeInDown}
+        exiting={FadeOut.duration(275)}
         ref={ref}
         nativeID={formMessageNativeID}
         className={stripFontWeightClass(mergedClassName)}

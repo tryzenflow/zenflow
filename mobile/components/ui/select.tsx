@@ -1,8 +1,7 @@
 import * as SelectPrimitive from "@/components/primitives/select";
 import * as React from "react";
 import { Platform, StyleSheet, View } from "react-native";
-import { useMotion } from "@/hooks/use-motion";
-import Animated from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 
 import { Check, ChevronDown, ChevronUp } from "@/components/Icons";
 
@@ -92,14 +91,13 @@ const SelectContent = React.forwardRef<
   }
 >(({ className, children, position = "popper", portalHost, ...props }, ref) => {
   const { open } = SelectPrimitive.useRootContext();
-  const motion = useMotion();
 
   return (
     <SelectPrimitive.Portal hostName={portalHost}>
       <SelectPrimitive.Overlay
         style={Platform.OS !== "web" ? StyleSheet.absoluteFill : undefined}
       >
-        <Animated.View {...motion.fade(200)}>
+        <Animated.View entering={FadeIn} exiting={FadeOut}>
           <SelectPrimitive.Content
             ref={ref}
             className={cn(

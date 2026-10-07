@@ -1,9 +1,7 @@
 import { useLanguage } from "@/hooks/use-language";
 import { format, t } from "@/lib/i18n";
 import { getDeadlineOptions } from "@/api/tasks";
-import { Check } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
-import { haptic } from "@/lib/haptics";
 import { TimePickerInline } from "@/components/ui/time-picker";
 import { cn } from "@/lib/utils";
 import { zonedDate, zonedNow, zonedWallClockToUtc } from "@zenflow/core";
@@ -49,23 +47,26 @@ function combine(day: Date, minutes: number, tz: string): string {
 /**
  * Deadline quick-action chip row — RN port of
  * `frontend/src/components/tasks/form/deadline-chip-field.tsx` (same logic,
- * same six prefetched options from `GET /tasks/deadline-options` plus Custom,
- * same Today/Tomorrow/Custom time-of-day reveal). Unlike web there is no
- * preselected chip: a deadline is required, and "No rush" is an explicit choice
- * (the backend resolves it to the end of next month, a real instant). The
- * picker widgets underneath (`TimePickerInline`/`InlineDateField`) are
- * RN-specific replacements for the web's `<TimePicker>`/`<DatePicker>`.
+ * unchanged: same six prefetched options from `GET /tasks/deadline-options`
+ * plus Custom, same Today/Tomorrow/Custom time-of-day reveal, same "default
+ * to No rush on create" behaviour). Only the picker widgets underneath
+ * (`TimePickerInline`/`InlineDateField`) are RN-specific replacements for the
+ * web's `<TimePicker>`/`<DatePicker>`.
  */
 export function DeadlineChipRow({
   value,
   onChange,
   disabled,
+  editing,
   tz,
 }: {
   /** The resolved deadline, as a UTC ISO-8601 instant (or "" when unset). */
   value: string;
   onChange: (iso: string) => void;
   disabled?: boolean;
+  /** Edit mode: an empty `value` just means the task hasn't loaded yet, NOT
+   * "unset" — so the no-rush default below must not fire. */
+  editing?: boolean;
   tz: string;
 }) {
   useLanguage();
@@ -162,16 +163,25 @@ export function DeadlineChipRow({
   };
 
   const pick = (id: ChipId) => {
-    if (id !== chip) haptic.select();
     if (id === "today" || id === "tomorrow") return pickTodayTomorrow(id);
     setChip(id);
     if (id === "custom" || !options) return;
     emit(options[id]);
   };
 
-  // App language and clock: "Tue Oct 7 · 5:00 PM" / "T3, 7/10 · 17:00".
+  // New-task default: a required field with nothing visibly selected reads
+  // as broken, so once the options load, silently default to "No rush"
+  // rather than leaving every chip unselected until the user picks one.
+  const defaultedRef = useRef(false);
+  useEffect(() => {
+    if (editing || defaultedRef.current || !options || value) return;
+    defaultedRef.current = true;
+    setChip("noRush");
+    emit(options.noRush);
+  }, [editing, options, value, emit]);
+
   const preview = value
-    ? `${format(zonedDate(value, tz), "EEE MMM d")} · ${format(zonedDate(value, tz), "h:mm a")}`
+    ? format(zonedDate(value, tz), "EEE, MMM d, h:mm a")
     : null;
 
   // Hard cap on how far out a Custom deadline can be set (max 60 days).
@@ -182,35 +192,26 @@ export function DeadlineChipRow({
 
   return (
     <View className="gap-2">
-      <View
-        accessibilityRole="radiogroup"
-        accessibilityLabel={t("Deadline")}
-        className="flex-row flex-wrap gap-2"
-      >
+      <View className="flex-row flex-wrap gap-1.5">
         {CHIPS.map((c) => {
           const chipDisabled = disabled || (!options && c.id !== "custom");
-          const selected = chip === c.id;
           return (
             <Pressable
               key={c.id}
               disabled={chipDisabled}
               onPress={() => pick(c.id)}
-              accessibilityRole="radio"
-              accessibilityLabel={t(c.label)}
-              accessibilityState={{ selected, disabled: !!chipDisabled }}
               className={cn(
-                "min-h-11 flex-row items-center justify-center gap-1 rounded-full border px-3.5",
-                selected
-                  ? "border-2 border-primary-text bg-primary/15"
+                "rounded-full border px-2.5 py-1",
+                chip === c.id
+                  ? "border-primary bg-primary/15"
                   : "border-border bg-muted",
                 chipDisabled && "opacity-50",
               )}
             >
-              {selected && <Check size={14} className="text-primary-text" />}
               <Text
                 className={cn(
-                  "text-[13px] font-semibold",
-                  selected ? "text-primary-text" : "text-foreground",
+                  "text-[11px] font-semibold",
+                  chip === c.id ? "text-primary" : "text-muted-foreground",
                 )}
               >
                 {t(c.label)}
@@ -252,7 +253,7 @@ export function DeadlineChipRow({
       )}
 
       {preview && (
-        <Text className="text-xs text-muted-foreground">
+        <Text className="text-[11px] text-muted-foreground">
           {t("Due {date}", { date: preview })}
         </Text>
       )}

@@ -3,21 +3,16 @@ import { useLanguage } from "@/hooks/use-language";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { isAxiosError } from "axios";
 import { useLocalSearchParams } from "expo-router";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import {
   Controller,
   type Resolver,
   type SubmitHandler,
   useForm,
 } from "react-hook-form";
-import * as Haptics from "expo-haptics";
 import {
   ActivityIndicator,
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   TextInput,
   type TextInputInstance,
   View,
@@ -28,18 +23,14 @@ import { z } from "zod";
 import { requestOtp, verifyOtp } from "@/api/auth";
 import { updateBasicInfo } from "@/api/users";
 import { LanguageSelect } from "@/components/language-select";
-import { PlannedDayPreview } from "@/components/auth/planned-day-preview";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Form, FormField, FormInput } from "@/components/ui/form";
 import { Text } from "@/components/ui/text";
-import { TextLink } from "@/components/ui/text-link";
 import { useToast } from "@/components/ui/toast";
 import { formatCountdown, useCountdown } from "@/hooks/use-countdown";
 import { useUserStore } from "@/hooks/use-user-store";
-import { NAV_THEME } from "@/lib/constants";
 import { cacheSessionUser } from "@/lib/session";
-import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
 import { hideEmail } from "@/utils/hide-email";
 import { Clock, Loader2Icon } from "lucide-react-native";
@@ -74,7 +65,7 @@ function LockoutNotice({ children }: { children: ReactNode }) {
   useLanguage();
   return (
     <View className="mt-2 flex-row items-start gap-1.5">
-      <Clock size={15} className="mt-px shrink-0 text-warning" />
+      <Clock size={15} className="mt-px shrink-0 text-brand-yellow" />
       <Text className="flex-1 text-[13px] font-medium text-foreground">
         {children}
       </Text>
@@ -94,7 +85,7 @@ const otpSchema = z.object({
   email: z.email(),
   otp: z.string().length(6, {
     get message() {
-      return t("Your sign-in code must be 6 digits.");
+      return t("Your one-time password must be 6 digits.");
     },
   }),
 });
@@ -125,17 +116,12 @@ function OtpBoxes({
 
   return (
     <Pressable
-      accessible={false}
       className="flex-row justify-between gap-[9px]"
       onPress={() => !disabled && inputRef.current?.focus()}
     >
       {digits.map((d, i) => (
         <View
           key={i}
-          // The hidden input below is the one accessible control; the boxes
-          // only draw its value.
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
           className={cn(
             "flex-1 aspect-[1/1.18] max-w-[52px] items-center justify-center rounded-xl border border-input bg-card",
             !error && i < value.length && "border-ring/50",
@@ -162,16 +148,6 @@ function OtpBoxes({
           onChangeText(v.replace(/[^0-9]/g, "").slice(0, OTP_LENGTH))
         }
         keyboardType="number-pad"
-        autoComplete="one-time-code"
-        textContentType="oneTimeCode"
-        accessibilityLabel={t("Sign-in code")}
-        accessibilityHint={t("Enter the 6-digit code from your email")}
-        accessibilityValue={{
-          text: t("{count} of {total} digits entered", {
-            count: value.length,
-            total: OTP_LENGTH,
-          }),
-        }}
         maxLength={OTP_LENGTH}
         editable={!disabled}
         autoFocus
@@ -187,15 +163,9 @@ export default function LoginScreen() {
   const setUser = useUserStore((state) => state.setUser);
   const { toast } = useToast();
   const insets = useSafeAreaInsets();
-  const { isDarkColorScheme } = useColorScheme();
-  const palette = isDarkColorScheme ? NAV_THEME.dark : NAV_THEME.light;
-  const keyboardOpen = useKeyboardOpen();
 
   const [stage, setStage] = useState<"email" | "otp">("email");
   const [submitting, setSubmitting] = useState(false);
-  // True after a request that never reached the server, so the error can offer
-  // a retry instead of a dead end.
-  const [offline, setOffline] = useState(false);
 
   // Rate-limit UI state (issue #14 — LimitKit on the backend):
   // - `requestLockout`: server 429 from `POST /auth/otp/request`. Disables
@@ -230,7 +200,6 @@ export default function LoginScreen() {
   const handleEmailRequest = async (data: EmailFormValues) => {
     if (requestLockout.active) return;
     setSubmitting(true);
-    setOffline(false);
     clearErrors("email");
     try {
       await requestOtp(data.email, getLanguage());
@@ -244,7 +213,6 @@ export default function LoginScreen() {
       if (isAxiosError(error) && error.response?.status === 429) {
         requestLockout.start(getRetryAfterSeconds(error));
       } else {
-        setOffline(!(isAxiosError(error) && error.response));
         const message =
           isAxiosError(error) && error.response
             ? (error.response.data?.message ??
@@ -260,23 +228,11 @@ export default function LoginScreen() {
   const handleOtpVerify = async (data: OtpFormValues) => {
     if (otpLockout.active) return;
     setSubmitting(true);
-    setOffline(false);
     clearErrors("otp");
     try {
       const result = await verifyOtp(getValues("email"), data.otp);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
-        () => {},
-      );
+      toast(t("Welcome back"), "success");
       let user: User = result.data;
-      // A first sign-in is oriented ("a few questions, then your day"); a
-      // returning student just gets a quiet welcome.
-      if (user.onboardedAt) toast(t("Welcome back"), "success");
-      else
-        toast({
-          title: t("Welcome to Zenflow"),
-          description: t("A few quick questions, then your day is ready."),
-          variant: "success",
-        });
       // The language shown on this screen (the top-right select, or the
       // Vietnamese default) overrides the account's stored preference.
       const language = getLanguage();
@@ -290,13 +246,9 @@ export default function LoginScreen() {
       setUser(user);
       await cacheSessionUser(user);
     } catch (error) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(
-        () => {},
-      );
       if (isAxiosError(error) && error.response?.status === 429) {
         otpLockout.start(getRetryAfterSeconds(error));
       } else {
-        setOffline(!(isAxiosError(error) && error.response));
         const message =
           isAxiosError(error) && error.response
             ? (error.response.data?.message ??
@@ -314,60 +266,28 @@ export default function LoginScreen() {
     else await handleOtpVerify(data as OtpFormValues);
   };
 
-  const retry = offline ? (
-    <TextLink
-      tone="primary"
-      onPress={() => void handleSubmit(onSubmit)()}
-      accessibilityHint={t("Sends the request again")}
-    >
-      {t("Try again")}
-    </TextLink>
-  ) : null;
-
   return (
-    <KeyboardAvoidingView
-      className="flex-1 bg-background"
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
+    <View className="flex-1 bg-background px-5">
       <View
         className="absolute right-5 z-10"
         style={{ top: insets.top + 8 }}
       >
         <LanguageSelect />
       </View>
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        contentContainerClassName="flex-grow justify-center px-5"
-        contentContainerStyle={{
-          paddingTop: insets.top + 56,
-          paddingBottom: Math.max(insets.bottom, 16) + 16,
-        }}
-      >
-        <View className="items-center gap-3 pb-4">
-          <Logo className="h-12 w-12 rounded-full shadow-lg shadow-brand-orange/30" />
+      <View className="flex-1 justify-center">
+        <View className="items-center gap-3.5 pb-[26px]">
+          <Logo className="h-[60px] w-[60px] rounded-full shadow-lg shadow-brand-orange/30" />
           <View className="items-center gap-1">
-            <Text
-              accessibilityRole="header"
-              className="text-center text-title font-bold tracking-[-0.02em]"
-            >
-              {stage === "email"
-                ? t("Your DLU schedule, planned for you")
-                : t("Enter your code")}
+            <Text className="text-[22px] font-bold tracking-[-0.02em]">
+              {stage === "email" ? t("Login to Zenflow") : t("Enter your code")}
             </Text>
-            <Text className="text-center text-sm text-muted-foreground">
+            <Text className="text-[14px] text-muted-foreground">
               {stage === "email"
-                ? t("Add what's due. Zenflow picks the time.")
+                ? t("A focus-first planner that schedules for you.")
                 : t("Sent to {email}", { email: hideEmail(email) })}
             </Text>
           </View>
         </View>
-
-        {stage === "email" && !keyboardOpen ? (
-          <View className="mb-5">
-            <PlannedDayPreview />
-          </View>
-        ) : null}
 
         <Form {...form}>
           {stage === "email" ? (
@@ -379,8 +299,8 @@ export default function LoginScreen() {
                   <FormInput
                     name={field.name}
                     label={t("Email")}
-                    labelClassName="text-sm font-semibold"
-                    placeholder="mssv@dlu.edu.vn"
+                    labelClassName="text-[14px] font-semibold"
+                    placeholder="m@example.com"
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoComplete="email"
@@ -392,7 +312,6 @@ export default function LoginScreen() {
                   />
                 )}
               />
-              {retry}
               {requestLockout.active && (
                 <LockoutNotice>
                   {t("Too many requests. Wait a moment, then try again.")}
@@ -401,27 +320,33 @@ export default function LoginScreen() {
             </View>
           ) : (
             <View>
-              <TextLink
+              <Pressable
                 disabled={otpLockout.active}
                 onPress={() => {
                   if (otpLockout.active) return;
                   setStage("email");
-                  setOffline(false);
                   form.setValue("otp", "");
                   clearErrors();
                   otpLockout.clear();
                   resendCooldown.clear();
                 }}
               >
-                {t("Change email")}
-              </TextLink>
+                <Text
+                  className={cn(
+                    "text-[13px] underline text-muted-foreground underline-offset-[3px]",
+                    otpLockout.active && "text-muted-foreground opacity-50",
+                  )}
+                >
+                  {t("Change email")}
+                </Text>
+              </Pressable>
               <Controller
                 control={form.control}
                 name="otp"
                 render={({ field, fieldState }) => (
-                  <View className="mb-3 mt-1 gap-2">
-                    <Text className="text-sm font-semibold">
-                      {t("Sign-in code")}
+                  <View className="mt-[18px] mb-[18px] gap-2">
+                    <Text className="text-[14px] font-semibold">
+                      {t("One-Time Password")}
                     </Text>
                     <View className={cn(otpLockout.active && "opacity-50")}>
                       <OtpBoxes
@@ -437,15 +362,10 @@ export default function LoginScreen() {
                       />
                     </View>
                     {fieldState.error && (
-                      <Text
-                        accessibilityRole="alert"
-                        accessibilityLiveRegion="polite"
-                        className="text-sm font-medium text-destructive"
-                      >
+                      <Text className="text-sm font-medium text-destructive">
                         {fieldState.error.message}
                       </Text>
                     )}
-                    {fieldState.error ? retry : null}
                     {otpLockout.active && (
                       <LockoutNotice>
                         {t("Too many attempts. Try again in")}{" "}
@@ -455,61 +375,51 @@ export default function LoginScreen() {
                   </View>
                 )}
               />
-              {/* One fixed-height row for every state, so swapping between the
-                  resend button and the cooldown never moves the page. */}
-              <View className="h-12 w-full items-center justify-center">
-                {submitting ? (
-                  <View
-                    accessibilityLiveRegion="polite"
-                    className="flex-row items-center justify-center gap-[9px]"
-                  >
-                    <ActivityIndicator
-                      size="small"
-                      color={palette.mutedForeground}
-                    />
-                    <Text className="text-sm text-muted-foreground">
-                      {t("Verifying code…")}
-                    </Text>
-                  </View>
-                ) : otpLockout.active ? (
-                  <View className="h-12 w-full flex-row items-center justify-center rounded-xl opacity-50">
-                    <Text className="text-sm font-semibold text-muted-foreground">
-                      {t("Resend code")}
-                    </Text>
-                  </View>
-                ) : requestLockout.active ? (
-                  <View className="h-12 w-full flex-row items-center justify-center gap-2 rounded-xl opacity-50">
-                    <Clock size={16} className="text-muted-foreground" />
-                    <Text className="text-sm font-semibold tabular-nums text-muted-foreground">
-                      {t("Try again in")}{" "}
-                      {formatCountdown(requestLockout.remaining)}
-                    </Text>
-                  </View>
-                ) : resendCooldown.active ? (
-                  <View className="h-12 w-full flex-row items-center justify-center gap-2 rounded-xl opacity-50">
-                    <Clock size={16} className="text-muted-foreground" />
-                    <Text className="text-sm font-semibold tabular-nums text-muted-foreground">
-                      {t("Resend code in")}{" "}
-                      {formatCountdown(resendCooldown.remaining)}
-                    </Text>
-                  </View>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    disabled={submitting}
-                    onPress={() => handleEmailRequest({ email })}
-                    accessibilityLabel={t("Resend code")}
-                    className="h-12 w-full rounded-xl"
-                  >
-                    <Text className="text-sm font-semibold text-muted-foreground">
-                      {t("Resend code")}
-                    </Text>
-                  </Button>
-                )}
-              </View>
-              <Text className="mt-1 text-center text-xs leading-4 text-muted-foreground">
-                {t("Didn't get it? Check your spam folder.")}
-              </Text>
+              {submitting ? (
+                <View className="flex-row items-center justify-center gap-[9px]">
+                  <ActivityIndicator
+                    className="mr-2"
+                    size="small"
+                    color="black"
+                  />
+                  <Text className="text-[14px] text-muted-foreground">
+                    {t("Verifying code…")}
+                  </Text>
+                </View>
+              ) : otpLockout.active ? (
+                <View className="h-12 w-full flex-row items-center justify-center rounded-xl opacity-50">
+                  <Text className="text-sm font-semibold text-muted-foreground">
+                    {t("Resend code")}
+                  </Text>
+                </View>
+              ) : requestLockout.active ? (
+                <View className="h-12 w-full flex-row items-center justify-center gap-2 rounded-xl opacity-50">
+                  <Clock size={16} className="text-muted-foreground" />
+                  <Text className="text-sm font-semibold tabular-nums text-muted-foreground">
+                    {t("Try again in")}{" "}
+                    {formatCountdown(requestLockout.remaining)}
+                  </Text>
+                </View>
+              ) : resendCooldown.active ? (
+                <View className="h-12 w-full flex-row items-center justify-center gap-2 rounded-xl opacity-50">
+                  <Clock size={16} className="text-muted-foreground" />
+                  <Text className="text-sm font-semibold tabular-nums text-muted-foreground">
+                    {t("Resend code in")}{" "}
+                    {formatCountdown(resendCooldown.remaining)}
+                  </Text>
+                </View>
+              ) : (
+                <Button
+                  variant="ghost"
+                  disabled={submitting}
+                  onPress={() => handleEmailRequest({ email })}
+                  className="w-full rounded-xl"
+                >
+                  <Text className="text-sm font-semibold text-muted-foreground">
+                    {t("Resend code")}
+                  </Text>
+                </Button>
+              )}
             </View>
           )}
 
@@ -526,17 +436,13 @@ export default function LoginScreen() {
               <Button
                 className="mt-[18px] flex-row h-[52px] rounded-xl"
                 disabled={submitting}
-                accessibilityLabel={
-                  submitting ? t("Sending…") : t("Send sign-in code")
-                }
-                accessibilityState={{ busy: submitting, disabled: submitting }}
                 onPress={handleSubmit(onSubmit)}
               >
                 {submitting && (
                   <ActivityIndicator
                     className="mr-2"
                     size="small"
-                    color={NAV_THEME.light.primaryForeground}
+                    color="black"
                   />
                 )}
                 <Text
@@ -545,46 +451,24 @@ export default function LoginScreen() {
                     submitting && "text-primary-foreground/70",
                   )}
                 >
-                  {submitting ? t("Sending…") : t("Send sign-in code")}
+                  {submitting ? t("Sending…") : t("Send OTP")}
                 </Text>
               </Button>
             ))}
         </Form>
 
-        {/* Plain text, not links: the app has no Terms or Privacy URL in its
-            config to open yet. */}
-        <Text className="mt-[18px] px-2.5 text-center text-xs leading-normal text-muted-foreground">
+        <Text className="mt-[22px] px-2.5 text-center text-[12px] leading-normal text-muted-foreground">
           {t("By continuing, you agree to our")}{" "}
-          <Text className="text-xs text-foreground underline underline-offset-2">
+          <Text className="text-[12px] text-foreground underline underline-offset-2">
             {t("Terms of Service")}
           </Text>{" "}
           {t("and")}{" "}
-          <Text className="text-xs text-foreground underline underline-offset-2">
+          <Text className="text-[12px] text-foreground underline underline-offset-2">
             {t("Privacy Policy")}
           </Text>
           .
         </Text>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </View>
+    </View>
   );
-}
-
-/** True while the software keyboard is up (the hero preview steps aside for it). */
-function useKeyboardOpen(): boolean {
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    const show = Keyboard.addListener(
-      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
-      () => setOpen(true),
-    );
-    const hide = Keyboard.addListener(
-      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
-      () => setOpen(false),
-    );
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
-  return open;
 }

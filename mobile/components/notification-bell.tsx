@@ -21,11 +21,8 @@ export function NotificationBell() {
   return (
     <Pressable
       onPress={() => router.push("/notifications" as Href)}
-      accessibilityRole="button"
       accessibilityLabel={
-        unread > 0
-          ? `${t("Notifications")}, ${t("{count} unread", { count: unread })}`
-          : t("Notifications")
+        unread > 0 ? `Notifications, ${unread} unread` : t(t("Notifications"))
       }
       hitSlop={10}
       style={{ top: insets.top + 8 }}
@@ -33,7 +30,7 @@ export function NotificationBell() {
     >
       <Bell size={17} className="text-foreground" />
       {unread > 0 && (
-        <View className="absolute -right-0.5 -top-0.5 size-3 rounded-full border-2 border-background bg-primary-text" />
+        <View className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-background bg-destructive" />
       )}
     </Pressable>
   );

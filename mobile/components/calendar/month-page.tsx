@@ -1,5 +1,4 @@
 import { t } from "@/lib/i18n";
-import { sessionTypeTextClass } from "@/lib/session-type-class";
 import { useLanguage } from "@/hooks/use-language";
 import { useDelayedLoading } from "@/hooks/use-delayed-loading";
 import { format } from "@/lib/i18n";
@@ -103,6 +102,8 @@ interface MonthPageProps {
   onDragActiveChange: (active: boolean) => void;
   onOpenDay: (day: Date, tasks: Session[], drag: MonthDragHandle) => void;
   onOpenOverflow: (day: Date, tasks: Session[], drag: MonthDragHandle) => void;
+  /** Double tap on a cell → jump to the Week view with that day selected. */
+  onDoubleTapDay: (day: Date) => void;
 }
 
 /**
@@ -125,6 +126,7 @@ export const MonthPage = memo(function MonthPage({
   onDragActiveChange,
   onOpenDay,
   onOpenOverflow,
+  onDoubleTapDay,
 }: MonthPageProps) {
   useLanguage();
   const { toast, confirm } = useToast();
@@ -517,6 +519,7 @@ export const MonthPage = memo(function MonthPage({
           highlightedKey={highlightedKey}
           draggingSessionId={dragging?.task.id ?? null}
           onPressDay={handleOpenDay}
+          onDoubleTapDay={onDoubleTapDay}
           onPressOverflow={handleOpenOverflow}
           onGridLayout={measureGeometry}
           justDroppedKey={justDroppedKey}
@@ -530,25 +533,28 @@ export const MonthPage = memo(function MonthPage({
         <Animated.View pointerEvents="none" style={ghostStyle}>
           <View
             className={cn(
-              // Same hairline outline as the grid pills (the hue is in
-              // `MONTH_PILL_CLASSES`; a bare `border` would fall back to black).
-              "flex-row items-center gap-1 rounded-md border px-1.5 py-1 shadow-lg",
+              // Keeps the pills' `border-l-2` accent rather than the mockup's
+              // all-round `border border-brand-orange/45`: RN has no
+              // per-state border color in `MONTH_PILL_CLASSES` for the other
+              // three sides, and an uncolored `border` there falls back to
+              // black instead of inheriting.
+              "flex-row items-center gap-1 rounded-md border-l-2 px-1.5 py-1 shadow-lg",
               MONTH_PILL_CLASSES[ghostState],
             )}
           >
             <GhostIcon
-              size={11}
-              className={sessionTypeTextClass(ghostSession.type)}
+              size={10}
+              className={SESSION_TYPE_META[ghostSession.type].textClass}
             />
             <Text
               numberOfLines={1}
               className={cn(
-                "flex-1 text-label font-semibold",
+                "flex-1 text-[10px] font-semibold",
                 MONTH_PILL_TEXT_CLASSES[ghostState],
               )}
             >
               {ghostSession.scheduledStartTime && (
-                <Text className="text-label font-normal text-muted-foreground">
+                <Text className="text-[10px] font-normal text-muted-foreground">
                   {format(
                     zonedDate(ghostSession.scheduledStartTime, tz),
                     "H:mm",

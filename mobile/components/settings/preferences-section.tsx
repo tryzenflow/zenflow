@@ -14,7 +14,6 @@ import {
 import { SettingsSectionLabel } from "@/components/settings/settings-header";
 import { useNotificationToggle } from "@/hooks/use-notification-toggle";
 import { Switch } from "@/components/ui/switch";
-import { haptic } from "@/lib/haptics";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
 import {
@@ -43,13 +42,8 @@ function Row({
   useLanguage();
   return (
     <Pressable
-      onPress={() => {
-        haptic.select();
-        onPress();
-      }}
-      accessibilityRole="button"
-      accessibilityLabel={`${title}, ${value}`}
-      className="min-h-14 flex-row items-center gap-[13px] px-4 py-3.5"
+      onPress={onPress}
+      className="flex-row items-center gap-[13px] px-4 py-3.5"
     >
       <View className="h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl bg-muted">
         <Icon size={18} className="text-foreground" />
@@ -163,11 +157,7 @@ export function PreferencesSection() {
               {t("Push alerts for reminders and schedule changes")}
             </Text>
           </View>
-          <Switch
-            checked={active}
-            onCheckedChange={toggleNotifications}
-            accessibilityLabel={t("Allow notifications")}
-          />
+          <Switch checked={active} onCheckedChange={toggleNotifications} />
         </View>
       </View>
 

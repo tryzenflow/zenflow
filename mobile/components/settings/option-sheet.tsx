@@ -156,7 +156,7 @@ function OptionSheetInner<T extends string | number>(
                     className={cn(
                       "text-[15px]",
                       selected
-                        ? "font-semibold text-primary-text"
+                        ? "font-semibold text-primary"
                         : "text-foreground",
                     )}
                   >
@@ -168,7 +168,7 @@ function OptionSheetInner<T extends string | number>(
                     {option.detail}
                   </Text>
                 ) : null}
-                {selected && <Check size={18} className="ml-3 text-primary-text" />}
+                {selected && <Check size={18} className="ml-3 text-primary" />}
               </Pressable>
             );
           })}

@@ -27,10 +27,6 @@ interface NotificationsState {
   fetchNotifications: (mode?: "initial" | "refresh") => Promise<void>;
   addNotification: (n: NotificationDto) => void;
   dismiss: (id: string) => Promise<void>;
-  /** Hide a row without deleting it yet (the inbox's Undo window); returns it. */
-  removeLocal: (id: string) => NotificationDto | undefined;
-  /** Put a hidden row back where it belongs (newest first). */
-  restoreLocal: (n: NotificationDto) => void;
   dismissMany: (ids: string[]) => Promise<void>;
   clearAll: () => Promise<void>;
   markRead: (id: string) => Promise<void>;
@@ -108,31 +104,6 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
       set({ items: prevItems });
       throw new Error(t("Couldn't dismiss notification"));
     }
-  },
-
-  removeLocal: (id: string) => {
-    const target = get().items.find((x) => x.id === id);
-    if (!target) return undefined;
-    set((state) => ({
-      items: state.items.filter((x) => x.id !== id),
-      unreadCount: !target.readAt
-        ? Math.max(0, state.unreadCount - 1)
-        : state.unreadCount,
-    }));
-    return target;
-  },
-
-  restoreLocal: (n: NotificationDto) => {
-    set((state) => {
-      if (state.items.some((x) => x.id === n.id)) return state;
-      const items = [...state.items, n].sort(
-        (a, b) => +new Date(b.sentAt) - +new Date(a.sentAt),
-      );
-      return {
-        items,
-        unreadCount: !n.readAt ? state.unreadCount + 1 : state.unreadCount,
-      };
-    });
   },
 
   dismissMany: async (ids: string[]) => {

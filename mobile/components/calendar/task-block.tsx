@@ -1,5 +1,4 @@
 import { SpotlightAnchor } from "@/components/checklist/spotlight-anchor";
-import { sessionTypeTextClass } from "@/lib/session-type-class";
 import { t } from "@/lib/i18n";
 import { useLanguage } from "@/hooks/use-language";
 import { locale, localizedDeadlineShort } from "@/lib/i18n";
@@ -11,7 +10,7 @@ import {
   MapPin,
 } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
-import { FONT_SCALE_CAP, NAV_THEME } from "@/lib/constants";
+import { NAV_THEME } from "@/lib/constants";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
 import { differenceInCalendarDays } from "date-fns";
@@ -41,7 +40,6 @@ import Animated, {
   withSpring,
   withTiming,
   interpolate,
-  useReducedMotion,
   runOnJS,
   type SharedValue,
 } from "react-native-reanimated";
@@ -142,7 +140,7 @@ function DueChip({ late, label }: { late: boolean; label: string }) {
       ) : (
         <Clock size={12} className="text-muted-foreground" />
       )}
-      <Text maxFontSizeMultiplier={FONT_SCALE_CAP.grid}
+      <Text
         className={cn(
           "text-xs font-medium leading-none",
           late ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground",
@@ -166,7 +164,7 @@ function LocationChip({ location }: { location: string }) {
   return (
     <View className="min-w-0 flex-row items-center gap-1 rounded bg-muted px-1 py-0.5">
       <Icon size={11} className="shrink-0 text-muted-foreground" />
-      <Text maxFontSizeMultiplier={FONT_SCALE_CAP.grid}
+      <Text
         className="shrink text-xs font-medium leading-none text-muted-foreground"
         numberOfLines={1}
         ellipsizeMode="tail"
@@ -405,15 +403,10 @@ function SessionBlockImpl({
     },
   );
 
-  const reduceMotion = useReducedMotion();
   const [flashing, setFlashing] = useState(false);
   useEffect(() => {
     if (!flash) return;
     setFlashing(true);
-    // The block has landed: a soft "success" tap, a beat after the scroll.
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
-      () => {},
-    );
     flashProgress.value = 1;
     flashProgress.value = withTiming(0, {
       duration: 640,
@@ -434,8 +427,7 @@ function SessionBlockImpl({
     // rest). A plain drag no longer scales or tilts the card: it just tracks
     // the finger (and lifts its shadow, `shadowStyle`).
     const p = 1 - flashProgress.value;
-    // Reduce Motion: no pop or slide; the ring below still fades in and out.
-    const pop = reduceMotion ? 1 : interpolate(p, [0, 0.35, 1], [1, 1.05, 1]);
+    const pop = interpolate(p, [0, 0.35, 1], [1, 1.05, 1]);
     return {
       transform: [
         {
@@ -445,8 +437,7 @@ function SessionBlockImpl({
           translateY:
             isDragging.value === 1 ? snapOffsetY.value : translateY.value,
         },
-        { translateX:
-            translateX.value + (reduceMotion ? 0 : interpolate(p, [0, 1], [10, 0])) },
+        { translateX: translateX.value + interpolate(p, [0, 1], [10, 0]) },
         { scale: pop },
       ],
     };
@@ -460,9 +451,7 @@ function SessionBlockImpl({
     const p = 1 - flashProgress.value;
     return {
       opacity: interpolate(p, [0, 0.12, 1], [0, 0.9, 0]),
-      transform: [
-        { scale: reduceMotion ? 1 : interpolate(p, [0, 1], [0.98, 1.16]) },
-      ],
+      transform: [{ scale: interpolate(p, [0, 1], [0.98, 1.16]) }],
     };
   });
 
@@ -841,7 +830,7 @@ function SessionBlockImpl({
             // nothing.
             <View className="w-full min-w-0 flex-row items-center gap-1">
               {segment.continued ? (
-                <Text maxFontSizeMultiplier={FONT_SCALE_CAP.grid} className="shrink-0 text-label leading-none text-muted-foreground">
+                <Text className="shrink-0 text-[10px] leading-none text-muted-foreground">
                   ↳
                 </Text>
               ) : (
@@ -849,7 +838,7 @@ function SessionBlockImpl({
                   size={11}
                   className={cn(
                     "shrink-0",
-                    sessionTypeTextClass(segment.type),
+                    SESSION_TYPE_META[segment.type].textClass,
                   )}
                 />
               )}
@@ -864,16 +853,16 @@ function SessionBlockImpl({
               )}
               {/* Explicit px line heights: `leading-none` (lineHeight = font
                   size) clipped the tops of the glyphs on Android. */}
-              <Text maxFontSizeMultiplier={FONT_SCALE_CAP.grid}
-                className="min-w-0 flex-1 text-label font-semibold leading-[14px]"
+              <Text
+                className="min-w-0 flex-1 text-[11px] font-semibold leading-[14px]"
                 style={COMPACT_TEXT_STYLE}
                 numberOfLines={1}
                 ellipsizeMode="tail"
               >
                 {segment.title}
               </Text>
-              <Text maxFontSizeMultiplier={FONT_SCALE_CAP.grid}
-                className="shrink-0 text-label leading-[12px] text-muted-foreground"
+              <Text
+                className="shrink-0 text-[9px] leading-[12px] text-muted-foreground"
                 style={COMPACT_TEXT_STYLE}
               >
                 {segment.continued
@@ -885,7 +874,7 @@ function SessionBlockImpl({
             <>
               <View className="min-w-0 flex-row items-center gap-1.5">
                 {segment.continued ? (
-                  <Text maxFontSizeMultiplier={FONT_SCALE_CAP.grid} className="shrink-0 text-label text-muted-foreground">
+                  <Text className="shrink-0 text-[10px] text-muted-foreground">
                     ↳
                   </Text>
                 ) : (
@@ -895,8 +884,8 @@ function SessionBlockImpl({
                     iconOnly={typeBadgeIconOnly}
                   />
                 )}
-                <Text maxFontSizeMultiplier={FONT_SCALE_CAP.grid}
-                  className="min-w-0 flex-1 text-xs font-semibold leading-5"
+                <Text
+                  className="min-w-0 flex-1 text-[12px] font-semibold leading-5"
                   numberOfLines={1}
                   ellipsizeMode="tail"
                 >
@@ -904,7 +893,7 @@ function SessionBlockImpl({
                 </Text>
               </View>
               <View className="flex-row flex-wrap items-center gap-1">
-                <Text maxFontSizeMultiplier={FONT_SCALE_CAP.grid} className="text-label leading-[12px] text-muted-foreground">
+                <Text className="text-[10px] leading-[12px] text-muted-foreground">
                   {segment.continued
                     ? t("cont. → {time}", { time: fmt(segment.taskEnd, tz) })
                     : segment.continues && !drawsThrough
@@ -932,12 +921,12 @@ function SessionBlockImpl({
                       key={t}
                       className={cn("rounded border px-1.5 py-0.5", tagTint(t))}
                     >
-                      <Text maxFontSizeMultiplier={FONT_SCALE_CAP.grid} className="text-label font-medium">{t}</Text>
+                      <Text className="text-[9px] font-medium">{t}</Text>
                     </View>
                   ))}
                   {segment.tags.length > 3 && (
                     <View className="rounded border border-border bg-muted px-1.5 py-0.5">
-                      <Text maxFontSizeMultiplier={FONT_SCALE_CAP.grid} className="text-label font-medium text-muted-foreground">
+                      <Text className="text-[9px] font-medium text-muted-foreground">
                         +{segment.tags.length - 3}
                       </Text>
                     </View>

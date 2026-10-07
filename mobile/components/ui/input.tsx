@@ -12,10 +12,7 @@ type InputProps = {
   placeholder?: string;
   secureTextEntry?: boolean;
   editable?: boolean;
-  autoComplete?: any;
-  textContentType?: any;
-  blurOnSubmit?: boolean;
-  enterKeyHint?: any;
+  autoComplete?: "name" | "email" | "username" | "password" | "off";
   autoCapitalize?: "none" | "sentences" | "words" | "characters";
   autoCorrect?: boolean;
   autoFocus?: boolean;
@@ -45,18 +42,9 @@ type InputProps = {
 
 const Input = React.forwardRef<React.ElementRef<typeof TextInput>, InputProps>(
   (
-    {
-      className,
-      placeholderClassName,
-      rightElement,
-      as,
-      onFocus,
-      onBlur,
-      ...props
-    },
+    { className, placeholderClassName, rightElement, as, ...props },
     ref,
   ) => {
-    const [focused, setFocused] = React.useState(false);
     const Component: React.ComponentType<any> = as ?? TextInput;
     const input = (
       <Component
@@ -64,8 +52,6 @@ const Input = React.forwardRef<React.ElementRef<typeof TextInput>, InputProps>(
         className={cn(
           "web:flex h-10 native:h-12 web:w-full rounded-md border border-input bg-background px-3 web:py-2 text-base lg:text-sm native:text-lg native:leading-[1.25] text-foreground placeholder:text-muted-foreground web:ring-offset-background file:border-0 file:bg-transparent file:font-medium web:focus-visible:outline-none web:focus-visible:ring-2 web:focus-visible:ring-ring web:focus-visible:ring-offset-2",
           props.editable === false && "opacity-50 web:cursor-not-allowed",
-          // Focus: the orange text token (5.4:1), not the 2:1 brand orange.
-          focused && "border-primary-text",
           props["aria-invalid"] &&
             "border-destructive web:ring-[3px] web:ring-destructive/20 web:dark:ring-destructive/40",
           rightElement && "pr-10",
@@ -74,14 +60,6 @@ const Input = React.forwardRef<React.ElementRef<typeof TextInput>, InputProps>(
         placeholderClassName={cn("text-muted-foreground", placeholderClassName)}
         style={{ fontFamily: "Geist" }}
         {...props}
-        onFocus={(e: unknown) => {
-          setFocused(true);
-          onFocus?.(e);
-        }}
-        onBlur={(e: unknown) => {
-          setFocused(false);
-          onBlur?.(e);
-        }}
       />
     );
 

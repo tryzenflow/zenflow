@@ -15,21 +15,9 @@ import {
   Trash2,
   X,
 } from "@/components/Icons";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
-import { dismissNotification, rescheduleConflicts } from "@/api/notifications";
-import {
-  ModalToastScope,
-  useModalToast,
-} from "@/components/tasks/modal-toast-scope";
-import { useDelayedLoading } from "@/hooks/use-delayed-loading";
-import { useMotion } from "@/hooks/use-motion";
-import { NAV_THEME } from "@/lib/constants";
-import { haptic } from "@/lib/haptics";
-import { createUndoQueue } from "@/lib/undo-queue";
-import { useColorScheme } from "@/lib/useColorScheme";
-import Animated from "react-native-reanimated";
+import { rescheduleConflicts } from "@/api/notifications";
+import { useToast } from "@/components/ui/toast";
 import {
   useNotificationsStore,
   viewSessionOnCalendar,
@@ -46,7 +34,7 @@ import { formatDistanceToNow } from "date-fns";
 import { zonedDate } from "@zenflow/core";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -82,27 +70,11 @@ const CATEGORY_LABEL: Record<NotificationCategory, string> = {
 };
 
 /** Visual configuration for a notification's eventName, matching mockups/detected-items.html */
-/**
- * Icon colours are explicit light/dark pairs (the session-type hues, AA-dark in
- * light mode); conflict and reminder come from the theme mirror. Hex, not
- * classes: NativeWind color interop on lucide icons is unreliable on native.
- */
-const ICON_COLOR = {
-  ASSIGNMENT: { light: "#0f766e", dark: "#2dd4bf" },
-  EXAM: { light: "#e11d48", dark: "#fb7185" },
-  LECTURE: { light: "#0369a1", dark: "#38bdf8" },
-  CONFLICT: { light: NAV_THEME.light.warning, dark: NAV_THEME.dark.warning },
-  REMINDER: {
-    light: NAV_THEME.light.primaryText,
-    dark: NAV_THEME.dark.primaryText,
-  },
-} as const;
-
 function notificationVisual(eventName: string): {
   Icon: LucideIcon;
   label: string;
   tint: string;
-  iconColor: { light: string; dark: string };
+  iconColor: string;
 } {
   const category = notificationCategory(eventName);
   if (notificationEventKind(eventName) === "CONFLICT") {
@@ -110,7 +82,7 @@ function notificationVisual(eventName: string): {
       Icon: AlertTriangle,
       label: t("{category} conflict", { category: CATEGORY_LABEL[category] }),
       tint: "border-amber-500/40 bg-amber-500/15",
-      iconColor: ICON_COLOR.CONFLICT,
+      iconColor: "#d97706",
     };
   }
   switch (category) {
@@ -119,21 +91,21 @@ function notificationVisual(eventName: string): {
         Icon: ClipboardList,
         label: CATEGORY_LABEL.ASSIGNMENT,
         tint: "border-teal-500/40 bg-teal-500/15",
-        iconColor: ICON_COLOR.ASSIGNMENT,
+        iconColor: "#0f766e",
       };
     case "EXAM":
       return {
         Icon: Notebook,
         label: CATEGORY_LABEL.EXAM,
         tint: "border-rose-500/40 bg-rose-500/15",
-        iconColor: ICON_COLOR.EXAM,
+        iconColor: "#e11d48",
       };
     case "LECTURE":
       return {
         Icon: GraduationCap,
         label: CATEGORY_LABEL.LECTURE,
         tint: "border-sky-500/40 bg-sky-500/15",
-        iconColor: ICON_COLOR.LECTURE,
+        iconColor: "#0369a1",
       };
     case "REMINDER":
     default:
@@ -141,7 +113,7 @@ function notificationVisual(eventName: string): {
         Icon: Bell,
         label: CATEGORY_LABEL.REMINDER,
         tint: "border-primary/40 bg-primary/15",
-        iconColor: ICON_COLOR.REMINDER,
+        iconColor: "#f97316",
       };
   }
 }
@@ -167,23 +139,10 @@ function eventTimeLabel(n: NotificationDto, tz: string): string | null {
  * Edit and View-on-calendar actions, and swipe-left to dismiss.
  */
 export default function NotificationsScreen() {
-  // A modal screen sits above the root toast stack, so it gets its own.
-  return (
-    <ModalToastScope>
-      <NotificationsBody />
-    </ModalToastScope>
-  );
-}
-
-/** How long a swiped-away notification can be brought back. */
-const UNDO_WINDOW_MS = 5000;
-
-function NotificationsBody() {
   useLanguage();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { toast } = useModalToast();
-  const motion = useMotion();
+  const { toast } = useToast();
   const [reschedulingId, setReschedulingId] = useState<string | null>(null);
   const tz = useUserStore((s) => s.user?.timezone) || "UTC";
 
@@ -196,36 +155,13 @@ function NotificationsBody() {
   const loading = useNotificationsStore((s) => s.loading);
   const refreshing = useNotificationsStore((s) => s.refreshing);
   const fetchNotifications = useNotificationsStore((s) => s.fetchNotifications);
-    const dismissMany = useNotificationsStore((s) => s.dismissMany);
+  const dismiss = useNotificationsStore((s) => s.dismiss);
+  const dismissMany = useNotificationsStore((s) => s.dismissMany);
   const clearAll = useNotificationsStore((s) => s.clearAll);
   const markRead = useNotificationsStore((s) => s.markRead);
-  const removeLocal = useNotificationsStore((s) => s.removeLocal);
-  const restoreLocal = useNotificationsStore((s) => s.restoreLocal);
-  const showSkeleton = useDelayedLoading(loading);
-
-  // Swipe-delete hides the row now and deletes for real after the Undo window.
-  const toastRef = useRef(toast);
-  toastRef.current = toast;
-  const undoQueue = useRef(
-    createUndoQueue<NotificationDto>({
-      delayMs: UNDO_WINDOW_MS,
-      commit: (_id, item) => {
-        dismissNotification(item.id).catch(() => {
-          restoreLocal(item);
-          toastRef.current({
-            title: t("Couldn't delete notification"),
-            description: t("It's back in your inbox. Try again in a moment."),
-            variant: "destructive",
-          });
-        });
-      },
-    }),
-  ).current;
-  // Leaving the inbox must not drop a delete the student already saw.
-  useEffect(() => () => undoQueue.flush(), [undoQueue]);
 
   const toggleSelect = useCallback((id: string) => {
-    haptic.select();
+    void Haptics.selectionAsync();
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -282,30 +218,19 @@ function NotificationsBody() {
   );
 
   const handleDismiss = useCallback(
-    (id: string) => {
-      const item = removeLocal(id);
-      // Swipe and the Delete button can both fire for one row.
-      if (!item) return;
+    async (id: string) => {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      undoQueue.schedule(id, item);
-      toast({
-        title: t("Notification deleted"),
-        variant: "default",
-        duration: UNDO_WINDOW_MS,
-        action: {
-          label: t("Undo"),
-          inline: true,
-          onPress: () => {
-            const back = undoQueue.undo(id);
-            if (back) {
-              restoreLocal(back);
-              haptic.select();
-            }
-          },
-        },
-      });
+      try {
+        await dismiss(id);
+      } catch {
+        toast({
+          title: t("Couldn't dismiss notification"),
+          description: t("Try again in a moment."),
+          variant: "destructive",
+        });
+      }
     },
-    [removeLocal, restoreLocal, undoQueue, toast],
+    [dismiss, toast],
   );
 
   const handleDeleteSelected = useCallback(async () => {
@@ -352,7 +277,7 @@ function NotificationsBody() {
   }, []);
 
   const handleSelectAll = useCallback(() => {
-    haptic.select();
+    void Haptics.selectionAsync();
     if (selectedIds.size === items.length) {
       setSelectedIds(new Set());
     } else {
@@ -375,26 +300,21 @@ function NotificationsBody() {
           <>
             <Pressable
               onPress={exitSelecting}
-              accessibilityRole="button"
               accessibilityLabel={t("Cancel selection")}
-              className="size-11 items-center justify-center rounded-full active:bg-muted"
+              hitSlop={8}
+              className="size-9 items-center justify-center rounded-full active:bg-muted"
             >
               <X size={20} className="text-foreground" />
             </Pressable>
-            <Text
-              accessibilityRole="header"
-              accessibilityLiveRegion="polite"
-              className="flex-1 text-[17px] font-semibold text-foreground"
-            >
+            <Text className="flex-1 text-[17px] font-semibold text-foreground">
               {selectedIds.size} {t("selected")}
             </Text>
             <Pressable
               onPress={handleSelectAll}
-              accessibilityRole="button"
-              accessibilityLabel={allSelected ? t("Select none") : t("Select all")}
-              className="min-h-11 justify-center rounded-full px-3 active:bg-muted"
+              hitSlop={8}
+              className="rounded-full px-3 py-1.5 active:bg-muted"
             >
-              <Text className="text-[13px] font-semibold text-primary-text">
+              <Text className="text-[13px] font-semibold text-primary">
                 {allSelected ? t("None") : t("All")}
               </Text>
             </Pressable>
@@ -405,11 +325,10 @@ function NotificationsBody() {
                   ? () => setShowClearAllConfirm(true)
                   : handleDeleteSelected
               }
-              accessibilityRole="button"
               accessibilityLabel={t("Delete selected")}
-              accessibilityState={{ disabled: selectedIds.size === 0 }}
+              hitSlop={8}
               className={cn(
-                "size-11 items-center justify-center rounded-full active:bg-destructive/10",
+                "size-9 items-center justify-center rounded-full active:bg-destructive/10",
                 selectedIds.size === 0 && "opacity-40",
               )}
             >
@@ -420,26 +339,18 @@ function NotificationsBody() {
           <>
             <Pressable
               onPress={() => router.back()}
-              accessibilityRole="button"
               accessibilityLabel={t("Back")}
-              className="size-11 items-center justify-center rounded-full active:bg-muted"
+              hitSlop={8}
+              className="size-9 items-center justify-center rounded-full active:bg-muted"
             >
               <ChevronLeft size={22} className="text-foreground" />
             </Pressable>
             <View className="flex-1 flex-row items-center gap-2">
-              <Text
-                accessibilityRole="header"
-                className="text-xl font-bold tracking-tight text-foreground"
-              >
+              <Text className="text-xl font-bold tracking-tight text-foreground">
                 {t("Inbox")}
               </Text>
               {unreadCount > 0 && (
-                <View
-                  accessibilityLabel={t("{count} unread", {
-                    count: unreadCount,
-                  })}
-                  className="h-[20px] min-w-[26px] rounded-full items-center justify-center bg-primary px-2"
-                >
+                <View className="h-[20px] min-w-[26px] rounded-full items-center justify-center bg-primary px-2">
                   <Text className="text-sm font-bold leading-none text-primary-foreground">
                     {unreadCount.toLocaleString(locale())}
                   </Text>
@@ -449,10 +360,10 @@ function NotificationsBody() {
             {items.length > 0 && (
               <Pressable
                 onPress={() => setIsSelecting(true)}
-                accessibilityRole="button"
-                className="min-h-11 justify-center rounded-full px-3 active:bg-muted"
+                hitSlop={8}
+                className="rounded-full px-3 py-1.5 active:bg-muted"
               >
-                <Text className="text-[14px] font-semibold text-primary-text">
+                <Text className="text-[14px] font-semibold text-primary">
                   {t("Select")}
                 </Text>
               </Pressable>
@@ -463,9 +374,9 @@ function NotificationsBody() {
 
       {/* Body */}
       {loading ? (
-        showSkeleton ? (
-          <InboxSkeleton />
-        ) : null
+        <View className="flex-1 items-center justify-center py-20">
+          <ActivityIndicator />
+        </View>
       ) : (
         <FlatList
           data={items}
@@ -483,16 +394,10 @@ function NotificationsBody() {
           }
           ListEmptyComponent={
             <View className="flex-1 items-center justify-center px-8 py-16">
-              <Animated.View
-                {...motion.pop()}
-                className="mb-4 h-14 w-14 items-center justify-center rounded-full border border-primary/30 bg-primary/10"
-              >
-                <Check size={24} className="text-primary-text" />
-              </Animated.View>
-              <Text
-                accessibilityRole="header"
-                className="text-center text-[16px] font-semibold text-foreground"
-              >
+              <View className="mb-4 h-14 w-14 items-center justify-center rounded-full border border-primary/30 bg-primary/10">
+                <Check size={24} className="text-primary" />
+              </View>
+              <Text className="text-center text-[16px] font-semibold text-foreground">
                 {t("You're all caught up")}
               </Text>
               <Text className="mt-1.5 text-center text-[13px] leading-snug text-muted-foreground">
@@ -517,24 +422,13 @@ function NotificationsBody() {
 
       {/* Confirm Clear All Modal */}
       {showClearAllConfirm && (
-        <Modal
-          visible={true}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setShowClearAllConfirm(false)}
-        >
-          <View
-            accessibilityViewIsModal
-            className="flex-1 items-center justify-center bg-black/60 px-5"
-          >
+        <Modal visible={true} transparent animationType="fade">
+          <View className="flex-1 items-center justify-center bg-black/60 px-5">
             <View className="w-full max-w-sm rounded-3xl border border-border bg-card p-6 shadow-2xl">
               <View className="mb-3 h-12 w-12 items-center justify-center rounded-2xl bg-destructive/15">
                 <Trash2 size={22} className="text-destructive" />
               </View>
-              <Text
-                accessibilityRole="header"
-                className="text-lg font-bold text-foreground"
-              >
+              <Text className="text-lg font-bold text-foreground">
                 {t("Clear all notifications?")}
               </Text>
               <Text className="mt-2 text-sm leading-relaxed text-muted-foreground">
@@ -544,45 +438,30 @@ function NotificationsBody() {
               </Text>
 
               <View className="mt-6 flex-row gap-3">
-                <Button
-                  variant="outline"
-                  className="h-11 flex-1"
+                <Pressable
                   onPress={() => setShowClearAllConfirm(false)}
+                  className="h-11 flex-1 items-center justify-center rounded-xl border border-border bg-muted/60"
                 >
-                  <Text>{t("Cancel")}</Text>
-                </Button>
-                <Button
-                  variant="destructive"
-                  className="h-11 flex-1"
+                  <Text className="text-sm font-semibold text-foreground">
+                    {t("Cancel")}
+                  </Text>
+                </Pressable>
+                <Pressable
                   onPress={handleConfirmClearAll}
+                  className="h-11 flex-1 items-center justify-center rounded-xl bg-destructive active:opacity-90"
                 >
-                  <Text className="font-bold">{t("Clear all")}</Text>
-                </Button>
+                  <Text
+                    style={{ color: "#ffffff" }}
+                    className="text-sm font-bold text-white"
+                  >
+                    {t("Clear all")}
+                  </Text>
+                </Pressable>
               </View>
             </View>
           </View>
         </Modal>
       )}
-    </View>
-  );
-}
-
-/** Placeholder rows shown while the first page loads (after a short delay). */
-function InboxSkeleton() {
-  return (
-    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      {[0, 1, 2, 3, 4].map((i) => (
-        <View
-          key={i}
-          className="flex-row items-center gap-3.5 border-b border-border/70 px-4 py-3.5"
-        >
-          <Skeleton className="size-10 rounded-2xl" />
-          <View className="flex-1 gap-2">
-            <Skeleton className="h-3.5 w-11/12" />
-            <Skeleton className="h-3 w-1/3" />
-          </View>
-        </View>
-      ))}
     </View>
   );
 }
@@ -608,8 +487,6 @@ function NotificationRowItem({
 }) {
   useLanguage();
   const swipeableRef = useRef<SwipeableMethods>(null);
-  const { isDarkColorScheme } = useColorScheme();
-  const palette = isDarkColorScheme ? NAV_THEME.dark : NAV_THEME.light;
   const { Icon, tint, iconColor } = notificationVisual(n.eventName);
   const unread = !n.readAt;
   const relative = formatDistanceToNow(new Date(n.sentAt), {
@@ -627,20 +504,14 @@ function NotificationRowItem({
         swipeableRef.current?.close();
         onDismiss();
       }}
-      accessibilityRole="button"
-      accessibilityLabel={t("Delete")}
       className="w-[112px] flex-row items-center justify-center gap-1.5 bg-destructive"
     >
-      <Trash2 size={18} className="text-destructive-foreground" />
-      <Text className="text-[13px] font-semibold text-destructive-foreground">
-        {t("Delete")}
+      <Trash2 size={18} color="#ffffff" />
+      <Text className="text-[13px] font-semibold text-white">
+        {t("Dismiss")}
       </Text>
     </Pressable>
   );
-
-  const label = [unread ? t("Unread") : null, n.title, relative, when]
-    .filter(Boolean)
-    .join(", ");
 
   return (
     <Swipeable
@@ -653,48 +524,33 @@ function NotificationRowItem({
       onSwipeableOpen={() => onDismiss()}
     >
       {/* Opaque base: the row's unread/selected tints are translucent, so on
-          iOS the Delete action (laid out underneath) showed through at rest. */}
+          iOS the Dismiss action (laid out underneath) showed through at rest. */}
       <View className="bg-background">
         <Pressable
           onPress={onOpen}
-          accessibilityRole={isSelecting ? "checkbox" : "button"}
-          accessibilityLabel={label}
-          accessibilityState={isSelecting ? { checked: isSelected } : undefined}
-          accessibilityActions={
-            isSelecting ? undefined : [{ name: "delete", label: t("Delete") }]
-          }
-          onAccessibilityAction={(e) => {
-            if (e.nativeEvent.actionName === "delete") onDismiss();
-          }}
           className={cn(
             "flex-row items-center gap-3.5 border-b border-border/70 bg-background px-4 py-3.5",
-            unread && "bg-primary/10",
-            isSelected && "bg-primary/20",
+            unread && "bg-primary/[0.04]",
+            isSelected && "bg-primary/[0.09]",
           )}
         >
-          {/* Selection checkbox (visible in selection mode): a 24pt mark inside a 44pt target */}
+          {/* Selection Checkbox (visible in selection mode) */}
           {isSelecting && (
-            <View className="-ml-2 size-11 shrink-0 items-center justify-center">
-              <View
-                className={cn(
-                  "size-6 items-center justify-center rounded-full border-[1.5px]",
-                  isSelected
-                    ? "border-primary bg-primary"
-                    : "border-muted-foreground/60 bg-transparent",
-                )}
-              >
-                {isSelected && (
-                  <Check
-                    size={15}
-                    strokeWidth={3}
-                    className="text-primary-foreground"
-                  />
-                )}
-              </View>
+            <View
+              className={cn(
+                "h-6 w-6 shrink-0 items-center justify-center rounded-full border-[1.5px]",
+                isSelected
+                  ? "border-primary bg-primary"
+                  : "border-muted-foreground/50 bg-transparent",
+              )}
+            >
+              {isSelected && (
+                <Check size={15} color="#ffffff" strokeWidth={3} />
+              )}
             </View>
           )}
 
-          {/* Type icon badge with unread dot */}
+          {/* Type icon badge with unread badge */}
           <View className="relative shrink-0">
             <View
               className={cn(
@@ -702,24 +558,22 @@ function NotificationRowItem({
                 tint,
               )}
             >
-              <Icon
-                size={19}
-                color={iconColor[isDarkColorScheme ? "dark" : "light"]}
-              />
+              <Icon size={19} color={iconColor} />
             </View>
             {unread && (
-              <View className="absolute -right-0.5 -top-0.5 size-3 rounded-full border-2 border-background bg-primary-text" />
+              <View className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-background bg-destructive" />
             )}
           </View>
 
           {/* Content */}
           <View className="min-w-0 flex-1">
+            {/* Title line - always aligned! */}
             <Text
               numberOfLines={2}
               className={cn(
                 "text-[13.5px]",
                 unread
-                  ? "font-bold text-foreground"
+                  ? "font-semibold text-foreground"
                   : "font-medium text-foreground/85",
               )}
             >
@@ -730,7 +584,7 @@ function NotificationRowItem({
             <View className="mt-1 flex-row items-center gap-1.5">
               <Text
                 className={cn(
-                  "shrink-0 text-label",
+                  "shrink-0 text-[11px]",
                   unread
                     ? "font-medium text-foreground/80"
                     : "text-muted-foreground",
@@ -741,11 +595,13 @@ function NotificationRowItem({
 
               {when && (
                 <>
-                  <Text className="text-label text-muted-foreground">·</Text>
+                  <Text className="text-[11px] text-muted-foreground/60">
+                    ·
+                  </Text>
                   <Text
                     numberOfLines={1}
                     className={cn(
-                      "flex-1 text-label",
+                      "flex-1 text-[11px]",
                       unread
                         ? "font-medium text-foreground/80"
                         : "text-muted-foreground",
@@ -761,27 +617,25 @@ function NotificationRowItem({
               <Pressable
                 onPress={onRescheduleAll}
                 disabled={rescheduling}
-                accessibilityRole="button"
-                accessibilityLabel={t("Reschedule them all")}
-                accessibilityState={{ busy: rescheduling }}
-                className="mt-2 min-h-11 flex-row items-center gap-1.5 self-start rounded-full bg-warning px-4 active:opacity-80"
+                hitSlop={6}
+                className="mt-2 flex-row items-center gap-1.5 self-start rounded-full bg-amber-600 px-3 py-1 active:opacity-80"
               >
                 {rescheduling ? (
-                  <ActivityIndicator size="small" color={palette.background} />
+                  <ActivityIndicator size="small" color="#ffffff" />
                 ) : (
-                  <RefreshCw size={13} className="text-background" />
+                  <RefreshCw size={12} color="#ffffff" />
                 )}
-                <Text className="text-xs font-semibold text-background">
+                <Text className="text-[12px] font-semibold text-white">
                   {t("Reschedule them all")}
                 </Text>
               </Pressable>
             )}
           </View>
 
-          {/* Right indicator: only rows that open something */}
+          {/* Right indicator — only rows that open something */}
           {!isSelecting && n.sessionId && (
             <View className="shrink-0 pl-1 pr-0.5 items-center justify-center">
-              <ChevronRight size={16} className="text-muted-foreground" />
+              <ChevronRight size={16} className="text-muted-foreground/40" />
             </View>
           )}
         </Pressable>

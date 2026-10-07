@@ -78,7 +78,7 @@ mobile/
 | Route               | Screen                                                                            |
 | ------------------- | --------------------------------------------------------------------------------- |
 | `/(auth)/login`     | email then OTP; timezone captured on verify                                       |
-| `/(onboarding)`     | first-run setup: DLU, name, notifications, timezone (Vietnam time), reminder, tags; the step resumes after an interruption |
+| `/(onboarding)`     | first-run setup (tag picker)                                                      |
 | `/(app)` (Week)     | home: paginated day timeline + 7-day chip strip                                   |
 | `/(app)/month`      | Monday-first month grid                                                           |
 | `/(app)/settings`   | profile, appearance, preferences (language, timezone, default reminder; synced to API), integrations |
@@ -105,7 +105,7 @@ Reminders UI is `components/tasks/form/reminder-field.tsx` (hidden for `DND`); l
 Backend: `backend/src/devices/`, `backend/src/notifications/`.
 
 - **SSE:** bell badge and inbox read `GET /notifications/stream` via `react-native-sse` ([`api/notifications.ts`](api/notifications.ts)); no polling. `GET /notifications` is for the initial list and reconnect catch-up.
-- **Inbox** ([`app/notifications.tsx`](app/notifications.tsx)): per-topic icon, `NEW`/`CHANGE`/`DROP` badges, relative time, `eventEndsAt`. Swipe left hides the row and offers Undo for 5s before `DELETE /notifications/:id` (flushed on leaving; [`lib/undo-queue.ts`](lib/undo-queue.ts)).
+- **Inbox** ([`app/notifications.tsx`](app/notifications.tsx)): per-topic icon, `NEW`/`CHANGE`/`DROP` badges, relative time, `eventEndsAt`. Swipe left dismisses (`DELETE /notifications/:id`, optimistic).
 - **Foreground:** a tap-to-act toast jumps to the affected session (404-guarded).
 - **Native push:** the backend speaks FCM/APNs directly, so the app registers the raw device token (not an Expo token) via `POST /devices`. See [`lib/push.ts`](lib/push.ts) and the `use-push-registration` / `use-notifications` hooks. Sign-out unregisters.
 
@@ -119,17 +119,6 @@ Backend: `backend/src/devices/`, `backend/src/notifications/`.
 - Leave task titles, notes, names, locations and existing tags unchanged; suggested tags follow the language.
 - Backend notifications use the account language, so sync the preference before sending.
 - Vietnamese on Android uses an in-app date grid; iOS passes the locale to its native picker.
-
-## Accessibility conventions
-
-- Orange or amber **text and icons** use `text-primary-text` / `text-warning` (AA on light surfaces); the brand orange stays for fills. `NAV_THEME` mirrors them for non-className colours.
-- Type: `text-label` (11px) and `text-title` (22px) join the stock scale; nothing below 11. Dense chrome passes `maxFontSizeMultiplier={FONT_SCALE_CAP.chrome | grid}` ([`lib/constants.ts`](lib/constants.ts)).
-- Respect Reduce Motion with `useReducedMotion` from Reanimated; looping or sliding motion becomes static or instant.
-- Small text actions use [`TextLink`](components/ui/text-link.tsx) (44pt target, link role).
-- Touch targets are 44pt (a smaller glyph gets `hitSlop` or a 44pt wrapper); selection is never colour alone (check mark, heavier border, `accessibilityState`).
-- Reduce Motion in `components/ui` goes through `useMotion` ([`hooks/use-motion.ts`](hooks/use-motion.ts)); haptics through `haptic` ([`lib/haptics.ts`](lib/haptics.ts)).
-- `Button` is `rounded-xl`, takes `loading` (spinner, disabled, announced busy) and taps lightly on `default`/`destructive`. Green text uses `text-success-text`.
-- Toasts announce themselves; errors, confirms and actionable toasts without a `duration` stay until dismissed or acted on.
 
 ## Contributing
 

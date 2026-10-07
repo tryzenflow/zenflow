@@ -13,8 +13,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useToast } from "@/components/ui/toast";
-import { NAV_THEME } from "@/lib/constants";
-import { haptic } from "@/lib/haptics";
 import { useColorScheme } from "@/lib/useColorScheme";
 import type { User } from "@zenflow/shared";
 import { isAxiosError } from "axios";
@@ -39,18 +37,9 @@ function maskEmail(email: string) {
   return `${local[0]}${"•".repeat(Math.max(local.length - 1, 3))}@${domain}`;
 }
 
-/** The Warm Sunrise brand sweep (orange, yellow, lime), from the theme mirror. */
 const AVATAR_GRADIENT = {
-  light: [
-    NAV_THEME.light.primary,
-    NAV_THEME.light.brandYellow,
-    NAV_THEME.light.brandLime,
-  ],
-  dark: [
-    NAV_THEME.dark.primary,
-    NAV_THEME.dark.brandYellow,
-    NAV_THEME.dark.brandLime,
-  ],
+  light: ["#FF8E3E", "#F0B101", "#D8F998"],
+  dark: ["#FF7A24", "#F6B915", "#CBED86"],
 };
 
 /**
@@ -98,14 +87,8 @@ export function ProfileRow({
     <BottomSheet>
       <BottomSheetOpenTrigger asChild>
         <Pressable
-          onPress={() => {
-            haptic.select();
-            setName(user.name);
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={`${user.name}, ${maskEmail(user.email)}`}
-          accessibilityHint={t("Edit profile")}
-          className="min-h-16 flex-row items-center gap-[13px] px-4 py-3.5"
+          onPress={() => setName(user.name)}
+          className="flex-row items-center gap-[13px] px-4 py-3.5"
         >
           <LinearGradient
             colors={
@@ -139,10 +122,7 @@ export function ProfileRow({
       <BottomSheetContent ref={bottomSheet.ref}>
         <BottomSheetView className="px-0" hadHeader={false}>
           <View className="px-5">
-            <Text
-              accessibilityRole="header"
-              className="text-[19px] font-bold tracking-tight"
-            >
+            <Text className="text-[19px] font-bold tracking-tight">
               {t("Edit profile")}
             </Text>
             <Text className="mt-[3px] text-[13px] text-muted-foreground">
@@ -158,11 +138,6 @@ export function ProfileRow({
                 value={name}
                 onChangeText={setName}
                 autoCapitalize="words"
-                autoComplete="name"
-                textContentType="name"
-                returnKeyType="done"
-                onSubmitEditing={() => void save()}
-                accessibilityLabel={t("Name")}
               />
             </View>
             <View>
@@ -181,7 +156,7 @@ export function ProfileRow({
             </View>
           </View>
           <View className="px-5 pt-3.5">
-            <Button className="w-full" loading={saving} onPress={save}>
+            <Button className="w-full" disabled={saving} onPress={save}>
               <Text className="font-semibold text-primary-foreground">
                 {saving ? t("Saving…") : t("Save changes")}
               </Text>

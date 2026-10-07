@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
-import { haptic } from "@/lib/haptics";
 import { cn } from "@/lib/utils";
 import { minutesToLabel } from "@/utils/preferences";
 import { useCallback, useRef } from "react";
@@ -27,9 +26,9 @@ const MINUTE_STEPS = [0, 15, 30, 45];
 const MERIDIEMS = ["AM", "PM"] as const;
 type Meridiem = (typeof MERIDIEMS)[number];
 
-/** Row pitch (px): `h-11` row (44, the touch-target floor) + `gap-1.5` (6). Used to size the columns in
+/** Row pitch (px): `h-10` row (40) + `gap-1.5` (6). Used to size the columns in
  * whole rows and to auto-scroll the active entry into view. */
-const ROW_HEIGHT = 50;
+const ROW_HEIGHT = 46;
 const MIN_ROWS = 5;
 const MAX_ROWS = 10;
 /** Share of the window the sheet may occupy. */
@@ -133,15 +132,9 @@ function Column<T extends number | string>({
         return (
           <Pressable
             key={String(item)}
-            onPress={() => {
-              haptic.select();
-              onSelect(item);
-            }}
-            accessibilityRole="radio"
-            accessibilityLabel={renderLabel(item)}
-            accessibilityState={{ selected: active }}
+            onPress={() => onSelect(item)}
             className={cn(
-              "h-11 items-center justify-center rounded-lg",
+              "h-10 items-center justify-center rounded-lg",
               active ? "bg-primary" : "bg-transparent",
             )}
           >
@@ -226,12 +219,7 @@ function TimePickerBody({
   return (
     <BottomSheetView hadHeader={false} className="px-0">
       <View className="px-5">
-        <Text
-          accessibilityRole="header"
-          className="text-[19px] font-bold tracking-tight"
-        >
-          {t(title)}
-        </Text>
+        <Text className="text-[19px] font-bold tracking-tight">{t(title)}</Text>
         {subtitle && (
           <Text className="mt-[3px] text-[13px] text-muted-foreground">
             {subtitle}
@@ -259,15 +247,9 @@ function TimePickerBody({
           {MERIDIEMS.map((mer) => (
             <Pressable
               key={mer}
-              onPress={() => {
-                haptic.select();
-                commit(hour, minute, mer);
-              }}
-              accessibilityRole="radio"
-              accessibilityLabel={t(mer)}
-              accessibilityState={{ selected: mer === meridiem }}
+              onPress={() => commit(hour, minute, mer)}
               className={cn(
-                "h-11 items-center justify-center rounded-lg",
+                "h-10 items-center justify-center rounded-lg",
                 mer === meridiem ? "bg-primary" : "bg-transparent",
               )}
             >
@@ -333,8 +315,6 @@ export function TimePickerRow({
     <BottomSheet>
       <BottomSheetOpenTrigger asChild>
         <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${label}, ${minutesToLabel(value)}`}
           className={cn(
             "flex-row items-center justify-between gap-3 bg-card px-4 py-[15px]",
             className,
@@ -404,9 +384,6 @@ export function TimePickerInline({
     <BottomSheet>
       <BottomSheetOpenTrigger asChild disabled={disabled}>
         <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${t(label)}, ${minutesToLabel(value)}`}
-          accessibilityHint={t("Opens the time picker")}
           className={cn(
             "h-[46px] flex-row items-center justify-between rounded-xl border border-input bg-card px-3",
             disabled && "opacity-50",

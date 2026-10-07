@@ -36,14 +36,7 @@ type ItemProps = {
 function ThemeItem({ item, onPress, selected }: ItemProps) {
   useLanguage();
   return (
-    <Pressable
-      className="min-h-11 py-4"
-      onPress={onPress}
-      accessibilityRole="radio"
-      accessibilityLabel={item.title}
-      accessibilityHint={item.subtitle}
-      accessibilityState={{ selected }}
-    >
+    <Pressable className="py-4" onPress={onPress}>
       <View className="flex bg-pink flex-row justify-between">
         <View className="pr-4 pt-1">{item.icon}</View>
         <View className="flex-1">

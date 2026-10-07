@@ -1,4 +1,3 @@
-import { NAV_THEME } from "./constants";
 import { t } from "./i18n";
 import { format } from "./i18n";
 import type { useToast } from "@/components/ui/toast";
@@ -14,7 +13,6 @@ import {
   type SlotTakenError,
 } from "@zenflow/shared";
 import { isAxiosError } from "axios";
-import { differenceInCalendarDays } from "date-fns";
 import { describeSaveError } from "./save-error";
 
 export interface PlacementToastUser {
@@ -130,26 +128,17 @@ export function placementToastMessage(
   }
 
   const qualifier = placementQualifier(task, { timezone: user.timezone });
-  const start = zonedDate(task.scheduledStartTime, user.timezone);
-  const today = zonedDate(new Date(), user.timezone);
-  const dayOffset = differenceInCalendarDays(start, today);
-  const time = format(start, "HH:mm");
+  const suffix =
+    qualifier === "pastDeadline" ? `\n${t("It's past its deadline.")}` : "";
 
-  // Say where it landed in the student's own words: today / tomorrow, else the date.
-  const title =
-    dayOffset === 0
-      ? t("Scheduled for today, {time}", { time })
-      : dayOffset === 1
-        ? t("Scheduled for tomorrow, {time}", { time })
-        : t("Scheduled for {when}", {
-            when: format(start, "EEE MMM d, HH:mm"),
-          });
-  // The second line names the task, so the toast reads as "this one, there".
-  const detail =
-    qualifier === "pastDeadline"
-      ? `${task.title} · ${t("It's past its deadline.")}`
-      : task.title;
-  return { message: `${title}\n${detail}`, variant: "success" };
+  const when = format(
+    zonedDate(task.scheduledStartTime, user.timezone),
+    "EEE MMM d, HH:mm",
+  );
+  return {
+    message: t("Scheduled for {when}", { when }) + suffix,
+    variant: "success",
+  };
 }
 
 const POLICY_LABEL: Record<InfeasiblePolicy, string> = {
@@ -229,6 +218,7 @@ export async function withInfeasibleRetry<T>(
       title,
       description,
       variant: "warning",
+      duration: 12000,
       position: "bottom",
       showProgress: false,
       actions: infeasible.options.map((policy) => ({
@@ -315,10 +305,7 @@ export function showSeriesAlternativesPrompt(
     action: {
       label: t("View"),
       onPress: onView,
-      color: {
-        light: NAV_THEME.light.primaryText,
-        dark: NAV_THEME.dark.primaryText,
-      },
+      color: { light: "#f97316", dark: "#fb923c" },
       inline: true,
       mockup: true,
     },

@@ -1,7 +1,4 @@
 import * as SwitchPrimitives from "@/components/primitives/switch";
-import { useMotion } from "@/hooks/use-motion";
-import { NAV_THEME } from "@/lib/constants";
-import { haptic } from "@/lib/haptics";
 import { useColorScheme } from "@/lib/useColorScheme";
 import * as React from "react";
 import { Platform } from "react-native";
@@ -39,10 +36,15 @@ const SwitchWeb = React.forwardRef<
 
 SwitchWeb.displayName = "SwitchWeb";
 
-/** Track colours come from the theme mirror, so the switch is brand orange when on. */
-const TRACK = {
-  light: { primary: NAV_THEME.light.primary, input: NAV_THEME.light.border },
-  dark: { primary: NAV_THEME.dark.primary, input: NAV_THEME.dark.border },
+const RGB_COLORS = {
+  light: {
+    primary: "rgb(24, 24, 27)",
+    input: "rgb(228, 228, 231)",
+  },
+  dark: {
+    primary: "rgb(250, 250, 250)",
+    input: "rgb(39, 39, 42)",
+  },
 } as const;
 
 const SwitchNative = React.forwardRef<
@@ -50,20 +52,19 @@ const SwitchNative = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof SwitchPrimitives.Root>
 >(({ className, ...props }, ref) => {
   const { colorScheme } = useColorScheme();
-  const motion = useMotion();
   const translateX = useDerivedValue(() => (props.checked ? 18 : 0));
   const animatedRootStyle = useAnimatedStyle(() => {
     return {
       backgroundColor: interpolateColor(
         translateX.value,
         [0, 18],
-        [TRACK[colorScheme].input, TRACK[colorScheme].primary],
+        [RGB_COLORS[colorScheme].input, RGB_COLORS[colorScheme].primary],
       ),
     };
   });
   const animatedThumbStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateX: withTiming(translateX.value, { duration: motion.duration(200) }) },
+      { translateX: withTiming(translateX.value, { duration: 200 }) },
     ],
   }));
   return (
@@ -79,13 +80,7 @@ const SwitchNative = React.forwardRef<
           "flex-row h-8 w-[46px] shrink-0 items-center rounded-full border-2 border-transparent",
           className,
         )}
-        // The 32pt track grows to a 44pt touch target.
-        hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
         {...props}
-        onCheckedChange={(next: boolean) => {
-          haptic.select();
-          props.onCheckedChange?.(next);
-        }}
         ref={ref}
       >
         <Animated.View style={animatedThumbStyle}>

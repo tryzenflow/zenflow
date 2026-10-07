@@ -3,8 +3,7 @@ import * as DialogPrimitive from "@/components/primitives/dialog";
 import { cn } from "@/lib/utils";
 import * as React from "react";
 import { Platform, StyleSheet, View } from "react-native";
-import { useMotion } from "@/hooks/use-motion";
-import Animated from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 
 const Dialog = DialogPrimitive.Root;
 
@@ -41,7 +40,6 @@ const DialogOverlayNative = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
 >(({ className, children, ...props }, ref) => {
-  const motion = useMotion();
   return (
     <DialogPrimitive.Overlay
       style={StyleSheet.absoluteFill}
@@ -52,7 +50,10 @@ const DialogOverlayNative = React.forwardRef<
       {...props}
       ref={ref}
     >
-      <Animated.View {...motion.fade(150)}>
+      <Animated.View
+        entering={FadeIn.duration(150)}
+        exiting={FadeOut.duration(150)}
+      >
         <>{children}</>
       </Animated.View>
     </DialogPrimitive.Overlay>

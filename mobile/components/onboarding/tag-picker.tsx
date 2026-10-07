@@ -47,7 +47,7 @@ export function TagPicker({
                 on ? "border-primary bg-primary/15" : "border-border bg-card",
               )}
             >
-              {on && <Check size={14} className="text-primary-text" />}
+              {on && <Check size={14} className="text-primary" />}
               <Text
                 className={cn(
                   "text-[14px]",

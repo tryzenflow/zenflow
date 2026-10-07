@@ -2,7 +2,6 @@ import { useLanguage } from "@/hooks/use-language";
 import { t } from "@/lib/i18n";
 import {
   CalendarClock,
-  Check,
   CheckSquare,
   ClipboardList,
   GraduationCap,
@@ -11,8 +10,7 @@ import {
   Notebook,
 } from "@/components/Icons";
 import { Text } from "@/components/ui/text";
-import { NAV_THEME, withAlpha } from "@/lib/constants";
-import { haptic } from "@/lib/haptics";
+import { NAV_THEME } from "@/lib/constants";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
 import type { SessionFormType } from "@zenflow/core";
@@ -38,16 +36,11 @@ const FIXED_TYPES: {
 ];
 
 /**
- * Accent per session type, matching the calendar blocks' left border. These are
- * deliberate light/dark pairs (the same hues as `SESSION_TYPE_META`), not theme
- * tokens; TASK comes from the theme mirror. Hex, not classes: NativeWind color
- * interop on lucide icons is unreliable on native.
+ * Accent per session type, matching the calendar blocks' left border. Hex, not
+ * classes: NativeWind color interop on lucide icons is unreliable on native.
  */
 const TYPE_ACCENT: Record<SessionFormType, { light: string; dark: string }> = {
-  TASK: {
-    light: NAV_THEME.light.primaryText,
-    dark: NAV_THEME.dark.primaryText,
-  },
+  TASK: { light: NAV_THEME.light.primary, dark: NAV_THEME.dark.primary },
   ASSIGNMENT: { light: "#0d9488", dark: "#2dd4bf" },
   EXAM: { light: "#e11d48", dark: "#fb7185" },
   LECTURE: { light: "#0284c7", dark: "#38bdf8" },
@@ -79,11 +72,7 @@ export function SessionTypeTabs({
 
   return (
     <View className="gap-2 pb-1">
-      <View
-        accessibilityRole="radiogroup"
-        accessibilityLabel={t("Session type")}
-        className="flex-row gap-2"
-      >
+      <View className="flex-row gap-1.5">
         {TABS.map((tab) => {
           const active = tab.key === activeTab;
           const Icon = tab.icon;
@@ -94,29 +83,20 @@ export function SessionTypeTabs({
               disabled={disabled}
               onPress={() => {
                 if (active) return;
-                haptic.select();
                 onChange(tab.key === "FIXED" ? "ASSIGNMENT" : "TASK");
               }}
-              accessibilityRole="radio"
-              accessibilityLabel={t(tab.label)}
-              accessibilityState={{ selected: active, disabled: !!disabled }}
               className={cn(
-                "min-h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border px-2 py-2.5",
-                active && "border-2",
+                "flex-1 flex-row items-center justify-center gap-1.5 rounded-lg border px-2 py-2.5",
                 !active && "border-input bg-card",
                 disabled && "opacity-50",
               )}
               style={
                 active
-                  ? { borderColor: color, backgroundColor: withAlpha(color, 0.1) }
+                  ? { borderColor: color, backgroundColor: `${color}1a` }
                   : undefined
               }
             >
-              {active ? (
-                <Check size={16} color={color} />
-              ) : (
-                <Icon size={16} color={color} />
-              )}
+              <Icon size={16} color={color} />
               <Text
                 className="text-[13px] font-semibold"
                 style={{ color }}
@@ -130,12 +110,7 @@ export function SessionTypeTabs({
       </View>
 
       {activeTab === "FIXED" && (
-        <View
-          accessibilityRole="radiogroup"
-          accessibilityLabel={t("Fixed session type")}
-          className="flex-row flex-wrap"
-          style={{ gap: 8 }}
-        >
+        <View className="flex-row flex-wrap" style={{ gap: 6 }}>
           {FIXED_TYPES.map((ft) => {
             const active = ft.key === value;
             const Icon = ft.icon;
@@ -144,33 +119,22 @@ export function SessionTypeTabs({
               <Pressable
                 key={ft.key}
                 disabled={disabled}
-                onPress={() => {
-                  if (!active) haptic.select();
-                  onChange(ft.key);
-                }}
-                accessibilityRole="radio"
-                accessibilityLabel={t(ft.label)}
-                accessibilityState={{ selected: active, disabled: !!disabled }}
-                // Two per row: half the width minus half the 8px gap.
+                onPress={() => onChange(ft.key)}
+                // Two per row: half the width minus half the 6px gap.
                 style={[
                   { flexBasis: "48%", flexGrow: 1 },
                   active && {
                     borderColor: color,
-                    backgroundColor: withAlpha(color, 0.1),
+                    backgroundColor: `${color}1a`,
                   },
                 ]}
                 className={cn(
-                  "min-h-11 flex-row items-center justify-center gap-1.5 rounded-lg border px-2 py-2",
-                  active && "border-2",
+                  "flex-row items-center justify-center gap-1.5 rounded-md border px-2 py-2",
                   !active && "border-input bg-card",
                   disabled && "opacity-50",
                 )}
               >
-                {active ? (
-                  <Check size={15} color={color} />
-                ) : (
-                  <Icon size={15} color={color} />
-                )}
+                <Icon size={15} color={color} />
                 <Text
                   className="text-[12.5px] font-semibold"
                   style={{ color }}

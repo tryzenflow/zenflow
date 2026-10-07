@@ -3,7 +3,6 @@ import { differenceInCalendarDays, format as dateFormat } from "date-fns";
 import { enUS, vi } from "date-fns/locale";
 import { localizeValidation } from "./i18n-validation";
 import commonTranslations from "./i18n-common";
-import refineTranslations from "./i18n-refine";
 import taskTranslations from "./i18n-task";
 import vietnamese from "./i18n-vi";
 
@@ -13,7 +12,6 @@ const translations: Record<string, string> = {
   ...vietnamese,
   ...taskTranslations,
   ...commonTranslations,
-  ...refineTranslations,
 };
 const listeners = new Set<() => void>();
 export function setLanguage(next: Language) {

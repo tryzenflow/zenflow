@@ -15,16 +15,8 @@ export const NAV_THEME = {
     card: "#FFFFFF",
     notification: "#E7000B",
     primary: "#FF8E3E",
-    // Orange for text/icons (AA on light surfaces); `primary` stays the fill.
-    primaryText: "#B24800",
-    primaryForeground: "#2B1406",
-    warning: "#825600",
-    success: "#10B981",
-    successText: "#047857",
-    brandYellow: "#F0B101",
-    brandLime: "#D8F998",
     text: "#0F0D0A",
-    mutedForeground: "#6E665C",
+    mutedForeground: "#797065",
   },
   dark: {
     background: "#0F0D0A",
@@ -32,31 +24,7 @@ export const NAV_THEME = {
     card: "#1D1A17",
     notification: "#FF6467",
     primary: "#FF7A24",
-    primaryText: "#FF7A24",
-    primaryForeground: "#2B1406",
-    warning: "#F6B915",
-    success: "#34D399",
-    successText: "#34D399",
-    brandYellow: "#F6B915",
-    brandLime: "#CBED86",
     text: "#FBFAF8",
     mutedForeground: "#ACA397",
   },
 };
-
-/** `#RRGGBB` plus an opacity (0-1) as `#RRGGBBAA`, so translucent fills come from the theme tokens. */
-export function withAlpha(hex: string, alpha: number): string {
-  const a = Math.round(Math.min(1, Math.max(0, alpha)) * 255);
-  return `${hex}${a.toString(16).padStart(2, "0")}`;
-}
-
-/**
- * Upper bounds for system font scaling (`maxFontSizeMultiplier`). Text still
- * follows the user's size, but dense chrome stops growing before it breaks:
- * the tab bar and day strip are fixed-height rows, the time grid is 15-minute
- * blocks. Everything else (login, sheets, lists) scales freely.
- */
-export const FONT_SCALE_CAP = {
-  chrome: 1.2,
-  grid: 1.3,
-} as const;

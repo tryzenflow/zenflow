@@ -46,7 +46,7 @@ export function TodayButton({
         className="flex-row items-center gap-1.5 rounded-full border border-border bg-background/95 px-3.5 py-2 shadow-sm active:opacity-80"
       >
         <CalendarDays size={14} className="text-foreground" />
-        <Text className="text-xs font-semibold">{t("Today")}</Text>
+        <Text className="text-[12.5px] font-semibold">{t("Today")}</Text>
       </Pressable>
     </Animated.View>
   );

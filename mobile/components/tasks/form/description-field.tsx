@@ -56,7 +56,6 @@ import {
   type ViewInstance,
 } from "react-native";
 import type { WebViewMessageEvent } from "react-native-webview";
-import { NAV_THEME } from "@/lib/constants";
 import { AudioBridge, VideoBridge } from "./media-bridges";
 
 const HIGHLIGHT_COLOR = "#fde68a";
@@ -104,7 +103,6 @@ function DescriptionFieldEditor({
 }) {
   useLanguage();
   const { isDarkColorScheme } = useColorScheme();
-  const palette = isDarkColorScheme ? NAV_THEME.dark : NAV_THEME.light;
   const { toast } = useToast();
   // The content the editor currently owns: `initialValue` at first mount,
   // then whatever the user has typed since (kept current in `onChange`), or
@@ -161,7 +159,7 @@ function DescriptionFieldEditor({
   // through `unknown` rather than asking TS to prove it structurally.
   const editorTheme = {
     webview: {
-      backgroundColor: palette.card,
+      backgroundColor: isDarkColorScheme ? "rgb(29 26 23)" : "rgb(255 255 255)",
     },
   } as unknown as RecursivePartial<EditorTheme>;
 
@@ -199,11 +197,12 @@ function DescriptionFieldEditor({
   }, [state.isFocused]);
 
   function injectContentStyles() {
-    // A separate WebView document can't reach the CSS variables, so it takes
-    // the theme mirror's values (links use the AA orange-for-text token).
-    const bg = palette.card;
-    const fg = palette.text;
-    const linkColor = palette.primaryText;
+    const bg = isDarkColorScheme ? "rgb(29 26 23)" : "rgb(255 255 255)";
+    const fg = isDarkColorScheme ? "rgb(250 250 249)" : "rgb(28 25 23)";
+    // Same brand-orange RGB triplets as `--brand-orange` in
+    // `app/global.css` — this is a separate WebView document, so it can't
+    // reach that CSS variable and needs the literal value repeated here.
+    const linkColor = isDarkColorScheme ? "rgb(255 122 36)" : "rgb(255 142 62)";
 
     const fontFace = fontDataUri
       ? `@font-face { font-family: 'Geist'; src: url(${fontDataUri}) format('truetype'); font-weight: 400; font-style: normal; }`
@@ -523,7 +522,7 @@ function DescriptionFieldEditor({
           disabled={disabled}
           onPress={() => editor.toggleBlockquote()}
         />
-        <View className="mx-1 h-4 w-px bg-border" />
+        <View className="mx-1 h-4 w-px bg-black/10" />
         <ToolbarButton
           icon={Link2}
           label={t("Link")}
@@ -543,7 +542,7 @@ function DescriptionFieldEditor({
           disabled={disabled}
           onPress={() => void handleUploadFile()}
         />
-        <View className="mx-1 h-4 w-px bg-border" />
+        <View className="mx-1 h-4 w-px bg-black/10" />
         <ToolbarButton
           icon={List}
           label={t("Bulleted list")}
@@ -586,17 +585,15 @@ function DescriptionFieldEditor({
             />
             <Pressable
               onPress={() => void confirmLink()}
-              accessibilityRole="button"
               accessibilityLabel={t("Confirm link")}
-              className="size-11 items-center justify-center rounded-full bg-primary"
+              className="h-10 w-10 items-center justify-center rounded-full bg-primary"
             >
               <Check size={16} className="text-primary-foreground" />
             </Pressable>
             <Pressable
               onPress={() => setLinkOpen(false)}
-              accessibilityRole="button"
               accessibilityLabel={t("Cancel link")}
-              className="size-11 items-center justify-center rounded-full bg-muted"
+              className="h-10 w-10 items-center justify-center rounded-full bg-muted"
             >
               <X size={16} className="text-muted-foreground" />
             </Pressable>
@@ -625,21 +622,19 @@ function ToolbarButton({
     <Pressable
       onPress={onPress}
       disabled={disabled}
-      accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected: !!active, disabled: !!disabled }}
       className={cn(
-        "size-11 items-center justify-center rounded-full active:bg-muted",
-        // Active reads as a tinted fill plus an orange glyph (not colour alone:
-        // the selected state is also announced).
-        active && "bg-primary/20",
+        "h-10 w-10 items-center justify-center rounded-full active:bg-muted/30",
+        // Light amber active-state fill (this bar's own accent, distinct
+        // from the app's `bg-primary`) reads clearly against a white bar —
+        // the old `bg-white/25`-on-dark-pill treatment would be invisible
+        // here since the bar itself is now white.
+        active && "bg-amber-100",
         disabled && "opacity-40",
       )}
     >
-      <Icon
-        size={16}
-        className={active ? "text-primary-text" : "text-muted-foreground"}
-      />
+      <Icon size={14} className="text-muted-foreground" />
     </Pressable>
   );
 }
