@@ -1,80 +1,70 @@
 # ADR-0003: Python-Authoritative Placement (thin Nest API, frozen TS heuristic fallback)
 
-**Status:** Accepted — fully rolled out; the legacy/shadow TS ranking code and its mode flag
-have since been deleted.
+**Status:** Accepted. Fully rolled out; the legacy/shadow TS ranking code and its mode flag are deleted.
 **Date:** 2026-09-21
 **Issue:** none; builds on #60 (numpy core port) and #62 (slot-first LinUCB, displacement).
-Supersedes #60's "TS core is the source of truth" stance.
+**Supersedes:** #60's "TS core is the source of truth" stance.
 
-Endpoint contract, degraded-mode behavior, and rollout mechanics now live in
-[`backend/README.md`](../../backend/README.md) ("Python-authoritative placement" and
-"Scheduler architecture") and [`services/bandit/README.md`](../../services/bandit/README.md) —
-this record captures the decision and why, not the current implementation detail.
+This record holds the decision and why. Endpoint contract, degraded mode and rollout live in [docs/backend/api.md](../backend/api.md), [docs/backend/scheduler.md](../backend/scheduler.md) and [services/bandit/README.md](../../services/bandit/README.md).
 
 ## Context
 
-- The same ranking math existed twice: `backend/src/scheduler/core/*` (TypeScript) and
-  `services/bandit/src/core/*` (numpy, kept in golden-fixture parity with it).
-- After issue #62 the TS scan became the slow path (up to 30-60 days of 15-minute starts,
-  EDF displacement) while Python already scanned the same space with prefix-sums and
-  `argmax`.
-- Nest's pre-ADR flow: load day loads, run the heuristic scan in TS, call Python only for
-  arm scores, run slot-selection and displacement in TS, then persist.
-- Problems this caused: every core change had to be written twice; the hot loop blocked the
-  Node event loop; it was unclear which implementation was authoritative.
+- The same ranking math existed twice: `backend/src/scheduler/core/*` (TypeScript) and `services/bandit/src/core/*` (numpy, in golden-fixture parity).
+- After #62 the TS scan was the slow path (30-60 days of 15-minute starts, EDF displacement); Python scanned the same space with prefix-sums and `argmax`.
+- Old Nest flow: load day loads, run the heuristic scan in TS, call Python only for arm scores, run slot selection and displacement in TS, persist.
+- Problems:
+  - every core change was written twice;
+  - the hot loop blocked the Node event loop;
+  - it was unclear which implementation was authoritative.
 
 ## Decision
 
-- **Python (`services/bandit`, `POST /v1/place`) becomes the sole ranking implementation** —
-  heuristic best-free-slot, LinUCB slot-first scoring, series spreading, and displacement all
-  move there, pure numpy (no I/O, clock, or randomness; `now` is a parameter).
-- **Nest becomes thin**: it gathers inputs (day loads, preference matrix, observation count,
-  bandit `(A, b)`), calls `/v1/place` through `PlacementClient`, applies and persists the
-  result, and owns the only RNG (`ExperimentService.assignPolicy`).
-- **A small frozen copy of the pre-#62 TS heuristic stays as a degraded-mode fallback**
-  (`FallbackPlacer`, built on `HeuristicPlacer`) for when Python is unreachable — it changes
-  only for bug fixes, never for behavior, and is checked against Python by a narrowed golden
-  fixture set.
-- **Rollout was staged behind a mode flag** (contract → Python endpoint → Nest client/gateway
-  → cut-over → prod hardening → delete the dead TS code) so the app stayed releasable at every
-  commit; the final deletion phase shipped without a production shadow-mode soak having ever
-  run, an explicit, accepted product decision (see Consequences).
-- **Alternatives rejected**: keeping both implementations authoritative (dual maintenance, TS
-  scan still on the event loop); Python-only with no fallback (a Python restart would break
-  task creation); keeping the full TS core as the fallback (keeps the parity burden); having
-  Python own policy assignment (needs randomness and persistence, which Nest already owns).
+- **Python (`services/bandit`, `POST /v1/place`) is the sole ranking implementation.**
+  - Heuristic best-free-slot, LinUCB slot-first scoring, series spreading and displacement all move there.
+  - Pure numpy: no I/O, clock or randomness (`now` is a parameter).
+- **Nest is thin.**
+  - It gathers inputs (day loads, preference matrix, observation count, bandit `(A, b)`).
+  - It calls `/v1/place` via `PlacementClient`, applies and persists the result.
+  - It owns the only RNG (`ExperimentService.assignPolicy`).
+- **A small frozen copy of the pre-#62 TS heuristic is the degraded-mode fallback** (`FallbackPlacer`, built on `HeuristicPlacer`) when Python is unreachable.
+  - It changes only for bug fixes, never behaviour.
+  - A narrowed golden fixture set checks it against Python.
+- **Rollout was staged behind a mode flag:** contract, Python endpoint, Nest client/gateway, cut-over, prod hardening, delete the dead TS code. The app stayed releasable at every commit.
+  - The final deletion shipped without a production shadow-mode soak. This was an explicit, accepted product decision (see Consequences).
+- **Rejected alternatives:**
+  - both implementations authoritative: dual maintenance, TS scan stays on the event loop;
+  - Python-only, no fallback: a Python restart would break task creation;
+  - full TS core as fallback: keeps the parity burden;
+  - Python owns policy assignment: needs randomness and persistence, which Nest owns.
 
 ## API / data model changes
 
-- New internal contract `packages/shared/src/placement.ts` (`PlaceRequest`/`PlaceResponse` and
-  friends) for the Nest ↔ Python wire shape — see `backend/README.md` for the endpoint
-  contract and outcome enum.
-- No new client-facing `/api/v1` endpoints. Additive fields only: `schedulingDegraded?: boolean`
-  on create/update/reschedule responses, and a `SCHEDULER_DEGRADED_CODE` 503 body alongside the
-  existing `SCHEDULE_INFEASIBLE`.
-- Prisma: `SlotProposal` gains `placementSource` (`PYTHON | TS_FALLBACK`, default `PYTHON`) and
-  a nullable `degradedReason`. `modelVersion` now carries Python's constants-hash
-  `paramsVersion`. One additive migration; existing rows backfilled to whichever source they
-  actually used.
+- New internal contract `packages/shared/src/placement.ts` (`PlaceRequest` / `PlaceResponse` and friends) for the Nest to Python wire shape.
+- No new client-facing `/api/v1` endpoints. Additive only:
+  - `schedulingDegraded?: boolean` on create/update/reschedule responses;
+  - a `SCHEDULER_DEGRADED_CODE` 503 body beside the existing `SCHEDULE_INFEASIBLE`.
+- Prisma: `SlotProposal` gains `placementSource` (`PYTHON | TS_FALLBACK`, default `PYTHON`) and a nullable `degradedReason`.
+- `modelVersion` now carries Python's constants-hash `paramsVersion`.
+- One additive migration; existing rows backfilled to the source they used.
 
 ## Consequences
 
-- **Good:** one ranking implementation instead of two; the hot loop is off the Node event
-  loop; Nest is smaller; one versioned model (`paramsVersion`) for the A/B experiment.
-- **Costs:** full-quality scheduling now has a hard dependency on Python being reachable —
-  displacement and the infeasible policies are unavailable in degraded mode; one extra network
-  hop per placement; contract-drift risk (mitigated by shared fixtures and strict schema
-  validation on both sides).
-- **Accepted risk:** the dead TS ranking code was deleted without ever running the Python mode
-  in a deployed environment or completing a shadow-mode soak. There is no longer a parallel
-  full TS ranking implementation to fall back to if the Python placer has an undiscovered bug —
-  only git history has the deleted code, not a live rollback flag. `FallbackPlacer` plus
-  `PlacementClient`'s breaker/retry/timeout remain the degraded-mode safety net; contract
-  fixtures and the narrowed golden-parity test remain the drift guards on the surfaces that
-  still have two implementations or a documented wire contract. A production regression in the
-  LinUCB/displacement math now has no TS-side test to catch it — only Python's own test suite.
-- **Follow-ups:** move preference-matrix reinforcement/decay to Python if the matrix ever
-  becomes learned rather than hand-tuned; the circuit breaker's state is per-process (fine at
-  current scale, would need sharing across replicas at larger scale); a latency/throughput
-  benchmark comparing pre-#62 TS, slot-first TS, and Python-authoritative placement was planned
-  but never built — dropped as speculative rather than migrated here.
+- **Good:**
+  - one ranking implementation instead of two;
+  - hot loop off the Node event loop;
+  - Nest is smaller;
+  - one versioned model (`paramsVersion`) for the A/B.
+- **Costs:**
+  - full-quality scheduling hard-depends on Python being reachable; displacement and the infeasible policies are unavailable in degraded mode;
+  - one extra network hop per placement;
+  - contract-drift risk, mitigated by shared fixtures and strict schema validation on both sides.
+- **Accepted risk:**
+  - the dead TS ranking code was deleted without running Python mode in a deployed environment or a shadow-mode soak;
+  - there is no live rollback flag; only git history has the deleted code;
+  - `FallbackPlacer` plus `PlacementClient`'s breaker, retry and timeout remain the degraded-mode safety net;
+  - contract fixtures and the narrowed golden-parity test guard the surfaces that still have two implementations or a wire contract;
+  - a production regression in the LinUCB/displacement math has no TS-side test, only Python's suite.
+- **Follow-ups:**
+  - move preference-matrix reinforcement/decay to Python if the matrix ever becomes learned rather than hand-tuned;
+  - the circuit breaker's state is per-process (fine now; needs sharing across replicas at scale);
+  - a latency benchmark comparing pre-#62 TS, slot-first TS and Python placement was planned, never built, and dropped as speculative.
